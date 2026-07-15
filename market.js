@@ -30,6 +30,8 @@ async function init() {
   enablePasswordToggles();
   await autoPayDayIfDue(CLASS_CODE);
   await processAutomations(CLASS_CODE);
+  await processMortgages(CLASS_CODE);
+  await processWeeklyEvents(CLASS_CODE);
   await render();
 }
 

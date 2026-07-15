@@ -117,7 +117,9 @@ main{
 .grid{display:grid;gap:20px;}
 .grid-2{grid-template-columns:1fr 1fr;}
 .grid-3{grid-template-columns:repeat(3,1fr);}
-@media(max-width:800px){.grid-2,.grid-3{grid-template-columns:1fr;}}
+.grid-4{grid-template-columns:repeat(4,1fr);}
+@media(max-width:800px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}}
+@media(max-width:1000px) and (min-width:801px){.grid-4{grid-template-columns:repeat(2,1fr);}}
 
 .stat{
   background:linear-gradient(135deg,var(--navy-900),var(--navy-700));
@@ -199,6 +201,7 @@ tr:last-child td{border-bottom:none;}
 .badge.coral{background:#fceae7;color:#b8402c;}
 .badge.gold{background:#fbf1dd;color:#8a6112;}
 .badge.navy{background:#e7ebf5;color:var(--navy-900);}
+.badge.lilac{background:#efecfb;color:#5a4fb0;}
 
 .ticker-up{color:#217a5a;font-weight:800;}
 .ticker-down{color:#b8402c;font-weight:800;}

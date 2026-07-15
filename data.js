@@ -44,7 +44,7 @@ async function getUser(username) {
 async function getClass(code) {
   if (!code) return null;
   const snap = await classesCol().doc(code).get();
-  return snap.exists ? snap.data() : null;
+  return snap.exists ? withNewModuleDefaults(snap.data()) : null;
 }
 async function getClassStudents(code) {
   const cls = await getClass(code);
@@ -105,7 +105,14 @@ async function createTeacherAndClass(name, username, password, className) {
     priceRange: { min: 1, max: 5 },
     automations: [],
     jobApplications: [],
-    lastPayDayRun: null
+    lastPayDayRun: null,
+    insurancePlans: [], storeItems: [], properties: [],
+    eventDefs: [], eventLog: [], lastEventWeekRun: null,
+    lifestyleConfig: {
+      property: { enabled: true, weight: 4 },
+      store: { enabled: true, weight: 2 },
+      insurance: { enabled: true, weight: 2 }
+    }
   };
 
   await usersCol().doc(username).set(user);
@@ -687,4 +694,392 @@ async function portfolioValue(username, classCode) {
     total += shares * co.price;
   });
   return Math.round(total * 100) / 100;
+}
+
+/* ===================== Class defaults for new modules ===================== */
+function withNewModuleDefaults(cls) {
+  if (!cls) return cls;
+  cls.insurancePlans = cls.insurancePlans || [];
+  cls.storeItems = cls.storeItems || [];
+  cls.properties = cls.properties || [];
+  cls.eventDefs = cls.eventDefs || [];
+  cls.eventLog = cls.eventLog || [];
+  cls.lastEventWeekRun = cls.lastEventWeekRun || null;
+  cls.lifestyleConfig = cls.lifestyleConfig || {
+    property: { enabled: true, weight: 4 },
+    store: { enabled: true, weight: 2 },
+    insurance: { enabled: true, weight: 2 }
+  };
+  return cls;
+}
+
+function isoWeekKey(d) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const week = 1 + Math.round(((date - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+  return date.getUTCFullYear() + "-W" + week;
+}
+
+/* ===================== Insurance ===================== */
+async function addInsurancePlan(classCode, plan) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.insurancePlans.push({
+      id: uid("ins"), name: plan.name, price: Number(plan.price),
+      excess: Number(plan.excess), coverage: plan.coverage || "",
+      description: plan.description || "", stars: Math.max(0, Math.min(5, Number(plan.stars) || 0)),
+      active: true
+    });
+    t.update(classRef, { insurancePlans: cls.insurancePlans });
+  });
+}
+async function removeInsurancePlan(classCode, planId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.insurancePlans = cls.insurancePlans.filter(p => p.id !== planId);
+    t.update(classRef, { insurancePlans: cls.insurancePlans });
+  });
+}
+async function buyInsurance(username, classCode, planId) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let planName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const plan = cls.insurancePlans.find(p => p.id === planId && p.active);
+      if (!plan) throw new Error("NOT_FOUND");
+      user.insurance = user.insurance || [];
+      if (user.insurance.includes(planId)) throw new Error("ALREADY");
+      if (user.balance < plan.price) throw new Error("BROKE");
+      planName = plan.name;
+      user.insurance.push(planId);
+      t.update(userRef, { balance: Math.round((user.balance - plan.price) * 100) / 100, insurance: user.insurance });
+    });
+  } catch (e) {
+    if (e.message === "ALREADY") return { ok: false, error: "You already have this plan." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "insurance-buy", from: username, amount: 0, note: `Bought insurance: ${planName}` });
+  return { ok: true };
+}
+async function cancelInsurance(username, planId) {
+  const userRef = usersCol().doc(username);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(userRef);
+    if (!snap.exists) return;
+    const user = snap.data();
+    user.insurance = (user.insurance || []).filter(id => id !== planId);
+    t.update(userRef, { insurance: user.insurance });
+  });
+}
+
+/* ===================== Class store ===================== */
+async function addStoreItem(classCode, item) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.storeItems.push({
+      id: uid("item"), name: item.name, price: Number(item.price),
+      description: item.description || "", effect: item.effect || "",
+      stock: item.stock === "" || item.stock === undefined ? null : Number(item.stock),
+      stars: Math.max(0, Math.min(5, Number(item.stars) || 0))
+    });
+    t.update(classRef, { storeItems: cls.storeItems });
+  });
+}
+async function removeStoreItem(classCode, itemId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.storeItems = cls.storeItems.filter(i => i.id !== itemId);
+    t.update(classRef, { storeItems: cls.storeItems });
+  });
+}
+async function buyStoreItem(username, classCode, itemId) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let itemName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const item = cls.storeItems.find(i => i.id === itemId);
+      if (!item) throw new Error("NOT_FOUND");
+      if (item.stock !== null && item.stock <= 0) throw new Error("OUT");
+      if (user.balance < item.price) throw new Error("BROKE");
+      itemName = item.name;
+      if (item.stock !== null) item.stock -= 1;
+      user.storeItems = user.storeItems || [];
+      user.storeItems.push(itemId);
+      t.update(userRef, { balance: Math.round((user.balance - item.price) * 100) / 100, storeItems: user.storeItems });
+      t.update(classRef, { storeItems: cls.storeItems });
+    });
+  } catch (e) {
+    if (e.message === "OUT") return { ok: false, error: "That item is out of stock." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "store-buy", from: username, amount: 0, note: `Bought from store: ${itemName}` });
+  return { ok: true };
+}
+
+/* ===================== Property ===================== */
+async function addProperty(classCode, prop) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.properties.push({
+      id: uid("prop"), name: prop.name, price: Number(prop.price),
+      comfort: Math.max(1, Math.min(5, Number(prop.comfort) || 1)),
+      mortgageWeeks: Number(prop.mortgageWeeks) || 0,
+      description: prop.description || "", owner: null
+    });
+    t.update(classRef, { properties: cls.properties });
+  });
+}
+async function removeProperty(classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.properties = cls.properties.filter(p => p.id !== propId);
+    t.update(classRef, { properties: cls.properties });
+  });
+}
+async function buyProperty(username, classCode, propId, financed) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let deposit = 0, weekly = 0, propName = "", cashPaid = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop) throw new Error("NOT_FOUND");
+      if (prop.owner) throw new Error("TAKEN");
+      propName = prop.name;
+      if (financed && prop.mortgageWeeks > 0) {
+        deposit = Math.round(prop.price * 0.1 * 100) / 100;
+        weekly = Math.round(((prop.price - deposit) / prop.mortgageWeeks) * 100) / 100;
+        if (user.balance < deposit) throw new Error("BROKE");
+        prop.owner = username;
+        prop.mortgage = { weeksLeft: prop.mortgageWeeks, weeklyPayment: weekly };
+        t.update(userRef, { balance: Math.round((user.balance - deposit) * 100) / 100 });
+      } else {
+        if (user.balance < prop.price) throw new Error("BROKE");
+        prop.owner = username;
+        prop.mortgage = null;
+        cashPaid = prop.price;
+        t.update(userRef, { balance: Math.round((user.balance - prop.price) * 100) / 100 });
+      }
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "TAKEN") return { ok: false, error: "Someone already bought that property." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-buy", from: username, amount: financed ? deposit : cashPaid, note: financed ? `Bought (mortgaged): ${propName} — ${fmtMoney(deposit)} deposit` : `Bought outright: ${propName}` });
+  return { ok: true };
+}
+async function sellProperty(classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  let owner = null, payout = 0, propName = "";
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const prop = cls.properties.find(p => p.id === propId);
+    if (!prop || !prop.owner) return;
+    owner = prop.owner;
+    propName = prop.name;
+    payout = Math.round(prop.price * 0.9 * 100) / 100;
+    prop.owner = null;
+    prop.mortgage = null;
+    t.update(classRef, { properties: cls.properties });
+  });
+  if (owner) {
+    await adjustBalance(owner, payout);
+    await logTxn(classCode, { type: "property-sell", to: owner, amount: payout, note: `Sold back: ${propName}` });
+  }
+  return true;
+}
+async function processMortgages(classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  if (!cls) return 0;
+  const weekKey = isoWeekKey(new Date());
+  let ran = 0;
+  for (const prop of cls.properties) {
+    if (!prop.owner || !prop.mortgage || prop.mortgage.weeksLeft <= 0) continue;
+    if (prop.mortgage.lastWeekPaid === weekKey) continue;
+    const classRef = classesCol().doc(classCode);
+    const userRef = usersCol().doc(prop.owner);
+    let didRun = false, amt = 0, remainingAfter = 0;
+    try {
+      await fdb.runTransaction(async (t) => {
+        const classSnap = await t.get(classRef);
+        const userSnap = await t.get(userRef);
+        if (!classSnap.exists || !userSnap.exists) return;
+        const liveCls = withNewModuleDefaults(classSnap.data());
+        const liveProp = liveCls.properties.find(p => p.id === prop.id);
+        if (!liveProp || !liveProp.mortgage || liveProp.mortgage.lastWeekPaid === weekKey || liveProp.mortgage.weeksLeft <= 0) return;
+        const user = userSnap.data();
+        if (user.balance < liveProp.mortgage.weeklyPayment) return;
+        amt = liveProp.mortgage.weeklyPayment;
+        t.update(userRef, { balance: Math.round((user.balance - amt) * 100) / 100 });
+        liveProp.mortgage.weeksLeft -= 1;
+        liveProp.mortgage.lastWeekPaid = weekKey;
+        remainingAfter = liveProp.mortgage.weeksLeft;
+        if (remainingAfter <= 0) liveProp.mortgage = null;
+        t.update(classRef, { properties: liveCls.properties });
+        didRun = true;
+      });
+    } catch (e) { /* ignore, try next */ }
+    if (didRun) {
+      await logTxn(classCode, { type: "mortgage", from: prop.owner, amount: amt, note: `Mortgage payment: ${prop.name}` + (remainingAfter <= 0 ? " — paid off!" : "") });
+      ran++;
+    }
+  }
+  return ran;
+}
+
+/* ===================== Random events ===================== */
+async function addEventDef(classCode, ev) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.eventDefs.push({
+      id: uid("ev"), name: ev.name, amount: Number(ev.amount) || 0,
+      description: ev.description || "", repeatable: !!ev.repeatable, active: true
+    });
+    t.update(classRef, { eventDefs: cls.eventDefs });
+  });
+}
+async function removeEventDef(classCode, evId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.eventDefs = cls.eventDefs.filter(e => e.id !== evId);
+    t.update(classRef, { eventDefs: cls.eventDefs });
+  });
+}
+async function processWeeklyEvents(classCode) {
+  const classRef = classesCol().doc(classCode);
+  const weekKey = isoWeekKey(new Date());
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  if (!cls || cls.lastEventWeekRun === weekKey) return 0;
+  if (!cls.eventDefs || cls.eventDefs.filter(e => e.active).length === 0) {
+    await classRef.update({ lastEventWeekRun: weekKey }).catch(() => {});
+    return 0;
+  }
+
+  let claimed = false;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = withNewModuleDefaults(snap.data());
+    if (liveCls.lastEventWeekRun === weekKey) return;
+    t.update(classRef, { lastEventWeekRun: weekKey });
+    claimed = true;
+  });
+  if (!claimed) return 0;
+
+  const students = await getClassStudents(classCode);
+  const activeDefs = cls.eventDefs.filter(e => e.active);
+  const eventLog = cls.eventLog || [];
+  const newLogEntries = [];
+  const balanceDeltas = {};
+  const txns = [];
+
+  for (const student of students) {
+    const already = new Set(eventLog.filter(l => l.studentUser === student.username).map(l => l.eventId));
+    const pool = activeDefs.filter(e => e.repeatable || !already.has(e.id));
+    if (pool.length === 0) continue;
+    const count = Math.min(pool.length, 2 + Math.floor(Math.random() * 3));
+    const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
+    for (const ev of shuffled) {
+      balanceDeltas[student.username] = (balanceDeltas[student.username] || 0) + ev.amount;
+      newLogEntries.push({ studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey });
+      txns.push({ type: "event", to: student.username, amount: ev.amount, note: ev.name + (ev.description ? " — " + ev.description : "") });
+    }
+  }
+
+  for (const [username, delta] of Object.entries(balanceDeltas)) {
+    await adjustBalance(username, delta);
+  }
+  for (const t of txns) await logTxn(classCode, t);
+
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = withNewModuleDefaults(snap.data());
+    liveCls.eventLog = (liveCls.eventLog || []).concat(newLogEntries);
+    if (liveCls.eventLog.length > 500) liveCls.eventLog = liveCls.eventLog.slice(-500);
+    t.update(classRef, { eventLog: liveCls.eventLog });
+  });
+
+  return newLogEntries.length;
+}
+
+/* ===================== Lifestyle rating ===================== */
+async function saveLifestyleConfig(classCode, config) {
+  await classesCol().doc(classCode).update({ lifestyleConfig: config });
+}
+async function lifestyleRating(username, classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const user = await getUser(username);
+  if (!cls || !user) return 0;
+  const cfg = cls.lifestyleConfig;
+  let score = 0;
+
+  if (cfg.property && cfg.property.enabled) {
+    const owned = cls.properties.find(p => p.owner === username);
+    if (owned) score += owned.comfort * (cfg.property.weight || 0);
+  }
+  if (cfg.store && cfg.store.enabled) {
+    const owned = user.storeItems || [];
+    owned.forEach(itemId => {
+      const item = cls.storeItems.find(i => i.id === itemId);
+      if (item) score += (item.stars || 0) * (cfg.store.weight || 0);
+    });
+  }
+  if (cfg.insurance && cfg.insurance.enabled) {
+    const owned = user.insurance || [];
+    owned.forEach(planId => {
+      const plan = cls.insurancePlans.find(p => p.id === planId);
+      if (plan) score += (plan.stars || 0) * (cfg.insurance.weight || 0);
+    });
+  }
+  return Math.max(0, Math.min(100, Math.round(score)));
 }

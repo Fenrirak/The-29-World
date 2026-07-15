@@ -11,7 +11,13 @@ function badgeType(type) {
     automation: ["navy", "repeat", "Auto-pay"],
     "stock-buy": ["gold", "chart", "Stock buy"],
     "stock-sell": ["gold", "chart", "Stock sell"],
-    "stock-close": ["gold", "building", "Delisted"]
+    "stock-close": ["gold", "building", "Delisted"],
+    "insurance-buy": ["lilac", "shield", "Insurance"],
+    "store-buy": ["mint", "cart", "Store"],
+    "property-buy": ["navy", "house", "Property"],
+    "property-sell": ["gold", "house", "Property sold"],
+    "mortgage": ["coral", "house", "Mortgage"],
+    "event": ["lilac", "dice", "Random event"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -28,6 +34,7 @@ function paintChrome() {
   document.getElementById("iconBalance").innerHTML = icon("piggy", 30);
   document.getElementById("iconPortfolio").innerHTML = icon("chart", 30);
   document.getElementById("iconJob").innerHTML = icon("briefcase", 30);
+  document.getElementById("iconLifestyle").innerHTML = icon("star", 30);
   document.getElementById("hLeaderboard").innerHTML = icon("medal", 18) + " Net worth ranking";
   document.getElementById("hBank").innerHTML = icon("bank", 18) + " Bank account";
   document.getElementById("hClassmates").innerHTML = icon("users", 18) + " My classmates";
@@ -48,6 +55,8 @@ async function init() {
   // Fire any wages or automatic payments that have come due since last visit
   await autoPayDayIfDue(u.classCode);
   await processAutomations(u.classCode);
+  await processMortgages(u.classCode);
+  await processWeeklyEvents(u.classCode);
   await render();
 }
 
@@ -61,6 +70,14 @@ async function render() {
 
   const job = cls.jobs.find(j => j.id === me.jobId);
   document.getElementById("jobLabel").textContent = job ? `${job.title} — ${fmtMoney(job.wage)}/payday` : "No job assigned";
+
+  const cfg = cls.lifestyleConfig || {};
+  const anyEnabled = ["property", "store", "insurance"].some(k => cfg[k] && cfg[k].enabled);
+  document.getElementById("lifestyleCard").classList.toggle("hidden", !anyEnabled);
+  if (anyEnabled) {
+    const score = await lifestyleRating(me.username, me.classCode);
+    document.getElementById("lifestyleValue").textContent = score + " / 100";
+  }
 
   // net worth leaderboard
   const board = await classLeaderboard(me.classCode);
@@ -122,8 +139,9 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome"].includes(t.type)) { sign = "+"; }
-    else if (t.type === "fine") { sign = "-"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell"].includes(t.type)) { sign = "+"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy"].includes(t.type)) { sign = "-"; }
+    else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
 
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${detail}</td>

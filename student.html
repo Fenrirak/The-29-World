@@ -13,8 +13,11 @@
   <nav>
     <a href="student.html" class="active"><span class="icon-slot" data-icon="bank"></span><span class="nav-label">My account</span></a>
     <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
-    <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
     <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="insurance.html"><span class="icon-slot" data-icon="shield"></span><span class="nav-label">Insurance</span></a>
+    <a href="store.html"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
+    <a href="property.html"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
     <span class="who" id="whoami"></span>
     <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
   </nav>
@@ -23,7 +26,7 @@
 <main>
   <h1 id="greeting">Hi!</h1>
 
-  <div class="grid grid-3">
+  <div class="grid grid-4">
     <div class="stat gold">
       <span class="icon" id="iconBalance"></span>
       <div class="label">Cash balance</div>
@@ -38,6 +41,11 @@
       <span class="icon" id="iconJob"></span>
       <div class="label">My job</div>
       <div class="value" id="jobLabel" style="font-size:1.3rem;">None yet</div>
+    </div>
+    <div class="stat sky" id="lifestyleCard">
+      <span class="icon" id="iconLifestyle"></span>
+      <div class="label">Lifestyle rating</div>
+      <div class="value" id="lifestyleValue">0 / 100</div>
     </div>
   </div>
 

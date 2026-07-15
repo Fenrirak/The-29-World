@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Property — The 29 World</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="property.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
+    <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="insurance.html"><span class="icon-slot" data-icon="shield"></span><span class="nav-label">Insurance</span></a>
+    <a href="store.html"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
+    <a href="property.html" class="active"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
+    <span class="who" id="whoami"></span>
+    <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+  </nav>
+</div>
+
+<main>
+  <h1 id="pageTitle">Property</h1>
+  <p>Buy a house outright, or finance it with a weekly mortgage.</p>
+
+  <div id="teacherPanel" class="card hidden">
+    <h2 id="hAdd">Add a property</h2>
+    <form onsubmit="return addProp(event)">
+      <div class="grid grid-3">
+        <div>
+          <label for="hName" id="labName">Property name</label>
+          <input id="hName" placeholder="e.g. Cosy Cottage" required>
+        </div>
+        <div>
+          <label for="hPrice" id="labPrice">Price</label>
+          <input id="hPrice" type="number" min="0" step="0.01" required>
+        </div>
+        <div>
+          <label for="hComfort" id="labComfort">Comfort rating (1-5)</label>
+          <input id="hComfort" type="number" min="1" max="5" step="1" value="3" required>
+        </div>
+      </div>
+      <label for="hMortgage" id="labMortgage">Mortgage length in weeks (0 = cash only)</label>
+      <input id="hMortgage" type="number" min="0" step="1" value="0">
+      <label for="hDesc" id="labDesc">Description</label>
+      <input id="hDesc" placeholder="Shown to students">
+      <button class="btn gold" type="submit" id="addBtn">Add property</button>
+    </form>
+    <div id="addMsg"></div>
+  </div>
+
+  <div id="propList"></div>
+  <p class="muted-small" id="noProps">No properties are listed yet.</p>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script src="icons.js"></script>
+<script src="data.js"></script>
+<script src="property.js"></script>
+</body>
+</html>

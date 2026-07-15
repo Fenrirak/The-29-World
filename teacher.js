@@ -28,6 +28,13 @@ function paintChrome() {
   document.getElementById("saveRateBtn").innerHTML = icon("bank", 14) + " Save rate";
   document.getElementById("labPayDay").innerHTML = icon("calendar", 13) + " Pay day (which day wages are due)";
   document.getElementById("savePayDayBtn").innerHTML = icon("calendar", 14) + " Save pay day";
+  document.getElementById("hEvents").innerHTML = icon("dice", 18) + " Random weekly events";
+  document.getElementById("labEvName").innerHTML = icon("star", 13) + " Event name";
+  document.getElementById("labEvAmount").innerHTML = icon("coin", 13) + " Amount (negative for a cost)";
+  document.getElementById("labEvDesc").innerHTML = icon("idcard", 13) + " Description (shown in the activity feed)";
+  document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Add event";
+  document.getElementById("hLifestyle").innerHTML = icon("star", 18) + " Lifestyle rating settings";
+  document.getElementById("saveLifestyleBtn").innerHTML = icon("bank", 14) + " Save lifestyle settings";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -42,6 +49,8 @@ async function init() {
   enablePasswordToggles();
   await autoPayDayIfDue(CLASS_CODE);
   await processAutomations(CLASS_CODE);
+  await processMortgages(CLASS_CODE);
+  await processWeeklyEvents(CLASS_CODE);
   await render();
 }
 
@@ -113,6 +122,46 @@ async function render() {
     appBox.appendChild(row);
   });
 
+  // random events
+  const evBox = document.getElementById("eventList");
+  const evs = cls.eventDefs || [];
+  document.getElementById("noEvents").classList.toggle("hidden", evs.length > 0);
+  evBox.innerHTML = "";
+  evs.forEach(ev => {
+    const row = document.createElement("div");
+    row.className = "auto-row";
+    row.innerHTML = `
+      <div class="auto-details">${icon("dice", 14)} <strong>${ev.name}</strong>
+        &middot; ${ev.amount >= 0 ? "+" : ""}${fmtMoney(ev.amount)}
+        &middot; ${ev.repeatable ? "Can repeat" : "Once per student"}
+        ${ev.description ? `<div class="muted-small">${ev.description}</div>` : ""}
+      </div>
+      <button class="btn small coral" onclick="removeEvent('${ev.id}')">${icon("trash", 13)} Remove</button>
+    `;
+    evBox.appendChild(row);
+  });
+
+  // lifestyle settings
+  const cfg = cls.lifestyleConfig || {
+    property: { enabled: true, weight: 4 }, store: { enabled: true, weight: 2 }, insurance: { enabled: true, weight: 2 }
+  };
+  const lsBox = document.getElementById("lifestyleSettings");
+  const lsSections = [
+    { key: "property", label: "Property (house comfort)" },
+    { key: "store", label: "Store items owned" },
+    { key: "insurance", label: "Insurance plans owned" }
+  ];
+  lsBox.innerHTML = lsSections.map(s => `
+    <div class="card" style="margin-bottom:0;box-shadow:none;border:1.5px solid var(--line);">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:0;">
+        <input type="checkbox" id="ls-${s.key}-on" ${cfg[s.key] && cfg[s.key].enabled ? "checked" : ""} style="width:20px;height:20px;min-height:auto;">
+        ${s.label}
+      </label>
+      <label for="ls-${s.key}-weight">Points per star</label>
+      <input type="number" id="ls-${s.key}-weight" min="0" step="1" value="${cfg[s.key] ? cfg[s.key].weight : 0}">
+    </div>
+  `).join("");
+
   // adjustment select
   const sel = document.getElementById("adjStudent");
   sel.innerHTML = students.map(s => `<option value="${s.username}">${s.name}</option>`).join("");
@@ -148,6 +197,12 @@ function describeTxn(t, nameOf) {
     case "stock-buy": return `${nameOf(t.from)} — ${t.note}`;
     case "stock-sell": return `${nameOf(t.to)} — ${t.note}`;
     case "stock-close": return `${nameOf(t.to)} — ${t.note}`;
+    case "insurance-buy": return `${nameOf(t.from)} — ${t.note}`;
+    case "store-buy": return `${nameOf(t.from)} — ${t.note}`;
+    case "property-buy": return `${nameOf(t.from)} — ${t.note}`;
+    case "property-sell": return `${nameOf(t.to)} — ${t.note}`;
+    case "mortgage": return `${nameOf(t.from)} — ${t.note}`;
+    case "event": return `${nameOf(t.to)} — ${t.note}`;
     default: return t.note || "";
   }
 }
@@ -163,7 +218,13 @@ function badge(type) {
     automation: ["navy", "repeat", "Auto-pay"],
     "stock-buy": ["gold", "chart", "Stock buy"],
     "stock-sell": ["gold", "chart", "Stock sell"],
-    "stock-close": ["gold", "building", "Delisted"]
+    "stock-close": ["gold", "building", "Delisted"],
+    "insurance-buy": ["lilac", "shield", "Insurance"],
+    "store-buy": ["mint", "cart", "Store"],
+    "property-buy": ["navy", "house", "Property"],
+    "property-sell": ["gold", "house", "Property sold"],
+    "mortgage": ["coral", "house", "Mortgage"],
+    "event": ["lilac", "dice", "Random event"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -223,6 +284,41 @@ async function giveAdjustment(e) {
   }
   await render();
   return false;
+}
+
+async function addEventForm(e) {
+  e.preventDefault();
+  const ev = {
+    name: document.getElementById("evName").value.trim(),
+    amount: document.getElementById("evAmount").value,
+    repeatable: document.getElementById("evRepeat").checked,
+    description: document.getElementById("evDesc").value.trim()
+  };
+  await addEventDef(CLASS_CODE, ev);
+  document.getElementById("evName").value = "";
+  document.getElementById("evAmount").value = "";
+  document.getElementById("evDesc").value = "";
+  document.getElementById("evRepeat").checked = false;
+  await render();
+  return false;
+}
+
+async function removeEvent(id) {
+  if (confirm("Remove this event? It will no longer be handed out.")) {
+    await removeEventDef(CLASS_CODE, id);
+    await render();
+  }
+}
+
+async function saveLifestyle() {
+  const config = {
+    property: { enabled: document.getElementById("ls-property-on").checked, weight: Number(document.getElementById("ls-property-weight").value) || 0 },
+    store: { enabled: document.getElementById("ls-store-on").checked, weight: Number(document.getElementById("ls-store-weight").value) || 0 },
+    insurance: { enabled: document.getElementById("ls-insurance-on").checked, weight: Number(document.getElementById("ls-insurance-weight").value) || 0 }
+  };
+  await saveLifestyleConfig(CLASS_CODE, config);
+  document.getElementById("lifestyleMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
+  await render();
 }
 
 async function runPayDay() {

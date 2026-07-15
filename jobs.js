@@ -24,6 +24,8 @@ async function init() {
   paintChrome();
   await autoPayDayIfDue(CURRENT.classCode);
   await processAutomations(CURRENT.classCode);
+  await processMortgages(CURRENT.classCode);
+  await processWeeklyEvents(CURRENT.classCode);
   if (!IS_TEACHER) await render();
 }
 
