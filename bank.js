@@ -37,7 +37,10 @@ async function init() {
   await autoPayDayIfDue(u.classCode);
   await processAutomations(u.classCode);
   await processMortgages(u.classCode);
+  await processTermDeposits(u.classCode);
+  await autoInterestIfDue(u.classCode);
   await processWeeklyEvents(u.classCode);
+  await checkWeeklyEventPopup(u.username, u.classCode);
   await render();
 }
 
@@ -62,7 +65,7 @@ async function render() {
   const me = await getUser(CURRENT.username);
   const cls = await getClass(me.classCode);
 
-  document.getElementById("balance").textContent = fmtMoney(me.balance);
+  document.getElementById("balance").textContent = IS_TEACHER ? "Unlimited ∞" : fmtMoney(me.balance);
 
   const recipients = await payableRecipients();
   const optsHtml = recipients.length
@@ -110,7 +113,10 @@ async function render() {
       "stock-sell": ["gold", "chart", "Stock sell"], "stock-close": ["gold", "building", "Delisted"],
       "insurance-buy": ["lilac", "shield", "Insurance"], "store-buy": ["mint", "cart", "Store"],
       "property-buy": ["navy", "house", "Property"], "property-sell": ["gold", "house", "Property sold"],
-      "mortgage": ["coral", "house", "Mortgage"], "event": ["lilac", "dice", "Random event"]
+      "mortgage": ["coral", "house", "Mortgage"], "event": ["lilac", "dice", "Random event"],
+      "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
+      "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
+      "term-deposit-mature": ["mint", "vault", "Deposit matured"]
     };
     const [c, ic, label] = map[type] || ["navy", "coin", type];
     return `<span class="badge ${c}">${icon(ic, 12)}${label}</span>`;
@@ -122,8 +128,8 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage"].includes(t.type)) { sign = "-"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell", "vehicle-sell", "term-deposit-mature", "term-deposit-early"].includes(t.type)) { sign = "+"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "vehicle-buy", "term-deposit-open"].includes(t.type)) { sign = "-"; }
     else if (t.type === "property-buy") { sign = "-"; }
 
     let amtDisplay;

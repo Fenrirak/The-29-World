@@ -13,11 +13,13 @@
   <nav>
     <a href="teacher.html" class="active"><span class="icon-slot" data-icon="bank"></span><span class="nav-label">Dashboard</span></a>
     <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="termdeposit.html"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
     <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
     <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
     <a href="insurance.html"><span class="icon-slot" data-icon="shield"></span><span class="nav-label">Insurance</span></a>
     <a href="store.html"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
     <a href="property.html"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
+    <a href="transport.html"><span class="icon-slot" data-icon="car"></span><span class="nav-label">Transport</span></a>
     <span class="who" id="whoami"></span>
     <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
   </nav>
@@ -150,9 +152,40 @@
     <div class="flex-between">
       <h2 id="hSettings">Class settings</h2>
     </div>
-    <label for="rate" id="labRate">Savings interest rate (% applied each time you click Apply Interest)</label>
+    <label for="rate" id="labRate">Savings interest rate (% applied each time interest runs)</label>
     <input id="rate" type="number" min="0" max="20" step="0.1" style="max-width:160px;">
     <button class="btn secondary small" style="margin-top:12px;" onclick="saveRate()" id="saveRateBtn">Save rate</button>
+
+    <div style="margin-top:20px;">
+      <label style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="interestAuto" style="width:20px;height:20px;min-height:auto;">
+        <span id="labInterestAuto">Automatically pay interest on a schedule</span>
+      </label>
+      <div class="grid grid-2" style="margin-top:6px;">
+        <div>
+          <label for="interestFreq" id="labInterestFreq">How often</label>
+          <select id="interestFreq">
+            <option value="daily">Every day</option>
+            <option value="weekly">Every week</option>
+            <option value="fortnightly">Every 2 weeks</option>
+            <option value="monthly">Every 4 weeks</option>
+          </select>
+        </div>
+        <div id="interestDayWrap">
+          <label for="interestDay" id="labInterestDay">On which day</label>
+          <select id="interestDay">
+            <option value="Mon">Monday</option>
+            <option value="Tue">Tuesday</option>
+            <option value="Wed">Wednesday</option>
+            <option value="Thu">Thursday</option>
+            <option value="Fri">Friday</option>
+            <option value="Sat">Saturday</option>
+            <option value="Sun">Sunday</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn secondary small" style="margin-top:12px;" onclick="saveInterestAuto()" id="saveInterestAutoBtn">Save interest schedule</button>
+    </div>
 
     <label for="payDaySelect" id="labPayDay" style="margin-top:24px;">Pay day (which day wages are due)</label>
     <select id="payDaySelect" style="max-width:220px;">
@@ -191,6 +224,7 @@
 <script src="firebase-init.js"></script>
 <script src="icons.js"></script>
 <script src="data.js"></script>
+<script src="events-ui.js"></script>
 <script src="teacher.js"></script>
 </body>
 </html>

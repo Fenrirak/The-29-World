@@ -17,7 +17,10 @@ function badgeType(type) {
     "property-buy": ["navy", "house", "Property"],
     "property-sell": ["gold", "house", "Property sold"],
     "mortgage": ["coral", "house", "Mortgage"],
-    "event": ["lilac", "dice", "Random event"]
+    "event": ["lilac", "dice", "Random event"],
+    "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
+    "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
+    "term-deposit-mature": ["mint", "vault", "Deposit matured"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -56,7 +59,10 @@ async function init() {
   await autoPayDayIfDue(u.classCode);
   await processAutomations(u.classCode);
   await processMortgages(u.classCode);
+  await processTermDeposits(u.classCode);
+  await autoInterestIfDue(u.classCode);
   await processWeeklyEvents(u.classCode);
+  await checkWeeklyEventPopup(u.username, u.classCode);
   await render();
 }
 
@@ -72,7 +78,7 @@ async function render() {
   document.getElementById("jobLabel").textContent = job ? `${job.title} — ${fmtMoney(job.wage)}/payday` : "No job assigned";
 
   const cfg = cls.lifestyleConfig || {};
-  const anyEnabled = ["property", "store", "insurance"].some(k => cfg[k] && cfg[k].enabled);
+  const anyEnabled = ["property", "store", "insurance", "transport"].some(k => cfg[k] && cfg[k].enabled);
   document.getElementById("lifestyleCard").classList.toggle("hidden", !anyEnabled);
   if (anyEnabled) {
     const score = await lifestyleRating(me.username, me.classCode);
@@ -139,8 +145,8 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy"].includes(t.type)) { sign = "-"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell", "vehicle-sell", "term-deposit-mature", "term-deposit-early"].includes(t.type)) { sign = "+"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "vehicle-buy", "term-deposit-open"].includes(t.type)) { sign = "-"; }
     else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
 
     const tr = document.createElement("tr");

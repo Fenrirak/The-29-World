@@ -389,3 +389,21 @@ label .icon-slot{color:var(--navy-700);}
   .auth-card{padding:22px 16px;}
   .class-code-pill{font-size:.95rem;padding:8px 12px;}
 }
+
+/* ---------------- Random event popup ---------------- */
+.anw-modal-overlay{
+  position:fixed;inset:0;background:rgba(31,43,68,0.55);
+  display:flex;align-items:center;justify-content:center;
+  z-index:1000;padding:20px;
+}
+.anw-modal-card{
+  background:#fff;border-radius:18px;padding:26px;max-width:420px;width:100%;
+  box-shadow:0 24px 60px rgba(0,0,0,0.35);border-top:5px solid var(--gold);
+  max-height:85vh;overflow-y:auto;
+}
+.anw-event-row{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 4px;border-bottom:1px solid var(--line);
+}
+.anw-event-row:last-of-type{border-bottom:none;}
+.anw-event-name{font-weight:800;color:var(--navy-900);}

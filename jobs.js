@@ -25,7 +25,10 @@ async function init() {
   await autoPayDayIfDue(CURRENT.classCode);
   await processAutomations(CURRENT.classCode);
   await processMortgages(CURRENT.classCode);
+  await processTermDeposits(CURRENT.classCode);
+  await autoInterestIfDue(CURRENT.classCode);
   await processWeeklyEvents(CURRENT.classCode);
+  await checkWeeklyEventPopup(CURRENT.username, CURRENT.classCode);
   if (!IS_TEACHER) await render();
 }
 

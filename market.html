@@ -13,11 +13,13 @@
   <nav>
     <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
     <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="termdeposit.html"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
     <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
     <a href="market.html" class="active"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
     <a href="insurance.html"><span class="icon-slot" data-icon="shield"></span><span class="nav-label">Insurance</span></a>
     <a href="store.html"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
     <a href="property.html"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
+    <a href="transport.html"><span class="icon-slot" data-icon="car"></span><span class="nav-label">Transport</span></a>
     <span class="who" id="whoami"></span>
     <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
   </nav>
@@ -50,7 +52,7 @@
 
     <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
       <h2 id="hVolatility">Daily price movement</h2>
-      <p>Set how much every company's share price can randomly move (up or down) each time you simulate a market day — just like a real stock market.</p>
+      <p>Set how much every <strong>new</strong> company's share price can randomly move (up or down) each time you simulate a market day. Each company's range can also be fine-tuned individually below once it's listed.</p>
       <div class="grid grid-3">
         <div>
           <label for="rangeMin" id="labRangeMin">Minimum % change</label>
@@ -79,6 +81,7 @@
 <script src="firebase-init.js"></script>
 <script src="icons.js"></script>
 <script src="data.js"></script>
+<script src="events-ui.js"></script>
 <script src="market.js"></script>
 </body>
 </html>

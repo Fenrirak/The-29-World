@@ -31,7 +31,10 @@ async function init() {
   await autoPayDayIfDue(CLASS_CODE);
   await processAutomations(CLASS_CODE);
   await processMortgages(CLASS_CODE);
+  await processTermDeposits(CLASS_CODE);
+  await autoInterestIfDue(CLASS_CODE);
   await processWeeklyEvents(CLASS_CODE);
+  await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
   await render();
 }
 
@@ -83,7 +86,7 @@ async function render() {
         ${sparkline(co.history)}
       </div>
       <div class="progress-bar"><div style="width:${pctSold}%"></div></div>
-      <p class="muted-small">${co.availableShares} of ${co.totalShares} shares still available &middot; you own ${myShares} share${myShares === 1 ? "" : "s"}</p>
+      <p class="muted-small">${co.availableShares} of ${co.totalShares} shares still available &middot; You own ${myShares} share${myShares === 1 ? "" : "s"}</p>
 
       ${IS_TEACHER ? `
         <div class="grid grid-2" style="margin-top:10px;">
@@ -97,6 +100,19 @@ async function render() {
           <div style="text-align:right;">
             <label>&nbsp;</label>
             <button class="btn small coral" onclick="closeCo('${co.id}')">${icon("coin",13)} Delist &amp; cash out holders</button>
+          </div>
+        </div>
+        <div class="grid grid-3" style="margin-top:10px;">
+          <div>
+            <label>Min % change (this company)</label>
+            <input type="number" min="0" step="0.5" id="rmin-${co.id}" value="${(co.priceRange || cls.priceRange || {min:1}).min}">
+          </div>
+          <div>
+            <label>Max % change (this company)</label>
+            <input type="number" min="0" step="0.5" id="rmax-${co.id}" value="${(co.priceRange || cls.priceRange || {max:5}).max}">
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button class="btn small secondary" style="width:100%;" onclick="setCoRange('${co.id}')">${icon("chart",13)} Save range</button>
           </div>
         </div>
       ` : `
@@ -145,6 +161,12 @@ async function openCo(e) {
 async function setPrice(id) {
   const val = document.getElementById("price-" + id).value;
   await updateCompanyPrice(CLASS_CODE, id, val);
+  await render();
+}
+async function setCoRange(id) {
+  const min = document.getElementById("rmin-" + id).value;
+  const max = document.getElementById("rmax-" + id).value;
+  await setCompanyPriceRange(CLASS_CODE, id, min, max);
   await render();
 }
 async function closeCo(id) {

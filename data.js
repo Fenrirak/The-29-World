@@ -32,7 +32,30 @@ function fmtMoney(n) {
 }
 
 function nowStr() {
-  return new Date().toLocaleString();
+  return new Date().toLocaleString("en-NZ", { timeZone: "Pacific/Auckland" });
+}
+
+/* ---------------- New Zealand game-clock helpers ----------------
+   Everything that depends on "what day/date is it" (pay day, automations,
+   mortgages, interest, term deposits, random events) reads NZ wall-clock
+   time, not the visiting device's local time zone. */
+function nzParts(d) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Pacific/Auckland", weekday: "short",
+    year: "numeric", month: "2-digit", day: "2-digit"
+  });
+  const map = {};
+  fmt.formatToParts(d || new Date()).forEach(p => { map[p.type] = p.value; });
+  return map; // { weekday: "Mon", year: "2026", month: "07", day: "15" }
+}
+function nzDayName(d) { return nzParts(d).weekday; } // "Mon".."Sun" — matches DAY_NAMES values
+function nzDateKey(d) { const p = nzParts(d); return `${p.year}-${p.month}-${p.day}`; }
+function dateKeyToUTC(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  return Date.UTC(y, m - 1, d);
+}
+function daysBetweenKeys(earlierKey, laterKey) {
+  return Math.round((dateKeyToUTC(laterKey) - dateKeyToUTC(earlierKey)) / 86400000);
 }
 
 /* ---------------- Basic doc fetch helpers ---------------- */
@@ -108,10 +131,13 @@ async function createTeacherAndClass(name, username, password, className) {
     lastPayDayRun: null,
     insurancePlans: [], storeItems: [], properties: [],
     eventDefs: [], eventLog: [], lastEventWeekRun: null,
+    vehicles: [], termDepositPlans: [],
+    interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
     lifestyleConfig: {
       property: { enabled: true, weight: 4 },
       store: { enabled: true, weight: 2 },
-      insurance: { enabled: true, weight: 2 }
+      insurance: { enabled: true, weight: 2 },
+      transport: { enabled: true, weight: 3 }
     }
   };
 
@@ -167,7 +193,9 @@ async function adjustBalance(username, delta) {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) throw new Error("NO_USER");
-      const bal = Math.round((snap.data().balance + delta) * 100) / 100;
+      const data = snap.data();
+      if (data.role === "teacher" && delta < 0) return; // teachers have unlimited funds
+      const bal = Math.round((data.balance + delta) * 100) / 100;
       t.update(ref, { balance: bal });
     });
     return true;
@@ -196,6 +224,7 @@ async function transferMoney(fromUser, toUser, amount, note) {
   if (!from || !to) return { ok: false, error: "User not found." };
   if (from.classCode !== to.classCode) return { ok: false, error: "You can only send money within your own class." };
   if (amount <= 0) return { ok: false, error: "Enter an amount greater than zero." };
+  const fromIsTeacher = from.role === "teacher";
 
   try {
     await fdb.runTransaction(async (t) => {
@@ -203,8 +232,8 @@ async function transferMoney(fromUser, toUser, amount, note) {
       const toSnap = await t.get(toRef);
       const fromData = fromSnap.data();
       const toData = toSnap.data();
-      if (fromData.balance < amount) throw new Error("BROKE");
-      t.update(fromRef, { balance: Math.round((fromData.balance - amount) * 100) / 100 });
+      if (!fromIsTeacher && fromData.balance < amount) throw new Error("BROKE");
+      if (!fromIsTeacher) t.update(fromRef, { balance: Math.round((fromData.balance - amount) * 100) / 100 });
       t.update(toRef, { balance: Math.round((toData.balance + amount) * 100) / 100 });
     });
   } catch (e) {
@@ -329,9 +358,12 @@ async function removeStudent(classCode, studentUser) {
     cls.students = cls.students.filter(s => s !== studentUser);
     cls.automations = (cls.automations || []).filter(a => a.studentUser !== studentUser);
     cls.jobApplications = (cls.jobApplications || []).filter(a => a.studentUser !== studentUser);
+    (cls.properties || []).forEach(p => { if (p.owner === studentUser) { p.owner = null; p.mortgage = null; } });
+    (cls.vehicles || []).forEach(v => { if (v.owner === studentUser) v.owner = null; });
     t.update(classRef, {
       companies: cls.companies, students: cls.students,
-      automations: cls.automations, jobApplications: cls.jobApplications
+      automations: cls.automations, jobApplications: cls.jobApplications,
+      properties: cls.properties || [], vehicles: cls.vehicles || []
     });
   });
   await usersCol().doc(studentUser).delete();
@@ -345,16 +377,15 @@ async function setPayDay(classCode, day) {
 async function autoPayDayIfDue(classCode) {
   const cls = await getClass(classCode);
   if (!cls || !cls.payDay) return 0;
-  const today = new Date();
-  const todayName = DAY_NAMES[today.getDay()];
-  const todayKey = today.toISOString().slice(0, 10);
+  const todayName = nzDayName();
+  const todayKey = nzDateKey();
   if (todayName !== cls.payDay) return 0;
   if (cls.lastPayDayRun === todayKey) return 0;
   return await runPayDayInternal(classCode, todayKey);
 }
 
 async function payDay(classCode) {
-  return await runPayDayInternal(classCode, new Date().toISOString().slice(0, 10));
+  return await runPayDayInternal(classCode, nzDateKey());
 }
 
 async function runPayDayInternal(classCode, dateKey) {
@@ -414,10 +445,12 @@ async function openCompany(classCode, name, price, totalShares) {
       if (!snap.exists) throw new Error("NO_CLASS");
       const cls = snap.data();
       if (cls.companies.some(c => c.name.toLowerCase() === name.toLowerCase())) throw new Error("DUP");
+      const defaultRange = cls.priceRange || { min: 1, max: 5 };
       cls.companies.push({
         id: uid("co"), name, price: Number(price),
         totalShares: Number(totalShares), availableShares: Number(totalShares),
-        history: [Number(price)], holders: {}
+        history: [Number(price)], holders: {},
+        priceRange: { min: defaultRange.min, max: defaultRange.max }
       });
       t.update(classRef, { companies: cls.companies });
     });
@@ -427,6 +460,19 @@ async function openCompany(classCode, name, price, totalShares) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   return { ok: true };
+}
+
+async function setCompanyPriceRange(classCode, companyId, min, max) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = snap.data();
+    const co = cls.companies.find(c => c.id === companyId);
+    if (!co) return;
+    co.priceRange = { min: Math.max(0, Number(min)), max: Math.max(0, Number(max)) };
+    t.update(classRef, { companies: cls.companies });
+  });
 }
 
 async function updateCompanyPrice(classCode, companyId, newPrice) {
@@ -459,7 +505,8 @@ async function simulateMarketDay(classCode) {
     const cls = snap.data();
     const range = cls.priceRange || { min: 1, max: 5 };
     cls.companies.forEach(co => {
-      const pct = range.min + Math.random() * (range.max - range.min);
+      const coRange = co.priceRange || range;
+      const pct = coRange.min + Math.random() * (coRange.max - coRange.min);
       const direction = Math.random() < 0.5 ? -1 : 1;
       const newPrice = Math.max(0.01, Math.round(co.price * (1 + (direction * pct) / 100) * 100) / 100);
       co.price = newPrice;
@@ -613,9 +660,8 @@ async function processAutomations(classCode) {
   const cls = await getClass(classCode);
   if (!cls || !cls.automations || cls.automations.length === 0) return 0;
 
-  const today = new Date();
-  const todayName = DAY_NAMES[today.getDay()];
-  const todayKey = today.toISOString().slice(0, 10);
+  const todayName = nzDayName();
+  const todayKey = nzDateKey();
   let ran = 0;
 
   for (const a of cls.automations) {
@@ -623,7 +669,7 @@ async function processAutomations(classCode) {
     if (a.dayOfWeek !== todayName) continue;
     if (a.lastRun === todayKey) continue;
     if (a.lastRun) {
-      const daysSince = Math.round((today - new Date(a.lastRun)) / 86400000);
+      const daysSince = daysBetweenKeys(a.lastRun, todayKey);
       const need = FREQ_DAYS[a.frequency] || 7;
       if (daysSince < need) continue;
     }
@@ -661,6 +707,245 @@ async function processAutomations(classCode) {
   return ran;
 }
 
+/* ===================== Transport ===================== */
+async function addVehicle(classCode, v) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.vehicles.push({
+      id: uid("veh"), name: v.name, price: Number(v.price),
+      comfort: Math.max(1, Math.min(5, Number(v.comfort) || 1)),
+      description: v.description || "", owner: null
+    });
+    t.update(classRef, { vehicles: cls.vehicles });
+  });
+}
+async function removeVehicle(classCode, vehId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.vehicles = cls.vehicles.filter(v => v.id !== vehId);
+    t.update(classRef, { vehicles: cls.vehicles });
+  });
+}
+async function buyVehicle(username, classCode, vehId) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let vehName = "", cashPaid = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const veh = cls.vehicles.find(v => v.id === vehId);
+      if (!veh) throw new Error("NOT_FOUND");
+      if (veh.owner) throw new Error("TAKEN");
+      const isTeacher = user.role === "teacher";
+      if (!isTeacher && user.balance < veh.price) throw new Error("BROKE");
+      veh.owner = username;
+      vehName = veh.name;
+      cashPaid = veh.price;
+      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - veh.price) * 100) / 100 });
+      t.update(classRef, { vehicles: cls.vehicles });
+    });
+  } catch (e) {
+    if (e.message === "TAKEN") return { ok: false, error: "Someone already bought that vehicle." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` });
+  return { ok: true };
+}
+async function sellVehicle(classCode, vehId) {
+  const classRef = classesCol().doc(classCode);
+  let owner = null, payout = 0, vehName = "";
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const veh = cls.vehicles.find(v => v.id === vehId);
+    if (!veh || !veh.owner) return;
+    owner = veh.owner;
+    vehName = veh.name;
+    payout = Math.round(veh.price * 0.9 * 100) / 100;
+    veh.owner = null;
+    t.update(classRef, { vehicles: cls.vehicles });
+  });
+  if (owner) {
+    await adjustBalance(owner, payout);
+    await logTxn(classCode, { type: "vehicle-sell", to: owner, amount: payout, note: `Sold back: ${vehName}` });
+  }
+  return true;
+}
+
+/* ===================== Term deposits ===================== */
+function dateKeyPlusDays(key, days) {
+  const [y, m, d] = key.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.getUTCFullYear() + "-" + String(dt.getUTCMonth() + 1).padStart(2, "0") + "-" + String(dt.getUTCDate()).padStart(2, "0");
+}
+async function addTermDepositPlan(classCode, plan) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.termDepositPlans.push({
+      id: uid("td"), name: plan.name, minAmount: Number(plan.minAmount) || 0,
+      days: Math.max(1, Number(plan.days) || 1), rate: Number(plan.rate) || 0,
+      earlyFeePct: Math.max(0, Number(plan.earlyFeePct) || 0), active: true
+    });
+    t.update(classRef, { termDepositPlans: cls.termDepositPlans });
+  });
+}
+async function removeTermDepositPlan(classCode, planId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.termDepositPlans = cls.termDepositPlans.filter(p => p.id !== planId);
+    t.update(classRef, { termDepositPlans: cls.termDepositPlans });
+  });
+}
+async function openTermDeposit(username, classCode, planId, amount) {
+  amount = Number(amount);
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let planSnapshot = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const plan = cls.termDepositPlans.find(p => p.id === planId && p.active);
+      if (!plan) throw new Error("NOT_FOUND");
+      if (amount < plan.minAmount) throw new Error("MIN");
+      const isTeacher = user.role === "teacher";
+      if (!isTeacher && user.balance < amount) throw new Error("BROKE");
+      const todayKey = nzDateKey();
+      const matureKey = dateKeyPlusDays(todayKey, plan.days);
+      planSnapshot = { id: plan.id, name: plan.name, days: plan.days, rate: plan.rate, earlyFeePct: plan.earlyFeePct };
+      user.termDeposits = user.termDeposits || [];
+      user.termDeposits.push({
+        id: uid("tdo"), planId: plan.id, plan: planSnapshot, amount,
+        startDate: todayKey, matureDate: matureKey
+      });
+      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - amount) * 100) / 100, termDeposits: user.termDeposits });
+      else t.update(userRef, { termDeposits: user.termDeposits });
+    });
+  } catch (e) {
+    if (e.message === "MIN") return { ok: false, error: "That's below the minimum amount for this plan." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "term-deposit-open", from: username, amount, note: `Opened term deposit: ${planSnapshot.name}` });
+  return { ok: true };
+}
+async function withdrawTermDepositEarly(username, depositId) {
+  const userRef = usersCol().doc(username);
+  let payout = 0, name = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const user = snap.data();
+      user.termDeposits = user.termDeposits || [];
+      const dep = user.termDeposits.find(d => d.id === depositId);
+      if (!dep) throw new Error("NOT_FOUND");
+      name = dep.plan.name;
+      const fee = Math.round(dep.amount * (dep.plan.earlyFeePct / 100) * 100) / 100;
+      payout = Math.round((dep.amount - fee) * 100) / 100;
+      user.termDeposits = user.termDeposits.filter(d => d.id !== depositId);
+      t.update(userRef, { balance: Math.round((user.balance + payout) * 100) / 100, termDeposits: user.termDeposits });
+    });
+  } catch (e) {
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  const classUser = await getUser(username);
+  if (classUser) await logTxn(classUser.classCode, { type: "term-deposit-early", to: username, amount: payout, note: `Withdrew early from: ${name}` });
+  return { ok: true };
+}
+async function processTermDeposits(classCode) {
+  const students = await getClassStudents(classCode);
+  const todayKey = nzDateKey();
+  let matured = 0;
+  for (const student of students) {
+    const deposits = student.termDeposits || [];
+    const due = deposits.filter(d => d.matureDate <= todayKey);
+    if (due.length === 0) continue;
+    const userRef = usersCol().doc(student.username);
+    let notes = [];
+    try {
+      await fdb.runTransaction(async (t) => {
+        const snap = await t.get(userRef);
+        if (!snap.exists) return;
+        const user = snap.data();
+        const liveDeposits = user.termDeposits || [];
+        const liveDue = liveDeposits.filter(d => d.matureDate <= todayKey);
+        if (liveDue.length === 0) return;
+        let bal = user.balance;
+        liveDue.forEach(d => {
+          const interest = Math.round(d.amount * (d.plan.rate / 100) * 100) / 100;
+          const payout = d.amount + interest;
+          bal += payout;
+          notes.push({ note: `${d.plan.name} matured: ${fmtMoney(d.amount)} + ${fmtMoney(interest)} interest`, amount: payout });
+        });
+        const remaining = liveDeposits.filter(d => d.matureDate > todayKey);
+        t.update(userRef, { balance: Math.round(bal * 100) / 100, termDeposits: remaining });
+      });
+    } catch (e) { continue; }
+    for (const n of notes) {
+      await logTxn(classCode, { type: "term-deposit-mature", to: student.username, amount: n.amount, note: n.note });
+    }
+    if (notes.length) matured += notes.length;
+  }
+  return matured;
+}
+
+/* ===================== Auto interest ===================== */
+async function saveInterestSettings(classCode, settings) {
+  await classesCol().doc(classCode).update({
+    interestRate: Number(settings.rate) || 0,
+    interestAuto: !!settings.auto,
+    interestFrequency: settings.frequency || "weekly",
+    interestDay: settings.day || "Fri"
+  });
+}
+async function autoInterestIfDue(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls || !cls.interestAuto) return 0;
+  const todayKey = nzDateKey();
+  if (cls.lastInterestRun === todayKey) return 0;
+  if (cls.interestFrequency !== "daily") {
+    if (nzDayName() !== (cls.interestDay || "Fri")) return 0;
+    if (cls.lastInterestRun) {
+      const need = FREQ_DAYS[cls.interestFrequency] || 7;
+      if (daysBetweenKeys(cls.lastInterestRun, todayKey) < need) return 0;
+    }
+  }
+  const classRef = classesCol().doc(classCode);
+  let claimed = false;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = snap.data();
+    if (liveCls.lastInterestRun === todayKey) return;
+    t.update(classRef, { lastInterestRun: todayKey });
+    claimed = true;
+  });
+  if (!claimed) return 0;
+  return await applyInterest(classCode);
+}
+
 /* ---------------- Leaderboard ---------------- */
 async function classLeaderboard(classCode) {
   const students = await getClassStudents(classCode);
@@ -678,9 +963,15 @@ async function classLeaderboard(classCode) {
 
 async function resetClass(classCode) {
   const students = await getClassStudents(classCode);
-  await Promise.all(students.map(s => usersCol().doc(s.username).update({ balance: 0, jobId: null })));
+  await Promise.all(students.map(s => usersCol().doc(s.username).update({
+    balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: []
+  })));
+  const cls = await getClass(classCode);
+  const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null }));
+  const vehicles = (cls.vehicles || []).map(v => ({ ...v, owner: null }));
   await classesCol().doc(classCode).update({
-    companies: [], txns: [], automations: [], jobApplications: []
+    companies: [], txns: [], automations: [], jobApplications: [],
+    properties, vehicles, eventLog: []
   });
   return true;
 }
@@ -705,16 +996,25 @@ function withNewModuleDefaults(cls) {
   cls.eventDefs = cls.eventDefs || [];
   cls.eventLog = cls.eventLog || [];
   cls.lastEventWeekRun = cls.lastEventWeekRun || null;
+  cls.termDepositPlans = cls.termDepositPlans || [];
+  cls.vehicles = cls.vehicles || [];
+  cls.interestAuto = cls.interestAuto || false;
+  cls.interestFrequency = cls.interestFrequency || "weekly";
+  cls.interestDay = cls.interestDay || "Fri";
+  cls.lastInterestRun = cls.lastInterestRun || null;
   cls.lifestyleConfig = cls.lifestyleConfig || {
     property: { enabled: true, weight: 4 },
     store: { enabled: true, weight: 2 },
-    insurance: { enabled: true, weight: 2 }
+    insurance: { enabled: true, weight: 2 },
+    transport: { enabled: true, weight: 3 }
   };
+  if (!cls.lifestyleConfig.transport) cls.lifestyleConfig.transport = { enabled: true, weight: 3 };
   return cls;
 }
 
 function isoWeekKey(d) {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const p = nzParts(d);
+  const date = new Date(Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day)));
   const dayNum = (date.getUTCDay() + 6) % 7;
   date.setUTCDate(date.getUTCDate() - dayNum + 3);
   const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
@@ -1030,7 +1330,7 @@ async function processWeeklyEvents(classCode) {
     const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
     for (const ev of shuffled) {
       balanceDeltas[student.username] = (balanceDeltas[student.username] || 0) + ev.amount;
-      newLogEntries.push({ studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey });
+      newLogEntries.push({ studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey, name: ev.name, amount: ev.amount, description: ev.description || "" });
       txns.push({ type: "event", to: student.username, amount: ev.amount, note: ev.name + (ev.description ? " — " + ev.description : "") });
     }
   }
@@ -1066,6 +1366,10 @@ async function lifestyleRating(username, classCode) {
   if (cfg.property && cfg.property.enabled) {
     const owned = cls.properties.find(p => p.owner === username);
     if (owned) score += owned.comfort * (cfg.property.weight || 0);
+  }
+  if (cfg.transport && cfg.transport.enabled) {
+    const owned = cls.vehicles.find(v => v.owner === username);
+    if (owned) score += owned.comfort * (cfg.transport.weight || 0);
   }
   if (cfg.store && cfg.store.enabled) {
     const owned = user.storeItems || [];

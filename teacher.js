@@ -26,6 +26,9 @@ function paintChrome() {
   document.getElementById("applyAdjBtn").innerHTML = icon("send", 15) + " Apply";
   document.getElementById("labRate").innerHTML = icon("piggy", 13) + " Savings interest rate (%)";
   document.getElementById("saveRateBtn").innerHTML = icon("bank", 14) + " Save rate";
+  document.getElementById("labInterestFreq").innerHTML = icon("repeat", 13) + " How often";
+  document.getElementById("labInterestDay").innerHTML = icon("calendar", 13) + " On which day";
+  document.getElementById("saveInterestAutoBtn").innerHTML = icon("bank", 14) + " Save interest schedule";
   document.getElementById("labPayDay").innerHTML = icon("calendar", 13) + " Pay day (which day wages are due)";
   document.getElementById("savePayDayBtn").innerHTML = icon("calendar", 14) + " Save pay day";
   document.getElementById("hEvents").innerHTML = icon("dice", 18) + " Random weekly events";
@@ -50,7 +53,10 @@ async function init() {
   await autoPayDayIfDue(CLASS_CODE);
   await processAutomations(CLASS_CODE);
   await processMortgages(CLASS_CODE);
+  await processTermDeposits(CLASS_CODE);
+  await autoInterestIfDue(CLASS_CODE);
   await processWeeklyEvents(CLASS_CODE);
+  await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
   await render();
 }
 
@@ -59,6 +65,10 @@ async function render() {
   document.getElementById("className").textContent = cls.name;
   document.getElementById("classCode").textContent = cls.code;
   document.getElementById("rate").value = cls.interestRate;
+  document.getElementById("interestAuto").checked = !!cls.interestAuto;
+  document.getElementById("interestFreq").value = cls.interestFrequency || "weekly";
+  document.getElementById("interestDay").value = cls.interestDay || "Fri";
+  document.getElementById("interestDayWrap").classList.toggle("hidden", (cls.interestFrequency || "weekly") === "daily");
   document.getElementById("payDaySelect").value = cls.payDay || "Fri";
 
   const students = await getClassStudents(CLASS_CODE);
@@ -143,11 +153,14 @@ async function render() {
 
   // lifestyle settings
   const cfg = cls.lifestyleConfig || {
-    property: { enabled: true, weight: 4 }, store: { enabled: true, weight: 2 }, insurance: { enabled: true, weight: 2 }
+    property: { enabled: true, weight: 4 }, store: { enabled: true, weight: 2 },
+    insurance: { enabled: true, weight: 2 }, transport: { enabled: true, weight: 3 }
   };
   const lsBox = document.getElementById("lifestyleSettings");
+  lsBox.className = "grid grid-4";
   const lsSections = [
     { key: "property", label: "Property (house comfort)" },
+    { key: "transport", label: "Transport (vehicle comfort)" },
     { key: "store", label: "Store items owned" },
     { key: "insurance", label: "Insurance plans owned" }
   ];
@@ -224,7 +237,10 @@ function badge(type) {
     "property-buy": ["navy", "house", "Property"],
     "property-sell": ["gold", "house", "Property sold"],
     "mortgage": ["coral", "house", "Mortgage"],
-    "event": ["lilac", "dice", "Random event"]
+    "event": ["lilac", "dice", "Random event"],
+    "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
+    "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
+    "term-deposit-mature": ["mint", "vault", "Deposit matured"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -313,6 +329,7 @@ async function removeEvent(id) {
 async function saveLifestyle() {
   const config = {
     property: { enabled: document.getElementById("ls-property-on").checked, weight: Number(document.getElementById("ls-property-weight").value) || 0 },
+    transport: { enabled: document.getElementById("ls-transport-on").checked, weight: Number(document.getElementById("ls-transport-weight").value) || 0 },
     store: { enabled: document.getElementById("ls-store-on").checked, weight: Number(document.getElementById("ls-store-weight").value) || 0 },
     insurance: { enabled: document.getElementById("ls-insurance-on").checked, weight: Number(document.getElementById("ls-insurance-weight").value) || 0 }
   };
@@ -335,6 +352,22 @@ async function saveRate() {
   await classesColUpdateRate(Number(document.getElementById("rate").value));
   await render();
 }
+async function saveInterestAuto() {
+  await saveInterestSettings(CLASS_CODE, {
+    rate: document.getElementById("rate").value,
+    auto: document.getElementById("interestAuto").checked,
+    frequency: document.getElementById("interestFreq").value,
+    day: document.getElementById("interestDay").value
+  });
+  alert("Interest schedule saved.");
+  await render();
+}
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.id === "interestFreq") {
+    document.getElementById("interestDayWrap").classList.toggle("hidden", e.target.value === "daily");
+  }
+});
+
 async function classesColUpdateRate(rate) {
   await fdb.collection("classes").doc(CLASS_CODE).update({ interestRate: rate });
 }
