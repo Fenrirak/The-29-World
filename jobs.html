@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jobs — The 29 World</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="jobs.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
+    <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="jobs.html" class="active"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <span class="who" id="whoami"></span>
+    <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+  </nav>
+</div>
+
+<main>
+  <h1 id="pageTitle">Jobs</h1>
+
+  <!-- TEACHER VIEW: points back to the jobs board on the dashboard -->
+  <div id="teacherNotice" class="card hidden">
+    <h2 id="hTeacherNotice">Manage jobs from your Dashboard</h2>
+    <p>Add jobs, write descriptions, and approve or decline applications from the Jobs board and Pending applications cards on your Dashboard.</p>
+    <a class="btn gold" href="teacher.html" id="goDashBtn">Go to Dashboard</a>
+  </div>
+
+  <!-- STUDENT VIEW -->
+  <div id="studentView" class="hidden">
+    <div class="card">
+      <h2 id="hMyJob">My current job</h2>
+      <div id="myJobBox"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="hBoard">Job board</h2>
+      <p>Click a job to see the full description and wage, then apply. Your teacher will approve or decline your application.</p>
+      <div id="jobList"></div>
+      <p class="muted-small" id="noJobs">Your teacher hasn't posted any jobs yet.</p>
+    </div>
+
+    <div class="card">
+      <h2 id="hMyApps">My applications</h2>
+      <div id="myAppsList"></div>
+      <p class="muted-small" id="noApps">You haven't applied for anything yet.</p>
+    </div>
+  </div>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script src="icons.js"></script>
+<script src="data.js"></script>
+<script src="jobs.js"></script>
+</body>
+</html>

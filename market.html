@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Market — The 29 World</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="market.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
+    <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="market.html" class="active"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <span class="who" id="whoami"></span>
+    <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+  </nav>
+</div>
+
+<main>
+  <h1 id="pageTitle">Stock Market</h1>
+  <p>Buy and sell shares in companies your teacher has opened for the class.</p>
+
+  <div id="teacherPanel" class="card hidden">
+    <h2 id="hOpen">Open a new company</h2>
+    <form onsubmit="return openCo(event)">
+      <div class="grid grid-3">
+        <div>
+          <label for="coName" id="labName">Company name</label>
+          <input id="coName" placeholder="e.g. Sunshine Snacks Ltd" required>
+        </div>
+        <div>
+          <label for="coPrice" id="labPrice">Starting share price</label>
+          <input id="coPrice" type="number" min="0.01" step="0.01" required>
+        </div>
+        <div>
+          <label for="coShares" id="labShares">Total shares available</label>
+          <input id="coShares" type="number" min="1" step="1" required>
+        </div>
+      </div>
+      <button class="btn gold" type="submit" id="openBtn">Open company</button>
+    </form>
+    <div id="coMsg"></div>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
+      <h2 id="hVolatility">Daily price movement</h2>
+      <p>Set how much every company's share price can randomly move (up or down) each time you simulate a market day — just like a real stock market.</p>
+      <div class="grid grid-3">
+        <div>
+          <label for="rangeMin" id="labRangeMin">Minimum % change</label>
+          <input id="rangeMin" type="number" min="0" step="0.5">
+        </div>
+        <div>
+          <label for="rangeMax" id="labRangeMax">Maximum % change</label>
+          <input id="rangeMax" type="number" min="0" step="0.5">
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button class="btn secondary" style="width:100%;" onclick="saveRange()" id="saveRangeBtn">Save range</button>
+        </div>
+      </div>
+      <button class="btn gold" onclick="runMarketDay()" id="simDayBtn" style="margin-top:10px;">Simulate a market day</button>
+      <div id="rangeMsg"></div>
+    </div>
+  </div>
+
+  <div id="companyList"></div>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script src="icons.js"></script>
+<script src="data.js"></script>
+<script src="market.js"></script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The 29 World — Classroom Economy</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <span class="coin" id="logoCoin">$</span>
+      <h1 style="margin:0;">The 29 World</h1>
+    </div>
+    <p class="auth-title">A classroom economy where every student runs their own money.</p>
+
+    <!-- ROLE SWITCH -->
+    <div class="tabs">
+      <button id="role-teacher" class="active" onclick="showRole('teacher')"><span class="icon-slot"></span> I'm a Teacher</button>
+      <button id="role-student" onclick="showRole('student')"><span class="icon-slot"></span> I'm a Student</button>
+    </div>
+
+    <!-- ================= TEACHER SIDE ================= -->
+    <div id="role-panel-teacher">
+      <div class="tabs subtabs">
+        <button id="tab-teacher-login" class="active" onclick="showPanel('teacher-login')"><span class="icon-slot"></span> Log in</button>
+        <button id="tab-teacher-new" onclick="showPanel('teacher-new')"><span class="icon-slot"></span> Create a class</button>
+      </div>
+
+      <!-- Teacher login -->
+      <form id="panel-teacher-login" onsubmit="return doLogin(event)">
+        <label for="l-username"><span class="icon-slot"></span> Username</label>
+        <input id="l-username" required autocomplete="username" placeholder="Username">
+        <label for="l-password"><span class="icon-slot"></span> Password</label>
+        <input id="l-password" type="password" required autocomplete="current-password" placeholder="Password">
+        <div class="remember-row">
+          <input type="checkbox" id="l-remember">
+          <label for="l-remember">Remember my username &amp; password on this device</label>
+        </div>
+        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Log in</button>
+      </form>
+
+      <!-- Teacher creates a class -->
+      <form id="panel-teacher-new" class="hidden" onsubmit="return doTeacherSignup(event)">
+        <p class="muted-small" style="margin-top:0;">Set up your classroom — you'll get a unique class code straight away so students can join.</p>
+        <label for="t-name"><span class="icon-slot"></span> Your name</label>
+        <input id="t-name" required placeholder="Your name">
+        <label for="t-class"><span class="icon-slot"></span> Class name</label>
+        <input id="t-class" placeholder="Class name, e.g. Room 12" required>
+        <label for="t-username"><span class="icon-slot"></span> Choose a username</label>
+        <input id="t-username" required placeholder="Choose a username">
+        <label for="t-password"><span class="icon-slot"></span> Choose a password</label>
+        <input id="t-password" type="password" required placeholder="Choose a password">
+        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Create my class</button>
+      </form>
+    </div>
+
+    <!-- ================= STUDENT SIDE ================= -->
+    <div id="role-panel-student" class="hidden">
+      <div class="tabs subtabs">
+        <button id="tab-student-login" class="active" onclick="showPanel('student-login')"><span class="icon-slot"></span> Log in</button>
+        <button id="tab-student-new" onclick="showPanel('student-new')"><span class="icon-slot"></span> Join a class</button>
+      </div>
+
+      <!-- Student login -->
+      <form id="panel-student-login" onsubmit="return doLogin(event)">
+        <label for="sl-username"><span class="icon-slot"></span> Username</label>
+        <input id="sl-username" required autocomplete="username" placeholder="Username">
+        <label for="sl-password"><span class="icon-slot"></span> Password</label>
+        <input id="sl-password" type="password" required autocomplete="current-password" placeholder="Password">
+        <div class="remember-row">
+          <input type="checkbox" id="sl-remember">
+          <label for="sl-remember">Remember my username &amp; password on this device</label>
+        </div>
+        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Log in</button>
+      </form>
+
+      <!-- Student joins a class -->
+      <form id="panel-student-new" class="hidden" onsubmit="return doStudentSignup(event)">
+        <label for="s-code"><span class="icon-slot"></span> Class code</label>
+        <input id="s-code" placeholder="Class code, e.g. F7K2M" required style="text-transform:uppercase;">
+        <label for="s-name"><span class="icon-slot"></span> Your name</label>
+        <input id="s-name" required placeholder="Your name">
+        <label for="s-username"><span class="icon-slot"></span> Choose a username</label>
+        <input id="s-username" required placeholder="Choose a username">
+        <label for="s-password"><span class="icon-slot"></span> Choose a password</label>
+        <input id="s-password" type="password" required placeholder="Choose a password">
+        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Join class</button>
+        <p class="muted-small" style="text-align:center;margin-top:10px;">Each class holds up to 8 students. Ask your teacher for the class code.</p>
+      </form>
+    </div>
+
+    <div id="msg"></div>
+  </div>
+</div>
+
+<script src="icons.js"></script>
+<script src="data.js"></script>
+<script>
+// Fill every .icon-slot next to its text with the matching icon. This is
+// purely decorative — every label/button already has real text, so the
+// page is fully usable even if this script fails to load.
+function paintIcons() {
+  if (typeof icon !== "function") return;
+  const map = [
+    ["#role-teacher", "briefcase"], ["#role-student", "users"],
+    ["#tab-teacher-login", "key"], ["#tab-teacher-new", "plus"],
+    ["#tab-student-login", "key"], ["#tab-student-new", "star"],
+    ['label[for="l-username"]', "users"], ['label[for="l-password"]', "lock"],
+    ['#panel-teacher-login button[type="submit"]', "send"],
+    ['label[for="t-name"]', "users"], ['label[for="t-class"]', "building"],
+    ['label[for="t-username"]', "key"], ['label[for="t-password"]', "lock"],
+    ['#panel-teacher-new button[type="submit"]', "plus"],
+    ['label[for="sl-username"]', "users"], ['label[for="sl-password"]', "lock"],
+    ['#panel-student-login button[type="submit"]', "send"],
+    ['label[for="s-code"]', "key"], ['label[for="s-name"]', "users"],
+    ['label[for="s-username"]', "key"], ['label[for="s-password"]', "lock"],
+    ['#panel-student-new button[type="submit"]', "star"]
+  ];
+  map.forEach(([sel, name]) => {
+    const el = document.querySelector(sel);
+    const slot = el && el.querySelector(".icon-slot");
+    if (slot) slot.innerHTML = icon(name, 14);
+  });
+  const logo = document.getElementById("logoCoin");
+  logo.innerHTML = icon("coin", 26);
+}
+
+function showRole(which) {
+  document.getElementById("role-panel-teacher").classList.toggle("hidden", which !== "teacher");
+  document.getElementById("role-panel-student").classList.toggle("hidden", which !== "student");
+  document.getElementById("role-teacher").classList.toggle("active", which === "teacher");
+  document.getElementById("role-student").classList.toggle("active", which === "student");
+  document.getElementById("msg").innerHTML = "";
+}
+
+function showPanel(which) {
+  const groups = which.startsWith("teacher") ? ["teacher-login", "teacher-new"] : ["student-login", "student-new"];
+  groups.forEach(p => {
+    document.getElementById("panel-" + p).classList.toggle("hidden", p !== which);
+    document.getElementById("tab-" + p).classList.toggle("active", p === which);
+  });
+  document.getElementById("msg").innerHTML = "";
+}
+
+function showMsg(text, ok) {
+  document.getElementById("msg").innerHTML =
+    `<div class="${ok ? 'success-msg' : 'error-msg'}">${text}</div>`;
+}
+
+function doLogin(e) {
+  e.preventDefault();
+  const isTeacherForm = e.target.id === "panel-teacher-login";
+  const uField = isTeacherForm ? "l-username" : "sl-username";
+  const pField = isTeacherForm ? "l-password" : "sl-password";
+  const rField = isTeacherForm ? "l-remember" : "sl-remember";
+  const username = document.getElementById(uField).value.trim();
+  const password = document.getElementById(pField).value;
+  const remember = document.getElementById(rField).checked;
+
+  const res = login(username, password);
+  if (!res.ok) { showMsg(res.error, false); return false; }
+
+  const key = "anw_remember_" + (isTeacherForm ? "teacher" : "student");
+  if (remember) {
+    localStorage.setItem(key, JSON.stringify({ username, password }));
+  } else {
+    localStorage.removeItem(key);
+  }
+
+  window.location.href = res.user.role === "teacher" ? "teacher.html" : "student.html";
+  return false;
+}
+
+// Pre-fill saved logins, if any, on page load
+function loadRememberedLogins() {
+  ["teacher", "student"].forEach(role => {
+    const raw = localStorage.getItem("anw_remember_" + role);
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(raw);
+      const uField = role === "teacher" ? "l-username" : "sl-username";
+      const pField = role === "teacher" ? "l-password" : "sl-password";
+      const rField = role === "teacher" ? "l-remember" : "sl-remember";
+      document.getElementById(uField).value = saved.username || "";
+      document.getElementById(pField).value = saved.password || "";
+      document.getElementById(rField).checked = true;
+    } catch (e) { /* ignore corrupt storage */ }
+  });
+}
+
+function doTeacherSignup(e) {
+  e.preventDefault();
+  const name = document.getElementById("t-name").value.trim();
+  const className = document.getElementById("t-class").value.trim();
+  const username = document.getElementById("t-username").value.trim();
+  const password = document.getElementById("t-password").value;
+  const res = createTeacherAndClass(name, username, password, className);
+  if (!res.ok) { showMsg(res.error, false); return false; }
+  setSession(username);
+  window.location.href = "teacher.html?welcome=1";
+  return false;
+}
+
+function doStudentSignup(e) {
+  e.preventDefault();
+  const code = document.getElementById("s-code").value.trim().toUpperCase();
+  const name = document.getElementById("s-name").value.trim();
+  const username = document.getElementById("s-username").value.trim();
+  const password = document.getElementById("s-password").value;
+  const res = createStudentAccount(name, username, password, code);
+  if (!res.ok) { showMsg(res.error, false); return false; }
+  setSession(username);
+  window.location.href = "student.html?welcome=1";
+  return false;
+}
+
+paintIcons();
+enablePasswordToggles();
+loadRememberedLogins();
+
+// If already logged in, skip straight to dashboard
+(function () {
+  const u = getSessionUser();
+  if (u) window.location.href = u.role === "teacher" ? "teacher.html" : "student.html";
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teacher Dashboard — The 29 World</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="teacher.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <a href="teacher.html" class="active"><span class="icon-slot" data-icon="bank"></span><span class="nav-label">Dashboard</span></a>
+    <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <span class="who" id="whoami"></span>
+    <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+  </nav>
+</div>
+
+<main>
+  <div class="flex-between">
+    <div>
+      <h1 id="className">Class</h1>
+      <p>Class code: <span class="class-code-pill"><span class="icon" id="codeIcon" style="width:16px;height:16px;"></span><span id="classCode">-----</span></span> — share this with your students so they can join.</p>
+    </div>
+    <div>
+      <button class="btn gold" onclick="runPayDay()" id="payDayBtn">Run Pay Day</button>
+      <button class="btn secondary" onclick="runInterest()" id="interestBtn">Apply Interest</button>
+    </div>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="stat sky">
+      <span class="icon" id="iconStudents"></span>
+      <div class="label">Students</div>
+      <div class="value" id="statStudents">0 / 8</div>
+    </div>
+    <div class="stat gold">
+      <span class="icon" id="iconSavings"></span>
+      <div class="label">Total class savings</div>
+      <div class="value" id="statTotal">$0.00</div>
+    </div>
+    <div class="stat mint">
+      <span class="icon" id="iconCompanies"></span>
+      <div class="label">Companies on the market</div>
+      <div class="value" id="statCompanies">0</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="flex-between">
+      <h2 id="hStudents">Students</h2>
+    </div>
+    <div class="table-scroll">
+    <table id="studentTable">
+      <thead><tr><th>Student</th><th>Job</th><th>Balance</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+    <p class="muted-small" id="noStudents">No students have joined yet. Share your class code to get started.</p>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h2 id="hJobs">Jobs board</h2>
+      <p>Create jobs and assign one to each student. Students can also apply for jobs from the Jobs tab.</p>
+      <div class="table-scroll">
+      <table id="jobsTable">
+        <thead><tr><th>Job</th><th>Wage</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+      <form onsubmit="return addJobForm(event)">
+        <label for="jobTitle" id="labJobTitle">New job title</label>
+        <input id="jobTitle" placeholder="e.g. Librarian" required>
+        <label for="jobWage" id="labJobWage">Weekly wage</label>
+        <input id="jobWage" type="number" min="0" step="0.5" placeholder="e.g. 15" required>
+        <label for="jobDesc" id="labJobDesc">Job description (shown to students)</label>
+        <input id="jobDesc" placeholder="e.g. Keep the class library tidy and log borrowed books">
+        <button class="btn" type="submit" id="addJobBtn">Add job</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2 id="hApplications">Pending job applications</h2>
+      <p>Students apply for jobs from their Jobs tab — approve or decline them here.</p>
+      <div id="applicationsList"></div>
+      <p class="muted-small" id="noApplications">No pending applications right now.</p>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h2 id="hAdjust">Give a bonus or fine</h2>
+      <p>Adjust a single student's balance directly, with a note.</p>
+      <form onsubmit="return giveAdjustment(event)">
+        <label for="adjStudent" id="labAdjStudent">Student</label>
+        <select id="adjStudent" required></select>
+        <label for="adjAmount" id="labAdjAmount">Amount (use a negative number for a fine)</label>
+        <input id="adjAmount" type="number" step="0.5" placeholder="e.g. 5 or -5" required>
+        <label for="adjNote" id="labAdjNote">Reason</label>
+        <input id="adjNote" placeholder="e.g. Great teamwork" required>
+        <button class="btn" type="submit" id="applyAdjBtn">Apply</button>
+      </form>
+      <div id="adjMsg"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="flex-between">
+      <h2 id="hSettings">Class settings</h2>
+    </div>
+    <label for="rate" id="labRate">Savings interest rate (% applied each time you click Apply Interest)</label>
+    <input id="rate" type="number" min="0" max="20" step="0.1" style="max-width:160px;">
+    <button class="btn secondary small" style="margin-top:12px;" onclick="saveRate()" id="saveRateBtn">Save rate</button>
+
+    <label for="payDaySelect" id="labPayDay" style="margin-top:24px;">Pay day (which day wages are due)</label>
+    <select id="payDaySelect" style="max-width:220px;">
+      <option value="Mon">Monday</option>
+      <option value="Tue">Tuesday</option>
+      <option value="Wed">Wednesday</option>
+      <option value="Thu">Thursday</option>
+      <option value="Fri">Friday</option>
+      <option value="Sat">Saturday</option>
+      <option value="Sun">Sunday</option>
+    </select>
+    <button class="btn secondary small" style="margin-top:12px;" onclick="savePayDay()" id="savePayDayBtn">Save pay day</button>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
+      <h2 id="hDanger" style="color:var(--coral);">Danger zone</h2>
+      <p>Reset every student's balance to $0, remove all jobs assignments, delist every company, and clear the activity log. Student logins and the class code stay the same — this just gives everyone a fresh start.</p>
+      <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="hActivity">Recent activity</h2>
+    <div class="table-scroll">
+    <table id="txnTable">
+      <thead><tr><th>When</th><th>Type</th><th>Details</th><th>Amount</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </div>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script src="icons.js"></script>
+<script src="data.js"></script>
+<script src="teacher.js"></script>
+</body>
+</html>

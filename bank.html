@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bank Account — The 29 World</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="bank.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
+    <a href="bank.html" class="active"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <span class="who" id="whoami"></span>
+    <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+  </nav>
+</div>
+
+<main>
+  <h1 id="pageTitle">Bank Account</h1>
+
+  <div class="grid grid-2">
+    <div class="stat gold">
+      <span class="icon" id="iconBalance"></span>
+      <div class="label">Cash balance</div>
+      <div class="value" id="balance">$0.00</div>
+    </div>
+    <div class="stat sky">
+      <span class="icon" id="iconAuto"></span>
+      <div class="label">Active automatic payments</div>
+      <div class="value" id="autoCount">0</div>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h2 id="hSend">Send money</h2>
+      <p>Send some of your balance to a classmate or your teacher.</p>
+      <form onsubmit="return sendMoney(event)">
+        <label for="toStudent" id="labTo">Send to</label>
+        <select id="toStudent" required></select>
+        <label for="amount" id="labAmount">Amount</label>
+        <input id="amount" type="number" min="0.01" step="0.01" required>
+        <label for="note" id="labNote">What's it for?</label>
+        <input id="note" placeholder="e.g. Lunch swap">
+        <button class="btn gold" type="submit" id="sendBtn">Send</button>
+      </form>
+      <div id="sendMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="hNewAuto">Set up an automatic payment</h2>
+      <p>Choose a day, how often, how much, and who it goes to. It will run by itself whenever that day comes around.</p>
+      <form onsubmit="return addAuto(event)">
+        <label for="autoDay" id="labAutoDay">Day of the week</label>
+        <select id="autoDay">
+          <option value="Mon">Monday</option>
+          <option value="Tue">Tuesday</option>
+          <option value="Wed">Wednesday</option>
+          <option value="Thu">Thursday</option>
+          <option value="Fri">Friday</option>
+          <option value="Sat">Saturday</option>
+          <option value="Sun">Sunday</option>
+        </select>
+        <label for="autoFreq" id="labAutoFreq">How often</label>
+        <select id="autoFreq">
+          <option value="weekly">Every week</option>
+          <option value="fortnightly">Every 2 weeks</option>
+          <option value="monthly">Every 4 weeks</option>
+        </select>
+        <label for="autoAmount" id="labAutoAmount">Amount</label>
+        <input id="autoAmount" type="number" min="0.01" step="0.01" required>
+        <label for="autoTo" id="labAutoTo">Pay to</label>
+        <select id="autoTo" required></select>
+        <button class="btn" type="submit" id="addAutoBtn">Create automatic payment</button>
+      </form>
+      <div id="autoMsg"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="hAutoList">My automatic payments</h2>
+    <div id="autoList"></div>
+    <p class="muted-small" id="noAuto">You don't have any automatic payments set up yet.</p>
+  </div>
+
+  <div class="card">
+    <h2 id="hActivity">My recent activity</h2>
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>When</th><th>Type</th><th>Details</th><th>Amount</th></tr></thead>
+      <tbody id="txnTable"></tbody>
+    </table>
+    </div>
+  </div>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script src="icons.js"></script>
+<script src="data.js"></script>
+<script src="bank.js"></script>
+</body>
+</html>

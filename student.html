@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Account — The 29 World</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="student.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <a href="student.html" class="active"><span class="icon-slot" data-icon="bank"></span><span class="nav-label">My account</span></a>
+    <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <span class="who" id="whoami"></span>
+    <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+  </nav>
+</div>
+
+<main>
+  <h1 id="greeting">Hi!</h1>
+
+  <div class="grid grid-3">
+    <div class="stat gold">
+      <span class="icon" id="iconBalance"></span>
+      <div class="label">Cash balance</div>
+      <div class="value" id="balance">$0.00</div>
+    </div>
+    <div class="stat mint">
+      <span class="icon" id="iconPortfolio"></span>
+      <div class="label">Stock portfolio</div>
+      <div class="value" id="portfolio">$0.00</div>
+    </div>
+    <div class="stat lilac">
+      <span class="icon" id="iconJob"></span>
+      <div class="label">My job</div>
+      <div class="value" id="jobLabel" style="font-size:1.3rem;">None yet</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="hLeaderboard">Net worth ranking</h2>
+    <p>Cash balance plus the value of everyone's shares, added together.</p>
+    <div id="leaderboardList"></div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="flex-between">
+        <h2 id="hBank">Bank account</h2>
+        <a class="btn small gold" href="bank.html" id="bankLink">Go to Bank</a>
+      </div>
+      <p>Send money, set up automatic payments, and see your full transaction history.</p>
+    </div>
+
+    <div class="card">
+      <h2 id="hClassmates">My classmates</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Job</th></tr></thead>
+        <tbody id="classmateTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="flex-between">
+      <h2 id="hMarket">Market snapshot</h2>
+      <a class="btn small gold" href="market.html" id="marketLink">Go to Stock Market</a>
+    </div>
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Company</th><th>Price</th><th>My shares</th></tr></thead>
+      <tbody id="marketSnapshot"></tbody>
+    </table>
+    </div>
+    <p class="muted-small" id="noCompanies">Your teacher hasn't opened any companies yet.</p>
+  </div>
+
+  <div class="card">
+    <h2 id="hActivity">My recent activity</h2>
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>When</th><th>Type</th><th>Details</th><th>Amount</th></tr></thead>
+      <tbody id="txnTable"></tbody>
+    </table>
+    </div>
+  </div>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script src="icons.js"></script>
+<script src="data.js"></script>
+<script src="student.js"></script>
+</body>
+</html>
