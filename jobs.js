@@ -11,8 +11,8 @@ function paintChrome() {
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
-function init() {
-  const u = requireLogin();
+async function init() {
+  const u = await requireLogin();
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
@@ -22,15 +22,14 @@ function init() {
   document.getElementById("teacherNotice").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
-  autoPayDayIfDue(CURRENT.classCode);
-  processAutomations(CURRENT.classCode);
-  if (!IS_TEACHER) render();
+  await autoPayDayIfDue(CURRENT.classCode);
+  await processAutomations(CURRENT.classCode);
+  if (!IS_TEACHER) await render();
 }
 
-function render() {
-  const db = loadDB();
-  const me = db.users[CURRENT.username];
-  const cls = db.classes[me.classCode];
+async function render() {
+  const me = await getUser(CURRENT.username);
+  const cls = await getClass(me.classCode);
 
   // current job
   const job = cls.jobs.find(j => j.id === me.jobId);
@@ -81,10 +80,10 @@ function render() {
   });
 }
 
-function apply(jobId) {
-  const res = applyForJob(CURRENT.classCode, CURRENT.username, jobId);
+async function apply(jobId) {
+  const res = await applyForJob(CURRENT.classCode, CURRENT.username, jobId);
   if (!res.ok) alert(res.error);
-  render();
+  await render();
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -31,8 +31,8 @@ function paintChrome() {
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
-function init() {
-  const u = requireLogin();
+async function init() {
+  const u = await requireLogin();
   if (!u) return;
   if (u.role !== "teacher") { window.location.href = "student.html"; return; }
   CURRENT = u;
@@ -40,23 +40,29 @@ function init() {
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintChrome();
   enablePasswordToggles();
-  autoPayDayIfDue(CLASS_CODE);
-  processAutomations(CLASS_CODE);
-  render();
+  await autoPayDayIfDue(CLASS_CODE);
+  await processAutomations(CLASS_CODE);
+  await render();
 }
 
-function render() {
-  const cls = getClass(CLASS_CODE);
+async function render() {
+  const cls = await getClass(CLASS_CODE);
   document.getElementById("className").textContent = cls.name;
   document.getElementById("classCode").textContent = cls.code;
   document.getElementById("rate").value = cls.interestRate;
   document.getElementById("payDaySelect").value = cls.payDay || "Fri";
 
-  const students = getClassStudents(CLASS_CODE);
+  const students = await getClassStudents(CLASS_CODE);
   document.getElementById("statStudents").textContent = students.length + " / 8";
   const total = students.reduce((sum, s) => sum + s.balance, 0);
   document.getElementById("statTotal").textContent = fmtMoney(total);
   document.getElementById("statCompanies").textContent = cls.companies.length;
+
+  // name lookup cache for describeTxn / applications
+  const nameCache = {};
+  students.forEach(s => { nameCache[s.username] = s.name; });
+  const teacher = await getUser(cls.teacher);
+  if (teacher) nameCache[teacher.username] = teacher.name;
 
   // students table
   const tbody = document.querySelector("#studentTable tbody");
@@ -92,8 +98,7 @@ function render() {
   document.getElementById("noApplications").classList.toggle("hidden", apps.length > 0);
   appBox.innerHTML = "";
   apps.forEach(a => {
-    const db = loadDB();
-    const student = db.users[a.studentUser];
+    const student = students.find(s => s.username === a.studentUser);
     const job = cls.jobs.find(j => j.id === a.jobId);
     if (!student || !job) return;
     const row = document.createElement("div");
@@ -115,9 +120,10 @@ function render() {
   // txns
   const txbody = document.querySelector("#txnTable tbody");
   txbody.innerHTML = "";
+  const nameOf = u => nameCache[u] || u;
   cls.txns.slice(0, 25).forEach(t => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badge(t.type)}</td><td>${describeTxn(t)}</td><td>${fmtMoney(t.amount)}</td>`;
+    tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badge(t.type)}</td><td>${describeTxn(t, nameOf)}</td><td>${fmtMoney(t.amount)}</td>`;
     txbody.appendChild(tr);
   });
 }
@@ -130,9 +136,7 @@ function jobSelectHtml(cls, student) {
   return `<select onchange="onAssignJob('${student.username}', this.value)">${opts}</select>`;
 }
 
-function describeTxn(t) {
-  const db = loadDB();
-  const nameOf = u => (db.users[u] ? db.users[u].name : u);
+function describeTxn(t, nameOf) {
   switch (t.type) {
     case "welcome": return `${nameOf(t.to)} joined the class`;
     case "wage": return `${nameOf(t.to)} — ${t.note}`;
@@ -171,44 +175,44 @@ function avatarClass(username) {
   return AVATAR_COLORS[h];
 }
 
-function addJobForm(e) {
+async function addJobForm(e) {
   e.preventDefault();
   const title = document.getElementById("jobTitle").value.trim();
   const wage = document.getElementById("jobWage").value;
   const description = document.getElementById("jobDesc").value.trim();
-  addJob(CLASS_CODE, title, wage, description);
+  await addJob(CLASS_CODE, title, wage, description);
   document.getElementById("jobTitle").value = "";
   document.getElementById("jobWage").value = "";
   document.getElementById("jobDesc").value = "";
-  render();
+  await render();
   return false;
 }
 
-function deleteJob(id) {
-  removeJob(CLASS_CODE, id);
-  render();
+async function deleteJob(id) {
+  await removeJob(CLASS_CODE, id);
+  await render();
 }
 
-function onAssignJob(username, jobId) {
-  assignJob(username, jobId); // from data.js
-  render();
+async function onAssignJob(username, jobId) {
+  await assignJob(username, jobId);
+  await render();
 }
 
-function approveApp(appId) {
-  approveApplication(CLASS_CODE, appId);
-  render();
+async function approveApp(appId) {
+  await approveApplication(CLASS_CODE, appId);
+  await render();
 }
-function declineApp(appId) {
-  declineApplication(CLASS_CODE, appId);
-  render();
+async function declineApp(appId) {
+  await declineApplication(CLASS_CODE, appId);
+  await render();
 }
 
-function giveAdjustment(e) {
+async function giveAdjustment(e) {
   e.preventDefault();
   const student = document.getElementById("adjStudent").value;
   const amount = Number(document.getElementById("adjAmount").value);
   const note = document.getElementById("adjNote").value.trim();
-  const res = teacherAdjust(CURRENT.username, student, amount, note);
+  const res = await teacherAdjust(CURRENT.username, student, amount, note);
   const box = document.getElementById("adjMsg");
   if (res.ok) {
     box.innerHTML = `<div class="success-msg">Done — ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${student}.</div>`;
@@ -217,46 +221,46 @@ function giveAdjustment(e) {
   } else {
     box.innerHTML = `<div class="error-msg">${res.error}</div>`;
   }
-  render();
+  await render();
   return false;
 }
 
-function runPayDay() {
-  const count = payDay(CLASS_CODE);
+async function runPayDay() {
+  const count = await payDay(CLASS_CODE);
   alert(count > 0 ? `Pay day complete — ${count} student(s) paid.` : "No students have a job assigned yet.");
-  render();
+  await render();
 }
-function runInterest() {
-  const count = applyInterest(CLASS_CODE);
+async function runInterest() {
+  const count = await applyInterest(CLASS_CODE);
   alert(count > 0 ? `Interest applied to ${count} student(s).` : "No balances to apply interest to.");
-  render();
+  await render();
 }
-function saveRate() {
-  const db = loadDB();
-  db.classes[CLASS_CODE].interestRate = Number(document.getElementById("rate").value);
-  saveDB(db);
-  render();
+async function saveRate() {
+  await classesColUpdateRate(Number(document.getElementById("rate").value));
+  await render();
 }
-function savePayDay() {
-  setPayDay(CLASS_CODE, document.getElementById("payDaySelect").value);
+async function classesColUpdateRate(rate) {
+  await fdb.collection("classes").doc(CLASS_CODE).update({ interestRate: rate });
+}
+async function savePayDay() {
+  await setPayDay(CLASS_CODE, document.getElementById("payDaySelect").value);
   alert("Pay day saved. Wages will now be paid automatically whenever that day comes around — or click Run Pay Day any time to pay early.");
-  render();
+  await render();
 }
-function quickView(username) {
-  const db = loadDB();
-  const s = db.users[username];
+async function quickView(username) {
+  const s = await getUser(username);
   alert(`${s.name}\nUsername: ${s.username}\nBalance: ${fmtMoney(s.balance)}`);
 }
 
-function removeStudentClick(username, name) {
+async function removeStudentClick(username, name) {
   if (confirm(`Remove ${name} from the class? Their account and balance will be permanently deleted. This cannot be undone.`)) {
-    removeStudent(CLASS_CODE, username);
-    render();
+    await removeStudent(CLASS_CODE, username);
+    await render();
   }
 }
 
-function restartClass() {
-  const cls = getClass(CLASS_CODE);
+async function restartClass() {
+  const cls = await getClass(CLASS_CODE);
   const typed = prompt(
     `This will reset every student's balance to $0, remove job assignments, delist all companies, and clear the activity log for "${cls.name}".\n\nThis cannot be undone. Type the class name exactly to confirm:`
   );
@@ -265,9 +269,9 @@ function restartClass() {
     alert("That didn't match the class name, so nothing was changed.");
     return;
   }
-  resetClass(CLASS_CODE);
+  await resetClass(CLASS_CODE);
   alert("Class restarted — everyone is back to $0.");
-  render();
+  await render();
 }
 
 document.addEventListener("DOMContentLoaded", init);

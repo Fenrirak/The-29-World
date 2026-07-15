@@ -38,33 +38,32 @@ function paintChrome() {
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
-function init() {
-  const u = requireLogin();
+async function init() {
+  const u = await requireLogin();
   if (!u) return;
   if (u.role !== "student") { window.location.href = "teacher.html"; return; }
   CURRENT = u;
   document.getElementById("whoami").textContent = u.name;
   paintChrome();
   // Fire any wages or automatic payments that have come due since last visit
-  autoPayDayIfDue(u.classCode);
-  processAutomations(u.classCode);
-  render();
+  await autoPayDayIfDue(u.classCode);
+  await processAutomations(u.classCode);
+  await render();
 }
 
-function render() {
-  const db = loadDB();
-  const me = db.users[CURRENT.username];
-  const cls = db.classes[me.classCode];
+async function render() {
+  const me = await getUser(CURRENT.username);
+  const cls = await getClass(me.classCode);
 
   document.getElementById("greeting").textContent = "Hi, " + me.name + "!";
   document.getElementById("balance").textContent = fmtMoney(me.balance);
-  document.getElementById("portfolio").textContent = fmtMoney(portfolioValue(me.username, me.classCode));
+  document.getElementById("portfolio").textContent = fmtMoney(await portfolioValue(me.username, me.classCode));
 
   const job = cls.jobs.find(j => j.id === me.jobId);
   document.getElementById("jobLabel").textContent = job ? `${job.title} — ${fmtMoney(job.wage)}/payday` : "No job assigned";
 
   // net worth leaderboard
-  const board = classLeaderboard(me.classCode);
+  const board = await classLeaderboard(me.classCode);
   const medalClass = i => (i === 0 ? "gold" : i === 1 ? "silver" : i === 2 ? "bronze" : "");
   const lbBox = document.getElementById("leaderboardList");
   lbBox.innerHTML = "";
@@ -84,7 +83,8 @@ function render() {
   });
 
   // classmates
-  const classmates = getClassStudents(me.classCode).filter(s => s.username !== me.username);
+  const allStudents = await getClassStudents(me.classCode);
+  const classmates = allStudents.filter(s => s.username !== me.username);
   const ctbl = document.getElementById("classmateTable");
   ctbl.innerHTML = "";
   classmates.forEach(s => {
@@ -109,7 +109,11 @@ function render() {
   const my = cls.txns.filter(t => t.to === me.username || t.from === me.username).slice(0, 25);
   const tbody = document.getElementById("txnTable");
   tbody.innerHTML = "";
-  const nameOf = u => (db.users[u] ? db.users[u].name : u);
+  const nameCache = {};
+  for (const s of allStudents) nameCache[s.username] = s.name;
+  const teacher = await getUser(cls.teacher);
+  if (teacher) nameCache[teacher.username] = teacher.name;
+  const nameOf = u => nameCache[u] || u;
   my.forEach(t => {
     let detail = t.note || "";
     let amt = t.amount;

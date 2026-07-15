@@ -16,8 +16,8 @@ function paintChrome() {
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
-function init() {
-  const u = requireLogin();
+async function init() {
+  const u = await requireLogin();
   if (!u) return;
   CURRENT = u;
   CLASS_CODE = u.classCode;
@@ -28,9 +28,9 @@ function init() {
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   paintChrome();
   enablePasswordToggles();
-  autoPayDayIfDue(CLASS_CODE);
-  processAutomations(CLASS_CODE);
-  render();
+  await autoPayDayIfDue(CLASS_CODE);
+  await processAutomations(CLASS_CODE);
+  await render();
 }
 
 function sparkline(history) {
@@ -48,8 +48,8 @@ function sparkline(history) {
   </svg>`;
 }
 
-function render() {
-  const cls = getClass(CLASS_CODE);
+async function render() {
+  const cls = await getClass(CLASS_CODE);
   const range = cls.priceRange || { min: 1, max: 5 };
   document.getElementById("rangeMin").value = range.min;
   document.getElementById("rangeMax").value = range.max;
@@ -121,12 +121,12 @@ function render() {
   });
 }
 
-function openCo(e) {
+async function openCo(e) {
   e.preventDefault();
   const name = document.getElementById("coName").value.trim();
   const price = document.getElementById("coPrice").value;
   const shares = document.getElementById("coShares").value;
-  const res = openCompany(CLASS_CODE, name, price, shares);
+  const res = await openCompany(CLASS_CODE, name, price, shares);
   const box = document.getElementById("coMsg");
   if (res.ok) {
     box.innerHTML = `<div class="success-msg">${name} is now listed!</div>`;
@@ -136,53 +136,53 @@ function openCo(e) {
   } else {
     box.innerHTML = `<div class="error-msg">${res.error}</div>`;
   }
-  render();
+  await render();
   return false;
 }
 
-function setPrice(id) {
+async function setPrice(id) {
   const val = document.getElementById("price-" + id).value;
-  updateCompanyPrice(CLASS_CODE, id, val);
-  render();
+  await updateCompanyPrice(CLASS_CODE, id, val);
+  await render();
 }
-function closeCo(id) {
+async function closeCo(id) {
   if (confirm("Delist this company? All shareholders will be cashed out at the current price.")) {
-    closeCompany(CLASS_CODE, id);
-    render();
+    await closeCompany(CLASS_CODE, id);
+    await render();
   }
 }
-function buy(id) {
+async function buy(id) {
   const qty = document.getElementById("buy-" + id).value;
-  const res = buyShares(CURRENT.username, CLASS_CODE, id, qty);
+  const res = await buyShares(CURRENT.username, CLASS_CODE, id, qty);
   const box = document.getElementById("msg-" + id);
   box.innerHTML = res.ok ? `<div class="success-msg">Purchased!</div>` : `<div class="error-msg">${res.error}</div>`;
-  render();
+  await render();
 }
-function sell(id) {
+async function sell(id) {
   const qty = document.getElementById("sell-" + id).value;
-  const res = sellShares(CURRENT.username, CLASS_CODE, id, qty);
+  const res = await sellShares(CURRENT.username, CLASS_CODE, id, qty);
   const box = document.getElementById("msg-" + id);
   box.innerHTML = res.ok ? `<div class="success-msg">Sold!</div>` : `<div class="error-msg">${res.error}</div>`;
-  render();
+  await render();
 }
 
-function saveRange() {
+async function saveRange() {
   const min = document.getElementById("rangeMin").value;
   const max = document.getElementById("rangeMax").value;
-  setPriceRange(CLASS_CODE, min, max);
+  await setPriceRange(CLASS_CODE, min, max);
   document.getElementById("rangeMsg").innerHTML = `<div class="success-msg">Saved — companies will move between ${min}% and ${max}% per simulated day.</div>`;
-  render();
+  await render();
 }
 
-function runMarketDay() {
-  const results = simulateMarketDay(CLASS_CODE);
+async function runMarketDay() {
+  const results = await simulateMarketDay(CLASS_CODE);
   if (results.length === 0) {
     alert("There are no companies listed yet.");
     return;
   }
   const summary = results.map(r => `${r.name}: ${r.pct >= 0 ? "+" : ""}${r.pct.toFixed(1)}%`).join("\n");
   alert("Market day complete!\n\n" + summary);
-  render();
+  await render();
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -96,6 +96,9 @@
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
 <script src="icons.js"></script>
 <script src="data.js"></script>
 <script>
@@ -150,7 +153,7 @@ function showMsg(text, ok) {
     `<div class="${ok ? 'success-msg' : 'error-msg'}">${text}</div>`;
 }
 
-function doLogin(e) {
+async function doLogin(e) {
   e.preventDefault();
   const isTeacherForm = e.target.id === "panel-teacher-login";
   const uField = isTeacherForm ? "l-username" : "sl-username";
@@ -160,7 +163,7 @@ function doLogin(e) {
   const password = document.getElementById(pField).value;
   const remember = document.getElementById(rField).checked;
 
-  const res = login(username, password);
+  const res = await login(username, password);
   if (!res.ok) { showMsg(res.error, false); return false; }
 
   const key = "anw_remember_" + (isTeacherForm ? "teacher" : "student");
@@ -191,26 +194,26 @@ function loadRememberedLogins() {
   });
 }
 
-function doTeacherSignup(e) {
+async function doTeacherSignup(e) {
   e.preventDefault();
   const name = document.getElementById("t-name").value.trim();
   const className = document.getElementById("t-class").value.trim();
   const username = document.getElementById("t-username").value.trim();
   const password = document.getElementById("t-password").value;
-  const res = createTeacherAndClass(name, username, password, className);
+  const res = await createTeacherAndClass(name, username, password, className);
   if (!res.ok) { showMsg(res.error, false); return false; }
   setSession(username);
   window.location.href = "teacher.html?welcome=1";
   return false;
 }
 
-function doStudentSignup(e) {
+async function doStudentSignup(e) {
   e.preventDefault();
   const code = document.getElementById("s-code").value.trim().toUpperCase();
   const name = document.getElementById("s-name").value.trim();
   const username = document.getElementById("s-username").value.trim();
   const password = document.getElementById("s-password").value;
-  const res = createStudentAccount(name, username, password, code);
+  const res = await createStudentAccount(name, username, password, code);
   if (!res.ok) { showMsg(res.error, false); return false; }
   setSession(username);
   window.location.href = "student.html?welcome=1";
@@ -222,8 +225,8 @@ enablePasswordToggles();
 loadRememberedLogins();
 
 // If already logged in, skip straight to dashboard
-(function () {
-  const u = getSessionUser();
+(async function () {
+  const u = await getSessionUser();
   if (u) window.location.href = u.role === "teacher" ? "teacher.html" : "student.html";
 })();
 </script>

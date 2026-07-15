@@ -24,8 +24,8 @@ function paintChrome() {
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
-function init() {
-  const u = requireLogin();
+async function init() {
+  const u = await requireLogin();
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
@@ -34,37 +34,35 @@ function init() {
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
   paintChrome();
   enablePasswordToggles();
-  autoPayDayIfDue(u.classCode);
-  processAutomations(u.classCode);
-  render();
+  await autoPayDayIfDue(u.classCode);
+  await processAutomations(u.classCode);
+  await render();
 }
 
 // Everyone else in the class you can send money to / pay automatically —
 // classmates plus the teacher, labelled clearly.
-function payableRecipients() {
-  const db = loadDB();
-  const cls = db.classes[CURRENT.classCode];
+async function payableRecipients() {
+  const cls = await getClass(CURRENT.classCode);
   const options = [];
-  cls.students.forEach(uname => {
-    if (uname === CURRENT.username) return;
-    const s = db.users[uname];
-    if (s) options.push({ username: s.username, label: s.name });
+  const students = await getClassStudents(CURRENT.classCode);
+  students.forEach(s => {
+    if (s.username === CURRENT.username) return;
+    options.push({ username: s.username, label: s.name });
   });
   if (CURRENT.role !== "teacher") {
-    const t = db.users[cls.teacher];
+    const t = await getUser(cls.teacher);
     if (t) options.push({ username: t.username, label: t.name + " (Teacher)" });
   }
   return options;
 }
 
-function render() {
-  const db = loadDB();
-  const me = db.users[CURRENT.username];
-  const cls = db.classes[me.classCode];
+async function render() {
+  const me = await getUser(CURRENT.username);
+  const cls = await getClass(me.classCode);
 
   document.getElementById("balance").textContent = fmtMoney(me.balance);
 
-  const recipients = payableRecipients();
+  const recipients = await payableRecipients();
   const optsHtml = recipients.length
     ? recipients.map(r => `<option value="${r.username}">${r.label}</option>`).join("")
     : `<option value="">No one to pay yet</option>`;
@@ -72,13 +70,13 @@ function render() {
   document.getElementById("autoTo").innerHTML = optsHtml;
 
   // automations
-  const autos = getStudentAutomations(me.classCode, me.username);
+  const autos = await getStudentAutomations(me.classCode, me.username);
   document.getElementById("autoCount").textContent = autos.filter(a => a.active).length;
   const listBox = document.getElementById("autoList");
   document.getElementById("noAuto").classList.toggle("hidden", autos.length > 0);
   listBox.innerHTML = "";
-  autos.forEach(a => {
-    const toUser = db.users[a.toUser];
+  for (const a of autos) {
+    const toUser = await getUser(a.toUser);
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
@@ -89,13 +87,18 @@ function render() {
       <button class="btn small coral" onclick="removeAuto('${a.id}')">${icon("trash", 13)} Remove</button>
     `;
     listBox.appendChild(row);
-  });
+  }
 
   // txns
   const my = cls.txns.filter(t => t.to === me.username || t.from === me.username).slice(0, 30);
   const tbody = document.getElementById("txnTable");
   tbody.innerHTML = "";
-  const nameOf = u => (db.users[u] ? db.users[u].name : u);
+  const allStudents = await getClassStudents(me.classCode);
+  const nameCache = {};
+  allStudents.forEach(s => { nameCache[s.username] = s.name; });
+  const teacher = await getUser(cls.teacher);
+  if (teacher) nameCache[teacher.username] = teacher.name;
+  const nameOf = u => nameCache[u] || u;
   const badgeType = type => {
     const map = {
       welcome: ["navy", "star", "Welcome"], wage: ["mint", "briefcase", "Wage"],
@@ -124,14 +127,14 @@ function render() {
   });
 }
 
-function sendMoney(e) {
+async function sendMoney(e) {
   e.preventDefault();
   const to = document.getElementById("toStudent").value;
   const amount = Number(document.getElementById("amount").value);
   const note = document.getElementById("note").value.trim();
   const box = document.getElementById("sendMsg");
   if (!to) { box.innerHTML = `<div class="error-msg">There's no one to send money to yet.</div>`; return false; }
-  const res = transferMoney(CURRENT.username, to, amount, note);
+  const res = await transferMoney(CURRENT.username, to, amount, note);
   if (res.ok) {
     box.innerHTML = `<div class="success-msg">Sent ${fmtMoney(amount)}!</div>`;
     document.getElementById("amount").value = "";
@@ -139,11 +142,11 @@ function sendMoney(e) {
   } else {
     box.innerHTML = `<div class="error-msg">${res.error}</div>`;
   }
-  render();
+  await render();
   return false;
 }
 
-function addAuto(e) {
+async function addAuto(e) {
   e.preventDefault();
   const day = document.getElementById("autoDay").value;
   const freq = document.getElementById("autoFreq").value;
@@ -151,21 +154,21 @@ function addAuto(e) {
   const to = document.getElementById("autoTo").value;
   const box = document.getElementById("autoMsg");
   if (!to) { box.innerHTML = `<div class="error-msg">There's no one to pay yet.</div>`; return false; }
-  const res = addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to);
+  const res = await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to);
   if (res.ok) {
     box.innerHTML = `<div class="success-msg">Automatic payment created!</div>`;
     document.getElementById("autoAmount").value = "";
   } else {
     box.innerHTML = `<div class="error-msg">${res.error}</div>`;
   }
-  render();
+  await render();
   return false;
 }
 
-function removeAuto(id) {
+async function removeAuto(id) {
   if (confirm("Remove this automatic payment?")) {
-    removeAutomation(CURRENT.classCode, id);
-    render();
+    await removeAutomation(CURRENT.classCode, id);
+    await render();
   }
 }
 
