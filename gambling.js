@@ -59,8 +59,14 @@ function showRouletteAnimation(number) {
 
     const wheelSpins = 6;
     const ballSpins = 10;
+    // The disc rotates so the winning pocket ends up at angle 0 (under the
+    // fixed pointer at the top) — pocketAngle cancels out, so it always
+    // lands there regardless of which number won.
     const finalWheelRotation = wheelSpins * 360 - pocketAngle;
-    const finalBallRotation = -(ballSpins * 360) - pocketAngle;
+    // The ball needs to end up at that SAME screen position (angle 0, the
+    // pointer) so it visually drops into the now-topmost winning pocket.
+    // It must NOT be offset by pocketAngle, or it lands somewhere else.
+    const finalBallRotation = -(ballSpins * 360);
 
     disc.style.transform = `rotate(${finalWheelRotation}deg)`;
     ballTrack.style.transform = `rotate(${finalBallRotation}deg)`;
