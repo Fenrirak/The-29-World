@@ -17,28 +17,36 @@ function paintChrome() {
 }
 
 async function init() {
-  const u = await requireLogin();
-  if (!u) return;
-  CURRENT = u;
-  CLASS_CODE = u.classCode;
-  IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
-  document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
-  document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
-  document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
-  paintChrome();
-  enablePasswordToggles();
-  await autoPayDayIfDue(CLASS_CODE);
-  await processAutomations(CLASS_CODE);
-  await processMortgages(CLASS_CODE);
-  await processTermDeposits(CLASS_CODE);
-  await autoInterestIfDue(CLASS_CODE);
-  await processInsurancePayments(CLASS_CODE);
-  await processWeeklyEvents(CLASS_CODE);
-  await processWeeklyBigEvents(CLASS_CODE);
-  await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
-  await checkBigEventPopup(CURRENT.username, CLASS_CODE);
-  await render();
+  try {
+    const u = await requireLogin();
+    if (!u) return;
+    CURRENT = u;
+    CLASS_CODE = u.classCode;
+    IS_TEACHER = u.role === "teacher";
+    document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+    document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
+    document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
+    document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
+    paintChrome();
+    enablePasswordToggles();
+    await autoPayDayIfDue(CLASS_CODE);
+    await processAutomations(CLASS_CODE);
+    await processMortgages(CLASS_CODE);
+    await processTermDeposits(CLASS_CODE);
+    await autoInterestIfDue(CLASS_CODE);
+    await processInsurancePayments(CLASS_CODE);
+    await processWeeklyEvents(CLASS_CODE);
+    await processWeeklyBigEvents(CLASS_CODE);
+    await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
+    await checkBigEventPopup(CURRENT.username, CLASS_CODE);
+    await render();
+  } catch (err) {
+    console.error("Stock Market failed to load:", err);
+    const list = document.getElementById("companyList");
+    if (list) {
+      list.innerHTML = `<div class="card"><p class="error-msg" style="margin:0;">Something went wrong loading the Stock Market page: ${(err && err.message) || err}. Try refreshing — if it keeps happening, open the browser console (F12) and check for a red error, then share it so it can be fixed.</p></div>`;
+    }
+  }
 }
 
 function sparkline(history) {
@@ -57,6 +65,7 @@ function sparkline(history) {
 }
 
 async function render() {
+  try {
   // Re-derive IS_TEACHER from the live user doc every render (not just on
   // page load) so the teacher's management controls never get replaced by
   // the student buy/sell view after a role or session change.
@@ -147,6 +156,11 @@ async function render() {
     `;
     list.appendChild(div);
   });
+  } catch (err) {
+    console.error("Stock Market render failed:", err);
+    const list = document.getElementById("companyList");
+    if (list) list.innerHTML = `<div class="card"><p class="error-msg" style="margin:0;">Something went wrong showing the companies: ${(err && err.message) || err}. Try refreshing the page.</p></div>`;
+  }
 }
 
 async function openCo(e) {
