@@ -26,6 +26,8 @@ function paintChrome() {
   document.getElementById("labPayDay").innerHTML = icon("calendar", 13) + " Pay day (which day wages are due)";
   document.getElementById("savePayDayBtn").innerHTML = icon("calendar", 14) + " Save pay day";
   document.getElementById("hEvents").innerHTML = icon("dice", 18) + " Random weekly events";
+  document.getElementById("labEvType").innerHTML = icon("dice", 13) + " Event type";
+  document.getElementById("labEvOptions").innerHTML = icon("star", 13) + " Choices — one per line, as \"Label | amount\"";
   document.getElementById("labEvName").innerHTML = icon("star", 13) + " Event name";
   document.getElementById("labEvAmount").innerHTML = icon("coin", 13) + " Amount (negative for a cost)";
   document.getElementById("labEvDesc").innerHTML = icon("idcard", 13) + " Description (shown in the activity feed)";
@@ -110,9 +112,12 @@ async function render() {
   evs.forEach(ev => {
     const row = document.createElement("div");
     row.className = "auto-row";
+    const middle = ev.type === "choice"
+      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${o.label} (${o.amount >= 0 ? "+" : ""}${fmtMoney(o.amount)})`).join(", ")}`
+      : `&middot; ${ev.amount >= 0 ? "+" : ""}${fmtMoney(ev.amount)}`;
     row.innerHTML = `
       <div class="auto-details">${icon("dice", 14)} <strong>${ev.name}</strong>
-        &middot; ${ev.amount >= 0 ? "+" : ""}${fmtMoney(ev.amount)}
+        ${middle}
         &middot; ${ev.repeatable ? "Can repeat" : "Once per student"}
         &middot; <span class="badge ${ev.severity === 'bad' ? 'coral' : 'navy'}">${ev.severity === 'bad' ? 'Bad' : 'Neutral'}</span>
         ${ev.description ? `<div class="muted-small">${ev.description}</div>` : ""}
@@ -253,21 +258,51 @@ async function giveAdjustment(e) {
 
 async function addEventForm(e) {
   e.preventDefault();
+  const type = document.getElementById("evType").value;
   const ev = {
     name: document.getElementById("evName").value.trim(),
-    amount: document.getElementById("evAmount").value,
+    type,
     repeatable: document.getElementById("evRepeat").checked,
     severity: document.getElementById("evSeverity").value,
     description: document.getElementById("evDesc").value.trim()
   };
+  if (type === "choice") {
+    const lines = document.getElementById("evOptionsArea").value.split("\n").map(l => l.trim()).filter(Boolean);
+    const options = lines.map(line => {
+      const [label, amt] = line.split("|");
+      return { label: (label || "").trim(), amount: Number((amt || "0").trim()) || 0 };
+    }).filter(o => o.label);
+    if (options.length < 2) {
+      alert('Add at least 2 choices, one per line, as "Label | amount".');
+      return false;
+    }
+    ev.options = options;
+    ev.amount = 0;
+  } else {
+    const amt = document.getElementById("evAmount").value;
+    if (amt === "") {
+      alert("Enter an amount for this event.");
+      return false;
+    }
+    ev.amount = amt;
+  }
   await addEventDef(CLASS_CODE, ev);
   document.getElementById("evName").value = "";
   document.getElementById("evAmount").value = "";
+  document.getElementById("evOptionsArea").value = "";
   document.getElementById("evDesc").value = "";
   document.getElementById("evRepeat").checked = false;
   document.getElementById("evSeverity").value = "neutral";
+  document.getElementById("evType").value = "fixed";
+  toggleEventType();
   await render();
   return false;
+}
+
+function toggleEventType() {
+  const type = document.getElementById("evType").value;
+  document.getElementById("evAmountWrap").classList.toggle("hidden", type === "choice");
+  document.getElementById("evOptionsWrap").classList.toggle("hidden", type !== "choice");
 }
 
 async function removeEvent(id) {

@@ -77,14 +77,19 @@
     <div id="eventList"></div>
     <p class="muted-small" id="noEvents">You haven't added any events yet.</p>
     <form onsubmit="return addEventForm(event)">
+      <label for="evType" id="labEvType">Event type</label>
+      <select id="evType" onchange="toggleEventType()">
+        <option value="fixed">Fixed amount (happens automatically)</option>
+        <option value="choice">Multiple choice (student picks what happens)</option>
+      </select>
       <div class="grid grid-3">
         <div>
           <label for="evName" id="labEvName">Event name</label>
           <input id="evName" placeholder="e.g. Found money on the ground" required>
         </div>
-        <div>
+        <div id="evAmountWrap">
           <label for="evAmount" id="labEvAmount">Amount (negative for a cost)</label>
-          <input id="evAmount" type="number" step="0.5" required>
+          <input id="evAmount" type="number" step="0.5">
         </div>
         <div>
           <label for="evSeverity" id="labEvSeverity">Severity</label>
@@ -93,6 +98,13 @@
             <option value="bad">Bad (claimable on General insurance)</option>
           </select>
         </div>
+      </div>
+      <div id="evOptionsWrap" class="hidden">
+        <label for="evOptionsArea" id="labEvOptions">Choices — one per line, as "Label | amount"</label>
+        <textarea id="evOptionsArea" rows="4" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:1rem;" placeholder="Pay for repairs | -10
+Ignore it and hope for the best | 0
+Do it yourself and save money | -3"></textarea>
+        <p class="muted-small">The student will be shown this scenario and must pick one of these choices — each choice's amount is applied to their balance (negative for a cost, positive for a gain, 0 for no effect).</p>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:12px;">
         <input type="checkbox" id="evRepeat" style="width:20px;height:20px;min-height:auto;flex-shrink:0;">

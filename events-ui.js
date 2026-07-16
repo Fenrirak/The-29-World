@@ -33,10 +33,20 @@ async function checkWeeklyEventPopup(username, classCode) {
   const mine = (cls.eventLog || []).filter(l => l.studentUser === username && l.week === weekKey);
   if (mine.length === 0) return;
 
+  // Multiple-choice events must be answered — show a forced modal (like a
+  // big event) for the first pending one, before anything else pops up.
+  const pendingChoice = mine.find(l => l.type === "choice" && l.status === "pending");
+  if (pendingChoice && !document.getElementById("anwEventModal") && !document.getElementById("anwChoiceEventModal") && !document.getElementById("anwBigEventModal")) {
+    showChoiceEventPopup(pendingChoice, username, classCode);
+  }
+
+  const resolved = mine.filter(l => l.status !== "pending");
+  if (resolved.length === 0) return;
+
   let state = getShownEventState(username);
   if (state.week !== weekKey) state = { week: weekKey, ids: [] };
   const shown = new Set(state.ids);
-  const fresh = mine.filter(l => !shown.has(l.id || (l.eventId + "|" + l.date)));
+  const fresh = resolved.filter(l => !shown.has(l.id || (l.eventId + "|" + l.date)));
 
   if (fresh.length === 0) return;
 
@@ -52,8 +62,51 @@ async function checkWeeklyEventPopup(username, classCode) {
 
   showEventPopup(withDetails, username, classCode);
 
-  state.ids = state.ids.concat(mine.map(l => l.id || (l.eventId + "|" + l.date)));
+  state.ids = state.ids.concat(resolved.map(l => l.id || (l.eventId + "|" + l.date)));
   saveShownEventState(username, state);
+}
+
+// Multiple-choice weekly event popup. Has no close button and can't be
+// dismissed by clicking outside — the student must pick an option, which
+// resolves the event (applies the balance change) via resolveChoiceEvent.
+function showChoiceEventPopup(entry, username, classCode) {
+  const overlay = document.createElement("div");
+  overlay.id = "anwChoiceEventModal";
+  overlay.className = "anw-modal-overlay";
+
+  const optionsHtml = (entry.options || []).map(o => `
+    <button class="btn secondary" style="width:100%;justify-content:space-between;" data-opt="${o.id}">
+      <span>${o.label}</span>
+      <span class="${o.amount < 0 ? 'ticker-down' : 'ticker-up'}">${o.amount >= 0 ? "+" : "-"}${fmtMoney(Math.abs(o.amount))}</span>
+    </button>
+  `).join("");
+
+  overlay.innerHTML = `
+    <div class="anw-modal-card">
+      <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${entry.name}</h2>
+      <p>${entry.description || ""}</p>
+      <p class="muted-small">You need to choose how to handle this before you can continue.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
+        ${optionsHtml}
+      </div>
+      <div id="choiceEventMsg"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelectorAll("[data-opt]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      overlay.querySelectorAll("button").forEach(b => b.disabled = true);
+      const res = await resolveChoiceEvent(username, classCode, entry.id, btn.getAttribute("data-opt"));
+      if (res.ok) {
+        overlay.remove();
+        if (typeof render === "function") render();
+      } else {
+        document.getElementById("choiceEventMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
+        overlay.querySelectorAll("button").forEach(b => b.disabled = false);
+      }
+    });
+  });
 }
 
 function showEventPopup(events, username, classCode) {

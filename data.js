@@ -1596,10 +1596,13 @@ async function addEventDef(classCode, ev) {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    const isChoice = ev.type === "choice";
     cls.eventDefs.push({
       id: uid("ev"), name: ev.name, amount: Number(ev.amount) || 0,
       description: ev.description || "", repeatable: !!ev.repeatable,
-      severity: ev.severity === "bad" ? "bad" : "neutral", active: true
+      severity: ev.severity === "bad" ? "bad" : "neutral", active: true,
+      type: isChoice ? "choice" : "fixed",
+      options: isChoice ? (ev.options || []).map(o => ({ id: uid("opt"), label: o.label || "", amount: Number(o.amount) || 0 })) : []
     });
     t.update(classRef, { eventDefs: cls.eventDefs });
   });
@@ -1649,9 +1652,23 @@ async function processWeeklyEvents(classCode) {
     const count = Math.min(pool.length, 2 + Math.floor(Math.random() * 3));
     const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
     for (const ev of shuffled) {
-      balanceDeltas[student.username] = (balanceDeltas[student.username] || 0) + ev.amount;
-      newLogEntries.push({ id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey, name: ev.name, amount: ev.amount, description: ev.description || "", severity: ev.severity || "neutral", claimed: false });
-      txns.push({ type: "event", to: student.username, amount: ev.amount, note: ev.name + (ev.description ? " — " + ev.description : "") });
+      if (ev.type === "choice") {
+        // Multiple-choice events don't apply a balance change yet — the
+        // student must pick one of the options first (see resolveChoiceEvent).
+        newLogEntries.push({
+          id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey,
+          name: ev.name, amount: null, description: ev.description || "", severity: ev.severity || "neutral",
+          claimed: false, type: "choice", options: ev.options || [], status: "pending"
+        });
+      } else {
+        balanceDeltas[student.username] = (balanceDeltas[student.username] || 0) + ev.amount;
+        newLogEntries.push({
+          id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey,
+          name: ev.name, amount: ev.amount, description: ev.description || "", severity: ev.severity || "neutral",
+          claimed: false, type: "fixed", status: "resolved"
+        });
+        txns.push({ type: "event", to: student.username, amount: ev.amount, note: ev.name + (ev.description ? " — " + ev.description : "") });
+      }
     }
   }
 
@@ -1703,6 +1720,40 @@ async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
   }
   await logTxn(classCode, { type: "insurance-claim", to: username, amount: payout, note: "Insurance claim (General cover)" });
   return { ok: true, payout };
+}
+
+// Resolves a pending multiple-choice weekly event: applies the balance
+// change for the option the student picked, and marks it resolved so it
+// won't be asked again and behaves like a normal (already-happened) event.
+async function resolveChoiceEvent(username, classCode, logId, optionId) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let amount = 0, note = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const entry = (cls.eventLog || []).find(e => e.id === logId && e.studentUser === username && e.status === "pending");
+      if (!entry) throw new Error("NOT_FOUND");
+      const option = (entry.options || []).find(o => o.id === optionId);
+      if (!option) throw new Error("NOT_FOUND");
+      amount = option.amount;
+      entry.status = "resolved";
+      entry.chosenOptionId = optionId;
+      entry.amount = amount;
+      note = `${entry.name} — chose "${option.label}"`;
+      const isTeacher = user.role === "teacher";
+      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + amount) * 100) / 100 });
+      t.update(classRef, { eventLog: cls.eventLog });
+    });
+  } catch (e) {
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "event", to: username, amount, note });
+  return { ok: true, amount };
 }
 
 // Charges every student's active insurance premiums once per NZ calendar
