@@ -155,21 +155,27 @@ function renderPicker() {
   }
 
   const need = neededCount(type);
+  const layoutNote = type === "straightUp"
+    ? "Tap 0, or any number 1-36."
+    : "Numbers are laid out in a 3-column table, just like a real roulette table — pick cells that are actually next to each other (left/right in the same row, or directly above/below) for a valid bet.";
   area.innerHTML = `
-    <p class="muted-small">Pick ${need} number${need === 1 ? "" : "s"}${type === "straightUp" ? " (0-36)" : " (1-36 — invalid combos will be rejected)"}. Selected: <span id="pickCount">0</span>/${need}</p>
+    <p class="muted-small">Pick ${need} number${need === 1 ? "" : "s"}. ${layoutNote} Selected: <span id="pickCount">0</span>/${need}</p>
+    ${type === "straightUp" ? `<button type="button" class="number-zero" id="num-0">0</button>` : ""}
     <div id="numberGrid" class="number-grid"></div>
   `;
+  if (type === "straightUp") {
+    document.getElementById("num-0").onclick = () => toggleNumber(0, need);
+  }
   const grid = document.getElementById("numberGrid");
-  const nums = type === "straightUp" ? [0, ...Array.from({ length: 36 }, (_, i) => i + 1)] : Array.from({ length: 36 }, (_, i) => i + 1);
-  nums.forEach(n => {
+  for (let n = 1; n <= 36; n++) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "number-cell" + (n === 0 ? " zero" : (n % 2 === 0 ? " even-cell" : " odd-cell"));
+    btn.className = "number-cell" + (n % 2 === 0 ? " even-cell" : " odd-cell");
     btn.textContent = n;
     btn.onclick = () => toggleNumber(n, need);
     btn.id = "num-" + n;
     grid.appendChild(btn);
-  });
+  }
 }
 
 function pickOddEven(which) {
@@ -186,7 +192,7 @@ function toggleNumber(n, need) {
     if (selection.length >= need) selection.shift(); // drop oldest pick once full
     selection.push(n);
   }
-  document.querySelectorAll(".number-cell").forEach(el => el.classList.remove("selected"));
+  document.querySelectorAll(".number-cell, .number-zero").forEach(el => el.classList.remove("selected"));
   selection.forEach(n2 => {
     const el = document.getElementById("num-" + n2);
     if (el) el.classList.add("selected");
