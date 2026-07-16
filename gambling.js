@@ -27,14 +27,14 @@ function showRouletteAnimation(number) {
     let numbersHtml = "";
     WHEEL_ORDER.forEach((n, i) => {
       const angle = i * seg + seg / 2;
-      numbersHtml += `<div class="wheel-number" style="transform:rotate(${angle}deg) translate(0,-118px) rotate(${-angle}deg);background:${wheelPocketColor(n)};">${n}</div>`;
+      numbersHtml += `<div class="wheel-number" style="transform:rotate(${angle}deg) translate(0,-165px) rotate(${-angle}deg);background:${wheelPocketColor(n)};">${n}</div>`;
     });
 
     const overlay = document.createElement("div");
     overlay.className = "anw-modal-overlay";
     overlay.id = "wheelOverlay";
     overlay.innerHTML = `
-      <div class="anw-modal-card" style="text-align:center;max-width:360px;">
+      <div class="anw-modal-card" style="text-align:center;max-width:500px;">
         <h2 style="display:flex;align-items:center;justify-content:center;gap:9px;">${icon("dice", 24)} Spinning the wheel...</h2>
         <div class="wheel-stage">
           <div class="wheel-pointer"></div>

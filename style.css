@@ -422,43 +422,43 @@ label .icon-slot{color:var(--navy-700);}
 @media(max-width:640px){.number-grid{grid-template-columns:repeat(6,1fr);}}
 
 /* ---------------- Roulette wheel spin animation ---------------- */
-.wheel-stage{position:relative;width:280px;height:280px;margin:20px auto 6px;}
+.wheel-stage{position:relative;width:392px;height:392px;margin:24px auto 8px;max-width:100%;}
 .wheel-pointer{
-  position:absolute;top:-4px;left:50%;transform:translateX(-50%);
-  width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;
-  border-top:18px solid #fff;filter:drop-shadow(0 2px 5px rgba(0,0,0,0.45));z-index:6;
+  position:absolute;top:-6px;left:50%;transform:translateX(-50%);
+  width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;
+  border-top:25px solid #fff;filter:drop-shadow(0 3px 7px rgba(0,0,0,0.45));z-index:6;
 }
 .wheel-rim{
   position:absolute;inset:0;border-radius:50%;
   background:linear-gradient(135deg,var(--gold),var(--gold-dark));
-  box-shadow:0 12px 32px rgba(31,43,68,0.4);padding:11px;
+  box-shadow:0 17px 44px rgba(31,43,68,0.4);padding:15px;
 }
 .wheel-disc{
   position:relative;width:100%;height:100%;border-radius:50%;overflow:hidden;
-  box-shadow:inset 0 0 24px rgba(0,0,0,0.55), inset 0 0 3px rgba(255,255,255,0.4);
+  box-shadow:inset 0 0 34px rgba(0,0,0,0.55), inset 0 0 4px rgba(255,255,255,0.4);
   transition:transform 15s cubic-bezier(0.11,0.68,0.24,1);
   transform:rotate(0deg);
 }
 .wheel-number{
-  position:absolute;top:50%;left:50%;width:24px;height:24px;margin:-12px;
-  border-radius:4px;display:flex;align-items:center;justify-content:center;
-  font-size:9px;font-weight:800;color:#fff;font-family:"Trebuchet MS",sans-serif;
+  position:absolute;top:50%;left:50%;width:34px;height:34px;margin:-17px;
+  border-radius:6px;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:800;color:#fff;font-family:"Trebuchet MS",sans-serif;
   text-shadow:0 1px 2px rgba(0,0,0,0.5);
 }
 .wheel-hub{
-  position:absolute;top:50%;left:50%;width:38px;height:38px;margin:-19px;
+  position:absolute;top:50%;left:50%;width:53px;height:53px;margin:-27px;
   border-radius:50%;z-index:5;
   background:radial-gradient(circle at 35% 32%, #fff, #cfd6e4 55%, #8a94ab 100%);
-  box-shadow:0 4px 12px rgba(0,0,0,0.45);
+  box-shadow:0 6px 16px rgba(0,0,0,0.45);
 }
 .wheel-ball-track{
-  position:absolute;inset:16px;border-radius:50%;pointer-events:none;
+  position:absolute;inset:22px;border-radius:50%;pointer-events:none;
   transition:transform 15s cubic-bezier(0.08,0.72,0.2,1);
   transform:rotate(0deg);z-index:4;
 }
 .wheel-ball{
-  position:absolute;top:2px;left:50%;width:11px;height:11px;margin-left:-5.5px;
+  position:absolute;top:3px;left:50%;width:15px;height:15px;margin-left:-7.5px;
   border-radius:50%;background:radial-gradient(circle at 35% 30%, #fff, #d8d8d8 70%, #999);
-  box-shadow:0 2px 5px rgba(0,0,0,0.55);
+  box-shadow:0 3px 7px rgba(0,0,0,0.55);
 }
 #wheelStatus{text-align:center;margin-top:8px;}
