@@ -22,6 +22,7 @@ async function init() {
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("defListCard").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("historyCard").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
   await autoPayDayIfDue(u.classCode);
@@ -39,26 +40,28 @@ async function init() {
 
 async function render() {
   const cls = await getClass(CURRENT.classCode);
-  const defs = cls.bigEventDefs || [];
 
-  const list = document.getElementById("defList");
-  list.innerHTML = "";
-  document.getElementById("noDefs").classList.toggle("hidden", defs.length > 0);
-  defs.forEach(d => {
-    const div = document.createElement("div");
-    div.className = "card company-card";
-    div.innerHTML = `
-      <div class="flex-between">
-        <div>
-          <h4>${icon("star", 20)}${d.name} <span class="badge navy">${MODULE_LABEL[d.module]}</span></h4>
-          <p>${d.description || "No description provided."}</p>
-          <p><strong>${fmtMoney(d.cost)}</strong> to pay or claim's excess</p>
+  if (IS_TEACHER) {
+    const defs = cls.bigEventDefs || [];
+    const list = document.getElementById("defList");
+    list.innerHTML = "";
+    document.getElementById("noDefs").classList.toggle("hidden", defs.length > 0);
+    defs.forEach(d => {
+      const div = document.createElement("div");
+      div.className = "card company-card";
+      div.innerHTML = `
+        <div class="flex-between">
+          <div>
+            <h4>${icon("star", 20)}${d.name} <span class="badge navy">${MODULE_LABEL[d.module]}</span></h4>
+            <p>${d.description || "No description provided."}</p>
+            <p><strong>${fmtMoney(d.cost)}</strong> to pay or claim's excess</p>
+          </div>
+          <button class="btn small coral" onclick="deleteEvent('${d.id}')">${icon("trash", 13)} Remove</button>
         </div>
-        ${IS_TEACHER ? `<button class="btn small coral" onclick="deleteEvent('${d.id}')">${icon("trash", 13)} Remove</button>` : ""}
-      </div>
-    `;
-    list.appendChild(div);
-  });
+      `;
+      list.appendChild(div);
+    });
+  }
 
   if (!IS_TEACHER) {
     const me = await getUser(CURRENT.username);
