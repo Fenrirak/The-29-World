@@ -1,4 +1,5 @@
 let CURRENT, IS_TEACHER;
+let ITEMS_CACHE = [];
 
 function starsHtml(n) {
   n = Number(n) || 0;
@@ -50,8 +51,9 @@ async function render() {
     const owned = ownedCounts[it.id] || 0;
     const div = document.createElement("div");
     div.className = "card company-card";
+    div.id = "item-" + it.id;
     div.innerHTML = `
-      <div class="flex-between">
+      <div class="flex-between" id="view-${it.id}">
         <div>
           <h4>${icon("cart", 20)}${it.name} ${owned ? `<span class="badge mint">Owned ×${owned}</span>` : ""}</h4>
           <p>${it.description || "No description provided."}</p>
@@ -61,14 +63,17 @@ async function render() {
         </div>
         <div>
           ${IS_TEACHER
-            ? `<button class="btn small coral" onclick="deleteItem('${it.id}')">${icon("trash", 13)} Remove</button>`
+            ? `<button class="btn small secondary" onclick="editItem('${it.id}')">${icon("plus", 13)} Edit</button>
+               <button class="btn small coral" onclick="deleteItem('${it.id}')">${icon("trash", 13)} Remove</button>`
             : `<button class="btn small gold" ${outOfStock ? "disabled" : ""} onclick="buyItem('${it.id}')">${icon("cart", 13)} ${outOfStock ? "Out of stock" : "Buy"}</button>`}
         </div>
       </div>
+      <div id="edit-${it.id}" class="hidden"></div>
       <div id="msg-${it.id}"></div>
     `;
     list.appendChild(div);
   });
+  ITEMS_CACHE = items;
 }
 
 async function addItem(e) {
@@ -87,6 +92,58 @@ async function addItem(e) {
   document.getElementById("iStars").value = 0;
   await render();
   return false;
+}
+
+function editItem(id) {
+  const it = ITEMS_CACHE.find(i => i.id === id);
+  if (!it) return;
+  document.getElementById("view-" + id).classList.add("hidden");
+  const box = document.getElementById("edit-" + id);
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <div class="grid grid-3">
+      <div>
+        <label>Item name</label>
+        <input id="e-name-${id}" value="${it.name.replace(/"/g, "&quot;")}">
+      </div>
+      <div>
+        <label>Price</label>
+        <input id="e-price-${id}" type="number" min="0" step="0.01" value="${it.price}">
+      </div>
+      <div>
+        <label>Stock (blank = unlimited)</label>
+        <input id="e-stock-${id}" type="number" min="0" step="1" value="${it.stock === null ? "" : it.stock}">
+      </div>
+    </div>
+    <label>What it does</label>
+    <input id="e-effect-${id}" value="${(it.effect || "").replace(/"/g, "&quot;")}">
+    <label>Description</label>
+    <input id="e-desc-${id}" value="${(it.description || "").replace(/"/g, "&quot;")}">
+    <label>Lifestyle stars (0-5)</label>
+    <input id="e-stars-${id}" type="number" min="0" max="5" step="1" value="${it.stars || 0}">
+    <div class="row-flex" style="gap:8px;margin-top:14px;">
+      <button class="btn small gold" onclick="saveItemEdit('${id}')">${icon("plus", 13)} Save changes</button>
+      <button class="btn small secondary" onclick="cancelItemEdit('${id}')">Cancel</button>
+    </div>
+  `;
+}
+
+function cancelItemEdit(id) {
+  document.getElementById("edit-" + id).classList.add("hidden");
+  document.getElementById("view-" + id).classList.remove("hidden");
+}
+
+async function saveItemEdit(id) {
+  const item = {
+    name: document.getElementById("e-name-" + id).value.trim(),
+    price: document.getElementById("e-price-" + id).value,
+    stock: document.getElementById("e-stock-" + id).value,
+    effect: document.getElementById("e-effect-" + id).value.trim(),
+    description: document.getElementById("e-desc-" + id).value.trim(),
+    stars: document.getElementById("e-stars-" + id).value
+  };
+  await updateStoreItem(CURRENT.classCode, id, item);
+  await render();
 }
 
 async function deleteItem(id) {

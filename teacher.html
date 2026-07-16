@@ -110,6 +110,15 @@
     <div class="grid grid-3" id="lifestyleSettings"></div>
     <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyle()" id="saveLifestyleBtn">Save lifestyle settings</button>
     <div id="lifestyleMsg"></div>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
+      <h2 id="hThresholds">Lifestyle rating bands</h2>
+      <p>Give the 0-100 score meaningful names, e.g. "Poor" for 0-10, "Good" for 10-20. Bands should be ordered lowest to highest and cover the range you want labelled.</p>
+      <div id="thresholdList"></div>
+      <button class="btn small secondary" onclick="addThresholdRow()" id="addThresholdBtn">Add band</button>
+      <button class="btn secondary" style="margin-top:14px;" onclick="saveThresholds()" id="saveThresholdsBtn">Save bands</button>
+      <div id="thresholdMsg"></div>
+    </div>
   </div>
 
   <div class="grid grid-2">

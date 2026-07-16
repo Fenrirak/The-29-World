@@ -33,6 +33,9 @@ function paintChrome() {
   document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Add event";
   document.getElementById("hLifestyle").innerHTML = icon("star", 18) + " Lifestyle rating settings";
   document.getElementById("saveLifestyleBtn").innerHTML = icon("bank", 14) + " Save lifestyle settings";
+  document.getElementById("hThresholds").innerHTML = icon("star", 18) + " Lifestyle rating bands";
+  document.getElementById("addThresholdBtn").innerHTML = icon("plus", 13) + " Add band";
+  document.getElementById("saveThresholdsBtn").innerHTML = icon("bank", 14) + " Save bands";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -142,6 +145,9 @@ async function render() {
       <input type="number" id="ls-${s.key}-weight" min="0" step="1" value="${cfg[s.key] ? cfg[s.key].weight : 0}">
     </div>
   `).join("");
+
+  // lifestyle rating bands
+  renderThresholdRows(cls.lifestyleThresholds || []);
 
   // adjustment select
   const sel = document.getElementById("adjStudent");
@@ -269,6 +275,49 @@ async function removeEvent(id) {
     await removeEventDef(CLASS_CODE, id);
     await render();
   }
+}
+
+function renderThresholdRows(thresholds) {
+  const box = document.getElementById("thresholdList");
+  box.innerHTML = "";
+  thresholds.forEach((t, i) => {
+    const row = document.createElement("div");
+    row.className = "grid grid-4";
+    row.style.alignItems = "flex-end";
+    row.innerHTML = `
+      <div><label>Label</label><input class="th-label" value="${(t.label || "").replace(/"/g, "&quot;")}"></div>
+      <div><label>From (inclusive)</label><input class="th-min" type="number" min="0" max="100" step="1" value="${t.min}"></div>
+      <div><label>To (exclusive)</label><input class="th-max" type="number" min="0" max="100" step="1" value="${t.max}"></div>
+      <div><button class="btn small coral" type="button" onclick="this.closest('.grid').remove()">${icon("trash", 13)} Remove</button></div>
+    `;
+    box.appendChild(row);
+  });
+}
+
+function addThresholdRow() {
+  const box = document.getElementById("thresholdList");
+  const row = document.createElement("div");
+  row.className = "grid grid-4";
+  row.style.alignItems = "flex-end";
+  row.innerHTML = `
+    <div><label>Label</label><input class="th-label" value="New band"></div>
+    <div><label>From (inclusive)</label><input class="th-min" type="number" min="0" max="100" step="1" value="0"></div>
+    <div><label>To (exclusive)</label><input class="th-max" type="number" min="0" max="100" step="1" value="10"></div>
+    <div><button class="btn small coral" type="button" onclick="this.closest('.grid').remove()">${icon("trash", 13)} Remove</button></div>
+  `;
+  box.appendChild(row);
+}
+
+async function saveThresholds() {
+  const rows = document.querySelectorAll("#thresholdList > .grid");
+  const thresholds = Array.from(rows).map(row => ({
+    label: row.querySelector(".th-label").value,
+    min: row.querySelector(".th-min").value,
+    max: row.querySelector(".th-max").value
+  }));
+  await saveLifestyleThresholds(CLASS_CODE, thresholds);
+  document.getElementById("thresholdMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
+  await render();
 }
 
 async function saveLifestyle() {

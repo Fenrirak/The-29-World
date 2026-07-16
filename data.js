@@ -1151,7 +1151,17 @@ async function processWeeklyBigEvents(classCode) {
   const newEntries = [];
   for (const student of students) {
     if (Math.random() >= 0.25) continue; // 25% chance per student per week
-    const def = activeDefs[Math.floor(Math.random() * activeDefs.length)];
+    // Only consider events for modules where the student actually has
+    // something at stake (a job, a property, or a vehicle) — no point
+    // hitting someone with a "lost your job" event if they have no job.
+    const eligibleDefs = activeDefs.filter(d => {
+      if (d.module === "income") return !!student.jobId;
+      if (d.module === "property") return cls.properties.some(p => p.owner === student.username);
+      if (d.module === "transport") return cls.vehicles.some(v => v.owner === student.username);
+      return true;
+    });
+    if (eligibleDefs.length === 0) continue;
+    const def = eligibleDefs[Math.floor(Math.random() * eligibleDefs.length)];
     newEntries.push({
       id: uid("bigevlog"), studentUser: student.username, defId: def.id, week: weekKey, date: nowStr(),
       name: def.name, module: def.module, cost: def.cost, description: def.description || "", status: "pending"
@@ -1289,6 +1299,13 @@ function withNewModuleDefaults(cls) {
     transport: { enabled: true, weight: 3 }
   };
   if (!cls.lifestyleConfig.transport) cls.lifestyleConfig.transport = { enabled: true, weight: 3 };
+  cls.lifestyleThresholds = cls.lifestyleThresholds && cls.lifestyleThresholds.length ? cls.lifestyleThresholds : [
+    { min: 0, max: 10, label: "Poor" },
+    { min: 10, max: 20, label: "Modest" },
+    { min: 20, max: 40, label: "Comfortable" },
+    { min: 40, max: 70, label: "Good" },
+    { min: 70, max: 100, label: "Luxurious" }
+  ];
   return cls;
 }
 
@@ -1378,6 +1395,23 @@ async function addStoreItem(classCode, item) {
       stock: item.stock === "" || item.stock === undefined ? null : Number(item.stock),
       stars: Math.max(0, Math.min(5, Number(item.stars) || 0))
     });
+    t.update(classRef, { storeItems: cls.storeItems });
+  });
+}
+async function updateStoreItem(classCode, itemId, item) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const existing = cls.storeItems.find(i => i.id === itemId);
+    if (!existing) return;
+    existing.name = item.name;
+    existing.price = Number(item.price);
+    existing.description = item.description || "";
+    existing.effect = item.effect || "";
+    existing.stock = item.stock === "" || item.stock === undefined ? null : Number(item.stock);
+    existing.stars = Math.max(0, Math.min(5, Number(item.stars) || 0));
     t.update(classRef, { storeItems: cls.storeItems });
   });
 }
@@ -1714,6 +1748,20 @@ async function processInsurancePayments(classCode) {
 /* ===================== Lifestyle rating ===================== */
 async function saveLifestyleConfig(classCode, config) {
   await classesCol().doc(classCode).update({ lifestyleConfig: config });
+}
+// thresholds: array of { min, max, label }, sorted low to high, describing
+// named bands for the 0-100 lifestyle score (e.g. Poor 0-10, Good 10-20).
+async function saveLifestyleThresholds(classCode, thresholds) {
+  const clean = thresholds
+    .map(t => ({ min: Math.max(0, Number(t.min) || 0), max: Math.max(0, Number(t.max) || 0), label: (t.label || "").trim() || "Untitled" }))
+    .sort((a, b) => a.min - b.min);
+  await classesCol().doc(classCode).update({ lifestyleThresholds: clean });
+}
+function lifestyleLabelFor(score, thresholds) {
+  if (!thresholds || thresholds.length === 0) return "";
+  const band = thresholds.find(t => score >= t.min && score < t.max) ||
+               (score >= (thresholds[thresholds.length - 1].max) ? thresholds[thresholds.length - 1] : null);
+  return band ? band.label : "";
 }
 async function lifestyleRating(username, classCode) {
   const cls = withNewModuleDefaults(await getClass(classCode));

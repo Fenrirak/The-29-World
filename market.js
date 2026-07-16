@@ -57,6 +57,13 @@ function sparkline(history) {
 }
 
 async function render() {
+  // Re-derive IS_TEACHER from the live user doc every render (not just on
+  // page load) so the teacher's management controls never get replaced by
+  // the student buy/sell view after a role or session change.
+  const freshMe = await getUser(CURRENT.username);
+  if (freshMe) IS_TEACHER = freshMe.role === "teacher";
+  document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
+
   const cls = await getClass(CLASS_CODE);
   const range = cls.priceRange || { min: 1, max: 5 };
   document.getElementById("rangeMin").value = range.min;

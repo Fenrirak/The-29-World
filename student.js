@@ -87,7 +87,8 @@ async function render() {
   document.getElementById("lifestyleCard").classList.toggle("hidden", !anyEnabled);
   if (anyEnabled) {
     const score = await lifestyleRating(me.username, me.classCode);
-    document.getElementById("lifestyleValue").textContent = score + " / 100";
+    const label = lifestyleLabelFor(score, cls.lifestyleThresholds);
+    document.getElementById("lifestyleValue").textContent = score + " / 100" + (label ? " — " + label : "");
   }
 
   // net worth leaderboard
