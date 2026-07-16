@@ -40,6 +40,7 @@ async function init() {
     await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
     await checkBigEventPopup(CURRENT.username, CLASS_CODE);
     await render();
+    startAutoRefresh();
   } catch (err) {
     console.error("Stock Market failed to load:", err);
     const list = document.getElementById("companyList");
@@ -47,6 +48,26 @@ async function init() {
       list.innerHTML = `<div class="card"><p class="error-msg" style="margin:0;">Something went wrong loading the Stock Market page: ${(err && err.message) || err}. Try refreshing — if it keeps happening, open the browser console (F12) and check for a red error, then share it so it can be fixed.</p></div>`;
     }
   }
+}
+
+// Companies are shared, live data — other students/teachers can buy, sell,
+// open, close, or reprice a company at any moment. Firestore already saves
+// every change instantly, but this page only reads it on load, so without
+// polling you'd only ever see a snapshot from whenever you opened the tab.
+// Poll every 5s so prices/holdings stay in sync across devices. Only one
+// interval is ever running per page load.
+let MARKET_REFRESH_TIMER = null;
+function startAutoRefresh() {
+  if (MARKET_REFRESH_TIMER) return;
+  MARKET_REFRESH_TIMER = setInterval(() => {
+    // Don't refresh out from under someone mid-edit (typing a new price,
+    // a buy/sell quantity, etc) — only poll when nothing's focused inside
+    // the company list.
+    const active = document.activeElement;
+    const list = document.getElementById("companyList");
+    if (list && list.contains(active)) return;
+    render();
+  }, 5000);
 }
 
 function sparkline(history) {
