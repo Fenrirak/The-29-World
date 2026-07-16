@@ -407,3 +407,16 @@ label .icon-slot{color:var(--navy-700);}
 }
 .anw-event-row:last-of-type{border-bottom:none;}
 .anw-event-name{font-weight:800;color:var(--navy-900);}
+
+/* ---------------- Roulette number grid ---------------- */
+.number-grid{
+  display:grid;grid-template-columns:repeat(9,1fr);gap:4px;max-width:520px;
+}
+.number-cell{
+  aspect-ratio:1;border:1.5px solid var(--line);border-radius:6px;background:#fff;
+  font-weight:800;font-size:.8rem;cursor:pointer;color:var(--navy-900);
+  display:flex;align-items:center;justify-content:center;padding:0;min-height:0;
+}
+.number-cell.zero{background:#e3f8f0;}
+.number-cell.selected{background:var(--gold);border-color:var(--gold-dark);color:var(--navy-900);}
+@media(max-width:640px){.number-grid{grid-template-columns:repeat(6,1fr);}}

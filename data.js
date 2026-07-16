@@ -133,6 +133,10 @@ async function createTeacherAndClass(name, username, password, className) {
     eventDefs: [], eventLog: [], lastEventWeekRun: null,
     vehicles: [], termDepositPlans: [],
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
+    insuranceDay: "Fri", lastInsuranceWeekRun: null,
+    gambling: { minBet: 1, maxBet: 20, payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 } },
+    taxRates: { store: 0, insurance: 0, property: 0, transport: 0, wage: 0, interest: 0, gambling: 0 },
+    bigEventDefs: [], bigEventLog: [], lastBigEventWeekRun: null,
     lifestyleConfig: {
       property: { enabled: true, weight: 4 },
       store: { enabled: true, weight: 2 },
@@ -409,8 +413,9 @@ async function runPayDayInternal(classCode, dateKey) {
     if (student.jobId) {
       const job = cls.jobs.find(j => j.id === student.jobId);
       if (job) {
-        await adjustBalance(student.username, job.wage);
-        txns.push({ type: "wage", to: student.username, amount: job.wage, note: "Pay day: " + job.title });
+        const { net, taxAmount } = applyTaxToIncome(cls, "wage", job.wage);
+        await adjustBalance(student.username, net);
+        txns.push({ type: "wage", to: student.username, amount: net, note: "Pay day: " + job.title + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
         paidCount++;
       }
     }
@@ -428,8 +433,9 @@ async function applyInterest(classCode) {
   for (const student of students) {
     const interest = Math.round(student.balance * rate * 100) / 100;
     if (interest > 0) {
-      await adjustBalance(student.username, interest);
-      await logTxn(classCode, { type: "interest", to: student.username, amount: interest, note: "Savings interest" });
+      const { net, taxAmount } = applyTaxToIncome(cls, "interest", interest);
+      await adjustBalance(student.username, net);
+      await logTxn(classCode, { type: "interest", to: student.username, amount: net, note: "Savings interest" + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
       count++;
     }
   }
@@ -735,7 +741,7 @@ async function removeVehicle(classCode, vehId) {
 async function buyVehicle(username, classCode, vehId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let vehName = "", cashPaid = 0;
+  let vehName = "", cashPaid = 0, taxAmount = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -746,12 +752,14 @@ async function buyVehicle(username, classCode, vehId) {
       const veh = cls.vehicles.find(v => v.id === vehId);
       if (!veh) throw new Error("NOT_FOUND");
       if (veh.owner) throw new Error("TAKEN");
+      const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "transport", veh.price);
+      taxAmount = tax;
       const isTeacher = user.role === "teacher";
-      if (!isTeacher && user.balance < veh.price) throw new Error("BROKE");
+      if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
       veh.owner = username;
       vehName = veh.name;
-      cashPaid = veh.price;
-      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - veh.price) * 100) / 100 });
+      cashPaid = taxedPrice;
+      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - taxedPrice) * 100) / 100 });
       t.update(classRef, { vehicles: cls.vehicles });
     });
   } catch (e) {
@@ -759,7 +767,7 @@ async function buyVehicle(username, classCode, vehId) {
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` });
+  await logTxn(classCode, { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
 }
 async function sellVehicle(classCode, vehId) {
@@ -987,6 +995,268 @@ async function portfolioValue(username, classCode) {
   return Math.round(total * 100) / 100;
 }
 
+/* ===================== Gambling (Roulette) ===================== */
+async function saveGamblingSettings(classCode, settings) {
+  await classesCol().doc(classCode).update({
+    gambling: {
+      minBet: Math.max(0, Number(settings.minBet) || 0),
+      maxBet: Math.max(0, Number(settings.maxBet) || 0),
+      payouts: {
+        straightUp: Number(settings.straightUp) || 0,
+        split: Number(settings.split) || 0,
+        street: Number(settings.street) || 0,
+        corner: Number(settings.corner) || 0,
+        sixLine: Number(settings.sixLine) || 0,
+        oddEven: Number(settings.oddEven) || 0
+      }
+    }
+  });
+}
+
+function rouletteRowCol(n) { return { row: Math.ceil(n / 3), col: ((n - 1) % 3) + 1 }; }
+function isValidSplit(a, b) {
+  if (a < 1 || a > 36 || b < 1 || b > 36 || a === b) return false;
+  const p1 = rouletteRowCol(a), p2 = rouletteRowCol(b);
+  if (p1.row === p2.row && Math.abs(p1.col - p2.col) === 1) return true;
+  if (p1.col === p2.col && Math.abs(p1.row - p2.row) === 1) return true;
+  return false;
+}
+function isValidStreet(nums) {
+  if (nums.length !== 3) return false;
+  const sorted = [...nums].sort((a, b) => a - b);
+  if (sorted[0] < 1 || sorted[0] % 3 !== 1) return false;
+  return sorted[1] === sorted[0] + 1 && sorted[2] === sorted[0] + 2;
+}
+function isValidCorner(nums) {
+  if (nums.length !== 4) return false;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const n = sorted[0];
+  if (n % 3 === 0) return false; // can't start a corner in the right column
+  if (n > 33) return false;
+  const expected = [n, n + 1, n + 3, n + 4];
+  return JSON.stringify(sorted) === JSON.stringify(expected);
+}
+function isValidSixLine(nums) {
+  if (nums.length !== 6) return false;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const n = sorted[0];
+  if (n % 3 !== 1 || n > 31) return false;
+  const expected = [n, n + 1, n + 2, n + 3, n + 4, n + 5];
+  return JSON.stringify(sorted) === JSON.stringify(expected);
+}
+function rouletteIsOdd(n) { return n > 0 && n % 2 === 1; }
+
+// selection: array of numbers (0-36) chosen by the student, meaning
+// depends on betType. Returns { ok, error } or resolves via balance update.
+async function placeRouletteBet(username, classCode, betType, betAmount, selection) {
+  betAmount = Number(betAmount);
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  if (!cls) return { ok: false, error: "Class not found." };
+  const g = cls.gambling;
+  if (!(betAmount > 0)) return { ok: false, error: "Enter a bet amount greater than zero." };
+  if (betAmount < g.minBet || betAmount > g.maxBet) return { ok: false, error: `Bets must be between ${fmtMoney(g.minBet)} and ${fmtMoney(g.maxBet)}.` };
+
+  let valid = false, count = 0;
+  if (betType === "straightUp") { valid = selection.length === 1 && selection[0] >= 0 && selection[0] <= 36; count = 1; }
+  else if (betType === "split") { valid = selection.length === 2 && isValidSplit(selection[0], selection[1]); count = 2; }
+  else if (betType === "street") { valid = isValidStreet(selection); count = 3; }
+  else if (betType === "corner") { valid = isValidCorner(selection); count = 4; }
+  else if (betType === "sixLine") { valid = isValidSixLine(selection); count = 6; }
+  else if (betType === "oddEven") { valid = selection[0] === "odd" || selection[0] === "even"; }
+  else return { ok: false, error: "Unknown bet type." };
+  if (!valid) return { ok: false, error: "That's not a valid bet for this type." };
+
+  const user = await getUser(username);
+  if (!user) return { ok: false, error: "User not found." };
+  const isTeacher = user.role === "teacher";
+  if (!isTeacher && user.balance < betAmount) return { ok: false, error: "You don't have enough money for that bet." };
+
+  const spin = Math.floor(Math.random() * 37); // 0-36
+  let win = false;
+  if (betType === "straightUp") win = selection[0] === spin;
+  else if (betType === "oddEven") win = spin !== 0 && ((selection[0] === "odd") === rouletteIsOdd(spin));
+  else win = selection.includes(spin);
+
+  const multiplier = g.payouts[betType] || 0;
+  const { net: taxedWinnings, taxAmount } = win ? applyTaxToIncome(cls, "gambling", betAmount * multiplier) : { net: 0, taxAmount: 0 };
+  // Bet amount is deducted; on a win, the taxed winnings are credited back (winnings only, stake already "spent").
+  const netChange = win ? taxedWinnings : -betAmount;
+
+  if (!isTeacher) await adjustBalance(username, netChange);
+
+  await logTxn(classCode, {
+    type: "gambling", from: username, amount: Math.abs(netChange),
+    note: `Roulette (${betTypeLabel(betType)}): ${win ? "WON" : "lost"} — ball landed on ${spin}` + (win && taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "")
+  });
+
+  return { ok: true, spin, win, netChange };
+}
+function betTypeLabel(t) {
+  return { straightUp: "Straight up", split: "Split", street: "Street", corner: "Corner", sixLine: "Six line", oddEven: "Odd/Even" }[t] || t;
+}
+
+/* ===================== Big events ===================== */
+const BIG_EVENT_MODULES = ["income", "property", "transport"];
+const MODULE_TO_COVERAGE = { income: "jobs", property: "property", transport: "transport" };
+
+async function addBigEventDef(classCode, ev) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.bigEventDefs.push({
+      id: uid("big"), name: ev.name,
+      module: BIG_EVENT_MODULES.includes(ev.module) ? ev.module : "income",
+      cost: Math.max(0, Number(ev.cost) || 0), description: ev.description || "", active: true
+    });
+    t.update(classRef, { bigEventDefs: cls.bigEventDefs });
+  });
+}
+async function removeBigEventDef(classCode, defId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.bigEventDefs = cls.bigEventDefs.filter(e => e.id !== defId);
+    t.update(classRef, { bigEventDefs: cls.bigEventDefs });
+  });
+}
+// Once per NZ calendar week, each student has a 1-in-4 chance of being hit
+// with one random active big event, left "pending" until they respond.
+async function processWeeklyBigEvents(classCode) {
+  const classRef = classesCol().doc(classCode);
+  const weekKey = isoWeekKey(new Date());
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  if (!cls || cls.lastBigEventWeekRun === weekKey) return 0;
+  const activeDefs = (cls.bigEventDefs || []).filter(e => e.active);
+  if (activeDefs.length === 0) {
+    await classRef.update({ lastBigEventWeekRun: weekKey }).catch(() => {});
+    return 0;
+  }
+
+  let claimedRun = false;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = withNewModuleDefaults(snap.data());
+    if (liveCls.lastBigEventWeekRun === weekKey) return;
+    t.update(classRef, { lastBigEventWeekRun: weekKey });
+    claimedRun = true;
+  });
+  if (!claimedRun) return 0;
+
+  const students = await getClassStudents(classCode);
+  const newEntries = [];
+  for (const student of students) {
+    if (Math.random() >= 0.25) continue; // 25% chance per student per week
+    const def = activeDefs[Math.floor(Math.random() * activeDefs.length)];
+    newEntries.push({
+      id: uid("bigevlog"), studentUser: student.username, defId: def.id, week: weekKey, date: nowStr(),
+      name: def.name, module: def.module, cost: def.cost, description: def.description || "", status: "pending"
+    });
+  }
+  if (newEntries.length === 0) return 0;
+
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = withNewModuleDefaults(snap.data());
+    liveCls.bigEventLog = (liveCls.bigEventLog || []).concat(newEntries);
+    if (liveCls.bigEventLog.length > 300) liveCls.bigEventLog = liveCls.bigEventLog.slice(-300);
+    t.update(classRef, { bigEventLog: liveCls.bigEventLog });
+  });
+  return newEntries.length;
+}
+
+// choice: 'forfeit' | 'pay' | 'claim'
+async function resolveBigEvent(username, classCode, logId, choice) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let outcomeNote = "", amount = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const entry = (cls.bigEventLog || []).find(e => e.id === logId && e.studentUser === username && e.status === "pending");
+      if (!entry) throw new Error("NOT_FOUND");
+      const isTeacher = user.role === "teacher";
+
+      if (choice === "forfeit") {
+        entry.status = "lost";
+        outcomeNote = `Didn't pay for "${entry.name}" — lost the associated ${entry.module}`;
+        if (entry.module === "income") {
+          t.update(userRef, { jobId: null });
+        } else if (entry.module === "property") {
+          const prop = cls.properties.find(p => p.owner === username);
+          if (prop) { prop.owner = null; prop.mortgage = null; }
+          t.update(classRef, { properties: cls.properties, bigEventLog: cls.bigEventLog });
+        } else if (entry.module === "transport") {
+          const veh = cls.vehicles.find(v => v.owner === username);
+          if (veh) veh.owner = null;
+          t.update(classRef, { vehicles: cls.vehicles, bigEventLog: cls.bigEventLog });
+        }
+        if (entry.module === "income") t.update(classRef, { bigEventLog: cls.bigEventLog });
+      } else if (choice === "pay") {
+        if (!isTeacher && user.balance < entry.cost) throw new Error("BROKE");
+        entry.status = "paid";
+        amount = entry.cost;
+        outcomeNote = `Paid ${fmtMoney(entry.cost)} for "${entry.name}"`;
+        if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - entry.cost) * 100) / 100 });
+        t.update(classRef, { bigEventLog: cls.bigEventLog });
+      } else if (choice === "claim") {
+        const coverage = MODULE_TO_COVERAGE[entry.module];
+        const plan = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).find(p => p && p.coverage === coverage);
+        if (!plan) throw new Error("NO_PLAN");
+        const excess = Math.max(0, plan.excess);
+        if (!isTeacher && user.balance < excess) throw new Error("BROKE_EXCESS");
+        entry.status = "claimed";
+        amount = excess;
+        outcomeNote = `Claimed insurance (${plan.name}) for "${entry.name}" — paid ${fmtMoney(excess)} excess`;
+        if (!isTeacher && excess > 0) t.update(userRef, { balance: Math.round((user.balance - excess) * 100) / 100 });
+        t.update(classRef, { bigEventLog: cls.bigEventLog });
+      } else {
+        throw new Error("BAD_CHOICE");
+      }
+    });
+  } catch (e) {
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money to pay that." };
+    if (e.message === "BROKE_EXCESS") return { ok: false, error: "You don't have enough money to pay the excess." };
+    if (e.message === "NO_PLAN") return { ok: false, error: "You don't have a matching insurance plan for this." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That event is no longer pending." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "big-event", from: username, amount, note: outcomeNote });
+  return { ok: true };
+}
+
+/* ===================== Tax ===================== */
+async function classesColUpdateInsuranceDay(classCode, day) {
+  await classesCol().doc(classCode).update({ insuranceDay: day });
+}
+
+async function saveTaxRates(classCode, rates) {
+  const clean = {};
+  Object.keys(rates).forEach(k => { clean[k] = Math.max(0, Number(rates[k]) || 0); });
+  await classesCol().doc(classCode).update({ taxRates: clean });
+}
+// For purchases: student pays base cost + tax on top.
+function applyTaxToExpense(cls, category, baseAmount) {
+  const rate = (cls.taxRates && cls.taxRates[category]) || 0;
+  const taxAmount = Math.round(baseAmount * (rate / 100) * 100) / 100;
+  return { total: Math.round((baseAmount + taxAmount) * 100) / 100, taxAmount, rate };
+}
+// For income: student receives base amount minus tax.
+function applyTaxToIncome(cls, category, baseAmount) {
+  const rate = (cls.taxRates && cls.taxRates[category]) || 0;
+  const taxAmount = Math.round(baseAmount * (rate / 100) * 100) / 100;
+  return { net: Math.round((baseAmount - taxAmount) * 100) / 100, taxAmount, rate };
+}
+
 /* ===================== Class defaults for new modules ===================== */
 function withNewModuleDefaults(cls) {
   if (!cls) return cls;
@@ -1002,6 +1272,16 @@ function withNewModuleDefaults(cls) {
   cls.interestFrequency = cls.interestFrequency || "weekly";
   cls.interestDay = cls.interestDay || "Fri";
   cls.lastInterestRun = cls.lastInterestRun || null;
+  cls.insuranceDay = cls.insuranceDay || "Fri";
+  cls.lastInsuranceWeekRun = cls.lastInsuranceWeekRun || null;
+  cls.gambling = cls.gambling || {
+    minBet: 1, maxBet: 20,
+    payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 }
+  };
+  cls.taxRates = cls.taxRates || { store: 0, insurance: 0, property: 0, transport: 0, wage: 0, interest: 0, gambling: 0 };
+  cls.bigEventDefs = cls.bigEventDefs || [];
+  cls.bigEventLog = cls.bigEventLog || [];
+  cls.lastBigEventWeekRun = cls.lastBigEventWeekRun || null;
   cls.lifestyleConfig = cls.lifestyleConfig || {
     property: { enabled: true, weight: 4 },
     store: { enabled: true, weight: 2 },
@@ -1031,7 +1311,7 @@ async function addInsurancePlan(classCode, plan) {
     const cls = withNewModuleDefaults(snap.data());
     cls.insurancePlans.push({
       id: uid("ins"), name: plan.name, price: Number(plan.price),
-      excess: Number(plan.excess), coverage: plan.coverage || "",
+      excess: Number(plan.excess), coverage: plan.coverage || "general",
       description: plan.description || "", stars: Math.max(0, Math.min(5, Number(plan.stars) || 0)),
       active: true
     });
@@ -1063,17 +1343,15 @@ async function buyInsurance(username, classCode, planId) {
       if (!plan) throw new Error("NOT_FOUND");
       user.insurance = user.insurance || [];
       if (user.insurance.includes(planId)) throw new Error("ALREADY");
-      if (user.balance < plan.price) throw new Error("BROKE");
       planName = plan.name;
       user.insurance.push(planId);
-      t.update(userRef, { balance: Math.round((user.balance - plan.price) * 100) / 100, insurance: user.insurance });
+      t.update(userRef, { insurance: user.insurance });
     });
   } catch (e) {
     if (e.message === "ALREADY") return { ok: false, error: "You already have this plan." };
-    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "insurance-buy", from: username, amount: 0, note: `Bought insurance: ${planName}` });
+  await logTxn(classCode, { type: "insurance-buy", from: username, amount: 0, note: `Signed up for insurance: ${planName} — premiums are charged weekly` });
   return { ok: true };
 }
 async function cancelInsurance(username, planId) {
@@ -1116,7 +1394,7 @@ async function removeStoreItem(classCode, itemId) {
 async function buyStoreItem(username, classCode, itemId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let itemName = "";
+  let itemName = "", taxAmount = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1127,12 +1405,16 @@ async function buyStoreItem(username, classCode, itemId) {
       const item = cls.storeItems.find(i => i.id === itemId);
       if (!item) throw new Error("NOT_FOUND");
       if (item.stock !== null && item.stock <= 0) throw new Error("OUT");
-      if (user.balance < item.price) throw new Error("BROKE");
+      const { total, taxAmount: tax } = applyTaxToExpense(cls, "store", item.price);
+      taxAmount = tax;
+      const isTeacher = user.role === "teacher";
+      if (!isTeacher && user.balance < total) throw new Error("BROKE");
       itemName = item.name;
       if (item.stock !== null) item.stock -= 1;
       user.storeItems = user.storeItems || [];
       user.storeItems.push(itemId);
-      t.update(userRef, { balance: Math.round((user.balance - item.price) * 100) / 100, storeItems: user.storeItems });
+      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - total) * 100) / 100, storeItems: user.storeItems });
+      else t.update(userRef, { storeItems: user.storeItems });
       t.update(classRef, { storeItems: cls.storeItems });
     });
   } catch (e) {
@@ -1140,7 +1422,7 @@ async function buyStoreItem(username, classCode, itemId) {
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "store-buy", from: username, amount: 0, note: `Bought from store: ${itemName}` });
+  await logTxn(classCode, { type: "store-buy", from: username, amount: 0, note: `Bought from store: ${itemName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
 }
 
@@ -1173,7 +1455,7 @@ async function removeProperty(classCode, propId) {
 async function buyProperty(username, classCode, propId, financed) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let deposit = 0, weekly = 0, propName = "", cashPaid = 0;
+  let deposit = 0, weekly = 0, propName = "", cashPaid = 0, taxAmount = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1185,19 +1467,22 @@ async function buyProperty(username, classCode, propId, financed) {
       if (!prop) throw new Error("NOT_FOUND");
       if (prop.owner) throw new Error("TAKEN");
       propName = prop.name;
+      const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "property", prop.price);
+      taxAmount = tax;
+      const isTeacher = user.role === "teacher";
       if (financed && prop.mortgageWeeks > 0) {
-        deposit = Math.round(prop.price * 0.1 * 100) / 100;
-        weekly = Math.round(((prop.price - deposit) / prop.mortgageWeeks) * 100) / 100;
-        if (user.balance < deposit) throw new Error("BROKE");
+        deposit = Math.round(taxedPrice * 0.1 * 100) / 100;
+        weekly = Math.round(((taxedPrice - deposit) / prop.mortgageWeeks) * 100) / 100;
+        if (!isTeacher && user.balance < deposit) throw new Error("BROKE");
         prop.owner = username;
         prop.mortgage = { weeksLeft: prop.mortgageWeeks, weeklyPayment: weekly };
-        t.update(userRef, { balance: Math.round((user.balance - deposit) * 100) / 100 });
+        if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - deposit) * 100) / 100 });
       } else {
-        if (user.balance < prop.price) throw new Error("BROKE");
+        if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
         prop.owner = username;
         prop.mortgage = null;
-        cashPaid = prop.price;
-        t.update(userRef, { balance: Math.round((user.balance - prop.price) * 100) / 100 });
+        cashPaid = taxedPrice;
+        if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - taxedPrice) * 100) / 100 });
       }
       t.update(classRef, { properties: cls.properties });
     });
@@ -1206,7 +1491,7 @@ async function buyProperty(username, classCode, propId, financed) {
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "property-buy", from: username, amount: financed ? deposit : cashPaid, note: financed ? `Bought (mortgaged): ${propName} — ${fmtMoney(deposit)} deposit` : `Bought outright: ${propName}` });
+  await logTxn(classCode, { type: "property-buy", from: username, amount: financed ? deposit : cashPaid, note: (financed ? `Bought (mortgaged): ${propName} — ${fmtMoney(deposit)} deposit` : `Bought outright: ${propName}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
 }
 async function sellProperty(classCode, propId) {
@@ -1279,7 +1564,8 @@ async function addEventDef(classCode, ev) {
     const cls = withNewModuleDefaults(snap.data());
     cls.eventDefs.push({
       id: uid("ev"), name: ev.name, amount: Number(ev.amount) || 0,
-      description: ev.description || "", repeatable: !!ev.repeatable, active: true
+      description: ev.description || "", repeatable: !!ev.repeatable,
+      severity: ev.severity === "bad" ? "bad" : "neutral", active: true
     });
     t.update(classRef, { eventDefs: cls.eventDefs });
   });
@@ -1330,7 +1616,7 @@ async function processWeeklyEvents(classCode) {
     const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
     for (const ev of shuffled) {
       balanceDeltas[student.username] = (balanceDeltas[student.username] || 0) + ev.amount;
-      newLogEntries.push({ studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey, name: ev.name, amount: ev.amount, description: ev.description || "" });
+      newLogEntries.push({ id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey, name: ev.name, amount: ev.amount, description: ev.description || "", severity: ev.severity || "neutral", claimed: false });
       txns.push({ type: "event", to: student.username, amount: ev.amount, note: ev.name + (ev.description ? " — " + ev.description : "") });
     }
   }
@@ -1350,6 +1636,79 @@ async function processWeeklyEvents(classCode) {
   });
 
   return newLogEntries.length;
+}
+
+// Claim General-coverage insurance against a bad weekly event. Pays out the
+// loss minus the plan's excess (never below zero), and marks the event as
+// claimed so it can't be claimed twice.
+async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let payout = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const plan = cls.insurancePlans.find(p => p.id === planId && p.coverage === "general");
+      if (!plan || !(user.insurance || []).includes(planId)) throw new Error("NO_PLAN");
+      const entry = (cls.eventLog || []).find(e => e.id === eventLogId && e.studentUser === username);
+      if (!entry || entry.severity !== "bad" || entry.claimed) throw new Error("NOT_CLAIMABLE");
+      const loss = Math.abs(Math.min(0, entry.amount));
+      payout = Math.max(0, Math.round((loss - plan.excess) * 100) / 100);
+      entry.claimed = true;
+      t.update(userRef, { balance: Math.round((user.balance + payout) * 100) / 100 });
+      t.update(classRef, { eventLog: cls.eventLog });
+    });
+  } catch (e) {
+    if (e.message === "NO_PLAN") return { ok: false, error: "You don't have a General insurance plan for this." };
+    if (e.message === "NOT_CLAIMABLE") return { ok: false, error: "That event can't be claimed." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "insurance-claim", to: username, amount: payout, note: "Insurance claim (General cover)" });
+  return { ok: true, payout };
+}
+
+// Charges every student's active insurance premiums once per NZ calendar
+// week, on the day the teacher set. Skips silently (keeps cover active) if
+// a student can't afford it that week, same behaviour as automations.
+async function processInsurancePayments(classCode) {
+  const classRef = classesCol().doc(classCode);
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  if (!cls) return 0;
+  const weekKey = isoWeekKey(new Date());
+  if (cls.lastInsuranceWeekRun === weekKey) return 0;
+  if (nzDayName() !== (cls.insuranceDay || "Fri")) return 0;
+
+  let claimed = false;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = withNewModuleDefaults(snap.data());
+    if (liveCls.lastInsuranceWeekRun === weekKey) return;
+    t.update(classRef, { lastInsuranceWeekRun: weekKey });
+    claimed = true;
+  });
+  if (!claimed) return 0;
+
+  const students = await getClassStudents(classCode);
+  let charged = 0;
+  for (const student of students) {
+    const plans = (student.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).filter(Boolean);
+    if (plans.length === 0) continue;
+    const baseTotal = plans.reduce((s, p) => s + p.price, 0);
+    const { total, taxAmount } = applyTaxToExpense(cls, "insurance", baseTotal);
+    if (student.balance < total) continue; // skip silently, keep cover
+    await adjustBalance(student.username, -total);
+    await logTxn(classCode, {
+      type: "insurance-premium", from: student.username, amount: total,
+      note: `Weekly premiums: ${plans.map(p => p.name).join(", ")}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "")
+    });
+    charged++;
+  }
+  return charged;
 }
 
 /* ===================== Lifestyle rating ===================== */

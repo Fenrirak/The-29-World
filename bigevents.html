@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Term Deposit — The 29 World</title>
+<title>Big Events — The 29 World</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div class="topbar">
-  <a class="brand" href="termdeposit.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <a class="brand" href="bigevents.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
   <nav>
     <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
     <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
-    <a href="termdeposit.html" class="active"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
+    <a href="termdeposit.html"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
     <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
     <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
     <a href="gambling.html"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
@@ -21,7 +21,7 @@
     <a href="store.html"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
     <a href="property.html"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
     <a href="transport.html"><span class="icon-slot" data-icon="car"></span><span class="nav-label">Transport</span></a>
-    <a href="bigevents.html"><span class="icon-slot" data-icon="star"></span><span class="nav-label">Big Events</span></a>
+    <a href="bigevents.html" class="active"><span class="icon-slot" data-icon="star"></span><span class="nav-label">Big Events</span></a>
     <a href="tax.html"><span class="icon-slot" data-icon="percent"></span><span class="nav-label">Tax</span></a>
     <span class="who" id="whoami"></span>
     <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
@@ -29,48 +29,44 @@
 </div>
 
 <main>
-  <h1 id="pageTitle">Term Deposit</h1>
-  <p>Lock money away for a fixed number of days to earn interest. Break it early and you'll pay a fee instead.</p>
+  <h1 id="pageTitle">Big Events</h1>
+  <p>Rare, high-stakes random events. Each week every student has a small chance of being hit with one — when it happens they must choose to pay the cost, lose the associated thing, or claim matching insurance.</p>
 
   <div id="teacherPanel" class="card hidden">
-    <h2 id="hAdd">Add a term deposit plan</h2>
-    <form onsubmit="return addPlan(event)">
+    <h2 id="hAdd">Add a big event</h2>
+    <form onsubmit="return addEvent(event)">
       <div class="grid grid-3">
         <div>
-          <label for="tName" id="labName">Plan name</label>
-          <input id="tName" placeholder="e.g. 30-Day Saver" required>
+          <label for="beName" id="labName">Event name</label>
+          <input id="beName" placeholder="e.g. Made redundant" required>
         </div>
         <div>
-          <label for="tMin" id="labMin">Minimum deposit</label>
-          <input id="tMin" type="number" min="0" step="0.01" required>
+          <label for="beModule" id="labModule">What it affects</label>
+          <select id="beModule">
+            <option value="income">Income (job)</option>
+            <option value="property">Property (house)</option>
+            <option value="transport">Transport (vehicle)</option>
+          </select>
         </div>
         <div>
-          <label for="tDays" id="labDays">Term length (days)</label>
-          <input id="tDays" type="number" min="1" step="1" required>
+          <label for="beCost" id="labCost">Cost to fix / avoid</label>
+          <input id="beCost" type="number" min="0" step="0.5" required>
         </div>
       </div>
-      <div class="grid grid-2">
-        <div>
-          <label for="tRate" id="labRate">Interest rate (% paid at maturity)</label>
-          <input id="tRate" type="number" min="0" step="0.1" required>
-        </div>
-        <div>
-          <label for="tFee" id="labFee">Early withdrawal fee (%)</label>
-          <input id="tFee" type="number" min="0" step="0.1" required>
-        </div>
-      </div>
-      <button class="btn gold" type="submit" id="addBtn">Add plan</button>
+      <label for="beDesc" id="labDesc">Description (shown to students)</label>
+      <input id="beDesc" placeholder="e.g. Your workplace had to let you go">
+      <button class="btn gold" type="submit" id="addBtn">Add event</button>
     </form>
     <div id="addMsg"></div>
   </div>
 
-  <div id="planList"></div>
-  <p class="muted-small" id="noPlans">No term deposit plans have been set up yet.</p>
+  <div id="defList"></div>
+  <p class="muted-small" id="noDefs">No big events have been set up yet.</p>
 
-  <div class="card" id="mineCard">
-    <h2 id="hMine">My term deposits</h2>
-    <div id="myDeposits"></div>
-    <p class="muted-small" id="noMine">You don't have any money locked away right now.</p>
+  <div class="card" id="historyCard">
+    <h2 id="hHistory">My big event history</h2>
+    <div id="historyList"></div>
+    <p class="muted-small" id="noHistory">Nothing has happened yet — hopefully it stays that way!</p>
   </div>
 </main>
 
@@ -82,6 +78,6 @@
 <script src="icons.js"></script>
 <script src="data.js"></script>
 <script src="events-ui.js"></script>
-<script src="termdeposit.js"></script>
+<script src="bigevents.js"></script>
 </body>
 </html>

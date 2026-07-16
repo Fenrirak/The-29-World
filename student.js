@@ -20,7 +20,9 @@ function badgeType(type) {
     "event": ["lilac", "dice", "Random event"],
     "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
     "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
-    "term-deposit-mature": ["mint", "vault", "Deposit matured"]
+    "term-deposit-mature": ["mint", "vault", "Deposit matured"],
+    "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
+    "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -61,8 +63,11 @@ async function init() {
   await processMortgages(u.classCode);
   await processTermDeposits(u.classCode);
   await autoInterestIfDue(u.classCode);
+  await processInsurancePayments(u.classCode);
   await processWeeklyEvents(u.classCode);
+  await processWeeklyBigEvents(u.classCode);
   await checkWeeklyEventPopup(u.username, u.classCode);
+  await checkBigEventPopup(u.username, u.classCode);
   await render();
 }
 
@@ -145,9 +150,11 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell", "vehicle-sell", "term-deposit-mature", "term-deposit-early"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "vehicle-buy", "term-deposit-open"].includes(t.type)) { sign = "-"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell", "vehicle-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim"].includes(t.type)) { sign = "+"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "vehicle-buy", "term-deposit-open", "insurance-premium"].includes(t.type)) { sign = "-"; }
     else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
+    else if (t.type === "gambling") { sign = t.note.includes("WON") ? "+" : "-"; }
+    else if (t.type === "big-event") { sign = amt > 0 ? "-" : ""; }
 
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${detail}</td>

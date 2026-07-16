@@ -3,8 +3,9 @@ let CURRENT, IS_TEACHER;
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("briefcase", 26) + " Jobs";
-  document.getElementById("hTeacherNotice").innerHTML = icon("idcard", 18) + " Manage jobs from your Dashboard";
-  document.getElementById("goDashBtn").innerHTML = icon("bank", 15) + " Go to Dashboard";
+  document.getElementById("hJobs").innerHTML = icon("briefcase", 18) + " Jobs board";
+  document.getElementById("addJobBtn").innerHTML = icon("plus", 15) + " Add job";
+  document.getElementById("hApplications").innerHTML = icon("idcard", 18) + " Pending job applications";
   document.getElementById("hMyJob").innerHTML = icon("briefcase", 18) + " My current job";
   document.getElementById("hBoard").innerHTML = icon("idcard", 18) + " Job board";
   document.getElementById("hMyApps").innerHTML = icon("send", 18) + " My applications";
@@ -19,7 +20,7 @@ async function init() {
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
-  document.getElementById("teacherNotice").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("teacherView").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
   await autoPayDayIfDue(CURRENT.classCode);
@@ -27,14 +28,55 @@ async function init() {
   await processMortgages(CURRENT.classCode);
   await processTermDeposits(CURRENT.classCode);
   await autoInterestIfDue(CURRENT.classCode);
+  await processInsurancePayments(CURRENT.classCode);
   await processWeeklyEvents(CURRENT.classCode);
+  await processWeeklyBigEvents(CURRENT.classCode);
   await checkWeeklyEventPopup(CURRENT.username, CURRENT.classCode);
-  if (!IS_TEACHER) await render();
+  await checkBigEventPopup(CURRENT.username, CURRENT.classCode);
+  await render();
 }
 
 async function render() {
   const me = await getUser(CURRENT.username);
   const cls = await getClass(me.classCode);
+
+  if (IS_TEACHER) {
+    const students = await getClassStudents(CURRENT.classCode);
+    const nameCache = {};
+    students.forEach(s => { nameCache[s.username] = s.name; });
+
+    // jobs table
+    const jbody = document.querySelector("#jobsTable tbody");
+    jbody.innerHTML = "";
+    cls.jobs.forEach(j => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td><strong>${j.title}</strong>${j.description ? `<div class="muted-small">${j.description}</div>` : ""}</td><td>${fmtMoney(j.wage)}</td>
+        <td><button class="btn small coral" onclick="deleteJob('${j.id}')">Remove</button></td>`;
+      jbody.appendChild(tr);
+    });
+
+    // pending applications
+    const apps = (cls.jobApplications || []).filter(a => a.status === "pending");
+    const appBox = document.getElementById("applicationsList");
+    document.getElementById("noApplications").classList.toggle("hidden", apps.length > 0);
+    appBox.innerHTML = "";
+    apps.forEach(a => {
+      const studentName = nameCache[a.studentUser] || a.studentUser;
+      const job = cls.jobs.find(j => j.id === a.jobId);
+      if (!job) return;
+      const row = document.createElement("div");
+      row.className = "auto-row";
+      row.innerHTML = `
+        <div class="auto-details"><strong>${studentName}</strong> applied for <strong>${job.title}</strong> (${fmtMoney(job.wage)})</div>
+        <div class="row-flex" style="gap:8px;">
+          <button class="btn small mint" onclick="approveApp('${a.id}')">Approve</button>
+          <button class="btn small coral" onclick="declineApp('${a.id}')">Decline</button>
+        </div>
+      `;
+      appBox.appendChild(row);
+    });
+    return;
+  }
 
   // current job
   const job = cls.jobs.find(j => j.id === me.jobId);
@@ -88,6 +130,33 @@ async function render() {
 async function apply(jobId) {
   const res = await applyForJob(CURRENT.classCode, CURRENT.username, jobId);
   if (!res.ok) alert(res.error);
+  await render();
+}
+
+async function addJobForm(e) {
+  e.preventDefault();
+  const title = document.getElementById("jobTitle").value.trim();
+  const wage = document.getElementById("jobWage").value;
+  const description = document.getElementById("jobDesc").value.trim();
+  await addJob(CURRENT.classCode, title, wage, description);
+  document.getElementById("jobTitle").value = "";
+  document.getElementById("jobWage").value = "";
+  document.getElementById("jobDesc").value = "";
+  await render();
+  return false;
+}
+
+async function deleteJob(id) {
+  await removeJob(CURRENT.classCode, id);
+  await render();
+}
+
+async function approveApp(appId) {
+  await approveApplication(CURRENT.classCode, appId);
+  await render();
+}
+async function declineApp(appId) {
+  await declineApplication(CURRENT.classCode, appId);
   await render();
 }
 

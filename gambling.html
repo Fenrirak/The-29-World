@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gambling — The 29 World</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="gambling.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
+    <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="termdeposit.html"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
+    <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="gambling.html" class="active"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
+    <a href="insurance.html"><span class="icon-slot" data-icon="shield"></span><span class="nav-label">Insurance</span></a>
+    <a href="store.html"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
+    <a href="property.html"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
+    <a href="transport.html"><span class="icon-slot" data-icon="car"></span><span class="nav-label">Transport</span></a>
+    <a href="bigevents.html"><span class="icon-slot" data-icon="star"></span><span class="nav-label">Big Events</span></a>
+    <a href="tax.html"><span class="icon-slot" data-icon="percent"></span><span class="nav-label">Tax</span></a>
+    <span class="who" id="whoami"></span>
+    <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+  </nav>
+</div>
+
+<main>
+  <h1 id="pageTitle">Gambling — Roulette</h1>
+  <p>Place a bet, spin the wheel, see what happens. Betting is risky — only bet what you can afford to lose!</p>
+
+  <div id="teacherPanel" class="card hidden">
+    <h2 id="hSettings">Roulette settings</h2>
+    <div class="grid grid-2">
+      <div>
+        <label for="gMin" id="labMin">Minimum bet</label>
+        <input id="gMin" type="number" min="0" step="0.5">
+      </div>
+      <div>
+        <label for="gMax" id="labMax">Maximum bet</label>
+        <input id="gMax" type="number" min="0" step="0.5">
+      </div>
+    </div>
+    <p class="muted-small">Payout multipliers — a win pays out this many times the bet, on top of keeping the stake.</p>
+    <div class="grid grid-3">
+      <div><label for="pStraight">Straight up (single number)</label><input id="pStraight" type="number" min="0" step="1"></div>
+      <div><label for="pSplit">Split (2 numbers)</label><input id="pSplit" type="number" min="0" step="1"></div>
+      <div><label for="pStreet">Street (3 numbers)</label><input id="pStreet" type="number" min="0" step="1"></div>
+      <div><label for="pCorner">Corner (4 numbers)</label><input id="pCorner" type="number" min="0" step="1"></div>
+      <div><label for="pSixLine">Six line (6 numbers)</label><input id="pSixLine" type="number" min="0" step="1"></div>
+      <div><label for="pOddEven">Odd / Even</label><input id="pOddEven" type="number" min="0" step="1"></div>
+    </div>
+    <button class="btn secondary" onclick="saveSettings()" id="saveSettingsBtn">Save settings</button>
+    <div id="settingsMsg"></div>
+  </div>
+
+  <div id="studentView" class="hidden">
+    <div class="card">
+      <h2 id="hBet">Place a bet</h2>
+      <p class="muted-small" id="betLimits"></p>
+
+      <label for="betType" id="labBetType">Bet type</label>
+      <select id="betType" onchange="renderPicker()">
+        <option value="straightUp">Straight up (pick 1 number, 0 included)</option>
+        <option value="split">Split (pick 2 adjacent numbers)</option>
+        <option value="street">Street (pick a full row of 3)</option>
+        <option value="corner">Corner (pick a 2×2 block of 4)</option>
+        <option value="sixLine">Six line (pick two adjacent rows, 6 numbers)</option>
+        <option value="oddEven">Odd / Even</option>
+      </select>
+
+      <div id="pickerArea" style="margin-top:12px;"></div>
+
+      <label for="betAmount" id="labBetAmount">Bet amount</label>
+      <input id="betAmount" type="number" min="0" step="0.5" style="max-width:200px;">
+
+      <button class="btn gold" style="margin-top:14px;" onclick="spin()" id="spinBtn">Spin the wheel</button>
+      <div id="betMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="hRecent">My recent bets</h2>
+      <div id="recentBets"></div>
+      <p class="muted-small" id="noBets">You haven't placed any bets yet.</p>
+    </div>
+  </div>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script src="icons.js"></script>
+<script src="data.js"></script>
+<script src="events-ui.js"></script>
+<script src="gambling.js"></script>
+</body>
+</html>

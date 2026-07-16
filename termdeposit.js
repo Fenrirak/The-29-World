@@ -25,8 +25,11 @@ async function init() {
   await processMortgages(u.classCode);
   await processTermDeposits(u.classCode);
   await autoInterestIfDue(u.classCode);
+  await processInsurancePayments(u.classCode);
   await processWeeklyEvents(u.classCode);
+  await processWeeklyBigEvents(u.classCode);
   await checkWeeklyEventPopup(u.username, u.classCode);
+  await checkBigEventPopup(u.username, u.classCode);
   await render();
 }
 

@@ -9,17 +9,11 @@ function paintChrome() {
   document.getElementById("iconSavings").innerHTML = icon("piggy", 30);
   document.getElementById("iconCompanies").innerHTML = icon("building", 30);
   document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students";
-  document.getElementById("hJobs").innerHTML = icon("briefcase", 18) + " Jobs board";
-  document.getElementById("hApplications").innerHTML = icon("idcard", 18) + " Pending job applications";
   document.getElementById("hAdjust").innerHTML = icon("star", 18) + " Give a bonus or fine";
   document.getElementById("hSettings").innerHTML = icon("bank", 18) + " Class settings";
   document.getElementById("hDanger").innerHTML = icon("coin", 18) + " Danger zone";
   document.getElementById("restartBtn").innerHTML = icon("chart", 15) + " Restart class";
   document.getElementById("hActivity").innerHTML = icon("chart", 18) + " Recent activity";
-  document.getElementById("labJobTitle").innerHTML = icon("briefcase", 13) + " New job title";
-  document.getElementById("labJobWage").innerHTML = icon("coin", 13) + " Weekly wage";
-  document.getElementById("labJobDesc").innerHTML = icon("idcard", 13) + " Job description (shown to students)";
-  document.getElementById("addJobBtn").innerHTML = icon("plus", 15) + " Add job";
   document.getElementById("labAdjStudent").innerHTML = icon("users", 13) + " Student";
   document.getElementById("labAdjAmount").innerHTML = icon("coin", 13) + " Amount (negative for a fine)";
   document.getElementById("labAdjNote").innerHTML = icon("star", 13) + " Reason";
@@ -35,6 +29,7 @@ function paintChrome() {
   document.getElementById("labEvName").innerHTML = icon("star", 13) + " Event name";
   document.getElementById("labEvAmount").innerHTML = icon("coin", 13) + " Amount (negative for a cost)";
   document.getElementById("labEvDesc").innerHTML = icon("idcard", 13) + " Description (shown in the activity feed)";
+  document.getElementById("labEvSeverity").innerHTML = icon("star", 13) + " Severity";
   document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Add event";
   document.getElementById("hLifestyle").innerHTML = icon("star", 18) + " Lifestyle rating settings";
   document.getElementById("saveLifestyleBtn").innerHTML = icon("bank", 14) + " Save lifestyle settings";
@@ -55,8 +50,11 @@ async function init() {
   await processMortgages(CLASS_CODE);
   await processTermDeposits(CLASS_CODE);
   await autoInterestIfDue(CLASS_CODE);
+  await processInsurancePayments(CLASS_CODE);
   await processWeeklyEvents(CLASS_CODE);
+  await processWeeklyBigEvents(CLASS_CODE);
   await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
+  await checkBigEventPopup(CURRENT.username, CLASS_CODE);
   await render();
 }
 
@@ -101,37 +99,6 @@ async function render() {
     tbody.appendChild(tr);
   });
 
-  // jobs table
-  const jbody = document.querySelector("#jobsTable tbody");
-  jbody.innerHTML = "";
-  cls.jobs.forEach(j => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td><strong>${j.title}</strong>${j.description ? `<div class="muted-small">${j.description}</div>` : ""}</td><td>${fmtMoney(j.wage)}</td>
-      <td><button class="btn small coral" onclick="deleteJob('${j.id}')">Remove</button></td>`;
-    jbody.appendChild(tr);
-  });
-
-  // pending applications
-  const apps = (cls.jobApplications || []).filter(a => a.status === "pending");
-  const appBox = document.getElementById("applicationsList");
-  document.getElementById("noApplications").classList.toggle("hidden", apps.length > 0);
-  appBox.innerHTML = "";
-  apps.forEach(a => {
-    const student = students.find(s => s.username === a.studentUser);
-    const job = cls.jobs.find(j => j.id === a.jobId);
-    if (!student || !job) return;
-    const row = document.createElement("div");
-    row.className = "auto-row";
-    row.innerHTML = `
-      <div class="auto-details"><strong>${student.name}</strong> applied for <strong>${job.title}</strong> (${fmtMoney(job.wage)})</div>
-      <div class="row-flex" style="gap:8px;">
-        <button class="btn small mint" onclick="approveApp('${a.id}')">Approve</button>
-        <button class="btn small coral" onclick="declineApp('${a.id}')">Decline</button>
-      </div>
-    `;
-    appBox.appendChild(row);
-  });
-
   // random events
   const evBox = document.getElementById("eventList");
   const evs = cls.eventDefs || [];
@@ -144,6 +111,7 @@ async function render() {
       <div class="auto-details">${icon("dice", 14)} <strong>${ev.name}</strong>
         &middot; ${ev.amount >= 0 ? "+" : ""}${fmtMoney(ev.amount)}
         &middot; ${ev.repeatable ? "Can repeat" : "Once per student"}
+        &middot; <span class="badge ${ev.severity === 'bad' ? 'coral' : 'navy'}">${ev.severity === 'bad' ? 'Bad' : 'Neutral'}</span>
         ${ev.description ? `<div class="muted-small">${ev.description}</div>` : ""}
       </div>
       <button class="btn small coral" onclick="removeEvent('${ev.id}')">${icon("trash", 13)} Remove</button>
@@ -240,7 +208,9 @@ function badge(type) {
     "event": ["lilac", "dice", "Random event"],
     "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
     "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
-    "term-deposit-mature": ["mint", "vault", "Deposit matured"]
+    "term-deposit-mature": ["mint", "vault", "Deposit matured"],
+    "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
+    "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -252,35 +222,8 @@ function avatarClass(username) {
   return AVATAR_COLORS[h];
 }
 
-async function addJobForm(e) {
-  e.preventDefault();
-  const title = document.getElementById("jobTitle").value.trim();
-  const wage = document.getElementById("jobWage").value;
-  const description = document.getElementById("jobDesc").value.trim();
-  await addJob(CLASS_CODE, title, wage, description);
-  document.getElementById("jobTitle").value = "";
-  document.getElementById("jobWage").value = "";
-  document.getElementById("jobDesc").value = "";
-  await render();
-  return false;
-}
-
-async function deleteJob(id) {
-  await removeJob(CLASS_CODE, id);
-  await render();
-}
-
 async function onAssignJob(username, jobId) {
   await assignJob(username, jobId);
-  await render();
-}
-
-async function approveApp(appId) {
-  await approveApplication(CLASS_CODE, appId);
-  await render();
-}
-async function declineApp(appId) {
-  await declineApplication(CLASS_CODE, appId);
   await render();
 }
 
@@ -308,6 +251,7 @@ async function addEventForm(e) {
     name: document.getElementById("evName").value.trim(),
     amount: document.getElementById("evAmount").value,
     repeatable: document.getElementById("evRepeat").checked,
+    severity: document.getElementById("evSeverity").value,
     description: document.getElementById("evDesc").value.trim()
   };
   await addEventDef(CLASS_CODE, ev);
@@ -315,6 +259,7 @@ async function addEventForm(e) {
   document.getElementById("evAmount").value = "";
   document.getElementById("evDesc").value = "";
   document.getElementById("evRepeat").checked = false;
+  document.getElementById("evSeverity").value = "neutral";
   await render();
   return false;
 }
