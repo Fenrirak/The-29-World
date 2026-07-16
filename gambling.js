@@ -157,11 +157,13 @@ function renderPicker() {
   const need = neededCount(type);
   const layoutNote = type === "straightUp"
     ? "Tap 0, or any number 1-36."
-    : "Numbers are laid out in a 3-column table, just like a real roulette table — pick cells that are actually next to each other (left/right in the same row, or directly above/below) for a valid bet.";
+    : "Numbers are laid out in a horizontal table, just like a real roulette table — pick cells that are actually next to each other (above/below in the same column, or left/right) for a valid bet.";
   area.innerHTML = `
     <p class="muted-small">Pick ${need} number${need === 1 ? "" : "s"}. ${layoutNote} Selected: <span id="pickCount">0</span>/${need}</p>
-    ${type === "straightUp" ? `<button type="button" class="number-zero" id="num-0">0</button>` : ""}
-    <div id="numberGrid" class="number-grid"></div>
+    <div class="number-table-wrap">
+      ${type === "straightUp" ? `<button type="button" class="number-zero" id="num-0">0</button>` : ""}
+      <div id="numberGrid" class="number-grid"></div>
+    </div>
   `;
   if (type === "straightUp") {
     document.getElementById("num-0").onclick = () => toggleNumber(0, need);
