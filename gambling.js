@@ -37,7 +37,6 @@ function showRouletteAnimation(number) {
       <div class="anw-modal-card" style="text-align:center;max-width:500px;">
         <h2 style="display:flex;align-items:center;justify-content:center;gap:9px;">${icon("dice", 24)} Spinning the wheel...</h2>
         <div class="wheel-stage">
-          <div class="wheel-pointer"></div>
           <div class="wheel-rim">
             <div class="wheel-disc" id="wheelDisc" style="background:${wheelGradient()};">
               ${numbersHtml}

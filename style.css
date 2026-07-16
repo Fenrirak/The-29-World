@@ -423,11 +423,6 @@ label .icon-slot{color:var(--navy-700);}
 
 /* ---------------- Roulette wheel spin animation ---------------- */
 .wheel-stage{position:relative;width:392px;height:392px;margin:24px auto 8px;max-width:100%;}
-.wheel-pointer{
-  position:absolute;top:-6px;left:50%;transform:translateX(-50%);
-  width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;
-  border-top:25px solid #fff;filter:drop-shadow(0 3px 7px rgba(0,0,0,0.45));z-index:6;
-}
 .wheel-rim{
   position:absolute;inset:0;border-radius:50%;
   background:linear-gradient(135deg,var(--gold),var(--gold-dark));
