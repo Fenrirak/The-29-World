@@ -100,11 +100,11 @@
         </div>
       </div>
       <div id="evOptionsWrap" class="hidden">
-        <label for="evOptionsArea" id="labEvOptions">Choices — one per line, as "Label | amount"</label>
-        <textarea id="evOptionsArea" rows="4" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:1rem;" placeholder="Pay for repairs | -10
-Ignore it and hope for the best | 0
-Do it yourself and save money | -3"></textarea>
-        <p class="muted-small">The student will be shown this scenario and must pick one of these choices — each choice's amount is applied to their balance (negative for a cost, positive for a gain, 0 for no effect).</p>
+        <label for="evOptionsArea" id="labEvOptions">Choices — one per line, as "Label | amount | what happened (optional)"</label>
+        <textarea id="evOptionsArea" rows="4" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:1rem;" placeholder="Pay for repairs | -10 | The plumber fixed it in an hour
+Ignore it and hope for the best | 0 | Nothing happened, you got lucky
+Do it yourself and save money | -3 | It mostly worked, but you had to buy some parts"></textarea>
+        <p class="muted-small">The student will be shown this scenario and must pick one of these choices — each choice's amount is applied to their balance (negative for a cost, positive for a gain, 0 for no effect). The third part is optional — a short line explaining what happened, shown to the student after they choose.</p>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:12px;">
         <input type="checkbox" id="evRepeat" style="width:20px;height:20px;min-height:auto;flex-shrink:0;">

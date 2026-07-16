@@ -27,7 +27,7 @@ function paintChrome() {
   document.getElementById("savePayDayBtn").innerHTML = icon("calendar", 14) + " Save pay day";
   document.getElementById("hEvents").innerHTML = icon("dice", 18) + " Random weekly events";
   document.getElementById("labEvType").innerHTML = icon("dice", 13) + " Event type";
-  document.getElementById("labEvOptions").innerHTML = icon("star", 13) + " Choices — one per line, as \"Label | amount\"";
+  document.getElementById("labEvOptions").innerHTML = icon("star", 13) + " Choices — one per line, as \"Label | amount | what happened (optional)\"";
   document.getElementById("labEvName").innerHTML = icon("star", 13) + " Event name";
   document.getElementById("labEvAmount").innerHTML = icon("coin", 13) + " Amount (negative for a cost)";
   document.getElementById("labEvDesc").innerHTML = icon("idcard", 13) + " Description (shown in the activity feed)";
@@ -113,7 +113,7 @@ async function render() {
     const row = document.createElement("div");
     row.className = "auto-row";
     const middle = ev.type === "choice"
-      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${o.label} (${o.amount >= 0 ? "+" : ""}${fmtMoney(o.amount)})`).join(", ")}`
+      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${o.label} (${o.amount >= 0 ? "+" : ""}${fmtMoney(o.amount)})${o.outcome ? ` — ${o.outcome}` : ""}`).join(", ")}`
       : `&middot; ${ev.amount >= 0 ? "+" : ""}${fmtMoney(ev.amount)}`;
     row.innerHTML = `
       <div class="auto-details">${icon("dice", 14)} <strong>${ev.name}</strong>
@@ -269,8 +269,8 @@ async function addEventForm(e) {
   if (type === "choice") {
     const lines = document.getElementById("evOptionsArea").value.split("\n").map(l => l.trim()).filter(Boolean);
     const options = lines.map(line => {
-      const [label, amt] = line.split("|");
-      return { label: (label || "").trim(), amount: Number((amt || "0").trim()) || 0 };
+      const [label, amt, outcome] = line.split("|");
+      return { label: (label || "").trim(), amount: Number((amt || "0").trim()) || 0, outcome: (outcome || "").trim() };
     }).filter(o => o.label);
     if (options.length < 2) {
       alert('Add at least 2 choices, one per line, as "Label | amount".');

@@ -55,7 +55,7 @@ async function checkWeeklyEventPopup(username, classCode) {
     .some(p => p && p.coverage === "general");
 
   const withDetails = fresh.map(l => ({
-    id: l.id, name: l.name || "Random event", description: l.description || "",
+    id: l.id, name: l.name || "Random event", description: (l.type === "choice" && l.outcome) ? l.outcome : (l.description || ""),
     amount: l.amount || 0, severity: l.severity || "neutral", claimed: !!l.claimed,
     claimable: l.severity === "bad" && !l.claimed && hasGeneralPlan
   }));

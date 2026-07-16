@@ -1602,7 +1602,7 @@ async function addEventDef(classCode, ev) {
       description: ev.description || "", repeatable: !!ev.repeatable,
       severity: ev.severity === "bad" ? "bad" : "neutral", active: true,
       type: isChoice ? "choice" : "fixed",
-      options: isChoice ? (ev.options || []).map(o => ({ id: uid("opt"), label: o.label || "", amount: Number(o.amount) || 0 })) : []
+      options: isChoice ? (ev.options || []).map(o => ({ id: uid("opt"), label: o.label || "", amount: Number(o.amount) || 0, outcome: o.outcome || "" })) : []
     });
     t.update(classRef, { eventDefs: cls.eventDefs });
   });
@@ -1744,7 +1744,8 @@ async function resolveChoiceEvent(username, classCode, logId, optionId) {
       entry.status = "resolved";
       entry.chosenOptionId = optionId;
       entry.amount = amount;
-      note = `${entry.name} — chose "${option.label}"`;
+      entry.outcome = option.outcome || "";
+      note = `${entry.name} — chose "${option.label}"` + (option.outcome ? `: ${option.outcome}` : "");
       const isTeacher = user.role === "teacher";
       if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + amount) * 100) / 100 });
       t.update(classRef, { eventLog: cls.eventLog });
