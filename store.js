@@ -37,7 +37,7 @@ async function init() {
 async function render() {
   const me = await getUser(CURRENT.username);
   const cls = await getClass(me.classCode);
-  const items = cls.storeItems || [];
+  const items = (cls.storeItems || []).filter(i => !i.archived);
 
   const list = document.getElementById("itemList");
   list.innerHTML = "";
@@ -85,12 +85,14 @@ async function addItem(e) {
     stock: document.getElementById("iStock").value,
     effect: document.getElementById("iEffect").value.trim(),
     description: document.getElementById("iDesc").value.trim(),
-    stars: document.getElementById("iStars").value
+    stars: document.getElementById("iStars").value,
+    countsNetWorth: document.getElementById("iCountsNetWorth").checked
   };
   await addStoreItem(CURRENT.classCode, item);
   document.getElementById("addMsg").innerHTML = `<div class="success-msg">Item added!</div>`;
   ["iName","iPrice","iStock","iEffect","iDesc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("iStars").value = 0;
+  document.getElementById("iCountsNetWorth").checked = true;
   await render();
   return false;
 }
@@ -122,6 +124,10 @@ function editItem(id) {
     <input id="e-desc-${id}" value="${(it.description || "").replace(/"/g, "&quot;")}">
     <label>Lifestyle stars (0-5)</label>
     <input id="e-stars-${id}" type="number" min="0" max="5" step="1" value="${it.stars || 0}">
+    <label style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="e-countsnw-${id}" ${it.countsNetWorth !== false ? "checked" : ""} style="width:20px;height:20px;min-height:auto;flex-shrink:0;">
+      Counts towards net worth / leaderboard
+    </label>
     <div class="row-flex" style="gap:8px;margin-top:14px;">
       <button class="btn small gold" onclick="saveItemEdit('${id}')">${icon("plus", 13)} Save changes</button>
       <button class="btn small secondary" onclick="cancelItemEdit('${id}')">Cancel</button>
@@ -141,7 +147,8 @@ async function saveItemEdit(id) {
     stock: document.getElementById("e-stock-" + id).value,
     effect: document.getElementById("e-effect-" + id).value.trim(),
     description: document.getElementById("e-desc-" + id).value.trim(),
-    stars: document.getElementById("e-stars-" + id).value
+    stars: document.getElementById("e-stars-" + id).value,
+    countsNetWorth: document.getElementById("e-countsnw-" + id).checked
   };
   await updateStoreItem(CURRENT.classCode, id, item);
   await render();

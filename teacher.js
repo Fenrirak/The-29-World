@@ -1,4 +1,4 @@
-let CURRENT, CLASS_CODE;
+let CURRENT, CLASS_CODE, PROFILE_USER;
 
 function paintChrome() {
   paintIconSlots();
@@ -9,6 +9,7 @@ function paintChrome() {
   document.getElementById("iconSavings").innerHTML = icon("piggy", 30);
   document.getElementById("iconCompanies").innerHTML = icon("building", 30);
   document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students";
+  document.getElementById("hNetWorth").innerHTML = icon("medal", 18) + " Net worth ranking";
   document.getElementById("hAdjust").innerHTML = icon("star", 18) + " Give a bonus or fine";
   document.getElementById("hSettings").innerHTML = icon("bank", 18) + " Class settings";
   document.getElementById("hDanger").innerHTML = icon("coin", 18) + " Danger zone";
@@ -86,7 +87,32 @@ async function render() {
   const teacher = await getUser(cls.teacher);
   if (teacher) nameCache[teacher.username] = teacher.name;
 
+  // net worth ranking (also gives us each student's lifestyle rating for the table below)
+  const board = await classLeaderboard(CLASS_CODE);
+  const lifestyleByUser = {};
+  await Promise.all(students.map(async s => { lifestyleByUser[s.username] = await lifestyleRating(s.username, CLASS_CODE); }));
+
+  const nwBox = document.getElementById("netWorthList");
+  nwBox.innerHTML = "";
+  const medalClass = i => (i === 0 ? "gold" : i === 1 ? "silver" : i === 2 ? "bronze" : "");
+  board.forEach((row, i) => {
+    const div = document.createElement("div");
+    div.className = "leaderboard-row";
+    div.innerHTML = `
+      <span class="rank-pill ${medalClass(i)}">${i + 1}</span>
+      <span class="student-avatar ${avatarClass(row.username)}">${initials(row.name)}</span>
+      <div style="flex:1;">
+        <div class="leaderboard-name">${row.name}</div>
+        <div class="leaderboard-sub">${fmtMoney(row.balance)} cash + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}</div>
+      </div>
+      <div class="leaderboard-net">${fmtMoney(row.net)}</div>
+    `;
+    nwBox.appendChild(div);
+  });
+
   // students table
+  const netByUser = {};
+  board.forEach(r => { netByUser[r.username] = r.net; });
   const tbody = document.querySelector("#studentTable tbody");
   tbody.innerHTML = "";
   document.getElementById("noStudents").classList.toggle("hidden", students.length > 0);
@@ -96,6 +122,8 @@ async function render() {
       <td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${s.name}<div class="muted-small">@${s.username}</div></td>
       <td>${jobSelectHtml(cls, s)}</td>
       <td><strong>${fmtMoney(s.balance)}</strong></td>
+      <td>${lifestyleByUser[s.username]} / 100</td>
+      <td>${fmtMoney(netByUser[s.username] || 0)}</td>
       <td>
         <button class="btn small secondary" onclick="quickView('${s.username}')">View</button>
         <button class="btn small coral" onclick="removeStudentClick('${s.username}', '${s.name.replace(/'/g, "\\'")}')">${icon("trash", 13)}</button>
@@ -408,8 +436,77 @@ async function savePayDay() {
   await render();
 }
 async function quickView(username) {
+  await renderProfile(username);
+  document.getElementById("profileModal").classList.remove("hidden");
+}
+
+function closeProfile() {
+  document.getElementById("profileModal").classList.add("hidden");
+}
+
+async function renderProfile(username) {
   const s = await getUser(username);
-  alert(`${s.name}\nUsername: ${s.username}\nBalance: ${fmtMoney(s.balance)}`);
+  if (!s) return;
+  PROFILE_USER = username;
+  const rating = await lifestyleRating(username, CLASS_CODE);
+  const net = await portfolioValue(username, CLASS_CODE);
+  const poss = await getStudentPossessions(username, CLASS_CODE);
+
+  document.getElementById("profileName").innerHTML = `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${s.name}`;
+
+  const rows = [];
+  rows.push(`<p><strong>Balance:</strong> ${fmtMoney(s.balance)} &middot; <strong>Portfolio:</strong> ${fmtMoney(net)} &middot; <strong>Lifestyle rating:</strong> ${rating} / 100</p>`);
+
+  rows.push(`<h4>${icon("house", 16)} Property</h4>`);
+  rows.push(poss.property
+    ? `<div class="auto-row"><div class="auto-details"><strong>${poss.property.name}</strong> — ${fmtMoney(poss.property.price)}</div>
+        <button class="btn small coral" onclick="profileRemoveProperty('${poss.property.id}')">Repossess</button></div>`
+    : `<p class="muted-small">No property owned.</p>`);
+
+  rows.push(`<h4>${icon("car", 16)} Transport</h4>`);
+  rows.push(poss.vehicle
+    ? `<div class="auto-row"><div class="auto-details"><strong>${poss.vehicle.name}</strong> — ${fmtMoney(poss.vehicle.price)}</div>
+        <button class="btn small coral" onclick="profileRemoveVehicle('${poss.vehicle.id}')">Repossess</button></div>`
+    : `<p class="muted-small">No vehicle owned.</p>`);
+
+  rows.push(`<h4>${icon("cart", 16)} Store items</h4>`);
+  rows.push(poss.storeItems.length
+    ? poss.storeItems.map(it => `<div class="auto-row"><div class="auto-details">${it.name} — ${fmtMoney(it.price)}${it.countsNetWorth === false ? ' <span class="muted-small">(not counted)</span>' : ""}</div>
+        <button class="btn small coral" onclick="profileRemoveStoreItem('${username}','${it.id}')">Remove</button></div>`).join("")
+    : `<p class="muted-small">No store items owned.</p>`);
+
+  rows.push(`<h4>${icon("shield", 16)} Insurance</h4>`);
+  rows.push(poss.insurance.length
+    ? poss.insurance.map(p => `<div class="auto-row"><div class="auto-details">${p.name} — ${fmtMoney(p.price)}/week</div>
+        <button class="btn small coral" onclick="profileRemoveInsurance('${username}','${p.id}')">Cancel</button></div>`).join("")
+    : `<p class="muted-small">No insurance plans.</p>`);
+
+  document.getElementById("profileBody").innerHTML = rows.join("");
+}
+
+async function profileRemoveProperty(propId) {
+  if (!confirm("Repossess this property? The student will be refunded 90% of its price.")) return;
+  await sellProperty(CLASS_CODE, propId);
+  await render();
+  await renderProfile(PROFILE_USER);
+}
+async function profileRemoveVehicle(vehId) {
+  if (!confirm("Repossess this vehicle? The student will be refunded 90% of its price.")) return;
+  await sellVehicle(CLASS_CODE, vehId);
+  await render();
+  await renderProfile(PROFILE_USER);
+}
+async function profileRemoveStoreItem(username, itemId) {
+  if (!confirm("Remove this item from the student? They'll be refunded 80% of its price.")) return;
+  await sellStoreItem(username, CLASS_CODE, itemId);
+  await render();
+  await renderProfile(username);
+}
+async function profileRemoveInsurance(username, planId) {
+  if (!confirm("Cancel this student's insurance plan?")) return;
+  await cancelInsurance(username, planId);
+  await render();
+  await renderProfile(username);
 }
 
 async function removeStudentClick(username, name) {

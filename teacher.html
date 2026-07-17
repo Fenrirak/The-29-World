@@ -59,12 +59,18 @@
   </div>
 
   <div class="card">
+    <h2 id="hNetWorth">Net worth ranking</h2>
+    <p>Cash balance plus stock portfolio plus any store items the teacher has marked as counting toward net worth.</p>
+    <div id="netWorthList"></div>
+  </div>
+
+  <div class="card">
     <div class="flex-between">
       <h2 id="hStudents">Students</h2>
     </div>
     <div class="table-scroll">
     <table id="studentTable">
-      <thead><tr><th>Student</th><th>Job</th><th>Balance</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Student</th><th>Job</th><th>Balance</th><th>Lifestyle</th><th>Net worth</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     </table>
     </div>
@@ -220,6 +226,16 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 </main>
 
 <div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<div id="profileModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:40px 16px;">
+  <div class="card" style="max-width:640px;width:100%;margin-top:0;">
+    <div class="flex-between">
+      <h2 id="profileName">Student</h2>
+      <button class="btn small secondary" onclick="closeProfile()">Close</button>
+    </div>
+    <div id="profileBody"></div>
+  </div>
+</div>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>

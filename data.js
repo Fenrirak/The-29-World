@@ -270,6 +270,20 @@ async function addJob(classCode, title, wage, description) {
     t.update(classRef, { jobs: cls.jobs });
   });
 }
+async function updateJob(classCode, jobId, updates) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = snap.data();
+    const job = cls.jobs.find(j => j.id === jobId);
+    if (!job) return;
+    job.title = updates.title;
+    job.wage = Number(updates.wage);
+    job.description = updates.description || "";
+    t.update(classRef, { jobs: cls.jobs });
+  });
+}
 async function removeJob(classCode, jobId) {
   const classRef = classesCol().doc(classCode);
   let affectedStudents = [];
@@ -1007,7 +1021,7 @@ async function storeItemsValue(username, classCode) {
   let total = 0;
   (user.storeItems || []).forEach(itemId => {
     const item = cls.storeItems.find(i => i.id === itemId);
-    if (item) total += item.price;
+    if (item && item.countsNetWorth !== false) total += item.price;
   });
   return Math.round(total * 100) / 100;
 }
@@ -1410,7 +1424,9 @@ async function addStoreItem(classCode, item) {
       id: uid("item"), name: item.name, price: Number(item.price),
       description: item.description || "", effect: item.effect || "",
       stock: item.stock === "" || item.stock === undefined ? null : Number(item.stock),
-      stars: Math.max(0, Math.min(5, Number(item.stars) || 0))
+      stars: Math.max(0, Math.min(5, Number(item.stars) || 0)),
+      countsNetWorth: item.countsNetWorth !== false,
+      archived: false
     });
     t.update(classRef, { storeItems: cls.storeItems });
   });
@@ -1429,16 +1445,23 @@ async function updateStoreItem(classCode, itemId, item) {
     existing.effect = item.effect || "";
     existing.stock = item.stock === "" || item.stock === undefined ? null : Number(item.stock);
     existing.stars = Math.max(0, Math.min(5, Number(item.stars) || 0));
+    existing.countsNetWorth = item.countsNetWorth !== false;
     t.update(classRef, { storeItems: cls.storeItems });
   });
 }
+// Removing an item from the store no longer deletes its record outright —
+// it's archived instead (hidden from the buyable list) so that students who
+// already own one can still sell it back for a refund, and it still counts
+// toward lifestyle rating / net worth as before.
 async function removeStoreItem(classCode, itemId) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
-    cls.storeItems = cls.storeItems.filter(i => i.id !== itemId);
+    const item = cls.storeItems.find(i => i.id === itemId);
+    if (!item) return;
+    item.archived = true;
     t.update(classRef, { storeItems: cls.storeItems });
   });
 }
@@ -1454,7 +1477,7 @@ async function buyStoreItem(username, classCode, itemId) {
       const user = userSnap.data();
       const cls = withNewModuleDefaults(classSnap.data());
       const item = cls.storeItems.find(i => i.id === itemId);
-      if (!item) throw new Error("NOT_FOUND");
+      if (!item || item.archived) throw new Error("NOT_FOUND");
       if (item.stock !== null && item.stock <= 0) throw new Error("OUT");
       const { total, taxAmount: tax } = applyTaxToExpense(cls, "store", item.price);
       taxAmount = tax;
@@ -1850,6 +1873,19 @@ async function processInsurancePayments(classCode) {
     charged++;
   }
   return charged;
+}
+
+// Everything a single student owns, for the teacher's "view student" panel.
+async function getStudentPossessions(username, classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const user = await getUser(username);
+  if (!cls || !user) return null;
+  const property = cls.properties.find(p => p.owner === username) || null;
+  const vehicle = cls.vehicles.find(v => v.owner === username) || null;
+  const storeItems = (user.storeItems || []).map(id => cls.storeItems.find(i => i.id === id)).filter(Boolean)
+    .map(i => ({ ...i }));
+  const insurance = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).filter(Boolean);
+  return { property, vehicle, storeItems, insurance };
 }
 
 /* ===================== Lifestyle rating ===================== */

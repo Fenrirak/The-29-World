@@ -1,4 +1,5 @@
 let CURRENT, IS_TEACHER;
+let JOBS_CACHE = [];
 
 function paintChrome() {
   paintIconSlots();
@@ -46,12 +47,19 @@ async function render() {
     students.forEach(s => { nameCache[s.username] = s.name; });
 
     // jobs table
+    JOBS_CACHE = cls.jobs;
     const jbody = document.querySelector("#jobsTable tbody");
     jbody.innerHTML = "";
     cls.jobs.forEach(j => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td><strong>${j.title}</strong>${j.description ? `<div class="muted-small">${j.description}</div>` : ""}</td><td>${fmtMoney(j.wage)}</td>
-        <td><button class="btn small coral" onclick="deleteJob('${j.id}')">Remove</button></td>`;
+      tr.id = "jobrow-" + j.id;
+      tr.innerHTML = `
+        <td id="jobview-${j.id}"><strong>${j.title}</strong>${j.description ? `<div class="muted-small">${j.description}</div>` : ""}</td>
+        <td id="jobwage-${j.id}">${fmtMoney(j.wage)}</td>
+        <td id="jobactions-${j.id}">
+          <button class="btn small secondary" onclick="editJob('${j.id}')">Edit</button>
+          <button class="btn small coral" onclick="deleteJob('${j.id}')">Remove</button>
+        </td>`;
       jbody.appendChild(tr);
     });
 
@@ -144,6 +152,34 @@ async function addJobForm(e) {
   document.getElementById("jobDesc").value = "";
   await render();
   return false;
+}
+
+function editJob(id) {
+  const j = JOBS_CACHE.find(jj => jj.id === id);
+  if (!j) return;
+  const tr = document.getElementById("jobrow-" + id);
+  tr.innerHTML = `
+    <td colspan="3">
+      <div class="grid grid-3">
+        <div><label>Title</label><input id="ej-title-${id}" value="${j.title.replace(/"/g, "&quot;")}"></div>
+        <div><label>Weekly wage</label><input id="ej-wage-${id}" type="number" min="0" step="0.5" value="${j.wage}"></div>
+        <div><label>Description</label><input id="ej-desc-${id}" value="${(j.description || "").replace(/"/g, "&quot;")}"></div>
+      </div>
+      <div class="row-flex" style="gap:8px;margin-top:10px;">
+        <button class="btn small gold" onclick="saveJobEdit('${id}')">Save changes</button>
+        <button class="btn small secondary" onclick="render()">Cancel</button>
+      </div>
+    </td>
+  `;
+}
+
+async function saveJobEdit(id) {
+  const title = document.getElementById("ej-title-" + id).value.trim();
+  const wage = document.getElementById("ej-wage-" + id).value;
+  const description = document.getElementById("ej-desc-" + id).value.trim();
+  if (!title || wage === "") { alert("Please fill in a title and wage."); return; }
+  await updateJob(CURRENT.classCode, id, { title, wage, description });
+  await render();
 }
 
 async function deleteJob(id) {
