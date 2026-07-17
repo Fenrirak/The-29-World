@@ -208,6 +208,16 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
     <button class="btn secondary small" style="margin-top:12px;" onclick="savePayDay()" id="savePayDayBtn">Save pay day</button>
 
     <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
+      <label style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="gamblingEnabled" style="width:20px;height:20px;min-height:auto;">
+        <span id="labGamblingEnabled">Allow the Gambling module (students can place bets)</span>
+      </label>
+      <p class="muted-small">Turn this off to temporarily pause gambling class-wide. Students will see a message if they try to bet while it's off.</p>
+      <button class="btn secondary small" style="margin-top:6px;" onclick="saveGamblingEnabled()" id="saveGamblingEnabledBtn">Save gambling setting</button>
+      <div id="gamblingMsg"></div>
+    </div>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
       <h2 id="hDanger" style="color:var(--coral);">Danger zone</h2>
       <p>Reset every student's balance to $0, remove all jobs assignments, delist every company, and clear the activity log. Student logins and the class code stay the same — this just gives everyone a fresh start.</p>
       <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>

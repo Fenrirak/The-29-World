@@ -34,7 +34,12 @@
 
   <div id="teacherPanel" class="card hidden">
     <h2 id="hSettings">Roulette settings</h2>
-    <div class="grid grid-2">
+    <label style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="gEnabled" style="width:20px;height:20px;min-height:auto;">
+      <span id="labEnabled">Allow students to gamble</span>
+    </label>
+    <p class="muted-small">Turn this off to temporarily pause the whole module — students will see a "paused" message instead of the bet form.</p>
+    <div class="grid grid-2" style="margin-top:14px;">
       <div>
         <label for="gMin" id="labMin">Minimum bet</label>
         <input id="gMin" type="number" min="0" step="0.5">
@@ -55,6 +60,11 @@
     </div>
     <button class="btn secondary" onclick="saveSettings()" id="saveSettingsBtn">Save settings</button>
     <div id="settingsMsg"></div>
+  </div>
+
+  <div id="disabledBanner" class="card hidden">
+    <h2 id="hDisabled">Gambling is paused</h2>
+    <p id="disabledText">Your teacher has temporarily turned off the Gambling module. Check back later!</p>
   </div>
 
   <div id="studentView" class="hidden">

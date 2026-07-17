@@ -134,7 +134,7 @@ async function createTeacherAndClass(name, username, password, className) {
     vehicles: [], termDepositPlans: [],
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
     insuranceDay: "Fri", lastInsuranceWeekRun: null,
-    gambling: { minBet: 1, maxBet: 20, payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 } },
+    gambling: { enabled: true, minBet: 1, maxBet: 20, payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 } },
     taxRates: { store: 0, insurance: 0, property: 0, transport: 0, wage: 0, interest: 0, gambling: 0 },
     bigEventDefs: [], bigEventLog: [], lastBigEventWeekRun: null,
     lifestyleConfig: {
@@ -170,7 +170,7 @@ async function createStudentAccount(name, username, password, classCode) {
       t.set(usersCol().doc(username), user);
 
       cls.students.push(username);
-      cls.txns.unshift({ id: uid("t"), type: "welcome", to: username, amount: 20, note: "Welcome grant", date: nowStr() });
+      cls.txns.unshift({ id: uid("t"), type: "welcome", to: username, amount: 20, note: "Welcome grant", date: nowStr(), ts: Date.now() });
       if (cls.txns.length > MAX_STORED_TXNS) cls.txns.length = MAX_STORED_TXNS;
       t.update(classRef, { students: cls.students, txns: cls.txns });
     });
@@ -214,7 +214,7 @@ async function logTxn(classCode, txn) {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
-    cls.txns.unshift(Object.assign({ id: uid("t"), date: nowStr() }, txn));
+    cls.txns.unshift(Object.assign({ id: uid("t"), date: nowStr(), ts: Date.now() }, txn));
     if (cls.txns.length > MAX_STORED_TXNS) cls.txns.length = MAX_STORED_TXNS;
     t.update(classRef, { txns: cls.txns });
   });
@@ -969,6 +969,14 @@ async function autoInterestIfDue(classCode) {
 }
 
 /* ---------------- Leaderboard ---------------- */
+// Every transaction from the last `days` days (default 10.5 = 1.5 weeks).
+// Txns logged before the ts field existed have no timestamp to check, so
+// they're included rather than silently hidden.
+function getRecentTxns(cls, days) {
+  const cutoff = Date.now() - (days || 10.5) * 86400000;
+  return (cls.txns || []).filter(t => t.ts === undefined || t.ts >= cutoff);
+}
+
 async function classLeaderboard(classCode) {
   const students = await getClassStudents(classCode);
   const rows = await Promise.all(students.map(async s => {
@@ -1030,6 +1038,7 @@ async function storeItemsValue(username, classCode) {
 async function saveGamblingSettings(classCode, settings) {
   await classesCol().doc(classCode).update({
     gambling: {
+      enabled: settings.enabled !== false,
       minBet: Math.max(0, Number(settings.minBet) || 0),
       maxBet: Math.max(0, Number(settings.maxBet) || 0),
       payouts: {
@@ -1084,6 +1093,7 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   const cls = withNewModuleDefaults(await getClass(classCode));
   if (!cls) return { ok: false, error: "Class not found." };
   const g = cls.gambling;
+  if (!g.enabled) return { ok: false, error: "Your teacher has temporarily turned off gambling for this class." };
   if (!(betAmount > 0)) return { ok: false, error: "Enter a bet amount greater than zero." };
   if (betAmount < g.minBet || betAmount > g.maxBet) return { ok: false, error: `Bets must be between ${fmtMoney(g.minBet)} and ${fmtMoney(g.maxBet)}.` };
 
@@ -1124,6 +1134,16 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
 }
 function betTypeLabel(t) {
   return { straightUp: "Straight up", split: "Split", street: "Street", corner: "Corner", sixLine: "Six line", oddEven: "Odd/Even" }[t] || t;
+}
+async function setGamblingEnabled(classCode, enabled) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.gambling.enabled = !!enabled;
+    t.update(classRef, { gambling: cls.gambling });
+  });
 }
 
 /* ===================== Big events ===================== */
@@ -1319,6 +1339,7 @@ function withNewModuleDefaults(cls) {
     minBet: 1, maxBet: 20,
     payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 }
   };
+  if (cls.gambling.enabled === undefined) cls.gambling.enabled = true;
   cls.taxRates = cls.taxRates || { store: 0, insurance: 0, property: 0, transport: 0, wage: 0, interest: 0, gambling: 0 };
   cls.bigEventDefs = cls.bigEventDefs || [];
   cls.bigEventLog = cls.bigEventLog || [];

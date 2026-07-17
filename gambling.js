@@ -86,6 +86,8 @@ function paintChrome() {
   document.getElementById("pageTitle").innerHTML = icon("dice", 26) + " Gambling — Roulette";
   document.getElementById("hSettings").innerHTML = icon("dice", 18) + " Roulette settings";
   document.getElementById("saveSettingsBtn").innerHTML = icon("bank", 14) + " Save settings";
+  document.getElementById("labEnabled").textContent = "Allow students to gamble";
+  document.getElementById("hDisabled").innerHTML = icon("dice", 20) + " Gambling is paused";
   document.getElementById("hBet").innerHTML = icon("dice", 18) + " Place a bet";
   document.getElementById("hRecent").innerHTML = icon("bank", 18) + " My recent bets";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
@@ -120,6 +122,7 @@ async function render() {
   const g = CLS.gambling;
 
   if (IS_TEACHER) {
+    document.getElementById("gEnabled").checked = g.enabled !== false;
     document.getElementById("gMin").value = g.minBet;
     document.getElementById("gMax").value = g.maxBet;
     document.getElementById("pStraight").value = g.payouts.straightUp;
@@ -129,6 +132,10 @@ async function render() {
     document.getElementById("pSixLine").value = g.payouts.sixLine;
     document.getElementById("pOddEven").value = g.payouts.oddEven;
   } else {
+    const enabled = g.enabled !== false;
+    document.getElementById("disabledBanner").classList.toggle("hidden", enabled);
+    document.getElementById("studentView").classList.toggle("hidden", !enabled);
+    if (!enabled) return;
     document.getElementById("betLimits").textContent = `Bets must be between ${fmtMoney(g.minBet)} and ${fmtMoney(g.maxBet)}.`;
     renderPicker();
     await renderRecent();
@@ -247,6 +254,7 @@ async function renderRecent() {
 
 async function saveSettings() {
   await saveGamblingSettings(CURRENT.classCode, {
+    enabled: document.getElementById("gEnabled").checked,
     minBet: document.getElementById("gMin").value,
     maxBet: document.getElementById("gMax").value,
     straightUp: document.getElementById("pStraight").value,

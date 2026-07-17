@@ -26,6 +26,7 @@ function paintChrome() {
   document.getElementById("saveInterestAutoBtn").innerHTML = icon("bank", 14) + " Save interest schedule";
   document.getElementById("labPayDay").innerHTML = icon("calendar", 13) + " Pay day (which day wages are due)";
   document.getElementById("savePayDayBtn").innerHTML = icon("calendar", 14) + " Save pay day";
+  document.getElementById("saveGamblingEnabledBtn").innerHTML = icon("dice", 14) + " Save gambling setting";
   document.getElementById("hEvents").innerHTML = icon("dice", 18) + " Random weekly events";
   document.getElementById("labEvType").innerHTML = icon("dice", 13) + " Event type";
   document.getElementById("labEvOptions").innerHTML = icon("star", 13) + " Choices — one per line, as \"Label | amount | what happened (optional)\"";
@@ -74,6 +75,7 @@ async function render() {
   document.getElementById("interestDay").value = cls.interestDay || "Fri";
   document.getElementById("interestDayWrap").classList.toggle("hidden", (cls.interestFrequency || "weekly") === "daily");
   document.getElementById("payDaySelect").value = cls.payDay || "Fri";
+  document.getElementById("gamblingEnabled").checked = cls.gambling ? cls.gambling.enabled !== false : true;
 
   const students = await getClassStudents(CLASS_CODE);
   document.getElementById("statStudents").textContent = students.length + " / 8";
@@ -190,7 +192,9 @@ async function render() {
   const txbody = document.querySelector("#txnTable tbody");
   txbody.innerHTML = "";
   const nameOf = u => nameCache[u] || u;
-  cls.txns.slice(0, 25).forEach(t => {
+  const recentTxns = getRecentTxns(cls, 10.5);
+  document.getElementById("hActivity").innerHTML = icon("chart", 18) + ` Recent activity (last 1.5 weeks — ${recentTxns.length})`;
+  recentTxns.forEach(t => {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badge(t.type)}</td><td>${describeTxn(t, nameOf)}</td><td>${fmtMoney(t.amount)}</td>`;
     txbody.appendChild(tr);
@@ -433,6 +437,12 @@ async function classesColUpdateRate(rate) {
 async function savePayDay() {
   await setPayDay(CLASS_CODE, document.getElementById("payDaySelect").value);
   alert("Pay day saved. Wages will now be paid automatically whenever that day comes around — or click Run Pay Day any time to pay early.");
+  await render();
+}
+async function saveGamblingEnabled() {
+  const enabled = document.getElementById("gamblingEnabled").checked;
+  await setGamblingEnabled(CLASS_CODE, enabled);
+  document.getElementById("gamblingMsg").innerHTML = `<div class="success-msg">${enabled ? "Gambling is now allowed." : "Gambling is now turned off for your class."}</div>`;
   await render();
 }
 async function quickView(username) {
