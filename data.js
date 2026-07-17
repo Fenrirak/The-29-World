@@ -959,10 +959,11 @@ async function classLeaderboard(classCode) {
   const students = await getClassStudents(classCode);
   const rows = await Promise.all(students.map(async s => {
     const invested = await portfolioValue(s.username, classCode);
+    const storeValue = await storeItemsValue(s.username, classCode);
     return {
       username: s.username, name: s.name,
-      balance: s.balance, invested,
-      net: Math.round((s.balance + invested) * 100) / 100
+      balance: s.balance, invested, storeValue,
+      net: Math.round((s.balance + invested + storeValue) * 100) / 100
     };
   }));
   rows.sort((a, b) => b.net - a.net);
@@ -991,6 +992,22 @@ async function portfolioValue(username, classCode) {
   cls.companies.forEach(co => {
     const shares = co.holders[username] || 0;
     total += shares * co.price;
+  });
+  return Math.round(total * 100) / 100;
+}
+
+// Value of everything a student has bought from the class store, counted
+// toward net worth. Looks up each owned item's current listed price by id,
+// so this works retroactively for purchases made before this feature
+// existed — no need to backfill any data.
+async function storeItemsValue(username, classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const user = await getUser(username);
+  if (!cls || !user) return 0;
+  let total = 0;
+  (user.storeItems || []).forEach(itemId => {
+    const item = cls.storeItems.find(i => i.id === itemId);
+    if (item) total += item.price;
   });
   return Math.round(total * 100) / 100;
 }
