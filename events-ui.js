@@ -1,10 +1,13 @@
 /* ===================== The 29 World — random event popups =====================
    Weekly random events are assigned to every student once per NZ calendar
-   week (see processWeeklyEvents in data.js). This file just decides whether
-   the CURRENT student has any events from this week they haven't been shown
-   yet, and if so, pops up a small modal — no matter which tab they land on.
-   The weekly limit itself lives in data.js; this only controls when the
-   student gets notified about it.
+   week (see processWeeklyEvents in data.js), but each event gets its own
+   random "revealAt" moment spread across the rest of that week — so a
+   student who was given 3 events doesn't see them all at once, they pop up
+   one at a time as the student visits the site over the following days.
+   This file decides whether the CURRENT student has any due-but-unseen
+   events, and if so, pops up a small modal (one event per popup) — no
+   matter which tab they land on. The weekly limit and reveal scheduling
+   live in data.js; this only controls when/how the student is notified.
 ================================================================== */
 
 function eventsShownKey(username) {
@@ -30,11 +33,15 @@ async function checkWeeklyEventPopup(username, classCode) {
   const user = await getUser(username);
   if (!cls || !user) return;
   const weekKey = isoWeekKey(new Date());
-  const mine = (cls.eventLog || []).filter(l => l.studentUser === username && l.week === weekKey);
+  const now = Date.now();
+  // revealAt is missing on legacy log entries (from before this field
+  // existed) — treat those as already revealed so nothing old gets stuck.
+  const mine = (cls.eventLog || []).filter(l => l.studentUser === username && l.week === weekKey && (l.revealAt === undefined || l.revealAt <= now));
   if (mine.length === 0) return;
 
   // Multiple-choice events must be answered — show a forced modal (like a
-  // big event) for the first pending one, before anything else pops up.
+  // big event) for the first pending one that has come due, before
+  // anything else pops up.
   const pendingChoice = mine.find(l => l.type === "choice" && l.status === "pending");
   if (pendingChoice && !document.getElementById("anwEventModal") && !document.getElementById("anwChoiceEventModal") && !document.getElementById("anwBigEventModal")) {
     showChoiceEventPopup(pendingChoice, username, classCode);
@@ -50,11 +57,17 @@ async function checkWeeklyEventPopup(username, classCode) {
 
   if (fresh.length === 0) return;
 
+  // Show only the single event that became due earliest — the rest will
+  // pop up on later visits (or as their own revealAt times come due),
+  // instead of dumping everything on the student at once.
+  fresh.sort((a, b) => (a.revealAt || 0) - (b.revealAt || 0));
+  const toShow = [fresh[0]];
+
   const hasGeneralPlan = (user.insurance || [])
     .map(id => cls.insurancePlans.find(p => p.id === id))
     .some(p => p && p.coverage === "general");
 
-  const withDetails = fresh.map(l => ({
+  const withDetails = toShow.map(l => ({
     id: l.id, name: l.name || "Random event", description: (l.type === "choice" && l.outcome) ? l.outcome : (l.description || ""),
     amount: l.amount || 0, severity: l.severity || "neutral", claimed: !!l.claimed,
     claimable: l.severity === "bad" && !l.claimed && hasGeneralPlan
@@ -62,7 +75,7 @@ async function checkWeeklyEventPopup(username, classCode) {
 
   showEventPopup(withDetails, username, classCode);
 
-  state.ids = state.ids.concat(resolved.map(l => l.id || (l.eventId + "|" + l.date)));
+  state.ids = state.ids.concat(toShow.map(l => l.id || (l.eventId + "|" + l.date)));
   saveShownEventState(username, state);
 }
 

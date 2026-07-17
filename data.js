@@ -1744,6 +1744,15 @@ async function processWeeklyEvents(classCode) {
   const balanceDeltas = {};
   const txns = [];
 
+  // Spread each student's 2-4 events out across the rest of the week
+  // (NZ time) rather than dumping them all on the student at once — each
+  // event gets its own random reveal moment, and the popup UI only shows
+  // an event once its revealAt time has passed.
+  const DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const todayIdx = DAY_ORDER.indexOf(nzDayName(new Date()));
+  const daysLeft = Math.max(6 - (todayIdx < 0 ? 0 : todayIdx), 1); // at least 1 day of spread, even on Sunday
+  const spreadMs = daysLeft * 86400000;
+
   for (const student of students) {
     const already = new Set(eventLog.filter(l => l.studentUser === student.username).map(l => l.eventId));
     const pool = activeDefs.filter(e => e.repeatable || !already.has(e.id));
@@ -1751,18 +1760,19 @@ async function processWeeklyEvents(classCode) {
     const count = Math.min(pool.length, 2 + Math.floor(Math.random() * 3));
     const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
     for (const ev of shuffled) {
+      const revealAt = Date.now() + Math.floor(Math.random() * spreadMs);
       if (ev.type === "choice") {
         // Multiple-choice events don't apply a balance change yet — the
         // student must pick one of the options first (see resolveChoiceEvent).
         newLogEntries.push({
-          id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey,
+          id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey, revealAt,
           name: ev.name, amount: null, description: ev.description || "", severity: ev.severity || "neutral",
           claimed: false, type: "choice", options: ev.options || [], status: "pending"
         });
       } else {
         balanceDeltas[student.username] = (balanceDeltas[student.username] || 0) + ev.amount;
         newLogEntries.push({
-          id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey,
+          id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey, revealAt,
           name: ev.name, amount: ev.amount, description: ev.description || "", severity: ev.severity || "neutral",
           claimed: false, type: "fixed", status: "resolved"
         });
