@@ -624,7 +624,7 @@ async function sellShares(username, classCode, companyId, shares) {
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FREQ_DAYS = { weekly: 7, fortnightly: 14, monthly: 28 };
 
-async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amount, toUser) {
+async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amount, toUser, note) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   const classRef = classesCol().doc(classCode);
   try {
@@ -635,7 +635,7 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       cls.automations = cls.automations || [];
       cls.automations.push({
         id: uid("auto"), studentUser, dayOfWeek, frequency,
-        amount: Number(amount), toUser, lastRun: null, active: true
+        amount: Number(amount), toUser, note: (note || "").trim(), lastRun: null, active: true
       });
       t.update(classRef, { automations: cls.automations });
     });
@@ -706,7 +706,7 @@ async function processAutomations(classCode) {
     } catch (e) { /* ignore, try next */ }
 
     if (didRun) {
-      await logTxn(classCode, { type: "automation", from: a.studentUser, to: a.toUser, amount: a.amount, note: "Automatic payment" });
+      await logTxn(classCode, { type: "automation", from: a.studentUser, to: a.toUser, amount: a.amount, note: a.note ? a.note : "Automatic payment" });
       ran++;
     }
   }
@@ -1428,7 +1428,7 @@ async function removeStoreItem(classCode, itemId) {
 async function buyStoreItem(username, classCode, itemId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let itemName = "", taxAmount = 0;
+  let itemName = "", taxAmount = 0, cashPaid = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1441,6 +1441,7 @@ async function buyStoreItem(username, classCode, itemId) {
       if (item.stock !== null && item.stock <= 0) throw new Error("OUT");
       const { total, taxAmount: tax } = applyTaxToExpense(cls, "store", item.price);
       taxAmount = tax;
+      cashPaid = total;
       const isTeacher = user.role === "teacher";
       if (!isTeacher && user.balance < total) throw new Error("BROKE");
       itemName = item.name;
@@ -1456,8 +1457,45 @@ async function buyStoreItem(username, classCode, itemId) {
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "store-buy", from: username, amount: 0, note: `Bought from store: ${itemName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
+  await logTxn(classCode, { type: "store-buy", from: username, amount: cashPaid, note: `Bought from store: ${itemName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
+}
+
+// Sell back one unit of an owned store item for 80% of its base price.
+// Removes it from the student's owned items (which also reduces their
+// lifestyle rating automatically, since that's computed live from
+// user.storeItems) and restocks it if the item has limited stock.
+async function sellStoreItem(username, classCode, itemId) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let itemName = "", payout = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const item = cls.storeItems.find(i => i.id === itemId);
+      if (!item) throw new Error("NOT_FOUND");
+      user.storeItems = user.storeItems || [];
+      const idx = user.storeItems.indexOf(itemId);
+      if (idx === -1) throw new Error("NOT_OWNED");
+      user.storeItems.splice(idx, 1);
+      itemName = item.name;
+      payout = Math.round(item.price * 0.8 * 100) / 100;
+      if (item.stock !== null) item.stock += 1;
+      const isTeacher = user.role === "teacher";
+      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + payout) * 100) / 100, storeItems: user.storeItems });
+      else t.update(userRef, { storeItems: user.storeItems });
+      t.update(classRef, { storeItems: cls.storeItems });
+    });
+  } catch (e) {
+    if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that item." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "store-sell", to: username, amount: payout, note: `Sold back to store: ${itemName} (80% refund)` });
+  return { ok: true, payout };
 }
 
 /* ===================== Property ===================== */

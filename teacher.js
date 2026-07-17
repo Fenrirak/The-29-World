@@ -191,6 +191,7 @@ function describeTxn(t, nameOf) {
     case "stock-close": return `${nameOf(t.to)} — ${t.note}`;
     case "insurance-buy": return `${nameOf(t.from)} — ${t.note}`;
     case "store-buy": return `${nameOf(t.from)} — ${t.note}`;
+    case "store-sell": return `${nameOf(t.to)} — ${t.note}`;
     case "property-buy": return `${nameOf(t.from)} — ${t.note}`;
     case "property-sell": return `${nameOf(t.to)} — ${t.note}`;
     case "mortgage": return `${nameOf(t.from)} — ${t.note}`;
@@ -213,6 +214,7 @@ function badge(type) {
     "stock-close": ["gold", "building", "Delisted"],
     "insurance-buy": ["lilac", "shield", "Insurance"],
     "store-buy": ["mint", "cart", "Store"],
+    "store-sell": ["gold", "cart", "Store sale"],
     "property-buy": ["navy", "house", "Property"],
     "property-sell": ["gold", "house", "Property sold"],
     "mortgage": ["coral", "house", "Mortgage"],

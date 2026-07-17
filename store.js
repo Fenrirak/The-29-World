@@ -61,11 +61,12 @@ async function render() {
           <p><strong>${fmtMoney(it.price)}</strong> ${starsHtml(it.stars)}</p>
           <p class="muted-small">${it.stock === null ? "Unlimited stock" : `${it.stock} left in stock`}</p>
         </div>
-        <div>
+        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
           ${IS_TEACHER
             ? `<button class="btn small secondary" onclick="editItem('${it.id}')">${icon("plus", 13)} Edit</button>
                <button class="btn small coral" onclick="deleteItem('${it.id}')">${icon("trash", 13)} Remove</button>`
-            : `<button class="btn small gold" ${outOfStock ? "disabled" : ""} onclick="buyItem('${it.id}')">${icon("cart", 13)} ${outOfStock ? "Out of stock" : "Buy"}</button>`}
+            : `<button class="btn small gold" ${outOfStock ? "disabled" : ""} onclick="buyItem('${it.id}')">${icon("cart", 13)} ${outOfStock ? "Out of stock" : "Buy"}</button>
+               ${owned ? `<button class="btn small secondary" onclick="sellItem('${it.id}')">${icon("trash", 13)} Sell back (80%)</button>` : ""}`}
         </div>
       </div>
       <div id="edit-${it.id}" class="hidden"></div>
@@ -151,6 +152,15 @@ async function deleteItem(id) {
     await removeStoreItem(CURRENT.classCode, id);
     await render();
   }
+}
+
+async function sellItem(id) {
+  if (!confirm("Sell this item back to the store for an 80% refund?")) return;
+  const res = await sellStoreItem(CURRENT.username, CURRENT.classCode, id);
+  document.getElementById("msg-" + id).innerHTML = res.ok
+    ? `<div class="success-msg">Sold back for ${fmtMoney(res.payout)}!</div>`
+    : `<div class="error-msg">${res.error}</div>`;
+  await render();
 }
 
 async function buyItem(id) {

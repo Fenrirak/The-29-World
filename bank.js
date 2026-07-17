@@ -20,6 +20,7 @@ function paintChrome() {
   document.getElementById("labAutoFreq").innerHTML = icon("repeat", 13) + " How often";
   document.getElementById("labAutoAmount").innerHTML = icon("coin", 13) + " Amount";
   document.getElementById("labAutoTo").innerHTML = icon("users", 13) + " Pay to";
+  document.getElementById("labAutoNote").innerHTML = icon("star", 13) + " Reference / what's it for?";
   document.getElementById("addAutoBtn").innerHTML = icon("plus", 15) + " Create automatic payment";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
@@ -90,6 +91,7 @@ async function render() {
     row.innerHTML = `
       <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toUser ? toUser.name : a.toUser}</strong>
         &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
+        ${a.note ? `<div class="muted-small">${a.note}</div>` : ""}
         ${a.lastRun ? `<div class="muted-small">Last paid: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
       </div>
       <button class="btn small coral" onclick="removeAuto('${a.id}')">${icon("trash", 13)} Remove</button>
@@ -114,7 +116,7 @@ async function render() {
       fine: ["coral", "coin", "Fine"], transfer: ["navy", "send", "Transfer"],
       automation: ["navy", "repeat", "Auto-pay"], "stock-buy": ["gold", "chart", "Stock buy"],
       "stock-sell": ["gold", "chart", "Stock sell"], "stock-close": ["gold", "building", "Delisted"],
-      "insurance-buy": ["lilac", "shield", "Insurance"], "store-buy": ["mint", "cart", "Store"],
+      "insurance-buy": ["lilac", "shield", "Insurance"], "store-buy": ["mint", "cart", "Store"], "store-sell": ["gold", "cart", "Store sale"],
       "property-buy": ["navy", "house", "Property"], "property-sell": ["gold", "house", "Property sold"],
       "mortgage": ["coral", "house", "Mortgage"], "event": ["lilac", "dice", "Random event"],
       "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
@@ -133,7 +135,7 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell", "vehicle-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim"].includes(t.type)) { sign = "+"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim"].includes(t.type)) { sign = "+"; }
     else if (["fine", "insurance-buy", "store-buy", "mortgage", "vehicle-buy", "term-deposit-open", "insurance-premium"].includes(t.type)) { sign = "-"; }
     else if (t.type === "property-buy") { sign = "-"; }
 
@@ -183,12 +185,14 @@ async function addAuto(e) {
   const freq = document.getElementById("autoFreq").value;
   const amount = document.getElementById("autoAmount").value;
   const to = document.getElementById("autoTo").value;
+  const note = document.getElementById("autoNote").value.trim();
   const box = document.getElementById("autoMsg");
   if (!to) { box.innerHTML = `<div class="error-msg">There's no one to pay yet.</div>`; return false; }
-  const res = await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to);
+  const res = await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note);
   if (res.ok) {
     box.innerHTML = `<div class="success-msg">Automatic payment created!</div>`;
     document.getElementById("autoAmount").value = "";
+    document.getElementById("autoNote").value = "";
   } else {
     box.innerHTML = `<div class="error-msg">${res.error}</div>`;
   }
