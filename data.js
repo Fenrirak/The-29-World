@@ -2020,7 +2020,10 @@ async function mountBalanceWidget(username) {
   const box = document.createElement("div");
   box.id = "anwBalanceWidget";
   box.className = "anw-balance-widget";
-  box.innerHTML = `<span class="icon">${icon("piggy", 18)}</span><span id="anwBalanceWidgetValue">—</span>`;
+  box.innerHTML = `
+    <div class="anw-bw-label">${icon("piggy", 14)} Cash balance</div>
+    <div class="anw-bw-value" id="anwBalanceWidgetValue">—</div>
+  `;
   document.body.appendChild(box);
   positionBalanceWidget();
   window.addEventListener("resize", positionBalanceWidget);
