@@ -59,6 +59,12 @@
       <button class="btn gold" type="submit" id="addBtn">Add event</button>
     </form>
     <div id="addMsg"></div>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1.5px solid var(--line);">
+      <button class="btn secondary" onclick="runBigEventsNow()" id="runBigEventsBtn">Run this week's big events now</button>
+      <p class="muted-small">Normally each eligible student only has a 25% chance of getting one per week — this forces it onto every eligible student right now (someone with a job/property/vehicle depending on the event), bypassing that chance and the once-per-week limit.</p>
+      <div id="runBigEventsMsg"></div>
+    </div>
   </div>
 
   <div id="defListCard" class="hidden">

@@ -9,6 +9,7 @@ function paintChrome() {
   document.getElementById("pageTitle").innerHTML = icon("star", 26) + " Big Events";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a big event";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add event";
+  document.getElementById("runBigEventsBtn").innerHTML = icon("repeat", 14) + " Run this week's big events now";
   document.getElementById("hHistory").innerHTML = icon("star", 18) + " My big event history";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
@@ -103,6 +104,14 @@ async function deleteEvent(id) {
     await removeBigEventDef(CURRENT.classCode, id);
     await render();
   }
+}
+
+async function runBigEventsNow() {
+  const count = await forceWeeklyBigEvents(CURRENT.classCode);
+  document.getElementById("runBigEventsMsg").innerHTML = count > 0
+    ? `<div class="success-msg">Done — ${count} student(s) were hit with a big event just now.</div>`
+    : `<div class="error-msg">No eligible students right now — make sure at least one active event has students with a matching job/property/vehicle.</div>`;
+  await render();
 }
 
 document.addEventListener("DOMContentLoaded", init);
