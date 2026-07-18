@@ -1268,7 +1268,13 @@ async function processWeeklyBigEvents(classCode, opts) {
 
   const students = await getClassStudents(classCode);
   const newEntries = [];
+  // Same guard as processWeeklyEvents: never give a student a second big
+  // event for a week they already have one queued for, even on a forced
+  // run — otherwise clicking "Run this week's big events now" more than
+  // once (double-click, slow-connection retry, etc.) stacks duplicates.
+  const alreadyThisWeek = new Set((cls.bigEventLog || []).filter(e => e.week === weekKey).map(e => e.studentUser));
   for (const student of students) {
+    if (alreadyThisWeek.has(student.username)) continue;
     if (!forceAll && Math.random() >= 0.25) continue; // 25% chance per student per week (unless a manual run forces it)
     // Only consider events for modules where the student actually has
     // something at stake (a job, a property, or a vehicle) — no point
@@ -1855,6 +1861,16 @@ async function processWeeklyEvents(classCode, opts) {
   const eventLog = cls.eventLog || [];
   const newLogEntries = [];
 
+  // Students who already have an event queued for THIS week are skipped
+  // no matter what — this is what makes it safe to click "Run this week's
+  // events now" more than once (double-click, slow connection retry,
+  // clicking again because there's no loading indicator, etc.) without
+  // stacking multiple events onto the same student for the same week.
+  // ignoreAlreadyHad only affects which DEFINITIONS are eligible (e.g.
+  // letting a student get an event they've had before, in past weeks) —
+  // it never means "give them another one this week too."
+  const alreadyThisWeek = new Set(eventLog.filter(l => l.week === weekKey).map(l => l.studentUser));
+
   // Each student gets exactly 1 event per weekly run, revealed within
   // ~20 minutes — this used to be a random 2-4 events with the reveal
   // spread out further, but a single event per run is simpler and avoids
@@ -1864,6 +1880,7 @@ async function processWeeklyEvents(classCode, opts) {
   const GAP_MAX_MS = 5 * 3600000;
 
   for (const student of students) {
+    if (alreadyThisWeek.has(student.username)) continue;
     const already = new Set(eventLog.filter(l => l.studentUser === student.username).map(l => l.eventId));
     const pool = activeDefs.filter(e => ignoreAlreadyHad || e.repeatable || !already.has(e.id));
     if (pool.length === 0) continue;

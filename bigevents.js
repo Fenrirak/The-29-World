@@ -116,11 +116,18 @@ async function deleteEvent(id) {
 }
 
 async function runBigEventsNow() {
-  const count = await forceWeeklyBigEvents(CURRENT.classCode);
-  document.getElementById("runBigEventsMsg").innerHTML = count > 0
-    ? `<div class="success-msg">Done — ${count} student(s) got a big event just now.</div>`
-    : `<div class="error-msg">No eligible students right now — for "bad" events, make sure at least one active event has students with a matching job/property/vehicle. "Good" events are open to everyone.</div>`;
-  await render();
+  const btn = document.getElementById("runBigEventsBtn");
+  if (btn.disabled) return; // already running — ignore extra clicks
+  btn.disabled = true;
+  try {
+    const count = await forceWeeklyBigEvents(CURRENT.classCode);
+    document.getElementById("runBigEventsMsg").innerHTML = count > 0
+      ? `<div class="success-msg">Done — ${count} student(s) got a big event just now.</div>`
+      : `<div class="error-msg">No eligible students right now — for "bad" events, make sure at least one active event has students with a matching job/property/vehicle. "Good" events are open to everyone. (Anyone who already has a big event queued for this week is skipped.)</div>`;
+    await render();
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);

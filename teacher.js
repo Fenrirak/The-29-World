@@ -492,9 +492,16 @@ async function runInterest() {
   await render();
 }
 async function runWeeklyEventsNow() {
-  const count = await forceWeeklyEvents(CLASS_CODE);
-  alert(count > 0 ? `Done — ${count} event(s) assigned across the class. They'll pop up gradually as students visit the site over the next while.` : "No active events are set up yet — add some below first.");
-  await render();
+  const btn = document.getElementById("runEventsNowBtn");
+  if (btn.disabled) return; // already running — ignore extra clicks
+  btn.disabled = true;
+  try {
+    const count = await forceWeeklyEvents(CLASS_CODE);
+    alert(count > 0 ? `Done — ${count} event(s) assigned across the class. They'll pop up gradually as students visit the site over the next while.` : "No active events are set up yet, or everyone already has one queued for this week.");
+    await render();
+  } finally {
+    btn.disabled = false;
+  }
 }
 async function saveRate() {
   await classesColUpdateRate(Number(document.getElementById("rate").value));
