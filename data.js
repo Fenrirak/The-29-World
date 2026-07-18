@@ -1994,7 +1994,7 @@ async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
 async function resolveChoiceEvent(username, classCode, logId, optionId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let amount = 0, note = "";
+  let amount = 0, note = "", outcome = "";
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -2007,10 +2007,11 @@ async function resolveChoiceEvent(username, classCode, logId, optionId) {
       const option = (entry.options || []).find(o => o.id === optionId);
       if (!option) throw new Error("NOT_FOUND");
       amount = option.amount;
+      outcome = option.outcome || "";
       entry.status = "resolved";
       entry.chosenOptionId = optionId;
       entry.amount = amount;
-      entry.outcome = option.outcome || "";
+      entry.outcome = outcome;
       note = `${entry.name} — chose "${option.label}"` + (option.outcome ? `: ${option.outcome}` : "");
       const isTeacher = user.role === "teacher";
       if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + amount) * 100) / 100 });
@@ -2020,7 +2021,7 @@ async function resolveChoiceEvent(username, classCode, logId, optionId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "event", to: username, amount, note });
-  return { ok: true, amount };
+  return { ok: true, amount, outcome };
 }
 
 // Charges every student's active insurance premiums once per NZ calendar

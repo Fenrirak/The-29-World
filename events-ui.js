@@ -98,10 +98,12 @@ function showChoiceEventPopup(entry, username, classCode) {
   overlay.id = "anwChoiceEventModal";
   overlay.className = "anw-modal-overlay";
 
+  // Amounts are intentionally withheld here — the student should be
+  // choosing based on the label/description, not min-maxing the payout.
+  // The actual amount + outcome only appears after they've committed.
   const optionsHtml = (entry.options || []).map(o => `
-    <button class="btn secondary" style="width:100%;justify-content:space-between;" data-opt="${o.id}">
+    <button class="btn secondary" style="width:100%;justify-content:flex-start;" data-opt="${o.id}">
       <span>${o.label}</span>
-      <span class="${o.amount < 0 ? 'ticker-down' : 'ticker-up'}">${o.amount >= 0 ? "+" : "-"}${fmtMoney(Math.abs(o.amount))}</span>
     </button>
   `).join("");
 
@@ -123,7 +125,7 @@ function showChoiceEventPopup(entry, username, classCode) {
       overlay.querySelectorAll("button").forEach(b => b.disabled = true);
       const res = await resolveChoiceEvent(username, classCode, entry.id, btn.getAttribute("data-opt"));
       if (res.ok) {
-        overlay.remove();
+        showChoiceOutcome(overlay, entry, res.amount, res.outcome);
         if (typeof render === "function") render();
       } else {
         document.getElementById("choiceEventMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
@@ -131,6 +133,20 @@ function showChoiceEventPopup(entry, username, classCode) {
       }
     });
   });
+}
+
+// Swaps the choice modal's content for a reveal of what actually happened
+// — this is the first moment the student sees the amount, now that
+// they've already committed to their choice.
+function showChoiceOutcome(overlay, entry, amount, outcome) {
+  const card = overlay.querySelector(".anw-modal-card");
+  card.innerHTML = `
+    <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${entry.name}</h2>
+    ${outcome ? `<p>${outcome}</p>` : ""}
+    <p class="${amount < 0 ? 'ticker-down' : 'ticker-up'}" style="font-weight:900;font-size:1.2em;">${amount >= 0 ? "+" : "-"}${fmtMoney(Math.abs(amount))}</p>
+    <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwChoiceOutcomeCloseBtn">Nice, got it</button>
+  `;
+  document.getElementById("anwChoiceOutcomeCloseBtn").addEventListener("click", () => overlay.remove());
 }
 
 function showEventPopup(events, username, classCode) {
