@@ -1793,14 +1793,10 @@ async function processWeeklyEvents(classCode) {
   const eventLog = cls.eventLog || [];
   const newLogEntries = [];
 
-  // Spread each student's 2-4 events out over roughly the next day or so,
-  // rather than dumping them all at once — but critically, this no longer
-  // depends on which day of the week it happens to be (the old version
-  // tied the spread to "days left until Sunday", which could randomly
-  // delay every single event by many hours with no guaranteed early one —
-  // easy to end up with nobody seeing anything for a while). Now: the
-  // first event is always guaranteed to reveal within ~20 minutes, and
-  // each subsequent one trickles in a few hours after the last.
+  // Each student gets exactly 1 event per weekly run, revealed within
+  // ~20 minutes — this used to be a random 2-4 events with the reveal
+  // spread out further, but a single event per run is simpler and avoids
+  // ever handing out more than one on a manual "run now".
   const FIRST_EVENT_MAX_DELAY_MS = 20 * 60000;      // first ever event: within 20 min
   const GAP_MIN_MS = 2 * 3600000;                   // ~2-5h between each later event
   const GAP_MAX_MS = 5 * 3600000;
@@ -1809,7 +1805,7 @@ async function processWeeklyEvents(classCode) {
     const already = new Set(eventLog.filter(l => l.studentUser === student.username).map(l => l.eventId));
     const pool = activeDefs.filter(e => e.repeatable || !already.has(e.id));
     if (pool.length === 0) continue;
-    const count = Math.min(pool.length, 2 + Math.floor(Math.random() * 3));
+    const count = Math.min(pool.length, 1);
     const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
     let cursor = Date.now();
     shuffled.forEach((ev, i) => {
