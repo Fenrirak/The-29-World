@@ -192,19 +192,69 @@ async function claimFromPopup(eventLogId, username, classCode, btn) {
 const BIG_EVENT_MODULE_LABEL = { income: "Income", property: "Property", transport: "Transport" };
 const BIG_EVENT_COVERAGE = { income: "jobs", property: "property", transport: "transport" };
 
+function bigEventsShownKey(username) {
+  return "anw_bigevents_shown_" + username;
+}
+function getShownBigEventState(username) {
+  try {
+    const raw = localStorage.getItem(bigEventsShownKey(username));
+    return raw ? JSON.parse(raw) : { ids: [] };
+  } catch (e) {
+    return { ids: [] };
+  }
+}
+function saveShownBigEventState(username, state) {
+  try { localStorage.setItem(bigEventsShownKey(username), JSON.stringify(state)); } catch (e) { /* ignore */ }
+}
+
 async function checkBigEventPopup(username, classCode) {
   if (!username || !classCode) return;
+  if (document.getElementById("anwBigEventModal") || document.getElementById("anwGoodBigEventModal")) return; // something's already showing
   const cls = await getClass(classCode);
   if (!cls) return;
+
+  // Bad events (job/property/vehicle at risk) take priority — forced
+  // modal, must be resolved via pay / forfeit / claim before continuing.
   const pending = (cls.bigEventLog || []).find(e => e.studentUser === username && e.status === "pending");
-  if (!pending) return;
-  if (document.getElementById("anwBigEventModal")) return; // already showing
+  if (pending) {
+    const user = await getUser(username);
+    const coverage = BIG_EVENT_COVERAGE[pending.module];
+    const plan = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).find(p => p && p.coverage === coverage);
+    showBigEventPopup(pending, plan, username, classCode);
+    return;
+  }
 
-  const user = await getUser(username);
-  const coverage = BIG_EVENT_COVERAGE[pending.module];
-  const plan = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).find(p => p && p.coverage === coverage);
+  // Good (windfall) events are already paid out the moment they're
+  // generated — this just shows a friendly, dismissible heads-up the
+  // first time the student sees it, same one-time-shown pattern as the
+  // regular weekly events.
+  const state = getShownBigEventState(username);
+  const shown = new Set(state.ids);
+  const unseenGood = (cls.bigEventLog || [])
+    .find(e => e.studentUser === username && e.status === "received" && !shown.has(e.id));
+  if (!unseenGood) return;
 
-  showBigEventPopup(pending, plan, username, classCode);
+  showGoodBigEventPopup(unseenGood);
+  state.ids = state.ids.concat([unseenGood.id]);
+  saveShownBigEventState(username, state);
+}
+
+function showGoodBigEventPopup(entry) {
+  const overlay = document.createElement("div");
+  overlay.id = "anwGoodBigEventModal";
+  overlay.className = "anw-modal-overlay";
+
+  overlay.innerHTML = `
+    <div class="anw-modal-card">
+      <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${entry.name}</h2>
+      <p>${entry.description || ""}</p>
+      <p class="ticker-up" style="font-weight:900;font-size:1.2em;">+${fmtMoney(entry.cost)}</p>
+      <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwGoodBigEventCloseBtn">Nice, got it</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById("anwGoodBigEventCloseBtn").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
 function showBigEventPopup(entry, plan, username, classCode) {

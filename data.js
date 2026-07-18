@@ -1200,6 +1200,7 @@ async function addBigEventDef(classCode, ev) {
     cls.bigEventDefs.push({
       id: uid("big"), name: ev.name,
       module: BIG_EVENT_MODULES.includes(ev.module) ? ev.module : "income",
+      kind: ev.kind === "good" ? "good" : "bad",
       cost: Math.max(0, Number(ev.cost) || 0), description: ev.description || "", active: true
     });
     t.update(classRef, { bigEventDefs: cls.bigEventDefs });
@@ -1212,6 +1213,22 @@ async function removeBigEventDef(classCode, defId) {
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     cls.bigEventDefs = cls.bigEventDefs.filter(e => e.id !== defId);
+    t.update(classRef, { bigEventDefs: cls.bigEventDefs });
+  });
+}
+async function updateBigEventDef(classCode, defId, ev) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const existing = cls.bigEventDefs.find(e => e.id === defId);
+    if (!existing) return;
+    existing.name = ev.name;
+    existing.module = BIG_EVENT_MODULES.includes(ev.module) ? ev.module : "income";
+    existing.kind = ev.kind === "good" ? "good" : "bad";
+    existing.cost = Math.max(0, Number(ev.cost) || 0);
+    existing.description = ev.description || "";
     t.update(classRef, { bigEventDefs: cls.bigEventDefs });
   });
 }
@@ -1257,6 +1274,9 @@ async function processWeeklyBigEvents(classCode, opts) {
     // something at stake (a job, a property, or a vehicle) — no point
     // hitting someone with a "lost your job" event if they have no job.
     const eligibleDefs = activeDefs.filter(d => {
+      // Good events are windfalls that don't require owning anything —
+      // everyone's eligible for a bonus/refund/etc regardless of module.
+      if (d.kind === "good") return true;
       if (d.module === "income") return !!student.jobId;
       if (d.module === "property") return cls.properties.some(p => p.owner === student.username);
       if (d.module === "transport") return cls.vehicles.some(v => v.owner === student.username);
@@ -1266,7 +1286,11 @@ async function processWeeklyBigEvents(classCode, opts) {
     const def = eligibleDefs[Math.floor(Math.random() * eligibleDefs.length)];
     newEntries.push({
       id: uid("bigevlog"), studentUser: student.username, defId: def.id, week: weekKey, date: nowStr(),
-      name: def.name, module: def.module, cost: def.cost, description: def.description || "", status: "pending"
+      name: def.name, module: def.module, kind: def.kind || "bad", cost: def.cost, description: def.description || "",
+      // Good events need no choice from the student — they're paid out
+      // immediately and just get an acknowledgment popup. Bad events stay
+      // "pending" until the student picks pay / forfeit / claim.
+      status: def.kind === "good" ? "received" : "pending"
     });
   }
   if (newEntries.length === 0) return 0;
@@ -1279,6 +1303,14 @@ async function processWeeklyBigEvents(classCode, opts) {
     if (liveCls.bigEventLog.length > 300) liveCls.bigEventLog = liveCls.bigEventLog.slice(-300);
     t.update(classRef, { bigEventLog: liveCls.bigEventLog });
   });
+
+  // Pay out any good (windfall) events right away — no choice needed.
+  const goodEntries = newEntries.filter(e => e.kind === "good");
+  for (const e of goodEntries) {
+    await adjustBalance(e.studentUser, e.cost);
+    await logTxn(classCode, { type: "big-event", to: e.studentUser, amount: e.cost, note: `Big event windfall: "${e.name}"` + (e.description ? " — " + e.description : "") });
+  }
+
   return newEntries.length;
 }
 
@@ -1765,6 +1797,25 @@ async function removeEventDef(classCode, evId) {
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     cls.eventDefs = cls.eventDefs.filter(e => e.id !== evId);
+    t.update(classRef, { eventDefs: cls.eventDefs });
+  });
+}
+async function updateEventDef(classCode, evId, ev) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const existing = cls.eventDefs.find(e => e.id === evId);
+    if (!existing) return;
+    const isChoice = ev.type === "choice";
+    existing.name = ev.name;
+    existing.amount = Number(ev.amount) || 0;
+    existing.description = ev.description || "";
+    existing.repeatable = !!ev.repeatable;
+    existing.severity = ev.severity === "bad" ? "bad" : "neutral";
+    existing.type = isChoice ? "choice" : "fixed";
+    existing.options = isChoice ? (ev.options || []).map(o => ({ id: uid("opt"), label: o.label || "", amount: Number(o.amount) || 0, outcome: o.outcome || "" })) : [];
     t.update(classRef, { eventDefs: cls.eventDefs });
   });
 }

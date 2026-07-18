@@ -42,6 +42,13 @@
           <input id="beName" placeholder="e.g. Made redundant" required>
         </div>
         <div>
+          <label for="beKind" id="labKind">Good or bad?</label>
+          <select id="beKind" onchange="updateCostLabel()">
+            <option value="bad">Bad — student pays or loses something</option>
+            <option value="good">Good — student gets paid</option>
+          </select>
+        </div>
+        <div>
           <label for="beModule" id="labModule">What it affects</label>
           <select id="beModule">
             <option value="income">Income (job)</option>
@@ -49,6 +56,8 @@
             <option value="transport">Transport (vehicle)</option>
           </select>
         </div>
+      </div>
+      <div class="grid grid-3">
         <div>
           <label for="beCost" id="labCost">Cost to fix / avoid</label>
           <input id="beCost" type="number" min="0" step="0.5" required>

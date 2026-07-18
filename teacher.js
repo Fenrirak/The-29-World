@@ -1,4 +1,15 @@
-let CURRENT, CLASS_CODE, PROFILE_USER;
+let CURRENT, CLASS_CODE, PROFILE_USER, EDITING_EVENT_ID = null;
+
+// Teachers naturally type amounts like "$10" or "1,000" in a money app —
+// plain Number() chokes on those and silently falls back to 0, which is
+// why a whole multi-choice event could end up worth +$0 across the board.
+// This strips currency symbols/commas/whitespace first so those work.
+function parseMoneyInput(str) {
+  if (str === undefined || str === null) return NaN;
+  const cleaned = String(str).replace(/[$,\s]/g, "");
+  if (cleaned === "" || cleaned === "-" || cleaned === "+") return NaN;
+  return Number(cleaned);
+}
 
 function paintChrome() {
   paintIconSlots();
@@ -153,6 +164,7 @@ async function render() {
         &middot; <span class="badge ${ev.severity === 'bad' ? 'coral' : 'navy'}">${ev.severity === 'bad' ? 'Bad' : 'Neutral'}</span>
         ${ev.description ? `<div class="muted-small">${ev.description}</div>` : ""}
       </div>
+      <button class="btn small secondary" onclick="startEditEvent('${ev.id}')">${icon("idcard", 13)} Edit</button>
       <button class="btn small coral" onclick="removeEvent('${ev.id}')">${icon("trash", 13)} Remove</button>
     `;
     evBox.appendChild(row);
@@ -312,10 +324,17 @@ async function addEventForm(e) {
   };
   if (type === "choice") {
     const lines = document.getElementById("evOptionsArea").value.split("\n").map(l => l.trim()).filter(Boolean);
-    const options = lines.map(line => {
+    const options = [];
+    for (const line of lines) {
       const [label, amt, outcome] = line.split("|");
-      return { label: (label || "").trim(), amount: Number((amt || "0").trim()) || 0, outcome: (outcome || "").trim() };
-    }).filter(o => o.label);
+      if (!(label || "").trim()) continue;
+      const parsed = parseMoneyInput(amt);
+      if (Number.isNaN(parsed)) {
+        alert(`Couldn't read the amount for "${(label || "").trim()}" — enter a plain number like -10 or 5 (no currency symbols needed).`);
+        return false;
+      }
+      options.push({ label: label.trim(), amount: parsed, outcome: (outcome || "").trim() });
+    }
     if (options.length < 2) {
       alert('Add at least 2 choices, one per line, as "Label | amount".');
       return false;
@@ -323,14 +342,31 @@ async function addEventForm(e) {
     ev.options = options;
     ev.amount = 0;
   } else {
-    const amt = document.getElementById("evAmount").value;
-    if (amt === "") {
+    const rawAmt = document.getElementById("evAmount").value;
+    if (rawAmt === "") {
       alert("Enter an amount for this event.");
       return false;
     }
-    ev.amount = amt;
+    const parsed = parseMoneyInput(rawAmt);
+    if (Number.isNaN(parsed)) {
+      alert("Couldn't read that amount — enter a plain number like -10 or 5 (no currency symbols needed).");
+      return false;
+    }
+    ev.amount = parsed;
   }
-  await addEventDef(CLASS_CODE, ev);
+
+  if (EDITING_EVENT_ID) {
+    await updateEventDef(CLASS_CODE, EDITING_EVENT_ID, ev);
+  } else {
+    await addEventDef(CLASS_CODE, ev);
+  }
+  resetEventForm();
+  await render();
+  return false;
+}
+
+function resetEventForm() {
+  EDITING_EVENT_ID = null;
   document.getElementById("evName").value = "";
   document.getElementById("evAmount").value = "";
   document.getElementById("evOptionsArea").value = "";
@@ -339,8 +375,41 @@ async function addEventForm(e) {
   document.getElementById("evSeverity").value = "neutral";
   document.getElementById("evType").value = "fixed";
   toggleEventType();
-  await render();
-  return false;
+  document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Add event";
+  const cancelBtn = document.getElementById("cancelEditEventBtn");
+  if (cancelBtn) cancelBtn.remove();
+}
+
+function startEditEvent(id) {
+  getClass(CLASS_CODE).then(cls => {
+    const ev = (cls.eventDefs || []).find(e => e.id === id);
+    if (!ev) return;
+    EDITING_EVENT_ID = id;
+    document.getElementById("evType").value = ev.type;
+    toggleEventType();
+    document.getElementById("evName").value = ev.name;
+    document.getElementById("evSeverity").value = ev.severity || "neutral";
+    document.getElementById("evRepeat").checked = !!ev.repeatable;
+    document.getElementById("evDesc").value = ev.description || "";
+    if (ev.type === "choice") {
+      document.getElementById("evOptionsArea").value = (ev.options || [])
+        .map(o => `${o.label} | ${o.amount}${o.outcome ? " | " + o.outcome : ""}`).join("\n");
+    } else {
+      document.getElementById("evAmount").value = ev.amount;
+    }
+    document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Save changes";
+    if (!document.getElementById("cancelEditEventBtn")) {
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.id = "cancelEditEventBtn";
+      cancelBtn.className = "btn small secondary";
+      cancelBtn.style.marginLeft = "8px";
+      cancelBtn.textContent = "Cancel edit";
+      cancelBtn.onclick = resetEventForm;
+      document.getElementById("addEventBtn").insertAdjacentElement("afterend", cancelBtn);
+    }
+    document.getElementById("addEventBtn").scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 }
 
 function toggleEventType() {
@@ -351,6 +420,7 @@ function toggleEventType() {
 
 async function removeEvent(id) {
   if (confirm("Remove this event? It will no longer be handed out.")) {
+    if (id === EDITING_EVENT_ID) resetEventForm();
     await removeEventDef(CLASS_CODE, id);
     await render();
   }

@@ -1,8 +1,13 @@
 let CURRENT, IS_TEACHER;
 
 const MODULE_LABEL = { income: "Income", property: "Property", transport: "Transport" };
-const STATUS_LABEL = { pending: "Awaiting response", paid: "Paid", lost: "Lost the asset", claimed: "Claimed on insurance" };
-const STATUS_CLASS = { pending: "status-pending", paid: "status-approved", lost: "status-declined", claimed: "status-approved" };
+const STATUS_LABEL = { pending: "Awaiting response", paid: "Paid", lost: "Lost the asset", claimed: "Claimed on insurance", received: "Received" };
+const STATUS_CLASS = { pending: "status-pending", paid: "status-approved", lost: "status-declined", claimed: "status-approved", received: "status-approved" };
+
+function updateCostLabel() {
+  const kind = document.getElementById("beKind").value;
+  document.getElementById("labCost").textContent = kind === "good" ? "Amount paid to the student" : "Cost to fix / avoid";
+}
 
 function paintChrome() {
   paintIconSlots();
@@ -22,6 +27,7 @@ async function init() {
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
+  if (IS_TEACHER) updateCostLabel();
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("defListCard").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("historyCard").classList.toggle("hidden", IS_TEACHER);
@@ -50,12 +56,13 @@ async function render() {
     defs.forEach(d => {
       const div = document.createElement("div");
       div.className = "card company-card";
+      const isGood = d.kind === "good";
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${icon("star", 20)}${d.name} <span class="badge navy">${MODULE_LABEL[d.module]}</span></h4>
+            <h4>${icon("star", 20)}${d.name} <span class="badge navy">${MODULE_LABEL[d.module]}</span> <span class="badge ${isGood ? "gold" : "coral"}">${isGood ? "Good" : "Bad"}</span></h4>
             <p>${d.description || "No description provided."}</p>
-            <p><strong>${fmtMoney(d.cost)}</strong> to pay or claim's excess</p>
+            <p><strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay or claim's excess"}</p>
           </div>
           <button class="btn small coral" onclick="deleteEvent('${d.id}')">${icon("trash", 13)} Remove</button>
         </div>
@@ -73,8 +80,9 @@ async function render() {
     mine.forEach(e => {
       const row = document.createElement("div");
       row.className = "auto-row";
+      const isGood = e.kind === "good";
       row.innerHTML = `
-        <div class="auto-details"><strong>${e.name}</strong> (${MODULE_LABEL[e.module]}) — ${fmtMoney(e.cost)}
+        <div class="auto-details"><strong>${e.name}</strong> (${MODULE_LABEL[e.module]}) — <span class="${isGood ? "ticker-up" : ""}">${isGood ? "+" : ""}${fmtMoney(e.cost)}</span>
           <div class="muted-small">${e.date}</div>
         </div>
         <span class="${STATUS_CLASS[e.status]}">${STATUS_LABEL[e.status]}</span>
@@ -89,6 +97,7 @@ async function addEvent(e) {
   const ev = {
     name: document.getElementById("beName").value.trim(),
     module: document.getElementById("beModule").value,
+    kind: document.getElementById("beKind").value,
     cost: document.getElementById("beCost").value,
     description: document.getElementById("beDesc").value.trim()
   };
@@ -109,8 +118,8 @@ async function deleteEvent(id) {
 async function runBigEventsNow() {
   const count = await forceWeeklyBigEvents(CURRENT.classCode);
   document.getElementById("runBigEventsMsg").innerHTML = count > 0
-    ? `<div class="success-msg">Done — ${count} student(s) were hit with a big event just now.</div>`
-    : `<div class="error-msg">No eligible students right now — make sure at least one active event has students with a matching job/property/vehicle.</div>`;
+    ? `<div class="success-msg">Done — ${count} student(s) got a big event just now.</div>`
+    : `<div class="error-msg">No eligible students right now — for "bad" events, make sure at least one active event has students with a matching job/property/vehicle. "Good" events are open to everyone.</div>`;
   await render();
 }
 
