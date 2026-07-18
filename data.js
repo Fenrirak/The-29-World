@@ -1217,7 +1217,17 @@ async function removeBigEventDef(classCode, defId) {
 }
 // Once per NZ calendar week, each student has a 1-in-4 chance of being hit
 // with one random active big event, left "pending" until they respond.
-async function processWeeklyBigEvents(classCode) {
+// Bypasses the once-per-week guard and generates this week's big events
+// right now — same idea as forceWeeklyEvents. Also skips the normal 25%
+// per-student chance, so every eligible student gets one on a manual run
+// instead of being left out by the dice roll.
+async function forceWeeklyBigEvents(classCode) {
+  await classesCol().doc(classCode).update({ lastBigEventWeekRun: null });
+  return await processWeeklyBigEvents(classCode, { forceAll: true });
+}
+
+async function processWeeklyBigEvents(classCode, opts) {
+  const forceAll = !!(opts && opts.forceAll);
   const classRef = classesCol().doc(classCode);
   const weekKey = isoWeekKey(new Date());
   const cls = withNewModuleDefaults(await getClass(classCode));
@@ -1242,7 +1252,7 @@ async function processWeeklyBigEvents(classCode) {
   const students = await getClassStudents(classCode);
   const newEntries = [];
   for (const student of students) {
-    if (Math.random() >= 0.25) continue; // 25% chance per student per week
+    if (!forceAll && Math.random() >= 0.25) continue; // 25% chance per student per week (unless a manual run forces it)
     // Only consider events for modules where the student actually has
     // something at stake (a job, a property, or a vehicle) — no point
     // hitting someone with a "lost your job" event if they have no job.
