@@ -142,7 +142,7 @@ async function render() {
     const capEl = document.getElementById("dailyCapStatus");
     if (g.dailyBetCap) {
       const todayKey = nzDateKey();
-      const betToday = cls.txns
+      const betToday = CLS.txns
         .filter(t => t.type === "gambling" && t.from === CURRENT.username && nzDateKey(new Date(t.ts || 0)) === todayKey)
         .reduce((sum, t) => sum + (t.bet !== undefined ? t.bet : t.amount), 0);
       const remaining = Math.max(0, g.dailyBetCap - betToday);
