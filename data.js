@@ -1764,10 +1764,11 @@ async function removeEventDef(classCode, evId) {
 // stuck waiting until next Monday for it to try again naturally.
 async function forceWeeklyEvents(classCode) {
   await classesCol().doc(classCode).update({ lastEventWeekRun: null });
-  return await processWeeklyEvents(classCode);
+  return await processWeeklyEvents(classCode, { ignoreAlreadyHad: true });
 }
 
-async function processWeeklyEvents(classCode) {
+async function processWeeklyEvents(classCode, opts) {
+  const ignoreAlreadyHad = !!(opts && opts.ignoreAlreadyHad);
   const classRef = classesCol().doc(classCode);
   const weekKey = isoWeekKey(new Date());
   const cls = withNewModuleDefaults(await getClass(classCode));
@@ -1803,7 +1804,7 @@ async function processWeeklyEvents(classCode) {
 
   for (const student of students) {
     const already = new Set(eventLog.filter(l => l.studentUser === student.username).map(l => l.eventId));
-    const pool = activeDefs.filter(e => e.repeatable || !already.has(e.id));
+    const pool = activeDefs.filter(e => ignoreAlreadyHad || e.repeatable || !already.has(e.id));
     if (pool.length === 0) continue;
     const count = Math.min(pool.length, 1);
     const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
