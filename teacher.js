@@ -229,6 +229,15 @@ function describeTxn(t, nameOf) {
     case "property-sell": return `${nameOf(t.to)} — ${t.note}`;
     case "mortgage": return `${nameOf(t.from)} — ${t.note}`;
     case "event": return `${nameOf(t.to)} — ${t.note}`;
+    case "vehicle-buy": return `${nameOf(t.from)} — ${t.note}`;
+    case "vehicle-sell": return `${nameOf(t.to)} — ${t.note}`;
+    case "term-deposit-open": return `${nameOf(t.from)} — ${t.note}`;
+    case "term-deposit-early": return `${nameOf(t.to)} — ${t.note}`;
+    case "term-deposit-mature": return `${nameOf(t.to)} — ${t.note}`;
+    case "gambling": return `${nameOf(t.to || t.from)} — ${t.note}`;
+    case "big-event": return `${nameOf(t.to || t.from)} — ${t.note}`;
+    case "insurance-claim": return `${nameOf(t.to)} — ${t.note}`;
+    case "insurance-premium": return `${nameOf(t.from)} — ${t.note}`;
     default: return t.note || "";
   }
 }
