@@ -134,7 +134,7 @@ async function createTeacherAndClass(name, username, password, className) {
     vehicles: [], termDepositPlans: [],
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
     insuranceDay: "Fri", lastInsuranceWeekRun: null,
-    gambling: { enabled: true, minBet: 1, maxBet: 20, payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 } },
+    gambling: { enabled: true, minBet: 1, maxBet: 20, dailyBetCap: null, payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 } },
     taxRates: { store: 0, insurance: 0, property: 0, transport: 0, wage: 0, interest: 0, gambling: 0 },
     bigEventDefs: [], bigEventLog: [], lastBigEventWeekRun: null,
     lifestyleConfig: {
@@ -1067,6 +1067,7 @@ async function saveGamblingSettings(classCode, settings) {
       enabled: settings.enabled !== false,
       minBet: Math.max(0, Number(settings.minBet) || 0),
       maxBet: Math.max(0, Number(settings.maxBet) || 0),
+      dailyBetCap: (settings.dailyBetCap === "" || settings.dailyBetCap === undefined || settings.dailyBetCap === null) ? null : Math.max(0, Number(settings.dailyBetCap) || 0),
       payouts: {
         straightUp: Number(settings.straightUp) || 0,
         split: Number(settings.split) || 0,
@@ -1123,6 +1124,20 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   if (!(betAmount > 0)) return { ok: false, error: "Enter a bet amount greater than zero." };
   if (betAmount < g.minBet || betAmount > g.maxBet) return { ok: false, error: `Bets must be between ${fmtMoney(g.minBet)} and ${fmtMoney(g.maxBet)}.` };
 
+  if (g.dailyBetCap) {
+    const todayKey = nzDateKey();
+    const betToday = (cls.txns || [])
+      .filter(t => t.type === "gambling" && t.from === username && nzDateKey(new Date(t.ts || 0)) === todayKey)
+      // t.bet is the actual stake placed; fall back to t.amount for older
+      // txns logged before this field existed (imprecise on wins, since
+      // amount was the net winnings there, but better than nothing).
+      .reduce((sum, t) => sum + (t.bet !== undefined ? t.bet : t.amount), 0);
+    if (betToday + betAmount > g.dailyBetCap) {
+      const remaining = Math.max(0, g.dailyBetCap - betToday);
+      return { ok: false, error: `Daily betting limit reached — you can bet up to ${fmtMoney(g.dailyBetCap)} per day, and you've already bet ${fmtMoney(betToday)} today (${fmtMoney(remaining)} left).` };
+    }
+  }
+
   let valid = false, count = 0;
   if (betType === "straightUp") { valid = selection.length === 1 && selection[0] >= 0 && selection[0] <= 36; count = 1; }
   else if (betType === "split") { valid = selection.length === 2 && isValidSplit(selection[0], selection[1]); count = 2; }
@@ -1152,7 +1167,7 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   if (!isTeacher) await adjustBalance(username, netChange);
 
   await logTxn(classCode, {
-    type: "gambling", from: username, amount: Math.abs(netChange),
+    type: "gambling", from: username, amount: Math.abs(netChange), bet: betAmount,
     note: `Roulette (${betTypeLabel(betType)}): ${win ? "WON" : "lost"} — ball landed on ${spin}` + (win && taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "")
   });
 
@@ -1366,6 +1381,7 @@ function withNewModuleDefaults(cls) {
     payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 }
   };
   if (cls.gambling.enabled === undefined) cls.gambling.enabled = true;
+  if (cls.gambling.dailyBetCap === undefined) cls.gambling.dailyBetCap = null;
   cls.taxRates = cls.taxRates || { store: 0, insurance: 0, property: 0, transport: 0, wage: 0, interest: 0, gambling: 0 };
   cls.bigEventDefs = cls.bigEventDefs || [];
   cls.bigEventLog = cls.bigEventLog || [];

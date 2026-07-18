@@ -49,6 +49,9 @@
         <input id="gMax" type="number" min="0" step="0.5">
       </div>
     </div>
+    <label for="gDailyCap" id="labDailyCap" style="margin-top:14px;">Daily betting limit per student (leave blank for no limit)</label>
+    <input id="gDailyCap" type="number" min="0" step="0.5" style="max-width:220px;" placeholder="e.g. 20">
+    <p class="muted-small" id="dailyCapNote">Total amount a student can stake across all bets in one NZ calendar day.</p>
     <p class="muted-small">Payout multipliers — a win pays out this many times the bet, on top of keeping the stake.</p>
     <div class="grid grid-3">
       <div><label for="pStraight">Straight up (single number)</label><input id="pStraight" type="number" min="0" step="1"></div>
@@ -71,6 +74,7 @@
     <div class="card">
       <h2 id="hBet">Place a bet</h2>
       <p class="muted-small" id="betLimits"></p>
+      <p class="muted-small" id="dailyCapStatus"></p>
 
       <label for="betType" id="labBetType">Bet type</label>
       <select id="betType" onchange="renderPicker()">
