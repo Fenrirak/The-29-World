@@ -1792,8 +1792,6 @@ async function processWeeklyEvents(classCode) {
   const activeDefs = cls.eventDefs.filter(e => e.active);
   const eventLog = cls.eventLog || [];
   const newLogEntries = [];
-  const balanceDeltas = {};
-  const txns = [];
 
   // Spread each student's 2-4 events out over roughly the next day or so,
   // rather than dumping them all at once — but critically, this no longer
@@ -1828,21 +1826,21 @@ async function processWeeklyEvents(classCode) {
           claimed: false, type: "choice", options: ev.options || [], status: "pending"
         });
       } else {
-        balanceDeltas[student.username] = (balanceDeltas[student.username] || 0) + ev.amount;
+        // Fixed-amount events used to apply the balance change and log a
+        // txn right here, at generation time — long before the student
+        // ever saw a popup explaining why. That meant balances could
+        // silently jump by several events' worth all at once. Now this
+        // just schedules it; the actual balance change + txn only happens
+        // in revealFixedEvent(), which is called the moment the popup is
+        // about to be shown to the student (see checkWeeklyEventPopup).
         newLogEntries.push({
           id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey, revealAt,
           name: ev.name, amount: ev.amount, description: ev.description || "", severity: ev.severity || "neutral",
-          claimed: false, type: "fixed", status: "resolved"
+          claimed: false, type: "fixed", status: "scheduled"
         });
-        txns.push({ type: "event", to: student.username, amount: ev.amount, note: ev.name + (ev.description ? " — " + ev.description : "") });
       }
     });
   }
-
-  for (const [username, delta] of Object.entries(balanceDeltas)) {
-    await adjustBalance(username, delta);
-  }
-  for (const t of txns) await logTxn(classCode, t);
 
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
@@ -1854,6 +1852,32 @@ async function processWeeklyEvents(classCode) {
   });
 
   return newLogEntries.length;
+}
+
+// Applies a scheduled fixed-amount event's balance change and logs its txn
+// — called the moment its popup is about to be shown to the student (see
+// checkWeeklyEventPopup in events-ui.js), never before. This is what makes
+// sure a student's balance can't change "silently" ahead of them actually
+// seeing what happened and why. Safe to call more than once (e.g. two tabs
+// racing) — the transaction only acts on it while status is still
+// "scheduled", so a second call is a no-op.
+async function revealFixedEvent(classCode, eventLogId) {
+  const classRef = classesCol().doc(classCode);
+  let entry = null;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = withNewModuleDefaults(snap.data());
+    const found = (liveCls.eventLog || []).find(l => l.id === eventLogId);
+    if (!found || found.type !== "fixed" || found.status !== "scheduled") return;
+    found.status = "resolved";
+    entry = { ...found };
+    t.update(classRef, { eventLog: liveCls.eventLog });
+  });
+  if (!entry) return null;
+  await adjustBalance(entry.studentUser, entry.amount);
+  await logTxn(classCode, { type: "event", to: entry.studentUser, amount: entry.amount, note: entry.name + (entry.description ? " — " + entry.description : "") });
+  return entry;
 }
 
 // Claim General-coverage insurance against a bad weekly event. Pays out the

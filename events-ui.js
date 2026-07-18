@@ -1,13 +1,17 @@
 /* ===================== The 29 World — random event popups =====================
    Weekly random events are assigned to every student once per NZ calendar
    week (see processWeeklyEvents in data.js), but each event gets its own
-   random "revealAt" moment spread across the rest of that week — so a
-   student who was given 3 events doesn't see them all at once, they pop up
-   one at a time as the student visits the site over the following days.
-   This file decides whether the CURRENT student has any due-but-unseen
-   events, and if so, pops up a small modal (one event per popup) — no
-   matter which tab they land on. The weekly limit and reveal scheduling
-   live in data.js; this only controls when/how the student is notified.
+   random "revealAt" moment spread across the following day or so — so a
+   student who was given 3 events doesn't see them (or feel their balance
+   change) all at once. This file:
+   1. Only surfaces ONE event per check, the earliest one that's come due —
+      never a batch — no matter how many are queued up.
+   2. For fixed-amount events, doesn't apply the balance change until the
+      exact moment it's about to show the popup (via revealFixedEvent in
+      data.js) — so a student's balance can never change silently ahead of
+      them actually seeing what happened and why.
+   3. For multiple-choice events, shows a forced modal that must be
+      answered before the student can continue (unchanged from before).
 ================================================================== */
 
 function eventsShownKey(username) {
@@ -29,53 +33,60 @@ function saveShownEventState(username, state) {
 
 async function checkWeeklyEventPopup(username, classCode) {
   if (!username || !classCode) return;
-  const cls = await getClass(classCode);
+  if (document.getElementById("anwEventModal") || document.getElementById("anwChoiceEventModal") || document.getElementById("anwBigEventModal")) return; // something's already showing
+  let cls = await getClass(classCode);
   const user = await getUser(username);
   if (!cls || !user) return;
   const weekKey = isoWeekKey(new Date());
   const now = Date.now();
   // revealAt is missing on legacy log entries (from before this field
-  // existed) — treat those as already revealed so nothing old gets stuck.
-  const mine = (cls.eventLog || []).filter(l => l.studentUser === username && l.week === weekKey && (l.revealAt === undefined || l.revealAt <= now));
-  if (mine.length === 0) return;
+  // existed) — treat those as already due so nothing old gets stuck.
+  const due = (cls.eventLog || []).filter(l => l.studentUser === username && l.week === weekKey && (l.revealAt === undefined || l.revealAt <= now));
+  if (due.length === 0) return;
 
-  // Multiple-choice events must be answered — show a forced modal (like a
-  // big event) for the first pending one that has come due, before
-  // anything else pops up.
-  const pendingChoice = mine.find(l => l.type === "choice" && l.status === "pending");
-  if (pendingChoice && !document.getElementById("anwEventModal") && !document.getElementById("anwChoiceEventModal") && !document.getElementById("anwBigEventModal")) {
+  // Multiple-choice events take priority — forced modal, must be answered.
+  const pendingChoice = due.filter(l => l.type === "choice" && l.status === "pending").sort((a, b) => (a.revealAt || 0) - (b.revealAt || 0))[0];
+  if (pendingChoice) {
     showChoiceEventPopup(pendingChoice, username, classCode);
+    return;
   }
 
-  const resolved = mine.filter(l => l.status !== "pending");
-  if (resolved.length === 0) return;
-
+  // Otherwise, find the single earliest-due item the student hasn't seen
+  // yet — this includes fixed events still waiting to be revealed
+  // ("scheduled") as well as anything already resolved but unshown (a
+  // legacy fallback from before "scheduled" existed).
   let state = getShownEventState(username);
   if (state.week !== weekKey) state = { week: weekKey, ids: [] };
   const shown = new Set(state.ids);
-  const fresh = resolved.filter(l => !shown.has(l.id || (l.eventId + "|" + l.date)));
+  const candidates = due
+    .filter(l => l.type === "fixed" && (l.status === "scheduled" || l.status === "resolved") && !shown.has(l.id))
+    .sort((a, b) => (a.revealAt || 0) - (b.revealAt || 0));
+  if (candidates.length === 0) return;
+  let entry = candidates[0];
 
-  if (fresh.length === 0) return;
-
-  // Show only the single event that became due earliest — the rest will
-  // pop up on later visits (or as their own revealAt times come due),
-  // instead of dumping everything on the student at once.
-  fresh.sort((a, b) => (a.revealAt || 0) - (b.revealAt || 0));
-  const toShow = [fresh[0]];
+  if (entry.status === "scheduled") {
+    // This is the moment the balance change + txn actually happens — not
+    // a moment before. If it's already been revealed by another tab/page
+    // load in the meantime, revealFixedEvent just returns the resolved
+    // entry instead of double-applying anything.
+    const revealed = await revealFixedEvent(classCode, entry.id);
+    if (!revealed) return; // someone else's page load already handled it
+    entry = revealed;
+  }
 
   const hasGeneralPlan = (user.insurance || [])
     .map(id => cls.insurancePlans.find(p => p.id === id))
     .some(p => p && p.coverage === "general");
 
-  const withDetails = toShow.map(l => ({
-    id: l.id, name: l.name || "Random event", description: (l.type === "choice" && l.outcome) ? l.outcome : (l.description || ""),
-    amount: l.amount || 0, severity: l.severity || "neutral", claimed: !!l.claimed,
-    claimable: l.severity === "bad" && !l.claimed && hasGeneralPlan
-  }));
+  const withDetails = [{
+    id: entry.id, name: entry.name || "Random event", description: entry.description || "",
+    amount: entry.amount || 0, severity: entry.severity || "neutral", claimed: !!entry.claimed,
+    claimable: entry.severity === "bad" && !entry.claimed && hasGeneralPlan
+  }];
 
   showEventPopup(withDetails, username, classCode);
 
-  state.ids = state.ids.concat(toShow.map(l => l.id || (l.eventId + "|" + l.date)));
+  state.ids = state.ids.concat([entry.id]);
   saveShownEventState(username, state);
 }
 
