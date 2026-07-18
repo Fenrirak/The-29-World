@@ -516,6 +516,32 @@ async function setPriceRange(classCode, min, max) {
   });
 }
 
+// Runs the market simulation automatically once per NZ calendar day — the
+// first page load of the day (from any student or teacher) that hits this
+// triggers it, same pattern as autoPayDayIfDue / autoInterestIfDue.
+async function autoMarketDayIfDue(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls) return [];
+  const todayKey = nzDateKey();
+  if (cls.lastMarketDayRun === todayKey) return [];
+  if (!cls.companies || cls.companies.length === 0) {
+    await classesCol().doc(classCode).update({ lastMarketDayRun: todayKey }).catch(() => {});
+    return [];
+  }
+  const classRef = classesCol().doc(classCode);
+  let claimed = false;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = snap.data();
+    if (liveCls.lastMarketDayRun === todayKey) return;
+    t.update(classRef, { lastMarketDayRun: todayKey });
+    claimed = true;
+  });
+  if (!claimed) return [];
+  return await simulateMarketDay(classCode);
+}
+
 async function simulateMarketDay(classCode) {
   const classRef = classesCol().doc(classCode);
   let results = [];
@@ -1968,3 +1994,59 @@ async function lifestyleRating(username, classCode) {
   }
   return Math.max(0, Math.min(100, Math.round(score)));
 }
+
+/* ===================== Global page bootstrap =====================
+   This runs on EVERY page that loads data.js (i.e. every page in the app),
+   regardless of what that page's own init() does. Two jobs:
+   1. Make sure the market simulates itself once per NZ calendar day, even
+      if nobody happens to visit the Market page that day.
+   2. Mount a small floating "cash balance" widget in the corner of the
+      screen for logged-in students, so they can see their balance no
+      matter which module they're in.
+================================================================== */
+async function anwGlobalBootstrap() {
+  const u = await getSessionUser();
+  if (!u) return; // not logged in (e.g. on the login page) — nothing to do
+  if (u.classCode) {
+    autoMarketDayIfDue(u.classCode).catch(() => {});
+  }
+  if (u.role === "student") {
+    mountBalanceWidget(u.username);
+  }
+}
+
+async function mountBalanceWidget(username) {
+  if (document.getElementById("anwBalanceWidget")) return;
+  const box = document.createElement("div");
+  box.id = "anwBalanceWidget";
+  box.className = "anw-balance-widget";
+  box.innerHTML = `<span class="icon">${icon("piggy", 18)}</span><span id="anwBalanceWidgetValue">—</span>`;
+  document.body.appendChild(box);
+  positionBalanceWidget();
+  window.addEventListener("resize", positionBalanceWidget);
+
+  const refresh = async () => {
+    const el = document.getElementById("anwBalanceWidgetValue");
+    if (!el) return;
+    const fresh = await getUser(username);
+    if (fresh) el.textContent = fmtMoney(fresh.balance);
+  };
+  await refresh();
+  // Poll periodically so the widget stays live even though most module
+  // pages have their own separate render() calls that don't know about it.
+  setInterval(refresh, 8000);
+}
+
+// Sits just under the sticky top nav bar, on the left, rather than being
+// hard-pinned to the literal viewport corner — avoids overlapping the
+// brand logo, and re-runs on resize since the nav can wrap to two rows on
+// narrow screens.
+function positionBalanceWidget() {
+  const topbar = document.querySelector(".topbar");
+  const widget = document.getElementById("anwBalanceWidget");
+  if (!topbar || !widget) return;
+  if (window.innerWidth <= 640) { widget.style.top = ""; return; } // mobile: CSS pins it to the bottom instead
+  widget.style.top = (topbar.getBoundingClientRect().bottom + 10) + "px";
+}
+
+document.addEventListener("DOMContentLoaded", anwGlobalBootstrap);

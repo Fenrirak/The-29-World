@@ -1,5 +1,36 @@
 let CURRENT, CLASS_CODE, IS_TEACHER;
 
+// buy()/sell() show a success/error message inside each company's card, but
+// render() wipes and rebuilds the whole card list (including a fresh, empty
+// message box) — including the render() call that happens right after we
+// set the message. Without this, the message barely gets painted before
+// being erased. Keeping it here means it survives across render() calls and
+// the 5s auto-refresh poll, and clears itself after a few seconds.
+const COMPANY_MSGS = {}; // id -> { html, expiresAt }
+const MSG_DISPLAY_MS = 4000;
+
+function setCompanyMsg(id, html) {
+  COMPANY_MSGS[id] = { html, expiresAt: Date.now() + MSG_DISPLAY_MS };
+  applyCompanyMsg(id);
+}
+
+function applyCompanyMsg(id) {
+  const box = document.getElementById("msg-" + id);
+  if (!box) return;
+  const entry = COMPANY_MSGS[id];
+  if (!entry || entry.expiresAt <= Date.now()) {
+    delete COMPANY_MSGS[id];
+    return;
+  }
+  box.innerHTML = entry.html;
+  clearTimeout(box._clearTimer);
+  box._clearTimer = setTimeout(() => {
+    delete COMPANY_MSGS[id];
+    const stillThere = document.getElementById("msg-" + id);
+    if (stillThere) stillThere.innerHTML = "";
+  }, entry.expiresAt - Date.now());
+}
+
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("chart", 26) + " Stock Market";
@@ -176,6 +207,7 @@ async function render() {
       <div id="msg-${co.id}"></div>
     `;
     list.appendChild(div);
+    applyCompanyMsg(co.id);
   });
   } catch (err) {
     console.error("Stock Market render failed:", err);
@@ -223,15 +255,13 @@ async function closeCo(id) {
 async function buy(id) {
   const qty = document.getElementById("buy-" + id).value;
   const res = await buyShares(CURRENT.username, CLASS_CODE, id, qty);
-  const box = document.getElementById("msg-" + id);
-  box.innerHTML = res.ok ? `<div class="success-msg">Purchased!</div>` : `<div class="error-msg">${res.error}</div>`;
+  setCompanyMsg(id, res.ok ? `<div class="success-msg">Purchased!</div>` : `<div class="error-msg">${res.error}</div>`);
   await render();
 }
 async function sell(id) {
   const qty = document.getElementById("sell-" + id).value;
   const res = await sellShares(CURRENT.username, CLASS_CODE, id, qty);
-  const box = document.getElementById("msg-" + id);
-  box.innerHTML = res.ok ? `<div class="success-msg">Sold!</div>` : `<div class="error-msg">${res.error}</div>`;
+  setCompanyMsg(id, res.ok ? `<div class="success-msg">Sold!</div>` : `<div class="error-msg">${res.error}</div>`);
   await render();
 }
 
