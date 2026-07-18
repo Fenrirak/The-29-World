@@ -28,6 +28,7 @@ function paintChrome() {
   document.getElementById("savePayDayBtn").innerHTML = icon("calendar", 14) + " Save pay day";
   document.getElementById("saveGamblingEnabledBtn").innerHTML = icon("dice", 14) + " Save gambling setting";
   document.getElementById("hEvents").innerHTML = icon("dice", 18) + " Random weekly events";
+  document.getElementById("runEventsNowBtn").innerHTML = icon("repeat", 14) + " Run this week's events now";
   document.getElementById("labEvType").innerHTML = icon("dice", 13) + " Event type";
   document.getElementById("labEvOptions").innerHTML = icon("star", 13) + " Choices — one per line, as \"Label | amount | what happened (optional)\"";
   document.getElementById("labEvName").innerHTML = icon("star", 13) + " Event name";
@@ -409,6 +410,11 @@ async function runPayDay() {
 async function runInterest() {
   const count = await applyInterest(CLASS_CODE);
   alert(count > 0 ? `Interest applied to ${count} student(s).` : "No balances to apply interest to.");
+  await render();
+}
+async function runWeeklyEventsNow() {
+  const count = await forceWeeklyEvents(CLASS_CODE);
+  alert(count > 0 ? `Done — ${count} event(s) assigned across the class. They'll pop up gradually as students visit the site over the next while.` : "No active events are set up yet — add some below first.");
   await render();
 }
 async function saveRate() {

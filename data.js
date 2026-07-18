@@ -1742,6 +1742,15 @@ async function removeEventDef(classCode, evId) {
     t.update(classRef, { eventDefs: cls.eventDefs });
   });
 }
+// Bypasses the once-per-week guard and generates this week's events right
+// now — useful if the weekly run already fired earlier (e.g. before any
+// event definitions existed, or before a timing fix), so the teacher isn't
+// stuck waiting until next Monday for it to try again naturally.
+async function forceWeeklyEvents(classCode) {
+  await classesCol().doc(classCode).update({ lastEventWeekRun: null });
+  return await processWeeklyEvents(classCode);
+}
+
 async function processWeeklyEvents(classCode) {
   const classRef = classesCol().doc(classCode);
   const weekKey = isoWeekKey(new Date());
@@ -1770,14 +1779,17 @@ async function processWeeklyEvents(classCode) {
   const balanceDeltas = {};
   const txns = [];
 
-  // Spread each student's 2-4 events out across the rest of the week
-  // (NZ time) rather than dumping them all on the student at once — each
-  // event gets its own random reveal moment, and the popup UI only shows
-  // an event once its revealAt time has passed.
-  const DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const todayIdx = DAY_ORDER.indexOf(nzDayName(new Date()));
-  const daysLeft = Math.max(6 - (todayIdx < 0 ? 0 : todayIdx), 1); // at least 1 day of spread, even on Sunday
-  const spreadMs = daysLeft * 86400000;
+  // Spread each student's 2-4 events out over roughly the next day or so,
+  // rather than dumping them all at once — but critically, this no longer
+  // depends on which day of the week it happens to be (the old version
+  // tied the spread to "days left until Sunday", which could randomly
+  // delay every single event by many hours with no guaranteed early one —
+  // easy to end up with nobody seeing anything for a while). Now: the
+  // first event is always guaranteed to reveal within ~20 minutes, and
+  // each subsequent one trickles in a few hours after the last.
+  const FIRST_EVENT_MAX_DELAY_MS = 20 * 60000;      // first ever event: within 20 min
+  const GAP_MIN_MS = 2 * 3600000;                   // ~2-5h between each later event
+  const GAP_MAX_MS = 5 * 3600000;
 
   for (const student of students) {
     const already = new Set(eventLog.filter(l => l.studentUser === student.username).map(l => l.eventId));
@@ -1785,8 +1797,12 @@ async function processWeeklyEvents(classCode) {
     if (pool.length === 0) continue;
     const count = Math.min(pool.length, 2 + Math.floor(Math.random() * 3));
     const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
-    for (const ev of shuffled) {
-      const revealAt = Date.now() + Math.floor(Math.random() * spreadMs);
+    let cursor = Date.now();
+    shuffled.forEach((ev, i) => {
+      cursor += i === 0
+        ? Math.floor(Math.random() * FIRST_EVENT_MAX_DELAY_MS)
+        : GAP_MIN_MS + Math.floor(Math.random() * (GAP_MAX_MS - GAP_MIN_MS));
+      const revealAt = cursor;
       if (ev.type === "choice") {
         // Multiple-choice events don't apply a balance change yet — the
         // student must pick one of the options first (see resolveChoiceEvent).
@@ -1804,7 +1820,7 @@ async function processWeeklyEvents(classCode) {
         });
         txns.push({ type: "event", to: student.username, amount: ev.amount, note: ev.name + (ev.description ? " — " + ev.description : "") });
       }
-    }
+    });
   }
 
   for (const [username, delta] of Object.entries(balanceDeltas)) {
