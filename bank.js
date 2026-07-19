@@ -34,6 +34,12 @@ function paintChrome() {
   document.getElementById("labWithdraw").innerHTML = icon("send", 13) + " Withdraw back to cash";
   document.getElementById("depositBtn").innerHTML = icon("plus", 15) + " Deposit";
   document.getElementById("withdrawBtn").innerHTML = icon("send", 15) + " Withdraw";
+  document.getElementById("labSavAutoDirection").innerHTML = icon("repeat", 13) + " Direction";
+  document.getElementById("labSavAutoDay").innerHTML = icon("calendar", 13) + " Day of the week";
+  document.getElementById("labSavAutoFreq").innerHTML = icon("repeat", 13) + " How often";
+  document.getElementById("labSavAutoAmount").innerHTML = icon("coin", 13) + " Amount";
+  document.getElementById("labSavAutoNote").innerHTML = icon("star", 13) + " Note (optional)";
+  document.getElementById("addSavAutoBtn").innerHTML = icon("plus", 15) + " Create automatic transfer";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -103,9 +109,22 @@ async function render() {
   document.getElementById("noAuto").classList.toggle("hidden", autos.length > 0);
   listBox.innerHTML = "";
   for (const a of autos) {
-    const toUser = await getUser(a.toUser);
     const row = document.createElement("div");
     row.className = "auto-row";
+    if (a.type === "savings-transfer") {
+      const dirLabel = a.direction === "toSavings" ? "Cash → Savings" : "Savings → Cash";
+      row.innerHTML = `
+        <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> ${dirLabel}
+          &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
+          ${a.note ? `<div class="muted-small">${a.note}</div>` : ""}
+          ${a.lastRun ? `<div class="muted-small">Last ran: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
+        </div>
+        <button class="btn small coral" onclick="removeAuto('${a.id}')">${icon("trash", 13)} Remove</button>
+      `;
+      listBox.appendChild(row);
+      continue;
+    }
+    const toUser = await getUser(a.toUser);
     row.innerHTML = `
       <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toUser ? toUser.name : a.toUser}</strong>
         &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
@@ -265,6 +284,26 @@ async function withdrawSavings(e) {
   const res = await withdrawFromSavings(CURRENT.username, amount);
   box.innerHTML = res.ok ? `<div class="success-msg">Withdrew ${fmtMoney(amount)} back to cash.</div>` : `<div class="error-msg">${res.error}</div>`;
   if (res.ok) document.getElementById("withdrawAmount").value = "";
+  await render();
+  return false;
+}
+
+async function addSavingsAuto(e) {
+  e.preventDefault();
+  const direction = document.getElementById("savAutoDirection").value;
+  const day = document.getElementById("savAutoDay").value;
+  const freq = document.getElementById("savAutoFreq").value;
+  const amount = document.getElementById("savAutoAmount").value;
+  const note = document.getElementById("savAutoNote").value.trim();
+  const box = document.getElementById("savAutoMsg");
+  const res = await addSavingsAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, direction, note);
+  if (res.ok) {
+    box.innerHTML = `<div class="success-msg">Automatic transfer created!</div>`;
+    document.getElementById("savAutoAmount").value = "";
+    document.getElementById("savAutoNote").value = "";
+  } else {
+    box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+  }
   await render();
   return false;
 }

@@ -881,6 +881,32 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
   }
   return { ok: true };
 }
+
+// A recurring transfer between a student's own cash balance and their
+// Savings Account — same idea as a regular automatic payment, but both
+// sides belong to the same person, so it's stored distinctly (type:
+// "savings-transfer") and handled on a single user doc rather than two.
+async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency, amount, direction, note) {
+  if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
+  if (direction !== "toSavings" && direction !== "toCash") return { ok: false, error: "Invalid direction." };
+  const classRef = classesCol().doc(classCode);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NO_CLASS");
+      const cls = snap.data();
+      cls.automations = cls.automations || [];
+      cls.automations.push({
+        id: uid("auto"), studentUser, dayOfWeek, frequency, type: "savings-transfer", direction,
+        amount: Number(amount), toUser: studentUser, note: (note || "").trim(), lastRun: null, active: true
+      });
+      t.update(classRef, { automations: cls.automations });
+    });
+  } catch (e) {
+    return { ok: false, error: "Class not found." };
+  }
+  return { ok: true };
+}
 async function removeAutomation(classCode, id) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
@@ -918,6 +944,49 @@ async function processAutomations(classCode) {
     }
 
     const classRef = classesCol().doc(classCode);
+
+    if (a.type === "savings-transfer") {
+      // Self-to-self: only one user doc involved, so this is handled
+      // separately from the peer-to-peer path below (which reads/writes
+      // two different docs).
+      let didRun = false;
+      try {
+        await fdb.runTransaction(async (t) => {
+          const userRef = usersCol().doc(a.studentUser);
+          const classSnap = await t.get(classRef);
+          const userSnap = await t.get(userRef);
+          if (!classSnap.exists || !userSnap.exists) return;
+          const user = userSnap.data();
+          const liveCls = classSnap.data();
+          const liveAuto = (liveCls.automations || []).find(x => x.id === a.id);
+          if (!liveAuto || liveAuto.lastRun === todayKey) return;
+
+          const savings = user.savings || 0;
+          const fromCash = a.direction === "toSavings";
+          const available = fromCash ? user.balance : savings;
+          if (available < a.amount) return; // skip silently if they can't afford it this time
+
+          const newBalance = fromCash ? user.balance - a.amount : user.balance + a.amount;
+          const newSavings = fromCash ? savings + a.amount : savings - a.amount;
+          t.update(userRef, { balance: Math.round(newBalance * 100) / 100, savings: Math.round(newSavings * 100) / 100 });
+          liveAuto.lastRun = todayKey;
+          t.update(classRef, { automations: liveCls.automations });
+          didRun = true;
+        });
+      } catch (e) { /* ignore, try next */ }
+
+      if (didRun) {
+        await logTxn(classCode, {
+          type: a.direction === "toSavings" ? "savings-deposit" : "savings-withdraw",
+          [a.direction === "toSavings" ? "from" : "to"]: a.studentUser,
+          amount: a.amount,
+          note: (a.note ? a.note + " — " : "") + "Automatic transfer"
+        });
+        ran++;
+      }
+      continue;
+    }
+
     let didRun = false;
     try {
       await fdb.runTransaction(async (t) => {

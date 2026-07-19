@@ -74,6 +74,48 @@
       </form>
     </div>
     <div id="savingsMsg"></div>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1.5px solid var(--line);">
+      <h3 id="hSavingsAuto" style="margin:0 0 10px;">Automatic transfer</h3>
+      <p class="muted-small">Move money between your cash and savings on a schedule, so you don't have to remember to do it yourself.</p>
+      <form onsubmit="return addSavingsAuto(event)">
+        <label for="savAutoDirection" id="labSavAutoDirection">Direction</label>
+        <select id="savAutoDirection">
+          <option value="toSavings">Cash → Savings</option>
+          <option value="toCash">Savings → Cash</option>
+        </select>
+        <div class="grid grid-3">
+          <div>
+            <label for="savAutoDay" id="labSavAutoDay">Day of the week</label>
+            <select id="savAutoDay">
+              <option value="Mon">Monday</option>
+              <option value="Tue">Tuesday</option>
+              <option value="Wed">Wednesday</option>
+              <option value="Thu">Thursday</option>
+              <option value="Fri">Friday</option>
+              <option value="Sat">Saturday</option>
+              <option value="Sun">Sunday</option>
+            </select>
+          </div>
+          <div>
+            <label for="savAutoFreq" id="labSavAutoFreq">How often</label>
+            <select id="savAutoFreq">
+              <option value="weekly">Every week</option>
+              <option value="fortnightly">Every 2 weeks</option>
+              <option value="monthly">Every 4 weeks</option>
+            </select>
+          </div>
+          <div>
+            <label for="savAutoAmount" id="labSavAutoAmount">Amount</label>
+            <input id="savAutoAmount" type="number" min="0.01" step="0.01" required>
+          </div>
+        </div>
+        <label for="savAutoNote" id="labSavAutoNote">Note (optional)</label>
+        <input id="savAutoNote" placeholder="e.g. Weekly savings top-up">
+        <button class="btn secondary" type="submit" id="addSavAutoBtn">Create automatic transfer</button>
+      </form>
+      <div id="savAutoMsg"></div>
+    </div>
   </div>
 
   <div class="grid grid-2">
