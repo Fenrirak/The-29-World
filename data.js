@@ -441,21 +441,32 @@ async function runPayDayInternal(classCode, dateKey) {
 async function applyInterest(classCode) {
   const cls = await getClass(classCode);
   if (!cls) return 0;
-  const rate = (cls.interestRate || 0) / 100;
+  const savingsRate = (cls.interestRate || 0) / 100;
+  const cashRate = (cls.cashInterestRate || 0) / 100;
   const students = await getClassStudents(classCode);
   let count = 0;
   for (const student of students) {
-    // Interest only applies to money sitting in the Savings Account, not
-    // the student's everyday cash balance — that's the whole point of a
-    // savings account. Deposit/withdraw between the two on the Bank page.
+    // Savings and cash can now earn (or not earn) interest at different
+    // teacher-set rates — money in the Savings Account uses interestRate,
+    // the everyday cash balance uses cashInterestRate (0 by default, so
+    // existing classes behave exactly as before unless the teacher opts in).
     const savings = student.savings || 0;
-    const interest = Math.round(savings * rate * 100) / 100;
-    if (interest > 0) {
-      const { net, taxAmount } = applyTaxToIncome(cls, "interest", interest);
+    const savingsInterest = Math.round(savings * savingsRate * 100) / 100;
+    const cashInterest = Math.round(student.balance * cashRate * 100) / 100;
+    let touched = false;
+    if (savingsInterest > 0) {
+      const { net, taxAmount } = applyTaxToIncome(cls, "interest", savingsInterest);
       await adjustSavings(student.username, net);
       await logTxn(classCode, { type: "interest", to: student.username, amount: net, note: "Savings account interest" + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
-      count++;
+      touched = true;
     }
+    if (cashInterest > 0) {
+      const { net, taxAmount } = applyTaxToIncome(cls, "interest", cashInterest);
+      await adjustBalance(student.username, net);
+      await logTxn(classCode, { type: "cash-interest", to: student.username, amount: net, note: "Cash balance interest" + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
+      touched = true;
+    }
+    if (touched) count++;
   }
   return count;
 }
@@ -1229,6 +1240,7 @@ async function processTermDeposits(classCode) {
 async function saveInterestSettings(classCode, settings) {
   await classesCol().doc(classCode).update({
     interestRate: Number(settings.rate) || 0,
+    cashInterestRate: Number(settings.cashRate) || 0,
     interestAuto: !!settings.auto,
     interestFrequency: settings.frequency || "weekly",
     interestDay: settings.day || "Fri"
@@ -1689,6 +1701,7 @@ function withNewModuleDefaults(cls) {
   cls.maxLoanAmount = cls.maxLoanAmount || 0; // 0 = no extra class-wide cap beyond the tiers themselves
   cls.vehicles = cls.vehicles || [];
   cls.interestAuto = cls.interestAuto || false;
+  cls.cashInterestRate = cls.cashInterestRate || 0;
   cls.interestFrequency = cls.interestFrequency || "weekly";
   cls.interestDay = cls.interestDay || "Fri";
   cls.lastInterestRun = cls.lastInterestRun || null;

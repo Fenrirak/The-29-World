@@ -2,20 +2,20 @@ let CURRENT, IS_TEACHER;
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("vault", 26) + " Loans";
-  document.getElementById("hSettings").innerHTML = icon("vault", 18) + " Loan settings";
+  document.getElementById("pageTitle").innerHTML = icon("handshake", 26) + " Loans";
+  document.getElementById("hSettings").innerHTML = icon("handshake", 18) + " Loan settings";
   document.getElementById("addTierBtn").innerHTML = icon("plus", 15) + " Add loan range";
   document.getElementById("labTierMin").innerHTML = icon("coin", 13) + " Minimum amount";
   document.getElementById("labTierMax").innerHTML = icon("coin", 13) + " Maximum amount";
   document.getElementById("labTierTerm").innerHTML = icon("calendar", 13) + " Term (weeks)";
   document.getElementById("labTierRate").innerHTML = icon("percent", 13) + " Interest rate (% of the loan, charged once)";
-  document.getElementById("labMaxLoan").innerHTML = icon("vault", 13) + " Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
+  document.getElementById("labMaxLoan").innerHTML = icon("handshake", 13) + " Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
   document.getElementById("saveMaxLoanBtn").innerHTML = icon("plus", 13) + " Save maximum";
-  document.getElementById("hTake").innerHTML = icon("vault", 18) + " Take out a loan";
+  document.getElementById("hTake").innerHTML = icon("handshake", 18) + " Take out a loan";
   document.getElementById("labLoanAmount").innerHTML = icon("coin", 13) + " How much do you want to borrow?";
   document.getElementById("takeLoanBtn").innerHTML = icon("send", 15) + " Borrow";
-  document.getElementById("hMyLoan").innerHTML = icon("vault", 18) + " My loan";
-  document.getElementById("hPastLoans").innerHTML = icon("vault", 18) + " Loan history";
+  document.getElementById("hMyLoan").innerHTML = icon("handshake", 18) + " My loan";
+  document.getElementById("hPastLoans").innerHTML = icon("handshake", 18) + " Loan history";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -52,7 +52,7 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${icon("vault", 20)}${fmtMoney(t.min)} — ${fmtMoney(t.max)}</h4>
+            <h4>${icon("handshake", 20)}${fmtMoney(t.min)} — ${fmtMoney(t.max)}</h4>
             <p>${termLabel(t.termWeeks)} term &middot; <strong>${t.rate}%</strong> interest (charged once, on the whole loan)</p>
           </div>
           <div>

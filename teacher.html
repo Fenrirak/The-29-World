@@ -14,7 +14,7 @@
     <a href="teacher.html" class="active"><span class="icon-slot" data-icon="bank"></span><span class="nav-label">Dashboard</span></a>
     <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
     <a href="termdeposit.html"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
-    <a href="loan.html"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Loans</span></a>
+    <a href="loan.html"><span class="icon-slot" data-icon="handshake"></span><span class="nav-label">Loans</span></a>
     <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
     <a href="store.html"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
     <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
@@ -164,7 +164,9 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
     </div>
     <label for="rate" id="labRate">Savings interest rate (% applied each time interest runs)</label>
     <input id="rate" type="number" min="0" max="20" step="0.1" style="max-width:160px;">
-    <p class="muted-small">This only applies to money students have put into their <strong>Savings Account</strong> on the Bank page — not their everyday cash balance. Loan settings live on the new Loans page.</p>
+    <label for="cashRate" id="labCashRate">Cash balance interest rate (% applied each time interest runs)</label>
+    <input id="cashRate" type="number" min="0" max="20" step="0.1" style="max-width:160px;">
+    <p class="muted-small">Set these separately — e.g. reward saving with a higher Savings rate, or set the cash rate to 0 (default) so only money moved into Savings earns anything. Loan settings live on the new Loans page.</p>
     <button class="btn secondary small" style="margin-top:12px;" onclick="saveRate()" id="saveRateBtn">Save rate</button>
 
     <div style="margin-top:20px;">

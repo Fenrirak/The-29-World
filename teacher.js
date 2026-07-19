@@ -31,6 +31,7 @@ function paintChrome() {
   document.getElementById("labAdjNote").innerHTML = icon("star", 13) + " Reason";
   document.getElementById("applyAdjBtn").innerHTML = icon("send", 15) + " Apply";
   document.getElementById("labRate").innerHTML = icon("piggy", 13) + " Savings interest rate (%)";
+  document.getElementById("labCashRate").innerHTML = icon("coin", 13) + " Cash balance interest rate (%)";
   document.getElementById("saveRateBtn").innerHTML = icon("bank", 14) + " Save rate";
   document.getElementById("labInterestFreq").innerHTML = icon("repeat", 13) + " How often";
   document.getElementById("labInterestDay").innerHTML = icon("calendar", 13) + " On which day";
@@ -82,6 +83,7 @@ async function render() {
   document.getElementById("className").textContent = cls.name;
   document.getElementById("classCode").textContent = cls.code;
   document.getElementById("rate").value = cls.interestRate;
+  document.getElementById("cashRate").value = cls.cashInterestRate || 0;
   document.getElementById("interestAuto").checked = !!cls.interestAuto;
   document.getElementById("interestFreq").value = cls.interestFrequency || "weekly";
   document.getElementById("interestDay").value = cls.interestDay || "Fri";
@@ -504,12 +506,13 @@ async function runWeeklyEventsNow() {
   }
 }
 async function saveRate() {
-  await classesColUpdateRate(Number(document.getElementById("rate").value));
+  await classesColUpdateRate(Number(document.getElementById("rate").value), Number(document.getElementById("cashRate").value));
   await render();
 }
 async function saveInterestAuto() {
   await saveInterestSettings(CLASS_CODE, {
     rate: document.getElementById("rate").value,
+    cashRate: document.getElementById("cashRate").value,
     auto: document.getElementById("interestAuto").checked,
     frequency: document.getElementById("interestFreq").value,
     day: document.getElementById("interestDay").value
@@ -523,8 +526,8 @@ document.addEventListener("change", (e) => {
   }
 });
 
-async function classesColUpdateRate(rate) {
-  await fdb.collection("classes").doc(CLASS_CODE).update({ interestRate: rate });
+async function classesColUpdateRate(rate, cashRate) {
+  await fdb.collection("classes").doc(CLASS_CODE).update({ interestRate: rate, cashInterestRate: cashRate });
 }
 async function savePayDay() {
   await setPayDay(CLASS_CODE, document.getElementById("payDaySelect").value);

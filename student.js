@@ -4,7 +4,8 @@ function badgeType(type) {
   const map = {
     welcome: ["navy", "star", "Welcome"],
     wage: ["mint", "briefcase", "Wage"],
-    interest: ["gold", "piggy", "Interest"],
+    interest: ["gold", "piggy", "Savings interest"],
+    "cash-interest": ["gold", "coin", "Cash interest"],
     bonus: ["mint", "star", "Bonus"],
     fine: ["coral", "coin", "Fine"],
     transfer: ["navy", "send", "Transfer"],
@@ -160,7 +161,7 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim"].includes(t.type)) { sign = "+"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim"].includes(t.type)) { sign = "+"; }
     else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment"].includes(t.type)) { sign = "-"; }
     else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
     else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
