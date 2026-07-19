@@ -2004,8 +2004,23 @@ async function resolveChoiceEvent(username, classCode, logId, optionId) {
       const cls = withNewModuleDefaults(classSnap.data());
       const entry = (cls.eventLog || []).find(e => e.id === logId && e.studentUser === username && e.status === "pending");
       if (!entry) throw new Error("NOT_FOUND");
-      const option = (entry.options || []).find(o => o.id === optionId);
+      let option = (entry.options || []).find(o => o.id === optionId);
       if (!option) throw new Error("NOT_FOUND");
+
+      // The entry's options are a snapshot taken when it was assigned —
+      // if the teacher has since fixed/edited the event definition (e.g.
+      // correcting an amount that had been saved as 0), that snapshot is
+      // stale. Prefer the live definition's amount for this option when
+      // we can confidently match it up (by id, or failing that by label),
+      // so a teacher's fix actually takes effect for events already
+      // sitting in a student's queue instead of only future assignments.
+      const liveDef = (cls.eventDefs || []).find(d => d.id === entry.eventId);
+      if (liveDef && liveDef.options) {
+        const liveOption = liveDef.options.find(o => o.id === option.id)
+          || liveDef.options.find(o => o.label.trim().toLowerCase() === option.label.trim().toLowerCase());
+        if (liveOption) option = liveOption;
+      }
+
       amount = option.amount;
       outcome = option.outcome || "";
       entry.status = "resolved";
