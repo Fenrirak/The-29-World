@@ -13,9 +13,14 @@ function paintChrome() {
   document.getElementById("hAutoList").innerHTML = icon("repeat", 18) + " My automatic payments";
   document.getElementById("hActivity").innerHTML = icon("bank", 18) + " My recent activity";
   document.getElementById("labTo").innerHTML = icon("users", 13) + " Send to";
-  document.getElementById("labAmount").innerHTML = icon("coin", 13) + " Amount";
+  document.getElementById("labAmount").innerHTML = icon("coin", 13) + (IS_TEACHER ? " Amount (negative to deduct from a student)" : " Amount");
   document.getElementById("labNote").innerHTML = icon("star", 13) + " What's it for?";
   document.getElementById("sendBtn").innerHTML = icon("send", 15) + " Send";
+  if (IS_TEACHER) {
+    const amtInput = document.getElementById("amount");
+    amtInput.removeAttribute("min");
+    amtInput.step = "0.01";
+  }
   document.getElementById("labAutoDay").innerHTML = icon("calendar", 13) + " Day of the week";
   document.getElementById("labAutoFreq").innerHTML = icon("repeat", 13) + " How often";
   document.getElementById("labAutoAmount").innerHTML = icon("coin", 13) + " Amount";
@@ -167,9 +172,22 @@ async function sendMoney(e) {
   const note = document.getElementById("note").value.trim();
   const box = document.getElementById("sendMsg");
   if (!to) { box.innerHTML = `<div class="error-msg">There's no one to send money to yet.</div>`; return false; }
-  const res = await transferMoney(CURRENT.username, to, amount, note);
+  if (Number.isNaN(amount) || amount === 0) { box.innerHTML = `<div class="error-msg">Enter an amount.</div>`; return false; }
+  if (!IS_TEACHER && amount < 0) { box.innerHTML = `<div class="error-msg">Enter an amount greater than zero.</div>`; return false; }
+
+  // A teacher entering a negative amount is deducting from the student,
+  // not "sending" them money — there's no one to credit it to on the
+  // teacher's side (their balance is unlimited), so this goes through the
+  // same balance-adjustment path as the "Give a bonus or fine" tool
+  // instead of the peer-to-peer transfer path.
+  const res = (IS_TEACHER && amount < 0)
+    ? await teacherAdjust(CURRENT.username, to, amount, note)
+    : await transferMoney(CURRENT.username, to, amount, note);
+
   if (res.ok) {
-    box.innerHTML = `<div class="success-msg">Sent ${fmtMoney(amount)}!</div>`;
+    box.innerHTML = amount < 0
+      ? `<div class="success-msg">Deducted ${fmtMoney(Math.abs(amount))}.</div>`
+      : `<div class="success-msg">Sent ${fmtMoney(amount)}!</div>`;
     document.getElementById("amount").value = "";
     document.getElementById("note").value = "";
   } else {
