@@ -11,7 +11,7 @@ function paintChrome() {
   document.getElementById("hSend").innerHTML = icon("send", 18) + " Send money";
   document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Set up an automatic payment";
   document.getElementById("hAutoList").innerHTML = icon("repeat", 18) + " My automatic payments";
-  document.getElementById("hActivity").innerHTML = icon("bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 5 days)");
+  document.getElementById("hActivity").innerHTML = icon("bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 3 days)");
   document.getElementById("labTo").innerHTML = icon("users", 13) + " Send to";
   document.getElementById("labAmount").innerHTML = icon("coin", 13) + (IS_TEACHER ? " Amount (negative to deduct from a student)" : " Amount");
   document.getElementById("labNote").innerHTML = icon("star", 13) + " What's it for?";
@@ -104,13 +104,14 @@ async function render() {
     listBox.appendChild(row);
   }
 
-  // txns — students see the last 5 days only; the teacher's own bank
+  // txns — students see the last 3 days only; the teacher's own bank
   // activity (rare, since their balance is unlimited) keeps full history.
-  const activityCutoff = Date.now() - 5 * 24 * 3600 * 1000;
+  const activityCutoff = Date.now() - 3 * 24 * 3600 * 1000;
   const my = cls.txns
     .filter(t => t.to === me.username || t.from === me.username)
     .filter(t => IS_TEACHER || t.ts === undefined || t.ts >= activityCutoff)
     .slice(0, IS_TEACHER ? 30 : 200);
+  document.getElementById("noTxns").classList.toggle("hidden", IS_TEACHER || my.length > 0);
   const tbody = document.getElementById("txnTable");
   tbody.innerHTML = "";
   const allStudents = await getClassStudents(me.classCode);

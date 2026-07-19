@@ -45,7 +45,7 @@ function paintChrome() {
   document.getElementById("hBank").innerHTML = icon("bank", 18) + " Bank account";
   document.getElementById("hClassmates").innerHTML = icon("users", 18) + " My classmates";
   document.getElementById("hMarket").innerHTML = icon("chart", 18) + " Market snapshot";
-  document.getElementById("hActivity").innerHTML = icon("bank", 18) + " My recent activity (last 5 days)";
+  document.getElementById("hActivity").innerHTML = icon("bank", 18) + " My recent activity (last 3 days)";
   document.getElementById("bankLink").innerHTML = icon("piggy", 14) + " Go to Bank";
   document.getElementById("marketLink").innerHTML = icon("chart", 14) + " Go to Stock Market";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
@@ -135,13 +135,14 @@ async function render() {
     mbody.appendChild(tr);
   });
 
-  // my transactions — last 5 days only (txns carry a raw "ts" epoch-ms
+  // my transactions — last 3 days only (txns carry a raw "ts" epoch-ms
   // alongside the display "date" string; very old entries from before
   // "ts" existed don't have one, so those are kept rather than hidden).
-  const activityCutoff = Date.now() - 5 * 24 * 3600 * 1000;
+  const activityCutoff = Date.now() - 3 * 24 * 3600 * 1000;
   const my = cls.txns
     .filter(t => (t.to === me.username || t.from === me.username) && (t.ts === undefined || t.ts >= activityCutoff))
     .slice(0, 200);
+  document.getElementById("noTxns").classList.toggle("hidden", my.length > 0);
   const tbody = document.getElementById("txnTable");
   tbody.innerHTML = "";
   const nameCache = {};
