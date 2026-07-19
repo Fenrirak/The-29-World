@@ -15,6 +15,7 @@
     <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
     <a href="bank.html" class="active"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
     <a href="termdeposit.html"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
+    <a href="loan.html"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Loans</span></a>
     <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
     <a href="store.html"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
     <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
@@ -43,6 +44,36 @@
       <div class="label">Active automatic payments</div>
       <div class="value" id="autoCount">0</div>
     </div>
+  </div>
+
+  <div class="card" id="savingsCard">
+    <h2 id="hSavings">Savings account</h2>
+    <p id="savingsRateNote">Money in here earns interest whenever your teacher applies it — it doesn't earn anything sitting in your cash balance.</p>
+    <div class="grid grid-2">
+      <div class="stat mint">
+        <span class="icon" id="iconSavings"></span>
+        <div class="label">Savings balance</div>
+        <div class="value" id="savingsBalance">$0.00</div>
+      </div>
+      <div class="stat sky">
+        <span class="icon" id="iconSavingsRate"></span>
+        <div class="label">Current interest rate</div>
+        <div class="value" id="savingsRateValue">0%</div>
+      </div>
+    </div>
+    <div class="grid grid-2" style="margin-top:14px;">
+      <form onsubmit="return depositSavings(event)">
+        <label for="depositAmount" id="labDeposit">Deposit into savings</label>
+        <input id="depositAmount" type="number" min="0.01" step="0.01" required>
+        <button class="btn gold" type="submit" id="depositBtn">Deposit</button>
+      </form>
+      <form onsubmit="return withdrawSavings(event)">
+        <label for="withdrawAmount" id="labWithdraw">Withdraw back to cash</label>
+        <input id="withdrawAmount" type="number" min="0.01" step="0.01" required>
+        <button class="btn secondary" type="submit" id="withdrawBtn">Withdraw</button>
+      </form>
+    </div>
+    <div id="savingsMsg"></div>
   </div>
 
   <div class="grid grid-2">

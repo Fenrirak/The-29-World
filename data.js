@@ -165,7 +165,7 @@ async function createStudentAccount(name, username, password, classCode) {
 
       const user = {
         username, password, role: "student", name,
-        classCode, balance: 20, jobId: null
+        classCode, balance: 20, jobId: null, savings: 0, loans: []
       };
       t.set(usersCol().doc(username), user);
 
@@ -445,15 +445,212 @@ async function applyInterest(classCode) {
   const students = await getClassStudents(classCode);
   let count = 0;
   for (const student of students) {
-    const interest = Math.round(student.balance * rate * 100) / 100;
+    // Interest only applies to money sitting in the Savings Account, not
+    // the student's everyday cash balance — that's the whole point of a
+    // savings account. Deposit/withdraw between the two on the Bank page.
+    const savings = student.savings || 0;
+    const interest = Math.round(savings * rate * 100) / 100;
     if (interest > 0) {
       const { net, taxAmount } = applyTaxToIncome(cls, "interest", interest);
-      await adjustBalance(student.username, net);
-      await logTxn(classCode, { type: "interest", to: student.username, amount: net, note: "Savings interest" + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
+      await adjustSavings(student.username, net);
+      await logTxn(classCode, { type: "interest", to: student.username, amount: net, note: "Savings account interest" + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
       count++;
     }
   }
   return count;
+}
+
+async function adjustSavings(username, delta) {
+  const userRef = usersCol().doc(username);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(userRef);
+    if (!snap.exists) return;
+    const user = snap.data();
+    const newSavings = Math.round(((user.savings || 0) + delta) * 100) / 100;
+    t.update(userRef, { savings: newSavings });
+  });
+}
+
+// Moves money from cash balance into the interest-earning Savings Account.
+async function depositToSavings(username, amount) {
+  amount = Number(amount);
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const user = snap.data();
+      if (amount <= 0) throw new Error("BAD_AMOUNT");
+      if (user.balance < amount) throw new Error("BROKE");
+      t.update(userRef, {
+        balance: Math.round((user.balance - amount) * 100) / 100,
+        savings: Math.round(((user.savings || 0) + amount) * 100) / 100
+      });
+    });
+  } catch (e) {
+    if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than zero." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for that." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  const user = await getUser(username);
+  if (user) await logTxn(user.classCode, { type: "savings-deposit", from: username, amount, note: "Deposited into Savings Account" });
+  return { ok: true };
+}
+
+// Moves money back out of the Savings Account into cash balance.
+async function withdrawFromSavings(username, amount) {
+  amount = Number(amount);
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const user = snap.data();
+      if (amount <= 0) throw new Error("BAD_AMOUNT");
+      if ((user.savings || 0) < amount) throw new Error("BROKE");
+      t.update(userRef, {
+        balance: Math.round((user.balance + amount) * 100) / 100,
+        savings: Math.round(((user.savings || 0) - amount) * 100) / 100
+      });
+    });
+  } catch (e) {
+    if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than zero." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have that much in savings." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  const user = await getUser(username);
+  if (user) await logTxn(user.classCode, { type: "savings-withdraw", to: username, amount, note: "Withdrew from Savings Account" });
+  return { ok: true };
+}
+
+/* ===================== Loans ===================== */
+async function addLoanTier(classCode, tier) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.loanTiers.push({
+      id: uid("loantier"),
+      min: Math.max(0, Number(tier.min) || 0),
+      max: Math.max(0, Number(tier.max) || 0),
+      termWeeks: Math.max(1, Number(tier.termWeeks) || 1),
+      rate: Math.max(0, Number(tier.rate) || 0),
+      active: true
+    });
+    t.update(classRef, { loanTiers: cls.loanTiers });
+  });
+}
+async function updateLoanTier(classCode, tierId, tier) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const existing = cls.loanTiers.find(x => x.id === tierId);
+    if (!existing) return;
+    existing.min = Math.max(0, Number(tier.min) || 0);
+    existing.max = Math.max(0, Number(tier.max) || 0);
+    existing.termWeeks = Math.max(1, Number(tier.termWeeks) || 1);
+    existing.rate = Math.max(0, Number(tier.rate) || 0);
+    t.update(classRef, { loanTiers: cls.loanTiers });
+  });
+}
+async function removeLoanTier(classCode, tierId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.loanTiers = cls.loanTiers.filter(x => x.id !== tierId);
+    t.update(classRef, { loanTiers: cls.loanTiers });
+  });
+}
+async function setMaxLoanAmount(classCode, amount) {
+  await classesCol().doc(classCode).update({ maxLoanAmount: Math.max(0, Number(amount) || 0) });
+}
+
+// Which tier a requested amount falls into — the teacher's price ranges
+// should be set up so they don't gap or overlap, but if ranges do overlap
+// the first (lowest-set-up) match wins.
+function findLoanTier(cls, amount) {
+  return (cls.loanTiers || []).find(t => t.active && amount >= t.min && amount <= t.max) || null;
+}
+
+async function takeLoan(username, classCode, amount) {
+  amount = Number(amount);
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let tierSnapshot = null, owed = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      if (!(amount > 0)) throw new Error("BAD_AMOUNT");
+      // Keep it simple: one active loan at a time, so a student can't
+      // stack debt without ever having to pay any of it back.
+      const existingLoans = user.loans || [];
+      if (existingLoans.some(l => l.status === "active")) throw new Error("HAS_LOAN");
+      const tier = findLoanTier(cls, amount);
+      if (!tier) throw new Error("NO_TIER");
+      if (cls.maxLoanAmount > 0 && amount > cls.maxLoanAmount) throw new Error("OVER_MAX");
+      const todayKey = nzDateKey();
+      const dueDate = dateKeyPlusDays(todayKey, tier.termWeeks * 7);
+      const interestAmt = Math.round(amount * (tier.rate / 100) * 100) / 100;
+      owed = Math.round((amount + interestAmt) * 100) / 100;
+      tierSnapshot = { id: tier.id, termWeeks: tier.termWeeks, rate: tier.rate };
+      const loan = {
+        id: uid("loan"), tierId: tier.id, principal: amount, rate: tier.rate, termWeeks: tier.termWeeks,
+        interestAmt, owed, takenDate: todayKey, dueDate, status: "active"
+      };
+      user.loans = existingLoans.concat([loan]);
+      t.update(userRef, { balance: Math.round((user.balance + amount) * 100) / 100, loans: user.loans });
+    });
+  } catch (e) {
+    if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than zero." };
+    if (e.message === "HAS_LOAN") return { ok: false, error: "You already have an outstanding loan — pay it off before taking another." };
+    if (e.message === "NO_TIER") return { ok: false, error: "That amount doesn't fall within any of the loan options your teacher has set up." };
+    if (e.message === "OVER_MAX") return { ok: false, error: "That's above the maximum loan amount your teacher allows." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, {
+    type: "loan-taken", to: username, amount,
+    note: `Loan taken — ${fmtMoney(owed)} owed total (${tierSnapshot.rate}% over ${tierSnapshot.termWeeks} week${tierSnapshot.termWeeks === 1 ? "" : "s"})`
+  });
+  return { ok: true, owed };
+}
+
+async function repayLoan(username, loanId, amount) {
+  amount = Number(amount);
+  const userRef = usersCol().doc(username);
+  let paid = 0, fullyPaid = false;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const user = snap.data();
+      if (!(amount > 0)) throw new Error("BAD_AMOUNT");
+      const loans = user.loans || [];
+      const loan = loans.find(l => l.id === loanId && l.status === "active");
+      if (!loan) throw new Error("NOT_FOUND");
+      if (user.balance < amount) throw new Error("BROKE");
+      paid = Math.min(amount, loan.owed);
+      loan.owed = Math.round((loan.owed - paid) * 100) / 100;
+      if (loan.owed <= 0) { loan.owed = 0; loan.status = "paid"; fullyPaid = true; }
+      t.update(userRef, { balance: Math.round((user.balance - amount) * 100) / 100, loans });
+    });
+  } catch (e) {
+    if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than zero." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for that." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That loan couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  const user = await getUser(username);
+  if (user) await logTxn(user.classCode, { type: "loan-repayment", from: username, amount: paid, note: fullyPaid ? "Loan fully repaid" : "Loan repayment" });
+  return { ok: true, fullyPaid };
 }
 
 /* ---------------- Stock market ---------------- */
@@ -1008,10 +1205,12 @@ async function classLeaderboard(classCode) {
   const rows = await Promise.all(students.map(async s => {
     const invested = await portfolioValue(s.username, classCode);
     const storeValue = await storeItemsValue(s.username, classCode);
+    const savings = s.savings || 0;
+    const owed = (s.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0);
     return {
       username: s.username, name: s.name,
-      balance: s.balance, invested, storeValue,
-      net: Math.round((s.balance + invested + storeValue) * 100) / 100
+      balance: s.balance, invested, storeValue, savings, owed,
+      net: Math.round((s.balance + invested + storeValue + savings - owed) * 100) / 100
     };
   }));
   rows.sort((a, b) => b.net - a.net);
@@ -1021,7 +1220,7 @@ async function classLeaderboard(classCode) {
 async function resetClass(classCode) {
   const students = await getClassStudents(classCode);
   await Promise.all(students.map(s => usersCol().doc(s.username).update({
-    balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: []
+    balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: []
   })));
   const cls = await getClass(classCode);
   const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null }));
@@ -1417,6 +1616,8 @@ function withNewModuleDefaults(cls) {
   cls.eventLog = cls.eventLog || [];
   cls.lastEventWeekRun = cls.lastEventWeekRun || null;
   cls.termDepositPlans = cls.termDepositPlans || [];
+  cls.loanTiers = cls.loanTiers || [];
+  cls.maxLoanAmount = cls.maxLoanAmount || 0; // 0 = no extra class-wide cap beyond the tiers themselves
   cls.vehicles = cls.vehicles || [];
   cls.interestAuto = cls.interestAuto || false;
   cls.interestFrequency = cls.interestFrequency || "weekly";
@@ -1881,8 +2082,14 @@ async function processWeeklyEvents(classCode, opts) {
 
   for (const student of students) {
     if (alreadyThisWeek.has(student.username)) continue;
-    const already = new Set(eventLog.filter(l => l.studentUser === student.username).map(l => l.eventId));
-    const pool = activeDefs.filter(e => ignoreAlreadyHad || e.repeatable || !already.has(e.id));
+    const studentEntries = eventLog.filter(l => l.studentUser === student.username);
+    const already = new Set(studentEntries.map(l => l.eventId));
+    // Whatever event this student was assigned most recently (regardless
+    // of week) is excluded from this week's draw even if it's marked
+    // "repeatable" — repeatable just means it can come back around in a
+    // later week, not that the same event can land twice in a row.
+    const lastEventId = studentEntries.length ? studentEntries[studentEntries.length - 1].eventId : null;
+    const pool = activeDefs.filter(e => e.id !== lastEventId && (ignoreAlreadyHad || e.repeatable || !already.has(e.id)));
     if (pool.length === 0) continue;
     const count = Math.min(pool.length, 1);
     const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, count);

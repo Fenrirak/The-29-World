@@ -27,6 +27,13 @@ function paintChrome() {
   document.getElementById("labAutoTo").innerHTML = icon("users", 13) + " Pay to";
   document.getElementById("labAutoNote").innerHTML = icon("star", 13) + " Reference / what's it for?";
   document.getElementById("addAutoBtn").innerHTML = icon("plus", 15) + " Create automatic payment";
+  document.getElementById("hSavings").innerHTML = icon("piggy", 18) + " Savings account";
+  document.getElementById("iconSavings").innerHTML = icon("piggy", 26);
+  document.getElementById("iconSavingsRate").innerHTML = icon("percent", 26);
+  document.getElementById("labDeposit").innerHTML = icon("piggy", 13) + " Deposit into savings";
+  document.getElementById("labWithdraw").innerHTML = icon("send", 13) + " Withdraw back to cash";
+  document.getElementById("depositBtn").innerHTML = icon("plus", 15) + " Deposit";
+  document.getElementById("withdrawBtn").innerHTML = icon("send", 15) + " Withdraw";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -75,6 +82,12 @@ async function render() {
   const cls = await getClass(me.classCode);
 
   document.getElementById("balance").textContent = IS_TEACHER ? "Unlimited ∞" : fmtMoney(me.balance);
+
+  document.getElementById("savingsCard").classList.toggle("hidden", IS_TEACHER);
+  if (!IS_TEACHER) {
+    document.getElementById("savingsBalance").textContent = fmtMoney(me.savings || 0);
+    document.getElementById("savingsRateValue").textContent = (cls.interestRate || 0) + "%";
+  }
 
   const recipients = await payableRecipients();
   const optsHtml = recipients.length
@@ -134,7 +147,9 @@ async function render() {
       "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
       "term-deposit-mature": ["mint", "vault", "Deposit matured"],
       "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
-      "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"]
+      "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
+      "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
+      "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"]
     };
     const [c, ic, label] = map[type] || ["navy", "coin", type];
     return `<span class="badge ${c}">${icon(ic, 12)}${label}</span>`;
@@ -147,7 +162,8 @@ async function render() {
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
     else if (["stock-sell", "stock-close", "wage", "interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "vehicle-buy", "term-deposit-open", "insurance-premium"].includes(t.type)) { sign = "-"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment"].includes(t.type)) { sign = "-"; }
+    else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
     else if (t.type === "property-buy") { sign = "-"; }
 
     let amtDisplay;
@@ -229,6 +245,28 @@ async function removeAuto(id) {
     await removeAutomation(CURRENT.classCode, id);
     await render();
   }
+}
+
+async function depositSavings(e) {
+  e.preventDefault();
+  const amount = Number(document.getElementById("depositAmount").value);
+  const box = document.getElementById("savingsMsg");
+  const res = await depositToSavings(CURRENT.username, amount);
+  box.innerHTML = res.ok ? `<div class="success-msg">Deposited ${fmtMoney(amount)} into savings!</div>` : `<div class="error-msg">${res.error}</div>`;
+  if (res.ok) document.getElementById("depositAmount").value = "";
+  await render();
+  return false;
+}
+
+async function withdrawSavings(e) {
+  e.preventDefault();
+  const amount = Number(document.getElementById("withdrawAmount").value);
+  const box = document.getElementById("savingsMsg");
+  const res = await withdrawFromSavings(CURRENT.username, amount);
+  box.innerHTML = res.ok ? `<div class="success-msg">Withdrew ${fmtMoney(amount)} back to cash.</div>` : `<div class="error-msg">${res.error}</div>`;
+  if (res.ok) document.getElementById("withdrawAmount").value = "";
+  await render();
+  return false;
 }
 
 document.addEventListener("DOMContentLoaded", init);

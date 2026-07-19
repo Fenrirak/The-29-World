@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loans — The 29 World</title>
+<link rel="icon" type="image/png" href="Favicon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="loan.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
+    <a href="bank.html"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="termdeposit.html"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
+    <a href="loan.html" class="active"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Loans</span></a>
+    <a href="market.html"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="store.html"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
+    <a href="jobs.html"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <a href="transport.html"><span class="icon-slot" data-icon="car"></span><span class="nav-label">Transport</span></a>
+    <a href="property.html"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
+    <a href="insurance.html"><span class="icon-slot" data-icon="shield"></span><span class="nav-label">Insurance</span></a>
+    <a href="tax.html"><span class="icon-slot" data-icon="percent"></span><span class="nav-label">Tax</span></a>
+    <a href="bigevents.html"><span class="icon-slot" data-icon="star"></span><span class="nav-label">Big Events</span></a>
+    <a href="gambling.html"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
+    <span class="who" id="whoami"></span>
+    <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+  </nav>
+</div>
+
+<main>
+  <h1 id="pageTitle">Loans</h1>
+  <p>Borrow against your future income — pick an amount, see the term and interest up front, and pay it back whenever you like before (or after) it's due.</p>
+
+  <div id="teacherPanel" class="card hidden">
+    <h2 id="hSettings">Loan settings</h2>
+    <p>Set up price ranges — each one has its own term length and interest rate. A student picks an amount, and whichever range it falls into decides their terms.</p>
+    <div id="tierList"></div>
+    <p class="muted-small" id="noTiers">No loan ranges set up yet — students won't be able to borrow until you add at least one.</p>
+
+    <form onsubmit="return addTier(event)" style="margin-top:16px;">
+      <div class="grid grid-3">
+        <div>
+          <label for="tierMin" id="labTierMin">Minimum amount</label>
+          <input id="tierMin" type="number" min="0" step="0.5" required>
+        </div>
+        <div>
+          <label for="tierMax" id="labTierMax">Maximum amount</label>
+          <input id="tierMax" type="number" min="0" step="0.5" required>
+        </div>
+        <div>
+          <label for="tierTerm" id="labTierTerm">Term (weeks)</label>
+          <input id="tierTerm" type="number" min="1" step="1" required>
+        </div>
+      </div>
+      <label for="tierRate" id="labTierRate">Interest rate (% of the loan, charged once)</label>
+      <input id="tierRate" type="number" min="0" step="0.5" style="max-width:200px;" required>
+      <button class="btn gold" type="submit" id="addTierBtn">Add loan range</button>
+    </form>
+    <div id="tierMsg"></div>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1.5px solid var(--line);">
+      <label for="maxLoanInput" id="labMaxLoan">Overall maximum loan amount (0 = no extra cap beyond the ranges above)</label>
+      <input id="maxLoanInput" type="number" min="0" step="0.5" style="max-width:200px;">
+      <button class="btn secondary small" style="margin-top:10px;" onclick="saveMaxLoan()" id="saveMaxLoanBtn">Save maximum</button>
+      <div id="maxLoanMsg"></div>
+    </div>
+  </div>
+
+  <div id="studentPanel" class="grid grid-2 hidden">
+    <div class="card">
+      <h2 id="hTake">Take out a loan</h2>
+      <div id="loanOptionsList"></div>
+      <p class="muted-small" id="noTiersStudent">Your teacher hasn't set up any loan options yet.</p>
+      <form onsubmit="return takeLoanForm(event)" style="margin-top:12px;">
+        <label for="loanAmount" id="labLoanAmount">How much do you want to borrow?</label>
+        <input id="loanAmount" type="number" min="0.01" step="0.01" required>
+        <div id="loanPreview" class="muted-small"></div>
+        <button class="btn gold" type="submit" id="takeLoanBtn">Borrow</button>
+      </form>
+      <div id="takeLoanMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="hMyLoan">My loan</h2>
+      <div id="myLoanBox"></div>
+      <p class="muted-small" id="noLoan">You don't have any loan out right now.</p>
+    </div>
+  </div>
+
+  <div class="card hidden" id="pastLoansCard">
+    <h2 id="hPastLoans">Loan history</h2>
+    <div id="pastLoansList"></div>
+  </div>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script src="icons.js"></script>
+<script src="data.js"></script>
+<script src="events-ui.js"></script>
+<script src="loan.js"></script>
+</body>
+</html>
