@@ -401,18 +401,29 @@ label .icon-slot{color:var(--navy-700);}
    horizontally instead of ever wrapping. Gated on max-height so this never
    fires for portrait mode (which is always much taller than wide) or for
    normal desktop/laptop screens (which are wide AND tall). */
-/* Landscape mode, any device/width — keep the whole topbar to one line by
-   going icon-only and, as a safety net for narrower landscape widths,
-   letting it scroll horizontally instead of ever wrapping. Gated purely
-   on orientation so portrait mode is completely untouched. */
+/* Landscape mode, wider screens — keep the text labels (don't switch to
+   icon-only) but trim font size, icon size, padding and gaps just enough
+   to fit everything on one line. overflow-x:auto stays as a safety net
+   in case a particular device is still a little too narrow for this. */
 @media (orientation: landscape){
-  .topbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 14px;}
-  .topbar nav{flex-wrap:nowrap;row-gap:0;}
+  .topbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 12px;gap:6px;}
+  .topbar nav{flex-wrap:nowrap;row-gap:0;gap:1px;}
   .brand{font-size:1rem;flex-shrink:0;white-space:nowrap;}
+  .topbar nav a{flex-shrink:0;padding:7px 8px;font-size:.78rem;gap:5px;min-height:34px;white-space:nowrap;}
+  .topbar nav a .icon{width:14px;height:14px;}
+  .topbar .who{flex-shrink:0;font-size:.78rem;padding-left:10px;margin-left:2px;}
+  .btn-logout{flex-shrink:0;padding:7px 10px;font-size:.78rem;gap:5px;}
+  .btn-logout .icon{width:13px;height:13px;}
+}
+
+/* Landscape mode, narrower widths (phones) — shrinking alone isn't enough
+   room for full text labels, so fall back to icon-only + horizontal
+   scroll here, same as before. */
+@media (orientation: landscape) and (max-width: 700px){
   .topbar .who{display:none;}
-  .topbar nav a{flex-shrink:0;padding:8px;min-width:36px;justify-content:center;min-height:34px;}
+  .topbar nav a{padding:8px;min-width:36px;justify-content:center;}
   .topbar nav a .nav-label{display:none;}
-  .btn-logout{flex-shrink:0;padding:8px;min-width:36px;justify-content:center;}
+  .btn-logout{padding:8px;min-width:36px;justify-content:center;}
   .btn-logout .nav-label{display:none;}
 }
 
