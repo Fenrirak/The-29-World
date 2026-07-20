@@ -75,7 +75,7 @@ p{color:var(--muted);line-height:1.5;}
   color:var(--gold);
   filter:drop-shadow(0 3px 6px rgba(232,184,75,0.35));
 }
-.topbar nav{display:flex;gap:4px;align-items:center;flex-wrap:wrap;row-gap:6px;}
+.topbar nav{display:flex;gap:9px;align-items:center;flex-wrap:wrap;row-gap:6px;}
 .topbar nav a{
   color:#cfd8ea;text-decoration:none;font-weight:600;font-size:.9rem;
   display:inline-flex;align-items:center;gap:6px;
@@ -408,7 +408,7 @@ label .icon-slot{color:var(--navy-700);}
    in case a particular device is still a little too narrow for this. */
 @media (orientation: landscape){
   .topbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 12px;gap:6px;}
-  .topbar nav{flex-wrap:nowrap;row-gap:0;gap:1px;}
+  .topbar nav{flex-wrap:nowrap;row-gap:0;gap:5px;}
   .brand{font-size:1rem;flex-shrink:0;white-space:nowrap;}
   .topbar nav a{flex-shrink:0;padding:7px 8px;font-size:.83rem;gap:5px;min-height:34px;white-space:nowrap;}
   .topbar nav a .icon{width:14px;height:14px;}
