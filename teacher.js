@@ -75,6 +75,7 @@ async function init() {
   await processWeeklyBigEvents(CLASS_CODE);
   await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
   await checkBigEventPopup(CURRENT.username, CLASS_CODE);
+  await checkAdjustmentPopup(CURRENT.username, CLASS_CODE);
   await render();
 }
 

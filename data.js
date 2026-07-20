@@ -254,9 +254,24 @@ async function teacherAdjust(teacherUser, studentUser, amount, note, kind) {
   await adjustBalance(studentUser, amount);
   await logTxn(student.classCode, {
     type: kind || (amount >= 0 ? "bonus" : "fine"),
-    from: teacherUser, to: studentUser, amount: Math.abs(amount), note: note || ""
+    from: teacherUser, to: studentUser, amount: Math.abs(amount), note: note || "",
+    announce: true, acknowledged: false
   });
   return { ok: true };
+}
+
+// Marks a bonus/fine txn as seen so its one-time popup doesn't show again.
+async function acknowledgeTxn(classCode, txnId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = snap.data();
+    const txn = (cls.txns || []).find(x => x.id === txnId);
+    if (!txn) return;
+    txn.acknowledged = true;
+    t.update(classRef, { txns: cls.txns });
+  });
 }
 
 /* ---------------- Jobs ---------------- */

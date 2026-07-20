@@ -33,7 +33,7 @@ function saveShownEventState(username, state) {
 
 async function checkWeeklyEventPopup(username, classCode) {
   if (!username || !classCode) return;
-  if (document.getElementById("anwEventModal") || document.getElementById("anwChoiceEventModal") || document.getElementById("anwBigEventModal")) return; // something's already showing
+  if (anyModalShowing()) return; // something's already showing
   let cls = await getClass(classCode);
   const user = await getUser(username);
   if (!cls || !user) return;
@@ -201,6 +201,47 @@ async function claimFromPopup(eventLogId, username, classCode, btn) {
   }
 }
 
+/* ===================== Bonus / fine popup =====================
+   When a teacher gives a bonus or fine from the dashboard, the student
+   gets a one-time popup (like a good big event) showing the reason and
+   the amount, instead of just quietly finding it in their activity feed. */
+function anyModalShowing() {
+  return !!(document.getElementById("anwEventModal") || document.getElementById("anwChoiceEventModal")
+    || document.getElementById("anwBigEventModal") || document.getElementById("anwGoodBigEventModal")
+    || document.getElementById("anwAdjustmentModal"));
+}
+
+async function checkAdjustmentPopup(username, classCode) {
+  if (!username || !classCode) return;
+  if (anyModalShowing()) return;
+  const cls = await getClass(classCode);
+  if (!cls) return;
+  const pending = (cls.txns || []).find(t => t.announce && !t.acknowledged && t.to === username && (t.type === "bonus" || t.type === "fine"));
+  if (!pending) return;
+
+  showAdjustmentPopup(pending);
+  await acknowledgeTxn(classCode, pending.id);
+}
+
+function showAdjustmentPopup(txn) {
+  const overlay = document.createElement("div");
+  overlay.id = "anwAdjustmentModal";
+  overlay.className = "anw-modal-overlay";
+
+  const isBonus = txn.type === "bonus";
+  overlay.innerHTML = `
+    <div class="anw-modal-card">
+      <h2 style="display:flex;align-items:center;gap:9px;">${icon(isBonus ? "star" : "coin", 24)} ${isBonus ? "You got a bonus!" : "You got a fine"}</h2>
+      ${txn.note ? `<p>${txn.note}</p>` : ""}
+      <p class="${isBonus ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;font-size:1.2em;">${isBonus ? "+" : "-"}${fmtMoney(txn.amount)}</p>
+      <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwAdjustmentCloseBtn">Nice, got it</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById("anwAdjustmentCloseBtn").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
 /* ===================== Big event popup =====================
    Unlike small weekly events, big events must be resolved — the modal has
    no close button and clicking outside doesn't dismiss it. It reappears on
@@ -225,7 +266,7 @@ function saveShownBigEventState(username, state) {
 
 async function checkBigEventPopup(username, classCode) {
   if (!username || !classCode) return;
-  if (document.getElementById("anwBigEventModal") || document.getElementById("anwGoodBigEventModal")) return; // something's already showing
+  if (anyModalShowing()) return; // something's already showing
   const cls = await getClass(classCode);
   if (!cls) return;
 
