@@ -401,7 +401,11 @@ label .icon-slot{color:var(--navy-700);}
    horizontally instead of ever wrapping. Gated on max-height so this never
    fires for portrait mode (which is always much taller than wide) or for
    normal desktop/laptop screens (which are wide AND tall). */
-@media (orientation: landscape) and (max-height: 500px){
+/* Landscape mode, any device/width — keep the whole topbar to one line by
+   going icon-only and, as a safety net for narrower landscape widths,
+   letting it scroll horizontally instead of ever wrapping. Gated purely
+   on orientation so portrait mode is completely untouched. */
+@media (orientation: landscape){
   .topbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 14px;}
   .topbar nav{flex-wrap:nowrap;row-gap:0;}
   .brand{font-size:1rem;flex-shrink:0;white-space:nowrap;}
