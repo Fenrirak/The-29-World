@@ -110,13 +110,13 @@ async function deleteVeh(id) {
 }
 async function forceSell(id) {
   if (confirm("Sell this vehicle back to the class (owner gets 90% of price)?")) {
-    await sellVehicle(CURRENT.classCode, id);
+    await sellVehicle(CURRENT.classCode, id, 0.9);
     await render();
   }
 }
 async function sellMine(id) {
-  if (confirm("Sell your vehicle back for 90% of its price?")) {
-    await sellVehicle(CURRENT.classCode, id);
+  if (confirm("Sell your vehicle back for 85% of its price?")) {
+    await sellVehicle(CURRENT.classCode, id, 0.85);
     await render();
   }
 }

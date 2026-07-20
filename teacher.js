@@ -258,6 +258,11 @@ function describeTxn(t, nameOf) {
     case "big-event": return `${nameOf(t.to || t.from)} — ${t.note}`;
     case "insurance-claim": return `${nameOf(t.to)} — ${t.note}`;
     case "insurance-premium": return `${nameOf(t.from)} — ${t.note}`;
+    case "cash-interest": return `${nameOf(t.to)} — ${t.note}`;
+    case "savings-deposit": return `${nameOf(t.from)} — ${t.note || "Deposited into Savings Account"}`;
+    case "savings-withdraw": return `${nameOf(t.to)} — ${t.note || "Withdrew from Savings Account"}`;
+    case "loan-taken": return `${nameOf(t.to)} — ${t.note}`;
+    case "loan-repayment": return `${nameOf(t.from)} — ${t.note}`;
     default: return t.note || "";
   }
 }
@@ -285,7 +290,10 @@ function badge(type) {
     "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
     "term-deposit-mature": ["mint", "vault", "Deposit matured"],
     "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
-    "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"]
+    "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
+    "cash-interest": ["gold", "coin", "Cash interest"],
+    "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
+    "loan-taken": ["navy", "handshake", "Loan"], "loan-repayment": ["mint", "handshake", "Loan repayment"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;

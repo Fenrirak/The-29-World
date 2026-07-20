@@ -395,6 +395,23 @@ label .icon-slot{color:var(--navy-700);}
   .class-code-pill{font-size:.95rem;padding:8px 12px;}
 }
 
+/* Landscape phones/tablets specifically (short viewport height, regardless
+   of width) — keep the whole topbar to one line by going icon-only and,
+   as a safety net for narrower landscape widths, letting it scroll
+   horizontally instead of ever wrapping. Gated on max-height so this never
+   fires for portrait mode (which is always much taller than wide) or for
+   normal desktop/laptop screens (which are wide AND tall). */
+@media (orientation: landscape) and (max-height: 500px){
+  .topbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 14px;}
+  .topbar nav{flex-wrap:nowrap;row-gap:0;}
+  .brand{font-size:1rem;flex-shrink:0;white-space:nowrap;}
+  .topbar .who{display:none;}
+  .topbar nav a{flex-shrink:0;padding:8px;min-width:36px;justify-content:center;min-height:34px;}
+  .topbar nav a .nav-label{display:none;}
+  .btn-logout{flex-shrink:0;padding:8px;min-width:36px;justify-content:center;}
+  .btn-logout .nav-label{display:none;}
+}
+
 /* ---------------- Random event popup ---------------- */
 .anw-modal-overlay{
   position:fixed;inset:0;background:rgba(31,43,68,0.55);

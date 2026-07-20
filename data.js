@@ -1102,7 +1102,7 @@ async function buyVehicle(username, classCode, vehId) {
   await logTxn(classCode, { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
 }
-async function sellVehicle(classCode, vehId) {
+async function sellVehicle(classCode, vehId, rate) {
   const classRef = classesCol().doc(classCode);
   let owner = null, payout = 0, vehName = "";
   await fdb.runTransaction(async (t) => {
@@ -1113,7 +1113,7 @@ async function sellVehicle(classCode, vehId) {
     if (!veh || !veh.owner) return;
     owner = veh.owner;
     vehName = veh.name;
-    payout = Math.round(veh.price * 0.9 * 100) / 100;
+    payout = Math.round(veh.price * (rate !== undefined ? rate : 0.9) * 100) / 100;
     veh.owner = null;
     t.update(classRef, { vehicles: cls.vehicles });
   });
