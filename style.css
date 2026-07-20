@@ -478,7 +478,12 @@ label .icon-slot{color:var(--navy-700);}
 @media(max-width:640px){.number-zero,.number-cell{width:30px;height:30px;font-size:.75rem;}.number-grid{grid-auto-columns:30px;}}
 
 /* ---------------- Roulette wheel spin animation ---------------- */
-.wheel-stage{position:relative;width:392px;height:392px;margin:24px auto 8px;max-width:100%;}
+/* width and height are set with the same min() expression so the stage
+   is always a perfect square on any screen — previously only width had
+   max-width:100%, so on narrow phones the box got squashed into an oval
+   (width shrunk, height stayed fixed at 392px) even though the spin
+   animation itself (a plain rotation) still looked like a circle. */
+.wheel-stage{position:relative;width:min(392px, 88vw);height:min(392px, 88vw);margin:24px auto 8px;}
 .wheel-rim{
   position:absolute;inset:0;border-radius:50%;
   background:linear-gradient(135deg,var(--gold),var(--gold-dark));
@@ -513,6 +518,18 @@ label .icon-slot{color:var(--navy-700);}
   box-shadow:0 3px 7px rgba(0,0,0,0.55);
 }
 #wheelStatus{text-align:center;margin-top:8px;}
+
+@media (max-width: 445px){
+  /* Everything below this width has the wheel itself shrinking via
+     width:min(392px,88vw) — these fixed-px child elements (which don't
+     scale with a percentage) get a proportional trim too, so numbers,
+     the hub, and the ball stay sensibly sized on the smaller wheel
+     instead of looking oversized relative to it. */
+  .wheel-number{width:26px;height:26px;margin:-13px;font-size:10px;}
+  .wheel-hub{width:40px;height:40px;margin:-20px;}
+  .wheel-ball-track{inset:16px;}
+  .wheel-ball{width:11px;height:11px;margin-left:-5.5px;}
+}
 
 /* ===================== Floating balance widget ===================== */
 .anw-balance-widget{

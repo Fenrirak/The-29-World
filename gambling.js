@@ -24,10 +24,18 @@ function showRouletteAnimation(number) {
     const idx = WHEEL_ORDER.indexOf(number);
     const pocketAngle = idx * seg + seg / 2;
 
+    // Matches the CSS's `width:min(392px, 88vw)` for .wheel-stage — the
+    // number ring's radius is a fixed px offset, so on a shrunk (mobile)
+    // wheel it needs scaling down too, or the numbers would sit outside
+    // the visible disc instead of around its edge.
+    const stageSize = Math.min(392, window.innerWidth * 0.88);
+    const scale = stageSize / 392;
+    const radius = 165 * scale;
+
     let numbersHtml = "";
     WHEEL_ORDER.forEach((n, i) => {
       const angle = i * seg + seg / 2;
-      numbersHtml += `<div class="wheel-number" style="transform:rotate(${angle}deg) translate(0,-165px) rotate(${-angle}deg);background:${wheelPocketColor(n)};">${n}</div>`;
+      numbersHtml += `<div class="wheel-number" style="transform:rotate(${angle}deg) translate(0,${(-radius).toFixed(1)}px) rotate(${-angle}deg);background:${wheelPocketColor(n)};">${n}</div>`;
     });
 
     const overlay = document.createElement("div");
@@ -105,24 +113,14 @@ async function init() {
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
-  // These 8 jobs are all independent of each other (each is its own
-  // guarded, self-contained check-and-maybe-write), so running them one
-  // at a time — 8 separate sequential network round-trips — was a big
-  // chunk of load time, especially on a slow mobile connection. Running
-  // them together cuts that to roughly the time of the single slowest one.
-  await Promise.all([
-    autoPayDayIfDue(u.classCode),
-    processAutomations(u.classCode),
-    processMortgages(u.classCode),
-    processTermDeposits(u.classCode),
-    autoInterestIfDue(u.classCode),
-    processInsurancePayments(u.classCode),
-    processWeeklyEvents(u.classCode),
-    processWeeklyBigEvents(u.classCode)
-  ]);
-  // These popups read the results of the jobs above, so they still need
-  // to run afterwards — but stay sequential since each checks whether
-  // another popup is already showing before deciding to show its own.
+  await autoPayDayIfDue(u.classCode);
+  await processAutomations(u.classCode);
+  await processMortgages(u.classCode);
+  await processTermDeposits(u.classCode);
+  await autoInterestIfDue(u.classCode);
+  await processInsurancePayments(u.classCode);
+  await processWeeklyEvents(u.classCode);
+  await processWeeklyBigEvents(u.classCode);
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
   await render();
