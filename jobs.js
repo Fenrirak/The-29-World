@@ -24,22 +24,34 @@ async function init() {
   document.getElementById("teacherView").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
-  await autoPayDayIfDue(CURRENT.classCode);
-  await processAutomations(CURRENT.classCode);
-  await processMortgages(CURRENT.classCode);
-  await processTermDeposits(CURRENT.classCode);
-  await autoInterestIfDue(CURRENT.classCode);
-  await processInsurancePayments(CURRENT.classCode);
-  await processWeeklyEvents(CURRENT.classCode);
-  await processWeeklyBigEvents(CURRENT.classCode);
+  // These 8 jobs are all independent of each other (each is its own
+  // guarded, self-contained check-and-maybe-write), so running them one
+  // at a time — 8 separate sequential network round-trips — was a big
+  // chunk of load time, especially on a slow mobile connection. Running
+  // them together cuts that to roughly the time of the single slowest one.
+  await Promise.all([
+    autoPayDayIfDue(CURRENT.classCode),
+    processAutomations(CURRENT.classCode),
+    processMortgages(CURRENT.classCode),
+    processTermDeposits(CURRENT.classCode),
+    autoInterestIfDue(CURRENT.classCode),
+    processInsurancePayments(CURRENT.classCode),
+    processWeeklyEvents(CURRENT.classCode),
+    processWeeklyBigEvents(CURRENT.classCode)
+  ]);
+  // These popups read the results of the jobs above, so they still need
+  // to run afterwards — but stay sequential since each checks whether
+  // another popup is already showing before deciding to show its own.
   await checkWeeklyEventPopup(CURRENT.username, CURRENT.classCode);
   await checkBigEventPopup(CURRENT.username, CURRENT.classCode);
   await render();
 }
 
 async function render() {
-  const me = await getUser(CURRENT.username);
-  const cls = await getClass(me.classCode);
+  // getUser and getClass are independent reads — CURRENT.classCode is
+  // already known without needing `me` first, so fetch both at once
+  // instead of waiting on one before starting the other.
+  const [me, cls] = await Promise.all([getUser(CURRENT.username), getClass(CURRENT.classCode)]);
 
   if (IS_TEACHER) {
     const students = await getClassStudents(CURRENT.classCode);

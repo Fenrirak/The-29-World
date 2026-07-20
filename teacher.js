@@ -65,14 +65,19 @@ async function init() {
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintChrome();
   enablePasswordToggles();
-  await autoPayDayIfDue(CLASS_CODE);
-  await processAutomations(CLASS_CODE);
-  await processMortgages(CLASS_CODE);
-  await processTermDeposits(CLASS_CODE);
-  await autoInterestIfDue(CLASS_CODE);
-  await processInsurancePayments(CLASS_CODE);
-  await processWeeklyEvents(CLASS_CODE);
-  await processWeeklyBigEvents(CLASS_CODE);
+  // Same reasoning as the other pages: these are 8 independent jobs, so
+  // running them together instead of one-at-a-time avoids 8 sequential
+  // network round-trips on page load.
+  await Promise.all([
+    autoPayDayIfDue(CLASS_CODE),
+    processAutomations(CLASS_CODE),
+    processMortgages(CLASS_CODE),
+    processTermDeposits(CLASS_CODE),
+    autoInterestIfDue(CLASS_CODE),
+    processInsurancePayments(CLASS_CODE),
+    processWeeklyEvents(CLASS_CODE),
+    processWeeklyBigEvents(CLASS_CODE)
+  ]);
   await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
   await checkBigEventPopup(CURRENT.username, CLASS_CODE);
   await checkAdjustmentPopup(CURRENT.username, CLASS_CODE);

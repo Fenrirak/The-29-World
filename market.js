@@ -60,14 +60,21 @@ async function init() {
     document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
     paintChrome();
     enablePasswordToggles();
-    await autoPayDayIfDue(CLASS_CODE);
-    await processAutomations(CLASS_CODE);
-    await processMortgages(CLASS_CODE);
-    await processTermDeposits(CLASS_CODE);
-    await autoInterestIfDue(CLASS_CODE);
-    await processInsurancePayments(CLASS_CODE);
-    await processWeeklyEvents(CLASS_CODE);
-    await processWeeklyBigEvents(CLASS_CODE);
+    // These 8 jobs are all independent of each other (each is its own
+    // guarded, self-contained check-and-maybe-write), so running them one
+    // at a time — 8 separate sequential network round-trips — was a big
+    // chunk of load time, especially on a slow mobile connection. Running
+    // them together cuts that to roughly the time of the single slowest one.
+    await Promise.all([
+      autoPayDayIfDue(CLASS_CODE),
+      processAutomations(CLASS_CODE),
+      processMortgages(CLASS_CODE),
+      processTermDeposits(CLASS_CODE),
+      autoInterestIfDue(CLASS_CODE),
+      processInsurancePayments(CLASS_CODE),
+      processWeeklyEvents(CLASS_CODE),
+      processWeeklyBigEvents(CLASS_CODE)
+    ]);
     await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
     await checkBigEventPopup(CURRENT.username, CLASS_CODE);
     await render();

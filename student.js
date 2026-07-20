@@ -62,14 +62,25 @@ async function init() {
   document.getElementById("whoami").textContent = u.name;
   paintChrome();
   // Fire any wages or automatic payments that have come due since last visit
-  await autoPayDayIfDue(u.classCode);
-  await processAutomations(u.classCode);
-  await processMortgages(u.classCode);
-  await processTermDeposits(u.classCode);
-  await autoInterestIfDue(u.classCode);
-  await processInsurancePayments(u.classCode);
-  await processWeeklyEvents(u.classCode);
-  await processWeeklyBigEvents(u.classCode);
+  // These 8 jobs are all independent of each other (each is its own
+  // guarded, self-contained check-and-maybe-write), so running them one
+  // at a time — 8 separate sequential network round-trips — was a big
+  // chunk of load time, especially on a slow mobile connection. Running
+  // them together cuts that to roughly the time of the single slowest one.
+  await Promise.all([
+    autoPayDayIfDue(u.classCode),
+    processAutomations(u.classCode),
+    processMortgages(u.classCode),
+    processTermDeposits(u.classCode),
+    autoInterestIfDue(u.classCode),
+    processInsurancePayments(u.classCode),
+    processWeeklyEvents(u.classCode),
+    processWeeklyBigEvents(u.classCode)
+  ]);
+  // These popups read the results of the jobs above (e.g. a weekly event
+  // that just got generated), so they still need to run afterwards — but
+  // they stay sequential since each checks "is another popup already
+  // showing" before deciding to show its own.
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
   await checkAdjustmentPopup(u.username, u.classCode);

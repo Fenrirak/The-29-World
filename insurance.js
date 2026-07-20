@@ -30,22 +30,34 @@ async function init() {
   document.getElementById("payDayCard").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("hMine").closest(".card").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
-  await autoPayDayIfDue(u.classCode);
-  await processAutomations(u.classCode);
-  await processMortgages(u.classCode);
-  await processTermDeposits(u.classCode);
-  await autoInterestIfDue(u.classCode);
-  await processInsurancePayments(u.classCode);
-  await processWeeklyEvents(u.classCode);
-  await processWeeklyBigEvents(u.classCode);
+  // These 8 jobs are all independent of each other (each is its own
+  // guarded, self-contained check-and-maybe-write), so running them one
+  // at a time — 8 separate sequential network round-trips — was a big
+  // chunk of load time, especially on a slow mobile connection. Running
+  // them together cuts that to roughly the time of the single slowest one.
+  await Promise.all([
+    autoPayDayIfDue(u.classCode),
+    processAutomations(u.classCode),
+    processMortgages(u.classCode),
+    processTermDeposits(u.classCode),
+    autoInterestIfDue(u.classCode),
+    processInsurancePayments(u.classCode),
+    processWeeklyEvents(u.classCode),
+    processWeeklyBigEvents(u.classCode)
+  ]);
+  // These popups read the results of the jobs above, so they still need
+  // to run afterwards — but stay sequential since each checks whether
+  // another popup is already showing before deciding to show its own.
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
   await render();
 }
 
 async function render() {
-  const me = await getUser(CURRENT.username);
-  const cls = await getClass(me.classCode);
+  // getUser and getClass are independent reads — CURRENT.classCode is
+  // already known without needing `me` first, so fetch both at once
+  // instead of waiting on one before starting the other.
+  const [me, cls] = await Promise.all([getUser(CURRENT.username), getClass(CURRENT.classCode)]);
   const plans = cls.insurancePlans || [];
 
   if (IS_TEACHER) document.getElementById("insuranceDay").value = cls.insuranceDay || "Fri";

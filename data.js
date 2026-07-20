@@ -1297,10 +1297,28 @@ function getRecentTxns(cls, days) {
 }
 
 async function classLeaderboard(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls) return [];
   const students = await getClassStudents(classCode);
-  const rows = await Promise.all(students.map(async s => {
-    const invested = await portfolioValue(s.username, classCode);
-    const storeValue = await storeItemsValue(s.username, classCode);
+  // Everything needed (share prices, store item prices) is already sitting
+  // in `cls`, and each student's own holdings/items came back with them —
+  // so this is computed entirely in memory instead of the old approach,
+  // which had portfolioValue() and storeItemsValue() each re-fetch the
+  // whole class (and, for storeItemsValue, the user too) from the network
+  // separately for every single student. That was ~4 extra network
+  // round-trips per student just to build the leaderboard.
+  const rows = students.map(s => {
+    let invested = 0;
+    cls.companies.forEach(co => { invested += (co.holders[s.username] || 0) * co.price; });
+    invested = Math.round(invested * 100) / 100;
+
+    let storeValue = 0;
+    (s.storeItems || []).forEach(itemId => {
+      const item = cls.storeItems.find(i => i.id === itemId);
+      if (item && item.countsNetWorth !== false) storeValue += item.price;
+    });
+    storeValue = Math.round(storeValue * 100) / 100;
+
     const savings = s.savings || 0;
     const owed = (s.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0);
     return {
@@ -1308,7 +1326,7 @@ async function classLeaderboard(classCode) {
       balance: s.balance, invested, storeValue, savings, owed,
       net: Math.round((s.balance + invested + storeValue + savings - owed) * 100) / 100
     };
-  }));
+  });
   rows.sort((a, b) => b.net - a.net);
   return rows;
 }

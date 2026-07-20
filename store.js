@@ -24,19 +24,25 @@ async function init() {
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   paintChrome();
-  await autoPayDayIfDue(u.classCode);
-  await processAutomations(u.classCode);
-  await processMortgages(u.classCode);
-  await processTermDeposits(u.classCode);
-  await autoInterestIfDue(u.classCode);
-  await processWeeklyEvents(u.classCode);
+  // Same fix as the other pages: run the independent background jobs
+  // together instead of one sequential network round-trip each.
+  await Promise.all([
+    autoPayDayIfDue(u.classCode),
+    processAutomations(u.classCode),
+    processMortgages(u.classCode),
+    processTermDeposits(u.classCode),
+    autoInterestIfDue(u.classCode),
+    processWeeklyEvents(u.classCode)
+  ]);
   await checkWeeklyEventPopup(u.username, u.classCode);
   await render();
 }
 
 async function render() {
-  const me = await getUser(CURRENT.username);
-  const cls = await getClass(me.classCode);
+  // getUser and getClass are independent reads — CURRENT.classCode is
+  // already known without needing `me` first, so fetch both at once
+  // instead of waiting on one before starting the other.
+  const [me, cls] = await Promise.all([getUser(CURRENT.username), getClass(CURRENT.classCode)]);
   const items = (cls.storeItems || []).filter(i => !i.archived);
 
   const list = document.getElementById("itemList");
