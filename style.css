@@ -397,35 +397,55 @@ label .icon-slot{color:var(--navy-700);}
 }
 
 /* Landscape phones/tablets specifically (short viewport height, regardless
-   of width) — keep the whole topbar to one line by going icon-only and,
-   as a safety net for narrower landscape widths, letting it scroll
-   horizontally instead of ever wrapping. Gated on max-height so this never
-   fires for portrait mode (which is always much taller than wide) or for
-   normal desktop/laptop screens (which are wide AND tall). */
-/* Landscape mode, wider screens — keep the text labels (don't switch to
-   icon-only) but trim font size, icon size, padding and gaps just enough
-   to fit everything on one line. overflow-x:auto stays as a safety net
-   in case a particular device is still a little too narrow for this. */
+   of width) — keep the whole topbar to one line, all wording and icons
+   intact, by scaling everything fluidly with clamp(min, vw-based, max)
+   instead of jumping between fixed sizes at a couple of breakpoints.
+   Because every dimension (font, icon, padding, gaps) shrinks continuously
+   in step with the viewport, the row's total width tracks the available
+   width at every screen size in between, so it never needs to wrap or
+   scroll — no icon-only fallback and no overflow-x safety net required.
+   Gated on orientation:landscape so this never fires for portrait mode
+   (always much taller than wide) or normal desktop/laptop screens (wide
+   AND tall, where the un-scaled default sizes already fit fine). */
 @media (orientation: landscape){
-  .topbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 12px;gap:6px;}
-  .topbar nav{flex-wrap:nowrap;row-gap:0;gap:5px;}
-  .brand{font-size:1rem;flex-shrink:0;white-space:nowrap;}
-  .topbar nav a{flex-shrink:0;padding:7px 8px;font-size:.83rem;gap:5px;min-height:34px;white-space:nowrap;}
-  .topbar nav a .icon{width:14px;height:14px;}
-  .topbar .who{flex-shrink:0;font-size:.83rem;padding-left:10px;margin-left:2px;}
-  .btn-logout{flex-shrink:0;padding:7px 10px;font-size:.83rem;gap:5px;}
-  .btn-logout .icon{width:13px;height:13px;}
-}
-
-/* Landscape mode, narrower widths (phones) — shrinking alone isn't enough
-   room for full text labels, so fall back to icon-only + horizontal
-   scroll here, same as before. */
-@media (orientation: landscape) and (max-width: 700px){
-  .topbar .who{display:none;}
-  .topbar nav a{padding:8px;min-width:36px;justify-content:center;}
-  .topbar nav a .nav-label{display:none;}
-  .btn-logout{padding:8px;min-width:36px;justify-content:center;}
-  .btn-logout .nav-label{display:none;}
+  .topbar{
+    flex-wrap:nowrap;
+    padding:clamp(6px, 1.2vw, 12px) clamp(8px, 1.6vw, 16px);
+    gap:clamp(4px, 0.8vw, 10px);
+  }
+  .topbar nav{flex-wrap:nowrap;row-gap:0;gap:clamp(3px, 0.7vw, 9px);}
+  .brand{font-size:clamp(.85rem, 1.5vw, 1.25rem);flex-shrink:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .brand .coin, .brand .icon-slot{width:clamp(20px, 2.6vw, 28px);height:clamp(20px, 2.6vw, 28px);}
+  .topbar nav a{
+    flex-shrink:1;
+    min-width:0;
+    padding:clamp(5px, 1vw, 9px) clamp(5px, 1.1vw, 12px);
+    font-size:clamp(.68rem, 1.05vw, .9rem);
+    gap:clamp(3px, 0.6vw, 6px);
+    min-height:clamp(28px, 4vw, 40px);
+    white-space:nowrap;
+  }
+  .topbar nav a .icon{width:clamp(12px, 1.4vw, 16px);height:clamp(12px, 1.4vw, 16px);flex-shrink:0;}
+  .topbar nav a .nav-label{overflow:hidden;text-overflow:ellipsis;}
+  .topbar .who{
+    flex-shrink:1;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    font-size:clamp(.68rem, 1.05vw, .85rem);
+    padding-left:clamp(6px, 1.2vw, 14px);
+    margin-left:2px;
+    white-space:nowrap;
+  }
+  .btn-logout{
+    flex-shrink:0;
+    padding:clamp(5px, 1vw, 8px) clamp(6px, 1.3vw, 14px);
+    font-size:clamp(.68rem, 1.05vw, .85rem);
+    gap:clamp(3px, 0.6vw, 6px);
+    margin-left:clamp(4px, 1vw, 14px);
+  }
+  .btn-logout .icon{width:clamp(11px, 1.3vw, 15px);height:clamp(11px, 1.3vw, 15px);}
+  .btn-logout .nav-label{white-space:nowrap;}
 }
 
 /* ---------------- Random event popup ---------------- */
