@@ -397,55 +397,53 @@ label .icon-slot{color:var(--navy-700);}
 }
 
 /* Landscape phones/tablets specifically (short viewport height, regardless
-   of width) — keep the whole topbar to one line, all wording and icons
-   intact, by scaling everything fluidly with clamp(min, vw-based, max)
-   instead of jumping between fixed sizes at a couple of breakpoints.
-   Because every dimension (font, icon, padding, gaps) shrinks continuously
-   in step with the viewport, the row's total width tracks the available
-   width at every screen size in between, so it never needs to wrap or
-   scroll — no icon-only fallback and no overflow-x safety net required.
-   Gated on orientation:landscape so this never fires for portrait mode
-   (always much taller than wide) or normal desktop/laptop screens (wide
-   AND tall, where the un-scaled default sizes already fit fine). */
+   of width) — keep the whole topbar to one line with NO horizontal
+   scrolling at all. Instead of a fixed set of breakpoints that can still
+   overflow on an odd in-between width, sizes below scale fluidly with
+   clamp()/vw so the bar keeps shrinking continuously as the viewport
+   narrows, and every row-level item is allowed to shrink (min-width:0 /
+   flex-shrink) rather than forcing a scrollbar. Gated on orientation so
+   this never fires for portrait mode or normal desktop/laptop screens. */
 @media (orientation: landscape){
   .topbar{
-    flex-wrap:nowrap;
-    padding:clamp(6px, 1.2vw, 12px) clamp(8px, 1.6vw, 16px);
-    gap:clamp(4px, 0.8vw, 10px);
+    flex-wrap:nowrap;overflow-x:hidden;padding:clamp(6px,1.4vw,10px) clamp(8px,2vw,14px);
+    gap:clamp(4px,1vw,8px);
   }
-  .topbar nav{flex-wrap:nowrap;row-gap:0;gap:clamp(3px, 0.7vw, 9px);}
-  .brand{font-size:clamp(.85rem, 1.5vw, 1.25rem);flex-shrink:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .brand .coin, .brand .icon-slot{width:clamp(20px, 2.6vw, 28px);height:clamp(20px, 2.6vw, 28px);}
+  .brand{
+    font-size:clamp(.78rem,2.6vw,1.05rem);gap:6px;flex-shrink:1;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .brand .coin,.brand .icon-slot{width:clamp(18px,4vw,28px);height:clamp(18px,4vw,28px);flex-shrink:0;}
+  .topbar nav{flex-wrap:nowrap;row-gap:0;gap:clamp(2px,0.8vw,6px);flex-shrink:1;min-width:0;}
   .topbar nav a{
-    flex-shrink:1;
-    min-width:0;
-    padding:clamp(5px, 1vw, 9px) clamp(5px, 1.1vw, 12px);
-    font-size:clamp(.68rem, 1.05vw, .9rem);
-    gap:clamp(3px, 0.6vw, 6px);
-    min-height:clamp(28px, 4vw, 40px);
-    white-space:nowrap;
+    flex-shrink:0;padding:clamp(5px,1vw,8px) clamp(6px,1.4vw,10px);
+    font-size:clamp(.72rem,1.8vw,.88rem);gap:4px;min-height:clamp(30px,6vw,38px);white-space:nowrap;
   }
-  .topbar nav a .icon{width:clamp(12px, 1.4vw, 16px);height:clamp(12px, 1.4vw, 16px);flex-shrink:0;}
-  .topbar nav a .nav-label{overflow:hidden;text-overflow:ellipsis;}
-  .topbar .who{
-    flex-shrink:1;
-    min-width:0;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    font-size:clamp(.68rem, 1.05vw, .85rem);
-    padding-left:clamp(6px, 1.2vw, 14px);
-    margin-left:2px;
-    white-space:nowrap;
-  }
+  .topbar nav a .icon{width:clamp(12px,2.6vw,15px);height:clamp(12px,2.6vw,15px);flex-shrink:0;}
+  .topbar .who{flex-shrink:0;font-size:clamp(.72rem,1.8vw,.85rem);padding-left:8px;margin-left:2px;white-space:nowrap;}
   .btn-logout{
-    flex-shrink:0;
-    padding:clamp(5px, 1vw, 8px) clamp(6px, 1.3vw, 14px);
-    font-size:clamp(.68rem, 1.05vw, .85rem);
-    gap:clamp(3px, 0.6vw, 6px);
-    margin-left:clamp(4px, 1vw, 14px);
+    flex-shrink:0;padding:clamp(5px,1vw,8px) clamp(6px,1.4vw,10px);
+    font-size:clamp(.72rem,1.8vw,.85rem);gap:4px;
   }
-  .btn-logout .icon{width:clamp(11px, 1.3vw, 15px);height:clamp(11px, 1.3vw, 15px);}
-  .btn-logout .nav-label{white-space:nowrap;}
+  .btn-logout .icon{width:clamp(11px,2.4vw,13px);height:clamp(11px,2.4vw,13px);flex-shrink:0;}
+}
+
+/* Landscape mode, narrower widths (phones) — shrinking alone still isn't
+   enough room for full text labels, so drop nav-label text (icon-only
+   nav) and shrink the logout button's own text label too, per the rule:
+   remove "Logout" wording before removing anything else. */
+@media (orientation: landscape) and (max-width: 700px){
+  .topbar nav a{padding:clamp(5px,1vw,8px);min-width:clamp(28px,6vw,36px);justify-content:center;}
+  .topbar nav a .nav-label{display:none;}
+  .btn-logout{padding:clamp(5px,1vw,8px);min-width:clamp(28px,6vw,36px);justify-content:center;}
+  .btn-logout .nav-label{display:none;}
+}
+
+/* Landscape mode, very narrow phones — last resort per spec: drop the
+   student name/who block next to the logout button. Brand logo + name
+   and all nav icons are still kept, just at their smallest fluid size. */
+@media (orientation: landscape) and (max-width: 480px){
+  .topbar .who{display:none;}
 }
 
 /* ---------------- Random event popup ---------------- */
