@@ -66,6 +66,43 @@
     <div id="addMsg"></div>
   </div>
 
+  <div id="editPlanCard" class="card hidden">
+    <h2 id="hEdit">Edit term deposit plan</h2>
+    <form onsubmit="return saveEditPlan(event)">
+      <input type="hidden" id="eId">
+      <div class="grid grid-3">
+        <div>
+          <label for="eName">Plan name</label>
+          <input id="eName" required>
+        </div>
+        <div>
+          <label for="eMin">Minimum deposit</label>
+          <input id="eMin" type="number" min="0" step="0.01" required>
+        </div>
+        <div>
+          <label for="eDays">Term length (days)</label>
+          <input id="eDays" type="number" min="1" step="1" required>
+        </div>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label for="eRate">Interest rate (% paid at maturity)</label>
+          <input id="eRate" type="number" min="0" step="0.1" required>
+        </div>
+        <div>
+          <label for="eFee">Early withdrawal fee (%)</label>
+          <input id="eFee" type="number" min="0" step="0.1" required>
+        </div>
+      </div>
+      <p class="muted-small">Changes to the rate and fee apply immediately to any deposits students already have open under this plan.</p>
+      <div class="row-flex" style="gap:8px;">
+        <button class="btn gold" type="submit" id="saveEditBtn">Save changes</button>
+        <button class="btn small" type="button" onclick="cancelEditPlan()">Cancel</button>
+      </div>
+    </form>
+    <div id="editMsg"></div>
+  </div>
+
   <div id="planList"></div>
   <p class="muted-small" id="noPlans">No term deposit plans have been set up yet.</p>
 

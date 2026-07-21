@@ -1144,6 +1144,52 @@ async function addTermDepositPlan(classCode, plan) {
     t.update(classRef, { termDepositPlans: cls.termDepositPlans });
   });
 }
+async function editTermDepositPlan(classCode, planId, plan) {
+  const classRef = classesCol().doc(classCode);
+  let updatedPlan = null;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const existing = cls.termDepositPlans.find(p => p.id === planId);
+    if (!existing) return;
+    existing.name = plan.name;
+    existing.minAmount = Number(plan.minAmount) || 0;
+    existing.days = Math.max(1, Number(plan.days) || 1);
+    existing.rate = Number(plan.rate) || 0;
+    existing.earlyFeePct = Math.max(0, Number(plan.earlyFeePct) || 0);
+    updatedPlan = existing;
+    t.update(classRef, { termDepositPlans: cls.termDepositPlans });
+  });
+  if (!updatedPlan) return;
+  // Existing deposits store a snapshot of the plan at open time (name, rate,
+  // earlyFeePct, days) so that a plan being removed/changed doesn't corrupt
+  // the deposit. Since the teacher explicitly wants edits to apply to
+  // ongoing deposits, that snapshot is refreshed on every student who has a
+  // deposit under this plan. matureDate is left untouched — it was already
+  // computed from the original day count, and changing it retroactively
+  // would be surprising, so `days` is only updated for display purposes.
+  const students = await getClassStudents(classCode);
+  await Promise.all(students.map(async (s) => {
+    const deposits = s.termDeposits || [];
+    if (!deposits.some(d => d.planId === planId)) return;
+    const userRef = usersCol().doc(s.username);
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) return;
+      const user = snap.data();
+      const liveDeposits = user.termDeposits || [];
+      let changed = false;
+      liveDeposits.forEach(d => {
+        if (d.planId === planId) {
+          d.plan = { id: updatedPlan.id, name: updatedPlan.name, days: updatedPlan.days, rate: updatedPlan.rate, earlyFeePct: updatedPlan.earlyFeePct };
+          changed = true;
+        }
+      });
+      if (changed) t.update(userRef, { termDeposits: liveDeposits });
+    });
+  }));
+}
 async function removeTermDepositPlan(classCode, planId) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
@@ -1321,10 +1367,11 @@ async function classLeaderboard(classCode) {
 
     const savings = s.savings || 0;
     const owed = (s.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0);
+    const termDeposits = (s.termDeposits || []).reduce((sum, d) => sum + d.amount, 0);
     return {
       username: s.username, name: s.name,
-      balance: s.balance, invested, storeValue, savings, owed,
-      net: Math.round((s.balance + invested + storeValue + savings - owed) * 100) / 100
+      balance: s.balance, invested, storeValue, savings, owed, termDeposits,
+      net: Math.round((s.balance + invested + storeValue + savings + termDeposits - owed) * 100) / 100
     };
   });
   rows.sort((a, b) => b.net - a.net);

@@ -1,4 +1,4 @@
-let CURRENT, IS_TEACHER;
+let CURRENT, IS_TEACHER, PLANS = [];
 
 function paintChrome() {
   paintIconSlots();
@@ -6,6 +6,7 @@ function paintChrome() {
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a term deposit plan";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add plan";
   document.getElementById("hMine").innerHTML = icon("vault", 18) + " My term deposits";
+  document.getElementById("hEdit").innerHTML = icon("vault", 18) + " Edit term deposit plan";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -49,6 +50,7 @@ async function render() {
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUser(CURRENT.username), getClass(CURRENT.classCode)]);
   const plans = (cls.termDepositPlans || []).filter(p => p.active);
+  PLANS = plans;
 
   const list = document.getElementById("planList");
   list.innerHTML = "";
@@ -65,7 +67,10 @@ async function render() {
         </div>
         <div>
           ${IS_TEACHER
-            ? `<button class="btn small coral" onclick="deletePlan('${p.id}')">${icon("trash", 13)} Remove</button>`
+            ? `<div class="row-flex" style="gap:8px;">
+                 <button class="btn small" onclick="openEditPlan('${p.id}')">${icon("vault", 13)} Edit</button>
+                 <button class="btn small coral" onclick="deletePlan('${p.id}')">${icon("trash", 13)} Remove</button>
+               </div>`
             : `<div class="row-flex" style="gap:8px;">
                  <input type="number" min="${p.minAmount}" step="0.01" id="amt-${p.id}" placeholder="Amount" style="max-width:140px;">
                  <button class="btn small gold" onclick="openDeposit('${p.id}')">${icon("vault", 13)} Deposit</button>
@@ -108,6 +113,41 @@ async function addPlan(e) {
   await addTermDepositPlan(CURRENT.classCode, plan);
   document.getElementById("addMsg").innerHTML = `<div class="success-msg">Plan added!</div>`;
   ["tName","tMin","tDays","tRate","tFee"].forEach(id => document.getElementById(id).value = "");
+  await render();
+  return false;
+}
+
+function openEditPlan(id) {
+  const p = PLANS.find(pl => pl.id === id);
+  if (!p) return;
+  document.getElementById("eId").value = p.id;
+  document.getElementById("eName").value = p.name;
+  document.getElementById("eMin").value = p.minAmount;
+  document.getElementById("eDays").value = p.days;
+  document.getElementById("eRate").value = p.rate;
+  document.getElementById("eFee").value = p.earlyFeePct;
+  document.getElementById("editMsg").innerHTML = "";
+  document.getElementById("editPlanCard").classList.remove("hidden");
+  document.getElementById("editPlanCard").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function cancelEditPlan() {
+  document.getElementById("editPlanCard").classList.add("hidden");
+}
+
+async function saveEditPlan(e) {
+  e.preventDefault();
+  const id = document.getElementById("eId").value;
+  const plan = {
+    name: document.getElementById("eName").value.trim(),
+    minAmount: document.getElementById("eMin").value,
+    days: document.getElementById("eDays").value,
+    rate: document.getElementById("eRate").value,
+    earlyFeePct: document.getElementById("eFee").value
+  };
+  await editTermDepositPlan(CURRENT.classCode, id, plan);
+  document.getElementById("editMsg").innerHTML = `<div class="success-msg">Plan updated!</div>`;
+  document.getElementById("editPlanCard").classList.add("hidden");
   await render();
   return false;
 }
