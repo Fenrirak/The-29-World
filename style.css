@@ -65,7 +65,7 @@ p{color:var(--muted);line-height:1.5;}
   align-items:center;
   gap:10px;
   font-weight:800;
-  font-size:1.25rem;
+  font-size:1.38rem;
   color:#fff;
   text-decoration:none;
 }
@@ -77,12 +77,12 @@ p{color:var(--muted);line-height:1.5;}
 }
 .topbar nav{display:flex;gap:9px;align-items:center;flex-wrap:wrap;row-gap:6px;}
 .topbar nav a{
-  color:#cfd8ea;text-decoration:none;font-weight:600;font-size:.9rem;
+  color:#cfd8ea;text-decoration:none;font-weight:600;font-size:1rem;
   display:inline-flex;align-items:center;gap:6px;
   padding:9px 12px;border-radius:8px;
   min-height:40px;
 }
-.topbar nav a .icon{width:16px;height:16px;}
+.topbar nav a .icon{width:18px;height:18px;}
 .topbar nav a:hover{color:#fff;background:rgba(255,255,255,0.08);}
 .topbar nav a.active{background:rgba(232,184,75,0.16);color:var(--gold);}
 .topbar .who{display:none;}
@@ -95,7 +95,7 @@ p{color:var(--muted);line-height:1.5;}
   min-width:40px;
   min-height:40px;
 }
-.btn-logout .icon{width:20px;height:20px;}
+.btn-logout .icon{width:22px;height:22px;}
 .btn-logout .nav-label{display:none;}
 .btn-logout:hover{background:rgba(255,255,255,0.18);}
 
@@ -382,7 +382,7 @@ label .icon-slot{color:var(--navy-700);}
 
 @media (max-width: 640px){
   .topbar{padding:10px 14px;}
-  .brand{font-size:1.05rem;}
+  .brand{font-size:1.16rem;}
   h1{font-size:1.4rem;}
   h2{font-size:1.1rem;}
   .card{padding:16px;}
@@ -407,11 +407,11 @@ label .icon-slot{color:var(--navy-700);}
 @media (orientation: landscape){
   .topbar{flex-wrap:wrap;padding:8px 12px;gap:6px;row-gap:6px;}
   .topbar nav{flex-wrap:wrap;row-gap:6px;gap:5px;}
-  .brand{font-size:1rem;flex-shrink:0;white-space:nowrap;}
-  .topbar nav a{flex-shrink:0;padding:7px 8px;font-size:.83rem;gap:5px;min-height:34px;white-space:nowrap;}
-  .topbar nav a .icon{width:14px;height:14px;}
+  .brand{font-size:1.1rem;flex-shrink:0;white-space:nowrap;}
+  .topbar nav a{flex-shrink:0;padding:7px 8px;font-size:.92rem;gap:5px;min-height:34px;white-space:nowrap;}
+  .topbar nav a .icon{width:16px;height:16px;}
   .btn-logout{flex-shrink:0;padding:7px;min-width:34px;min-height:34px;}
-  .btn-logout .icon{width:17px;height:17px;}
+  .btn-logout .icon{width:19px;height:19px;}
 }
 
 /* Landscape mode, narrower widths (phones) — shrinking alone isn't enough
