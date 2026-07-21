@@ -21,7 +21,7 @@
 
 html{-webkit-text-size-adjust:100%;}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{margin:0;padding:0;touch-action:manipulation;overflow-x:hidden;max-width:100%;}
+html,body{margin:0;padding:0;touch-action:manipulation;}
 body{
   color:var(--ink);
   font-family:"Segoe UI","Trebuchet MS",Verdana,sans-serif;
@@ -85,16 +85,18 @@ p{color:var(--muted);line-height:1.5;}
 .topbar nav a .icon{width:16px;height:16px;}
 .topbar nav a:hover{color:#fff;background:rgba(255,255,255,0.08);}
 .topbar nav a.active{background:rgba(232,184,75,0.16);color:var(--gold);}
-.topbar .who{display:none;} /* student name removed from topbar per request */
+.topbar .who{display:none;}
 .btn-logout{
   background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
-  padding:10px;font-weight:700;cursor:pointer;font-size:.85rem;
+  padding:9px;font-weight:700;cursor:pointer;font-size:.85rem;
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
   margin-left:14px;
   flex-shrink:0;
+  min-width:40px;
+  min-height:40px;
 }
-.btn-logout .nav-label{display:none;} /* "Logout" word removed, icon-only button */
-.btn-logout .icon{width:20px;height:20px;} /* enlarged since the button is icon-only now */
+.btn-logout .icon{width:20px;height:20px;}
+.btn-logout .nav-label{display:none;}
 .btn-logout:hover{background:rgba(255,255,255,0.18);}
 
 main{
@@ -365,18 +367,17 @@ label .icon-slot{color:var(--navy-700);}
 /* ==================================================================
    Responsive breakpoints — tablet and phone
 ================================================================== */
-@media (max-width: 980px){
+@media (max-width: 900px){
   main{padding:22px 16px 50px;}
   .stat .value{font-size:1.7rem;}
   .auth-card{padding:28px 22px;}
-  /* Nav labels wrap or overflow anywhere from ~640-980px wide (this range
-     covers both narrow portrait phones and, importantly, landscape phones,
-     which commonly measure 700-930px wide) — switching to icon-only nav
-     across this whole range keeps the topbar to a single compact row that
-     always fits, with no wrapping and no horizontal scrolling needed. */
+  /* Nav labels wrap onto multiple lines anywhere from ~640-900px wide,
+     which was bloating the sticky topbar's height on a lot of phones and
+     pushing page content (like the cash balance stat card) mostly out of
+     view. Switching to icon-only nav across this whole range keeps the
+     topbar to a single compact row instead. */
   .topbar nav a .nav-label{display:none;}
   .topbar nav a{padding:9px;min-width:40px;justify-content:center;}
-  .topbar nav{flex-wrap:nowrap;row-gap:0;}
 }
 
 @media (max-width: 640px){
@@ -396,17 +397,29 @@ label .icon-slot{color:var(--navy-700);}
   .class-code-pill{font-size:.95rem;padding:8px 12px;}
 }
 
-/* The topbar's fit is driven purely by viewport WIDTH now (see the
-   max-width:980px / 640px rules above and below), not by orientation.
-   Landscape phones are simply narrow-width viewports (commonly
-   ~650-930px), so they're already caught by those same width breakpoints
-   and go icon-only automatically — no separate orientation handling, and
-   no horizontal-scroll fallback, is needed. The rule below is just a
-   little extra breathing room for short (landscape) viewports so the
-   sticky topbar never eats too much vertical space. */
-@media (max-height: 500px) and (orientation: landscape){
-  .topbar{padding:6px 12px;}
-  .topbar nav a{min-height:30px;}
+/* Landscape phones/tablets specifically (short viewport height, regardless
+   of width) — keep the topbar compact and NEVER let it scroll sideways.
+   Now that the "who" name is gone for good and the logout button is
+   icon-only for good, there's enough room that the row can just wrap onto
+   a second line (flex-wrap:wrap) if a device is unusually narrow, instead
+   of relying on horizontal scroll. Gated on orientation so this never
+   fires for portrait mode or normal desktop/laptop screens. */
+@media (orientation: landscape){
+  .topbar{flex-wrap:wrap;padding:8px 12px;gap:6px;row-gap:6px;}
+  .topbar nav{flex-wrap:wrap;row-gap:6px;gap:5px;}
+  .brand{font-size:1rem;flex-shrink:0;white-space:nowrap;}
+  .topbar nav a{flex-shrink:0;padding:7px 8px;font-size:.83rem;gap:5px;min-height:34px;white-space:nowrap;}
+  .topbar nav a .icon{width:14px;height:14px;}
+  .btn-logout{flex-shrink:0;padding:7px;min-width:34px;min-height:34px;}
+  .btn-logout .icon{width:17px;height:17px;}
+}
+
+/* Landscape mode, narrower widths (phones) — shrinking alone isn't enough
+   room for full text labels, so fall back to icon-only nav here so
+   everything reliably stays on one row without needing to scroll or wrap. */
+@media (orientation: landscape) and (max-width: 700px){
+  .topbar nav a{padding:8px;min-width:36px;justify-content:center;}
+  .topbar nav a .nav-label{display:none;}
 }
 
 /* ---------------- Random event popup ---------------- */
