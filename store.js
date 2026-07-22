@@ -121,7 +121,7 @@ function editItem(id) {
       </div>
       <div>
         <label>Stock (blank = unlimited)</label>
-        <input id="e-stock-${id}" type="number" min="0" step="1" value="${it.stock === null ? "" : it.stock}">
+        <input id="e-stock-${id}" type="number" min="0" step="1" value="${it.stockTotal === null || it.stockTotal === undefined ? "" : it.stockTotal}">
       </div>
     </div>
     <label>What it does</label>

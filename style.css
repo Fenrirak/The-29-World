@@ -60,42 +60,67 @@ p{color:var(--muted);line-height:1.5;}
   top:0;
   z-index:50;
 }
+/* Nav sizing (brand text/icon, link text/icon, gaps, padding, logout button)
+   is expressed with clamp(min, calc(anchor + (100vw - 1366px) * rate), max)
+   throughout this block. 1366px is the reference/minimum desktop width the
+   full-label nav must fit into on a single line, so every clamp's middle
+   term evaluates to exactly its min value at 100vw = 1366px (the (100vw -
+   1366px) term is 0) and holds flat below that (clamp floors it at min, so
+   901-1366px stays just as compact). Above 1366px the term grows, scaling
+   font size/icon size/padding/gaps up in proportion with viewport width,
+   capped at a sensible max so things don't get cartoonishly large on very
+   wide monitors. */
 .brand{
   display:flex;
   align-items:center;
   gap:10px;
   font-weight:800;
-  font-size:1.42rem;
+  font-size:clamp(1.05rem, calc(1.05rem + (100vw - 1366px) * 0.00035), 1.6rem);
   color:#fff;
   text-decoration:none;
 }
 .brand .coin, .brand .icon-slot{
-  width:28px;height:28px;
+  width:clamp(22px, calc(22px + (100vw - 1366px) * 0.005), 32px);
+  height:clamp(22px, calc(22px + (100vw - 1366px) * 0.005), 32px);
   display:inline-flex;align-items:center;justify-content:center;
   color:var(--gold);
   filter:drop-shadow(0 3px 6px rgba(232,184,75,0.35));
 }
-.topbar nav{display:flex;gap:9px;align-items:center;flex-wrap:wrap;row-gap:6px;}
-.topbar nav a{
-  color:#cfd8ea;text-decoration:none;font-weight:600;font-size:1.02rem;
-  display:inline-flex;align-items:center;gap:6px;
-  padding:9px 12px;border-radius:8px;
-  min-height:40px;
+.topbar nav{
+  display:flex;
+  gap:clamp(4px, calc(4px + (100vw - 1366px) * 0.0035), 10px);
+  align-items:center;flex-wrap:wrap;row-gap:6px;
 }
-.topbar nav a .icon{width:18px;height:18px;}
+.topbar nav a{
+  color:#cfd8ea;text-decoration:none;font-weight:600;
+  font-size:clamp(0.8rem, calc(0.8rem + (100vw - 1366px) * 0.00045), 1.35rem);
+  display:inline-flex;align-items:center;
+  gap:clamp(4px, calc(4px + (100vw - 1366px) * 0.0025), 8px);
+  padding:clamp(6px, calc(6px + (100vw - 1366px) * 0.004), 11px) clamp(7px, calc(7px + (100vw - 1366px) * 0.006), 14px);
+  border-radius:8px;
+  min-height:clamp(34px, calc(34px + (100vw - 1366px) * 0.01), 46px);
+}
+.topbar nav a .icon{
+  width:clamp(14px, calc(14px + (100vw - 1366px) * 0.006), 22px);
+  height:clamp(14px, calc(14px + (100vw - 1366px) * 0.006), 22px);
+}
 .topbar nav a:hover{color:#fff;background:rgba(255,255,255,0.08);}
 .topbar nav a.active{background:rgba(232,184,75,0.16);color:var(--gold);}
 .topbar .who{display:none;}
 .btn-logout{
   background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
-  padding:9px;font-weight:700;cursor:pointer;font-size:.85rem;
+  padding:clamp(6px, calc(6px + (100vw - 1366px) * 0.004), 11px);
+  font-weight:700;cursor:pointer;font-size:.85rem;
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
-  margin-left:14px;
+  margin-left:clamp(10px, calc(10px + (100vw - 1366px) * 0.003), 18px);
   flex-shrink:0;
-  min-width:40px;
-  min-height:40px;
+  min-width:clamp(34px, calc(34px + (100vw - 1366px) * 0.01), 46px);
+  min-height:clamp(34px, calc(34px + (100vw - 1366px) * 0.01), 46px);
 }
-.btn-logout .icon{width:23px;height:23px;}
+.btn-logout .icon{
+  width:clamp(18px, calc(18px + (100vw - 1366px) * 0.006), 26px);
+  height:clamp(18px, calc(18px + (100vw - 1366px) * 0.006), 26px);
+}
 .btn-logout .nav-label{display:none;}
 .btn-logout:hover{background:rgba(255,255,255,0.18);}
 

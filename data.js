@@ -1365,13 +1365,29 @@ async function classLeaderboard(classCode) {
     });
     storeValue = Math.round(storeValue * 100) / 100;
 
+    // Property and vehicles aren't listed on the student doc — ownership
+    // lives on the class doc's properties/vehicles arrays (p.owner /
+    // v.owner) — so find what this student owns by scanning those.
+    let propertyValue = 0, mortgageOwed = 0;
+    (cls.properties || []).forEach(p => {
+      if (p.owner !== s.username) return;
+      propertyValue += p.price;
+      if (p.mortgage) mortgageOwed += (p.mortgage.weeklyPayment || 0) * (p.mortgage.weeksLeft || 0);
+    });
+    propertyValue = Math.round(propertyValue * 100) / 100;
+    mortgageOwed = Math.round(mortgageOwed * 100) / 100;
+
+    let vehicleValue = 0;
+    (cls.vehicles || []).forEach(v => { if (v.owner === s.username) vehicleValue += v.price; });
+    vehicleValue = Math.round(vehicleValue * 100) / 100;
+
     const savings = s.savings || 0;
-    const owed = (s.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0);
+    const owed = (s.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0) + mortgageOwed;
     const termDeposits = (s.termDeposits || []).reduce((sum, d) => sum + d.amount, 0);
     return {
       username: s.username, name: s.name,
-      balance: s.balance, invested, storeValue, savings, owed, termDeposits,
-      net: Math.round((s.balance + invested + storeValue + savings + termDeposits - owed) * 100) / 100
+      balance: s.balance, invested, storeValue, propertyValue, vehicleValue, savings, owed, termDeposits,
+      net: Math.round((s.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits - owed) * 100) / 100
     };
   });
   rows.sort((a, b) => b.net - a.net);
@@ -1772,6 +1788,10 @@ function withNewModuleDefaults(cls) {
   if (!cls) return cls;
   cls.insurancePlans = cls.insurancePlans || [];
   cls.storeItems = cls.storeItems || [];
+  cls.storeItems.forEach(it => {
+    if (it.stockTotal === undefined) it.stockTotal = it.stock === undefined ? null : it.stock;
+    if (it.sold === undefined) it.sold = 0;
+  });
   cls.properties = cls.properties || [];
   cls.eventDefs = cls.eventDefs || [];
   cls.eventLog = cls.eventLog || [];
@@ -1894,10 +1914,16 @@ async function addStoreItem(classCode, item) {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    // stockTotal is the "bank" figure the teacher sets; stock is what's
+    // actually left to buy right now; sold tracks units bought so far so
+    // that a later change to stockTotal (see updateStoreItem) can be
+    // applied as "bank total minus what's already gone out the door"
+    // instead of blindly overwriting the remaining count.
+    const stockTotal = item.stock === "" || item.stock === undefined ? null : Number(item.stock);
     cls.storeItems.push({
       id: uid("item"), name: item.name, price: Number(item.price),
       description: item.description || "", effect: item.effect || "",
-      stock: item.stock === "" || item.stock === undefined ? null : Number(item.stock),
+      stock: stockTotal, stockTotal, sold: 0,
       stars: Math.max(0, Math.min(5, Number(item.stars) || 0)),
       countsNetWorth: item.countsNetWorth !== false,
       archived: false
@@ -1917,7 +1943,14 @@ async function updateStoreItem(classCode, itemId, item) {
     existing.price = Number(item.price);
     existing.description = item.description || "";
     existing.effect = item.effect || "";
-    existing.stock = item.stock === "" || item.stock === undefined ? null : Number(item.stock);
+    const newStockTotal = item.stock === "" || item.stock === undefined ? null : Number(item.stock);
+    const sold = existing.sold || 0;
+    existing.stockTotal = newStockTotal;
+    // Re-derive what's left from the new bank total minus units already
+    // sold (e.g. bank set to 5, 2 already sold -> 3 left), rather than
+    // setting remaining stock straight to the entered number. Floored at
+    // 0 in case the teacher lowers the bank below what's already sold.
+    existing.stock = newStockTotal === null ? null : Math.max(0, newStockTotal - sold);
     existing.stars = Math.max(0, Math.min(5, Number(item.stars) || 0));
     existing.countsNetWorth = item.countsNetWorth !== false;
     t.update(classRef, { storeItems: cls.storeItems });
@@ -1960,6 +1993,7 @@ async function buyStoreItem(username, classCode, itemId) {
       if (!isTeacher && user.balance < total) throw new Error("BROKE");
       itemName = item.name;
       if (item.stock !== null) item.stock -= 1;
+      item.sold = (item.sold || 0) + 1;
       user.storeItems = user.storeItems || [];
       user.storeItems.push(itemId);
       if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - total) * 100) / 100, storeItems: user.storeItems });
@@ -1999,6 +2033,7 @@ async function sellStoreItem(username, classCode, itemId) {
       itemName = item.name;
       payout = Math.round(item.price * 0.8 * 100) / 100;
       if (item.stock !== null) item.stock += 1;
+      item.sold = Math.max(0, (item.sold || 0) - 1);
       const isTeacher = user.role === "teacher";
       if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + payout) * 100) / 100, storeItems: user.storeItems });
       else t.update(userRef, { storeItems: user.storeItems });
