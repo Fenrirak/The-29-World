@@ -115,12 +115,14 @@ function sparkline(history) {
   const pts = history.map((v, i) => {
     const x = (i / (history.length - 1 || 1)) * w;
     const y = h - ((v - min) / range) * h;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-  const up = history[history.length - 1] >= history[0];
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-    <polyline points="${pts}" fill="none" stroke="${up ? '#3fbf8f' : '#e8735f'}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-  </svg>`;
+    return { x, y };
+  });
+  const segments = pts.slice(1).map((p, i) => {
+    const prev = pts[i];
+    const up = p.y <= prev.y; // y is inverted (smaller y = higher price)
+    return `<line x1="${prev.x.toFixed(1)}" y1="${prev.y.toFixed(1)}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${up ? '#3fbf8f' : '#e8735f'}" stroke-width="2.5" stroke-linecap="round"/>`;
+  }).join("");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${segments}</svg>`;
 }
 
 async function render() {
