@@ -1,4 +1,4 @@
-let CURRENT, IS_TEACHER;
+let CURRENT, IS_TEACHER, EDITING_PLAN_ID = null;
 
 function stars(n) {
   n = Number(n) || 0;
@@ -80,7 +80,8 @@ async function render() {
         </div>
         <div>
           ${IS_TEACHER
-            ? `<button class="btn small coral" onclick="deletePlan('${p.id}')">${icon("trash", 13)} Remove</button>`
+            ? `<button class="btn small secondary" onclick='startEditPlan(${JSON.stringify(p).replace(/'/g, "&#39;")})'>Edit</button>
+               <button class="btn small coral" onclick="deletePlan('${p.id}')">${icon("trash", 13)} Remove</button>`
             : owned
               ? `<button class="btn small secondary" onclick="cancelPlan('${p.id}')">Cancel cover</button>`
               : `<button class="btn small gold" onclick="buyPlan('${p.id}', ${Number(p.signupFee) || 0})">${icon("shield", 13)} Sign up</button>`}
@@ -116,13 +117,46 @@ async function addPlan(e) {
     stars: document.getElementById("pStars").value,
     signupFee: document.getElementById("pSignupFee").value
   };
-  await addInsurancePlan(CURRENT.classCode, plan);
-  document.getElementById("addMsg").innerHTML = `<div class="success-msg">Plan added!</div>`;
+  if (EDITING_PLAN_ID) {
+    await editInsurancePlan(CURRENT.classCode, EDITING_PLAN_ID, plan);
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Plan updated!</div>`;
+    cancelEditPlan();
+  } else {
+    await addInsurancePlan(CURRENT.classCode, plan);
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Plan added!</div>`;
+    ["pName","pPrice","pExcess","pDesc"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("pStars").value = 0;
+    document.getElementById("pSignupFee").value = 0;
+  }
+  await render();
+  return false;
+}
+
+function startEditPlan(p) {
+  EDITING_PLAN_ID = p.id;
+  document.getElementById("pName").value = p.name || "";
+  document.getElementById("pPrice").value = p.price || 0;
+  document.getElementById("pExcess").value = p.excess || 0;
+  document.getElementById("pCoverage").value = p.coverage || "general";
+  document.getElementById("pDesc").value = p.description || "";
+  document.getElementById("pStars").value = p.stars || 0;
+  document.getElementById("pSignupFee").value = p.signupFee || 0;
+  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit insurance plan";
+  document.getElementById("addBtn").innerHTML = "Save changes";
+  document.getElementById("cancelEditBtn").classList.remove("hidden");
+  document.getElementById("addMsg").innerHTML = "";
+  document.getElementById("teacherPanel").scrollIntoView({ behavior: "smooth" });
+}
+
+function cancelEditPlan() {
+  EDITING_PLAN_ID = null;
   ["pName","pPrice","pExcess","pDesc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("pStars").value = 0;
   document.getElementById("pSignupFee").value = 0;
-  await render();
-  return false;
+  document.getElementById("pCoverage").value = "general";
+  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add an insurance plan";
+  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add plan";
+  document.getElementById("cancelEditBtn").classList.add("hidden");
 }
 
 async function deletePlan(id) {

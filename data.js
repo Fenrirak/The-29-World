@@ -1871,6 +1871,25 @@ async function removeInsurancePlan(classCode, planId) {
     t.update(classRef, { insurancePlans: cls.insurancePlans });
   });
 }
+async function editInsurancePlan(classCode, planId, plan) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const idx = cls.insurancePlans.findIndex(p => p.id === planId);
+    if (idx === -1) return;
+    const existing = cls.insurancePlans[idx];
+    cls.insurancePlans[idx] = {
+      ...existing,
+      name: plan.name, price: Number(plan.price),
+      excess: Number(plan.excess), coverage: plan.coverage || "general",
+      description: plan.description || "", stars: Math.max(0, Math.min(5, Number(plan.stars) || 0)),
+      signupFee: Math.max(0, Number(plan.signupFee) || 0)
+    };
+    t.update(classRef, { insurancePlans: cls.insurancePlans });
+  });
+}
 async function buyInsurance(username, classCode, planId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
