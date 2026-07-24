@@ -413,66 +413,78 @@ async function autoPayDayIfDue(classCode) {
   const todayName = nzDayName();
   const todayKey = nzDateKey();
   if (todayName !== cls.payDay) return 0;
-  if (cls.lastPayDayRun === todayKey) return 0;
-  return await runPayDayInternal(classCode, todayKey);
+  if (cls.lastPayDayRun === todayKey) return 0; // cheap skip — already fully ran today
+  const result = await runPayDayInternal(classCode, todayKey, { force: false });
+  return result.newlyPaid;
 }
 
 async function payDay(classCode) {
-  return await runPayDayInternal(classCode, nzDateKey());
+  // Manual "Run Pay Day" button — always actually checks every student,
+  // even if today's auto-run already completed. It will still never pay
+  // the same student twice for the same day; it only pays students who
+  // have a job but haven't been paid yet today (e.g. ones missed by an
+  // earlier partial/failed run, or ones assigned a job after auto-run).
+  return await runPayDayInternal(classCode, nzDateKey(), { force: true });
 }
 
-async function runPayDayInternal(classCode, dateKey) {
+async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
   const classRef = classesCol().doc(classCode);
 
-  // Claim today's run, but only skip entirely if it was already marked
-  // FULLY complete. If a previous run was interrupted partway through
-  // (crash, network drop, one student's payment throwing), we pick up
-  // a progress record instead of a blunt "already ran" flag, so nobody
-  // gets silently skipped for the rest of the day.
+  // Figure out today's progress record. `force` (manual button) always
+  // proceeds to check students even if lastPayDayRun already says today
+  // is done — the per-student paidUsernames list is what actually
+  // prevents double-payment, not the coarse lastPayDayRun flag.
   let progress = null;
+  let alreadyRun = false;
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
-    if (cls.lastPayDayRun === dateKey) { progress = "DONE"; return; }
+    alreadyRun = cls.lastPayDayRun === dateKey;
+    if (alreadyRun && !force) { progress = "SKIP"; return; }
     const existing = cls.payDayProgress;
     progress = (existing && existing.dateKey === dateKey) ? existing : { dateKey, paidUsernames: [] };
     t.update(classRef, { payDayProgress: progress });
   });
-  if (progress === "DONE") return { paidCount: 0, alreadyRun: true };
+  if (progress === "SKIP") return { paidCount: 0, newlyPaid: 0, hasJobs: null, alreadyRun: true };
 
   const cls = await getClass(classCode);
-  if (!cls) return { paidCount: 0, alreadyRun: false };
+  if (!cls) return { paidCount: 0, newlyPaid: 0, hasJobs: false, alreadyRun };
   const students = await getClassStudents(classCode);
   const alreadyPaid = new Set(progress.paidUsernames || []);
   let paidCount = alreadyPaid.size;
+  let newlyPaid = 0;
+  let hasJobs = false;
   let allSucceeded = true;
 
   for (const student of students) {
-    if (!student.jobId || alreadyPaid.has(student.username)) continue;
+    if (!student.jobId) continue;
     const job = cls.jobs.find(j => j.id === student.jobId);
     if (!job) continue;
+    hasJobs = true;
+    if (alreadyPaid.has(student.username)) continue;
     try {
       const { net, taxAmount } = applyTaxToIncome(cls, "wage", job.wage);
       await adjustBalance(student.username, net);
       await logTxn(classCode, { type: "wage", to: student.username, amount: net, note: "Pay day: " + job.title + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
       alreadyPaid.add(student.username);
       paidCount++;
+      newlyPaid++;
       // Persist progress after each successful payment so a crash
       // mid-loop doesn't cause a re-run to pay this student twice.
       await classRef.update({ payDayProgress: { dateKey, paidUsernames: Array.from(alreadyPaid) } });
     } catch (e) {
       // Don't let one student's failure stop the rest of the class
       // from getting paid — but don't mark the day as fully done either,
-      // so the next page load will retry just this student.
+      // so the next run (auto or manual) will retry just this student.
       allSucceeded = false;
     }
   }
 
   if (allSucceeded) {
-    await classRef.update({ lastPayDayRun: dateKey, payDayProgress: null });
+    await classRef.update({ lastPayDayRun: dateKey });
   }
-  return { paidCount, alreadyRun: false };
+  return { paidCount, newlyPaid, hasJobs, alreadyRun };
 }
 
 async function applyInterest(classCode) {

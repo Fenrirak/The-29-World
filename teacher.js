@@ -498,11 +498,13 @@ async function saveLifestyle() {
 }
 
 async function runPayDay() {
-  const { paidCount, alreadyRun } = await payDay(CLASS_CODE);
-  if (alreadyRun) {
-    alert("Pay day has already run for today — it won't run again until tomorrow (NZ time). If some students still weren't paid, check the activity log for errors on their account.");
+  const { newlyPaid, hasJobs } = await payDay(CLASS_CODE);
+  if (!hasJobs) {
+    alert("No students have a job assigned yet.");
+  } else if (newlyPaid > 0) {
+    alert(`Pay day complete — ${newlyPaid} student(s) paid.`);
   } else {
-    alert(paidCount > 0 ? `Pay day complete — ${paidCount} student(s) paid.` : "No students have a job assigned yet.");
+    alert("Everyone with a job has already been paid for today.");
   }
   await render();
 }
