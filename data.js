@@ -130,7 +130,7 @@ async function createTeacherAndClass(name, username, password, className) {
     jobApplications: [],
     lastPayDayRun: null,
     insurancePlans: [], storeItems: [], properties: [],
-    eventDefs: [], eventLog: [], lastEventWeekRun: null,
+    eventDefs: [], eventLog: [], lastEventWeekRun: null, lastEventDayRun: null,
     vehicles: [], termDepositPlans: [],
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
     insuranceDay: "Fri", lastInsuranceWeekRun: null,
@@ -1830,6 +1830,7 @@ function withNewModuleDefaults(cls) {
   cls.eventDefs = cls.eventDefs || [];
   cls.eventLog = cls.eventLog || [];
   cls.lastEventWeekRun = cls.lastEventWeekRun || null;
+  cls.lastEventDayRun = cls.lastEventDayRun || null;
   cls.termDepositPlans = cls.termDepositPlans || [];
   cls.loanTiers = cls.loanTiers || [];
   cls.maxLoanAmount = cls.maxLoanAmount || 0; // 0 = no extra class-wide cap beyond the tiers themselves
@@ -2292,97 +2293,96 @@ async function updateEventDef(classCode, evId, ev) {
 // event definitions existed, or before a timing fix), so the teacher isn't
 // stuck waiting until next Monday for it to try again naturally.
 async function forceWeeklyEvents(classCode) {
-  await classesCol().doc(classCode).update({ lastEventWeekRun: null });
+  // Manual "Run this week's events now" — overrides both the once-a-day
+  // auto-run guard and each student's daily/weekly caps below.
   return await processWeeklyEvents(classCode, { ignoreAlreadyHad: true });
 }
 
 async function processWeeklyEvents(classCode, opts) {
-  const ignoreAlreadyHad = !!(opts && opts.ignoreAlreadyHad);
+  const ignoreAlreadyHad = !!(opts && opts.ignoreAlreadyHad); // true only for a manual run
   const classRef = classesCol().doc(classCode);
+  const dayKey = nzDateKey();
   const weekKey = isoWeekKey(new Date());
   const cls = withNewModuleDefaults(await getClass(classCode));
-  if (!cls || cls.lastEventWeekRun === weekKey) return 0;
+  if (!cls) return 0;
+
+  // The auto-trigger (page load) only ever runs once per NZ calendar day —
+  // that's what makes "max 1 event a day" hold without any extra bookkeeping.
+  // A manual run skips this guard entirely, which is what lets it override
+  // the caps below.
+  if (!ignoreAlreadyHad && cls.lastEventDayRun === dayKey) return 0;
   if (!cls.eventDefs || cls.eventDefs.filter(e => e.active).length === 0) {
-    await classRef.update({ lastEventWeekRun: weekKey }).catch(() => {});
+    if (!ignoreAlreadyHad) await classRef.update({ lastEventDayRun: dayKey }).catch(() => {});
     return 0;
   }
 
-  let claimed = false;
-  await fdb.runTransaction(async (t) => {
-    const snap = await t.get(classRef);
-    if (!snap.exists) return;
-    const liveCls = withNewModuleDefaults(snap.data());
-    if (liveCls.lastEventWeekRun === weekKey) return;
-    t.update(classRef, { lastEventWeekRun: weekKey });
-    claimed = true;
-  });
-  if (!claimed) return 0;
+  let claimed = true;
+  if (!ignoreAlreadyHad) {
+    claimed = false;
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) return;
+      const liveCls = withNewModuleDefaults(snap.data());
+      if (liveCls.lastEventDayRun === dayKey) return;
+      t.update(classRef, { lastEventDayRun: dayKey });
+      claimed = true;
+    });
+    if (!claimed) return 0;
+  }
 
   const students = await getClassStudents(classCode);
   const activeDefs = cls.eventDefs.filter(e => e.active);
   const eventLog = cls.eventLog || [];
   const newLogEntries = [];
 
-  // Students who already have an event queued for THIS week are skipped
-  // no matter what — this is what makes it safe to click "Run this week's
-  // events now" more than once (double-click, slow connection retry,
-  // clicking again because there's no loading indicator, etc.) without
-  // stacking multiple events onto the same student for the same week.
-  // ignoreAlreadyHad only affects which DEFINITIONS are eligible (e.g.
-  // letting a student get an event they've had before, in past weeks) —
-  // it never means "give them another one this week too."
-  const alreadyThisWeek = new Set(eventLog.filter(l => l.week === weekKey).map(l => l.studentUser));
-
-  // Each student gets exactly 1 event per weekly run, revealed within
-  // ~20 minutes — this used to be a random 2-4 events with the reveal
-  // spread out further, but a single event per run is simpler and avoids
-  // ever handing out more than one on a manual "run now".
+  // Each qualifying student gets exactly 1 event per run, revealed within
+  // ~20 minutes.
   const FIRST_EVENT_MAX_DELAY_MS = 20 * 60000;      // first ever event: within 20 min
-  const GAP_MIN_MS = 2 * 3600000;                   // ~2-5h between each later event
-  const GAP_MAX_MS = 5 * 3600000;
 
   for (const student of students) {
-    if (alreadyThisWeek.has(student.username)) continue;
     const studentEntries = eventLog.filter(l => l.studentUser === student.username);
+
+    if (!ignoreAlreadyHad) {
+      // Max 1 event per day...
+      const hadToday = studentEntries.some(l => l.day === dayKey);
+      if (hadToday) continue;
+      // ...and max 3 events per week.
+      const weekCount = studentEntries.filter(l => l.week === weekKey).length;
+      if (weekCount >= 3) continue;
+    }
+
     const already = new Set(studentEntries.map(l => l.eventId));
     // Whatever event this student was assigned most recently (regardless
-    // of week) is excluded from this week's draw even if it's marked
-    // "repeatable" — repeatable just means it can come back around in a
-    // later week, not that the same event can land twice in a row.
+    // of week) is excluded from this draw even if it's marked "repeatable"
+    // — repeatable just means it can come back around later, not that the
+    // same event can land twice in a row.
     const lastEventId = studentEntries.length ? studentEntries[studentEntries.length - 1].eventId : null;
     const pool = activeDefs.filter(e => e.id !== lastEventId && (ignoreAlreadyHad || e.repeatable || !already.has(e.id)));
     if (pool.length === 0) continue;
-    const count = Math.min(pool.length, 1);
-    const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
-    let cursor = Date.now();
-    shuffled.forEach((ev, i) => {
-      cursor += i === 0
-        ? Math.floor(Math.random() * FIRST_EVENT_MAX_DELAY_MS)
-        : GAP_MIN_MS + Math.floor(Math.random() * (GAP_MAX_MS - GAP_MIN_MS));
-      const revealAt = cursor;
-      if (ev.type === "choice") {
-        // Multiple-choice events don't apply a balance change yet — the
-        // student must pick one of the options first (see resolveChoiceEvent).
-        newLogEntries.push({
-          id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey, revealAt,
-          name: ev.name, amount: null, description: ev.description || "", severity: ev.severity || "neutral",
-          claimed: false, type: "choice", options: ev.options || [], status: "pending"
-        });
-      } else {
-        // Fixed-amount events used to apply the balance change and log a
-        // txn right here, at generation time — long before the student
-        // ever saw a popup explaining why. That meant balances could
-        // silently jump by several events' worth all at once. Now this
-        // just schedules it; the actual balance change + txn only happens
-        // in revealFixedEvent(), which is called the moment the popup is
-        // about to be shown to the student (see checkWeeklyEventPopup).
-        newLogEntries.push({
-          id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), week: weekKey, revealAt,
-          name: ev.name, amount: ev.amount, description: ev.description || "", severity: ev.severity || "neutral",
-          claimed: false, type: "fixed", status: "scheduled"
-        });
-      }
-    });
+    const ev = pool[Math.floor(Math.random() * pool.length)];
+    const revealAt = Date.now() + Math.floor(Math.random() * FIRST_EVENT_MAX_DELAY_MS);
+    if (ev.type === "choice") {
+      // Multiple-choice events don't apply a balance change yet — the
+      // student must pick one of the options first (see resolveChoiceEvent).
+      newLogEntries.push({
+        id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
+        name: ev.name, amount: null, description: ev.description || "", severity: ev.severity || "neutral",
+        claimed: false, type: "choice", options: ev.options || [], status: "pending"
+      });
+    } else {
+      // Fixed-amount events used to apply the balance change and log a
+      // txn right here, at generation time — long before the student
+      // ever saw a popup explaining why. That meant balances could
+      // silently jump by several events' worth all at once. Now this
+      // just schedules it; the actual balance change + txn only happens
+      // in revealFixedEvent(), which is called the moment the popup is
+      // about to be shown to the student (see checkWeeklyEventPopup).
+      newLogEntries.push({
+        id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
+        name: ev.name, amount: ev.amount, description: ev.description || "", severity: ev.severity || "neutral",
+        claimed: false, type: "fixed", status: "scheduled"
+      });
+    }
   }
 
   await fdb.runTransaction(async (t) => {
