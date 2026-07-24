@@ -423,33 +423,55 @@ async function payDay(classCode) {
 
 async function runPayDayInternal(classCode, dateKey) {
   const classRef = classesCol().doc(classCode);
-  let toPay = [];
+
+  // Claim today's run, but only skip entirely if it was already marked
+  // FULLY complete. If a previous run was interrupted partway through
+  // (crash, network drop, one student's payment throwing), we pick up
+  // a progress record instead of a blunt "already ran" flag, so nobody
+  // gets silently skipped for the rest of the day.
+  let progress = null;
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
-    if (cls.lastPayDayRun === dateKey) return; // guard against double-run race
-    cls.students.forEach(sUser => {}); // students fetched outside; just mark class as run
-    t.update(classRef, { lastPayDayRun: dateKey });
+    if (cls.lastPayDayRun === dateKey) { progress = "DONE"; return; }
+    const existing = cls.payDayProgress;
+    progress = (existing && existing.dateKey === dateKey) ? existing : { dateKey, paidUsernames: [] };
+    t.update(classRef, { payDayProgress: progress });
   });
+  if (progress === "DONE") return 0;
 
   const cls = await getClass(classCode);
   if (!cls) return 0;
   const students = await getClassStudents(classCode);
-  let paidCount = 0;
-  const txns = [];
+  const alreadyPaid = new Set(progress.paidUsernames || []);
+  let paidCount = alreadyPaid.size;
+  let allSucceeded = true;
+
   for (const student of students) {
-    if (student.jobId) {
-      const job = cls.jobs.find(j => j.id === student.jobId);
-      if (job) {
-        const { net, taxAmount } = applyTaxToIncome(cls, "wage", job.wage);
-        await adjustBalance(student.username, net);
-        txns.push({ type: "wage", to: student.username, amount: net, note: "Pay day: " + job.title + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
-        paidCount++;
-      }
+    if (!student.jobId || alreadyPaid.has(student.username)) continue;
+    const job = cls.jobs.find(j => j.id === student.jobId);
+    if (!job) continue;
+    try {
+      const { net, taxAmount } = applyTaxToIncome(cls, "wage", job.wage);
+      await adjustBalance(student.username, net);
+      await logTxn(classCode, { type: "wage", to: student.username, amount: net, note: "Pay day: " + job.title + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
+      alreadyPaid.add(student.username);
+      paidCount++;
+      // Persist progress after each successful payment so a crash
+      // mid-loop doesn't cause a re-run to pay this student twice.
+      await classRef.update({ payDayProgress: { dateKey, paidUsernames: Array.from(alreadyPaid) } });
+    } catch (e) {
+      // Don't let one student's failure stop the rest of the class
+      // from getting paid — but don't mark the day as fully done either,
+      // so the next page load will retry just this student.
+      allSucceeded = false;
     }
   }
-  for (const t of txns) await logTxn(classCode, t);
+
+  if (allSucceeded) {
+    await classRef.update({ lastPayDayRun: dateKey, payDayProgress: null });
+  }
   return paidCount;
 }
 
