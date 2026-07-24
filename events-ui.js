@@ -125,7 +125,7 @@ function showChoiceEventPopup(entry, username, classCode) {
       overlay.querySelectorAll("button").forEach(b => b.disabled = true);
       const res = await resolveChoiceEvent(username, classCode, entry.id, btn.getAttribute("data-opt"));
       if (res.ok) {
-        showChoiceOutcome(overlay, entry, res.amount, res.outcome);
+        showChoiceOutcome(overlay, entry, res.amount, res.outcome, username, classCode);
         if (typeof render === "function") render();
       } else {
         document.getElementById("choiceEventMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
@@ -138,12 +138,18 @@ function showChoiceEventPopup(entry, username, classCode) {
 // Swaps the choice modal's content for a reveal of what actually happened
 // — this is the first moment the student sees the amount, now that
 // they've already committed to their choice.
-function showChoiceOutcome(overlay, entry, amount, outcome) {
+function showChoiceOutcome(overlay, entry, amount, outcome, username, classCode) {
   const card = overlay.querySelector(".anw-modal-card");
+  // Same claimability rule as fixed events: the event def was marked
+  // "bad" and the option the student picked actually cost them money.
+  // A student who picks a $0/positive option on a "bad" event has
+  // nothing to claim, even though the event itself is tagged bad.
+  const claimable = entry.severity === "bad" && amount < 0;
   card.innerHTML = `
     <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${entry.name}</h2>
     ${outcome ? `<p>${outcome}</p>` : ""}
     <p class="${amount < 0 ? 'ticker-down' : 'ticker-up'}" style="font-weight:900;font-size:1.2em;">${amount >= 0 ? "+" : "-"}${fmtMoney(Math.abs(amount))}</p>
+    ${claimable ? `<button class="btn small secondary" onclick="claimFromPopup('${entry.id}', '${username}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
     <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwChoiceOutcomeCloseBtn">Nice, got it</button>
   `;
   document.getElementById("anwChoiceOutcomeCloseBtn").addEventListener("click", () => overlay.remove());
