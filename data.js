@@ -439,10 +439,10 @@ async function runPayDayInternal(classCode, dateKey) {
     progress = (existing && existing.dateKey === dateKey) ? existing : { dateKey, paidUsernames: [] };
     t.update(classRef, { payDayProgress: progress });
   });
-  if (progress === "DONE") return 0;
+  if (progress === "DONE") return { paidCount: 0, alreadyRun: true };
 
   const cls = await getClass(classCode);
-  if (!cls) return 0;
+  if (!cls) return { paidCount: 0, alreadyRun: false };
   const students = await getClassStudents(classCode);
   const alreadyPaid = new Set(progress.paidUsernames || []);
   let paidCount = alreadyPaid.size;
@@ -472,7 +472,7 @@ async function runPayDayInternal(classCode, dateKey) {
   if (allSucceeded) {
     await classRef.update({ lastPayDayRun: dateKey, payDayProgress: null });
   }
-  return paidCount;
+  return { paidCount, alreadyRun: false };
 }
 
 async function applyInterest(classCode) {
