@@ -2355,9 +2355,12 @@ async function processWeeklyEvents(classCode, opts) {
     // Whatever event this student was assigned most recently (regardless
     // of week) is excluded from this draw even if it's marked "repeatable"
     // — repeatable just means it can come back around later, not that the
-    // same event can land twice in a row.
+    // same event can land twice in a row. A manual/forced run overrides
+    // this too, otherwise a class with only one active event (or a student
+    // whose only eligible event was their last one) would silently get
+    // nothing at all, even on an explicit "override" run.
     const lastEventId = studentEntries.length ? studentEntries[studentEntries.length - 1].eventId : null;
-    const pool = activeDefs.filter(e => e.id !== lastEventId && (ignoreAlreadyHad || e.repeatable || !already.has(e.id)));
+    const pool = activeDefs.filter(e => ignoreAlreadyHad || (e.id !== lastEventId && (e.repeatable || !already.has(e.id))));
     if (pool.length === 0) continue;
     const ev = pool[Math.floor(Math.random() * pool.length)];
     const revealAt = Date.now() + Math.floor(Math.random() * FIRST_EVENT_MAX_DELAY_MS);
