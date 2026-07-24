@@ -1855,6 +1855,7 @@ async function addInsurancePlan(classCode, plan) {
       id: uid("ins"), name: plan.name, price: Number(plan.price),
       excess: Number(plan.excess), coverage: plan.coverage || "general",
       description: plan.description || "", stars: Math.max(0, Math.min(5, Number(plan.stars) || 0)),
+      signupFee: Math.max(0, Number(plan.signupFee) || 0),
       active: true
     });
     t.update(classRef, { insurancePlans: cls.insurancePlans });
@@ -1874,6 +1875,7 @@ async function buyInsurance(username, classCode, planId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let planName = "";
+  let fee = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1885,13 +1887,22 @@ async function buyInsurance(username, classCode, planId) {
       if (!plan) throw new Error("NOT_FOUND");
       user.insurance = user.insurance || [];
       if (user.insurance.includes(planId)) throw new Error("ALREADY");
+      fee = Math.max(0, Number(plan.signupFee) || 0);
+      const isTeacher = user.role === "teacher";
+      if (!isTeacher && fee > 0 && user.balance < fee) throw new Error("BROKE");
       planName = plan.name;
       user.insurance.push(planId);
-      t.update(userRef, { insurance: user.insurance });
+      const update = { insurance: user.insurance };
+      if (!isTeacher && fee > 0) update.balance = Math.round((user.balance - fee) * 100) / 100;
+      t.update(userRef, update);
     });
   } catch (e) {
     if (e.message === "ALREADY") return { ok: false, error: "You already have this plan." };
+    if (e.message === "BROKE") return { ok: false, error: `You don't have enough money to pay the ${fmtMoney(fee)} sign-up fee.` };
     return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  if (fee > 0) {
+    await logTxn(classCode, { type: "insurance-signup-fee", from: username, amount: fee, note: `Sign-up fee for insurance: ${planName}` });
   }
   await logTxn(classCode, { type: "insurance-buy", from: username, amount: 0, note: `Signed up for insurance: ${planName} — premiums are charged weekly` });
   return { ok: true };

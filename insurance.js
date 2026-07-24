@@ -76,14 +76,14 @@ async function render() {
           <h4>${icon("shield", 20)}${p.name} ${owned ? '<span class="badge mint">You have this</span>' : ""}</h4>
           <p>${p.description || "No description provided."}</p>
           <p class="muted-small">Covers: ${COVERAGE_LABEL[p.coverage] || "—"}</p>
-          <p><strong>${fmtMoney(p.price)}</strong>/week &middot; ${fmtMoney(p.excess)} excess ${p.stars ? `&middot; <span class="ticker-up">${stars(p.stars)}</span>` : ""}</p>
+          <p><strong>${fmtMoney(p.price)}</strong>/week &middot; ${fmtMoney(p.excess)} excess ${p.signupFee ? `&middot; ${fmtMoney(p.signupFee)} sign-up fee` : ""} ${p.stars ? `&middot; <span class="ticker-up">${stars(p.stars)}</span>` : ""}</p>
         </div>
         <div>
           ${IS_TEACHER
             ? `<button class="btn small coral" onclick="deletePlan('${p.id}')">${icon("trash", 13)} Remove</button>`
             : owned
               ? `<button class="btn small secondary" onclick="cancelPlan('${p.id}')">Cancel cover</button>`
-              : `<button class="btn small gold" onclick="buyPlan('${p.id}')">${icon("shield", 13)} Sign up</button>`}
+              : `<button class="btn small gold" onclick="buyPlan('${p.id}', ${Number(p.signupFee) || 0})">${icon("shield", 13)} Sign up</button>`}
         </div>
       </div>
       <div id="msg-${p.id}"></div>
@@ -113,12 +113,14 @@ async function addPlan(e) {
     excess: document.getElementById("pExcess").value,
     coverage: document.getElementById("pCoverage").value,
     description: document.getElementById("pDesc").value.trim(),
-    stars: document.getElementById("pStars").value
+    stars: document.getElementById("pStars").value,
+    signupFee: document.getElementById("pSignupFee").value
   };
   await addInsurancePlan(CURRENT.classCode, plan);
   document.getElementById("addMsg").innerHTML = `<div class="success-msg">Plan added!</div>`;
   ["pName","pPrice","pExcess","pDesc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("pStars").value = 0;
+  document.getElementById("pSignupFee").value = 0;
   await render();
   return false;
 }
@@ -130,7 +132,8 @@ async function deletePlan(id) {
   }
 }
 
-async function buyPlan(id) {
+async function buyPlan(id, fee) {
+  if (fee > 0 && !confirm(`This plan has a one-off sign-up fee of ${fmtMoney(fee)}, charged immediately. Continue?`)) return;
   const res = await buyInsurance(CURRENT.username, CURRENT.classCode, id);
   document.getElementById("msg-" + id).innerHTML = res.ok
     ? `<div class="success-msg">You're covered! Premiums will be charged weekly.</div>`
