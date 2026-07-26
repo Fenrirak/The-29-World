@@ -61,44 +61,37 @@ p{color:var(--muted);line-height:1.5;}
   z-index:50;
 }
 /* Nav sizing (brand text/icon, link text/icon, gaps, padding, logout button)
-   is expressed with clamp(min, calc(anchor + (100vw - 1366px) * rate), max)
-   throughout this block. 1366px is the reference/minimum desktop width the
-   full-label nav must fit into on a single line, so every clamp's middle
-   term evaluates to exactly its min value at 100vw = 1366px (the (100vw -
-   1366px) term is 0) and holds flat below that (clamp floors it at min, so
-   901-1366px stays just as compact). Above 1366px the term grows, scaling
-   font size/icon size/padding/gaps up in proportion with viewport width,
-   capped at a sensible max so things don't get cartoonishly large on very
-   wide monitors. */
-/* Nav sizing (brand text/icon, link text/icon, gaps, padding, logout button)
-   is expressed with clamp(min, calc(anchor + (100vw - 1366px) * rate), max).
-   The min values below were solved with actual text-width metrics for all
-   13 nav labels (Dashboard/Bank/Term Deposit/Loans/Stock Market/Store/Jobs/
-   Transport/Property/Insurance/Tax/Big Events/Gambling) plus the brand text,
-   icons, gaps and padding, added up against a 1366px budget — not guessed —
-   so the full-label row actually fits at 1366px instead of just looking
-   like it should. Each clamp's middle term evaluates to exactly its min at
-   100vw = 1366px (the (100vw - 1366px) term is 0) and holds flat below
-   that (clamp floors at min, so 901-1366px stays just as compact). Above
-   1366px the term grows, scaling everything up in proportion with viewport
-   width, capped at a max. flex-wrap:nowrap plus white-space:nowrap on the
-   links are a hard backstop: even if some other font metric runs a little
-   wider than measured here, the row will compress/overflow slightly rather
-   than silently wrapping to a second line. */
+   is expressed with clamp(min, calc(anchor + (100vw - 1000px) * rate), max)
+   throughout this block. 1000px is the reference/minimum desktop-or-landscape
+   width the full-label nav must fit into on a single line, so every clamp's
+   middle term evaluates to exactly its min value at 100vw = 1000px (the
+   (100vw - 1000px) term is 0). Above 1000px the term grows, scaling font
+   size/icon size/padding/gaps up in proportion with viewport width, capped
+   at a sensible max so things don't get cartoonishly large on very wide
+   monitors. Below 1000px in landscape, clamp floors at min (still tiny but
+   readable text); very narrow landscape phones fall back to icon-only via
+   a dedicated max-width query further down. In portrait orientation this
+   whole nav switches to icon-only and is allowed to wrap onto a second
+   line instead (see the orientation:portrait block below) — labels are
+   dropped there rather than shrunk further, since sub-0.46rem text stops
+   being legible. flex-wrap:nowrap plus white-space:nowrap on the links are
+   a hard backstop for landscape/desktop: even if some font metric runs a
+   little wider than expected, the row compresses/overflows slightly rather
+   than silently wrapping. */
 .brand{
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:6px;
   font-weight:800;
-  font-size:clamp(0.9375rem, calc(0.9375rem + (100vw - 1366px) * 0.00035), 1.3rem);
+  font-size:clamp(0.72rem, calc(0.72rem + (100vw - 1000px) * 0.00035), 1.3rem);
   color:#fff;
   text-decoration:none;
   flex-shrink:0;
   white-space:nowrap;
 }
 .brand .coin, .brand .icon-slot{
-  width:clamp(20px, calc(20px + (100vw - 1366px) * 0.004), 28px);
-  height:clamp(20px, calc(20px + (100vw - 1366px) * 0.004), 28px);
+  width:clamp(16px, calc(16px + (100vw - 1000px) * 0.004), 28px);
+  height:clamp(16px, calc(16px + (100vw - 1000px) * 0.004), 28px);
   display:inline-flex;align-items:center;justify-content:center;
   color:var(--gold);
   filter:drop-shadow(0 3px 6px rgba(232,184,75,0.35));
@@ -108,23 +101,23 @@ p{color:var(--muted);line-height:1.5;}
 .topbar nav{
   display:flex;
   flex-wrap:nowrap;
-  gap:clamp(3px, calc(3px + (100vw - 1366px) * 0.003), 8px);
+  gap:clamp(2px, calc(2px + (100vw - 1000px) * 0.003), 8px);
   align-items:center;
 }
 .topbar nav a{
   color:#cfd8ea;text-decoration:none;font-weight:600;
-  font-size:clamp(0.5625rem, calc(0.5625rem + (100vw - 1366px) * 0.00045), 1.05rem);
+  font-size:clamp(0.46rem, calc(0.46rem + (100vw - 1000px) * 0.00045), 1.05rem);
   display:inline-flex;align-items:center;
-  gap:clamp(4px, calc(4px + (100vw - 1366px) * 0.0025), 8px);
-  padding:clamp(5px, calc(5px + (100vw - 1366px) * 0.004), 10px) clamp(6px, calc(6px + (100vw - 1366px) * 0.005), 12px);
+  gap:clamp(2px, calc(2px + (100vw - 1000px) * 0.0025), 8px);
+  padding:clamp(4px, calc(4px + (100vw - 1000px) * 0.004), 10px) clamp(4px, calc(4px + (100vw - 1000px) * 0.005), 12px);
   border-radius:8px;
-  min-height:clamp(28px, calc(28px + (100vw - 1366px) * 0.009), 40px);
+  min-height:clamp(24px, calc(24px + (100vw - 1000px) * 0.009), 40px);
   white-space:nowrap;
   flex-shrink:0;
 }
 .topbar nav a .icon{
-  width:clamp(13px, calc(13px + (100vw - 1366px) * 0.006), 20px);
-  height:clamp(13px, calc(13px + (100vw - 1366px) * 0.006), 20px);
+  width:clamp(11px, calc(11px + (100vw - 1000px) * 0.006), 20px);
+  height:clamp(11px, calc(11px + (100vw - 1000px) * 0.006), 20px);
   flex-shrink:0;
 }
 .topbar nav a:hover{color:#fff;background:rgba(255,255,255,0.08);}
@@ -132,17 +125,17 @@ p{color:var(--muted);line-height:1.5;}
 .topbar .who{display:none;}
 .btn-logout{
   background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
-  padding:clamp(5px, calc(5px + (100vw - 1366px) * 0.003), 10px);
+  padding:clamp(4px, calc(4px + (100vw - 1000px) * 0.003), 10px);
   font-weight:700;cursor:pointer;font-size:.85rem;
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
-  margin-left:clamp(8px, calc(8px + (100vw - 1366px) * 0.003), 16px);
+  margin-left:clamp(4px, calc(4px + (100vw - 1000px) * 0.003), 16px);
   flex-shrink:0;
-  min-width:clamp(28px, calc(28px + (100vw - 1366px) * 0.009), 40px);
-  min-height:clamp(28px, calc(28px + (100vw - 1366px) * 0.009), 40px);
+  min-width:clamp(24px, calc(24px + (100vw - 1000px) * 0.009), 40px);
+  min-height:clamp(24px, calc(24px + (100vw - 1000px) * 0.009), 40px);
 }
 .btn-logout .icon{
-  width:clamp(16px, calc(16px + (100vw - 1366px) * 0.005), 22px);
-  height:clamp(16px, calc(16px + (100vw - 1366px) * 0.005), 22px);
+  width:clamp(14px, calc(14px + (100vw - 1000px) * 0.005), 22px);
+  height:clamp(14px, calc(14px + (100vw - 1000px) * 0.005), 22px);
 }
 .btn-logout .nav-label{display:none;}
 .btn-logout:hover{background:rgba(255,255,255,0.18);}
@@ -419,13 +412,33 @@ label .icon-slot{color:var(--navy-700);}
   main{padding:22px 16px 50px;}
   .stat .value{font-size:1.7rem;}
   .auth-card{padding:28px 22px;}
-  /* Nav labels wrap onto multiple lines anywhere from ~640-900px wide,
-     which was bloating the sticky topbar's height on a lot of phones and
-     pushing page content (like the cash balance stat card) mostly out of
-     view. Switching to icon-only nav across this whole range keeps the
-     topbar to a single compact row instead. */
+}
+
+/* Portrait orientation (phones and tablets held upright) — always show
+   icon-only nav, regardless of width. The row is allowed to wrap onto a
+   second line if it doesn't all fit, but must never overflow sideways:
+   flex-wrap:wrap plus a hard max-width:100vw + overflow-x:hidden on the
+   topbar keeps everything on-screen, just taller instead of wider. */
+@media (orientation: portrait){
+  .topbar{
+    flex-wrap:wrap;
+    max-width:100vw;
+    overflow-x:hidden;
+    row-gap:6px;
+  }
+  .topbar nav{
+    flex-wrap:wrap;
+    row-gap:6px;
+    max-width:100%;
+  }
   .topbar nav a .nav-label{display:none;}
-  .topbar nav a{padding:9px;min-width:40px;justify-content:center;}
+  .topbar nav a{
+    padding:9px;
+    min-width:38px;
+    justify-content:center;
+    font-size:.85rem;
+  }
+  .topbar nav a .icon{width:17px;height:17px;}
 }
 
 @media (max-width: 640px){
@@ -452,22 +465,15 @@ label .icon-slot{color:var(--navy-700);}
    a second line (flex-wrap:wrap) if a device is unusually narrow, instead
    of relying on horizontal scroll. Gated on orientation so this never
    fires for portrait mode or normal desktop/laptop screens. */
-@media (orientation: landscape){
-  .topbar{flex-wrap:wrap;padding:8px 12px;gap:6px;row-gap:6px;}
-  .topbar nav{flex-wrap:wrap;row-gap:6px;gap:5px;}
-  .brand{font-size:1.14rem;flex-shrink:0;white-space:nowrap;}
-  .topbar nav a{flex-shrink:0;padding:7px 8px;font-size:.94rem;gap:5px;min-height:34px;white-space:nowrap;}
-  .topbar nav a .icon{width:16px;height:16px;}
-  .btn-logout{flex-shrink:0;padding:7px;min-width:34px;min-height:34px;}
-  .btn-logout .icon{width:19px;height:19px;}
-}
-
-/* Landscape mode, narrower widths (phones) — shrinking alone isn't enough
-   room for full text labels, so fall back to icon-only nav here so
-   everything reliably stays on one row without needing to scroll or wrap. */
-@media (orientation: landscape) and (max-width: 700px){
-  .topbar nav a{padding:8px;min-width:36px;justify-content:center;}
+/* Landscape phones under 1000px wide — the clamp() above floors at its
+   1000px-anchored minimum here, but that's still text+icon; below ~560px
+   wide even the tiniest text nav won't hold 13 labels on one line without
+   the row overflowing sideways, so fall back to icon-only so it reliably
+   stays on one row without horizontal scroll. */
+@media (orientation: landscape) and (max-width: 560px){
+  .topbar nav a{padding:6px;min-width:30px;justify-content:center;}
   .topbar nav a .nav-label{display:none;}
+  .topbar nav a .icon{width:15px;height:15px;}
 }
 
 /* ---------------- Random event popup ---------------- */
