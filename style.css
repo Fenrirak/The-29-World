@@ -47,95 +47,94 @@ a{color:var(--navy-700);}
 p{color:var(--muted);line-height:1.5;}
 
 .topbar{
+  --navscale:1; /* set by fitTopbar() in icons.js after measuring real widths */
   background:linear-gradient(120deg,var(--navy-900) 0%,var(--navy-800) 55%,var(--navy-700) 100%);
   color:#fff;
   padding:12px 16px;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:10px;
-  flex-wrap:wrap;
+  gap:calc(10px * var(--navscale));
+  flex-wrap:nowrap;
   box-shadow:var(--shadow);
   position:sticky;
   top:0;
   z-index:50;
 }
 /* Nav sizing (brand text/icon, link text/icon, gaps, padding, logout button)
-   is expressed with clamp(min, calc(anchor + (100vw - 1000px) * rate), max)
-   throughout this block. 1000px is the reference/minimum desktop-or-landscape
-   width the full-label nav must fit into on a single line, so every clamp's
-   middle term evaluates to exactly its min value at 100vw = 1000px (the
-   (100vw - 1000px) term is 0). Above 1000px the term grows, scaling font
-   size/icon size/padding/gaps up in proportion with viewport width, capped
-   at a sensible max so things don't get cartoonishly large on very wide
-   monitors. Below 1000px in landscape, clamp floors at min (still tiny but
-   readable text); very narrow landscape phones fall back to icon-only via
-   a dedicated max-width query further down. In portrait orientation this
-   whole nav switches to icon-only and is allowed to wrap onto a second
-   line instead (see the orientation:portrait block below) — labels are
-   dropped there rather than shrunk further, since sub-0.46rem text stops
-   being legible. flex-wrap:nowrap plus white-space:nowrap on the links are
-   a hard backstop for landscape/desktop: even if some font metric runs a
-   little wider than expected, the row compresses/overflows slightly rather
-   than silently wrapping. */
+   is driven by the --navscale custom property instead of guessed
+   breakpoints. Every size below is a base ("full size") value multiplied
+   by var(--navscale) via calc(). fitTopbar() in icons.js measures the
+   topbar's real available width against what the nav actually needs at
+   scale 1, then sets --navscale to whatever value makes it fit exactly —
+   recalculated on load, resize, and orientation change, so it responds to
+   the genuine screen width rather than a fixed set of breakpoints. In
+   portrait orientation, JS leaves --navscale at 1 and CSS instead switches
+   to icon-only + allows wrapping (see the orientation:portrait block
+   below), since shrinking text below a certain point stops being legible —
+   dropping labels reads better than microscopic text. */
 .brand{
   display:flex;
   align-items:center;
-  gap:6px;
+  gap:calc(6px * var(--navscale));
   font-weight:800;
-  font-size:clamp(0.72rem, calc(0.72rem + (100vw - 1000px) * 0.00035), 1.3rem);
+  font-size:calc(1.15rem * var(--navscale));
   color:#fff;
   text-decoration:none;
   flex-shrink:0;
   white-space:nowrap;
 }
 .brand .coin, .brand .icon-slot{
-  width:clamp(16px, calc(16px + (100vw - 1000px) * 0.004), 28px);
-  height:clamp(16px, calc(16px + (100vw - 1000px) * 0.004), 28px);
+  width:calc(24px * var(--navscale));
+  height:calc(24px * var(--navscale));
   display:inline-flex;align-items:center;justify-content:center;
   color:var(--gold);
   filter:drop-shadow(0 3px 6px rgba(232,184,75,0.35));
   flex-shrink:0;
 }
-.topbar{flex-wrap:nowrap;}
 .topbar nav{
   display:flex;
   flex-wrap:nowrap;
-  gap:clamp(2px, calc(2px + (100vw - 1000px) * 0.003), 8px);
+  gap:calc(6px * var(--navscale));
   align-items:center;
 }
 .topbar nav a{
   color:#cfd8ea;text-decoration:none;font-weight:600;
-  font-size:clamp(0.46rem, calc(0.46rem + (100vw - 1000px) * 0.00045), 1.05rem);
+  font-size:calc(0.95rem * var(--navscale));
   display:inline-flex;align-items:center;
-  gap:clamp(2px, calc(2px + (100vw - 1000px) * 0.0025), 8px);
-  padding:clamp(4px, calc(4px + (100vw - 1000px) * 0.004), 10px) clamp(4px, calc(4px + (100vw - 1000px) * 0.005), 12px);
+  gap:calc(6px * var(--navscale));
+  padding:calc(8px * var(--navscale)) calc(10px * var(--navscale));
   border-radius:8px;
-  min-height:clamp(24px, calc(24px + (100vw - 1000px) * 0.009), 40px);
+  min-height:calc(34px * var(--navscale));
   white-space:nowrap;
   flex-shrink:0;
 }
 .topbar nav a .icon{
-  width:clamp(11px, calc(11px + (100vw - 1000px) * 0.006), 20px);
-  height:clamp(11px, calc(11px + (100vw - 1000px) * 0.006), 20px);
+  width:calc(17px * var(--navscale));
+  height:calc(17px * var(--navscale));
   flex-shrink:0;
 }
+/* Applied by fitTopbar() when even the minimum legible text scale can't
+   make the full-label row fit — drops to icon-only so the row still fits
+   on one line rather than shrinking text past readability. */
+.topbar nav.force-icons a .nav-label{display:none;}
+.topbar nav.force-icons a{padding:calc(8px * var(--navscale));justify-content:center;}
 .topbar nav a:hover{color:#fff;background:rgba(255,255,255,0.08);}
 .topbar nav a.active{background:rgba(232,184,75,0.16);color:var(--gold);}
 .topbar .who{display:none;}
 .btn-logout{
   background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
-  padding:clamp(4px, calc(4px + (100vw - 1000px) * 0.003), 10px);
+  padding:calc(8px * var(--navscale));
   font-weight:700;cursor:pointer;font-size:.85rem;
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
-  margin-left:clamp(4px, calc(4px + (100vw - 1000px) * 0.003), 16px);
+  margin-left:calc(10px * var(--navscale));
   flex-shrink:0;
-  min-width:clamp(24px, calc(24px + (100vw - 1000px) * 0.009), 40px);
-  min-height:clamp(24px, calc(24px + (100vw - 1000px) * 0.009), 40px);
+  min-width:calc(34px * var(--navscale));
+  min-height:calc(34px * var(--navscale));
 }
 .btn-logout .icon{
-  width:clamp(14px, calc(14px + (100vw - 1000px) * 0.005), 22px);
-  height:clamp(14px, calc(14px + (100vw - 1000px) * 0.005), 22px);
+  width:calc(18px * var(--navscale));
+  height:calc(18px * var(--navscale));
 }
 .btn-logout .nav-label{display:none;}
 .btn-logout:hover{background:rgba(255,255,255,0.18);}

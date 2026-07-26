@@ -75,4 +75,75 @@ function paintIconSlots() {
   });
   const brand = document.getElementById("brandCoin");
   if (brand) brand.innerHTML = icon("coin", 24);
+  fitTopbar();
 }
+
+/* ===================== Dynamic topbar fitting =====================
+   Measures the topbar's real available width against what the nav
+   actually needs at full size, then sets --navscale so it always fits on
+   one line — instead of relying on fixed breakpoints. In portrait, CSS
+   takes over instead (icon-only nav, allowed to wrap), so this leaves
+   --navscale alone there. Runs on load, resize, and orientation change.
+====================================================================== */
+function fitTopbar() {
+  const topbar = document.querySelector(".topbar");
+  const nav = topbar ? topbar.querySelector("nav") : null;
+  if (!topbar || !nav) return;
+
+  const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+  if (isPortrait) {
+    // Portrait handles itself via CSS (icon-only + wrapping); don't fight it.
+    topbar.style.removeProperty("--navscale");
+    nav.classList.remove("force-icons");
+    return;
+  }
+
+  // Reset to full size and drop any icon-only fallback so we measure the
+  // nav's true "natural" width before deciding how much to shrink it.
+  topbar.style.setProperty("--navscale", "1");
+  nav.classList.remove("force-icons");
+  // Force a reflow so the measurements below reflect the reset state.
+  void topbar.offsetWidth;
+
+  const brand = topbar.querySelector(".brand");
+  const logoutBtn = topbar.querySelector(".btn-logout");
+  const topbarStyle = getComputedStyle(topbar);
+  const paddingL = parseFloat(topbarStyle.paddingLeft) || 0;
+  const paddingR = parseFloat(topbarStyle.paddingRight) || 0;
+  const topbarGap = parseFloat(topbarStyle.columnGap || topbarStyle.gap) || 0;
+
+  const brandW = brand ? brand.getBoundingClientRect().width : 0;
+  const logoutW = logoutBtn ? logoutBtn.getBoundingClientRect().width : 0;
+  // Two gaps: between brand<->nav and nav<->logout button.
+  const available = topbar.clientWidth - paddingL - paddingR - brandW - logoutW - (topbarGap * 2);
+  const needed = nav.scrollWidth;
+
+  let scale = needed > 0 ? available / needed : 1;
+  if (!isFinite(scale) || scale > 1) scale = 1;
+
+  const MIN_TEXT_SCALE = 0.55; // below this, text stops being legible
+  if (scale < MIN_TEXT_SCALE) {
+    // Full labels can't fit even at the smallest legible size — drop to
+    // icon-only, then re-measure and scale that instead.
+    nav.classList.add("force-icons");
+    void nav.offsetWidth;
+    const neededIcons = nav.scrollWidth;
+    scale = neededIcons > 0 ? available / neededIcons : 1;
+    if (!isFinite(scale) || scale > 1) scale = 1;
+    if (scale < 0.6) scale = 0.6; // hard floor so icons stay tappable
+  }
+
+  topbar.style.setProperty("--navscale", scale.toFixed(3));
+}
+
+function debounce(fn, wait) {
+  let t;
+  return function (...args) {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), wait);
+  };
+}
+
+window.addEventListener("resize", debounce(fitTopbar, 100));
+window.addEventListener("orientationchange", () => setTimeout(fitTopbar, 50));
+window.addEventListener("load", fitTopbar);
