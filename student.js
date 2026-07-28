@@ -26,7 +26,8 @@ function badgeType(type) {
     "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
     "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
-    "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"]
+    "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"],
+    "side-hustle": ["mint", "briefcase", "Side hustle"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -85,6 +86,9 @@ async function init() {
   await checkBigEventPopup(u.username, u.classCode);
   await checkAdjustmentPopup(u.username, u.classCode);
   await render();
+  // Keeps the side hustle check-in window (and everything else) in sync
+  // with the clock even if the student just leaves the tab open.
+  setInterval(render, 30000);
 }
 
 async function render() {
@@ -106,6 +110,8 @@ async function render() {
     const label = lifestyleLabelFor(score, cls.lifestyleThresholds);
     document.getElementById("lifestyleValue").textContent = score + " / 100" + (label ? " — " + label : "");
   }
+
+  await renderSideHustle(me, cls);
 
   // net worth leaderboard
   const board = await classLeaderboard(me.classCode);
@@ -173,7 +179,7 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim"].includes(t.type)) { sign = "+"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle"].includes(t.type)) { sign = "+"; }
     else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment"].includes(t.type)) { sign = "-"; }
     else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
     else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
@@ -185,6 +191,103 @@ async function render() {
       <td class="${sign === '-' ? 'ticker-down' : 'ticker-up'}">${sign}${fmtMoney(amt)}</td>`;
     tbody.appendChild(tr);
   });
+}
+
+/* ---------------- Side hustle ---------------- */
+let SH_EDITING = false;
+
+function populateSideHustleHourSelect() {
+  const sel = document.getElementById("shHour");
+  if (sel.options.length) return;
+  for (let h = 0; h < 24; h++) {
+    const opt = document.createElement("option");
+    opt.value = h;
+    opt.textContent = hourLabel(h);
+    sel.appendChild(opt);
+  }
+}
+
+// e.g. "4pm – 4:15pm"
+function sideHustleWindowLabel(h) {
+  const period = h < 12 ? "am" : "pm";
+  let hh = h % 12; if (hh === 0) hh = 12;
+  return `${hourLabel(h)} – ${hh}:15${period}`;
+}
+
+async function renderSideHustle(me, cls) {
+  populateSideHustleHourSelect();
+  const hustles = cls.sideHustles || [];
+  document.getElementById("noSideHustles").classList.toggle("hidden", hustles.length > 0);
+  const picker = document.getElementById("sideHustlePicker");
+  const active = document.getElementById("sideHustleActive");
+  if (hustles.length === 0) {
+    picker.classList.add("hidden");
+    active.classList.add("hidden");
+    return;
+  }
+
+  const sel = document.getElementById("shSelect");
+  sel.innerHTML = "";
+  hustles.forEach(h => {
+    const opt = document.createElement("option");
+    opt.value = h.id;
+    opt.textContent = h.name;
+    sel.appendChild(opt);
+  });
+
+  const sh = me.sideHustle;
+  const current = sh && hustles.find(h => h.id === sh.hustleId);
+
+  if (current && !SH_EDITING) {
+    picker.classList.add("hidden");
+    active.classList.remove("hidden");
+    document.getElementById("shName").textContent = current.name;
+    document.getElementById("shWindow").textContent = sideHustleWindowLabel(sh.checkinHour);
+    const pay = Number(current.payouts[sh.checkinHour]) || 0;
+    document.getElementById("shPay").textContent = fmtMoney(pay);
+
+    const { hour, minute } = nzHourMinute();
+    const inWindow = hour === sh.checkinHour && minute <= 15;
+    const already = sh.lastCheckin === nzDateKey();
+    const btn = document.getElementById("shCheckinBtn");
+    btn.disabled = !inWindow || already;
+    const statusEl = document.getElementById("shStatus");
+    if (already) statusEl.textContent = `You've checked in today. Streak: ${sh.streak || 0} day${(sh.streak || 0) === 1 ? "" : "s"}.`;
+    else if (inWindow) statusEl.textContent = "You're in your check-in window — go ahead!";
+    else statusEl.textContent = `Come back at ${hourLabel(sh.checkinHour)} to check in.`;
+  } else {
+    picker.classList.remove("hidden");
+    active.classList.add("hidden");
+    if (sh && sh.hustleId) sel.value = sh.hustleId;
+    if (sh && sh.checkinHour !== undefined) document.getElementById("shHour").value = sh.checkinHour;
+  }
+}
+
+function toggleSideHustleEdit() {
+  SH_EDITING = true;
+  render();
+}
+
+async function saveSideHustleChoice() {
+  const hustleId = document.getElementById("shSelect").value;
+  const hour = document.getElementById("shHour").value;
+  const msg = document.getElementById("shPickerMsg");
+  msg.textContent = "Saving...";
+  const res = await setStudentSideHustle(CURRENT.username, CURRENT.classCode, hustleId, hour);
+  if (!res.ok) { msg.textContent = res.error; return; }
+  msg.textContent = "";
+  SH_EDITING = false;
+  await render();
+}
+
+async function doSideHustleCheckin() {
+  document.getElementById("shCheckinBtn").disabled = true;
+  const res = await checkinSideHustle(CURRENT.username, CURRENT.classCode);
+  const statusEl = document.getElementById("shStatus");
+  statusEl.textContent = res.ok
+    ? `Checked in! +${fmtMoney(res.amount)}. Streak: ${res.streak} day${res.streak === 1 ? "" : "s"}.`
+    : res.error;
+  await render();
 }
 
 document.addEventListener("DOMContentLoaded", init);

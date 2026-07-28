@@ -94,6 +94,49 @@
     <p class="muted-small" id="noCompanies">Your teacher hasn't opened any companies yet.</p>
   </div>
 
+  <div class="card" id="sideHustleCard">
+    <div class="flex-between">
+      <h2 id="hSideHustle"><span class="icon-slot" data-icon="briefcase"></span> Side hustle</h2>
+    </div>
+    <p class="muted-small" id="noSideHustles">Your teacher hasn't added any side hustles yet.</p>
+
+    <div id="sideHustlePicker" class="hidden">
+      <p>Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid.</p>
+      <div class="grid grid-2">
+        <div>
+          <label for="shSelect" id="labShSelect">Side hustle</label>
+          <select id="shSelect"></select>
+        </div>
+        <div>
+          <label for="shHour" id="labShHour">Daily check-in time</label>
+          <select id="shHour"></select>
+        </div>
+      </div>
+      <button class="btn" id="shSaveBtn" onclick="saveSideHustleChoice()">Save my side hustle</button>
+      <div id="shPickerMsg"></div>
+    </div>
+
+    <div id="sideHustleActive" class="hidden">
+      <div class="grid grid-3">
+        <div class="stat mint">
+          <div class="label">My side hustle</div>
+          <div class="value" id="shName" style="font-size:1.2rem;">—</div>
+        </div>
+        <div class="stat gold">
+          <div class="label">Check-in window</div>
+          <div class="value" id="shWindow" style="font-size:1.2rem;">—</div>
+        </div>
+        <div class="stat lilac">
+          <div class="label">Today's pay</div>
+          <div class="value" id="shPay">$0.00</div>
+        </div>
+      </div>
+      <button class="btn gold" id="shCheckinBtn" onclick="doSideHustleCheckin()">Check in now</button>
+      <button class="btn secondary small" id="shChangeBtn" onclick="toggleSideHustleEdit()">Change side hustle</button>
+      <p class="muted-small" id="shStatus"></p>
+    </div>
+  </div>
+
   <div class="card">
     <h2 id="hActivity">My recent activity</h2>
     <div class="table-scroll">

@@ -125,6 +125,26 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
   </div>
 
   <div class="card">
+    <h2 id="hSideHustles">Side hustles</h2>
+    <p>Students each pick one hustle and a daily check-in hour (e.g. 1am, 2am, 3am...). They must check in within 15 minutes after that hour to get paid — the amount depends on which hour they picked.</p>
+    <div id="sideHustleList"></div>
+    <p class="muted-small" id="noSideHustlesTeacher">You haven't added any side hustles yet.</p>
+    <form onsubmit="return addSideHustleForm(event)">
+      <label for="shName" id="labShName">Side hustle name</label>
+      <input id="shName" placeholder="e.g. Dog walking" required>
+      <label for="shDesc" id="labShDesc">Description (optional)</label>
+      <input id="shDesc" placeholder="e.g. Walk the neighbourhood dogs">
+      <label for="shPayoutsArea" id="labShPayouts">Payout per check-in hour — one per line, as "hour | amount"</label>
+      <textarea id="shPayoutsArea" rows="4" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:1rem;" placeholder="1am | 20
+3pm | 25
+7pm | 15" required></textarea>
+      <p class="muted-small">Only list the hours you want to offer a payout for (e.g. 12am, 1am, ... 11pm) — one "hour | amount" per line. Hours you leave out won't pay anything if a student somehow picks them.</p>
+      <button class="btn" type="submit" id="addSideHustleBtn">Add side hustle</button>
+    </form>
+    <div id="sideHustleMsg"></div>
+  </div>
+
+  <div class="card">
     <h2 id="hLifestyle">Lifestyle rating settings</h2>
     <p>The lifestyle rating (0-100, shown on every student's homepage) is built from stars: a property's comfort rating, and any stars you gave a store item or insurance plan. Set how many points each star is worth, and toggle sections on or off.</p>
     <div class="grid grid-3" id="lifestyleSettings"></div>

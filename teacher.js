@@ -1,4 +1,15 @@
-let CURRENT, CLASS_CODE, PROFILE_USER, EDITING_EVENT_ID = null;
+let CURRENT, CLASS_CODE, PROFILE_USER, EDITING_EVENT_ID = null, EDITING_SIDE_HUSTLE_ID = null;
+
+// "1am" / "12pm" -> 0-23, or null if unrecognized.
+function parseHourLabel(str) {
+  const m = String(str || "").trim().toLowerCase().match(/^(\d{1,2})\s*(am|pm)$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  if (h < 1 || h > 12) return null;
+  if (m[2] === "am") h = (h === 12) ? 0 : h;
+  else h = (h === 12) ? 12 : h + 12;
+  return h;
+}
 
 // Teachers naturally type amounts like "$10" or "1,000" in a money app —
 // plain Number() chokes on those and silently falls back to 0, which is
@@ -176,6 +187,28 @@ async function render() {
       <button class="btn small coral" onclick="removeEvent('${ev.id}')">${icon("trash", 13)} Remove</button>
     `;
     evBox.appendChild(row);
+  });
+
+  // side hustles
+  const shBox = document.getElementById("sideHustleList");
+  const hustles = cls.sideHustles || [];
+  document.getElementById("noSideHustlesTeacher").classList.toggle("hidden", hustles.length > 0);
+  shBox.innerHTML = "";
+  hustles.forEach(h => {
+    const row = document.createElement("div");
+    row.className = "auto-row";
+    const payoutSummary = Object.keys(h.payouts || {})
+      .map(Number).sort((a, b) => a - b)
+      .map(hr => `${hourLabel(hr)}: ${fmtMoney(h.payouts[hr])}`).join(", ") || "No payouts set";
+    row.innerHTML = `
+      <div class="auto-details">${icon("briefcase", 14)} <strong>${h.name}</strong>
+        <div class="muted-small">${payoutSummary}</div>
+        ${h.description ? `<div class="muted-small">${h.description}</div>` : ""}
+      </div>
+      <button class="btn small secondary" onclick="startEditSideHustle('${h.id}')">${icon("idcard", 13)} Edit</button>
+      <button class="btn small coral" onclick="removeSideHustleClick('${h.id}')">${icon("trash", 13)} Remove</button>
+    `;
+    shBox.appendChild(row);
   });
 
   // lifestyle settings
@@ -438,6 +471,84 @@ async function removeEvent(id) {
   if (confirm("Remove this event? It will no longer be handed out.")) {
     if (id === EDITING_EVENT_ID) resetEventForm();
     await removeEventDef(CLASS_CODE, id);
+    await render();
+  }
+}
+
+async function addSideHustleForm(e) {
+  e.preventDefault();
+  const name = document.getElementById("shName").value.trim();
+  const description = document.getElementById("shDesc").value.trim();
+  const lines = document.getElementById("shPayoutsArea").value.split("\n").map(l => l.trim()).filter(Boolean);
+  const payouts = {};
+  for (const line of lines) {
+    const [hourPart, amtPart] = line.split("|");
+    const hour = parseHourLabel(hourPart);
+    if (hour === null) {
+      alert(`Couldn't read the hour "${(hourPart || "").trim()}" — use a plain hour like "1am" or "3pm".`);
+      return false;
+    }
+    const amount = parseMoneyInput(amtPart);
+    if (Number.isNaN(amount)) {
+      alert(`Couldn't read the amount for "${(hourPart || "").trim()}" — enter a plain number like 20 (no currency symbols needed).`);
+      return false;
+    }
+    payouts[hour] = amount;
+  }
+  if (Object.keys(payouts).length === 0) {
+    alert('Add at least one payout, as "hour | amount" (e.g. "1am | 20").');
+    return false;
+  }
+
+  if (EDITING_SIDE_HUSTLE_ID) {
+    await editSideHustle(CLASS_CODE, EDITING_SIDE_HUSTLE_ID, { name, description, payouts });
+  } else {
+    await addSideHustle(CLASS_CODE, { name, description, payouts });
+  }
+  resetSideHustleForm();
+  await render();
+  return false;
+}
+
+function resetSideHustleForm() {
+  EDITING_SIDE_HUSTLE_ID = null;
+  document.getElementById("shName").value = "";
+  document.getElementById("shDesc").value = "";
+  document.getElementById("shPayoutsArea").value = "";
+  document.getElementById("addSideHustleBtn").innerHTML = icon("plus", 15) + " Add side hustle";
+  const cancelBtn = document.getElementById("cancelEditSideHustleBtn");
+  if (cancelBtn) cancelBtn.remove();
+}
+
+function startEditSideHustle(id) {
+  getClass(CLASS_CODE).then(cls => {
+    const h = (cls.sideHustles || []).find(x => x.id === id);
+    if (!h) return;
+    EDITING_SIDE_HUSTLE_ID = id;
+    document.getElementById("shName").value = h.name;
+    document.getElementById("shDesc").value = h.description || "";
+    document.getElementById("shPayoutsArea").value = Object.keys(h.payouts || {})
+      .map(Number).sort((a, b) => a - b)
+      .map(hr => `${hourLabel(hr)} | ${h.payouts[hr]}`).join("\n");
+    document.getElementById("addSideHustleBtn").innerHTML = icon("plus", 15) + " Save changes";
+    if (!document.getElementById("cancelEditSideHustleBtn")) {
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.id = "cancelEditSideHustleBtn";
+      cancelBtn.className = "btn small secondary";
+      cancelBtn.style.marginLeft = "8px";
+      cancelBtn.textContent = "Cancel edit";
+      cancelBtn.onclick = resetSideHustleForm;
+      document.getElementById("addSideHustleBtn").insertAdjacentElement("afterend", cancelBtn);
+    }
+    document.getElementById("addSideHustleBtn").scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
+async function removeSideHustleClick(id) {
+  if (confirm("Remove this side hustle? Students currently using it will lose their check-in until they pick a new one.")) {
+    if (id === EDITING_SIDE_HUSTLE_ID) resetSideHustleForm();
+    await removeSideHustle(CLASS_CODE, id);
     await render();
   }
 }

@@ -57,6 +57,23 @@ function dateKeyToUTC(key) {
 function daysBetweenKeys(earlierKey, laterKey) {
   return Math.round((dateKeyToUTC(laterKey) - dateKeyToUTC(earlierKey)) / 86400000);
 }
+// Current hour (0-23) and minute in NZ wall-clock time — used by the side
+// hustle check-in window (must check in within 15 min of the chosen hour).
+function nzHourMinute(d) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Pacific/Auckland", hourCycle: "h23", hour: "2-digit", minute: "2-digit"
+  });
+  const map = {};
+  fmt.formatToParts(d || new Date()).forEach(p => { map[p.type] = p.value; });
+  return { hour: Number(map.hour), minute: Number(map.minute) };
+}
+// "12am", "1am", ... "12pm", "1pm", ... "11pm" for hour 0-23.
+function hourLabel(h) {
+  const period = h < 12 ? "am" : "pm";
+  let hh = h % 12;
+  if (hh === 0) hh = 12;
+  return hh + period;
+}
 
 /* ---------------- Basic doc fetch helpers ---------------- */
 async function getUser(username) {
@@ -132,6 +149,7 @@ async function createTeacherAndClass(name, username, password, className) {
     insurancePlans: [], storeItems: [], properties: [],
     eventDefs: [], eventLog: [], lastEventWeekRun: null, lastEventDayRun: null,
     vehicles: [], termDepositPlans: [],
+    sideHustles: [],
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
     insuranceDay: "Fri", lastInsuranceWeekRun: null,
     gambling: { enabled: true, minBet: 1, maxBet: 20, dailyBetCap: null, payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 } },
@@ -1832,6 +1850,7 @@ function withNewModuleDefaults(cls) {
   cls.lastEventWeekRun = cls.lastEventWeekRun || null;
   cls.lastEventDayRun = cls.lastEventDayRun || null;
   cls.termDepositPlans = cls.termDepositPlans || [];
+  cls.sideHustles = cls.sideHustles || [];
   cls.loanTiers = cls.loanTiers || [];
   cls.maxLoanAmount = cls.maxLoanAmount || 0; // 0 = no extra class-wide cap beyond the tiers themselves
   cls.vehicles = cls.vehicles || [];
@@ -1925,6 +1944,119 @@ async function editInsurancePlan(classCode, planId, plan) {
     t.update(classRef, { insurancePlans: cls.insurancePlans });
   });
 }
+/* ===================== Side hustles =====================
+   Teacher defines a list of side hustle "jobs", each with a payout amount
+   per possible check-in hour (0-23, NZ time). A student picks one hustle
+   and one hour of the day as their standing check-in time, then must
+   check in every day within 15 minutes after that hour to get paid. */
+async function addSideHustle(classCode, hustle) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.sideHustles.push({
+      id: uid("sh"), name: hustle.name, description: hustle.description || "",
+      payouts: hustle.payouts || {}
+    });
+    t.update(classRef, { sideHustles: cls.sideHustles });
+  });
+}
+async function editSideHustle(classCode, hustleId, hustle) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const idx = cls.sideHustles.findIndex(h => h.id === hustleId);
+    if (idx === -1) return;
+    cls.sideHustles[idx] = {
+      ...cls.sideHustles[idx],
+      name: hustle.name, description: hustle.description || "", payouts: hustle.payouts || {}
+    };
+    t.update(classRef, { sideHustles: cls.sideHustles });
+  });
+}
+async function removeSideHustle(classCode, hustleId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.sideHustles = cls.sideHustles.filter(h => h.id !== hustleId);
+    t.update(classRef, { sideHustles: cls.sideHustles });
+  });
+}
+
+// Student picks (or changes) which hustle + hour they're committing to.
+// Changing hustle or hour resets today's check-in state and streak, since
+// it's effectively a new commitment.
+async function setStudentSideHustle(username, classCode, hustleId, hour) {
+  const cls = await getClass(classCode);
+  if (!cls) return { ok: false, error: "Class not found." };
+  const hustle = (cls.sideHustles || []).find(h => h.id === hustleId);
+  if (!hustle) return { ok: false, error: "That side hustle isn't available." };
+  const h = Number(hour);
+  if (!Number.isInteger(h) || h < 0 || h > 23) return { ok: false, error: "Pick a valid check-in time." };
+
+  const user = await getUser(username);
+  if (!user) return { ok: false, error: "User not found." };
+  const prev = user.sideHustle || {};
+  const sameCommitment = prev.hustleId === hustleId && prev.checkinHour === h;
+  await usersCol().doc(username).update({
+    sideHustle: {
+      hustleId, checkinHour: h,
+      lastCheckin: sameCommitment ? (prev.lastCheckin || null) : null,
+      streak: sameCommitment ? (prev.streak || 0) : 0
+    }
+  });
+  return { ok: true };
+}
+
+// Pays out if the student is inside their 15-minute check-in window and
+// hasn't already checked in today (NZ calendar day).
+async function checkinSideHustle(username, classCode) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let amount = 0, hustleName = "", streak = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("GONE");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const sh = user.sideHustle;
+      if (!sh || !sh.hustleId) throw new Error("NO_HUSTLE");
+      const hustle = cls.sideHustles.find(h => h.id === sh.hustleId);
+      if (!hustle) throw new Error("NO_HUSTLE");
+
+      const { hour, minute } = nzHourMinute();
+      if (hour !== sh.checkinHour || minute > 15) throw new Error("WRONG_TIME");
+
+      const todayKey = nzDateKey();
+      if (sh.lastCheckin === todayKey) throw new Error("ALREADY");
+
+      amount = Number(hustle.payouts[sh.checkinHour]) || 0;
+      hustleName = hustle.name;
+      streak = (sh.streak || 0) + 1;
+      const newBal = Math.round((user.balance + amount) * 100) / 100;
+      t.update(userRef, {
+        balance: newBal,
+        "sideHustle.lastCheckin": todayKey,
+        "sideHustle.streak": streak
+      });
+    });
+  } catch (e) {
+    if (e.message === "NO_HUSTLE") return { ok: false, error: "Pick a side hustle and check-in time first." };
+    if (e.message === "WRONG_TIME") return { ok: false, error: "You can only check in within 15 minutes after your chosen time." };
+    if (e.message === "ALREADY") return { ok: false, error: "You've already checked in today." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "side-hustle", to: username, amount, note: `Side hustle check-in — ${hustleName}` });
+  return { ok: true, amount, streak };
+}
+
 async function buyInsurance(username, classCode, planId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
