@@ -135,11 +135,25 @@ async function render() {
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
 
   const cls = await getClass(CLASS_CODE);
+
+  const banner = document.getElementById("marketLockedBanner");
+  const list = document.getElementById("companyList");
+  if (!IS_TEACHER) {
+    const lockedModules = await getLockedModulesForStudent(CURRENT.username, CLASS_CODE);
+    applyNavModuleLocks(lockedModules);
+    if (lockedModules.includes("market")) {
+      banner.classList.remove("hidden");
+      banner.innerHTML = `<p style="margin:0;"><strong>The Stock Market is locked</strong><br>Your lifestyle rating is too low right now to buy or sell shares. Ask your teacher what's needed to unlock it.</p>`;
+      list.innerHTML = "";
+      return;
+    }
+  }
+  banner.classList.add("hidden");
+
   const range = cls.priceRange || { min: 1, max: 5 };
   document.getElementById("rangeMin").value = range.min;
   document.getElementById("rangeMax").value = range.max;
 
-  const list = document.getElementById("companyList");
   list.innerHTML = "";
 
   if (cls.companies.length === 0) {

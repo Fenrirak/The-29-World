@@ -200,21 +200,13 @@ async function render() {
 
 /* ---------------- Lifestyle-based module locks ---------------- */
 function applyModuleLocks(locked) {
+  applyNavModuleLocks(locked);
   const banner = document.getElementById("lifestyleLockBanner");
   const lockedLabels = [];
   document.querySelectorAll("nav a[data-module]").forEach(a => {
-    const key = a.dataset.module;
-    const isLocked = locked.includes(key);
-    a.classList.toggle("nav-locked", isLocked);
-    if (isLocked) {
+    if (locked.includes(a.dataset.module)) {
       const labelEl = a.querySelector(".nav-label");
-      lockedLabels.push(labelEl ? labelEl.textContent : key);
-      a.onclick = (e) => {
-        e.preventDefault();
-        alert("This module is locked because your lifestyle rating is too low right now. Check with your teacher about what's needed to unlock it.");
-      };
-    } else {
-      a.onclick = null;
+      lockedLabels.push(labelEl ? labelEl.textContent : a.dataset.module);
     }
   });
   if (locked.includes("sidehustle")) lockedLabels.push("Side hustle");

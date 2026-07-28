@@ -865,6 +865,9 @@ async function closeCompany(classCode, companyId) {
 }
 
 async function buyShares(username, classCode, companyId, shares) {
+  if (await isModuleLockedForStudent(username, classCode, "market")) {
+    return { ok: false, error: "The Stock Market is locked for you right now because of your lifestyle rating." };
+  }
   shares = Math.floor(Number(shares));
   if (shares <= 0) return { ok: false, error: "Enter a whole number of shares." };
   const userRef = usersCol().doc(username);
@@ -901,6 +904,9 @@ async function buyShares(username, classCode, companyId, shares) {
 }
 
 async function sellShares(username, classCode, companyId, shares) {
+  if (await isModuleLockedForStudent(username, classCode, "market")) {
+    return { ok: false, error: "The Stock Market is locked for you right now because of your lifestyle rating." };
+  }
   shares = Math.floor(Number(shares));
   if (shares <= 0) return { ok: false, error: "Enter a whole number of shares." };
   const userRef = usersCol().doc(username);
@@ -1545,6 +1551,9 @@ function rouletteIsOdd(n) { return n > 0 && n % 2 === 1; }
 // selection: array of numbers (0-36) chosen by the student, meaning
 // depends on betType. Returns { ok, error } or resolves via balance update.
 async function placeRouletteBet(username, classCode, betType, betAmount, selection) {
+  if (await isModuleLockedForStudent(username, classCode, "gambling")) {
+    return { ok: false, error: "Gambling is locked for you right now because of your lifestyle rating." };
+  }
   betAmount = Number(betAmount);
   const cls = withNewModuleDefaults(await getClass(classCode));
   if (!cls) return { ok: false, error: "Class not found." };
@@ -2862,6 +2871,25 @@ async function getLockedModulesForStudent(username, classCode) {
 async function isModuleLockedForStudent(username, classCode, moduleKey) {
   const locked = await getLockedModulesForStudent(username, classCode);
   return locked.includes(moduleKey);
+}
+
+// Shared across every page's topbar: greys out nav links to locked
+// modules and blocks navigating to them. Pages just need
+// nav a[data-module="key"] attributes matching LIFESTYLE_LOCKABLE_MODULES.
+function applyNavModuleLocks(lockedModules) {
+  document.querySelectorAll("nav a[data-module]").forEach(a => {
+    const key = a.dataset.module;
+    const isLocked = (lockedModules || []).includes(key);
+    a.classList.toggle("nav-locked", isLocked);
+    if (isLocked) {
+      a.onclick = (e) => {
+        e.preventDefault();
+        alert("This module is locked because your lifestyle rating is too low right now. Check with your teacher about what's needed to unlock it.");
+      };
+    } else {
+      a.onclick = null;
+    }
+  });
 }
 
 /* ===================== Global page bootstrap =====================

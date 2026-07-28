@@ -142,6 +142,18 @@ async function render() {
     document.getElementById("pSixLine").value = g.payouts.sixLine;
     document.getElementById("pOddEven").value = g.payouts.oddEven;
   } else {
+    const lockedModules = await getLockedModulesForStudent(CURRENT.username, CURRENT.classCode);
+    applyNavModuleLocks(lockedModules);
+    const lockedBanner = document.getElementById("gamblingLockedBanner");
+    if (lockedModules.includes("gambling")) {
+      lockedBanner.classList.remove("hidden");
+      lockedBanner.innerHTML = `<p style="margin:0;"><strong>Gambling is locked</strong><br>Your lifestyle rating is too low right now to place bets. Ask your teacher what's needed to unlock it.</p>`;
+      document.getElementById("disabledBanner").classList.add("hidden");
+      document.getElementById("studentView").classList.add("hidden");
+      return;
+    }
+    lockedBanner.classList.add("hidden");
+
     const enabled = g.enabled !== false;
     document.getElementById("disabledBanner").classList.toggle("hidden", enabled);
     document.getElementById("studentView").classList.toggle("hidden", !enabled);
