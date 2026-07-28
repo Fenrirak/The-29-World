@@ -190,6 +190,28 @@ async function render() {
   });
 
   // side hustles
+  const reqBox = document.getElementById("sideHustleRequests");
+  const pending = students.filter(s => s.sideHustleRequest && s.sideHustleRequest.status === "pending");
+  document.getElementById("noSideHustleRequests").classList.toggle("hidden", pending.length > 0);
+  reqBox.innerHTML = "";
+  pending.forEach(s => {
+    const req = s.sideHustleRequest;
+    const hustles = cls.sideHustles || [];
+    const from = hustles.find(h => h.id === (s.sideHustle || {}).hustleId);
+    const to = hustles.find(h => h.id === req.hustleId);
+    const row = document.createElement("div");
+    row.className = "auto-row";
+    row.innerHTML = `
+      <div class="auto-details"><strong>${s.name}</strong>
+        wants to switch ${from ? `from ${from.name} (${hourLabel((s.sideHustle || {}).checkinHour)})` : "(no current hustle)"}
+        to <strong>${to ? to.name : "—"}</strong> at ${hourLabel(req.checkinHour)}
+      </div>
+      <button class="btn small" onclick="approveSideHustleRequest('${s.username}')">Approve</button>
+      <button class="btn small coral" onclick="denySideHustleRequest('${s.username}')">Deny</button>
+    `;
+    reqBox.appendChild(row);
+  });
+
   const shBox = document.getElementById("sideHustleList");
   const hustles = cls.sideHustles || [];
   document.getElementById("noSideHustlesTeacher").classList.toggle("hidden", hustles.length > 0);
@@ -473,6 +495,18 @@ async function removeEvent(id) {
     await removeEventDef(CLASS_CODE, id);
     await render();
   }
+}
+
+async function approveSideHustleRequest(username) {
+  const res = await approveSideHustleChange(username, CLASS_CODE);
+  if (!res.ok) alert(res.error || "Couldn't approve that request.");
+  await render();
+}
+
+async function denySideHustleRequest(username) {
+  const reason = prompt("Optional reason to show the student (leave blank to skip):", "") || "";
+  await denySideHustleChange(username, reason);
+  await render();
 }
 
 async function addSideHustleForm(e) {

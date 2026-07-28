@@ -219,9 +219,11 @@ async function renderSideHustle(me, cls) {
   const hustles = cls.sideHustles || [];
   document.getElementById("noSideHustles").classList.toggle("hidden", hustles.length > 0);
   const picker = document.getElementById("sideHustlePicker");
+  const pendingBox = document.getElementById("sideHustlePending");
   const active = document.getElementById("sideHustleActive");
   if (hustles.length === 0) {
     picker.classList.add("hidden");
+    pendingBox.classList.add("hidden");
     active.classList.add("hidden");
     return;
   }
@@ -237,10 +239,27 @@ async function renderSideHustle(me, cls) {
 
   const sh = me.sideHustle;
   const current = sh && hustles.find(h => h.id === sh.hustleId);
+  const request = me.sideHustleRequest;
+  const hasPendingRequest = request && request.status === "pending";
 
   if (current && !SH_EDITING) {
     picker.classList.add("hidden");
     active.classList.remove("hidden");
+    pendingBox.classList.toggle("hidden", !hasPendingRequest);
+    if (hasPendingRequest) {
+      const reqHustle = hustles.find(h => h.id === request.hustleId);
+      document.getElementById("shPendingMsg").textContent =
+        `Waiting on your teacher to approve your request to switch to ${reqHustle ? reqHustle.name : "a new hustle"} at ${hourLabel(request.checkinHour)}. Your current hustle still applies until then.`;
+    }
+
+    const denialEl = document.getElementById("shDenialNote");
+    if (me.sideHustleDenialNote) {
+      denialEl.classList.remove("hidden");
+      denialEl.innerHTML = `<span class="badge coral">Change request denied</span> <span class="muted-small">${me.sideHustleDenialNote}</span>`;
+    } else {
+      denialEl.classList.add("hidden");
+    }
+
     document.getElementById("shName").textContent = current.name;
     document.getElementById("shWindow").textContent = sideHustleWindowLabel(sh.checkinHour);
     const pay = Number(current.payouts[sh.checkinHour]) || 0;
@@ -255,9 +274,18 @@ async function renderSideHustle(me, cls) {
     if (already) statusEl.textContent = `You've checked in today. Streak: ${sh.streak || 0} day${(sh.streak || 0) === 1 ? "" : "s"}.`;
     else if (inWindow) statusEl.textContent = "You're in your check-in window — go ahead!";
     else statusEl.textContent = `Come back at ${hourLabel(sh.checkinHour)} to check in.`;
+
+    document.getElementById("shChangeBtn").classList.toggle("hidden", hasPendingRequest);
   } else {
+    pendingBox.classList.add("hidden");
     picker.classList.remove("hidden");
     active.classList.add("hidden");
+    const isFirstPick = !current;
+    document.getElementById("shPickerIntro").textContent = isFirstPick
+      ? "Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid."
+      : "Request a new side hustle or check-in hour. Your teacher has to approve the change before it applies — your current hustle keeps working until they do.";
+    document.getElementById("shSaveBtn").textContent = isFirstPick ? "Save my side hustle" : "Request this change";
+    document.getElementById("shCancelEditBtn").classList.toggle("hidden", isFirstPick);
     if (sh && sh.hustleId) sel.value = sh.hustleId;
     if (sh && sh.checkinHour !== undefined) document.getElementById("shHour").value = sh.checkinHour;
   }
@@ -268,14 +296,20 @@ function toggleSideHustleEdit() {
   render();
 }
 
+function cancelSideHustleEdit() {
+  SH_EDITING = false;
+  document.getElementById("shPickerMsg").textContent = "";
+  render();
+}
+
 async function saveSideHustleChoice() {
   const hustleId = document.getElementById("shSelect").value;
   const hour = document.getElementById("shHour").value;
   const msg = document.getElementById("shPickerMsg");
   msg.textContent = "Saving...";
-  const res = await setStudentSideHustle(CURRENT.username, CURRENT.classCode, hustleId, hour);
+  const res = await requestSideHustleChange(CURRENT.username, CURRENT.classCode, hustleId, hour);
   if (!res.ok) { msg.textContent = res.error; return; }
-  msg.textContent = "";
+  msg.textContent = res.pending ? "Request sent — waiting on your teacher to approve it." : "";
   SH_EDITING = false;
   await render();
 }

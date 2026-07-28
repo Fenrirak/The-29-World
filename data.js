@@ -1989,8 +1989,39 @@ async function removeSideHustle(classCode, hustleId) {
 }
 
 // Student picks (or changes) which hustle + hour they're committing to.
-// Changing hustle or hour resets today's check-in state and streak, since
-// it's effectively a new commitment.
+// First-ever pick applies immediately. After that, changes require the
+// teacher's approval (this just stops someone quietly retiming their
+// check-in to whenever they happen to be checking in).
+async function requestSideHustleChange(username, classCode, hustleId, hour) {
+  const cls = await getClass(classCode);
+  if (!cls) return { ok: false, error: "Class not found." };
+  const hustle = (cls.sideHustles || []).find(h => h.id === hustleId);
+  if (!hustle) return { ok: false, error: "That side hustle isn't available." };
+  const h = Number(hour);
+  if (!Number.isInteger(h) || h < 0 || h > 23) return { ok: false, error: "Pick a valid check-in time." };
+
+  const user = await getUser(username);
+  if (!user) return { ok: false, error: "User not found." };
+
+  if (!user.sideHustle || !user.sideHustle.hustleId) {
+    // Nothing set yet — no approval needed for the first pick.
+    const res = await setStudentSideHustle(username, classCode, hustleId, h);
+    return res;
+  }
+
+  if (user.sideHustle.hustleId === hustleId && user.sideHustle.checkinHour === h) {
+    return { ok: false, error: "That's already your current side hustle." };
+  }
+
+  await usersCol().doc(username).update({
+    sideHustleRequest: { hustleId, checkinHour: h, status: "pending", requestedAt: nowStr() },
+    sideHustleDenialNote: null
+  });
+  return { ok: true, pending: true };
+}
+
+// Internal — actually applies a hustle/hour to a student. Used for the
+// first-ever pick and by the teacher when approving a change request.
 async function setStudentSideHustle(username, classCode, hustleId, hour) {
   const cls = await getClass(classCode);
   if (!cls) return { ok: false, error: "Class not found." };
@@ -2009,6 +2040,29 @@ async function setStudentSideHustle(username, classCode, hustleId, hour) {
       lastCheckin: sameCommitment ? (prev.lastCheckin || null) : null,
       streak: sameCommitment ? (prev.streak || 0) : 0
     }
+  });
+  return { ok: true };
+}
+
+// Teacher approves a pending change request — applies it and clears the request.
+async function approveSideHustleChange(username, classCode) {
+  const user = await getUser(username);
+  if (!user || !user.sideHustleRequest || user.sideHustleRequest.status !== "pending") {
+    return { ok: false, error: "No pending request." };
+  }
+  const req = user.sideHustleRequest;
+  const res = await setStudentSideHustle(username, classCode, req.hustleId, req.checkinHour);
+  if (!res.ok) return res;
+  await usersCol().doc(username).update({ sideHustleRequest: null });
+  return { ok: true };
+}
+
+// Teacher denies a pending change request — leaves the student's current
+// hustle/hour untouched, but leaves a note explaining why.
+async function denySideHustleChange(username, reason) {
+  await usersCol().doc(username).update({
+    sideHustleRequest: null,
+    sideHustleDenialNote: (reason || "").trim() || "Your teacher denied this change."
   });
   return { ok: true };
 }

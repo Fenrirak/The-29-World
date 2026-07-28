@@ -126,8 +126,15 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 
   <div class="card">
     <h2 id="hSideHustles">Side hustles</h2>
-    <p>Students each pick one hustle and a daily check-in hour (e.g. 1am, 2am, 3am...). They must check in within 15 minutes after that hour to get paid — the amount depends on which hour they picked.</p>
-    <div id="sideHustleList"></div>
+    <p>Students each pick one hustle and a daily check-in hour (e.g. 1am, 2am, 3am...). They must check in within 15 minutes after that hour to get paid — the amount depends on which hour they picked. Once a student has picked one, any change needs your approval — that stops someone quietly retiming their check-in to match whenever they happen to be online.</p>
+
+    <div id="sideHustleRequestsWrap">
+      <h3 id="hSideHustleRequests" style="margin-top:0;">Pending change requests</h3>
+      <div id="sideHustleRequests"></div>
+      <p class="muted-small" id="noSideHustleRequests">No pending requests.</p>
+    </div>
+
+    <div id="sideHustleList" style="margin-top:16px;"></div>
     <p class="muted-small" id="noSideHustlesTeacher">You haven't added any side hustles yet.</p>
     <form onsubmit="return addSideHustleForm(event)">
       <label for="shName" id="labShName">Side hustle name</label>

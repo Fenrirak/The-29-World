@@ -101,7 +101,7 @@
     <p class="muted-small" id="noSideHustles">Your teacher hasn't added any side hustles yet.</p>
 
     <div id="sideHustlePicker" class="hidden">
-      <p>Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid.</p>
+      <p id="shPickerIntro">Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid.</p>
       <div class="grid grid-2">
         <div>
           <label for="shSelect" id="labShSelect">Side hustle</label>
@@ -113,10 +113,16 @@
         </div>
       </div>
       <button class="btn" id="shSaveBtn" onclick="saveSideHustleChoice()">Save my side hustle</button>
+      <button class="btn secondary small" id="shCancelEditBtn" onclick="cancelSideHustleEdit()">Cancel</button>
       <div id="shPickerMsg"></div>
     </div>
 
+    <div id="sideHustlePending" class="hidden">
+      <p id="shPendingMsg" class="muted-small"></p>
+    </div>
+
     <div id="sideHustleActive" class="hidden">
+      <div id="shDenialNote" class="hidden" style="margin-bottom:10px;"></div>
       <div class="grid grid-3">
         <div class="stat mint">
           <div class="label">My side hustle</div>
@@ -132,7 +138,7 @@
         </div>
       </div>
       <button class="btn gold" id="shCheckinBtn" onclick="doSideHustleCheckin()">Check in now</button>
-      <button class="btn secondary small" id="shChangeBtn" onclick="toggleSideHustleEdit()">Change side hustle</button>
+      <button class="btn secondary small" id="shChangeBtn" onclick="toggleSideHustleEdit()">Request a change</button>
       <p class="muted-small" id="shStatus"></p>
     </div>
   </div>
