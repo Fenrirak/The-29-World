@@ -725,7 +725,30 @@ async function renderProfile(username) {
   document.getElementById("profileName").innerHTML = `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${s.name}`;
 
   const rows = [];
-  rows.push(`<p><strong>Balance:</strong> ${fmtMoney(s.balance)} &middot; <strong>Portfolio:</strong> ${fmtMoney(net)} &middot; <strong>Lifestyle rating:</strong> ${rating} / 100</p>`);
+  const isOverride = s.lifestyleOverride !== undefined && s.lifestyleOverride !== null;
+  rows.push(`<p><strong>Balance:</strong> ${fmtMoney(s.balance)} &middot; <strong>Portfolio:</strong> ${fmtMoney(net)} &middot; <strong>Lifestyle rating:</strong> ${rating} / 100${isOverride ? " (overridden)" : ""}</p>`);
+
+  rows.push(`<h4>${icon("star", 16)} Lifestyle rating override</h4>`);
+  if (isOverride) {
+    rows.push(`
+      <p class="muted-small">This student's lifestyle rating is locked at <strong>${s.lifestyleOverride} / 100</strong> — nothing they buy, sell, or do will change it until you remove the override.</p>
+      <div class="auto-row">
+        <div class="auto-details">Locked at ${s.lifestyleOverride} / 100</div>
+        <button class="btn small secondary" onclick="removeProfileLifestyleOverride('${username}')">Remove override</button>
+      </div>
+    `);
+  } else {
+    rows.push(`
+      <p class="muted-small">Set a fixed lifestyle rating for this student. While set, it replaces their computed score and won't move no matter what they buy or sell.</p>
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <div style="flex:1;">
+          <label for="profileLifestyleOverrideInput" style="margin-top:0;">Override value (0-100)</label>
+          <input id="profileLifestyleOverrideInput" type="number" min="0" max="100" step="1" placeholder="e.g. 50">
+        </div>
+        <button class="btn small" onclick="applyProfileLifestyleOverride('${username}')">Set override</button>
+      </div>
+    `);
+  }
 
   rows.push(`<h4>${icon("house", 16)} Property</h4>`);
   rows.push(poss.property
@@ -752,6 +775,20 @@ async function renderProfile(username) {
     : `<p class="muted-small">No insurance plans.</p>`);
 
   document.getElementById("profileBody").innerHTML = rows.join("");
+}
+
+async function applyProfileLifestyleOverride(username) {
+  const val = document.getElementById("profileLifestyleOverrideInput").value;
+  const res = await setLifestyleOverride(username, val);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+  await renderProfile(username);
+}
+async function removeProfileLifestyleOverride(username) {
+  if (!confirm("Remove the lifestyle override? The student's rating will go back to being calculated automatically.")) return;
+  await clearLifestyleOverride(username);
+  await render();
+  await renderProfile(username);
 }
 
 async function profileRemoveProperty(propId) {

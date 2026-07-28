@@ -2771,6 +2771,9 @@ async function lifestyleRating(username, classCode) {
   const cls = withNewModuleDefaults(await getClass(classCode));
   const user = await getUser(username);
   if (!cls || !user) return 0;
+  if (user.lifestyleOverride !== undefined && user.lifestyleOverride !== null) {
+    return Math.max(0, Math.min(100, Math.round(Number(user.lifestyleOverride) || 0)));
+  }
   const cfg = cls.lifestyleConfig;
   let score = 0;
 
@@ -2797,6 +2800,19 @@ async function lifestyleRating(username, classCode) {
     });
   }
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+// Teacher-set lifestyle score that overrides the computed one entirely —
+// the student can't move it by buying/selling anything while it's active.
+async function setLifestyleOverride(username, score) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return { ok: false, error: "Enter a number between 0 and 100." };
+  const clamped = Math.max(0, Math.min(100, Math.round(n)));
+  await usersCol().doc(username).update({ lifestyleOverride: clamped });
+  return { ok: true };
+}
+async function clearLifestyleOverride(username) {
+  await usersCol().doc(username).update({ lifestyleOverride: null });
+  return { ok: true };
 }
 
 /* ===================== Global page bootstrap =====================

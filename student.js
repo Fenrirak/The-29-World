@@ -108,7 +108,9 @@ async function render() {
   if (anyEnabled) {
     const score = await lifestyleRating(me.username, me.classCode);
     const label = lifestyleLabelFor(score, cls.lifestyleThresholds);
-    document.getElementById("lifestyleValue").textContent = score + " / 100" + (label ? " — " + label : "");
+    const isOverride = me.lifestyleOverride !== undefined && me.lifestyleOverride !== null;
+    document.getElementById("lifestyleValue").textContent =
+      score + " / 100" + (label ? " — " + label : "") + (isOverride ? " (set by teacher)" : "");
   }
 
   await renderSideHustle(me, cls);
