@@ -99,10 +99,17 @@
     <div class="flex-between">
       <h2 id="hSideHustle"><span class="icon-slot" data-icon="briefcase"></span> Side hustle</h2>
     </div>
-    <p class="muted-small" id="noSideHustles">Your teacher hasn't added any side hustles yet.</p>
 
-    <div id="sideHustlePicker" class="hidden">
-      <p id="shPickerIntro">Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid.</p>
+    <div id="shLockedBlock" class="hidden">
+      <p class="muted-small">Side hustles are locked for you right now because of your lifestyle rating. Ask your teacher what's needed to unlock it.</p>
+    </div>
+
+    <div id="shEmptyBlock" class="hidden">
+      <p class="muted-small">Your teacher hasn't added any side hustles yet.</p>
+    </div>
+
+    <div id="shPickBlock" class="hidden">
+      <p id="shPickIntro">Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid.</p>
       <div class="grid grid-2">
         <div>
           <label for="shSelect" id="labShSelect">Side hustle</label>
@@ -113,17 +120,17 @@
           <select id="shHour"></select>
         </div>
       </div>
-      <button class="btn" id="shSaveBtn" onclick="saveSideHustleChoice()">Save my side hustle</button>
-      <button class="btn secondary small" id="shCancelEditBtn" onclick="cancelSideHustleEdit()">Cancel</button>
-      <div id="shPickerMsg"></div>
+      <button class="btn" id="shSaveBtn" onclick="shSaveChoice()">Save my side hustle</button>
+      <button class="btn secondary small hidden" id="shCancelBtn" onclick="shCancelPick()">Cancel</button>
+      <div id="shPickMsg"></div>
     </div>
 
-    <div id="sideHustlePending" class="hidden">
-      <p id="shPendingMsg" class="muted-small"></p>
-    </div>
-
-    <div id="sideHustleActive" class="hidden">
+    <div id="shActiveBlock" class="hidden">
+      <div id="shPendingNote" class="hidden" style="margin-bottom:10px;">
+        <p class="muted-small" id="shPendingText"></p>
+      </div>
       <div id="shDenialNote" class="hidden" style="margin-bottom:10px;"></div>
+
       <div class="grid grid-3">
         <div class="stat mint">
           <div class="label">My side hustle</div>
@@ -138,8 +145,8 @@
           <div class="value" id="shPay">$0.00</div>
         </div>
       </div>
-      <button class="btn gold" id="shCheckinBtn" onclick="doSideHustleCheckin()">Check in now</button>
-      <button class="btn secondary small" id="shChangeBtn" onclick="toggleSideHustleEdit()">Request a change</button>
+      <button class="btn gold" id="shCheckinBtn" onclick="shDoCheckin()">Check in now</button>
+      <button class="btn secondary small" id="shChangeBtn" onclick="shStartChangeRequest()">Request a change</button>
       <p class="muted-small" id="shStatus"></p>
     </div>
   </div>

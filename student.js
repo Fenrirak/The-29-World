@@ -219,12 +219,28 @@ function applyModuleLocks(locked) {
   }
 }
 
-/* ---------------- Side hustle ---------------- */
-let SH_EDITING = false;
+/* ---------------- Side hustle ----------------
+   Rewritten as a single explicit state machine so there's exactly one
+   place that decides what's on screen, instead of several toggle() calls
+   that can drift out of sync. States:
+     "locked"   — lifestyle rating too low, module locked by teacher
+     "empty"    — teacher hasn't added any side hustles yet
+     "pick"     — student has no hustle yet (first-ever pick, no approval needed)
+     "request"  — student has a hustle, is requesting a change (needs approval)
+     "active"   — student has a hustle and isn't currently editing it
+   sh() is a tiny helper that warns loudly in the console instead of
+   silently failing if an expected element is missing from the page. */
+function sh(id) {
+  const el = document.getElementById(id);
+  if (!el) console.warn(`[side hustle] expected #${id} in the page but it's missing`);
+  return el;
+}
+
+let SH_MODE_REQUEST = false; // true once the student clicks "Request a change"
 
 function populateSideHustleHourSelect() {
-  const sel = document.getElementById("shHour");
-  if (sel.options.length) return;
+  const sel = sh("shHour");
+  if (!sel || sel.options.length) return;
   for (let h = 0; h < 24; h++) {
     const opt = document.createElement("option");
     opt.value = h;
@@ -240,134 +256,130 @@ function sideHustleWindowLabel(h) {
   return `${hourLabel(h)} – ${hh}:15${period}`;
 }
 
+function shSetBlock(state) {
+  const blocks = { locked: "shLockedBlock", empty: "shEmptyBlock", pick: "shPickBlock", request: "shPickBlock", active: "shActiveBlock" };
+  ["shLockedBlock", "shEmptyBlock", "shPickBlock", "shActiveBlock"].forEach(id => {
+    const el = sh(id);
+    if (el) el.classList.toggle("hidden", blocks[state] !== id);
+  });
+}
+
 async function renderSideHustle(me, cls, lockedModules) {
   populateSideHustleHourSelect();
   const hustles = cls.sideHustles || [];
-  const picker = document.getElementById("sideHustlePicker");
-  const pendingBox = document.getElementById("sideHustlePending");
-  const active = document.getElementById("sideHustleActive");
   const isLocked = (lockedModules || []).includes("sidehustle");
 
-  if (isLocked) {
-    document.getElementById("noSideHustles").classList.add("hidden");
-    picker.classList.add("hidden");
-    pendingBox.classList.add("hidden");
-    active.classList.add("hidden");
-    let lockedNotice = document.getElementById("shLockedNotice");
-    if (!lockedNotice) {
-      lockedNotice = document.createElement("p");
-      lockedNotice.id = "shLockedNotice";
-      lockedNotice.className = "muted-small";
-      document.getElementById("sideHustleCard").appendChild(lockedNotice);
-    }
-    lockedNotice.textContent = "Side hustles are locked for you right now because of your lifestyle rating. Ask your teacher what's needed to unlock it.";
-    lockedNotice.classList.remove("hidden");
-    return;
-  }
-  const lockedNotice = document.getElementById("shLockedNotice");
-  if (lockedNotice) lockedNotice.classList.add("hidden");
+  if (isLocked) { shSetBlock("locked"); return; }
+  if (hustles.length === 0) { shSetBlock("empty"); return; }
 
-  document.getElementById("noSideHustles").classList.toggle("hidden", hustles.length > 0);
-  if (hustles.length === 0) {
-    picker.classList.add("hidden");
-    pendingBox.classList.add("hidden");
-    active.classList.add("hidden");
-    return;
+  const sel = sh("shSelect");
+  if (sel) {
+    sel.innerHTML = "";
+    hustles.forEach(h => {
+      const opt = document.createElement("option");
+      opt.value = h.id;
+      opt.textContent = h.name;
+      sel.appendChild(opt);
+    });
   }
 
-  const sel = document.getElementById("shSelect");
-  sel.innerHTML = "";
-  hustles.forEach(h => {
-    const opt = document.createElement("option");
-    opt.value = h.id;
-    opt.textContent = h.name;
-    sel.appendChild(opt);
-  });
-
-  const sh = me.sideHustle;
-  const current = sh && hustles.find(h => h.id === sh.hustleId);
+  const myHustle = me.sideHustle;
+  const current = myHustle && hustles.find(h => h.id === myHustle.hustleId);
   const request = me.sideHustleRequest;
-  const hasPendingRequest = request && request.status === "pending";
+  const hasPendingRequest = !!(request && request.status === "pending");
 
-  if (current && !SH_EDITING) {
-    picker.classList.add("hidden");
-    active.classList.remove("hidden");
-    pendingBox.classList.toggle("hidden", !hasPendingRequest);
-    if (hasPendingRequest) {
-      const reqHustle = hustles.find(h => h.id === request.hustleId);
-      document.getElementById("shPendingMsg").textContent =
-        `Waiting on your teacher to approve your request to switch to ${reqHustle ? reqHustle.name : "a new hustle"} at ${hourLabel(request.checkinHour)}. Your current hustle still applies until then.`;
-    }
+  const state = !current ? "pick" : (SH_MODE_REQUEST ? "request" : "active");
+  shSetBlock(state);
 
-    const denialEl = document.getElementById("shDenialNote");
+  if (state === "pick" || state === "request") {
+    const intro = sh("shPickIntro");
+    if (intro) intro.textContent = state === "pick"
+      ? "Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid."
+      : "Request a new side hustle or check-in hour. Your teacher has to approve the change before it applies — your current hustle keeps working until they do.";
+    const saveBtn = sh("shSaveBtn");
+    if (saveBtn) saveBtn.textContent = state === "pick" ? "Save my side hustle" : "Request this change";
+    const cancelBtn = sh("shCancelBtn");
+    if (cancelBtn) cancelBtn.classList.toggle("hidden", state === "pick");
+    if (sel && myHustle && myHustle.hustleId) sel.value = myHustle.hustleId;
+    const hourSel = sh("shHour");
+    if (hourSel && myHustle && myHustle.checkinHour !== undefined) hourSel.value = myHustle.checkinHour;
+    return;
+  }
+
+  // state === "active"
+  const pendingNote = sh("shPendingNote");
+  if (pendingNote) pendingNote.classList.toggle("hidden", !hasPendingRequest);
+  if (hasPendingRequest) {
+    const reqHustle = hustles.find(h => h.id === request.hustleId);
+    const pendingText = sh("shPendingText");
+    if (pendingText) pendingText.textContent =
+      `Waiting on your teacher to approve your request to switch to ${reqHustle ? reqHustle.name : "a new hustle"} at ${hourLabel(request.checkinHour)}. Your current hustle still applies until then.`;
+  }
+
+  const denialEl = sh("shDenialNote");
+  if (denialEl) {
     if (me.sideHustleDenialNote) {
       denialEl.classList.remove("hidden");
       denialEl.innerHTML = `<span class="badge coral">Change request denied</span> <span class="muted-small">${me.sideHustleDenialNote}</span>`;
     } else {
       denialEl.classList.add("hidden");
     }
-
-    document.getElementById("shName").textContent = current.name;
-    document.getElementById("shWindow").textContent = sideHustleWindowLabel(sh.checkinHour);
-    const pay = Number(current.payouts[sh.checkinHour]) || 0;
-    document.getElementById("shPay").textContent = fmtMoney(pay);
-
-    const { hour, minute } = nzHourMinute();
-    const inWindow = hour === sh.checkinHour && minute <= 15;
-    const already = sh.lastCheckin === nzDateKey();
-    const btn = document.getElementById("shCheckinBtn");
-    btn.disabled = !inWindow || already;
-    const statusEl = document.getElementById("shStatus");
-    if (already) statusEl.textContent = `You've checked in today. Streak: ${sh.streak || 0} day${(sh.streak || 0) === 1 ? "" : "s"}.`;
-    else if (inWindow) statusEl.textContent = "You're in your check-in window — go ahead!";
-    else statusEl.textContent = `Come back at ${hourLabel(sh.checkinHour)} to check in.`;
-
-    document.getElementById("shChangeBtn").classList.toggle("hidden", hasPendingRequest);
-  } else {
-    pendingBox.classList.add("hidden");
-    picker.classList.remove("hidden");
-    active.classList.add("hidden");
-    const isFirstPick = !current;
-    document.getElementById("shPickerIntro").textContent = isFirstPick
-      ? "Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid."
-      : "Request a new side hustle or check-in hour. Your teacher has to approve the change before it applies — your current hustle keeps working until they do.";
-    document.getElementById("shSaveBtn").textContent = isFirstPick ? "Save my side hustle" : "Request this change";
-    document.getElementById("shCancelEditBtn").classList.toggle("hidden", isFirstPick);
-    if (sh && sh.hustleId) sel.value = sh.hustleId;
-    if (sh && sh.checkinHour !== undefined) document.getElementById("shHour").value = sh.checkinHour;
   }
+
+  const nameEl = sh("shName"); if (nameEl) nameEl.textContent = current.name;
+  const windowEl = sh("shWindow"); if (windowEl) windowEl.textContent = sideHustleWindowLabel(myHustle.checkinHour);
+  const pay = Number(current.payouts[myHustle.checkinHour]) || 0;
+  const payEl = sh("shPay"); if (payEl) payEl.textContent = fmtMoney(pay);
+
+  const { hour, minute } = nzHourMinute();
+  const inWindow = hour === myHustle.checkinHour && minute <= 15;
+  const already = myHustle.lastCheckin === nzDateKey();
+  const checkinBtn = sh("shCheckinBtn");
+  if (checkinBtn) checkinBtn.disabled = !inWindow || already;
+  const statusEl = sh("shStatus");
+  if (statusEl) {
+    if (already) statusEl.textContent = `You've checked in today. Streak: ${myHustle.streak || 0} day${(myHustle.streak || 0) === 1 ? "" : "s"}.`;
+    else if (inWindow) statusEl.textContent = "You're in your check-in window — go ahead!";
+    else statusEl.textContent = `Come back at ${hourLabel(myHustle.checkinHour)} to check in.`;
+  }
+  const changeBtn = sh("shChangeBtn");
+  if (changeBtn) changeBtn.classList.toggle("hidden", hasPendingRequest);
 }
 
-function toggleSideHustleEdit() {
-  SH_EDITING = true;
+function shStartChangeRequest() {
+  SH_MODE_REQUEST = true;
   render();
 }
 
-function cancelSideHustleEdit() {
-  SH_EDITING = false;
-  document.getElementById("shPickerMsg").textContent = "";
+function shCancelPick() {
+  SH_MODE_REQUEST = false;
+  const msg = sh("shPickMsg");
+  if (msg) msg.textContent = "";
   render();
 }
 
-async function saveSideHustleChoice() {
-  const hustleId = document.getElementById("shSelect").value;
-  const hour = document.getElementById("shHour").value;
-  const msg = document.getElementById("shPickerMsg");
-  msg.textContent = "Saving...";
+async function shSaveChoice() {
+  const hustleId = sh("shSelect").value;
+  const hour = sh("shHour").value;
+  const msg = sh("shPickMsg");
+  if (msg) msg.textContent = "Saving...";
   const res = await requestSideHustleChange(CURRENT.username, CURRENT.classCode, hustleId, hour);
-  if (!res.ok) { msg.textContent = res.error; return; }
-  msg.textContent = res.pending ? "Request sent — waiting on your teacher to approve it." : "";
-  SH_EDITING = false;
+  if (!res.ok) { if (msg) msg.textContent = res.error; return; }
+  if (msg) msg.textContent = res.pending ? "Request sent — waiting on your teacher to approve it." : "";
+  SH_MODE_REQUEST = false;
   await render();
 }
 
-async function doSideHustleCheckin() {
-  document.getElementById("shCheckinBtn").disabled = true;
+async function shDoCheckin() {
+  const btn = sh("shCheckinBtn");
+  if (btn) btn.disabled = true;
   const res = await checkinSideHustle(CURRENT.username, CURRENT.classCode);
-  const statusEl = document.getElementById("shStatus");
-  statusEl.textContent = res.ok
-    ? `Checked in! +${fmtMoney(res.amount)}. Streak: ${res.streak} day${res.streak === 1 ? "" : "s"}.`
-    : res.error;
+  const statusEl = sh("shStatus");
+  if (statusEl) {
+    statusEl.textContent = res.ok
+      ? `Checked in! +${fmtMoney(res.amount)}. Streak: ${res.streak} day${res.streak === 1 ? "" : "s"}.`
+      : res.error;
+  }
   await render();
 }
 
