@@ -121,6 +121,8 @@ p{color:var(--muted);line-height:1.5;}
 .topbar nav.force-icons a{padding:calc(8px * var(--navscale));justify-content:center;}
 .topbar nav a:hover{color:#fff;background:rgba(255,255,255,0.08);}
 .topbar nav a.active{background:rgba(232,184,75,0.16);color:var(--gold);}
+.topbar nav a.nav-locked{opacity:.4;cursor:not-allowed;}
+.topbar nav a.nav-locked:hover{background:none;color:inherit;}
 .topbar .who{display:none;}
 .btn-logout{
   background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;

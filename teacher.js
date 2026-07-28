@@ -260,6 +260,16 @@ async function render() {
   // lifestyle rating bands
   renderThresholdRows(cls.lifestyleThresholds || []);
 
+  // lifestyle-based module locks
+  const lock = cls.lifestyleLock || { threshold: 0, modules: [] };
+  document.getElementById("lifestyleLockThreshold").value = lock.threshold;
+  document.getElementById("lifestyleLockModules").innerHTML = LIFESTYLE_LOCKABLE_MODULES.map(m => `
+    <label style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" class="lifestyleLockModuleBox" value="${m.key}" ${lock.modules.includes(m.key) ? "checked" : ""} style="width:20px;height:20px;min-height:auto;flex-shrink:0;">
+      ${m.label}
+    </label>
+  `).join("");
+
   // adjustment select
   const sel = document.getElementById("adjStudent");
   sel.innerHTML = students.map(s => `<option value="${s.username}">${s.name}</option>`).join("");
@@ -627,6 +637,14 @@ async function saveThresholds() {
   }));
   await saveLifestyleThresholds(CLASS_CODE, thresholds);
   document.getElementById("thresholdMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
+  await render();
+}
+
+async function saveLifestyleLockSettings() {
+  const threshold = document.getElementById("lifestyleLockThreshold").value;
+  const modules = Array.from(document.querySelectorAll(".lifestyleLockModuleBox:checked")).map(el => el.value);
+  await saveLifestyleLock(CLASS_CODE, threshold, modules);
+  document.getElementById("lifestyleLockMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
   await render();
 }
 

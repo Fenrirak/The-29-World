@@ -113,7 +113,10 @@ async function render() {
       score + " / 100" + (label ? " — " + label : "") + (isOverride ? " (set by teacher)" : "");
   }
 
-  await renderSideHustle(me, cls);
+  const lockedModules = await getLockedModulesForStudent(me.username, me.classCode);
+  applyModuleLocks(lockedModules);
+
+  await renderSideHustle(me, cls, lockedModules);
 
   // net worth leaderboard
   const board = await classLeaderboard(me.classCode);
@@ -195,6 +198,35 @@ async function render() {
   });
 }
 
+/* ---------------- Lifestyle-based module locks ---------------- */
+function applyModuleLocks(locked) {
+  const banner = document.getElementById("lifestyleLockBanner");
+  const lockedLabels = [];
+  document.querySelectorAll("nav a[data-module]").forEach(a => {
+    const key = a.dataset.module;
+    const isLocked = locked.includes(key);
+    a.classList.toggle("nav-locked", isLocked);
+    if (isLocked) {
+      const labelEl = a.querySelector(".nav-label");
+      lockedLabels.push(labelEl ? labelEl.textContent : key);
+      a.onclick = (e) => {
+        e.preventDefault();
+        alert("This module is locked because your lifestyle rating is too low right now. Check with your teacher about what's needed to unlock it.");
+      };
+    } else {
+      a.onclick = null;
+    }
+  });
+  if (locked.includes("sidehustle")) lockedLabels.push("Side hustle");
+
+  if (lockedLabels.length === 0) {
+    banner.classList.add("hidden");
+  } else {
+    banner.classList.remove("hidden");
+    banner.innerHTML = `<p style="margin:0;"><strong>Some modules are locked</strong><br>Your lifestyle rating is too low right now to use: ${lockedLabels.join(", ")}. Ask your teacher what's needed to unlock them.</p>`;
+  }
+}
+
 /* ---------------- Side hustle ---------------- */
 let SH_EDITING = false;
 
@@ -216,13 +248,34 @@ function sideHustleWindowLabel(h) {
   return `${hourLabel(h)} – ${hh}:15${period}`;
 }
 
-async function renderSideHustle(me, cls) {
+async function renderSideHustle(me, cls, lockedModules) {
   populateSideHustleHourSelect();
   const hustles = cls.sideHustles || [];
-  document.getElementById("noSideHustles").classList.toggle("hidden", hustles.length > 0);
   const picker = document.getElementById("sideHustlePicker");
   const pendingBox = document.getElementById("sideHustlePending");
   const active = document.getElementById("sideHustleActive");
+  const isLocked = (lockedModules || []).includes("sidehustle");
+
+  if (isLocked) {
+    document.getElementById("noSideHustles").classList.add("hidden");
+    picker.classList.add("hidden");
+    pendingBox.classList.add("hidden");
+    active.classList.add("hidden");
+    let lockedNotice = document.getElementById("shLockedNotice");
+    if (!lockedNotice) {
+      lockedNotice = document.createElement("p");
+      lockedNotice.id = "shLockedNotice";
+      lockedNotice.className = "muted-small";
+      document.getElementById("sideHustleCard").appendChild(lockedNotice);
+    }
+    lockedNotice.textContent = "Side hustles are locked for you right now because of your lifestyle rating. Ask your teacher what's needed to unlock it.";
+    lockedNotice.classList.remove("hidden");
+    return;
+  }
+  const lockedNotice = document.getElementById("shLockedNotice");
+  if (lockedNotice) lockedNotice.classList.add("hidden");
+
+  document.getElementById("noSideHustles").classList.toggle("hidden", hustles.length > 0);
   if (hustles.length === 0) {
     picker.classList.add("hidden");
     pendingBox.classList.add("hidden");

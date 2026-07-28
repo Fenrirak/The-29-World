@@ -166,6 +166,16 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
       <button class="btn secondary" style="margin-top:14px;" onclick="saveThresholds()" id="saveThresholdsBtn">Save bands</button>
       <div id="thresholdMsg"></div>
     </div>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
+      <h2 id="hLifestyleLock">Lock modules by lifestyle rating</h2>
+      <p>Stop students from using certain modules while their lifestyle rating is low. Pick a cutoff and tick which modules should be locked when a student is at or below it.</p>
+      <label for="lifestyleLockThreshold" id="labLifestyleLockThreshold">Lock when lifestyle rating is at or below</label>
+      <input id="lifestyleLockThreshold" type="number" min="0" max="100" step="1" style="max-width:160px;">
+      <div class="grid grid-3" id="lifestyleLockModules" style="margin-top:10px;"></div>
+      <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyleLockSettings()" id="saveLifestyleLockBtn">Save module locks</button>
+      <div id="lifestyleLockMsg"></div>
+    </div>
   </div>
 
   <div class="grid grid-2">

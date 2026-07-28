@@ -150,6 +150,7 @@ async function createTeacherAndClass(name, username, password, className) {
     eventDefs: [], eventLog: [], lastEventWeekRun: null, lastEventDayRun: null,
     vehicles: [], termDepositPlans: [],
     sideHustles: [],
+    lifestyleLock: { threshold: 0, modules: [] },
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
     insuranceDay: "Fri", lastInsuranceWeekRun: null,
     gambling: { enabled: true, minBet: 1, maxBet: 20, dailyBetCap: null, payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 } },
@@ -1851,6 +1852,7 @@ function withNewModuleDefaults(cls) {
   cls.lastEventDayRun = cls.lastEventDayRun || null;
   cls.termDepositPlans = cls.termDepositPlans || [];
   cls.sideHustles = cls.sideHustles || [];
+  cls.lifestyleLock = cls.lifestyleLock || { threshold: 0, modules: [] };
   cls.loanTiers = cls.loanTiers || [];
   cls.maxLoanAmount = cls.maxLoanAmount || 0; // 0 = no extra class-wide cap beyond the tiers themselves
   cls.vehicles = cls.vehicles || [];
@@ -1993,6 +1995,9 @@ async function removeSideHustle(classCode, hustleId) {
 // teacher's approval (this just stops someone quietly retiming their
 // check-in to whenever they happen to be checking in).
 async function requestSideHustleChange(username, classCode, hustleId, hour) {
+  if (await isModuleLockedForStudent(username, classCode, "sidehustle")) {
+    return { ok: false, error: "Side hustles are locked for you right now because of your lifestyle rating." };
+  }
   const cls = await getClass(classCode);
   if (!cls) return { ok: false, error: "Class not found." };
   const hustle = (cls.sideHustles || []).find(h => h.id === hustleId);
@@ -2070,6 +2075,9 @@ async function denySideHustleChange(username, reason) {
 // Pays out if the student is inside their 15-minute check-in window and
 // hasn't already checked in today (NZ calendar day).
 async function checkinSideHustle(username, classCode) {
+  if (await isModuleLockedForStudent(username, classCode, "sidehustle")) {
+    return { ok: false, error: "Side hustles are locked for you right now because of your lifestyle rating." };
+  }
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let amount = 0, hustleName = "", streak = 0;
@@ -2813,6 +2821,47 @@ async function setLifestyleOverride(username, score) {
 async function clearLifestyleOverride(username) {
   await usersCol().doc(username).update({ lifestyleOverride: null });
   return { ok: true };
+}
+
+// Registry of modules that can be locked by lifestyle rating. "key" must
+// match what each module's own page passes to isModuleLockedForStudent.
+const LIFESTYLE_LOCKABLE_MODULES = [
+  { key: "bank", label: "Bank" },
+  { key: "termdeposit", label: "Term Deposit" },
+  { key: "loan", label: "Loans" },
+  { key: "market", label: "Stock Market" },
+  { key: "store", label: "Store" },
+  { key: "jobs", label: "Jobs" },
+  { key: "transport", label: "Transport" },
+  { key: "property", label: "Property" },
+  { key: "insurance", label: "Insurance" },
+  { key: "tax", label: "Tax" },
+  { key: "bigevents", label: "Big Events" },
+  { key: "gambling", label: "Gambling" },
+  { key: "sidehustle", label: "Side hustle" }
+];
+
+async function saveLifestyleLock(classCode, threshold, modules) {
+  const clean = {
+    threshold: Math.max(0, Math.min(100, Math.round(Number(threshold) || 0))),
+    modules: (modules || []).filter(k => LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === k))
+  };
+  await classesCol().doc(classCode).update({ lifestyleLock: clean });
+  return clean;
+}
+
+// Which modules are currently locked for this student (empty array if none).
+async function getLockedModulesForStudent(username, classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const lock = cls.lifestyleLock;
+  if (!lock || !lock.modules || lock.modules.length === 0) return [];
+  const score = await lifestyleRating(username, classCode);
+  if (score > lock.threshold) return [];
+  return lock.modules;
+}
+async function isModuleLockedForStudent(username, classCode, moduleKey) {
+  const locked = await getLockedModulesForStudent(username, classCode);
+  return locked.includes(moduleKey);
 }
 
 /* ===================== Global page bootstrap =====================
