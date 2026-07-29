@@ -113,13 +113,14 @@
       <div class="grid grid-2">
         <div>
           <label for="shSelect" id="labShSelect">Side hustle</label>
-          <select id="shSelect"></select>
+          <select id="shSelect" onchange="shUpdatePayPreview()"></select>
         </div>
         <div>
           <label for="shHour" id="labShHour">Daily check-in time</label>
-          <select id="shHour"></select>
+          <select id="shHour" onchange="shUpdatePayPreview()"></select>
         </div>
       </div>
+      <p class="muted-small" id="shPayPreview"></p>
       <button class="btn" id="shSaveBtn" onclick="shSaveChoice()">Save my side hustle</button>
       <button class="btn secondary small hidden" id="shCancelBtn" onclick="shCancelPick()">Cancel</button>
       <div id="shPickMsg"></div>

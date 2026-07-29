@@ -110,7 +110,7 @@ async function render() {
     const label = lifestyleLabelFor(score, cls.lifestyleThresholds);
     const isOverride = me.lifestyleOverride !== undefined && me.lifestyleOverride !== null;
     document.getElementById("lifestyleValue").textContent =
-      score + " / 100" + (label ? " — " + label : "");
+      score + " / 100" + (label ? " — " + label : "") + (isOverride ? " (set by teacher)" : "");
   }
 
   const lockedModules = await getLockedModulesForStudent(me.username, me.classCode);
@@ -237,6 +237,7 @@ function sh(id) {
 }
 
 let SH_MODE_REQUEST = false; // true once the student clicks "Request a change"
+let SH_HUSTLES = []; // cached from the latest render, used by the pay preview
 
 function populateSideHustleHourSelect() {
   const sel = sh("shHour");
@@ -271,6 +272,7 @@ async function renderSideHustle(me, cls, lockedModules) {
 
   if (isLocked) { shSetBlock("locked"); return; }
   if (hustles.length === 0) { shSetBlock("empty"); return; }
+  SH_HUSTLES = hustles;
 
   const sel = sh("shSelect");
   if (sel) {
@@ -303,6 +305,7 @@ async function renderSideHustle(me, cls, lockedModules) {
     if (sel && myHustle && myHustle.hustleId) sel.value = myHustle.hustleId;
     const hourSel = sh("shHour");
     if (hourSel && myHustle && myHustle.checkinHour !== undefined) hourSel.value = myHustle.checkinHour;
+    shUpdatePayPreview();
     return;
   }
 
@@ -344,6 +347,21 @@ async function renderSideHustle(me, cls, lockedModules) {
   }
   const changeBtn = sh("shChangeBtn");
   if (changeBtn) changeBtn.classList.toggle("hidden", hasPendingRequest);
+}
+
+// Reads straight from the currently selected hustle's payouts — works
+// automatically for hustles the teacher already created and any new ones
+// added later, since it's not hardcoded to specific hustles or amounts.
+function shUpdatePayPreview() {
+  const preview = sh("shPayPreview");
+  if (!preview) return;
+  const selEl = sh("shSelect"), hourEl = sh("shHour");
+  if (!selEl || !hourEl) return;
+  const hustle = SH_HUSTLES.find(h => h.id === selEl.value);
+  const hour = Number(hourEl.value);
+  if (!hustle) { preview.textContent = ""; return; }
+  const pay = Number(hustle.payouts[hour]) || 0;
+  preview.textContent = `Checking in at ${hourLabel(hour)} for ${hustle.name} pays ${fmtMoney(pay)}.`;
 }
 
 function shStartChangeRequest() {
