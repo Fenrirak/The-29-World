@@ -328,6 +328,8 @@ function describeTxn(t, nameOf) {
     case "savings-withdraw": return `${nameOf(t.to)} — ${t.note || "Withdrew from Savings Account"}`;
     case "loan-taken": return `${nameOf(t.to)} — ${t.note}`;
     case "loan-repayment": return `${nameOf(t.from)} — ${t.note}`;
+    case "side-hustle": return `${nameOf(t.to)} — ${t.note}`;
+    case "store-gift": return `${nameOf(t.to)} — ${t.note}`;
     default: return t.note || "";
   }
 }
@@ -358,7 +360,9 @@ function badge(type) {
     "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
     "cash-interest": ["gold", "coin", "Cash interest"],
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
-    "loan-taken": ["navy", "handshake", "Loan"], "loan-repayment": ["mint", "handshake", "Loan repayment"]
+    "loan-taken": ["navy", "handshake", "Loan"], "loan-repayment": ["mint", "handshake", "Loan repayment"],
+    "side-hustle": ["mint", "briefcase", "Side hustle"],
+    "store-gift": ["mint", "cart", "Free item"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -739,6 +743,7 @@ async function renderProfile(username) {
   const rating = await lifestyleRating(username, CLASS_CODE);
   const net = await portfolioValue(username, CLASS_CODE);
   const poss = await getStudentPossessions(username, CLASS_CODE);
+  const cls = withNewModuleDefaults(await getClass(CLASS_CODE));
 
   document.getElementById("profileName").innerHTML = `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${s.name}`;
 
@@ -786,6 +791,22 @@ async function renderProfile(username) {
         <button class="btn small coral" onclick="profileRemoveStoreItem('${username}','${it.id}')">Remove</button></div>`).join("")
     : `<p class="muted-small">No store items owned.</p>`);
 
+  const giftableItems = (cls.storeItems || []).filter(it => !it.archived);
+  if (giftableItems.length > 0) {
+    rows.push(`
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;">
+        <div style="flex:1;">
+          <label for="profileGiftItemSelect" style="margin-top:0;">Give a store item for free</label>
+          <select id="profileGiftItemSelect">
+            ${giftableItems.map(it => `<option value="${it.id}">${it.name} — ${fmtMoney(it.price)}${it.stock !== null && it.stock <= 0 ? " (out of stock)" : ""}</option>`).join("")}
+          </select>
+        </div>
+        <button class="btn small" onclick="profileGiveStoreItem('${username}')">Give free</button>
+      </div>
+      <p class="muted-small">Doesn't cost the student anything and ignores stock — works even if the item shows 0 left.</p>
+    `);
+  }
+
   rows.push(`<h4>${icon("shield", 16)} Insurance</h4>`);
   rows.push(poss.insurance.length
     ? poss.insurance.map(p => `<div class="auto-row"><div class="auto-details">${p.name} — ${fmtMoney(p.price)}/week</div>
@@ -821,6 +842,14 @@ async function profileRemoveVehicle(vehId) {
   await render();
   await renderProfile(PROFILE_USER);
 }
+async function profileGiveStoreItem(username) {
+  const itemId = document.getElementById("profileGiftItemSelect").value;
+  const res = await giveFreeStoreItem(CLASS_CODE, username, itemId);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+  await renderProfile(username);
+}
+
 async function profileRemoveStoreItem(username, itemId) {
   if (!confirm("Remove this item from the student? They'll be refunded 80% of its price.")) return;
   await sellStoreItem(username, CLASS_CODE, itemId);

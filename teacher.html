@@ -79,52 +79,6 @@
   </div>
 
   <div class="card">
-    <h2 id="hEvents">Random weekly events</h2>
-    <p>Every week, each student is randomly given 1 of the active events below. Turn on "Can repeat" if a student should be able to get the same event more than once.</p>
-    <button class="btn secondary small" onclick="runWeeklyEventsNow()" id="runEventsNowBtn" style="margin-bottom:12px;">Run this week's events now</button>
-    <div id="eventList"></div>
-    <p class="muted-small" id="noEvents">You haven't added any events yet.</p>
-    <form onsubmit="return addEventForm(event)">
-      <label for="evType" id="labEvType">Event type</label>
-      <select id="evType" onchange="toggleEventType()">
-        <option value="fixed">Fixed amount (happens automatically)</option>
-        <option value="choice">Multiple choice (student picks what happens)</option>
-      </select>
-      <div class="grid grid-3">
-        <div>
-          <label for="evName" id="labEvName">Event name</label>
-          <input id="evName" placeholder="e.g. Found money on the ground" required>
-        </div>
-        <div id="evAmountWrap">
-          <label for="evAmount" id="labEvAmount">Amount (negative for a cost)</label>
-          <input id="evAmount" type="number" step="0.5">
-        </div>
-        <div>
-          <label for="evSeverity" id="labEvSeverity">Severity</label>
-          <select id="evSeverity">
-            <option value="neutral">Neutral</option>
-            <option value="bad">Bad (claimable on General insurance)</option>
-          </select>
-        </div>
-      </div>
-      <div id="evOptionsWrap" class="hidden">
-        <label for="evOptionsArea" id="labEvOptions">Choices — one per line, as "Label | amount | what happened (optional)"</label>
-        <textarea id="evOptionsArea" rows="4" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:1rem;" placeholder="Pay for repairs | -10 | The plumber fixed it in an hour
-Ignore it and hope for the best | 0 | Nothing happened, you got lucky
-Do it yourself and save money | -3 | It mostly worked, but you had to buy some parts"></textarea>
-        <p class="muted-small">The student will be shown this scenario and must pick one of these choices — each choice's amount is applied to their balance (negative for a cost, positive for a gain, 0 for no effect). The third part is optional — a short line explaining what happened, shown to the student after they choose.</p>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:12px;">
-        <input type="checkbox" id="evRepeat" style="width:20px;height:20px;min-height:auto;flex-shrink:0;">
-        <label for="evRepeat" style="margin:0;">Can repeat</label>
-      </div>
-      <label for="evDesc" id="labEvDesc">Description (shown in the activity feed)</label>
-      <input id="evDesc" placeholder="e.g. Someone dropped some coins">
-      <button class="btn" type="submit" id="addEventBtn">Add event</button>
-    </form>
-  </div>
-
-  <div class="card">
     <h2 id="hSideHustles">Side hustles</h2>
     <p>Students each pick one hustle and a daily check-in hour (e.g. 1am, 2am, 3am...). They must check in within 15 minutes after that hour to get paid — the amount depends on which hour they picked. Once a student has picked one, any change needs your approval — that stops someone quietly retiming their check-in to match whenever they happen to be online.</p>
 
@@ -264,6 +218,52 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
       <p>Reset every student's balance to $0, remove all jobs assignments, delist every company, and clear the activity log. Student logins and the class code stay the same — this just gives everyone a fresh start.</p>
       <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>
     </div>
+  </div>
+
+  <div class="card">
+    <h2 id="hEvents">Random weekly events</h2>
+    <p>Every week, each student is randomly given 1 of the active events below. Turn on "Can repeat" if a student should be able to get the same event more than once.</p>
+    <button class="btn secondary small" onclick="runWeeklyEventsNow()" id="runEventsNowBtn" style="margin-bottom:12px;">Run this week's events now</button>
+    <div id="eventList"></div>
+    <p class="muted-small" id="noEvents">You haven't added any events yet.</p>
+    <form onsubmit="return addEventForm(event)">
+      <label for="evType" id="labEvType">Event type</label>
+      <select id="evType" onchange="toggleEventType()">
+        <option value="fixed">Fixed amount (happens automatically)</option>
+        <option value="choice">Multiple choice (student picks what happens)</option>
+      </select>
+      <div class="grid grid-3">
+        <div>
+          <label for="evName" id="labEvName">Event name</label>
+          <input id="evName" placeholder="e.g. Found money on the ground" required>
+        </div>
+        <div id="evAmountWrap">
+          <label for="evAmount" id="labEvAmount">Amount (negative for a cost)</label>
+          <input id="evAmount" type="number" step="0.5">
+        </div>
+        <div>
+          <label for="evSeverity" id="labEvSeverity">Severity</label>
+          <select id="evSeverity">
+            <option value="neutral">Neutral</option>
+            <option value="bad">Bad (claimable on General insurance)</option>
+          </select>
+        </div>
+      </div>
+      <div id="evOptionsWrap" class="hidden">
+        <label for="evOptionsArea" id="labEvOptions">Choices — one per line, as "Label | amount | what happened (optional)"</label>
+        <textarea id="evOptionsArea" rows="4" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:1rem;" placeholder="Pay for repairs | -10 | The plumber fixed it in an hour
+Ignore it and hope for the best | 0 | Nothing happened, you got lucky
+Do it yourself and save money | -3 | It mostly worked, but you had to buy some parts"></textarea>
+        <p class="muted-small">The student will be shown this scenario and must pick one of these choices — each choice's amount is applied to their balance (negative for a cost, positive for a gain, 0 for no effect). The third part is optional — a short line explaining what happened, shown to the student after they choose.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+        <input type="checkbox" id="evRepeat" style="width:20px;height:20px;min-height:auto;flex-shrink:0;">
+        <label for="evRepeat" style="margin:0;">Can repeat</label>
+      </div>
+      <label for="evDesc" id="labEvDesc">Description (shown in the activity feed)</label>
+      <input id="evDesc" placeholder="e.g. Someone dropped some coins">
+      <button class="btn" type="submit" id="addEventBtn">Add event</button>
+    </form>
   </div>
 
   <div class="card">

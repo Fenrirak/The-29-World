@@ -2281,6 +2281,35 @@ async function buyStoreItem(username, classCode, itemId) {
 // Removes it from the student's owned items (which also reduces their
 // lifestyle rating automatically, since that's computed live from
 // user.storeItems) and restocks it if the item has limited stock.
+// Teacher-only: gift a store item to a student for free, ignoring price
+// and stock entirely (even if the item shows 0 left). Doesn't touch the
+// item's stock/sold counters, since this is a manual override outside
+// the normal buy/sell accounting.
+async function giveFreeStoreItem(classCode, username, itemId) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let itemName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const item = cls.storeItems.find(i => i.id === itemId);
+      if (!item) throw new Error("NOT_FOUND");
+      itemName = item.name;
+      user.storeItems = user.storeItems || [];
+      user.storeItems.push(itemId);
+      t.update(userRef, { storeItems: user.storeItems });
+    });
+  } catch (e) {
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "store-gift", to: username, amount: 0, note: `Given for free by teacher: ${itemName}` });
+  return { ok: true };
+}
+
 async function sellStoreItem(username, classCode, itemId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
