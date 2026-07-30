@@ -103,12 +103,14 @@ async function render() {
   const cashRateNote = document.getElementById("cashRateNote");
   const cashRate = cls.cashInterestRate || 0;
   cashRateNote.classList.toggle("hidden", IS_TEACHER || cashRate <= 0);
-  if (!IS_TEACHER && cashRate > 0) cashRateNote.textContent = `Earning ${cashRate}% interest`;
+  if (!IS_TEACHER && cashRate > 0) cashRateNote.textContent = `Earning ${cashRate}% interest. ${interestScheduleLabel(cls)}`;
 
   document.getElementById("savingsCard").classList.toggle("hidden", IS_TEACHER);
   if (!IS_TEACHER) {
     document.getElementById("savingsBalance").textContent = fmtMoney(me.savings || 0);
     document.getElementById("savingsRateValue").textContent = (cls.interestRate || 0) + "%";
+    document.getElementById("savingsRateNote").textContent =
+      "Money in here earns interest at the rate below — it doesn't earn anything sitting in your cash balance unless your teacher has set a cash rate too. " + interestScheduleLabel(cls);
   }
 
   const recipients = await payableRecipients();

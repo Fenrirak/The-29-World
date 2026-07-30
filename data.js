@@ -426,6 +426,39 @@ async function setPayDay(classCode, day) {
   await classesCol().doc(classCode).update({ payDay: day });
 }
 
+// Identifies the current "pay cycle" by the date of its most recent (or
+// today's, if today IS the pay day) occurrence of the class's pay day.
+// That date only changes once pay day itself arrives — e.g. with the
+// default Friday pay day, this key is the same all week and then flips
+// the moment Friday begins, which is what makes the job-task checkbox
+// reset on pay day rather than on some unrelated Monday-start week.
+function payCycleKey(payDay) {
+  const targetIdx = DAY_NAMES.indexOf(payDay || "Fri");
+  const todayIdx = DAY_NAMES.indexOf(nzDayName());
+  const diff = (todayIdx - targetIdx + 7) % 7;
+  const ms = dateKeyToUTC(nzDateKey()) - diff * 86400000;
+  const dt = new Date(ms);
+  const y = dt.getUTCFullYear(), m = String(dt.getUTCMonth() + 1).padStart(2, "0"), d = String(dt.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// Teacher-controlled gate on wages: a student only gets paid on pay day
+// if the teacher has ticked "completed this week's job task" for the
+// current pay cycle. The box doesn't carry over — it resets automatically
+// the moment pay day arrives (Friday by default, or whatever the class's
+// pay day is set to), so the teacher has to tick it again each cycle.
+async function setJobTaskApproval(classCode, username, approved) {
+  const cls = await getClass(classCode);
+  const weekKey = payCycleKey(cls && cls.payDay);
+  await usersCol().doc(username).update({ jobTaskApproval: { weekKey, approved: !!approved } });
+  return { ok: true };
+}
+function isJobTaskApprovedThisWeek(user, cls) {
+  const weekKey = payCycleKey(cls && cls.payDay);
+  const approval = user && user.jobTaskApproval;
+  return !!(approval && approval.weekKey === weekKey && approval.approved);
+}
+
 async function autoPayDayIfDue(classCode) {
   const cls = await getClass(classCode);
   if (!cls || !cls.payDay) return 0;
@@ -482,6 +515,11 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
     if (!job) continue;
     hasJobs = true;
     if (alreadyPaid.has(student.username)) continue;
+    // Not marked as having done this week's job task yet — skip without
+    // touching alreadyPaid/allSucceeded, so as soon as the teacher ticks
+    // the box, the next pay day run (auto or the manual button) will
+    // catch them up rather than having missed the week for good.
+    if (!isJobTaskApprovedThisWeek(student, cls)) continue;
     try {
       const { net, taxAmount } = applyTaxToIncome(cls, "wage", job.wage);
       await adjustBalance(student.username, net);
@@ -504,6 +542,21 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
     await classRef.update({ lastPayDayRun: dateKey });
   }
   return { paidCount, newlyPaid, hasJobs, alreadyRun };
+}
+
+// Plain-English description of when interest is next applied, for
+// whichever page shows a student's interest rate/amount. Not wired into
+// any page yet — bank.html/bank.js would need to call this and render it.
+const INTEREST_FREQ_LABEL = { daily: "every day", weekly: "every week", fortnightly: "every 2 weeks", monthly: "every 4 weeks" };
+const DAY_FULL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
+function interestScheduleLabel(cls) {
+  if (!cls || !cls.interestAuto) {
+    return "Your teacher applies interest manually — there's no fixed schedule.";
+  }
+  const freq = cls.interestFrequency || "weekly";
+  if (freq === "daily") return "Interest is paid automatically every day.";
+  const dayName = DAY_FULL[cls.interestDay || "Fri"] || cls.interestDay;
+  return `Interest is paid automatically ${INTEREST_FREQ_LABEL[freq] || "every week"}, on ${dayName}.`;
 }
 
 async function applyInterest(classCode) {

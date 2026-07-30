@@ -153,7 +153,7 @@ async function render() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${s.name}<div class="muted-small">@${s.username}</div></td>
-      <td>${jobSelectHtml(cls, s)}</td>
+      <td>${jobSelectHtml(cls, s)}${s.jobId ? `<div class="muted-small">${isJobTaskApprovedThisWeek(s, cls) ? `${icon("star", 11)} Task approved this week` : `Task not yet approved`}</div>` : ""}</td>
       <td><strong>${fmtMoney(s.balance)}</strong></td>
       <td>${lifestyleByUser[s.username]} / 100</td>
       <td>${fmtMoney(netByUser[s.username] || 0)}</td>
@@ -751,6 +751,21 @@ async function renderProfile(username) {
   const isOverride = s.lifestyleOverride !== undefined && s.lifestyleOverride !== null;
   rows.push(`<p><strong>Balance:</strong> ${fmtMoney(s.balance)} &middot; <strong>Portfolio:</strong> ${fmtMoney(net)} &middot; <strong>Lifestyle rating:</strong> ${rating} / 100${isOverride ? " (overridden)" : ""}</p>`);
 
+  const job = cls.jobs.find(j => j.id === s.jobId);
+  const taskApproved = isJobTaskApprovedThisWeek(s, cls);
+  rows.push(`<h4>${icon("briefcase", 16)} This week's job task</h4>`);
+  if (!job) {
+    rows.push(`<p class="muted-small">No job assigned — nothing to approve.</p>`);
+  } else {
+    rows.push(`
+      <label style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="profileJobTaskCheck" ${taskApproved ? "checked" : ""} onchange="profileSetJobTaskApproval('${username}', this.checked)" style="width:20px;height:20px;min-height:auto;">
+        <span>Completed this week's task for <strong>${job.title}</strong> — pay day will pay them once this is ticked</span>
+      </label>
+      <p class="muted-small">Resets automatically the moment pay day (${DAY_FULL[cls.payDay || "Fri"]}) begins — you'll need to tick it again for next cycle. If it's unticked on pay day, ${s.name.split(" ")[0]} won't be paid until you tick it and re-run pay day.</p>
+    `);
+  }
+
   rows.push(`<h4>${icon("star", 16)} Lifestyle rating override</h4>`);
   if (isOverride) {
     rows.push(`
@@ -814,6 +829,11 @@ async function renderProfile(username) {
     : `<p class="muted-small">No insurance plans.</p>`);
 
   document.getElementById("profileBody").innerHTML = rows.join("");
+}
+
+async function profileSetJobTaskApproval(username, approved) {
+  await setJobTaskApproval(CLASS_CODE, username, approved);
+  await renderProfile(username);
 }
 
 async function applyProfileLifestyleOverride(username) {
