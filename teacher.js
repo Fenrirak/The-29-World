@@ -836,6 +836,15 @@ async function renderProfile(username) {
         <button class="btn small coral" onclick="profileRemoveInsurance('${username}','${p.id}')">Cancel</button></div>`).join("")
     : `<p class="muted-small">No insurance plans.</p>`);
 
+  // Shares held: just the quantity per company, no value shown, per teacher request.
+  const heldShares = (cls.companies || [])
+    .map(co => ({ name: co.name, qty: co.holders ? (co.holders[username] || 0) : 0 }))
+    .filter(h => h.qty > 0);
+  rows.push(`<h4>${icon("chart", 16)} Stock Market shares</h4>`);
+  rows.push(heldShares.length
+    ? heldShares.map(h => `<div class="auto-row"><div class="auto-details"><strong>${h.name}</strong></div><div class="auto-details">${h.qty} share${h.qty === 1 ? "" : "s"}</div></div>`).join("")
+    : `<p class="muted-small">No shares owned.</p>`);
+
   document.getElementById("profileBody").innerHTML = rows.join("");
 }
 
