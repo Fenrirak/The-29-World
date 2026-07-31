@@ -123,6 +123,30 @@ p{color:var(--muted);line-height:1.5;}
 .topbar nav a.active{background:rgba(232,184,75,0.16);color:var(--gold);}
 .topbar nav a.nav-locked{opacity:.4;cursor:not-allowed;}
 .topbar nav a.nav-locked:hover{background:none;color:inherit;}
+
+/* Student profile modal */
+#profileModal .card{max-width:680px;max-height:88vh;overflow:auto;}
+#profileSubtitle{color:var(--muted);font-size:.9rem;margin:-6px 0 0;}
+.profile-summary{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 4px;}
+.profile-chip{flex:1;min-width:140px;background:#f6f8fc;border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;}
+.profile-chip .label{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:800;margin-bottom:3px;}
+.profile-chip .value{font-size:1.15rem;font-weight:800;color:var(--navy-900);line-height:1.25;}
+.profile-chip .value .muted-small{font-weight:600;}
+#profileBody h4{
+  display:flex;align-items:center;gap:8px;
+  margin:24px 0 10px;
+  padding-top:20px;
+  border-top:1.5px solid var(--line);
+  font-size:.76rem;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--muted);
+  font-weight:800;
+}
+#profileBody h4:first-of-type{margin-top:0;padding-top:0;border-top:none;}
+#profileBody h4 .icon{color:var(--navy-700);flex-shrink:0;}
+#profileBody .auto-row{margin-bottom:8px;}
+#profileBody .auto-row:last-child{margin-bottom:0;}
 .topbar .who{display:none;}
 .btn-logout{
   background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;

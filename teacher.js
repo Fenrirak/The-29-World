@@ -745,14 +745,22 @@ async function renderProfile(username) {
   const poss = await getStudentPossessions(username, CLASS_CODE);
   const cls = withNewModuleDefaults(await getClass(CLASS_CODE));
 
+  const job = cls.jobs.find(j => j.id === s.jobId);
+  const taskApproved = isJobTaskApprovedThisWeek(s, cls);
+
   document.getElementById("profileName").innerHTML = `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${s.name}`;
+  document.getElementById("profileSubtitle").textContent = `@${s.username}${job ? ` · ${job.title}` : " · No job assigned"}`;
 
   const rows = [];
   const isOverride = s.lifestyleOverride !== undefined && s.lifestyleOverride !== null;
-  rows.push(`<p><strong>Balance:</strong> ${fmtMoney(s.balance)} &middot; <strong>Portfolio:</strong> ${fmtMoney(net)} &middot; <strong>Lifestyle rating:</strong> ${rating} / 100${isOverride ? " (overridden)" : ""}</p>`);
+  rows.push(`
+    <div class="profile-summary">
+      <div class="profile-chip"><div class="label">Cash balance</div><div class="value">${fmtMoney(s.balance)}</div></div>
+      <div class="profile-chip"><div class="label">Portfolio</div><div class="value">${fmtMoney(net)}</div></div>
+      <div class="profile-chip"><div class="label">Lifestyle rating</div><div class="value">${rating} / 100${isOverride ? ` <span class="muted-small">(overridden)</span>` : ""}</div></div>
+    </div>
+  `);
 
-  const job = cls.jobs.find(j => j.id === s.jobId);
-  const taskApproved = isJobTaskApprovedThisWeek(s, cls);
   rows.push(`<h4>${icon("briefcase", 16)} This week's job task</h4>`);
   if (!job) {
     rows.push(`<p class="muted-small">No job assigned — nothing to approve.</p>`);
