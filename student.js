@@ -132,7 +132,7 @@ async function render() {
       <span class="student-avatar ${avatarClass(row.username)}">${initials(row.name)}</span>
       <div style="flex:1;">
         <div class="leaderboard-name">${row.name}${row.username === me.username ? " (you)" : ""}</div>
-        <div class="leaderboard-sub">${fmtMoney(row.balance)} cash + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.savings ? ` + ${fmtMoney(row.savings)} savings` : ""}${row.owed ? ` − ${fmtMoney(row.owed)} owed` : ""}</div>
+        <div class="leaderboard-sub">${fmtMoney(row.balance)} cash + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.savings ? ` + ${fmtMoney(row.savings)} savings` : ""}</div>
       </div>
       <div class="leaderboard-net">${fmtMoney(row.net)}</div>
     `;
