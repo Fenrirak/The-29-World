@@ -10,7 +10,8 @@ function paintChrome() {
   document.getElementById("labTierTerm").innerHTML = icon("calendar", 13) + " Term (weeks)";
   document.getElementById("labTierRate").innerHTML = icon("percent", 13) + " Interest rate (% of the loan, charged once)";
   document.getElementById("labMaxLoan").innerHTML = icon("handshake", 13) + " Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
-  document.getElementById("saveMaxLoanBtn").innerHTML = icon("plus", 13) + " Save maximum";
+  document.getElementById("labMaxLoanCount").innerHTML = icon("handshake", 13) + " Maximum number of loans a student can take out (0 = no limit)";
+  document.getElementById("saveMaxLoanBtn").innerHTML = icon("plus", 13) + " Save maximums";
   document.getElementById("hTake").innerHTML = icon("handshake", 18) + " Take out a loan";
   document.getElementById("labLoanAmount").innerHTML = icon("coin", 13) + " How much do you want to borrow?";
   document.getElementById("takeLoanBtn").innerHTML = icon("send", 15) + " Borrow";
@@ -64,6 +65,7 @@ async function render() {
       list.appendChild(div);
     });
     document.getElementById("maxLoanInput").value = cls.maxLoanAmount || "";
+    document.getElementById("maxLoanCountInput").value = cls.maxLoanCount || "";
   }
 
   if (!IS_TEACHER) {
@@ -80,10 +82,16 @@ async function render() {
 
     const loans = me.loans || [];
     const activeLoan = loans.find(l => l.status === "active");
-    document.getElementById("noLoan").classList.toggle("hidden", !!activeLoan);
+    const atCountLimit = cls.maxLoanCount > 0 && loans.length >= cls.maxLoanCount && !activeLoan;
+    document.getElementById("noLoan").classList.toggle("hidden", !!activeLoan || atCountLimit);
+    document.getElementById("loanLimitReached").classList.toggle("hidden", !atCountLimit);
+    if (atCountLimit) {
+      document.getElementById("loanLimitReached").textContent =
+        `You've used all ${cls.maxLoanCount} of the loans your teacher allows.`;
+    }
     const box = document.getElementById("myLoanBox");
     box.innerHTML = "";
-    document.getElementById("loanAmount").closest("form").querySelector("button").disabled = !!activeLoan;
+    document.getElementById("loanAmount").closest("form").querySelector("button").disabled = !!activeLoan || atCountLimit;
     if (activeLoan) {
       const todayKey = nzDateKeyLocal();
       const overdue = activeLoan.dueDate < todayKey;
@@ -186,7 +194,11 @@ async function removeTier(id) {
 
 async function saveMaxLoan() {
   const amount = document.getElementById("maxLoanInput").value || 0;
-  await setMaxLoanAmount(CURRENT.classCode, amount);
+  const count = document.getElementById("maxLoanCountInput").value || 0;
+  await Promise.all([
+    setMaxLoanAmount(CURRENT.classCode, amount),
+    setMaxLoanCount(CURRENT.classCode, count)
+  ]);
   document.getElementById("maxLoanMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
   await render();
 }

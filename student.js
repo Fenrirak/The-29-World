@@ -120,7 +120,7 @@ async function render() {
   await renderSideHustle(me, cls, lockedModules);
 
   // net worth leaderboard
-  const board = await classLeaderboard(me.classCode);
+  const board = await classLeaderboard(me.classCode, me.username);
   const medalClass = i => (i === 0 ? "gold" : i === 1 ? "silver" : i === 2 ? "bronze" : "");
   const lbBox = document.getElementById("leaderboardList");
   lbBox.innerHTML = "";

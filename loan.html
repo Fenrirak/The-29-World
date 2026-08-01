@@ -62,8 +62,16 @@
     <div id="tierMsg"></div>
 
     <div style="margin-top:20px;padding-top:16px;border-top:1.5px solid var(--line);">
-      <label for="maxLoanInput" id="labMaxLoan">Overall maximum loan amount (0 = no extra cap beyond the ranges above)</label>
-      <input id="maxLoanInput" type="number" min="0" step="0.5" style="max-width:200px;">
+      <div class="grid grid-2">
+        <div>
+          <label for="maxLoanInput" id="labMaxLoan">Overall maximum loan amount (0 = no extra cap beyond the ranges above)</label>
+          <input id="maxLoanInput" type="number" min="0" step="0.5" style="max-width:200px;">
+        </div>
+        <div>
+          <label for="maxLoanCountInput" id="labMaxLoanCount">Maximum number of loans a student can take out (0 = no limit)</label>
+          <input id="maxLoanCountInput" type="number" min="0" step="1" style="max-width:200px;">
+        </div>
+      </div>
       <button class="btn secondary small" style="margin-top:10px;" onclick="saveMaxLoan()" id="saveMaxLoanBtn">Save maximum</button>
       <div id="maxLoanMsg"></div>
     </div>
@@ -87,6 +95,7 @@
       <h2 id="hMyLoan">My loan</h2>
       <div id="myLoanBox"></div>
       <p class="muted-small" id="noLoan">You don't have any loan out right now.</p>
+      <p class="muted-small hidden" id="loanLimitReached"></p>
     </div>
   </div>
 

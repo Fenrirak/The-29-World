@@ -701,6 +701,9 @@ async function removeLoanTier(classCode, tierId) {
 async function setMaxLoanAmount(classCode, amount) {
   await classesCol().doc(classCode).update({ maxLoanAmount: Math.max(0, Number(amount) || 0) });
 }
+async function setMaxLoanCount(classCode, count) {
+  await classesCol().doc(classCode).update({ maxLoanCount: Math.max(0, Math.floor(Number(count)) || 0) });
+}
 
 // Which tier a requested amount falls into — the teacher's price ranges
 // should be set up so they don't gap or overlap, but if ranges do overlap
@@ -729,6 +732,9 @@ async function takeLoan(username, classCode, amount) {
       const tier = findLoanTier(cls, amount);
       if (!tier) throw new Error("NO_TIER");
       if (cls.maxLoanAmount > 0 && amount > cls.maxLoanAmount) throw new Error("OVER_MAX");
+      // Lifetime cap on how many loans a student can ever take out (counts
+      // both active and paid-off loans), separate from the per-loan amount cap.
+      if (cls.maxLoanCount > 0 && existingLoans.length >= cls.maxLoanCount) throw new Error("OVER_COUNT");
       const todayKey = nzDateKey();
       const dueDate = dateKeyPlusDays(todayKey, tier.termWeeks * 7);
       const interestAmt = Math.round(amount * (tier.rate / 100) * 100) / 100;
@@ -746,6 +752,7 @@ async function takeLoan(username, classCode, amount) {
     if (e.message === "HAS_LOAN") return { ok: false, error: "You already have an outstanding loan — pay it off before taking another." };
     if (e.message === "NO_TIER") return { ok: false, error: "That amount doesn't fall within any of the loan options your teacher has set up." };
     if (e.message === "OVER_MAX") return { ok: false, error: "That's above the maximum loan amount your teacher allows." };
+    if (e.message === "OVER_COUNT") return { ok: false, error: "You've already reached the maximum number of loans your teacher allows." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, {
@@ -1454,7 +1461,7 @@ function getRecentTxns(cls, days) {
   return (cls.txns || []).filter(t => t.ts === undefined || t.ts >= cutoff);
 }
 
-async function classLeaderboard(classCode) {
+async function classLeaderboard(classCode, viewerUsername) {
   const cls = await getClass(classCode);
   if (!cls) return [];
   const students = await getClassStudents(classCode);
@@ -1502,6 +1509,17 @@ async function classLeaderboard(classCode) {
       net: Math.round((s.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits - owed) * 100) / 100
     };
   });
+  // Loan/mortgage debt is private — only the student themself (or the
+  // teacher, when viewerUsername is omitted) should see the "owed" figure.
+  // `net` still reflects the true debt-adjusted total for everyone, so the
+  // ranking stays accurate; we just strip the breakdown detail from rows
+  // that aren't the viewer's own.
+  if (viewerUsername) {
+    rows.forEach(row => {
+      if (row.username !== viewerUsername) delete row.owed;
+    });
+  }
+
   rows.sort((a, b) => b.net - a.net);
   return rows;
 }
@@ -1917,6 +1935,7 @@ function withNewModuleDefaults(cls) {
   cls.lifestyleLock = cls.lifestyleLock || { threshold: 0, modules: [] };
   cls.loanTiers = cls.loanTiers || [];
   cls.maxLoanAmount = cls.maxLoanAmount || 0; // 0 = no extra class-wide cap beyond the tiers themselves
+  cls.maxLoanCount = cls.maxLoanCount || 0; // 0 = no cap on how many loans a student can take out over time
   cls.vehicles = cls.vehicles || [];
   cls.interestAuto = cls.interestAuto || false;
   cls.cashInterestRate = cls.cashInterestRate || 0;
