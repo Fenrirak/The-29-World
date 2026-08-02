@@ -134,9 +134,28 @@ async function getClass(code) {
 }
 async function getClassStudents(code) {
   const cls = await getClass(code);
-  if (!cls) return [];
-  const users = await Promise.all(cls.students.map(u => getUser(u)));
-  return users.filter(Boolean);
+  if (!cls || !cls.students || cls.students.length === 0) return [];
+  // Was one individual .get() per student (25 students = 25 separate
+  // requests, all fired at once). Firestore supports fetching up to 30
+  // docs by ID in a single query, so batch into chunks of 30 instead —
+  // any normal-sized class now costs 1 request instead of one per student.
+  // Falls back to the old one-by-one approach if this Firestore version/
+  // build doesn't expose FieldPath (defensive only — it's been standard
+  // for years, this just avoids a hard failure if it's ever missing).
+  if (!(firebase && firebase.firestore && firebase.firestore.FieldPath)) {
+    const users = await Promise.all(cls.students.map(u => getUser(u)));
+    return users.filter(Boolean);
+  }
+  const usernames = cls.students;
+  const chunks = [];
+  for (let i = 0; i < usernames.length; i += 30) chunks.push(usernames.slice(i, i + 30));
+  const snaps = await Promise.all(chunks.map(chunk =>
+    usersCol().where(firebase.firestore.FieldPath.documentId(), "in", chunk).get()
+  ));
+  const byUsername = {};
+  snaps.forEach(snap => snap.forEach(doc => { byUsername[doc.id] = doc.data(); }));
+  // Keep the same order and "drop missing users" behavior as before.
+  return usernames.map(u => byUsername[u]).filter(Boolean);
 }
 
 /* ---------------- Lightweight per-page read cache ----------------
@@ -275,7 +294,11 @@ function setSession(username) {
 async function getSessionUser() {
   const uname = localStorage.getItem(SESSION_KEY);
   if (!uname) return null;
-  return await getUser(uname);
+  // requireLogin() (below) runs at the top of every page, before render()
+  // asks for the same current-user doc again — using the cached fetch here
+  // means that second ask is a cache hit instead of a second, fully
+  // redundant Firestore read of the identical document.
+  return await getUserCached(uname);
 }
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
