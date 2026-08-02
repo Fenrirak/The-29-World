@@ -1,4 +1,4 @@
-let CURRENT, IS_TEACHER;
+let CURRENT, IS_TEACHER, EDITING_AUTO_ID = null, EDITING_SAV_AUTO_ID = null;
 
 const FREQ_LABEL = { weekly: "every week", fortnightly: "every 2 weeks", monthly: "every 4 weeks" };
 const DAY_LABEL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
@@ -139,6 +139,7 @@ async function render() {
           ${a.note ? `<div class="muted-small">${a.note}</div>` : ""}
           ${a.lastRun ? `<div class="muted-small">Last ran: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
         </div>
+        <button class="btn small secondary" onclick='startEditSavAuto(${JSON.stringify(a).replace(/'/g, "&#39;")})'>Edit</button>
         <button class="btn small coral" onclick="removeAuto('${a.id}')">${icon("trash", 13)} Remove</button>
       `;
       listBox.appendChild(row);
@@ -151,6 +152,7 @@ async function render() {
         ${a.note ? `<div class="muted-small">${a.note}</div>` : ""}
         ${a.lastRun ? `<div class="muted-small">Last paid: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
       </div>
+      <button class="btn small secondary" onclick='startEditAuto(${JSON.stringify(a).replace(/'/g, "&#39;")})'>Edit</button>
       <button class="btn small coral" onclick="removeAuto('${a.id}')">${icon("trash", 13)} Remove</button>
     `;
     listBox.appendChild(row);
@@ -267,11 +269,12 @@ async function addAuto(e) {
   const note = document.getElementById("autoNote").value.trim();
   const box = document.getElementById("autoMsg");
   if (!to) { box.innerHTML = `<div class="error-msg">There's no one to pay yet.</div>`; return false; }
-  const res = await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note);
+  const res = EDITING_AUTO_ID
+    ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note)
+    : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note);
   if (res.ok) {
-    box.innerHTML = `<div class="success-msg">Automatic payment created!</div>`;
-    document.getElementById("autoAmount").value = "";
-    document.getElementById("autoNote").value = "";
+    box.innerHTML = `<div class="success-msg">${EDITING_AUTO_ID ? "Automatic payment updated!" : "Automatic payment created!"}</div>`;
+    cancelEditAuto();
   } else {
     box.innerHTML = `<div class="error-msg">${res.error}</div>`;
   }
@@ -279,9 +282,34 @@ async function addAuto(e) {
   return false;
 }
 
+function startEditAuto(a) {
+  EDITING_AUTO_ID = a.id;
+  document.getElementById("autoDay").value = a.dayOfWeek;
+  document.getElementById("autoFreq").value = a.frequency;
+  document.getElementById("autoAmount").value = a.amount;
+  document.getElementById("autoTo").value = a.toUser;
+  document.getElementById("autoNote").value = a.note || "";
+  document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Edit automatic payment";
+  document.getElementById("addAutoBtn").innerHTML = "Save changes";
+  document.getElementById("cancelAutoEditBtn").classList.remove("hidden");
+  document.getElementById("autoMsg").innerHTML = "";
+  document.getElementById("hNewAuto").scrollIntoView({ behavior: "smooth" });
+}
+
+function cancelEditAuto() {
+  EDITING_AUTO_ID = null;
+  document.getElementById("autoAmount").value = "";
+  document.getElementById("autoNote").value = "";
+  document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Set up an automatic payment";
+  document.getElementById("addAutoBtn").innerHTML = icon("plus", 15) + " Create automatic payment";
+  document.getElementById("cancelAutoEditBtn").classList.add("hidden");
+}
+
 async function removeAuto(id) {
   if (confirm("Remove this automatic payment?")) {
     await removeAutomation(CURRENT.classCode, id);
+    if (EDITING_AUTO_ID === id) cancelEditAuto();
+    if (EDITING_SAV_AUTO_ID === id) cancelEditSavAuto();
     await render();
   }
 }
@@ -316,16 +344,40 @@ async function addSavingsAuto(e) {
   const amount = document.getElementById("savAutoAmount").value;
   const note = document.getElementById("savAutoNote").value.trim();
   const box = document.getElementById("savAutoMsg");
-  const res = await addSavingsAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, direction, note);
+  const res = EDITING_SAV_AUTO_ID
+    ? await editSavingsAutomation(CURRENT.classCode, EDITING_SAV_AUTO_ID, CURRENT.username, day, freq, amount, direction, note)
+    : await addSavingsAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, direction, note);
   if (res.ok) {
-    box.innerHTML = `<div class="success-msg">Automatic transfer created!</div>`;
-    document.getElementById("savAutoAmount").value = "";
-    document.getElementById("savAutoNote").value = "";
+    box.innerHTML = `<div class="success-msg">${EDITING_SAV_AUTO_ID ? "Automatic transfer updated!" : "Automatic transfer created!"}</div>`;
+    cancelEditSavAuto();
   } else {
     box.innerHTML = `<div class="error-msg">${res.error}</div>`;
   }
   await render();
   return false;
+}
+
+function startEditSavAuto(a) {
+  EDITING_SAV_AUTO_ID = a.id;
+  document.getElementById("savAutoDirection").value = a.direction;
+  document.getElementById("savAutoDay").value = a.dayOfWeek;
+  document.getElementById("savAutoFreq").value = a.frequency;
+  document.getElementById("savAutoAmount").value = a.amount;
+  document.getElementById("savAutoNote").value = a.note || "";
+  document.getElementById("hSavingsAuto").innerHTML = "Edit automatic transfer";
+  document.getElementById("addSavAutoBtn").innerHTML = "Save changes";
+  document.getElementById("cancelSavAutoEditBtn").classList.remove("hidden");
+  document.getElementById("savAutoMsg").innerHTML = "";
+  document.getElementById("hSavingsAuto").scrollIntoView({ behavior: "smooth" });
+}
+
+function cancelEditSavAuto() {
+  EDITING_SAV_AUTO_ID = null;
+  document.getElementById("savAutoAmount").value = "";
+  document.getElementById("savAutoNote").value = "";
+  document.getElementById("hSavingsAuto").innerHTML = "Automatic transfer";
+  document.getElementById("addSavAutoBtn").innerHTML = icon("plus", 15) + " Create automatic transfer";
+  document.getElementById("cancelSavAutoEditBtn").classList.add("hidden");
 }
 
 document.addEventListener("DOMContentLoaded", init);

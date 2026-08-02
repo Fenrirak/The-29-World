@@ -303,7 +303,7 @@ function describeTxn(t, nameOf) {
     case "bonus": return `${nameOf(t.to)} — ${t.note}`;
     case "fine": return `${nameOf(t.to)} — ${t.note}`;
     case "transfer": return `${nameOf(t.from)} → ${nameOf(t.to)} ${t.note ? "— " + t.note : ""}`;
-    case "automation": return `${nameOf(t.from)} → ${nameOf(t.to)} — automatic payment`;
+    case "automation": return `${nameOf(t.from)} → ${nameOf(t.to)} — ${t.note || "Automatic payment"}`;
     case "stock-buy": return `${nameOf(t.from)} — ${t.note}`;
     case "stock-sell": return `${nameOf(t.to)} — ${t.note}`;
     case "stock-close": return `${nameOf(t.to)} — ${t.note}`;

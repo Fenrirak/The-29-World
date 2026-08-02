@@ -1243,6 +1243,51 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
   }
   return { ok: true };
 }
+async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, toUser, note) {
+  if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
+  const classRef = classesCol().doc(classCode);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NO_CLASS");
+      const cls = snap.data();
+      cls.automations = cls.automations || [];
+      const idx = cls.automations.findIndex(a => a.id === id && a.studentUser === studentUser);
+      if (idx === -1) throw new Error("NOT_FOUND");
+      const existing = cls.automations[idx];
+      cls.automations[idx] = {
+        ...existing, dayOfWeek, frequency, amount: Number(amount), toUser, note: (note || "").trim()
+      };
+      t.update(classRef, { automations: cls.automations });
+    });
+  } catch (e) {
+    return { ok: false, error: e.message === "NOT_FOUND" ? "Automatic payment not found." : "Class not found." };
+  }
+  return { ok: true };
+}
+async function editSavingsAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, direction, note) {
+  if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
+  if (direction !== "toSavings" && direction !== "toCash") return { ok: false, error: "Invalid direction." };
+  const classRef = classesCol().doc(classCode);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NO_CLASS");
+      const cls = snap.data();
+      cls.automations = cls.automations || [];
+      const idx = cls.automations.findIndex(a => a.id === id && a.studentUser === studentUser);
+      if (idx === -1) throw new Error("NOT_FOUND");
+      const existing = cls.automations[idx];
+      cls.automations[idx] = {
+        ...existing, dayOfWeek, frequency, amount: Number(amount), direction, note: (note || "").trim()
+      };
+      t.update(classRef, { automations: cls.automations });
+    });
+  } catch (e) {
+    return { ok: false, error: e.message === "NOT_FOUND" ? "Automatic transfer not found." : "Class not found." };
+  }
+  return { ok: true };
+}
 async function removeAutomation(classCode, id) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {

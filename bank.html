@@ -116,6 +116,7 @@
         <label for="savAutoNote" id="labSavAutoNote">Note (optional)</label>
         <input id="savAutoNote" placeholder="e.g. Weekly savings top-up">
         <button class="btn secondary" type="submit" id="addSavAutoBtn">Create automatic transfer</button>
+        <button class="btn small secondary hidden" type="button" id="cancelSavAutoEditBtn" onclick="cancelEditSavAuto()">Cancel edit</button>
       </form>
       <div id="savAutoMsg"></div>
     </div>
@@ -164,6 +165,7 @@
         <label for="autoNote" id="labAutoNote">Reference / what's it for?</label>
         <input id="autoNote" placeholder="e.g. Weekly rent">
         <button class="btn" type="submit" id="addAutoBtn">Create automatic payment</button>
+        <button class="btn small secondary hidden" type="button" id="cancelAutoEditBtn" onclick="cancelEditAuto()">Cancel edit</button>
       </form>
       <div id="autoMsg"></div>
     </div>
