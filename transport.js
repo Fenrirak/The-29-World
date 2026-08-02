@@ -1,4 +1,4 @@
-let CURRENT, IS_TEACHER;
+let CURRENT, IS_TEACHER, EDITING_ID = null;
 
 function comfortStars(n) {
   n = Number(n) || 0;
@@ -74,7 +74,7 @@ async function render() {
         </div>
         <div class="row-flex" style="gap:8px;">
           ${IS_TEACHER
-            ? `${v.owner ? `<button class="btn small secondary" onclick="forceSell('${v.id}')">Sell back</button>` : ""}<button class="btn small coral" onclick="deleteVeh('${v.id}')">${icon("trash", 13)} Remove</button>`
+            ? `<button class="btn small secondary" onclick="editVeh('${v.id}')">${icon("plus", 13)} Edit</button>${v.owner ? `<button class="btn small secondary" onclick="forceSell('${v.id}')">Sell back</button>` : ""}<button class="btn small coral" onclick="deleteVeh('${v.id}')">${icon("trash", 13)} Remove</button>`
             : v.owner
               ? (isMine ? `<button class="btn small secondary" onclick="sellMine('${v.id}')">Sell back</button>` : "")
               : `<button class="btn small gold" onclick="buyVeh('${v.id}')">Buy</button>`}
@@ -94,12 +94,43 @@ async function addProp(e) {
     comfort: document.getElementById("hComfort").value,
     description: document.getElementById("hDesc").value.trim()
   };
-  await addVehicle(CURRENT.classCode, veh);
-  document.getElementById("addMsg").innerHTML = `<div class="success-msg">Vehicle added!</div>`;
-  ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
-  document.getElementById("hComfort").value = 3;
+  if (EDITING_ID) {
+    await updateVehicle(CURRENT.classCode, EDITING_ID, veh);
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Vehicle updated!</div>`;
+    cancelEditVeh();
+  } else {
+    await addVehicle(CURRENT.classCode, veh);
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Vehicle added!</div>`;
+    ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("hComfort").value = 3;
+  }
   await render();
   return false;
+}
+
+async function editVeh(id) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const veh = (cls.vehicles || []).find(v => v.id === id);
+  if (!veh) return;
+  EDITING_ID = id;
+  document.getElementById("hName").value = veh.name;
+  document.getElementById("hPrice").value = veh.price;
+  document.getElementById("hComfort").value = veh.comfort;
+  document.getElementById("hDesc").value = veh.description || "";
+  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit vehicle";
+  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
+  document.getElementById("cancelEditBtn").classList.remove("hidden");
+  document.getElementById("addMsg").innerHTML = "";
+  document.getElementById("teacherPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function cancelEditVeh() {
+  EDITING_ID = null;
+  ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("hComfort").value = 3;
+  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a vehicle";
+  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add vehicle";
+  document.getElementById("cancelEditBtn").classList.add("hidden");
 }
 
 async function deleteVeh(id) {

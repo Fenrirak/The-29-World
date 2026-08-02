@@ -1,4 +1,4 @@
-let CURRENT, IS_TEACHER;
+let CURRENT, IS_TEACHER, EDITING_ID = null;
 
 function comfortStars(n) {
   n = Number(n) || 0;
@@ -75,7 +75,7 @@ async function render() {
         </div>
         <div class="row-flex" style="gap:8px;">
           ${IS_TEACHER
-            ? `${p.owner ? `<button class="btn small secondary" onclick="forceSell('${p.id}')">Sell back</button>` : ""}<button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>`
+            ? `<button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button>${p.owner ? `<button class="btn small secondary" onclick="forceSell('${p.id}')">Sell back</button>` : ""}<button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>`
             : p.owner
               ? (isMine ? `<button class="btn small secondary" onclick="sellMine('${p.id}')">Sell back</button>` : "")
               : `<button class="btn small gold" onclick="buyOutright('${p.id}')">Buy cash</button>
@@ -97,13 +97,46 @@ async function addProp(e) {
     mortgageWeeks: document.getElementById("hMortgage").value,
     description: document.getElementById("hDesc").value.trim()
   };
-  await addProperty(CURRENT.classCode, prop);
-  document.getElementById("addMsg").innerHTML = `<div class="success-msg">Property added!</div>`;
+  if (EDITING_ID) {
+    await updateProperty(CURRENT.classCode, EDITING_ID, prop);
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Property updated!</div>`;
+    cancelEditProp();
+  } else {
+    await addProperty(CURRENT.classCode, prop);
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Property added!</div>`;
+    ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("hComfort").value = 3;
+    document.getElementById("hMortgage").value = 0;
+  }
+  await render();
+  return false;
+}
+
+async function editProp(id) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const prop = (cls.properties || []).find(p => p.id === id);
+  if (!prop) return;
+  EDITING_ID = id;
+  document.getElementById("hName").value = prop.name;
+  document.getElementById("hPrice").value = prop.price;
+  document.getElementById("hComfort").value = prop.comfort;
+  document.getElementById("hMortgage").value = prop.mortgageWeeks || 0;
+  document.getElementById("hDesc").value = prop.description || "";
+  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit property";
+  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
+  document.getElementById("cancelEditBtn").classList.remove("hidden");
+  document.getElementById("addMsg").innerHTML = "";
+  document.getElementById("teacherPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function cancelEditProp() {
+  EDITING_ID = null;
   ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("hComfort").value = 3;
   document.getElementById("hMortgage").value = 0;
-  await render();
-  return false;
+  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a property";
+  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add property";
+  document.getElementById("cancelEditBtn").classList.add("hidden");
 }
 
 async function deleteProp(id) {

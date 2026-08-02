@@ -1425,6 +1425,21 @@ async function removeVehicle(classCode, vehId) {
     t.update(classRef, { vehicles: cls.vehicles });
   });
 }
+async function updateVehicle(classCode, vehId, updates) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const veh = cls.vehicles.find(v => v.id === vehId);
+    if (!veh) return;
+    veh.name = updates.name;
+    veh.price = Number(updates.price);
+    veh.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
+    veh.description = updates.description || "";
+    t.update(classRef, { vehicles: cls.vehicles });
+  });
+}
 async function buyVehicle(username, classCode, vehId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
@@ -2675,6 +2690,22 @@ async function removeProperty(classCode, propId) {
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     cls.properties = cls.properties.filter(p => p.id !== propId);
+    t.update(classRef, { properties: cls.properties });
+  });
+}
+async function updateProperty(classCode, propId, updates) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const prop = cls.properties.find(p => p.id === propId);
+    if (!prop) return;
+    prop.name = updates.name;
+    prop.price = Number(updates.price);
+    prop.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
+    prop.mortgageWeeks = Number(updates.mortgageWeeks) || 0;
+    prop.description = updates.description || "";
     t.update(classRef, { properties: cls.properties });
   });
 }
