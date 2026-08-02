@@ -75,16 +75,62 @@ function hourLabel(h) {
   return hh + period;
 }
 
-/* ---------------- Basic doc fetch helpers ---------------- */
+/* ---------------- Basic doc fetch helpers ----------------
+   Every page fires several independent background jobs together via
+   Promise.all (autoPayDayIfDue, processAutomations, processMortgages,
+   processTermDeposits, autoInterestIfDue, processInsurancePayments,
+   processWeeklyEvents, processWeeklyBigEvents, ...) and most of them start
+   by reading the SAME class doc — so on every page load, up to ~8-10
+   near-simultaneous getClass() calls were each independently hitting
+   Firestore for a document that hadn't changed since the call right next
+   to it. The two _inFlight maps below fix that: if a second call for the
+   same id comes in while a fetch is already in progress, it shares that
+   same network request instead of starting a new one.
+
+   This is safe for callers that mutate the returned object in place
+   (several functions in this file do — e.g. `cls.jobs = ...` then write
+   it back), because each caller below still gets its OWN independent deep
+   copy of the resolved data, never a shared object reference. It also
+   can't ever hand back stale data: once the in-flight fetch resolves, the
+   entry is removed immediately, so the very next call starts a brand new
+   fetch — this only merges requests that were already overlapping in
+   time, it never caches across time the way getUserCached/getClassCached
+   (below) intentionally do. */
+const _inFlightUserFetch = new Map();
+const _inFlightClassFetch = new Map();
+
+function _cloneDoc(v) {
+  // Every field this app stores is plain JSON-safe data (no Firestore
+  // Timestamps/FieldValues are used anywhere in this file), so a JSON
+  // round-trip is a safe, complete deep clone.
+  return v === null || v === undefined ? v : JSON.parse(JSON.stringify(v));
+}
+
+function _sharedFetch(map, key, fetcher) {
+  let p = map.get(key);
+  if (!p) {
+    p = fetcher();
+    map.set(key, p);
+    p.finally(() => {
+      if (map.get(key) === p) map.delete(key);
+    });
+  }
+  return p;
+}
+
 async function getUser(username) {
   if (!username) return null;
-  const snap = await usersCol().doc(username).get();
-  return snap.exists ? snap.data() : null;
+  const data = await _sharedFetch(_inFlightUserFetch, username, () =>
+    usersCol().doc(username).get().then(snap => snap.exists ? snap.data() : null)
+  );
+  return _cloneDoc(data);
 }
 async function getClass(code) {
   if (!code) return null;
-  const snap = await classesCol().doc(code).get();
-  return snap.exists ? withNewModuleDefaults(snap.data()) : null;
+  const data = await _sharedFetch(_inFlightClassFetch, code, () =>
+    classesCol().doc(code).get().then(snap => snap.exists ? withNewModuleDefaults(snap.data()) : null)
+  );
+  return _cloneDoc(data);
 }
 async function getClassStudents(code) {
   const cls = await getClass(code);
@@ -97,11 +143,13 @@ async function getClassStudents(code) {
    getUserCached()/getClassCached() below let page-level render/init code
    reuse a doc it already fetched a moment ago instead of re-hitting
    Firestore every time (a single render() often reads the same user or
-   class doc several times). getUser()/getClass() themselves are left
-   completely untouched above — every read-modify-write in this file keeps
-   reading straight from Firestore, so multi-user concurrent edits (two
-   students acting on the same class doc at once) are handled exactly as
-   before, with no risk of acting on stale data.
+   class doc several times). getUser()/getClass() themselves only got
+   request-coalescing above (for the "8 background jobs all ask for the
+   same doc at once" case) — they still never cache anything across time,
+   so every read-modify-write in this file keeps seeing Firestore's actual
+   current state, and multi-user concurrent edits (two students acting on
+   the same class doc at once) are handled exactly as before, with no risk
+   of acting on stale data.
 
    To make sure the cache can never show stale data after a write, EVERY
    write in this app goes through one of exactly two choke points:
@@ -166,21 +214,51 @@ async function getClassStudents(code) {
   };
 })();
 
+// Page load fires off around 7 independent background jobs (auto pay day,
+// automations, mortgages, interest, insurance, weekly events, big events)
+// all at once via Promise.all, and several of them each start by reading
+// the same class doc. A plain cache doesn't help there — they all call in
+// before the first read has even come back, so they'd all still miss and
+// all still fire their own Firestore request. This "in-flight" map fixes
+// that: the first caller for a given doc starts the real fetch and every
+// other caller for that same doc, while it's still pending, is handed the
+// exact same promise instead of starting a duplicate one.
+const _inflightUserFetch = new Map();
+const _inflightClassFetch = new Map();
+
 async function getUserCached(username) {
   if (!username) return null;
   const cached = window._rcGet("users", username);
   if (cached !== undefined) return cached;
-  const value = await getUser(username);
-  window._rcSet("users", username, value);
-  return value;
+  if (_inflightUserFetch.has(username)) return _inflightUserFetch.get(username);
+  const promise = (async () => {
+    try {
+      const value = await getUser(username);
+      window._rcSet("users", username, value);
+      return value;
+    } finally {
+      _inflightUserFetch.delete(username);
+    }
+  })();
+  _inflightUserFetch.set(username, promise);
+  return promise;
 }
 async function getClassCached(code) {
   if (!code) return null;
   const cached = window._rcGet("classes", code);
   if (cached !== undefined) return cached;
-  const value = await getClass(code);
-  window._rcSet("classes", code, value);
-  return value;
+  if (_inflightClassFetch.has(code)) return _inflightClassFetch.get(code);
+  const promise = (async () => {
+    try {
+      const value = await getClass(code);
+      window._rcSet("classes", code, value);
+      return value;
+    } finally {
+      _inflightClassFetch.delete(code);
+    }
+  })();
+  _inflightClassFetch.set(code, promise);
+  return promise;
 }
 function initials(name) {
   if (!name) return "?";
