@@ -1,5 +1,22 @@
 let CURRENT, IS_TEACHER, EDITING_PLAN_ID = null;
 
+const DAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+function nextPaymentInfo(dayAbbr) {
+  const targetIdx = DAY_INDEX[dayAbbr];
+  if (targetIdx === undefined) return null;
+  const now = new Date();
+  const todayIdx = now.getDay();
+  const daysUntil = (targetIdx - todayIdx + 7) % 7;
+  const next = new Date(now);
+  next.setDate(now.getDate() + daysUntil);
+  return {
+    daysUntil,
+    dateStr: next.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }),
+    isToday: daysUntil === 0
+  };
+}
+
 function stars(n) {
   n = Number(n) || 0;
   return '★'.repeat(n) + '☆'.repeat(5 - n);
@@ -97,10 +114,17 @@ async function render() {
     document.getElementById("noMine").classList.toggle("hidden", mine.length > 0);
     const box = document.getElementById("myPlans");
     box.innerHTML = "";
+    const payInfo = nextPaymentInfo(cls.insuranceDay);
     mine.forEach(p => {
       const row = document.createElement("div");
       row.className = "auto-row";
-      row.innerHTML = `<div class="auto-details">${icon("shield", 14)} <strong>${p.name}</strong> &middot; ${fmtMoney(p.price)}/week &middot; ${fmtMoney(p.excess)} excess &middot; premiums charged on ${cls.insuranceDay}s</div>`;
+      let payText = `premiums charged on ${cls.insuranceDay}s`;
+      if (payInfo) {
+        payText = payInfo.isToday
+          ? `<span class="badge gold">Payment due today</span>`
+          : `Next payment: ${payInfo.dateStr} (in ${payInfo.daysUntil} day${payInfo.daysUntil === 1 ? "" : "s"})`;
+      }
+      row.innerHTML = `<div class="auto-details">${icon("shield", 14)} <strong>${p.name}</strong> &middot; ${fmtMoney(p.price)}/week &middot; ${fmtMoney(p.excess)} excess &middot; ${payText}</div>`;
       box.appendChild(row);
     });
   }
