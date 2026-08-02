@@ -5,16 +5,68 @@ const TAX_CATEGORIES = [
   { key: "insurance", label: "Insurance premiums", kind: "expense" },
   { key: "property", label: "Property purchases", kind: "expense" },
   { key: "transport", label: "Transport purchases", kind: "expense" },
-  { key: "wage", label: "Wages (income tax)", kind: "income" },
   { key: "interest", label: "Savings interest (income tax)", kind: "income" },
   { key: "gambling", label: "Gambling winnings (income tax)", kind: "income" }
 ];
+
+// Wages use progressive brackets rather than one flat rate. Each row taxes
+// only the slice of the wage between the previous bracket's cap and its own
+// "up to" amount; the last row (upTo left blank) covers everything above it.
+let wageBrackets = [];
+
+function renderWageBracketRows() {
+  const rows = document.getElementById("wageBracketRows");
+  if (!rows) return;
+  rows.innerHTML = wageBrackets.map((b, i) => `
+    <div class="bracket-row" style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+      <span>From ${fmtBracketFloor(i)} up to</span>
+      <input type="number" min="0" step="1" placeholder="no limit" value="${b.upTo === null ? "" : b.upTo}"
+        style="width:110px" onchange="updateBracket(${i}, 'upTo', this.value)">
+      <span>tax</span>
+      <input type="number" min="0" max="100" step="0.5" value="${b.rate}"
+        style="width:80px" onchange="updateBracket(${i}, 'rate', this.value)">
+      <span>%</span>
+      <button type="button" class="btn small" onclick="removeBracket(${i})">Remove</button>
+    </div>
+  `).join("") || `<p>No wage tax brackets yet — wages aren't taxed. Add a bracket below.</p>`;
+}
+
+function fmtBracketFloor(index) {
+  if (index === 0) return "$0";
+  const prevTop = wageBrackets[index - 1].upTo;
+  return prevTop === null || prevTop === "" ? "$0" : "$" + prevTop;
+}
+
+function updateBracket(i, field, value) {
+  if (field === "upTo") {
+    wageBrackets[i].upTo = value === "" ? null : Number(value);
+  } else {
+    wageBrackets[i].rate = Number(value) || 0;
+  }
+  renderWageBracketRows();
+}
+
+function addBracket() {
+  // New bracket starts above the current top; if the previous "last" bracket
+  // had no cap, give it one now so there's still exactly one open-ended row.
+  if (wageBrackets.length && wageBrackets[wageBrackets.length - 1].upTo === null) {
+    wageBrackets[wageBrackets.length - 1].upTo = 100;
+  }
+  wageBrackets.push({ upTo: null, rate: 0 });
+  renderWageBracketRows();
+}
+
+function removeBracket(i) {
+  wageBrackets.splice(i, 1);
+  renderWageBracketRows();
+}
 
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("percent", 26) + " Tax";
   document.getElementById("hRates").innerHTML = icon("percent", 18) + " Tax rates";
   document.getElementById("saveBtn").innerHTML = icon("bank", 15) + " Save tax rates";
+  document.getElementById("hWageBrackets").innerHTML = icon("percent", 18) + " Wage tax brackets";
   document.getElementById("hCurrent").innerHTML = icon("percent", 18) + " Current tax rates";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
@@ -56,6 +108,7 @@ async function init() {
 async function render() {
   const cls = await getClassCached(CURRENT.classCode);
   const rates = cls.taxRates || {};
+  wageBrackets = (cls.wageTaxBrackets || []).map(b => ({ upTo: b.upTo, rate: b.rate }));
 
   if (IS_TEACHER) {
     const grid = document.getElementById("taxGrid");
@@ -65,6 +118,7 @@ async function render() {
         <input type="number" min="0" max="100" step="0.5" id="tax-${c.key}" value="${rates[c.key] || 0}">
       </div>
     `).join("");
+    renderWageBracketRows();
   } else {
     const box = document.getElementById("studentTaxList");
     box.innerHTML = TAX_CATEGORIES.map(c => `
@@ -73,6 +127,26 @@ async function render() {
         <strong>${rates[c.key] || 0}%</strong>
       </div>
     `).join("");
+
+    const wageBox = document.getElementById("studentWageBrackets");
+    if (!wageBrackets.length) {
+      wageBox.innerHTML = `<div class="auto-row"><div class="auto-details">Wages (income tax)</div><strong>0%</strong></div>`;
+    } else {
+      const sorted = wageBrackets.slice().sort((a, b) => {
+        const aTop = a.upTo == null ? Infinity : a.upTo;
+        const bTop = b.upTo == null ? Infinity : b.upTo;
+        return aTop - bTop;
+      });
+      wageBox.innerHTML = sorted.map((b, i) => {
+        const floor = i === 0 ? 0 : sorted[i - 1].upTo;
+        const rangeLabel = b.upTo == null ? `Above $${floor}` : `$${floor} – $${b.upTo}`;
+        return `
+        <div class="auto-row">
+          <div class="auto-details">Wages: ${rangeLabel}</div>
+          <strong>${b.rate}%</strong>
+        </div>`;
+      }).join("");
+    }
   }
 }
 
@@ -80,6 +154,7 @@ async function saveRates() {
   const rates = {};
   TAX_CATEGORIES.forEach(c => { rates[c.key] = document.getElementById("tax-" + c.key).value; });
   await saveTaxRates(CURRENT.classCode, rates);
+  await saveWageTaxBrackets(CURRENT.classCode, wageBrackets);
   document.getElementById("saveMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
   await render();
 }

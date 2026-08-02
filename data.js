@@ -345,7 +345,8 @@ async function createTeacherAndClass(name, username, password, className) {
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
     insuranceDay: "Fri", lastInsuranceWeekRun: null,
     gambling: { enabled: true, minBet: 1, maxBet: 20, dailyBetCap: null, payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 } },
-    taxRates: { store: 0, insurance: 0, property: 0, transport: 0, wage: 0, interest: 0, gambling: 0 },
+    taxRates: { store: 0, insurance: 0, property: 0, transport: 0, interest: 0, gambling: 0 },
+    wageTaxBrackets: [],
     bigEventDefs: [], bigEventLog: [], lastBigEventWeekRun: null,
     lifestyleConfig: {
       property: { enabled: true, weight: 4 },
@@ -712,7 +713,7 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
     // catch them up rather than having missed the week for good.
     if (!isJobTaskApprovedThisWeek(student, cls)) continue;
     try {
-      const { net, taxAmount } = applyTaxToIncome(cls, "wage", job.wage);
+      const { net, taxAmount } = applyWageTax(cls, job.wage);
       await adjustBalance(student.username, net);
       await logTxn(classCode, { type: "wage", to: student.username, amount: net, note: "Pay day: " + job.title + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
       alreadyPaid.add(student.username);
@@ -2166,6 +2167,42 @@ function applyTaxToIncome(cls, category, baseAmount) {
   const taxAmount = Math.round(baseAmount * (rate / 100) * 100) / 100;
   return { net: Math.round((baseAmount - taxAmount) * 100) / 100, taxAmount, rate };
 }
+// Wages use marginal tax brackets instead of a single flat rate, same idea
+// as real-life progressive income tax: each bracket's rate only applies to
+// the slice of the wage that falls within that bracket, not the whole wage.
+// Brackets are stored sorted ascending as { upTo, rate }, where upTo is the
+// top of that bracket (null/undefined = no upper limit, i.e. the top bracket).
+function applyWageTax(cls, wage) {
+  const brackets = (cls.wageTaxBrackets || []).slice().sort((a, b) => {
+    const aTop = a.upTo == null ? Infinity : a.upTo;
+    const bTop = b.upTo == null ? Infinity : b.upTo;
+    return aTop - bTop;
+  });
+  if (!brackets.length || wage <= 0) {
+    return { net: Math.round(wage * 100) / 100, taxAmount: 0, rate: 0 };
+  }
+  let taxAmount = 0;
+  let bandFloor = 0;
+  for (const b of brackets) {
+    const bandTop = b.upTo == null ? Infinity : Number(b.upTo);
+    const bandAmount = Math.max(0, Math.min(wage, bandTop) - bandFloor);
+    taxAmount += bandAmount * ((Number(b.rate) || 0) / 100);
+    bandFloor = bandTop;
+    if (wage <= bandTop) break;
+  }
+  taxAmount = Math.round(taxAmount * 100) / 100;
+  const effectiveRate = wage > 0 ? Math.round((taxAmount / wage) * 10000) / 100 : 0;
+  return { net: Math.round((wage - taxAmount) * 100) / 100, taxAmount, rate: effectiveRate };
+}
+async function saveWageTaxBrackets(classCode, brackets) {
+  const clean = (brackets || [])
+    .map(b => ({
+      upTo: (b.upTo === null || b.upTo === "" || b.upTo === undefined) ? null : Math.max(0, Number(b.upTo) || 0),
+      rate: Math.max(0, Number(b.rate) || 0)
+    }))
+    .sort((a, b) => (a.upTo == null ? Infinity : a.upTo) - (b.upTo == null ? Infinity : b.upTo));
+  await classesCol().doc(classCode).update({ wageTaxBrackets: clean });
+}
 
 /* ===================== Class defaults for new modules ===================== */
 function withNewModuleDefaults(cls) {
@@ -2201,7 +2238,15 @@ function withNewModuleDefaults(cls) {
   };
   if (cls.gambling.enabled === undefined) cls.gambling.enabled = true;
   if (cls.gambling.dailyBetCap === undefined) cls.gambling.dailyBetCap = null;
-  cls.taxRates = cls.taxRates || { store: 0, insurance: 0, property: 0, transport: 0, wage: 0, interest: 0, gambling: 0 };
+  cls.taxRates = cls.taxRates || { store: 0, insurance: 0, property: 0, transport: 0, interest: 0, gambling: 0 };
+  // Migrate old flat wage rate (if present) into a single bracket the first
+  // time a class with legacy data is loaded, so existing tax settings aren't
+  // silently lost when brackets are introduced.
+  if (!cls.wageTaxBrackets || !cls.wageTaxBrackets.length) {
+    const legacyWageRate = cls.taxRates.wage;
+    cls.wageTaxBrackets = legacyWageRate ? [{ upTo: null, rate: Number(legacyWageRate) || 0 }] : [];
+  }
+  delete cls.taxRates.wage;
   cls.bigEventDefs = cls.bigEventDefs || [];
   cls.bigEventLog = cls.bigEventLog || [];
   cls.lastBigEventWeekRun = cls.lastBigEventWeekRun || null;
