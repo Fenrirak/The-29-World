@@ -92,6 +92,96 @@ async function getClassStudents(code) {
   const users = await Promise.all(cls.students.map(u => getUser(u)));
   return users.filter(Boolean);
 }
+
+/* ---------------- Lightweight per-page read cache ----------------
+   getUserCached()/getClassCached() below let page-level render/init code
+   reuse a doc it already fetched a moment ago instead of re-hitting
+   Firestore every time (a single render() often reads the same user or
+   class doc several times). getUser()/getClass() themselves are left
+   completely untouched above — every read-modify-write in this file keeps
+   reading straight from Firestore, so multi-user concurrent edits (two
+   students acting on the same class doc at once) are handled exactly as
+   before, with no risk of acting on stale data.
+
+   To make sure the cache can never show stale data after a write, EVERY
+   write in this app goes through one of exactly two choke points:
+   fdb.collection("users"/"classes").doc(id).update/set/delete(), or
+   fdb.runTransaction(). Both are wrapped just below so that the instant
+   any write to a user or class doc resolves — from anywhere in the app —
+   that doc's cached read is dropped automatically. */
+(function installReadCache() {
+  const CACHE_TTL_MS = 2000; // just a safety cap; real invalidation is explicit, below
+  const store = new Map();
+  const cacheKey = (col, id) => col + "/" + id;
+
+  window._rcGet = function (col, id) {
+    const hit = store.get(cacheKey(col, id));
+    if (hit && hit.expires > Date.now()) return hit.value;
+    if (hit) store.delete(cacheKey(col, id));
+    return undefined;
+  };
+  window._rcSet = function (col, id, value) {
+    store.set(cacheKey(col, id), { value, expires: Date.now() + CACHE_TTL_MS });
+  };
+
+  // Wrap fdb.collection("users"/"classes") so any direct write — from this
+  // file or (via classesColUpdateRate in teacher.js) elsewhere — clears
+  // that doc's cached read the moment the write resolves. Guards against
+  // double-wrapping in case the SDK reuses the same collection/doc object
+  // across calls.
+  const origCollection = fdb.collection.bind(fdb);
+  fdb.collection = function (name) {
+    const colRef = origCollection(name);
+    if (name !== "users" && name !== "classes") return colRef;
+    if (colRef.__anwWrapped) return colRef;
+    colRef.__anwWrapped = true;
+    const origDoc = colRef.doc.bind(colRef);
+    colRef.doc = function (id) {
+      const docRef = origDoc(id);
+      if (docRef.__anwWrapped) return docRef;
+      docRef.__anwWrapped = true;
+      ["update", "set", "delete"].forEach(method => {
+        const orig = docRef[method].bind(docRef);
+        docRef[method] = function (...args) {
+          const result = orig(...args);
+          result.then(() => store.delete(cacheKey(name, id)), () => {});
+          return result;
+        };
+      });
+      return docRef;
+    };
+    return colRef;
+  };
+
+  // Transactions read/write via t.get()/t.update()/t.set(), which don't go
+  // through docRef above — so as a simple, always-correct safety net,
+  // clear the ENTIRE cache once any transaction finishes, regardless of
+  // which doc(s) it touched. Transactions are already the least frequent,
+  // most deliberate writes in the app, so this costs nothing noticeable.
+  const origRunTransaction = fdb.runTransaction.bind(fdb);
+  fdb.runTransaction = function (updateFn) {
+    const result = origRunTransaction(updateFn);
+    result.then(() => store.clear(), () => {});
+    return result;
+  };
+})();
+
+async function getUserCached(username) {
+  if (!username) return null;
+  const cached = window._rcGet("users", username);
+  if (cached !== undefined) return cached;
+  const value = await getUser(username);
+  window._rcSet("users", username, value);
+  return value;
+}
+async function getClassCached(code) {
+  if (!code) return null;
+  const cached = window._rcGet("classes", code);
+  if (cached !== undefined) return cached;
+  const value = await getClass(code);
+  window._rcSet("classes", code, value);
+  return value;
+}
 function initials(name) {
   if (!name) return "?";
   return name.trim().split(/\s+/).map(p => p[0]).join("").slice(0, 2).toUpperCase();

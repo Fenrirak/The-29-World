@@ -81,7 +81,7 @@ async function init() {
 // Everyone else in the class you can send money to / pay automatically —
 // classmates plus the teacher, labelled clearly.
 async function payableRecipients() {
-  const cls = await getClass(CURRENT.classCode);
+  const cls = await getClassCached(CURRENT.classCode);
   const options = [];
   const students = await getClassStudents(CURRENT.classCode);
   students.forEach(s => {
@@ -89,15 +89,15 @@ async function payableRecipients() {
     options.push({ username: s.username, label: s.name });
   });
   if (CURRENT.role !== "teacher") {
-    const t = await getUser(cls.teacher);
+    const t = await getUserCached(cls.teacher);
     if (t) options.push({ username: t.username, label: t.name + " (Teacher)" });
   }
   return options;
 }
 
 async function render() {
-  const me = await getUser(CURRENT.username);
-  const cls = await getClass(me.classCode);
+  const me = await getUserCached(CURRENT.username);
+  const cls = await getClassCached(me.classCode);
 
   document.getElementById("balance").textContent = IS_TEACHER ? "Unlimited ∞" : fmtMoney(me.balance);
   const cashRateNote = document.getElementById("cashRateNote");
@@ -142,7 +142,7 @@ async function render() {
       listBox.appendChild(row);
       continue;
     }
-    const toUser = await getUser(a.toUser);
+    const toUser = await getUserCached(a.toUser);
     row.innerHTML = `
       <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toUser ? toUser.name : a.toUser}</strong>
         &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
@@ -167,7 +167,7 @@ async function render() {
   const allStudents = await getClassStudents(me.classCode);
   const nameCache = {};
   allStudents.forEach(s => { nameCache[s.username] = s.name; });
-  const teacher = await getUser(cls.teacher);
+  const teacher = await getUserCached(cls.teacher);
   if (teacher) nameCache[teacher.username] = teacher.name;
   const nameOf = u => nameCache[u] || u;
   const badgeType = type => {

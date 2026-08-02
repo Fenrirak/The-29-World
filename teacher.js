@@ -96,7 +96,7 @@ async function init() {
 }
 
 async function render() {
-  const cls = await getClass(CLASS_CODE);
+  const cls = await getClassCached(CLASS_CODE);
   document.getElementById("className").textContent = cls.name;
   document.getElementById("classCode").textContent = cls.code;
   document.getElementById("rate").value = cls.interestRate;
@@ -117,7 +117,7 @@ async function render() {
   // name lookup cache for describeTxn / applications
   const nameCache = {};
   students.forEach(s => { nameCache[s.username] = s.name; });
-  const teacher = await getUser(cls.teacher);
+  const teacher = await getUserCached(cls.teacher);
   if (teacher) nameCache[teacher.username] = teacher.name;
 
   // net worth ranking (also gives us each student's lifestyle rating for the table below)
@@ -466,7 +466,7 @@ function resetEventForm() {
 }
 
 function startEditEvent(id) {
-  getClass(CLASS_CODE).then(cls => {
+  getClassCached(CLASS_CODE).then(cls => {
     const ev = (cls.eventDefs || []).find(e => e.id === id);
     if (!ev) return;
     EDITING_EVENT_ID = id;
@@ -569,7 +569,7 @@ function resetSideHustleForm() {
 }
 
 function startEditSideHustle(id) {
-  getClass(CLASS_CODE).then(cls => {
+  getClassCached(CLASS_CODE).then(cls => {
     const h = (cls.sideHustles || []).find(x => x.id === id);
     if (!h) return;
     EDITING_SIDE_HUSTLE_ID = id;
@@ -737,13 +737,13 @@ function closeProfile() {
 }
 
 async function renderProfile(username) {
-  const s = await getUser(username);
+  const s = await getUserCached(username);
   if (!s) return;
   PROFILE_USER = username;
   const rating = await lifestyleRating(username, CLASS_CODE);
   const net = await portfolioValue(username, CLASS_CODE);
   const poss = await getStudentPossessions(username, CLASS_CODE);
-  const cls = withNewModuleDefaults(await getClass(CLASS_CODE));
+  const cls = withNewModuleDefaults(await getClassCached(CLASS_CODE));
 
   const job = cls.jobs.find(j => j.id === s.jobId);
   const taskApproved = isJobTaskApprovedThisWeek(s, cls);
@@ -908,7 +908,7 @@ async function removeStudentClick(username, name) {
 }
 
 async function restartClass() {
-  const cls = await getClass(CLASS_CODE);
+  const cls = await getClassCached(CLASS_CODE);
   const typed = prompt(
     `This will reset every student's balance to $0, remove job assignments, delist all companies, and clear the activity log for "${cls.name}".\n\nThis cannot be undone. Type the class name exactly to confirm:`
   );

@@ -127,7 +127,7 @@ async function init() {
 }
 
 async function render() {
-  CLS = await getClass(CURRENT.classCode);
+  CLS = await getClassCached(CURRENT.classCode);
   const g = CLS.gambling;
 
   if (IS_TEACHER) {
@@ -272,7 +272,7 @@ async function spin() {
 }
 
 async function renderRecent() {
-  const cls = await getClass(CURRENT.classCode);
+  const cls = await getClassCached(CURRENT.classCode);
   const mine = cls.txns.filter(t => t.type === "gambling" && t.from === CURRENT.username).slice(0, 15);
   const box = document.getElementById("recentBets");
   document.getElementById("noBets").classList.toggle("hidden", mine.length > 0);

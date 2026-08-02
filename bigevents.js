@@ -58,7 +58,7 @@ async function init() {
 }
 
 async function render() {
-  const cls = await getClass(CURRENT.classCode);
+  const cls = await getClassCached(CURRENT.classCode);
 
   if (IS_TEACHER) {
     const defs = cls.bigEventDefs || [];
@@ -84,7 +84,7 @@ async function render() {
   }
 
   if (!IS_TEACHER) {
-    const me = await getUser(CURRENT.username);
+    const me = await getUserCached(CURRENT.username);
     const mine = (cls.bigEventLog || []).filter(e => e.studentUser === me.username).slice().reverse();
     document.getElementById("noHistory").classList.toggle("hidden", mine.length > 0);
     const box = document.getElementById("historyList");

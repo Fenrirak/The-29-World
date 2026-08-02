@@ -54,7 +54,7 @@ async function init() {
 }
 
 async function render() {
-  const cls = await getClass(CURRENT.classCode);
+  const cls = await getClassCached(CURRENT.classCode);
   const rates = cls.taxRates || {};
 
   if (IS_TEACHER) {

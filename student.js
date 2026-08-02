@@ -93,8 +93,8 @@ async function init() {
 }
 
 async function render() {
-  const me = await getUser(CURRENT.username);
-  const cls = await getClass(me.classCode);
+  const me = await getUserCached(CURRENT.username);
+  const cls = await getClassCached(me.classCode);
 
   document.getElementById("greeting").textContent = "Hi, " + me.name + "!";
   document.getElementById("balance").textContent = fmtMoney(me.balance);
@@ -174,7 +174,7 @@ async function render() {
   tbody.innerHTML = "";
   const nameCache = {};
   for (const s of allStudents) nameCache[s.username] = s.name;
-  const teacher = await getUser(cls.teacher);
+  const teacher = await getUserCached(cls.teacher);
   if (teacher) nameCache[teacher.username] = teacher.name;
   const nameOf = u => nameCache[u] || u;
   my.forEach(t => {

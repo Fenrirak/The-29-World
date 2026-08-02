@@ -57,7 +57,7 @@ async function render() {
   // getUser and getClass are independent reads — CURRENT.classCode is
   // already known without needing `me` first, so fetch both at once
   // instead of waiting on one before starting the other.
-  const [me, cls] = await Promise.all([getUser(CURRENT.username), getClass(CURRENT.classCode)]);
+  const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
   const plans = cls.insurancePlans || [];
 
   if (IS_TEACHER) document.getElementById("insuranceDay").value = cls.insuranceDay || "Fri";

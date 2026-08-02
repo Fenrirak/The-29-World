@@ -40,7 +40,7 @@ function termLabel(weeks) {
 }
 
 async function render() {
-  const cls = await getClass(CURRENT.classCode);
+  const cls = await getClassCached(CURRENT.classCode);
   const tiers = cls.loanTiers || [];
 
   if (IS_TEACHER) {
@@ -69,7 +69,7 @@ async function render() {
   }
 
   if (!IS_TEACHER) {
-    const me = await getUser(CURRENT.username);
+    const me = await getUserCached(CURRENT.username);
     const optBox = document.getElementById("loanOptionsList");
     optBox.innerHTML = "";
     document.getElementById("noTiersStudent").classList.toggle("hidden", tiers.length > 0);
@@ -135,7 +135,7 @@ function nzDateKeyLocal() {
 }
 
 async function updateLoanPreview() {
-  const cls = await getClass(CURRENT.classCode);
+  const cls = await getClassCached(CURRENT.classCode);
   const amount = Number(document.getElementById("loanAmount").value);
   const preview = document.getElementById("loanPreview");
   if (!amount || amount <= 0) { preview.textContent = ""; return; }
@@ -173,7 +173,7 @@ async function addTier(e) {
 }
 
 async function editTier(id) {
-  const cls = await getClass(CURRENT.classCode);
+  const cls = await getClassCached(CURRENT.classCode);
   const tier = (cls.loanTiers || []).find(t => t.id === id);
   if (!tier) return;
   document.getElementById("tierMin").value = tier.min;
