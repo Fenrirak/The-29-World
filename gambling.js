@@ -1,5 +1,10 @@
 let CURRENT, IS_TEACHER, CLS;
 let selection = [];
+// Remembers the last bet type/selection so it can be re-applied after a
+// spin (so the picker doesn't reset every bet). Plain in-memory JS state,
+// so it naturally resets to "nothing selected" on page reload/navigation.
+let lastBetType = null;
+let lastSelection = [];
 
 // European roulette wheel pocket order (clockwise) and colours, used to
 // build the spinning-wheel animation shown while a bet is resolving.
@@ -190,8 +195,11 @@ function neededCount(type) {
 }
 
 function renderPicker() {
-  selection = [];
   const type = document.getElementById("betType").value;
+  // Re-apply the previous bet's selection only if the bet type is the same
+  // as last time — otherwise start fresh (old picks wouldn't make sense
+  // under a different bet type).
+  selection = (type === lastBetType) ? [...lastSelection] : [];
   const area = document.getElementById("pickerArea");
 
   if (type === "oddEven") {
@@ -201,6 +209,9 @@ function renderPicker() {
         <button class="btn secondary" onclick="pickOddEven('even')" id="pickEven">Even</button>
       </div>
     `;
+    if (selection[0] === "odd" || selection[0] === "even") {
+      document.getElementById(selection[0] === "odd" ? "pickOdd" : "pickEven").classList.add("gold");
+    }
     return;
   }
 
@@ -228,12 +239,24 @@ function renderPicker() {
     btn.id = "num-" + n;
     grid.appendChild(btn);
   }
+
+  // Re-mark any restored selection in the freshly-built grid.
+  selection.forEach(n2 => {
+    const el = document.getElementById("num-" + n2);
+    if (el) el.classList.add("selected");
+  });
+  const countEl = document.getElementById("pickCount");
+  if (countEl) countEl.textContent = selection.length;
+  lastBetType = type;
+  lastSelection = [...selection];
 }
 
 function pickOddEven(which) {
   selection = [which];
   document.getElementById("pickOdd").classList.toggle("gold", which === "odd");
   document.getElementById("pickEven").classList.toggle("gold", which === "even");
+  lastBetType = "oddEven";
+  lastSelection = [...selection];
 }
 
 function toggleNumber(n, need) {
@@ -251,6 +274,8 @@ function toggleNumber(n, need) {
   });
   const countEl = document.getElementById("pickCount");
   if (countEl) countEl.textContent = selection.length;
+  lastBetType = document.getElementById("betType").value;
+  lastSelection = [...selection];
 }
 
 async function spin() {
