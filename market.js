@@ -129,12 +129,12 @@ async function render() {
   try {
   // Re-derive IS_TEACHER from the live user doc every render (not just on
   // page load) so the teacher's management controls never get replaced by
-  // the student buy/sell view after a role or session change.
-  const freshMe = await getUserCached(CURRENT.username);
+  // the student buy/sell view after a role or session change. freshMe and
+  // cls are independent reads — fetch both together instead of waiting on
+  // one before starting the other (this page polls every 5s, so it's worth it).
+  const [freshMe, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CLASS_CODE)]);
   if (freshMe) IS_TEACHER = freshMe.role === "teacher";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
-
-  const cls = await getClassCached(CLASS_CODE);
 
   const banner = document.getElementById("marketLockedBanner");
   const list = document.getElementById("companyList");

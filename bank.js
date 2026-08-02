@@ -96,8 +96,10 @@ async function payableRecipients() {
 }
 
 async function render() {
-  const me = await getUserCached(CURRENT.username);
-  const cls = await getClassCached(me.classCode);
+  // getUserCached and getClassCached are independent reads — CURRENT.classCode
+  // is already known without needing `me` first, so fetch both at once
+  // instead of waiting on one before starting the other.
+  const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
 
   document.getElementById("balance").textContent = IS_TEACHER ? "Unlimited ∞" : fmtMoney(me.balance);
   const cashRateNote = document.getElementById("cashRateNote");
