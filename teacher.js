@@ -618,16 +618,19 @@ async function removeSideHustleClick(id) {
 function thresholdRowHtml(t) {
   t = t || {};
   return `
-    <div class="grid grid-4">
+    <div class="threshold-head">
       <div><label>Label</label><input class="th-label" value="${(t.label || "").replace(/"/g, "&quot;")}"></div>
-      <div><label>From (inclusive)</label><input class="th-min" type="number" min="0" max="100" step="1" value="${t.min ?? 0}"></div>
-      <div><label>To (exclusive)</label><input class="th-max" type="number" min="0" max="100" step="1" value="${t.max ?? 10}"></div>
-      <div><button class="btn small coral" type="button" onclick="this.closest('.threshold-row').remove()">${icon("trash", 13)} Remove</button></div>
+      <div style="width:130px;"><label>From (inclusive)</label><input class="th-min" type="number" min="0" max="100" step="1" value="${t.min ?? 0}"></div>
+      <div style="width:130px;"><label>To (exclusive)</label><input class="th-max" type="number" min="0" max="100" step="1" value="${t.max ?? 10}"></div>
+      <button class="btn small coral" type="button" onclick="this.closest('.threshold-row').remove()" style="flex-shrink:0;">${icon("trash", 13)} Remove</button>
     </div>
-    <div class="grid grid-3" style="margin-top:-8px;margin-bottom:14px;">
-      <div><label>Min net worth (0 = no requirement)</label><input class="th-min-networth" type="number" min="0" step="1" value="${t.minNetWorth || 0}"></div>
-      <div><label>Min property comfort, 0-5 stars (0 = no requirement)</label><input class="th-min-property" type="number" min="0" max="5" step="1" value="${t.minPropertyComfort || 0}"></div>
-      <div><label>Min transport comfort, 0-5 stars (0 = no requirement)</label><input class="th-min-transport" type="number" min="0" max="5" step="1" value="${t.minTransportComfort || 0}"></div>
+    <div class="threshold-reqs">
+      <p class="muted-small threshold-reqs-label">Optional requirements — a student must also meet these to be shown this band, even if their score qualifies. Leave at 0 for no requirement.</p>
+      <div class="grid grid-3">
+        <div><label>Min net worth</label><input class="th-min-networth" type="number" min="0" step="1" value="${t.minNetWorth || 0}"></div>
+        <div><label>Min property comfort (0-5 stars)</label><input class="th-min-property" type="number" min="0" max="5" step="1" value="${t.minPropertyComfort || 0}"></div>
+        <div><label>Min transport comfort (0-5 stars)</label><input class="th-min-transport" type="number" min="0" max="5" step="1" value="${t.minTransportComfort || 0}"></div>
+      </div>
     </div>
   `;
 }

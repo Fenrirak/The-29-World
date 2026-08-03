@@ -7,6 +7,34 @@
 <link rel="stylesheet" href="style.css">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
+<style>
+  /* Extra breathing room for the lifestyle settings card, which packs in
+     several distinct sub-sections (star weights, bands, module locks). */
+  .lifestyle-subsection { margin-top: 32px; padding-top: 24px; border-top: 1.5px solid var(--line); }
+  .lifestyle-subsection > p { margin-top: 6px; margin-bottom: 20px; }
+  #lifestyleSettings.grid { gap: 14px; }
+  #lifestyleLockModules.grid { gap: 10px 14px; }
+
+  /* Each band gets its own clearly-bordered card with generous internal
+     spacing, instead of two cramped input grids stacked with no separation. */
+  #thresholdList { display: flex; flex-direction: column; gap: 18px; margin-bottom: 18px; }
+  .threshold-row {
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 20px;
+    background: rgba(0,0,0,0.012);
+  }
+  .threshold-row .grid { gap: 14px; }
+  .threshold-row .grid + .grid { margin-top: 14px; }
+  .threshold-head { display: flex; align-items: flex-end; gap: 14px; }
+  .threshold-head > div:first-child { flex: 1; }
+  .threshold-reqs {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--line);
+  }
+  .threshold-reqs-label { margin: 0 0 12px 0; }
+</style>
 </head>
 <body>
 
@@ -114,7 +142,7 @@
     <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyle()" id="saveLifestyleBtn">Save lifestyle settings</button>
     <div id="lifestyleMsg"></div>
 
-    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
+    <div class="lifestyle-subsection">
       <h2 id="hThresholds">Lifestyle rating bands</h2>
       <p>Give the 0-100 score meaningful names, e.g. "Poor" for 0-10, "Good" for 10-20. Bands should be ordered lowest to highest and cover the range you want labelled. You can also set extra requirements a student must meet to actually be shown a band — e.g. a minimum net worth, or owning a property/vehicle with at least a certain comfort rating — even if their score alone is high enough. Leave a requirement at 0 to not require it. If a student's score qualifies for a band but they don't meet its requirements, they'll be shown the next band down that they do qualify for.</p>
       <div id="thresholdList"></div>
@@ -123,12 +151,12 @@
       <div id="thresholdMsg"></div>
     </div>
 
-    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
+    <div class="lifestyle-subsection">
       <h2 id="hLifestyleLock">Lock modules by lifestyle rating</h2>
       <p>Stop students from using certain modules while their lifestyle rating is low. Pick a cutoff and tick which modules should be locked when a student is at or below it.</p>
       <label for="lifestyleLockThreshold" id="labLifestyleLockThreshold">Lock when lifestyle rating is at or below</label>
       <input id="lifestyleLockThreshold" type="number" min="0" max="100" step="1" style="max-width:160px;">
-      <div class="grid grid-3" id="lifestyleLockModules" style="margin-top:10px;"></div>
+      <div class="grid grid-3" id="lifestyleLockModules" style="margin-top:14px;"></div>
       <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyleLockSettings()" id="saveLifestyleLockBtn">Save module locks</button>
       <div id="lifestyleLockMsg"></div>
     </div>
