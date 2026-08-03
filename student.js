@@ -110,7 +110,7 @@ async function render() {
   document.getElementById("lifestyleCard").classList.toggle("hidden", !anyEnabled);
   if (anyEnabled) {
     const score = await lifestyleRating(me.username, me.classCode);
-    const label = lifestyleLabelFor(score, cls.lifestyleThresholds);
+    const label = await lifestyleBandForStudent(me.username, me.classCode);
     const isOverride = me.lifestyleOverride !== undefined && me.lifestyleOverride !== null;
     document.getElementById("lifestyleValue").textContent =
       score + " / 100" + (label ? " — " + label : "") + (isOverride ? " (set by teacher)" : "");

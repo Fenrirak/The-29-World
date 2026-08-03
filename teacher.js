@@ -123,7 +123,21 @@ async function render() {
   // net worth ranking (also gives us each student's lifestyle rating for the table below)
   const board = await classLeaderboard(CLASS_CODE);
   const lifestyleByUser = {};
-  await Promise.all(students.map(async s => { lifestyleByUser[s.username] = await lifestyleRating(s.username, CLASS_CODE); }));
+  const lifestyleBandByUser = {};
+  await Promise.all(students.map(async s => {
+    lifestyleByUser[s.username] = await lifestyleRating(s.username, CLASS_CODE);
+  }));
+  students.forEach(s => {
+    const row = board.find(r => r.username === s.username);
+    const property = (cls.properties || []).find(p => p.owner === s.username);
+    const vehicle = (cls.vehicles || []).find(v => v.owner === s.username);
+    const stats = {
+      netWorth: row ? row.net : 0,
+      propertyComfort: property ? (property.comfort || 0) : 0,
+      transportComfort: vehicle ? (vehicle.comfort || 0) : 0
+    };
+    lifestyleBandByUser[s.username] = lifestyleLabelFor(lifestyleByUser[s.username], cls.lifestyleThresholds || [], stats);
+  });
 
   const nwBox = document.getElementById("netWorthList");
   nwBox.innerHTML = "";
@@ -155,7 +169,7 @@ async function render() {
       <td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${s.name}<div class="muted-small">@${s.username}</div></td>
       <td>${jobSelectHtml(cls, s)}${s.jobId ? `<div class="muted-small">${isJobTaskApprovedThisWeek(s, cls) ? `${icon("star", 11)} Task approved this week` : `Task not yet approved`}</div>` : ""}</td>
       <td><strong>${fmtMoney(s.balance)}</strong></td>
-      <td>${lifestyleByUser[s.username]} / 100</td>
+      <td>${lifestyleByUser[s.username]} / 100${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</td>
       <td>${fmtMoney(netByUser[s.username] || 0)}</td>
       <td>
         <button class="btn small secondary" onclick="quickView('${s.username}')">View</button>
@@ -601,19 +615,30 @@ async function removeSideHustleClick(id) {
   }
 }
 
+function thresholdRowHtml(t) {
+  t = t || {};
+  return `
+    <div class="grid grid-4">
+      <div><label>Label</label><input class="th-label" value="${(t.label || "").replace(/"/g, "&quot;")}"></div>
+      <div><label>From (inclusive)</label><input class="th-min" type="number" min="0" max="100" step="1" value="${t.min ?? 0}"></div>
+      <div><label>To (exclusive)</label><input class="th-max" type="number" min="0" max="100" step="1" value="${t.max ?? 10}"></div>
+      <div><button class="btn small coral" type="button" onclick="this.closest('.threshold-row').remove()">${icon("trash", 13)} Remove</button></div>
+    </div>
+    <div class="grid grid-3" style="margin-top:-8px;margin-bottom:14px;">
+      <div><label>Min net worth (0 = no requirement)</label><input class="th-min-networth" type="number" min="0" step="1" value="${t.minNetWorth || 0}"></div>
+      <div><label>Min property comfort, 0-5 stars (0 = no requirement)</label><input class="th-min-property" type="number" min="0" max="5" step="1" value="${t.minPropertyComfort || 0}"></div>
+      <div><label>Min transport comfort, 0-5 stars (0 = no requirement)</label><input class="th-min-transport" type="number" min="0" max="5" step="1" value="${t.minTransportComfort || 0}"></div>
+    </div>
+  `;
+}
+
 function renderThresholdRows(thresholds) {
   const box = document.getElementById("thresholdList");
   box.innerHTML = "";
-  thresholds.forEach((t, i) => {
+  thresholds.forEach(t => {
     const row = document.createElement("div");
-    row.className = "grid grid-4";
-    row.style.alignItems = "flex-end";
-    row.innerHTML = `
-      <div><label>Label</label><input class="th-label" value="${(t.label || "").replace(/"/g, "&quot;")}"></div>
-      <div><label>From (inclusive)</label><input class="th-min" type="number" min="0" max="100" step="1" value="${t.min}"></div>
-      <div><label>To (exclusive)</label><input class="th-max" type="number" min="0" max="100" step="1" value="${t.max}"></div>
-      <div><button class="btn small coral" type="button" onclick="this.closest('.grid').remove()">${icon("trash", 13)} Remove</button></div>
-    `;
+    row.className = "threshold-row";
+    row.innerHTML = thresholdRowHtml(t);
     box.appendChild(row);
   });
 }
@@ -621,23 +646,20 @@ function renderThresholdRows(thresholds) {
 function addThresholdRow() {
   const box = document.getElementById("thresholdList");
   const row = document.createElement("div");
-  row.className = "grid grid-4";
-  row.style.alignItems = "flex-end";
-  row.innerHTML = `
-    <div><label>Label</label><input class="th-label" value="New band"></div>
-    <div><label>From (inclusive)</label><input class="th-min" type="number" min="0" max="100" step="1" value="0"></div>
-    <div><label>To (exclusive)</label><input class="th-max" type="number" min="0" max="100" step="1" value="10"></div>
-    <div><button class="btn small coral" type="button" onclick="this.closest('.grid').remove()">${icon("trash", 13)} Remove</button></div>
-  `;
+  row.className = "threshold-row";
+  row.innerHTML = thresholdRowHtml({ label: "New band", min: 0, max: 10 });
   box.appendChild(row);
 }
 
 async function saveThresholds() {
-  const rows = document.querySelectorAll("#thresholdList > .grid");
+  const rows = document.querySelectorAll("#thresholdList > .threshold-row");
   const thresholds = Array.from(rows).map(row => ({
     label: row.querySelector(".th-label").value,
     min: row.querySelector(".th-min").value,
-    max: row.querySelector(".th-max").value
+    max: row.querySelector(".th-max").value,
+    minNetWorth: row.querySelector(".th-min-networth").value,
+    minPropertyComfort: row.querySelector(".th-min-property").value,
+    minTransportComfort: row.querySelector(".th-min-transport").value
   }));
   await saveLifestyleThresholds(CLASS_CODE, thresholds);
   document.getElementById("thresholdMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
@@ -741,6 +763,7 @@ async function renderProfile(username) {
   if (!s) return;
   PROFILE_USER = username;
   const rating = await lifestyleRating(username, CLASS_CODE);
+  const band = await lifestyleBandForStudent(username, CLASS_CODE);
   const net = await portfolioValue(username, CLASS_CODE);
   const poss = await getStudentPossessions(username, CLASS_CODE);
   const cls = withNewModuleDefaults(await getClassCached(CLASS_CODE));
@@ -757,7 +780,7 @@ async function renderProfile(username) {
     <div class="profile-summary">
       <div class="profile-chip"><div class="label">Cash balance</div><div class="value">${fmtMoney(s.balance)}</div></div>
       <div class="profile-chip"><div class="label">Portfolio</div><div class="value">${fmtMoney(net)}</div></div>
-      <div class="profile-chip"><div class="label">Lifestyle rating</div><div class="value">${rating} / 100${isOverride ? ` <span class="muted-small">(overridden)</span>` : ""}</div></div>
+      <div class="profile-chip"><div class="label">Lifestyle rating</div><div class="value">${rating} / 100${isOverride ? ` <span class="muted-small">(overridden)</span>` : ""}</div>${band ? `<div class="muted-small">${band}</div>` : ""}</div>
     </div>
   `);
 

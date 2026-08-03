@@ -2258,12 +2258,19 @@ function withNewModuleDefaults(cls) {
   };
   if (!cls.lifestyleConfig.transport) cls.lifestyleConfig.transport = { enabled: true, weight: 3 };
   cls.lifestyleThresholds = cls.lifestyleThresholds && cls.lifestyleThresholds.length ? cls.lifestyleThresholds : [
-    { min: 0, max: 10, label: "Poor" },
-    { min: 10, max: 20, label: "Modest" },
-    { min: 20, max: 40, label: "Comfortable" },
-    { min: 40, max: 70, label: "Good" },
-    { min: 70, max: 100, label: "Luxurious" }
+    { min: 0, max: 10, label: "Poor", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
+    { min: 10, max: 20, label: "Modest", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
+    { min: 20, max: 40, label: "Comfortable", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
+    { min: 40, max: 70, label: "Good", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
+    { min: 70, max: 100, label: "Luxurious", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 }
   ];
+  // Older classes may have bands saved before requirements existed — fill
+  // in the new fields so downstream code can rely on them always being set.
+  cls.lifestyleThresholds.forEach(t => {
+    if (t.minNetWorth === undefined) t.minNetWorth = 0;
+    if (t.minPropertyComfort === undefined) t.minPropertyComfort = 0;
+    if (t.minTransportComfort === undefined) t.minTransportComfort = 0;
+  });
   return cls;
 }
 
@@ -3183,19 +3190,73 @@ async function getStudentPossessions(username, classCode) {
 async function saveLifestyleConfig(classCode, config) {
   await classesCol().doc(classCode).update({ lifestyleConfig: config });
 }
-// thresholds: array of { min, max, label }, sorted low to high, describing
-// named bands for the 0-100 lifestyle score (e.g. Poor 0-10, Good 10-20).
+// thresholds: array of { min, max, label, minNetWorth, minPropertyComfort,
+// minTransportComfort }, sorted low to high, describing named bands for the
+// 0-100 lifestyle score (e.g. Poor 0-10, Good 10-20). The min* fields are
+// optional extra requirements a student must meet to actually be shown that
+// band, even if their score alone would qualify — e.g. a "Luxurious" band
+// might require a net worth of at least $500 and a property with a comfort
+// rating of at least 4, so a student can't reach it on store items alone.
+// A value of 0 means "no requirement" for that field.
 async function saveLifestyleThresholds(classCode, thresholds) {
   const clean = thresholds
-    .map(t => ({ min: Math.max(0, Number(t.min) || 0), max: Math.max(0, Number(t.max) || 0), label: (t.label || "").trim() || "Untitled" }))
+    .map(t => ({
+      min: Math.max(0, Number(t.min) || 0),
+      max: Math.max(0, Number(t.max) || 0),
+      label: (t.label || "").trim() || "Untitled",
+      minNetWorth: Math.max(0, Number(t.minNetWorth) || 0),
+      minPropertyComfort: Math.max(0, Math.min(5, Number(t.minPropertyComfort) || 0)),
+      minTransportComfort: Math.max(0, Math.min(5, Number(t.minTransportComfort) || 0))
+    }))
     .sort((a, b) => a.min - b.min);
   await classesCol().doc(classCode).update({ lifestyleThresholds: clean });
 }
-function lifestyleLabelFor(score, thresholds) {
+// Does a student meet a given band's extra requirements? `stats` is
+// optional — omit it (or pass nothing) to check score-range membership
+// only, which keeps this backward compatible with any existing callers
+// that only ever dealt with the score.
+function bandRequirementsMet(band, stats) {
+  if (!stats) return true;
+  if (band.minNetWorth && (stats.netWorth || 0) < band.minNetWorth) return false;
+  if (band.minPropertyComfort && (stats.propertyComfort || 0) < band.minPropertyComfort) return false;
+  if (band.minTransportComfort && (stats.transportComfort || 0) < band.minTransportComfort) return false;
+  return true;
+}
+// Finds the label for a 0-100 score. If `stats` is passed (netWorth,
+// propertyComfort, transportComfort), a band whose extra requirements
+// aren't met is skipped in favour of the next band down that the student
+// does qualify for, so a high score alone can't skip requirements — see
+// lifestyleBandForStudent, which builds `stats` for you.
+function lifestyleLabelFor(score, thresholds, stats) {
   if (!thresholds || thresholds.length === 0) return "";
-  const band = thresholds.find(t => score >= t.min && score < t.max) ||
-               (score >= (thresholds[thresholds.length - 1].max) ? thresholds[thresholds.length - 1] : null);
-  return band ? band.label : "";
+  let targetIndex = thresholds.findIndex(t => score >= t.min && score < t.max);
+  if (targetIndex === -1) {
+    const last = thresholds[thresholds.length - 1];
+    if (score >= last.max) targetIndex = thresholds.length - 1;
+  }
+  if (targetIndex === -1) return "";
+  for (let i = targetIndex; i >= 0; i--) {
+    if (bandRequirementsMet(thresholds[i], stats)) return thresholds[i].label;
+  }
+  return "";
+}
+// Convenience wrapper: works out a student's lifestyle score AND the extra
+// stats (net worth, owned property/vehicle comfort) needed to enforce band
+// requirements, then returns the label they actually qualify for.
+async function lifestyleBandForStudent(username, classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  if (!cls) return "";
+  const score = await lifestyleRating(username, classCode);
+  const board = await classLeaderboard(classCode);
+  const row = board.find(r => r.username === username);
+  const property = (cls.properties || []).find(p => p.owner === username);
+  const vehicle = (cls.vehicles || []).find(v => v.owner === username);
+  const stats = {
+    netWorth: row ? row.net : 0,
+    propertyComfort: property ? (property.comfort || 0) : 0,
+    transportComfort: vehicle ? (vehicle.comfort || 0) : 0
+  };
+  return lifestyleLabelFor(score, cls.lifestyleThresholds, stats);
 }
 async function lifestyleRating(username, classCode) {
   const cls = withNewModuleDefaults(await getClass(classCode));
