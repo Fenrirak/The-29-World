@@ -10,12 +10,12 @@ function paintChrome() {
   document.getElementById("labTierTerm").innerHTML = icon("calendar", 13) + " Term (weeks)";
   document.getElementById("labTierRate").innerHTML = icon("percent", 13) + " Interest rate (% of the loan, charged once)";
   document.getElementById("labMaxLoan").innerHTML = icon("handshake", 13) + " Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
-  document.getElementById("labMaxLoanCount").innerHTML = icon("handshake", 13) + " Maximum number of loans a student can take out (0 = no limit)";
+  document.getElementById("labMaxLoanCount").innerHTML = icon("handshake", 13) + " Maximum number of loans a student can have open at once (0 = no limit)";
   document.getElementById("saveMaxLoanBtn").innerHTML = icon("plus", 13) + " Save maximums";
   document.getElementById("hTake").innerHTML = icon("handshake", 18) + " Take out a loan";
   document.getElementById("labLoanAmount").innerHTML = icon("coin", 13) + " How much do you want to borrow?";
   document.getElementById("takeLoanBtn").innerHTML = icon("send", 15) + " Borrow";
-  document.getElementById("hMyLoan").innerHTML = icon("handshake", 18) + " My loan";
+  document.getElementById("hMyLoan").innerHTML = icon("handshake", 18) + " My loans";
   document.getElementById("hPastLoans").innerHTML = icon("handshake", 18) + " Loan history";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
@@ -81,36 +81,40 @@ async function render() {
     }
 
     const loans = me.loans || [];
-    const activeLoan = loans.find(l => l.status === "active");
-    const atCountLimit = cls.maxLoanCount > 0 && loans.length >= cls.maxLoanCount && !activeLoan;
-    document.getElementById("noLoan").classList.toggle("hidden", !!activeLoan || atCountLimit);
+    const activeLoans = loans.filter(l => l.status === "active");
+    const atCountLimit = cls.maxLoanCount > 0 && activeLoans.length >= cls.maxLoanCount;
+    document.getElementById("noLoan").classList.toggle("hidden", activeLoans.length > 0 || atCountLimit);
     document.getElementById("loanLimitReached").classList.toggle("hidden", !atCountLimit);
     if (atCountLimit) {
       document.getElementById("loanLimitReached").textContent =
-        `You've used all ${cls.maxLoanCount} of the loans your teacher allows.`;
+        `You have ${cls.maxLoanCount} loan${cls.maxLoanCount === 1 ? "" : "s"} open — that's the max your teacher allows at once. Pay one off to borrow again.`;
     }
     const box = document.getElementById("myLoanBox");
     box.innerHTML = "";
-    document.getElementById("loanAmount").closest("form").querySelector("button").disabled = !!activeLoan || atCountLimit;
-    if (activeLoan) {
-      const todayKey = nzDateKeyLocal();
-      const overdue = activeLoan.dueDate < todayKey;
-      box.innerHTML = `
+    document.getElementById("loanAmount").closest("form").querySelector("button").disabled = atCountLimit;
+    const todayKey = nzDateKeyLocal();
+    activeLoans.forEach(loan => {
+      const overdue = loan.dueDate < todayKey;
+      const row = document.createElement("div");
+      row.className = "card company-card";
+      row.style.marginBottom = "12px";
+      row.innerHTML = `
         <div class="auto-row">
           <div class="auto-details">
-            <strong>${fmtMoney(activeLoan.principal)}</strong> borrowed &middot; ${activeLoan.rate}% over ${termLabel(activeLoan.termWeeks)}
-            <div class="muted-small">Due ${activeLoan.dueDate}${overdue ? " — overdue" : ""}</div>
+            <strong>${fmtMoney(loan.principal)}</strong> borrowed &middot; ${loan.rate}% over ${termLabel(loan.termWeeks)}
+            <div class="muted-small">Due ${loan.dueDate}${overdue ? " — overdue" : ""}</div>
           </div>
-          <div class="${overdue ? 'status-declined' : 'status-pending'}">${fmtMoney(activeLoan.owed)} owed</div>
+          <div class="${overdue ? 'status-declined' : 'status-pending'}">${fmtMoney(loan.owed)} owed</div>
         </div>
-        <form onsubmit="return repayLoanForm(event, '${activeLoan.id}')" style="margin-top:12px;">
-          <label>Repay amount (up to ${fmtMoney(activeLoan.owed)})</label>
-          <input id="repayAmount" type="number" min="0.01" max="${activeLoan.owed}" step="0.01" required>
+        <form onsubmit="return repayLoanForm(event, '${loan.id}')" style="margin-top:12px;">
+          <label for="repayAmount-${loan.id}">Repay amount (up to ${fmtMoney(loan.owed)})</label>
+          <input id="repayAmount-${loan.id}" type="number" min="0.01" max="${loan.owed}" step="0.01" required>
           <button class="btn gold" type="submit">Make a repayment</button>
         </form>
-        <div id="repayMsg"></div>
+        <div id="repayMsg-${loan.id}"></div>
       `;
-    }
+      box.appendChild(row);
+    });
 
     const past = loans.filter(l => l.status === "paid").slice().reverse();
     document.getElementById("pastLoansCard").classList.toggle("hidden", past.length === 0);
@@ -216,10 +220,10 @@ async function takeLoanForm(e) {
 
 async function repayLoanForm(e, loanId) {
   e.preventDefault();
-  const amount = document.getElementById("repayAmount").value;
+  const amount = document.getElementById(`repayAmount-${loanId}`).value;
   const res = await repayLoan(CURRENT.username, loanId, amount);
   if (!res.ok) {
-    document.getElementById("repayMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
+    document.getElementById(`repayMsg-${loanId}`).innerHTML = `<div class="error-msg">${res.error}</div>`;
     return false;
   }
   await render();

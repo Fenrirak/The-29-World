@@ -917,16 +917,15 @@ async function takeLoan(username, classCode, amount) {
       const user = userSnap.data();
       const cls = withNewModuleDefaults(classSnap.data());
       if (!(amount > 0)) throw new Error("BAD_AMOUNT");
-      // Keep it simple: one active loan at a time, so a student can't
-      // stack debt without ever having to pay any of it back.
       const existingLoans = user.loans || [];
-      if (existingLoans.some(l => l.status === "active")) throw new Error("HAS_LOAN");
+      const activeLoans = existingLoans.filter(l => l.status === "active");
       const tier = findLoanTier(cls, amount);
       if (!tier) throw new Error("NO_TIER");
       if (cls.maxLoanAmount > 0 && amount > cls.maxLoanAmount) throw new Error("OVER_MAX");
-      // Lifetime cap on how many loans a student can ever take out (counts
-      // both active and paid-off loans), separate from the per-loan amount cap.
-      if (cls.maxLoanCount > 0 && existingLoans.length >= cls.maxLoanCount) throw new Error("OVER_COUNT");
+      // Cap on how many loans a student can have open (active) at the same
+      // time — paid-off loans don't count against it, so a student can
+      // reborrow after repaying, separate from the per-loan amount cap.
+      if (cls.maxLoanCount > 0 && activeLoans.length >= cls.maxLoanCount) throw new Error("OVER_COUNT");
       const todayKey = nzDateKey();
       const dueDate = dateKeyPlusDays(todayKey, tier.termWeeks * 7);
       const interestAmt = Math.round(amount * (tier.rate / 100) * 100) / 100;
@@ -941,10 +940,9 @@ async function takeLoan(username, classCode, amount) {
     });
   } catch (e) {
     if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than zero." };
-    if (e.message === "HAS_LOAN") return { ok: false, error: "You already have an outstanding loan — pay it off before taking another." };
     if (e.message === "NO_TIER") return { ok: false, error: "That amount doesn't fall within any of the loan options your teacher has set up." };
     if (e.message === "OVER_MAX") return { ok: false, error: "That's above the maximum loan amount your teacher allows." };
-    if (e.message === "OVER_COUNT") return { ok: false, error: "You've already reached the maximum number of loans your teacher allows." };
+    if (e.message === "OVER_COUNT") return { ok: false, error: "You already have the maximum number of loans open that your teacher allows at once." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, {
@@ -2223,7 +2221,7 @@ function withNewModuleDefaults(cls) {
   cls.lifestyleLock = cls.lifestyleLock || { threshold: 0, modules: [] };
   cls.loanTiers = cls.loanTiers || [];
   cls.maxLoanAmount = cls.maxLoanAmount || 0; // 0 = no extra class-wide cap beyond the tiers themselves
-  cls.maxLoanCount = cls.maxLoanCount || 0; // 0 = no cap on how many loans a student can take out over time
+  cls.maxLoanCount = cls.maxLoanCount || 0; // 0 = no cap on how many loans a student can have open at once
   cls.vehicles = cls.vehicles || [];
   cls.interestAuto = cls.interestAuto || false;
   cls.cashInterestRate = cls.cashInterestRate || 0;
