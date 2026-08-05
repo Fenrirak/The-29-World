@@ -169,7 +169,7 @@ async function render() {
       <td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${s.name}<div class="muted-small">@${s.username}</div></td>
       <td>${jobSelectHtml(cls, s)}${s.jobId ? `<div class="muted-small">${isJobTaskApprovedThisWeek(s, cls) ? `${icon("star", 11)} Task approved this week` : `Task not yet approved`}</div>` : ""}</td>
       <td><strong>${fmtMoney(s.balance)}</strong></td>
-      <td>${lifestyleByUser[s.username]} / 100${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</td>
+      <td>${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</td>
       <td>${fmtMoney(netByUser[s.username] || 0)}</td>
       <td>
         <button class="btn small secondary" onclick="quickView('${s.username}')">View</button>
@@ -620,8 +620,8 @@ function thresholdRowHtml(t) {
   return `
     <div class="threshold-head">
       <div><label>Label</label><input class="th-label" value="${(t.label || "").replace(/"/g, "&quot;")}"></div>
-      <div style="width:130px;"><label>From (inclusive)</label><input class="th-min" type="number" min="0" max="100" step="1" value="${t.min ?? 0}"></div>
-      <div style="width:130px;"><label>To (exclusive)</label><input class="th-max" type="number" min="0" max="100" step="1" value="${t.max ?? 10}"></div>
+      <div style="width:130px;"><label>From (inclusive)</label><input class="th-min" type="number" min="0" step="1" value="${t.min ?? 0}"></div>
+      <div style="width:130px;"><label>To (exclusive)</label><input class="th-max" type="number" min="0" step="1" value="${t.max ?? 10}"></div>
       <button class="btn small coral" type="button" onclick="this.closest('.threshold-row').remove()" style="flex-shrink:0;">${icon("trash", 13)} Remove</button>
     </div>
     <div class="threshold-reqs">
@@ -783,7 +783,7 @@ async function renderProfile(username) {
     <div class="profile-summary">
       <div class="profile-chip"><div class="label">Cash balance</div><div class="value">${fmtMoney(s.balance)}</div></div>
       <div class="profile-chip"><div class="label">Portfolio</div><div class="value">${fmtMoney(net)}</div></div>
-      <div class="profile-chip"><div class="label">Lifestyle rating</div><div class="value">${rating} / 100${isOverride ? ` <span class="muted-small">(overridden)</span>` : ""}</div>${band ? `<div class="muted-small">${band}</div>` : ""}</div>
+      <div class="profile-chip"><div class="label">Lifestyle rating</div><div class="value">${rating}${isOverride ? ` <span class="muted-small">(overridden)</span>` : ""}</div>${band ? `<div class="muted-small">${band}</div>` : ""}</div>
     </div>
   `);
 
@@ -803,9 +803,9 @@ async function renderProfile(username) {
   rows.push(`<h4>${icon("star", 16)} Lifestyle rating override</h4>`);
   if (isOverride) {
     rows.push(`
-      <p class="muted-small">This student's lifestyle rating is locked at <strong>${s.lifestyleOverride} / 100</strong> — nothing they buy, sell, or do will change it until you remove the override.</p>
+      <p class="muted-small">This student's lifestyle rating is locked at <strong>${s.lifestyleOverride}</strong> — nothing they buy, sell, or do will change it until you remove the override.</p>
       <div class="auto-row">
-        <div class="auto-details">Locked at ${s.lifestyleOverride} / 100</div>
+        <div class="auto-details">Locked at ${s.lifestyleOverride}</div>
         <button class="btn small secondary" onclick="removeProfileLifestyleOverride('${username}')">Remove override</button>
       </div>
     `);
@@ -814,8 +814,8 @@ async function renderProfile(username) {
       <p class="muted-small">Set a fixed lifestyle rating for this student. While set, it replaces their computed score and won't move no matter what they buy or sell.</p>
       <div style="display:flex;gap:8px;align-items:flex-end;">
         <div style="flex:1;">
-          <label for="profileLifestyleOverrideInput" style="margin-top:0;">Override value (0-100)</label>
-          <input id="profileLifestyleOverrideInput" type="number" min="0" max="100" step="1" placeholder="e.g. 50">
+          <label for="profileLifestyleOverrideInput" style="margin-top:0;">Override value (0 or more)</label>
+          <input id="profileLifestyleOverrideInput" type="number" min="0" step="1" placeholder="e.g. 50">
         </div>
         <button class="btn small" onclick="applyProfileLifestyleOverride('${username}')">Set override</button>
       </div>

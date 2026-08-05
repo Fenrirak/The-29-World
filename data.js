@@ -3192,7 +3192,10 @@ async function saveLifestyleConfig(classCode, config) {
 }
 // thresholds: array of { min, max, label, minNetWorth, minPropertyComfort,
 // minTransportComfort }, sorted low to high, describing named bands for the
-// 0-100 lifestyle score (e.g. Poor 0-10, Good 10-20). The min* fields are
+// uncapped (0+) lifestyle score (e.g. Poor 0-10, Good 10-20). The top band's
+// `max` is just where its own editable range stops — any score at or above
+// it still qualifies (see lifestyleLabelFor below), so the highest band
+// effectively has no ceiling. The min* fields are
 // optional extra requirements a student must meet to actually be shown that
 // band, even if their score alone would qualify — e.g. a "Luxurious" band
 // might require a net worth of at least $500 and a property with a comfort
@@ -3201,8 +3204,8 @@ async function saveLifestyleConfig(classCode, config) {
 async function saveLifestyleThresholds(classCode, thresholds) {
   const clean = thresholds
     .map(t => ({
-      min: Math.max(0, Number(t.min) || 0),
-      max: Math.max(0, Number(t.max) || 0),
+      min: Math.max(0, Number(t.min) || 0), // uncapped — score can exceed 100
+      max: Math.max(0, Number(t.max) || 0), // uncapped — score can exceed 100
       label: (t.label || "").trim() || "Untitled",
       minNetWorth: Math.max(0, Number(t.minNetWorth) || 0),
       minPropertyComfort: Math.max(0, Math.min(5, Number(t.minPropertyComfort) || 0)),
@@ -3222,7 +3225,7 @@ function bandRequirementsMet(band, stats) {
   if (band.minTransportComfort && (stats.transportComfort || 0) < band.minTransportComfort) return false;
   return true;
 }
-// Finds the label for a 0-100 score. If `stats` is passed (netWorth,
+// Finds the label for an uncapped (0+) score. If `stats` is passed (netWorth,
 // propertyComfort, transportComfort), a band whose extra requirements
 // aren't met is skipped in favour of the next band down that the student
 // does qualify for, so a high score alone can't skip requirements — see
@@ -3263,7 +3266,9 @@ async function lifestyleRating(username, classCode) {
   const user = await getUser(username);
   if (!cls || !user) return 0;
   if (user.lifestyleOverride !== undefined && user.lifestyleOverride !== null) {
-    return Math.max(0, Math.min(100, Math.round(Number(user.lifestyleOverride) || 0)));
+    // Uncapped — a teacher override can be set to any non-negative score,
+    // it just can't go negative.
+    return Math.max(0, Math.round(Number(user.lifestyleOverride) || 0));
   }
   const cfg = cls.lifestyleConfig;
   let score = 0;
@@ -3290,14 +3295,17 @@ async function lifestyleRating(username, classCode) {
       if (plan) score += (plan.stars || 0) * (cfg.insurance.weight || 0);
     });
   }
-  return Math.max(0, Math.min(100, Math.round(score)));
+  // Uncapped — a student's computed score can grow without limit as they
+  // accumulate property/transport/store/insurance comfort, it just can't
+  // go negative.
+  return Math.max(0, Math.round(score));
 }
 // Teacher-set lifestyle score that overrides the computed one entirely —
 // the student can't move it by buying/selling anything while it's active.
 async function setLifestyleOverride(username, score) {
   const n = Number(score);
-  if (!Number.isFinite(n)) return { ok: false, error: "Enter a number between 0 and 100." };
-  const clamped = Math.max(0, Math.min(100, Math.round(n)));
+  if (!Number.isFinite(n)) return { ok: false, error: "Enter a number 0 or greater." };
+  const clamped = Math.max(0, Math.round(n));
   await usersCol().doc(username).update({ lifestyleOverride: clamped });
   return { ok: true };
 }
@@ -3326,7 +3334,9 @@ const LIFESTYLE_LOCKABLE_MODULES = [
 
 async function saveLifestyleLock(classCode, threshold, modules) {
   const clean = {
-    threshold: Math.max(0, Math.min(100, Math.round(Number(threshold) || 0))),
+    // Uncapped to match the now-uncapped lifestyle score — a teacher may
+    // need a lock threshold above 100 once scores commonly run higher.
+    threshold: Math.max(0, Math.round(Number(threshold) || 0)),
     modules: (modules || []).filter(k => LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === k))
   };
   await classesCol().doc(classCode).update({ lifestyleLock: clean });

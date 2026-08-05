@@ -113,7 +113,7 @@ async function render() {
     const label = await lifestyleBandForStudent(me.username, me.classCode);
     const isOverride = me.lifestyleOverride !== undefined && me.lifestyleOverride !== null;
     document.getElementById("lifestyleValue").textContent =
-      score + " / 100" + (label ? " — " + label : "") + (isOverride ? " (set by teacher)" : "");
+      score + (label ? " — " + label : "") + (isOverride ? " (set by teacher)" : "");
   }
 
   const lockedModules = await getLockedModulesForStudent(me.username, me.classCode);

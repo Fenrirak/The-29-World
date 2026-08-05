@@ -137,7 +137,7 @@
 
   <div class="card">
     <h2 id="hLifestyle">Lifestyle rating settings</h2>
-    <p>The lifestyle rating (0-100, shown on every student's homepage) is built from stars: a property's comfort rating, and any stars you gave a store item or insurance plan. Set how many points each star is worth, and toggle sections on or off.</p>
+    <p>The lifestyle rating (an uncapped score starting at 0, shown on every student's homepage) is built from stars: a property's comfort rating, and any stars you gave a store item or insurance plan. Set how many points each star is worth, and toggle sections on or off.</p>
     <div class="grid grid-3" id="lifestyleSettings"></div>
     <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyle()" id="saveLifestyleBtn">Save lifestyle settings</button>
     <div id="lifestyleMsg"></div>
@@ -155,7 +155,7 @@
       <h2 id="hLifestyleLock">Lock modules by lifestyle rating</h2>
       <p>Stop students from using certain modules while their lifestyle rating is low. Pick a cutoff and tick which modules should be locked when a student is at or below it.</p>
       <label for="lifestyleLockThreshold" id="labLifestyleLockThreshold">Lock when lifestyle rating is at or below</label>
-      <input id="lifestyleLockThreshold" type="number" min="0" max="100" step="1" style="max-width:160px;">
+      <input id="lifestyleLockThreshold" type="number" min="0" step="1" style="max-width:160px;">
       <div class="grid grid-3" id="lifestyleLockModules" style="margin-top:14px;"></div>
       <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyleLockSettings()" id="saveLifestyleLockBtn">Save module locks</button>
       <div id="lifestyleLockMsg"></div>
