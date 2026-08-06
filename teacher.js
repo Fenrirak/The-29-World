@@ -690,11 +690,15 @@ async function saveLifestyle() {
 }
 
 async function runPayDay() {
-  const { newlyPaid, hasJobs } = await payDay(CLASS_CODE);
+  const { newlyPaid, hasJobs, unapprovedCount } = await payDay(CLASS_CODE);
   if (!hasJobs) {
     alert("No students have a job assigned yet.");
+  } else if (newlyPaid > 0 && unapprovedCount > 0) {
+    alert(`Pay day complete — ${newlyPaid} student(s) paid. ${unapprovedCount} still aren't ticked as having done their job task, so they weren't paid.`);
   } else if (newlyPaid > 0) {
     alert(`Pay day complete — ${newlyPaid} student(s) paid.`);
+  } else if (unapprovedCount > 0) {
+    alert(`Nobody was paid — ${unapprovedCount} student(s) with a job aren't ticked as having done their job task yet. Tick their box on the student's profile, then run pay day again.`);
   } else {
     alert("Everyone with a job has already been paid for today.");
   }

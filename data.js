@@ -693,16 +693,17 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
     progress = (existing && existing.dateKey === dateKey) ? existing : { dateKey, paidUsernames: [] };
     t.update(classRef, { payDayProgress: progress });
   });
-  if (progress === "SKIP") return { paidCount: 0, newlyPaid: 0, hasJobs: null, alreadyRun: true };
+  if (progress === "SKIP") return { paidCount: 0, newlyPaid: 0, hasJobs: null, alreadyRun: true, unapprovedCount: 0 };
 
   const cls = await getClass(classCode);
-  if (!cls) return { paidCount: 0, newlyPaid: 0, hasJobs: false, alreadyRun };
+  if (!cls) return { paidCount: 0, newlyPaid: 0, hasJobs: false, alreadyRun, unapprovedCount: 0 };
   const students = await getClassStudents(classCode);
   const alreadyPaid = new Set(progress.paidUsernames || []);
   let paidCount = alreadyPaid.size;
   let newlyPaid = 0;
   let hasJobs = false;
   let allSucceeded = true;
+  let unapprovedCount = 0; // has a job, not yet paid today, just isn't ticked
 
   for (const student of students) {
     if (!student.jobId) continue;
@@ -714,7 +715,7 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
     // touching alreadyPaid/allSucceeded, so as soon as the teacher ticks
     // the box, the next pay day run (auto or the manual button) will
     // catch them up rather than having missed the week for good.
-    if (!isJobTaskApprovedThisWeek(student, cls)) continue;
+    if (!isJobTaskApprovedThisWeek(student, cls)) { unapprovedCount++; continue; }
     try {
       const { net, taxAmount } = applyWageTax(cls, job.wage);
       await adjustBalance(student.username, net);
@@ -736,7 +737,7 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
   if (allSucceeded) {
     await classRef.update({ lastPayDayRun: dateKey });
   }
-  return { paidCount, newlyPaid, hasJobs, alreadyRun };
+  return { paidCount, newlyPaid, hasJobs, alreadyRun, unapprovedCount };
 }
 
 // Plain-English description of when interest is next applied, for
