@@ -782,6 +782,7 @@ async function renderProfile(username) {
   rows.push(`
     <div class="profile-summary">
       <div class="profile-chip"><div class="label">Cash balance</div><div class="value">${fmtMoney(s.balance)}</div></div>
+      <div class="profile-chip"><div class="label">Savings</div><div class="value">${fmtMoney(s.savings || 0)}</div></div>
       <div class="profile-chip"><div class="label">Portfolio</div><div class="value">${fmtMoney(net)}</div></div>
       <div class="profile-chip"><div class="label">Lifestyle rating</div><div class="value">${rating}${isOverride ? ` <span class="muted-small">(overridden)</span>` : ""}</div>${band ? `<div class="muted-small">${band}</div>` : ""}</div>
     </div>
