@@ -619,17 +619,19 @@ async function setPayDay(classCode, day) {
   await classesCol().doc(classCode).update({ payDay: day });
 }
 
-// Identifies the current "pay cycle" by the date of its most recent (or
+// Identifies the current "pay cycle" by the date of its next upcoming (or
 // today's, if today IS the pay day) occurrence of the class's pay day.
-// That date only changes once pay day itself arrives — e.g. with the
-// default Friday pay day, this key is the same all week and then flips
-// the moment Friday begins, which is what makes the job-task checkbox
-// reset on pay day rather than on some unrelated Monday-start week.
+// This key is the same for the whole week leading up to and including pay
+// day itself, so a job-task approval ticked any day that week — including
+// on pay day, before pay day actually runs — stays valid when pay day
+// checks it. It only flips forward, to next week's pay day, once the
+// current pay day has passed, which is what makes the job-task checkbox
+// reset the day AFTER pay day rather than moments before pay day runs.
 function payCycleKey(payDay) {
   const targetIdx = DAY_NAMES.indexOf(payDay || "Fri");
   const todayIdx = DAY_NAMES.indexOf(nzDayName());
-  const diff = (todayIdx - targetIdx + 7) % 7;
-  const ms = dateKeyToUTC(nzDateKey()) - diff * 86400000;
+  const diff = (targetIdx - todayIdx + 7) % 7;
+  const ms = dateKeyToUTC(nzDateKey()) + diff * 86400000;
   const dt = new Date(ms);
   const y = dt.getUTCFullYear(), m = String(dt.getUTCMonth() + 1).padStart(2, "0"), d = String(dt.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
