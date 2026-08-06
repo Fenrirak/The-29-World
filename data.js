@@ -352,7 +352,8 @@ async function createTeacherAndClass(name, username, password, className) {
       property: { enabled: true, weight: 4 },
       store: { enabled: true, weight: 2 },
       insurance: { enabled: true, weight: 2 },
-      transport: { enabled: true, weight: 3 }
+      transport: { enabled: true, weight: 3 },
+      loan: { enabled: false, perAmount: 0, points: 0 }
     }
   };
 
@@ -895,6 +896,18 @@ async function setMaxLoanAmount(classCode, amount) {
 }
 async function setMaxLoanCount(classCode, count) {
   await classesCol().doc(classCode).update({ maxLoanCount: Math.max(0, Math.floor(Number(count)) || 0) });
+}
+// Lets a teacher dock lifestyle points for outstanding loan debt: for every
+// `perAmount` a student currently owes (active loans only), they lose
+// `points` off their computed lifestyle score. Feeds into lifestyleRating().
+async function setLoanLifestylePenalty(classCode, { enabled, perAmount, points }) {
+  const clean = {
+    enabled: !!enabled,
+    perAmount: Math.max(0, Number(perAmount) || 0),
+    points: Math.max(0, Number(points) || 0)
+  };
+  await classesCol().doc(classCode).update({ "lifestyleConfig.loan": clean });
+  return clean;
 }
 
 // Which tier a requested amount falls into — the teacher's price ranges
@@ -2255,6 +2268,7 @@ function withNewModuleDefaults(cls) {
     transport: { enabled: true, weight: 3 }
   };
   if (!cls.lifestyleConfig.transport) cls.lifestyleConfig.transport = { enabled: true, weight: 3 };
+  if (!cls.lifestyleConfig.loan) cls.lifestyleConfig.loan = { enabled: false, perAmount: 0, points: 0 };
   cls.lifestyleThresholds = cls.lifestyleThresholds && cls.lifestyleThresholds.length ? cls.lifestyleThresholds : [
     { min: 0, max: 10, label: "Poor", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
     { min: 10, max: 20, label: "Modest", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
@@ -3292,6 +3306,12 @@ async function lifestyleRating(username, classCode) {
       const plan = cls.insurancePlans.find(p => p.id === planId);
       if (plan) score += (plan.stars || 0) * (cfg.insurance.weight || 0);
     });
+  }
+  if (cfg.loan && cfg.loan.enabled && cfg.loan.perAmount > 0 && cfg.loan.points > 0) {
+    const owedTotal = (user.loans || [])
+      .filter(l => l.status === "active")
+      .reduce((sum, l) => sum + l.owed, 0);
+    score -= Math.floor(owedTotal / cfg.loan.perAmount) * cfg.loan.points;
   }
   // Uncapped — a student's computed score can grow without limit as they
   // accumulate property/transport/store/insurance comfort, it just can't

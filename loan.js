@@ -12,6 +12,11 @@ function paintChrome() {
   document.getElementById("labMaxLoan").innerHTML = icon("handshake", 13) + " Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
   document.getElementById("labMaxLoanCount").innerHTML = icon("handshake", 13) + " Maximum number of loans a student can have open at once (0 = no limit)";
   document.getElementById("saveMaxLoanBtn").innerHTML = icon("plus", 13) + " Save maximums";
+  document.getElementById("hLoanLifestyle").innerHTML = icon("star", 18) + " Lifestyle rating penalty";
+  document.getElementById("labLoanLifestyleEnabled").textContent = "Dock lifestyle points for outstanding loans";
+  document.getElementById("labLoanLifestylePoints").innerHTML = icon("star", 13) + " Lifestyle points lost";
+  document.getElementById("labLoanLifestylePerAmount").innerHTML = icon("coin", 13) + " Per this much owed";
+  document.getElementById("saveLoanLifestyleBtn").innerHTML = icon("plus", 13) + " Save penalty";
   document.getElementById("hTake").innerHTML = icon("handshake", 18) + " Take out a loan";
   document.getElementById("labLoanAmount").innerHTML = icon("coin", 13) + " How much do you want to borrow?";
   document.getElementById("takeLoanBtn").innerHTML = icon("send", 15) + " Borrow";
@@ -40,7 +45,7 @@ function termLabel(weeks) {
 }
 
 async function render() {
-  const cls = await getClassCached(CURRENT.classCode);
+  const cls = withNewModuleDefaults(await getClassCached(CURRENT.classCode));
   const tiers = cls.loanTiers || [];
 
   if (IS_TEACHER) {
@@ -66,6 +71,10 @@ async function render() {
     });
     document.getElementById("maxLoanInput").value = cls.maxLoanAmount || "";
     document.getElementById("maxLoanCountInput").value = cls.maxLoanCount || "";
+    const lc = cls.lifestyleConfig.loan;
+    document.getElementById("loanLifestyleEnabled").checked = !!(lc && lc.enabled);
+    document.getElementById("loanLifestylePoints").value = lc && lc.points ? lc.points : "";
+    document.getElementById("loanLifestylePerAmount").value = lc && lc.perAmount ? lc.perAmount : "";
   }
 
   if (!IS_TEACHER) {
@@ -89,6 +98,20 @@ async function render() {
       document.getElementById("loanLimitReached").textContent =
         `You have ${cls.maxLoanCount} loan${cls.maxLoanCount === 1 ? "" : "s"} open — that's the max your teacher allows at once. Pay one off to borrow again.`;
     }
+
+    const lc = cls.lifestyleConfig.loan;
+    const noteEl = document.getElementById("loanLifestyleNote");
+    if (lc && lc.enabled && lc.perAmount > 0 && lc.points > 0) {
+      const currentOwed = activeLoans.reduce((sum, l) => sum + l.owed, 0);
+      const pointsLost = Math.floor(currentOwed / lc.perAmount) * lc.points;
+      noteEl.classList.remove("hidden");
+      noteEl.innerHTML = pointsLost > 0
+        ? `${icon("star", 13)} Owing ${fmtMoney(currentOwed)} is currently costing you <strong>${pointsLost} lifestyle point${pointsLost === 1 ? "" : "s"}</strong> (${lc.points} point${lc.points === 1 ? "" : "s"} lost per ${fmtMoney(lc.perAmount)} owed).`
+        : `${icon("star", 13)} Loans here cost lifestyle points once you owe ${fmtMoney(lc.perAmount)} or more (${lc.points} point${lc.points === 1 ? "" : "s"} per ${fmtMoney(lc.perAmount)} owed).`;
+    } else {
+      noteEl.classList.add("hidden");
+    }
+
     const box = document.getElementById("myLoanBox");
     box.innerHTML = "";
     document.getElementById("loanAmount").closest("form").querySelector("button").disabled = atCountLimit;
@@ -139,7 +162,7 @@ function nzDateKeyLocal() {
 }
 
 async function updateLoanPreview() {
-  const cls = await getClassCached(CURRENT.classCode);
+  const cls = withNewModuleDefaults(await getClassCached(CURRENT.classCode));
   const amount = Number(document.getElementById("loanAmount").value);
   const preview = document.getElementById("loanPreview");
   if (!amount || amount <= 0) { preview.textContent = ""; return; }
@@ -147,7 +170,17 @@ async function updateLoanPreview() {
   if (!tier) { preview.innerHTML = `<span class="ticker-down">That amount doesn't fall within any available loan range.</span>`; return; }
   const interest = Math.round(amount * (tier.rate / 100) * 100) / 100;
   const owed = Math.round((amount + interest) * 100) / 100;
-  preview.innerHTML = `You'd owe <strong>${fmtMoney(owed)}</strong> total (${fmtMoney(interest)} interest), due back in ${termLabel(tier.termWeeks)}.`;
+  let text = `You'd owe <strong>${fmtMoney(owed)}</strong> total (${fmtMoney(interest)} interest), due back in ${termLabel(tier.termWeeks)}.`;
+  const lc = cls.lifestyleConfig.loan;
+  if (lc && lc.enabled && lc.perAmount > 0 && lc.points > 0) {
+    const me = await getUserCached(CURRENT.username);
+    const currentOwed = (me.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0);
+    const pointsAfter = Math.floor((currentOwed + owed) / lc.perAmount) * lc.points;
+    if (pointsAfter > 0) {
+      text += `<div class="muted-small">This would put you at ${fmtMoney(currentOwed + owed)} owed in total — costing you ${pointsAfter} lifestyle point${pointsAfter === 1 ? "" : "s"}.</div>`;
+    }
+  }
+  preview.innerHTML = text;
 }
 
 async function addTier(e) {
@@ -204,6 +237,19 @@ async function saveMaxLoan() {
     setMaxLoanCount(CURRENT.classCode, count)
   ]);
   document.getElementById("maxLoanMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
+  await render();
+}
+
+async function saveLoanLifestylePenalty() {
+  const enabled = document.getElementById("loanLifestyleEnabled").checked;
+  const points = document.getElementById("loanLifestylePoints").value || 0;
+  const perAmount = document.getElementById("loanLifestylePerAmount").value || 0;
+  if (enabled && (!(Number(points) > 0) || !(Number(perAmount) > 0))) {
+    document.getElementById("loanLifestyleMsg").innerHTML = `<div class="error-msg">Enter both a points value and an amount greater than zero to turn this on.</div>`;
+    return;
+  }
+  await setLoanLifestylePenalty(CURRENT.classCode, { enabled, points, perAmount });
+  document.getElementById("loanLifestyleMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
   await render();
 }
 

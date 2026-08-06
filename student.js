@@ -106,7 +106,7 @@ async function render() {
   document.getElementById("jobLabel").textContent = job ? `${job.title} — ${fmtMoney(job.wage)}/payday` : "No job assigned";
 
   const cfg = cls.lifestyleConfig || {};
-  const anyEnabled = ["property", "store", "insurance", "transport"].some(k => cfg[k] && cfg[k].enabled);
+  const anyEnabled = ["property", "store", "insurance", "transport", "loan"].some(k => cfg[k] && cfg[k].enabled);
   document.getElementById("lifestyleCard").classList.toggle("hidden", !anyEnabled);
   if (anyEnabled) {
     const score = await lifestyleRating(me.username, me.classCode);
