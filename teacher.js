@@ -862,6 +862,26 @@ async function renderProfile(username) {
         <button class="btn small coral" onclick="profileRemoveInsurance('${username}','${p.id}')">Cancel</button></div>`).join("")
     : `<p class="muted-small">No insurance plans.</p>`);
 
+  const activeLoans = (s.loans || []).filter(l => l.status === "active");
+  const todayKey = nzDateKey();
+  rows.push(`<h4>${icon("handshake", 16)} Loans</h4>`);
+  rows.push(activeLoans.length
+    ? activeLoans.map(l => {
+        const overdue = l.dueDate < todayKey;
+        return `<div class="auto-row">
+          <div class="auto-details">
+            <strong>${fmtMoney(l.principal)}</strong> borrowed &middot; ${l.rate}% over ${l.termWeeks} week${l.termWeeks === 1 ? "" : "s"}
+            <div class="muted-small">Due ${l.dueDate}${overdue ? " — overdue" : ""}</div>
+          </div>
+          <div class="${overdue ? 'status-declined' : 'status-pending'}">${fmtMoney(l.owed)} owed</div>
+        </div>`;
+      }).join("")
+    : `<p class="muted-small">No outstanding loans.</p>`);
+  if (activeLoans.length > 1) {
+    const totalOwed = Math.round(activeLoans.reduce((sum, l) => sum + l.owed, 0) * 100) / 100;
+    rows.push(`<p class="muted-small">Total owed across ${activeLoans.length} loans: <strong>${fmtMoney(totalOwed)}</strong></p>`);
+  }
+
   // Shares held: just the quantity per company, no value shown, per teacher request.
   const heldShares = (cls.companies || [])
     .map(co => ({ name: co.name, qty: co.holders ? (co.holders[username] || 0) : 0 }))
