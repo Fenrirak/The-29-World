@@ -52,10 +52,11 @@
       <div class="label">My job</div>
       <div class="value" id="jobLabel" style="font-size:1.3rem;">None yet</div>
     </div>
-    <div class="stat sky" id="lifestyleCard">
+    <div class="stat sky" id="lifestyleCard" onclick="openLifestyleBreakdown()" style="cursor:pointer;">
       <span class="icon" id="iconLifestyle"></span>
       <div class="label">Lifestyle rating</div>
       <div class="value" id="lifestyleValue">0</div>
+      <div class="muted-small" id="lifestyleHint" style="margin-top:2px;">Tap for breakdown</div>
     </div>
   </div>
 
@@ -167,6 +168,16 @@
 </main>
 
 <div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<div id="lifestyleModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:40px 16px;" ondblclick="if(event.target===this)closeLifestyleBreakdown()">
+  <div class="card" style="width:100%;max-width:480px;margin-top:0;">
+    <div class="flex-between">
+      <h2 id="lifestyleModalTitle" style="margin-bottom:2px;">Lifestyle rating</h2>
+      <button class="btn small secondary" onclick="closeLifestyleBreakdown()">Close</button>
+    </div>
+    <div id="lifestyleModalBody"></div>
+  </div>
+</div>
 
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>

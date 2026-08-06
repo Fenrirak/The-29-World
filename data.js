@@ -3318,6 +3318,71 @@ async function lifestyleRating(username, classCode) {
   // go negative.
   return Math.max(0, Math.round(score));
 }
+// Same computation as lifestyleRating(), but returns the itemised list of
+// what's adding to (or subtracting from) the score instead of just the
+// final number — powers the student-facing "why is my score X" popup.
+async function lifestyleRatingBreakdown(username, classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const user = await getUser(username);
+  if (!cls || !user) return { items: [], total: 0, overridden: false };
+  if (user.lifestyleOverride !== undefined && user.lifestyleOverride !== null) {
+    return { items: [], total: Math.max(0, Math.round(Number(user.lifestyleOverride) || 0)), overridden: true };
+  }
+  const cfg = cls.lifestyleConfig;
+  const items = [];
+  let score = 0;
+
+  if (cfg.property && cfg.property.enabled) {
+    const owned = cls.properties.find(p => p.owner === username);
+    if (owned) {
+      const pts = owned.comfort * (cfg.property.weight || 0);
+      score += pts;
+      items.push({ type: "gain", label: owned.name || "Property", detail: `${owned.comfort} comfort &times; ${cfg.property.weight || 0} pts/star`, points: pts });
+    }
+  }
+  if (cfg.transport && cfg.transport.enabled) {
+    const owned = cls.vehicles.find(v => v.owner === username);
+    if (owned) {
+      const pts = owned.comfort * (cfg.transport.weight || 0);
+      score += pts;
+      items.push({ type: "gain", label: owned.name || "Vehicle", detail: `${owned.comfort} comfort &times; ${cfg.transport.weight || 0} pts/star`, points: pts });
+    }
+  }
+  if (cfg.store && cfg.store.enabled) {
+    const owned = user.storeItems || [];
+    owned.forEach(itemId => {
+      const item = cls.storeItems.find(i => i.id === itemId);
+      if (item) {
+        const pts = (item.stars || 0) * (cfg.store.weight || 0);
+        score += pts;
+        items.push({ type: "gain", label: item.name, detail: `${item.stars || 0}★ &times; ${cfg.store.weight || 0} pts/star`, points: pts });
+      }
+    });
+  }
+  if (cfg.insurance && cfg.insurance.enabled) {
+    const owned = user.insurance || [];
+    owned.forEach(planId => {
+      const plan = cls.insurancePlans.find(p => p.id === planId);
+      if (plan) {
+        const pts = (plan.stars || 0) * (cfg.insurance.weight || 0);
+        score += pts;
+        items.push({ type: "gain", label: plan.name, detail: `${plan.stars || 0}★ &times; ${cfg.insurance.weight || 0} pts/star`, points: pts });
+      }
+    });
+  }
+  if (cfg.loan && cfg.loan.enabled && cfg.loan.perAmount > 0 && cfg.loan.points > 0) {
+    const owedTotal = (user.loans || [])
+      .filter(l => l.status === "active")
+      .reduce((sum, l) => sum + l.owed, 0);
+    const penalty = Math.floor(owedTotal / cfg.loan.perAmount) * cfg.loan.points;
+    if (penalty > 0) {
+      score -= penalty;
+      items.push({ type: "loss", label: "Outstanding loans", detail: `${fmtMoney(owedTotal)} owed &middot; ${cfg.loan.points} pt${cfg.loan.points === 1 ? "" : "s"} per ${fmtMoney(cfg.loan.perAmount)} owed`, points: penalty });
+    }
+  }
+
+  return { items, total: Math.max(0, Math.round(score)), overridden: false };
+}
 // Teacher-set lifestyle score that overrides the computed one entirely —
 // the student can't move it by buying/selling anything while it's active.
 async function setLifestyleOverride(username, score) {

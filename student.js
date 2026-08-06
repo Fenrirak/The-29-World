@@ -404,4 +404,47 @@ async function shDoCheckin() {
   await render();
 }
 
+async function openLifestyleBreakdown() {
+  const modal = document.getElementById("lifestyleModal");
+  const body = document.getElementById("lifestyleModalBody");
+  body.innerHTML = `<p class="muted-small">Loading...</p>`;
+  modal.classList.remove("hidden");
+
+  const [breakdown, label] = await Promise.all([
+    lifestyleRatingBreakdown(CURRENT.username, CURRENT.classCode),
+    lifestyleBandForStudent(CURRENT.username, CURRENT.classCode)
+  ]);
+
+  document.getElementById("lifestyleModalTitle").innerHTML =
+    icon("star", 20) + ` Lifestyle rating: ${breakdown.total}${label ? " — " + label : ""}`;
+
+  if (breakdown.overridden) {
+    body.innerHTML = `<p class="muted-small">Your teacher has set this score manually, so it isn't calculated from what you own — it's fixed at <strong>${breakdown.total}</strong> until they change or clear it.</p>`;
+    return;
+  }
+
+  if (breakdown.items.length === 0) {
+    body.innerHTML = `<p class="muted-small">Nothing is affecting your score yet — property, a vehicle, store items, or insurance can raise it.</p>`;
+    return;
+  }
+
+  const gains = breakdown.items.filter(i => i.type === "gain");
+  const losses = breakdown.items.filter(i => i.type === "loss");
+  const rows = arr => arr.map(i => `
+    <div class="auto-row">
+      <div class="auto-details">${i.label}<div class="muted-small">${i.detail}</div></div>
+      <div class="${i.type === "gain" ? "status-approved" : "status-declined"}">${i.type === "gain" ? "+" : "-"}${i.points}</div>
+    </div>
+  `).join("");
+
+  body.innerHTML = `
+    ${gains.length ? `<h4>${icon("star", 14)} Adding to your score</h4>${rows(gains)}` : ""}
+    ${losses.length ? `<h4 style="margin-top:14px;">${icon("coin", 14)} Taking away from your score</h4>${rows(losses)}` : ""}
+  `;
+}
+
+function closeLifestyleBreakdown() {
+  document.getElementById("lifestyleModal").classList.add("hidden");
+}
+
 document.addEventListener("DOMContentLoaded", init);
