@@ -430,16 +430,26 @@ async function openLifestyleBreakdown() {
 
   const gains = breakdown.items.filter(i => i.type === "gain");
   const losses = breakdown.items.filter(i => i.type === "loss");
-  const rows = arr => arr.map(i => `
-    <div class="auto-row">
-      <div class="auto-details">${i.label}<div class="muted-small">${i.detail}</div></div>
-      <div class="${i.type === "gain" ? "status-approved" : "status-declined"}">${i.type === "gain" ? "+" : "-"}${i.points}</div>
-    </div>
-  `).join("");
+  const rows = arr => arr.length
+    ? arr.map(i => `
+        <div class="auto-row">
+          <div class="auto-details">${i.label}<div class="muted-small">${i.detail}</div></div>
+          <div class="${i.type === "gain" ? "status-approved" : "status-declined"}">${i.type === "gain" ? "+" : "-"}${i.points}</div>
+        </div>
+      `).join("")
+    : `<p class="muted-small">None right now.</p>`;
 
   body.innerHTML = `
-    ${gains.length ? `<h4>${icon("star", 14)} Adding to your score</h4>${rows(gains)}` : ""}
-    ${losses.length ? `<h4 style="margin-top:14px;">${icon("coin", 14)} Taking away from your score</h4>${rows(losses)}` : ""}
+    <div class="grid grid-2" style="align-items:start;">
+      <div>
+        <h4>${icon("star", 14)} Adding to your score</h4>
+        ${rows(gains)}
+      </div>
+      <div>
+        <h4>${icon("coin", 14)} Taking away from your score</h4>
+        ${rows(losses)}
+      </div>
+    </div>
   `;
 }
 
