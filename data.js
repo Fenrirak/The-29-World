@@ -1775,17 +1775,9 @@ async function classLeaderboard(classCode, viewerUsername) {
       net: Math.round((s.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits - owed) * 100) / 100
     };
   });
-  // Loan/mortgage debt is private — only the student themself (or the
-  // teacher, when viewerUsername is omitted) should see the "owed" figure.
-  // `net` still reflects the true debt-adjusted total for everyone, so the
-  // ranking stays accurate; we just strip the breakdown detail from rows
-  // that aren't the viewer's own.
-  if (viewerUsername) {
-    rows.forEach(row => {
-      if (row.username !== viewerUsername) delete row.owed;
-    });
-  }
-
+  // Loan/mortgage debt ("owed") is shown for every student on the
+  // leaderboard, not just the viewer's own row — classmates can see each
+  // other's debt, same as every other breakdown figure here.
   rows.sort((a, b) => b.net - a.net);
   return rows;
 }
