@@ -10,6 +10,8 @@ function paintChrome() {
   document.getElementById("pageTitle").innerHTML = icon("car", 26) + " Transport";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a vehicle";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add vehicle";
+  document.getElementById("hMyVehicles").innerHTML = icon("car", 18) + " My vehicles";
+  document.getElementById("hBrowse").innerHTML = icon("car", 18) + " Available vehicles";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -22,6 +24,7 @@ async function init() {
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("myVehiclesPanel").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
   // These 8 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
@@ -54,6 +57,31 @@ async function render() {
   const vehicles = cls.vehicles || [];
   const students = await getClassStudents(me.classCode);
   const nameOf = un => (students.find(s => s.username === un) || {}).name || un;
+
+  if (!IS_TEACHER) {
+    const mine = vehicles.filter(v => (v.owners || []).includes(me.username));
+    const myList = document.getElementById("myVehiclesList");
+    myList.innerHTML = "";
+    document.getElementById("noMyVehicles").classList.toggle("hidden", mine.length > 0);
+    mine.forEach(v => {
+      const div = document.createElement("div");
+      div.className = "card company-card";
+      div.innerHTML = `
+        <div class="flex-between">
+          <div>
+            <h4>${icon("car", 20)}${v.name}</h4>
+            <p>${v.description || "No description provided."}</p>
+            <p>${comfortStars(v.comfort)} comfort</p>
+            <p><strong>${fmtMoney(v.price)}</strong> paid</p>
+          </div>
+          <div class="row-flex" style="gap:8px;">
+            <button class="btn small secondary" onclick="sellMine('${v.id}')">Sell back</button>
+          </div>
+        </div>
+      `;
+      myList.appendChild(div);
+    });
+  }
 
   const list = document.getElementById("vehicleList");
   list.innerHTML = "";
