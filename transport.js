@@ -60,7 +60,17 @@ async function render() {
   document.getElementById("noVehicles").classList.toggle("hidden", vehicles.length > 0);
 
   vehicles.forEach(v => {
-    const isMine = v.owner === me.username;
+    const owners = v.owners || [];
+    const isMine = owners.includes(me.username);
+    const ownedLabel = owners.length === 0 ? "Available"
+      : `Owned by ${owners.length} student${owners.length === 1 ? "" : "s"}`;
+    const ownerRows = IS_TEACHER && owners.length > 0
+      ? `<div class="owner-list">${owners.map(o => `
+          <div class="auto-row">
+            <div class="auto-details">${nameOf(o)}</div>
+            <button class="btn small secondary" onclick="forceSell('${v.id}','${o}')">Sell back</button>
+          </div>`).join("")}</div>`
+      : "";
     const div = document.createElement("div");
     div.className = "card company-card";
     div.innerHTML = `
@@ -69,14 +79,15 @@ async function render() {
           <h4>${icon("car", 20)}${v.name} ${isMine ? '<span class="badge mint">Yours</span>' : ""}</h4>
           <p>${v.description || "No description provided."}</p>
           <p>${comfortStars(v.comfort)} comfort</p>
-          <p><strong>${fmtMoney(v.price)}</strong> &middot; cash purchase only</p>
-          <p class="muted-small">${v.owner ? `Owned by ${nameOf(v.owner)}` : "Available"}</p>
+          <p><strong>${fmtMoney(v.price)}</strong> &middot; cash purchase only, unlimited stock</p>
+          <p class="muted-small">${ownedLabel}</p>
+          ${ownerRows}
         </div>
         <div class="row-flex" style="gap:8px;">
           ${IS_TEACHER
-            ? `<button class="btn small secondary" onclick="editVeh('${v.id}')">${icon("plus", 13)} Edit</button>${v.owner ? `<button class="btn small secondary" onclick="forceSell('${v.id}')">Sell back</button>` : ""}<button class="btn small coral" onclick="deleteVeh('${v.id}')">${icon("trash", 13)} Remove</button>`
-            : v.owner
-              ? (isMine ? `<button class="btn small secondary" onclick="sellMine('${v.id}')">Sell back</button>` : "")
+            ? `<button class="btn small secondary" onclick="editVeh('${v.id}')">${icon("plus", 13)} Edit</button><button class="btn small coral" onclick="deleteVeh('${v.id}')">${icon("trash", 13)} Remove</button>`
+            : isMine
+              ? `<button class="btn small secondary" onclick="sellMine('${v.id}')">Sell back</button>`
               : `<button class="btn small gold" onclick="buyVeh('${v.id}')">Buy</button>`}
         </div>
       </div>
@@ -134,27 +145,39 @@ function cancelEditVeh() {
 }
 
 async function deleteVeh(id) {
-  if (confirm("Remove this vehicle? Any owner will not be refunded automatically.")) {
+  if (confirm("Remove this vehicle? Any owners will not be refunded automatically.")) {
     await removeVehicle(CURRENT.classCode, id);
     await render();
   }
 }
-async function forceSell(id) {
-  if (confirm("Sell this vehicle back to the class (owner gets 90% of price)?")) {
-    await sellVehicle(CURRENT.classCode, id, 0.9);
+async function forceSell(id, username) {
+  if (confirm("Sell this student's vehicle back to the class (they get 90% of price)?")) {
+    await sellVehicle(CURRENT.classCode, id, username, 0.9);
     await render();
   }
 }
 async function sellMine(id) {
   if (confirm("Sell your vehicle back for 85% of its price?")) {
-    await sellVehicle(CURRENT.classCode, id, 0.85);
+    await sellVehicle(CURRENT.classCode, id, CURRENT.username, 0.85);
     await render();
   }
 }
 async function buyVeh(id) {
   const res = await buyVehicle(CURRENT.username, CURRENT.classCode, id);
-  document.getElementById("msg-" + id).innerHTML = res.ok ? `<div class="success-msg">Congratulations, it's yours!</div>` : `<div class="error-msg">${res.error}</div>`;
+  if (!res.ok) {
+    document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`;
+    await render();
+    return;
+  }
   await render();
+  // render() rebuilds the vehicle list (and wipes msg-<id> in the process),
+  // so the success message is set *after* render and given its own timer
+  // rather than being written pre-render, where it'd disappear instantly.
+  const msgEl = document.getElementById("msg-" + id);
+  if (msgEl) {
+    msgEl.innerHTML = `<div class="success-msg">Congratulations, it's yours!</div>`;
+    setTimeout(() => { msgEl.innerHTML = ""; }, 3000);
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);

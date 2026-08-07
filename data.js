@@ -604,7 +604,7 @@ async function removeStudent(classCode, studentUser) {
     cls.automations = (cls.automations || []).filter(a => a.studentUser !== studentUser);
     cls.jobApplications = (cls.jobApplications || []).filter(a => a.studentUser !== studentUser);
     (cls.properties || []).forEach(p => { if (p.owner === studentUser) { p.owner = null; p.mortgage = null; } });
-    (cls.vehicles || []).forEach(v => { if (v.owner === studentUser) v.owner = null; });
+    (cls.vehicles || []).forEach(v => { v.owners = (v.owners || []).filter(o => o !== studentUser); });
     t.update(classRef, {
       companies: cls.companies, students: cls.students,
       automations: cls.automations, jobApplications: cls.jobApplications,
@@ -1425,7 +1425,7 @@ async function addVehicle(classCode, v) {
     cls.vehicles.push({
       id: uid("veh"), name: v.name, price: Number(v.price),
       comfort: Math.max(1, Math.min(5, Number(v.comfort) || 1)),
-      description: v.description || "", owner: null
+      description: v.description || "", owners: []
     });
     t.update(classRef, { vehicles: cls.vehicles });
   });
@@ -1468,26 +1468,27 @@ async function buyVehicle(username, classCode, vehId) {
       const cls = withNewModuleDefaults(classSnap.data());
       const veh = cls.vehicles.find(v => v.id === vehId);
       if (!veh) throw new Error("NOT_FOUND");
-      if (veh.owner) throw new Error("TAKEN");
+      veh.owners = veh.owners || [];
+      if (veh.owners.includes(username)) throw new Error("ALREADY_OWN");
       const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "transport", veh.price);
       taxAmount = tax;
       const isTeacher = user.role === "teacher";
       if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
-      veh.owner = username;
+      veh.owners.push(username);
       vehName = veh.name;
       cashPaid = taxedPrice;
       if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - taxedPrice) * 100) / 100 });
       t.update(classRef, { vehicles: cls.vehicles });
     });
   } catch (e) {
-    if (e.message === "TAKEN") return { ok: false, error: "Someone already bought that vehicle." };
+    if (e.message === "ALREADY_OWN") return { ok: false, error: "You already own this vehicle." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
 }
-async function sellVehicle(classCode, vehId, rate) {
+async function sellVehicle(classCode, vehId, username, rate) {
   const classRef = classesCol().doc(classCode);
   let owner = null, payout = 0, vehName = "";
   await fdb.runTransaction(async (t) => {
@@ -1495,11 +1496,13 @@ async function sellVehicle(classCode, vehId, rate) {
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const veh = cls.vehicles.find(v => v.id === vehId);
-    if (!veh || !veh.owner) return;
-    owner = veh.owner;
+    if (!veh) return;
+    veh.owners = veh.owners || [];
+    if (!veh.owners.includes(username)) return;
+    owner = username;
     vehName = veh.name;
     payout = Math.round(veh.price * (rate !== undefined ? rate : 0.9) * 100) / 100;
-    veh.owner = null;
+    veh.owners = veh.owners.filter(o => o !== username);
     t.update(classRef, { vehicles: cls.vehicles });
   });
   if (owner) {
@@ -1752,7 +1755,7 @@ async function classLeaderboard(classCode, viewerUsername) {
 
     // Property and vehicles aren't listed on the student doc — ownership
     // lives on the class doc's properties/vehicles arrays (p.owner /
-    // v.owner) — so find what this student owns by scanning those.
+    // v.owners) — so find what this student owns by scanning those.
     let propertyValue = 0, mortgageOwed = 0;
     (cls.properties || []).forEach(p => {
       if (p.owner !== s.username) return;
@@ -1763,7 +1766,7 @@ async function classLeaderboard(classCode, viewerUsername) {
     mortgageOwed = Math.round(mortgageOwed * 100) / 100;
 
     let vehicleValue = 0;
-    (cls.vehicles || []).forEach(v => { if (v.owner === s.username) vehicleValue += v.price; });
+    (cls.vehicles || []).forEach(v => { if ((v.owners || []).includes(s.username)) vehicleValue += v.price; });
     vehicleValue = Math.round(vehicleValue * 100) / 100;
 
     const savings = s.savings || 0;
@@ -1789,7 +1792,7 @@ async function resetClass(classCode) {
   })));
   const cls = await getClass(classCode);
   const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null }));
-  const vehicles = (cls.vehicles || []).map(v => ({ ...v, owner: null }));
+  const vehicles = (cls.vehicles || []).map(v => ({ ...v, owners: [] }));
   await classesCol().doc(classCode).update({
     companies: [], txns: [], automations: [], jobApplications: [],
     properties, vehicles, eventLog: []
@@ -2052,7 +2055,7 @@ async function processWeeklyBigEvents(classCode, opts) {
       if (d.kind === "good") return true;
       if (d.module === "income") return !!student.jobId;
       if (d.module === "property") return cls.properties.some(p => p.owner === student.username);
-      if (d.module === "transport") return cls.vehicles.some(v => v.owner === student.username);
+      if (d.module === "transport") return cls.vehicles.some(v => (v.owners || []).includes(student.username));
       return true;
     });
     if (eligibleDefs.length === 0) continue;
@@ -2113,8 +2116,8 @@ async function resolveBigEvent(username, classCode, logId, choice) {
           if (prop) { prop.owner = null; prop.mortgage = null; }
           t.update(classRef, { properties: cls.properties, bigEventLog: cls.bigEventLog });
         } else if (entry.module === "transport") {
-          const veh = cls.vehicles.find(v => v.owner === username);
-          if (veh) veh.owner = null;
+          const veh = cls.vehicles.find(v => (v.owners || []).includes(username));
+          if (veh) veh.owners = veh.owners.filter(o => o !== username);
           t.update(classRef, { vehicles: cls.vehicles, bigEventLog: cls.bigEventLog });
         }
         if (entry.module === "income") t.update(classRef, { bigEventLog: cls.bigEventLog });
@@ -3186,11 +3189,12 @@ async function getStudentPossessions(username, classCode) {
   const user = await getUser(username);
   if (!cls || !user) return null;
   const property = cls.properties.find(p => p.owner === username) || null;
-  const vehicle = cls.vehicles.find(v => v.owner === username) || null;
+  const vehicles = cls.vehicles.filter(v => (v.owners || []).includes(username));
+  const vehicle = vehicles.reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
   const storeItems = (user.storeItems || []).map(id => cls.storeItems.find(i => i.id === id)).filter(Boolean)
     .map(i => ({ ...i }));
   const insurance = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).filter(Boolean);
-  return { property, vehicle, storeItems, insurance };
+  return { property, vehicle, vehicles, storeItems, insurance };
 }
 
 /* ===================== Lifestyle rating ===================== */
@@ -3260,7 +3264,8 @@ async function lifestyleBandForStudent(username, classCode) {
   const board = await classLeaderboard(classCode);
   const row = board.find(r => r.username === username);
   const property = (cls.properties || []).find(p => p.owner === username);
-  const vehicle = (cls.vehicles || []).find(v => v.owner === username);
+  const vehicle = (cls.vehicles || []).filter(v => (v.owners || []).includes(username))
+    .reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
   const stats = {
     netWorth: row ? row.net : 0,
     propertyComfort: property ? (property.comfort || 0) : 0,
@@ -3285,7 +3290,8 @@ async function lifestyleRating(username, classCode) {
     if (owned) score += owned.comfort * (cfg.property.weight || 0);
   }
   if (cfg.transport && cfg.transport.enabled) {
-    const owned = cls.vehicles.find(v => v.owner === username);
+    const owned = cls.vehicles.filter(v => (v.owners || []).includes(username))
+      .reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
     if (owned) score += owned.comfort * (cfg.transport.weight || 0);
   }
   if (cfg.store && cfg.store.enabled) {
@@ -3336,7 +3342,8 @@ async function lifestyleRatingBreakdown(username, classCode) {
     }
   }
   if (cfg.transport && cfg.transport.enabled) {
-    const owned = cls.vehicles.find(v => v.owner === username);
+    const owned = cls.vehicles.filter(v => (v.owners || []).includes(username))
+      .reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
     if (owned) {
       const pts = owned.comfort * (cfg.transport.weight || 0);
       score += pts;
