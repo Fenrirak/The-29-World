@@ -2234,6 +2234,14 @@ function withNewModuleDefaults(cls) {
   cls.maxLoanAmount = cls.maxLoanAmount || 0; // 0 = no extra class-wide cap beyond the tiers themselves
   cls.maxLoanCount = cls.maxLoanCount || 0; // 0 = no cap on how many loans a student can have open at once
   cls.vehicles = cls.vehicles || [];
+  // Migrate pre-update vehicles, which stored a single `owner` username,
+  // into the current `owners` array so vehicles bought before this change
+  // still show up as owned instead of looking unowned.
+  cls.vehicles.forEach(v => {
+    if (v.owners === undefined) {
+      v.owners = v.owner ? [v.owner] : [];
+    }
+  });
   cls.interestAuto = cls.interestAuto || false;
   cls.cashInterestRate = cls.cashInterestRate || 0;
   cls.interestFrequency = cls.interestFrequency || "weekly";
