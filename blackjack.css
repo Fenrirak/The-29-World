@@ -1,0 +1,146 @@
+/* Blackjack table — layered on top of style.css, which already defines
+   .card, .btn, .muted-small, .success-msg, .error-msg, .hidden, and the
+   --gold/--coral colour variables used elsewhere in The 29 World. */
+
+.bj-table {
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 14px;
+  background: radial-gradient(ellipse at center, #1f5c3f 0%, #123626 100%);
+  border: 6px solid #5a3a1e;
+}
+
+.bj-dealer-row {
+  text-align: center;
+  padding-bottom: 16px;
+  border-bottom: 2px dashed rgba(255,255,255,0.25);
+  margin-bottom: 16px;
+}
+
+.bj-seat-label {
+  color: #fff;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  font-size: 12px;
+  opacity: .85;
+  margin-bottom: 6px;
+}
+
+.bj-seats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.bj-seat {
+  text-align: center;
+  padding: 10px 6px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  transition: background .2s;
+}
+
+.bj-seat.is-human {
+  background: rgba(255,215,120,0.14);
+  box-shadow: 0 0 0 2px rgba(255,215,120,0.5) inset;
+}
+
+.bj-seat.is-active {
+  box-shadow: 0 0 0 2px #ffd778 inset, 0 0 14px rgba(255,215,120,0.6);
+}
+
+.bj-seat-name {
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.bj-hand-group {
+  margin-bottom: 8px;
+}
+
+.bj-hand {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-height: 54px;
+}
+
+.bj-card {
+  width: 34px;
+  height: 48px;
+  border-radius: 5px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 13px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  border: 1px solid #ccc;
+  font-family: Trebuchet MS, sans-serif;
+}
+
+.bj-card.red { color: #c9503a; }
+.bj-card.black { color: #1f2b44; }
+
+.bj-card.face-down {
+  background: repeating-linear-gradient(45deg, #2a4d8f, #2a4d8f 4px, #1f3a6b 4px, #1f3a6b 8px);
+  border: 1px solid #16294d;
+}
+
+.bj-total {
+  color: #ffe9a8;
+  font-weight: 900;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.bj-outcome {
+  font-weight: 800;
+  font-size: 12px;
+  margin-top: 2px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  display: inline-block;
+}
+
+.bj-outcome.won { background: #2e9873; color: #fff; }
+.bj-outcome.lost { background: #c9503a; color: #fff; }
+.bj-outcome.push { background: #808a9a; color: #fff; }
+
+@media (max-width: 640px) {
+  .bj-seats-row { grid-template-columns: 1fr; }
+  .bj-card { width: 30px; height: 42px; font-size: 12px; }
+}
+
+/* Roulette/Blackjack mode switcher */
+.mode-switch {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0 20px;
+}
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 2px solid var(--gold, #d4a24c);
+  background: transparent;
+  color: var(--gold, #d4a24c);
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.mode-btn:hover { background: rgba(212,162,76,0.12); }
+.mode-btn.active {
+  background: var(--gold, #d4a24c);
+  color: #1f2b44;
+}
+.mode-btn .icon-slot { width: 18px; height: 18px; display: inline-flex; }
+

@@ -1957,6 +1957,452 @@ async function setGamblingEnabled(classCode, enabled) {
   });
 }
 
+/* ===================== Gambling (Blackjack) =====================
+   Rules implemented strictly from Christchurch Casino's public
+   "Blackjack — How to Play" guide (4 decks, 3:2 blackjack, doubling on
+   any 2-card total that does NOT include an Ace, splitting same-value
+   cards up to twice — max 3 hands — split Aces get exactly one card
+   each and can't make a "blackjack", insurance at 2:1 when the dealer
+   shows an Ace, original-bet-only protection against a dealer
+   blackjack after doubling/splitting). Two settings not stated in the
+   PDF were confirmed with the teacher building this: the dealer stands
+   on every 17 (hard or soft), and the bots play full basic strategy. */
+async function saveBlackjackSettings(classCode, settings) {
+  await classesCol().doc(classCode).update({
+    blackjack: {
+      enabled: settings.enabled !== false,
+      minBet: Math.max(0, Number(settings.minBet) || 0),
+      maxBet: Math.max(0, Number(settings.maxBet) || 0)
+    }
+  });
+}
+
+const BJ_SUITS = ["S", "H", "D", "C"];
+const BJ_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+const BJ_NUM_DECKS = 4;
+const BJ_BOT_NAMES = ["Ana", "Miro", "Kahu", "Priya", "Leo", "Sione"];
+
+// Rejection-sampled random ints from crypto.getRandomValues (falls back to
+// Math.random if unavailable) — avoids the modulo bias a plain
+// `Math.random() * n | 0` would have, so the shuffle below is unbiased.
+function bjRandomInt(maxExclusive) {
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    const maxUint32 = 0xFFFFFFFF;
+    const limit = maxUint32 - (maxUint32 % maxExclusive);
+    const buf = new Uint32Array(1);
+    let x;
+    do { crypto.getRandomValues(buf); x = buf[0]; } while (x >= limit);
+    return x % maxExclusive;
+  }
+  return Math.floor(Math.random() * maxExclusive);
+}
+// Fisher-Yates shuffle — every permutation equally likely, so the shoe is a
+// fair shuffle of the 4 decks.
+function bjShuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = bjRandomInt(i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function bjBuildShoe() {
+  const shoe = [];
+  for (let d = 0; d < BJ_NUM_DECKS; d++) {
+    BJ_SUITS.forEach(s => BJ_RANKS.forEach(r => shoe.push({ r, s })));
+  }
+  return bjShuffle(shoe);
+}
+// Draws (removes) the top card of the shoe — once drawn it is gone from
+// the shoe for the rest of the round, exactly like cards leaving a real
+// shoe until it's reshuffled for the next round.
+function bjDraw(shoe) {
+  if (!shoe.length) throw new Error("SHOE_EMPTY");
+  return shoe.pop();
+}
+function bjCardValue(rank) {
+  if (rank === "A") return 11;
+  if (rank === "J" || rank === "Q" || rank === "K") return 10;
+  return Number(rank);
+}
+function bjHandValue(cards) {
+  let total = 0, aces = 0;
+  cards.forEach(c => { total += bjCardValue(c.r); if (c.r === "A") aces++; });
+  while (total > 21 && aces > 0) { total -= 10; aces--; }
+  return { total, soft: aces > 0 };
+}
+function bjIsBust(cards) { return bjHandValue(cards).total > 21; }
+// "Blackjack" = a natural 21 on the first two cards. A 21 reached via a
+// split Ace (one card only, per the rules) never counts as blackjack.
+function bjIsNaturalBlackjack(cards) { return cards.length === 2 && bjHandValue(cards).total === 21; }
+function bjCardLabel(c) { return c.r + c.s; }
+
+/* ---- Basic strategy for the two bot players (cosmetic, no real money) ---- */
+function bjBotDecision(cards, dealerUpRank, canDouble, canSplit) {
+  const dealerVal = bjCardValue(dealerUpRank) === 11 ? 11 : bjCardValue(dealerUpRank);
+  const { total, soft } = bjHandValue(cards);
+
+  if (canSplit && cards.length === 2 && bjCardValue(cards[0].r) === bjCardValue(cards[1].r)) {
+    const v = bjCardValue(cards[0].r);
+    if (cards[0].r === "A" || v === 8) return "split";
+    if (v === 9) return ([2, 3, 4, 5, 6, 8, 9].includes(dealerVal)) ? "split" : "stand";
+    if (v === 7) return (dealerVal <= 7) ? "split" : "hit";
+    if (v === 6) return (dealerVal >= 2 && dealerVal <= 6) ? "split" : "hit";
+    if (v === 4) return (dealerVal === 5 || dealerVal === 6) ? "split" : "hit";
+    if (v === 2 || v === 3) return (dealerVal >= 2 && dealerVal <= 7) ? "split" : "hit";
+    // v === 5 or v === 10: never split, fall through to hard-total logic below
+  }
+
+  if (soft) {
+    if (total >= 19) return "stand";
+    if (total === 18) {
+      if (canDouble && dealerVal >= 3 && dealerVal <= 6) return "double";
+      return (dealerVal >= 9) ? "hit" : "stand";
+    }
+    if (total === 17) return (canDouble && dealerVal >= 3 && dealerVal <= 6) ? "double" : "hit";
+    if (total === 15 || total === 16) return (canDouble && dealerVal >= 4 && dealerVal <= 6) ? "double" : "hit";
+    if (total === 13 || total === 14) return (canDouble && dealerVal >= 5 && dealerVal <= 6) ? "double" : "hit";
+    return "hit";
+  }
+
+  if (total <= 8) return "hit";
+  if (total === 9) return (canDouble && dealerVal >= 3 && dealerVal <= 6) ? "double" : "hit";
+  if (total === 10) return (canDouble && dealerVal >= 2 && dealerVal <= 9) ? "double" : "hit";
+  if (total === 11) return (canDouble && dealerVal <= 10) ? "double" : "hit";
+  if (total === 12) return (dealerVal >= 4 && dealerVal <= 6) ? "stand" : "hit";
+  if (total >= 13 && total <= 16) return (dealerVal >= 2 && dealerVal <= 6) ? "stand" : "hit";
+  return "stand";
+}
+
+// Plays out one bot's hand(s) to completion at deal time — bots never
+// touch real money, so they can be resolved immediately without pausing
+// the round, then just get replayed/animated on the client in table order.
+function bjPlayBot(shoe, initialCards, dealerUpRank) {
+  let hands = [{ cards: initialCards, doubled: false, isSplitAces: false }];
+  let splits = 0;
+  let i = 0;
+  while (i < hands.length) {
+    const h = hands[i];
+    for (;;) {
+      const canDouble = h.cards.length === 2 && !h.doubled && !h.isSplitAces && !h.cards.some(c => c.r === "A");
+      const canSplit = h.cards.length === 2 && splits < 2 && !h.isSplitAces && bjCardValue(h.cards[0].r) === bjCardValue(h.cards[1].r);
+      const decision = bjPlayBot_isFirstBust(h) ? "stand" : bjBotDecision(h.cards, dealerUpRank, canDouble, canSplit);
+      if (decision === "split" && canSplit) {
+        const isAces = h.cards[0].r === "A";
+        const otherCard = h.cards.pop();
+        h.cards.push(bjDraw(shoe));
+        const newHand = { cards: [otherCard, bjDraw(shoe)], doubled: false, isSplitAces: isAces };
+        if (isAces) { h.isSplitAces = true; }
+        hands.splice(i + 1, 0, newHand);
+        splits++;
+        if (isAces) break; // split aces: exactly one card each, forced stand
+        continue;
+      }
+      if (decision === "double" && canDouble) {
+        h.doubled = true;
+        h.cards.push(bjDraw(shoe));
+        break;
+      }
+      if (decision === "hit") {
+        h.cards.push(bjDraw(shoe));
+        if (bjIsBust(h.cards) || bjHandValue(h.cards).total === 21) break;
+        continue;
+      }
+      break; // stand
+    }
+    i++;
+  }
+  return hands.map(h => ({ cards: h.cards, total: bjHandValue(h.cards).total, bust: bjIsBust(h.cards), doubled: h.doubled }));
+}
+function bjPlayBot_isFirstBust(h) { return bjIsBust(h.cards); }
+
+function bjSeatOrder() { return [1, 2, 3]; }
+
+// Deals a fresh round: builds+shuffles a brand-new 4-deck shoe (a real
+// table also reshuffles between rounds), seats the human in a random seat
+// (1, 2 or 3) with the other two seats filled by bots, deals in strict
+// table order (seat1, seat2, seat3, dealer-up, seat1, seat2, seat3,
+// dealer-hole), then instantly resolves the two bot hands since they
+// never depend on the human's choices. The human's bet is escrowed
+// immediately, same as chips leaving your hand onto the table.
+async function startBlackjackRound(username, classCode, betAmount) {
+  if (await isModuleLockedForStudent(username, classCode, "gambling")) {
+    return { ok: false, error: "Gambling is locked for you right now because of your lifestyle rating." };
+  }
+  betAmount = Number(betAmount);
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  if (!cls) return { ok: false, error: "Class not found." };
+  if (!cls.gambling.enabled) return { ok: false, error: "Your teacher has temporarily turned off gambling for this class." };
+  const bj = cls.blackjack;
+  if (!bj.enabled) return { ok: false, error: "Your teacher has temporarily turned off Blackjack for this class." };
+  if (!(betAmount > 0)) return { ok: false, error: "Enter a bet amount greater than zero." };
+  if (betAmount < bj.minBet || betAmount > bj.maxBet) return { ok: false, error: `Bets must be between ${fmtMoney(bj.minBet)} and ${fmtMoney(bj.maxBet)}.` };
+
+  if (cls.gambling.dailyBetCap) {
+    const todayKey = nzDateKey();
+    const betToday = (cls.txns || [])
+      .filter(t => t.type === "gambling" && t.from === username && nzDateKey(new Date(t.ts || 0)) === todayKey)
+      .reduce((sum, t) => sum + (t.bet !== undefined ? t.bet : t.amount), 0);
+    if (betToday + betAmount > cls.gambling.dailyBetCap) {
+      const remaining = Math.max(0, cls.gambling.dailyBetCap - betToday);
+      return { ok: false, error: `Daily betting limit reached — you can bet up to ${fmtMoney(cls.gambling.dailyBetCap)} per day, and you've already bet ${fmtMoney(betToday)} today (${fmtMoney(remaining)} left).` };
+    }
+  }
+
+  const user = await getUser(username);
+  if (!user) return { ok: false, error: "User not found." };
+  if (user.blackjackRound) return { ok: false, error: "You already have a Blackjack round in progress." };
+  if (user.role !== "teacher" && user.balance < betAmount) return { ok: false, error: "You don't have enough money for that bet." };
+
+  const shoe = bjBuildShoe();
+  const humanSeat = 1 + bjRandomInt(3);
+  const botSeats = [1, 2, 3].filter(s => s !== humanSeat);
+  const botNames = bjShuffle(BJ_BOT_NAMES).slice(0, 2);
+  const seatCards = { 1: [], 2: [], 3: [] };
+
+  [1, 2, 3].forEach(s => seatCards[s].push(bjDraw(shoe)));
+  const dealerUp = bjDraw(shoe);
+  [1, 2, 3].forEach(s => seatCards[s].push(bjDraw(shoe)));
+  const dealerHole = bjDraw(shoe);
+
+  const bots = {};
+  botSeats.forEach((s, idx) => {
+    bots[s] = { name: botNames[idx], hands: bjPlayBot(shoe, seatCards[s], dealerUp.r) };
+  });
+
+  const humanCards = seatCards[humanSeat];
+  const insuranceOffered = dealerUp.r === "A";
+
+  await adjustBalance(username, -betAmount);
+
+  const round = {
+    shoe, betAmount, humanSeat, botSeats, bots,
+    dealer: { up: dealerUp, hole: dealerHole, cards: [], revealed: false },
+    insurance: { offered: insuranceOffered, resolved: !insuranceOffered, taken: false, amount: 0 },
+    hands: [{ cards: humanCards, bet: betAmount, doubled: false, isSplitAces: false, status: "playing" }],
+    activeHandIndex: 0, splitCount: 0,
+    phase: insuranceOffered ? "insurance" : "playing",
+    createdAt: Date.now()
+  };
+
+  // A natural human blackjack auto-stands that hand — nothing left to
+  // decide on it (only insurance, if offered, is still open).
+  if (bjIsNaturalBlackjack(humanCards)) {
+    round.hands[0].status = "blackjack";
+    if (!insuranceOffered) {
+      return await bjAdvance(username, classCode, round);
+    }
+  }
+
+  await usersCol().doc(username).update({ blackjackRound: round });
+  return { ok: true, round: bjClientView(round) };
+}
+
+// Applies the human's insurance decision, then checks the dealer's hole
+// card: a dealer blackjack ends the round immediately (insurance pays 2:1;
+// only the ORIGINAL bet is at risk on the main hand — any split/double
+// wagers a player had already placed would be refunded, though at this
+// stage in a round none have been placed yet since insurance is offered
+// before any other action).
+async function blackjackInsurance(username, classCode, takeInsurance) {
+  const user = await getUser(username);
+  if (!user || !user.blackjackRound) return { ok: false, error: "No Blackjack round in progress." };
+  const round = user.blackjackRound;
+  if (round.phase !== "insurance") return { ok: false, error: "Insurance isn't available right now." };
+
+  if (takeInsurance) {
+    const insAmount = Math.round((round.betAmount / 2) * 100) / 100;
+    if (user.balance < insAmount) return { ok: false, error: "You don't have enough money for insurance." };
+    await adjustBalance(username, -insAmount);
+    round.insurance.taken = true;
+    round.insurance.amount = insAmount;
+  }
+  round.insurance.resolved = true;
+
+  round.dealer.revealed = true;
+  round.dealer.cards = [round.dealer.up, round.dealer.hole];
+  const dealerBJ = bjIsNaturalBlackjack(round.dealer.cards);
+
+  if (dealerBJ) {
+    if (round.insurance.taken) await adjustBalance(username, round.insurance.amount * 3); // stake back + 2:1
+    if (round.hands[0].status === "blackjack") round.hands[0].status = "push";
+    else round.hands[0].status = "lost-to-dealer-blackjack";
+    round.phase = "dealer";
+    return await bjSettle(username, classCode, round);
+  }
+
+  round.dealer.revealed = false; // hide it again until the human's play is done
+  if (round.hands[0].status === "blackjack") {
+    round.phase = "dealer";
+    return await bjSettle(username, classCode, round);
+  }
+  round.phase = "playing";
+  await usersCol().doc(username).update({ blackjackRound: round });
+  return { ok: true, round: bjClientView(round) };
+}
+
+function bjActiveHand(round) { return round.hands[round.activeHandIndex]; }
+
+// Moves on to the next hand still marked "playing" (relevant after a
+// split), or into the dealer's turn once every human hand is resolved.
+async function bjAdvance(username, classCode, round) {
+  let next = round.hands.findIndex(h => h.status === "playing");
+  if (next === -1) {
+    round.phase = "dealer";
+    return await bjSettle(username, classCode, round);
+  }
+  round.activeHandIndex = next;
+  await usersCol().doc(username).update({ blackjackRound: round });
+  return { ok: true, round: bjClientView(round) };
+}
+
+async function blackjackAction(username, classCode, action) {
+  const user = await getUser(username);
+  if (!user || !user.blackjackRound) return { ok: false, error: "No Blackjack round in progress." };
+  const round = user.blackjackRound;
+  if (round.phase !== "playing") return { ok: false, error: "It's not your turn to act." };
+  const hand = bjActiveHand(round);
+  if (!hand || hand.status !== "playing") return { ok: false, error: "That hand is already finished." };
+
+  if (action === "hit") {
+    hand.cards.push(bjDraw(round.shoe));
+    if (bjIsBust(hand.cards)) hand.status = "bust";
+    else if (bjHandValue(hand.cards).total === 21) hand.status = "stand";
+    return await bjAdvance(username, classCode, round);
+  }
+
+  if (action === "stand") {
+    hand.status = "stand";
+    return await bjAdvance(username, classCode, round);
+  }
+
+  if (action === "double") {
+    const eligible = hand.cards.length === 2 && !hand.doubled && !hand.isSplitAces && !hand.cards.some(c => c.r === "A");
+    if (!eligible) return { ok: false, error: "You can only double on your first two cards, and not if either card is an Ace." };
+    if (user.balance < hand.bet) return { ok: false, error: "You don't have enough money to double down." };
+    await adjustBalance(username, -hand.bet);
+    hand.doubled = true;
+    hand.bet *= 2;
+    hand.cards.push(bjDraw(round.shoe));
+    hand.status = bjIsBust(hand.cards) ? "bust" : "stand";
+    return await bjAdvance(username, classCode, round);
+  }
+
+  if (action === "split") {
+    const eligible = hand.cards.length === 2 && !hand.isSplitAces && round.splitCount < 2 &&
+      bjCardValue(hand.cards[0].r) === bjCardValue(hand.cards[1].r);
+    if (!eligible) return { ok: false, error: "That hand can't be split." };
+    if (user.balance < hand.bet) return { ok: false, error: "You don't have enough money to split." };
+    await adjustBalance(username, -hand.bet);
+    const isAces = hand.cards[0].r === "A";
+    const otherCard = hand.cards.pop();
+    hand.cards.push(bjDraw(round.shoe));
+    const newHand = { cards: [otherCard, bjDraw(round.shoe)], bet: hand.bet, doubled: false, isSplitAces: isAces, status: "playing" };
+    if (isAces) {
+      hand.isSplitAces = true;
+      hand.status = "stand"; // split Aces: exactly one card each, forced stand
+      newHand.status = "stand";
+    }
+    round.hands.splice(round.activeHandIndex + 1, 0, newHand);
+    round.splitCount++;
+    return await bjAdvance(username, classCode, round);
+  }
+
+  return { ok: false, error: "Unknown action." };
+}
+
+// Dealer plays out (stands on all 17s, hard or soft), then every human
+// hand is settled against it and the round is closed out with a single
+// transaction log entry.
+async function bjSettle(username, classCode, round) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+
+  if (!round.dealer.revealed) {
+    round.dealer.revealed = true;
+    round.dealer.cards = [round.dealer.up, round.dealer.hole];
+  }
+  if (round.hands.some(h => h.status !== "bust" && h.status !== "push" && h.status !== "lost-to-dealer-blackjack")) {
+    while (bjHandValue(round.dealer.cards).total < 17) {
+      round.dealer.cards.push(bjDraw(round.shoe));
+    }
+  }
+  const dealerVal = bjHandValue(round.dealer.cards).total;
+  const dealerBust = dealerVal > 21;
+  const dealerBJ = bjIsNaturalBlackjack(round.dealer.cards);
+
+  let totalCredit = 0, totalStaked = 0, taxTotal = 0;
+  const results = [];
+  for (const h of round.hands) {
+    totalStaked += h.bet;
+    if (h.status === "push") { totalCredit += h.bet; results.push({ hand: h, outcome: "push" }); continue; }
+    if (h.status === "lost-to-dealer-blackjack" || h.status === "bust") { results.push({ hand: h, outcome: "lost" }); continue; }
+
+    const playerVal = bjHandValue(h.cards).total;
+    const playerBJ = bjIsNaturalBlackjack(h.cards) && !h.isSplitAces;
+    let outcome;
+    if (playerBJ && !dealerBJ) outcome = "blackjack";
+    else if (dealerBust || playerVal > dealerVal) outcome = "won";
+    else if (playerVal === dealerVal) outcome = "push";
+    else outcome = "lost";
+
+    if (outcome === "push") { totalCredit += h.bet; }
+    else if (outcome === "won" || outcome === "blackjack") {
+      const profitBase = outcome === "blackjack" ? h.bet * 1.5 : h.bet;
+      const { net, taxAmount } = applyTaxToIncome(cls, "gambling", profitBase);
+      totalCredit += h.bet + net;
+      taxTotal += taxAmount;
+    }
+    results.push({ hand: h, outcome });
+  }
+
+  if (totalCredit > 0) await adjustBalance(username, totalCredit);
+
+  const insuranceNote = round.insurance.taken
+    ? (round.insurance.amount > 0 && dealerBJ ? ` Insurance won ${fmtMoney(round.insurance.amount * 2)}.` : ` Insurance lost ${fmtMoney(round.insurance.amount)}.`)
+    : "";
+  const wins = results.filter(r => r.outcome === "won" || r.outcome === "blackjack").length;
+  const pushes = results.filter(r => r.outcome === "push").length;
+  const losses = results.filter(r => r.outcome === "lost").length;
+  const handsSummary = round.hands.length > 1 ? ` across ${round.hands.length} hands (${wins}W/${pushes}P/${losses}L)` : "";
+  const netChange = Math.round((totalCredit - totalStaked - round.insurance.amount) * 100) / 100;
+  const netForTxn = Math.round((netChange) * 100) / 100;
+
+  await logTxn(classCode, {
+    type: "gambling", from: username, amount: Math.abs(netForTxn), bet: totalStaked + round.insurance.amount,
+    note: `Blackjack: dealer had ${dealerVal}${dealerBust ? " (bust)" : dealerBJ ? " (blackjack)" : ""}${handsSummary} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))}.${insuranceNote}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
+  });
+
+  const finalRound = Object.assign({}, round, { phase: "done", results: results.map(r => r.outcome), netChange: netForTxn });
+  await usersCol().doc(username).update({ blackjackRound: null });
+  return { ok: true, round: bjClientView(finalRound), netChange: netForTxn };
+}
+
+// Strips the shoe (never sent to the client) and hides the dealer's hole
+// card until it's actually revealed.
+function bjClientView(round) {
+  const dealerCards = round.dealer.revealed ? round.dealer.cards : [round.dealer.up];
+  return {
+    phase: round.phase,
+    humanSeat: round.humanSeat,
+    botSeats: round.botSeats,
+    bots: round.bots,
+    dealer: { cards: dealerCards, revealed: round.dealer.revealed, total: round.dealer.revealed ? bjHandValue(round.dealer.cards).total : null },
+    insurance: round.insurance,
+    hands: round.hands.map(h => ({ cards: h.cards, bet: h.bet, doubled: h.doubled, isSplitAces: h.isSplitAces, status: h.status, total: bjHandValue(h.cards).total })),
+    activeHandIndex: round.activeHandIndex,
+    results: round.results || null,
+    netChange: round.netChange !== undefined ? round.netChange : null
+  };
+}
+
+// Lets the student resume/see their in-progress round (e.g. after a page
+// refresh) without losing the already-escrowed bet.
+async function getBlackjackRound(username) {
+  const user = await getUser(username);
+  if (!user || !user.blackjackRound) return null;
+  return bjClientView(user.blackjackRound);
+}
+
 /* ===================== Big events ===================== */
 const BIG_EVENT_MODULES = ["income", "property", "transport"];
 const MODULE_TO_COVERAGE = { income: "jobs", property: "property", transport: "transport" };
@@ -2255,6 +2701,10 @@ function withNewModuleDefaults(cls) {
   };
   if (cls.gambling.enabled === undefined) cls.gambling.enabled = true;
   if (cls.gambling.dailyBetCap === undefined) cls.gambling.dailyBetCap = null;
+  cls.blackjack = cls.blackjack || { enabled: true, minBet: 1, maxBet: 20 };
+  if (cls.blackjack.enabled === undefined) cls.blackjack.enabled = true;
+  if (cls.blackjack.minBet === undefined) cls.blackjack.minBet = 1;
+  if (cls.blackjack.maxBet === undefined) cls.blackjack.maxBet = 20;
   cls.taxRates = cls.taxRates || { store: 0, insurance: 0, property: 0, transport: 0, interest: 0, gambling: 0 };
   // Migrate old flat wage rate (if present) into a single bracket the first
   // time a class with legacy data is loaded, so existing tax settings aren't
