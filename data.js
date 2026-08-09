@@ -2417,7 +2417,14 @@ async function bjSettle(username, classCode, round) {
   }
 
   await logTxn(classCode, {
-    type: "gambling", from: username, amount: Math.abs(netForTxn), bet: totalStaked + round.insurance.amount,
+    // `bet` here is what the daily bet cap (placeRouletteBet/
+    // startBlackjackRound) sums up to see how much a student has bet
+    // today — it should only reflect what they actually chose to risk by
+    // starting the round, not money added afterwards by doubling down or
+    // splitting (each of which increases totalStaked without the student
+    // placing a new, separate bet), and not the side insurance bet
+    // either. round.betAmount is exactly that original stake.
+    type: "gambling", from: username, amount: Math.abs(netForTxn), bet: round.betAmount,
     note: `Blackjack: ${handsDesc}; ${dealerDesc} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
   });
 
