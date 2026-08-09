@@ -63,7 +63,7 @@ async function render() {
       <div class="flex-between">
         <div>
           <h4>${icon("vault", 20)}${p.name}</h4>
-          <p class="muted-small">Minimum ${fmtMoney(p.minAmount)} &middot; ${p.days} days &middot; ${p.rate}% interest at maturity &middot; ${p.earlyFeePct}% fee if broken early</p>
+          <p class="muted-small">Minimum ${fmtMoney(p.minAmount)} &middot; ${p.days} days &middot; ${p.rate}% interest/week (compounds to maturity) &middot; ${p.earlyFeePct}% fee if broken early</p>
         </div>
         <div>
           ${IS_TEACHER

@@ -944,8 +944,11 @@ async function takeLoan(username, classCode, amount) {
       if (cls.maxLoanCount > 0 && activeLoans.length >= cls.maxLoanCount) throw new Error("OVER_COUNT");
       const todayKey = nzDateKey();
       const dueDate = dateKeyPlusDays(todayKey, tier.termWeeks * 7);
-      const interestAmt = Math.round(amount * (tier.rate / 100) * 100) / 100;
-      owed = Math.round((amount + interestAmt) * 100) / 100;
+      // tier.rate is a WEEKLY rate that compounds over the loan's term —
+      // e.g. a 5%/week loan over 3 weeks owes principal * 1.05^3, not a
+      // single 5% (or 15%) charge on the whole amount up front.
+      owed = Math.round(amount * Math.pow(1 + (tier.rate / 100), tier.termWeeks) * 100) / 100;
+      const interestAmt = Math.round((owed - amount) * 100) / 100;
       tierSnapshot = { id: tier.id, termWeeks: tier.termWeeks, rate: tier.rate };
       const loan = {
         id: uid("loan"), tierId: tier.id, principal: amount, rate: tier.rate, termWeeks: tier.termWeeks,
@@ -963,7 +966,7 @@ async function takeLoan(username, classCode, amount) {
   }
   await logTxn(classCode, {
     type: "loan-taken", to: username, amount,
-    note: `Loan taken — ${fmtMoney(owed)} owed total (${tierSnapshot.rate}% over ${tierSnapshot.termWeeks} week${tierSnapshot.termWeeks === 1 ? "" : "s"})`
+    note: `Loan taken — ${fmtMoney(owed)} owed total (${tierSnapshot.rate}%/week over ${tierSnapshot.termWeeks} week${tierSnapshot.termWeeks === 1 ? "" : "s"})`
   });
   return { ok: true, owed };
 }
@@ -1668,8 +1671,13 @@ async function processTermDeposits(classCode) {
         if (liveDue.length === 0) return;
         let bal = user.balance;
         liveDue.forEach(d => {
-          const interest = Math.round(d.amount * (d.plan.rate / 100) * 100) / 100;
-          const payout = d.amount + interest;
+          // d.plan.rate is a WEEKLY rate that compounds over the deposit's
+          // term (days/7 weeks, which may be fractional) — matches how
+          // loan interest works now, and lets a 90-day plan pay noticeably
+          // more than a 30-day plan at the same weekly rate.
+          const weeks = d.plan.days / 7;
+          const payout = Math.round(d.amount * Math.pow(1 + (d.plan.rate / 100), weeks) * 100) / 100;
+          const interest = Math.round((payout - d.amount) * 100) / 100;
           bal += payout;
           notes.push({ note: `${d.plan.name} matured: ${fmtMoney(d.amount)} + ${fmtMoney(interest)} interest`, amount: payout });
         });

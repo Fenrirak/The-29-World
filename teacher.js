@@ -875,7 +875,7 @@ async function renderProfile(username) {
         const overdue = l.dueDate < todayKey;
         return `<div class="auto-row">
           <div class="auto-details">
-            <strong>${fmtMoney(l.principal)}</strong> borrowed &middot; ${l.rate}% over ${l.termWeeks} week${l.termWeeks === 1 ? "" : "s"}
+            <strong>${fmtMoney(l.principal)}</strong> borrowed &middot; ${l.rate}%/week over ${l.termWeeks} week${l.termWeeks === 1 ? "" : "s"}
             <div class="muted-small">Due ${l.dueDate}${overdue ? " — overdue" : ""}</div>
           </div>
           <div class="${overdue ? 'status-declined' : 'status-pending'}">${fmtMoney(l.owed)} owed</div>

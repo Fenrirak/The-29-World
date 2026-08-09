@@ -8,7 +8,7 @@ function paintChrome() {
   document.getElementById("labTierMin").innerHTML = icon("coin", 13) + " Minimum amount";
   document.getElementById("labTierMax").innerHTML = icon("coin", 13) + " Maximum amount";
   document.getElementById("labTierTerm").innerHTML = icon("calendar", 13) + " Term (weeks)";
-  document.getElementById("labTierRate").innerHTML = icon("percent", 13) + " Interest rate (% of the loan, charged once)";
+  document.getElementById("labTierRate").innerHTML = icon("percent", 13) + " Interest rate (% per week, compounding)";
   document.getElementById("labMaxLoan").innerHTML = icon("handshake", 13) + " Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
   document.getElementById("labMaxLoanCount").innerHTML = icon("handshake", 13) + " Maximum number of loans a student can have open at once (0 = no limit)";
   document.getElementById("saveMaxLoanBtn").innerHTML = icon("plus", 13) + " Save maximums";
@@ -59,7 +59,7 @@ async function render() {
         <div class="flex-between">
           <div>
             <h4>${icon("handshake", 20)}${fmtMoney(t.min)} — ${fmtMoney(t.max)}</h4>
-            <p>${termLabel(t.termWeeks)} term &middot; <strong>${t.rate}%</strong> interest (charged once, on the whole loan)</p>
+            <p>${termLabel(t.termWeeks)} term &middot; <strong>${t.rate}%</strong> interest per week (compounds over the term)</p>
           </div>
           <div>
             <button class="btn small secondary" onclick="editTier('${t.id}')">${icon("idcard", 13)} Edit</button>
@@ -84,7 +84,7 @@ async function render() {
     document.getElementById("noTiersStudent").classList.toggle("hidden", tiers.length > 0);
     if (tiers.length > 0) {
       const rows = tiers.slice().sort((a, b) => a.min - b.min).map(t =>
-        `<div class="auto-row"><div class="auto-details">${fmtMoney(t.min)} – ${fmtMoney(t.max)}<div class="muted-small">${termLabel(t.termWeeks)} &middot; ${t.rate}% interest</div></div></div>`
+        `<div class="auto-row"><div class="auto-details">${fmtMoney(t.min)} – ${fmtMoney(t.max)}<div class="muted-small">${termLabel(t.termWeeks)} &middot; ${t.rate}% interest/week</div></div></div>`
       ).join("");
       optBox.innerHTML = rows;
     }
@@ -124,7 +124,7 @@ async function render() {
       row.innerHTML = `
         <div class="auto-row">
           <div class="auto-details">
-            <strong>${fmtMoney(loan.principal)}</strong> borrowed &middot; ${loan.rate}% over ${termLabel(loan.termWeeks)}
+            <strong>${fmtMoney(loan.principal)}</strong> borrowed &middot; ${loan.rate}%/week over ${termLabel(loan.termWeeks)}
             <div class="muted-small">Due ${loan.dueDate}${overdue ? " — overdue" : ""}</div>
           </div>
           <div class="${overdue ? 'status-declined' : 'status-pending'}">${fmtMoney(loan.owed)} owed</div>
@@ -146,7 +146,7 @@ async function render() {
     past.forEach(l => {
       const row = document.createElement("div");
       row.className = "auto-row";
-      row.innerHTML = `<div class="auto-details"><strong>${fmtMoney(l.principal)}</strong> borrowed &middot; ${l.rate}% over ${termLabel(l.termWeeks)}<div class="muted-small">Taken ${l.takenDate}</div></div><span class="status-approved">Paid off</span>`;
+      row.innerHTML = `<div class="auto-details"><strong>${fmtMoney(l.principal)}</strong> borrowed &middot; ${l.rate}%/week over ${termLabel(l.termWeeks)}<div class="muted-small">Taken ${l.takenDate}</div></div><span class="status-approved">Paid off</span>`;
       pastBox.appendChild(row);
     });
 
@@ -168,8 +168,8 @@ async function updateLoanPreview() {
   if (!amount || amount <= 0) { preview.textContent = ""; return; }
   const tier = findLoanTier(cls, amount);
   if (!tier) { preview.innerHTML = `<span class="ticker-down">That amount doesn't fall within any available loan range.</span>`; return; }
-  const interest = Math.round(amount * (tier.rate / 100) * 100) / 100;
-  const owed = Math.round((amount + interest) * 100) / 100;
+  const owed = Math.round(amount * Math.pow(1 + (tier.rate / 100), tier.termWeeks) * 100) / 100;
+  const interest = Math.round((owed - amount) * 100) / 100;
   let text = `You'd owe <strong>${fmtMoney(owed)}</strong> total (${fmtMoney(interest)} interest), due back in ${termLabel(tier.termWeeks)}.`;
   const lc = cls.lifestyleConfig.loan;
   if (lc && lc.enabled && lc.perAmount > 0 && lc.points > 0) {
