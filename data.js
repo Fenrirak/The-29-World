@@ -2360,16 +2360,24 @@ async function bjSettle(username, classCode, round) {
   const insuranceNote = round.insurance.taken
     ? (round.insurance.amount > 0 && dealerBJ ? ` Insurance won ${fmtMoney(round.insurance.amount * 2)}.` : ` Insurance lost ${fmtMoney(round.insurance.amount)}.`)
     : "";
-  const wins = results.filter(r => r.outcome === "won" || r.outcome === "blackjack").length;
-  const pushes = results.filter(r => r.outcome === "push").length;
-  const losses = results.filter(r => r.outcome === "lost").length;
-  const handsSummary = round.hands.length > 1 ? ` across ${round.hands.length} hands (${wins}W/${pushes}P/${losses}L)` : "";
   const netChange = Math.round((totalCredit - totalStaked - round.insurance.amount) * 100) / 100;
   const netForTxn = Math.round((netChange) * 100) / 100;
+  const dealerDesc = `dealer had ${dealerVal}${dealerBust ? " (bust)" : dealerBJ ? " (blackjack)" : ""}`;
+
+  // Say exactly what the player's hand(s) got, not just the outcome —
+  // one clause per hand so a split round reads clearly too.
+  const outcomeWord = { won: "won", blackjack: "blackjack, won", push: "pushed", lost: "lost", "lost-to-dealer-blackjack": "lost" };
+  let handsDesc;
+  if (round.hands.length === 1) {
+    const only = results[0];
+    handsDesc = `you had ${bjHandValue(only.hand.cards).total}${only.hand.status === "bust" ? " (bust)" : ""} — ${outcomeWord[only.outcome]}`;
+  } else {
+    handsDesc = results.map((r, i) => `hand ${i + 1}: ${bjHandValue(r.hand.cards).total}${r.hand.status === "bust" ? " (bust)" : ""} (${outcomeWord[r.outcome]})`).join(", ");
+  }
 
   await logTxn(classCode, {
     type: "gambling", from: username, amount: Math.abs(netForTxn), bet: totalStaked + round.insurance.amount,
-    note: `Blackjack: dealer had ${dealerVal}${dealerBust ? " (bust)" : dealerBJ ? " (blackjack)" : ""}${handsSummary} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))}.${insuranceNote}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
+    note: `Blackjack: ${handsDesc}; ${dealerDesc} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
   });
 
   const finalRound = Object.assign({}, round, { phase: "done", results: results.map(r => r.outcome), netChange: netForTxn });

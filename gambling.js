@@ -248,7 +248,23 @@ async function saveRouletteSettings() {
 }
 
 /* ===================== Blackjack state/logic ===================== */
-let CURRENT_ROUND = null; // client-side mirror of the server round view
+// CURRENT_ROUND holds the true, authoritative round state from the server
+// (already fully resolved — bots and dealer are computed in one shot).
+// The DISPLAY_* variables are a separate, deliberately "behind" copy used
+// purely for the seat-by-seat reveal animation, so the player never sees
+// a card, a bot's result, or the dealer's hand before its actual turn in
+// table order (1 → 2 → 3 → dealer) comes up.
+let CURRENT_ROUND = null;
+let DISPLAY_BOTS = {};
+let DISPLAY_DEALER = { cards: [], revealed: false, total: null };
+let DISPLAY_HUMAN_HANDS = null; // null = "just use CURRENT_ROUND.hands" (live, once it's the human's actual turn)
+let ACTIVE_SEAT = null;         // 1, 2, 3, "dealer", or null — drives the highlight + "playing..." caption
+let SHOW_RESULTS = false;       // withheld until the dealer's hand has finished animating in
+let DEAL_TOKEN = 0;             // bumped on every new deal/resume so a stale animation loop can detect it's obsolete and stop
+
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+const BJ_CARD_DELAY = 500; // ms between each card appearing
+const BJ_SEAT_PAUSE = 400; // ms pause after a seat finishes, before the next seat's turn starts
 
 async function bjDeal() {
   const amount = document.getElementById("bjBetAmount").value;
@@ -270,42 +286,94 @@ async function bjDeal() {
   document.getElementById("bjTableArea").classList.remove("hidden");
   document.getElementById("bjNewRoundBtn").classList.add("hidden");
   document.getElementById("bjRoundMsg").innerHTML = "";
-  renderBlackjackRound();
+
+  const token = ++DEAL_TOKEN;
+  await bjAnimateInitialDeal(CURRENT_ROUND, token);
+  if (token !== DEAL_TOKEN) return; // a resume/new deal happened while we were animating
+
+  // Insurance (when offered) is a table-wide decision made right after the
+  // deal, before ANYONE's turn — including seats before the human — so it
+  // must be handled before the seat-by-seat turn sequence starts, not
+  // folded into it.
+  if (CURRENT_ROUND.phase === "insurance") {
+    ACTIVE_SEAT = CURRENT_ROUND.humanSeat;
+    renderBlackjackRound(bjBuildDisplayRound());
+    document.getElementById("bjInsuranceArea").classList.remove("hidden");
+    return; // waits for bjDoInsurance()
+  }
+  await bjRunTurnSequence(CURRENT_ROUND, 1, token);
 }
 
 async function bjDoInsurance(take) {
   const res = await blackjackInsurance(CURRENT.username, CURRENT.classCode, take);
   if (!res.ok) { alert(res.error); return; }
   CURRENT_ROUND = res.round;
-  renderBlackjackRound();
-  if (CURRENT_ROUND.phase === "done") await bjAfterRoundEnds(res.netChange);
+  document.getElementById("bjInsuranceArea").classList.add("hidden");
+  const token = DEAL_TOKEN;
+
+  const dealerHadBlackjack = CURRENT_ROUND.hands[0].status === "push" || CURRENT_ROUND.hands[0].status === "lost-to-dealer-blackjack";
+  if (CURRENT_ROUND.phase === "done" && dealerHadBlackjack) {
+    // The dealer had Blackjack — real casino rules end the round for the
+    // WHOLE table right here, before seat 1 (or anyone) gets a turn. So
+    // skip the turn sequence entirely and just reveal the dealer's hand.
+    ACTIVE_SEAT = "dealer";
+    await bjAnimateDealerTurn(CURRENT_ROUND, token);
+    if (token !== DEAL_TOKEN) return;
+    ACTIVE_SEAT = null;
+    await bjFinalizeRound(CURRENT_ROUND);
+    return;
+  }
+
+  // Otherwise table play proceeds normally, starting at seat 1 — this also
+  // correctly covers the player having their own Blackjack (and the
+  // dealer not): that seat is simply skipped with nothing to decide,
+  // while every other seat still gets a normal turn.
+  await bjRunTurnSequence(CURRENT_ROUND, 1, token);
 }
 
 async function bjDoAction(action) {
   ["bjHitBtn", "bjStandBtn", "bjDoubleBtn", "bjSplitBtn"].forEach(id => document.getElementById(id).disabled = true);
   const res = await blackjackAction(CURRENT.username, CURRENT.classCode, action);
-  ["bjHitBtn", "bjStandBtn", "bjDoubleBtn", "bjSplitBtn"].forEach(id => document.getElementById(id).disabled = false);
+  const token = DEAL_TOKEN;
   if (!res.ok) {
     document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
+    ["bjHitBtn", "bjStandBtn", "bjDoubleBtn", "bjSplitBtn"].forEach(id => document.getElementById(id).disabled = false);
     return;
   }
   CURRENT_ROUND = res.round;
-  renderBlackjackRound();
-  if (CURRENT_ROUND.phase === "done") await bjAfterRoundEnds(res.netChange);
+  if (CURRENT_ROUND.phase === "playing") {
+    // Still your turn (e.g. another card, or a fresh split hand to play).
+    renderBlackjackRound(bjBuildDisplayRound());
+    bjUpdateActionButtons();
+    ["bjHitBtn", "bjStandBtn", "bjDoubleBtn", "bjSplitBtn"].forEach(id => document.getElementById(id).disabled = false);
+  } else {
+    document.getElementById("bjActionArea").classList.add("hidden");
+    await bjRunRemainingSeats(CURRENT_ROUND, CURRENT_ROUND.humanSeat + 1, token);
+  }
+}
+
+// Plays the seat-by-seat reveal animation for every seat AFTER the human
+// (their outcomes are already decided server-side — this just shows them
+// in the right order), then the dealer, then finally reveals the results.
+async function bjRunRemainingSeats(round, fromSeat, token) {
+  await bjRunTurnSequence(round, fromSeat, token);
 }
 
 // Deliberately does NOT hide the table or reset the bet form — the player
 // should still see the finished hands until they choose "New round".
-async function bjAfterRoundEnds(netChange) {
+async function bjFinalizeRound(round) {
+  SHOW_RESULTS = true;
+  renderBlackjackRound(bjBuildDisplayRound());
   document.getElementById("bjNewRoundBtn").classList.remove("hidden");
-  document.getElementById("bjRoundMsg").innerHTML = netChange >= 0
-    ? `<div class="success-msg">You WON ${fmtMoney(netChange)} this round!</div>`
-    : `<div class="error-msg">You lost ${fmtMoney(Math.abs(netChange))} this round.</div>`;
+  document.getElementById("bjRoundMsg").innerHTML = round.netChange >= 0
+    ? `<div class="success-msg">You WON ${fmtMoney(round.netChange)} this round!</div>`
+    : `<div class="error-msg">You lost ${fmtMoney(Math.abs(round.netChange))} this round.</div>`;
   CLS = await getClassCached(CURRENT.classCode);
   await renderRecentBlackjack();
 }
 
 async function bjResetTable() {
+  DEAL_TOKEN++; // invalidate any in-flight animation loop
   CURRENT_ROUND = null;
   document.getElementById("bjBetAmount").value = "";
   document.getElementById("bjBetForm").classList.remove("hidden");
@@ -340,15 +408,184 @@ function bjCardValueClient(rank) {
   return Number(rank);
 }
 
-function renderBlackjackRound() {
-  const r = CURRENT_ROUND;
+/* ---- Deal / turn animation ---- */
 
+// Deals the very first two cards to everyone in real table order — seat 1,
+// seat 2, seat 3, dealer's up-card, then seat 1, 2, 3 again, then the
+// dealer's hidden hole card — one card at a time with a short pause, so
+// it visually reads exactly like a real dealer working around the table.
+async function bjAnimateInitialDeal(round, token) {
+  DISPLAY_BOTS = {};
+  DISPLAY_DEALER = { cards: [], revealed: false, total: null };
+  DISPLAY_HUMAN_HANDS = [{ cards: [], bet: round.hands[0].bet, doubled: false, isSplitAces: false, status: "playing", total: 0 }];
+  ACTIVE_SEAT = null;
+  SHOW_RESULTS = false;
+  [1, 2, 3].forEach(seat => {
+    if (seat !== round.humanSeat) DISPLAY_BOTS[seat] = { name: round.bots[seat].name, hands: [{ cards: [], total: null, bust: false, doubled: false }] };
+  });
+
+  const seatCardOf = (seat, idx) => (seat === round.humanSeat ? round.hands[0].cards[idx] : round.bots[seat].hands[0].cards[idx]);
+  const steps = [
+    { seat: 1, idx: 0 }, { seat: 2, idx: 0 }, { seat: 3, idx: 0 }, { seat: "dealer", idx: 0 },
+    { seat: 1, idx: 1 }, { seat: 2, idx: 1 }, { seat: 3, idx: 1 }, { seat: "dealer", idx: 1, hidden: true }
+  ];
+
+  renderBlackjackRound(bjBuildDisplayRound());
+  for (const step of steps) {
+    if (token !== DEAL_TOKEN) return;
+    await sleep(BJ_CARD_DELAY);
+    if (token !== DEAL_TOKEN) return;
+    if (step.seat === "dealer") {
+      DISPLAY_DEALER.cards.push(round.dealer.cards[step.idx] || round.dealer.up);
+    } else if (step.seat === round.humanSeat) {
+      DISPLAY_HUMAN_HANDS[0].cards.push(seatCardOf(step.seat, step.idx));
+    } else {
+      DISPLAY_BOTS[step.seat].hands[0].cards.push(seatCardOf(step.seat, step.idx));
+    }
+    renderBlackjackRound(bjBuildDisplayRound());
+  }
+}
+
+// Walks seats fromSeat..3 in order. A bot seat auto-plays its (already
+// server-decided) turn with a card-by-card reveal; the human seat pauses
+// here for real input (hit/stand/double/split — insurance, when offered,
+// is always resolved before this function is first called) — the loop is
+// resumed later, from humanSeat+1, once the server confirms the human's
+// hands are all finished. Once every seat is done, the dealer's turn
+// animates and the round is finalized.
+async function bjRunTurnSequence(round, fromSeat, token) {
+  for (let seat = fromSeat; seat <= 3; seat++) {
+    if (token !== DEAL_TOKEN) return;
+    if (seat === round.humanSeat) {
+      DISPLAY_HUMAN_HANDS = null; // switch to live CURRENT_ROUND.hands from here on
+      ACTIVE_SEAT = seat;
+
+      if (round.phase === "playing" && round.hands.some(h => h.status === "playing")) {
+        renderBlackjackRound(bjBuildDisplayRound());
+        document.getElementById("bjActionArea").classList.remove("hidden");
+        bjUpdateActionButtons();
+        return; // waits for bjDoAction()
+      }
+      // Nothing to decide (e.g. an instant natural blackjack with no
+      // insurance offered) — show it briefly, then move straight on.
+      renderBlackjackRound(bjBuildDisplayRound());
+      await sleep(BJ_SEAT_PAUSE);
+      continue;
+    }
+    await bjAnimateBotTurn(round, seat, token);
+    if (token !== DEAL_TOKEN) return;
+  }
+  ACTIVE_SEAT = "dealer";
+  await bjAnimateDealerTurn(round, token);
+  if (token !== DEAL_TOKEN) return;
+  ACTIVE_SEAT = null;
+  await bjFinalizeRound(round);
+}
+
+// Reveals one bot's final (already-decided) hand(s) card by card — the
+// initial two cards are already showing from the deal animation, so this
+// only adds anything drawn after that (hits, doubles, or extra hands from
+// a split).
+async function bjAnimateBotTurn(round, seat, token) {
+  ACTIVE_SEAT = seat;
+  const finalBot = round.bots[seat];
+  if (!DISPLAY_BOTS[seat]) DISPLAY_BOTS[seat] = { name: finalBot.name, hands: [{ cards: [], total: null, bust: false, doubled: false }] };
+  renderBlackjackRound(bjBuildDisplayRound());
+
+  const steps = [];
+  finalBot.hands.forEach((h, hi) => {
+    const startIdx = hi === 0 ? (DISPLAY_BOTS[seat].hands[0].cards.length || 0) : 0;
+    for (let ci = startIdx; ci < h.cards.length; ci++) steps.push({ hi, ci });
+  });
+
+  for (const step of steps) {
+    if (token !== DEAL_TOKEN) return;
+    await sleep(BJ_CARD_DELAY);
+    if (token !== DEAL_TOKEN) return;
+    while (DISPLAY_BOTS[seat].hands.length <= step.hi) DISPLAY_BOTS[seat].hands.push({ cards: [], total: null, bust: false, doubled: false });
+    DISPLAY_BOTS[seat].hands[step.hi].cards.push(finalBot.hands[step.hi].cards[step.ci]);
+    renderBlackjackRound(bjBuildDisplayRound());
+  }
+  DISPLAY_BOTS[seat] = finalBot; // finalize with real totals/bust/doubled flags
+  renderBlackjackRound(bjBuildDisplayRound());
+  await sleep(BJ_SEAT_PAUSE);
+}
+
+// Reveals the dealer's hole card, then hits (one card at a time) until
+// the dealer's final total from the server is reached.
+async function bjAnimateDealerTurn(round, token) {
+  if (token !== DEAL_TOKEN) return;
+  DISPLAY_DEALER = { cards: [round.dealer.cards[0], round.dealer.cards[1]], revealed: true, total: null };
+  renderBlackjackRound(bjBuildDisplayRound());
+  await sleep(BJ_CARD_DELAY);
+  for (let i = 2; i < round.dealer.cards.length; i++) {
+    if (token !== DEAL_TOKEN) return;
+    DISPLAY_DEALER.cards.push(round.dealer.cards[i]);
+    renderBlackjackRound(bjBuildDisplayRound());
+    await sleep(BJ_CARD_DELAY);
+  }
+  DISPLAY_DEALER = round.dealer; // finalize (adds the real total)
+  renderBlackjackRound(bjBuildDisplayRound());
+  await sleep(BJ_SEAT_PAUSE);
+}
+
+// Shows an already-in-progress round with no reveal animation — used only
+// when resuming after a page refresh, where replaying the whole deal
+// would be a confusing surprise rather than a genuine new deal.
+function bjShowRoundStatic(round) {
+  DEAL_TOKEN++; // make sure no stale animation loop can interfere
+  DISPLAY_BOTS = round.bots;
+  DISPLAY_DEALER = round.dealer;
+  DISPLAY_HUMAN_HANDS = null;
+  ACTIVE_SEAT = (round.phase === "playing" || round.phase === "insurance") ? round.humanSeat : null;
+  SHOW_RESULTS = round.phase === "done";
+  renderBlackjackRound(bjBuildDisplayRound());
+  if (round.phase === "insurance") document.getElementById("bjInsuranceArea").classList.remove("hidden");
+  if (round.phase === "playing") { document.getElementById("bjActionArea").classList.remove("hidden"); bjUpdateActionButtons(); }
+  if (round.phase === "done") {
+    document.getElementById("bjNewRoundBtn").classList.remove("hidden");
+    document.getElementById("bjRoundMsg").innerHTML = round.netChange >= 0
+      ? `<div class="success-msg">You WON ${fmtMoney(round.netChange)} this round!</div>`
+      : `<div class="error-msg">You lost ${fmtMoney(Math.abs(round.netChange))} this round.</div>`;
+  }
+}
+
+function bjUpdateActionButtons() {
+  const r = CURRENT_ROUND;
+  if (r.phase !== "playing") return;
+  const hand = r.hands[r.activeHandIndex];
+  const canDouble = hand.cards.length === 2 && !hand.doubled && !hand.isSplitAces && !hand.cards.some(c => c.r === "A");
+  const canSplit = hand.cards.length === 2 && !hand.isSplitAces && bjCardValueClient(hand.cards[0].r) === bjCardValueClient(hand.cards[1].r);
+  document.getElementById("bjDoubleBtn").classList.toggle("hidden", !canDouble);
+  document.getElementById("bjSplitBtn").classList.toggle("hidden", !canSplit);
+}
+
+// Builds the object actually handed to renderBlackjackRound() — mixes the
+// server's true CURRENT_ROUND (for things that are never animated, like
+// the bet amount and insurance state) with the DISPLAY_* "reveal so far"
+// state for the parts being animated in.
+function bjBuildDisplayRound() {
+  return {
+    phase: CURRENT_ROUND.phase,
+    humanSeat: CURRENT_ROUND.humanSeat,
+    botSeats: CURRENT_ROUND.botSeats,
+    bots: DISPLAY_BOTS,
+    dealer: DISPLAY_DEALER,
+    insurance: CURRENT_ROUND.insurance,
+    hands: DISPLAY_HUMAN_HANDS || CURRENT_ROUND.hands,
+    activeHandIndex: CURRENT_ROUND.activeHandIndex,
+    results: SHOW_RESULTS ? CURRENT_ROUND.results : null,
+    activeSeat: ACTIVE_SEAT
+  };
+}
+
+function renderBlackjackRound(r) {
   // Dealer
   const dealerHidden = !r.dealer.revealed;
-  document.getElementById("bjDealerHand").innerHTML = dealerHidden
-    ? bjCardHtml(r.dealer.cards[0], false) + bjCardHtml(null, true)
-    : bjHandHtml(r.dealer.cards, 0);
-  document.getElementById("bjDealerTotal").textContent = r.dealer.revealed ? `Total: ${r.dealer.total}` : "";
+  document.getElementById("bjDealerHand").innerHTML = r.dealer.cards.length
+    ? (dealerHidden ? bjCardHtml(r.dealer.cards[0], false) + (r.dealer.cards.length > 1 || CURRENT_ROUND.dealer.revealed === false ? bjCardHtml(null, true) : "") : bjHandHtml(r.dealer.cards, 0))
+    : "";
+  document.getElementById("bjDealerTotal").textContent = r.dealer.revealed && r.dealer.total !== null ? `Total: ${r.dealer.total}` : "";
 
   // Seats 1, 2, 3 in table order
   const seatsRow = document.getElementById("bjSeatsRow");
@@ -357,26 +594,28 @@ function renderBlackjackRound() {
     const isHuman = seat === r.humanSeat;
     const div = document.createElement("div");
     div.className = "bj-seat" + (isHuman ? " is-human" : "");
-    if (isHuman && r.phase === "playing" && r.activeHandIndex !== undefined) div.classList.add("is-active");
+    if (r.activeSeat === seat) div.classList.add("is-active");
+
+    const playingCaption = (r.activeSeat === seat && !isHuman) ? `<div class="bj-playing-tag">Playing...</div>` : "";
 
     if (isHuman) {
       let html = `<div class="bj-seat-name">${icon("users", 14)} You (seat ${seat})</div>`;
-      r.hands.forEach((h, i) => {
-        const active = r.phase === "playing" && i === r.activeHandIndex;
+      (r.hands || []).forEach((h, i) => {
+        const active = r.phase === "playing" && r.activeSeat === seat && i === r.activeHandIndex;
         html += `<div class="bj-hand-group" style="${active ? 'outline:2px dashed #ffd778;border-radius:8px;padding:4px;' : ''}">
           <div class="bj-hand">${bjHandHtml(h.cards, 0)}</div>
-          <div class="bj-total">${fmtMoney(h.bet)} — Total: ${h.total}${h.doubled ? " (doubled)" : ""}</div>
+          ${h.cards.length ? `<div class="bj-total">${fmtMoney(h.bet)} — Total: ${h.total}${h.doubled ? " (doubled)" : ""}</div>` : ""}
           ${h.status !== "playing" && r.results ? `<span class="bj-outcome ${bjOutcomeClass(r.results[i])}">${bjOutcomeLabel(r.results[i])}</span>` : ""}
         </div>`;
       });
       div.innerHTML = html;
     } else {
       const bot = r.bots[seat];
-      let html = `<div class="bj-seat-name">${icon("users", 14)} ${bot.name}</div>`;
+      let html = `<div class="bj-seat-name">${icon("users", 14)} ${bot.name}</div>${playingCaption}`;
       bot.hands.forEach(h => {
         html += `<div class="bj-hand-group">
           <div class="bj-hand">${bjHandHtml(h.cards, 0)}</div>
-          <div class="bj-total">Total: ${h.total}${h.bust ? " (bust)" : ""}${h.doubled ? " (doubled)" : ""}</div>
+          ${h.cards.length && h.total !== null ? `<div class="bj-total">Total: ${h.total}${h.bust ? " (bust)" : ""}${h.doubled ? " (doubled)" : ""}</div>` : ""}
         </div>`;
       });
       div.innerHTML = html;
@@ -384,16 +623,8 @@ function renderBlackjackRound() {
     seatsRow.appendChild(div);
   }
 
-  document.getElementById("bjInsuranceArea").classList.toggle("hidden", r.phase !== "insurance");
-  document.getElementById("bjActionArea").classList.toggle("hidden", r.phase !== "playing");
-
-  if (r.phase === "playing") {
-    const hand = r.hands[r.activeHandIndex];
-    const canDouble = hand.cards.length === 2 && !hand.doubled && !hand.isSplitAces && !hand.cards.some(c => c.r === "A");
-    const canSplit = hand.cards.length === 2 && !hand.isSplitAces && bjCardValueClient(hand.cards[0].r) === bjCardValueClient(hand.cards[1].r);
-    document.getElementById("bjDoubleBtn").classList.toggle("hidden", !canDouble);
-    document.getElementById("bjSplitBtn").classList.toggle("hidden", !canSplit);
-  }
+  if (r.phase !== "insurance") document.getElementById("bjInsuranceArea").classList.add("hidden");
+  if (r.phase !== "playing" || r.activeSeat !== r.humanSeat) document.getElementById("bjActionArea").classList.add("hidden");
 }
 
 async function renderRecentBlackjack() {
@@ -569,13 +800,13 @@ async function render() {
 
     // Resume an in-progress Blackjack round if the page was refreshed
     // mid-hand — the bet is already escrowed server-side, so this just
-    // re-shows it instead of losing it.
+    // re-shows it (statically, no reveal animation) instead of losing it.
     const resumed = await getBlackjackRound(CURRENT.username);
     if (resumed) {
       document.getElementById("bjBetForm").classList.add("hidden");
       document.getElementById("bjTableArea").classList.remove("hidden");
       CURRENT_ROUND = resumed;
-      renderBlackjackRound();
+      bjShowRoundStatic(resumed);
     } else {
       document.getElementById("bjBetForm").classList.remove("hidden");
       document.getElementById("bjTableArea").classList.add("hidden");

@@ -112,6 +112,27 @@
 .bj-outcome.lost { background: #c9503a; color: #fff; }
 .bj-outcome.push { background: #808a9a; color: #fff; }
 
+.bj-playing-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  color: #1f2b44;
+  background: #ffd778;
+  padding: 2px 8px;
+  border-radius: 20px;
+  margin-bottom: 6px;
+  animation: bjPulse 1s ease-in-out infinite;
+}
+@keyframes bjPulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+/* Every .bj-card is freshly inserted by the reveal animation one at a
+   time, so this pop-in plays exactly once per card as it appears. */
+@keyframes bjCardIn {
+  from { opacity: 0; transform: translateY(-14px) scale(.85); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.bj-card { animation: bjCardIn .28s ease-out; }
+
 @media (max-width: 640px) {
   .bj-seats-row { grid-template-columns: 1fr; }
   .bj-card { width: 30px; height: 42px; font-size: 12px; }
