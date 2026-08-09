@@ -3988,6 +3988,110 @@ async function anwGlobalBootstrap() {
   }
 }
 
+const ANW_BALANCE_POLL_MS = 10000;
+
+/* ---------------- Balance widget poll pause/resume ----------------
+   The 10s poll needs to actually stop (not just skip its fetch) while:
+     - the tab is hidden/backgrounded (handled automatically below via the
+       Page Visibility API — no other file needs to call anything for this)
+     - a popup (gambling result, weekly event, etc.) is open on screen
+     - the student is on the Blackjack table
+
+   Other pages/modules call these two functions to pause/resume the poll,
+   passing a short string identifying WHY (so unrelated pauses can't step
+   on each other and accidentally resume the poll too early):
+
+     anwBalancePoll.pause("gambling-popup");   // when a popup opens
+     anwBalancePoll.resume("gambling-popup");  // when that popup closes
+
+     anwBalancePoll.pause("blackjack-table");  // when the BJ table mounts
+     anwBalancePoll.resume("blackjack-table"); // when the BJ table unmounts
+
+   Multiple reasons can be active at once (e.g. tab hidden AND a popup
+   open) — the poll only actually resumes once every reason is cleared.
+   Calling pause()/resume() with the same reason twice in a row is safe
+   (pause is idempotent, resume on a reason that isn't active is a no-op).
+==================================================================== */
+const _anwPollPauseReasons = new Set();
+let _anwPollTimer = null;
+let _anwPollRefreshFn = null;
+
+function _anwPollStart() {
+  if (_anwPollTimer || !_anwPollRefreshFn) return; // already running, or not mounted yet
+  _anwPollTimer = setInterval(_anwPollRefreshFn, ANW_BALANCE_POLL_MS);
+}
+function _anwPollStop() {
+  if (!_anwPollTimer) return;
+  clearInterval(_anwPollTimer);
+  _anwPollTimer = null;
+}
+function _anwPollSync() {
+  if (_anwPollPauseReasons.size > 0) _anwPollStop();
+  else _anwPollStart();
+}
+
+window.anwBalancePoll = {
+  pause(reason) {
+    if (!reason) return;
+    const wasIdle = _anwPollPauseReasons.size === 0;
+    _anwPollPauseReasons.add(reason);
+    if (wasIdle) _anwPollSync();
+  },
+  resume(reason) {
+    if (!reason) return;
+    _anwPollPauseReasons.delete(reason);
+    if (_anwPollPauseReasons.size === 0) {
+      _anwPollSync();
+      if (_anwPollRefreshFn) _anwPollRefreshFn(); // catch up immediately instead of waiting up to 10s
+    }
+  },
+  isPaused() { return _anwPollPauseReasons.size > 0; },
+  activeReasons() { return [..._anwPollPauseReasons]; }
+};
+
+// Page Visibility API — this is the actual mechanism that stops the timer
+// when the tab is backgrounded or the user switches away. Browsers already
+// throttle/clamp setInterval in background tabs, but clearInterval here
+// makes the "stopped" behavior explicit and verifiable rather than relying
+// on browser throttling, which varies (and can still fire, just slower).
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) window.anwBalancePoll.pause("tab-hidden");
+  else window.anwBalancePoll.resume("tab-hidden");
+});
+
+/* ---------------- Automatic popup / Blackjack-table detection ----------------
+   Rather than threading anwBalancePoll.pause()/resume() calls through every
+   individual popup-showing function (and the Blackjack table's own
+   show/hide code) — easy to miss a spot, or to leave the poll stuck paused
+   if some error path closes a popup without going through its normal close
+   handler — this watches the actual DOM state directly:
+
+     - ANY element with class "anw-modal-overlay" present on the page =>
+       paused. Every popup in this app uses that same class: the weekly
+       event popup, the choice-event modal, the bonus/fine adjustment
+       popup, both big-event modals (events-ui.js), and the roulette wheel
+       spin overlay (gambling.js) — so this one check covers all of them,
+       and any new popup added later that follows the same convention,
+       without touching those files.
+     - #bjTableArea visible (missing the "hidden" class) => paused. This
+       is the Blackjack table container in gambling.js; it only exists in
+       the DOM on the gambling page.
+
+   A MutationObserver re-checks both after every relevant DOM change, so
+   the paused state can never drift out of sync with what's actually on
+   screen — if in doubt, it re-derives from the DOM rather than trusting
+   a remembered flag. */
+function _anwSyncDomPauseState() {
+  const popupOpen = !!document.querySelector(".anw-modal-overlay");
+  if (popupOpen) window.anwBalancePoll.pause("popup");
+  else window.anwBalancePoll.resume("popup");
+
+  const bjTable = document.getElementById("bjTableArea");
+  const bjVisible = !!bjTable && !bjTable.classList.contains("hidden");
+  if (bjVisible) window.anwBalancePoll.pause("blackjack-table");
+  else window.anwBalancePoll.resume("blackjack-table");
+}
+
 async function mountBalanceWidget(username) {
   if (document.getElementById("anwBalanceWidget")) return;
   const box = document.createElement("div");
@@ -4008,9 +4112,23 @@ async function mountBalanceWidget(username) {
     if (fresh) el.textContent = fmtMoney(fresh.balance);
   };
   await refresh();
+
   // Poll periodically so the widget stays live even though most module
   // pages have their own separate render() calls that don't know about it.
-  setInterval(refresh, 8000);
+  // Started/stopped via anwBalancePoll so it can be paused for popups,
+  // the Blackjack table, and backgrounded tabs (see block above).
+  _anwPollRefreshFn = refresh;
+  if (document.hidden) _anwPollPauseReasons.add("tab-hidden"); // page loaded already-hidden (rare, but possible)
+  _anwPollSync();
+
+  // Watch for popups / the Blackjack table opening or closing anywhere on
+  // the page (see _anwSyncDomPauseState above). Scoped to widget mount so
+  // teacher pages (no widget) don't pay for a MutationObserver they'd
+  // never benefit from.
+  _anwSyncDomPauseState(); // pick up anything already on screen (e.g. a forced modal from page load)
+  new MutationObserver(_anwSyncDomPauseState).observe(document.body, {
+    childList: true, subtree: true, attributes: true, attributeFilter: ["class"]
+  });
 }
 
 // Sits just under the sticky top nav bar, on the left, rather than being
