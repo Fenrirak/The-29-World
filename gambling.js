@@ -193,23 +193,31 @@ async function spin() {
   spinBtn.disabled = true;
   spinBtn.textContent = "Spinning...";
 
-  const res = await placeRouletteBet(CURRENT.username, CURRENT.classCode, type, amount, selection);
-  if (!res.ok) {
-    box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+  // Wrapped so ANY unexpected error (network hiccup, animation glitch,
+  // etc.) still leaves the Spin button clickable again, instead of stuck
+  // on "Spinning..." forever — the one thing that would look like the
+  // page had crashed.
+  try {
+    const res = await placeRouletteBet(CURRENT.username, CURRENT.classCode, type, amount, selection);
+    if (!res.ok) {
+      box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+
+    await showRouletteAnimation(res.spin);
+
+    box.innerHTML = res.win
+      ? `<div class="success-msg">Ball landed on ${res.spin}. You WON ${fmtMoney(res.netChange)}!</div>`
+      : `<div class="error-msg">Ball landed on ${res.spin}. You lost ${fmtMoney(Math.abs(res.netChange))}.</div>`;
+    document.getElementById("betAmount").value = "";
+    await render();
+  } catch (e) {
+    document.getElementById("wheelOverlay")?.remove();
+    box.innerHTML = `<div class="error-msg">Something went wrong placing that bet. Please try again.</div>`;
+  } finally {
     spinBtn.disabled = false;
     spinBtn.innerHTML = "Spin the wheel";
-    return;
   }
-
-  await showRouletteAnimation(res.spin);
-
-  box.innerHTML = res.win
-    ? `<div class="success-msg">Ball landed on ${res.spin}. You WON ${fmtMoney(res.netChange)}!</div>`
-    : `<div class="error-msg">Ball landed on ${res.spin}. You lost ${fmtMoney(Math.abs(res.netChange))}.</div>`;
-  document.getElementById("betAmount").value = "";
-  spinBtn.disabled = false;
-  spinBtn.innerHTML = "Spin the wheel";
-  await render();
 }
 
 async function renderRecentRoulette() {
@@ -274,81 +282,111 @@ async function bjDeal() {
   btn.disabled = true;
   btn.textContent = "Dealing...";
 
-  const res = await startBlackjackRound(CURRENT.username, CURRENT.classCode, amount);
-  btn.disabled = false;
-  btn.innerHTML = "Deal";
-  if (!res.ok) {
-    box.innerHTML = `<div class="error-msg">${res.error}</div>`;
-    return;
-  }
-  CURRENT_ROUND = res.round;
-  document.getElementById("bjBetForm").classList.add("hidden");
-  document.getElementById("bjTableArea").classList.remove("hidden");
-  document.getElementById("bjNewRoundBtn").classList.add("hidden");
-  document.getElementById("bjRoundMsg").innerHTML = "";
+  // The whole flow (server call + reveal animation) is wrapped so that any
+  // unexpected error surfaces as a message and resets the table, rather
+  // than leaving the Deal button disabled and the table half-drawn forever.
+  try {
+    const res = await startBlackjackRound(CURRENT.username, CURRENT.classCode, amount);
+    if (!res.ok) {
+      box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+    CURRENT_ROUND = res.round;
+    document.getElementById("bjBetForm").classList.add("hidden");
+    document.getElementById("bjTableArea").classList.remove("hidden");
+    document.getElementById("bjNewRoundBtn").classList.add("hidden");
+    document.getElementById("bjRoundMsg").innerHTML = "";
 
-  const token = ++DEAL_TOKEN;
-  await bjAnimateInitialDeal(CURRENT_ROUND, token);
-  if (token !== DEAL_TOKEN) return; // a resume/new deal happened while we were animating
+    const token = ++DEAL_TOKEN;
+    await bjAnimateInitialDeal(CURRENT_ROUND, token);
+    if (token !== DEAL_TOKEN) return; // a resume/new deal happened while we were animating
 
-  // Insurance (when offered) is a table-wide decision made right after the
-  // deal, before ANYONE's turn — including seats before the human — so it
-  // must be handled before the seat-by-seat turn sequence starts, not
-  // folded into it.
-  if (CURRENT_ROUND.phase === "insurance") {
-    ACTIVE_SEAT = CURRENT_ROUND.humanSeat;
-    renderBlackjackRound(bjBuildDisplayRound());
-    document.getElementById("bjInsuranceArea").classList.remove("hidden");
-    return; // waits for bjDoInsurance()
+    // Insurance (when offered) is a table-wide decision made right after the
+    // deal, before ANYONE's turn — including seats before the human — so it
+    // must be handled before the seat-by-seat turn sequence starts, not
+    // folded into it.
+    if (CURRENT_ROUND.phase === "insurance") {
+      ACTIVE_SEAT = CURRENT_ROUND.humanSeat;
+      renderBlackjackRound(bjBuildDisplayRound());
+      document.getElementById("bjInsuranceArea").classList.remove("hidden");
+      return; // waits for bjDoInsurance()
+    }
+    await bjRunTurnSequence(CURRENT_ROUND, 1, token);
+  } catch (e) {
+    document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong dealing that round. If your balance looks off, refresh the page — any escrowed bet is automatically refunded on failure.</div>`;
+    await bjResetTable();
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Deal";
   }
-  await bjRunTurnSequence(CURRENT_ROUND, 1, token);
 }
 
 async function bjDoInsurance(take) {
-  const res = await blackjackInsurance(CURRENT.username, CURRENT.classCode, take);
-  if (!res.ok) { alert(res.error); return; }
-  CURRENT_ROUND = res.round;
-  document.getElementById("bjInsuranceArea").classList.add("hidden");
-  const token = DEAL_TOKEN;
+  const insuranceBtns = document.querySelectorAll("#bjInsuranceArea button");
+  insuranceBtns.forEach(b => b.disabled = true);
+  try {
+    const res = await blackjackInsurance(CURRENT.username, CURRENT.classCode, take);
+    if (!res.ok) {
+      document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+    CURRENT_ROUND = res.round;
+    document.getElementById("bjInsuranceArea").classList.add("hidden");
+    const token = DEAL_TOKEN;
 
-  const dealerHadBlackjack = CURRENT_ROUND.hands[0].status === "push" || CURRENT_ROUND.hands[0].status === "lost-to-dealer-blackjack";
-  if (CURRENT_ROUND.phase === "done" && dealerHadBlackjack) {
-    // The dealer had Blackjack — real casino rules end the round for the
-    // WHOLE table right here, before seat 1 (or anyone) gets a turn. So
-    // skip the turn sequence entirely and just reveal the dealer's hand.
-    ACTIVE_SEAT = "dealer";
-    await bjAnimateDealerTurn(CURRENT_ROUND, token);
-    if (token !== DEAL_TOKEN) return;
-    ACTIVE_SEAT = null;
-    await bjFinalizeRound(CURRENT_ROUND);
-    return;
+    const dealerHadBlackjack = CURRENT_ROUND.hands[0].status === "push" || CURRENT_ROUND.hands[0].status === "lost-to-dealer-blackjack";
+    if (CURRENT_ROUND.phase === "done" && dealerHadBlackjack) {
+      // The dealer had Blackjack — real casino rules end the round for the
+      // WHOLE table right here, before seat 1 (or anyone) gets a turn. So
+      // skip the turn sequence entirely and just reveal the dealer's hand.
+      ACTIVE_SEAT = "dealer";
+      await bjAnimateDealerTurn(CURRENT_ROUND, token);
+      if (token !== DEAL_TOKEN) return;
+      ACTIVE_SEAT = null;
+      await bjFinalizeRound(CURRENT_ROUND);
+      return;
+    }
+
+    // Otherwise table play proceeds normally, starting at seat 1 — this also
+    // correctly covers the player having their own Blackjack (and the
+    // dealer not): that seat is simply skipped with nothing to decide,
+    // while every other seat still gets a normal turn.
+    await bjRunTurnSequence(CURRENT_ROUND, 1, token);
+  } catch (e) {
+    document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong resolving insurance. Please refresh the page.</div>`;
+  } finally {
+    insuranceBtns.forEach(b => b.disabled = false);
   }
-
-  // Otherwise table play proceeds normally, starting at seat 1 — this also
-  // correctly covers the player having their own Blackjack (and the
-  // dealer not): that seat is simply skipped with nothing to decide,
-  // while every other seat still gets a normal turn.
-  await bjRunTurnSequence(CURRENT_ROUND, 1, token);
 }
 
+const BJ_ACTION_BTN_IDS = ["bjHitBtn", "bjStandBtn", "bjDoubleBtn", "bjSplitBtn"];
+
 async function bjDoAction(action) {
-  ["bjHitBtn", "bjStandBtn", "bjDoubleBtn", "bjSplitBtn"].forEach(id => document.getElementById(id).disabled = true);
-  const res = await blackjackAction(CURRENT.username, CURRENT.classCode, action);
-  const token = DEAL_TOKEN;
-  if (!res.ok) {
-    document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
-    ["bjHitBtn", "bjStandBtn", "bjDoubleBtn", "bjSplitBtn"].forEach(id => document.getElementById(id).disabled = false);
-    return;
-  }
-  CURRENT_ROUND = res.round;
-  if (CURRENT_ROUND.phase === "playing") {
-    // Still your turn (e.g. another card, or a fresh split hand to play).
-    renderBlackjackRound(bjBuildDisplayRound());
-    bjUpdateActionButtons();
-    ["bjHitBtn", "bjStandBtn", "bjDoubleBtn", "bjSplitBtn"].forEach(id => document.getElementById(id).disabled = false);
-  } else {
-    document.getElementById("bjActionArea").classList.add("hidden");
-    await bjRunRemainingSeats(CURRENT_ROUND, CURRENT_ROUND.humanSeat + 1, token);
+  BJ_ACTION_BTN_IDS.forEach(id => document.getElementById(id).disabled = true);
+  // Wrapped so a failed hit/stand/double/split always leaves the action
+  // buttons clickable again instead of stuck disabled — previously any
+  // unexpected error here (e.g. a rejected request) left the table
+  // permanently unresponsive until a full page reload.
+  try {
+    const res = await blackjackAction(CURRENT.username, CURRENT.classCode, action);
+    const token = DEAL_TOKEN;
+    if (!res.ok) {
+      document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+    CURRENT_ROUND = res.round;
+    if (CURRENT_ROUND.phase === "playing") {
+      // Still your turn (e.g. another card, or a fresh split hand to play).
+      renderBlackjackRound(bjBuildDisplayRound());
+      bjUpdateActionButtons();
+    } else {
+      document.getElementById("bjActionArea").classList.add("hidden");
+      await bjRunRemainingSeats(CURRENT_ROUND, CURRENT_ROUND.humanSeat + 1, token);
+    }
+  } catch (e) {
+    document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong with that action. Please refresh the page — any stake taken for it is automatically refunded on failure.</div>`;
+  } finally {
+    BJ_ACTION_BTN_IDS.forEach(id => document.getElementById(id).disabled = false);
   }
 }
 
@@ -379,7 +417,13 @@ async function bjResetTable() {
   document.getElementById("bjBetForm").classList.remove("hidden");
   document.getElementById("bjTableArea").classList.add("hidden");
   document.getElementById("bjNewRoundBtn").classList.add("hidden");
-  await render();
+  try {
+    await render();
+  } catch (e) {
+    // The table itself is already reset above even if the follow-up
+    // refresh fails — worst case the student just sees slightly stale
+    // balances/limits until their next action or page load.
+  }
 }
 
 function bjSuitSymbol(s) { return { S: "♠", H: "♥", D: "♦", C: "♣" }[s] || s; }

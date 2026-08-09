@@ -2154,48 +2154,63 @@ async function startBlackjackRound(username, classCode, betAmount) {
   if (user.blackjackRound) return { ok: false, error: "You already have a Blackjack round in progress." };
   if (user.role !== "teacher" && user.balance < betAmount) return { ok: false, error: "You don't have enough money for that bet." };
 
-  const shoe = bjBuildShoe();
-  const humanSeat = 1 + bjRandomInt(3);
-  const botSeats = [1, 2, 3].filter(s => s !== humanSeat);
-  const botNames = bjShuffle(BJ_BOT_NAMES).slice(0, 2);
-  const seatCards = { 1: [], 2: [], 3: [] };
+  // Build and deal the whole round in memory FIRST, before any money moves.
+  // Shuffling/dealing/bot-play never touch the network and can't fail for a
+  // real user (bjDraw only throws if the 208-card shoe is ever exhausted,
+  // which basic strategy play can't do) — but if something unexpected does
+  // go wrong here, better to bail out now than escrow a bet for a round
+  // that was never actually built.
+  let round;
+  try {
+    const shoe = bjBuildShoe();
+    const humanSeat = 1 + bjRandomInt(3);
+    const botSeats = [1, 2, 3].filter(s => s !== humanSeat);
+    const botNames = bjShuffle(BJ_BOT_NAMES).slice(0, 2);
+    const seatCards = { 1: [], 2: [], 3: [] };
 
-  [1, 2, 3].forEach(s => seatCards[s].push(bjDraw(shoe)));
-  const dealerUp = bjDraw(shoe);
-  [1, 2, 3].forEach(s => seatCards[s].push(bjDraw(shoe)));
-  const dealerHole = bjDraw(shoe);
+    [1, 2, 3].forEach(s => seatCards[s].push(bjDraw(shoe)));
+    const dealerUp = bjDraw(shoe);
+    [1, 2, 3].forEach(s => seatCards[s].push(bjDraw(shoe)));
+    const dealerHole = bjDraw(shoe);
 
-  const bots = {};
-  botSeats.forEach((s, idx) => {
-    bots[s] = { name: botNames[idx], hands: bjPlayBot(shoe, seatCards[s], dealerUp.r) };
-  });
+    const bots = {};
+    botSeats.forEach((s, idx) => {
+      bots[s] = { name: botNames[idx], hands: bjPlayBot(shoe, seatCards[s], dealerUp.r) };
+    });
 
-  const humanCards = seatCards[humanSeat];
-  const insuranceOffered = dealerUp.r === "A";
+    const humanCards = seatCards[humanSeat];
+    const insuranceOffered = dealerUp.r === "A";
+
+    round = {
+      shoe, betAmount, humanSeat, botSeats, bots,
+      dealer: { up: dealerUp, hole: dealerHole, cards: [], revealed: false },
+      insurance: { offered: insuranceOffered, resolved: !insuranceOffered, taken: false, amount: 0 },
+      hands: [{ cards: humanCards, bet: betAmount, doubled: false, isSplitAces: false, status: "playing" }],
+      activeHandIndex: 0, splitCount: 0,
+      phase: insuranceOffered ? "insurance" : "playing",
+      createdAt: Date.now()
+    };
+    // A natural human blackjack auto-stands that hand — nothing left to
+    // decide on it (only insurance, if offered, is still open).
+    if (bjIsNaturalBlackjack(humanCards)) round.hands[0].status = "blackjack";
+  } catch (e) {
+    return { ok: false, error: "Something went wrong dealing that round. Please try again." };
+  }
 
   await adjustBalance(username, -betAmount);
 
-  const round = {
-    shoe, betAmount, humanSeat, botSeats, bots,
-    dealer: { up: dealerUp, hole: dealerHole, cards: [], revealed: false },
-    insurance: { offered: insuranceOffered, resolved: !insuranceOffered, taken: false, amount: 0 },
-    hands: [{ cards: humanCards, bet: betAmount, doubled: false, isSplitAces: false, status: "playing" }],
-    activeHandIndex: 0, splitCount: 0,
-    phase: insuranceOffered ? "insurance" : "playing",
-    createdAt: Date.now()
-  };
-
-  // A natural human blackjack auto-stands that hand — nothing left to
-  // decide on it (only insurance, if offered, is still open).
-  if (bjIsNaturalBlackjack(humanCards)) {
-    round.hands[0].status = "blackjack";
-    if (!insuranceOffered) {
+  // From here on the bet is escrowed, so any failure must refund it rather
+  // than leave the student down money with no round to show for it.
+  try {
+    if (round.hands[0].status === "blackjack" && !round.insurance.offered) {
       return await bjAdvance(username, classCode, round);
     }
+    await usersCol().doc(username).update({ blackjackRound: round });
+    return { ok: true, round: bjClientView(round) };
+  } catch (e) {
+    await adjustBalance(username, betAmount);
+    return { ok: false, error: "Something went wrong starting that round — your bet has been refunded. Please try again." };
   }
-
-  await usersCol().doc(username).update({ blackjackRound: round });
-  return { ok: true, round: bjClientView(round) };
 }
 
 // Applies the human's insurance decision, then checks the dealer's hole
@@ -2210,35 +2225,46 @@ async function blackjackInsurance(username, classCode, takeInsurance) {
   const round = user.blackjackRound;
   if (round.phase !== "insurance") return { ok: false, error: "Insurance isn't available right now." };
 
+  let insAmount = 0;
   if (takeInsurance) {
-    const insAmount = Math.round((round.betAmount / 2) * 100) / 100;
+    insAmount = Math.round((round.betAmount / 2) * 100) / 100;
     if (user.balance < insAmount) return { ok: false, error: "You don't have enough money for insurance." };
     await adjustBalance(username, -insAmount);
     round.insurance.taken = true;
     round.insurance.amount = insAmount;
   }
-  round.insurance.resolved = true;
 
-  round.dealer.revealed = true;
-  round.dealer.cards = [round.dealer.up, round.dealer.hole];
-  const dealerBJ = bjIsNaturalBlackjack(round.dealer.cards);
+  // Everything below only rearranges already-known cards and saves state —
+  // nothing here should realistically throw — but if it ever does, refund
+  // any insurance stake just taken instead of leaving the round stuck with
+  // money gone and nothing saved.
+  try {
+    round.insurance.resolved = true;
 
-  if (dealerBJ) {
-    if (round.insurance.taken) await adjustBalance(username, round.insurance.amount * 3); // stake back + 2:1
-    if (round.hands[0].status === "blackjack") round.hands[0].status = "push";
-    else round.hands[0].status = "lost-to-dealer-blackjack";
-    round.phase = "dealer";
-    return await bjSettle(username, classCode, round);
+    round.dealer.revealed = true;
+    round.dealer.cards = [round.dealer.up, round.dealer.hole];
+    const dealerBJ = bjIsNaturalBlackjack(round.dealer.cards);
+
+    if (dealerBJ) {
+      if (round.insurance.taken) await adjustBalance(username, round.insurance.amount * 3); // stake back + 2:1
+      if (round.hands[0].status === "blackjack") round.hands[0].status = "push";
+      else round.hands[0].status = "lost-to-dealer-blackjack";
+      round.phase = "dealer";
+      return await bjSettle(username, classCode, round);
+    }
+
+    round.dealer.revealed = false; // hide it again until the human's play is done
+    if (round.hands[0].status === "blackjack") {
+      round.phase = "dealer";
+      return await bjSettle(username, classCode, round);
+    }
+    round.phase = "playing";
+    await usersCol().doc(username).update({ blackjackRound: round });
+    return { ok: true, round: bjClientView(round) };
+  } catch (e) {
+    if (insAmount > 0) await adjustBalance(username, insAmount);
+    return { ok: false, error: "Something went wrong resolving insurance — any insurance stake has been refunded. Please try again." };
   }
-
-  round.dealer.revealed = false; // hide it again until the human's play is done
-  if (round.hands[0].status === "blackjack") {
-    round.phase = "dealer";
-    return await bjSettle(username, classCode, round);
-  }
-  round.phase = "playing";
-  await usersCol().doc(username).update({ blackjackRound: round });
-  return { ok: true, round: bjClientView(round) };
 }
 
 function bjActiveHand(round) { return round.hands[round.activeHandIndex]; }
@@ -2264,51 +2290,66 @@ async function blackjackAction(username, classCode, action) {
   const hand = bjActiveHand(round);
   if (!hand || hand.status !== "playing") return { ok: false, error: "That hand is already finished." };
 
-  if (action === "hit") {
-    hand.cards.push(bjDraw(round.shoe));
-    if (bjIsBust(hand.cards)) hand.status = "bust";
-    else if (bjHandValue(hand.cards).total === 21) hand.status = "stand";
-    return await bjAdvance(username, classCode, round);
-  }
-
-  if (action === "stand") {
-    hand.status = "stand";
-    return await bjAdvance(username, classCode, round);
-  }
-
-  if (action === "double") {
-    const eligible = hand.cards.length === 2 && !hand.doubled && !hand.isSplitAces && !hand.cards.some(c => c.r === "A");
-    if (!eligible) return { ok: false, error: "You can only double on your first two cards, and not if either card is an Ace." };
-    if (user.balance < hand.bet) return { ok: false, error: "You don't have enough money to double down." };
-    await adjustBalance(username, -hand.bet);
-    hand.doubled = true;
-    hand.bet *= 2;
-    hand.cards.push(bjDraw(round.shoe));
-    hand.status = bjIsBust(hand.cards) ? "bust" : "stand";
-    return await bjAdvance(username, classCode, round);
-  }
-
-  if (action === "split") {
-    const eligible = hand.cards.length === 2 && !hand.isSplitAces && round.splitCount < 2 &&
-      bjCardValue(hand.cards[0].r) === bjCardValue(hand.cards[1].r);
-    if (!eligible) return { ok: false, error: "That hand can't be split." };
-    if (user.balance < hand.bet) return { ok: false, error: "You don't have enough money to split." };
-    await adjustBalance(username, -hand.bet);
-    const isAces = hand.cards[0].r === "A";
-    const otherCard = hand.cards.pop();
-    hand.cards.push(bjDraw(round.shoe));
-    const newHand = { cards: [otherCard, bjDraw(round.shoe)], bet: hand.bet, doubled: false, isSplitAces: isAces, status: "playing" };
-    if (isAces) {
-      hand.isSplitAces = true;
-      hand.status = "stand"; // split Aces: exactly one card each, forced stand
-      newHand.status = "stand";
+  try {
+    if (action === "hit") {
+      hand.cards.push(bjDraw(round.shoe));
+      if (bjIsBust(hand.cards)) hand.status = "bust";
+      else if (bjHandValue(hand.cards).total === 21) hand.status = "stand";
+      return await bjAdvance(username, classCode, round);
     }
-    round.hands.splice(round.activeHandIndex + 1, 0, newHand);
-    round.splitCount++;
-    return await bjAdvance(username, classCode, round);
-  }
 
-  return { ok: false, error: "Unknown action." };
+    if (action === "stand") {
+      hand.status = "stand";
+      return await bjAdvance(username, classCode, round);
+    }
+
+    if (action === "double") {
+      const eligible = hand.cards.length === 2 && !hand.doubled && !hand.isSplitAces && !hand.cards.some(c => c.r === "A");
+      if (!eligible) return { ok: false, error: "You can only double on your first two cards, and not if either card is an Ace." };
+      if (user.balance < hand.bet) return { ok: false, error: "You don't have enough money to double down." };
+      await adjustBalance(username, -hand.bet);
+      try {
+        hand.doubled = true;
+        hand.bet *= 2;
+        hand.cards.push(bjDraw(round.shoe));
+        hand.status = bjIsBust(hand.cards) ? "bust" : "stand";
+        return await bjAdvance(username, classCode, round);
+      } catch (e) {
+        await adjustBalance(username, hand.bet / 2); // undo the doubled stake just taken
+        return { ok: false, error: "Something went wrong doubling down — your extra stake has been refunded. Please try again." };
+      }
+    }
+
+    if (action === "split") {
+      const eligible = hand.cards.length === 2 && !hand.isSplitAces && round.splitCount < 2 &&
+        bjCardValue(hand.cards[0].r) === bjCardValue(hand.cards[1].r);
+      if (!eligible) return { ok: false, error: "That hand can't be split." };
+      if (user.balance < hand.bet) return { ok: false, error: "You don't have enough money to split." };
+      const splitStake = hand.bet;
+      await adjustBalance(username, -splitStake);
+      try {
+        const isAces = hand.cards[0].r === "A";
+        const otherCard = hand.cards.pop();
+        hand.cards.push(bjDraw(round.shoe));
+        const newHand = { cards: [otherCard, bjDraw(round.shoe)], bet: hand.bet, doubled: false, isSplitAces: isAces, status: "playing" };
+        if (isAces) {
+          hand.isSplitAces = true;
+          hand.status = "stand"; // split Aces: exactly one card each, forced stand
+          newHand.status = "stand";
+        }
+        round.hands.splice(round.activeHandIndex + 1, 0, newHand);
+        round.splitCount++;
+        return await bjAdvance(username, classCode, round);
+      } catch (e) {
+        await adjustBalance(username, splitStake); // undo the split stake just taken
+        return { ok: false, error: "Something went wrong splitting that hand — your stake has been refunded. Please try again." };
+      }
+    }
+
+    return { ok: false, error: "Unknown action." };
+  } catch (e) {
+    return { ok: false, error: "Something went wrong with that action. Please try again." };
+  }
 }
 
 // Dealer plays out (stands on all 17s, hard or soft), then every human
