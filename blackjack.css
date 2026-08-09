@@ -88,8 +88,8 @@
 .bj-card.black { color: #1f2b44; }
 
 .bj-card.face-down {
-  background: repeating-linear-gradient(45deg, #2a4d8f, #2a4d8f 4px, #1f3a6b 4px, #1f3a6b 8px);
-  border: 1px solid #16294d;
+  background: repeating-linear-gradient(45deg, #e8b74d, #e8b74d 4px, #c28f2e 4px, #c28f2e 8px);
+  border: 1px solid #8a651f;
 }
 
 .bj-total {
@@ -125,13 +125,18 @@
 }
 @keyframes bjPulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 
-/* Every .bj-card is freshly inserted by the reveal animation one at a
-   time, so this pop-in plays exactly once per card as it appears. */
+/* Cards fade smoothly into existence as they're dealt. This animation is
+   applied only via the .bj-card-in class (added by gambling.js only to a
+   card the very first time its slot is drawn) rather than to every
+   .bj-card — the table re-renders its whole hand HTML on every step of
+   the deal/turn sequence, so if every .bj-card played this on insertion,
+   already-shown cards would replay it dozens of times per round and
+   look like continuous flashing. */
 @keyframes bjCardIn {
-  from { opacity: 0; transform: translateY(-14px) scale(.85); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-.bj-card { animation: bjCardIn .28s ease-out; }
+.bj-card.bj-card-in { animation: bjCardIn 2s ease-out; }
 
 @media (max-width: 640px) {
   .bj-seats-row { grid-template-columns: 1fr; }
@@ -164,4 +169,61 @@
   color: #1f2b44;
 }
 .mode-btn .icon-slot { width: 18px; height: 18px; display: inline-flex; }
+
+/* ===================== Blackjack: landscape-only ===================== */
+/* Hidden by default (desktop/landscape) — only shown by the media query
+   below, and only ever swapped in for phones/tablets held upright. A
+   plain "portrait" check alone would also fire on a narrow-but-tall
+   desktop browser window, which isn't the situation this is meant to
+   catch, so it's paired with a width cap. */
+.bj-rotate-prompt {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  padding: 60px 24px;
+}
+.bj-rotate-prompt h3 {
+  margin: 0;
+  color: var(--gold, #d4a24c);
+  font-size: 18px;
+}
+.bj-rotate-prompt p { max-width: 320px; margin: 0; }
+
+.bj-rotate-icon {
+  width: 56px;
+  height: 88px;
+  border: 4px solid var(--gold, #d4a24c);
+  border-radius: 10px;
+  position: relative;
+  animation: bjRotateHint 1.8s ease-in-out infinite;
+}
+.bj-rotate-icon::after {
+  /* home-button dot, just to read clearly as "phone" */
+  content: "";
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold, #d4a24c);
+  transform: translateX(-50%);
+}
+@keyframes bjRotateHint {
+  0%, 15% { transform: rotate(0deg); }
+  50%, 65% { transform: rotate(90deg); }
+  100% { transform: rotate(90deg); }
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  /* Only the rotate prompt shows; everything else in the Blackjack
+     student area (bet form, table, recent bets) is hidden outright —
+     not just visually, since display:none also stops it receiving any
+     taps, which is what makes it actually unplayable in portrait rather
+     than just visually discouraged. */
+  #bjStudentView > *:not(#bjRotatePrompt) { display: none !important; }
+  #bjRotatePrompt { display: flex; }
+}
 

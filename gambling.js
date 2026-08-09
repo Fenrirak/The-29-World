@@ -275,20 +275,24 @@ const BJ_CARD_DELAY = 500; // ms between each card appearing
 const BJ_SEAT_PAUSE = 400; // ms pause after a seat finishes, before the next seat's turn starts
 
 async function bjDeal() {
-  const amount = document.getElementById("bjBetAmount").value;
   const box = document.getElementById("bjBetMsg");
   const btn = document.getElementById("bjDealBtn");
-  box.innerHTML = "";
-  btn.disabled = true;
-  btn.textContent = "Dealing...";
 
   // The whole flow (server call + reveal animation) is wrapped so that any
   // unexpected error surfaces as a message and resets the table, rather
   // than leaving the Deal button disabled and the table half-drawn forever.
+  // Element lookups now happen inside the try too — previously a null
+  // element here would throw before the try block even started, leaving
+  // the Deal button stuck disabled with no error shown and no way to
+  // recover except a full page reload.
   try {
+    const amount = document.getElementById("bjBetAmount").value;
+    if (box) box.innerHTML = "";
+    if (btn) { btn.disabled = true; btn.textContent = "Dealing..."; }
+
     const res = await startBlackjackRound(CURRENT.username, CURRENT.classCode, amount);
     if (!res.ok) {
-      box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+      if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`;
       return;
     }
     CURRENT_ROUND = res.round;
@@ -316,8 +320,7 @@ async function bjDeal() {
     document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong dealing that round. If your balance looks off, refresh the page — any escrowed bet is automatically refunded on failure.</div>`;
     await bjResetTable();
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = "Deal";
+    if (btn) { btn.disabled = false; btn.innerHTML = "Deal"; }
   }
 }
 
@@ -361,13 +364,30 @@ async function bjDoInsurance(take) {
 
 const BJ_ACTION_BTN_IDS = ["bjHitBtn", "bjStandBtn", "bjDoubleBtn", "bjSplitBtn"];
 
+// Small helper used throughout the Blackjack UI: a null-safe batch
+// enable/disable that never throws even if an id is momentarily missing
+// from the DOM (e.g. a render happening mid-click). Previously several
+// spots here did document.getElementById(id).disabled = ... directly,
+// OUTSIDE any try/catch — if that lookup ever came back null the whole
+// click handler threw immediately, before it even reached its own
+// try/finally, so the buttons it had just set to disabled=true were
+// never re-enabled. That's the "occasionally clicking does nothing" bug:
+// one bad click silently left the action buttons permanently disabled
+// for the rest of the round.
+function bjSetButtonsDisabled(ids, disabled) {
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = disabled;
+  });
+}
+
 async function bjDoAction(action) {
-  BJ_ACTION_BTN_IDS.forEach(id => document.getElementById(id).disabled = true);
   // Wrapped so a failed hit/stand/double/split always leaves the action
   // buttons clickable again instead of stuck disabled — previously any
   // unexpected error here (e.g. a rejected request) left the table
   // permanently unresponsive until a full page reload.
   try {
+    bjSetButtonsDisabled(BJ_ACTION_BTN_IDS, true);
     const res = await blackjackAction(CURRENT.username, CURRENT.classCode, action);
     const token = DEAL_TOKEN;
     if (!res.ok) {
@@ -380,13 +400,13 @@ async function bjDoAction(action) {
       renderBlackjackRound(bjBuildDisplayRound());
       bjUpdateActionButtons();
     } else {
-      document.getElementById("bjActionArea").classList.add("hidden");
+      document.getElementById("bjActionArea")?.classList.add("hidden");
       await bjRunRemainingSeats(CURRENT_ROUND, CURRENT_ROUND.humanSeat + 1, token);
     }
   } catch (e) {
     document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong with that action. Please refresh the page — any stake taken for it is automatically refunded on failure.</div>`;
   } finally {
-    BJ_ACTION_BTN_IDS.forEach(id => document.getElementById(id).disabled = false);
+    bjSetButtonsDisabled(BJ_ACTION_BTN_IDS, false);
   }
 }
 
@@ -426,14 +446,30 @@ async function bjResetTable() {
   }
 }
 
+// Tracks which "card slots" (dealer-0, human-1-2, seat3-b0-1, etc.) have
+// already been drawn once, so a card only ever plays its fade-in the
+// first time it appears — every later re-render of the same hand (which
+// happens a lot: once per sleep() step during the reveal, plus whenever
+// the player clicks an action) renders that card statically instead of
+// restarting its animation. Reset at the start of a fresh deal; see
+// bjAnimateInitialDeal and bjShowRoundStatic.
+let _bjAnimatedCardKeys = new Set();
+// Set true only while replaying an already-finished round with no
+// animation at all (resuming after a page refresh) — every card in that
+// round should appear instantly, none of them "new".
+let _bjSuppressCardAnim = false;
+
 function bjSuitSymbol(s) { return { S: "♠", H: "♥", D: "♦", C: "♣" }[s] || s; }
-function bjCardHtml(card, faceDown) {
-  if (faceDown) return `<div class="bj-card face-down"></div>`;
+function bjCardHtml(card, faceDown, key) {
+  const isNew = !!key && !_bjSuppressCardAnim && !_bjAnimatedCardKeys.has(key);
+  if (key) _bjAnimatedCardKeys.add(key);
+  const animClass = isNew ? " bj-card-in" : "";
+  if (faceDown) return `<div class="bj-card face-down${animClass}"></div>`;
   const red = card.s === "H" || card.s === "D";
-  return `<div class="bj-card ${red ? "red" : "black"}">${card.r}${bjSuitSymbol(card.s)}</div>`;
+  return `<div class="bj-card ${red ? "red" : "black"}${animClass}">${card.r}${bjSuitSymbol(card.s)}</div>`;
 }
-function bjHandHtml(cards, faceDownCount) {
-  return cards.map((c, i) => bjCardHtml(c, faceDownCount && i >= cards.length - faceDownCount)).join("");
+function bjHandHtml(cards, faceDownCount, keyPrefix) {
+  return cards.map((c, i) => bjCardHtml(c, faceDownCount && i >= cards.length - faceDownCount, keyPrefix ? `${keyPrefix}-${i}` : null)).join("");
 }
 function bjOutcomeLabel(o) {
   return { won: "Won", blackjack: "Blackjack!", push: "Push", lost: "Lost", "lost-to-dealer-blackjack": "Lost" }[o] || "";
@@ -459,6 +495,7 @@ function bjCardValueClient(rank) {
 // dealer's hidden hole card — one card at a time with a short pause, so
 // it visually reads exactly like a real dealer working around the table.
 async function bjAnimateInitialDeal(round, token) {
+  _bjAnimatedCardKeys = new Set(); // fresh deal — every card slot is new again
   DISPLAY_BOTS = {};
   DISPLAY_DEALER = { cards: [], revealed: false, total: null };
   DISPLAY_HUMAN_HANDS = [{ cards: [], bet: round.hands[0].bet, doubled: false, isSplitAces: false, status: "playing", total: 0 }];
@@ -500,6 +537,12 @@ async function bjAnimateInitialDeal(round, token) {
 async function bjRunTurnSequence(round, fromSeat, token) {
   for (let seat = fromSeat; seat <= 3; seat++) {
     if (token !== DEAL_TOKEN) return;
+    // Slight pause before every seat's turn starts — including right
+    // after the human's own turn resolves, which previously had no gap
+    // at all (bjRunRemainingSeats used to jump straight into the next
+    // seat's card reveal the instant the human's action came back).
+    await sleep(BJ_SEAT_PAUSE);
+    if (token !== DEAL_TOKEN) return;
     if (seat === round.humanSeat) {
       DISPLAY_HUMAN_HANDS = null; // switch to live CURRENT_ROUND.hands from here on
       ACTIVE_SEAT = seat;
@@ -520,6 +563,8 @@ async function bjRunTurnSequence(round, fromSeat, token) {
     if (token !== DEAL_TOKEN) return;
   }
   ACTIVE_SEAT = "dealer";
+  await sleep(BJ_SEAT_PAUSE); // same slight pause before the dealer's turn
+  if (token !== DEAL_TOKEN) return;
   await bjAnimateDealerTurn(round, token);
   if (token !== DEAL_TOKEN) return;
   ACTIVE_SEAT = null;
@@ -583,7 +628,9 @@ function bjShowRoundStatic(round) {
   DISPLAY_HUMAN_HANDS = null;
   ACTIVE_SEAT = (round.phase === "playing" || round.phase === "insurance") ? round.humanSeat : null;
   SHOW_RESULTS = round.phase === "done";
+  _bjSuppressCardAnim = true; // resuming after a refresh — every card appears instantly, none of them "new"
   renderBlackjackRound(bjBuildDisplayRound());
+  _bjSuppressCardAnim = false;
   if (round.phase === "insurance") document.getElementById("bjInsuranceArea").classList.remove("hidden");
   if (round.phase === "playing") { document.getElementById("bjActionArea").classList.remove("hidden"); bjUpdateActionButtons(); }
   if (round.phase === "done") {
@@ -626,49 +673,57 @@ function bjBuildDisplayRound() {
 function renderBlackjackRound(r) {
   // Dealer
   const dealerHidden = !r.dealer.revealed;
-  document.getElementById("bjDealerHand").innerHTML = r.dealer.cards.length
-    ? (dealerHidden ? bjCardHtml(r.dealer.cards[0], false) + (r.dealer.cards.length > 1 || CURRENT_ROUND.dealer.revealed === false ? bjCardHtml(null, true) : "") : bjHandHtml(r.dealer.cards, 0))
-    : "";
-  document.getElementById("bjDealerTotal").textContent = r.dealer.revealed && r.dealer.total !== null ? `Total: ${r.dealer.total}` : "";
+  const dealerHandEl = document.getElementById("bjDealerHand");
+  if (dealerHandEl) {
+    dealerHandEl.innerHTML = r.dealer.cards.length
+      ? (dealerHidden
+          ? bjCardHtml(r.dealer.cards[0], false, "dealer-0") + (r.dealer.cards.length > 1 || CURRENT_ROUND.dealer.revealed === false ? bjCardHtml(null, true, "dealer-hole") : "")
+          : bjHandHtml(r.dealer.cards, 0, "dealer"))
+      : "";
+  }
+  const dealerTotalEl = document.getElementById("bjDealerTotal");
+  if (dealerTotalEl) dealerTotalEl.textContent = r.dealer.revealed && r.dealer.total !== null ? `Total: ${r.dealer.total}` : "";
 
   // Seats 1, 2, 3 in table order
   const seatsRow = document.getElementById("bjSeatsRow");
-  seatsRow.innerHTML = "";
-  for (let seat = 1; seat <= 3; seat++) {
-    const isHuman = seat === r.humanSeat;
-    const div = document.createElement("div");
-    div.className = "bj-seat" + (isHuman ? " is-human" : "");
-    if (r.activeSeat === seat) div.classList.add("is-active");
+  if (seatsRow) {
+    seatsRow.innerHTML = "";
+    for (let seat = 1; seat <= 3; seat++) {
+      const isHuman = seat === r.humanSeat;
+      const div = document.createElement("div");
+      div.className = "bj-seat" + (isHuman ? " is-human" : "");
+      if (r.activeSeat === seat) div.classList.add("is-active");
 
-    const playingCaption = (r.activeSeat === seat && !isHuman) ? `<div class="bj-playing-tag">Playing...</div>` : "";
+      const playingCaption = (r.activeSeat === seat && !isHuman) ? `<div class="bj-playing-tag">Playing...</div>` : "";
 
-    if (isHuman) {
-      let html = `<div class="bj-seat-name">${icon("users", 14)} You (seat ${seat})</div>`;
-      (r.hands || []).forEach((h, i) => {
-        const active = r.phase === "playing" && r.activeSeat === seat && i === r.activeHandIndex;
-        html += `<div class="bj-hand-group" style="${active ? 'outline:2px dashed #ffd778;border-radius:8px;padding:4px;' : ''}">
-          <div class="bj-hand">${bjHandHtml(h.cards, 0)}</div>
-          ${h.cards.length ? `<div class="bj-total">${fmtMoney(h.bet)} — Total: ${h.total}${h.doubled ? " (doubled)" : ""}</div>` : ""}
-          ${h.status !== "playing" && r.results ? `<span class="bj-outcome ${bjOutcomeClass(r.results[i])}">${bjOutcomeLabel(r.results[i])}</span>` : ""}
-        </div>`;
-      });
-      div.innerHTML = html;
-    } else {
-      const bot = r.bots[seat];
-      let html = `<div class="bj-seat-name">${icon("users", 14)} ${bot.name}</div>${playingCaption}`;
-      bot.hands.forEach(h => {
-        html += `<div class="bj-hand-group">
-          <div class="bj-hand">${bjHandHtml(h.cards, 0)}</div>
-          ${h.cards.length && h.total !== null ? `<div class="bj-total">Total: ${h.total}${h.bust ? " (bust)" : ""}${h.doubled ? " (doubled)" : ""}</div>` : ""}
-        </div>`;
-      });
-      div.innerHTML = html;
+      if (isHuman) {
+        let html = `<div class="bj-seat-name">${icon("users", 14)} You (seat ${seat})</div>`;
+        (r.hands || []).forEach((h, i) => {
+          const active = r.phase === "playing" && r.activeSeat === seat && i === r.activeHandIndex;
+          html += `<div class="bj-hand-group" style="${active ? 'outline:2px dashed #ffd778;border-radius:8px;padding:4px;' : ''}">
+            <div class="bj-hand">${bjHandHtml(h.cards, 0, `human-${i}`)}</div>
+            ${h.cards.length ? `<div class="bj-total">${fmtMoney(h.bet)} — Total: ${h.total}${h.doubled ? " (doubled)" : ""}</div>` : ""}
+            ${h.status !== "playing" && r.results ? `<span class="bj-outcome ${bjOutcomeClass(r.results[i])}">${bjOutcomeLabel(r.results[i])}</span>` : ""}
+          </div>`;
+        });
+        div.innerHTML = html;
+      } else {
+        const bot = r.bots[seat];
+        let html = `<div class="bj-seat-name">${icon("users", 14)} ${bot.name}</div>${playingCaption}`;
+        bot.hands.forEach((h, hi) => {
+          html += `<div class="bj-hand-group">
+            <div class="bj-hand">${bjHandHtml(h.cards, 0, `seat${seat}-b${hi}`)}</div>
+            ${h.cards.length && h.total !== null ? `<div class="bj-total">Total: ${h.total}${h.bust ? " (bust)" : ""}${h.doubled ? " (doubled)" : ""}</div>` : ""}
+          </div>`;
+        });
+        div.innerHTML = html;
+      }
+      seatsRow.appendChild(div);
     }
-    seatsRow.appendChild(div);
   }
 
-  if (r.phase !== "insurance") document.getElementById("bjInsuranceArea").classList.add("hidden");
-  if (r.phase !== "playing" || r.activeSeat !== r.humanSeat) document.getElementById("bjActionArea").classList.add("hidden");
+  if (r.phase !== "insurance") document.getElementById("bjInsuranceArea")?.classList.add("hidden");
+  if (r.phase !== "playing" || r.activeSeat !== r.humanSeat) document.getElementById("bjActionArea")?.classList.add("hidden");
 }
 
 async function renderRecentBlackjack() {
@@ -700,6 +755,27 @@ async function saveBlackjackSettingsUI() {
 }
 
 /* ===================== Shared: mode switch, chrome, init, render ===================== */
+
+// Blackjack needs real horizontal space for the dealer row + 3 seats
+// side-by-side, so it's landscape-only on narrow/mobile screens. Rather
+// than listening for orientationchange/resize in JS to toggle this, the
+// prompt is injected once here and left entirely to a CSS media query
+// (see blackjack.css) — the browser re-evaluates that instantly on
+// rotation, so there's no listener to maintain and no risk of it getting
+// out of sync with the actual screen orientation.
+function mountBjRotatePrompt() {
+  const container = document.getElementById("bjStudentView");
+  if (!container || document.getElementById("bjRotatePrompt")) return;
+  const prompt = document.createElement("div");
+  prompt.id = "bjRotatePrompt";
+  prompt.className = "bj-rotate-prompt";
+  prompt.innerHTML = `
+    <div class="bj-rotate-icon"></div>
+    <h3>Rotate your device</h3>
+    <p class="muted-small">Blackjack needs a landscape screen so the whole table fits. Turn your phone or tablet sideways to keep playing.</p>
+  `;
+  container.insertBefore(prompt, container.firstChild);
+}
 
 function switchMode(mode) {
   MODE = mode;
@@ -741,6 +817,7 @@ async function init() {
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
+  mountBjRotatePrompt();
   // These 8 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
   // at a time — 8 separate sequential network round-trips — was a big
