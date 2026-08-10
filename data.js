@@ -1,3 +1,29 @@
+
+
+Skip to content
+Using Gmail with screen readers
+
+1 of 12
+29 World
+Inbox
+
+Nathan Liu <nathan.liu1211@gmail.com>
+Attachments
+07:20 (3 minutes ago)
+to me
+
+ One attachment
+  •  Scanned by Gmail
+Anti-virus warning – 1 attachment contains a virus or blocked file. Downloading this attachment is disabled.
+
+Mail Delivery Subsystem <mailer-daemon@googlemail.com>
+07:20 (2 minutes ago)
+to me
+
+For security reasons, Gmail does not allow you to use this type of file as it violates Google policy for executables and archives.
+
+
+
 /* ===================== The 29 World — data layer =====================
    Everything is now stored in Firestore (collections "users" and
    "classes") so multiple devices share the same live data.
@@ -959,7 +985,15 @@ async function takeLoan(username, classCode, amount) {
         // Which ISO week this loan last had interest charged for — set to
         // the taking week so the very next Monday job doesn't double-charge
         // a loan taken earlier that same week (or on the Monday itself).
-        lastInterestWeek: isoWeekKey(new Date()), status: "active"
+        lastInterestWeek: isoWeekKey(new Date()), status: "active",
+        // Marks this loan as taken out under the weekly-compounding model
+        // (added after the original "one interest charge at take-out only"
+        // version). Loans taken before that change don't have this flag,
+        // and processLoanInterest below only compounds flagged loans — so
+        // existing loans keep accruing interest exactly the way they did
+        // when the student took them out; only loans taken out from now on
+        // compound weekly.
+        weeklyCompounding: true
       };
       user.loans = existingLoans.concat([loan]);
       t.update(userRef, { balance: Math.round((user.balance + amount) * 100) / 100, loans: user.loans });
@@ -1027,7 +1061,11 @@ async function processLoanInterest(classCode) {
   let count = 0;
   for (const student of students) {
     const loans = student.loans || [];
-    const due = loans.filter(l => l.status === "active" && l.lastInterestWeek !== weekKey);
+    // Only loans taken out under the weekly-compounding model (see takeLoan)
+    // are eligible — loans taken before that change never got the
+    // weeklyCompounding flag, so they're skipped here and keep the flat,
+    // one-time-interest behavior they were taken out under.
+    const due = loans.filter(l => l.status === "active" && l.weeklyCompounding && l.lastInterestWeek !== weekKey);
     if (due.length === 0) continue;
     const userRef = usersCol().doc(student.username);
     let charged = [];
@@ -1038,7 +1076,7 @@ async function processLoanInterest(classCode) {
         const user = snap.data();
         const liveLoans = user.loans || [];
         liveLoans.forEach(l => {
-          if (l.status !== "active" || l.lastInterestWeek === weekKey) return;
+          if (l.status !== "active" || !l.weeklyCompounding || l.lastInterestWeek === weekKey) return;
           const before = l.owed;
           l.owed = Math.round(l.owed * (1 + (l.rate / 100)) * 100) / 100;
           l.lastInterestWeek = weekKey;
@@ -1672,7 +1710,14 @@ async function openTermDeposit(username, classCode, planId, amount) {
       user.termDeposits = user.termDeposits || [];
       user.termDeposits.push({
         id: uid("tdo"), planId: plan.id, plan: planSnapshot, amount,
-        startDate: todayKey, matureDate: matureKey
+        startDate: todayKey, matureDate: matureKey,
+        // Marks this deposit as opened under the weekly-compounding payout
+        // model (rate compounded over days/7 weeks). Deposits opened before
+        // that change don't have this flag, and processTermDeposits below
+        // falls back to the original flat, non-compounding payout formula
+        // for them — so a deposit already sitting in someone's account
+        // still matures for exactly the amount it was opened expecting.
+        weeklyCompounding: true
       });
       if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - amount) * 100) / 100, termDeposits: user.termDeposits });
       else t.update(userRef, { termDeposits: user.termDeposits });
@@ -1729,12 +1774,22 @@ async function processTermDeposits(classCode) {
         if (liveDue.length === 0) return;
         let bal = user.balance;
         liveDue.forEach(d => {
-          // d.plan.rate is a WEEKLY rate that compounds over the deposit's
-          // term (days/7 weeks, which may be fractional) — matches how
-          // loan interest works now, and lets a 90-day plan pay noticeably
-          // more than a 30-day plan at the same weekly rate.
-          const weeks = d.plan.days / 7;
-          const payout = Math.round(d.amount * Math.pow(1 + (d.plan.rate / 100), weeks) * 100) / 100;
+          // Deposits opened under the weekly-compounding model (flagged at
+          // open time — see openTermDeposit) use d.plan.rate as a WEEKLY
+          // rate that compounds over the deposit's term (days/7 weeks,
+          // which may be fractional) — matches how loan interest works
+          // now, and lets a 90-day plan pay noticeably more than a 30-day
+          // plan at the same weekly rate. Deposits opened before that
+          // change never got the flag, so they fall back to the original
+          // flat payout they were promised: rate applied once, not
+          // compounded per week.
+          let payout;
+          if (d.weeklyCompounding) {
+            const weeks = d.plan.days / 7;
+            payout = Math.round(d.amount * Math.pow(1 + (d.plan.rate / 100), weeks) * 100) / 100;
+          } else {
+            payout = Math.round(d.amount * (1 + (d.plan.rate / 100)) * 100) / 100;
+          }
           const interest = Math.round((payout - d.amount) * 100) / 100;
           bal += payout;
           notes.push({ note: `${d.plan.name} matured: ${fmtMoney(d.amount)} + ${fmtMoney(interest)} interest`, amount: payout });
@@ -1949,12 +2004,16 @@ function rouletteIsOdd(n) { return n > 0 && n % 2 === 1; }
 // selection: array of numbers (0-36) chosen by the student, meaning
 // depends on betType. Returns { ok, error } or resolves via balance update.
 async function placeRouletteBet(username, classCode, betType, betAmount, selection) {
-  if (await isModuleLockedForStudent(username, classCode, "gambling")) {
+  // Same fix as startBlackjackRound: fetch the class/user docs once and
+  // reuse them for the lock check instead of letting isModuleLockedForStudent
+  // fetch them again independently.
+  betAmount = Number(betAmount);
+  const [clsRaw, user] = await Promise.all([getClass(classCode), getUser(username)]);
+  const cls = withNewModuleDefaults(clsRaw);
+  if (!cls) return { ok: false, error: "Class not found." };
+  if (isModuleLockedForStudentFromData(cls, user, username, "gambling")) {
     return { ok: false, error: "Gambling is locked for you right now because of your lifestyle rating." };
   }
-  betAmount = Number(betAmount);
-  const cls = withNewModuleDefaults(await getClass(classCode));
-  if (!cls) return { ok: false, error: "Class not found." };
   const g = cls.gambling;
   if (!g.enabled) return { ok: false, error: "Your teacher has temporarily turned off gambling for this class." };
   if (!(betAmount > 0)) return { ok: false, error: "Enter a bet amount greater than zero." };
@@ -1984,7 +2043,6 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   else return { ok: false, error: "Unknown bet type." };
   if (!valid) return { ok: false, error: "That's not a valid bet for this type." };
 
-  const user = await getUser(username);
   if (!user) return { ok: false, error: "User not found." };
   const isTeacher = user.role === "teacher";
   if (!isTeacher && user.balance < betAmount) return { ok: false, error: "You don't have enough money for that bet." };
@@ -2192,12 +2250,19 @@ function bjSeatOrder() { return [1, 2, 3]; }
 // never depend on the human's choices. The human's bet is escrowed
 // immediately, same as chips leaving your hand onto the table.
 async function startBlackjackRound(username, classCode, betAmount) {
-  if (await isModuleLockedForStudent(username, classCode, "gambling")) {
+  // Previously this fetched the class doc up to 3x and the user doc 2x for
+  // a single Deal click: once each inside isModuleLockedForStudent() (via
+  // getLockedModulesForStudent() -> lifestyleRating()), and again right
+  // here. Fetching both docs once, up front, and reusing them for the lock
+  // check removes those duplicate reads — same checks, same order, same
+  // error messages, just no redundant round-trips.
+  betAmount = Number(betAmount);
+  const [clsRaw, user] = await Promise.all([getClass(classCode), getUser(username)]);
+  const cls = withNewModuleDefaults(clsRaw);
+  if (!cls) return { ok: false, error: "Class not found." };
+  if (isModuleLockedForStudentFromData(cls, user, username, "gambling")) {
     return { ok: false, error: "Gambling is locked for you right now because of your lifestyle rating." };
   }
-  betAmount = Number(betAmount);
-  const cls = withNewModuleDefaults(await getClass(classCode));
-  if (!cls) return { ok: false, error: "Class not found." };
   if (!cls.gambling.enabled) return { ok: false, error: "Your teacher has temporarily turned off gambling for this class." };
   const bj = cls.blackjack;
   if (!bj.enabled) return { ok: false, error: "Your teacher has temporarily turned off Blackjack for this class." };
@@ -2215,7 +2280,6 @@ async function startBlackjackRound(username, classCode, betAmount) {
     }
   }
 
-  const user = await getUser(username);
   if (!user) return { ok: false, error: "User not found." };
   if (user.blackjackRound) return { ok: false, error: "You already have a Blackjack round in progress." };
   if (user.role !== "teacher" && user.balance < betAmount) return { ok: false, error: "You don't have enough money for that bet." };
@@ -3869,9 +3933,12 @@ async function lifestyleBandForStudent(username, classCode) {
   };
   return lifestyleLabelFor(score, cls.lifestyleThresholds, stats);
 }
-async function lifestyleRating(username, classCode) {
-  const cls = withNewModuleDefaults(await getClass(classCode));
-  const user = await getUser(username);
+// Pure calculation, no fetching — split out of lifestyleRating() so callers
+// that already have `cls`/`user` in hand (e.g. startBlackjackRound, which
+// needs both anyway regardless of lock status) can compute a rating without
+// triggering their own extra getClass()/getUser() reads. lifestyleRating()
+// below is unchanged in behavior for every existing caller.
+function lifestyleRatingFromData(cls, user, username) {
   if (!cls || !user) return 0;
   if (user.lifestyleOverride !== undefined && user.lifestyleOverride !== null) {
     // Uncapped — a teacher override can be set to any non-negative score,
@@ -3914,6 +3981,11 @@ async function lifestyleRating(username, classCode) {
   // accumulate property/transport/store/insurance comfort, it just can't
   // go negative.
   return Math.max(0, Math.round(score));
+}
+async function lifestyleRating(username, classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const user = await getUser(username);
+  return lifestyleRatingFromData(cls, user, username);
 }
 // Same computation as lifestyleRating(), but returns the itemised list of
 // what's adding to (or subtracting from) the score instead of just the
@@ -4025,13 +4097,28 @@ async function saveLifestyleLock(classCode, threshold, modules) {
 }
 
 // Which modules are currently locked for this student (empty array if none).
-async function getLockedModulesForStudent(username, classCode) {
-  const cls = withNewModuleDefaults(await getClass(classCode));
+// Pure version of the lock check, for callers that already have `cls` and
+// `user` loaded (see lifestyleRatingFromData above for why). Mirrors
+// getLockedModulesForStudent()'s logic exactly, just without fetching.
+function getLockedModulesForStudentFromData(cls, user, username) {
   const lock = cls.lifestyleLock;
   if (!lock || !lock.modules || lock.modules.length === 0) return [];
-  const score = await lifestyleRating(username, classCode);
+  const score = lifestyleRatingFromData(cls, user, username);
   if (score > lock.threshold) return [];
   return lock.modules;
+}
+function isModuleLockedForStudentFromData(cls, user, username, moduleKey) {
+  return getLockedModulesForStudentFromData(cls, user, username).includes(moduleKey);
+}
+async function getLockedModulesForStudent(username, classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  // Keep the original short-circuit: most classes don't use a lifestyle
+  // lock at all, so avoid the extra getUser() read whenever there's
+  // nothing configured to check against.
+  const lock = cls.lifestyleLock;
+  if (!lock || !lock.modules || lock.modules.length === 0) return [];
+  const user = await getUser(username);
+  return getLockedModulesForStudentFromData(cls, user, username);
 }
 async function isModuleLockedForStudent(username, classCode, moduleKey) {
   const locked = await getLockedModulesForStudent(username, classCode);
