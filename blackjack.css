@@ -143,32 +143,58 @@
   .bj-card { width: 30px; height: 42px; font-size: 12px; }
 }
 
-/* Roulette/Blackjack mode switcher */
+/* Roulette/Blackjack mode switcher — a single segmented control (one
+   pill-shaped track holding both options) reads more clearly as "pick
+   one of two modes" than two separate outlined buttons floating with a
+   gap between them, and avoids the layout jumping around as the active
+   style toggles between outlined and filled. */
 .mode-switch {
-  display: flex;
-  gap: 10px;
-  margin: 14px 0 20px;
+  display: inline-flex;
+  gap: 4px;
+  margin: 14px 0 22px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(212,162,76,0.07);
+  border: 1px solid rgba(212,162,76,0.35);
 }
 .mode-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 20px;
+  padding: 9px 22px;
   border-radius: 999px;
-  border: 2px solid var(--gold, #d4a24c);
+  border: none;
   background: transparent;
   color: var(--gold, #d4a24c);
   font-weight: 800;
   font-size: 14px;
+  line-height: 1;
   cursor: pointer;
-  transition: background .15s, color .15s;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
 }
-.mode-btn:hover { background: rgba(212,162,76,0.12); }
+.mode-btn:hover:not(.active) { background: rgba(212,162,76,0.14); }
 .mode-btn.active {
   background: var(--gold, #d4a24c);
   color: #1f2b44;
+  box-shadow: 0 2px 8px rgba(212,162,76,0.4);
 }
-.mode-btn .icon-slot { width: 18px; height: 18px; display: inline-flex; }
+.mode-btn .icon-slot {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* On narrow screens the track fills the width and both options share it
+   evenly, rather than staying a small hugged-content pill that's easy to
+   miss next to the page title. */
+@media (max-width: 480px) {
+  .mode-switch { display: flex; width: 100%; }
+  .mode-btn { flex: 1; }
+}
 
 /* ===================== Blackjack: landscape-only ===================== */
 /* Hidden by default (desktop/landscape) — only shown by the media query

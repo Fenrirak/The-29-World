@@ -2171,7 +2171,16 @@ async function startBlackjackRound(username, classCode, betAmount) {
   let round;
   try {
     const shoe = bjBuildShoe();
-    const humanSeat = 1 + bjRandomInt(3);
+    // A flat 1-in-3 random pick is unbiased over the long run, but it can
+    // still "streak" onto the same one or two seats for a while and never
+    // land on the third — which is exactly what got reported (seat 2
+    // never coming up). To make every seat visibly show up on a regular
+    // basis, exclude whichever seat the student sat in last round (when
+    // known) from this round's draw, so the same seat can never repeat
+    // back-to-back.
+    const avoidSeat = user.lastBjSeat;
+    const seatChoices = [1, 2, 3].filter(s => s !== avoidSeat);
+    const humanSeat = seatChoices[bjRandomInt(seatChoices.length)];
     const botSeats = [1, 2, 3].filter(s => s !== humanSeat);
     const botNames = bjShuffle(BJ_BOT_NAMES).slice(0, 2);
     const seatCards = { 1: [], 2: [], 3: [] };
@@ -2204,6 +2213,13 @@ async function startBlackjackRound(username, classCode, betAmount) {
   } catch (e) {
     return { ok: false, error: "Something went wrong dealing that round. Please try again." };
   }
+
+  // Best-effort — remembering the seat is only used to keep future seat
+  // draws fair, it's not part of the actual round/money, so a failure
+  // here shouldn't stop the round from being dealt.
+  try {
+    await usersCol().doc(username).update({ lastBjSeat: humanSeat });
+  } catch (e) { /* not critical */ }
 
   await adjustBalance(username, -betAmount);
 
