@@ -38,6 +38,12 @@ function lgSetOn(on) {
   });
   const cb = document.getElementById("t29LiquidGlassToggle");
   if (cb && cb.checked !== on) cb.checked = on;
+
+  if (on) {
+    lgBuildNavIndicator();
+  } else {
+    lgTeardownNavIndicator();
+  }
 }
 
 function lgBuildPopover() {
@@ -102,6 +108,97 @@ function lgOpenPopover(btn) {
   const pop = lgBuildPopover();
   lgPositionPopover(pop, btn);
   btn.setAttribute("aria-expanded", "true");
+}
+
+/* ---------------- Topbar nav sliding indicator ----------------
+   One pill that slides between nav links (Dashboard, Jobs, etc.) instead
+   of each link independently fading its own background in/out. Built only
+   while Liquid Glass is on; torn down when it's switched off so the plain
+   topbar goes back to being untouched by this file, as documented above. */
+
+let lgNavIndicator = null;
+let lgNavResizeObserver = null;
+
+function lgActiveNavLink(nav) {
+  return nav.querySelector("a.active");
+}
+
+function lgMoveNavIndicator(link, nav, indicator, opts) {
+  opts = opts || {};
+  if (!link) {
+    indicator.classList.remove("is-visible");
+    return;
+  }
+  const navRect = nav.getBoundingClientRect();
+  const linkRect = link.getBoundingClientRect();
+  const x = linkRect.left - navRect.left;
+  const y = linkRect.top - navRect.top;
+
+  if (opts.instant) indicator.style.transition = "none";
+
+  indicator.style.width = `${linkRect.width}px`;
+  indicator.style.height = `${linkRect.height}px`;
+  indicator.style.transform = `translate(${x}px, ${y}px)`;
+  indicator.classList.toggle("is-active-state", !!opts.isActiveState);
+  indicator.classList.add("is-visible");
+
+  if (opts.instant) {
+    // Force a reflow so this instant jump doesn't get animated, while
+    // leaving the transition ready for the very next (real) move.
+    indicator.getBoundingClientRect();
+    indicator.style.transition = "";
+  }
+}
+
+function lgSyncNavIndicator(instant) {
+  if (!lgNavIndicator) return;
+  const nav = lgNavIndicator.parentElement;
+  if (!nav) return;
+  const hovered = nav.querySelector("a:hover:not(.nav-locked)");
+  const active = lgActiveNavLink(nav);
+  const target = hovered || active;
+  lgMoveNavIndicator(target, nav, lgNavIndicator, {
+    instant,
+    isActiveState: target === active
+  });
+}
+
+function lgBuildNavIndicator() {
+  const nav = document.querySelector(".topbar nav");
+  if (!nav || (lgNavIndicator && nav.contains(lgNavIndicator))) return;
+
+  const indicator = document.createElement("span");
+  indicator.className = "lg-nav-indicator";
+  indicator.setAttribute("aria-hidden", "true");
+  nav.prepend(indicator);
+  lgNavIndicator = indicator;
+
+  nav.querySelectorAll("a").forEach(link => {
+    if (link.classList.contains("nav-locked")) return;
+    link.addEventListener("mouseenter", () => {
+      lgMoveNavIndicator(link, nav, indicator, { isActiveState: link.classList.contains("active") });
+    });
+  });
+  nav.addEventListener("mouseleave", () => lgSyncNavIndicator(false));
+
+  lgSyncNavIndicator(true);
+
+  if (window.ResizeObserver) {
+    lgNavResizeObserver = new ResizeObserver(() => lgSyncNavIndicator(true));
+    lgNavResizeObserver.observe(nav);
+  }
+  window.addEventListener("resize", () => lgSyncNavIndicator(true));
+}
+
+function lgTeardownNavIndicator() {
+  if (lgNavResizeObserver) {
+    lgNavResizeObserver.disconnect();
+    lgNavResizeObserver = null;
+  }
+  if (lgNavIndicator && lgNavIndicator.parentElement) {
+    lgNavIndicator.parentElement.removeChild(lgNavIndicator);
+  }
+  lgNavIndicator = null;
 }
 
 function lgInit() {
