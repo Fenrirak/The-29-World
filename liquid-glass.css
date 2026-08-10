@@ -46,6 +46,7 @@ html.liquid-glass .topbar{
   background:linear-gradient(120deg, rgba(31,43,68,0.66) 0%, rgba(36,58,94,0.62) 55%, rgba(44,59,92,0.66) 100%);
   backdrop-filter:blur(22px) saturate(180%);
   -webkit-backdrop-filter:blur(22px) saturate(180%);
+  border:none;
   border-bottom:1px solid rgba(255,255,255,0.16);
   box-shadow:0 8px 32px rgba(15,23,42,0.22), inset 0 1px 0 rgba(255,255,255,0.14);
 }
@@ -92,6 +93,7 @@ html.liquid-glass .topbar nav .lg-nav-indicator{
   top:0;
   left:0;
   z-index:0;
+  overflow:hidden;
   border-radius:999px;
   background:rgba(255,255,255,0.16);
   box-shadow:inset 0 1px 0 rgba(255,255,255,0.22);
@@ -101,6 +103,13 @@ html.liquid-glass .topbar nav .lg-nav-indicator{
              height .28s cubic-bezier(.4,0,.2,1), background .18s ease, box-shadow .18s ease,
              opacity .15s ease;
   will-change:transform;
+}
+/* Same top-of-surface shine as the cards/buttons, scaled down for the pill. */
+html.liquid-glass .topbar nav .lg-nav-indicator::before{
+  content:"";
+  position:absolute; inset:0 0 55% 0;
+  background:linear-gradient(180deg, rgba(255,255,255,0.3), rgba(255,255,255,0));
+  pointer-events:none;
 }
 html.liquid-glass .topbar nav .lg-nav-indicator.is-visible{ opacity:1; }
 html.liquid-glass .topbar nav .lg-nav-indicator.is-active-state{
@@ -112,19 +121,49 @@ html.liquid-glass .brand .icon-slot{
 }
 html.liquid-glass .btn-logout,
 html.liquid-glass .btn-icon-topbar{
-  background:rgba(255,255,255,0.12);
-  border:1px solid rgba(255,255,255,0.18);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.22), 0 2px 10px rgba(15,23,42,0.18);
+  position:relative;
+  overflow:hidden;
+  background:rgba(255,255,255,0.14);
+  border:1px solid rgba(255,255,255,0.22);
+  backdrop-filter:blur(12px) saturate(190%);
+  -webkit-backdrop-filter:blur(12px) saturate(190%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.28), 0 2px 10px rgba(15,23,42,0.18);
+  outline:none;
   transition:background .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease;
+}
+/* Top specular highlight, same idea as the cards, so the icon buttons
+   read as little panes of glass instead of flat tinted squares. */
+html.liquid-glass .btn-logout::before,
+html.liquid-glass .btn-icon-topbar::before{
+  content:"";
+  position:absolute; inset:0 0 55% 0;
+  background:linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0));
+  pointer-events:none;
 }
 html.liquid-glass .btn-logout:hover,
 html.liquid-glass .btn-icon-topbar:hover{
-  background:rgba(255,255,255,0.22);
+  background:rgba(255,255,255,0.26);
+}
+/* The browser's default focus outline showed up as a hard, opaque ring
+   sitting on top of the glass — swap it for a soft glow that matches the
+   frosted look instead of hiding focus entirely. */
+html.liquid-glass .btn-logout:focus,
+html.liquid-glass .btn-logout:focus-visible,
+html.liquid-glass .btn-icon-topbar:focus,
+html.liquid-glass .btn-icon-topbar:focus-visible{
+  outline:none !important;
+  box-shadow:0 0 0 3px rgba(255,255,255,0.26), inset 0 1px 0 rgba(255,255,255,0.28), 0 2px 10px rgba(15,23,42,0.18);
 }
 html.liquid-glass .btn-icon-topbar.active{
-  background:rgba(232,184,75,0.3);
-  border-color:rgba(232,184,75,0.55);
+  background:rgba(232,184,75,0.26);
+  border-color:rgba(232,184,75,0.5);
   color:var(--gold);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.32), 0 3px 12px rgba(232,184,75,0.22);
+}
+html.liquid-glass .btn-icon-topbar.active:focus,
+html.liquid-glass .btn-icon-topbar.active:focus-visible{
+  outline:none !important;
+  box-shadow:0 0 0 3px rgba(232,184,75,0.32), inset 0 1px 0 rgba(255,255,255,0.32), 0 3px 12px rgba(232,184,75,0.22);
 }
 
 /* ---------------- Settings popover ---------------- */
