@@ -44,8 +44,8 @@ html.liquid-glass body{
 /* ---------------- Topbar ---------------- */
 html.liquid-glass .topbar{
   background:linear-gradient(120deg, rgba(31,43,68,0.66) 0%, rgba(36,58,94,0.62) 55%, rgba(44,59,92,0.66) 100%);
-  backdrop-filter:blur(22px) saturate(210%);
-  -webkit-backdrop-filter:blur(22px) saturate(210%);
+  backdrop-filter:blur(22px) saturate(180%);
+  -webkit-backdrop-filter:blur(22px) saturate(180%);
   border-bottom:1px solid rgba(255,255,255,0.16);
   box-shadow:0 8px 32px rgba(15,23,42,0.22), inset 0 1px 0 rgba(255,255,255,0.14);
 }
@@ -351,7 +351,7 @@ html.liquid-glass .threshold-row{
    already-tight portrait topbar layout, so ease it back a little
    rather than turning it off outright. */
 @media (max-width:640px){
-  html.liquid-glass .topbar{ backdrop-filter:blur(14px) saturate(180%); -webkit-backdrop-filter:blur(14px) saturate(180%); }
+  html.liquid-glass .topbar{ backdrop-filter:blur(14px) saturate(160%); -webkit-backdrop-filter:blur(14px) saturate(160%); }
   html.liquid-glass .card{ backdrop-filter:blur(14px) saturate(160%); -webkit-backdrop-filter:blur(14px) saturate(160%); }
 }
 
