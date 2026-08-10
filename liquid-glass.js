@@ -112,12 +112,76 @@ function lgOpenPopover(btn) {
   btn.setAttribute("aria-expanded", "true");
 }
 
-/* ---------------- Topbar nav sliding indicator ----------------
-   One pill that slides between nav links (Dashboard, Jobs, etc.) instead
-   of each link independently fading its own background in/out. Built only
-   while Liquid Glass is on; torn down when it's switched off so the plain
-   topbar goes back to being untouched by this file, as documented above. */
+/* ---------------- Shared "goo" filter + echo-blob helper ----------------
+   A single inline SVG <filter id="lg-goo"> is injected once (blur, then a
+   contrast-boosted alpha via feColorMatrix). Any blob layer with
+   `filter:url(#lg-goo)` applied gets the classic liquid-merge look: while
+   two blobs in that layer are close enough for their blur to overlap, the
+   contrast pass fuses them into one shape instead of showing two separate
+   circles — like two droplets touching. Used by both the topbar nav
+   indicator and the action-button indicator below. */
 
+let lgGooFilterInjected = false;
+
+function lgEnsureGooFilter() {
+  if (lgGooFilterInjected || document.getElementById("lg-goo-defs")) {
+    lgGooFilterInjected = true;
+    return;
+  }
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.id = "lg-goo-defs";
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.style.position = "absolute";
+  svg.style.width = "0";
+  svg.style.height = "0";
+  svg.style.overflow = "hidden";
+  svg.innerHTML = `
+    <defs>
+      <filter id="lg-goo">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="lg-blur"/>
+        <feColorMatrix in="lg-blur" mode="matrix"
+          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9"/>
+      </filter>
+    </defs>
+  `;
+  document.body.appendChild(svg);
+  lgGooFilterInjected = true;
+}
+
+/* Drops a shrinking/fading "echo" blob where the indicator currently sits,
+   right before the indicator itself moves on to a new button. Both live in
+   the same filtered blob layer, so while they briefly overlap the goo
+   filter melds them into one shape pulling apart — the "merge" effect. */
+function lgSpawnEcho(layer, indicator) {
+  if (!layer || !indicator.classList.contains("is-visible")) return;
+
+  const pos = document.createElement("span");
+  pos.className = "lg-echo-pos";
+  pos.style.width = indicator.style.width;
+  pos.style.height = indicator.style.height;
+  pos.style.transform = indicator.style.transform;
+
+  const blob = document.createElement("span");
+  blob.className = "lg-echo-blob" + (indicator.classList.contains("is-active-state") ? " is-active-state" : "");
+  pos.appendChild(blob);
+  layer.appendChild(pos);
+
+  requestAnimationFrame(() => blob.classList.add("is-collapsing"));
+  blob.addEventListener("transitionend", () => {
+    if (pos.parentElement) pos.parentElement.removeChild(pos);
+  }, { once: true });
+}
+
+/* ---------------- Topbar nav sliding indicator ----------------
+   One blob that slides/melts between nav links (Dashboard, Jobs, etc.)
+   instead of each link independently fading its own background in/out.
+   Built only while Liquid Glass is on; torn down when it's switched off
+   so the plain topbar goes back to being untouched by this file, as
+   documented above. */
+
+let lgNavEl = null;
+let lgNavBlobLayer = null;
 let lgNavIndicator = null;
 let lgNavResizeObserver = null;
 
@@ -125,12 +189,14 @@ function lgActiveNavLink(nav) {
   return nav.querySelector("a.active");
 }
 
-function lgMoveNavIndicator(link, nav, indicator, opts) {
+function lgMoveNavIndicator(link, nav, indicator, layer, opts) {
   opts = opts || {};
   if (!link) {
     indicator.classList.remove("is-visible");
     return;
   }
+  if (!opts.instant) lgSpawnEcho(layer, indicator);
+
   const navRect = nav.getBoundingClientRect();
   const linkRect = link.getBoundingClientRect();
   const x = linkRect.left - navRect.left;
@@ -153,13 +219,11 @@ function lgMoveNavIndicator(link, nav, indicator, opts) {
 }
 
 function lgSyncNavIndicator(instant) {
-  if (!lgNavIndicator) return;
-  const nav = lgNavIndicator.parentElement;
-  if (!nav) return;
-  const hovered = nav.querySelector("a:hover:not(.nav-locked)");
-  const active = lgActiveNavLink(nav);
+  if (!lgNavIndicator || !lgNavEl) return;
+  const hovered = lgNavEl.querySelector("a:hover:not(.nav-locked)");
+  const active = lgActiveNavLink(lgNavEl);
   const target = hovered || active;
-  lgMoveNavIndicator(target, nav, lgNavIndicator, {
+  lgMoveNavIndicator(target, lgNavEl, lgNavIndicator, lgNavBlobLayer, {
     instant,
     isActiveState: target === active
   });
@@ -169,16 +233,25 @@ function lgBuildNavIndicator() {
   const nav = document.querySelector(".topbar nav");
   if (!nav || (lgNavIndicator && nav.contains(lgNavIndicator))) return;
 
+  lgEnsureGooFilter();
+
+  const layer = document.createElement("span");
+  layer.className = "lg-blob-layer";
+  layer.setAttribute("aria-hidden", "true");
+  nav.prepend(layer);
+
   const indicator = document.createElement("span");
   indicator.className = "lg-nav-indicator";
-  indicator.setAttribute("aria-hidden", "true");
-  nav.prepend(indicator);
+  layer.appendChild(indicator);
+
+  lgNavEl = nav;
+  lgNavBlobLayer = layer;
   lgNavIndicator = indicator;
 
   nav.querySelectorAll("a").forEach(link => {
     if (link.classList.contains("nav-locked")) return;
     link.addEventListener("mouseenter", () => {
-      lgMoveNavIndicator(link, nav, indicator, { isActiveState: link.classList.contains("active") });
+      lgMoveNavIndicator(link, nav, indicator, layer, { isActiveState: link.classList.contains("active") });
     });
   });
   nav.addEventListener("mouseleave", () => lgSyncNavIndicator(false));
@@ -197,9 +270,11 @@ function lgTeardownNavIndicator() {
     lgNavResizeObserver.disconnect();
     lgNavResizeObserver = null;
   }
-  if (lgNavIndicator && lgNavIndicator.parentElement) {
-    lgNavIndicator.parentElement.removeChild(lgNavIndicator);
+  if (lgNavBlobLayer && lgNavBlobLayer.parentElement) {
+    lgNavBlobLayer.parentElement.removeChild(lgNavBlobLayer);
   }
+  lgNavEl = null;
+  lgNavBlobLayer = null;
   lgNavIndicator = null;
 }
 
@@ -214,6 +289,7 @@ function lgTeardownNavIndicator() {
 
 let lgActionsIndicator = null;
 let lgActionsParent = null;
+let lgActionsBlobLayer = null;
 let lgActionsResizeObserver = null;
 let lgActionsResizeBound = false;
 
@@ -227,12 +303,14 @@ function lgFindActionsGroup() {
   return { parent, buttons };
 }
 
-function lgMoveActionsIndicator(btn, parent, indicator, opts) {
+function lgMoveActionsIndicator(btn, parent, indicator, layer, opts) {
   opts = opts || {};
   if (!btn) {
     indicator.classList.remove("is-visible");
     return;
   }
+  if (!opts.instant) lgSpawnEcho(layer, indicator);
+
   const parentRect = parent.getBoundingClientRect();
   const btnRect = btn.getBoundingClientRect();
   const x = btnRect.left - parentRect.left;
@@ -257,7 +335,7 @@ function lgMoveActionsIndicator(btn, parent, indicator, opts) {
 function lgSyncActionsIndicator(instant) {
   if (!lgActionsIndicator || !lgActionsParent) return;
   const hovered = lgActionsParent.querySelector(".btn-logout:hover, .btn-icon-topbar:hover");
-  lgMoveActionsIndicator(hovered, lgActionsParent, lgActionsIndicator, { instant });
+  lgMoveActionsIndicator(hovered, lgActionsParent, lgActionsIndicator, lgActionsBlobLayer, { instant });
 }
 
 function lgBuildActionsIndicator() {
@@ -266,18 +344,26 @@ function lgBuildActionsIndicator() {
   const { parent, buttons } = group;
   if (lgActionsIndicator && parent.contains(lgActionsIndicator)) return;
 
+  lgEnsureGooFilter();
+
   parent.classList.add("lg-actions-track");
+
+  const layer = document.createElement("span");
+  layer.className = "lg-blob-layer";
+  layer.setAttribute("aria-hidden", "true");
+  parent.prepend(layer);
 
   const indicator = document.createElement("span");
   indicator.className = "lg-actions-indicator";
-  indicator.setAttribute("aria-hidden", "true");
-  parent.prepend(indicator);
+  layer.appendChild(indicator);
+
   lgActionsIndicator = indicator;
   lgActionsParent = parent;
+  lgActionsBlobLayer = layer;
 
   buttons.forEach(btn => {
     btn.addEventListener("mouseenter", () => {
-      lgMoveActionsIndicator(btn, parent, indicator);
+      lgMoveActionsIndicator(btn, parent, indicator, layer);
     });
   });
   parent.addEventListener("mouseleave", () => {
@@ -299,10 +385,11 @@ function lgTeardownActionsIndicator() {
     lgActionsResizeObserver.disconnect();
     lgActionsResizeObserver = null;
   }
-  if (lgActionsIndicator && lgActionsIndicator.parentElement) {
-    lgActionsIndicator.parentElement.classList.remove("lg-actions-track");
-    lgActionsIndicator.parentElement.removeChild(lgActionsIndicator);
+  if (lgActionsBlobLayer && lgActionsBlobLayer.parentElement) {
+    lgActionsBlobLayer.parentElement.classList.remove("lg-actions-track");
+    lgActionsBlobLayer.parentElement.removeChild(lgActionsBlobLayer);
   }
+  lgActionsBlobLayer = null;
   lgActionsIndicator = null;
   lgActionsParent = null;
 }

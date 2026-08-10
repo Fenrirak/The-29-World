@@ -43,7 +43,7 @@ html.liquid-glass body{
 
 /* ---------------- Topbar ---------------- */
 html.liquid-glass .topbar{
-  background:linear-gradient(120deg, rgba(31,43,68,0.66) 0%, rgba(36,58,94,0.62) 55%, rgba(44,59,92,0.66) 100%);
+  background:#667590;
   backdrop-filter:blur(22px) saturate(180%);
   -webkit-backdrop-filter:blur(22px) saturate(180%);
   border-bottom:1px solid rgba(255,255,255,0.16);
@@ -70,20 +70,26 @@ html.liquid-glass .topbar nav a.active{
   box-shadow:none;
   color:var(--gold);
 }
-/* The nav itself is now one continuous frosted "track" behind every link —
-   a single pill-shaped glass bar rather than each button having its own
-   separate box, so the buttons read as one connected surface and the
-   indicator (below) looks like it's riding along a shared rail as it
-   glides from button to button. */
+/* No more single large oval behind the whole nav — the row itself is
+   just a plain flex track now. Each button's highlight is its own blob
+   (below), not one shared background box. */
 html.liquid-glass .topbar nav{
   position:relative;
-  background:rgba(255,255,255,0.08);
-  border:1px solid rgba(255,255,255,0.14);
-  border-radius:999px;
   padding:calc(3px * var(--navscale)) calc(5px * var(--navscale));
-  backdrop-filter:blur(14px) saturate(170%);
-  -webkit-backdrop-filter:blur(14px) saturate(170%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.16);
+}
+/* Blob layer: a filtered sublayer that sits behind the link text and
+   holds the indicator + its "echo" trail. The goo filter (defined by
+   liquid-glass.js as an inline SVG <filter id="lg-goo">) blurs the blobs
+   together and pushes the alpha channel back to sharp edges, so two
+   overlapping blobs read as one merged liquid shape instead of two
+   separate circles — like two water droplets touching. Only the blob
+   layer is filtered, never the links themselves, so the text stays crisp. */
+html.liquid-glass .topbar nav .lg-blob-layer{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  filter:url(#lg-goo);
 }
 /* Built/positioned by liquid-glass.js (lgBuildNavIndicator). Absent until
    Liquid Glass is switched on; removed again when it's switched off. */
@@ -91,21 +97,16 @@ html.liquid-glass .topbar nav .lg-nav-indicator{
   position:absolute;
   top:0;
   left:0;
-  z-index:0;
   border-radius:999px;
-  background:rgba(255,255,255,0.16);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.22);
+  background:rgba(255,255,255,0.5);
   opacity:0;
-  pointer-events:none;
   transition:transform .28s cubic-bezier(.4,0,.2,1), width .28s cubic-bezier(.4,0,.2,1),
-             height .28s cubic-bezier(.4,0,.2,1), background .18s ease, box-shadow .18s ease,
-             opacity .15s ease;
+             height .28s cubic-bezier(.4,0,.2,1), background .18s ease, opacity .15s ease;
   will-change:transform;
 }
 html.liquid-glass .topbar nav .lg-nav-indicator.is-visible{ opacity:1; }
 html.liquid-glass .topbar nav .lg-nav-indicator.is-active-state{
-  background:rgba(232,184,75,0.28);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 14px rgba(232,184,75,0.22);
+  background:rgba(232,184,75,0.85);
 }
 html.liquid-glass .brand .icon-slot{
   filter:drop-shadow(0 3px 8px rgba(232,184,75,0.5));
@@ -134,19 +135,19 @@ html.liquid-glass .btn-icon-topbar.active{
   color:var(--gold);
 }
 
-/* Shared frosted "track" behind the action buttons (settings, logout,
-   etc.) — the class is added dynamically by liquid-glass.js
-   (lgBuildActionsIndicator) to whichever element is their common parent,
-   so the buttons read as one connected glass surface rather than
-   separate bubbles. */
+/* No large oval behind the action buttons either — just a plain
+   positioning context (marked by liquid-glass.js) for their blob layer. */
 html.liquid-glass .lg-actions-track{
   position:relative;
-  background:rgba(255,255,255,0.08);
-  border:1px solid rgba(255,255,255,0.14);
-  border-radius:999px;
-  backdrop-filter:blur(14px) saturate(170%);
-  -webkit-backdrop-filter:blur(14px) saturate(170%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.16);
+}
+/* Same filtered blob-layer trick as the nav: the goo filter only ever
+   touches this sublayer, never the button icons/text sitting above it. */
+html.liquid-glass .lg-actions-track .lg-blob-layer{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  filter:url(#lg-goo);
 }
 /* Built/positioned by liquid-glass.js (lgBuildActionsIndicator). Absent
    until Liquid Glass is switched on, and while the mouse isn't over any
@@ -155,21 +156,48 @@ html.liquid-glass .lg-actions-indicator{
   position:absolute;
   top:0;
   left:0;
-  z-index:0;
   border-radius:999px;
-  background:rgba(255,255,255,0.16);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.22);
+  background:rgba(255,255,255,0.5);
   opacity:0;
   pointer-events:none;
   transition:transform .28s cubic-bezier(.4,0,.2,1), width .28s cubic-bezier(.4,0,.2,1),
-             height .28s cubic-bezier(.4,0,.2,1), background .18s ease, box-shadow .18s ease,
-             opacity .15s ease;
+             height .28s cubic-bezier(.4,0,.2,1), background .18s ease, opacity .15s ease;
   will-change:transform;
 }
 html.liquid-glass .lg-actions-indicator.is-visible{ opacity:1; }
 html.liquid-glass .lg-actions-indicator.is-active-state{
-  background:rgba(232,184,75,0.28);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 14px rgba(232,184,75,0.22);
+  background:rgba(232,184,75,0.85);
+}
+
+/* "Echo" blob left behind at the previous button when the indicator moves
+   on to a new one — it shrinks/fades in place while the indicator grows
+   into its new spot, and because both live in the same filtered blob
+   layer and briefly overlap, the goo filter melds them into one shape
+   pulling apart, like two droplets separating/merging. Spawned and
+   removed by liquid-glass.js (lgSpawnEcho); a nested pos/blob pair keeps
+   the position (set once, untransitioned) separate from the scale+fade
+   animation (which always animates from a clean 1 -> 0). */
+html.liquid-glass .lg-echo-pos{
+  position:absolute;
+  top:0;
+  left:0;
+  pointer-events:none;
+}
+html.liquid-glass .lg-echo-blob{
+  width:100%;
+  height:100%;
+  border-radius:999px;
+  background:rgba(255,255,255,0.5);
+  transform:scale(1);
+  opacity:1;
+  transition:transform .32s cubic-bezier(.4,0,.2,1), opacity .32s ease;
+}
+html.liquid-glass .lg-echo-blob.is-collapsing{
+  transform:scale(0.05);
+  opacity:0;
+}
+html.liquid-glass .lg-echo-blob.is-active-state{
+  background:rgba(232,184,75,0.85);
 }
 
 /* ---------------- Settings popover ---------------- */
@@ -418,6 +446,7 @@ html.liquid-glass .threshold-row{
   html.liquid-glass .btn::after{ display:none; }
   html.liquid-glass .topbar nav .lg-nav-indicator,
   html.liquid-glass .lg-actions-indicator{
-    transition:background .18s ease, box-shadow .18s ease, opacity .15s ease;
+    transition:background .18s ease, opacity .15s ease;
   }
+  html.liquid-glass .lg-echo-pos{ display:none; }
 }
