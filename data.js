@@ -1,29 +1,3 @@
-
-
-Skip to content
-Using Gmail with screen readers
-
-1 of 12
-29 World
-Inbox
-
-Nathan Liu <nathan.liu1211@gmail.com>
-Attachments
-07:20 (3 minutes ago)
-to me
-
- One attachment
-  •  Scanned by Gmail
-Anti-virus warning – 1 attachment contains a virus or blocked file. Downloading this attachment is disabled.
-
-Mail Delivery Subsystem <mailer-daemon@googlemail.com>
-07:20 (2 minutes ago)
-to me
-
-For security reasons, Gmail does not allow you to use this type of file as it violates Google policy for executables and archives.
-
-
-
 /* ===================== The 29 World — data layer =====================
    Everything is now stored in Firestore (collections "users" and
    "classes") so multiple devices share the same live data.
@@ -38,8 +12,8 @@ const SESSION_KEY = "anw_session"; // session stays in localStorage — it's fin
 const MAX_STUDENTS_PER_CLASS = 8;
 const MAX_STORED_TXNS = 200; // keep class docs from growing forever
 
-function usersCol() { return fdb.collection("users"); }
-function classesCol() { return fdb.collection("classes"); }
+function usersCol() { installReadCache(); return fdb.collection("users"); }
+function classesCol() { installReadCache(); return fdb.collection("classes"); }
 
 function genCode(len) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -202,7 +176,26 @@ async function getClassStudents(code) {
    fdb.runTransaction(). Both are wrapped just below so that the instant
    any write to a user or class doc resolves — from anywhere in the app —
    that doc's cached read is dropped automatically. */
-(function installReadCache() {
+// NOTE: this used to be an IIFE that ran immediately at script load and
+// touched `fdb` right away. That made data.js's very first action a hard,
+// synchronous dependency on firebase-init.js having *already* finished
+// setting `fdb` up at the exact moment this script was parsed — a race
+// that every other function in this file avoids by only touching `fdb`
+// lazily, once actually called (see usersCol()/classesCol() above). If
+// that race lost even occasionally (slow network, script order, etc.) the
+// IIFE threw immediately and unguarded, which aborted the rest of this
+// file entirely — leaving getUser/getClass/requireLogin/everything below
+// it undefined on every page. installReadCache() now only runs lazily,
+// on the first real call to usersCol()/classesCol(), by which point fdb is
+// guaranteed to exist because those same calls are already using it.
+let _readCacheInstalled = false;
+window._rcGet = function () { return undefined; };
+window._rcSet = function () {};
+
+function installReadCache() {
+  if (_readCacheInstalled) return;
+  _readCacheInstalled = true;
+
   const CACHE_TTL_MS = 2000; // just a safety cap; real invalidation is explicit, below
   const store = new Map();
   const cacheKey = (col, id) => col + "/" + id;
@@ -257,7 +250,7 @@ async function getClassStudents(code) {
     result.then(() => store.clear(), () => {});
     return result;
   };
-})();
+}
 
 // Page load fires off around 7 independent background jobs (auto pay day,
 // automations, mortgages, interest, insurance, weekly events, big events)
