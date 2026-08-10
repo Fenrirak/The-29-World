@@ -3796,44 +3796,13 @@ async function resolveChoiceEvent(username, classCode, logId, optionId) {
   return { ok: true, amount, outcome };
 }
 
-// Charges every student's active insurance premiums once per NZ calendar
-// week, on the day the teacher set. Skips silently (keeps cover active) if
-// a student can't afford it that week, same behaviour as automations.
+// Insurance premiums are NOT auto-deducted. Students are responsible for
+// setting up their own recurring payment for premiums via the Bank tab's
+// automations feature. This function is intentionally disabled (kept as a
+// no-op stub in case anything still calls it) so premiums are never
+// silently withdrawn on the insurance day.
 async function processInsurancePayments(classCode) {
-  const classRef = classesCol().doc(classCode);
-  const cls = withNewModuleDefaults(await getClass(classCode));
-  if (!cls) return 0;
-  const weekKey = isoWeekKey(new Date());
-  if (cls.lastInsuranceWeekRun === weekKey) return 0;
-  if (nzDayName() !== (cls.insuranceDay || "Fri")) return 0;
-
-  let claimed = false;
-  await fdb.runTransaction(async (t) => {
-    const snap = await t.get(classRef);
-    if (!snap.exists) return;
-    const liveCls = withNewModuleDefaults(snap.data());
-    if (liveCls.lastInsuranceWeekRun === weekKey) return;
-    t.update(classRef, { lastInsuranceWeekRun: weekKey });
-    claimed = true;
-  });
-  if (!claimed) return 0;
-
-  const students = await getClassStudents(classCode);
-  let charged = 0;
-  for (const student of students) {
-    const plans = (student.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).filter(Boolean);
-    if (plans.length === 0) continue;
-    const baseTotal = plans.reduce((s, p) => s + p.price, 0);
-    const { total, taxAmount } = applyTaxToExpense(cls, "insurance", baseTotal);
-    if (student.balance < total) continue; // skip silently, keep cover
-    await adjustBalance(student.username, -total);
-    await logTxn(classCode, {
-      type: "insurance-premium", from: student.username, amount: total,
-      note: `Weekly premiums: ${plans.map(p => p.name).join(", ")}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "")
-    });
-    charged++;
-  }
-  return charged;
+  return 0;
 }
 
 // Everything a single student owns, for the teacher's "view student" panel.

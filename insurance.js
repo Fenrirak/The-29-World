@@ -58,7 +58,6 @@ async function init() {
     processMortgages(u.classCode),
     processTermDeposits(u.classCode),
     autoInterestIfDue(u.classCode),
-    processInsurancePayments(u.classCode),
     processWeeklyEvents(u.classCode),
     processWeeklyBigEvents(u.classCode)
   ]);
