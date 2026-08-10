@@ -110,21 +110,66 @@ html.liquid-glass .topbar nav .lg-nav-indicator.is-active-state{
 html.liquid-glass .brand .icon-slot{
   filter:drop-shadow(0 3px 8px rgba(232,184,75,0.5));
 }
+/* Individual buttons no longer carry their own glass "bubble" (background/
+   border/shadow) — that's now one shared frosted track behind the whole
+   group (.lg-actions-track, built by liquid-glass.js), with a single
+   indicator pill that slides/melts from button to button on hover, the
+   same pattern used for the topbar nav links above. */
 html.liquid-glass .btn-logout,
 html.liquid-glass .btn-icon-topbar{
-  background:rgba(255,255,255,0.12);
-  border:1px solid rgba(255,255,255,0.18);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.22), 0 2px 10px rgba(15,23,42,0.18);
-  transition:background .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease;
+  position:relative;
+  z-index:1;
+  background:none;
+  border:1px solid transparent;
+  box-shadow:none;
+  transition:color .18s ease;
 }
 html.liquid-glass .btn-logout:hover,
 html.liquid-glass .btn-icon-topbar:hover{
-  background:rgba(255,255,255,0.22);
+  background:none;
 }
 html.liquid-glass .btn-icon-topbar.active{
-  background:rgba(232,184,75,0.3);
-  border-color:rgba(232,184,75,0.55);
+  background:none;
+  border-color:transparent;
   color:var(--gold);
+}
+
+/* Shared frosted "track" behind the action buttons (settings, logout,
+   etc.) — the class is added dynamically by liquid-glass.js
+   (lgBuildActionsIndicator) to whichever element is their common parent,
+   so the buttons read as one connected glass surface rather than
+   separate bubbles. */
+html.liquid-glass .lg-actions-track{
+  position:relative;
+  background:rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:999px;
+  backdrop-filter:blur(14px) saturate(170%);
+  -webkit-backdrop-filter:blur(14px) saturate(170%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.16);
+}
+/* Built/positioned by liquid-glass.js (lgBuildActionsIndicator). Absent
+   until Liquid Glass is switched on, and while the mouse isn't over any
+   action button; removed again when Liquid Glass is switched off. */
+html.liquid-glass .lg-actions-indicator{
+  position:absolute;
+  top:0;
+  left:0;
+  z-index:0;
+  border-radius:999px;
+  background:rgba(255,255,255,0.16);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.22);
+  opacity:0;
+  pointer-events:none;
+  transition:transform .28s cubic-bezier(.4,0,.2,1), width .28s cubic-bezier(.4,0,.2,1),
+             height .28s cubic-bezier(.4,0,.2,1), background .18s ease, box-shadow .18s ease,
+             opacity .15s ease;
+  will-change:transform;
+}
+html.liquid-glass .lg-actions-indicator.is-visible{ opacity:1; }
+html.liquid-glass .lg-actions-indicator.is-active-state{
+  background:rgba(232,184,75,0.28);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 14px rgba(232,184,75,0.22);
 }
 
 /* ---------------- Settings popover ---------------- */
@@ -371,7 +416,8 @@ html.liquid-glass .threshold-row{
    slide — position still updates, it just jumps instead of gliding. */
 @media (prefers-reduced-motion: reduce){
   html.liquid-glass .btn::after{ display:none; }
-  html.liquid-glass .topbar nav .lg-nav-indicator{
+  html.liquid-glass .topbar nav .lg-nav-indicator,
+  html.liquid-glass .lg-actions-indicator{
     transition:background .18s ease, box-shadow .18s ease, opacity .15s ease;
   }
 }

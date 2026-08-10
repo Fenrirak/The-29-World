@@ -41,8 +41,10 @@ function lgSetOn(on) {
 
   if (on) {
     lgBuildNavIndicator();
+    lgBuildActionsIndicator();
   } else {
     lgTeardownNavIndicator();
+    lgTeardownActionsIndicator();
   }
 }
 
@@ -199,6 +201,110 @@ function lgTeardownNavIndicator() {
     lgNavIndicator.parentElement.removeChild(lgNavIndicator);
   }
   lgNavIndicator = null;
+}
+
+/* ---------------- Topbar action buttons (settings, logout, ...) ----------------
+   Same idea as the nav indicator above: instead of each button (.btn-logout,
+   .btn-icon-topbar) carrying its own separate glass "bubble", one pill
+   lives behind the group and slides/melts from button to button as the
+   mouse moves over them, so they read as one connected glass surface.
+   Only built if those buttons turn out to share a common parent element —
+   if the markup doesn't group them that way, this quietly no-ops and the
+   buttons just render with no encasing (no broken layout either way). */
+
+let lgActionsIndicator = null;
+let lgActionsParent = null;
+let lgActionsResizeObserver = null;
+let lgActionsResizeBound = false;
+
+function lgFindActionsGroup() {
+  const topbar = document.querySelector(".topbar");
+  if (!topbar) return null;
+  const buttons = Array.from(topbar.querySelectorAll(".btn-logout, .btn-icon-topbar"));
+  if (buttons.length < 2) return null;
+  const parent = buttons[0].parentElement;
+  if (!parent || !buttons.every(b => b.parentElement === parent)) return null;
+  return { parent, buttons };
+}
+
+function lgMoveActionsIndicator(btn, parent, indicator, opts) {
+  opts = opts || {};
+  if (!btn) {
+    indicator.classList.remove("is-visible");
+    return;
+  }
+  const parentRect = parent.getBoundingClientRect();
+  const btnRect = btn.getBoundingClientRect();
+  const x = btnRect.left - parentRect.left;
+  const y = btnRect.top - parentRect.top;
+
+  if (opts.instant) indicator.style.transition = "none";
+
+  indicator.style.width = `${btnRect.width}px`;
+  indicator.style.height = `${btnRect.height}px`;
+  indicator.style.transform = `translate(${x}px, ${y}px)`;
+  indicator.classList.toggle("is-active-state", btn.classList.contains("active"));
+  indicator.classList.add("is-visible");
+
+  if (opts.instant) {
+    // Force a reflow so this instant jump doesn't get animated, while
+    // leaving the transition ready for the very next (real) move.
+    indicator.getBoundingClientRect();
+    indicator.style.transition = "";
+  }
+}
+
+function lgSyncActionsIndicator(instant) {
+  if (!lgActionsIndicator || !lgActionsParent) return;
+  const hovered = lgActionsParent.querySelector(".btn-logout:hover, .btn-icon-topbar:hover");
+  lgMoveActionsIndicator(hovered, lgActionsParent, lgActionsIndicator, { instant });
+}
+
+function lgBuildActionsIndicator() {
+  const group = lgFindActionsGroup();
+  if (!group) return;
+  const { parent, buttons } = group;
+  if (lgActionsIndicator && parent.contains(lgActionsIndicator)) return;
+
+  parent.classList.add("lg-actions-track");
+
+  const indicator = document.createElement("span");
+  indicator.className = "lg-actions-indicator";
+  indicator.setAttribute("aria-hidden", "true");
+  parent.prepend(indicator);
+  lgActionsIndicator = indicator;
+  lgActionsParent = parent;
+
+  buttons.forEach(btn => {
+    btn.addEventListener("mouseenter", () => {
+      lgMoveActionsIndicator(btn, parent, indicator);
+    });
+  });
+  parent.addEventListener("mouseleave", () => {
+    indicator.classList.remove("is-visible");
+  });
+
+  if (window.ResizeObserver) {
+    lgActionsResizeObserver = new ResizeObserver(() => lgSyncActionsIndicator(true));
+    lgActionsResizeObserver.observe(parent);
+  }
+  if (!lgActionsResizeBound) {
+    window.addEventListener("resize", () => lgSyncActionsIndicator(true));
+    lgActionsResizeBound = true;
+  }
+}
+
+function lgTeardownActionsIndicator() {
+  if (lgActionsResizeObserver) {
+    lgActionsResizeObserver.disconnect();
+    lgActionsResizeObserver = null;
+  }
+  if (lgActionsIndicator && lgActionsIndicator.parentElement) {
+    lgActionsIndicator.parentElement.classList.remove("lg-actions-track");
+    lgActionsIndicator.parentElement.removeChild(lgActionsIndicator);
+  }
+  lgActionsIndicator = null;
+  lgActionsParent = null;
 }
 
 function lgInit() {
