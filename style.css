@@ -148,12 +148,23 @@ p{color:var(--muted);line-height:1.5;}
 #profileBody .auto-row{margin-bottom:8px;}
 #profileBody .auto-row:last-child{margin-bottom:0;}
 .topbar .who{display:none;}
+
+/* Wraps the settings icon + logout button so they scale and space
+   themselves as one trailing block (see fitTopbar() in icons.js), and so
+   the pair keeps the same left-margin the logout button used to carry on
+   its own. */
+.topbar-actions{
+  display:flex;
+  align-items:center;
+  gap:calc(8px * var(--navscale));
+  margin-left:calc(10px * var(--navscale));
+  flex-shrink:0;
+}
 .btn-logout{
   background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
   padding:calc(8px * var(--navscale));
   font-weight:700;cursor:pointer;font-size:.85rem;
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
-  margin-left:calc(10px * var(--navscale));
   flex-shrink:0;
   min-width:calc(34px * var(--navscale));
   min-height:calc(34px * var(--navscale));
@@ -164,6 +175,66 @@ p{color:var(--muted);line-height:1.5;}
 }
 .btn-logout .nav-label{display:none;}
 .btn-logout:hover{background:rgba(255,255,255,0.18);}
+
+/* Settings icon button (topbar) — same footprint as the logout button so
+   the pair scales together cleanly. */
+.btn-icon-topbar{
+  background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
+  cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  min-width:calc(34px * var(--navscale));
+  min-height:calc(34px * var(--navscale));
+  padding:calc(8px * var(--navscale));
+  position:relative;
+}
+.btn-icon-topbar .icon{
+  width:calc(18px * var(--navscale));
+  height:calc(18px * var(--navscale));
+}
+.btn-icon-topbar:hover{background:rgba(255,255,255,0.18);}
+.btn-icon-topbar.active{background:rgba(232,184,75,0.2);color:var(--gold);}
+
+/* ---------------- Settings popover ---------------- */
+.settings-popover{
+  position:fixed;
+  z-index:200;
+  width:272px;
+  max-width:calc(100vw - 24px);
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:14px;
+  box-shadow:0 18px 44px rgba(31,43,68,0.24);
+  padding:16px 18px;
+  animation:t29PopIn .16s ease;
+}
+.settings-popover.hidden{display:none;}
+@keyframes t29PopIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
+.settings-popover-row{display:flex;align-items:center;justify-content:space-between;gap:14px;}
+.settings-popover-row + .settings-popover-row{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+.settings-popover-title{font-weight:800;color:var(--navy-900);font-size:.92rem;line-height:1.3;}
+.settings-popover-desc{color:var(--muted);font-size:.78rem;margin-top:3px;line-height:1.4;}
+.settings-popover-heading{
+  display:flex;align-items:center;gap:8px;
+  font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;font-weight:800;
+  color:var(--muted);margin-bottom:12px;
+}
+.settings-popover-heading .icon{color:var(--navy-700);width:15px;height:15px;}
+
+.lg-switch{position:relative;display:inline-block;width:44px;height:26px;flex-shrink:0;}
+.lg-switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;}
+.lg-switch-track{
+  position:absolute;inset:0;background:#d7dce6;border-radius:999px;
+  transition:background .2s ease;pointer-events:none;
+}
+.lg-switch-thumb{
+  position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
+  background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.25);
+  transition:transform .2s ease;
+}
+.lg-switch input:checked + .lg-switch-track{background:linear-gradient(135deg,var(--gold),var(--gold-dark));}
+.lg-switch input:checked + .lg-switch-track .lg-switch-thumb{transform:translateX(18px);}
+.lg-switch input:focus-visible + .lg-switch-track{outline:2px solid var(--gold);outline-offset:2px;}
 
 main{
   flex:1;

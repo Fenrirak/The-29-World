@@ -2,10 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script>(function(){try{if(localStorage.getItem('t29-liquid-glass')==='1')document.documentElement.classList.add('liquid-glass');}catch(e){}})();</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Loans — The 29 World</title>
 <link rel="icon" type="image/png" href="Favicon.png">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="liquid-glass.css">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 </head>
@@ -28,7 +30,10 @@
     <a href="bigevents.html"><span class="icon-slot" data-icon="star"></span><span class="nav-label">Big Events</span></a>
     <a href="gambling.html"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
     <span class="who" id="whoami"></span>
-    <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+    <div class="topbar-actions">
+      <button class="btn-icon-topbar" id="settingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Settings" title="Settings"><span class="icon-slot" data-icon="settings"></span></button>
+      <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+    </div>
   </nav>
 </div>
 
@@ -135,6 +140,7 @@
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script defer src="firebase-init.js"></script>
 <script defer src="icons.js"></script>
+<script defer src="liquid-glass.js"></script>
 <script defer src="data.js"></script>
 <script defer src="events-ui.js"></script>
 <script defer src="loan.js"></script>

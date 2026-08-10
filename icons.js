@@ -32,7 +32,8 @@ const ICONS = {
   vault: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="currentColor"/><circle cx="12" cy="12" r="4.3" fill="#1f2b44" opacity=".3"/><circle cx="12" cy="12" r="1.6" fill="#1f2b44"/><rect x="15.5" y="6.2" width="1.6" height="1.6" rx=".3" fill="#1f2b44" opacity=".5"/></svg>`,
   handshake: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 11.5 6 8l3.3 2.4a1.6 1.6 0 0 1 0 2.6l-.4.3a1.4 1.4 0 0 0 1.9 2l1-.9M22 11.5 18 8l-4.8 3.5a1.6 1.6 0 0 0 0 2.6c.6.45 1.4.45 2 0l1.3-1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M9.2 13 11 14.6c.55.5 1.4.5 1.9 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><rect x="2" y="10.5" width="4" height="7" rx="1" fill="currentColor"/><rect x="18" y="10.5" width="4" height="7" rx="1" fill="currentColor"/></svg>`,
   percent: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 19 19 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="7" cy="7" r="3" fill="currentColor"/><circle cx="17" cy="17" r="3" fill="currentColor"/></svg>`,
-  cards: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="6" width="12" height="16" rx="1.6" transform="rotate(-8 8.5 14)" fill="currentColor" opacity=".55"/><rect x="7.5" y="4" width="12" height="16" rx="1.6" fill="currentColor"/><text x="13.5" y="12.5" font-size="7.5" font-weight="900" text-anchor="middle" fill="#1f2b44" font-family="Trebuchet MS, sans-serif">A</text></svg>`
+  cards: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="6" width="12" height="16" rx="1.6" transform="rotate(-8 8.5 14)" fill="currentColor" opacity=".55"/><rect x="7.5" y="4" width="12" height="16" rx="1.6" fill="currentColor"/><text x="13.5" y="12.5" font-size="7.5" font-weight="900" text-anchor="middle" fill="#1f2b44" font-family="Trebuchet MS, sans-serif">A</text></svg>`,
+  settings: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 15.4a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8Z" fill="currentColor"/><path d="M19.4 13.6a7.6 7.6 0 0 0 0-3.2l1.9-1.3-1.6-2.8-2.2.7a7.6 7.6 0 0 0-2.8-1.6L14.3 3h-4.6l-.4 2.4a7.6 7.6 0 0 0-2.8 1.6l-2.2-.7-1.6 2.8 1.9 1.3a7.6 7.6 0 0 0 0 3.2l-1.9 1.3 1.6 2.8 2.2-.7c.8.7 1.8 1.3 2.8 1.6l.4 2.4h4.6l.4-2.4a7.6 7.6 0 0 0 2.8-1.6l2.2.7 1.6-2.8-1.9-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" fill="none" opacity=".85"/></svg>`
 };
 
 // Wraps every password field on the page with a show/hide eye button.
@@ -107,16 +108,20 @@ function fitTopbar() {
   void topbar.offsetWidth;
 
   const brand = topbar.querySelector(".brand");
-  const logoutBtn = topbar.querySelector(".btn-logout");
+  // .topbar-actions wraps the settings icon + logout button together, so
+  // both are measured (and scaled) as a single trailing block — falls back
+  // to just the logout button on any page that hasn't been updated with
+  // the wrapper yet.
+  const actionsEl = topbar.querySelector(".topbar-actions") || topbar.querySelector(".btn-logout");
   const topbarStyle = getComputedStyle(topbar);
   const paddingL = parseFloat(topbarStyle.paddingLeft) || 0;
   const paddingR = parseFloat(topbarStyle.paddingRight) || 0;
   const topbarGap = parseFloat(topbarStyle.columnGap || topbarStyle.gap) || 0;
 
   const brandW = brand ? brand.getBoundingClientRect().width : 0;
-  const logoutW = logoutBtn ? logoutBtn.getBoundingClientRect().width : 0;
-  // Two gaps: between brand<->nav and nav<->logout button.
-  const available = topbar.clientWidth - paddingL - paddingR - brandW - logoutW - (topbarGap * 2);
+  const actionsW = actionsEl ? actionsEl.getBoundingClientRect().width : 0;
+  // Two gaps: between brand<->nav and nav<->actions block.
+  const available = topbar.clientWidth - paddingL - paddingR - brandW - actionsW - (topbarGap * 2);
   const needed = nav.scrollWidth;
 
   let scale = needed > 0 ? available / needed : 1;
