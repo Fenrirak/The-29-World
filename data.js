@@ -944,15 +944,22 @@ async function takeLoan(username, classCode, amount) {
       if (cls.maxLoanCount > 0 && activeLoans.length >= cls.maxLoanCount) throw new Error("OVER_COUNT");
       const todayKey = nzDateKey();
       const dueDate = dateKeyPlusDays(todayKey, tier.termWeeks * 7);
-      // tier.rate is a WEEKLY rate that compounds over the loan's term —
-      // e.g. a 5%/week loan over 3 weeks owes principal * 1.05^3, not a
-      // single 5% (or 15%) charge on the whole amount up front.
-      owed = Math.round(amount * Math.pow(1 + (tier.rate / 100), tier.termWeeks) * 100) / 100;
+      // tier.rate is a WEEKLY rate that compounds live, not a lump sum
+      // pre-computed for the whole term up front. The first week's
+      // interest is charged right here, the moment the loan is taken out;
+      // after that, processLoanInterest() charges the same weekly rate
+      // again every Monday for as long as the loan stays active, so
+      // paying it off early genuinely saves interest.
+      owed = Math.round(amount * (1 + (tier.rate / 100)) * 100) / 100;
       const interestAmt = Math.round((owed - amount) * 100) / 100;
       tierSnapshot = { id: tier.id, termWeeks: tier.termWeeks, rate: tier.rate };
       const loan = {
         id: uid("loan"), tierId: tier.id, principal: amount, rate: tier.rate, termWeeks: tier.termWeeks,
-        interestAmt, owed, takenDate: todayKey, dueDate, status: "active"
+        interestAmt, owed, takenDate: todayKey, dueDate,
+        // Which ISO week this loan last had interest charged for — set to
+        // the taking week so the very next Monday job doesn't double-charge
+        // a loan taken earlier that same week (or on the Monday itself).
+        lastInterestWeek: isoWeekKey(new Date()), status: "active"
       };
       user.loans = existingLoans.concat([loan]);
       t.update(userRef, { balance: Math.round((user.balance + amount) * 100) / 100, loans: user.loans });
@@ -966,7 +973,7 @@ async function takeLoan(username, classCode, amount) {
   }
   await logTxn(classCode, {
     type: "loan-taken", to: username, amount,
-    note: `Loan taken — ${fmtMoney(owed)} owed total (${tierSnapshot.rate}%/week over ${tierSnapshot.termWeeks} week${tierSnapshot.termWeeks === 1 ? "" : "s"})`
+    note: `Loan taken — ${fmtMoney(owed)} owed so far (${tierSnapshot.rate}%/week, compounding every Monday until paid off)`
   });
   return { ok: true, owed };
 }
@@ -999,6 +1006,57 @@ async function repayLoan(username, loanId, amount) {
   const user = await getUser(username);
   if (user) await logTxn(user.classCode, { type: "loan-repayment", from: username, amount: paid, note: fullyPaid ? "Loan fully repaid" : "Loan repayment" });
   return { ok: true, fullyPaid };
+}
+
+// Charges another week of compounding interest on every still-active loan,
+// first thing every Monday — same "first thing on day X" idea as
+// autoInterestIfDue, but on a fixed Monday schedule rather than a
+// teacher-configurable day, since loan interest isn't tied to the bank's
+// interest settings. A loan's very first week of interest is charged the
+// moment it's taken out (see takeLoan) — this only ever adds the 2nd, 3rd,
+// ... week's interest on top of that. Tracks the ISO week each loan was
+// last charged for (lastInterestWeek) so: (a) re-running this on the same
+// Monday (e.g. the teacher reloading the page) never double-charges, and
+// (b) a loan gets skipped for good the moment it's fully repaid — a loan
+// paid off is status "paid" and simply never matches the active filter
+// again, so it stops accruing interest for good, whatever day that happens.
+async function processLoanInterest(classCode) {
+  if (nzDayName() !== "Mon") return 0;
+  const weekKey = isoWeekKey(new Date());
+  const students = await getClassStudents(classCode);
+  let count = 0;
+  for (const student of students) {
+    const loans = student.loans || [];
+    const due = loans.filter(l => l.status === "active" && l.lastInterestWeek !== weekKey);
+    if (due.length === 0) continue;
+    const userRef = usersCol().doc(student.username);
+    let charged = [];
+    try {
+      await fdb.runTransaction(async (t) => {
+        const snap = await t.get(userRef);
+        if (!snap.exists) return;
+        const user = snap.data();
+        const liveLoans = user.loans || [];
+        liveLoans.forEach(l => {
+          if (l.status !== "active" || l.lastInterestWeek === weekKey) return;
+          const before = l.owed;
+          l.owed = Math.round(l.owed * (1 + (l.rate / 100)) * 100) / 100;
+          l.lastInterestWeek = weekKey;
+          const interest = Math.round((l.owed - before) * 100) / 100;
+          if (interest > 0) charged.push({ interest, owedAfter: l.owed });
+        });
+        t.update(userRef, { loans: liveLoans });
+      });
+    } catch (e) { continue; }
+    for (const c of charged) {
+      await logTxn(classCode, {
+        type: "loan-interest", to: student.username, amount: c.interest,
+        note: `Weekly loan interest — now owe ${fmtMoney(c.owedAfter)}`
+      });
+      count++;
+    }
+  }
+  return count;
 }
 
 /* ---------------- Stock market ---------------- */

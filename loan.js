@@ -59,7 +59,7 @@ async function render() {
         <div class="flex-between">
           <div>
             <h4>${icon("handshake", 20)}${fmtMoney(t.min)} — ${fmtMoney(t.max)}</h4>
-            <p>${termLabel(t.termWeeks)} term &middot; <strong>${t.rate}%</strong> interest per week (compounds over the term)</p>
+            <p>${termLabel(t.termWeeks)} term &middot; <strong>${t.rate}%</strong> interest per week (charged on take-out, then compounds every Monday until paid off)</p>
           </div>
           <div>
             <button class="btn small secondary" onclick="editTier('${t.id}')">${icon("idcard", 13)} Edit</button>
@@ -168,19 +168,11 @@ async function updateLoanPreview() {
   if (!amount || amount <= 0) { preview.textContent = ""; return; }
   const tier = findLoanTier(cls, amount);
   if (!tier) { preview.innerHTML = `<span class="ticker-down">That amount doesn't fall within any available loan range.</span>`; return; }
-  const owed = Math.round(amount * Math.pow(1 + (tier.rate / 100), tier.termWeeks) * 100) / 100;
-  const interest = Math.round((owed - amount) * 100) / 100;
-  let text = `You'd owe <strong>${fmtMoney(owed)}</strong> total (${fmtMoney(interest)} interest), due back in ${termLabel(tier.termWeeks)}.`;
-  const lc = cls.lifestyleConfig.loan;
-  if (lc && lc.enabled && lc.perAmount > 0 && lc.points > 0) {
-    const me = await getUserCached(CURRENT.username);
-    const currentOwed = (me.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0);
-    const pointsAfter = Math.floor((currentOwed + owed) / lc.perAmount) * lc.points;
-    if (pointsAfter > 0) {
-      text += `<div class="muted-small">This would put you at ${fmtMoney(currentOwed + owed)} owed in total — costing you ${pointsAfter} lifestyle point${pointsAfter === 1 ? "" : "s"}.</div>`;
-    }
-  }
-  preview.innerHTML = text;
+  // Deliberately not showing a projected total here — interest compounds
+  // live (first charge the moment you borrow, then again every Monday
+  // until it's paid off), so there's no single "total you'll owe" to
+  // calculate in advance. Just flag the rate and let them reason about it.
+  preview.innerHTML = `This falls in the ${tier.rate}%/week range. Interest is charged as soon as you borrow, then again every Monday until it's paid off — the longer it takes you to pay it back, the more you'll end up owing.`;
 }
 
 async function addTier(e) {
@@ -258,7 +250,7 @@ async function takeLoanForm(e) {
   const amount = document.getElementById("loanAmount").value;
   const res = await takeLoan(CURRENT.username, CURRENT.classCode, amount);
   const box = document.getElementById("takeLoanMsg");
-  box.innerHTML = res.ok ? `<div class="success-msg">Loan approved — ${fmtMoney(res.owed)} to pay back.</div>` : `<div class="error-msg">${res.error}</div>`;
+  box.innerHTML = res.ok ? `<div class="success-msg">Loan approved — you owe ${fmtMoney(res.owed)} right now (more will be added every Monday until it's paid off).</div>` : `<div class="error-msg">${res.error}</div>`;
   if (res.ok) document.getElementById("loanAmount").value = "";
   await render();
   return false;

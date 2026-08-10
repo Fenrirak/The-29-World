@@ -76,8 +76,8 @@ async function init() {
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintChrome();
   enablePasswordToggles();
-  // Same reasoning as the other pages: these are 8 independent jobs, so
-  // running them together instead of one-at-a-time avoids 8 sequential
+  // Same reasoning as the other pages: these are 9 independent jobs, so
+  // running them together instead of one-at-a-time avoids 9 sequential
   // network round-trips on page load.
   await Promise.all([
     autoPayDayIfDue(CLASS_CODE),
@@ -87,7 +87,8 @@ async function init() {
     autoInterestIfDue(CLASS_CODE),
     processInsurancePayments(CLASS_CODE),
     processWeeklyEvents(CLASS_CODE),
-    processWeeklyBigEvents(CLASS_CODE)
+    processWeeklyBigEvents(CLASS_CODE),
+    processLoanInterest(CLASS_CODE)
   ]);
   await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
   await checkBigEventPopup(CURRENT.username, CLASS_CODE);
@@ -342,6 +343,7 @@ function describeTxn(t, nameOf) {
     case "savings-withdraw": return `${nameOf(t.to)} — ${t.note || "Withdrew from Savings Account"}`;
     case "loan-taken": return `${nameOf(t.to)} — ${t.note}`;
     case "loan-repayment": return `${nameOf(t.from)} — ${t.note}`;
+    case "loan-interest": return `${nameOf(t.to)} — ${t.note}`;
     case "side-hustle": return `${nameOf(t.to)} — ${t.note}`;
     case "store-gift": return `${nameOf(t.to)} — ${t.note}`;
     default: return t.note || "";
@@ -375,6 +377,7 @@ function badge(type) {
     "cash-interest": ["gold", "coin", "Cash interest"],
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
     "loan-taken": ["navy", "handshake", "Loan"], "loan-repayment": ["mint", "handshake", "Loan repayment"],
+    "loan-interest": ["coral", "handshake", "Loan interest"],
     "side-hustle": ["mint", "briefcase", "Side hustle"],
     "store-gift": ["mint", "cart", "Free item"]
   };
