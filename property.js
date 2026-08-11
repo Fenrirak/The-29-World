@@ -32,6 +32,7 @@ async function init() {
     autoPayDayIfDue(u.classCode),
     processAutomations(u.classCode),
     processMortgages(u.classCode),
+    processPropertyRent(u.classCode),
     processTermDeposits(u.classCode),
     autoInterestIfDue(u.classCode),
     processInsurancePayments(u.classCode),
@@ -69,9 +70,11 @@ async function render() {
           <h4>${icon("house", 20)}${p.name} ${isMine ? '<span class="badge mint">Your home</span>' : ""}</h4>
           <p>${p.description || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
-          <p><strong>${fmtMoney(p.price)}</strong> ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks` : "&middot; cash purchase only"}</p>
+          <p><strong>${fmtMoney(p.price)}</strong> ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks` : "&middot; cash purchase only"}
+            ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
           <p class="muted-small">${p.owner ? `Owned by ${nameOf(p.owner)}` : "Available"}
             ${p.owner && p.mortgage ? ` — mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week, ${p.mortgage.weeksLeft} weeks left` : ""}</p>
+          ${p.owner ? occupancyBlock(p, isMine) : ""}
         </div>
         <div class="row-flex" style="gap:8px;">
           ${IS_TEACHER
@@ -88,6 +91,54 @@ async function render() {
   });
 }
 
+// Renders the "living in it / rented out" status + choice for an owned
+// property. Only the owner sees the choice buttons — everyone else just
+// sees whether the property is currently occupied or rented out.
+function occupancyBlock(p, isMine) {
+  if (!isMine) {
+    if (p.occupancy === "living") return `<p class="muted-small">${icon("house", 13)} Owner is living here.</p>`;
+    if (p.occupancy === "rented") return `<p class="muted-small">This property is currently rented out.</p>`;
+    return "";
+  }
+  if (p.occupancy === "living") {
+    return `
+      <div class="card" style="margin-top:8px;padding:10px 12px;">
+        <p><strong>${icon("house", 14)} You're living here</strong> — your lifestyle rating gets a +5 bonus (property category) while you live in it. You're not collecting rent.</p>
+        ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out instead</button>` : `<p class="muted-small">Your teacher hasn't set a rent amount for this property, so it can't be rented out yet.</p>`}
+      </div>`;
+  }
+  if (p.occupancy === "rented") {
+    return `
+      <div class="card" style="margin-top:8px;padding:10px 12px;">
+        <p><strong>${icon("coin", 14)} Rented out</strong> — you're earning ${fmtMoney(p.rentPerWeek)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}. You're not getting the living-in-it lifestyle bonus.</p>
+        <button class="btn small secondary" onclick="chooseOccupancy('${p.id}','living')">Move in instead</button>
+      </div>`;
+  }
+  // Owned but no choice made yet — explain the consequences of both
+  // options up front before the student picks either one.
+  return `
+    <div class="card" style="margin-top:8px;padding:10px 12px;">
+      <p><strong>Live in it, or rent it out?</strong></p>
+      <p class="muted-small">Live in it: no rent income, but +5 to your lifestyle rating (property category) while you live there.<br>
+      Rent it out: ${p.rentPerWeek > 0 ? `${fmtMoney(p.rentPerWeek)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}` : "your teacher hasn't set a rent amount yet"} — but no lifestyle bonus, only the property's base comfort rating counts.<br>
+      You can change your mind at any time.</p>
+      <div class="row-flex" style="gap:8px;">
+        <button class="btn small gold" onclick="chooseOccupancy('${p.id}','living')">Live in it</button>
+        ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out</button>` : ""}
+      </div>
+    </div>`;
+}
+
+async function chooseOccupancy(id, choice) {
+  const msg = choice === "living"
+    ? "Live in this property?\n\nYou'll get a +5 bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time."
+    : "Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +5 lifestyle bonus for living in it — only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.";
+  if (!confirm(msg)) return;
+  const res = await setPropertyOccupancy(CURRENT.username, CURRENT.classCode, id, choice);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+}
+
 async function addProp(e) {
   e.preventDefault();
   const prop = {
@@ -95,7 +146,9 @@ async function addProp(e) {
     price: document.getElementById("hPrice").value,
     comfort: document.getElementById("hComfort").value,
     mortgageWeeks: document.getElementById("hMortgage").value,
-    description: document.getElementById("hDesc").value.trim()
+    description: document.getElementById("hDesc").value.trim(),
+    rentPerWeek: document.getElementById("hRent").value,
+    rentDay: document.getElementById("hRentDay").value
   };
   if (EDITING_ID) {
     await updateProperty(CURRENT.classCode, EDITING_ID, prop);
@@ -107,6 +160,8 @@ async function addProp(e) {
     ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("hComfort").value = 3;
     document.getElementById("hMortgage").value = 0;
+    document.getElementById("hRent").value = 0;
+    document.getElementById("hRentDay").value = "Fri";
   }
   await render();
   return false;
@@ -122,6 +177,8 @@ async function editProp(id) {
   document.getElementById("hComfort").value = prop.comfort;
   document.getElementById("hMortgage").value = prop.mortgageWeeks || 0;
   document.getElementById("hDesc").value = prop.description || "";
+  document.getElementById("hRent").value = prop.rentPerWeek || 0;
+  document.getElementById("hRentDay").value = prop.rentDay || "Fri";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit property";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
   document.getElementById("cancelEditBtn").classList.remove("hidden");
@@ -134,6 +191,8 @@ function cancelEditProp() {
   ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("hComfort").value = 3;
   document.getElementById("hMortgage").value = 0;
+  document.getElementById("hRent").value = 0;
+  document.getElementById("hRentDay").value = "Fri";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a property";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add property";
   document.getElementById("cancelEditBtn").classList.add("hidden");

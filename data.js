@@ -622,7 +622,7 @@ async function removeStudent(classCode, studentUser) {
     cls.students = cls.students.filter(s => s !== studentUser);
     cls.automations = (cls.automations || []).filter(a => a.studentUser !== studentUser);
     cls.jobApplications = (cls.jobApplications || []).filter(a => a.studentUser !== studentUser);
-    (cls.properties || []).forEach(p => { if (p.owner === studentUser) { p.owner = null; p.mortgage = null; } });
+    (cls.properties || []).forEach(p => { if (p.owner === studentUser) { p.owner = null; p.mortgage = null; p.occupancy = null; p.rentLastWeekPaid = null; } });
     (cls.vehicles || []).forEach(v => { v.owners = (v.owners || []).filter(o => o !== studentUser); });
     t.update(classRef, {
       companies: cls.companies, students: cls.students,
@@ -1905,7 +1905,7 @@ async function resetClass(classCode) {
     balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: []
   })));
   const cls = await getClass(classCode);
-  const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null }));
+  const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null, occupancy: null, rentLastWeekPaid: null }));
   const vehicles = (cls.vehicles || []).map(v => ({ ...v, owners: [] }));
   await classesCol().doc(classCode).update({
     companies: [], txns: [], automations: [], jobApplications: [],
@@ -2754,7 +2754,7 @@ async function resolveBigEvent(username, classCode, logId, choice) {
           t.update(userRef, { jobId: null });
         } else if (entry.module === "property") {
           const prop = cls.properties.find(p => p.owner === username);
-          if (prop) { prop.owner = null; prop.mortgage = null; }
+          if (prop) { prop.owner = null; prop.mortgage = null; prop.occupancy = null; prop.rentLastWeekPaid = null; }
           t.update(classRef, { properties: cls.properties, bigEventLog: cls.bigEventLog });
         } else if (entry.module === "transport") {
           const veh = cls.vehicles.find(v => (v.owners || []).includes(username));
@@ -2864,6 +2864,15 @@ function withNewModuleDefaults(cls) {
     if (it.sold === undefined) it.sold = 0;
   });
   cls.properties = cls.properties || [];
+  // Migrate properties saved before renting-out was added — give them a
+  // (disabled, i.e. $0) rent setup and no occupancy choice made yet,
+  // rather than leaving these fields undefined everywhere downstream.
+  cls.properties.forEach(p => {
+    if (p.rentPerWeek === undefined) p.rentPerWeek = 0;
+    if (p.rentDay === undefined) p.rentDay = "Fri";
+    if (p.occupancy === undefined) p.occupancy = null;
+    if (p.rentLastWeekPaid === undefined) p.rentLastWeekPaid = null;
+  });
   cls.eventDefs = cls.eventDefs || [];
   cls.eventLog = cls.eventLog || [];
   cls.lastEventWeekRun = cls.lastEventWeekRun || null;
@@ -3393,7 +3402,14 @@ async function addProperty(classCode, prop) {
       id: uid("prop"), name: prop.name, price: Number(prop.price),
       comfort: Math.max(1, Math.min(5, Number(prop.comfort) || 1)),
       mortgageWeeks: Number(prop.mortgageWeeks) || 0,
-      description: prop.description || "", owner: null
+      description: prop.description || "", owner: null,
+      // Weekly rent an owner can earn if they choose to rent this property
+      // out instead of living in it, and which NZ weekday that rent is
+      // paid on (see processPropertyRent). occupancy tracks the owner's
+      // current choice — "living" | "rented" | null (not yet chosen).
+      rentPerWeek: Math.max(0, Number(prop.rentPerWeek) || 0),
+      rentDay: DAY_NAMES.includes(prop.rentDay) ? prop.rentDay : "Fri",
+      occupancy: null, rentLastWeekPaid: null
     });
     t.update(classRef, { properties: cls.properties });
   });
@@ -3421,6 +3437,8 @@ async function updateProperty(classCode, propId, updates) {
     prop.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
     prop.mortgageWeeks = Number(updates.mortgageWeeks) || 0;
     prop.description = updates.description || "";
+    prop.rentPerWeek = Math.max(0, Number(updates.rentPerWeek) || 0);
+    prop.rentDay = DAY_NAMES.includes(updates.rentDay) ? updates.rentDay : "Fri";
     t.update(classRef, { properties: cls.properties });
   });
 }
@@ -3448,11 +3466,13 @@ async function buyProperty(username, classCode, propId, financed) {
         if (!isTeacher && user.balance < deposit) throw new Error("BROKE");
         prop.owner = username;
         prop.mortgage = { weeksLeft: prop.mortgageWeeks, weeklyPayment: weekly };
+        prop.occupancy = null; prop.rentLastWeekPaid = null;
         if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - deposit) * 100) / 100 });
       } else {
         if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
         prop.owner = username;
         prop.mortgage = null;
+        prop.occupancy = null; prop.rentLastWeekPaid = null;
         cashPaid = taxedPrice;
         if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - taxedPrice) * 100) / 100 });
       }
@@ -3480,6 +3500,8 @@ async function sellProperty(classCode, propId) {
     payout = Math.round(prop.price * 0.9 * 100) / 100;
     prop.owner = null;
     prop.mortgage = null;
+    prop.occupancy = null;
+    prop.rentLastWeekPaid = null;
     t.update(classRef, { properties: cls.properties });
   });
   if (owner) {
@@ -3521,6 +3543,84 @@ async function processMortgages(classCode) {
     } catch (e) { /* ignore, try next */ }
     if (didRun) {
       await logTxn(classCode, { type: "mortgage", from: prop.owner, amount: amt, note: `Mortgage payment: ${prop.name}` + (remainingAfter <= 0 ? " — paid off!" : "") });
+      ran++;
+    }
+  }
+  return ran;
+}
+
+// Student picks (or changes, any time) whether they live in their property
+// or rent it out. Living in it earns a flat lifestyle bonus (see
+// lifestyleRatingFromData); renting it out earns weekly rent instead, paid
+// automatically on the property's rentDay (see processPropertyRent), but
+// gives no lifestyle bonus on top of the property's base comfort score.
+// Switching choice takes effect immediately and resets the rent-paid
+// tracker so a mid-week switch can't double- or skip-pay that week's rent.
+async function setPropertyOccupancy(username, classCode, propId, occupancy) {
+  if (occupancy !== "living" && occupancy !== "rented") {
+    return { ok: false, error: "Invalid choice." };
+  }
+  const classRef = classesCol().doc(classCode);
+  let propName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop) throw new Error("NOT_FOUND");
+      if (prop.owner !== username) throw new Error("NOT_OWNER");
+      propName = prop.name;
+      prop.occupancy = occupancy;
+      prop.rentLastWeekPaid = null;
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "NOT_OWNER") return { ok: false, error: "You don't own that property." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, {
+    type: "property-occupancy", from: username,
+    note: occupancy === "living" ? `Moved into: ${propName}` : `Started renting out: ${propName}`
+  });
+  return { ok: true };
+}
+
+// Pays weekly rent to any student who owns a property and has chosen to
+// rent it out, once per NZ calendar week on that property's own rentDay —
+// same "once per ISO week, tracked per-item" pattern as processMortgages,
+// just paying the owner instead of charging them.
+async function processPropertyRent(classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  if (!cls) return 0;
+  const todayName = nzDayName();
+  const weekKey = isoWeekKey(new Date());
+  let ran = 0;
+  for (const prop of cls.properties) {
+    if (!prop.owner || prop.occupancy !== "rented") continue;
+    if (!(prop.rentPerWeek > 0)) continue;
+    if ((prop.rentDay || "Fri") !== todayName) continue;
+    if (prop.rentLastWeekPaid === weekKey) continue;
+    const classRef = classesCol().doc(classCode);
+    let didRun = false, amt = 0, owner = "";
+    try {
+      await fdb.runTransaction(async (t) => {
+        const classSnap = await t.get(classRef);
+        if (!classSnap.exists) return;
+        const liveCls = withNewModuleDefaults(classSnap.data());
+        const liveProp = liveCls.properties.find(p => p.id === prop.id);
+        if (!liveProp || !liveProp.owner || liveProp.occupancy !== "rented") return;
+        if (liveProp.rentLastWeekPaid === weekKey) return;
+        amt = liveProp.rentPerWeek;
+        owner = liveProp.owner;
+        liveProp.rentLastWeekPaid = weekKey;
+        t.update(classRef, { properties: liveCls.properties });
+        didRun = true;
+      });
+    } catch (e) { /* ignore, try next */ }
+    if (didRun) {
+      await adjustBalance(owner, amt);
+      await logTxn(classCode, { type: "property-rent", to: owner, amount: amt, note: `Weekly rent received: ${prop.name}` });
       ran++;
     }
   }
@@ -3820,6 +3920,10 @@ async function getStudentPossessions(username, classCode) {
 }
 
 /* ===================== Lifestyle rating ===================== */
+// Flat lifestyle-score bonus for choosing to live in an owned property
+// instead of renting it out (see setPropertyOccupancy).
+const PROPERTY_LIVING_BONUS = 5;
+
 async function saveLifestyleConfig(classCode, config) {
   await classesCol().doc(classCode).update({ lifestyleConfig: config });
 }
@@ -3912,7 +4016,14 @@ function lifestyleRatingFromData(cls, user, username) {
 
   if (cfg.property && cfg.property.enabled) {
     const owned = cls.properties.find(p => p.owner === username);
-    if (owned) score += owned.comfort * (cfg.property.weight || 0);
+    if (owned) {
+      score += owned.comfort * (cfg.property.weight || 0);
+      // Living in the property (as opposed to renting it out) earns a
+      // flat +5 lifestyle bonus on top of its base comfort score. Renting
+      // it out instead earns weekly rent (see processPropertyRent) but no
+      // bonus — the property still only counts for its base comfort.
+      if (owned.occupancy === "living") score += PROPERTY_LIVING_BONUS;
+    }
   }
   if (cfg.transport && cfg.transport.enabled) {
     const owned = cls.vehicles.filter(v => (v.owners || []).includes(username))
@@ -3969,6 +4080,10 @@ async function lifestyleRatingBreakdown(username, classCode) {
       const pts = owned.comfort * (cfg.property.weight || 0);
       score += pts;
       items.push({ type: "gain", label: owned.name || "Property", detail: `${owned.comfort} comfort &times; ${cfg.property.weight || 0} pts/star`, points: pts });
+      if (owned.occupancy === "living") {
+        score += PROPERTY_LIVING_BONUS;
+        items.push({ type: "gain", label: "Living in your property", detail: "Flat bonus for living in it instead of renting it out", points: PROPERTY_LIVING_BONUS });
+      }
     }
   }
   if (cfg.transport && cfg.transport.enabled) {

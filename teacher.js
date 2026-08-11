@@ -832,7 +832,8 @@ async function renderProfile(username) {
 
   rows.push(`<h4>${icon("house", 16)} Property</h4>`);
   rows.push(poss.property
-    ? `<div class="auto-row"><div class="auto-details"><strong>${poss.property.name}</strong> — ${fmtMoney(poss.property.price)}</div>
+    ? `<div class="auto-row"><div class="auto-details"><strong>${poss.property.name}</strong> — ${fmtMoney(poss.property.price)}
+        <div class="muted-small">${poss.property.occupancy === "living" ? "Living in it (lifestyle bonus applied)" : poss.property.occupancy === "rented" ? `Rented out — earning ${fmtMoney(poss.property.rentPerWeek || 0)}/week, paid ${DAY_FULL[poss.property.rentDay || "Fri"]}` : "Hasn't chosen to live in it or rent it out yet"}</div></div>
         <button class="btn small coral" onclick="profileRemoveProperty('${poss.property.id}')">Repossess</button></div>`
     : `<p class="muted-small">No property owned.</p>`);
 
