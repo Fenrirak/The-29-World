@@ -47,6 +47,21 @@ async function init() {
   await render();
 }
 
+// Groups the flat list of per-unit property records into listings (all
+// units sharing a groupId — see data.js). Properties saved before this
+// feature existed have no groupId, so they fall back to being their own
+// group of 1, exactly as before.
+function groupProperties(props) {
+  const order = [];
+  const byGroup = new Map();
+  props.forEach(p => {
+    const gid = p.groupId || p.id;
+    if (!byGroup.has(gid)) { byGroup.set(gid, []); order.push(gid); }
+    byGroup.get(gid).push(p);
+  });
+  return order.map(gid => byGroup.get(gid));
+}
+
 async function render() {
   // getUser and getClass are independent reads — CURRENT.classCode is
   // already known without needing `me` first, so fetch both at once
@@ -60,36 +75,59 @@ async function render() {
   list.innerHTML = "";
   document.getElementById("noProps").classList.toggle("hidden", props.length > 0);
 
-  props.forEach(p => {
-    const isMine = p.owner === me.username;
+  const groups = groupProperties(props);
+
+  groups.forEach(units => {
+    const p = units[0]; // shared listing fields (name/price/comfort/etc) come from any unit
+    const gid = p.groupId || p.id;
+    const owned = units.filter(u => u.owner);
+    const available = units.filter(u => !u.owner);
+    const myUnit = units.find(u => u.owner === me.username);
+
     const div = document.createElement("div");
     div.className = "card company-card";
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${icon("house", 20)}${p.name} ${isMine ? '<span class="badge mint">Your home</span>' : ""}</h4>
+          <h4>${icon("house", 20)}${p.name} ${myUnit ? '<span class="badge mint">Your home</span>' : ""}</h4>
           <p>${p.description || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
           <p><strong>${fmtMoney(p.price)}</strong> ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s` : "&middot; cash purchase only"}
             ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
-          <p class="muted-small">${p.owner ? `Owned by ${nameOf(p.owner)}` : "Available"}
-            ${p.owner && p.mortgage ? ` — mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
-          ${isMine && p.mortgageDefault ? `<p style="color:#b42318;"><strong>${icon("house", 13)} Your mortgage term ended on ${p.mortgageDefault.endedDate} without being fully paid off — you still owe ${fmtMoney(p.mortgageDefault.amountOwed)}.</strong></p>` : ""}
-          ${p.owner ? occupancyBlock(p, isMine) : ""}
+          <p class="muted-small">${units.length > 1 ? `${available.length} of ${units.length} available` : (available.length > 0 ? "Available" : `Owned by ${nameOf(owned[0].owner)}`)}</p>
         </div>
         <div class="row-flex" style="gap:8px;">
           ${IS_TEACHER
-            ? `<button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button>${p.owner ? `<button class="btn small secondary" onclick="forceSell('${p.id}')">Sell back</button>` : ""}<button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>`
-            : p.owner
-              ? (isMine ? `<button class="btn small secondary" onclick="sellMine('${p.id}')">Sell back</button>` : "")
-              : `<button class="btn small gold" onclick="buyOutright('${p.id}')">Buy cash</button>
-                 ${p.mortgageWeeks > 0 ? `<button class="btn small secondary" onclick="buyFinanced('${p.id}')">Finance (10% deposit)</button>` : ""}`}
+            ? `<button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button><button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>`
+            : (!myUnit && available.length > 0
+                ? `<button class="btn small gold" onclick="buyOutright('${gid}')">Buy cash</button>
+                   ${p.mortgageWeeks > 0 ? `<button class="btn small secondary" onclick="buyFinanced('${gid}')">Finance (10% deposit)</button>` : ""}`
+                : "")}
         </div>
       </div>
-      <div id="msg-${p.id}"></div>
+      <div id="msg-${gid}"></div>
+      ${owned.map(u => ownedUnitBlock(u, u.owner === me.username, cls, nameOf)).join("")}
     `;
     list.appendChild(div);
   });
+}
+
+// Renders one owned unit's status/actions within a listing card — mortgage
+// info, default warning, occupancy choice, and (teacher-only / owner-only)
+// sell-back controls. Each owned unit still tracks its own mortgage and
+// occupancy independently even when several students own units from the
+// same listing.
+function ownedUnitBlock(p, isMine, cls, nameOf) {
+  const who = isMine ? "You" : nameOf(p.owner);
+  return `
+    <div class="card" style="margin-top:8px;padding:10px 12px;">
+      <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
+      ${isMine && p.mortgageDefault ? `<p style="color:#b42318;"><strong>${icon("house", 13)} Your mortgage term ended on ${p.mortgageDefault.endedDate} without being fully paid off — you still owe ${fmtMoney(p.mortgageDefault.amountOwed)}.</strong></p>` : ""}
+      ${occupancyBlock(p, isMine)}
+      <div class="row-flex" style="gap:8px;margin-top:6px;">
+        ${IS_TEACHER ? `<button class="btn small secondary" onclick="forceSell('${p.id}')">Sell back (${who})</button>` : (isMine ? `<button class="btn small secondary" onclick="sellMine('${p.id}')">Sell back</button>` : "")}
+      </div>
+    </div>`;
 }
 
 // Renders the "living in it / rented out" status + choice for an owned
@@ -146,6 +184,7 @@ async function addProp(e) {
     name: document.getElementById("hName").value.trim(),
     price: document.getElementById("hPrice").value,
     comfort: document.getElementById("hComfort").value,
+    quantity: document.getElementById("hQuantity").value,
     mortgageWeeks: document.getElementById("hMortgage").value,
     description: document.getElementById("hDesc").value.trim(),
     rentPerWeek: document.getElementById("hRent").value,
@@ -160,6 +199,7 @@ async function addProp(e) {
     document.getElementById("addMsg").innerHTML = `<div class="success-msg">Property added!</div>`;
     ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("hComfort").value = 3;
+    document.getElementById("hQuantity").value = 1;
     document.getElementById("hMortgage").value = 0;
     document.getElementById("hRent").value = 0;
     document.getElementById("hRentDay").value = "Fri";
@@ -168,14 +208,21 @@ async function addProp(e) {
   return false;
 }
 
+// id is any unit's id within the listing — edits apply to the whole
+// group (see updateProperty in data.js). Quantity shown is how many
+// units currently exist in that group.
 async function editProp(id) {
   const cls = await getClassCached(CURRENT.classCode);
-  const prop = (cls.properties || []).find(p => p.id === id);
+  const props = cls.properties || [];
+  const prop = props.find(p => p.id === id);
   if (!prop) return;
+  const gid = prop.groupId || prop.id;
+  const groupSize = props.filter(p => (p.groupId || p.id) === gid).length;
   EDITING_ID = id;
   document.getElementById("hName").value = prop.name;
   document.getElementById("hPrice").value = prop.price;
   document.getElementById("hComfort").value = prop.comfort;
+  document.getElementById("hQuantity").value = groupSize;
   document.getElementById("hMortgage").value = prop.mortgageWeeks || 0;
   document.getElementById("hDesc").value = prop.description || "";
   document.getElementById("hRent").value = prop.rentPerWeek || 0;
@@ -191,6 +238,7 @@ function cancelEditProp() {
   EDITING_ID = null;
   ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("hComfort").value = 3;
+  document.getElementById("hQuantity").value = 1;
   document.getElementById("hMortgage").value = 0;
   document.getElementById("hRent").value = 0;
   document.getElementById("hRentDay").value = "Fri";
@@ -200,7 +248,7 @@ function cancelEditProp() {
 }
 
 async function deleteProp(id) {
-  if (confirm("Remove this property? Any owner will not be refunded automatically.")) {
+  if (confirm("Remove this property listing (all units of it)? Any owners will not be refunded automatically.")) {
     await removeProperty(CURRENT.classCode, id);
     await render();
   }
@@ -217,14 +265,26 @@ async function sellMine(id) {
     await render();
   }
 }
-async function buyOutright(id) {
+// gid is a listing's groupId — picks whichever unit in that listing is
+// still unowned (fresh read, to keep the race window with another buyer
+// as small as possible) and buys that specific unit.
+async function pickAvailableUnitId(gid) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const unit = (cls.properties || []).find(p => (p.groupId || p.id) === gid && !p.owner);
+  return unit ? unit.id : null;
+}
+async function buyOutright(gid) {
+  const id = await pickAvailableUnitId(gid);
+  if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
   const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, false);
-  document.getElementById("msg-" + id).innerHTML = res.ok ? `<div class="success-msg">Congratulations, it's yours!</div>` : `<div class="error-msg">${res.error}</div>`;
+  document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Congratulations, it's yours!</div>` : `<div class="error-msg">${res.error}</div>`;
   await render();
 }
-async function buyFinanced(id) {
+async function buyFinanced(gid) {
+  const id = await pickAvailableUnitId(gid);
+  if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
   const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true);
-  document.getElementById("msg-" + id).innerHTML = res.ok ? `<div class="success-msg">Financed! Weekly payments will come out automatically.</div>` : `<div class="error-msg">${res.error}</div>`;
+  document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Financed! Weekly payments will come out automatically.</div>` : `<div class="error-msg">${res.error}</div>`;
   await render();
 }
 

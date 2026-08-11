@@ -3405,54 +3405,113 @@ async function sellStoreItem(username, classCode, itemId) {
   return { ok: true, payout };
 }
 
-/* ===================== Property ===================== */
+/* ===================== Property =====================
+   A "listing" a teacher creates in the UI can represent more than one
+   identical house available for sale (e.g. "Cosy Cottage x5"). Under the
+   hood each purchasable unit is still its own separate entry in
+   cls.properties (own id, own owner/mortgage/occupancy state — nothing
+   downstream like buyProperty/sellProperty/processMortgages/
+   processPropertyRent needs to change), but all units from the same
+   listing share a `groupId` so the UI can show them as one card with an
+   "X of N available" count instead of N duplicate cards. Properties saved
+   before this feature existed have no groupId — they're treated as their
+   own group of 1 (see groupIdOf below), so nothing breaks for them. */
+function groupIdOf(prop) { return prop.groupId || prop.id; }
+
 async function addProperty(classCode, prop) {
   const classRef = classesCol().doc(classCode);
+  const qty = Math.max(1, Math.floor(Number(prop.quantity)) || 1);
+  const groupId = uid("propgrp");
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
-    cls.properties.push({
-      id: uid("prop"), name: prop.name, price: Number(prop.price),
-      comfort: Math.max(1, Math.min(5, Number(prop.comfort) || 1)),
-      mortgageWeeks: Number(prop.mortgageWeeks) || 0,
-      description: prop.description || "", owner: null,
-      // Weekly rent an owner can earn if they choose to rent this property
-      // out instead of living in it, and which NZ weekday that rent is
-      // paid on (see processPropertyRent). occupancy tracks the owner's
-      // current choice — "living" | "rented" | null (not yet chosen).
-      rentPerWeek: Math.max(0, Number(prop.rentPerWeek) || 0),
-      rentDay: DAY_NAMES.includes(prop.rentDay) ? prop.rentDay : "Fri",
-      occupancy: null, rentLastWeekPaid: null
-    });
+    for (let i = 0; i < qty; i++) {
+      cls.properties.push({
+        id: uid("prop"), groupId, name: prop.name, price: Number(prop.price),
+        comfort: Math.max(1, Math.min(5, Number(prop.comfort) || 1)),
+        mortgageWeeks: Number(prop.mortgageWeeks) || 0,
+        description: prop.description || "", owner: null,
+        // Weekly rent an owner can earn if they choose to rent this property
+        // out instead of living in it, and which NZ weekday that rent is
+        // paid on (see processPropertyRent). occupancy tracks the owner's
+        // current choice — "living" | "rented" | null (not yet chosen).
+        rentPerWeek: Math.max(0, Number(prop.rentPerWeek) || 0),
+        rentDay: DAY_NAMES.includes(prop.rentDay) ? prop.rentDay : "Fri",
+        occupancy: null, rentLastWeekPaid: null
+      });
+    }
     t.update(classRef, { properties: cls.properties });
   });
 }
+// propId here is the id of ANY unit in the listing — removes every unit
+// that shares its groupId (i.e. removes the whole listing, all units).
+// Owners of removed units are not refunded automatically (same as before).
 async function removeProperty(classCode, propId) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
-    cls.properties = cls.properties.filter(p => p.id !== propId);
+    const target = cls.properties.find(p => p.id === propId);
+    if (!target) return;
+    const gid = groupIdOf(target);
+    cls.properties = cls.properties.filter(p => groupIdOf(p) !== gid);
     t.update(classRef, { properties: cls.properties });
   });
 }
+// propId is the id of ANY unit in the listing. Shared fields (name,
+// price, comfort, mortgage terms, description, rent) are applied to every
+// unit in the group, whether it's currently owned or not — this doesn't
+// touch anyone's owner/mortgage/occupancy state. `updates.quantity` grows
+// or shrinks the number of units: growing adds fresh available units;
+// shrinking only ever removes currently-UNOWNED units (never repossesses
+// someone's home) — if there aren't enough unowned units to shrink down
+// to the requested count, it removes as many as it safely can and stops.
 async function updateProperty(classCode, propId, updates) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
-    const prop = cls.properties.find(p => p.id === propId);
-    if (!prop) return;
-    prop.name = updates.name;
-    prop.price = Number(updates.price);
-    prop.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
-    prop.mortgageWeeks = Number(updates.mortgageWeeks) || 0;
-    prop.description = updates.description || "";
-    prop.rentPerWeek = Math.max(0, Number(updates.rentPerWeek) || 0);
-    prop.rentDay = DAY_NAMES.includes(updates.rentDay) ? updates.rentDay : "Fri";
+    const target = cls.properties.find(p => p.id === propId);
+    if (!target) return;
+    const gid = groupIdOf(target);
+    const units = cls.properties.filter(p => groupIdOf(p) === gid);
+    units.forEach(prop => {
+      prop.groupId = gid;
+      prop.name = updates.name;
+      prop.price = Number(updates.price);
+      prop.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
+      prop.mortgageWeeks = Number(updates.mortgageWeeks) || 0;
+      prop.description = updates.description || "";
+      prop.rentPerWeek = Math.max(0, Number(updates.rentPerWeek) || 0);
+      prop.rentDay = DAY_NAMES.includes(updates.rentDay) ? updates.rentDay : "Fri";
+    });
+    const desiredQty = Math.max(1, Math.floor(Number(updates.quantity)) || 1);
+    const currentQty = units.length;
+    if (desiredQty > currentQty) {
+      const template = units[0];
+      for (let i = 0; i < desiredQty - currentQty; i++) {
+        cls.properties.push({
+          id: uid("prop"), groupId: gid, name: template.name, price: template.price,
+          comfort: template.comfort, mortgageWeeks: template.mortgageWeeks,
+          description: template.description, owner: null,
+          rentPerWeek: template.rentPerWeek, rentDay: template.rentDay,
+          occupancy: null, rentLastWeekPaid: null
+        });
+      }
+    } else if (desiredQty < currentQty) {
+      let toRemove = currentQty - desiredQty;
+      const removeIds = new Set();
+      for (const p of units) {
+        if (toRemove <= 0) break;
+        if (!p.owner) { removeIds.add(p.id); toRemove--; }
+      }
+      if (removeIds.size > 0) {
+        cls.properties = cls.properties.filter(p => !removeIds.has(p.id));
+      }
+    }
     t.update(classRef, { properties: cls.properties });
   });
 }
