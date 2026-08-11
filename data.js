@@ -3556,6 +3556,35 @@ async function processMortgages(classCode) {
 // gives no lifestyle bonus on top of the property's base comfort score.
 // Switching choice takes effect immediately and resets the rent-paid
 // tracker so a mid-week switch can't double- or skip-pay that week's rent.
+// Teacher-only: end a student's rental arrangement on the spot — stops any
+// further rent payments and clears their occupancy choice back to
+// "undecided", so next time they visit Property they're prompted to pick
+// living-in-it or renting-out again (same prompt as a brand new purchase).
+// Unlike setPropertyOccupancy this doesn't check who owns the property —
+// it's a teacher override, not a student self-service action.
+async function teacherEndRental(classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "", owner = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop || !prop.owner) throw new Error("NOT_FOUND");
+      propName = prop.name;
+      owner = prop.owner;
+      prop.occupancy = null;
+      prop.rentLastWeekPaid = null;
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", to: owner, note: `Teacher ended the rental / kicked out tenants: ${propName}` });
+  return { ok: true };
+}
+
 async function setPropertyOccupancy(username, classCode, propId, occupancy) {
   if (occupancy !== "living" && occupancy !== "rented") {
     return { ok: false, error: "Invalid choice." };

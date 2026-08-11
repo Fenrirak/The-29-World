@@ -834,7 +834,10 @@ async function renderProfile(username) {
   rows.push(poss.property
     ? `<div class="auto-row"><div class="auto-details"><strong>${poss.property.name}</strong> — ${fmtMoney(poss.property.price)}
         <div class="muted-small">${poss.property.occupancy === "living" ? "Living in it (lifestyle bonus applied)" : poss.property.occupancy === "rented" ? `Rented out — earning ${fmtMoney(poss.property.rentPerWeek || 0)}/week, paid ${DAY_FULL[poss.property.rentDay || "Fri"]}` : "Hasn't chosen to live in it or rent it out yet"}</div></div>
-        <button class="btn small coral" onclick="profileRemoveProperty('${poss.property.id}')">Repossess</button></div>`
+        <div class="row-flex" style="gap:8px;">
+          ${poss.property.occupancy === "rented" ? `<button class="btn small secondary" onclick="profileEndRental('${poss.property.id}')">Stop renting / kick out tenants</button>` : ""}
+          <button class="btn small coral" onclick="profileRemoveProperty('${poss.property.id}')">Repossess</button>
+        </div></div>`
     : `<p class="muted-small">No property owned.</p>`);
 
   rows.push(`<h4>${icon("car", 16)} Transport</h4>`);
@@ -925,6 +928,13 @@ async function removeProfileLifestyleOverride(username) {
 async function profileRemoveProperty(propId) {
   if (!confirm("Repossess this property? The student will be refunded 90% of its price.")) return;
   await sellProperty(CLASS_CODE, propId);
+  await render();
+  await renderProfile(PROFILE_USER);
+}
+async function profileEndRental(propId) {
+  if (!confirm("Stop this rental and kick out the tenants? The student keeps the property, but stops earning rent immediately and will be asked to choose living-in-it or renting-out again next time they visit Property.")) return;
+  const res = await teacherEndRental(CLASS_CODE, propId);
+  if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);
 }
