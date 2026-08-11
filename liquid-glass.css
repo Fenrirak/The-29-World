@@ -174,6 +174,18 @@ html.liquid-glass .settings-popover{
   border:1px solid rgba(255,255,255,0.6);
   box-shadow:0 22px 50px rgba(31,43,68,0.28), inset 0 1px 0 rgba(255,255,255,0.7);
 }
+html.liquid-glass .lg-switch-track{
+  background:rgba(31,43,68,0.18);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,0.4);
+}
+html.liquid-glass .lg-switch input:checked + .lg-switch-track{
+  background:linear-gradient(135deg, rgba(232,184,75,0.8), rgba(201,154,46,0.82));
+}
+html.liquid-glass .lg-switch-thumb{
+  box-shadow:0 2px 5px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,0.6);
+}
 
 /* ---------------- Cards ---------------- */
 html.liquid-glass .card{
@@ -213,14 +225,31 @@ html.liquid-glass .stat::before{
   pointer-events:none;
 }
 
-/* ---------------- Buttons ---------------- */
+/* ---------------- Buttons ----------------
+   Base .btn/.btn.gold/.btn.mint/.btn.coral all ship solid, fully-opaque
+   backgrounds in style.css — backdrop-filter has nothing to show through
+   on an opaque surface, so every colour variant needs its own translucent
+   override here, not just a blur+border+shine layered on top of a solid
+   fill. */
 html.liquid-glass .btn{
   position:relative;
   overflow:hidden;
-  backdrop-filter:blur(10px);
-  -webkit-backdrop-filter:blur(10px);
-  border:1px solid rgba(255,255,255,0.2);
-  box-shadow:0 4px 16px rgba(31,43,68,0.2), inset 0 1px 0 rgba(255,255,255,0.28);
+  background:linear-gradient(135deg, rgba(31,43,68,0.55), rgba(44,59,92,0.6));
+  backdrop-filter:blur(14px) saturate(180%);
+  -webkit-backdrop-filter:blur(14px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.24);
+  box-shadow:0 4px 16px rgba(31,43,68,0.22), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+html.liquid-glass .btn:hover{
+  background:linear-gradient(135deg, rgba(31,43,68,0.72), rgba(44,59,92,0.76));
+}
+/* Top specular highlight, same as the cards/icon buttons, layered under
+   the shine-sweep below. */
+html.liquid-glass .btn::before{
+  content:"";
+  position:absolute; inset:0 0 55% 0;
+  background:linear-gradient(180deg, rgba(255,255,255,0.3), rgba(255,255,255,0));
+  pointer-events:none;
 }
 html.liquid-glass .btn::after{
   content:"";
@@ -237,7 +266,29 @@ html.liquid-glass .btn.secondary{
   -webkit-backdrop-filter:blur(10px);
   border-color:rgba(31,43,68,0.35);
 }
-html.liquid-glass .btn.secondary:hover{ background:var(--navy-900); }
+html.liquid-glass .btn.secondary:hover{
+  background:rgba(31,43,68,0.75);
+  backdrop-filter:blur(14px) saturate(180%);
+  -webkit-backdrop-filter:blur(14px) saturate(180%);
+}
+html.liquid-glass .btn.gold{
+  background:linear-gradient(135deg, rgba(232,184,75,0.7), rgba(201,154,46,0.72));
+}
+html.liquid-glass .btn.gold:hover{
+  background:linear-gradient(135deg, rgba(232,184,75,0.85), rgba(201,154,46,0.87));
+}
+html.liquid-glass .btn.mint{
+  background:linear-gradient(135deg, rgba(63,191,143,0.65), rgba(46,152,115,0.68));
+}
+html.liquid-glass .btn.mint:hover{
+  background:linear-gradient(135deg, rgba(63,191,143,0.82), rgba(46,152,115,0.85));
+}
+html.liquid-glass .btn.coral{
+  background:linear-gradient(135deg, rgba(232,115,95,0.65), rgba(201,80,58,0.68));
+}
+html.liquid-glass .btn.coral:hover{
+  background:linear-gradient(135deg, rgba(232,115,95,0.82), rgba(201,80,58,0.85));
+}
 
 /* ---------------- Form fields ---------------- */
 html.liquid-glass input,
@@ -262,7 +313,10 @@ html.liquid-glass .tabs{
 }
 html.liquid-glass .tabs.subtabs{ background:rgba(255,255,255,0.28); }
 html.liquid-glass .tabs button.active{
-  box-shadow:0 4px 14px rgba(31,43,68,0.28), inset 0 1px 0 rgba(255,255,255,0.2);
+  background:linear-gradient(135deg, rgba(31,43,68,0.75), rgba(44,59,92,0.78));
+  backdrop-filter:blur(10px) saturate(180%);
+  -webkit-backdrop-filter:blur(10px) saturate(180%);
+  box-shadow:0 4px 14px rgba(31,43,68,0.28), inset 0 1px 0 rgba(255,255,255,0.25);
 }
 
 /* ---------------- Badges, pills, chips ---------------- */
@@ -322,7 +376,11 @@ html.liquid-glass .auth-card{
   border:1px solid rgba(255,255,255,0.55);
   box-shadow:0 24px 70px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.7);
 }
-html.liquid-glass .pw-toggle:hover{ background:rgba(31,43,68,0.08); }
+html.liquid-glass .pw-toggle:hover{
+  background:rgba(31,43,68,0.1);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+}
 
 /* ---------------- Modals / popups ---------------- */
 html.liquid-glass .anw-modal-overlay,
