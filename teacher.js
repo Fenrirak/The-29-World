@@ -49,6 +49,8 @@ function paintChrome() {
   document.getElementById("saveInterestAutoBtn").innerHTML = icon("bank", 14) + " Save interest schedule";
   document.getElementById("labPayDay").innerHTML = icon("calendar", 13) + " Pay day (which day wages are due)";
   document.getElementById("savePayDayBtn").innerHTML = icon("calendar", 14) + " Save pay day";
+  document.getElementById("labMortgageDay").innerHTML = icon("calendar", 13) + " Mortgage due day (which day weekly mortgage payments are charged)";
+  document.getElementById("saveMortgageDayBtn").innerHTML = icon("calendar", 14) + " Save mortgage day";
   document.getElementById("saveGamblingEnabledBtn").innerHTML = icon("dice", 14) + " Save gambling setting";
   document.getElementById("hEvents").innerHTML = icon("dice", 18) + " Random weekly events";
   document.getElementById("runEventsNowBtn").innerHTML = icon("repeat", 14) + " Run this week's events now";
@@ -107,6 +109,7 @@ async function render() {
   document.getElementById("interestDay").value = cls.interestDay || "Fri";
   document.getElementById("interestDayWrap").classList.toggle("hidden", (cls.interestFrequency || "weekly") === "daily");
   document.getElementById("payDaySelect").value = cls.payDay || "Fri";
+  document.getElementById("mortgageDaySelect").value = cls.mortgageDay || "Fri";
   document.getElementById("gamblingEnabled").checked = cls.gambling ? cls.gambling.enabled !== false : true;
 
   const students = await getClassStudents(CLASS_CODE);
@@ -328,6 +331,7 @@ function describeTxn(t, nameOf) {
     case "property-buy": return `${nameOf(t.from)} — ${t.note}`;
     case "property-sell": return `${nameOf(t.to)} — ${t.note}`;
     case "mortgage": return `${nameOf(t.from)} — ${t.note}`;
+    case "mortgage-missed": return `${nameOf(t.from)} — ${t.note}`;
     case "event": return `${nameOf(t.to)} — ${t.note}`;
     case "vehicle-buy": return `${nameOf(t.from)} — ${t.note}`;
     case "vehicle-sell": return `${nameOf(t.to)} — ${t.note}`;
@@ -368,6 +372,7 @@ function badge(type) {
     "property-buy": ["navy", "house", "Property"],
     "property-sell": ["gold", "house", "Property sold"],
     "mortgage": ["coral", "house", "Mortgage"],
+    "mortgage-missed": ["coral", "house", "Missed mortgage"],
     "event": ["lilac", "dice", "Random event"],
     "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
     "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
@@ -753,6 +758,11 @@ async function savePayDay() {
   alert("Pay day saved. Wages will now be paid automatically whenever that day comes around — or click Run Pay Day any time to pay early.");
   await render();
 }
+async function saveMortgageDayClick() {
+  await setMortgageDay(CLASS_CODE, document.getElementById("mortgageDaySelect").value);
+  alert("Mortgage day saved. Weekly mortgage payments will now be charged automatically whenever that day comes around.");
+  await render();
+}
 async function saveGamblingEnabled() {
   const enabled = document.getElementById("gamblingEnabled").checked;
   await setGamblingEnabled(CLASS_CODE, enabled);
@@ -831,9 +841,24 @@ async function renderProfile(username) {
   }
 
   rows.push(`<h4>${icon("house", 16)} Property</h4>`);
+  if (poss.property && poss.property.mortgageDefault) {
+    const d = poss.property.mortgageDefault;
+    rows.push(`
+      <div class="auto-row" style="background:#fde2e2;border:1px solid #f3a6a6;border-radius:8px;">
+        <div class="auto-details">
+          <strong>${icon("house", 14)} Mortgage ended unpaid — ${poss.property.name}</strong>
+          <div class="muted-small">The mortgage term ended on ${d.endedDate} with ${d.missedPayments} missed payment${d.missedPayments === 1 ? "" : "s"} still outstanding.</div>
+        </div>
+        <div class="row-flex" style="gap:8px;align-items:center;">
+          <div class="status-declined">${fmtMoney(d.amountOwed)} owed</div>
+          <button class="btn small secondary" onclick="profileClearMortgageDefault('${poss.property.id}')">Dismiss</button>
+        </div>
+      </div>`);
+  }
   rows.push(poss.property
     ? `<div class="auto-row"><div class="auto-details"><strong>${poss.property.name}</strong> — ${fmtMoney(poss.property.price)}
-        <div class="muted-small">${poss.property.occupancy === "living" ? "Living in it (lifestyle bonus applied)" : poss.property.occupancy === "rented" ? `Rented out — earning ${fmtMoney(poss.property.rentPerWeek || 0)}/week, paid ${DAY_FULL[poss.property.rentDay || "Fri"]}` : "Hasn't chosen to live in it or rent it out yet"}</div></div>
+        <div class="muted-small">${poss.property.occupancy === "living" ? "Living in it (lifestyle bonus applied)" : poss.property.occupancy === "rented" ? `Rented out — earning ${fmtMoney(poss.property.rentPerWeek || 0)}/week, paid ${DAY_FULL[poss.property.rentDay || "Fri"]}` : "Hasn't chosen to live in it or rent it out yet"}</div>
+        ${poss.property.mortgage ? `<div class="muted-small">Mortgage: ${fmtMoney(poss.property.mortgage.weeklyPayment)}/week, ${poss.property.mortgage.weeksLeft} week${poss.property.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}</div>` : ""}</div>
         <div class="row-flex" style="gap:8px;">
           ${poss.property.occupancy === "rented" ? `<button class="btn small secondary" onclick="profileEndRental('${poss.property.id}')">Stop renting / kick out tenants</button>` : ""}
           <button class="btn small coral" onclick="profileRemoveProperty('${poss.property.id}')">Repossess</button>
@@ -925,6 +950,12 @@ async function removeProfileLifestyleOverride(username) {
   await renderProfile(username);
 }
 
+async function profileClearMortgageDefault(propId) {
+  if (!confirm("Dismiss this default warning? This doesn't collect the owed amount — it just clears the flag, e.g. once you've settled it with the student some other way.")) return;
+  await clearMortgageDefault(CLASS_CODE, propId);
+  await render();
+  await renderProfile(PROFILE_USER);
+}
 async function profileRemoveProperty(propId) {
   if (!confirm("Repossess this property? The student will be refunded 90% of its price.")) return;
   await sellProperty(CLASS_CODE, propId);

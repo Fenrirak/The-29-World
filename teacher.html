@@ -239,6 +239,19 @@
     </select>
     <button class="btn secondary small" style="margin-top:12px;" onclick="savePayDay()" id="savePayDayBtn">Save pay day</button>
 
+    <label for="mortgageDaySelect" id="labMortgageDay" style="margin-top:24px;">Mortgage due day (which day weekly mortgage payments are charged)</label>
+    <select id="mortgageDaySelect" style="max-width:220px;">
+      <option value="Mon">Monday</option>
+      <option value="Tue">Tuesday</option>
+      <option value="Wed">Wednesday</option>
+      <option value="Thu">Thursday</option>
+      <option value="Fri">Friday</option>
+      <option value="Sat">Saturday</option>
+      <option value="Sun">Sunday</option>
+    </select>
+    <p class="muted-small">Financed properties charge their weekly mortgage payment automatically on this day (skipping the week the property was bought). If a student can't afford a payment, the term still counts down — a mortgage that reaches the end of its term without being fully paid off shows up as a red warning on that student's profile.</p>
+    <button class="btn secondary small" style="margin-top:12px;" onclick="saveMortgageDayClick()" id="saveMortgageDayBtn">Save mortgage day</button>
+
     <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
       <label style="display:flex;align-items:center;gap:8px;">
         <input type="checkbox" id="gamblingEnabled" style="width:20px;height:20px;min-height:auto;">

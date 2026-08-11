@@ -352,6 +352,7 @@ async function createTeacherAndClass(name, username, password, className) {
     students: [], jobs: [], companies: [],
     interestRate: 2, txns: [],
     payDay: "Fri",
+    mortgageDay: "Fri",
     priceRange: { min: 1, max: 5 },
     automations: [],
     jobApplications: [],
@@ -622,7 +623,7 @@ async function removeStudent(classCode, studentUser) {
     cls.students = cls.students.filter(s => s !== studentUser);
     cls.automations = (cls.automations || []).filter(a => a.studentUser !== studentUser);
     cls.jobApplications = (cls.jobApplications || []).filter(a => a.studentUser !== studentUser);
-    (cls.properties || []).forEach(p => { if (p.owner === studentUser) { p.owner = null; p.mortgage = null; p.occupancy = null; p.rentLastWeekPaid = null; } });
+    (cls.properties || []).forEach(p => { if (p.owner === studentUser) { p.owner = null; p.mortgage = null; p.occupancy = null; p.rentLastWeekPaid = null; p.mortgageDefault = null; } });
     (cls.vehicles || []).forEach(v => { v.owners = (v.owners || []).filter(o => o !== studentUser); });
     t.update(classRef, {
       companies: cls.companies, students: cls.students,
@@ -636,6 +637,11 @@ async function removeStudent(classCode, studentUser) {
 
 async function setPayDay(classCode, day) {
   await classesCol().doc(classCode).update({ payDay: day });
+}
+
+// Class-wide day mortgage installments are charged on (see processMortgages).
+async function setMortgageDay(classCode, day) {
+  await classesCol().doc(classCode).update({ mortgageDay: DAY_NAMES.includes(day) ? day : "Fri" });
 }
 
 // Identifies the current "pay cycle" by the date of its next upcoming (or
@@ -1875,6 +1881,7 @@ async function classLeaderboard(classCode, viewerUsername) {
       if (p.owner !== s.username) return;
       propertyValue += p.price;
       if (p.mortgage) mortgageOwed += (p.mortgage.weeklyPayment || 0) * (p.mortgage.weeksLeft || 0);
+      if (p.mortgageDefault) mortgageOwed += p.mortgageDefault.amountOwed || 0;
     });
     propertyValue = Math.round(propertyValue * 100) / 100;
     mortgageOwed = Math.round(mortgageOwed * 100) / 100;
@@ -1905,7 +1912,7 @@ async function resetClass(classCode) {
     balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: []
   })));
   const cls = await getClass(classCode);
-  const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null, occupancy: null, rentLastWeekPaid: null }));
+  const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null, occupancy: null, rentLastWeekPaid: null, mortgageDefault: null }));
   const vehicles = (cls.vehicles || []).map(v => ({ ...v, owners: [] }));
   await classesCol().doc(classCode).update({
     companies: [], txns: [], automations: [], jobApplications: [],
@@ -2754,7 +2761,7 @@ async function resolveBigEvent(username, classCode, logId, choice) {
           t.update(userRef, { jobId: null });
         } else if (entry.module === "property") {
           const prop = cls.properties.find(p => p.owner === username);
-          if (prop) { prop.owner = null; prop.mortgage = null; prop.occupancy = null; prop.rentLastWeekPaid = null; }
+          if (prop) { prop.owner = null; prop.mortgage = null; prop.occupancy = null; prop.rentLastWeekPaid = null; prop.mortgageDefault = null; }
           t.update(classRef, { properties: cls.properties, bigEventLog: cls.bigEventLog });
         } else if (entry.module === "transport") {
           const veh = cls.vehicles.find(v => (v.owners || []).includes(username));
@@ -2872,7 +2879,14 @@ function withNewModuleDefaults(cls) {
     if (p.rentDay === undefined) p.rentDay = "Fri";
     if (p.occupancy === undefined) p.occupancy = null;
     if (p.rentLastWeekPaid === undefined) p.rentLastWeekPaid = null;
+    // mortgageDefault: set once a financed property's mortgage term runs
+    // out without being fully paid off (see processMortgages). Persists on
+    // the property — visible to the teacher — until the property changes
+    // hands again (repossession, resale, etc).
+    if (p.mortgageDefault === undefined) p.mortgageDefault = null;
   });
+  // Class-wide day mortgage installments are due on (like payDay/interestDay).
+  cls.mortgageDay = DAY_NAMES.includes(cls.mortgageDay) ? cls.mortgageDay : "Fri";
   cls.eventDefs = cls.eventDefs || [];
   cls.eventLog = cls.eventLog || [];
   cls.lastEventWeekRun = cls.lastEventWeekRun || null;
@@ -3465,14 +3479,22 @@ async function buyProperty(username, classCode, propId, financed) {
         weekly = Math.round(((taxedPrice - deposit) / prop.mortgageWeeks) * 100) / 100;
         if (!isTeacher && user.balance < deposit) throw new Error("BROKE");
         prop.owner = username;
-        prop.mortgage = { weeksLeft: prop.mortgageWeeks, weeklyPayment: weekly };
-        prop.occupancy = null; prop.rentLastWeekPaid = null;
+        // purchaseWeekKey marks the ISO week the mortgage was taken out —
+        // processMortgages skips charging a mortgage during its own
+        // purchase week. missedPayments/amountOwed track weeks the owner
+        // couldn't afford the due payment (see processMortgages).
+        prop.mortgage = {
+          weeksLeft: prop.mortgageWeeks, weeklyPayment: weekly,
+          purchaseWeekKey: isoWeekKey(new Date()), lastWeekPaid: null,
+          missedPayments: 0, amountOwed: 0
+        };
+        prop.occupancy = null; prop.rentLastWeekPaid = null; prop.mortgageDefault = null;
         if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - deposit) * 100) / 100 });
       } else {
         if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
         prop.owner = username;
         prop.mortgage = null;
-        prop.occupancy = null; prop.rentLastWeekPaid = null;
+        prop.occupancy = null; prop.rentLastWeekPaid = null; prop.mortgageDefault = null;
         cashPaid = taxedPrice;
         if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - taxedPrice) * 100) / 100 });
       }
@@ -3502,6 +3524,7 @@ async function sellProperty(classCode, propId) {
     prop.mortgage = null;
     prop.occupancy = null;
     prop.rentLastWeekPaid = null;
+    prop.mortgageDefault = null;
     t.update(classRef, { properties: cls.properties });
   });
   if (owner) {
@@ -3510,17 +3533,53 @@ async function sellProperty(classCode, propId) {
   }
   return true;
 }
+// Charges weekly mortgage installments, once per NZ calendar week per
+// property, but ONLY on the class's mortgageDay (teacher-set — see
+// setMortgageDay) — same day-gated pattern as processPropertyRent. The
+// ISO week a mortgage was taken out in is never charged (purchaseWeekKey,
+// set in buyProperty), matching "excludes the week the student bought the
+// house".
+//
+// Each due week is charged whether or not the student can actually afford
+// it: if their balance is short, nothing is deducted, but the mortgage
+// term still counts down and the missed amount accumulates in
+// mortgage.amountOwed. If the term runs out (weeksLeft reaches 0) with
+// amountOwed still outstanding, the mortgage is closed out and a
+// persistent prop.mortgageDefault flag is set — this is what the
+// teacher's student profile view uses to show a red "mortgage ended
+// unpaid" bar (see renderProfile in teacher.js). The flag stays until the
+// property changes hands again (repossession, resale, student removed).
+// Teacher-only: clear a property's mortgageDefault flag without touching
+// ownership, price, or balances — e.g. once the teacher has settled the
+// owed amount with the student some other way (a bonus/fine adjustment,
+// a manual arrangement, etc).
+async function clearMortgageDefault(classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const prop = cls.properties.find(p => p.id === propId);
+    if (!prop) return;
+    prop.mortgageDefault = null;
+    t.update(classRef, { properties: cls.properties });
+  });
+}
+
 async function processMortgages(classCode) {
   const cls = withNewModuleDefaults(await getClass(classCode));
   if (!cls) return 0;
+  const todayName = nzDayName();
+  if ((cls.mortgageDay || "Fri") !== todayName) return 0;
   const weekKey = isoWeekKey(new Date());
   let ran = 0;
   for (const prop of cls.properties) {
     if (!prop.owner || !prop.mortgage || prop.mortgage.weeksLeft <= 0) continue;
+    if (prop.mortgage.purchaseWeekKey === weekKey) continue; // don't charge the week they bought
     if (prop.mortgage.lastWeekPaid === weekKey) continue;
     const classRef = classesCol().doc(classCode);
     const userRef = usersCol().doc(prop.owner);
-    let didRun = false, amt = 0, remainingAfter = 0;
+    let didRun = false, amt = 0, paid = false, remainingAfter = 0, owedAtEnd = 0;
     try {
       await fdb.runTransaction(async (t) => {
         const classSnap = await t.get(classRef);
@@ -3529,20 +3588,44 @@ async function processMortgages(classCode) {
         const liveCls = withNewModuleDefaults(classSnap.data());
         const liveProp = liveCls.properties.find(p => p.id === prop.id);
         if (!liveProp || !liveProp.mortgage || liveProp.mortgage.lastWeekPaid === weekKey || liveProp.mortgage.weeksLeft <= 0) return;
+        if (liveProp.mortgage.purchaseWeekKey === weekKey) return;
         const user = userSnap.data();
-        if (user.balance < liveProp.mortgage.weeklyPayment) return;
         amt = liveProp.mortgage.weeklyPayment;
-        t.update(userRef, { balance: Math.round((user.balance - amt) * 100) / 100 });
+        paid = user.balance >= amt;
+        if (paid) {
+          t.update(userRef, { balance: Math.round((user.balance - amt) * 100) / 100 });
+        } else {
+          liveProp.mortgage.missedPayments = (liveProp.mortgage.missedPayments || 0) + 1;
+          liveProp.mortgage.amountOwed = Math.round(((liveProp.mortgage.amountOwed || 0) + amt) * 100) / 100;
+        }
         liveProp.mortgage.weeksLeft -= 1;
         liveProp.mortgage.lastWeekPaid = weekKey;
         remainingAfter = liveProp.mortgage.weeksLeft;
-        if (remainingAfter <= 0) liveProp.mortgage = null;
+        if (remainingAfter <= 0) {
+          owedAtEnd = liveProp.mortgage.amountOwed || 0;
+          if (owedAtEnd > 0) {
+            liveProp.mortgageDefault = {
+              amountOwed: owedAtEnd,
+              missedPayments: liveProp.mortgage.missedPayments || 0,
+              endedDate: nzDateKey()
+            };
+          }
+          liveProp.mortgage = null;
+        }
         t.update(classRef, { properties: liveCls.properties });
         didRun = true;
       });
     } catch (e) { /* ignore, try next */ }
     if (didRun) {
-      await logTxn(classCode, { type: "mortgage", from: prop.owner, amount: amt, note: `Mortgage payment: ${prop.name}` + (remainingAfter <= 0 ? " — paid off!" : "") });
+      if (paid) {
+        await logTxn(classCode, { type: "mortgage", from: prop.owner, amount: amt, note: `Mortgage payment: ${prop.name}` + (remainingAfter <= 0 ? " — paid off!" : "") });
+      } else {
+        await logTxn(classCode, {
+          type: "mortgage-missed", from: prop.owner, amount: 0,
+          note: `Missed mortgage payment: ${prop.name} (${fmtMoney(amt)} — insufficient funds)` +
+            (remainingAfter <= 0 ? ` — mortgage term ended, ${fmtMoney(owedAtEnd)} still owed` : "")
+        });
+      }
       ran++;
     }
   }

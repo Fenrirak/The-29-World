@@ -70,10 +70,11 @@ async function render() {
           <h4>${icon("house", 20)}${p.name} ${isMine ? '<span class="badge mint">Your home</span>' : ""}</h4>
           <p>${p.description || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
-          <p><strong>${fmtMoney(p.price)}</strong> ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks` : "&middot; cash purchase only"}
+          <p><strong>${fmtMoney(p.price)}</strong> ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s` : "&middot; cash purchase only"}
             ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
           <p class="muted-small">${p.owner ? `Owned by ${nameOf(p.owner)}` : "Available"}
-            ${p.owner && p.mortgage ? ` — mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week, ${p.mortgage.weeksLeft} weeks left` : ""}</p>
+            ${p.owner && p.mortgage ? ` — mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
+          ${isMine && p.mortgageDefault ? `<p style="color:#b42318;"><strong>${icon("house", 13)} Your mortgage term ended on ${p.mortgageDefault.endedDate} without being fully paid off — you still owe ${fmtMoney(p.mortgageDefault.amountOwed)}.</strong></p>` : ""}
           ${p.owner ? occupancyBlock(p, isMine) : ""}
         </div>
         <div class="row-flex" style="gap:8px;">
