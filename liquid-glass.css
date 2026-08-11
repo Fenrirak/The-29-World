@@ -8,12 +8,28 @@
    applies, so the site renders exactly as defined in style.css /
    blackjack.css, unchanged.
 
-   Design language: translucent frosted surfaces (backdrop-filter blur +
-   saturate), soft floating colour behind everything to refract, thin
-   bright hairline borders that read as glass edges, a top-of-surface
-   specular highlight on cards/buttons/pills, and a light "shine sweep"
-   on button hover to suggest glass catching the light.
+   Design language: continuous, generously-rounded corners; translucent
+   vibrant surfaces (backdrop-filter blur + saturate + a touch of
+   brightness, standing in for real refraction); a soft bright rim along
+   the top edge fading to almost nothing at the bottom, rather than a
+   flat single-tone border; diffused, low-contrast ambient shadows for
+   lift instead of hard drop shadows; and fluid, slightly-springy motion
+   instead of linear/instant state changes. Controls give a small tactile
+   "press" (scale down) on :active rather than relying on a moving shine
+   sweep — real glass doesn't glint when you hover over it, it responds
+   when you touch it.
 ===================================================================== */
+
+/* ---------------- Shared tokens ----------------
+   One set of blur/easing/edge values reused everywhere below, so every
+   surface feels like the same material rather than a patchwork of
+   slightly different glass. */
+html.liquid-glass{
+  --lg-ease:cubic-bezier(.22,1,.36,1);       /* fluid deceleration — most background/shadow/border changes */
+  --lg-spring:cubic-bezier(.34,1.56,.64,1);  /* slight overshoot — press/pop feedback on controls */
+  --lg-edge-hi:rgba(255,255,255,0.6);        /* bright rim highlight, top edge */
+  --lg-edge-lo:rgba(255,255,255,0.14);       /* faint rim, everywhere else */
+}
 
 /* ---------------- Ambient background ----------------
    Soft, slowly-drifting colour blooms behind the glass. Kept deliberately
@@ -44,11 +60,11 @@ html.liquid-glass body{
 /* ---------------- Topbar ---------------- */
 html.liquid-glass .topbar{
   background:linear-gradient(120deg, rgba(31,43,68,0.66) 0%, rgba(36,58,94,0.62) 55%, rgba(44,59,92,0.66) 100%);
-  backdrop-filter:blur(22px) saturate(180%);
-  -webkit-backdrop-filter:blur(22px) saturate(180%);
+  backdrop-filter:blur(26px) saturate(180%) brightness(1.04);
+  -webkit-backdrop-filter:blur(26px) saturate(180%) brightness(1.04);
   border:none;
-  border-bottom:1px solid rgba(255,255,255,0.16);
-  box-shadow:0 8px 32px rgba(15,23,42,0.22), inset 0 1px 0 rgba(255,255,255,0.14);
+  border-bottom:1px solid var(--lg-edge-lo);
+  box-shadow:0 12px 40px rgba(15,23,42,0.16), inset 0 1px 0 var(--lg-edge-hi);
 }
 /* Nav links no longer fade their own background in/out on hover/active —
    that's now a single indicator pill (below) that slides between them, so
@@ -60,7 +76,7 @@ html.liquid-glass .topbar nav a{
   z-index:1;
   background:none;
   box-shadow:none;
-  transition:color .18s ease;
+  transition:color .22s var(--lg-ease);
 }
 html.liquid-glass .topbar nav a:hover{
   background:none;
@@ -79,15 +95,17 @@ html.liquid-glass .topbar nav a.active{
 html.liquid-glass .topbar nav{
   position:relative;
   background:rgba(255,255,255,0.08);
-  border:1px solid rgba(255,255,255,0.14);
+  border:1px solid var(--lg-edge-lo);
   border-radius:999px;
   padding:calc(3px * var(--navscale)) calc(5px * var(--navscale));
-  backdrop-filter:blur(14px) saturate(170%);
-  -webkit-backdrop-filter:blur(14px) saturate(170%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.16);
+  backdrop-filter:blur(16px) saturate(170%);
+  -webkit-backdrop-filter:blur(16px) saturate(170%);
+  box-shadow:inset 0 1px 0 var(--lg-edge-lo);
 }
 /* Built/positioned by liquid-glass.js (lgBuildNavIndicator). Absent until
-   Liquid Glass is switched on; removed again when it's switched off. */
+   Liquid Glass is switched on; removed again when it's switched off. Uses
+   the spring easing for its slide so it settles like a real physical
+   object catching up, not a linear glide. */
 html.liquid-glass .topbar nav .lg-nav-indicator{
   position:absolute;
   top:0;
@@ -96,40 +114,47 @@ html.liquid-glass .topbar nav .lg-nav-indicator{
   overflow:hidden;
   border-radius:999px;
   background:rgba(255,255,255,0.16);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.22);
+  box-shadow:inset 0 1px 0 var(--lg-edge-hi);
   opacity:0;
   pointer-events:none;
-  transition:transform .28s cubic-bezier(.4,0,.2,1), width .28s cubic-bezier(.4,0,.2,1),
-             height .28s cubic-bezier(.4,0,.2,1), background .18s ease, box-shadow .18s ease,
-             opacity .15s ease;
+  transition:transform .38s var(--lg-spring), width .38s var(--lg-spring),
+             height .38s var(--lg-spring), background .2s var(--lg-ease), box-shadow .2s var(--lg-ease),
+             opacity .15s var(--lg-ease);
   will-change:transform;
 }
 /* Same top-of-surface shine as the cards/buttons, scaled down for the pill. */
 html.liquid-glass .topbar nav .lg-nav-indicator::before{
   content:"";
   position:absolute; inset:0 0 55% 0;
-  background:linear-gradient(180deg, rgba(255,255,255,0.3), rgba(255,255,255,0));
+  background:linear-gradient(180deg, rgba(255,255,255,0.32), rgba(255,255,255,0));
   pointer-events:none;
 }
 html.liquid-glass .topbar nav .lg-nav-indicator.is-visible{ opacity:1; }
 html.liquid-glass .topbar nav .lg-nav-indicator.is-active-state{
-  background:rgba(232,184,75,0.28);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 14px rgba(232,184,75,0.22);
+  background:rgba(232,184,75,0.26);
+  box-shadow:inset 0 1px 0 var(--lg-edge-hi), 0 4px 14px rgba(232,184,75,0.2);
 }
 html.liquid-glass .brand .icon-slot{
   filter:drop-shadow(0 3px 8px rgba(232,184,75,0.5));
 }
+
+/* ---------------- Topbar icon buttons (settings + logout) ----------------
+   Rounder ("squircle") corners, real translucency + blur, a soft top
+   rim instead of a flat-coloured border, and a small tactile press —
+   the same feel Apple's toolbar glass buttons have when tapped. */
 html.liquid-glass .btn-logout,
 html.liquid-glass .btn-icon-topbar{
   position:relative;
   overflow:hidden;
+  border-radius:12px;
   background:rgba(255,255,255,0.14);
-  border:1px solid rgba(255,255,255,0.22);
-  backdrop-filter:blur(12px) saturate(190%);
-  -webkit-backdrop-filter:blur(12px) saturate(190%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.28), 0 2px 10px rgba(15,23,42,0.18);
+  border:1px solid var(--lg-edge-lo);
+  backdrop-filter:blur(14px) saturate(190%) brightness(1.05);
+  -webkit-backdrop-filter:blur(14px) saturate(190%) brightness(1.05);
+  box-shadow:inset 0 1px 0 var(--lg-edge-hi), 0 2px 10px rgba(15,23,42,0.16);
   outline:none;
-  transition:background .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease;
+  transition:background .22s var(--lg-ease), border-color .22s var(--lg-ease),
+             box-shadow .22s var(--lg-ease), color .22s var(--lg-ease), transform .15s var(--lg-spring);
 }
 /* Top specular highlight, same idea as the cards, so the icon buttons
    read as little panes of glass instead of flat tinted squares. */
@@ -137,12 +162,17 @@ html.liquid-glass .btn-logout::before,
 html.liquid-glass .btn-icon-topbar::before{
   content:"";
   position:absolute; inset:0 0 55% 0;
-  background:linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0));
+  background:linear-gradient(180deg, rgba(255,255,255,0.38), rgba(255,255,255,0));
   pointer-events:none;
 }
 html.liquid-glass .btn-logout:hover,
 html.liquid-glass .btn-icon-topbar:hover{
-  background:rgba(255,255,255,0.26);
+  background:rgba(255,255,255,0.24);
+}
+/* Tactile press — the glass "gives" slightly rather than just recolouring. */
+html.liquid-glass .btn-logout:active,
+html.liquid-glass .btn-icon-topbar:active{
+  transform:scale(0.92);
 }
 /* The browser's default focus outline showed up as a hard, opaque ring
    sitting on top of the glass — swap it for a soft glow that matches the
@@ -152,50 +182,55 @@ html.liquid-glass .btn-logout:focus-visible,
 html.liquid-glass .btn-icon-topbar:focus,
 html.liquid-glass .btn-icon-topbar:focus-visible{
   outline:none !important;
-  box-shadow:0 0 0 3px rgba(255,255,255,0.26), inset 0 1px 0 rgba(255,255,255,0.28), 0 2px 10px rgba(15,23,42,0.18);
+  box-shadow:0 0 0 3px rgba(255,255,255,0.26), inset 0 1px 0 var(--lg-edge-hi), 0 2px 10px rgba(15,23,42,0.16);
 }
 html.liquid-glass .btn-icon-topbar.active{
-  background:rgba(232,184,75,0.26);
-  border-color:rgba(232,184,75,0.5);
+  background:rgba(232,184,75,0.24);
+  border-color:rgba(232,184,75,0.45);
   color:var(--gold);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.32), 0 3px 12px rgba(232,184,75,0.22);
+  box-shadow:inset 0 1px 0 var(--lg-edge-hi), 0 3px 12px rgba(232,184,75,0.2);
 }
 html.liquid-glass .btn-icon-topbar.active:focus,
 html.liquid-glass .btn-icon-topbar.active:focus-visible{
   outline:none !important;
-  box-shadow:0 0 0 3px rgba(232,184,75,0.32), inset 0 1px 0 rgba(255,255,255,0.32), 0 3px 12px rgba(232,184,75,0.22);
+  box-shadow:0 0 0 3px rgba(232,184,75,0.3), inset 0 1px 0 var(--lg-edge-hi), 0 3px 12px rgba(232,184,75,0.2);
 }
 
 /* ---------------- Settings popover ---------------- */
 html.liquid-glass .settings-popover{
+  border-radius:20px;
   background:linear-gradient(165deg, rgba(255,255,255,0.78), rgba(255,255,255,0.55));
-  backdrop-filter:blur(26px) saturate(180%);
-  -webkit-backdrop-filter:blur(26px) saturate(180%);
+  backdrop-filter:blur(30px) saturate(180%) brightness(1.04);
+  -webkit-backdrop-filter:blur(30px) saturate(180%) brightness(1.04);
   border:1px solid rgba(255,255,255,0.6);
-  box-shadow:0 22px 50px rgba(31,43,68,0.28), inset 0 1px 0 rgba(255,255,255,0.7);
+  box-shadow:0 24px 60px rgba(31,43,68,0.22), inset 0 1px 0 rgba(255,255,255,0.75);
 }
 html.liquid-glass .lg-switch-track{
   background:rgba(31,43,68,0.18);
   backdrop-filter:blur(6px);
   -webkit-backdrop-filter:blur(6px);
   border:1px solid rgba(255,255,255,0.4);
+  transition:background .22s var(--lg-ease);
 }
 html.liquid-glass .lg-switch input:checked + .lg-switch-track{
   background:linear-gradient(135deg, rgba(232,184,75,0.8), rgba(201,154,46,0.82));
 }
 html.liquid-glass .lg-switch-thumb{
   box-shadow:0 2px 5px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,0.6);
+  transition:transform .3s var(--lg-spring);
 }
 
 /* ---------------- Cards ---------------- */
 html.liquid-glass .card{
+  border-radius:20px;
   background:linear-gradient(165deg, rgba(255,255,255,0.7), rgba(255,255,255,0.42));
-  backdrop-filter:blur(20px) saturate(190%);
-  -webkit-backdrop-filter:blur(20px) saturate(190%);
+  backdrop-filter:blur(24px) saturate(190%) brightness(1.03);
+  -webkit-backdrop-filter:blur(24px) saturate(190%) brightness(1.03);
   border:1px solid rgba(255,255,255,0.55);
-  box-shadow:0 10px 34px rgba(31,43,68,0.14), inset 0 1px 0 rgba(255,255,255,0.6);
+  box-shadow:0 16px 46px rgba(31,43,68,0.1), inset 0 1px 0 var(--lg-edge-hi);
   position:relative;
   overflow:hidden;
+  transition:box-shadow .28s var(--lg-ease), transform .28s var(--lg-ease);
 }
 html.liquid-glass .card::before{
   content:"";
@@ -204,7 +239,7 @@ html.liquid-glass .card::before{
   pointer-events:none;
 }
 html.liquid-glass .card:hover{
-  box-shadow:0 16px 44px rgba(31,43,68,0.18), inset 0 1px 0 rgba(255,255,255,0.65);
+  box-shadow:0 22px 56px rgba(31,43,68,0.14), inset 0 1px 0 rgba(255,255,255,0.7);
 }
 html.liquid-glass .company-card::before{
   background:radial-gradient(circle, rgba(232,184,75,0.22), transparent 70%);
@@ -212,10 +247,11 @@ html.liquid-glass .company-card::before{
 
 /* ---------------- Stat tiles ---------------- */
 html.liquid-glass .stat{
-  backdrop-filter:blur(16px) saturate(190%);
-  -webkit-backdrop-filter:blur(16px) saturate(190%);
+  border-radius:18px;
+  backdrop-filter:blur(18px) saturate(190%);
+  -webkit-backdrop-filter:blur(18px) saturate(190%);
   border:1px solid rgba(255,255,255,0.3);
-  box-shadow:0 10px 30px rgba(31,43,68,0.26), inset 0 1px 0 rgba(255,255,255,0.35);
+  box-shadow:0 12px 34px rgba(31,43,68,0.22), inset 0 1px 0 rgba(255,255,255,0.35);
 }
 html.liquid-glass .stat::before{
   content:"";
@@ -228,66 +264,60 @@ html.liquid-glass .stat::before{
 /* ---------------- Buttons ----------------
    Base .btn/.btn.gold/.btn.mint/.btn.coral all ship solid, fully-opaque
    backgrounds in style.css — backdrop-filter has nothing to show through
-   on an opaque surface, so every colour variant needs its own translucent
-   override here, not just a blur+border+shine layered on top of a solid
-   fill. */
+   on an opaque surface, so every colour variant gets its own translucent
+   override here. No moving shine sweep on hover — that's a dated glossy-
+   button trick, not how Liquid Glass reads. Instead: a static top rim
+   highlight that brightens slightly on hover, and a small scale-down on
+   press for tactile feedback. */
 html.liquid-glass .btn{
   position:relative;
   overflow:hidden;
-  background:linear-gradient(135deg, rgba(31,43,68,0.55), rgba(44,59,92,0.6));
-  backdrop-filter:blur(14px) saturate(180%);
-  -webkit-backdrop-filter:blur(14px) saturate(180%);
-  border:1px solid rgba(255,255,255,0.24);
-  box-shadow:0 4px 16px rgba(31,43,68,0.22), inset 0 1px 0 rgba(255,255,255,0.3);
+  border-radius:14px;
+  background:linear-gradient(135deg, rgba(31,43,68,0.5), rgba(44,59,92,0.56));
+  backdrop-filter:blur(16px) saturate(200%) brightness(1.05);
+  -webkit-backdrop-filter:blur(16px) saturate(200%) brightness(1.05);
+  border:1px solid var(--lg-edge-lo);
+  box-shadow:0 6px 18px rgba(31,43,68,0.18), inset 0 1px 0 var(--lg-edge-hi);
+  transition:background .22s var(--lg-ease), box-shadow .22s var(--lg-ease), transform .15s var(--lg-spring);
 }
 html.liquid-glass .btn:hover{
-  background:linear-gradient(135deg, rgba(31,43,68,0.72), rgba(44,59,92,0.76));
+  background:linear-gradient(135deg, rgba(31,43,68,0.66), rgba(44,59,92,0.7));
 }
-/* Top specular highlight, same as the cards/icon buttons, layered under
-   the shine-sweep below. */
+html.liquid-glass .btn:active{
+  transform:scale(0.97) translateY(0);
+}
+/* Top specular highlight — steady, not a moving sweep. */
 html.liquid-glass .btn::before{
   content:"";
   position:absolute; inset:0 0 55% 0;
   background:linear-gradient(180deg, rgba(255,255,255,0.3), rgba(255,255,255,0));
   pointer-events:none;
 }
-html.liquid-glass .btn::after{
-  content:"";
-  position:absolute; top:0; left:-60%; width:35%; height:100%;
-  background:linear-gradient(115deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 100%);
-  transform:skewX(-20deg);
-  transition:left .55s ease;
-  pointer-events:none;
-}
-html.liquid-glass .btn:hover::after{ left:135%; }
+html.liquid-glass .btn.small{ border-radius:11px; }
 html.liquid-glass .btn.secondary{
   background:rgba(255,255,255,0.55);
-  backdrop-filter:blur(10px);
-  -webkit-backdrop-filter:blur(10px);
-  border-color:rgba(31,43,68,0.35);
+  border-color:rgba(31,43,68,0.3);
 }
 html.liquid-glass .btn.secondary:hover{
-  background:rgba(31,43,68,0.75);
-  backdrop-filter:blur(14px) saturate(180%);
-  -webkit-backdrop-filter:blur(14px) saturate(180%);
+  background:rgba(31,43,68,0.72);
 }
 html.liquid-glass .btn.gold{
-  background:linear-gradient(135deg, rgba(232,184,75,0.7), rgba(201,154,46,0.72));
+  background:linear-gradient(135deg, rgba(232,184,75,0.62), rgba(201,154,46,0.66));
 }
 html.liquid-glass .btn.gold:hover{
-  background:linear-gradient(135deg, rgba(232,184,75,0.85), rgba(201,154,46,0.87));
+  background:linear-gradient(135deg, rgba(232,184,75,0.78), rgba(201,154,46,0.82));
 }
 html.liquid-glass .btn.mint{
-  background:linear-gradient(135deg, rgba(63,191,143,0.65), rgba(46,152,115,0.68));
+  background:linear-gradient(135deg, rgba(63,191,143,0.58), rgba(46,152,115,0.62));
 }
 html.liquid-glass .btn.mint:hover{
-  background:linear-gradient(135deg, rgba(63,191,143,0.82), rgba(46,152,115,0.85));
+  background:linear-gradient(135deg, rgba(63,191,143,0.76), rgba(46,152,115,0.8));
 }
 html.liquid-glass .btn.coral{
-  background:linear-gradient(135deg, rgba(232,115,95,0.65), rgba(201,80,58,0.68));
+  background:linear-gradient(135deg, rgba(232,115,95,0.58), rgba(201,80,58,0.62));
 }
 html.liquid-glass .btn.coral:hover{
-  background:linear-gradient(135deg, rgba(232,115,95,0.82), rgba(201,80,58,0.85));
+  background:linear-gradient(135deg, rgba(232,115,95,0.76), rgba(201,80,58,0.8));
 }
 
 /* ---------------- Form fields ---------------- */
@@ -295,28 +325,34 @@ html.liquid-glass input,
 html.liquid-glass select,
 html.liquid-glass textarea{
   background:rgba(255,255,255,0.55);
-  backdrop-filter:blur(10px);
-  -webkit-backdrop-filter:blur(10px);
+  backdrop-filter:blur(12px) saturate(180%);
+  -webkit-backdrop-filter:blur(12px) saturate(180%);
   border:1.5px solid rgba(255,255,255,0.65);
   box-shadow:inset 0 1px 3px rgba(31,43,68,0.06);
+  transition:border-color .2s var(--lg-ease), box-shadow .2s var(--lg-ease), background .2s var(--lg-ease);
 }
 html.liquid-glass input:focus,
 html.liquid-glass select:focus,
 html.liquid-glass textarea:focus{
   border-color:var(--gold);
-  box-shadow:0 0 0 3px rgba(232,184,75,0.25);
+  box-shadow:0 0 0 3px rgba(232,184,75,0.22);
 }
 html.liquid-glass .tabs{
+  border-radius:999px;
   background:rgba(255,255,255,0.4);
-  backdrop-filter:blur(10px);
-  -webkit-backdrop-filter:blur(10px);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
 }
 html.liquid-glass .tabs.subtabs{ background:rgba(255,255,255,0.28); }
+html.liquid-glass .tabs button{
+  border-radius:999px;
+  transition:background .22s var(--lg-ease), box-shadow .22s var(--lg-ease), color .22s var(--lg-ease);
+}
 html.liquid-glass .tabs button.active{
-  background:linear-gradient(135deg, rgba(31,43,68,0.75), rgba(44,59,92,0.78));
+  background:linear-gradient(135deg, rgba(31,43,68,0.72), rgba(44,59,92,0.76));
   backdrop-filter:blur(10px) saturate(180%);
   -webkit-backdrop-filter:blur(10px) saturate(180%);
-  box-shadow:0 4px 14px rgba(31,43,68,0.28), inset 0 1px 0 rgba(255,255,255,0.25);
+  box-shadow:0 4px 14px rgba(31,43,68,0.24), inset 0 1px 0 var(--lg-edge-hi);
 }
 
 /* ---------------- Badges, pills, chips ---------------- */
@@ -324,7 +360,7 @@ html.liquid-glass .badge{ backdrop-filter:blur(6px); -webkit-backdrop-filter:blu
 html.liquid-glass .class-code-pill{
   backdrop-filter:blur(10px);
   -webkit-backdrop-filter:blur(10px);
-  border:1px solid rgba(255,255,255,0.2);
+  border:1px solid var(--lg-edge-lo);
 }
 html.liquid-glass .rank-pill{
   box-shadow:inset 0 1px 0 rgba(255,255,255,0.35), 0 3px 8px rgba(31,43,68,0.2);
@@ -342,6 +378,7 @@ html.liquid-glass .profile-chip{
 /* ---------------- Job / company / leaderboard rows ---------------- */
 html.liquid-glass .company-card,
 html.liquid-glass .job-card{
+  border-radius:16px;
   background:rgba(255,255,255,0.38);
   backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px);
@@ -351,7 +388,7 @@ html.liquid-glass .leaderboard-row.me{
   background:rgba(232,184,75,0.22);
   backdrop-filter:blur(6px);
   -webkit-backdrop-filter:blur(6px);
-  border-radius:10px;
+  border-radius:12px;
 }
 html.liquid-glass .auto-row{
   background:rgba(255,255,255,0.32);
@@ -370,11 +407,15 @@ html.liquid-glass .auth-wrap{
     linear-gradient(135deg,var(--navy-900) 0%,#233657 60%,var(--navy-700) 100%);
 }
 html.liquid-glass .auth-card{
+  border-radius:24px;
   background:linear-gradient(165deg, rgba(255,255,255,0.82), rgba(255,255,255,0.6));
-  backdrop-filter:blur(26px) saturate(200%);
-  -webkit-backdrop-filter:blur(26px) saturate(200%);
+  backdrop-filter:blur(30px) saturate(200%) brightness(1.04);
+  -webkit-backdrop-filter:blur(30px) saturate(200%) brightness(1.04);
   border:1px solid rgba(255,255,255,0.55);
-  box-shadow:0 24px 70px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.7);
+  box-shadow:0 30px 80px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.75);
+}
+html.liquid-glass .pw-toggle{
+  transition:background .2s var(--lg-ease);
 }
 html.liquid-glass .pw-toggle:hover{
   background:rgba(31,43,68,0.1);
@@ -386,20 +427,21 @@ html.liquid-glass .pw-toggle:hover{
 html.liquid-glass .anw-modal-overlay,
 html.liquid-glass #profileModal,
 html.liquid-glass #lifestyleModal{
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
 }
 html.liquid-glass .anw-modal-card{
+  border-radius:22px;
   background:linear-gradient(165deg, rgba(255,255,255,0.86), rgba(255,255,255,0.66));
-  backdrop-filter:blur(26px) saturate(200%);
-  -webkit-backdrop-filter:blur(26px) saturate(200%);
+  backdrop-filter:blur(30px) saturate(200%) brightness(1.04);
+  -webkit-backdrop-filter:blur(30px) saturate(200%) brightness(1.04);
   border:1px solid rgba(255,255,255,0.6);
 }
 
 /* ---------------- Floating balance widget ---------------- */
 html.liquid-glass .anw-balance-widget{
-  backdrop-filter:blur(14px) saturate(190%);
-  -webkit-backdrop-filter:blur(14px) saturate(190%);
+  backdrop-filter:blur(16px) saturate(190%);
+  -webkit-backdrop-filter:blur(16px) saturate(190%);
   border:1px solid rgba(255,255,255,0.32);
 }
 
@@ -410,7 +452,10 @@ html.liquid-glass .number-zero{
   backdrop-filter:blur(6px);
   -webkit-backdrop-filter:blur(6px);
   border-color:rgba(255,255,255,0.6);
+  transition:background .18s var(--lg-ease), transform .12s var(--lg-spring);
 }
+html.liquid-glass .number-cell:active,
+html.liquid-glass .number-zero:active{ transform:scale(0.93); }
 html.liquid-glass .number-cell.zero{ background:rgba(63,191,143,0.28); }
 html.liquid-glass .number-cell.selected,
 html.liquid-glass .number-zero.selected{
@@ -460,15 +505,20 @@ html.liquid-glass .threshold-row{
    already-tight portrait topbar layout, so ease it back a little
    rather than turning it off outright. */
 @media (max-width:640px){
-  html.liquid-glass .topbar{ backdrop-filter:blur(14px) saturate(160%); -webkit-backdrop-filter:blur(14px) saturate(160%); }
-  html.liquid-glass .card{ backdrop-filter:blur(14px) saturate(160%); -webkit-backdrop-filter:blur(14px) saturate(160%); }
+  html.liquid-glass .topbar{ backdrop-filter:blur(16px) saturate(160%); -webkit-backdrop-filter:blur(16px) saturate(160%); }
+  html.liquid-glass .card{ backdrop-filter:blur(16px) saturate(160%); -webkit-backdrop-filter:blur(16px) saturate(160%); }
 }
 
-/* Respect reduced-motion for the button shine sweep and the nav indicator's
-   slide — position still updates, it just jumps instead of gliding. */
+/* Respect reduced-motion: keep the spring/scale feedback but make it
+   near-instant rather than visibly bouncing or gliding. */
 @media (prefers-reduced-motion: reduce){
-  html.liquid-glass .btn::after{ display:none; }
+  html.liquid-glass{ --lg-spring:linear; --lg-ease:linear; }
+  html.liquid-glass .btn:active,
+  html.liquid-glass .btn-logout:active,
+  html.liquid-glass .btn-icon-topbar:active,
+  html.liquid-glass .number-cell:active,
+  html.liquid-glass .number-zero:active{ transform:none; }
   html.liquid-glass .topbar nav .lg-nav-indicator{
-    transition:background .18s ease, box-shadow .18s ease, opacity .15s ease;
+    transition:background .1s linear, box-shadow .1s linear, opacity .1s linear;
   }
 }
