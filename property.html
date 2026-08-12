@@ -60,8 +60,16 @@
       </div>
       <label for="hQuantity" id="labQuantity">Quantity available for sale</label>
       <input id="hQuantity" type="number" min="1" step="1" value="1" required>
-      <label for="hMortgage" id="labMortgage">Mortgage length in weeks (0 = cash only)</label>
-      <input id="hMortgage" type="number" min="0" step="1" value="0">
+      <div class="grid grid-2">
+        <div>
+          <label for="hMortgage" id="labMortgage">Mortgage length in weeks (0 = cash only)</label>
+          <input id="hMortgage" type="number" min="0" step="1" value="0">
+        </div>
+        <div>
+          <label for="hMortgageRate" id="labMortgageRate">Mortgage interest (% per week, 0 = none)</label>
+          <input id="hMortgageRate" type="number" min="0" step="0.1" value="0">
+        </div>
+      </div>
       <div class="grid grid-3">
         <div>
           <label for="hRent" id="labRent">Rent income if rented out (per week, 0 = can't be rented)</label>

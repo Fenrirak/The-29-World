@@ -884,7 +884,7 @@ async function renderProfile(username) {
   rows.push(poss.property
     ? `<div class="auto-row"><div class="auto-details"><strong>${poss.property.name}</strong> — ${fmtMoney(poss.property.price)}
         <div class="muted-small">${poss.property.occupancy === "living" ? "Living in it (lifestyle bonus applied)" : poss.property.occupancy === "rented" ? `Rented out — earning ${fmtMoney(poss.property.rentPerWeek || 0)}/week, paid ${DAY_FULL[poss.property.rentDay || "Fri"]}` : "Hasn't chosen to live in it or rent it out yet"}</div>
-        ${poss.property.mortgage ? `<div class="muted-small">Mortgage: ${fmtMoney(poss.property.mortgage.weeklyPayment)}/week, ${poss.property.mortgage.weeksLeft} week${poss.property.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}</div>` : ""}</div>
+        ${poss.property.mortgage ? `<div class="muted-small">Mortgage: ${fmtMoney(poss.property.mortgage.weeklyPayment)}/week${poss.property.mortgage.interestRate > 0 ? ` + ${poss.property.mortgage.interestRate}% interest` : ""}, ${poss.property.mortgage.weeksLeft} week${poss.property.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}</div>` : ""}</div>
         <div class="row-flex" style="gap:8px;">
           ${poss.property.occupancy === "rented" ? `<button class="btn small secondary" onclick="profileEndRental('${poss.property.id}')">Stop renting / kick out tenants</button>` : ""}
           <button class="btn small coral" onclick="profileRemoveProperty('${poss.property.id}')">Repossess</button>

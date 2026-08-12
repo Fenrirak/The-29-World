@@ -2940,6 +2940,11 @@ function withNewModuleDefaults(cls) {
     // the property — visible to the teacher — until the property changes
     // hands again (repossession, resale, etc).
     if (p.mortgageDefault === undefined) p.mortgageDefault = null;
+    // Weekly mortgage interest rate on the listing (percent, 0 = none).
+    // Existing mortgages already in progress keep accruing interest-free
+    // (processMortgages falls back to weeklyPayment*weeksLeft for
+    // principalRemaining and 0 for interestRate on those).
+    if (p.mortgageInterestRate === undefined) p.mortgageInterestRate = 0;
   });
   // Class-wide day mortgage installments are due on (like payDay/interestDay).
   cls.mortgageDay = DAY_NAMES.includes(cls.mortgageDay) ? cls.mortgageDay : "Fri";
@@ -3487,6 +3492,10 @@ async function addProperty(classCode, prop) {
         id: uid("prop"), groupId, name: prop.name, price: Number(prop.price),
         comfort: Math.max(1, Math.min(5, Number(prop.comfort) || 1)),
         mortgageWeeks: Number(prop.mortgageWeeks) || 0,
+        // Weekly interest rate charged on the outstanding mortgage
+        // principal (percent per week, e.g. 2 = 2%/week). Defaults to 0 —
+        // an interest-free installment plan — unless the teacher sets one.
+        mortgageInterestRate: Math.max(0, Number(prop.mortgageInterestRate) || 0),
         description: prop.description || "", owner: null,
         // Weekly rent an owner can earn if they choose to rent this property
         // out instead of living in it, and which NZ weekday that rent is
@@ -3540,6 +3549,7 @@ async function updateProperty(classCode, propId, updates) {
       prop.price = Number(updates.price);
       prop.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
       prop.mortgageWeeks = Number(updates.mortgageWeeks) || 0;
+      prop.mortgageInterestRate = Math.max(0, Number(updates.mortgageInterestRate) || 0);
       prop.description = updates.description || "";
       prop.rentPerWeek = Math.max(0, Number(updates.rentPerWeek) || 0);
       prop.rentDay = DAY_NAMES.includes(updates.rentDay) ? updates.rentDay : "Fri";
@@ -3552,6 +3562,7 @@ async function updateProperty(classCode, propId, updates) {
         cls.properties.push({
           id: uid("prop"), groupId: gid, name: template.name, price: template.price,
           comfort: template.comfort, mortgageWeeks: template.mortgageWeeks,
+          mortgageInterestRate: template.mortgageInterestRate || 0,
           description: template.description, owner: null,
           rentPerWeek: template.rentPerWeek, rentDay: template.rentDay,
           occupancy: null, rentLastWeekPaid: null
@@ -3598,10 +3609,18 @@ async function buyProperty(username, classCode, propId, financed) {
         // processMortgages skips charging a mortgage during its own
         // purchase week. missedPayments/amountOwed track weeks the owner
         // couldn't afford the due payment (see processMortgages).
+        // interestRate is snapshotted from the listing at purchase time (so
+        // a later change to the listing's rate doesn't retroactively alter
+        // an existing mortgage) and is charged each week on
+        // principalRemaining — the financed amount still outstanding,
+        // which only ever goes down by the (interest-free) weeklyPayment
+        // installment, same schedule as weeksLeft.
         prop.mortgage = {
           weeksLeft: prop.mortgageWeeks, weeklyPayment: weekly,
           purchaseWeekKey: isoWeekKey(new Date()), lastWeekPaid: null,
-          missedPayments: 0, amountOwed: 0
+          missedPayments: 0, amountOwed: 0,
+          interestRate: prop.mortgageInterestRate || 0,
+          principalRemaining: Math.round((taxedPrice - deposit) * 100) / 100
         };
         prop.occupancy = null; prop.rentLastWeekPaid = null; prop.mortgageDefault = null;
         if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - deposit) * 100) / 100 });
@@ -3705,7 +3724,16 @@ async function processMortgages(classCode) {
         if (!liveProp || !liveProp.mortgage || liveProp.mortgage.lastWeekPaid === weekKey || liveProp.mortgage.weeksLeft <= 0) return;
         if (liveProp.mortgage.purchaseWeekKey === weekKey) return;
         const user = userSnap.data();
-        amt = liveProp.mortgage.weeklyPayment;
+        // Interest (if any) is charged on top of the fixed weekly
+        // installment, calculated on the principal still outstanding
+        // going into this week — same weekly-simple-interest style as
+        // loan interest (see processLoanInterest), just scoped to the
+        // mortgage's own remaining balance instead of a compounding total.
+        const principalBefore = liveProp.mortgage.principalRemaining != null
+          ? liveProp.mortgage.principalRemaining
+          : liveProp.mortgage.weeklyPayment * liveProp.mortgage.weeksLeft; // pre-existing mortgages without the field
+        const interestAmt = Math.round(principalBefore * ((liveProp.mortgage.interestRate || 0) / 100) * 100) / 100;
+        amt = Math.round((liveProp.mortgage.weeklyPayment + interestAmt) * 100) / 100;
         paid = user.balance >= amt;
         if (paid) {
           t.update(userRef, { balance: Math.round((user.balance - amt) * 100) / 100 });
@@ -3713,6 +3741,7 @@ async function processMortgages(classCode) {
           liveProp.mortgage.missedPayments = (liveProp.mortgage.missedPayments || 0) + 1;
           liveProp.mortgage.amountOwed = Math.round(((liveProp.mortgage.amountOwed || 0) + amt) * 100) / 100;
         }
+        liveProp.mortgage.principalRemaining = Math.max(0, Math.round((principalBefore - liveProp.mortgage.weeklyPayment) * 100) / 100);
         liveProp.mortgage.weeksLeft -= 1;
         liveProp.mortgage.lastWeekPaid = weekKey;
         remainingAfter = liveProp.mortgage.weeksLeft;

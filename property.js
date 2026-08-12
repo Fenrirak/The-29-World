@@ -92,7 +92,7 @@ async function render() {
           <h4>${icon("house", 20)}${p.name} ${myUnit ? '<span class="badge mint">Your home</span>' : ""}</h4>
           <p>${p.description || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
-          <p><strong>${fmtMoney(p.price)}</strong> ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s` : "&middot; cash purchase only"}
+          <p><strong>${fmtMoney(p.price)}</strong> ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""}` : "&middot; cash purchase only"}
             ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
           <p class="muted-small">${units.length > 1 ? `${available.length} of ${units.length} available` : (available.length > 0 ? "Available" : `Owned by ${nameOf(owned[0].owner)}`)}</p>
         </div>
@@ -121,7 +121,7 @@ function ownedUnitBlock(p, isMine, cls, nameOf) {
   const who = isMine ? "You" : nameOf(p.owner);
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
-      <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
+      <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
       ${isMine && p.mortgageDefault ? `<p style="color:#b42318;"><strong>${icon("house", 13)} Your mortgage term ended on ${p.mortgageDefault.endedDate} without being fully paid off — you still owe ${fmtMoney(p.mortgageDefault.amountOwed)}.</strong></p>` : ""}
       ${occupancyBlock(p, isMine)}
       <div class="row-flex" style="gap:8px;margin-top:6px;">
@@ -186,6 +186,7 @@ async function addProp(e) {
     comfort: document.getElementById("hComfort").value,
     quantity: document.getElementById("hQuantity").value,
     mortgageWeeks: document.getElementById("hMortgage").value,
+    mortgageInterestRate: document.getElementById("hMortgageRate").value,
     description: document.getElementById("hDesc").value.trim(),
     rentPerWeek: document.getElementById("hRent").value,
     rentDay: document.getElementById("hRentDay").value
@@ -201,6 +202,7 @@ async function addProp(e) {
     document.getElementById("hComfort").value = 3;
     document.getElementById("hQuantity").value = 1;
     document.getElementById("hMortgage").value = 0;
+    document.getElementById("hMortgageRate").value = 0;
     document.getElementById("hRent").value = 0;
     document.getElementById("hRentDay").value = "Fri";
   }
@@ -224,6 +226,7 @@ async function editProp(id) {
   document.getElementById("hComfort").value = prop.comfort;
   document.getElementById("hQuantity").value = groupSize;
   document.getElementById("hMortgage").value = prop.mortgageWeeks || 0;
+  document.getElementById("hMortgageRate").value = prop.mortgageInterestRate || 0;
   document.getElementById("hDesc").value = prop.description || "";
   document.getElementById("hRent").value = prop.rentPerWeek || 0;
   document.getElementById("hRentDay").value = prop.rentDay || "Fri";
@@ -240,6 +243,7 @@ function cancelEditProp() {
   document.getElementById("hComfort").value = 3;
   document.getElementById("hQuantity").value = 1;
   document.getElementById("hMortgage").value = 0;
+  document.getElementById("hMortgageRate").value = 0;
   document.getElementById("hRent").value = 0;
   document.getElementById("hRentDay").value = "Fri";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a property";
