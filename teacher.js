@@ -820,6 +820,30 @@ async function renderProfile(username) {
     `);
   }
 
+  rows.push(`<h4>${icon("briefcase", 16)} Side hustle</h4>`);
+  const sh = s.sideHustle;
+  const shDef = sh && sh.hustleId ? (cls.sideHustles || []).find(h => h.id === sh.hustleId) : null;
+  if (shDef) {
+    const payout = Number(shDef.payouts[sh.checkinHour]) || 0;
+    rows.push(`
+      <div class="auto-row">
+        <div class="auto-details">
+          <strong>${shDef.name}</strong>
+          <div class="muted-small">Checks in at ${hourLabel(sh.checkinHour)} &middot; ${fmtMoney(payout)} per check-in${sh.streak ? ` &middot; streak: ${sh.streak}` : ""}</div>
+          <div class="muted-small">Last checked in: ${sh.lastCheckin || "Never"}</div>
+        </div>
+      </div>
+    `);
+  } else if (sh && sh.hustleId) {
+    rows.push(`<p class="muted-small">Has a side hustle set (at ${hourLabel(sh.checkinHour)}), but it no longer exists in this class's list.</p>`);
+  } else {
+    rows.push(`<p class="muted-small">No side hustle chosen yet.</p>`);
+  }
+  if (s.sideHustleRequest && s.sideHustleRequest.status === "pending") {
+    const reqHustle = (cls.sideHustles || []).find(h => h.id === s.sideHustleRequest.hustleId);
+    rows.push(`<p class="muted-small">Pending change request: ${reqHustle ? reqHustle.name : "Unknown"} at ${hourLabel(s.sideHustleRequest.checkinHour)} — approve or deny it from the Side hustles section below.</p>`);
+  }
+
   rows.push(`<h4>${icon("star", 16)} Lifestyle rating override</h4>`);
   if (isOverride) {
     rows.push(`
