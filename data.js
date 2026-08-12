@@ -4504,9 +4504,19 @@ async function anwGlobalBootstrap() {
 const _anwPollPauseReasons = new Set();
 let _anwBalanceUnsub = null;
 let _anwLatestBalance = null; // most recent value pushed by Firestore
+let _anwPaintedBalance = undefined; // value currently shown in the DOM (undefined = nothing painted yet)
 let _anwBalanceUsername = null;
 
 function _anwPaintBalance(balance) {
+  // Skip the DOM write entirely if this is the same value already shown.
+  // Belt-and-braces: the widget sits inside document.body, which the
+  // MutationObserver below watches — writing textContent unconditionally
+  // on every call, even with an unchanged value, would still count as a
+  // DOM mutation and re-trigger that observer, which could in turn repaint
+  // again, forever. This guard means a repaint only ever happens when the
+  // number on screen actually needs to change.
+  if (balance === _anwPaintedBalance) return;
+  _anwPaintedBalance = balance;
   const el = document.getElementById("anwBalanceWidgetValue");
   if (!el) return;
   el.textContent = fmtMoney(balance);
@@ -4621,13 +4631,27 @@ async function mountBalanceWidget(username) {
   else _anwAttachBalanceListener();
 
   // Watch for popups / the Blackjack table opening or closing anywhere on
-  // the page (see _anwSyncDomPauseState above). Scoped to widget mount so
-  // teacher pages (no widget) don't pay for a MutationObserver they'd
-  // never benefit from.
+  // the page. Two separate, narrowly-scoped observers instead of one
+  // broad one on document.body — this used to watch { childList: true,
+  // subtree: true } across the ENTIRE page, which meant literally any DOM
+  // change anywhere (any table repaint, any re-render) fired it. That
+  // included the balance widget's own textContent update a few lines
+  // above, since it lives inside document.body's subtree too — so any
+  // repaint retriggered the observer, which (when nothing was paused)
+  // repainted again, which retriggered it again: an infinite loop that
+  // pins the main thread and shows up as the browser's "Page Unresponsive"
+  // dialog. Scoping to exactly the two things we actually care about
+  // avoids that entirely: modal overlays are always appended directly to
+  // document.body (see events-ui.js/gambling.js), so childList without
+  // subtree catches those; the Blackjack table's "hidden" class is
+  // observed directly on that one element instead of searching the whole
+  // page for it.
   _anwSyncDomPauseState(); // pick up anything already on screen (e.g. a forced modal from page load)
-  new MutationObserver(_anwSyncDomPauseState).observe(document.body, {
-    childList: true, subtree: true, attributes: true, attributeFilter: ["class"]
-  });
+  new MutationObserver(_anwSyncDomPauseState).observe(document.body, { childList: true });
+  const bjTable = document.getElementById("bjTableArea");
+  if (bjTable) {
+    new MutationObserver(_anwSyncDomPauseState).observe(bjTable, { attributes: true, attributeFilter: ["class"] });
+  }
 }
 
 // Sits just under the sticky top nav bar, on the left, rather than being
