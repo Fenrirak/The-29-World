@@ -125,7 +125,9 @@ async function render() {
   if (teacher) nameCache[teacher.username] = teacher.name;
 
   // net worth ranking (also gives us each student's lifestyle rating for the table below)
-  const board = await classLeaderboard(CLASS_CODE);
+  // Pass in `students` (already fetched above) so this doesn't re-run the
+  // batched per-student Firestore read a second time.
+  const board = await classLeaderboard(CLASS_CODE, undefined, students);
   const lifestyleByUser = {};
   const lifestyleBandByUser = {};
   await Promise.all(students.map(async s => {

@@ -80,10 +80,10 @@ async function init() {
 
 // Everyone else in the class you can send money to / pay automatically —
 // classmates plus the teacher, labelled clearly.
-async function payableRecipients() {
+async function payableRecipients(precomputedStudents) {
   const cls = await getClassCached(CURRENT.classCode);
   const options = [];
-  const students = await getClassStudents(CURRENT.classCode);
+  const students = precomputedStudents || await getClassStudents(CURRENT.classCode);
   students.forEach(s => {
     if (s.username === CURRENT.username) return;
     options.push({ username: s.username, label: s.name });
@@ -115,7 +115,14 @@ async function render() {
       "Money in here earns interest at the rate below — it doesn't earn anything sitting in your cash balance unless your teacher has set a cash rate too. " + interestScheduleLabel(cls);
   }
 
-  const recipients = await payableRecipients();
+  // Fetch the class roster once and reuse it for both the recipients
+  // dropdown and the transaction-history name lookup below — these used
+  // to each independently call getClassStudents(), which batches one
+  // Firestore read PER STUDENT, so every render() (including after every
+  // send/deposit/withdraw/automation action) read the whole class twice.
+  const allStudents = await getClassStudents(me.classCode, cls);
+
+  const recipients = await payableRecipients(allStudents);
   const optsHtml = recipients.length
     ? recipients.map(r => `<option value="${r.username}">${r.label}</option>`).join("")
     : `<option value="">No one to pay yet</option>`;
@@ -168,7 +175,6 @@ async function render() {
   document.getElementById("noTxns").classList.toggle("hidden", IS_TEACHER || my.length > 0);
   const tbody = document.getElementById("txnTable");
   tbody.innerHTML = "";
-  const allStudents = await getClassStudents(me.classCode);
   const nameCache = {};
   allStudents.forEach(s => { nameCache[s.username] = s.name; });
   const teacher = await getUserCached(cls.teacher);

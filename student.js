@@ -105,24 +105,32 @@ async function render() {
   const job = cls.jobs.find(j => j.id === me.jobId);
   document.getElementById("jobLabel").textContent = job ? `${job.title} — ${fmtMoney(job.wage)}/payday` : "No job assigned";
 
-  const cfg = cls.lifestyleConfig || {};
-  const anyEnabled = ["property", "store", "insurance", "transport", "loan"].some(k => cfg[k] && cfg[k].enabled);
-  document.getElementById("lifestyleCard").classList.toggle("hidden", !anyEnabled);
-  if (anyEnabled) {
-    const score = await lifestyleRating(me.username, me.classCode);
-    const label = await lifestyleBandForStudent(me.username, me.classCode);
-    const isOverride = me.lifestyleOverride !== undefined && me.lifestyleOverride !== null;
-    document.getElementById("lifestyleValue").textContent =
-      score + (label ? " — " + label : "") + (isOverride ? " (set by teacher)" : "");
-  }
-
   const lockedModules = await getLockedModulesForStudent(me.username, me.classCode);
   applyModuleLocks(lockedModules);
 
   await renderSideHustle(me, cls, lockedModules);
 
+  // Fetch the class roster once and reuse it for both the leaderboard and
+  // the classmates table below — these used to each independently call
+  // getClassStudents(), which batches one Firestore read PER STUDENT, so
+  // every render() was reading every student in the class twice over.
+  const allStudents = await getClassStudents(me.classCode, cls);
+
   // net worth leaderboard
-  const board = await classLeaderboard(me.classCode, me.username);
+  const board = await classLeaderboard(me.classCode, me.username, allStudents);
+
+  const cfg = cls.lifestyleConfig || {};
+  const anyEnabled = ["property", "store", "insurance", "transport", "loan"].some(k => cfg[k] && cfg[k].enabled);
+  document.getElementById("lifestyleCard").classList.toggle("hidden", !anyEnabled);
+  if (anyEnabled) {
+    const score = await lifestyleRating(me.username, me.classCode);
+    // Pass the leaderboard we already built above instead of having
+    // lifestyleBandForStudent() recompute it (another full-class re-read).
+    const label = await lifestyleBandForStudent(me.username, me.classCode, board);
+    const isOverride = me.lifestyleOverride !== undefined && me.lifestyleOverride !== null;
+    document.getElementById("lifestyleValue").textContent =
+      score + (label ? " — " + label : "") + (isOverride ? " (set by teacher)" : "");
+  }
   const medalClass = i => (i === 0 ? "gold" : i === 1 ? "silver" : i === 2 ? "bronze" : "");
   const lbBox = document.getElementById("leaderboardList");
   lbBox.innerHTML = "";
@@ -141,8 +149,7 @@ async function render() {
     lbBox.appendChild(div);
   });
 
-  // classmates
-  const allStudents = await getClassStudents(me.classCode);
+  // classmates (reuses allStudents fetched above for the leaderboard)
   const classmates = allStudents.filter(s => s.username !== me.username);
   const ctbl = document.getElementById("classmateTable");
   ctbl.innerHTML = "";

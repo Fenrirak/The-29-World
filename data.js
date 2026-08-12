@@ -132,8 +132,8 @@ async function getClass(code) {
   );
   return _cloneDoc(data);
 }
-async function getClassStudents(code) {
-  const cls = await getClass(code);
+async function getClassStudents(code, precomputedCls) {
+  const cls = precomputedCls || await getClass(code);
   if (!cls || !cls.students || cls.students.length === 0) return [];
   // Was one individual .get() per student (25 students = 25 separate
   // requests, all fired at once). Firestore supports fetching up to 30
@@ -1754,8 +1754,36 @@ async function withdrawTermDepositEarly(username, depositId) {
   return { ok: true };
 }
 async function processTermDeposits(classCode) {
-  const students = await getClassStudents(classCode);
+  // This job runs on EVERY page load, on every page in the app (it's one
+  // of the 8 background jobs in each page's init()) — but a student's
+  // term deposits only ever mature once, on one specific day. Without a
+  // guard, every single page load did a full batched read of every
+  // student in the class (getClassStudents = 1 Firestore read PER
+  // STUDENT) just to check maturity dates, even on the ~29 days out of 30
+  // nothing was due. processWeeklyEvents/processWeeklyBigEvents right
+  // below already use a "claim today/this week via transaction" guard for
+  // exactly this reason — this brings processTermDeposits in line with
+  // them: skip the student read entirely once today's already been
+  // checked, and use a transaction to claim the day so two tabs loading
+  // at once can't both think they're first and double-process.
+  const classRef = classesCol().doc(classCode);
   const todayKey = nzDateKey();
+  const cls = await getClassCached(classCode);
+  if (!cls) return 0;
+  if (cls.lastTermDepositCheckDay === todayKey) return 0;
+
+  let claimed = false;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = snap.data();
+    if (liveCls.lastTermDepositCheckDay === todayKey) return;
+    t.update(classRef, { lastTermDepositCheckDay: todayKey });
+    claimed = true;
+  });
+  if (!claimed) return 0;
+
+  const students = await getClassStudents(classCode);
   let matured = 0;
   for (const student of students) {
     const deposits = student.termDeposits || [];
@@ -1850,10 +1878,10 @@ function getRecentTxns(cls, days) {
   return (cls.txns || []).filter(t => t.ts === undefined || t.ts >= cutoff);
 }
 
-async function classLeaderboard(classCode, viewerUsername) {
-  const cls = await getClass(classCode);
+async function classLeaderboard(classCode, viewerUsername, precomputedStudents) {
+  const cls = await getClassCached(classCode);
   if (!cls) return [];
-  const students = await getClassStudents(classCode);
+  const students = precomputedStudents || await getClassStudents(classCode, cls);
   // Everything needed (share prices, store item prices) is already sitting
   // in `cls`, and each student's own holdings/items came back with them —
   // so this is computed entirely in memory instead of the old approach,
@@ -1922,7 +1950,7 @@ async function resetClass(classCode) {
 }
 
 async function portfolioValue(username, classCode) {
-  const cls = await getClass(classCode);
+  const cls = await getClassCached(classCode);
   if (!cls) return 0;
   let total = 0;
   cls.companies.forEach(co => {
@@ -4154,11 +4182,15 @@ function lifestyleLabelFor(score, thresholds, stats) {
 // Convenience wrapper: works out a student's lifestyle score AND the extra
 // stats (net worth, owned property/vehicle comfort) needed to enforce band
 // requirements, then returns the label they actually qualify for.
-async function lifestyleBandForStudent(username, classCode) {
-  const cls = withNewModuleDefaults(await getClass(classCode));
+async function lifestyleBandForStudent(username, classCode, precomputedBoard) {
+  const cls = withNewModuleDefaults(await getClassCached(classCode));
   if (!cls) return "";
   const score = await lifestyleRating(username, classCode);
-  const board = await classLeaderboard(classCode);
+  // Accept an already-computed leaderboard when the caller has one handy
+  // (e.g. render() loops that just built it) instead of recomputing it —
+  // classLeaderboard() re-reads every student in the class, so doing that
+  // a second time here for a single student's band was wasteful.
+  const board = precomputedBoard || await classLeaderboard(classCode);
   const row = board.find(r => r.username === username);
   const property = (cls.properties || []).find(p => p.owner === username);
   const vehicle = (cls.vehicles || []).filter(v => (v.owners || []).includes(username))
@@ -4227,16 +4259,16 @@ function lifestyleRatingFromData(cls, user, username) {
   return Math.max(0, Math.round(score));
 }
 async function lifestyleRating(username, classCode) {
-  const cls = withNewModuleDefaults(await getClass(classCode));
-  const user = await getUser(username);
+  const cls = withNewModuleDefaults(await getClassCached(classCode));
+  const user = await getUserCached(username);
   return lifestyleRatingFromData(cls, user, username);
 }
 // Same computation as lifestyleRating(), but returns the itemised list of
 // what's adding to (or subtracting from) the score instead of just the
 // final number — powers the student-facing "why is my score X" popup.
 async function lifestyleRatingBreakdown(username, classCode) {
-  const cls = withNewModuleDefaults(await getClass(classCode));
-  const user = await getUser(username);
+  const cls = withNewModuleDefaults(await getClassCached(classCode));
+  const user = await getUserCached(username);
   if (!cls || !user) return { items: [], total: 0, overridden: false };
   if (user.lifestyleOverride !== undefined && user.lifestyleOverride !== null) {
     return { items: [], total: Math.max(0, Math.round(Number(user.lifestyleOverride) || 0)), overridden: true };
@@ -4359,13 +4391,13 @@ function isModuleLockedForStudentFromData(cls, user, username, moduleKey) {
   return getLockedModulesForStudentFromData(cls, user, username).includes(moduleKey);
 }
 async function getLockedModulesForStudent(username, classCode) {
-  const cls = withNewModuleDefaults(await getClass(classCode));
+  const cls = withNewModuleDefaults(await getClassCached(classCode));
   // Keep the original short-circuit: most classes don't use a lifestyle
   // lock at all, so avoid the extra getUser() read whenever there's
   // nothing configured to check against.
   const lock = cls.lifestyleLock;
   if (!lock || !lock.modules || lock.modules.length === 0) return [];
-  const user = await getUser(username);
+  const user = await getUserCached(username);
   return getLockedModulesForStudentFromData(cls, user, username);
 }
 async function isModuleLockedForStudent(username, classCode, moduleKey) {
@@ -4412,75 +4444,92 @@ async function anwGlobalBootstrap() {
   }
 }
 
-const ANW_BALANCE_POLL_MS = 10000;
+/* ---------------- Balance widget: live updates, not polling ----------------
+   This used to poll getUser() every 10s regardless of whether anything had
+   changed, which billed a Firestore read every 10s per open tab even when
+   a student's balance sat untouched for the whole session. Firestore's
+   onSnapshot() gives a real push channel instead: it bills one read for
+   the initial snapshot, then exactly one more read per subsequent write to
+   that user doc — nothing while the balance is just sitting there idle.
 
-/* ---------------- Balance widget poll pause/resume ----------------
-   The 10s poll needs to actually stop (not just skip its fetch) while:
-     - the tab is hidden/backgrounded (handled automatically below via the
-       Page Visibility API — no other file needs to call anything for this)
-     - a popup (gambling result, weekly event, etc.) is open on screen
-     - the student is on the Blackjack table
+   One caveat worth knowing: Firestore streams the whole user document on
+   any change to it (jobId, lifestyleOverride, blackjackRound, etc.), not
+   specifically the balance field — there's no way to subscribe to a single
+   field with the compat SDK. So this still bills a read on non-balance
+   writes to that doc. What it fixes is the *time-based* cost (10s poll
+   regardless of activity) — a genuinely idle student now costs ~0 ongoing
+   reads instead of 360/hour. Getting it down to "only balance-affecting
+   writes" would mean splitting balance into its own doc/collection, which
+   would touch every write path in this file — a bigger change than this
+   pass covers; flagging it in case that's worth doing later.
 
-   Other pages/modules call these two functions to pause/resume the poll,
-   passing a short string identifying WHY (so unrelated pauses can't step
-   on each other and accidentally resume the poll too early):
-
-     anwBalancePoll.pause("gambling-popup");   // when a popup opens
-     anwBalancePoll.resume("gambling-popup");  // when that popup closes
-
-     anwBalancePoll.pause("blackjack-table");  // when the BJ table mounts
-     anwBalancePoll.resume("blackjack-table"); // when the BJ table unmounts
-
-   Multiple reasons can be active at once (e.g. tab hidden AND a popup
-   open) — the poll only actually resumes once every reason is cleared.
-   Calling pause()/resume() with the same reason twice in a row is safe
-   (pause is idempotent, resume on a reason that isn't active is a no-op).
-==================================================================== */
+   pause()/resume() below keep their old meaning for callers (popups,
+   Blackjack, tab visibility) but now only suppress *painting* the DOM
+   while paused — the listener itself stays attached and keeps receiving
+   pushes in the background, so nothing is missed, and resume() paints
+   whatever the latest known value is immediately. The one exception is
+   "tab-hidden": that fully detaches the listener while the tab is in the
+   background (see visibilitychange handler below) since a hidden tab has
+   no UI to update anyway, and re-attaches (one fresh read) when it's shown
+   again — genuinely idle time in the background now costs nothing at all,
+   not even background reads. */
 const _anwPollPauseReasons = new Set();
-let _anwPollTimer = null;
-let _anwPollRefreshFn = null;
+let _anwBalanceUnsub = null;
+let _anwLatestBalance = null; // most recent value pushed by Firestore
+let _anwBalanceUsername = null;
 
-function _anwPollStart() {
-  if (_anwPollTimer || !_anwPollRefreshFn) return; // already running, or not mounted yet
-  _anwPollTimer = setInterval(_anwPollRefreshFn, ANW_BALANCE_POLL_MS);
+function _anwPaintBalance(balance) {
+  const el = document.getElementById("anwBalanceWidgetValue");
+  if (!el) return;
+  el.textContent = fmtMoney(balance);
 }
-function _anwPollStop() {
-  if (!_anwPollTimer) return;
-  clearInterval(_anwPollTimer);
-  _anwPollTimer = null;
+
+function _anwAttachBalanceListener() {
+  if (_anwBalanceUnsub || !_anwBalanceUsername) return; // already attached, or not mounted yet
+  _anwBalanceUnsub = usersCol().doc(_anwBalanceUsername).onSnapshot(
+    snap => {
+      const data = snap.exists ? snap.data() : null;
+      const balance = data ? data.balance : 0;
+      _anwLatestBalance = balance;
+      if (_anwPollPauseReasons.size === 0) _anwPaintBalance(balance);
+    },
+    () => { /* transient listen errors (e.g. brief offline) just wait for the next push */ }
+  );
 }
-function _anwPollSync() {
-  if (_anwPollPauseReasons.size > 0) _anwPollStop();
-  else _anwPollStart();
+function _anwDetachBalanceListener() {
+  if (!_anwBalanceUnsub) return;
+  _anwBalanceUnsub();
+  _anwBalanceUnsub = null;
 }
 
 window.anwBalancePoll = {
   pause(reason) {
     if (!reason) return;
-    const wasIdle = _anwPollPauseReasons.size === 0;
     _anwPollPauseReasons.add(reason);
-    if (wasIdle) _anwPollSync();
   },
   resume(reason) {
     if (!reason) return;
     _anwPollPauseReasons.delete(reason);
-    if (_anwPollPauseReasons.size === 0) {
-      _anwPollSync();
-      if (_anwPollRefreshFn) _anwPollRefreshFn(); // catch up immediately instead of waiting up to 10s
+    if (_anwPollPauseReasons.size === 0 && _anwLatestBalance !== null) {
+      _anwPaintBalance(_anwLatestBalance); // catch up to whatever came in while paused
     }
   },
   isPaused() { return _anwPollPauseReasons.size > 0; },
   activeReasons() { return [..._anwPollPauseReasons]; }
 };
 
-// Page Visibility API — this is the actual mechanism that stops the timer
-// when the tab is backgrounded or the user switches away. Browsers already
-// throttle/clamp setInterval in background tabs, but clearInterval here
-// makes the "stopped" behavior explicit and verifiable rather than relying
-// on browser throttling, which varies (and can still fire, just slower).
+// Page Visibility API — fully detaches the Firestore listener while the
+// tab is backgrounded (rather than just skipping paint, like the other
+// pause reasons do) so an idle background tab costs zero ongoing reads,
+// and re-attaches — one fresh read — when the tab is shown again.
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) window.anwBalancePoll.pause("tab-hidden");
-  else window.anwBalancePoll.resume("tab-hidden");
+  if (document.hidden) {
+    _anwPollPauseReasons.add("tab-hidden");
+    _anwDetachBalanceListener();
+  } else {
+    _anwPollPauseReasons.delete("tab-hidden");
+    _anwAttachBalanceListener();
+  }
 });
 
 /* ---------------- Automatic popup / Blackjack-table detection ----------------
@@ -4529,21 +4578,19 @@ async function mountBalanceWidget(username) {
   positionBalanceWidget();
   window.addEventListener("resize", positionBalanceWidget);
 
-  const refresh = async () => {
-    const el = document.getElementById("anwBalanceWidgetValue");
-    if (!el) return;
-    const fresh = await getUser(username);
-    if (fresh) el.textContent = fmtMoney(fresh.balance);
-  };
-  await refresh();
+  // Paint an initial value from whatever's already cached (e.g. the page's
+  // own render() likely just fetched this same user) so the widget doesn't
+  // sit on "—" until the listener's first push arrives.
+  const cached = await getUserCached(username);
+  if (cached) { _anwLatestBalance = cached.balance; _anwPaintBalance(cached.balance); }
 
-  // Poll periodically so the widget stays live even though most module
-  // pages have their own separate render() calls that don't know about it.
-  // Started/stopped via anwBalancePoll so it can be paused for popups,
-  // the Blackjack table, and backgrounded tabs (see block above).
-  _anwPollRefreshFn = refresh;
+  // Live-updates via Firestore listener instead of polling — see the big
+  // comment above _anwAttachBalanceListener() for why. Started/stopped via
+  // anwBalancePoll so it can be paused for popups, the Blackjack table,
+  // and backgrounded tabs (see block above).
+  _anwBalanceUsername = username;
   if (document.hidden) _anwPollPauseReasons.add("tab-hidden"); // page loaded already-hidden (rare, but possible)
-  _anwPollSync();
+  else _anwAttachBalanceListener();
 
   // Watch for popups / the Blackjack table opening or closing anywhere on
   // the page (see _anwSyncDomPauseState above). Scoped to widget mount so
