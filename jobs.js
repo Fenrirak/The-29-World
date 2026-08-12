@@ -30,14 +30,14 @@ async function init() {
   // chunk of load time, especially on a slow mobile connection. Running
   // them together cuts that to roughly the time of the single slowest one.
   await Promise.all([
-    autoPayDayIfDue(CURRENT.classCode),
-    processAutomations(CURRENT.classCode),
-    processMortgages(CURRENT.classCode),
-    processTermDeposits(CURRENT.classCode),
-    autoInterestIfDue(CURRENT.classCode),
-    processInsurancePayments(CURRENT.classCode),
-    processWeeklyEvents(CURRENT.classCode),
-    processWeeklyBigEvents(CURRENT.classCode)
+    safeBgJob(autoPayDayIfDue(CURRENT.classCode), "autoPayDayIfDue"),
+    safeBgJob(processAutomations(CURRENT.classCode), "processAutomations"),
+    safeBgJob(processMortgages(CURRENT.classCode), "processMortgages"),
+    safeBgJob(processTermDeposits(CURRENT.classCode), "processTermDeposits"),
+    safeBgJob(autoInterestIfDue(CURRENT.classCode), "autoInterestIfDue"),
+    safeBgJob(processInsurancePayments(CURRENT.classCode), "processInsurancePayments"),
+    safeBgJob(processWeeklyEvents(CURRENT.classCode), "processWeeklyEvents"),
+    safeBgJob(processWeeklyBigEvents(CURRENT.classCode), "processWeeklyBigEvents")
   ]);
   // These popups read the results of the jobs above, so they still need
   // to run afterwards — but stay sequential since each checks whether

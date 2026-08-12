@@ -66,14 +66,14 @@ async function init() {
     // chunk of load time, especially on a slow mobile connection. Running
     // them together cuts that to roughly the time of the single slowest one.
     await Promise.all([
-      autoPayDayIfDue(CLASS_CODE),
-      processAutomations(CLASS_CODE),
-      processMortgages(CLASS_CODE),
-      processTermDeposits(CLASS_CODE),
-      autoInterestIfDue(CLASS_CODE),
-      processInsurancePayments(CLASS_CODE),
-      processWeeklyEvents(CLASS_CODE),
-      processWeeklyBigEvents(CLASS_CODE)
+      safeBgJob(autoPayDayIfDue(CLASS_CODE), "autoPayDayIfDue"),
+      safeBgJob(processAutomations(CLASS_CODE), "processAutomations"),
+      safeBgJob(processMortgages(CLASS_CODE), "processMortgages"),
+      safeBgJob(processTermDeposits(CLASS_CODE), "processTermDeposits"),
+      safeBgJob(autoInterestIfDue(CLASS_CODE), "autoInterestIfDue"),
+      safeBgJob(processInsurancePayments(CLASS_CODE), "processInsurancePayments"),
+      safeBgJob(processWeeklyEvents(CLASS_CODE), "processWeeklyEvents"),
+      safeBgJob(processWeeklyBigEvents(CLASS_CODE), "processWeeklyBigEvents")
     ]);
     await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
     await checkBigEventPopup(CURRENT.username, CLASS_CODE);

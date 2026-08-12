@@ -679,6 +679,22 @@ function isJobTaskApprovedThisWeek(user, cls) {
   return !!(approval && approval.weekKey === weekKey && approval.approved);
 }
 
+/* ---------------- Safe background-job wrapper ----------------
+   Every page runs the 8 jobs below via Promise.all() on load. Promise.all
+   rejects the moment ANY one of them rejects — and until now nothing
+   caught that, so a single job failing (a transient network hiccup, a
+   permission error, anything) took the entire page down with it: the
+   whole init() function stops right there and render() never runs, which
+   looks like the page just hanging. Wrapping each job in this before it
+   goes into Promise.all() means one job failing can only skip that one
+   job — every other job still runs, and the page still loads normally. */
+function safeBgJob(promise, label) {
+  return promise.catch(e => {
+    console.error(`Background job "${label}" failed (page will still load):`, e);
+    return 0;
+  });
+}
+
 async function autoPayDayIfDue(classCode) {
   const cls = await getClass(classCode);
   if (!cls || !cls.payDay) return 0;
@@ -1766,22 +1782,34 @@ async function processTermDeposits(classCode) {
   // them: skip the student read entirely once today's already been
   // checked, and use a transaction to claim the day so two tabs loading
   // at once can't both think they're first and double-process.
-  const classRef = classesCol().doc(classCode);
+  //
+  // The claim step is wrapped in try/catch: this function is called from
+  // a Promise.all() with 7 other jobs on every single page, with nothing
+  // upstream catching a rejection — so if this write ever fails for any
+  // reason (permission rule, transient network issue, etc.), it must not
+  // throw, or it takes the ENTIRE page load down with it. On failure it
+  // falls back to the original always-check behavior for that one load
+  // rather than skipping the check, so a deposit maturing never silently
+  // stops working even if the optimization itself can't run.
   const todayKey = nzDateKey();
-  const cls = await getClassCached(classCode);
-  if (!cls) return 0;
-  if (cls.lastTermDepositCheckDay === todayKey) return 0;
-
   let claimed = false;
-  await fdb.runTransaction(async (t) => {
-    const snap = await t.get(classRef);
-    if (!snap.exists) return;
-    const liveCls = snap.data();
-    if (liveCls.lastTermDepositCheckDay === todayKey) return;
-    t.update(classRef, { lastTermDepositCheckDay: todayKey });
-    claimed = true;
-  });
-  if (!claimed) return 0;
+  try {
+    const classRef = classesCol().doc(classCode);
+    const cls = await getClassCached(classCode);
+    if (!cls) return 0;
+    if (cls.lastTermDepositCheckDay === todayKey) return 0;
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) return;
+      const liveCls = snap.data();
+      if (liveCls.lastTermDepositCheckDay === todayKey) return;
+      t.update(classRef, { lastTermDepositCheckDay: todayKey });
+      claimed = true;
+    });
+    if (!claimed) return 0;
+  } catch (e) {
+    console.warn("processTermDeposits: day-guard failed, falling back to a full check", e);
+  }
 
   const students = await getClassStudents(classCode);
   let matured = 0;

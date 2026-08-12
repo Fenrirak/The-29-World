@@ -27,12 +27,12 @@ async function init() {
   // Same fix as the other pages: run the independent background jobs
   // together instead of one sequential network round-trip each.
   await Promise.all([
-    autoPayDayIfDue(u.classCode),
-    processAutomations(u.classCode),
-    processMortgages(u.classCode),
-    processTermDeposits(u.classCode),
-    autoInterestIfDue(u.classCode),
-    processWeeklyEvents(u.classCode)
+    safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
+    safeBgJob(processAutomations(u.classCode), "processAutomations"),
+    safeBgJob(processMortgages(u.classCode), "processMortgages"),
+    safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
+    safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
+    safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents")
   ]);
   await checkWeeklyEventPopup(u.username, u.classCode);
   await render();
