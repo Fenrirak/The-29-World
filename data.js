@@ -4472,136 +4472,54 @@ async function anwGlobalBootstrap() {
   }
 }
 
-/* ---------------- Balance widget: live updates, not polling ----------------
-   This used to poll getUser() every 10s regardless of whether anything had
-   changed, which billed a Firestore read every 10s per open tab even when
-   a student's balance sat untouched for the whole session. Firestore's
-   onSnapshot() gives a real push channel instead: it bills one read for
-   the initial snapshot, then exactly one more read per subsequent write to
-   that user doc — nothing while the balance is just sitting there idle.
+/* ---------------- Balance widget: simple polling ----------------
+   This has gone through two more "clever" designs (a live Firestore
+   listener, then a MutationObserver watching the page for popups) that
+   both turned out to cause real breakage — the observer approach in
+   particular caused an infinite loop (any DOM change repainted the
+   widget, which was itself a DOM change, forever) that froze the page
+   entirely. Given the choice between "a few more reads" and "the page
+   sometimes doesn't load", reads lose. This is deliberately the simplest
+   possible version: poll on a plain interval, full stop. No listeners,
+   no DOM observation, no auto-detected pause states — nothing here can
+   get into a feedback loop with anything else on the page, because it
+   doesn't watch anything on the page at all.
+   Cost: ~1 read per POLL_MS per open tab while visible. At 20s that's
+   180 reads/hour/open-tab — a small, flat, predictable number, not the
+   360/hour the original 10s poll cost, and nowhere near the accidental
+   36000+/hour an infinite loop can cause. */
+const ANW_BALANCE_POLL_MS = 20000;
+let _anwPollTimer = null;
+let _anwPollUsername = null;
 
-   One caveat worth knowing: Firestore streams the whole user document on
-   any change to it (jobId, lifestyleOverride, blackjackRound, etc.), not
-   specifically the balance field — there's no way to subscribe to a single
-   field with the compat SDK. So this still bills a read on non-balance
-   writes to that doc. What it fixes is the *time-based* cost (10s poll
-   regardless of activity) — a genuinely idle student now costs ~0 ongoing
-   reads instead of 360/hour. Getting it down to "only balance-affecting
-   writes" would mean splitting balance into its own doc/collection, which
-   would touch every write path in this file — a bigger change than this
-   pass covers; flagging it in case that's worth doing later.
-
-   pause()/resume() below keep their old meaning for callers (popups,
-   Blackjack, tab visibility) but now only suppress *painting* the DOM
-   while paused — the listener itself stays attached and keeps receiving
-   pushes in the background, so nothing is missed, and resume() paints
-   whatever the latest known value is immediately. The one exception is
-   "tab-hidden": that fully detaches the listener while the tab is in the
-   background (see visibilitychange handler below) since a hidden tab has
-   no UI to update anyway, and re-attaches (one fresh read) when it's shown
-   again — genuinely idle time in the background now costs nothing at all,
-   not even background reads. */
-const _anwPollPauseReasons = new Set();
-let _anwBalanceUnsub = null;
-let _anwLatestBalance = null; // most recent value pushed by Firestore
-let _anwPaintedBalance = undefined; // value currently shown in the DOM (undefined = nothing painted yet)
-let _anwBalanceUsername = null;
-
-function _anwPaintBalance(balance) {
-  // Skip the DOM write entirely if this is the same value already shown.
-  // Belt-and-braces: the widget sits inside document.body, which the
-  // MutationObserver below watches — writing textContent unconditionally
-  // on every call, even with an unchanged value, would still count as a
-  // DOM mutation and re-trigger that observer, which could in turn repaint
-  // again, forever. This guard means a repaint only ever happens when the
-  // number on screen actually needs to change.
-  if (balance === _anwPaintedBalance) return;
-  _anwPaintedBalance = balance;
+async function _anwPollTick() {
   const el = document.getElementById("anwBalanceWidgetValue");
-  if (!el) return;
-  el.textContent = fmtMoney(balance);
-}
-
-function _anwAttachBalanceListener() {
-  if (_anwBalanceUnsub || !_anwBalanceUsername) return; // already attached, or not mounted yet
-  _anwBalanceUnsub = usersCol().doc(_anwBalanceUsername).onSnapshot(
-    snap => {
-      const data = snap.exists ? snap.data() : null;
-      const balance = data ? data.balance : 0;
-      _anwLatestBalance = balance;
-      if (_anwPollPauseReasons.size === 0) _anwPaintBalance(balance);
-    },
-    () => { /* transient listen errors (e.g. brief offline) just wait for the next push */ }
-  );
-}
-function _anwDetachBalanceListener() {
-  if (!_anwBalanceUnsub) return;
-  _anwBalanceUnsub();
-  _anwBalanceUnsub = null;
-}
-
-window.anwBalancePoll = {
-  pause(reason) {
-    if (!reason) return;
-    _anwPollPauseReasons.add(reason);
-  },
-  resume(reason) {
-    if (!reason) return;
-    _anwPollPauseReasons.delete(reason);
-    if (_anwPollPauseReasons.size === 0 && _anwLatestBalance !== null) {
-      _anwPaintBalance(_anwLatestBalance); // catch up to whatever came in while paused
-    }
-  },
-  isPaused() { return _anwPollPauseReasons.size > 0; },
-  activeReasons() { return [..._anwPollPauseReasons]; }
-};
-
-// Page Visibility API — fully detaches the Firestore listener while the
-// tab is backgrounded (rather than just skipping paint, like the other
-// pause reasons do) so an idle background tab costs zero ongoing reads,
-// and re-attaches — one fresh read — when the tab is shown again.
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    _anwPollPauseReasons.add("tab-hidden");
-    _anwDetachBalanceListener();
-  } else {
-    _anwPollPauseReasons.delete("tab-hidden");
-    _anwAttachBalanceListener();
+  if (!el || !_anwPollUsername) return;
+  try {
+    const fresh = await getUser(_anwPollUsername); // uncached: this IS the poll, no point caching a 20s-apart call
+    if (fresh) el.textContent = fmtMoney(fresh.balance);
+  } catch (e) {
+    console.warn("Balance widget poll failed (will retry next tick):", e);
   }
-});
-
-/* ---------------- Automatic popup / Blackjack-table detection ----------------
-   Rather than threading anwBalancePoll.pause()/resume() calls through every
-   individual popup-showing function (and the Blackjack table's own
-   show/hide code) — easy to miss a spot, or to leave the poll stuck paused
-   if some error path closes a popup without going through its normal close
-   handler — this watches the actual DOM state directly:
-
-     - ANY element with class "anw-modal-overlay" present on the page =>
-       paused. Every popup in this app uses that same class: the weekly
-       event popup, the choice-event modal, the bonus/fine adjustment
-       popup, both big-event modals (events-ui.js), and the roulette wheel
-       spin overlay (gambling.js) — so this one check covers all of them,
-       and any new popup added later that follows the same convention,
-       without touching those files.
-     - #bjTableArea visible (missing the "hidden" class) => paused. This
-       is the Blackjack table container in gambling.js; it only exists in
-       the DOM on the gambling page.
-
-   A MutationObserver re-checks both after every relevant DOM change, so
-   the paused state can never drift out of sync with what's actually on
-   screen — if in doubt, it re-derives from the DOM rather than trusting
-   a remembered flag. */
-function _anwSyncDomPauseState() {
-  const popupOpen = !!document.querySelector(".anw-modal-overlay");
-  if (popupOpen) window.anwBalancePoll.pause("popup");
-  else window.anwBalancePoll.resume("popup");
-
-  const bjTable = document.getElementById("bjTableArea");
-  const bjVisible = !!bjTable && !bjTable.classList.contains("hidden");
-  if (bjVisible) window.anwBalancePoll.pause("blackjack-table");
-  else window.anwBalancePoll.resume("blackjack-table");
 }
+
+function _anwPollStart() {
+  if (_anwPollTimer) return;
+  _anwPollTimer = setInterval(_anwPollTick, ANW_BALANCE_POLL_MS);
+}
+function _anwPollStop() {
+  if (!_anwPollTimer) return;
+  clearInterval(_anwPollTimer);
+  _anwPollTimer = null;
+}
+
+// Only real optimization kept: stop polling while the tab is backgrounded
+// (a plain visibilitychange listener — not a MutationObserver — so it
+// can only ever fire on an actual tab-visibility change, nothing else).
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) _anwPollStop();
+  else _anwPollStart();
+});
 
 async function mountBalanceWidget(username) {
   if (document.getElementById("anwBalanceWidget")) return;
@@ -4616,42 +4534,11 @@ async function mountBalanceWidget(username) {
   positionBalanceWidget();
   window.addEventListener("resize", positionBalanceWidget);
 
-  // Paint an initial value from whatever's already cached (e.g. the page's
-  // own render() likely just fetched this same user) so the widget doesn't
-  // sit on "—" until the listener's first push arrives.
   const cached = await getUserCached(username);
-  if (cached) { _anwLatestBalance = cached.balance; _anwPaintBalance(cached.balance); }
+  if (cached) box.querySelector("#anwBalanceWidgetValue").textContent = fmtMoney(cached.balance);
 
-  // Live-updates via Firestore listener instead of polling — see the big
-  // comment above _anwAttachBalanceListener() for why. Started/stopped via
-  // anwBalancePoll so it can be paused for popups, the Blackjack table,
-  // and backgrounded tabs (see block above).
-  _anwBalanceUsername = username;
-  if (document.hidden) _anwPollPauseReasons.add("tab-hidden"); // page loaded already-hidden (rare, but possible)
-  else _anwAttachBalanceListener();
-
-  // Watch for popups / the Blackjack table opening or closing anywhere on
-  // the page. Two separate, narrowly-scoped observers instead of one
-  // broad one on document.body — this used to watch { childList: true,
-  // subtree: true } across the ENTIRE page, which meant literally any DOM
-  // change anywhere (any table repaint, any re-render) fired it. That
-  // included the balance widget's own textContent update a few lines
-  // above, since it lives inside document.body's subtree too — so any
-  // repaint retriggered the observer, which (when nothing was paused)
-  // repainted again, which retriggered it again: an infinite loop that
-  // pins the main thread and shows up as the browser's "Page Unresponsive"
-  // dialog. Scoping to exactly the two things we actually care about
-  // avoids that entirely: modal overlays are always appended directly to
-  // document.body (see events-ui.js/gambling.js), so childList without
-  // subtree catches those; the Blackjack table's "hidden" class is
-  // observed directly on that one element instead of searching the whole
-  // page for it.
-  _anwSyncDomPauseState(); // pick up anything already on screen (e.g. a forced modal from page load)
-  new MutationObserver(_anwSyncDomPauseState).observe(document.body, { childList: true });
-  const bjTable = document.getElementById("bjTableArea");
-  if (bjTable) {
-    new MutationObserver(_anwSyncDomPauseState).observe(bjTable, { attributes: true, attributeFilter: ["class"] });
-  }
+  _anwPollUsername = username;
+  if (!document.hidden) _anwPollStart();
 }
 
 // Sits just under the sticky top nav bar, on the left, rather than being
