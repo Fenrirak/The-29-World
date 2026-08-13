@@ -32,7 +32,7 @@ function paintChrome() {
   document.getElementById("iconCompanies").innerHTML = icon("building", 30);
   document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students";
   document.getElementById("hNetWorth").innerHTML = icon("medal", 18) + " Net worth ranking";
-  document.getElementById("hAdjust").innerHTML = icon("star", 18) + " Give a bonus or fine";
+  document.getElementById("hAdjust").innerHTML = icon("star", 18) + " Quick transactions";
   document.getElementById("hSettings").innerHTML = icon("bank", 18) + " Class settings";
   document.getElementById("hDanger").innerHTML = icon("coin", 18) + " Danger zone";
   document.getElementById("restartBtn").innerHTML = icon("chart", 15) + " Restart class";
@@ -299,8 +299,8 @@ async function render() {
   const txbody = document.querySelector("#txnTable tbody");
   txbody.innerHTML = "";
   const nameOf = u => nameCache[u] || u;
-  const recentTxns = getRecentTxns(cls, 10.5);
-  document.getElementById("hActivity").innerHTML = icon("chart", 18) + ` Recent activity (last 1.5 weeks — ${recentTxns.length})`;
+  const recentTxns = getRecentTxns(cls, 4);
+  document.getElementById("hActivity").innerHTML = icon("chart", 18) + " Recent activity (last 4 days)";
   recentTxns.forEach(t => {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badge(t.type)}</td><td>${describeTxn(t, nameOf)}</td><td>${fmtMoney(t.amount)}</td>`;

@@ -142,47 +142,18 @@
   </div>
 
   <div class="card">
-    <h2 id="hLifestyle">Lifestyle rating settings</h2>
-    <p>The lifestyle rating (an uncapped score starting at 0, shown on every student's homepage) is built from stars: a property's comfort rating, and any stars you gave a store item or insurance plan. Set how many points each star is worth, and toggle sections on or off.</p>
-    <div class="grid grid-3" id="lifestyleSettings"></div>
-    <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyle()" id="saveLifestyleBtn">Save lifestyle settings</button>
-    <div id="lifestyleMsg"></div>
-
-    <div class="lifestyle-subsection">
-      <h2 id="hThresholds">Lifestyle rating bands</h2>
-      <p>Give the 0-100 score meaningful names, e.g. "Poor" for 0-10, "Good" for 10-20. Bands should be ordered lowest to highest and cover the range you want labelled. You can also set extra requirements a student must meet to actually be shown a band — e.g. a minimum net worth, or owning a property/vehicle with at least a certain comfort rating — even if their score alone is high enough. Leave a requirement at 0 to not require it. If a student's score qualifies for a band but they don't meet its requirements, they'll be shown the next band down that they do qualify for.</p>
-      <div id="thresholdList"></div>
-      <button class="btn small secondary" onclick="addThresholdRow()" id="addThresholdBtn">Add band</button>
-      <button class="btn secondary" style="margin-top:14px;" onclick="saveThresholds()" id="saveThresholdsBtn">Save bands</button>
-      <div id="thresholdMsg"></div>
-    </div>
-
-    <div class="lifestyle-subsection">
-      <h2 id="hLifestyleLock">Lock modules by lifestyle rating</h2>
-      <p>Stop students from using certain modules while their lifestyle rating is low. Pick a cutoff and tick which modules should be locked when a student is at or below it.</p>
-      <label for="lifestyleLockThreshold" id="labLifestyleLockThreshold">Lock when lifestyle rating is at or below</label>
-      <input id="lifestyleLockThreshold" type="number" min="0" step="1" style="max-width:160px;">
-      <div class="grid grid-3" id="lifestyleLockModules" style="margin-top:14px;"></div>
-      <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyleLockSettings()" id="saveLifestyleLockBtn">Save module locks</button>
-      <div id="lifestyleLockMsg"></div>
-    </div>
-  </div>
-
-  <div class="grid grid-2">
-    <div class="card">
-      <h2 id="hAdjust">Give a bonus or fine</h2>
-      <p>Adjust a single student's balance directly, with a note.</p>
-      <form onsubmit="return giveAdjustment(event)">
-        <label for="adjStudent" id="labAdjStudent">Student</label>
-        <select id="adjStudent" required></select>
-        <label for="adjAmount" id="labAdjAmount">Amount (use a negative number for a fine)</label>
-        <input id="adjAmount" type="number" step="0.5" placeholder="e.g. 5 or -5" required>
-        <label for="adjNote" id="labAdjNote">Reason</label>
-        <input id="adjNote" placeholder="e.g. Great teamwork" required>
-        <button class="btn" type="submit" id="applyAdjBtn">Apply</button>
-      </form>
-      <div id="adjMsg"></div>
-    </div>
+    <h2 id="hAdjust">Quick transactions</h2>
+    <p>Adjust a single student's balance directly, with a note.</p>
+    <form onsubmit="return giveAdjustment(event)">
+      <label for="adjStudent" id="labAdjStudent">Student</label>
+      <select id="adjStudent" required></select>
+      <label for="adjAmount" id="labAdjAmount">Amount (use a negative number for a fine)</label>
+      <input id="adjAmount" type="number" step="0.5" placeholder="e.g. 5 or -5" required>
+      <label for="adjNote" id="labAdjNote">Reason</label>
+      <input id="adjNote" placeholder="e.g. Great teamwork" required>
+      <button class="btn" type="submit" id="applyAdjBtn">Apply</button>
+    </form>
+    <div id="adjMsg"></div>
   </div>
 
   <div class="card">
@@ -266,6 +237,33 @@
       <h2 id="hDanger" style="color:var(--coral);">Danger zone</h2>
       <p>Reset every student's balance to $0, remove all jobs assignments, delist every company, and clear the activity log. Student logins and the class code stay the same — this just gives everyone a fresh start.</p>
       <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="hLifestyle">Lifestyle rating settings</h2>
+    <p>The lifestyle rating (an uncapped score starting at 0, shown on every student's homepage) is built from stars: a property's comfort rating, and any stars you gave a store item or insurance plan. Set how many points each star is worth, and toggle sections on or off.</p>
+    <div class="grid grid-3" id="lifestyleSettings"></div>
+    <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyle()" id="saveLifestyleBtn">Save lifestyle settings</button>
+    <div id="lifestyleMsg"></div>
+
+    <div class="lifestyle-subsection">
+      <h2 id="hThresholds">Lifestyle rating bands</h2>
+      <p>Give the 0-100 score meaningful names, e.g. "Poor" for 0-10, "Good" for 10-20. Bands should be ordered lowest to highest and cover the range you want labelled. You can also set extra requirements a student must meet to actually be shown a band — e.g. a minimum net worth, or owning a property/vehicle with at least a certain comfort rating — even if their score alone is high enough. Leave a requirement at 0 to not require it. If a student's score qualifies for a band but they don't meet its requirements, they'll be shown the next band down that they do qualify for.</p>
+      <div id="thresholdList"></div>
+      <button class="btn small secondary" onclick="addThresholdRow()" id="addThresholdBtn">Add band</button>
+      <button class="btn secondary" style="margin-top:14px;" onclick="saveThresholds()" id="saveThresholdsBtn">Save bands</button>
+      <div id="thresholdMsg"></div>
+    </div>
+
+    <div class="lifestyle-subsection">
+      <h2 id="hLifestyleLock">Lock modules by lifestyle rating</h2>
+      <p>Stop students from using certain modules while their lifestyle rating is low. Pick a cutoff and tick which modules should be locked when a student is at or below it.</p>
+      <label for="lifestyleLockThreshold" id="labLifestyleLockThreshold">Lock when lifestyle rating is at or below</label>
+      <input id="lifestyleLockThreshold" type="number" min="0" step="1" style="max-width:160px;">
+      <div class="grid grid-3" id="lifestyleLockModules" style="margin-top:14px;"></div>
+      <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyleLockSettings()" id="saveLifestyleLockBtn">Save module locks</button>
+      <div id="lifestyleLockMsg"></div>
     </div>
   </div>
 
