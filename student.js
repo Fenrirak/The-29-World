@@ -464,4 +464,59 @@ function closeLifestyleBreakdown() {
   document.getElementById("lifestyleModal").classList.add("hidden");
 }
 
+/* ---------------- Settings dropdown / change password ---------------- */
+function toggleSettingsDropdown(evtOrForce) {
+  const dd = document.getElementById("settingsDropdown");
+  const btn = document.getElementById("settingsBtn");
+  if (!dd || !btn) return;
+  if (evtOrForce && evtOrForce.stopPropagation) evtOrForce.stopPropagation();
+  const forceShow = typeof evtOrForce === "boolean" ? evtOrForce : dd.classList.contains("hidden");
+  dd.classList.toggle("hidden", !forceShow);
+  btn.setAttribute("aria-expanded", String(forceShow));
+}
+// Click-away closes the dropdown — matches how the lifestyle modal closes
+// on a double-click outside its card.
+document.addEventListener("click", (e) => {
+  const wrap = document.querySelector(".settings-dropdown-wrap");
+  const dd = document.getElementById("settingsDropdown");
+  if (!wrap || !dd || dd.classList.contains("hidden")) return;
+  if (!wrap.contains(e.target)) toggleSettingsDropdown(false);
+});
+
+function openPasswordModal() {
+  toggleSettingsDropdown(false);
+  document.getElementById("pwCurrent").value = "";
+  document.getElementById("pwNew").value = "";
+  document.getElementById("pwConfirm").value = "";
+  document.getElementById("pwMsg").textContent = "";
+  document.getElementById("passwordModal").classList.remove("hidden");
+  document.getElementById("pwCurrent").focus();
+}
+function closePasswordModal() {
+  document.getElementById("passwordModal").classList.add("hidden");
+}
+
+async function submitPasswordChange() {
+  const oldPw = document.getElementById("pwCurrent").value;
+  const newPw = document.getElementById("pwNew").value;
+  const confirmPw = document.getElementById("pwConfirm").value;
+  const msg = document.getElementById("pwMsg");
+  const btn = document.getElementById("pwSubmitBtn");
+
+  if (!oldPw || !newPw || !confirmPw) { msg.textContent = "Please fill in all three fields."; return; }
+  if (newPw !== confirmPw) { msg.textContent = "New passwords don't match."; return; }
+
+  btn.disabled = true;
+  msg.textContent = "Updating...";
+  const res = await changePassword(CURRENT.username, oldPw, newPw);
+  btn.disabled = false;
+
+  if (!res.ok) { msg.textContent = res.error; return; }
+
+  document.getElementById("pwCurrent").value = "";
+  document.getElementById("pwNew").value = "";
+  document.getElementById("pwConfirm").value = "";
+  msg.textContent = "Password updated — you're still signed in here. Any other device you were logged in on will need to sign back in.";
+}
+
 document.addEventListener("DOMContentLoaded", init);

@@ -10,6 +10,24 @@
 <link rel="stylesheet" href="liquid-glass.css">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
+<style>
+  .settings-dropdown-wrap { position: relative; display: inline-flex; }
+  .settings-dropdown {
+    position: absolute; top: calc(100% + 8px); right: 0;
+    min-width: 190px; background: var(--card, #fff);
+    border: 1px solid rgba(0,0,0,.08); border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.18); overflow: hidden; z-index: 55;
+  }
+  .settings-dropdown.hidden { display: none; }
+  .settings-dropdown-item {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 10px 14px; border: none; background: none; text-align: left;
+    font: inherit; color: inherit; cursor: pointer;
+  }
+  .settings-dropdown-item:hover { background: rgba(0,0,0,.05); }
+  .field-label { display: block; margin: 12px 0 4px; font-size: .9rem; }
+  .field-label:first-of-type { margin-top: 0; }
+</style>
 </head>
 <body>
 
@@ -31,7 +49,12 @@
     <a href="gambling.html" data-module="gambling"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
     <span class="who" id="whoami"></span>
     <div class="topbar-actions">
-      <button class="btn-icon-topbar" id="settingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Settings" title="Settings"><span class="icon-slot" data-icon="settings"></span></button>
+      <div class="settings-dropdown-wrap">
+        <button class="btn-icon-topbar" id="settingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Settings" title="Settings" onclick="toggleSettingsDropdown(event)"><span class="icon-slot" data-icon="settings"></span></button>
+        <div class="settings-dropdown hidden" id="settingsDropdown">
+          <button class="settings-dropdown-item" type="button" onclick="openPasswordModal()">Change password</button>
+        </div>
+      </div>
       <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
     </div>
   </nav>
@@ -181,6 +204,24 @@
       <button class="btn small secondary" onclick="closeLifestyleBreakdown()">Close</button>
     </div>
     <div id="lifestyleModalBody"></div>
+  </div>
+</div>
+
+<div id="passwordModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:40px 16px;" ondblclick="if(event.target===this)closePasswordModal()">
+  <div class="card" style="width:100%;max-width:420px;margin-top:0;">
+    <div class="flex-between">
+      <h2 style="margin-bottom:2px;">Change password</h2>
+      <button class="btn small secondary" type="button" onclick="closePasswordModal()">Close</button>
+    </div>
+    <label class="field-label" for="pwCurrent">Current password</label>
+    <input type="password" id="pwCurrent" autocomplete="current-password" style="width:100%;">
+    <label class="field-label" for="pwNew">New password</label>
+    <input type="password" id="pwNew" autocomplete="new-password" style="width:100%;">
+    <label class="field-label" for="pwConfirm">Confirm new password</label>
+    <input type="password" id="pwConfirm" autocomplete="new-password" style="width:100%;">
+    <p class="muted-small" id="pwMsg" style="min-height:1.2em;margin-top:10px;"></p>
+    <button class="btn gold" type="button" id="pwSubmitBtn" onclick="submitPasswordChange()">Update password</button>
+    <p class="muted-small" style="margin-top:10px;">Changing your password will sign you out on any other device you're currently logged in on.</p>
   </div>
 </div>
 

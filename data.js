@@ -307,17 +307,47 @@ function initials(name) {
 // Session (which username is logged in on THIS device) stays in
 // localStorage on purpose — there's no reason to sync who's logged in
 // on a given browser across devices.
-function setSession(username) {
-  localStorage.setItem(SESSION_KEY, username);
+//
+// Each user doc carries a `sessionVersion` counter (starts at 0). The
+// session stored on a device remembers which version it was created
+// under. changePassword() bumps the counter in the same write as the
+// password change, so every OTHER device's stored session (still
+// pointing at the old version) stops matching the user doc's current
+// version the next time that device checks — which requireLogin() does
+// on every page load — and gets logged out automatically. The device
+// that actually changed the password re-stamps its own session with the
+// new version immediately, so it stays logged in.
+function setSession(username, sessionVersion) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ username, sv: sessionVersion || 0 }));
+}
+function _parseSession() {
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && parsed.username) return parsed;
+  } catch (e) {
+    // Falls through — pre-existing sessions (saved before this feature
+    // shipped) stored the bare username string instead of JSON.
+  }
+  return { username: raw, sv: 0 };
 }
 async function getSessionUser() {
-  const uname = localStorage.getItem(SESSION_KEY);
-  if (!uname) return null;
+  const sess = _parseSession();
+  if (!sess) return null;
   // requireLogin() (below) runs at the top of every page, before render()
   // asks for the same current-user doc again — using the cached fetch here
   // means that second ask is a cache hit instead of a second, fully
   // redundant Firestore read of the identical document.
-  return await getUserCached(uname);
+  const u = await getUserCached(sess.username);
+  if (!u) { clearSession(); return null; }
+  if ((u.sessionVersion || 0) !== (sess.sv || 0)) {
+    // Password was changed (here or elsewhere) since this device's
+    // session was created — treat this device as logged out too.
+    clearSession();
+    return null;
+  }
+  return u;
 }
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
@@ -344,7 +374,7 @@ async function createTeacherAndClass(name, username, password, className) {
 
   const user = {
     username, password, role: "teacher", name,
-    classCode: code, balance: 0
+    classCode: code, balance: 0, sessionVersion: 0
   };
 
   const cls = {
@@ -397,7 +427,8 @@ async function createStudentAccount(name, username, password, classCode) {
 
       const user = {
         username, password, role: "student", name,
-        classCode, balance: 20, jobId: null, savings: 0, loans: []
+        classCode, balance: 20, jobId: null, savings: 0, loans: [],
+        sessionVersion: 0
       };
       t.set(usersCol().doc(username), user);
 
@@ -418,8 +449,43 @@ async function createStudentAccount(name, username, password, classCode) {
 async function login(username, password) {
   const u = await getUser(username);
   if (!u || u.password !== password) return { ok: false, error: "Incorrect username or password." };
-  setSession(username);
+  setSession(username, u.sessionVersion || 0);
   return { ok: true, user: u };
+}
+
+/* ---------------- Change password ----------------
+   Bumps sessionVersion in the same write as the password change, which
+   is what signs every other logged-in device out (see the Session
+   section above for how that check works). Requires the current
+   password so a student walking away from an unlocked device can't have
+   their password silently swapped out from under them. */
+async function changePassword(username, oldPassword, newPassword) {
+  if (!newPassword || newPassword.length < 4) {
+    return { ok: false, error: "New password must be at least 4 characters." };
+  }
+  const ref = usersCol().doc(username);
+  let newVersion;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) throw new Error("NO_USER");
+      const u = snap.data();
+      if (u.password !== oldPassword) throw new Error("BAD_PASSWORD");
+      if (newPassword === oldPassword) throw new Error("SAME_PASSWORD");
+      newVersion = (u.sessionVersion || 0) + 1;
+      t.update(ref, { password: newPassword, sessionVersion: newVersion });
+    });
+  } catch (e) {
+    if (e.message === "NO_USER") return { ok: false, error: "Account not found." };
+    if (e.message === "BAD_PASSWORD") return { ok: false, error: "Current password is incorrect." };
+    if (e.message === "SAME_PASSWORD") return { ok: false, error: "New password must be different from your current password." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  // Re-stamp THIS device's own session with the new version immediately,
+  // so the device that just changed the password stays logged in — only
+  // every other device gets signed out.
+  setSession(username, newVersion);
+  return { ok: true };
 }
 
 /* ---------------- Money movement ---------------- */
