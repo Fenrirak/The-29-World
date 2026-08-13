@@ -763,7 +763,7 @@ async function savePayDay() {
 }
 async function saveMortgageDayClick() {
   await setMortgageDay(CLASS_CODE, document.getElementById("mortgageDaySelect").value);
-  alert("Mortgage day saved. Weekly mortgage payments will now be charged automatically whenever that day comes around.");
+  alert("Mortgage day saved. Students can pay their weekly mortgage installment themselves on this day.");
   await render();
 }
 async function saveGamblingEnabled() {
