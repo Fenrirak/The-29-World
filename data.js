@@ -488,6 +488,94 @@ async function changePassword(username, oldPassword, newPassword) {
   return { ok: true };
 }
 
+/* ---------------- Change-password modal (global, every page) ----------------
+   Built on demand with plain DOM injection — the same pattern
+   liquid-glass.js uses for its own settings popover — so there's no
+   per-page HTML to add or keep in sync. Opened from the "Change password"
+   row inside that popover (see lgBuildPopover() in liquid-glass.js).
+   Reuses the .anw-modal-overlay / .anw-modal-card classes already defined
+   in style.css for the random-event popup, so it matches the rest of the
+   app without new CSS. */
+function _pwBuildModal() {
+  const existing = document.getElementById("t29PasswordModal");
+  if (existing) return existing;
+
+  const overlay = document.createElement("div");
+  overlay.id = "t29PasswordModal";
+  overlay.className = "anw-modal-overlay hidden";
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closePasswordModal(); });
+
+  overlay.innerHTML = `
+    <div class="anw-modal-card">
+      <div class="flex-between">
+        <h2 style="margin:0 0 2px;">Change password</h2>
+        <button class="btn small secondary" type="button" id="t29PwCloseBtn">Close</button>
+      </div>
+      <label style="display:block;margin:14px 0 4px;font-size:.9rem;" for="t29PwCurrent">Current password</label>
+      <input type="password" id="t29PwCurrent" autocomplete="current-password" style="width:100%;">
+      <label style="display:block;margin:12px 0 4px;font-size:.9rem;" for="t29PwNew">New password</label>
+      <input type="password" id="t29PwNew" autocomplete="new-password" style="width:100%;">
+      <label style="display:block;margin:12px 0 4px;font-size:.9rem;" for="t29PwConfirm">Confirm new password</label>
+      <input type="password" id="t29PwConfirm" autocomplete="new-password" style="width:100%;">
+      <p class="muted-small" id="t29PwMsg" style="min-height:1.2em;margin-top:10px;"></p>
+      <button class="btn gold" type="button" id="t29PwSubmitBtn">Update password</button>
+      <p class="muted-small" style="margin-top:10px;">Changing your password will sign you out on any other device you're currently logged in on.</p>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector("#t29PwCloseBtn").addEventListener("click", closePasswordModal);
+  overlay.querySelector("#t29PwSubmitBtn").addEventListener("click", submitPasswordChange);
+  overlay.querySelectorAll("input").forEach(inp => {
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") submitPasswordChange(); });
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !overlay.classList.contains("hidden")) closePasswordModal();
+  });
+  return overlay;
+}
+
+function openPasswordModal() {
+  const overlay = _pwBuildModal();
+  overlay.querySelector("#t29PwCurrent").value = "";
+  overlay.querySelector("#t29PwNew").value = "";
+  overlay.querySelector("#t29PwConfirm").value = "";
+  overlay.querySelector("#t29PwMsg").textContent = "";
+  overlay.classList.remove("hidden");
+  overlay.querySelector("#t29PwCurrent").focus();
+}
+function closePasswordModal() {
+  const overlay = document.getElementById("t29PasswordModal");
+  if (overlay) overlay.classList.add("hidden");
+}
+async function submitPasswordChange() {
+  const overlay = document.getElementById("t29PasswordModal");
+  if (!overlay) return;
+  const oldPw = overlay.querySelector("#t29PwCurrent").value;
+  const newPw = overlay.querySelector("#t29PwNew").value;
+  const confirmPw = overlay.querySelector("#t29PwConfirm").value;
+  const msg = overlay.querySelector("#t29PwMsg");
+  const btn = overlay.querySelector("#t29PwSubmitBtn");
+
+  if (!oldPw || !newPw || !confirmPw) { msg.textContent = "Please fill in all three fields."; return; }
+  if (newPw !== confirmPw) { msg.textContent = "New passwords don't match."; return; }
+
+  const me = await getSessionUser();
+  if (!me) { msg.textContent = "You've been signed out — please log back in."; return; }
+
+  btn.disabled = true;
+  msg.textContent = "Updating...";
+  const res = await changePassword(me.username, oldPw, newPw);
+  btn.disabled = false;
+
+  if (!res.ok) { msg.textContent = res.error; return; }
+
+  overlay.querySelector("#t29PwCurrent").value = "";
+  overlay.querySelector("#t29PwNew").value = "";
+  overlay.querySelector("#t29PwConfirm").value = "";
+  msg.textContent = "Password updated — you're still signed in here. Any other device you were logged in on will need to sign back in.";
+}
+
 /* ---------------- Money movement ---------------- */
 async function adjustBalance(username, delta) {
   const ref = usersCol().doc(username);

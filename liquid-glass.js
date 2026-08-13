@@ -56,7 +56,7 @@ function lgBuildPopover() {
   pop.setAttribute("aria-label", "Display settings");
 
   pop.innerHTML = `
-    <div class="settings-popover-heading">${typeof icon === "function" ? icon("settings", 15) : ""}<span>Display settings</span></div>
+    <div class="settings-popover-heading">${typeof icon === "function" ? icon("settings", 15) : ""}<span>Settings</span></div>
     <div class="settings-popover-row">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Liquid Glass design</div>
@@ -67,6 +67,13 @@ function lgBuildPopover() {
         <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
       </label>
     </div>
+    <div class="settings-popover-row" id="t29ChangePasswordRow" style="cursor:pointer;">
+      <div class="settings-popover-text">
+        <div class="settings-popover-title">Change password</div>
+        <div class="settings-popover-desc">You'll stay signed in here — any other device you're logged in on will need to sign back in.</div>
+      </div>
+      <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
+    </div>
   `;
 
   document.body.appendChild(pop);
@@ -74,6 +81,21 @@ function lgBuildPopover() {
   const cb = pop.querySelector("#t29LiquidGlassToggle");
   cb.checked = lgIsOn();
   cb.addEventListener("change", () => lgSetOn(cb.checked));
+
+  // openPasswordModal() lives in data.js (loaded on every page) — the
+  // typeof guard is defensive only, in case some future page ever loads
+  // this file without data.js.
+  const pwRow = pop.querySelector("#t29ChangePasswordRow");
+  if (pwRow) {
+    if (typeof openPasswordModal === "function") {
+      pwRow.addEventListener("click", () => {
+        lgClosePopover();
+        openPasswordModal();
+      });
+    } else {
+      pwRow.style.display = "none";
+    }
+  }
 
   return pop;
 }
