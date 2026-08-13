@@ -78,13 +78,14 @@ async function init() {
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintChrome();
   enablePasswordToggles();
-  // Same reasoning as the other pages: these are 9 independent jobs, so
-  // running them together instead of one-at-a-time avoids 9 sequential
+  // Same reasoning as the other pages: these are 8 independent jobs, so
+  // running them together instead of one-at-a-time avoids 8 sequential
   // network round-trips on page load.
+  // Note: mortgage payments are NOT auto-deducted here (see payMortgage in
+  // data.js) — students pay their own weekly installment on the due day.
   await Promise.all([
     safeBgJob(autoPayDayIfDue(CLASS_CODE), "autoPayDayIfDue"),
     safeBgJob(processAutomations(CLASS_CODE), "processAutomations"),
-    safeBgJob(processMortgages(CLASS_CODE), "processMortgages"),
     safeBgJob(processTermDeposits(CLASS_CODE), "processTermDeposits"),
     safeBgJob(autoInterestIfDue(CLASS_CODE), "autoInterestIfDue"),
     safeBgJob(processInsurancePayments(CLASS_CODE), "processInsurancePayments"),
@@ -867,6 +868,16 @@ async function renderProfile(username) {
   }
 
   rows.push(`<h4>${icon("house", 16)} Property</h4>`);
+  if (poss.property && isMortgagePaymentOverdue(poss.property, cls)) {
+    rows.push(`
+      <div class="auto-row" style="background:#fde2e2;border:1px solid #f3a6a6;border-radius:8px;">
+        <div class="auto-details">
+          <strong>${icon("house", 14)} Mortgage payment overdue — ${poss.property.name}</strong>
+          <div class="muted-small">This week's payment (due ${DAY_FULL[cls.mortgageDay || "Fri"]}) hasn't been paid yet.</div>
+        </div>
+        <div class="status-declined">Unpaid</div>
+      </div>`);
+  }
   if (poss.property && poss.property.mortgageDefault) {
     const d = poss.property.mortgageDefault;
     rows.push(`

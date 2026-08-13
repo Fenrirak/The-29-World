@@ -64,15 +64,16 @@ async function init() {
   document.getElementById("whoami").textContent = u.name;
   paintChrome();
   // Fire any wages or automatic payments that have come due since last visit
-  // These 8 jobs are all independent of each other (each is its own
+  // These 7 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
-  // at a time — 8 separate sequential network round-trips — was a big
+  // at a time — 7 separate sequential network round-trips — was a big
   // chunk of load time, especially on a slow mobile connection. Running
   // them together cuts that to roughly the time of the single slowest one.
+  // Note: mortgage payments are NOT auto-deducted here (see payMortgage in
+  // data.js) — students pay their own weekly installment on the due day.
   await Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
-    safeBgJob(processMortgages(u.classCode), "processMortgages"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
     safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),

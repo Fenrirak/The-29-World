@@ -3821,6 +3821,13 @@ async function sellProperty(classCode, propId) {
   }
   return true;
 }
+// NOT CALLED ANYWHERE ANYMORE — mortgage payments are no longer taken
+// automatically. Left here only as a reference for the per-week interest
+// calculation (payMortgage below reuses the same formula) and in case this
+// behaviour is ever wanted back. Students now pay their own weekly
+// installment themselves via payMortgage, which only works on the due day
+// and only for the exact amount owed that week.
+//
 // Charges weekly mortgage installments, once per NZ calendar week per
 // property, but ONLY on the class's mortgageDay (teacher-set — see
 // setMortgageDay) — same day-gated pattern as processPropertyRent. The
@@ -4003,6 +4010,24 @@ async function payMortgage(username, classCode, propId) {
   }
   await logTxn(classCode, { type: "mortgage", from: username, amount: amt, note: `Mortgage payment: ${propName}` + (remainingAfter <= 0 ? " — paid off!" : "") });
   return { ok: true, amount: amt, fullyPaid: remainingAfter <= 0 };
+}
+
+// Whether this property's mortgage currently has a missed weekly payment —
+// i.e. its due day (see setMortgageDay) has already fully passed for the
+// current week and the student hasn't paid it themselves yet (see
+// payMortgage above). Used to show a red "payment overdue" warning on the
+// teacher's student profile popup. Purely a read of already-loaded data —
+// doesn't touch the database or move any money, and doesn't count how many
+// weeks running it's been missed, just whether it's currently overdue.
+function isMortgagePaymentOverdue(prop, cls) {
+  if (!prop || !prop.mortgage || prop.mortgage.weeksLeft <= 0) return false;
+  const weekKey = isoWeekKey(new Date());
+  if (prop.mortgage.purchaseWeekKey === weekKey) return false; // first week is always free
+  if (prop.mortgage.lastWeekPaid === weekKey) return false; // already paid this week
+  // ISO weekday ordinal, Monday = 0 ... Sunday = 6 — matches the Mon-Sun
+  // weeks isoWeekKey groups payments into, unlike DAY_NAMES' Sun-first order.
+  const isoIdx = day => (DAY_NAMES.indexOf(day) + 6) % 7;
+  return isoIdx(nzDayName()) > isoIdx(cls.mortgageDay || "Fri"); // due day has fully passed this week without payment
 }
 
 // Student picks (or changes, any time) whether they live in their property
