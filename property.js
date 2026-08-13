@@ -76,6 +76,17 @@ async function render() {
   document.getElementById("noProps").classList.toggle("hidden", props.length > 0);
 
   const groups = groupProperties(props);
+  // Students see their own home(s) first — everything else keeps its
+  // original (teacher-set) order after that. Array.sort is stable, so this
+  // only ever moves "owned by me" groups up, never reshuffles the rest.
+  // Teachers never own a unit, so this is a no-op for the teacher view.
+  if (!IS_TEACHER) {
+    groups.sort((a, b) => {
+      const aMine = a.some(u => u.owner === me.username) ? 0 : 1;
+      const bMine = b.some(u => u.owner === me.username) ? 0 : 1;
+      return aMine - bMine;
+    });
+  }
 
   groups.forEach(units => {
     const p = units[0]; // shared listing fields (name/price/comfort/etc) come from any unit
@@ -123,6 +134,7 @@ function ownedUnitBlock(p, isMine, cls, nameOf) {
     <div class="card" style="margin-top:8px;padding:10px 12px;">
       <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
       ${isMine && p.mortgageDefault ? `<p style="color:#b42318;"><strong>${icon("house", 13)} Your mortgage term ended on ${p.mortgageDefault.endedDate} without being fully paid off — you still owe ${fmtMoney(p.mortgageDefault.amountOwed)}.</strong></p>` : ""}
+      ${isMine && p.mortgage ? mortgagePayBlock(p, cls) : ""}
       ${occupancyBlock(p, isMine)}
       <div class="row-flex" style="gap:8px;margin-top:6px;">
         ${IS_TEACHER ? `<button class="btn small secondary" onclick="forceSell('${p.id}')">Sell back (${who})</button>` : (isMine ? `<button class="btn small secondary" onclick="sellMine('${p.id}')">Sell back</button>` : "")}
@@ -166,6 +178,48 @@ function occupancyBlock(p, isMine) {
         ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out</button>` : ""}
       </div>
     </div>`;
+}
+
+// Shows this week's mortgage-payment status for the owner, and — only on
+// the exact due day, for the exact due week — a button to pay it manually
+// instead of waiting for the automatic weekly job. There's never an amount
+// to type in: the weekly installment (+ interest) is fixed by the mortgage
+// itself, same figure the automatic job would charge.
+function mortgagePayBlock(p, cls) {
+  const mortgageDayName = DAY_FULL[cls.mortgageDay || "Fri"];
+  const weekKey = isoWeekKey(new Date());
+  const purchaseWeek = p.mortgage.purchaseWeekKey === weekKey;
+  const alreadyPaid = p.mortgage.lastWeekPaid === weekKey;
+  const isDueToday = (cls.mortgageDay || "Fri") === nzDayName();
+
+  let status, canPay = false;
+  if (purchaseWeek) {
+    status = `Your first payment isn't due yet — the week you bought is free.`;
+  } else if (alreadyPaid) {
+    status = `${icon("house", 13)} This week's payment is already sorted.`;
+  } else if (!isDueToday) {
+    status = `Mortgage payments are due every ${mortgageDayName} — come back then to pay this week's installment yourself.`;
+  } else {
+    status = `This week's payment is due today.`;
+    canPay = true;
+  }
+
+  return `
+    <div class="card" style="margin-top:8px;padding:10px 12px;">
+      <p class="muted-small">${status}</p>
+      ${canPay ? `<button class="btn small gold" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay this week's mortgage</button>` : ""}
+      <div id="mortgageMsg-${p.id}"></div>
+    </div>`;
+}
+
+async function payMortgageClick(id) {
+  const res = await payMortgage(CURRENT.username, CURRENT.classCode, id);
+  if (!res.ok) {
+    const box = document.getElementById(`mortgageMsg-${id}`);
+    if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+    return;
+  }
+  await render();
 }
 
 async function chooseOccupancy(id, choice) {

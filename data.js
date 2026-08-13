@@ -3930,6 +3930,81 @@ async function processMortgages(classCode) {
   return ran;
 }
 
+// Lets a student manually pay off this week's mortgage installment
+// themselves, instead of only ever waiting for the automatic
+// processMortgages job to charge it. Mirrors the exact same
+// weekly-installment + interest calculation as processMortgages (see
+// above) so there's only ever one "right" amount to pay — students can't
+// pay extra, pay early against a future week, or pay a custom amount here.
+// Two guards keep this from being used to dodge or front-run the normal
+// schedule:
+//   - it only works on the class's mortgageDay (teacher-set), same day the
+//     automatic job runs; and
+//   - it's blocked during the ISO week the property was purchased (that
+//     week is always free, same as processMortgages), and once per ISO
+//     week thereafter via mortgage.lastWeekPaid, which this also sets so
+//     the automatic job never double-charges a week the student already
+//     paid manually themselves.
+// Unlike processMortgages, an unaffordable payment here is simply refused
+// (BROKE) rather than silently accumulating into mortgage.amountOwed —
+// that "charge regardless, track what's missed" behaviour only makes
+// sense for the automatic weekly sweep, not a payment the student is
+// actively choosing to make right now.
+async function payMortgage(username, classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  const userRef = usersCol().doc(username);
+  let amt = 0, remainingAfter = 0, propName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const classSnap = await t.get(classRef);
+      const userSnap = await t.get(userRef);
+      if (!classSnap.exists || !userSnap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(classSnap.data());
+      const user = userSnap.data();
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop || prop.owner !== username || !prop.mortgage || prop.mortgage.weeksLeft <= 0) throw new Error("NOT_FOUND");
+      if ((cls.mortgageDay || "Fri") !== nzDayName()) throw new Error("WRONG_DAY");
+      const weekKey = isoWeekKey(new Date());
+      if (prop.mortgage.purchaseWeekKey === weekKey) throw new Error("PURCHASE_WEEK");
+      if (prop.mortgage.lastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
+      propName = prop.name;
+      // Same interest-on-remaining-principal calculation as processMortgages.
+      const principalBefore = prop.mortgage.principalRemaining != null
+        ? prop.mortgage.principalRemaining
+        : prop.mortgage.weeklyPayment * prop.mortgage.weeksLeft; // pre-existing mortgages without the field
+      const interestAmt = Math.round(principalBefore * ((prop.mortgage.interestRate || 0) / 100) * 100) / 100;
+      amt = Math.round((prop.mortgage.weeklyPayment + interestAmt) * 100) / 100;
+      if (user.balance < amt) throw new Error("BROKE");
+      t.update(userRef, { balance: Math.round((user.balance - amt) * 100) / 100 });
+      prop.mortgage.principalRemaining = Math.max(0, Math.round((principalBefore - prop.mortgage.weeklyPayment) * 100) / 100);
+      prop.mortgage.weeksLeft -= 1;
+      prop.mortgage.lastWeekPaid = weekKey;
+      remainingAfter = prop.mortgage.weeksLeft;
+      if (remainingAfter <= 0) {
+        // Same end-of-term check as processMortgages: any amountOwed left
+        // over from earlier missed automatic payments still flags a
+        // default even though this final week's payment itself went
+        // through fine.
+        const owedAtEnd = prop.mortgage.amountOwed || 0;
+        if (owedAtEnd > 0) {
+          prop.mortgageDefault = { amountOwed: owedAtEnd, missedPayments: prop.mortgage.missedPayments || 0, endedDate: nzDateKey() };
+        }
+        prop.mortgage = null;
+      }
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay your mortgage on its due day." };
+    if (e.message === "PURCHASE_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you bought is free." };
+    if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's payment has already gone through." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's payment." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That mortgage couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "mortgage", from: username, amount: amt, note: `Mortgage payment: ${propName}` + (remainingAfter <= 0 ? " — paid off!" : "") });
+  return { ok: true, amount: amt, fullyPaid: remainingAfter <= 0 };
+}
+
 // Student picks (or changes, any time) whether they live in their property
 // or rent it out. Living in it earns a flat lifestyle bonus (see
 // lifestyleRatingFromData); renting it out earns weekly rent instead, paid
