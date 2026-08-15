@@ -2949,7 +2949,11 @@ async function processWeeklyBigEvents(classCode, opts) {
 }
 
 // choice: 'forfeit' | 'pay' | 'claim'
-async function resolveBigEvent(username, classCode, logId, choice) {
+// paySource (only used when choice === 'pay'): 'cash' | 'savings' — lets a
+// student cover a big event out of their Savings Account instead of their
+// everyday cash balance. Defaults to 'cash' so any existing caller that
+// doesn't pass this keeps behaving exactly as before.
+async function resolveBigEvent(username, classCode, logId, choice, paySource) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let outcomeNote = "", amount = 0;
@@ -2980,11 +2984,21 @@ async function resolveBigEvent(username, classCode, logId, choice) {
         }
         if (entry.module === "income") t.update(classRef, { bigEventLog: cls.bigEventLog });
       } else if (choice === "pay") {
-        if (!isTeacher && user.balance < entry.cost) throw new Error("BROKE");
+        const source = paySource === "savings" ? "savings" : "cash";
+        const cash = user.balance || 0;
+        const savings = user.savings || 0;
+        const available = source === "savings" ? savings : cash;
+        if (!isTeacher && available < entry.cost) throw new Error(source === "savings" ? "BROKE_SAVINGS" : "BROKE");
         entry.status = "paid";
         amount = entry.cost;
-        outcomeNote = `Paid ${fmtMoney(entry.cost)} for "${entry.name}"`;
-        if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - entry.cost) * 100) / 100 });
+        outcomeNote = `Paid ${fmtMoney(entry.cost)} for "${entry.name}"` + (source === "savings" ? " (from savings)" : "");
+        if (!isTeacher) {
+          if (source === "savings") {
+            t.update(userRef, { savings: Math.round((savings - entry.cost) * 100) / 100 });
+          } else {
+            t.update(userRef, { balance: Math.round((cash - entry.cost) * 100) / 100 });
+          }
+        }
         t.update(classRef, { bigEventLog: cls.bigEventLog });
       } else if (choice === "claim") {
         const coverage = MODULE_TO_COVERAGE[entry.module];
@@ -3002,7 +3016,8 @@ async function resolveBigEvent(username, classCode, logId, choice) {
       }
     });
   } catch (e) {
-    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money to pay that." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash to pay that." };
+    if (e.message === "BROKE_SAVINGS") return { ok: false, error: "You don't have enough in savings to pay that." };
     if (e.message === "BROKE_EXCESS") return { ok: false, error: "You don't have enough money to pay the excess." };
     if (e.message === "NO_PLAN") return { ok: false, error: "You don't have a matching insurance plan for this." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That event is no longer pending." };

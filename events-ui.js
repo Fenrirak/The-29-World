@@ -283,7 +283,7 @@ async function checkBigEventPopup(username, classCode) {
     const user = await getUser(username);
     const coverage = BIG_EVENT_COVERAGE[pending.module];
     const plan = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).find(p => p && p.coverage === coverage);
-    showBigEventPopup(pending, plan, username, classCode);
+    showBigEventPopup(pending, plan, username, classCode, user);
     return;
   }
 
@@ -320,12 +320,21 @@ function showGoodBigEventPopup(entry) {
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
-function showBigEventPopup(entry, plan, username, classCode) {
+function showBigEventPopup(entry, plan, username, classCode, user) {
   const overlay = document.createElement("div");
   overlay.id = "anwBigEventModal";
   overlay.className = "anw-modal-overlay";
 
   const assetLabel = { income: "your job", property: "your property", transport: "your vehicle" }[entry.module];
+
+  // Teachers can hit this modal too (defensive — resolveBigEvent lets them
+  // pay/claim regardless of balance), so don't gate their buttons on funds
+  // they don't actually need.
+  const isTeacher = user && user.role === "teacher";
+  const cash = (user && user.balance) || 0;
+  const savings = (user && user.savings) || 0;
+  const cashOk = isTeacher || cash >= entry.cost;
+  const savingsOk = isTeacher || savings >= entry.cost;
 
   overlay.innerHTML = `
     <div class="anw-modal-card">
@@ -335,7 +344,12 @@ function showBigEventPopup(entry, plan, username, classCode) {
       <p class="muted-small">You need to choose how to handle this before you can continue.</p>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
         <button class="btn coral" id="bigForfeitBtn">Don't pay — lose ${assetLabel}</button>
-        <button class="btn gold" id="bigPayBtn">Pay ${fmtMoney(entry.cost)}</button>
+        <button class="btn gold" id="bigPayCashBtn" ${cashOk ? "" : "disabled"}>
+          Pay ${fmtMoney(entry.cost)} from cash${cashOk ? "" : ` (only ${fmtMoney(cash)} available)`}
+        </button>
+        <button class="btn gold" id="bigPaySavingsBtn" ${savingsOk ? "" : "disabled"}>
+          Pay ${fmtMoney(entry.cost)} from savings${savingsOk ? "" : ` (only ${fmtMoney(savings)} available)`}
+        </button>
         <button class="btn secondary" id="bigClaimBtn" ${plan ? "" : "disabled"}>
           ${plan ? `Claim insurance (${plan.name}) — pay ${fmtMoney(plan.excess)} excess` : "Claim insurance (no matching plan)"}
         </button>
@@ -345,19 +359,34 @@ function showBigEventPopup(entry, plan, username, classCode) {
   `;
   document.body.appendChild(overlay);
 
-  const resolve = async (choice) => {
-    overlay.querySelectorAll("button").forEach(b => b.disabled = true);
-    const res = await resolveBigEvent(username, classCode, entry.id, choice);
+  // Only buttons that are actually usable get toggled between attempts.
+  // Buttons disabled because of a genuine constraint (not enough cash, not
+  // enough savings, no matching insurance plan) must STAY disabled after a
+  // failed attempt at a different option — previously ALL buttons were
+  // blindly re-enabled on any error, which could un-disable e.g. "Claim
+  // insurance" for a student with no matching plan.
+  const eligibleIds = ["bigForfeitBtn"];
+  if (cashOk) eligibleIds.push("bigPayCashBtn");
+  if (savingsOk) eligibleIds.push("bigPaySavingsBtn");
+  if (plan) eligibleIds.push("bigClaimBtn");
+  const setBusy = (busy) => {
+    eligibleIds.forEach(id => { document.getElementById(id).disabled = busy; });
+  };
+
+  const resolve = async (choice, paySource) => {
+    setBusy(true);
+    const res = await resolveBigEvent(username, classCode, entry.id, choice, paySource);
     if (res.ok) {
       overlay.remove();
       if (typeof render === "function") render();
     } else {
       document.getElementById("bigEventMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
-      overlay.querySelectorAll("button").forEach(b => b.disabled = false);
+      setBusy(false);
     }
   };
 
   document.getElementById("bigForfeitBtn").addEventListener("click", () => resolve("forfeit"));
-  document.getElementById("bigPayBtn").addEventListener("click", () => resolve("pay"));
+  document.getElementById("bigPayCashBtn").addEventListener("click", () => resolve("pay", "cash"));
+  document.getElementById("bigPaySavingsBtn").addEventListener("click", () => resolve("pay", "savings"));
   document.getElementById("bigClaimBtn").addEventListener("click", () => resolve("claim"));
 }
