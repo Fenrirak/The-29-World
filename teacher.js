@@ -137,7 +137,8 @@ async function render() {
   students.forEach(s => {
     const row = board.find(r => r.username === s.username);
     const property = (cls.properties || []).find(p => p.owner === s.username);
-    const vehicle = (cls.vehicles || []).find(v => v.owner === s.username);
+    const vehicle = (cls.vehicles || []).filter(v => (v.owners || []).includes(s.username))
+      .reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
     const stats = {
       netWorth: row ? row.net : 0,
       propertyComfort: property ? (property.comfort || 0) : 0,
