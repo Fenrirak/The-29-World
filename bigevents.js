@@ -1,6 +1,6 @@
 let CURRENT, IS_TEACHER, EDITING_ID = null;
 
-const MODULE_LABEL = { income: "Income", property: "Property", transport: "Transport" };
+const MODULE_LABEL = { income: "Income", property: "Property", transport: "Transport", general: "General" };
 const STATUS_LABEL = { pending: "Awaiting response", paid: "Paid", lost: "Lost the asset", claimed: "Claimed on insurance", received: "Received" };
 const STATUS_CLASS = { pending: "status-pending", paid: "status-approved", lost: "status-declined", claimed: "status-approved", received: "status-approved" };
 
@@ -11,6 +11,13 @@ function updateCostLabel() {
   // events are windfalls with nothing to forfeit.
   document.getElementById("takesAssetRow").classList.toggle("hidden", kind === "good");
   document.getElementById("takesAssetHint").classList.toggle("hidden", kind === "good");
+  // "General" (not tied to any job/property/vehicle) only makes sense for
+  // good events — a bad event needs a real asset to threaten or insure.
+  const generalOpt = document.getElementById("beModuleGeneral");
+  const moduleSelect = document.getElementById("beModule");
+  generalOpt.classList.toggle("hidden", kind !== "good");
+  generalOpt.disabled = kind !== "good";
+  if (kind !== "good" && moduleSelect.value === "general") moduleSelect.value = "income";
 }
 
 function paintChrome() {
@@ -73,6 +80,7 @@ async function render() {
       const div = document.createElement("div");
       div.className = "card company-card";
       const isGood = d.kind === "good";
+      const isGeneral = d.module === "general";
       const takesAsset = d.takesAsset !== false;
       div.innerHTML = `
         <div class="flex-between">
@@ -81,6 +89,7 @@ async function render() {
             <p>${d.description || "No description provided."}</p>
             <p><strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay or claim's excess"}</p>
             ${!isGood ? `<p class="muted-small">${takesAsset ? "Not paying costs the student the related job/property/vehicle." : "Cost only — the student can't lose the asset over this."}</p>` : ""}
+            ${isGood && isGeneral ? `<p class="muted-small">Open to everyone — not tied to any job, property, or vehicle.</p>` : ""}
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn small secondary" onclick="startEditEvent('${d.id}')">${icon("idcard", 13)} Edit</button>

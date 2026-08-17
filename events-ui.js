@@ -252,7 +252,7 @@ function showAdjustmentPopup(txn) {
    Unlike small weekly events, big events must be resolved — the modal has
    no close button and clicking outside doesn't dismiss it. It reappears on
    every page load until the student picks pay / forfeit / claim. */
-const BIG_EVENT_MODULE_LABEL = { income: "Income", property: "Property", transport: "Transport" };
+const BIG_EVENT_MODULE_LABEL = { income: "Income", property: "Property", transport: "Transport", general: "General" };
 const BIG_EVENT_COVERAGE = { income: "jobs", property: "property", transport: "transport" };
 
 function bigEventsShownKey(username) {

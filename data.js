@@ -2816,8 +2816,23 @@ async function getBlackjackRound(username) {
 }
 
 /* ===================== Big events ===================== */
-const BIG_EVENT_MODULES = ["income", "property", "transport"];
+const BIG_EVENT_MODULES = ["income", "property", "transport", "general"];
+// "General" isn't tied to any module — it's only valid on "good" events
+// (a pure windfall with nothing at stake), since "bad" events need a real
+// job/property/vehicle to attach the loss/insurance-claim to.
+const BIG_EVENT_ASSET_MODULES = ["income", "property", "transport"];
 const MODULE_TO_COVERAGE = { income: "jobs", property: "property", transport: "transport" };
+
+// "general" is only a legal module for "good" events — a "bad" event
+// always needs a real asset to threaten/insure, so it silently falls back
+// to "income" if someone tries to save a bad event as general (shouldn't
+// happen via the UI, but keep the data model honest either way).
+function resolveBigEventModule(module, kind) {
+  const isGood = kind === "good";
+  const allowed = isGood ? BIG_EVENT_MODULES : BIG_EVENT_ASSET_MODULES;
+  if (allowed.includes(module)) return module;
+  return isGood ? "general" : "income";
+}
 
 async function addBigEventDef(classCode, ev) {
   const classRef = classesCol().doc(classCode);
@@ -2825,17 +2840,19 @@ async function addBigEventDef(classCode, ev) {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    const kind = ev.kind === "good" ? "good" : "bad";
     cls.bigEventDefs.push({
       id: uid("big"), name: ev.name,
-      module: BIG_EVENT_MODULES.includes(ev.module) ? ev.module : "income",
-      kind: ev.kind === "good" ? "good" : "bad",
+      module: resolveBigEventModule(ev.module, kind),
+      kind,
       cost: Math.max(0, Number(ev.cost) || 0), description: ev.description || "", active: true,
       // Whether NOT paying this event costs the student the related
       // job/property/vehicle. Defaults true so existing "bad" events keep
       // behaving exactly as before. When false, the event is still tied to
       // the module (for eligibility + insurance matching) but the student
       // never loses the asset over it — they just owe the amount, covered
-      // by insurance if they have a matching plan.
+      // by insurance if they have a matching plan. Meaningless (and
+      // ignored) for "general" events since there's no asset either way.
       takesAsset: ev.takesAsset === false ? false : true
     });
     t.update(classRef, { bigEventDefs: cls.bigEventDefs });
@@ -2859,9 +2876,10 @@ async function updateBigEventDef(classCode, defId, ev) {
     const cls = withNewModuleDefaults(snap.data());
     const existing = cls.bigEventDefs.find(e => e.id === defId);
     if (!existing) return;
+    const kind = ev.kind === "good" ? "good" : "bad";
     existing.name = ev.name;
-    existing.module = BIG_EVENT_MODULES.includes(ev.module) ? ev.module : "income";
-    existing.kind = ev.kind === "good" ? "good" : "bad";
+    existing.kind = kind;
+    existing.module = resolveBigEventModule(ev.module, kind);
     existing.cost = Math.max(0, Number(ev.cost) || 0);
     existing.description = ev.description || "";
     existing.takesAsset = ev.takesAsset === false ? false : true;
