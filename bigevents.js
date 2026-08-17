@@ -7,6 +7,10 @@ const STATUS_CLASS = { pending: "status-pending", paid: "status-approved", lost:
 function updateCostLabel() {
   const kind = document.getElementById("beKind").value;
   document.getElementById("labCost").textContent = kind === "good" ? "Amount paid to the student" : "Cost to fix / avoid";
+  // Losing the asset is only ever a possibility for "bad" events — good
+  // events are windfalls with nothing to forfeit.
+  document.getElementById("takesAssetRow").classList.toggle("hidden", kind === "good");
+  document.getElementById("takesAssetHint").classList.toggle("hidden", kind === "good");
 }
 
 function paintChrome() {
@@ -69,12 +73,14 @@ async function render() {
       const div = document.createElement("div");
       div.className = "card company-card";
       const isGood = d.kind === "good";
+      const takesAsset = d.takesAsset !== false;
       div.innerHTML = `
         <div class="flex-between">
           <div>
             <h4>${icon("star", 20)}${d.name} <span class="badge navy">${MODULE_LABEL[d.module]}</span> <span class="badge ${isGood ? "gold" : "coral"}">${isGood ? "Good" : "Bad"}</span></h4>
             <p>${d.description || "No description provided."}</p>
             <p><strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay or claim's excess"}</p>
+            ${!isGood ? `<p class="muted-small">${takesAsset ? "Not paying costs the student the related job/property/vehicle." : "Cost only — the student can't lose the asset over this."}</p>` : ""}
           </div>
           <button class="btn small coral" onclick="deleteEvent('${d.id}')">${icon("trash", 13)} Remove</button>
         </div>
@@ -111,11 +117,13 @@ async function addEvent(e) {
     module: document.getElementById("beModule").value,
     kind: document.getElementById("beKind").value,
     cost: document.getElementById("beCost").value,
-    description: document.getElementById("beDesc").value.trim()
+    description: document.getElementById("beDesc").value.trim(),
+    takesAsset: document.getElementById("beTakesAsset").checked
   };
   await addBigEventDef(CURRENT.classCode, ev);
   document.getElementById("addMsg").innerHTML = `<div class="success-msg">Big event added!</div>`;
   ["beName","beCost","beDesc"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("beTakesAsset").checked = true;
   await render();
   return false;
 }

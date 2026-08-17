@@ -73,6 +73,11 @@
       </div>
       <label for="beDesc" id="labDesc">Description (shown to students)</label>
       <input id="beDesc" placeholder="e.g. Your workplace had to let you go">
+      <div id="takesAssetRow" class="flex-row" style="align-items:center;gap:8px;margin-top:10px;">
+        <input type="checkbox" id="beTakesAsset" checked style="width:auto;">
+        <label for="beTakesAsset" id="labTakesAsset" style="margin:0;">If the student doesn't pay, also take away the related job/property/vehicle</label>
+      </div>
+      <p class="muted-small" id="takesAssetHint">Untick this for events that are just a cost (e.g. a fine, a repair bill) — the student will only be able to pay or claim insurance, never lose the asset itself.</p>
       <button class="btn gold" type="submit" id="addBtn">Add event</button>
     </form>
     <div id="addMsg"></div>

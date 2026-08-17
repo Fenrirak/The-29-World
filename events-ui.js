@@ -326,6 +326,11 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
   overlay.className = "anw-modal-overlay";
 
   const assetLabel = { income: "your job", property: "your property", transport: "your vehicle" }[entry.module];
+  // Some events are only ever a cost — the def can be set so not paying
+  // never takes the associated job/property/vehicle away. Older log
+  // entries (created before this option existed) had no such field, so
+  // treat that as "at risk", same as before.
+  const canForfeit = entry.takesAsset !== false;
 
   // Teachers can hit this modal too (defensive — resolveBigEvent lets them
   // pay/claim regardless of balance), so don't gate their buttons on funds
@@ -341,9 +346,9 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
       <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${entry.name}</h2>
       <p>${entry.description || ""}</p>
       <p><strong>${BIG_EVENT_MODULE_LABEL[entry.module]}</strong> &middot; costs <strong>${fmtMoney(entry.cost)}</strong> to resolve</p>
-      <p class="muted-small">You need to choose how to handle this before you can continue.</p>
+      <p class="muted-small">${canForfeit ? "You need to choose how to handle this before you can continue." : `This doesn't put ${assetLabel} at risk — you just need to cover the cost, or claim insurance if you have it.`}</p>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
-        <button class="btn coral" id="bigForfeitBtn">Don't pay — lose ${assetLabel}</button>
+        ${canForfeit ? `<button class="btn coral" id="bigForfeitBtn">Don't pay — lose ${assetLabel}</button>` : ""}
         <button class="btn gold" id="bigPayCashBtn" ${cashOk ? "" : "disabled"}>
           Pay ${fmtMoney(entry.cost)} from cash${cashOk ? "" : ` (only ${fmtMoney(cash)} available)`}
         </button>
@@ -365,7 +370,8 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
   // failed attempt at a different option — previously ALL buttons were
   // blindly re-enabled on any error, which could un-disable e.g. "Claim
   // insurance" for a student with no matching plan.
-  const eligibleIds = ["bigForfeitBtn"];
+  const eligibleIds = [];
+  if (canForfeit) eligibleIds.push("bigForfeitBtn");
   if (cashOk) eligibleIds.push("bigPayCashBtn");
   if (savingsOk) eligibleIds.push("bigPaySavingsBtn");
   if (plan) eligibleIds.push("bigClaimBtn");
@@ -385,7 +391,7 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
     }
   };
 
-  document.getElementById("bigForfeitBtn").addEventListener("click", () => resolve("forfeit"));
+  if (canForfeit) document.getElementById("bigForfeitBtn").addEventListener("click", () => resolve("forfeit"));
   document.getElementById("bigPayCashBtn").addEventListener("click", () => resolve("pay", "cash"));
   document.getElementById("bigPaySavingsBtn").addEventListener("click", () => resolve("pay", "savings"));
   document.getElementById("bigClaimBtn").addEventListener("click", () => resolve("claim"));

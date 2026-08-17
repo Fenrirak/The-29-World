@@ -2829,7 +2829,14 @@ async function addBigEventDef(classCode, ev) {
       id: uid("big"), name: ev.name,
       module: BIG_EVENT_MODULES.includes(ev.module) ? ev.module : "income",
       kind: ev.kind === "good" ? "good" : "bad",
-      cost: Math.max(0, Number(ev.cost) || 0), description: ev.description || "", active: true
+      cost: Math.max(0, Number(ev.cost) || 0), description: ev.description || "", active: true,
+      // Whether NOT paying this event costs the student the related
+      // job/property/vehicle. Defaults true so existing "bad" events keep
+      // behaving exactly as before. When false, the event is still tied to
+      // the module (for eligibility + insurance matching) but the student
+      // never loses the asset over it — they just owe the amount, covered
+      // by insurance if they have a matching plan.
+      takesAsset: ev.takesAsset === false ? false : true
     });
     t.update(classRef, { bigEventDefs: cls.bigEventDefs });
   });
@@ -2857,6 +2864,7 @@ async function updateBigEventDef(classCode, defId, ev) {
     existing.kind = ev.kind === "good" ? "good" : "bad";
     existing.cost = Math.max(0, Number(ev.cost) || 0);
     existing.description = ev.description || "";
+    existing.takesAsset = ev.takesAsset === false ? false : true;
     t.update(classRef, { bigEventDefs: cls.bigEventDefs });
   });
 }
@@ -2921,9 +2929,13 @@ async function processWeeklyBigEvents(classCode, opts) {
     newEntries.push({
       id: uid("bigevlog"), studentUser: student.username, defId: def.id, week: weekKey, date: nowStr(),
       name: def.name, module: def.module, kind: def.kind || "bad", cost: def.cost, description: def.description || "",
+      // Locked in at generation time so editing the def later never changes
+      // how an already-issued event resolves.
+      takesAsset: def.takesAsset === false ? false : true,
       // Good events need no choice from the student — they're paid out
       // immediately and just get an acknowledgment popup. Bad events stay
-      // "pending" until the student picks pay / forfeit / claim.
+      // "pending" until the student picks pay / forfeit / claim (or just
+      // pay / claim, if this event doesn't put the asset at risk).
       status: def.kind === "good" ? "received" : "pending"
     });
   }
@@ -2969,6 +2981,10 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource) {
       const isTeacher = user.role === "teacher";
 
       if (choice === "forfeit") {
+        // Defensive server-side check — the UI already hides this option
+        // when the event doesn't put the asset at risk, but never trust
+        // the client alone.
+        if (entry.takesAsset === false) throw new Error("NO_FORFEIT");
         entry.status = "lost";
         outcomeNote = `Didn't pay for "${entry.name}" — lost the associated ${entry.module}`;
         if (entry.module === "income") {
@@ -3020,6 +3036,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource) {
     if (e.message === "BROKE_SAVINGS") return { ok: false, error: "You don't have enough in savings to pay that." };
     if (e.message === "BROKE_EXCESS") return { ok: false, error: "You don't have enough money to pay the excess." };
     if (e.message === "NO_PLAN") return { ok: false, error: "You don't have a matching insurance plan for this." };
+    if (e.message === "NO_FORFEIT") return { ok: false, error: "This event doesn't allow losing the asset — you need to pay or claim insurance." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That event is no longer pending." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
