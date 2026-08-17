@@ -1,4 +1,4 @@
-let CURRENT, IS_TEACHER;
+let CURRENT, IS_TEACHER, EDITING_ID = null;
 
 const MODULE_LABEL = { income: "Income", property: "Property", transport: "Transport" };
 const STATUS_LABEL = { pending: "Awaiting response", paid: "Paid", lost: "Lost the asset", claimed: "Claimed on insurance", received: "Received" };
@@ -82,7 +82,10 @@ async function render() {
             <p><strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay or claim's excess"}</p>
             ${!isGood ? `<p class="muted-small">${takesAsset ? "Not paying costs the student the related job/property/vehicle." : "Cost only — the student can't lose the asset over this."}</p>` : ""}
           </div>
-          <button class="btn small coral" onclick="deleteEvent('${d.id}')">${icon("trash", 13)} Remove</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn small secondary" onclick="startEditEvent('${d.id}')">${icon("idcard", 13)} Edit</button>
+            <button class="btn small coral" onclick="deleteEvent('${d.id}')">${icon("trash", 13)} Remove</button>
+          </div>
         </div>
       `;
       list.appendChild(div);
@@ -120,16 +123,60 @@ async function addEvent(e) {
     description: document.getElementById("beDesc").value.trim(),
     takesAsset: document.getElementById("beTakesAsset").checked
   };
-  await addBigEventDef(CURRENT.classCode, ev);
-  document.getElementById("addMsg").innerHTML = `<div class="success-msg">Big event added!</div>`;
-  ["beName","beCost","beDesc"].forEach(id => document.getElementById(id).value = "");
-  document.getElementById("beTakesAsset").checked = true;
+  if (EDITING_ID) {
+    await updateBigEventDef(CURRENT.classCode, EDITING_ID, ev);
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Big event updated!</div>`;
+  } else {
+    await addBigEventDef(CURRENT.classCode, ev);
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Big event added!</div>`;
+  }
+  resetEventForm();
   await render();
   return false;
 }
 
+function resetEventForm() {
+  EDITING_ID = null;
+  ["beName","beCost","beDesc"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("beTakesAsset").checked = true;
+  document.getElementById("beKind").value = "bad";
+  document.getElementById("beModule").value = "income";
+  updateCostLabel();
+  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add event";
+  const cancelBtn = document.getElementById("cancelEditBtn");
+  if (cancelBtn) cancelBtn.remove();
+}
+
+function startEditEvent(id) {
+  getClassCached(CURRENT.classCode).then(cls => {
+    const d = (cls.bigEventDefs || []).find(x => x.id === id);
+    if (!d) return;
+    EDITING_ID = id;
+    document.getElementById("beName").value = d.name;
+    document.getElementById("beModule").value = d.module;
+    document.getElementById("beKind").value = d.kind || "bad";
+    document.getElementById("beCost").value = d.cost;
+    document.getElementById("beDesc").value = d.description || "";
+    document.getElementById("beTakesAsset").checked = d.takesAsset !== false;
+    updateCostLabel();
+    document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
+    if (!document.getElementById("cancelEditBtn")) {
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.id = "cancelEditBtn";
+      cancelBtn.className = "btn small secondary";
+      cancelBtn.style.marginLeft = "8px";
+      cancelBtn.textContent = "Cancel edit";
+      cancelBtn.onclick = resetEventForm;
+      document.getElementById("addBtn").insertAdjacentElement("afterend", cancelBtn);
+    }
+    document.getElementById("addBtn").scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
 async function deleteEvent(id) {
   if (confirm("Remove this big event? It won't be handed out anymore.")) {
+    if (id === EDITING_ID) resetEventForm();
     await removeBigEventDef(CURRENT.classCode, id);
     await render();
   }
