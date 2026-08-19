@@ -1326,9 +1326,45 @@ async function setPriceRange(classCode, min, max) {
   });
 }
 
+// Applies one simulated day's random price move to every company on `cls`
+// IN PLACE, and returns the per-company results. Shared by the auto-trigger
+// and the manual "Simulate a market day" button so both move prices exactly
+// the same way.
+function applyMarketDayMoves(cls) {
+  const results = [];
+  const range = cls.priceRange || { min: 1, max: 5 };
+  cls.companies.forEach(co => {
+    const coRange = co.priceRange || range;
+    const pct = coRange.min + Math.random() * (coRange.max - coRange.min);
+    const direction = Math.random() < 0.5 ? -1 : 1;
+    const newPrice = Math.max(0.01, Math.round(co.price * (1 + (direction * pct) / 100) * 100) / 100);
+    co.price = newPrice;
+    co.history.push(newPrice);
+    if (co.history.length > 30) co.history.shift();
+    results.push({ name: co.name, pct: direction * pct });
+  });
+  return results;
+}
+
 // Runs the market simulation automatically once per NZ calendar day — the
 // first page load of the day (from any student or teacher) that hits this
 // triggers it, same pattern as autoPayDayIfDue / autoInterestIfDue.
+//
+// The "claim today" flag and the actual price simulation used to be two
+// SEPARATE transactions (claim, then simulate). That let a Firestore
+// transaction retry — which happens automatically whenever this doc gets
+// written to by something else, e.g. a student buying/selling shares, at
+// the same moment two page loads were racing to claim the day — leave a
+// stale `claimed = true` from a failed first attempt in place even when a
+// later retry correctly detected the day was already claimed by someone
+// else and returned without writing anything. That stale flag then went on
+// to trigger a second, unwanted simulateMarketDay() call — an occasional,
+// contention-dependent extra simulation with no relation to midnight or
+// the manual button. Doing the claim AND the price move in one atomic
+// transaction (with the results array reset on every attempt, since
+// retries re-run this whole function) removes that possibility entirely:
+// either this transaction commits once, having both claimed the day and
+// moved the prices, or it does neither.
 async function autoMarketDayIfDue(classCode) {
   const cls = await getClass(classCode);
   if (!cls) return [];
@@ -1339,37 +1375,28 @@ async function autoMarketDayIfDue(classCode) {
     return [];
   }
   const classRef = classesCol().doc(classCode);
-  let claimed = false;
+  let results = [];
   await fdb.runTransaction(async (t) => {
+    results = []; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const liveCls = snap.data();
     if (liveCls.lastMarketDayRun === todayKey) return;
-    t.update(classRef, { lastMarketDayRun: todayKey });
-    claimed = true;
+    results = applyMarketDayMoves(liveCls);
+    t.update(classRef, { companies: liveCls.companies, lastMarketDayRun: todayKey });
   });
-  if (!claimed) return [];
-  return await simulateMarketDay(classCode);
+  return results;
 }
 
 async function simulateMarketDay(classCode) {
   const classRef = classesCol().doc(classCode);
   let results = [];
   await fdb.runTransaction(async (t) => {
+    results = []; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
-    const range = cls.priceRange || { min: 1, max: 5 };
-    cls.companies.forEach(co => {
-      const coRange = co.priceRange || range;
-      const pct = coRange.min + Math.random() * (coRange.max - coRange.min);
-      const direction = Math.random() < 0.5 ? -1 : 1;
-      const newPrice = Math.max(0.01, Math.round(co.price * (1 + (direction * pct) / 100) * 100) / 100);
-      co.price = newPrice;
-      co.history.push(newPrice);
-      if (co.history.length > 30) co.history.shift();
-      results.push({ name: co.name, pct: direction * pct });
-    });
+    results = applyMarketDayMoves(cls);
     t.update(classRef, { companies: cls.companies });
   });
   return results;
