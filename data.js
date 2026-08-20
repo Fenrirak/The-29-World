@@ -1720,7 +1720,8 @@ async function addVehicle(classCode, v) {
     cls.vehicles.push({
       id: uid("veh"), name: v.name, price: Number(v.price),
       comfort: Math.max(1, Math.min(5, Number(v.comfort) || 1)),
-      description: v.description || "", owners: []
+      description: v.description || "", owners: [],
+      stockLimit: (v.stockLimit === "" || v.stockLimit === undefined || v.stockLimit === null) ? null : Math.max(0, Math.floor(Number(v.stockLimit)))
     });
     t.update(classRef, { vehicles: cls.vehicles });
   });
@@ -1747,6 +1748,7 @@ async function updateVehicle(classCode, vehId, updates) {
     veh.price = Number(updates.price);
     veh.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
     veh.description = updates.description || "";
+    veh.stockLimit = (updates.stockLimit === "" || updates.stockLimit === undefined || updates.stockLimit === null) ? null : Math.max(0, Math.floor(Number(updates.stockLimit)));
     t.update(classRef, { vehicles: cls.vehicles });
   });
 }
@@ -1765,6 +1767,7 @@ async function buyVehicle(username, classCode, vehId) {
       if (!veh) throw new Error("NOT_FOUND");
       veh.owners = veh.owners || [];
       if (veh.owners.includes(username)) throw new Error("ALREADY_OWN");
+      if (veh.stockLimit !== null && veh.stockLimit !== undefined && veh.owners.length >= veh.stockLimit) throw new Error("SOLD_OUT");
       const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "transport", veh.price);
       taxAmount = tax;
       const isTeacher = user.role === "teacher";
@@ -1778,6 +1781,7 @@ async function buyVehicle(username, classCode, vehId) {
   } catch (e) {
     if (e.message === "ALREADY_OWN") return { ok: false, error: "You already own this vehicle." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    if (e.message === "SOLD_OUT") return { ok: false, error: "This vehicle is sold out." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });

@@ -12,6 +12,7 @@ function paintChrome() {
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add vehicle";
   document.getElementById("hMyVehicles").innerHTML = icon("car", 18) + " My vehicles";
   document.getElementById("hBrowse").innerHTML = icon("car", 18) + " Available vehicles";
+  document.getElementById("labStock").textContent = "Stock limit (leave blank for unlimited)";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -90,8 +91,14 @@ async function render() {
   vehicles.forEach(v => {
     const owners = v.owners || [];
     const isMine = owners.includes(me.username);
+    const hasLimit = v.stockLimit !== null && v.stockLimit !== undefined;
+    const remaining = hasLimit ? Math.max(0, v.stockLimit - owners.length) : null;
+    const soldOut = hasLimit && remaining <= 0;
     const ownedLabel = owners.length === 0 ? "Available"
       : `Owned by ${owners.length} student${owners.length === 1 ? "" : "s"}`;
+    const stockLabel = hasLimit
+      ? (soldOut ? `Sold out (0 of ${v.stockLimit} left)` : `${remaining} of ${v.stockLimit} left`)
+      : "Unlimited stock";
     const ownerRows = IS_TEACHER && owners.length > 0
       ? `<div class="owner-list">${owners.map(o => `
           <div class="auto-row">
@@ -107,7 +114,7 @@ async function render() {
           <h4>${icon("car", 20)}${v.name} ${isMine ? '<span class="badge mint">Yours</span>' : ""}</h4>
           <p>${v.description || "No description provided."}</p>
           <p>${comfortStars(v.comfort)} comfort</p>
-          <p><strong>${fmtMoney(v.price)}</strong> &middot; cash purchase only, unlimited stock</p>
+          <p><strong>${fmtMoney(v.price)}</strong> &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
           <p class="muted-small">${ownedLabel}</p>
           ${ownerRows}
         </div>
@@ -116,7 +123,9 @@ async function render() {
             ? `<button class="btn small secondary" onclick="editVeh('${v.id}')">${icon("plus", 13)} Edit</button><button class="btn small coral" onclick="deleteVeh('${v.id}')">${icon("trash", 13)} Remove</button>`
             : isMine
               ? `<button class="btn small secondary" onclick="sellMine('${v.id}')">Sell back</button>`
-              : `<button class="btn small gold" onclick="buyVeh('${v.id}')">Buy</button>`}
+              : soldOut
+                ? `<button class="btn small gold" disabled>Sold out</button>`
+                : `<button class="btn small gold" onclick="buyVeh('${v.id}')">Buy</button>`}
         </div>
       </div>
       <div id="msg-${v.id}"></div>
@@ -131,7 +140,8 @@ async function addProp(e) {
     name: document.getElementById("hName").value.trim(),
     price: document.getElementById("hPrice").value,
     comfort: document.getElementById("hComfort").value,
-    description: document.getElementById("hDesc").value.trim()
+    description: document.getElementById("hDesc").value.trim(),
+    stockLimit: document.getElementById("hStock").value.trim()
   };
   if (EDITING_ID) {
     await updateVehicle(CURRENT.classCode, EDITING_ID, veh);
@@ -140,7 +150,7 @@ async function addProp(e) {
   } else {
     await addVehicle(CURRENT.classCode, veh);
     document.getElementById("addMsg").innerHTML = `<div class="success-msg">Vehicle added!</div>`;
-    ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
+    ["hName","hPrice","hDesc","hStock"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("hComfort").value = 3;
   }
   await render();
@@ -156,6 +166,7 @@ async function editVeh(id) {
   document.getElementById("hPrice").value = veh.price;
   document.getElementById("hComfort").value = veh.comfort;
   document.getElementById("hDesc").value = veh.description || "";
+  document.getElementById("hStock").value = (veh.stockLimit === null || veh.stockLimit === undefined) ? "" : veh.stockLimit;
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit vehicle";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
   document.getElementById("cancelEditBtn").classList.remove("hidden");
@@ -165,7 +176,7 @@ async function editVeh(id) {
 
 function cancelEditVeh() {
   EDITING_ID = null;
-  ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
+  ["hName","hPrice","hDesc","hStock"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("hComfort").value = 3;
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a vehicle";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add vehicle";
