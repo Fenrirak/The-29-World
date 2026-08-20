@@ -351,10 +351,145 @@ async function getSessionUser() {
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
 }
-async function requireLogin() {
+
+/* ---------------- Daily time limit (teacher-settable, per student) ----
+   Design goal: enforcing/tracking this must not add any extra Firestore
+   READS beyond what every page already does. It works entirely off of
+   two fields already present on the user doc that requireLogin() fetches
+   on every single page load anyway:
+     dailyLimitMinutes — denormalized copy of the class setting (kept in
+       sync by setStudentTimeLimit() below, and copied onto new students
+       in createStudentAccount). 0/null = no limit.
+     timeSpentTodaySec / timeSpentDate — how much active time this
+       student has used today, and which day (NZ date key, same "what day
+       is it" convention as pay day / interest / mortgages elsewhere in
+       this file — see nzDateKey()) that count is for.
+
+   WRITES are the only cost, and they're kept cheap on purpose:
+     - Nothing is written at all for classes that don't set a limit.
+     - While a student is on the site, elapsed active seconds (tab must be
+       visible AND focused — a background or unfocused tab doesn't count,
+       since the ask was specifically time spent directly on the site)
+       accumulate in a plain JS variable. Only every ~10s of *active* time
+       does that get flushed to Firestore, as a single
+       FieldValue.increment() — a blind write, not a read-modify-write.
+       10s (not something larger like 30s) is deliberate: this app is a
+       multi-page site (Bank/Jobs/Market/etc are all separate page loads,
+       not one SPA), so a student bouncing between pages every few seconds
+       would otherwise lose most of their active time to never-flushed
+       seconds from short-lived pages.
+     - The tab being hidden, or the page unloading, forces an extra flush
+       so a closed tab doesn't lose more than a few seconds of credit —
+       though browsers don't guarantee an in-flight write started during
+       unload actually completes, so this is best-effort, not a guarantee.
+
+   Known limitation: the day boundary and "how much time has been used"
+   are both computed from data the client controls (the device clock feeds
+   nzDateKey(), and the student's own browser is what reports elapsed
+   seconds). Like the rest of this app's client-only architecture, this is
+   a soft, honor-system limit suitable for a classroom setting — a student
+   who deliberately changes their device's clock could reset or dodge it.
+   It is not a substitute for a server-enforced control. */
+
+// Pure, synchronous — only ever looks at fields already on hand from the
+// user doc requireLogin() just fetched. No I/O. Uses nzDateKey() (not the
+// device's local date) so every student's daily reset lines up with the
+// same "day" the rest of the app already uses for pay day/interest/etc,
+// regardless of which timezone a given device happens to be set to.
+function timeLimitStatus(u) {
+  const limitMin = u && u.dailyLimitMinutes;
+  if (!limitMin || limitMin <= 0) return { limited: false };
+  const spentSec = (u.timeSpentDate === nzDateKey()) ? (u.timeSpentTodaySec || 0) : 0;
+  return { limited: true, limitSec: limitMin * 60, spentSec, reached: spentSec >= limitMin * 60 };
+}
+
+let _timeTrackingStarted = false;
+function startTimeTracking(u) {
+  if (_timeTrackingStarted) return; // one tracker per page load, guaranteed
+  const status = timeLimitStatus(u);
+  if (!status.limited) return; // no limit set for this class — do nothing, zero cost
+  _timeTrackingStarted = true;
+
+  const username = u.username;
+  const dateAtLoad = nzDateKey();
+  let flushedIsFirst = u.timeSpentDate !== dateAtLoad; // crossed the day boundary since this was last recorded — first flush must overwrite, not increment
+  let sessionAccumSec = 0; // active seconds counted this page view, not yet flushed
+  let unflushedSec = 0; // active seconds counted since the last flush
+  const FLUSH_EVERY_SEC = 10;
+
+  // Flushes are chained through a single promise so overlapping triggers
+  // (the tick timer, visibilitychange, pagehide, and the final lockout
+  // flush can all fire close together) always run one at a time instead
+  // of racing — otherwise two flushes could both see the stale-day flag
+  // still set and both send an overwrite, with the second stomping the
+  // first's already-applied delta.
+  let flushChain = Promise.resolve();
+  function flush(finalBeforeLock) {
+    flushChain = flushChain.then(() => doFlush(finalBeforeLock));
+    return flushChain;
+  }
+  async function doFlush(finalBeforeLock) {
+    if (unflushedSec <= 0 && !finalBeforeLock) return;
+    const delta = unflushedSec;
+    unflushedSec = 0;
+    try {
+      if (flushedIsFirst) {
+        // Day rolled over since this was last written — overwrite rather
+        // than increment onto a stale prior-day value. Only cleared once
+        // the write actually succeeds, so a failed attempt correctly
+        // retries as an overwrite next time instead of silently falling
+        // back to incrementing onto the still-stale count.
+        await usersCol().doc(username).update({ timeSpentTodaySec: delta, timeSpentDate: dateAtLoad });
+        flushedIsFirst = false;
+      } else if (delta > 0) {
+        await usersCol().doc(username).update({
+          timeSpentTodaySec: firebase.firestore.FieldValue.increment(delta),
+          timeSpentDate: dateAtLoad
+        });
+      }
+    } catch (e) {
+      // Best-effort — a missed flush just means a few seconds of slack;
+      // never let this break the page.
+      unflushedSec += delta;
+    }
+  }
+
+  function lockOut() {
+    clearInterval(tickTimer);
+    flush(true).finally(() => { window.location.href = "timeup.html"; });
+  }
+
+  const tickTimer = setInterval(() => {
+    // Require the tab to be both visible AND the focused window — an
+    // open-but-backgrounded tab (student alt-tabbed to something else)
+    // shouldn't count as "time spent directly on the website".
+    if (document.visibilityState !== "visible" || !document.hasFocus()) return;
+    sessionAccumSec++;
+    unflushedSec++;
+    if (status.spentSec + sessionAccumSec >= status.limitSec) { lockOut(); return; }
+    if (unflushedSec >= FLUSH_EVERY_SEC) flush(false);
+  }, 1000);
+
+  // Best-effort extra flushes so closing/backgrounding the tab doesn't
+  // waste more than a few unflushed seconds of a student's daily budget.
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(false); });
+  window.addEventListener("pagehide", () => flush(false));
+  window.addEventListener("blur", () => flush(false));
+}
+
+async function requireLogin(opts) {
+  opts = opts || {};
   const u = await getSessionUser();
   if (!u) {
     window.location.href = "index.html";
+    return null;
+  }
+  if (u.role === "student" && !opts.skipTimeLimit) {
+    if (timeLimitStatus(u).reached) {
+      window.location.href = "timeup.html";
+      return null;
+    }
+    startTimeTracking(u);
   }
   return u;
 }
@@ -393,6 +528,7 @@ async function createTeacherAndClass(name, username, password, className) {
     sellBackRates: { car: 0.85, truck: 0.85, bike: 0.85 },
     sideHustles: [],
     lifestyleLock: { threshold: 0, modules: [] },
+    dailyTimeLimitMinutes: null, // null/0 = no limit; minutes of active time per student per day
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
     insuranceDay: "Fri", lastInsuranceWeekRun: null,
     gambling: { enabled: true, minBet: 1, maxBet: 20, dailyBetCap: null, payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 } },
@@ -428,7 +564,14 @@ async function createStudentAccount(name, username, password, classCode) {
       const user = {
         username, password, role: "student", name,
         classCode, balance: 20, jobId: null, savings: 0, loans: [],
-        sessionVersion: 0
+        sessionVersion: 0,
+        // Denormalized copy of the class's daily time limit (see
+        // setStudentTimeLimit below). Kept on the user doc itself so
+        // requireLogin() can check/enforce it using the user doc it
+        // already reads on every page — no extra class-doc read needed.
+        dailyLimitMinutes: cls.dailyTimeLimitMinutes || null,
+        timeSpentTodaySec: 0,
+        timeSpentDate: null
       };
       t.set(usersCol().doc(username), user);
 
@@ -2454,6 +2597,37 @@ async function setGamblingEnabled(classCode, enabled) {
   });
 }
 
+// Sets (or clears, with minutes <= 0) the class's daily active-time limit.
+// The class doc is the source of truth (shown back in the teacher's
+// settings form), but the actual enforcement reads a copy denormalized
+// onto each STUDENT doc (see timeLimitStatus() above) so requireLogin()
+// never has to fetch the class doc just to check the limit. This is the
+// one place that copy has to be pushed out to every existing student —
+// a deliberately rare, teacher-initiated action, not something that
+// happens on every page load. Firestore batches cap out at 500 writes,
+// so large classes are chunked into multiple batches.
+async function setStudentTimeLimit(classCode, minutes) {
+  const limit = Number(minutes) > 0 ? Math.round(Number(minutes)) : null;
+  const classRef = classesCol().doc(classCode);
+  await classRef.update({ dailyTimeLimitMinutes: limit });
+
+  const cls = await getClass(classCode);
+  const students = (cls && cls.students) || [];
+  for (let i = 0; i < students.length; i += 500) {
+    const batch = fdb.batch();
+    students.slice(i, i + 500).forEach(username => {
+      // set(..., {merge:true}) rather than update(): a batch's update()
+      // calls all fail together if even one target doc doesn't exist
+      // (e.g. cls.students briefly out of sync with the users collection),
+      // which would silently drop the whole chunk. merge-set can't fail
+      // that way, and for every normal, in-sync student it behaves
+      // identically to update() — it only ever touches this one field.
+      batch.set(usersCol().doc(username), { dailyLimitMinutes: limit }, { merge: true });
+    });
+    await batch.commit();
+  }
+}
+
 /* ===================== Gambling (Blackjack) =====================
    Rules implemented strictly from Christchurch Casino's public
    "Blackjack — How to Play" guide (4 decks, 3:2 blackjack, doubling on
@@ -3325,6 +3499,7 @@ function withNewModuleDefaults(cls) {
   cls.loanTiers = cls.loanTiers || [];
   cls.maxLoanAmount = cls.maxLoanAmount || 0; // 0 = no extra class-wide cap beyond the tiers themselves
   cls.maxLoanCount = cls.maxLoanCount || 0; // 0 = no cap on how many loans a student can have open at once
+  if (cls.dailyTimeLimitMinutes === undefined) cls.dailyTimeLimitMinutes = null;
   cls.vehicles = cls.vehicles || [];
   // Migrate pre-update vehicles, which stored a single `owner` username,
   // into the current `owners` array so vehicles bought before this change

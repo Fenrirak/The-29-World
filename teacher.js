@@ -112,6 +112,7 @@ async function render() {
   document.getElementById("payDaySelect").value = cls.payDay || "Fri";
   document.getElementById("mortgageDaySelect").value = cls.mortgageDay || "Fri";
   document.getElementById("gamblingEnabled").checked = cls.gambling ? cls.gambling.enabled !== false : true;
+  document.getElementById("dailyTimeLimit").value = cls.dailyTimeLimitMinutes || "";
 
   const students = await getClassStudents(CLASS_CODE);
   document.getElementById("statStudents").textContent = students.length;
@@ -771,6 +772,22 @@ async function saveGamblingEnabled() {
   await setGamblingEnabled(CLASS_CODE, enabled);
   document.getElementById("gamblingMsg").innerHTML = `<div class="success-msg">${enabled ? "Gambling is now allowed." : "Gambling is now turned off for your class."}</div>`;
   await render();
+}
+async function saveDailyTimeLimit() {
+  const btn = document.getElementById("saveDailyTimeLimitBtn");
+  const raw = document.getElementById("dailyTimeLimit").value;
+  const minutes = raw === "" ? 0 : Number(raw);
+  if (btn.disabled) return; // fan-out to every student can take a moment on large classes — ignore double-clicks
+  btn.disabled = true;
+  try {
+    await setStudentTimeLimit(CLASS_CODE, minutes);
+    document.getElementById("dailyTimeLimitMsg").innerHTML = `<div class="success-msg">${minutes > 0 ? `Daily time limit set to ${minutes} minute${minutes === 1 ? "" : "s"} per student.` : "Daily time limit removed — students have unlimited time on the site again."}</div>`;
+    await render();
+  } catch (e) {
+    document.getElementById("dailyTimeLimitMsg").innerHTML = `<div class="error-msg">Couldn't save the time limit — please try again.</div>`;
+  } finally {
+    btn.disabled = false;
+  }
 }
 async function quickView(username) {
   await renderProfile(username);

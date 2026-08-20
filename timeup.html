@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>(function(){try{if(localStorage.getItem('t29-liquid-glass')==='1')document.documentElement.classList.add('liquid-glass');}catch(e){}})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Time's up — The 29 World</title>
+<link rel="icon" type="image/png" href="Favicon.png">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="liquid-glass.css">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="timeup.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <span class="who" id="whoami"></span>
+    <div class="topbar-actions">
+      <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+    </div>
+  </nav>
+</div>
+
+<main>
+  <div class="card" style="max-width:520px;margin:40px auto;text-align:center;">
+    <div style="font-size:40px;margin-bottom:8px;" id="clockIcon"></div>
+    <h1 id="pageTitle">You've used up today's time</h1>
+    <p id="explainText">Your teacher has set a daily time limit for how long you can spend on The 29 World. You've reached it for today — come back tomorrow!</p>
+    <p class="muted-small" id="resetNote"></p>
+  </div>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script defer src="firebase-init.js"></script>
+<script defer src="icons.js"></script>
+<script defer src="liquid-glass.js"></script>
+<script defer src="data.js"></script>
+<script defer src="timeup.js"></script>
+</body>
+</html>

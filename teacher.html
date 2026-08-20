@@ -234,6 +234,14 @@
     </div>
 
     <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
+      <label for="dailyTimeLimit" id="labDailyTimeLimit">Daily time limit per student (minutes on the site, 0 = no limit)</label>
+      <input id="dailyTimeLimit" type="number" min="0" step="1" placeholder="e.g. 30" style="max-width:160px;">
+      <p class="muted-small">Only counts time actually spent with the site open, visible, and in focus — a background or unfocused tab doesn't count against it. Once a student hits the limit for the day, they're shown a "come back tomorrow" screen; it resets automatically at NZ midnight, the same daily boundary the rest of the class (pay day, interest, etc.) uses.</p>
+      <button class="btn secondary small" style="margin-top:6px;" onclick="saveDailyTimeLimit()" id="saveDailyTimeLimitBtn">Save time limit</button>
+      <div id="dailyTimeLimitMsg"></div>
+    </div>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
       <h2 id="hDanger" style="color:var(--coral);">Danger zone</h2>
       <p>Reset every student's balance to $0, remove all jobs assignments, delist every company, and clear the activity log. Student logins and the class code stay the same — this just gives everyone a fresh start.</p>
       <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>

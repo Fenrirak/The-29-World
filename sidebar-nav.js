@@ -63,11 +63,18 @@ function sbSetDrawerOpen(open) {
   document.documentElement.classList.toggle("sidebar-open", open);
   if (sbHamburgerEl) sbHamburgerEl.setAttribute("aria-expanded", String(open));
 
+  // Only the sidebar's own mobile drawer needs the topbar's nav/actions
+  // taken out of the tab order while closed. When sidebar-nav mode isn't
+  // on at all, this must be a no-op — otherwise every phone-width page
+  // load (sbInit() always calls sbApply(sbIsOn()), even when that's
+  // false) would mark the *normal* topbar nav inert and make it
+  // completely unusable regardless of whether the feature is enabled.
+  const sidebarModeOn = document.documentElement.classList.contains("sidebar-nav");
   const nav = document.querySelector(".topbar nav");
   const actions = document.querySelector(".topbar-actions");
   [nav, actions].forEach(el => {
     if (!el) return;
-    if (sbIsDesktop() || open) el.removeAttribute("inert");
+    if (!sidebarModeOn || sbIsDesktop() || open) el.removeAttribute("inert");
     else el.setAttribute("inert", "");
   });
 }
