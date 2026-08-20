@@ -114,7 +114,7 @@ async function render() {
   document.getElementById("gamblingEnabled").checked = cls.gambling ? cls.gambling.enabled !== false : true;
 
   const students = await getClassStudents(CLASS_CODE);
-  document.getElementById("statStudents").textContent = students.length + " / 8";
+  document.getElementById("statStudents").textContent = students.length;
   const total = students.reduce((sum, s) => sum + s.balance, 0);
   document.getElementById("statTotal").textContent = fmtMoney(total);
   document.getElementById("statCompanies").textContent = cls.companies.length;

@@ -9,7 +9,6 @@
 ====================================================================== */
 
 const SESSION_KEY = "anw_session"; // session stays in localStorage — it's fine for this to be per-device
-const MAX_STUDENTS_PER_CLASS = 8;
 const MAX_STORED_TXNS = 200; // keep class docs from growing forever
 
 function usersCol() { installReadCache(); return fdb.collection("users"); }
@@ -425,7 +424,6 @@ async function createStudentAccount(name, username, password, classCode) {
       const clsSnap = await t.get(classRef);
       if (!clsSnap.exists) throw new Error("NO_CLASS");
       const cls = clsSnap.data();
-      if (cls.students.length >= MAX_STUDENTS_PER_CLASS) throw new Error("FULL");
 
       const user = {
         username, password, role: "student", name,
@@ -441,7 +439,6 @@ async function createStudentAccount(name, username, password, classCode) {
     });
   } catch (e) {
     if (e.message === "NO_CLASS") return { ok: false, error: "That class code doesn't exist." };
-    if (e.message === "FULL") return { ok: false, error: "This class already has 8 students — it's full." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   return { ok: true };
