@@ -28,6 +28,14 @@
   --sb-mobile-width: min(84vw, 300px);
 }
 
+/* sidebar-nav.js injects the hamburger button once (on first switch to
+   sidebar mode) and never removes it from the DOM again — it just relies
+   on this stylesheet to show/style it. Every other rule for it below is
+   scoped to html.sidebar-nav, so without this base rule, switching back
+   to the plain top bar left it visible with unstyled default browser
+   button chrome (a small white/gray box) instead of disappearing. */
+.sb-hamburger{ display: none; }
+
 /* --------------------------------------------------------------------
    Desktop / laptop / wide tablet (>=901px): permanent left rail
 -------------------------------------------------------------------- */
