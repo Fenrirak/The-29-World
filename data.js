@@ -1728,6 +1728,10 @@ async function addVehicle(classCode, v) {
       comfort: Math.max(1, Math.min(5, Number(v.comfort) || 1)),
       description: v.description || "", owners: [],
       type: normalizeVehicleType(v.type),
+      // Only meaningful for trucks — how much an owner earns each time they
+      // check in to "drive" it (see checkinTruckDrive). Stored regardless
+      // of type so switching a vehicle's type later doesn't lose the value.
+      drivePayout: Math.max(0, Number(v.drivePayout) || 0),
       stockLimit: (v.stockLimit === "" || v.stockLimit === undefined || v.stockLimit === null) ? null : Math.max(0, Math.floor(Number(v.stockLimit)))
     });
     t.update(classRef, { vehicles: cls.vehicles });
@@ -1756,6 +1760,7 @@ async function updateVehicle(classCode, vehId, updates) {
     veh.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
     veh.description = updates.description || "";
     veh.type = normalizeVehicleType(updates.type);
+    veh.drivePayout = Math.max(0, Number(updates.drivePayout) || 0);
     veh.stockLimit = (updates.stockLimit === "" || updates.stockLimit === undefined || updates.stockLimit === null) ? null : Math.max(0, Math.floor(Number(updates.stockLimit)));
     t.update(classRef, { vehicles: cls.vehicles });
   });
@@ -1881,6 +1886,53 @@ async function setSellBackRates(classCode, rates) {
   });
   await classesCol().doc(classCode).update({ sellBackRates: clean });
   return clean;
+}
+
+// Owning a truck works like a side hustle a student already qualifies for:
+// no fixed check-in hour, no teacher approval — any truck they own can be
+// "driven" once per calendar day (NZ time) for the flat amount the teacher
+// set on that specific truck (veh.drivePayout). Tracked per-vehicle on the
+// user doc (truckCheckins: { [vehId]: dateKey }) since a student can own
+// more than one truck at once.
+async function checkinTruckDrive(username, classCode, vehId) {
+  if (await isModuleLockedForStudent(username, classCode, "transport")) {
+    return { ok: false, error: "Transport is locked for you right now because of your lifestyle rating." };
+  }
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let amount = 0, vehName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("GONE");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const veh = cls.vehicles.find(v => v.id === vehId);
+      if (!veh) throw new Error("NOT_FOUND");
+      if (normalizeVehicleType(veh.type) !== "truck") throw new Error("NOT_TRUCK");
+      if (!(veh.owners || []).includes(username)) throw new Error("NOT_OWNER");
+
+      const todayKey = nzDateKey();
+      const checkins = user.truckCheckins || {};
+      if (checkins[vehId] === todayKey) throw new Error("ALREADY");
+
+      amount = Number(veh.drivePayout) || 0;
+      vehName = veh.name;
+      const newBal = Math.round((user.balance + amount) * 100) / 100;
+      t.update(userRef, {
+        balance: newBal,
+        [`truckCheckins.${vehId}`]: todayKey
+      });
+    });
+  } catch (e) {
+    if (e.message === "NOT_FOUND" || e.message === "NOT_OWNER") return { ok: false, error: "You don't own that truck." };
+    if (e.message === "NOT_TRUCK") return { ok: false, error: "That vehicle isn't a truck." };
+    if (e.message === "ALREADY") return { ok: false, error: "You've already driven this truck today." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "truck-drive", to: username, amount, note: `Drove truck — ${vehName}` });
+  return { ok: true, amount };
 }
 
 /* ===================== Term deposits ===================== */
@@ -2222,7 +2274,7 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
 async function resetClass(classCode) {
   const students = await getClassStudents(classCode);
   await Promise.all(students.map(s => usersCol().doc(s.username).update({
-    balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: [], truckLicence: false
+    balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: [], truckLicence: false, truckCheckins: {}
   })));
   const cls = await getClass(classCode);
   const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null, occupancy: null, rentLastWeekPaid: null, mortgageDefault: null }));
@@ -3276,6 +3328,7 @@ function withNewModuleDefaults(cls) {
     // Vehicles created before subcategories existed default to "car" so
     // they aren't mistaken for trucks (which require a licence).
     if (!VEHICLE_TYPES.includes(v.type)) v.type = "car";
+    if (v.drivePayout === undefined || v.drivePayout === null) v.drivePayout = 0;
   });
   cls.truckLicence = cls.truckLicence || { price: 0, description: "" };
   cls.sellBackRates = cls.sellBackRates || {};

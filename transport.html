@@ -61,7 +61,7 @@
       <div class="grid grid-3">
         <div>
           <label for="hType" id="labType">Type</label>
-          <select id="hType">
+          <select id="hType" onchange="onTypeChange()">
             <option value="car">Car</option>
             <option value="truck">Truck</option>
             <option value="bike">Bike/Scooter</option>
@@ -70,6 +70,10 @@
         <div>
           <label for="hStock" id="labStock">Stock limit (leave blank for unlimited)</label>
           <input id="hStock" type="number" min="0" step="1" placeholder="Unlimited">
+        </div>
+        <div id="hPayoutWrap" class="hidden">
+          <label for="hPayout" id="labPayout">Daily driving payout ($)</label>
+          <input id="hPayout" type="number" min="0" step="0.01" value="0">
         </div>
       </div>
       <label for="hDesc" id="labDesc">Description</label>

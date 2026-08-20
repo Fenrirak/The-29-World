@@ -35,6 +35,7 @@ async function init() {
   document.getElementById("licenceSettingsPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("sellBackPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("myVehiclesPanel").classList.toggle("hidden", IS_TEACHER);
+  if (IS_TEACHER) onTypeChange();
   paintChrome();
   // These 8 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
@@ -97,7 +98,10 @@ async function render() {
     const myList = document.getElementById("myVehiclesList");
     myList.innerHTML = "";
     document.getElementById("noMyVehicles").classList.toggle("hidden", mine.length > 0);
+    const todayKey = nzDateKey();
     mine.forEach(v => {
+      const isTruck = v.type === "truck";
+      const drivenToday = isTruck && me.truckCheckins && me.truckCheckins[v.id] === todayKey;
       const div = document.createElement("div");
       div.className = "card company-card";
       div.innerHTML = `
@@ -107,11 +111,14 @@ async function render() {
             <p>${v.description || "No description provided."}</p>
             <p>${comfortStars(v.comfort)} comfort</p>
             <p><strong>${fmtMoney(v.price)}</strong> paid</p>
+            ${isTruck ? `<p class="muted-small">Driving pays ${fmtMoney(v.drivePayout || 0)}/day &middot; ${drivenToday ? "already driven today" : "not driven today yet"}</p>` : ""}
           </div>
           <div class="row-flex" style="gap:8px;">
+            ${isTruck ? `<button class="btn small gold" ${drivenToday ? "disabled" : ""} onclick="driveTruck('${v.id}')">${drivenToday ? "Driven today" : "Drive today"}</button>` : ""}
             <button class="btn small secondary" onclick="sellMine('${v.id}')">Sell back</button>
           </div>
         </div>
+        <div id="drive-msg-${v.id}"></div>
       `;
       myList.appendChild(div);
     });
@@ -179,6 +186,7 @@ async function addProp(e) {
     comfort: document.getElementById("hComfort").value,
     description: document.getElementById("hDesc").value.trim(),
     type: document.getElementById("hType").value,
+    drivePayout: document.getElementById("hPayout").value,
     stockLimit: document.getElementById("hStock").value.trim()
   };
   if (EDITING_ID) {
@@ -191,9 +199,16 @@ async function addProp(e) {
     ["hName","hPrice","hDesc","hStock"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("hComfort").value = 3;
     document.getElementById("hType").value = "car";
+    document.getElementById("hPayout").value = 0;
+    onTypeChange();
   }
   await render();
   return false;
+}
+
+function onTypeChange() {
+  const isTruck = document.getElementById("hType").value === "truck";
+  document.getElementById("hPayoutWrap").classList.toggle("hidden", !isTruck);
 }
 
 async function editVeh(id) {
@@ -206,6 +221,8 @@ async function editVeh(id) {
   document.getElementById("hComfort").value = veh.comfort;
   document.getElementById("hDesc").value = veh.description || "";
   document.getElementById("hType").value = veh.type || "car";
+  document.getElementById("hPayout").value = veh.drivePayout || 0;
+  onTypeChange();
   document.getElementById("hStock").value = (veh.stockLimit === null || veh.stockLimit === undefined) ? "" : veh.stockLimit;
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit vehicle";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
@@ -219,6 +236,8 @@ function cancelEditVeh() {
   ["hName","hPrice","hDesc","hStock"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("hComfort").value = 3;
   document.getElementById("hType").value = "car";
+  document.getElementById("hPayout").value = 0;
+  onTypeChange();
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a vehicle";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add vehicle";
   document.getElementById("cancelEditBtn").classList.add("hidden");
@@ -307,6 +326,21 @@ async function buyVeh(id) {
   if (msgEl) {
     msgEl.innerHTML = `<div class="success-msg">Congratulations, it's yours!</div>`;
     setTimeout(() => { msgEl.innerHTML = ""; }, 3000);
+  }
+}
+
+async function driveTruck(vehId) {
+  const res = await checkinTruckDrive(CURRENT.username, CURRENT.classCode, vehId);
+  const msgEl = document.getElementById("drive-msg-" + vehId);
+  if (!res.ok) {
+    if (msgEl) msgEl.innerHTML = `<div class="error-msg">${res.error}</div>`;
+    return;
+  }
+  await render();
+  const newMsgEl = document.getElementById("drive-msg-" + vehId);
+  if (newMsgEl) {
+    newMsgEl.innerHTML = `<div class="success-msg">Nice driving! You earned ${fmtMoney(res.amount)}.</div>`;
+    setTimeout(() => { newMsgEl.innerHTML = ""; }, 3000);
   }
 }
 
