@@ -390,6 +390,8 @@ async function createTeacherAndClass(name, username, password, className) {
     insurancePlans: [], storeItems: [], properties: [],
     eventDefs: [], eventLog: [], lastEventWeekRun: null, lastEventDayRun: null,
     vehicles: [], termDepositPlans: [],
+    truckLicence: { price: 0, description: "" },
+    sellBackRates: { car: 0.85, truck: 0.85, bike: 0.85 },
     sideHustles: [],
     lifestyleLock: { threshold: 0, modules: [] },
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
@@ -1711,6 +1713,10 @@ async function processAutomations(classCode) {
 }
 
 /* ===================== Transport ===================== */
+const VEHICLE_TYPES = ["car", "truck", "bike"];
+function normalizeVehicleType(t) {
+  return VEHICLE_TYPES.includes(t) ? t : "car";
+}
 async function addVehicle(classCode, v) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
@@ -1721,6 +1727,7 @@ async function addVehicle(classCode, v) {
       id: uid("veh"), name: v.name, price: Number(v.price),
       comfort: Math.max(1, Math.min(5, Number(v.comfort) || 1)),
       description: v.description || "", owners: [],
+      type: normalizeVehicleType(v.type),
       stockLimit: (v.stockLimit === "" || v.stockLimit === undefined || v.stockLimit === null) ? null : Math.max(0, Math.floor(Number(v.stockLimit)))
     });
     t.update(classRef, { vehicles: cls.vehicles });
@@ -1748,6 +1755,7 @@ async function updateVehicle(classCode, vehId, updates) {
     veh.price = Number(updates.price);
     veh.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
     veh.description = updates.description || "";
+    veh.type = normalizeVehicleType(updates.type);
     veh.stockLimit = (updates.stockLimit === "" || updates.stockLimit === undefined || updates.stockLimit === null) ? null : Math.max(0, Math.floor(Number(updates.stockLimit)));
     t.update(classRef, { vehicles: cls.vehicles });
   });
@@ -1768,9 +1776,10 @@ async function buyVehicle(username, classCode, vehId) {
       veh.owners = veh.owners || [];
       if (veh.owners.includes(username)) throw new Error("ALREADY_OWN");
       if (veh.stockLimit !== null && veh.stockLimit !== undefined && veh.owners.length >= veh.stockLimit) throw new Error("SOLD_OUT");
+      const isTeacher = user.role === "teacher";
+      if (normalizeVehicleType(veh.type) === "truck" && !isTeacher && !user.truckLicence) throw new Error("NO_LICENCE");
       const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "transport", veh.price);
       taxAmount = tax;
-      const isTeacher = user.role === "teacher";
       if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
       veh.owners.push(username);
       vehName = veh.name;
@@ -1782,6 +1791,7 @@ async function buyVehicle(username, classCode, vehId) {
     if (e.message === "ALREADY_OWN") return { ok: false, error: "You already own this vehicle." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     if (e.message === "SOLD_OUT") return { ok: false, error: "This vehicle is sold out." };
+    if (e.message === "NO_LICENCE") return { ok: false, error: "You need a truck licence before buying this vehicle." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
@@ -1800,7 +1810,11 @@ async function sellVehicle(classCode, vehId, username, rate) {
     if (!veh.owners.includes(username)) return;
     owner = username;
     vehName = veh.name;
-    payout = Math.round(veh.price * (rate !== undefined ? rate : 0.9) * 100) / 100;
+    // An explicit rate (e.g. the teacher's flat 90% forced-repossession
+    // rate) always wins. Otherwise — a student selling their own vehicle —
+    // fall back to the teacher-configured per-category sell-back rate.
+    const effectiveRate = rate !== undefined ? rate : (cls.sellBackRates[normalizeVehicleType(veh.type)] !== undefined ? cls.sellBackRates[normalizeVehicleType(veh.type)] : 0.85);
+    payout = Math.round(veh.price * effectiveRate * 100) / 100;
     veh.owners = veh.owners.filter(o => o !== username);
     t.update(classRef, { vehicles: cls.vehicles });
   });
@@ -1809,6 +1823,64 @@ async function sellVehicle(classCode, vehId, username, rate) {
     await logTxn(classCode, { type: "vehicle-sell", to: owner, amount: payout, note: `Sold back: ${vehName}` });
   }
   return true;
+}
+
+// Teacher-set price/description for the class-wide truck licence. Students
+// must hold this licence (see buyTruckLicence) before they're allowed to
+// buy any vehicle of type "truck" — see the NO_LICENCE check in buyVehicle.
+async function setTruckLicenceConfig(classCode, price, description) {
+  const clean = { price: Math.max(0, Number(price) || 0), description: description || "" };
+  await classesCol().doc(classCode).update({ truckLicence: clean });
+  return clean;
+}
+async function buyTruckLicence(username, classCode) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let price = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      if (user.truckLicence) throw new Error("ALREADY");
+      price = cls.truckLicence.price || 0;
+      const isTeacher = user.role === "teacher";
+      if (!isTeacher && user.balance < price) throw new Error("BROKE");
+      const update = { truckLicence: true };
+      if (!isTeacher) update.balance = Math.round((user.balance - price) * 100) / 100;
+      t.update(userRef, update);
+    });
+  } catch (e) {
+    if (e.message === "ALREADY") return { ok: false, error: "You already have a truck licence." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "truck-licence-buy", from: username, amount: price, note: "Bought truck licence" });
+  return { ok: true };
+}
+// Teacher control to revoke a student's truck licence (e.g. from the
+// profile panel) — no refund, mirrors the manual nature of repossession.
+async function revokeTruckLicence(username) {
+  await usersCol().doc(username).update({ truckLicence: false });
+  return true;
+}
+
+// Teacher-set percentage (per vehicle category) a student gets back when
+// selling their own vehicle via sellMine — see the fallback in sellVehicle
+// above. Forced repossessions (forceSell/profileRemoveVehicle) always pass
+// their own explicit rate and are unaffected by this.
+async function setSellBackRates(classCode, rates) {
+  const clean = {};
+  VEHICLE_TYPES.forEach(type => {
+    let pct = Number(rates[type]);
+    if (isNaN(pct)) pct = 85;
+    pct = Math.max(0, Math.min(100, pct));
+    clean[type] = Math.round(pct) / 100;
+  });
+  await classesCol().doc(classCode).update({ sellBackRates: clean });
+  return clean;
 }
 
 /* ===================== Term deposits ===================== */
@@ -2150,7 +2222,7 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
 async function resetClass(classCode) {
   const students = await getClassStudents(classCode);
   await Promise.all(students.map(s => usersCol().doc(s.username).update({
-    balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: []
+    balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: [], truckLicence: false
   })));
   const cls = await getClass(classCode);
   const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null, occupancy: null, rentLastWeekPaid: null, mortgageDefault: null }));
@@ -3201,6 +3273,14 @@ function withNewModuleDefaults(cls) {
     if (v.owners === undefined) {
       v.owners = v.owner ? [v.owner] : [];
     }
+    // Vehicles created before subcategories existed default to "car" so
+    // they aren't mistaken for trucks (which require a licence).
+    if (!VEHICLE_TYPES.includes(v.type)) v.type = "car";
+  });
+  cls.truckLicence = cls.truckLicence || { price: 0, description: "" };
+  cls.sellBackRates = cls.sellBackRates || {};
+  VEHICLE_TYPES.forEach(type => {
+    if (cls.sellBackRates[type] === undefined) cls.sellBackRates[type] = 0.85;
   });
   cls.interestAuto = cls.interestAuto || false;
   cls.cashInterestRate = cls.cashInterestRate || 0;
@@ -3667,10 +3747,10 @@ async function giveFreeStoreItem(classCode, username, itemId) {
   return { ok: true };
 }
 
-async function sellStoreItem(username, classCode, itemId) {
+async function sellStoreItem(username, classCode, itemId, rate) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let itemName = "", payout = 0;
+  let itemName = "", payout = 0, effectiveRate = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -3685,7 +3765,8 @@ async function sellStoreItem(username, classCode, itemId) {
       if (idx === -1) throw new Error("NOT_OWNED");
       user.storeItems.splice(idx, 1);
       itemName = item.name;
-      payout = Math.round(item.price * 0.8 * 100) / 100;
+      effectiveRate = rate !== undefined ? rate : 0.8;
+      payout = Math.round(item.price * effectiveRate * 100) / 100;
       if (item.stock !== null) item.stock += 1;
       item.sold = Math.max(0, (item.sold || 0) - 1);
       const isTeacher = user.role === "teacher";
@@ -3697,7 +3778,7 @@ async function sellStoreItem(username, classCode, itemId) {
     if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that item." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "store-sell", to: username, amount: payout, note: `Sold back to store: ${itemName} (80% refund)` });
+  await logTxn(classCode, { type: "store-sell", to: username, amount: payout, note: `Sold back to store: ${itemName} (${Math.round(effectiveRate * 100)}% refund)` });
   return { ok: true, payout };
 }
 
@@ -3877,7 +3958,7 @@ async function buyProperty(username, classCode, propId, financed) {
   await logTxn(classCode, { type: "property-buy", from: username, amount: financed ? deposit : cashPaid, note: (financed ? `Bought (mortgaged): ${propName} — ${fmtMoney(deposit)} deposit` : `Bought outright: ${propName}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
 }
-async function sellProperty(classCode, propId) {
+async function sellProperty(classCode, propId, rate) {
   const classRef = classesCol().doc(classCode);
   let owner = null, payout = 0, propName = "";
   await fdb.runTransaction(async (t) => {
@@ -3888,7 +3969,7 @@ async function sellProperty(classCode, propId) {
     if (!prop || !prop.owner) return;
     owner = prop.owner;
     propName = prop.name;
-    payout = Math.round(prop.price * 0.9 * 100) / 100;
+    payout = Math.round(prop.price * (rate !== undefined ? rate : 0.9) * 100) / 100;
     prop.owner = null;
     prop.mortgage = null;
     prop.occupancy = null;
@@ -4585,12 +4666,13 @@ async function lifestyleBandForStudent(username, classCode, precomputedBoard) {
   const board = precomputedBoard || await classLeaderboard(classCode);
   const row = board.find(r => r.username === username);
   const property = (cls.properties || []).find(p => p.owner === username);
-  const vehicle = (cls.vehicles || []).filter(v => (v.owners || []).includes(username))
-    .reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
+  const ownedVehicles = (cls.vehicles || []).filter(v => (v.owners || []).includes(username));
   const stats = {
     netWorth: row ? row.net : 0,
     propertyComfort: property ? (property.comfort || 0) : 0,
-    transportComfort: vehicle ? (vehicle.comfort || 0) : 0
+    // Stacked total across every vehicle the student owns, not just their
+    // best one, matching how transport now contributes to the score itself.
+    transportComfort: ownedVehicles.reduce((sum, v) => sum + (v.comfort || 0), 0)
   };
   return lifestyleLabelFor(score, cls.lifestyleThresholds, stats);
 }
@@ -4621,9 +4703,11 @@ function lifestyleRatingFromData(cls, user, username) {
     }
   }
   if (cfg.transport && cfg.transport.enabled) {
-    const owned = cls.vehicles.filter(v => (v.owners || []).includes(username))
-      .reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
-    if (owned) score += owned.comfort * (cfg.transport.weight || 0);
+    // Every owned vehicle contributes its own comfort × weight — stars
+    // stack across all vehicles a student owns instead of only counting
+    // their single best one.
+    const owned = cls.vehicles.filter(v => (v.owners || []).includes(username));
+    owned.forEach(v => { score += (v.comfort || 0) * (cfg.transport.weight || 0); });
   }
   if (cfg.store && cfg.store.enabled) {
     const owned = user.storeItems || [];
@@ -4682,13 +4766,12 @@ async function lifestyleRatingBreakdown(username, classCode) {
     }
   }
   if (cfg.transport && cfg.transport.enabled) {
-    const owned = cls.vehicles.filter(v => (v.owners || []).includes(username))
-      .reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
-    if (owned) {
-      const pts = owned.comfort * (cfg.transport.weight || 0);
+    const owned = cls.vehicles.filter(v => (v.owners || []).includes(username));
+    owned.forEach(v => {
+      const pts = (v.comfort || 0) * (cfg.transport.weight || 0);
       score += pts;
-      items.push({ type: "gain", label: owned.name || "Vehicle", detail: `${owned.comfort} comfort &times; ${cfg.transport.weight || 0} pts/star`, points: pts });
-    }
+      items.push({ type: "gain", label: v.name || "Vehicle", detail: `${v.comfort || 0} comfort &times; ${cfg.transport.weight || 0} pts/star`, points: pts });
+    });
   }
   if (cfg.store && cfg.store.enabled) {
     const owned = user.storeItems || [];

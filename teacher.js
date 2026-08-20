@@ -137,12 +137,11 @@ async function render() {
   students.forEach(s => {
     const row = board.find(r => r.username === s.username);
     const property = (cls.properties || []).find(p => p.owner === s.username);
-    const vehicle = (cls.vehicles || []).filter(v => (v.owners || []).includes(s.username))
-      .reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
+    const ownedVehicles = (cls.vehicles || []).filter(v => (v.owners || []).includes(s.username));
     const stats = {
       netWorth: row ? row.net : 0,
       propertyComfort: property ? (property.comfort || 0) : 0,
-      transportComfort: vehicle ? (vehicle.comfort || 0) : 0
+      transportComfort: ownedVehicles.reduce((sum, v) => sum + (v.comfort || 0), 0)
     };
     lifestyleBandByUser[s.username] = lifestyleLabelFor(lifestyleByUser[s.username], cls.lifestyleThresholds || [], stats);
   });
@@ -264,7 +263,7 @@ async function render() {
   lsBox.className = "grid grid-4";
   const lsSections = [
     { key: "property", label: "Property (house comfort)" },
-    { key: "transport", label: "Transport (vehicle comfort)" },
+    { key: "transport", label: "Transport (stacked vehicle comfort)" },
     { key: "store", label: "Store items owned" },
     { key: "insurance", label: "Insurance plans owned" }
   ];
@@ -641,7 +640,7 @@ function thresholdRowHtml(t) {
       <div class="grid grid-3">
         <div><label>Min net worth</label><input class="th-min-networth" type="number" min="0" step="1" value="${t.minNetWorth || 0}"></div>
         <div><label>Min property comfort (0-5 stars)</label><input class="th-min-property" type="number" min="0" max="5" step="1" value="${t.minPropertyComfort || 0}"></div>
-        <div><label>Min transport comfort (0-5 stars)</label><input class="th-min-transport" type="number" min="0" max="5" step="1" value="${t.minTransportComfort || 0}"></div>
+        <div><label>Min transport comfort (total stars across owned vehicles)</label><input class="th-min-transport" type="number" min="0" step="1" value="${t.minTransportComfort || 0}"></div>
       </div>
     </div>
   `;
@@ -904,10 +903,13 @@ async function renderProfile(username) {
     : `<p class="muted-small">No property owned.</p>`);
 
   rows.push(`<h4>${icon("car", 16)} Transport</h4>`);
-  rows.push(poss.vehicle
-    ? `<div class="auto-row"><div class="auto-details"><strong>${poss.vehicle.name}</strong> — ${fmtMoney(poss.vehicle.price)}</div>
-        <button class="btn small coral" onclick="profileRemoveVehicle('${poss.vehicle.id}')">Repossess</button></div>`
-    : `<p class="muted-small">No vehicle owned.</p>`);
+  rows.push(poss.vehicles && poss.vehicles.length
+    ? poss.vehicles.map(v => `<div class="auto-row"><div class="auto-details"><strong>${v.name}</strong> — ${fmtMoney(v.price)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span></div>
+        <button class="btn small coral" onclick="profileRemoveVehicle('${v.id}','${username}')">Repossess</button></div>`).join("")
+    : `<p class="muted-small">No vehicles owned.</p>`);
+  rows.push(`<div class="auto-row"><div class="auto-details">Truck licence</div>${s.truckLicence
+    ? `<button class="btn small coral" onclick="profileRevokeTruckLicence('${username}')">Revoke</button>`
+    : `<span class="muted-small">Not held</span>`}</div>`);
 
   rows.push(`<h4>${icon("cart", 16)} Store items</h4>`);
   rows.push(poss.storeItems.length
@@ -994,9 +996,26 @@ async function profileClearMortgageDefault(propId) {
   await render();
   await renderProfile(PROFILE_USER);
 }
+// Shared flow for any teacher-initiated removal that might warrant a
+// refund: confirms the removal itself, then asks yes/no on a refund, and
+// if yes, lets the teacher type the exact percentage. Returns a rate
+// (0-1) to hand to the underlying sell/cancel function, or null if the
+// teacher backed out at any point (removal should NOT proceed).
+function confirmRefundRate(removeQuestion, defaultPct) {
+  if (!confirm(removeQuestion)) return null;
+  const wantsRefund = confirm("Give the student a refund for this?\n\nOK = yes, refund some money\nCancel = no refund");
+  if (!wantsRefund) return 0;
+  const input = prompt("What percentage of the price should be refunded? (0-100)", String(defaultPct));
+  if (input === null) return null;
+  let pct = Number(input);
+  if (isNaN(pct)) pct = defaultPct;
+  pct = Math.max(0, Math.min(100, pct));
+  return pct / 100;
+}
 async function profileRemoveProperty(propId) {
-  if (!confirm("Repossess this property? The student will be refunded 90% of its price.")) return;
-  await sellProperty(CLASS_CODE, propId);
+  const rate = confirmRefundRate("Repossess this property?", 90);
+  if (rate === null) return;
+  await sellProperty(CLASS_CODE, propId, rate);
   await render();
   await renderProfile(PROFILE_USER);
 }
@@ -1007,9 +1026,19 @@ async function profileEndRental(propId) {
   await render();
   await renderProfile(PROFILE_USER);
 }
-async function profileRemoveVehicle(vehId) {
-  if (!confirm("Repossess this vehicle? The student will be refunded 90% of its price.")) return;
-  await sellVehicle(CLASS_CODE, vehId);
+function vehicleTypeLabel(type) {
+  return type === "truck" ? "Truck" : type === "bike" ? "Bike/Scooter" : "Car";
+}
+async function profileRemoveVehicle(vehId, username) {
+  const rate = confirmRefundRate("Repossess this vehicle?", 90);
+  if (rate === null) return;
+  await sellVehicle(CLASS_CODE, vehId, username, rate);
+  await render();
+  await renderProfile(PROFILE_USER);
+}
+async function profileRevokeTruckLicence(username) {
+  if (!confirm("Revoke this student's truck licence? They won't be refunded and will need to buy it again before purchasing a truck.")) return;
+  await revokeTruckLicence(username);
   await render();
   await renderProfile(PROFILE_USER);
 }
@@ -1022,8 +1051,9 @@ async function profileGiveStoreItem(username) {
 }
 
 async function profileRemoveStoreItem(username, itemId) {
-  if (!confirm("Remove this item from the student? They'll be refunded 80% of its price.")) return;
-  await sellStoreItem(username, CLASS_CODE, itemId);
+  const rate = confirmRefundRate("Remove this item from the student?", 80);
+  if (rate === null) return;
+  await sellStoreItem(username, CLASS_CODE, itemId, rate);
   await render();
   await renderProfile(username);
 }

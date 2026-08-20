@@ -60,6 +60,14 @@
       </div>
       <div class="grid grid-3">
         <div>
+          <label for="hType" id="labType">Type</label>
+          <select id="hType">
+            <option value="car">Car</option>
+            <option value="truck">Truck</option>
+            <option value="bike">Bike/Scooter</option>
+          </select>
+        </div>
+        <div>
           <label for="hStock" id="labStock">Stock limit (leave blank for unlimited)</label>
           <input id="hStock" type="number" min="0" step="1" placeholder="Unlimited">
         </div>
@@ -70,6 +78,48 @@
       <button type="button" class="btn small secondary hidden" id="cancelEditBtn" onclick="cancelEditVeh()">Cancel edit</button>
     </form>
     <div id="addMsg"></div>
+  </div>
+
+  <div id="licenceSettingsPanel" class="card hidden">
+    <h2 id="hLicenceSettings">Truck licence</h2>
+    <p class="muted-small">Students must buy this licence before they're allowed to buy any truck.</p>
+    <div class="grid grid-3">
+      <div>
+        <label for="lcPrice" id="labLcPrice">Licence cost</label>
+        <input id="lcPrice" type="number" min="0" step="0.01">
+      </div>
+    </div>
+    <label for="lcDesc" id="labLcDesc">Description (shown to students)</label>
+    <input id="lcDesc" placeholder="e.g. Required to drive heavy vehicles">
+    <button class="btn gold" type="button" id="lcSaveBtn" onclick="saveLicenceConfig()">Save licence settings</button>
+    <div id="lcMsg"></div>
+  </div>
+
+  <div id="sellBackPanel" class="card hidden">
+    <h2 id="hSellBack">Sell-back rates</h2>
+    <p class="muted-small">How much of the price a student gets back when they sell their own vehicle, by category.</p>
+    <div class="grid grid-3">
+      <div>
+        <label for="sbCar" id="labSbCar">Car %</label>
+        <input id="sbCar" type="number" min="0" max="100" step="1">
+      </div>
+      <div>
+        <label for="sbTruck" id="labSbTruck">Truck %</label>
+        <input id="sbTruck" type="number" min="0" max="100" step="1">
+      </div>
+      <div>
+        <label for="sbBike" id="labSbBike">Bike/Scooter %</label>
+        <input id="sbBike" type="number" min="0" max="100" step="1">
+      </div>
+    </div>
+    <button class="btn gold" type="button" id="sbSaveBtn" onclick="saveSellBackRates()">Save sell-back rates</button>
+    <div id="sbMsg"></div>
+  </div>
+
+  <div id="licencePanel" class="card hidden">
+    <h2 id="hLicenceBuy">Truck licence</h2>
+    <p id="licenceDesc" class="muted-small"></p>
+    <div id="licenceStatus"></div>
   </div>
 
   <div id="myVehiclesPanel" class="hidden">
