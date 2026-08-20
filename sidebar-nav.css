@@ -124,7 +124,11 @@
     left: auto;
     right: 20px;
     top: 20px !important;
+    min-width: 120px;
+    padding: 11px 14px;
   }
+  html.sidebar-nav .anw-balance-widget .anw-bw-label{ font-size: .66rem; }
+  html.sidebar-nav .anw-balance-widget .anw-bw-value{ font-size: 1.35rem; }
 }
 
 /* --------------------------------------------------------------------
