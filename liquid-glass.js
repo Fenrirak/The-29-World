@@ -67,6 +67,17 @@ function lgBuildPopover() {
         <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
       </label>
     </div>
+    ${typeof sbIsOn === "function" ? `
+    <div class="settings-popover-row">
+      <div class="settings-popover-text">
+        <div class="settings-popover-title">Sidebar navigation</div>
+        <div class="settings-popover-desc">Move the menu to a side panel instead of the top bar — a slide-out drawer on phones.</div>
+      </div>
+      <label class="lg-switch">
+        <input type="checkbox" id="t29SidebarNavToggle">
+        <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
+      </label>
+    </div>` : ""}
     <div class="settings-popover-row" id="t29ChangePasswordRow" style="cursor:pointer;">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Change password</div>
@@ -81,6 +92,12 @@ function lgBuildPopover() {
   const cb = pop.querySelector("#t29LiquidGlassToggle");
   cb.checked = lgIsOn();
   cb.addEventListener("change", () => lgSetOn(cb.checked));
+
+  const sbCb = pop.querySelector("#t29SidebarNavToggle");
+  if (sbCb && typeof sbIsOn === "function") {
+    sbCb.checked = sbIsOn();
+    sbCb.addEventListener("change", () => sbSetOn(sbCb.checked));
+  }
 
   // openPasswordModal() lives in data.js (loaded on every page) — the
   // typeof guard is defensive only, in case some future page ever loads

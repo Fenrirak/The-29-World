@@ -1,0 +1,234 @@
+/* =====================================================================
+   The 29 World — Sidebar navigation layout (student pages)
+
+   An alternate to the default top bar, toggled from Settings. Purely a
+   CSS layer over the existing .topbar / nav / .topbar-actions markup —
+   no HTML structure changes, so it works on every student page that
+   includes this file.
+
+   How it's driven:
+   - `sidebar-nav` class on <html> = the feature is on. Set before paint
+     by the inline snippet in <head> (reads localStorage), same pattern
+     as the Liquid Glass toggle — no flash of the wrong layout.
+   - `sidebar-open` class on <html> = the mobile slide-in drawer is open
+     (toggled by sidebar-nav.js via the injected hamburger button).
+   - Everything else (building the hamburger + backdrop, persisting the
+     choice, wiring the Settings switch) lives in sidebar-nav.js.
+
+   Two responsive modes:
+   - >=901px: a permanent left rail. .topbar becomes a fixed, full-height
+     column; nav links and the settings/logout block stack vertically.
+   - <=900px: .topbar stays a slim sticky strip (brand + hamburger only);
+     nav and .topbar-actions become fixed off-canvas panels that slide in
+     together, with a tap-away backdrop, when the drawer is opened.
+===================================================================== */
+
+:root{
+  --sb-width: 252px;
+  --sb-mobile-width: min(84vw, 300px);
+}
+
+/* --------------------------------------------------------------------
+   Desktop / laptop / wide tablet (>=901px): permanent left rail
+-------------------------------------------------------------------- */
+@media (min-width: 901px){
+  html.sidebar-nav .topbar{
+    position: fixed;
+    inset: 0 auto 0 0;
+    height: 100vh;
+    width: var(--sb-width);
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 22px 14px 18px;
+    gap: 2px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-shadow: 6px 0 28px rgba(20,28,46,.18);
+    z-index: 90;
+  }
+  html.sidebar-nav body{ padding-left: var(--sb-width); }
+
+  html.sidebar-nav .brand{
+    padding-bottom: 18px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,.14);
+    flex-wrap: wrap;
+  }
+
+  html.sidebar-nav .topbar nav{
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 3px;
+    max-width: none;
+  }
+  html.sidebar-nav .topbar nav a{
+    width: 100%;
+    font-size: .95rem;
+    padding: 11px 12px;
+    min-height: 0;
+    gap: 10px;
+  }
+  /* Never let icons.js's width-fitting logic (meant for a horizontal
+     row) drop labels here — the sidebar always has room for them. */
+  html.sidebar-nav .topbar nav.force-icons a .nav-label{ display: inline; }
+  html.sidebar-nav .topbar nav.force-icons a{ justify-content: flex-start; padding: 11px 12px; }
+
+  html.sidebar-nav .topbar-actions{
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    margin-left: 0;
+    margin-top: 10px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,.14);
+    gap: 6px;
+  }
+  html.sidebar-nav .btn-logout,
+  html.sidebar-nav .btn-icon-topbar,
+  html.sidebar-nav .settings-dropdown-wrap{ width: 100%; }
+  html.sidebar-nav .btn-logout,
+  html.sidebar-nav .btn-icon-topbar{
+    justify-content: flex-start;
+    padding: 10px 12px;
+    gap: 10px;
+    min-width: 0;
+  }
+  html.sidebar-nav .btn-logout .nav-label{ display: inline; }
+  /* The settings button has no text label in the markup (icon-only in
+     the top bar) — add one here purely visually; it already carries
+     aria-label="Settings" for assistive tech regardless of this. */
+  html.sidebar-nav .btn-icon-topbar::after{
+    content: "Settings";
+    font-size: .9rem;
+    font-weight: 700;
+  }
+  /* The legacy inline settings dropdown (student.html only) anchors
+     bottom-left instead of top-right so it opens into the rail rather
+     than off the edge of the screen. */
+  html.sidebar-nav .settings-dropdown{
+    left: 0; right: auto; top: auto; bottom: calc(100% + 8px); width: 100%; min-width: 0;
+  }
+
+  html.sidebar-nav .sb-hamburger,
+  html.sidebar-nav .sb-backdrop{ display: none !important; }
+
+  html.sidebar-nav .anw-balance-widget{ left: calc(var(--sb-width) + 16px); }
+}
+
+/* --------------------------------------------------------------------
+   Tablet portrait & phones (<=900px): slim top strip + slide-in drawer
+-------------------------------------------------------------------- */
+@media (max-width: 900px){
+  html.sidebar-nav .topbar{
+    flex-wrap: nowrap;
+    overflow: visible;
+    row-gap: 0;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+  html.sidebar-nav .brand{ order: 2; min-width: 0; }
+
+  html.sidebar-nav .sb-hamburger{
+    order: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255,255,255,.1);
+    cursor: pointer;
+    padding: 0;
+  }
+  html.sidebar-nav .sb-hamburger:hover{ background: rgba(255,255,255,.18); }
+  html.sidebar-nav .sb-hamburger-bar{
+    display: block; width: 18px; height: 2px; background: #fff; border-radius: 2px;
+    position: relative;
+  }
+  html.sidebar-nav .sb-hamburger-bar::before,
+  html.sidebar-nav .sb-hamburger-bar::after{
+    content: ""; position: absolute; left: 0; width: 18px; height: 2px; background: #fff; border-radius: 2px;
+  }
+  html.sidebar-nav .sb-hamburger-bar::before{ top: -6px; }
+  html.sidebar-nav .sb-hamburger-bar::after{ top: 6px; }
+
+  html.sidebar-nav .topbar nav{
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sb-mobile-width);
+    height: 100vh;
+    max-width: none;
+    flex-direction: column;
+    align-items: stretch;
+    background: linear-gradient(165deg, var(--navy-900) 0%, var(--navy-800) 55%, var(--navy-700) 100%);
+    padding: 74px 16px 16px;
+    gap: 4px;
+    row-gap: 4px;
+    overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform .24s ease;
+    z-index: 130;
+    box-shadow: 10px 0 36px rgba(0,0,0,.4);
+  }
+  html.sidebar-nav.sidebar-open .topbar nav{ transform: translateX(0); }
+  html.sidebar-nav .topbar nav a{
+    width: 100%;
+    justify-content: flex-start;
+    padding: 12px;
+    font-size: 1rem;
+    min-height: 0;
+  }
+  html.sidebar-nav .topbar nav a .nav-label{ display: inline !important; }
+
+  html.sidebar-nav .topbar-actions{
+    position: fixed;
+    left: 0; bottom: 0;
+    width: var(--sb-mobile-width);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    margin: 0;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+    background: var(--navy-900);
+    border-top: 1px solid rgba(255,255,255,.14);
+    transform: translateX(-100%);
+    transition: transform .24s ease;
+    z-index: 131;
+  }
+  html.sidebar-nav.sidebar-open .topbar-actions{ transform: translateX(0); }
+  html.sidebar-nav .btn-logout,
+  html.sidebar-nav .btn-icon-topbar,
+  html.sidebar-nav .settings-dropdown-wrap{ width: 100%; }
+  html.sidebar-nav .btn-logout,
+  html.sidebar-nav .btn-icon-topbar{
+    justify-content: flex-start; padding: 11px 12px; gap: 10px; min-width: 0;
+  }
+  html.sidebar-nav .btn-logout .nav-label{ display: inline; }
+  html.sidebar-nav .btn-icon-topbar::after{ content: "Settings"; font-size: .92rem; font-weight: 700; }
+  html.sidebar-nav .settings-dropdown{ left: 0; right: auto; bottom: calc(100% + 8px); top: auto; width: 100%; }
+
+  /* Keep the closed drawer out of the tab order so keyboard focus can't
+     land on links the user can't currently see. sidebar-nav.js toggles
+     the matching `inert` attribute in step with this class. */
+  html.sidebar-nav:not(.sidebar-open) .topbar nav,
+  html.sidebar-nav:not(.sidebar-open) .topbar-actions{ pointer-events: none; }
+
+  html.sidebar-nav .sb-backdrop{
+    position: fixed; inset: 0;
+    background: rgba(15,20,32,.5);
+    z-index: 125;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .22s ease;
+  }
+  html.sidebar-nav.sidebar-open .sb-backdrop{ opacity: 1; pointer-events: auto; }
+
+  html.sidebar-nav.sidebar-open,
+  html.sidebar-nav.sidebar-open body{ overflow: hidden; }
+}

@@ -5057,6 +5057,12 @@ function positionBalanceWidget() {
   const topbar = document.querySelector(".topbar");
   const widget = document.getElementById("anwBalanceWidget");
   if (!topbar || !widget) return;
+  // Sidebar navigation on a wide screen turns .topbar into a full-height
+  // rail (its own left offset comes from sidebar-nav.css), so the usual
+  // "just under the topbar" math doesn't apply — pin it near the top
+  // instead of computing from topbar.bottom (which would be ~100vh).
+  const sidebarRail = document.documentElement.classList.contains("sidebar-nav") && window.innerWidth > 900;
+  if (sidebarRail) { widget.style.top = "20px"; return; }
   if (window.innerWidth <= 640) { widget.style.top = ""; return; } // mobile: CSS pins it to the bottom instead
   widget.style.top = (topbar.getBoundingClientRect().bottom + 10) + "px";
 }

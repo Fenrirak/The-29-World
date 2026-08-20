@@ -92,6 +92,15 @@ function fitTopbar() {
   const nav = topbar ? topbar.querySelector("nav") : null;
   if (!topbar || !nav) return;
 
+  // Sidebar navigation (see sidebar-nav.js/.css) lays the nav out
+  // vertically with its own sizing — the horizontal width-fit logic
+  // below doesn't apply and would just fight it.
+  if (document.documentElement.classList.contains("sidebar-nav")) {
+    topbar.style.removeProperty("--navscale");
+    nav.classList.remove("force-icons");
+    return;
+  }
+
   const isPortrait = window.matchMedia("(orientation: portrait)").matches;
   if (isPortrait) {
     // Portrait handles itself via CSS (icon-only + wrapping); don't fight it.
