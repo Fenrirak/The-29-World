@@ -1782,7 +1782,15 @@ async function buyVehicle(username, classCode, vehId) {
       if (veh.owners.includes(username)) throw new Error("ALREADY_OWN");
       if (veh.stockLimit !== null && veh.stockLimit !== undefined && veh.owners.length >= veh.stockLimit) throw new Error("SOLD_OUT");
       const isTeacher = user.role === "teacher";
-      if (normalizeVehicleType(veh.type) === "truck" && !isTeacher && !user.truckLicence) throw new Error("NO_LICENCE");
+      if (normalizeVehicleType(veh.type) === "truck") {
+        if (!isTeacher && !user.truckLicence) throw new Error("NO_LICENCE");
+        // Max one truck per student — check every vehicle in the class,
+        // not just this listing, since a student could otherwise own a
+        // truck from one listing and try to buy a different truck too.
+        const alreadyOwnsTruck = !isTeacher && cls.vehicles.some(v2 =>
+          normalizeVehicleType(v2.type) === "truck" && (v2.owners || []).includes(username));
+        if (alreadyOwnsTruck) throw new Error("TRUCK_LIMIT");
+      }
       const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "transport", veh.price);
       taxAmount = tax;
       if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
@@ -1797,6 +1805,7 @@ async function buyVehicle(username, classCode, vehId) {
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     if (e.message === "SOLD_OUT") return { ok: false, error: "This vehicle is sold out." };
     if (e.message === "NO_LICENCE") return { ok: false, error: "You need a truck licence before buying this vehicle." };
+    if (e.message === "TRUCK_LIMIT") return { ok: false, error: "You can only own one truck at a time." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
@@ -1889,11 +1898,13 @@ async function setSellBackRates(classCode, rates) {
 }
 
 // Owning a truck works like a side hustle a student already qualifies for:
-// no fixed check-in hour, no teacher approval — any truck they own can be
+// no fixed check-in hour, no teacher approval — the truck they own can be
 // "driven" once per calendar day (NZ time) for the flat amount the teacher
 // set on that specific truck (veh.drivePayout). Tracked per-vehicle on the
-// user doc (truckCheckins: { [vehId]: dateKey }) since a student can own
-// more than one truck at once.
+// user doc (truckCheckins: { [vehId]: dateKey }) even though a student can
+// only own one truck at a time (see TRUCK_LIMIT in buyVehicle) — keeps this
+// resilient if that cap is ever relaxed, and survives selling one truck and
+// buying a different one without carrying over a stale check-in.
 async function checkinTruckDrive(username, classCode, vehId) {
   if (await isModuleLockedForStudent(username, classCode, "transport")) {
     return { ok: false, error: "Transport is locked for you right now because of your lifestyle rating." };

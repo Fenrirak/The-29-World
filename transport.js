@@ -128,6 +128,8 @@ async function render() {
   list.innerHTML = "";
   document.getElementById("noVehicles").classList.toggle("hidden", vehicles.length > 0);
 
+  const ownsAnyTruck = !IS_TEACHER && vehicles.some(v => v.type === "truck" && (v.owners || []).includes(me.username));
+
   vehicles.forEach(v => {
     const owners = v.owners || [];
     const isMine = owners.includes(me.username);
@@ -135,6 +137,7 @@ async function render() {
     const remaining = hasLimit ? Math.max(0, v.stockLimit - owners.length) : null;
     const soldOut = hasLimit && remaining <= 0;
     const needsLicence = v.type === "truck" && !IS_TEACHER && !me.truckLicence;
+    const truckLimitReached = v.type === "truck" && !IS_TEACHER && !isMine && ownsAnyTruck;
     const ownedLabel = owners.length === 0 ? "Available"
       : `Owned by ${owners.length} student${owners.length === 1 ? "" : "s"}`;
     const stockLabel = hasLimit
@@ -158,6 +161,7 @@ async function render() {
           <p><strong>${fmtMoney(v.price)}</strong> &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
           <p class="muted-small">${ownedLabel}</p>
           ${needsLicence ? `<p class="muted-small">Requires a truck licence — see above.</p>` : ""}
+          ${truckLimitReached ? `<p class="muted-small">You can only own one truck at a time.</p>` : ""}
           ${ownerRows}
         </div>
         <div class="row-flex" style="gap:8px;">
@@ -169,7 +173,9 @@ async function render() {
                 ? `<button class="btn small gold" disabled>Sold out</button>`
                 : needsLicence
                   ? `<button class="btn small gold" disabled>Licence required</button>`
-                  : `<button class="btn small gold" onclick="buyVeh('${v.id}')">Buy</button>`}
+                  : truckLimitReached
+                    ? `<button class="btn small gold" disabled>One truck max</button>`
+                    : `<button class="btn small gold" onclick="buyVeh('${v.id}')">Buy</button>`}
         </div>
       </div>
       <div id="msg-${v.id}"></div>
