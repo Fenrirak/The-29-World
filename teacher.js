@@ -51,6 +51,8 @@ function paintChrome() {
   document.getElementById("savePayDayBtn").innerHTML = icon("calendar", 14) + " Save pay day";
   document.getElementById("labMortgageDay").innerHTML = icon("calendar", 13) + " Mortgage due day (which day weekly mortgage payments are charged)";
   document.getElementById("saveMortgageDayBtn").innerHTML = icon("calendar", 14) + " Save mortgage day";
+  document.getElementById("labMortgageForceDue").innerHTML = "Mark this week's mortgage payments as due now";
+  document.getElementById("saveMortgageForceDueBtn").innerHTML = icon("send", 14) + " Save";
   document.getElementById("saveGamblingEnabledBtn").innerHTML = icon("dice", 14) + " Save gambling setting";
   document.getElementById("hEvents").innerHTML = icon("dice", 18) + " Random weekly events";
   document.getElementById("runEventsNowBtn").innerHTML = icon("repeat", 14) + " Run this week's events now";
@@ -111,6 +113,7 @@ async function render() {
   document.getElementById("interestDayWrap").classList.toggle("hidden", (cls.interestFrequency || "weekly") === "daily");
   document.getElementById("payDaySelect").value = cls.payDay || "Fri";
   document.getElementById("mortgageDaySelect").value = cls.mortgageDay || "Fri";
+  document.getElementById("mortgageForceDue").checked = !!cls.mortgageForceDueWeek && cls.mortgageForceDueWeek === isoWeekKey(new Date());
   document.getElementById("gamblingEnabled").checked = cls.gambling ? cls.gambling.enabled !== false : true;
   document.getElementById("dailyTimeLimit").value = cls.dailyTimeLimitMinutes || "";
 
@@ -765,6 +768,12 @@ async function savePayDay() {
 async function saveMortgageDayClick() {
   await setMortgageDay(CLASS_CODE, document.getElementById("mortgageDaySelect").value);
   alert("Mortgage day saved. Students can pay their weekly mortgage installment themselves on this day.");
+  await render();
+}
+async function saveMortgageForceDue() {
+  const active = document.getElementById("mortgageForceDue").checked;
+  await setMortgageDueOverride(CLASS_CODE, active);
+  document.getElementById("mortgageForceDueMsg").innerHTML = `<div class="success-msg">${active ? "This week's mortgage payments are now marked as due — students can pay from the Property page." : "Manual override turned off."}</div>`;
   await render();
 }
 async function saveGamblingEnabled() {

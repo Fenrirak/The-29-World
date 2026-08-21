@@ -192,7 +192,11 @@ function mortgagePayBlock(p, cls) {
   const weekKey = isoWeekKey(new Date());
   const purchaseWeek = p.mortgage.purchaseWeekKey === weekKey;
   const alreadyPaid = p.mortgage.lastWeekPaid === weekKey;
-  const isDueToday = (cls.mortgageDay || "Fri") === nzDayName();
+  // Payable either on the class's normal mortgage day, or — for this ISO
+  // week only — if the teacher has manually marked mortgages as due (see
+  // setMortgageDueOverride).
+  const forcedDue = cls.mortgageForceDueWeek === weekKey;
+  const isDueToday = (cls.mortgageDay || "Fri") === nzDayName() || forcedDue;
 
   let status, canPay = false;
   if (purchaseWeek) {
@@ -202,7 +206,9 @@ function mortgagePayBlock(p, cls) {
   } else if (!isDueToday) {
     status = `Mortgage payments are due every ${mortgageDayName} — come back then to pay this week's installment yourself.`;
   } else {
-    status = `This week's payment is due today.`;
+    status = forcedDue && (cls.mortgageDay || "Fri") !== nzDayName()
+      ? `Your teacher has marked this week's mortgage payment as due now.`
+      : `This week's payment is due today.`;
     canPay = true;
   }
 

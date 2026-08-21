@@ -521,6 +521,7 @@ async function createTeacherAndClass(name, username, password, className) {
     interestRate: 2, txns: [],
     payDay: "Fri",
     mortgageDay: "Fri",
+    mortgageForceDueWeek: null,
     priceRange: { min: 1, max: 5 },
     automations: [],
     jobApplications: [],
@@ -942,6 +943,20 @@ async function setPayDay(classCode, day) {
 // Class-wide day mortgage installments are charged on (see processMortgages).
 async function setMortgageDay(classCode, day) {
   await classesCol().doc(classCode).update({ mortgageDay: DAY_NAMES.includes(day) ? day : "Fri" });
+}
+
+// Teacher-only manual override: makes this week's mortgage installment
+// payable right now, regardless of the class's normal mortgageDay — e.g.
+// if the teacher missed the usual day or wants to run a payment on the
+// spot. `active` true stamps the current ISO week onto the class so
+// payMortgage (and the student-facing "pay this week's mortgage" button)
+// treat today as a due day for the rest of this week; `active` false
+// clears it early if the teacher changes their mind. It never charges
+// anyone itself — students still have to click "pay" themselves, same as
+// the normal due day (see payMortgage's comment for why mortgages are
+// manual-only).
+async function setMortgageDueOverride(classCode, active) {
+  await classesCol().doc(classCode).update({ mortgageForceDueWeek: active ? isoWeekKey(new Date()) : null });
 }
 
 // Identifies the current "pay cycle" by the date of its next upcoming (or
@@ -3493,6 +3508,14 @@ function withNewModuleDefaults(cls) {
   });
   // Class-wide day mortgage installments are due on (like payDay/interestDay).
   cls.mortgageDay = DAY_NAMES.includes(cls.mortgageDay) ? cls.mortgageDay : "Fri";
+  // Teacher manual override: an ISO week key (see isoWeekKey) for which the
+  // teacher has declared mortgage payments due *right now*, regardless of
+  // what day it actually is. Lets a teacher who missed the normal
+  // mortgageDay (or wants to demonstrate a payment on the spot) open up
+  // payment for the rest of this week without changing the permanent
+  // weekly due day. Naturally expires once the ISO week rolls over — see
+  // setMortgageDueOverride, payMortgage, and isMortgagePaymentOverdue.
+  if (cls.mortgageForceDueWeek === undefined) cls.mortgageForceDueWeek = null;
   cls.eventDefs = cls.eventDefs || [];
   cls.eventLog = cls.eventLog || [];
   cls.lastEventWeekRun = cls.lastEventWeekRun || null;
@@ -4298,8 +4321,12 @@ async function payMortgage(username, classCode, propId) {
       const user = userSnap.data();
       const prop = cls.properties.find(p => p.id === propId);
       if (!prop || prop.owner !== username || !prop.mortgage || prop.mortgage.weeksLeft <= 0) throw new Error("NOT_FOUND");
-      if ((cls.mortgageDay || "Fri") !== nzDayName()) throw new Error("WRONG_DAY");
       const weekKey = isoWeekKey(new Date());
+      // Payable either on the class's normal mortgage day, or — for this
+      // ISO week only — if the teacher has manually forced it due (see
+      // setMortgageDueOverride).
+      const forcedDue = cls.mortgageForceDueWeek === weekKey;
+      if ((cls.mortgageDay || "Fri") !== nzDayName() && !forcedDue) throw new Error("WRONG_DAY");
       if (prop.mortgage.purchaseWeekKey === weekKey) throw new Error("PURCHASE_WEEK");
       if (prop.mortgage.lastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
       propName = prop.name;
@@ -4352,6 +4379,9 @@ function isMortgagePaymentOverdue(prop, cls) {
   const weekKey = isoWeekKey(new Date());
   if (prop.mortgage.purchaseWeekKey === weekKey) return false; // first week is always free
   if (prop.mortgage.lastWeekPaid === weekKey) return false; // already paid this week
+  // A teacher-forced due week (see setMortgageDueOverride) counts as
+  // overdue-until-paid immediately, same as the normal due day passing.
+  if (cls.mortgageForceDueWeek === weekKey) return true;
   // ISO weekday ordinal, Monday = 0 ... Sunday = 6 — matches the Mon-Sun
   // weeks isoWeekKey groups payments into, unlike DAY_NAMES' Sun-first order.
   const isoIdx = day => (DAY_NAMES.indexOf(day) + 6) % 7;
