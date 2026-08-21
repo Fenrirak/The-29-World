@@ -118,7 +118,8 @@ async function render() {
         </div>
       </div>
       <div id="msg-${gid}"></div>
-      ${owned.map(u => ownedUnitBlock(u, u.owner === me.username, cls, nameOf)).join("")}
+      ${owned.filter(u => IS_TEACHER || u.owner === me.username)
+             .map(u => ownedUnitBlock(u, u.owner === me.username, cls, nameOf)).join("")}
     `;
     list.appendChild(div);
   });
