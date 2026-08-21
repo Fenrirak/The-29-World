@@ -403,8 +403,26 @@ function clearSession() {
 function timeLimitStatus(u) {
   const limitMin = u && u.dailyLimitMinutes;
   if (!limitMin || limitMin <= 0) return { limited: false };
-  const spentSec = (u.timeSpentDate === nzDateKey()) ? (u.timeSpentTodaySec || 0) : 0;
-  return { limited: true, limitSec: limitMin * 60, spentSec, reached: spentSec >= limitMin * 60 };
+  const today = nzDateKey();
+  const spentSec = (u.timeSpentDate === today) ? (u.timeSpentTodaySec || 0) : 0;
+  // Bonus minutes a teacher has granted for today only (see
+  // requestTimeExemption/decideTimeExemption) — stacks on top of the
+  // normal daily limit, and evaporates the moment the date rolls over,
+  // same as the limit and spent-time counters themselves.
+  const extraMin = (u.extraMinutesDate === today && u.extraMinutesToday > 0) ? u.extraMinutesToday : 0;
+  const limitSec = (limitMin + extraMin) * 60;
+  return { limited: true, limitSec, spentSec, reached: spentSec >= limitSec, extraMin };
+}
+
+// Pure, synchronous read of a student's current time-exemption request
+// state — "none" (never asked, or a prior request was already resolved),
+// "pending" (waiting on the teacher), or "declined" (teacher said no,
+// blocked from asking again until tomorrow). Scoped to timeExemptionDate
+// so — like the time-limit fields above — it resets on its own once the
+// NZ date rolls over, no cleanup job required.
+function timeExemptionState(u) {
+  if (!u || u.timeExemptionDate !== nzDateKey()) return "none";
+  return u.timeExemptionStatus || "none";
 }
 
 let _timeTrackingStarted = false;
@@ -576,7 +594,17 @@ async function createStudentAccount(name, username, password, classCode) {
         // already reads on every page — no extra class-doc read needed.
         dailyLimitMinutes: cls.dailyTimeLimitMinutes || null,
         timeSpentTodaySec: 0,
-        timeSpentDate: null
+        timeSpentDate: null,
+        // Time-limit exemption requests (see requestTimeExemption below).
+        // status is null/"pending"/"declined", scoped to timeExemptionDate
+        // (an NZ date key) so it naturally resets each day without a
+        // migration job — see timeExemptionState(). extraMinutesToday/
+        // -Date is the bonus time a teacher has granted for today only,
+        // added on top of dailyLimitMinutes by timeLimitStatus().
+        timeExemptionStatus: null,
+        timeExemptionDate: null,
+        extraMinutesToday: 0,
+        extraMinutesDate: null
       };
       t.set(usersCol().doc(username), user);
 
@@ -2645,6 +2673,77 @@ async function setStudentTimeLimit(classCode, minutes) {
     });
     await batch.commit();
   }
+}
+
+// Student-invoked, from the timeup.html lockout screen: asks the teacher
+// for more time today. Only allowed while the student is actually locked
+// out (stops this being called from anywhere else), and only one request
+// can be outstanding/refused at a time — see timeExemptionState():
+//   - "pending"  — already asked, waiting on the teacher. Can't ask again.
+//   - "declined" — teacher already said no today. Can't ask again until
+//                  the NZ date rolls over and timeExemptionState() resets
+//                  to "none" on its own.
+//   - "none"     — either never asked today, or the teacher already
+//                  approved an earlier request this same day (approving
+//                  clears status back to "none" — see decideTimeExemption
+//                  below) — either way, a fresh request is allowed, which
+//                  covers "accepted, then hit the new limit again".
+async function requestTimeExemption(username) {
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const u = snap.data();
+      if (!timeLimitStatus(u).reached) throw new Error("NOT_LOCKED");
+      const state = timeExemptionState(u);
+      if (state === "pending") throw new Error("ALREADY_PENDING");
+      if (state === "declined") throw new Error("DECLINED_TODAY");
+      t.update(userRef, { timeExemptionStatus: "pending", timeExemptionDate: nzDateKey(), timeExemptionRequestedAt: nowStr() });
+    });
+  } catch (e) {
+    if (e.message === "ALREADY_PENDING") return { ok: false, error: "You've already sent a request — waiting on your teacher." };
+    if (e.message === "DECLINED_TODAY") return { ok: false, error: "Your teacher already declined a request today. Try again tomorrow." };
+    if (e.message === "NOT_LOCKED") return { ok: false, error: "You're not currently out of time." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  return { ok: true };
+}
+
+// Teacher-invoked: approves or declines a student's pending time
+// exemption request.
+//   - Approve grants `extraMinutes` (manually typed in by the teacher) on
+//     top of today's normal limit, then clears the request back to
+//     "none" — so if the student burns through the bonus too, they're
+//     free to send another request the moment they're locked out again.
+//   - Decline leaves the daily limit untouched and flips the request to
+//     "declined", which blocks further requests for the rest of today
+//     (see timeExemptionState/requestTimeExemption above).
+async function decideTimeExemption(username, approve, extraMinutes) {
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const u = snap.data();
+      if (timeExemptionState(u) !== "pending") throw new Error("NOT_PENDING");
+      const today = nzDateKey();
+      if (approve) {
+        const grant = Math.max(0, Math.round(Number(extraMinutes)) || 0);
+        const existingExtra = (u.extraMinutesDate === today) ? (u.extraMinutesToday || 0) : 0;
+        t.update(userRef, {
+          timeExemptionStatus: null, timeExemptionDate: today,
+          extraMinutesToday: existingExtra + grant, extraMinutesDate: today
+        });
+      } else {
+        t.update(userRef, { timeExemptionStatus: "declined", timeExemptionDate: today });
+      }
+    });
+  } catch (e) {
+    if (e.message === "NOT_PENDING") return { ok: false, error: "That request isn't pending anymore." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  return { ok: true };
 }
 
 /* ===================== Gambling (Blackjack) =====================

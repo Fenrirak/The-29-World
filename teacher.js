@@ -916,7 +916,7 @@ async function renderProfile(username) {
     rows.push(`<p class="muted-small">${usedMin} of ${totalMin} minute${totalMin === 1 ? "" : "s"} used today${tStatus.extraMin ? ` (includes +${tStatus.extraMin} granted today)` : ""}.</p>`);
     const exState = timeExemptionState(s);
     if (exState === "pending") {
-      rows.push(`<p class="muted-small">Has a pending request for more time — approve or decline it from the Class settings section.</p>`);
+      rows.push(`<p class="muted-small">Has a pending request for more time — approve or decline it from the banner at the top of the dashboard.</p>`);
     } else if (exState === "declined") {
       rows.push(`<p class="muted-small">Their last request for more time today was declined.</p>`);
     }
