@@ -3,10 +3,15 @@
    =====================================================================
    Apple-style frosted, translucent "Liquid Glass" look for the whole
    site. Every single rule in this file is scoped under `html.liquid-glass`
-   (added/removed by liquid-glass.js via the settings toggle next to
-   Log out). With that class absent — the default — nothing in this file
-   applies, so the site renders exactly as defined in style.css /
+   (added/removed by liquid-glass.js, driven by the Settings switch in
+   settings-menu.js). With that class absent — the default — nothing in
+   this file applies, so the site renders exactly as defined in style.css /
    blackjack.css, unchanged.
+
+   This file (and liquid-glass.js) is only fetched when the feature is
+   already on for this visitor, or the instant they switch it on — never
+   downloaded "just in case", so phones that never touch the setting don't
+   pay for it.
 
    Design language: continuous, generously-rounded corners; translucent
    vibrant surfaces (backdrop-filter blur + saturate + a touch of

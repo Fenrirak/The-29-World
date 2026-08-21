@@ -2,14 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<script>(function(){try{if(localStorage.getItem('t29-liquid-glass')==='1')document.documentElement.classList.add('liquid-glass');}catch(e){}})();</script>
-<script>(function(){try{if(localStorage.getItem('t29-sidebar-nav')==='1')document.documentElement.classList.add('sidebar-nav');}catch(e){}})();</script>
+<script>
+(function(){
+  window.T29_HAS_SIDEBAR = true;
+  function loadIfOn(flagKey, cls, css, js){
+    var on;
+    try { on = localStorage.getItem(flagKey) === '1'; } catch(e) { on = false; }
+    if (!on) return;
+    document.documentElement.classList.add(cls);
+    var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = css;
+    document.head.appendChild(l);
+    var s = document.createElement('script'); s.src = js;
+    document.head.appendChild(s);
+  }
+  loadIfOn('t29-liquid-glass', 'liquid-glass', 'liquid-glass.css', 'liquid-glass.js');
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css', 'sidebar-nav.js');
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Insurance — The 29 World</title>
 <link rel="icon" type="image/png" href="Favicon.png">
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="liquid-glass.css">
-<link rel="stylesheet" href="sidebar-nav.css">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 </head>
@@ -114,8 +127,7 @@
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script defer src="firebase-init.js"></script>
 <script defer src="icons.js"></script>
-<script defer src="liquid-glass.js"></script>
-<script defer src="sidebar-nav.js"></script>
+<script defer src="settings-menu.js"></script>
 <script defer src="data.js"></script>
 <script defer src="events-ui.js"></script>
 <script defer src="insurance.js"></script>

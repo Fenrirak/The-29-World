@@ -632,9 +632,9 @@ async function changePassword(username, oldPassword, newPassword) {
 
 /* ---------------- Change-password modal (global, every page) ----------------
    Built on demand with plain DOM injection — the same pattern
-   liquid-glass.js uses for its own settings popover — so there's no
+   settings-menu.js uses for its own settings popover — so there's no
    per-page HTML to add or keep in sync. Opened from the "Change password"
-   row inside that popover (see lgBuildPopover() in liquid-glass.js).
+   row inside that popover (see smBuildPopover() in settings-menu.js).
    Reuses the .anw-modal-overlay / .anw-modal-card classes already defined
    in style.css for the random-event popup, so it matches the rest of the
    app without new CSS. */

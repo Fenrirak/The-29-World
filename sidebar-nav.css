@@ -13,7 +13,9 @@
    - `sidebar-open` class on <html> = the mobile slide-in drawer is open
      (toggled by sidebar-nav.js via the injected hamburger button).
    - Everything else (building the hamburger + backdrop, persisting the
-     choice, wiring the Settings switch) lives in sidebar-nav.js.
+     choice) lives in sidebar-nav.js; the Settings switch itself lives in
+     settings-menu.js. Both this file and sidebar-nav.js are only loaded
+     when the feature is already on, or the instant it's switched on.
 
    Two responsive modes:
    - >=901px: a permanent left rail. .topbar becomes a fixed, full-height
@@ -149,6 +151,16 @@
     row-gap: 0;
     justify-content: flex-start;
     gap: 10px;
+    /* .topbar is position:sticky with its own z-index (see style.css),
+       which makes it a stacking context of its own — so the fixed-position
+       nav/actions drawers and hamburger below (z-index 130/131) only ever
+       stacked *inside* that context, not against .sb-backdrop, which is a
+       plain child of <body> at z-index 125. Net effect: the backdrop
+       rendered on top of the open drawer instead of behind it, making the
+       menu look greyed-out and eating every tap meant for a nav link.
+       Raising .topbar's own z-index above the backdrop's fixes that for
+       everything stacked inside it. */
+    z-index: 140;
   }
   html.sidebar-nav .brand{ order: 2; min-width: 0; }
 
