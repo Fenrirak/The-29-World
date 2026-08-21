@@ -123,6 +123,28 @@ async function render() {
   document.getElementById("statTotal").textContent = fmtMoney(total);
   document.getElementById("statCompanies").textContent = cls.companies.length;
 
+  // Time exemption requests (students out of time asking for more — see
+  // requestTimeExemption/decideTimeExemption in data.js). Surfaced as a
+  // banner right at the top of the dashboard rather than tucked into
+  // settings, since it needs prompt attention.
+  const timePending = students.filter(s => timeExemptionState(s) === "pending");
+  const banner = document.getElementById("timeExemptionBanner");
+  banner.classList.toggle("hidden", timePending.length === 0);
+  const bannerList = document.getElementById("timeExemptionBannerList");
+  bannerList.innerHTML = "";
+  timePending.forEach(s => {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;";
+    row.innerHTML = `
+      <div>${icon("bell", 15)} <strong>${s.name}</strong> has requested more time — they're out for today.</div>
+      <div class="row-flex" style="gap:8px;">
+        <button class="btn small gold" onclick="approveTimeExemptionRequest('${s.username}')">Accept</button>
+        <button class="btn small coral" onclick="declineTimeExemptionRequest('${s.username}')">Decline</button>
+      </div>
+    `;
+    bannerList.appendChild(row);
+  });
+
   // name lookup cache for describeTxn / applications
   const nameCache = {};
   students.forEach(s => { nameCache[s.username] = s.name; });
@@ -776,6 +798,21 @@ async function saveMortgageForceDue() {
   document.getElementById("mortgageForceDueMsg").innerHTML = `<div class="success-msg">${active ? "This week's mortgage payments are now marked as due — students can pay from the Property page." : "Manual override turned off."}</div>`;
   await render();
 }
+async function approveTimeExemptionRequest(username) {
+  const raw = prompt("How many extra minutes should they get today?", "10");
+  if (raw === null) return; // cancelled
+  const minutes = Math.round(Number(raw));
+  if (!Number.isFinite(minutes) || minutes <= 0) { alert("Enter a whole number of minutes greater than 0."); return; }
+  const res = await decideTimeExemption(username, true, minutes);
+  if (!res.ok) alert(res.error || "Couldn't approve that request.");
+  await render();
+}
+async function declineTimeExemptionRequest(username) {
+  if (!confirm("Decline this request? They won't be able to ask again until tomorrow.")) return;
+  const res = await decideTimeExemption(username, false);
+  if (!res.ok) alert(res.error || "Couldn't decline that request.");
+  await render();
+}
 async function saveGamblingEnabled() {
   const enabled = document.getElementById("gamblingEnabled").checked;
   await setGamblingEnabled(CLASS_CODE, enabled);
@@ -869,6 +906,20 @@ async function renderProfile(username) {
   if (s.sideHustleRequest && s.sideHustleRequest.status === "pending") {
     const reqHustle = (cls.sideHustles || []).find(h => h.id === s.sideHustleRequest.hustleId);
     rows.push(`<p class="muted-small">Pending change request: ${reqHustle ? reqHustle.name : "Unknown"} at ${hourLabel(s.sideHustleRequest.checkinHour)} — approve or deny it from the Side hustles section below.</p>`);
+  }
+
+  if (s.dailyLimitMinutes > 0) {
+    rows.push(`<h4>${icon("calendar", 16)} Time on site</h4>`);
+    const tStatus = timeLimitStatus(s);
+    const usedMin = Math.floor((tStatus.spentSec || 0) / 60);
+    const totalMin = s.dailyLimitMinutes + (tStatus.extraMin || 0);
+    rows.push(`<p class="muted-small">${usedMin} of ${totalMin} minute${totalMin === 1 ? "" : "s"} used today${tStatus.extraMin ? ` (includes +${tStatus.extraMin} granted today)` : ""}.</p>`);
+    const exState = timeExemptionState(s);
+    if (exState === "pending") {
+      rows.push(`<p class="muted-small">Has a pending request for more time — approve or decline it from the Class settings section.</p>`);
+    } else if (exState === "declined") {
+      rows.push(`<p class="muted-small">Their last request for more time today was declined.</p>`);
+    }
   }
 
   rows.push(`<h4>${icon("star", 16)} Lifestyle rating override</h4>`);
