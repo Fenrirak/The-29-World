@@ -21,8 +21,8 @@
    require sidebar-nav.js to already be loaded to make that decision).
 ================================================================================ */
 
-const LG_STORAGE_KEY = "t29-liquid-glass";
-const SB_STORAGE_KEY = "t29-sidebar-nav";
+var LG_STORAGE_KEY = "t29-liquid-glass";
+var SB_STORAGE_KEY = "t29-sidebar-nav";
 
 function smReadFlag(key) {
   try {

@@ -18,8 +18,8 @@
      its switch in Settings — never unconditionally
 ================================================================================ */
 
-const SB_STORAGE_KEY = "t29-sidebar-nav";
-const SB_DESKTOP_QUERY = "(min-width: 901px)";
+var SB_STORAGE_KEY = "t29-sidebar-nav";
+var SB_DESKTOP_QUERY = "(min-width: 901px)";
 
 function sbIsOn() {
   try {

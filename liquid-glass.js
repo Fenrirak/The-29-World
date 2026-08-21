@@ -20,7 +20,7 @@
      directly.
 ================================================================================ */
 
-const LG_STORAGE_KEY = "t29-liquid-glass";
+var LG_STORAGE_KEY = "t29-liquid-glass";
 
 function lgIsOn() {
   try {
