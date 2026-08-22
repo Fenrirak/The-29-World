@@ -80,8 +80,6 @@ async function init() {
   // Same reasoning as the other pages: these are 8 independent jobs, so
   // running them together instead of one-at-a-time avoids 8 sequential
   // network round-trips on page load.
-  // Note: mortgage payments are NOT auto-deducted here (see payMortgage in
-  // data.js) — students pay their own weekly installment on the due day.
   await Promise.all([
     safeBgJob(autoPayDayIfDue(CLASS_CODE), "autoPayDayIfDue"),
     safeBgJob(processAutomations(CLASS_CODE), "processAutomations"),
@@ -355,7 +353,6 @@ function describeTxn(t, nameOf) {
     case "property-buy": return `${nameOf(t.from)} — ${t.note}`;
     case "property-sell": return `${nameOf(t.to)} — ${t.note}`;
     case "mortgage": return `${nameOf(t.from)} — ${t.note}`;
-    case "mortgage-missed": return `${nameOf(t.from)} — ${t.note}`;
     case "event": return `${nameOf(t.to)} — ${t.note}`;
     case "vehicle-buy": return `${nameOf(t.from)} — ${t.note}`;
     case "vehicle-sell": return `${nameOf(t.to)} — ${t.note}`;
@@ -396,7 +393,6 @@ function badge(type) {
     "property-buy": ["navy", "house", "Property"],
     "property-sell": ["gold", "house", "Property sold"],
     "mortgage": ["coral", "house", "Mortgage"],
-    "mortgage-missed": ["coral", "house", "Missed mortgage"],
     "event": ["lilac", "dice", "Random event"],
     "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
     "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
@@ -939,20 +935,6 @@ async function renderProfile(username) {
         <div class="status-declined">Unpaid</div>
       </div>`);
   }
-  if (poss.property && poss.property.mortgageDefault) {
-    const d = poss.property.mortgageDefault;
-    rows.push(`
-      <div class="auto-row" style="background:#fde2e2;border:1px solid #f3a6a6;border-radius:8px;">
-        <div class="auto-details">
-          <strong>${icon("house", 14)} Mortgage ended unpaid — ${poss.property.name}</strong>
-          <div class="muted-small">The mortgage term ended on ${d.endedDate} with ${d.missedPayments} missed payment${d.missedPayments === 1 ? "" : "s"} still outstanding.</div>
-        </div>
-        <div class="row-flex" style="gap:8px;align-items:center;">
-          <div class="status-declined">${fmtMoney(d.amountOwed)} owed</div>
-          <button class="btn small secondary" onclick="profileClearMortgageDefault('${poss.property.id}')">Dismiss</button>
-        </div>
-      </div>`);
-  }
   rows.push(poss.property
     ? `<div class="auto-row"><div class="auto-details"><strong>${poss.property.name}</strong> — ${fmtMoney(poss.property.price)}
         <div class="muted-small">${poss.property.occupancy === "living" ? "Living in it (lifestyle bonus applied)" : poss.property.occupancy === "rented" ? `Rented out — earning ${fmtMoney(poss.property.rentPerWeek || 0)}/week, paid ${DAY_FULL[poss.property.rentDay || "Fri"]}` : "Hasn't chosen to live in it or rent it out yet"}</div>
@@ -1051,12 +1033,6 @@ async function removeProfileLifestyleOverride(username) {
   await renderProfile(username);
 }
 
-async function profileClearMortgageDefault(propId) {
-  if (!confirm("Dismiss this default warning? This doesn't collect the owed amount — it just clears the flag, e.g. once you've settled it with the student some other way.")) return;
-  await clearMortgageDefault(CLASS_CODE, propId);
-  await render();
-  await renderProfile(PROFILE_USER);
-}
 // Shared flow for any teacher-initiated removal that might warrant a
 // refund: confirms the removal itself, then asks yes/no on a refund, and
 // if yes, lets the teacher type the exact percentage. Returns a rate

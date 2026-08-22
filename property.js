@@ -36,8 +36,6 @@ async function init() {
   // at a time — 7 separate sequential network round-trips — was a big
   // chunk of load time, especially on a slow mobile connection. Running
   // them together cuts that to roughly the time of the single slowest one.
-  // Note: mortgage payments are NOT auto-deducted here (see payMortgage in
-  // data.js) — students pay their own weekly installment on the due day.
   await Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
@@ -145,7 +143,6 @@ function ownedUnitBlock(p, isMine, cls, nameOf) {
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
       <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
-      ${isMine && p.mortgageDefault ? `<p style="color:#b42318;"><strong>${icon("house", 13)} Your mortgage term ended on ${p.mortgageDefault.endedDate} without being fully paid off — you still owe ${fmtMoney(p.mortgageDefault.amountOwed)}.</strong></p>` : ""}
       ${isMine && p.mortgage ? mortgagePayBlock(p, cls) : ""}
       ${occupancyBlock(p, isMine)}
       <div class="row-flex" style="gap:8px;margin-top:6px;">
@@ -193,36 +190,21 @@ function occupancyBlock(p, isMine) {
 }
 
 // Shows this week's mortgage-payment status for the owner, and — only on
-// the exact due day, for the exact due week — a button to pay it manually
-// instead of waiting for the automatic weekly job. There's never an amount
-// to type in: the weekly installment (+ interest) is fixed by the mortgage
-// itself, same figure the automatic job would charge.
+// the exact due day, for the exact due week — a button to pay it. There's
+// never an amount to type in: the weekly installment (+ interest) is
+// fixed by the mortgage itself. A week that's missed simply stays unpaid;
+// nothing accumulates as debt, and weeksLeft only ticks down when a
+// payment actually goes through.
 function mortgagePayBlock(p, cls) {
   const mortgageDayName = DAY_FULL[cls.mortgageDay || "Fri"];
   const weekKey = isoWeekKey(new Date());
   const purchaseWeek = p.mortgage.purchaseWeekKey === weekKey;
   const alreadyPaid = p.mortgage.lastWeekPaid === weekKey;
-  const owed = p.mortgage.amountOwed || 0;
   // Payable either on the class's normal mortgage day, or — for this ISO
   // week only — if the teacher has manually marked mortgages as due (see
   // setMortgageDueOverride).
   const forcedDue = cls.mortgageForceDueWeek === weekKey;
   const isDueToday = (cls.mortgageDay || "Fri") === nzDayName() || forcedDue;
-
-  // An outstanding owed balance comes first, ahead of every other state:
-  // a week can be stamped as handled while the money was never actually
-  // collected (a payment that came up short), and until that's cleared the
-  // student genuinely still owes it. Payable any day — it's already late,
-  // so there's no reason to make them wait for the next due day.
-  if (owed > 0) {
-    return `
-      <div class="card" style="margin-top:8px;padding:10px 12px;border:1.5px solid #b42318;">
-        <p style="color:#b42318;margin-top:0;"><strong>${icon("house", 13)} Payment missed — you still owe ${fmtMoney(owed)}.</strong></p>
-        <p class="muted-small">This didn't go through when it was due (most likely you were short on cash at the time). Pay it now to catch up — it counts as that week's installment, so your weeks remaining will tick down as normal.</p>
-        <button class="btn small gold" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay ${fmtMoney(owed)} now</button>
-        <div id="mortgageMsg-${p.id}"></div>
-      </div>`;
-  }
 
   let status, canPay = false;
   if (purchaseWeek) {

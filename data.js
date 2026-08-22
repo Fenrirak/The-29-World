@@ -79,10 +79,6 @@ function hourLabel(h) {
    Promise.all (autoPayDayIfDue, processAutomations,
    processTermDeposits, autoInterestIfDue, processInsurancePayments,
    processWeeklyEvents, processWeeklyBigEvents, ...) and most of them start
-   NOTE: processMortgages is intentionally NOT in that list — mortgage
-   payments are manual-only (see payMortgage), and processMortgages itself
-   is now a permanent no-op stub so it's harmless even if some other page's
-   script still calls it out of habit.
    by reading the SAME class doc — so on every page load, up to ~8-10
    near-simultaneous getClass() calls were each independently hitting
    Firestore for a document that hadn't changed since the call right next
@@ -952,7 +948,7 @@ async function removeStudent(classCode, studentUser) {
     cls.students = cls.students.filter(s => s !== studentUser);
     cls.automations = (cls.automations || []).filter(a => a.studentUser !== studentUser);
     cls.jobApplications = (cls.jobApplications || []).filter(a => a.studentUser !== studentUser);
-    (cls.properties || []).forEach(p => { if (p.owner === studentUser) { p.owner = null; p.mortgage = null; p.occupancy = null; p.rentLastWeekPaid = null; p.mortgageDefault = null; } });
+    (cls.properties || []).forEach(p => { if (p.owner === studentUser) { p.owner = null; p.mortgage = null; p.occupancy = null; p.rentLastWeekPaid = null; } });
     (cls.vehicles || []).forEach(v => { v.owners = (v.owners || []).filter(o => o !== studentUser); });
     t.update(classRef, {
       companies: cls.companies, students: cls.students,
@@ -968,7 +964,7 @@ async function setPayDay(classCode, day) {
   await classesCol().doc(classCode).update({ payDay: day });
 }
 
-// Class-wide day mortgage installments are charged on (see processMortgages).
+// Class-wide day mortgage installments fall due on (see payMortgage).
 async function setMortgageDay(classCode, day) {
   await classesCol().doc(classCode).update({ mortgageDay: DAY_NAMES.includes(day) ? day : "Fri" });
 }
@@ -2444,7 +2440,6 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
       if (p.owner !== s.username) return;
       propertyValue += p.price;
       if (p.mortgage) mortgageOwed += (p.mortgage.weeklyPayment || 0) * (p.mortgage.weeksLeft || 0);
-      if (p.mortgageDefault) mortgageOwed += p.mortgageDefault.amountOwed || 0;
     });
     propertyValue = Math.round(propertyValue * 100) / 100;
     mortgageOwed = Math.round(mortgageOwed * 100) / 100;
@@ -2475,7 +2470,7 @@ async function resetClass(classCode) {
     balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: [], truckLicence: false, truckCheckins: {}
   })));
   const cls = await getClass(classCode);
-  const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null, occupancy: null, rentLastWeekPaid: null, mortgageDefault: null }));
+  const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null, occupancy: null, rentLastWeekPaid: null }));
   const vehicles = (cls.vehicles || []).map(v => ({ ...v, owners: [] }));
   await classesCol().doc(classCode).update({
     companies: [], txns: [], automations: [], jobApplications: [],
@@ -3464,7 +3459,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource) {
           t.update(userRef, { jobId: null });
         } else if (entry.module === "property") {
           const prop = cls.properties.find(p => p.owner === username);
-          if (prop) { prop.owner = null; prop.mortgage = null; prop.occupancy = null; prop.rentLastWeekPaid = null; prop.mortgageDefault = null; }
+          if (prop) { prop.owner = null; prop.mortgage = null; prop.occupancy = null; prop.rentLastWeekPaid = null; }
           t.update(classRef, { properties: cls.properties, bigEventLog: cls.bigEventLog });
         } else if (entry.module === "transport") {
           const veh = cls.vehicles.find(v => (v.owners || []).includes(username));
@@ -3594,14 +3589,9 @@ function withNewModuleDefaults(cls) {
     if (p.rentDay === undefined) p.rentDay = "Fri";
     if (p.occupancy === undefined) p.occupancy = null;
     if (p.rentLastWeekPaid === undefined) p.rentLastWeekPaid = null;
-    // mortgageDefault: set once a financed property's mortgage term runs
-    // out without being fully paid off (see processMortgages). Persists on
-    // the property — visible to the teacher — until the property changes
-    // hands again (repossession, resale, etc).
-    if (p.mortgageDefault === undefined) p.mortgageDefault = null;
     // Weekly mortgage interest rate on the listing (percent, 0 = none).
     // Existing mortgages already in progress keep accruing interest-free
-    // (processMortgages falls back to weeklyPayment*weeksLeft for
+    // (payMortgage falls back to weeklyPayment*weeksLeft for
     // principalRemaining and 0 for interestRate on those).
     if (p.mortgageInterestRate === undefined) p.mortgageInterestRate = 0;
   });
@@ -4149,7 +4139,7 @@ async function sellStoreItem(username, classCode, itemId, rate) {
    identical house available for sale (e.g. "Cosy Cottage x5"). Under the
    hood each purchasable unit is still its own separate entry in
    cls.properties (own id, own owner/mortgage/occupancy state — nothing
-   downstream like buyProperty/sellProperty/processMortgages/
+   downstream like buyProperty/sellProperty/payMortgage/
    processPropertyRent needs to change), but all units from the same
    listing share a `groupId` so the UI can show them as one card with an
    "X of N available" count instead of N duplicate cards. Properties saved
@@ -4284,29 +4274,26 @@ async function buyProperty(username, classCode, propId, financed) {
         if (!isTeacher && user.balance < deposit) throw new Error("BROKE");
         prop.owner = username;
         // purchaseWeekKey marks the ISO week the mortgage was taken out —
-        // processMortgages skips charging a mortgage during its own
-        // purchase week. missedPayments/amountOwed track weeks the owner
-        // couldn't afford the due payment (see processMortgages).
-        // interestRate is snapshotted from the listing at purchase time (so
-        // a later change to the listing's rate doesn't retroactively alter
-        // an existing mortgage) and is charged each week on
-        // principalRemaining — the financed amount still outstanding,
-        // which only ever goes down by the (interest-free) weeklyPayment
-        // installment, same schedule as weeksLeft.
+        // payMortgage blocks payment during the mortgage's own purchase
+        // week. interestRate is snapshotted from the listing at purchase
+        // time (so a later change to the listing's rate doesn't
+        // retroactively alter an existing mortgage) and is charged each
+        // week on principalRemaining — the financed amount still
+        // outstanding, which only ever goes down by the (interest-free)
+        // weeklyPayment installment, same schedule as weeksLeft.
         prop.mortgage = {
           weeksLeft: prop.mortgageWeeks, weeklyPayment: weekly,
           purchaseWeekKey: isoWeekKey(new Date()), lastWeekPaid: null,
-          missedPayments: 0, amountOwed: 0,
           interestRate: prop.mortgageInterestRate || 0,
           principalRemaining: Math.round((taxedPrice - deposit) * 100) / 100
         };
-        prop.occupancy = null; prop.rentLastWeekPaid = null; prop.mortgageDefault = null;
+        prop.occupancy = null; prop.rentLastWeekPaid = null;
         if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - deposit) * 100) / 100 });
       } else {
         if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
         prop.owner = username;
         prop.mortgage = null;
-        prop.occupancy = null; prop.rentLastWeekPaid = null; prop.mortgageDefault = null;
+        prop.occupancy = null; prop.rentLastWeekPaid = null;
         cashPaid = taxedPrice;
         if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - taxedPrice) * 100) / 100 });
       }
@@ -4336,7 +4323,6 @@ async function sellProperty(classCode, propId, rate) {
     prop.mortgage = null;
     prop.occupancy = null;
     prop.rentLastWeekPaid = null;
-    prop.mortgageDefault = null;
     t.update(classRef, { properties: cls.properties });
   });
   if (owner) {
@@ -4345,72 +4331,26 @@ async function sellProperty(classCode, propId, rate) {
   }
   return true;
 }
-// DISABLED — mortgage payments must ONLY ever happen through a student
-// manually clicking "Pay this week's mortgage" (see payMortgage below).
-// This function is intentionally kept as a no-op stub, rather than being
-// deleted outright, so that if any other page in this project still has a
-// leftover call to processMortgages(classCode) in its own script (outside
-// this file), that call resolves harmlessly to 0 instead of silently
-// auto-charging or auto-defaulting a mortgage behind the student's back.
-// Do NOT restore the body below without also intentionally deciding that
-// automatic charging is wanted again — see payMortgage's comment for why
-// manual-only was chosen.
-//
-// Original behaviour (kept here only as a reference for the interest
-// calculation, which payMortgage reuses): charged weekly mortgage
-// installments once per NZ calendar week per property, but only on the
-// class's mortgageDay (teacher-set — see setMortgageDay), excluding the
-// ISO week the mortgage was taken out (purchaseWeekKey, set in
-// buyProperty). Each due week was charged whether or not the student
-// could actually afford it — if their balance was short, nothing was
-// deducted, but the mortgage term still counted down and the missed
-// amount accumulated in mortgage.amountOwed, same idea as
-// mortgage.amountOwed/mortgageDefault still used by the manual flow below.
-async function processMortgages(classCode) {
-  return 0;
-}
-
-// Teacher-only: clear a property's mortgageDefault flag without touching
-// ownership, price, or balances — e.g. once the teacher has settled the
-// owed amount with the student some other way (a bonus/fine adjustment,
-// a manual arrangement, etc).
-async function clearMortgageDefault(classCode, propId) {
-  const classRef = classesCol().doc(classCode);
-  await fdb.runTransaction(async (t) => {
-    const snap = await t.get(classRef);
-    if (!snap.exists) return;
-    const cls = withNewModuleDefaults(snap.data());
-    const prop = cls.properties.find(p => p.id === propId);
-    if (!prop) return;
-    prop.mortgageDefault = null;
-    t.update(classRef, { properties: cls.properties });
-  });
-}
-
-// Lets a student manually pay off this week's mortgage installment
-// themselves, instead of only ever waiting for the automatic
-// processMortgages job to charge it. Mirrors the exact same
-// weekly-installment + interest calculation as processMortgages (see
-// above) so there's only ever one "right" amount to pay — students can't
-// pay extra, pay early against a future week, or pay a custom amount here.
-// Two guards keep this from being used to dodge or front-run the normal
-// schedule:
-//   - it only works on the class's mortgageDay (teacher-set), same day the
-//     automatic job runs; and
+// The one and only way a mortgage installment is ever paid: the student
+// pays this week's installment themselves. Nothing in this app ever
+// deducts a mortgage payment automatically. There's never an amount to
+// type in — the weekly installment (+ interest on the remaining
+// principal) is fixed by the mortgage itself, so students can't pay extra,
+// pay early against a future week, or pay a custom amount here.
+// Guards on the normal weekly payment:
+//   - it only works on the class's mortgageDay (teacher-set), or for this
+//     ISO week only if the teacher has marked payments due now (see
+//     setMortgageDueOverride); and
 //   - it's blocked during the ISO week the property was purchased (that
-//     week is always free, same as processMortgages), and once per ISO
-//     week thereafter via mortgage.lastWeekPaid, which this also sets so
-//     the automatic job never double-charges a week the student already
-//     paid manually themselves.
-// Unlike processMortgages, an unaffordable payment here is simply refused
-// (BROKE) rather than silently accumulating into mortgage.amountOwed —
-// that "charge regardless, track what's missed" behaviour only makes
-// sense for the automatic weekly sweep, not a payment the student is
-// actively choosing to make right now.
+//     week is always free), and to once per ISO week thereafter via
+//     mortgage.lastWeekPaid.
+// An unaffordable payment is simply refused (BROKE) — nothing is part-paid
+// and nothing accumulates as debt, since the student is the only one who
+// can ever trigger a charge in the first place.
 async function payMortgage(username, classCode, propId) {
   const classRef = classesCol().doc(classCode);
   const userRef = usersCol().doc(username);
-  let amt = 0, remainingAfter = 0, propName = "", wasCatchUp = false;
+  let amt = 0, remainingAfter = 0, propName = "";
   try {
     await fdb.runTransaction(async (t) => {
       const classSnap = await t.get(classRef);
@@ -4425,44 +4365,12 @@ async function payMortgage(username, classCode, propId) {
       // ISO week only — if the teacher has manually forced it due (see
       // setMortgageDueOverride).
       const forcedDue = cls.mortgageForceDueWeek === weekKey;
-      const owed = prop.mortgage.amountOwed || 0;
-      const alreadyStampedThisWeek = prop.mortgage.lastWeekPaid === weekKey;
       propName = prop.name;
-      wasCatchUp = false;
-
-      if (alreadyStampedThisWeek && owed > 0) {
-        // Catch-up path: this week got stamped as "handled" (e.g. by an
-        // automatic charge that came up short) without the money actually
-        // being collected, leaving a real balance still owed. Let the
-        // student clear it any time — not gated to the due day/override,
-        // since it's already overdue — and treat it exactly like a normal
-        // installment: it counts down weeksLeft and reduces principal by
-        // one weeklyPayment, same as if that week's payment had gone
-        // through cleanly to begin with. No extra interest is charged on
-        // top, since interest already isn't double-counted here.
-        amt = owed;
-        wasCatchUp = true;
-        if (user.balance < amt) throw new Error("BROKE");
-        t.update(userRef, { balance: Math.round((user.balance - amt) * 100) / 100 });
-        const principalBefore = prop.mortgage.principalRemaining != null
-          ? prop.mortgage.principalRemaining
-          : prop.mortgage.weeklyPayment * prop.mortgage.weeksLeft;
-        prop.mortgage.principalRemaining = Math.max(0, Math.round((principalBefore - prop.mortgage.weeklyPayment) * 100) / 100);
-        prop.mortgage.weeksLeft -= 1;
-        prop.mortgage.amountOwed = 0;
-        prop.mortgage.missedPayments = Math.max(0, (prop.mortgage.missedPayments || 0) - 1);
-        remainingAfter = prop.mortgage.weeksLeft;
-        if (remainingAfter <= 0) {
-          prop.mortgage = null;
-        }
-        t.update(classRef, { properties: cls.properties });
-        return;
-      }
 
       if ((cls.mortgageDay || "Fri") !== nzDayName() && !forcedDue) throw new Error("WRONG_DAY");
       if (prop.mortgage.purchaseWeekKey === weekKey) throw new Error("PURCHASE_WEEK");
-      if (alreadyStampedThisWeek) throw new Error("ALREADY_PAID");
-      // Same interest-on-remaining-principal calculation as processMortgages.
+      if (prop.mortgage.lastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
+      // Interest is charged on the principal still remaining.
       const principalBefore = prop.mortgage.principalRemaining != null
         ? prop.mortgage.principalRemaining
         : prop.mortgage.weeklyPayment * prop.mortgage.weeksLeft; // pre-existing mortgages without the field
@@ -4474,32 +4382,19 @@ async function payMortgage(username, classCode, propId) {
       prop.mortgage.weeksLeft -= 1;
       prop.mortgage.lastWeekPaid = weekKey;
       remainingAfter = prop.mortgage.weeksLeft;
-      if (remainingAfter <= 0) {
-        // Same end-of-term check as processMortgages: any amountOwed left
-        // over from earlier missed automatic payments still flags a
-        // default even though this final week's payment itself went
-        // through fine.
-        const owedAtEnd = prop.mortgage.amountOwed || 0;
-        if (owedAtEnd > 0) {
-          prop.mortgageDefault = { amountOwed: owedAtEnd, missedPayments: prop.mortgage.missedPayments || 0, endedDate: nzDateKey() };
-        }
-        prop.mortgage = null;
-      }
+      if (remainingAfter <= 0) prop.mortgage = null;
       t.update(classRef, { properties: cls.properties });
     });
   } catch (e) {
     if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay your mortgage on its due day." };
     if (e.message === "PURCHASE_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you bought is free." };
     if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's payment has already gone through." };
-    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this payment." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's payment." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That mortgage couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, {
-    type: "mortgage", from: username, amount: amt,
-    note: (wasCatchUp ? `Missed mortgage payment caught up: ${propName}` : `Mortgage payment: ${propName}`) + (remainingAfter <= 0 ? " — paid off!" : "")
-  });
-  return { ok: true, amount: amt, fullyPaid: remainingAfter <= 0, caughtUp: wasCatchUp };
+  await logTxn(classCode, { type: "mortgage", from: username, amount: amt, note: `Mortgage payment: ${propName}` + (remainingAfter <= 0 ? " — paid off!" : "") });
+  return { ok: true, amount: amt, fullyPaid: remainingAfter <= 0 };
 }
 
 // Whether this property's mortgage currently has a missed weekly payment —
@@ -4512,10 +4407,6 @@ async function payMortgage(username, classCode, propId) {
 function isMortgagePaymentOverdue(prop, cls) {
   if (!prop || !prop.mortgage || prop.mortgage.weeksLeft <= 0) return false;
   const weekKey = isoWeekKey(new Date());
-  // An outstanding owed balance is overdue no matter what week it is or
-  // whether this week is stamped as handled — the money genuinely hasn't
-  // been collected yet (see the catch-up path in payMortgage).
-  if ((prop.mortgage.amountOwed || 0) > 0) return true;
   if (prop.mortgage.purchaseWeekKey === weekKey) return false; // first week is always free
   if (prop.mortgage.lastWeekPaid === weekKey) return false; // already paid this week
   // A teacher-forced due week (see setMortgageDueOverride) counts as
@@ -4595,7 +4486,7 @@ async function setPropertyOccupancy(username, classCode, propId, occupancy) {
 
 // Pays weekly rent to any student who owns a property and has chosen to
 // rent it out, once per NZ calendar week on that property's own rentDay —
-// same "once per ISO week, tracked per-item" pattern as processMortgages,
+// same "once per ISO week, tracked per-item" pattern as payMortgage,
 // just paying the owner instead of charging them.
 async function processPropertyRent(classCode) {
   const cls = withNewModuleDefaults(await getClass(classCode));
