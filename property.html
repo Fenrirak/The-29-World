@@ -25,6 +25,60 @@
 <link rel="stylesheet" href="style.css">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
+<style>
+  /* Mortgage settings card (teacher-only) */
+  #mortgagePanel .mortgage-status-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 22px; }
+  #mortgagePanel .mortgage-subsection { margin-top: 26px; padding-top: 22px; border-top: 1.5px solid var(--line); }
+  #mortgagePanel .mortgage-subsection:first-of-type { margin-top: 22px; padding-top: 0; border-top: none; }
+  #mortgagePanel .mortgage-subsection-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  #mortgagePanel .mortgage-subsection-head h3 { margin: 0; font-size: 1.02rem; }
+  #mortgagePanel .mortgage-day-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 10px; }
+  #mortgagePanel .mortgage-day-row select { max-width: 200px; margin-bottom: 0; }
+
+  .mortgage-toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-top: 12px;
+    padding: 14px 16px;
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    background: rgba(0,0,0,0.012);
+    cursor: pointer;
+  }
+  .mortgage-toggle-row input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .mortgage-toggle-track {
+    position: relative;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 26px;
+    margin-top: 1px;
+    border-radius: 999px;
+    background: #d7dae0;
+    transition: background .18s ease;
+  }
+  .mortgage-toggle-track .mortgage-toggle-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.28);
+    transition: transform .18s ease;
+  }
+  .mortgage-toggle-row input:checked ~ .mortgage-toggle-track { background: #c9932e; }
+  .mortgage-toggle-row input:checked ~ .mortgage-toggle-track .mortgage-toggle-thumb { transform: translateX(18px); }
+  .mortgage-toggle-row input:focus-visible ~ .mortgage-toggle-track { outline: 2px solid #c9932e; outline-offset: 2px; }
+  .mortgage-toggle-text { flex: 1; }
+  .mortgage-toggle-text strong { display: block; margin-bottom: 2px; }
+</style>
 </head>
 <body>
 
@@ -55,6 +109,51 @@
 <main>
   <h1 id="pageTitle">Property</h1>
   <p>Buy a house outright, or finance it with a weekly mortgage.</p>
+
+  <div id="mortgagePanel" class="card hidden">
+    <h2 id="hMortgageSettings">Mortgage settings</h2>
+    <p>Control when weekly mortgage installments become payable for financed properties.</p>
+    <div class="mortgage-status-row" id="mortgageStatusRow"></div>
+
+    <div class="mortgage-subsection">
+      <div class="mortgage-subsection-head">
+        <h3 id="hMortgageDay">Weekly due day</h3>
+      </div>
+      <p class="muted-small" id="pMortgageDay">Financed properties owe their weekly mortgage payment on this day (skipping the week the property was bought) — students pay it themselves from this page, it isn't deducted automatically. If a student hasn't paid by the time this day passes, it shows up as a red "payment overdue" warning on their profile until they pay.</p>
+      <div class="mortgage-day-row">
+        <div>
+          <label for="mortgageDaySelect" id="labMortgageDay">Due day</label>
+          <select id="mortgageDaySelect">
+            <option value="Mon">Monday</option>
+            <option value="Tue">Tuesday</option>
+            <option value="Wed">Wednesday</option>
+            <option value="Thu">Thursday</option>
+            <option value="Fri">Friday</option>
+            <option value="Sat">Saturday</option>
+            <option value="Sun">Sunday</option>
+          </select>
+        </div>
+        <button class="btn secondary small" onclick="saveMortgageDayClick()" id="saveMortgageDayBtn">Save mortgage day</button>
+      </div>
+      <div id="mortgageDayMsg"></div>
+    </div>
+
+    <div class="mortgage-subsection">
+      <div class="mortgage-subsection-head">
+        <h3 id="hMortgageForceDue">Manual override</h3>
+      </div>
+      <label class="mortgage-toggle-row" for="mortgageForceDue">
+        <input type="checkbox" id="mortgageForceDue" onchange="previewMortgageForceDue()">
+        <span class="mortgage-toggle-track"><span class="mortgage-toggle-thumb"></span></span>
+        <span class="mortgage-toggle-text">
+          <strong id="labMortgageForceDue">Mark this week's mortgage payments as due now</strong>
+          <span class="muted-small">Overrides the due day above for the rest of this week only, so students can pay their weekly installment right now instead of waiting for the usual day. Doesn't charge anyone automatically — students still pay it themselves. Turns back off on its own once the week ends.</span>
+        </span>
+      </label>
+      <button class="btn secondary small" style="margin-top:12px;" onclick="saveMortgageForceDue()" id="saveMortgageForceDueBtn">Save</button>
+      <div id="mortgageForceDueMsg"></div>
+    </div>
+  </div>
 
   <div id="teacherPanel" class="card hidden">
     <h2 id="hAdd">Add a property</h2>

@@ -1,4 +1,5 @@
 let CURRENT, IS_TEACHER, EDITING_ID = null;
+let MORTGAGE_SETTINGS_CLS = null; // last-loaded class doc, used to preview the force-due toggle before saving
 
 function comfortStars(n) {
   n = Number(n) || 0;
@@ -8,6 +9,12 @@ function comfortStars(n) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("house", 26) + " Property";
+  document.getElementById("hMortgageSettings").innerHTML = icon("house", 18) + " Mortgage settings";
+  document.getElementById("hMortgageDay").innerHTML = icon("calendar", 15) + " Weekly due day";
+  document.getElementById("labMortgageDay").innerHTML = "Due day";
+  document.getElementById("saveMortgageDayBtn").innerHTML = icon("calendar", 14) + " Save mortgage day";
+  document.getElementById("hMortgageForceDue").innerHTML = icon("send", 15) + " Manual override";
+  document.getElementById("saveMortgageForceDueBtn").innerHTML = icon("send", 14) + " Save";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a property";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add property";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
@@ -22,6 +29,7 @@ async function init() {
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("mortgagePanel").classList.toggle("hidden", !IS_TEACHER);
   paintChrome();
   // These 7 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
@@ -71,6 +79,8 @@ async function render() {
   const props = cls.properties || [];
   const students = await getClassStudents(me.classCode);
   const nameOf = un => (students.find(s => s.username === un) || {}).name || un;
+
+  if (IS_TEACHER) populateMortgageSettings(cls);
 
   const list = document.getElementById("propList");
   list.innerHTML = "";
@@ -227,6 +237,52 @@ async function payMortgageClick(id) {
     if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`;
     return;
   }
+  await render();
+}
+
+// Builds the status badge row for the teacher-only mortgage settings card.
+// previewForceDue, when passed, lets the toggle show what would change
+// before it's actually saved (see previewMortgageForceDue).
+function mortgageStatusBadges(cls, previewForceDue) {
+  const day = cls.mortgageDay || "Fri";
+  const weekKey = isoWeekKey(new Date());
+  const storedForceDue = cls.mortgageForceDueWeek === weekKey;
+  const forceDue = previewForceDue === undefined ? storedForceDue : previewForceDue;
+  const dueToday = day === nzDayName();
+
+  let badges = `<span class="badge navy">${icon("calendar", 12)}Due every ${DAY_FULL[day]}</span>`;
+  if (dueToday) badges += `<span class="badge mint">${icon("house", 12)}Due today</span>`;
+  if (forceDue && !dueToday) badges += `<span class="badge gold">${icon("send", 12)}This week: due now (override)</span>`;
+  if (forceDue !== storedForceDue) badges += `<span class="badge lilac">Unsaved change — click Save below</span>`;
+  return badges;
+}
+
+function populateMortgageSettings(cls) {
+  MORTGAGE_SETTINGS_CLS = cls;
+  document.getElementById("mortgageDaySelect").value = cls.mortgageDay || "Fri";
+  document.getElementById("mortgageForceDue").checked = cls.mortgageForceDueWeek === isoWeekKey(new Date());
+  document.getElementById("mortgageStatusRow").innerHTML = mortgageStatusBadges(cls);
+}
+
+// Live-updates the status badges as soon as the teacher flips the toggle,
+// before they've actually clicked Save — makes it obvious the change is
+// only local until confirmed.
+function previewMortgageForceDue() {
+  if (!MORTGAGE_SETTINGS_CLS) return;
+  const checked = document.getElementById("mortgageForceDue").checked;
+  document.getElementById("mortgageStatusRow").innerHTML = mortgageStatusBadges(MORTGAGE_SETTINGS_CLS, checked);
+}
+
+async function saveMortgageDayClick() {
+  await setMortgageDay(CURRENT.classCode, document.getElementById("mortgageDaySelect").value);
+  document.getElementById("mortgageDayMsg").innerHTML = `<div class="success-msg">Mortgage day saved. Students can pay their weekly mortgage installment themselves on this day.</div>`;
+  await render();
+}
+
+async function saveMortgageForceDue() {
+  const active = document.getElementById("mortgageForceDue").checked;
+  await setMortgageDueOverride(CURRENT.classCode, active);
+  document.getElementById("mortgageForceDueMsg").innerHTML = `<div class="success-msg">${active ? "This week's mortgage payments are now marked as due — students can pay below." : "Manual override turned off."}</div>`;
   await render();
 }
 

@@ -227,26 +227,7 @@
     </select>
     <button class="btn secondary small" style="margin-top:12px;" onclick="savePayDay()" id="savePayDayBtn">Save pay day</button>
 
-    <label for="mortgageDaySelect" id="labMortgageDay" style="margin-top:24px;">Mortgage due day (which day weekly mortgage payments are charged)</label>
-    <select id="mortgageDaySelect" style="max-width:220px;">
-      <option value="Mon">Monday</option>
-      <option value="Tue">Tuesday</option>
-      <option value="Wed">Wednesday</option>
-      <option value="Thu">Thursday</option>
-      <option value="Fri">Friday</option>
-      <option value="Sat">Saturday</option>
-      <option value="Sun">Sunday</option>
-    </select>
-    <p class="muted-small">Financed properties owe their weekly mortgage payment on this day (skipping the week the property was bought) — students pay it themselves from the Property page, it isn't deducted automatically. If a student hasn't paid by the time this day passes, it shows up as a red "payment overdue" warning on their profile until they pay.</p>
-    <button class="btn secondary small" style="margin-top:12px;" onclick="saveMortgageDayClick()" id="saveMortgageDayBtn">Save mortgage day</button>
-
-    <label style="display:flex;align-items:center;gap:8px;margin-top:16px;">
-      <input type="checkbox" id="mortgageForceDue">
-      <span id="labMortgageForceDue">Mark this week's mortgage payments as due now</span>
-    </label>
-    <p class="muted-small">Overrides the mortgage due day above for the rest of this week only, so students can pay their weekly installment right now instead of waiting for the usual day. Doesn't charge anyone automatically — students still pay it themselves. Turns back off on its own once the week ends.</p>
-    <button class="btn secondary small" style="margin-top:12px;" onclick="saveMortgageForceDue()" id="saveMortgageForceDueBtn">Save</button>
-    <div id="mortgageForceDueMsg"></div>
+    <p class="muted-small" id="mortgageSettingsMoved" style="margin-top:24px;">Mortgage due day and "mark due now" controls have moved to the <a href="property.html">Property</a> page.</p>
 
     <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
       <label style="display:flex;align-items:center;gap:8px;">
