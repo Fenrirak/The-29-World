@@ -370,6 +370,7 @@ function describeTxn(t, nameOf) {
     case "loan-repayment": return `${nameOf(t.from)} — ${t.note}`;
     case "loan-interest": return `${nameOf(t.to)} — ${t.note}`;
     case "side-hustle": return `${nameOf(t.to)} — ${t.note}`;
+    case "truck-drive": return `${nameOf(t.to)} — ${t.note}`;
     case "store-gift": return `${nameOf(t.to)} — ${t.note}`;
     default: return t.note || "";
   }
@@ -404,6 +405,7 @@ function badge(type) {
     "loan-taken": ["navy", "handshake", "Loan"], "loan-repayment": ["mint", "handshake", "Loan repayment"],
     "loan-interest": ["coral", "handshake", "Loan interest"],
     "side-hustle": ["mint", "briefcase", "Side hustle"],
+    "truck-drive": ["mint", "car", "Truck drive"],
     "store-gift": ["mint", "cart", "Free item"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
