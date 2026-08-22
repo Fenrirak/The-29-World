@@ -4410,7 +4410,7 @@ async function clearMortgageDefault(classCode, propId) {
 async function payMortgage(username, classCode, propId) {
   const classRef = classesCol().doc(classCode);
   const userRef = usersCol().doc(username);
-  let amt = 0, remainingAfter = 0, propName = "";
+  let amt = 0, remainingAfter = 0, propName = "", wasCatchUp = false;
   try {
     await fdb.runTransaction(async (t) => {
       const classSnap = await t.get(classRef);
@@ -4425,10 +4425,43 @@ async function payMortgage(username, classCode, propId) {
       // ISO week only — if the teacher has manually forced it due (see
       // setMortgageDueOverride).
       const forcedDue = cls.mortgageForceDueWeek === weekKey;
+      const owed = prop.mortgage.amountOwed || 0;
+      const alreadyStampedThisWeek = prop.mortgage.lastWeekPaid === weekKey;
+      propName = prop.name;
+      wasCatchUp = false;
+
+      if (alreadyStampedThisWeek && owed > 0) {
+        // Catch-up path: this week got stamped as "handled" (e.g. by an
+        // automatic charge that came up short) without the money actually
+        // being collected, leaving a real balance still owed. Let the
+        // student clear it any time — not gated to the due day/override,
+        // since it's already overdue — and treat it exactly like a normal
+        // installment: it counts down weeksLeft and reduces principal by
+        // one weeklyPayment, same as if that week's payment had gone
+        // through cleanly to begin with. No extra interest is charged on
+        // top, since interest already isn't double-counted here.
+        amt = owed;
+        wasCatchUp = true;
+        if (user.balance < amt) throw new Error("BROKE");
+        t.update(userRef, { balance: Math.round((user.balance - amt) * 100) / 100 });
+        const principalBefore = prop.mortgage.principalRemaining != null
+          ? prop.mortgage.principalRemaining
+          : prop.mortgage.weeklyPayment * prop.mortgage.weeksLeft;
+        prop.mortgage.principalRemaining = Math.max(0, Math.round((principalBefore - prop.mortgage.weeklyPayment) * 100) / 100);
+        prop.mortgage.weeksLeft -= 1;
+        prop.mortgage.amountOwed = 0;
+        prop.mortgage.missedPayments = Math.max(0, (prop.mortgage.missedPayments || 0) - 1);
+        remainingAfter = prop.mortgage.weeksLeft;
+        if (remainingAfter <= 0) {
+          prop.mortgage = null;
+        }
+        t.update(classRef, { properties: cls.properties });
+        return;
+      }
+
       if ((cls.mortgageDay || "Fri") !== nzDayName() && !forcedDue) throw new Error("WRONG_DAY");
       if (prop.mortgage.purchaseWeekKey === weekKey) throw new Error("PURCHASE_WEEK");
-      if (prop.mortgage.lastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
-      propName = prop.name;
+      if (alreadyStampedThisWeek) throw new Error("ALREADY_PAID");
       // Same interest-on-remaining-principal calculation as processMortgages.
       const principalBefore = prop.mortgage.principalRemaining != null
         ? prop.mortgage.principalRemaining
@@ -4458,12 +4491,15 @@ async function payMortgage(username, classCode, propId) {
     if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay your mortgage on its due day." };
     if (e.message === "PURCHASE_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you bought is free." };
     if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's payment has already gone through." };
-    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's payment." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this payment." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That mortgage couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "mortgage", from: username, amount: amt, note: `Mortgage payment: ${propName}` + (remainingAfter <= 0 ? " — paid off!" : "") });
-  return { ok: true, amount: amt, fullyPaid: remainingAfter <= 0 };
+  await logTxn(classCode, {
+    type: "mortgage", from: username, amount: amt,
+    note: (wasCatchUp ? `Missed mortgage payment caught up: ${propName}` : `Mortgage payment: ${propName}`) + (remainingAfter <= 0 ? " — paid off!" : "")
+  });
+  return { ok: true, amount: amt, fullyPaid: remainingAfter <= 0, caughtUp: wasCatchUp };
 }
 
 // Whether this property's mortgage currently has a missed weekly payment —
@@ -4476,6 +4512,10 @@ async function payMortgage(username, classCode, propId) {
 function isMortgagePaymentOverdue(prop, cls) {
   if (!prop || !prop.mortgage || prop.mortgage.weeksLeft <= 0) return false;
   const weekKey = isoWeekKey(new Date());
+  // An outstanding owed balance is overdue no matter what week it is or
+  // whether this week is stamped as handled — the money genuinely hasn't
+  // been collected yet (see the catch-up path in payMortgage).
+  if ((prop.mortgage.amountOwed || 0) > 0) return true;
   if (prop.mortgage.purchaseWeekKey === weekKey) return false; // first week is always free
   if (prop.mortgage.lastWeekPaid === weekKey) return false; // already paid this week
   // A teacher-forced due week (see setMortgageDueOverride) counts as
