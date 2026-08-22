@@ -29,7 +29,7 @@ async function init() {
   await Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
-    safeBgJob(processMortgages(u.classCode), "processMortgages"),
+    safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
     safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents")
