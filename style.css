@@ -1,0 +1,699 @@
+:root{
+  --navy-900:#1f2b44;
+  --navy-800:#243a5e;
+  --navy-700:#2c3b5c;
+  --navy-500:#3d5279;
+  --sky:#5b8def;
+  --gold:#e8b84b;
+  --gold-dark:#c99a2e;
+  --mint:#3fbf8f;
+  --mint-dark:#2e9873;
+  --coral:#e8735f;
+  --lilac:#8a7fd6;
+  --bg:#eef2fa;
+  --card:#ffffff;
+  --ink:#1a2233;
+  --muted:#697389;
+  --line:#e2e7f0;
+  --radius:14px;
+  --shadow:0 6px 20px rgba(31,43,68,0.08);
+}
+
+html{-webkit-text-size-adjust:100%;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;touch-action:manipulation;}
+body{
+  color:var(--ink);
+  font-family:"Segoe UI","Trebuchet MS",Verdana,sans-serif;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  background-color:var(--bg);
+  background-image:
+    radial-gradient(circle at 6% 10%, rgba(91,141,239,0.10), transparent 40%),
+    radial-gradient(circle at 96% 18%, rgba(232,184,75,0.14), transparent 40%),
+    radial-gradient(circle at 90% 92%, rgba(63,191,143,0.10), transparent 40%);
+  background-attachment:fixed;
+}
+.icon svg{width:100%;height:100%;display:block;}
+h1,h2,h3,h4{
+  font-family:"Trebuchet MS","Segoe UI",Verdana,sans-serif;
+  font-weight:800;
+  color:var(--navy-900);
+  letter-spacing:-0.01em;
+  margin:0 0 .4em 0;
+}
+a{color:var(--navy-700);}
+p{color:var(--muted);line-height:1.5;}
+
+.topbar{
+  --navscale:1; /* set by fitTopbar() in icons.js after measuring real widths */
+  background:linear-gradient(120deg,var(--navy-900) 0%,var(--navy-800) 55%,var(--navy-700) 100%);
+  color:#fff;
+  padding:12px 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:calc(10px * var(--navscale));
+  flex-wrap:nowrap;
+  box-shadow:var(--shadow);
+  position:sticky;
+  top:0;
+  z-index:50;
+}
+/* Nav sizing (brand text/icon, link text/icon, gaps, padding, logout button)
+   is driven by the --navscale custom property instead of guessed
+   breakpoints. Every size below is a base ("full size") value multiplied
+   by var(--navscale) via calc(). fitTopbar() in icons.js measures the
+   topbar's real available width against what the nav actually needs at
+   scale 1, then sets --navscale to whatever value makes it fit exactly —
+   recalculated on load, resize, and orientation change, so it responds to
+   the genuine screen width rather than a fixed set of breakpoints. In
+   portrait orientation, JS leaves --navscale at 1 and CSS instead switches
+   to icon-only + allows wrapping (see the orientation:portrait block
+   below), since shrinking text below a certain point stops being legible —
+   dropping labels reads better than microscopic text. */
+.brand{
+  display:flex;
+  align-items:center;
+  gap:calc(6px * var(--navscale));
+  font-weight:800;
+  font-size:calc(1.15rem * var(--navscale));
+  color:#fff;
+  text-decoration:none;
+  flex-shrink:0;
+  white-space:nowrap;
+}
+.brand .coin, .brand .icon-slot{
+  width:calc(24px * var(--navscale));
+  height:calc(24px * var(--navscale));
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--gold);
+  filter:drop-shadow(0 3px 6px rgba(232,184,75,0.35));
+  flex-shrink:0;
+}
+.topbar nav{
+  display:flex;
+  flex-wrap:nowrap;
+  gap:calc(6px * var(--navscale));
+  align-items:center;
+}
+.topbar nav a{
+  color:#cfd8ea;text-decoration:none;font-weight:600;
+  font-size:calc(0.95rem * var(--navscale));
+  display:inline-flex;align-items:center;
+  gap:calc(6px * var(--navscale));
+  padding:calc(8px * var(--navscale)) calc(10px * var(--navscale));
+  border-radius:8px;
+  min-height:calc(34px * var(--navscale));
+  white-space:nowrap;
+  flex-shrink:0;
+}
+.topbar nav a .icon{
+  width:calc(17px * var(--navscale));
+  height:calc(17px * var(--navscale));
+  flex-shrink:0;
+}
+/* Applied by fitTopbar() when even the minimum legible text scale can't
+   make the full-label row fit — drops to icon-only so the row still fits
+   on one line rather than shrinking text past readability. */
+.topbar nav.force-icons a .nav-label{display:none;}
+.topbar nav.force-icons a{padding:calc(8px * var(--navscale));justify-content:center;}
+.topbar nav a:hover{color:#fff;background:rgba(255,255,255,0.08);}
+.topbar nav a.active{background:rgba(232,184,75,0.16);color:var(--gold);}
+.topbar nav a.nav-locked{opacity:.4;cursor:not-allowed;}
+.topbar nav a.nav-locked:hover{background:none;color:inherit;}
+
+/* Student profile modal */
+#profileModal .card{max-width:680px;max-height:88vh;overflow:auto;}
+#profileSubtitle{color:var(--muted);font-size:.9rem;margin:-6px 0 0;}
+.profile-summary{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 4px;}
+.profile-chip{flex:1;min-width:140px;background:#f6f8fc;border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;}
+.profile-chip .label{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:800;margin-bottom:3px;}
+.profile-chip .value{font-size:1.15rem;font-weight:800;color:var(--navy-900);line-height:1.25;}
+.profile-chip .value .muted-small{font-weight:600;}
+#profileBody h4{
+  display:flex;align-items:center;gap:8px;
+  margin:24px 0 10px;
+  padding-top:20px;
+  border-top:1.5px solid var(--line);
+  font-size:.76rem;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--muted);
+  font-weight:800;
+}
+#profileBody h4:first-of-type{margin-top:0;padding-top:0;border-top:none;}
+#profileBody h4 .icon{color:var(--navy-700);flex-shrink:0;}
+#profileBody .auto-row{margin-bottom:8px;}
+#profileBody .auto-row:last-child{margin-bottom:0;}
+.topbar .who{display:none;}
+
+/* Wraps the settings icon + logout button so they scale and space
+   themselves as one trailing block (see fitTopbar() in icons.js), and so
+   the pair keeps the same left-margin the logout button used to carry on
+   its own. */
+.topbar-actions{
+  display:flex;
+  align-items:center;
+  gap:calc(8px * var(--navscale));
+  margin-left:calc(10px * var(--navscale));
+  flex-shrink:0;
+}
+.btn-logout{
+  background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
+  padding:calc(8px * var(--navscale));
+  font-weight:700;cursor:pointer;font-size:.85rem;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  flex-shrink:0;
+  min-width:calc(34px * var(--navscale));
+  min-height:calc(34px * var(--navscale));
+}
+.btn-logout .icon{
+  width:calc(18px * var(--navscale));
+  height:calc(18px * var(--navscale));
+}
+.btn-logout .nav-label{display:none;}
+.btn-logout:hover{background:rgba(255,255,255,0.18);}
+
+/* Settings icon button (topbar) — same footprint as the logout button so
+   the pair scales together cleanly. */
+.btn-icon-topbar{
+  background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
+  cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  min-width:calc(34px * var(--navscale));
+  min-height:calc(34px * var(--navscale));
+  padding:calc(8px * var(--navscale));
+  position:relative;
+}
+.btn-icon-topbar .icon{
+  width:calc(18px * var(--navscale));
+  height:calc(18px * var(--navscale));
+}
+.btn-icon-topbar:hover{background:rgba(255,255,255,0.18);}
+.btn-icon-topbar.active{background:rgba(232,184,75,0.2);color:var(--gold);}
+
+/* ---------------- Settings popover ---------------- */
+.settings-popover{
+  position:fixed;
+  z-index:200;
+  width:272px;
+  max-width:calc(100vw - 24px);
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:14px;
+  box-shadow:0 18px 44px rgba(31,43,68,0.24);
+  padding:16px 18px;
+  animation:t29PopIn .16s ease;
+}
+.settings-popover.hidden{display:none;}
+@keyframes t29PopIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
+.settings-popover-row{display:flex;align-items:center;justify-content:space-between;gap:14px;}
+.settings-popover-row + .settings-popover-row{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+.settings-popover-title{font-weight:800;color:var(--navy-900);font-size:.92rem;line-height:1.3;}
+.settings-popover-desc{color:var(--muted);font-size:.78rem;margin-top:3px;line-height:1.4;}
+.settings-popover-heading{
+  display:flex;align-items:center;gap:8px;
+  font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;font-weight:800;
+  color:var(--muted);margin-bottom:12px;
+}
+.settings-popover-heading .icon{color:var(--navy-700);width:15px;height:15px;}
+
+.lg-switch{position:relative;display:inline-block;width:44px;height:26px;flex-shrink:0;}
+.lg-switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;}
+.lg-switch-track{
+  position:absolute;inset:0;background:#d7dce6;border-radius:999px;
+  transition:background .2s ease;pointer-events:none;
+}
+.lg-switch-thumb{
+  position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
+  background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.25);
+  transition:transform .2s ease;
+}
+.lg-switch input:checked + .lg-switch-track{background:linear-gradient(135deg,var(--gold),var(--gold-dark));}
+.lg-switch input:checked + .lg-switch-track .lg-switch-thumb{transform:translateX(18px);}
+.lg-switch input:focus-visible + .lg-switch-track{outline:2px solid var(--gold);outline-offset:2px;}
+
+main{
+  flex:1;
+  width:100%;
+  max-width:1100px;
+  margin:0 auto;
+  padding:28px 20px 60px;
+}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:22px;
+  margin-bottom:20px;
+  transition:box-shadow .2s ease, transform .2s ease;
+}
+.card:hover{box-shadow:0 10px 28px rgba(31,43,68,0.12);}
+.card h2{display:flex;align-items:center;gap:9px;}
+.card h2 .icon{color:var(--navy-900);flex-shrink:0;}
+.grid{display:grid;gap:20px;}
+.grid-2{grid-template-columns:1fr 1fr;}
+.grid-3{grid-template-columns:repeat(3,1fr);}
+.grid-4{grid-template-columns:repeat(4,1fr);}
+@media(max-width:800px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}}
+@media(max-width:1000px) and (min-width:801px){.grid-4{grid-template-columns:repeat(2,1fr);}}
+
+.stat{
+  background:linear-gradient(135deg,var(--navy-900),var(--navy-700));
+  color:#fff;
+  border-radius:var(--radius);
+  padding:20px;
+  position:relative;
+  overflow:hidden;
+  box-shadow:0 8px 22px rgba(31,43,68,0.22);
+}
+.stat .icon{
+  position:absolute;top:16px;right:16px;width:34px;height:34px;
+  opacity:.9;color:rgba(255,255,255,0.85);
+}
+.stat.gold .icon, .stat.mint .icon{color:rgba(31,43,68,0.35);}
+.stat .label{color:#a9b6d1;font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;display:flex;align-items:center;gap:6px;}
+.stat .value{font-size:2.1rem;font-weight:900;margin-top:6px;}
+.stat.gold{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);box-shadow:0 8px 22px rgba(201,154,46,0.3);}
+.stat.gold .label{color:#5a4415;}
+.stat.mint{background:linear-gradient(135deg,var(--mint),var(--mint-dark));box-shadow:0 8px 22px rgba(46,152,115,0.3);}
+.stat.sky{background:linear-gradient(135deg,var(--sky),#3a63c9);box-shadow:0 8px 22px rgba(91,141,239,0.3);}
+.stat.lilac{background:linear-gradient(135deg,var(--lilac),#6a5fc0);box-shadow:0 8px 22px rgba(138,127,214,0.3);}
+
+label{display:block;font-weight:700;font-size:.85rem;margin:12px 0 6px;color:var(--navy-900);}
+input,select{
+  width:100%;
+  padding:12px 14px;
+  border:1.5px solid var(--line);
+  border-radius:8px;
+  font-size:1rem;
+  background:#fff;
+  color:var(--ink);
+  min-height:46px;
+}
+input:focus,select:focus{outline:2px solid var(--gold);border-color:var(--gold);}
+
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  background:var(--navy-900);
+  color:#fff;
+  border:none;
+  padding:12px 20px;
+  min-height:44px;
+  border-radius:9px;
+  font-weight:700;
+  font-size:.92rem;
+  cursor:pointer;
+  text-decoration:none;
+  margin-top:14px;
+  transition:transform .12s ease, background .15s ease, box-shadow .15s ease;
+}
+.btn .icon{width:16px;height:16px;flex-shrink:0;}
+.btn:hover{background:var(--navy-700);transform:translateY(-1px);box-shadow:0 6px 14px rgba(31,43,68,0.25);}
+.btn:active{transform:translateY(0);}
+.btn.secondary{background:#fff;color:var(--navy-900);border:1.5px solid var(--navy-900);}
+.btn.secondary:hover{background:var(--navy-900);color:#fff;}
+.btn.gold{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);box-shadow:0 4px 12px rgba(201,154,46,0.3);}
+.btn.gold:hover{box-shadow:0 8px 18px rgba(201,154,46,0.4);}
+.btn.mint{background:linear-gradient(135deg,var(--mint),var(--mint-dark));color:#fff;box-shadow:0 4px 12px rgba(46,152,115,0.3);}
+.btn.coral{background:linear-gradient(135deg,var(--coral),#c9503a);color:#fff;box-shadow:0 4px 12px rgba(232,115,95,0.3);}
+.btn.small{padding:8px 14px;font-size:.8rem;margin-top:0;min-height:38px;}
+
+table{width:100%;border-collapse:collapse;margin-top:10px;}
+.table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.table-scroll table{min-width:520px;}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);font-size:.9rem;}
+th{color:var(--navy-700);text-transform:uppercase;font-size:.72rem;letter-spacing:.05em;}
+tr:last-child td{border-bottom:none;}
+
+.badge{
+  display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;
+  font-size:.72rem;font-weight:800;letter-spacing:.02em;
+}
+.badge .icon{width:12px;height:12px;}
+.badge.mint{background:#e3f8f0;color:#217a5a;}
+.badge.coral{background:#fceae7;color:#b8402c;}
+.badge.gold{background:#fbf1dd;color:#8a6112;}
+.badge.navy{background:#e7ebf5;color:var(--navy-900);}
+.badge.lilac{background:#efecfb;color:#5a4fb0;}
+
+.ticker-up{color:#217a5a;font-weight:800;}
+.ticker-down{color:#b8402c;font-weight:800;}
+
+.auth-wrap{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  position:relative;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(232,184,75,0.22), transparent 40%),
+    radial-gradient(circle at 82% 15%, rgba(91,141,239,0.20), transparent 42%),
+    radial-gradient(circle at 78% 85%, rgba(63,191,143,0.18), transparent 45%),
+    linear-gradient(135deg,var(--navy-900) 0%,#233657 60%,var(--navy-700) 100%);
+  padding:20px;
+}
+.auth-wrap::before, .auth-wrap::after{
+  content:"$";
+  position:absolute;
+  font-family:"Trebuchet MS",sans-serif;
+  font-weight:900;
+  color:rgba(255,255,255,0.05);
+  pointer-events:none;
+}
+.auth-wrap::before{font-size:22rem;top:-6rem;left:-4rem;transform:rotate(-12deg);}
+.auth-wrap::after{font-size:16rem;bottom:-5rem;right:-3rem;transform:rotate(10deg);}
+.auth-card{
+  background:#fff;
+  border-radius:20px;
+  box-shadow:0 24px 70px rgba(0,0,0,0.4);
+  padding:36px;
+  width:100%;
+  max-width:420px;
+  position:relative;
+  z-index:1;
+  border-top:5px solid var(--gold);
+}
+.auth-logo{
+  display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px;
+}
+.auth-logo .coin{
+  width:48px;height:48px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  filter:drop-shadow(0 6px 12px rgba(201,154,46,0.45));
+  color:var(--gold);
+}
+.auth-title{text-align:center;color:var(--muted);font-size:.95rem;margin-bottom:22px;}
+.tabs{display:flex;gap:6px;background:var(--bg);border-radius:10px;padding:4px;margin-bottom:18px;}
+.tabs button{
+  flex:1;padding:9px;border:none;background:transparent;border-radius:8px;
+  font-weight:700;color:var(--muted);cursor:pointer;font-size:.85rem;
+}
+.tabs button.active{background:var(--navy-900);color:#fff;box-shadow:0 4px 10px rgba(31,43,68,0.25);}
+.tabs button{display:inline-flex;align-items:center;justify-content:center;gap:6px;}
+.tabs.subtabs{background:#eef2fa;margin-top:2px;}
+.icon-slot{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;}
+label{display:flex;align-items:center;gap:6px;}
+label .icon-slot{color:var(--navy-700);}
+.error-msg{
+  background:#fceae7;color:#b8402c;padding:10px 12px;border-radius:8px;
+  font-size:.85rem;font-weight:600;margin-top:12px;
+}
+.success-msg{
+  background:#e3f8f0;color:#217a5a;padding:10px 12px;border-radius:8px;
+  font-size:.85rem;font-weight:600;margin-top:12px;
+}
+.hidden{display:none !important;}
+.muted-small{color:var(--muted);font-size:.8rem;}
+.flex-between{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.student-avatar{
+  width:38px;height:38px;border-radius:50%;
+  background:linear-gradient(135deg,var(--navy-500),var(--navy-900));
+  color:#fff;display:inline-flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:.85rem;margin-right:10px;flex-shrink:0;
+  box-shadow:0 3px 8px rgba(31,43,68,0.25);
+}
+.student-avatar.c1{background:linear-gradient(135deg,var(--sky),#3a63c9);}
+.student-avatar.c2{background:linear-gradient(135deg,var(--mint),var(--mint-dark));}
+.student-avatar.c3{background:linear-gradient(135deg,var(--gold),var(--gold-dark));}
+.student-avatar.c4{background:linear-gradient(135deg,var(--lilac),#6a5fc0);}
+.student-avatar.c5{background:linear-gradient(135deg,var(--coral),#c9503a);}
+.row-flex{display:flex;align-items:center;}
+.footer-note{text-align:center;color:var(--muted);font-size:.78rem;padding:24px;display:flex;align-items:center;justify-content:center;gap:8px;}
+.footer-note .icon{width:14px;height:14px;opacity:.6;}
+.class-code-pill{
+  display:inline-flex;align-items:center;gap:8px;
+  background:linear-gradient(135deg,var(--navy-900),var(--navy-700));color:var(--gold);
+  font-weight:900;letter-spacing:.12em;padding:9px 18px;border-radius:9px;font-size:1.1rem;
+  box-shadow:0 6px 16px rgba(31,43,68,0.25);
+}
+.company-card{border:1.5px solid var(--line);border-radius:12px;padding:16px;position:relative;overflow:hidden;}
+.company-card::before{
+  content:"";position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;
+  background:radial-gradient(circle,rgba(232,184,75,0.14),transparent 70%);
+}
+.company-card h4{margin-bottom:2px;display:flex;align-items:center;gap:8px;}
+.company-card h4 .icon{color:var(--navy-700);width:20px;height:20px;}
+.progress-bar{height:7px;background:var(--line);border-radius:5px;overflow:hidden;margin-top:10px;}
+.progress-bar > div{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-dark));border-radius:5px;transition:width .3s ease;}
+
+/* ---------------- Password visibility toggle ---------------- */
+.pw-wrap{position:relative;}
+.pw-wrap input{padding-right:46px;}
+.pw-toggle{
+  position:absolute;top:50%;right:6px;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;
+  width:36px;height:36px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted);
+}
+.pw-toggle:hover{background:var(--bg);color:var(--navy-900);}
+.pw-toggle .icon{width:18px;height:18px;}
+
+/* ---------------- Remember-me row ---------------- */
+.remember-row{display:flex;align-items:center;gap:8px;margin-top:14px;}
+.remember-row input[type="checkbox"]{width:18px;height:18px;min-height:auto;flex-shrink:0;accent-color:var(--navy-900);}
+.remember-row label{margin:0;font-weight:600;color:var(--muted);font-size:.85rem;}
+
+/* ---------------- Leaderboard ---------------- */
+.leaderboard-row{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 10px;border-radius:10px;
+  border-bottom:1px solid var(--line);
+}
+.leaderboard-row:last-child{border-bottom:none;}
+.leaderboard-row.me{background:#fbf1dd;}
+.rank-pill{
+  width:30px;height:30px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:900;font-size:.85rem;color:#fff;background:var(--navy-500);flex-shrink:0;
+}
+.rank-pill.gold{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);}
+.rank-pill.silver{background:linear-gradient(135deg,#cfd6e4,#9aa6bd);color:var(--navy-900);}
+.rank-pill.bronze{background:linear-gradient(135deg,#d9a066,#a9713f);color:#fff;}
+.leaderboard-name{flex:1;font-weight:700;}
+.leaderboard-sub{font-size:.78rem;color:var(--muted);}
+.leaderboard-net{font-weight:900;font-size:1.05rem;color:var(--navy-900);}
+
+/* ---------------- Job listing cards ---------------- */
+.job-card{border:1.5px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px;transition:box-shadow .15s ease;}
+.job-card:hover{box-shadow:0 8px 20px rgba(31,43,68,0.1);}
+.job-card h4{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.job-card h4 .icon{color:var(--navy-700);}
+.status-pending{color:var(--gold-dark);font-weight:800;}
+.status-approved{color:#217a5a;font-weight:800;}
+.status-declined{color:#b8402c;font-weight:800;}
+
+/* ---------------- Automations list ---------------- */
+.auto-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:12px;border:1.5px solid var(--line);border-radius:10px;margin-bottom:10px;flex-wrap:wrap;
+}
+.auto-details{font-size:.88rem;}
+.auto-details strong{color:var(--navy-900);}
+
+/* ==================================================================
+   Responsive breakpoints — tablet and phone
+================================================================== */
+@media (max-width: 900px){
+  main{padding:22px 16px 50px;}
+  .stat .value{font-size:1.7rem;}
+  .auth-card{padding:28px 22px;}
+}
+
+/* Portrait orientation (phones and tablets held upright) — always show
+   icon-only nav, regardless of width. The row is allowed to wrap onto a
+   second line if it doesn't all fit, but must never overflow sideways:
+   flex-wrap:wrap plus a hard max-width:100vw + overflow-x:hidden on the
+   topbar keeps everything on-screen, just taller instead of wider. */
+@media (orientation: portrait){
+  .topbar{
+    flex-wrap:wrap;
+    max-width:100vw;
+    overflow-x:hidden;
+    row-gap:6px;
+  }
+  .topbar nav{
+    flex-wrap:wrap;
+    row-gap:6px;
+    max-width:100%;
+  }
+  .topbar nav a .nav-label{display:none;}
+  .topbar nav a{
+    padding:9px;
+    min-width:38px;
+    justify-content:center;
+    font-size:.85rem;
+  }
+  .topbar nav a .icon{width:17px;height:17px;}
+}
+
+@media (max-width: 640px){
+  .topbar{padding:10px 14px;}
+  .brand{font-size:1.19rem;}
+  h1{font-size:1.4rem;}
+  h2{font-size:1.1rem;}
+  .card{padding:16px;}
+  .grid{gap:14px;}
+  .stat{padding:16px;}
+  .stat .value{font-size:1.5rem;}
+  .company-card .row-flex svg{width:90px;}
+}
+
+@media (max-width: 420px){
+  .auth-card{padding:22px 16px;}
+  .class-code-pill{font-size:.95rem;padding:8px 12px;}
+}
+
+/* Landscape phones/tablets specifically (short viewport height, regardless
+   of width) — keep the topbar compact and NEVER let it scroll sideways.
+   Now that the "who" name is gone for good and the logout button is
+   icon-only for good, there's enough room that the row can just wrap onto
+   a second line (flex-wrap:wrap) if a device is unusually narrow, instead
+   of relying on horizontal scroll. Gated on orientation so this never
+   fires for portrait mode or normal desktop/laptop screens. */
+/* Landscape phones under 1000px wide — the clamp() above floors at its
+   1000px-anchored minimum here, but that's still text+icon; below ~560px
+   wide even the tiniest text nav won't hold 13 labels on one line without
+   the row overflowing sideways, so fall back to icon-only so it reliably
+   stays on one row without horizontal scroll. */
+@media (orientation: landscape) and (max-width: 560px){
+  .topbar nav a{padding:6px;min-width:30px;justify-content:center;}
+  .topbar nav a .nav-label{display:none;}
+  .topbar nav a .icon{width:15px;height:15px;}
+}
+
+/* ---------------- Random event popup ---------------- */
+.anw-modal-overlay{
+  position:fixed;inset:0;background:rgba(31,43,68,0.55);
+  display:flex;align-items:center;justify-content:center;
+  z-index:1000;padding:20px;
+}
+.anw-modal-card{
+  background:#fff;border-radius:18px;padding:26px;max-width:420px;width:100%;
+  box-shadow:0 24px 60px rgba(0,0,0,0.35);border-top:5px solid var(--gold);
+  max-height:85vh;overflow-y:auto;
+}
+.anw-event-row{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 4px;border-bottom:1px solid var(--line);
+}
+.anw-event-row:last-of-type{border-bottom:none;}
+.anw-event-name{font-weight:800;color:var(--navy-900);}
+
+/* ---------------- Roulette number grid ----------------
+   Laid out horizontally like a real roulette table: 12 columns, 3 numbers
+   stacked in each column (1,2,3 in column 1; 4,5,6 in column 2; etc).
+   grid-auto-flow:column fills top-to-bottom then moves to the next column,
+   which lines up exactly with rouletteRowCol/isValidStreet/isValidCorner/
+   isValidSixLine in data.js (row = ceil(n/3) = column index here, col =
+   (n-1)%3+1 = position within the column) — so visually-adjacent cells are
+   always valid bets. */
+.number-table-wrap{
+  display:flex;gap:6px;align-items:stretch;justify-content:flex-start;
+  overflow-x:auto;padding-bottom:6px;max-width:100%;
+}
+.number-zero{
+  width:38px;flex-shrink:0;border:1.5px solid var(--line);border-radius:6px;
+  background:#e3f8f0;font-weight:800;font-size:.85rem;cursor:pointer;
+  color:var(--navy-900);display:flex;align-items:center;justify-content:center;
+}
+.number-zero.selected{background:var(--gold);border-color:var(--gold-dark);}
+.number-grid{
+  display:grid;grid-template-rows:repeat(3,1fr);grid-auto-flow:column;
+  grid-auto-columns:38px;gap:4px;
+}
+.number-cell{
+  width:38px;height:38px;border:1.5px solid var(--line);border-radius:6px;background:#fff;
+  font-weight:800;font-size:.85rem;cursor:pointer;color:var(--navy-900);
+  display:flex;align-items:center;justify-content:center;padding:0;min-height:0;flex-shrink:0;
+}
+.number-cell.zero{background:#e3f8f0;}
+.number-cell.selected{background:var(--gold);border-color:var(--gold-dark);color:var(--navy-900);}
+@media(max-width:640px){.number-zero,.number-cell{width:30px;height:30px;font-size:.75rem;}.number-grid{grid-auto-columns:30px;}}
+
+/* ---------------- Roulette wheel spin animation ---------------- */
+/* width and height are set with the same min() expression so the stage
+   is always a perfect square on any screen — previously only width had
+   max-width:100%, so on narrow phones the box got squashed into an oval
+   (width shrunk, height stayed fixed at 392px) even though the spin
+   animation itself (a plain rotation) still looked like a circle. */
+.wheel-stage{position:relative;width:min(392px, 88vw);height:min(392px, 88vw);margin:24px auto 8px;}
+.wheel-rim{
+  position:absolute;inset:0;border-radius:50%;
+  background:linear-gradient(135deg,var(--gold),var(--gold-dark));
+  box-shadow:0 17px 44px rgba(31,43,68,0.4);padding:15px;
+}
+.wheel-disc{
+  position:relative;width:100%;height:100%;border-radius:50%;overflow:hidden;
+  box-shadow:inset 0 0 34px rgba(0,0,0,0.55), inset 0 0 4px rgba(255,255,255,0.4);
+  transition:transform 15s cubic-bezier(0.11,0.68,0.24,1);
+  transform:rotate(0deg);
+}
+.wheel-number{
+  position:absolute;top:50%;left:50%;width:34px;height:34px;margin:-17px;
+  border-radius:6px;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:800;color:#fff;font-family:"Trebuchet MS",sans-serif;
+  text-shadow:0 1px 2px rgba(0,0,0,0.5);
+}
+.wheel-hub{
+  position:absolute;top:50%;left:50%;width:53px;height:53px;margin:-27px;
+  border-radius:50%;z-index:5;
+  background:radial-gradient(circle at 35% 32%, #fff, #cfd6e4 55%, #8a94ab 100%);
+  box-shadow:0 6px 16px rgba(0,0,0,0.45);
+}
+.wheel-ball-track{
+  position:absolute;inset:22px;border-radius:50%;pointer-events:none;
+  transition:transform 15s cubic-bezier(0.08,0.72,0.2,1);
+  transform:rotate(0deg);z-index:4;
+}
+.wheel-ball{
+  position:absolute;top:3px;left:50%;width:15px;height:15px;margin-left:-7.5px;
+  border-radius:50%;background:radial-gradient(circle at 35% 30%, #fff, #d8d8d8 70%, #999);
+  box-shadow:0 3px 7px rgba(0,0,0,0.55);
+}
+#wheelStatus{text-align:center;margin-top:8px;}
+
+@media (max-width: 445px){
+  /* Everything below this width has the wheel itself shrinking via
+     width:min(392px,88vw) — these fixed-px child elements (which don't
+     scale with a percentage) get a proportional trim too, so numbers,
+     the hub, and the ball stay sensibly sized on the smaller wheel
+     instead of looking oversized relative to it. */
+  .wheel-number{width:26px;height:26px;margin:-13px;font-size:10px;}
+  .wheel-hub{width:40px;height:40px;margin:-20px;}
+  .wheel-ball-track{inset:16px;}
+  .wheel-ball{width:11px;height:11px;margin-left:-5.5px;}
+}
+
+/* ===================== Floating balance widget ===================== */
+.anw-balance-widget{
+  position:fixed;
+  left:14px;
+  top:80px;
+  z-index:45;
+  min-width:150px;
+  background:linear-gradient(135deg,var(--gold),var(--gold-dark));
+  color:var(--navy-900);
+  border-radius:var(--radius);
+  padding:14px 18px;
+  box-shadow:0 8px 22px rgba(201,154,46,0.35);
+}
+.anw-balance-widget .anw-bw-label{
+  color:#5a4415;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;
+  display:flex;align-items:center;gap:6px;
+}
+.anw-balance-widget .anw-bw-value{font-size:1.7rem;font-weight:900;margin-top:4px;line-height:1.1;}
+@media (max-width:640px){
+  .anw-balance-widget{left:10px;top:auto;bottom:14px;padding:10px 14px;min-width:130px;}
+  .anw-balance-widget .anw-bw-value{font-size:1.4rem;}
+}
