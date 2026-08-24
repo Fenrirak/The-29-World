@@ -1,0 +1,4708 @@
+<!DOCTYPE html>
+<!-- GENERATED FILE - do not edit by hand.
+     Built from game/page.html by game/build.py.
+     Edit the files in game/ and re-run: python game/build.py -->
+<html>
+
+<head>
+    <meta charset="utf-8">
+
+    <title>Legend of Fenrirak | The Thunder Dragon — Play Online</title>
+
+    <link rel="icon" type="image/png" href="Favicon.png">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="description"
+        content="Play Legend of Fenrirak™, The Thunder Dragon online with up to 6 players.">
+
+    <style>
+/* ==== site-nav.css ==== */
+/* =========================================================================
+   Legend of Fenrirak — shared site navigation.
+
+   One flat, quiet bar used by every page. Edit here, not in each page.
+   ========================================================================= */
+
+.topbar {
+    /* Set here rather than relying on a global reset: without it the side
+       padding is added on top of width:100% and the bar overflows the page. */
+    box-sizing: border-box;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 100%;
+    padding: 0 12px;
+    background: #16161a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    margin-bottom: 34px;
+}
+
+.topbar .nav-links {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+
+    /* Without this a flex child refuses to shrink below its content width,
+       which is what pushed the last link off the right of the screen. */
+    min-width: 0;
+    max-width: 100%;
+}
+
+.topbar .nav-links a,
+.topbar .nav-trigger {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 15px 14px;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    white-space: nowrap;
+    text-decoration: none;
+    font-family: Allegro, serif;
+    font-size: 14px;
+    letter-spacing: 0.2px;
+    color: #9c9a95;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.topbar .nav-links svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.7;
+    flex-shrink: 0;
+    opacity: 0.75;
+}
+
+.topbar .nav-links a:hover,
+.topbar .nav-trigger:hover {
+    color: #e8e4dc;
+}
+
+.topbar .nav-links a:hover svg,
+.topbar .nav-trigger:hover svg { opacity: 1; }
+
+/* Current page: a quiet underline, not a filled bubble. */
+.topbar .nav-links a.active,
+.topbar .nav-trigger.active {
+    border-color: rgba(217, 163, 92, 0.85);
+    color: #efe9de;
+}
+
+.topbar .nav-links a.active svg,
+.topbar .nav-trigger.active svg { opacity: 1; }
+
+/* ---- Games dropdown --------------------------------------------------- */
+
+.nav-group { position: relative; display: flex; }
+
+.nav-trigger .caret {
+    width: 11px;
+    height: 11px;
+    stroke-width: 2.2;
+    opacity: 0.55;
+    transition: transform 0.15s ease;
+}
+
+.nav-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    min-width: 210px;
+    display: none;
+    flex-direction: column;
+    padding: 5px 0;
+    background: #1b1b20;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-top: none;
+    border-radius: 0 0 9px 9px;
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+    z-index: 210;
+}
+
+/* Hover only where hovering is a real thing; taps use the .open class. */
+@media (hover: hover) {
+    .nav-group:hover .nav-menu { display: flex; }
+    .nav-group:hover .nav-trigger .caret { transform: rotate(180deg); }
+}
+.nav-group:focus-within .nav-menu,
+.nav-group.open .nav-menu { display: flex; }
+.nav-group.open .nav-trigger .caret { transform: rotate(180deg); }
+
+.topbar .nav-menu a {
+    padding: 11px 16px;
+    border-bottom: none;
+    border-left: 2px solid transparent;
+    font-size: 14px;
+}
+
+.topbar .nav-menu a:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.topbar .nav-menu a.active {
+    border-bottom: none;
+    border-left-color: rgba(217, 163, 92, 0.85);
+    color: #efe9de;
+}
+
+/* ---- narrow screens --------------------------------------------------- */
+
+@media (max-width: 760px) {
+    .topbar {
+        padding: 0;
+        margin-bottom: 24px;
+    }
+
+    .topbar .nav-links {
+        width: 100%;
+        justify-content: space-evenly;
+    }
+
+    .topbar .nav-links a,
+    .topbar .nav-trigger {
+        padding: 12px 10px;
+        font-size: 13px;
+    }
+
+    .topbar .nav-links > a > span,
+    .topbar .nav-trigger > span { display: none; }
+
+    .topbar .nav-links svg { width: 18px; height: 18px; }
+    .nav-trigger .caret { width: 10px; height: 10px; }
+
+    /* Anchor the menu to the bar rather than to the button, so it cannot run
+       off the edge when the Games button sits near the right of the screen.
+       .topbar is position:sticky, so it is the containing block once the
+       group itself stops being positioned. */
+    .nav-group { position: static; }
+
+    .nav-menu {
+        top: 100%;
+        left: 8px;
+        right: 8px;
+        transform: none;
+        min-width: 0;
+        border-radius: 0 0 9px 9px;
+    }
+
+    .topbar .nav-menu a span { display: inline; }
+}
+
+    </style>
+
+    <style>
+/* ==== game/style.css ==== */
+/* =========================================================================
+   Legend of Fenrirak™, The Thunder Dragon — Online Version
+   style.css
+   ========================================================================= */
+
+:root {
+    --gold: rgb(217, 163, 92);
+    --gold-bright: rgb(242, 204, 143);
+    --cream: rgb(255, 246, 230);
+    --ink: #121212;
+    --panel: linear-gradient(180deg, #1e1e1e, #141414);
+    --panel-edge: rgba(217, 163, 92, 0.28);
+    --crimson: #a8352c;
+    --thunder: #7fb6ff;
+    --good: #6fbf73;
+    --bad: #d2635a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: Allegro, serif;
+    color: #e6e6e6;
+    margin: 0;
+    padding: 0;
+
+    /* The page is the table the game is laid out on: dark stained wood with
+       the grain running across it. The board, the cards and the panels all
+       sit on top of this. */
+    background-color: var(--ink);
+    background-image:
+        repeating-linear-gradient(91deg,
+            rgba(255, 255, 255, .014) 0 2px,
+            transparent 2px 7px,
+            rgba(0, 0, 0, .05) 7px 9px),
+        radial-gradient(ellipse at 50% 0%, rgba(120, 92, 58, .16), transparent 60%),
+        linear-gradient(180deg, #1b1714, #131110 60%, #0f0d0c);
+    background-attachment: fixed;
+    min-height: 100vh;
+}
+
+/* ---- shared bits ----------------------------------------------------- */
+
+h1, h2, h3 { color: var(--cream); font-weight: bold; margin: 0 0 12px; }
+h1 { font-size: 32px; }
+h2 { font-size: 22px; }
+h3 { font-size: 17px; }
+
+.muted { color: #9a9a9a; }
+.gold { color: var(--gold-bright); }
+
+.btn {
+    font-family: Allegro, serif;
+    font-size: 16px;
+    padding: 11px 20px;
+    border-radius: 999px;
+    border: 1px solid var(--panel-edge);
+    background: linear-gradient(180deg, #262626, #191919);
+    color: #e8e8e8;
+    cursor: pointer;
+    transition: background-color .2s ease, border-color .2s ease,
+                transform .2s ease, color .2s ease;
+}
+.btn:hover:not(:disabled) {
+    background-color: #333;
+    border-color: var(--gold);
+    color: var(--gold-bright);
+    transform: translateY(-2px);
+}
+.btn:disabled { opacity: .38; cursor: not-allowed; }
+
+.btn.primary {
+    background: linear-gradient(180deg, var(--gold), #b3823f);
+    border-color: var(--gold);
+    color: #1a1108;
+    font-weight: bold;
+}
+.btn.primary:hover:not(:disabled) { background: var(--gold-bright); color: #1a1108; }
+
+.btn.danger { border-color: rgba(210, 99, 90, .5); color: #e6a49d; }
+.btn.small { font-size: 13.5px; padding: 7px 13px; }
+
+input[type=text], input[type=number], select {
+    font-family: Allegro, serif;
+    font-size: 16px;
+    padding: 11px 14px;
+    border-radius: 9px;
+    border: 1px solid var(--panel-edge);
+    background: #171717;
+    color: var(--cream);
+    width: 100%;
+}
+input:focus, select:focus { outline: none; border-color: var(--gold); }
+
+.card {
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+/* ---- screens --------------------------------------------------------- */
+
+.screen { display: none; }
+.screen.active { display: block; }
+
+.wrap { max-width: 1400px; margin: 0 auto; padding: 0 18px 50px; }
+
+/* ---- home ------------------------------------------------------------ */
+
+/* No artwork here — the title carries the page. */
+.home-hero { text-align: center; padding: 40px 0 4px; }
+.home-hero h1 {
+    font-size: 42px;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    /* Same yellow as the matching heading on the About page. */
+    color: rgb(235, 202, 19);
+}
+.home-hero p { max-width: 620px; margin: 10px auto 0; color: #b9b9b9; font-size: 16px; }
+
+.home-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 18px;
+    max-width: 860px;
+    margin: 26px auto 0;
+}
+.home-cards .card { display: flex; flex-direction: column; gap: 12px; }
+/* The note is pushed to the bottom so both cards' inputs and buttons sit
+   on the same lines even when one note wraps to more lines than the other. */
+.home-cards .card .note { margin-top: auto; margin-bottom: 0; font-size: 13.5px; }
+.home-cards input, .home-cards .btn { width: 100%; }
+/* The room code reads as a code without being a different size to the
+   name field next to it. */
+.code-input { letter-spacing: 6px; text-align: center; text-transform: uppercase; }
+.code-input::placeholder { letter-spacing: 6px; }
+
+.notice {
+    margin: 16px auto;
+    max-width: 860px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(210, 99, 90, .45);
+    background: rgba(168, 53, 44, .13);
+    color: #f0b8b2;
+    font-size: 15px;
+    display: none;
+}
+.notice.show { display: block; }
+
+/* ---- paper cards ------------------------------------------------------
+   The real game is index cards written in pencil, and every one of them is
+   laid out the same way: the name across the top with a rule ruled under it,
+   then the body. The card stock is what tells them apart -- white for
+   character and enemy stats, yellow for weapons and armour, pink for
+   power-ups -- so that is what the colours here mean. The layout inside each
+   card is built in ui.js.
+
+   The font is whatever handwriting the reader's machine has. Nothing is
+   downloaded for it: Segoe Print ships with Windows, Bradley Hand with macOS
+   and iOS, and the generic cursive keyword catches the rest.
+   ---------------------------------------------------------------------- */
+
+.paper {
+    --paper: #efece1;
+    --paper-ink: #46433b;
+
+    background: var(--paper);
+    color: var(--paper-ink);
+    border-radius: 3px;
+    padding: 9px 11px 12px;
+    font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: left;
+    /* Paper does not glow. A hairline keeps a white card off a black page. */
+    border: 1px solid rgba(0, 0, 0, .35);
+}
+
+.paper.yellow { --paper: #ece0a0; --paper-ink: #4a4326; }
+.paper.pink   { --paper: #eec3cd; --paper-ink: #4d323a; }
+
+.paper .p-name {
+    font-size: 15px;
+    padding-bottom: 3px;
+    margin-bottom: 6px;
+    border-bottom: 1.5px solid currentColor;
+    /* Long names wrap rather than being clipped -- a card that hides half its
+       own name is worse than one that runs to two lines. */
+    overflow-wrap: break-word;
+}
+
+.paper .p-art {
+    float: right;
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+    margin: 0 0 4px 8px;
+}
+
+.paper .p-head { margin-top: 4px; }
+.paper .p-stat { padding-left: 13px; }
+
+.paper .p-move {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding-left: 13px;
+    margin-top: 4px;
+}
+.paper .p-move .p-dmg { flex: 0 0 auto; }
+.paper .p-energy { padding-left: 13px; font-size: .9em; }
+
+.paper .p-body { padding-top: 1px; }
+.paper .p-foot {
+    margin-top: 7px;
+    padding-top: 5px;
+    border-top: 1px dashed rgba(0, 0, 0, .28);
+    font-size: .85em;
+}
+
+/* Clear the floated portrait so the card always encloses it. */
+.paper::after { content: ''; display: block; clear: both; }
+
+/* ---- lobby ----------------------------------------------------------- */
+
+.lobby-grid {
+    display: grid;
+    /* The three stat cards need the room; the roster is a short list. */
+    grid-template-columns: minmax(0, 1.9fr) minmax(230px, .75fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.class-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+.class-card {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 3px;
+    cursor: pointer;
+    transition: border-color .2s ease;
+}
+.class-card:hover { border-color: var(--gold); }
+/* Selected is shown by the border alone -- no ring, no glow. */
+.class-card.selected { border-color: var(--gold); }
+.class-card.full { opacity: .45; cursor: not-allowed; }
+.class-card .taken {
+    margin-top: 8px;
+    text-align: center;
+    font-size: 12.5px;
+    color: #9a9a9a;
+}
+
+.roster { list-style: none; margin: 0; padding: 0; }
+.roster li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, .05);
+    font-size: 15px;
+}
+.roster li:last-child { border-bottom: none; }
+.roster .dot { width: 9px; height: 9px; border-radius: 50%; background: #555; flex: 0 0 auto; }
+.roster .dot.ready { background: var(--good); }
+.roster .you { color: var(--gold-bright); }
+.roster .tag {
+    margin-left: auto; font-size: 12.5px; color: #9a9a9a;
+    border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 2px 9px;
+}
+
+.code-box {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.code-box .code {
+    font-size: 30px; letter-spacing: 7px; color: var(--gold-bright);
+    background: #171717; border: 1px dashed var(--gold);
+    border-radius: 10px; padding: 6px 16px;
+}
+
+/* ---- game layout ----------------------------------------------------- */
+
+.game-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 18px;
+    align-items: start;
+}
+
+.turn-banner {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 16px; margin-bottom: 14px;
+    border-radius: 12px;
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+}
+.turn-banner.mine { border-color: var(--gold); box-shadow: 0 0 22px -8px rgba(217,163,92,.7); }
+.turn-banner .who { font-size: 18px; color: var(--cream); }
+.turn-banner .timer { margin-left: auto; font-size: 14px; color: #9a9a9a; }
+
+/* ---- the board --------------------------------------------------------
+   Drawn to match the photograph of the real one: squares ruled in pencil on
+   a sheet of cream card, a blue river running top to bottom with cardboard
+   plank bridges over it, cut-paper trees, and the brown arena disc in the
+   middle. Everything here is CSS -- there is no picture of the board to load.
+   ---------------------------------------------------------------------- */
+
+.board {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-rows: repeat(5, minmax(104px, auto));
+    gap: 10px;
+    padding: 18px;
+    border-radius: 4px;
+    /* Card stock: a warm sheet with the faint mottling of real paper. */
+    background:
+        radial-gradient(ellipse at 22% 18%, rgba(255,255,255,.55), transparent 45%),
+        radial-gradient(ellipse at 78% 82%, rgba(150,140,115,.18), transparent 50%),
+        #e4e0cd;
+    border: 1px solid #b9b39a;
+    box-shadow: 0 18px 40px -22px rgba(0,0,0,.85);
+    font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+}
+
+/* The river, drawn behind everything, straight down the middle column. */
+.board .river {
+    grid-column: 4;
+    grid-row: 1 / -1;
+    margin: -18px 0;
+    z-index: 0;
+    background:
+        repeating-linear-gradient(180deg,
+            rgba(255,255,255,.16) 0 3px, transparent 3px 22px),
+        linear-gradient(90deg, #93b4d4, #b4cee4 45%, #93b4d4);
+    border-left: 1px solid #7d9dbc;
+    border-right: 1px solid #7d9dbc;
+}
+
+/* A square: a rectangle ruled in pencil, nothing more. */
+.sq {
+    position: relative;
+    z-index: 1;
+    border-radius: 2px;
+    padding: 7px 8px 6px;
+    background: rgba(255, 253, 245, .55);
+    border: 1px solid #8c8672;
+    min-height: 104px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: #4a4538;
+}
+.sq .sq-name {
+    font-size: 12.5px;
+    color: #35312a;
+    line-height: 1.2;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #8c8672;
+}
+.sq .sq-text {
+    font-size: 10.5px;
+    color: #5c5648;
+    line-height: 1.35;
+    margin-top: 4px;
+    flex: 1;
+}
+
+/* The optional-stop marker sits on its own line in the bottom-right corner.
+   It is laid out in flow rather than floated over the square, which is the
+   only way it can be guaranteed never to cover the square's own writing. */
+.sq .sq-badge {
+    align-self: flex-end;
+    margin-top: 4px;
+    z-index: 3;
+    font-size: 8.5px;
+    letter-spacing: .5px;
+    color: #6b3f1d;
+    background: rgba(242, 209, 138, .95);
+    border: 1px solid #b78b46;
+    border-radius: 2px;
+    padding: 1px 5px;
+    pointer-events: none;
+}
+
+/* Square types, as coloured on the board itself. */
+.sq.kind-battle  { background: rgba(226, 196, 176, .55); }
+.sq.kind-chest   { background: rgba(240, 226, 186, .6); }
+.sq.kind-heal    { background: rgba(206, 224, 199, .55); }
+.sq.kind-start   { background: rgba(240, 228, 178, .75); border-width: 2px; }
+.sq.kind-gate    { background: rgba(214, 202, 224, .6); }
+
+/* Midnight Desert is the yellow blob card stuck onto the board. */
+.sq.key-midnight_desert {
+    background: #f2d18a;
+    border-color: #c39b4d;
+    border-radius: 14px 4px 16px 5px;
+}
+
+/* Squares that sit on the water get planks under them. */
+.sq.scenery-bridge, .sq.scenery-broken_bridge {
+    background:
+        repeating-linear-gradient(90deg,
+            #b5714a 0 15px, #a3623d 15px 17px) center/100% 74% no-repeat,
+        transparent;
+    border-color: #8a5030;
+    color: #2f1d12;
+}
+.sq.scenery-bridge .sq-name,
+.sq.scenery-broken_bridge .sq-name { color: #2f1d12; border-bottom-color: #8a5030; }
+.sq.scenery-bridge .sq-text,
+.sq.scenery-broken_bridge .sq-text { color: #40281a; }
+
+/* ...and the crossing by the Sea of Castout is the broken one: the middle
+   planks have gone into the water. */
+.sq.scenery-broken_bridge {
+    background:
+        repeating-linear-gradient(90deg,
+            #b5714a 0 15px, #a3623d 15px 17px) left center/34% 74% no-repeat,
+        repeating-linear-gradient(90deg,
+            #b5714a 0 15px, #a3623d 15px 17px) right center/26% 74% no-repeat,
+        transparent;
+    border-style: dashed;
+}
+.sq.scenery-broken_bridge::after {
+    content: '';
+    position: absolute;
+    left: 36%; right: 28%; top: 34%;
+    height: 26%;
+    background:
+        linear-gradient(28deg, transparent 46%, #a3623d 46% 54%, transparent 54%),
+        linear-gradient(-40deg, transparent 44%, #8a5030 44% 52%, transparent 52%);
+    opacity: .85;
+    pointer-events: none;
+}
+
+/* Tokens: the character's own picture, standing on the square. */
+.sq .tokens {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    margin-top: 4px;
+    position: relative; z-index: 2;
+}
+.token {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 2px solid #4a4538;
+    background: #f3f0e4 center/86% no-repeat;
+    box-shadow: 0 2px 5px rgba(0,0,0,.45);
+    transition: transform .16s ease;
+}
+.token.me { border-color: #b8791f; border-width: 3px; }
+/* Lifted for the moment it is stepping onto a square. */
+.token.walking { transform: scale(1.22) translateY(-4px); }
+
+/* ---- the arena --------------------------------------------------------
+   The brown disc in the middle. No dragon picture on it -- on the real
+   board it is bare card.
+   ---------------------------------------------------------------------- */
+
+.arena {
+    grid-row: 2 / span 3;
+    grid-column: 2 / span 4;
+    position: relative;
+    z-index: 2;
+    border: none;
+    background: none;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    overflow: visible;
+}
+.arena::before {
+    content: '';
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(96%, 420px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 38% 32%, rgba(255,255,255,.22), transparent 55%),
+        #b5714a;
+    border: 2px solid #8a5030;
+    box-shadow: 0 10px 26px -12px rgba(0,0,0,.7);
+}
+.arena .arena-inner {
+    position: relative;
+    z-index: 2;
+    padding: 14px;
+    max-width: 74%;
+}
+.arena .arena-title { font-size: 24px; color: #3a2213; letter-spacing: 1px; }
+.arena .arena-sub { font-size: 12.5px; color: #5b3520; margin-top: 4px; }
+.arena .arena-note { font-size: 11px; color: #6b4229; margin-top: 8px; }
+.arena .tokens { justify-content: center; margin-top: 10px; }
+.arena.lit .arena-title { color: #2a1408; }
+
+/* ---- cut-paper scenery ------------------------------------------------ */
+
+.decor {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+.decor img { width: 82%; max-height: 84px; object-fit: contain; }
+.decor .decor-name { font-size: 10px; color: #6a6454; margin-top: 3px; }
+
+/* The Poor Merchant's sign, propped at the edge of the board as in the photo. */
+.merchant-sign {
+    position: absolute;
+    right: -6px;
+    bottom: 18%;
+    z-index: 4;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, #b5714a, #a3623d);
+    border: 1px solid #8a5030;
+    border-radius: 3px;
+    color: #2f1d12;
+    font-size: 13px;
+    line-height: 1.15;
+    text-align: center;
+    transform: rotate(-3deg);
+    box-shadow: 0 6px 14px -6px rgba(0,0,0,.7);
+    pointer-events: none;
+}
+
+/* ---- sidebar --------------------------------------------------------- */
+
+.side { display: flex; flex-direction: column; gap: 14px; }
+
+.hero-panel { display: flex; gap: 12px; align-items: flex-start; }
+.hero-panel img { width: 84px; height: 84px; object-fit: contain; flex: 0 0 auto; }
+.hero-panel .hname { font-size: 18px; color: var(--cream); }
+.hero-panel .hsub { font-size: 13px; color: #9a9a9a; margin-top: 2px; }
+
+.bar { height: 12px; border-radius: 999px; background: #262626; overflow: hidden; margin-top: 7px; }
+.bar > i { display: block; height: 100%; border-radius: 999px; transition: width .35s ease; }
+.bar.hp > i { background: linear-gradient(90deg, #8c2f28, #d2635a); }
+.bar.enemy > i { background: linear-gradient(90deg, #5a3ea8, #9a7bff); }
+.barlabel { display: flex; justify-content: space-between; font-size: 12px; color: #9a9a9a; margin-top: 5px; }
+
+.stat-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.chip {
+    font-size: 12.5px; padding: 4px 10px; border-radius: 999px;
+    background: #1d1d1d; border: 1px solid rgba(255,255,255,.08); color: #cfcfcf;
+}
+.chip b { color: var(--gold-bright); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.log {
+    max-height: 260px; overflow-y: auto;
+    font-size: 13.5px; line-height: 1.55;
+    display: flex; flex-direction: column-reverse; gap: 5px;
+}
+.log div { padding-left: 10px; border-left: 2px solid rgba(255,255,255,.08); }
+.log .t-system { color: var(--gold-bright); border-left-color: var(--gold); }
+.log .t-battle { color: #f0b8b2; border-left-color: var(--crimson); }
+.log .t-hit    { color: #e8cfa0; }
+.log .t-enemy  { color: #d2635a; }
+.log .t-heal   { color: #9fd4a2; border-left-color: var(--good); }
+.log .t-item   { color: #c6d6ef; }
+.log .t-death  { color: #d2635a; border-left-color: var(--crimson); }
+.log .t-roll   { color: #cfcfcf; }
+.log .t-move   { color: #b6b6b6; }
+.log .t-muted  { color: #7d7d7d; }
+
+/* ---- inventory ------------------------------------------------------- */
+
+.inv-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.inv-tabs .btn.small.active { border-color: var(--gold); color: var(--gold-bright); }
+
+.item-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px;
+}
+/* Every held card is the paper card it is in the box. Equipped and treasure
+   are marked on the card itself rather than by recolouring the stock, so the
+   yellow/pink/white still means what it means in the photographs. */
+.item .btn { margin-top: 9px; width: 100%; }
+.item.equipped { border-width: 2px; border-color: var(--gold); }
+.item.treasure .p-name::after { content: ' º6'; }
+
+.battle-statcard { max-width: 250px; margin: 16px auto 0; }
+
+/* ---- modal ----------------------------------------------------------- */
+
+.modal-back {
+    position: fixed; inset: 0; z-index: 900;
+    background: rgba(0,0,0,.72);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(3px);
+}
+.modal-back.show { display: flex; }
+.modal {
+    width: 100%; max-width: 720px;
+    max-height: 88vh; overflow-y: auto;
+    background: linear-gradient(180deg, #1f1f1f, #151515);
+    border: 1px solid var(--gold);
+    border-radius: 16px;
+    padding: 22px;
+    box-shadow: 0 30px 80px -30px #000;
+}
+.modal h2 { margin-bottom: 6px; }
+.modal .sub { color: #a0a0a0; font-size: 14px; margin-bottom: 16px; }
+.modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+
+/* ---- battle ---------------------------------------------------------- */
+
+.battle-top { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: center; }
+.battle-side { text-align: center; }
+.battle-side img { width: 96px; height: 96px; object-fit: contain; }
+.battle-side .bname { font-size: 17px; color: var(--cream); margin-top: 4px; }
+.battle-vs { font-size: 24px; color: var(--crimson); letter-spacing: 3px; }
+
+.die {
+    width: 62px; height: 62px; margin: 16px auto 6px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #f4ecdc, #ded2b8);
+    color: #241a10; font-size: 30px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 22px -8px #000;
+}
+.die.rolling { animation: die-shake .5s ease; }
+@keyframes die-shake {
+    0%,100% { transform: rotate(0) scale(1); }
+    25% { transform: rotate(-14deg) scale(1.1); }
+    50% { transform: rotate(12deg) scale(.95); }
+    75% { transform: rotate(-7deg) scale(1.05); }
+}
+
+.moves { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.move {
+    text-align: left; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid var(--panel-edge);
+    background: linear-gradient(180deg, #262019, #191512);
+    cursor: pointer; font-family: Allegro, serif; color: #e8e8e8;
+}
+.move:hover:not(:disabled) { border-color: var(--gold); }
+.move:disabled { opacity: .35; cursor: not-allowed; }
+.move .mname { color: var(--gold-bright); font-size: 15px; }
+.move .mmeta { font-size: 12.5px; color: #9a9a9a; margin-top: 3px; }
+
+/* ---- merchant -------------------------------------------------------- */
+
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.shop-item { border: 1px solid var(--panel-edge); border-radius: 10px; padding: 11px; font-size: 13px; }
+.shop-item .sname { color: var(--gold-bright); font-size: 14.5px; }
+.shop-item .sprice { color: var(--cream); margin-top: 5px; }
+.shop-item .sstock { color: #7d7d7d; font-size: 11.5px; }
+.shop-item.out { opacity: .35; }
+
+/* ---- winner ---------------------------------------------------------- */
+
+.victory { text-align: center; padding: 30px 10px; }
+.victory .vtitle {
+    font-size: 40px; color: var(--gold-bright); letter-spacing: 4px;
+    text-shadow: 0 0 34px rgba(217,163,92,.7);
+}
+.victory img { width: 200px; max-width: 55%; margin: 16px auto; display: block; }
+
+/* ---- whose die is it ---------------------------------------------------
+   One hit each, so the single most useful thing on screen during a fight is
+   who is holding the die. It gets its own line at the top of the modal.
+   ---------------------------------------------------------------------- */
+
+.turn-flag {
+    margin: 4px 0 10px;
+    padding: 9px 14px;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 15px;
+    color: #d9cfba;
+    background: rgba(255, 255, 255, .05);
+    border: 1px solid rgba(255, 255, 255, .12);
+}
+.turn-flag.mine {
+    color: #1a1108;
+    background: var(--gold);
+    border-color: var(--gold);
+    font-weight: bold;
+}
+
+/* ---- monster pictures -------------------------------------------------- */
+
+.enemy-pic {
+    display: block;
+    object-fit: contain;
+}
+.paper .p-art .enemy-pic { width: 100%; height: 100%; }
+
+/* ---- everyone's stats -------------------------------------------------- */
+
+.who-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+
+/* ---- trades ------------------------------------------------------------ */
+
+.trade-cards { margin-top: 8px; }
+.trade-cards .paper { font-size: 12px; }
+
+/* ---- responsive ------------------------------------------------------ */
+
+@media (max-width: 1080px) {
+    .game-grid { grid-template-columns: 1fr; }
+    .lobby-grid { grid-template-columns: 1fr; }
+    .board { grid-template-rows: repeat(5, minmax(84px, auto)); }
+    .sq { min-height: 84px; }
+    .sq .sq-text { display: none; }
+    .arena .arena-title { font-size: 21px; }
+    .arena img.dragon { width: 130px; }
+}
+
+@media (max-width: 720px) {
+    h1 { font-size: 25px; }
+    /* .home-hero h1 is more specific than the rule above, so it needs its own. */
+    .home-hero { padding: 26px 0 4px; }
+    .home-hero h1 { font-size: 30px; }
+    .class-picker { grid-template-columns: 1fr; }
+    .board { gap: 5px; padding: 8px; grid-template-rows: repeat(5, minmax(66px, auto)); }
+    .sq { min-height: 66px; padding: 5px; }
+    .sq .sq-name { font-size: 10px; }
+    .sq .sq-badge { display: none; }
+    .token { width: 22px; height: 22px; }
+    .arena .arena-title { font-size: 16px; letter-spacing: 1.5px; }
+    .arena .arena-sub, .arena .arena-note { display: none; }
+    .arena img.dragon { width: 92px; }
+    .code-box .code { font-size: 23px; letter-spacing: 4px; }
+}
+
+/* ---- enemy crest (only Fenrirak has a portrait) ----------------------- */
+
+.crest {
+    width: 96px;
+    height: 96px;
+    margin: 0 auto;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Allegro, serif;
+    font-size: 30px;
+    letter-spacing: 1px;
+    color: #f1e8d8;
+    background:
+        radial-gradient(circle at 38% 32%, rgba(255, 255, 255, 0.16), transparent 58%),
+        var(--crest, #6a6a6a);
+    border: 2px solid rgba(0, 0, 0, 0.45);
+    box-shadow: inset 0 -8px 20px rgba(0, 0, 0, 0.45);
+}
+
+
+    </style>
+
+</head>
+
+<body>
+
+    <nav class="topbar">
+        <div class="nav-links">
+            <a href="index.html">
+                <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>
+                <span>Home</span>
+            </a>
+            <a href="About.html">
+                <svg viewBox="0 0 24 24"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5V4.5Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/></svg>
+                <span>About</span>
+            </a>
+            <a href="Creators.html">
+                <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"/><circle cx="17" cy="7" r="3"/><path d="M22 21v-1.5a4 4 0 0 0-3-3.87"/></svg>
+                <span>Creators</span>
+            </a>
+            <a href="Images.html">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                <span>Photo Gallery</span>
+            </a>
+            <div class="nav-group">
+                <button type="button" class="nav-trigger active" aria-haspopup="true" aria-expanded="false">
+                    <svg viewBox="0 0 24 24"><rect x="2" y="7.5" width="20" height="10" rx="5"/><path d="M7 12.5h3M8.5 11v3"/><circle cx="15.8" cy="11.6" r=".9" fill="currentColor" stroke="none"/><circle cx="17.9" cy="13.6" r=".9" fill="currentColor" stroke="none"/></svg>
+                    <span>Games</span>
+                    <svg class="caret" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg>
+                </button>
+                <div class="nav-menu">
+                    <a href="Testplay Showdowns.html">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.3" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.3" fill="currentColor" stroke="none"/></svg>
+                        <span>Showdowns</span>
+                    </a>
+                    <a href="Thunder Dragon.html" class="active">
+                        <svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>
+                        <span>The Thunder Dragon</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div id="notice" class="notice"></div>
+
+    <!-- ================= HOME ================= -->
+    <section id="screen-home" class="screen active">
+        <div class="wrap">
+            <div class="home-hero">
+                <h1>The Thunder Dragon</h1>
+                <p>
+                    The full board game, online, for 2 to 6 players. Pick a Knight, an Archer
+                    or a Mage, race across the map, gather the three key fragments, and be
+                    the first to bring down Fenrirak.
+                </p>
+            </div>
+
+            <div class="home-cards">
+                <div class="card">
+                    <h2>Your name</h2>
+                    <input type="text" id="inp-name" maxlength="16" placeholder="e.g. Nathan">
+                    <button class="btn primary" id="btn-create">Create a new room</button>
+                    <p class="muted note">
+                        You will get a 5-letter room code and an invite link to share.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <h2>Join a room</h2>
+                    <input type="text" id="inp-code" class="code-input" maxlength="5" placeholder="ABCDE">
+                    <button class="btn" id="btn-join">Join</button>
+                    <p class="muted note">
+                        Ask the host for their room code, or open their invite link.
+                    </p>
+                </div>
+            </div>
+
+            <div class="card" style="max-width:860px;margin:22px auto 0">
+                <h2>How it plays</h2>
+                <p class="muted" style="font-size:14.5px;line-height:1.7;margin:0">
+                    Roll one die to move. Land on a square and do what it says. Monsters are
+                    run by the computer — they roll to hit just like you do, and always use the
+                    hardest attack they have the energy for. In battle, an even roll is a hit
+                    and an odd roll is a miss; damage is your attack minus the target's defence.
+                    Beat Seraphina, the Goblin Scout Group and the Goblin Hideout to collect all
+                    three key fragments, open the Gate past the Fountain of Life, and enter the
+                    arena. Land on the same square as another player and you fight them — that
+                    part is not optional.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================= LOBBY ================= -->
+    <section id="screen-lobby" class="screen">
+        <div class="wrap">
+            <div class="code-box">
+                <span class="muted">Room code</span>
+                <span class="code" id="lobby-code">—</span>
+                <button class="btn small" id="btn-copy">Copy invite link</button>
+                <button class="btn small danger" id="btn-leave-lobby">Leave</button>
+            </div>
+
+            <div class="lobby-grid">
+                <div class="card">
+                    <h2>Choose your class</h2>
+                    <p class="muted" style="font-size:13.5px;margin:0 0 14px">
+                        First come, first served. At most two of each class.
+                    </p>
+                    <div class="class-picker" id="class-picker"></div>
+                </div>
+
+                <div class="card">
+                    <h2>Players</h2>
+                    <ul class="roster" id="roster"></ul>
+                    <p class="muted" id="lobby-hint" style="font-size:13.5px;margin:14px 0"></p>
+                    <button class="btn primary" id="btn-start">Start the game</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================= GAME ================= -->
+    <section id="screen-game" class="screen">
+        <div class="wrap">
+            <div id="turn-banner" class="turn-banner"></div>
+
+            <div class="game-grid">
+                <div>
+                    <div class="board" id="board"></div>
+
+                    <div class="card" style="margin-top:16px">
+                        <h2>Your things</h2>
+                        <div class="inv-tabs" id="inv-tabs"></div>
+                        <div id="inventory"></div>
+                    </div>
+                </div>
+
+                <div class="side">
+                    <div class="card" id="side-hero"></div>
+                    <div class="card">
+                        <h3>Actions</h3>
+                        <div id="side-actions"></div>
+                        <div style="margin-top:12px">
+                            <button class="btn small danger" id="btn-leave-game">Leave game</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>The narrator</h3>
+                        <div class="log" id="log"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================= GAME OVER ================= -->
+    <section id="screen-over" class="screen">
+        <div class="wrap" id="over-body"></div>
+    </section>
+
+    <!-- ================= MODAL ================= -->
+    <div class="modal-back" id="modal-back">
+        <div class="modal" id="modal"></div>
+    </div>
+
+    <script>
+/* ==== game/data.js ==== */
+/* =========================================================================
+   Legend of Fenrirak™, The Thunder Dragon — Online Version
+   data.js — all static game content, transcribed from the physical cards.
+
+   Everything in here comes from the photographs in
+   "Legend of Fenrirak, The Thunder Dragon/".
+   Anything marked PLACEHOLDER or JUDGEMENT is called out in NOTES.md.
+   ========================================================================= */
+
+(function (global) {
+    'use strict';
+
+    /* ------------------------------------------------------------------ */
+    /* Classes                                                             */
+    /* ------------------------------------------------------------------ */
+
+    // art: the character PNGs are the canonical look. They sit next to the
+    // page rather than in a subfolder, so there is one flat set of files to
+    // upload and nothing to get lost on the way to the host.
+    const CLASSES = {
+        knight: {
+            id: 'knight',
+            name: 'Knight',
+            art: 'Knight.png',
+            hp: 100,
+            defence: 15,
+            weaponType: 'sword',
+            armourType: 'knight',
+            starterWeapon: 'rusty_claymore',
+            starterArmour: 'rusted_armour',
+            moves: [
+                { id: 'light_swing', name: 'Light Swing', damage: 10, energy: 1 },
+                { id: 'heavy_swing', name: 'Heavy Swing', damage: 50, energy: 5 }
+            ],
+            ability: {
+                id: 'strength_up',
+                name: 'Strength Up',
+                text: 'Roll a die. On an even number, increase your attack by 20 damage for 2 moves.'
+            },
+            colour: '#b9bec7'
+        },
+        archer: {
+            id: 'archer',
+            name: 'Archer',
+            art: 'Archer.png',
+            hp: 80,
+            defence: 10,
+            weaponType: 'bow',
+            armourType: 'archer',
+            starterWeapon: 'damaged_bow',
+            starterArmour: 'ripped_chest_plate',
+            moves: [
+                { id: 'strike', name: 'Strike', damage: 15, energy: 1 },
+                { id: 'triple_threat', name: 'Triple Threat', damage: 55, energy: 5 }
+            ],
+            ability: {
+                id: 'agile',
+                name: 'Agile',
+                text: 'Roll a die. On an even number, add 2 to your movement roll.'
+            },
+            colour: '#d8a43f'
+        },
+        mage: {
+            id: 'mage',
+            name: 'Mage',
+            art: 'Mage.png',
+            hp: 75,
+            defence: 5,
+            weaponType: 'magic',
+            armourType: 'mage',
+            starterWeapon: 'old_training_wand',
+            starterArmour: 'old_rag_armour',
+            moves: [
+                { id: 'orb_of_power', name: 'Orb of Power', damage: 20, energy: 1 },
+                { id: 'orb_of_light', name: 'Orb of Light', damage: 60, energy: 5 }
+            ],
+            ability: {
+                id: 'illusion',
+                name: 'Illusion',
+                text: 'Roll a die. On an even number, conjure an enemy (not Fenrirak or the ' +
+                      'Goblin Hideout) and choose another player to fight it. They lose their ' +
+                      'turn and receive only the coins.'
+            },
+            colour: '#5c8fc4'
+        }
+    };
+
+    const CLASS_ORDER = ['knight', 'archer', 'mage'];
+
+    /* ------------------------------------------------------------------ */
+    /* Enemies                                                             */
+    /* ------------------------------------------------------------------ */
+
+    const ENEMIES = {
+        swarm_of_bats: {
+            id: 'swarm_of_bats',
+            name: 'Swarm of Bats',
+            crest: { initials: 'SB', tint: '#6d5f8c' }, pic: 'bats',
+            hp: 60,
+            defence: 0,
+            placeholder: true,           // PLACEHOLDER — no profile card exists for this fight
+            moves: [
+                { id: 'bite', name: 'Bite', damage: 20, energy: 1 },
+                { id: 'frenzy', name: 'Frenzy', damage: 45, energy: 5 }
+            ]
+        },
+        seraphina: {
+            id: 'seraphina',
+            name: 'Seraphina',
+            crest: { initials: 'S',  tint: '#7a8c4a' }, pic: 'seraphina',
+            hp: 150,
+            defence: 0,
+            moves: [
+                { id: 'poison_fang', name: 'Poison Fang', damage: 40, energy: 1 },
+                { id: 'tail_slam', name: 'Tail Slam', damage: 120, energy: 5 }
+            ]
+        },
+        goblin_scout_group: {
+            id: 'goblin_scout_group',
+            name: 'Goblin Scout Group',
+            crest: { initials: 'GS', tint: '#8c6a3a' }, pic: 'goblins',
+            hp: 100,
+            defence: 0,
+            moves: [
+                { id: 'club_bash', name: 'Club Bash', damage: 40, energy: 1 },
+                { id: 'heavy_wack', name: 'Heavy Wack', damage: 60, energy: 5 }
+            ]
+        },
+        goblin_hideout: {
+            id: 'goblin_hideout',
+            name: 'Goblin Hideout',
+            crest: { initials: 'GH', tint: '#8c4a3a' }, pic: 'hideout',
+            hp: 180,
+            defence: 0,
+            noIllusion: true,
+            moves: [
+                { id: 'charge', name: 'Charge', damage: 30, energy: 1 },
+                { id: 'all_out_wacks', name: 'All Out Wacks', damage: 120, energy: 5 }
+            ]
+        },
+        fenrirak: {
+            id: 'fenrirak',
+            name: 'Fenrirak',
+            crest: { initials: 'F',  tint: '#4a6a8c', art: 'Fenrirak.png' }, pic: 'fenrirak',
+            hp: 275,
+            defence: 20,
+            boss: true,
+            noIllusion: true,
+            moves: [
+                { id: 'thunder', name: 'Thunder', damage: 75, energy: 1 },
+                { id: 'electrocute', name: 'Electrocute', damage: 85, energy: 3 },
+                { id: 'discharge', name: 'Discharge', damage: 175, energy: 8 }
+            ]
+        }
+    };
+
+    /* ------------------------------------------------------------------ */
+    /* Items — weapons & armour                                            */
+    /*                                                                     */
+    /* kind:    'weapon' | 'armour'                                        */
+    /* subtype: sword | bow | magic          (weapons)                     */
+    /*          knight | archer | mage | any (armour)                      */
+    /* attack:  added to every attack that deals damage                    */
+    /* defence: subtracted from every hit taken                            */
+    /* dice:    added to dice rolls                                        */
+    /* uses:    durability; omitted = unbreakable                          */
+    /* ------------------------------------------------------------------ */
+
+    const ITEMS = {
+        /* --- starting gear (3 uses each) ------------------------------- */
+        rusty_claymore: {
+            id: 'rusty_claymore', name: 'Rusty Claymore', kind: 'weapon', subtype: 'sword',
+            attack: 5, uses: 3, starter: true,
+            text: 'Do 5 more damage. Breaks after 3 uses.'
+        },
+        damaged_bow: {
+            id: 'damaged_bow', name: 'Damaged Bow', kind: 'weapon', subtype: 'bow',
+            attack: 5, uses: 3, starter: true,
+            text: 'Do 5 more damage. Breaks after 3 uses.'
+        },
+        old_training_wand: {
+            id: 'old_training_wand', name: 'Old Training Wand', kind: 'weapon', subtype: 'magic',
+            attack: 5, uses: 3, starter: true,
+            text: 'Do 5 more damage. Breaks after 3 uses.'
+        },
+        rusted_armour: {
+            id: 'rusted_armour', name: 'Rusted Armour', kind: 'armour', subtype: 'knight',
+            defence: 5, uses: 3, starter: true,
+            text: 'Take 5 less damage. Breaks after 3 hits.'
+        },
+        old_rag_armour: {
+            id: 'old_rag_armour', name: 'Old Rag Armour', kind: 'armour', subtype: 'mage',
+            defence: 5, uses: 3, starter: true,
+            text: 'Take 5 less damage. Breaks after 3 hits.'
+        },
+        ripped_chest_plate: {
+            id: 'ripped_chest_plate', name: 'Ripped Chest Plate', kind: 'armour', subtype: 'archer',
+            defence: 5, uses: 3, starter: true,
+            text: 'Take 5 less damage. Breaks after 3 hits.'
+        },
+
+        /* --- Knight: swords -------------------------------------------- */
+        dagger: {
+            id: 'dagger', name: 'Dagger', kind: 'weapon', subtype: 'sword',
+            attack: 5, text: 'Do 5 more damage.'
+        },
+        broadsword: {
+            id: 'broadsword', name: 'Broadsword', kind: 'weapon', subtype: 'sword',
+            attack: 10, text: 'Do 10 more damage.'
+        },
+        strong_broadsword: {
+            id: 'strong_broadsword', name: 'Strong Broadsword', kind: 'weapon', subtype: 'sword',
+            attack: 15, text: 'Do 15 more damage.'
+        },
+        claymore: {
+            id: 'claymore', name: 'Claymore', kind: 'weapon', subtype: 'sword',
+            attack: 20, text: 'Do 20 more damage.'
+        },
+
+        /* --- Knight: armour -------------------------------------------- */
+        full_body_armour: {
+            id: 'full_body_armour', name: 'Full Body Armour', kind: 'armour', subtype: 'knight',
+            defence: 10, text: 'Take 10 less damage.'
+        },
+        heavy_armour: {
+            id: 'heavy_armour', name: 'Heavy Armour', kind: 'armour', subtype: 'knight',
+            defence: 20, dice: -1,
+            text: 'Take 20 less damage, but every dice roll is reduced by 1.'
+        },
+        royal_guards_uniform: {
+            id: 'royal_guards_uniform', name: "Royal Guard's Uniform", kind: 'armour', subtype: 'knight',
+            defence: 30, attack: 5,
+            text: 'Take 30 less damage and do 5 more damage.'
+        },
+
+        /* --- Archer: bows ---------------------------------------------- */
+        cool_bow: {
+            id: 'cool_bow', name: 'Cool Bow', kind: 'weapon', subtype: 'bow',
+            attack: 5, text: 'Do 5 more damage.'
+        },
+        light_bow: {
+            id: 'light_bow', name: 'Light Bow', kind: 'weapon', subtype: 'bow',
+            attack: 10, text: 'Do 10 more damage.'
+        },
+        normal_bow: {
+            id: 'normal_bow', name: 'Normal Bow', kind: 'weapon', subtype: 'bow',
+            attack: 15, text: 'Do 15 more damage.'
+        },
+        explosive_bow: {
+            id: 'explosive_bow', name: 'Explosive Bow', kind: 'weapon', subtype: 'bow',
+            attack: 20, text: 'Does 20 more damage.'
+        },
+
+        /* --- Archer: armour -------------------------------------------- */
+        light_armour: {
+            id: 'light_armour', name: 'Light Armour', kind: 'armour', subtype: 'archer',
+            defence: 5, dice: 1,
+            text: 'Take 5 less damage and add 1 to your dice roll.'
+        },
+        plated_light_armour: {
+            id: 'plated_light_armour', name: 'Plated Light Armour', kind: 'armour', subtype: 'archer',
+            defence: 10, dice: 1,
+            text: 'Take 10 less damage and add 1 to your dice roll.'
+        },
+        royal_archers_suit: {
+            id: 'royal_archers_suit', name: "Royal Archer's Suit", kind: 'armour', subtype: 'archer',
+            defence: 25, dice: 1,
+            text: 'Take 25 less damage and add 1 to your dice roll.'
+        },
+
+        /* --- Mage: magic ----------------------------------------------- */
+        magic_staff: {
+            id: 'magic_staff', name: 'Magic Staff', kind: 'weapon', subtype: 'magic',
+            attack: 10, text: 'Do 10 more damage.'
+        },
+        star_wand: {
+            id: 'star_wand', name: 'Star Wand', kind: 'weapon', subtype: 'magic',
+            attack: 15, text: 'Do 15 more damage.'
+        },
+        crystal_staff: {
+            id: 'crystal_staff', name: 'Crystal Staff', kind: 'weapon', subtype: 'magic',
+            attack: 20, text: 'Do 20 more damage.'
+        },
+        lunar_staff: {
+            id: 'lunar_staff', name: 'Lunar Staff', kind: 'weapon', subtype: 'magic',
+            attack: 25, text: 'Do 25 more damage.'
+        },
+
+        /* --- Mage: armour ---------------------------------------------- */
+        light_cloak: {
+            id: 'light_cloak', name: 'Light Cloak', kind: 'armour', subtype: 'mage',
+            defence: 10, text: 'Take 10 less damage.'
+        },
+        light_cloak_swift: {
+            id: 'light_cloak_swift', name: 'Light Cloak', kind: 'armour', subtype: 'mage',
+            defence: 10, dice: 1,
+            text: 'Take 10 less damage. Add one to your dice roll.'
+        },
+        royal_mages_robe: {
+            id: 'royal_mages_robe', name: "Royal Mage's Robe", kind: 'armour', subtype: 'mage',
+            defence: 10, attack: 10,
+            text: 'Take 10 less damage and do 10 more damage.'
+        },
+        mystical_robe: {
+            id: 'mystical_robe', name: 'Mystical Robe', kind: 'armour', subtype: 'mage',
+            defence: 15, attack: 15,
+            text: 'Take 15 less damage and do 15 more damage.'
+        },
+
+        /* --- Merchant stock -------------------------------------------- */
+        spiked_bat: {
+            id: 'spiked_bat', name: 'Spiked Bat', kind: 'weapon', subtype: 'sword',
+            attack: 10, price: 5, text: 'Do 10 more damage.'
+        },
+        spear: {
+            id: 'spear', name: 'Spear', kind: 'weapon', subtype: 'sword',
+            attack: 20, price: 8, text: 'Do 20 more damage.'
+        },
+        iron_claymore: {
+            id: 'iron_claymore', name: 'Iron Claymore', kind: 'weapon', subtype: 'sword',
+            attack: 25, price: 15, text: 'Do 25 more damage.'
+        },
+        quick_bow: {
+            id: 'quick_bow', name: 'Quick Bow', kind: 'weapon', subtype: 'bow',
+            attack: 10, price: 5, text: 'Do 10 more damage.'
+        },
+        cross_fire_bow: {
+            id: 'cross_fire_bow', name: 'Cross Fire Bow', kind: 'weapon', subtype: 'bow',
+            attack: 15, price: 8, text: 'Do 15 more damage.'
+        },
+        falcon_bow: {
+            id: 'falcon_bow', name: 'Falcon Bow', kind: 'weapon', subtype: 'bow',
+            attack: 30, price: 15, text: 'Do 30 more damage.'
+        },
+        star_tipped_wand: {
+            id: 'star_tipped_wand', name: 'Star Tipped Wand', kind: 'weapon', subtype: 'magic',
+            attack: 10, price: 5, text: 'Do 10 more damage.'
+        },
+        shining_staff: {
+            id: 'shining_staff', name: 'Shining Staff', kind: 'weapon', subtype: 'magic',
+            attack: 15, price: 10, text: 'Do 15 more damage.'
+        },
+        wand_of_power: {
+            id: 'wand_of_power', name: 'Wand of Power', kind: 'weapon', subtype: 'magic',
+            attack: 30, price: 15, text: 'Do 30 more damage.'
+        },
+        reinforced_light_armour: {
+            id: 'reinforced_light_armour', name: 'Reinforced Light Armour',
+            kind: 'armour', subtype: 'any',
+            defence: 15, dice: 1, price: 12,
+            text: 'Take 15 less damage and add 1 to your dice roll.'
+        },
+        iron_armour: {
+            id: 'iron_armour', name: 'Iron Armour', kind: 'armour', subtype: 'any',
+            defence: 20, price: 15, text: 'Take 20 less damage.'
+        },
+        spiked_armour: {
+            id: 'spiked_armour', name: 'Spiked Armour', kind: 'armour', subtype: 'any',
+            defence: 10, attack: 5, price: 85,
+            text: 'Take 10 less damage and do 5 more damage.'
+        },
+
+        /* --- Crimson Keep / Chest treasure ------------------------------ */
+        cloak_of_invisibility: {
+            id: 'cloak_of_invisibility', name: 'Cloak of Invisibility',
+            kind: 'armour', subtype: 'any', treasure: true,
+            defence: 20, avoidPvp: true,
+            text: 'Take 20 less damage. You may choose to avoid PvP battles.'
+        },
+        dark_iron_armour: {
+            id: 'dark_iron_armour', name: 'Dark Iron Armour',
+            kind: 'armour', subtype: 'any', treasure: true,
+            defence: 30, firstStrikePvp: true,
+            text: 'Take 30 less damage. You will always attack first in a PvP battle.'
+        },
+        dragon_scale_armour: {
+            id: 'dragon_scale_armour', name: 'Dragon Scale Armour',
+            kind: 'armour', subtype: 'any', treasure: true,
+            defence: 35, fenrirakMovesPvp: true,
+            text: 'Take 35 less damage. You may use one of Fenrirak’s attacks in a PvP ' +
+                  'battle (requires the same amount of energy as Fenrirak).'
+        },
+        great_bulging_broadsword: {
+            id: 'great_bulging_broadsword', name: 'Great Bulging Broadsword',
+            kind: 'weapon', subtype: 'sword', treasure: true,
+            attack: 30, text: 'Do 30 more damage.'
+        },
+        compound_bow: {
+            id: 'compound_bow', name: 'Compound Bow',
+            kind: 'weapon', subtype: 'bow', treasure: true,
+            attack: 40, text: 'Do 40 more damage.'
+        },
+        staff_of_life: {
+            id: 'staff_of_life', name: 'Staff of Life',
+            kind: 'weapon', subtype: 'magic', treasure: true,
+            attack: 45, healPerMove: 5,
+            text: 'Do 45 more damage and with every move heal 5 HP.'
+        }
+    };
+
+    // The six treasures behind a Chest square / the Crimson Keep.
+    const TREASURE_POOL = [
+        'cloak_of_invisibility', 'dark_iron_armour', 'dragon_scale_armour',
+        'great_bulging_broadsword', 'compound_bow', 'staff_of_life'
+    ];
+
+    /* ------------------------------------------------------------------ */
+    /* Item deck — the yellow class cards, in the quantities photographed  */
+    /* ------------------------------------------------------------------ */
+
+    const ITEM_DECK = [
+        // swords
+        'dagger', 'dagger', 'broadsword', 'strong_broadsword', 'claymore',
+        // knight armour
+        'full_body_armour', 'full_body_armour', 'full_body_armour',
+        'heavy_armour', 'heavy_armour', 'royal_guards_uniform',
+        // bows
+        'cool_bow', 'light_bow', 'normal_bow', 'normal_bow', 'explosive_bow',
+        // archer armour
+        'light_armour', 'light_armour', 'light_armour',
+        'plated_light_armour', 'plated_light_armour', 'royal_archers_suit',
+        // magic
+        'magic_staff', 'magic_staff', 'star_wand', 'crystal_staff', 'lunar_staff',
+        // mage armour
+        'light_cloak', 'light_cloak_swift', 'light_cloak_swift',
+        'royal_mages_robe', 'royal_mages_robe', 'mystical_robe'
+    ];
+
+    /* ------------------------------------------------------------------ */
+    /* Power-up deck                                                       */
+    /* effect kinds: energy | damage | health | dice | defence            */
+    /* ------------------------------------------------------------------ */
+
+    const POWERUPS = {
+        low_energy_up:      { id: 'low_energy_up',      name: 'Low Energy Up',      effect: 'energy',  value: 2,  text: 'Add 2 energy to your character.' },
+        energy_up:          { id: 'energy_up',          name: 'Energy Up',          effect: 'energy',  value: 4,  text: 'Add 4 energy to your character.' },
+        low_strength_up:    { id: 'low_strength_up',    name: 'Low Strength Up',    effect: 'damage',  value: 10, text: 'Do 10 more damage.' },
+        strength_up:        { id: 'strength_up',        name: 'Strength Up',        effect: 'damage',  value: 20, text: 'Do 20 more damage.' },
+        super_strength_up:  { id: 'super_strength_up',  name: 'Super Strength Up',  effect: 'damage',  value: 30, text: 'Do 30 more damage.' },
+        low_health_up:      { id: 'low_health_up',      name: 'Low Health Up',      effect: 'health',  value: 15, text: 'Add 15 health to your character.' },
+        health_up:          { id: 'health_up',          name: 'Health Up',          effect: 'health',  value: 25, text: 'Add 25 health to your character.' },
+        super_health_up:    { id: 'super_health_up',    name: 'Super Health Up',    effect: 'health',  value: 50, text: 'Add 50 health to your character.' },
+        low_speed_up:       { id: 'low_speed_up',       name: 'Low Speed Up',       effect: 'dice',    value: 1,  text: 'Add 1 to your dice roll.' },
+        speed_up:           { id: 'speed_up',           name: 'Speed Up',           effect: 'dice',    value: 3,  text: 'Add 3 to your dice roll.' },
+        low_defence_up:     { id: 'low_defence_up',     name: 'Low Defence Up',     effect: 'defence', value: 5,  text: 'Take 5 less damage.' },
+        defence_up:         { id: 'defence_up',         name: 'Defence Up',         effect: 'defence', value: 10, text: 'Take 10 less damage.' }
+    };
+
+    // Super Strength Up appears twice in the photographed deck.
+    const POWERUP_DECK = [
+        'low_energy_up', 'energy_up',
+        'low_strength_up', 'strength_up', 'super_strength_up', 'super_strength_up',
+        'low_health_up', 'health_up', 'super_health_up',
+        'low_speed_up', 'speed_up',
+        'low_defence_up', 'defence_up'
+    ];
+
+    /* ------------------------------------------------------------------ */
+    /* Merchant                                                            */
+    /* Weapons and armour: 1 of each. Potions: stock as written on the      */
+    /* pricing sheets ("x3", "x5").                                        */
+    /* ------------------------------------------------------------------ */
+
+    const MERCHANT_POTIONS = {
+        energy_up:         { price: 15, stock: 3 },
+        low_energy_up:     { price: 12, stock: 5 },
+        health_up:         { price: 8,  stock: 3 },
+        super_health_up:   { price: 12, stock: 3 },
+        low_strength_up:   { price: 9,  stock: 5 },
+        strength_up:       { price: 15, stock: 3 },
+        super_strength_up: { price: 25, stock: 3 },
+        low_defence_up:    { price: 8,  stock: 3 },
+        defence_up:        { price: 15, stock: 3 },
+        low_speed_up:      { price: 5,  stock: 3 },
+        speed_up:          { price: 8,  stock: 3 },
+        low_health_up:     { price: 6,  stock: 3 }
+    };
+
+    const MERCHANT_GEAR = [
+        'spiked_bat', 'spear', 'iron_claymore',
+        'quick_bow', 'cross_fire_bow', 'falcon_bow',
+        'star_tipped_wand', 'shining_staff', 'wand_of_power',
+        'reinforced_light_armour', 'iron_armour', 'spiked_armour'
+    ];
+
+    /* ------------------------------------------------------------------ */
+    /* The board                                                           */
+    /*                                                                     */
+    /* A linear race track: START (0) through to Fenrirak's Arena (22).     */
+    /* row/col place each square on a 7x5 grid matching the handmade board; */
+    /* the arena occupies the centre.                                      */
+    /* ------------------------------------------------------------------ */
+
+    const BOARD = [
+        { i: 0,  key: 'start',            name: 'Start',                row: 4, col: 6,
+          text: 'Every journey begins here.' },
+
+        { i: 1,  key: 'draw_powerup',     name: 'Draw 3 Power-Ups',     row: 4, col: 5,
+          action: 'draw_powerup', count: 3, text: 'Draw 3 power-up cards.' },
+
+        { i: 2,  key: 'draw_item',        name: 'Draw 2 Item Cards',    row: 4, col: 4,
+          action: 'draw_item', count: 2, text: 'Draw 2 item cards.' },
+
+        { i: 3,  key: 'draw_item',        name: 'Draw 1 Item Card',     row: 4, col: 3,
+          action: 'draw_item', count: 1, scenery: 'bridge',
+          text: 'Draw 1 item card.' },
+
+        { i: 4,  key: 'draw_powerup',     name: 'Draw 2 Power-Ups',     row: 4, col: 2,
+          action: 'draw_powerup', count: 2, text: 'Draw 2 power-up cards.' },
+
+        { i: 5,  key: 'draw_item_key',    name: 'Item Card + Chest Key', row: 4, col: 1,
+          action: 'draw_item_key', count: 1, text: 'Draw 1 item card and get a chest key.' },
+
+        { i: 6,  key: 'draw_item',        name: 'Draw 2 Item Cards',    row: 4, col: 0,
+          action: 'draw_item', count: 2, text: 'Draw 2 item cards.' },
+
+        { i: 7,  key: 'spring',           name: 'Spring',               row: 3, col: 0,
+          action: 'spring', value: 2, text: 'Move forward two spaces.' },
+
+        { i: 8,  key: 'castle_ruins',     name: 'Castle Ruins',         row: 2, col: 0,
+          action: 'battle', enemy: 'swarm_of_bats', coins: 3, chestKey: 1,
+          text: 'You have to fight a swarm of bats. Finds 3 coins and a chest key.' },
+
+        { i: 9,  key: 'sack_of_gold',     name: 'Sack of Gold',         row: 1, col: 0,
+          action: 'coins', coins: 10, text: 'Congrats! You found a sack of gold! +10 coins.' },
+
+        { i: 10, key: 'pot',              name: 'Pot',                  row: 0, col: 0,
+          action: 'pot', text: 'You may cook steak!' },
+
+        { i: 11, key: 'midnight_desert',  name: 'Midnight Desert',      row: 0, col: 1,
+          action: 'battle', enemy: 'seraphina', coins: 8, keyFragment: 1,
+          text: 'You have to fight Seraphina. Drops 8 coins and a key fragment.' },
+
+        { i: 12, key: 'chest',            name: 'Chest',                row: 0, col: 2,
+          action: 'chest', text: 'Get an armour set or special weapon. (Cost: 1 chest key)' },
+
+        { i: 13, key: 'sea_of_castout',   name: 'Sea of Castout',       row: 0, col: 3,
+          action: 'sea_of_castout', scenery: 'broken_bridge',
+          text: 'A whirlpool takes one of your items. Choose something to lose.' },
+
+        { i: 14, key: 'slivergrove',      name: 'Slivergrove Village',  row: 0, col: 4,
+          action: 'heal', value: 50, text: 'Heal 50 HP.' },
+
+        { i: 15, key: 'uncharted_forest', name: 'Uncharted Forest',     row: 0, col: 5,
+          action: 'battle', enemy: 'goblin_scout_group', coins: 5, keyFragment: 1,
+          text: 'You have to fight a goblin scout group. Drops 5 coins and a key fragment.' },
+
+        { i: 16, key: 'crimson_keep',     name: 'Crimson Keep',         row: 0, col: 6,
+          action: 'crimson_keep',
+          text: 'CHOOSE 1 — sword, armour, bow or wand that suits your class.' },
+
+        { i: 17, key: 'chest',            name: 'Chest',                row: 1, col: 6,
+          action: 'chest', text: 'Get an armour set or special weapon. (Cost: 1 chest key)' },
+
+        { i: 18, key: 'pot',              name: 'Pot',                  row: 2, col: 6,
+          action: 'pot', text: 'You may cook steak!' },
+
+        { i: 19, key: 'goblin_hideout',   name: 'Goblin Hideout',       row: 3, col: 6,
+          action: 'battle', enemy: 'goblin_hideout', coins: 15, keyFragment: 1,
+          text: 'You stumble across a goblin hideout. You fight the goblins! ' +
+                'Drops 15 coins and a key fragment.' },
+
+        { i: 20, key: 'fountain_of_life', name: 'Fountain of Life',     row: 3, col: 5,
+          action: 'heal', value: 100, optionalStop: true,
+          text: 'Heal 100 HP. Optional stop.' },
+
+        { i: 21, key: 'gate',             name: 'The Gate',             row: 2, col: 5,
+          action: 'gate',
+          text: 'Three different key fragments open the way. Without them, you are cast ' +
+                'back to the Start.' },
+
+        { i: 22, key: 'arena',            name: "Fenrirak's Arena",     row: 1, col: 1,
+          rowSpan: 3, colSpan: 4,
+          action: 'battle', enemy: 'fenrirak', arena: true,
+          text: 'The Thunder Dragon waits. Defeat Fenrirak and the legend is yours.' }
+    ];
+
+
+    // Scenery, not a square you can land on — fills the gap beside the arena.
+    const DECOR = [
+        { row: 1, col: 5, name: 'The Iconic Tree', art: 'Tree.png' }
+    ];
+
+    const START_INDEX = 0;
+    const ARENA_INDEX = 22;
+    const KEY_FRAGMENTS_NEEDED = 3;
+
+    /* ------------------------------------------------------------------ */
+
+    const RULES = {
+        minPlayers: 2,
+        maxPlayers: 6,
+        maxPerClass: 2,
+        turnTimeoutMs: 60000,          // auto-skip after 1 minute of inactivity
+        startingCoins: 0,
+        equipCooldownTurns: 2,         // change weapon/armour every 2 turns
+        abilityCooldownTurns: 2,       // one ability every 2 turns
+        startingEnergy: 1,
+        rawSteakHeal: 5,
+        searedSteakHeal: 10,
+        foodPoisoningLoss: 15,
+        foodPoisoningRoll: 3,
+        steakRolls: [2, 4, 6]
+    };
+
+    global.LOF_DATA = {
+        CLASSES, CLASS_ORDER, ENEMIES, ITEMS, TREASURE_POOL,
+        ITEM_DECK, POWERUPS, POWERUP_DECK,
+        MERCHANT_POTIONS, MERCHANT_GEAR,
+        BOARD, DECOR, START_INDEX, ARENA_INDEX, KEY_FRAGMENTS_NEEDED, RULES
+    };
+
+})(typeof window !== 'undefined' ? window : globalThis);
+
+    </script>
+    <script>
+/* ==== game/engine.js ==== */
+/* =========================================================================
+   Legend of Fenrirak™, The Thunder Dragon — Online Version
+   engine.js — the rules.
+
+   Every function here takes the shared game state and mutates it in place.
+   The networking layer runs these inside a Firestore transaction, so the
+   engine itself never touches the network and stays easy to reason about.
+   ========================================================================= */
+
+(function (global) {
+    'use strict';
+
+    const D = global.LOF_DATA;
+    const R = D.RULES;
+
+    /* ------------------------------------------------------------------ */
+    /* Small helpers                                                       */
+    /* ------------------------------------------------------------------ */
+
+    let uidCounter = 0;
+    function uid(prefix) {
+        uidCounter += 1;
+        return (prefix || 'u') + '_' + Date.now().toString(36) + '_' +
+               uidCounter.toString(36) + Math.floor(Math.random() * 1296).toString(36);
+    }
+
+    function d6() { return 1 + Math.floor(Math.random() * 6); }
+
+    function shuffle(arr) {
+        const a = arr.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+
+    function log(state, text, tone) {
+        state.log.push({ t: text, tone: tone || 'info', at: Date.now() });
+        if (state.log.length > 120) state.log.splice(0, state.log.length - 120);
+    }
+
+    function player(state, pid) {
+        return state.players.find(p => p.id === pid) || null;
+    }
+
+    function square(i) {
+        return D.BOARD[Math.max(0, Math.min(D.BOARD.length - 1, i))];
+    }
+
+    function ownedItem(p, itemUid) {
+        return p.inventory.find(it => it.uid === itemUid) || null;
+    }
+
+    function equippedWeapon(p) {
+        return p.weaponUid ? ownedItem(p, p.weaponUid) : null;
+    }
+
+    function equippedArmour(p) {
+        return p.armourUid ? ownedItem(p, p.armourUid) : null;
+    }
+
+    function defOf(inst) { return inst ? D.ITEMS[inst.id] : null; }
+
+    /* ------------------------------------------------------------------ */
+    /* Derived stats                                                       */
+    /* ------------------------------------------------------------------ */
+
+    function buffTotal(p, kind) {
+        return (p.buffs || []).reduce((n, b) => n + (b.kind === kind ? b.value : 0), 0);
+    }
+
+    // Defence reduces damage taken: class defence + armour + any defence buffs.
+    function totalDefence(state, p) {
+        const cls = D.CLASSES[p.cls];
+        const armour = defOf(equippedArmour(p));
+        return (cls ? cls.defence : 0) +
+               (armour && armour.defence ? armour.defence : 0) +
+               buffTotal(p, 'defence');
+    }
+
+    // Attack bonus added to any move that already deals damage.
+    function totalAttackBonus(p) {
+        const weapon = defOf(equippedWeapon(p));
+        const armour = defOf(equippedArmour(p));
+        return (weapon && weapon.attack ? weapon.attack : 0) +
+               (armour && armour.attack ? armour.attack : 0) +
+               buffTotal(p, 'damage');
+    }
+
+    // Modifier applied to every dice roll this player makes.
+    function diceModifier(p) {
+        const armour = defOf(equippedArmour(p));
+        return (armour && armour.dice ? armour.dice : 0) + buffTotal(p, 'dice');
+    }
+
+    function consumeBuffs(p, kind) {
+        p.buffs = (p.buffs || []).filter(b => {
+            if (b.kind !== kind) return true;
+            b.uses -= 1;
+            return b.uses > 0;
+        });
+    }
+
+    function addBuff(p, kind, value, uses) {
+        p.buffs = p.buffs || [];
+        p.buffs.push({ kind: kind, value: value, uses: uses });
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Decks                                                               */
+    /* ------------------------------------------------------------------ */
+
+    function drawItem(state, p, count) {
+        const drawn = [];
+        for (let n = 0; n < count; n++) {
+            if (!state.decks.item.length) {
+                state.decks.item = shuffle(D.ITEM_DECK.slice());
+                log(state, 'The item deck was reshuffled.', 'muted');
+            }
+            const id = state.decks.item.shift();
+            const inst = { uid: uid('it'), id: id, uses: D.ITEMS[id].uses || null };
+            p.inventory.push(inst);
+            drawn.push(D.ITEMS[id].name);
+        }
+        if (drawn.length) log(state, p.name + ' drew ' + drawn.join(' and ') + '.', 'item');
+    }
+
+    function drawPowerup(state, p, count) {
+        const drawn = [];
+        for (let n = 0; n < count; n++) {
+            if (!state.decks.powerup.length) {
+                state.decks.powerup = shuffle(D.POWERUP_DECK.slice());
+            }
+            const id = state.decks.powerup.shift();
+            p.powerups.push({ uid: uid('pu'), id: id });
+            drawn.push(D.POWERUPS[id].name);
+        }
+        if (drawn.length) log(state, p.name + ' drew ' + drawn.join(', ') + '.', 'item');
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Game setup                                                          */
+    /* ------------------------------------------------------------------ */
+
+    function makeRoomCode() {
+        const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        let s = '';
+        for (let i = 0; i < 5; i++) s += A[Math.floor(Math.random() * 26)];
+        return s;
+    }
+
+    function createGame(code, hostId, hostName) {
+        const state = {
+            code: code,
+            hostId: hostId,
+            phase: 'lobby',              // lobby | order | playing | over
+            players: [],
+            turnOrder: [],
+            turnIndex: 0,
+            turnNo: 0,
+            decks: {
+                item: shuffle(D.ITEM_DECK.slice()),
+                powerup: shuffle(D.POWERUP_DECK.slice())
+            },
+            merchant: buildMerchantStock(),
+            battle: null,
+            pending: null,
+            trades: [],
+            log: [],
+            winner: null,
+            turnStartedAt: Date.now(),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            version: 1
+        };
+        addPlayer(state, hostId, hostName);
+        log(state, 'Room ' + code + ' opened. Waiting for adventurers…', 'muted');
+        return state;
+    }
+
+    function buildMerchantStock() {
+        const stock = { gear: {}, potions: {} };
+        D.MERCHANT_GEAR.forEach(id => { stock.gear[id] = 1; });
+        Object.keys(D.MERCHANT_POTIONS).forEach(id => {
+            stock.potions[id] = D.MERCHANT_POTIONS[id].stock;
+        });
+        return stock;
+    }
+
+    function addPlayer(state, pid, name) {
+        if (state.phase !== 'lobby') return fail('The game has already started.');
+        if (player(state, pid)) return ok();
+        if (state.players.length >= R.maxPlayers) return fail('This room is full (6 players).');
+
+        state.players.push({
+            id: pid,
+            name: (name || 'Adventurer').slice(0, 16),
+            cls: null,
+            ready: false,
+            pos: D.START_INDEX,
+            hp: 0, maxHp: 0,
+            coins: R.startingCoins,
+            energy: R.startingEnergy,
+            inventory: [],
+            powerups: [],
+            potions: [],
+            steaks: { raw: 0, cooked: 0 },
+            keyFragments: 0,
+            chestKeys: 0,
+            weaponUid: null,
+            armourUid: null,
+            buffs: [],
+            orderRoll: null,
+            turnsTaken: 0,
+            lastEquipTurn: -99,
+            lastAbilityTurn: -99,
+            pendingIllusion: null,
+            path: [],
+            movesLeft: 0,
+            hasMoved: false,
+            connected: true,
+            lastSeen: Date.now()
+        });
+        log(state, (name || 'An adventurer') + ' joined the room.', 'muted');
+        return ok();
+    }
+
+    function removePlayer(state, pid) {
+        const idx = state.players.findIndex(p => p.id === pid);
+        if (idx < 0) return ok();
+        if (state.phase === 'lobby') {
+            const gone = state.players[idx];
+            state.players.splice(idx, 1);
+            log(state, gone.name + ' left the room.', 'muted');
+            if (state.hostId === pid && state.players.length) {
+                state.hostId = state.players[0].id;
+            }
+        } else {
+            state.players[idx].connected = false;
+        }
+        return ok();
+    }
+
+    function chooseClass(state, pid, clsId) {
+        if (state.phase !== 'lobby') return fail('The game has already started.');
+        const p = player(state, pid);
+        if (!p) return fail('You are not in this room.');
+        if (clsId && !D.CLASSES[clsId]) return fail('Unknown class.');
+
+        if (clsId) {
+            const taken = state.players.filter(x => x.cls === clsId && x.id !== pid).length;
+            if (taken >= R.maxPerClass) {
+                return fail('There are already two ' + D.CLASSES[clsId].name + 's.');
+            }
+        }
+        p.cls = clsId;
+        p.ready = !!clsId;
+        return ok();
+    }
+
+    function startGame(state, pid) {
+        if (state.phase !== 'lobby') return fail('Already started.');
+        if (pid !== state.hostId) return fail('Only the host can start the game.');
+        if (state.players.length < R.minPlayers) return fail('You need at least 2 players.');
+        if (state.players.some(p => !p.cls)) return fail('Everyone must choose a class first.');
+
+        state.players.forEach(p => {
+            const cls = D.CLASSES[p.cls];
+            p.maxHp = cls.hp;
+            p.hp = cls.hp;
+            p.energy = R.startingEnergy;
+
+            const w = { uid: uid('it'), id: cls.starterWeapon, uses: D.ITEMS[cls.starterWeapon].uses };
+            const a = { uid: uid('it'), id: cls.starterArmour, uses: D.ITEMS[cls.starterArmour].uses };
+            p.inventory.push(w, a);
+            p.weaponUid = w.uid;
+            p.armourUid = a.uid;
+            p.orderRoll = null;
+        });
+
+        state.phase = 'order';
+        log(state, 'Everyone rolls for turn order. Highest goes first.', 'system');
+        return ok();
+    }
+
+    function rollForOrder(state, pid) {
+        if (state.phase !== 'order') return fail('Not rolling for order right now.');
+        const p = player(state, pid);
+        if (!p) return fail('You are not in this room.');
+        if (p.orderRoll !== null) return fail('You have already rolled.');
+
+        p.orderRoll = d6();
+        log(state, p.name + ' rolled a ' + p.orderRoll + ' for turn order.', 'roll');
+
+        if (state.players.every(x => x.orderRoll !== null)) {
+            // Ties are rerolled, exactly as the rules say. With six players a
+            // clean sweep of six different numbers is rare, so the rerolls are
+            // resolved here rather than making everyone click again and again.
+            let rounds = 0;
+            while (rounds < 400) {
+                const byRoll = {};
+                state.players.forEach(x => {
+                    byRoll[x.orderRoll] = (byRoll[x.orderRoll] || 0) + 1;
+                });
+                const tied = state.players.filter(x => byRoll[x.orderRoll] > 1);
+                if (!tied.length) break;
+
+                rounds += 1;
+                tied.forEach(x => { x.orderRoll = d6(); });
+            }
+            if (rounds) {
+                log(state, 'Tied rolls were rerolled ' + rounds +
+                           (rounds === 1 ? ' time.' : ' times.'), 'muted');
+            }
+
+            state.turnOrder = state.players.slice()
+                .sort((a, b) => b.orderRoll - a.orderRoll)
+                .map(x => x.id);
+            state.phase = 'playing';
+            state.turnIndex = 0;
+            state.turnNo = 1;
+            state.turnStartedAt = Date.now();
+            beginTurn(state);
+        }
+        return ok();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Turn flow                                                           */
+    /* ------------------------------------------------------------------ */
+
+    function currentPlayer(state) {
+        if (state.phase !== 'playing') return null;
+        return player(state, state.turnOrder[state.turnIndex]);
+    }
+
+    function beginTurn(state) {
+        const p = currentPlayer(state);
+        if (!p) return;
+        p.hasMoved = false;
+        p.movesLeft = 0;
+        p.path = [];          // last turn's walk, cleared so it is not replayed
+        state.turnStartedAt = Date.now();
+
+        // A Mage's illusion forces a fight before anything else.
+        if (p.pendingIllusion) {
+            const enemyId = p.pendingIllusion;
+            p.pendingIllusion = null;
+            log(state, p.name + ' is ambushed by an illusion of the ' +
+                       D.ENEMIES[enemyId].name + '!', 'battle');
+            startEnemyBattle(state, p, enemyId, p.pos, true);
+        }
+    }
+
+    function isMyTurn(state, pid) {
+        const p = currentPlayer(state);
+        return !!p && p.id === pid;
+    }
+
+    function endTurn(state, pid) {
+        if (state.phase !== 'playing') return fail('The game is not running.');
+        if (!isMyTurn(state, pid)) return fail('It is not your turn.');
+        if (state.battle) return fail('Finish the battle first.');
+        if (state.pending) return fail('Resolve the square first.');
+
+        // Ending your turn means rolling for a raw steak, by hand.
+        state.pending = {
+            type: 'steak_roll',
+            playerId: pid,
+            prompt: 'Roll for a raw steak. A ' + R.steakRolls.join(', ') + ' finds one.'
+        };
+        return ok();
+    }
+
+    function advanceTurn(state) {
+        const p = currentPlayer(state);
+        if (p) {
+            // The steak roll is not made here. Nothing in this game rolls a die
+            // on its own -- endTurn hands the player the die first and only
+            // calls this once they have thrown it.
+            // Defence buffs last one turn.
+            p.buffs = (p.buffs || []).filter(b => b.kind !== 'defence');
+            p.turnsTaken += 1;
+            p.energy = R.startingEnergy;
+        }
+
+        let guard = 0;
+        do {
+            state.turnIndex = (state.turnIndex + 1) % state.turnOrder.length;
+            if (state.turnIndex === 0) state.turnNo += 1;
+            guard += 1;
+        } while (guard < state.turnOrder.length && !currentPlayer(state));
+
+        beginTurn(state);
+        return ok();
+    }
+
+    function checkTimeout(state, now) {
+        if (state.phase !== 'playing') return false;
+        if ((now - (state.turnStartedAt || 0)) < R.turnTimeoutMs) return false;
+
+        // A battle must be settled, not silently deleted — otherwise the AFK
+        // player escapes and the other side never gets what they earned.
+        const b = state.battle;
+        if (b) {
+            const actorId = battleActorId(state);
+            if (b.kind === 'pvp') {
+                const afk = player(state, actorId);
+                const other = player(state, actorId === b.aId ? b.bId : b.aId);
+                if (afk && other) {
+                    log(state, afk.name + ' was away too long and forfeits the duel.', 'muted');
+                    return !!winPvp(state, other, afk);
+                }
+            }
+            const p = player(state, b.aId);
+            if (p) {
+                log(state, p.name + ' was away too long and flees the fight.', 'muted');
+                const wasIllusion = b.illusion;
+                losePve(state, p);
+                if (!wasIllusion) advanceTurn(state);
+                return true;
+            }
+            state.battle = null;
+        }
+
+        state.pending = null;
+        const cur = currentPlayer(state);
+        if (!cur) return false;
+        log(state, cur.name + ' was away too long — turn skipped.', 'muted');
+        advanceTurn(state);
+        return true;
+    }
+
+    // Someone's health hit zero outside of an attack (food poisoning). If they
+    // were mid-battle it has to be settled properly, not just abandoned.
+    function collapse(state, p, reason) {
+        const b = state.battle;
+        if (b && b.kind === 'pvp' && (b.aId === p.id || b.bId === p.id)) {
+            const other = player(state, b.aId === p.id ? b.bId : b.aId);
+            log(state, p.name + ' collapses' + (reason ? ' from ' + reason : '') + '.', 'death');
+            return winPvp(state, other, p);
+        }
+        if (b && b.kind === 'pve' && b.aId === p.id) {
+            log(state, p.name + ' collapses' + (reason ? ' from ' + reason : '') +
+                       ' and the fight is lost.', 'death');
+            const wasIllusion = b.illusion;
+            state.battle = null;
+            sendToStart(state, p, true);
+            if (wasIllusion) advanceTurn(state);
+            return ok();
+        }
+        log(state, p.name + ' collapses and returns to the Start.', 'death');
+        sendToStart(state, p, true);
+        return ok();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Movement                                                            */
+    /* ------------------------------------------------------------------ */
+
+    function rollMove(state, pid) {
+        if (state.phase !== 'playing') return fail('The game is not running.');
+        if (!isMyTurn(state, pid)) return fail('It is not your turn.');
+        if (state.battle) return fail('You are in a battle.');
+        if (state.pending) return fail('Resolve the square first.');
+        const p = currentPlayer(state);
+        if (p.hasMoved) return fail('You have already moved this turn.');
+        if (p.pos >= D.ARENA_INDEX) return fail('You are already in the arena.');
+
+        const raw = d6();
+        const mod = diceModifier(p) + (p.agileBonus || 0);
+        const total = Math.max(1, raw + mod);
+        p.agileBonus = 0;
+        consumeBuffs(p, 'dice');
+        p.hasMoved = true;
+
+        log(state, p.name + ' rolled a ' + raw +
+                   (mod ? ' (' + (mod > 0 ? '+' : '') + mod + ' = ' + total + ')' : '') + '.', 'roll');
+
+        return walk(state, p, total);
+    }
+
+    // Step square by square. Nothing on the board forces a stop any more --
+    // the only interruption is a square that *offers* one, and the Gate, which
+    // is a locked door rather than a stop.
+    //
+    // Every square stepped through is recorded in p.path so the board can walk
+    // the token along instead of teleporting it. It is cleared at the start of
+    // the next turn.
+    function walk(state, p, steps) {
+        let remaining = steps;
+        p.path = [p.pos];
+        while (remaining > 0) {
+            if (p.pos >= D.ARENA_INDEX) break;
+            p.pos += 1;
+            remaining -= 1;
+            p.path.push(p.pos);
+            const sq = square(p.pos);
+
+            // The Gate stops nobody, but it does not let anyone through
+            // without the three fragments -- walking past it is still walking
+            // through it.
+            if (remaining > 0 && sq.action === 'gate' && p.keyFragments < D.KEY_FRAGMENTS_NEEDED) {
+                log(state, 'The Gate refuses ' + p.name + '. Back to the Start.', 'death');
+                p.movesLeft = 0;
+                sendToStart(state, p, false);
+                p.path.push(p.pos);
+                return ok();
+            }
+
+            if (remaining > 0 && sq.optionalStop) {
+                p.movesLeft = remaining;
+                state.pending = {
+                    type: 'optional_stop',
+                    playerId: p.id,
+                    squareIndex: p.pos,
+                    prompt: sq.name + ' — ' + sq.text
+                };
+                return ok();
+            }
+        }
+        p.movesLeft = 0;
+        return landOn(state, p);
+    }
+
+    function landOn(state, p) {
+        const sq = square(p.pos);
+        log(state, p.name + ' landed on ' + sq.name + '.', 'move');
+
+        // Two characters on the same square means a forced PvP battle.
+        const rival = state.players.find(x =>
+            x.id !== p.id && x.cls && x.pos === p.pos && p.pos !== D.START_INDEX);
+        if (rival) {
+            const cloak = defOf(equippedArmour(p));
+            const rivalCloak = defOf(equippedArmour(rival));
+            if ((cloak && cloak.avoidPvp) || (rivalCloak && rivalCloak.avoidPvp)) {
+                const holder = (cloak && cloak.avoidPvp) ? p : rival;
+                state.pending = {
+                    type: 'pvp_avoid',
+                    playerId: holder.id,
+                    otherId: holder.id === p.id ? rival.id : p.id,
+                    squareIndex: p.pos,
+                    prompt: 'The Cloak of Invisibility can slip you past this fight.'
+                };
+                return ok();
+            }
+            return startPvp(state, p, rival);
+        }
+
+        return resolveSquare(state, p, sq);
+    }
+
+    function resolveSquare(state, p, sq) {
+        switch (sq.action) {
+            case 'draw_item':
+                drawItem(state, p, sq.count);
+                return ok();
+
+            case 'draw_powerup':
+                drawPowerup(state, p, sq.count);
+                return ok();
+
+            case 'draw_item_key':
+                drawItem(state, p, sq.count);
+                p.chestKeys += 1;
+                log(state, p.name + ' pockets a chest key.', 'item');
+                return ok();
+
+            case 'coins':
+                p.coins += sq.coins;
+                log(state, p.name + ' found ' + sq.coins + ' coins.', 'item');
+                return ok();
+
+            case 'heal': {
+                const before = p.hp;
+                p.hp = Math.min(p.maxHp, p.hp + sq.value);
+                log(state, p.name + ' healed ' + (p.hp - before) + ' HP at ' + sq.name + '.', 'heal');
+                return ok();
+            }
+
+            case 'spring': {
+                log(state, 'The spring launches ' + p.name + ' two spaces forward!', 'move');
+                return walk(state, p, sq.value);
+            }
+
+            case 'pot':
+                if (p.steaks.raw > 0) {
+                    state.pending = {
+                        type: 'pot', playerId: p.id,
+                        prompt: 'You may cook as many raw steaks as you like.'
+                    };
+                } else {
+                    log(state, 'No raw steak to cook.', 'muted');
+                }
+                return ok();
+
+            case 'chest':
+                if (p.chestKeys < 1) {
+                    log(state, p.name + ' has no chest key — the chest stays shut.', 'muted');
+                    return ok();
+                }
+                state.pending = {
+                    type: 'chest', playerId: p.id,
+                    options: D.TREASURE_POOL.slice(),
+                    prompt: 'Spend a chest key and choose one treasure. Any class may wear ' +
+                            'armour found in a chest.'
+                };
+                return ok();
+
+            case 'crimson_keep': {
+                const cls = D.CLASSES[p.cls];
+                const options = D.TREASURE_POOL.filter(id => {
+                    const it = D.ITEMS[id];
+                    if (it.kind === 'armour') return true;
+                    return it.subtype === cls.weaponType;
+                });
+                state.pending = {
+                    type: 'crimson_keep', playerId: p.id, options: options,
+                    prompt: 'The Crimson Keep. Choose one item that suits a ' + cls.name + '.'
+                };
+                return ok();
+            }
+
+            case 'sea_of_castout': {
+                const losable = p.inventory
+                    .filter(it => it.uid !== null)
+                    .map(it => ({ uid: it.uid, id: it.id, name: D.ITEMS[it.id].name }));
+                if (!losable.length) {
+                    log(state, 'The whirlpool finds nothing to take from ' + p.name + '.', 'muted');
+                    return ok();
+                }
+                state.pending = {
+                    type: 'sea_of_castout', playerId: p.id, options: losable,
+                    prompt: 'A whirlpool drags something under. Choose an item to lose.'
+                };
+                return ok();
+            }
+
+            case 'gate':
+                if (p.keyFragments >= D.KEY_FRAGMENTS_NEEDED) {
+                    log(state, p.name + ' turns three key fragments — the Gate grinds open!', 'system');
+                } else {
+                    log(state, 'The Gate refuses ' + p.name + '. Back to the Start.', 'death');
+                    sendToStart(state, p, false);
+                }
+                return ok();
+
+            case 'battle':
+                return startEnemyBattle(state, p, sq.enemy, sq.i, false);
+
+            default:
+                return ok();
+        }
+    }
+
+    function sendToStart(state, p, keepCoins) {
+        p.pos = D.START_INDEX;
+        p.hp = p.maxHp;
+        p.energy = R.startingEnergy;
+        p.buffs = [];
+        if (keepCoins === false) { /* items, coins and power-ups are always kept */ }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Battles                                                             */
+    /* ------------------------------------------------------------------ */
+
+    function startEnemyBattle(state, p, enemyId, squareIndex, isIllusion) {
+        const e = D.ENEMIES[enemyId];
+        p.energy = R.startingEnergy;
+        state.battle = {
+            kind: 'pve',
+            enemyId: enemyId,
+            enemyHp: e.hp,
+            enemyMaxHp: e.hp,
+            enemyEnergy: R.startingEnergy,
+            squareIndex: (squareIndex === undefined || squareIndex === null) ? p.pos : squareIndex,
+            illusion: !!isIllusion,
+            aId: p.id,
+            turn: 'a',
+            phase: 'roll',
+            lastRoll: null
+        };
+        log(state, p.name + ' faces the ' + e.name + '!', 'battle');
+        return ok();
+    }
+
+    function startPvp(state, a, b) {
+        a.energy = R.startingEnergy;
+        b.energy = R.startingEnergy;
+
+        // Dark Iron Armour always strikes first.
+        const aArmour = defOf(equippedArmour(a));
+        const bArmour = defOf(equippedArmour(b));
+        let first = 'a';
+        if (bArmour && bArmour.firstStrikePvp && !(aArmour && aArmour.firstStrikePvp)) first = 'b';
+
+        state.battle = {
+            kind: 'pvp',
+            aId: a.id,
+            bId: b.id,
+            squareIndex: a.pos,
+            turn: first,
+            phase: 'roll',
+            lastRoll: null
+        };
+        log(state, a.name + ' and ' + b.name + ' clash on ' + square(a.pos).name + '!', 'battle');
+        return ok();
+    }
+
+    function battleActorId(state) {
+        const b = state.battle;
+        if (!b) return null;
+        // In a monster fight the same player acts on both sides: their own
+        // moves, and the monster's die.
+        if (b.kind === 'pve') return b.aId;
+        return b.turn === 'a' ? b.aId : b.bId;
+    }
+
+    function availableMoves(state, pid) {
+        const b = state.battle;
+        const p = player(state, pid);
+        if (!b || !p) return [];
+        const cls = D.CLASSES[p.cls];
+        let moves = cls.moves.slice();
+
+        // Dragon Scale Armour lends you Fenrirak's attacks in PvP.
+        const armour = defOf(equippedArmour(p));
+        if (b.kind === 'pvp' && armour && armour.fenrirakMovesPvp) {
+            moves = moves.concat(D.ENEMIES.fenrirak.moves.map(m => ({
+                id: 'fenrirak_' + m.id, name: m.name + ' (Fenrirak)',
+                damage: m.damage, energy: m.energy
+            })));
+        }
+        return moves.map(m => ({
+            id: m.id, name: m.name, damage: m.damage, energy: m.energy,
+            usable: p.energy >= m.energy
+        }));
+    }
+
+    function battleRoll(state, pid) {
+        const b = state.battle;
+        if (!b) return fail('There is no battle.');
+        if (battleActorId(state) !== pid) return fail('It is not your move.');
+        if (b.phase !== 'roll') return fail('You have already rolled.');
+
+        const p = player(state, pid);
+        const raw = d6();
+        b.lastRoll = raw;
+        log(state, p.name + ' rolled a ' + raw + ' — ' + (raw % 2 === 0 ? 'hit!' : 'miss.'),
+            raw % 2 === 0 ? 'roll' : 'muted');
+
+        if (raw % 2 === 0) {
+            b.phase = 'act';
+        } else {
+            passBattleTurn(state);
+        }
+        return ok();
+    }
+
+    function battleAttack(state, pid, moveId) {
+        const b = state.battle;
+        if (!b) return fail('There is no battle.');
+        if (battleActorId(state) !== pid) return fail('It is not your move.');
+        if (b.phase !== 'act') return fail('Roll to see if you connect first.');
+
+        const p = player(state, pid);
+        const move = availableMoves(state, pid).find(m => m.id === moveId);
+        if (!move) return fail('Unknown move.');
+        if (!move.usable) return fail('Not enough energy for ' + move.name + '.');
+
+        const bonus = totalAttackBonus(p);
+        const raw = move.damage > 0 ? move.damage + bonus : 0;
+
+        if (b.kind === 'pve') {
+            const e = D.ENEMIES[b.enemyId];
+            const dealt = Math.max(0, raw - e.defence);
+            b.enemyHp = Math.max(0, b.enemyHp - dealt);
+            log(state, p.name + ' used ' + move.name + ' for ' + dealt + ' damage.', 'hit');
+            afterAttack(state, p, move);
+            if (b.enemyHp <= 0) return winPve(state, p);
+        } else {
+            const other = player(state, pid === b.aId ? b.bId : b.aId);
+            const dealt = Math.max(0, raw - totalDefence(state, other));
+            other.hp = Math.max(0, other.hp - dealt);
+            log(state, p.name + ' used ' + move.name + ' on ' + other.name +
+                       ' for ' + dealt + ' damage.', 'hit');
+            damageArmour(state, other);
+            afterAttack(state, p, move);
+            if (other.hp <= 0) return winPvp(state, p, other);
+        }
+
+        passBattleTurn(state);
+        return ok();
+    }
+
+    function afterAttack(state, p, move) {
+        p.energy += 1;                       // energy is gained by attacking, never spent
+        consumeBuffs(p, 'damage');
+
+        const weaponInst = equippedWeapon(p);
+        const weapon = defOf(weaponInst);
+        if (weapon && weapon.healPerMove) {
+            const before = p.hp;
+            p.hp = Math.min(p.maxHp, p.hp + weapon.healPerMove);
+            if (p.hp > before) {
+                log(state, 'The ' + weapon.name + ' knits ' + (p.hp - before) + ' HP back.', 'heal');
+            }
+        }
+        if (weaponInst && weaponInst.uses !== null && weaponInst.uses !== undefined) {
+            weaponInst.uses -= 1;
+            if (weaponInst.uses <= 0) {
+                log(state, p.name + "'s " + weapon.name + ' shatters!', 'death');
+                p.inventory = p.inventory.filter(it => it.uid !== weaponInst.uid);
+                p.weaponUid = null;
+            }
+        }
+    }
+
+    function damageArmour(state, target) {
+        const inst = equippedArmour(target);
+        if (!inst || inst.uses === null || inst.uses === undefined) return;
+        inst.uses -= 1;
+        if (inst.uses <= 0) {
+            log(state, target.name + "'s " + D.ITEMS[inst.id].name + ' falls apart!', 'death');
+            target.inventory = target.inventory.filter(it => it.uid !== inst.uid);
+            target.armourUid = null;
+        }
+    }
+
+    function passBattleTurn(state) {
+        const b = state.battle;
+        b.turn = b.turn === 'a' ? 'b' : 'a';
+        state.turnStartedAt = Date.now();
+        // The monster does not move on its own. Its die is thrown by the player
+        // it is fighting, exactly as somebody has to throw it at the table --
+        // one roll, one strike, then the turn comes back.
+        b.phase = (b.kind === 'pve' && b.turn === 'b') ? 'enemy_roll' : 'roll';
+    }
+
+    // Throw the monster's die. Even and it will connect; odd and the turn
+    // comes straight back to the player.
+    function enemyRoll(state, pid) {
+        const b = state.battle;
+        if (!b || b.kind !== 'pve') return fail('There is no monster to roll for.');
+        if (b.aId !== pid) return fail('This is not your fight.');
+        if (b.phase !== 'enemy_roll') return fail('The monster is not waiting on a roll.');
+
+        const e = D.ENEMIES[b.enemyId];
+        const roll = d6();
+        b.lastRoll = roll;
+        if (roll % 2 === 0) {
+            b.phase = 'enemy_act';
+            log(state, 'The ' + e.name + ' rolled a ' + roll + ' — it connects.', 'enemy');
+        } else {
+            log(state, 'The ' + e.name + ' rolled a ' + roll + ' and misses.', 'muted');
+            b.phase = 'roll';
+            b.turn = 'a';
+            state.turnStartedAt = Date.now();
+        }
+        return ok();
+    }
+
+    // Let the blow land. Which attack is not a choice -- the monster always
+    // uses the hardest one it has the energy for.
+    function enemyStrike(state, pid) {
+        const b = state.battle;
+        if (!b || b.kind !== 'pve') return fail('There is no monster.');
+        if (b.aId !== pid) return fail('This is not your fight.');
+        if (b.phase !== 'enemy_act') return fail('The monster has not rolled a hit.');
+        return runEnemyTurn(state);
+    }
+
+    // The monster has already rolled its hit; this lands it. It always uses
+    // the hardest attack it has the energy for.
+    function runEnemyTurn(state) {
+        const b = state.battle;
+        if (!b || b.kind !== 'pve' || b.turn !== 'b') return ok();
+        const e = D.ENEMIES[b.enemyId];
+        const p = player(state, b.aId);
+
+        const usable = e.moves.filter(m => b.enemyEnergy >= m.energy);
+        const move = usable.sort((x, y) => y.damage - x.damage)[0] || e.moves[0];
+        const dealt = Math.max(0, move.damage - totalDefence(state, p));
+        p.hp = Math.max(0, p.hp - dealt);
+        b.enemyEnergy += 1;
+        log(state, 'The ' + e.name + ' used ' + move.name + ' for ' + dealt + ' damage.', 'enemy');
+        damageArmour(state, p);
+
+        if (p.hp <= 0) { losePve(state, p); return ok(); }
+
+        b.phase = 'roll';
+        b.turn = 'a';
+        state.turnStartedAt = Date.now();
+        return ok();
+    }
+
+    function winPve(state, p) {
+        const b = state.battle;
+        const e = D.ENEMIES[b.enemyId];
+        const sq = D.BOARD.find(s => s.enemy === b.enemyId) || {};
+
+        log(state, p.name + ' defeated the ' + e.name + '!', 'system');
+
+        if (e.boss) {
+            state.battle = null;
+            state.phase = 'over';
+            state.winner = p.id;
+            log(state, '★ ' + p.name + ' has slain Fenrirak. The legend is theirs. ★', 'system');
+            return ok();
+        }
+
+        if (sq.coins) {
+            p.coins += sq.coins;
+            log(state, p.name + ' claims ' + sq.coins + ' coins.', 'item');
+        }
+        if (!b.illusion) {
+            if (sq.keyFragment) {
+                p.keyFragments = Math.min(D.KEY_FRAGMENTS_NEEDED, p.keyFragments + sq.keyFragment);
+                log(state, p.name + ' recovers a key fragment (' + p.keyFragments + '/3).', 'item');
+            }
+            if (sq.chestKey) {
+                p.chestKeys += sq.chestKey;
+                log(state, p.name + ' recovers a chest key.', 'item');
+            }
+        } else {
+            log(state, 'It was only an illusion — no key or chest key is left behind.', 'muted');
+        }
+
+        const wasIllusion = b.illusion;
+        state.battle = null;
+        p.energy = R.startingEnergy;
+        if (wasIllusion) advanceTurn(state);
+        return ok();
+    }
+
+    function losePve(state, p) {
+        const b = state.battle;
+        const e = D.ENEMIES[b.enemyId];
+        log(state, 'The ' + e.name + ' strikes ' + p.name + ' down. Back to the Start.', 'death');
+        const wasIllusion = b.illusion;
+        state.battle = null;
+        sendToStart(state, p, true);
+        if (wasIllusion) advanceTurn(state);
+        return ok();
+    }
+
+    function winPvp(state, winner, loser) {
+        const taken = loser.coins;
+        winner.coins += taken;
+        loser.coins = 0;
+        log(state, winner.name + ' defeats ' + loser.name +
+                   ' and takes ' + taken + ' coins.', 'system');
+        state.battle = null;
+        sendToStart(state, loser, true);
+        winner.energy = R.startingEnergy;
+        // A forced PvP battle ends the mover's turn.
+        return advanceTurn(state);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Consumables, abilities, gear                                        */
+    /* ------------------------------------------------------------------ */
+
+    function applyEffect(state, p, def) {
+        switch (def.effect) {
+            case 'energy':
+                p.energy += def.value;
+                log(state, p.name + ' gains ' + def.value + ' energy.', 'item');
+                break;
+            case 'damage':
+                addBuff(p, 'damage', def.value, 1);
+                log(state, p.name + ' will do ' + def.value + ' more damage on their next move.', 'item');
+                break;
+            case 'defence':
+                addBuff(p, 'defence', def.value, 99);   // cleared at end of turn
+                log(state, p.name + ' will take ' + def.value + ' less damage this turn.', 'item');
+                break;
+            case 'dice':
+                addBuff(p, 'dice', def.value, 1);
+                log(state, p.name + ' adds ' + def.value + ' to their next dice roll.', 'item');
+                break;
+            case 'health': {
+                if (p.hp >= p.maxHp) {
+                    p.maxHp += def.value;
+                    p.hp += def.value;
+                    log(state, p.name + ' raises their maximum health to ' + p.maxHp + '.', 'heal');
+                } else {
+                    const before = p.hp;
+                    p.hp = Math.min(p.maxHp, p.hp + def.value);
+                    log(state, p.name + ' heals ' + (p.hp - before) + ' HP.', 'heal');
+                }
+                break;
+            }
+        }
+    }
+
+    function usePowerup(state, pid, cardUid) {
+        const p = player(state, pid);
+        if (!p) return fail('Unknown player.');
+        const inBattle = state.battle &&
+            (state.battle.aId === pid || state.battle.bId === pid);
+        if (!isMyTurn(state, pid) && !inBattle) return fail('It is not your turn.');
+
+        const idx = p.powerups.findIndex(c => c.uid === cardUid);
+        if (idx < 0) return fail('You do not have that card.');
+        const card = p.powerups.splice(idx, 1)[0];
+        const def = D.POWERUPS[card.id];
+        log(state, p.name + ' plays ' + def.name + '.', 'item');
+        applyEffect(state, p, def);
+        state.decks.powerup.push(card.id);      // used cards go to the bottom of the deck
+        return ok();
+    }
+
+    function usePotion(state, pid, potionUid) {
+        const p = player(state, pid);
+        if (!p) return fail('Unknown player.');
+        const inBattle = state.battle &&
+            (state.battle.aId === pid || state.battle.bId === pid);
+        if (!isMyTurn(state, pid) && !inBattle) return fail('It is not your turn.');
+
+        const idx = p.potions.findIndex(c => c.uid === potionUid);
+        if (idx < 0) return fail('You do not have that potion.');
+        const card = p.potions.splice(idx, 1)[0];   // potions are discarded, never resold
+        const def = D.POWERUPS[card.id];
+        log(state, p.name + ' drinks ' + def.name + '.', 'item');
+        applyEffect(state, p, def);
+        return ok();
+    }
+
+    function eatSteak(state, pid, type) {
+        const p = player(state, pid);
+        if (!p) return fail('Unknown player.');
+        const inBattle = state.battle &&
+            (state.battle.aId === pid || state.battle.bId === pid);
+        if (!isMyTurn(state, pid) && !inBattle) return fail('It is not your turn.');
+
+        if (type === 'cooked') {
+            if (p.steaks.cooked < 1) return fail('No seared steak.');
+            p.steaks.cooked -= 1;
+            const before = p.hp;
+            p.hp = Math.min(p.maxHp, p.hp + R.searedSteakHeal);
+            log(state, p.name + ' eats a seared steak (+' + (p.hp - before) + ' HP).', 'heal');
+        } else {
+            if (p.steaks.raw < 1) return fail('No raw steak.');
+            p.steaks.raw -= 1;
+            const roll = d6();
+            if (roll === R.foodPoisoningRoll) {
+                p.hp = Math.max(0, p.hp - R.foodPoisoningLoss);
+                log(state, p.name + ' rolled a 3 — food poisoning! −' +
+                           R.foodPoisoningLoss + ' HP.', 'death');
+                if (p.hp <= 0) collapse(state, p, 'food poisoning');
+            } else {
+                const before = p.hp;
+                p.hp = Math.min(p.maxHp, p.hp + R.rawSteakHeal);
+                log(state, p.name + ' eats a raw steak (+' + (p.hp - before) + ' HP).', 'heal');
+            }
+        }
+        return ok();
+    }
+
+    function cookSteaks(state, pid, count) {
+        const p = player(state, pid);
+        if (!p) return fail('Unknown player.');
+        if (!isMyTurn(state, pid)) return fail('It is not your turn.');
+        if (!state.pending || state.pending.type !== 'pot' || state.pending.playerId !== pid) {
+            return fail('You are not standing at a pot.');
+        }
+        const n = Math.max(0, Math.min(count, p.steaks.raw));
+        p.steaks.raw -= n;
+        p.steaks.cooked += n;
+        log(state, p.name + ' cooked ' + n + ' steak' + (n === 1 ? '' : 's') + '.', 'item');
+        state.pending = null;
+        return ok();
+    }
+
+    function equip(state, pid, itemUid) {
+        const p = player(state, pid);
+        if (!p) return fail('Unknown player.');
+        if (!isMyTurn(state, pid)) return fail('You can only change gear on your turn.');
+        if (state.battle) return fail('You cannot change gear during a battle.');
+        if (state.turnNo - p.lastEquipTurn < R.equipCooldownTurns) {
+            return fail('You may only change weapon or armour every 2 turns.');
+        }
+        const inst = ownedItem(p, itemUid);
+        if (!inst) return fail('You do not have that item.');
+        const def = D.ITEMS[inst.id];
+        const cls = D.CLASSES[p.cls];
+
+        if (def.kind === 'weapon' && def.subtype !== cls.weaponType) {
+            return fail('A ' + cls.name + ' cannot wield that.');
+        }
+        if (def.kind === 'armour' && def.subtype !== 'any' && def.subtype !== cls.armourType) {
+            return fail('That armour is not made for a ' + cls.name + '.');
+        }
+
+        if (def.kind === 'weapon') p.weaponUid = inst.uid;
+        else p.armourUid = inst.uid;
+        p.lastEquipTurn = state.turnNo;
+        log(state, p.name + ' equips the ' + def.name + '.', 'item');
+        return ok();
+    }
+
+    function useAbility(state, pid, payload) {
+        const p = player(state, pid);
+        if (!p) return fail('Unknown player.');
+        if (!isMyTurn(state, pid)) return fail('Abilities can only be used on your turn.');
+        if (state.turnNo - p.lastAbilityTurn < R.abilityCooldownTurns) {
+            return fail('You may only use an ability every 2 turns.');
+        }
+        const cls = D.CLASSES[p.cls];
+        p.lastAbilityTurn = state.turnNo;
+
+        const roll = d6();
+        log(state, p.name + ' calls on ' + cls.ability.name + ' and rolled a ' + roll + '.', 'roll');
+        if (roll % 2 !== 0) {
+            log(state, 'The ability fizzles.', 'muted');
+            return ok();
+        }
+
+        if (cls.ability.id === 'agile') {
+            if (p.hasMoved) return fail('Use Agile before you move.');
+            p.agileBonus = 2;
+            log(state, p.name + ' is agile — +2 to this movement roll.', 'item');
+        } else if (cls.ability.id === 'strength_up') {
+            addBuff(p, 'damage', 20, 2);
+            log(state, p.name + ' surges with strength — +20 damage for 2 moves.', 'item');
+        } else if (cls.ability.id === 'illusion') {
+            const targetId = payload && payload.targetPlayerId;
+            const enemyId = payload && payload.enemyId;
+            const target = player(state, targetId);
+            if (!target || target.id === pid) return fail('Choose another player.');
+            if (!D.ENEMIES[enemyId] || D.ENEMIES[enemyId].noIllusion) {
+                return fail('That enemy cannot be conjured.');
+            }
+            target.pendingIllusion = enemyId;
+            log(state, p.name + ' conjures an illusion of the ' + D.ENEMIES[enemyId].name +
+                       ' to ambush ' + target.name + '!', 'system');
+        }
+        return ok();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Merchant                                                            */
+    /* ------------------------------------------------------------------ */
+
+    function buy(state, pid, kind, id) {
+        const p = player(state, pid);
+        if (!p) return fail('Unknown player.');
+        if (!isMyTurn(state, pid)) return fail('You can only trade with the Merchant on your turn.');
+        if (state.battle) return fail('The Merchant will not deal during a battle.');
+        if (state.pending) return fail('Resolve the square first.');
+
+        if (kind === 'gear') {
+            const def = D.ITEMS[id];
+            if (!def || !state.merchant.gear[id]) return fail('The Merchant is out of that.');
+            if (p.coins < def.price) return fail('You cannot afford that.');
+            p.coins -= def.price;
+            state.merchant.gear[id] -= 1;
+            p.inventory.push({ uid: uid('it'), id: id, uses: def.uses || null });
+            log(state, p.name + ' bought the ' + def.name + ' for ' + def.price + ' coins.', 'item');
+        } else {
+            const price = D.MERCHANT_POTIONS[id] && D.MERCHANT_POTIONS[id].price;
+            if (!price || !state.merchant.potions[id]) return fail('The Merchant is out of that.');
+            if (p.coins < price) return fail('You cannot afford that.');
+            p.coins -= price;
+            state.merchant.potions[id] -= 1;
+            p.potions.push({ uid: uid('po'), id: id });
+            log(state, p.name + ' bought a ' + D.POWERUPS[id].name +
+                       ' potion for ' + price + ' coins.', 'item');
+        }
+
+        // Buying ends your turn.
+        return advanceTurn(state);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Pending square choices                                              */
+    /* ------------------------------------------------------------------ */
+
+    function resolvePending(state, pid, choice) {
+        const pend = state.pending;
+        if (!pend) return fail('Nothing to resolve.');
+        if (pend.playerId !== pid) return fail('That choice is not yours to make.');
+        const p = player(state, pid);
+
+        switch (pend.type) {
+            case 'optional_stop': {
+                state.pending = null;
+                if (choice === 'stop') {
+                    p.movesLeft = 0;
+                    return landOn(state, p);
+                }
+                const left = p.movesLeft;
+                p.movesLeft = 0;
+                return walk(state, p, left);
+            }
+
+            case 'steak_roll': {
+                const roll = d6();
+                state.lastDie = { roll: roll, who: p.name, why: 'steak' };
+                if (R.steakRolls.indexOf(roll) >= 0) {
+                    p.steaks.raw += 1;
+                    log(state, p.name + ' rolled a ' + roll + ' and found a raw steak.', 'item');
+                } else {
+                    log(state, p.name + ' rolled a ' + roll + ' — no steak this time.', 'muted');
+                }
+                state.pending = null;
+                return advanceTurn(state);
+            }
+
+            case 'pot':
+                state.pending = null;
+                return cookSteaksDirect(state, p, choice === undefined ? p.steaks.raw : choice);
+
+            case 'chest':
+            case 'crimson_keep': {
+                if (pend.options.indexOf(choice) < 0) return fail('That is not on offer.');
+                if (pend.type === 'chest') {
+                    if (p.chestKeys < 1) return fail('You have no chest key.');
+                    p.chestKeys -= 1;
+                }
+                const def = D.ITEMS[choice];
+                const inst = { uid: uid('it'), id: choice, uses: def.uses || null, fromChest: true };
+                p.inventory.push(inst);
+                log(state, p.name + ' takes the ' + def.name + '!', 'item');
+                state.pending = null;
+                return ok();
+            }
+
+            case 'sea_of_castout': {
+                const inst = ownedItem(p, choice);
+                if (!inst) return fail('You do not have that item.');
+                p.inventory = p.inventory.filter(it => it.uid !== choice);
+                if (p.weaponUid === choice) p.weaponUid = null;
+                if (p.armourUid === choice) p.armourUid = null;
+                log(state, 'The whirlpool swallows ' + p.name + "'s " +
+                           D.ITEMS[inst.id].name + '.', 'death');
+                state.pending = null;
+                return ok();
+            }
+
+            case 'pvp_avoid': {
+                const other = player(state, pend.otherId);
+                state.pending = null;
+                if (choice === 'avoid') {
+                    log(state, p.name + ' melts into the shadows and avoids the fight.', 'muted');
+                    const mover = currentPlayer(state);
+                    return resolveSquare(state, mover, square(mover.pos));
+                }
+                const mover = currentPlayer(state);
+                const rival = mover.id === p.id ? other : p;
+                return startPvp(state, mover, rival);
+            }
+
+            default:
+                state.pending = null;
+                return ok();
+        }
+    }
+
+    function cookSteaksDirect(state, p, count) {
+        const n = Math.max(0, Math.min(count, p.steaks.raw));
+        p.steaks.raw -= n;
+        p.steaks.cooked += n;
+        if (n) log(state, p.name + ' cooked ' + n + ' steak' + (n === 1 ? '' : 's') + '.', 'item');
+        return ok();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Trading                                                             */
+    /* ------------------------------------------------------------------ */
+
+    function proposeTrade(state, fromId, toId, give, want) {
+        const a = player(state, fromId);
+        const b = player(state, toId);
+        if (!a || !b) return fail('Unknown player.');
+        if (a.id === b.id) return fail('You cannot trade with yourself.');
+        if (state.trades.some(t => t.fromId === fromId && t.status === 'open')) {
+            return fail('You already have an offer waiting.');
+        }
+        const t = {
+            id: uid('tr'), fromId: fromId, toId: toId,
+            give: normaliseBundle(give), want: normaliseBundle(want),
+            status: 'open', at: Date.now()
+        };
+        if (!validateBundle(a, t.give)) return fail('You do not have everything you offered.');
+        if (!validateBundle(b, t.want)) return fail(b.name + ' does not have all of that.');
+        state.trades.push(t);
+        log(state, a.name + ' offers ' + b.name + ' a trade.', 'muted');
+        return ok();
+    }
+
+    function normaliseBundle(x) {
+        x = x || {};
+        return {
+            coins: Math.max(0, x.coins | 0),
+            rawSteaks: Math.max(0, x.rawSteaks | 0),
+            cookedSteaks: Math.max(0, x.cookedSteaks | 0),
+            keyFragments: Math.max(0, x.keyFragments | 0),
+            chestKeys: Math.max(0, x.chestKeys | 0),
+            items: (x.items || []).slice(),
+            powerups: (x.powerups || []).slice(),
+            potions: (x.potions || []).slice()
+        };
+    }
+
+    function validateBundle(p, bundle) {
+        if (p.coins < bundle.coins) return false;
+        if (p.steaks.raw < bundle.rawSteaks) return false;
+        if (p.steaks.cooked < bundle.cookedSteaks) return false;
+        if (p.keyFragments < bundle.keyFragments) return false;
+        if (p.chestKeys < bundle.chestKeys) return false;
+        if (bundle.items.some(u => !p.inventory.some(i => i.uid === u))) return false;
+        if (bundle.powerups.some(u => !p.powerups.some(i => i.uid === u))) return false;
+        if (bundle.potions.some(u => !p.potions.some(i => i.uid === u))) return false;
+        return true;
+    }
+
+    function moveBundle(from, to, bundle) {
+        from.coins -= bundle.coins;            to.coins += bundle.coins;
+        from.steaks.raw -= bundle.rawSteaks;   to.steaks.raw += bundle.rawSteaks;
+        from.steaks.cooked -= bundle.cookedSteaks; to.steaks.cooked += bundle.cookedSteaks;
+        from.keyFragments -= bundle.keyFragments;  to.keyFragments += bundle.keyFragments;
+        from.chestKeys -= bundle.chestKeys;    to.chestKeys += bundle.chestKeys;
+
+        bundle.items.forEach(u => {
+            const i = from.inventory.findIndex(x => x.uid === u);
+            if (i >= 0) {
+                const inst = from.inventory.splice(i, 1)[0];
+                if (from.weaponUid === u) from.weaponUid = null;
+                if (from.armourUid === u) from.armourUid = null;
+                to.inventory.push(inst);
+            }
+        });
+        bundle.powerups.forEach(u => {
+            const i = from.powerups.findIndex(x => x.uid === u);
+            if (i >= 0) to.powerups.push(from.powerups.splice(i, 1)[0]);
+        });
+        bundle.potions.forEach(u => {
+            const i = from.potions.findIndex(x => x.uid === u);
+            if (i >= 0) to.potions.push(from.potions.splice(i, 1)[0]);
+        });
+    }
+
+    function respondTrade(state, pid, tradeId, accept) {
+        const t = state.trades.find(x => x.id === tradeId);
+        if (!t || t.status !== 'open') return fail('That offer is gone.');
+        if (t.toId !== pid) return fail('That offer is not for you.');
+        const a = player(state, t.fromId);
+        const b = player(state, t.toId);
+
+        if (!accept) {
+            t.status = 'declined';
+            log(state, b.name + ' declined the trade.', 'muted');
+            return ok();
+        }
+        if (!validateBundle(a, t.give) || !validateBundle(b, t.want)) {
+            t.status = 'void';
+            return fail('The goods have changed — the trade is void.');
+        }
+        moveBundle(a, b, t.give);
+        moveBundle(b, a, t.want);
+        t.status = 'accepted';
+        log(state, a.name + ' and ' + b.name + ' shook on a trade.', 'system');
+        return ok();
+    }
+
+    function cancelTrade(state, pid, tradeId) {
+        const t = state.trades.find(x => x.id === tradeId);
+        if (!t || t.fromId !== pid) return fail('Not your offer.');
+        t.status = 'cancelled';
+        return ok();
+    }
+
+    /* ------------------------------------------------------------------ */
+
+    function ok(data) { return { ok: true, data: data }; }
+    function fail(msg) { return { ok: false, error: msg }; }
+
+    global.LOF_ENGINE = {
+        makeRoomCode, createGame,
+        addPlayer, removePlayer, chooseClass, startGame, rollForOrder,
+        currentPlayer, isMyTurn, beginTurn, endTurn, advanceTurn, checkTimeout,
+        rollMove, resolvePending,
+        battleRoll, battleAttack, enemyRoll, enemyStrike, availableMoves, battleActorId,
+        usePowerup, usePotion, eatSteak, cookSteaks, equip, useAbility, buy,
+        proposeTrade, respondTrade, cancelTrade, collapse,
+        totalDefence, totalAttackBonus, diceModifier,
+        equippedWeapon, equippedArmour, player, square, uid, d6
+    };
+
+})(typeof window !== 'undefined' ? window : globalThis);
+
+    </script>
+    <script>
+/* ==== game/ui.js ==== */
+/* =========================================================================
+   Legend of Fenrirak™, The Thunder Dragon — Online Version
+   ui.js — rendering and input.
+   ========================================================================= */
+
+(function () {
+    'use strict';
+
+    const D = window.LOF_DATA;
+    const E = window.LOF_ENGINE;
+    let NET = null;
+
+    let S = null;              // latest game state
+    let ROOM = null;           // room code
+    let unsub = null;
+    let invTab = 'gear';
+    let openPanel = null;      // 'merchant' | 'trade' | null
+
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    function me() { return S ? E.player(S, NET.PID) : null; }
+    function myTurn() { return S && S.phase === 'playing' && E.isMyTurn(S, NET.PID); }
+
+    function notice(msg) {
+        const n = $('#notice');
+        if (!msg) { n.classList.remove('show'); return; }
+        n.textContent = msg;
+        n.classList.add('show');
+        clearTimeout(notice._t);
+        notice._t = setTimeout(() => n.classList.remove('show'), 5200);
+    }
+
+    function showScreen(id) {
+        $$('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Server actions                                                      */
+    /* ------------------------------------------------------------------ */
+
+    let busy = false;
+    async function act(action, args) {
+        if (busy) return;
+        busy = true;
+        try {
+            await NET.act(ROOM, action, args);
+            notice('');
+        } catch (err) {
+            if (!err.silent) notice(err.message || String(err));
+        } finally {
+            busy = false;
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Home screen                                                         */
+    /* ------------------------------------------------------------------ */
+
+    function initHome() {
+        $('#inp-name').value = NET.localName();
+
+        $('#btn-create').addEventListener('click', async () => {
+            const name = $('#inp-name').value.trim();
+            if (!name) return notice('Please enter a name first.');
+            $('#btn-create').disabled = true;
+            try {
+                const code = await NET.createRoom(name);
+                enterRoom(code);
+            } catch (err) {
+                notice(err.message || 'Could not create a room.');
+            } finally {
+                $('#btn-create').disabled = false;
+            }
+        });
+
+        $('#btn-join').addEventListener('click', joinFromInput);
+        $('#inp-code').addEventListener('keydown', e => {
+            if (e.key === 'Enter') joinFromInput();
+        });
+        $('#inp-code').addEventListener('input', e => {
+            e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 5);
+        });
+    }
+
+    async function joinFromInput() {
+        const name = $('#inp-name').value.trim();
+        const code = $('#inp-code').value.trim().toUpperCase();
+        if (!name) return notice('Please enter a name first.');
+        if (code.length !== 5) return notice('Room codes are 5 letters, like ABCDE.');
+        $('#btn-join').disabled = true;
+        try {
+            await NET.joinRoom(code, name);
+            enterRoom(code);
+        } catch (err) {
+            notice(err.message || 'Could not join that room.');
+        } finally {
+            $('#btn-join').disabled = false;
+        }
+    }
+
+    function enterRoom(code) {
+        ROOM = code;
+        try {
+            history.replaceState(null, '', location.pathname + '?room=' + code);
+        } catch (e) { /* file:// — no history API */ }
+
+        if (unsub) unsub();
+        unsub = NET.subscribe(code, onState, err => notice(err.message || 'Connection lost.'));
+
+        // No idle chatter: the only background write is retiring a turn that
+        // has genuinely run out, and only a player who is not the one being
+        // timed out may do it. Any player can, so an absent host cannot stall
+        // the whole game.
+        clearInterval(enterRoom._hb);
+        enterRoom._hb = setInterval(() => {
+            if (!S || S.phase !== 'playing') return;
+            if (Date.now() - (S.turnStartedAt || 0) < D.RULES.turnTimeoutMs) return;
+
+            const waitingOn = S.battle ? E.battleActorId(S) :
+                (S.pending ? S.pending.playerId :
+                    (E.currentPlayer(S) || {}).id);
+            if (!waitingOn || waitingOn === NET.PID) return;
+
+            NET.act(ROOM, 'timeoutCheck', {}).catch(() => {});
+        }, 5000);
+    }
+
+    function onState(state) {
+        S = state;
+        if (state.phase === 'lobby') { showScreen('screen-lobby'); renderLobby(); }
+        else if (state.phase === 'over') { showScreen('screen-over'); renderOver(); }
+        else { showScreen('screen-game'); renderGame(); }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Lobby                                                               */
+    /* ------------------------------------------------------------------ */
+
+
+    /* ------------------------------------------------------------------ */
+    /* Enemy pictures                                                      */
+    /*                                                                     */
+    /* Drawn here rather than loaded, so there is nothing extra to upload  */
+    /* and nothing that can 404. Fenrirak keeps his painting; the four     */
+    /* monsters that never had one get these.                              */
+    /* ------------------------------------------------------------------ */
+
+    const ENEMY_ART = {
+        bats:
+            '<path d="M50 44c-4-7-11-11-19-11-5 0-9 2-12 5 3 0 6 1 8 3-4 1-7 4-8 8 ' +
+            '5-4 12-4 17-1 5 3 9 8 14 8s9-5 14-8c5-3 12-3 17 1-1-4-4-7-8-8 2-2 5-3 8-3 ' +
+            '-3-3-7-5-12-5-8 0-15 4-19 11z" fill="currentColor"/>' +
+            '<circle cx="46" cy="45" r="1.6" fill="#f4e7b8"/>' +
+            '<circle cx="54" cy="45" r="1.6" fill="#f4e7b8"/>' +
+            '<g opacity=".65" transform="translate(-24 22) scale(.52)">' +
+            '<path d="M50 44c-4-7-11-11-19-11-5 0-9 2-12 5 3 0 6 1 8 3-4 1-7 4-8 8 ' +
+            '5-4 12-4 17-1 5 3 9 8 14 8s9-5 14-8c5-3 12-3 17 1-1-4-4-7-8-8 2-2 5-3 8-3 ' +
+            '-3-3-7-5-12-5-8 0-15 4-19 11z" fill="currentColor"/></g>' +
+            '<g opacity=".5" transform="translate(30 26) scale(.44)">' +
+            '<path d="M50 44c-4-7-11-11-19-11-5 0-9 2-12 5 3 0 6 1 8 3-4 1-7 4-8 8 ' +
+            '5-4 12-4 17-1 5 3 9 8 14 8s9-5 14-8c5-3 12-3 17 1-1-4-4-7-8-8 2-2 5-3 8-3 ' +
+            '-3-3-7-5-12-5-8 0-15 4-19 11z" fill="currentColor"/></g>',
+
+        seraphina:
+            '<path d="M26 82c10 2 17-3 20-11 3-9-2-16-9-19-5-2-8-6-6-11 2-6 9-9 16-7 ' +
+            '9 2 14 10 14 19 0 6-2 11-6 15" fill="none" stroke="currentColor" ' +
+            'stroke-width="7" stroke-linecap="round"/>' +
+            '<path d="M62 24c6-4 14-3 18 3 3 5 2 11-3 15-4 3-9 3-13 0" fill="currentColor"/>' +
+            '<circle cx="70" cy="30" r="2.4" fill="#f4e7b8"/>' +
+            '<path d="M64 38l3 6 3-6M72 38l3 6 3-6" stroke="#f4e7b8" stroke-width="2" ' +
+            'fill="none" stroke-linecap="round"/>',
+
+        goblins:
+            '<g fill="currentColor">' +
+            '<path d="M30 60c0-9 6-15 13-15s13 6 13 15c0 7-6 12-13 12s-13-5-13-12z"/>' +
+            '<path d="M30 54l-9-9 3 12zM56 54l9-9-3 12z"/>' +
+            '<path d="M62 70c0-7 5-12 11-12s11 5 11 12c0 6-5 10-11 10s-11-4-11-10z" opacity=".75"/>' +
+            '<path d="M62 66l-7-7 2 9zM84 66l7-7-2 9z" opacity=".75"/>' +
+            '<rect x="14" y="24" width="5" height="34" rx="2.5" transform="rotate(-22 16 41)"/>' +
+            '<circle cx="12" cy="24" r="7"/>' +
+            '</g>' +
+            '<circle cx="38" cy="57" r="2.2" fill="#f4e7b8"/>' +
+            '<circle cx="48" cy="57" r="2.2" fill="#f4e7b8"/>' +
+            '<circle cx="69" cy="68" r="1.8" fill="#f4e7b8"/>' +
+            '<circle cx="77" cy="68" r="1.8" fill="#f4e7b8"/>',
+
+        hideout:
+            '<path d="M12 82V52L50 22l38 30v30z" fill="currentColor"/>' +
+            '<path d="M50 22 8 54h84z" fill="currentColor" opacity=".8"/>' +
+            '<path d="M36 82V62c0-8 6-14 14-14s14 6 14 14v20z" fill="#1c1a17"/>' +
+            '<circle cx="44" cy="68" r="2.4" fill="#e4c14a"/>' +
+            '<circle cx="56" cy="68" r="2.4" fill="#e4c14a"/>' +
+            '<circle cx="47" cy="78" r="1.8" fill="#e4c14a" opacity=".7"/>'
+    };
+
+    // A monster's picture at whatever size the caller wants.
+    function enemyPic(enemy, px) {
+        const size = px || 96;
+        if (enemy.crest && enemy.crest.art) {
+            return '<img class="enemy-pic" src="' + esc(enemy.crest.art) + '" alt="' +
+                esc(enemy.name) + '" style="width:' + size + 'px;height:' + size + 'px">';
+        }
+        const art = ENEMY_ART[enemy.pic];
+        const tint = (enemy.crest && enemy.crest.tint) || '#6a6a6a';
+        if (!art) return crestHtml(enemy);
+        return '<svg class="enemy-pic" viewBox="0 0 100 100" role="img" aria-label="' +
+            esc(enemy.name) + '" style="width:' + size + 'px;height:' + size +
+            'px;color:' + esc(tint) + '">' + art + '</svg>';
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Paper cards                                                         */
+    /*                                                                     */
+    /* Every card in the box is an index card with the name across the top, */
+    /* a rule under it, and the body beneath. Stat cards are white and list */
+    /* Stats: then Moves: with the damage out to the right and the energy   */
+    /* on the line below. Item and power-up cards are yellow and pink and   */
+    /* carry a single line of effect text. These build exactly that.        */
+    /* ------------------------------------------------------------------ */
+
+    function statCardHtml(o) {
+        return '<div class="paper stat">' +
+            '<div class="p-name">' + esc(o.name) + '</div>' +
+            (o.svg ? '<div class="p-art">' + o.svg + '</div>'
+                   : o.art ? '<img class="p-art" src="' + esc(o.art) + '" alt="">' : '') +
+            '<div class="p-head">Stats:</div>' +
+            '<div class="p-stat">Health: ' + o.hp + '</div>' +
+            '<div class="p-stat">Defence: ' + o.defence + '</div>' +
+            '<div class="p-head">Moves:</div>' +
+            o.moves.map(m =>
+                '<div class="p-move"><span>' + esc(m.name) + '</span>' +
+                '<span class="p-dmg">' + m.damage + '</span></div>' +
+                '<div class="p-energy">(' + m.energy + ' Energy)</div>').join('') +
+            (o.foot ? '<div class="p-foot">' + o.foot + '</div>' : '') +
+            '</div>';
+    }
+
+    function paperCardHtml(stock, name, text, foot) {
+        return '<div class="paper ' + stock + '">' +
+            '<div class="p-name">' + esc(name) + '</div>' +
+            '<div class="p-body">' + esc(text) + '</div>' +
+            (foot ? '<div class="p-foot">' + foot + '</div>' : '') +
+            '</div>';
+    }
+
+    function renderLobby() {
+        $('#lobby-code').textContent = S.code;
+
+        const mine = me();
+        $('#class-picker').innerHTML = D.CLASS_ORDER.map(id => {
+            const c = D.CLASSES[id];
+            const taken = S.players.filter(p => p.cls === id).length;
+            const full = taken >= D.RULES.maxPerClass && (!mine || mine.cls !== id);
+            const sel = mine && mine.cls === id;
+            return '<div class="class-card' + (sel ? ' selected' : '') + (full ? ' full' : '') +
+                '" data-cls="' + id + '">' +
+                statCardHtml({
+                    name: c.name, art: c.art, hp: c.hp, defence: c.defence, moves: c.moves,
+                    foot: 'Ability: ' + esc(c.ability.name) + '<br>' + esc(c.ability.text)
+                }) +
+                '<div class="taken">' + taken + ' / ' + D.RULES.maxPerClass + ' taken' +
+                    (sel ? ' · yours' : '') + '</div>' +
+                '</div>';
+        }).join('');
+
+        $$('#class-picker .class-card').forEach(el => {
+            el.addEventListener('click', () => {
+                if (el.classList.contains('full')) return;
+                const id = el.dataset.cls;
+                act('chooseClass', { cls: (mine && mine.cls === id) ? null : id });
+            });
+        });
+
+        $('#roster').innerHTML = S.players.map(p =>
+            '<li>' +
+            '<span class="dot' + (p.cls ? ' ready' : '') + '"></span>' +
+            '<span class="' + (p.id === NET.PID ? 'you' : '') + '">' + esc(p.name) +
+                (p.id === NET.PID ? ' (you)' : '') + '</span>' +
+            '<span class="tag">' + (p.cls ? esc(D.CLASSES[p.cls].name) : 'choosing…') +
+                (p.id === S.hostId ? ' · host' : '') + '</span>' +
+            '</li>'
+        ).join('');
+
+        const isHost = S.hostId === NET.PID;
+        const everyoneReady = S.players.length >= D.RULES.minPlayers &&
+                              S.players.every(p => p.cls);
+        $('#btn-start').style.display = isHost ? '' : 'none';
+        $('#btn-start').disabled = !everyoneReady;
+        $('#lobby-hint').textContent = !isHost
+            ? 'Waiting for the host to begin.'
+            : S.players.length < D.RULES.minPlayers
+                ? 'You need at least 2 players.'
+                : everyoneReady ? 'Everyone is ready.' : 'Waiting for everyone to pick a class.';
+    }
+
+    function initLobby() {
+        $('#btn-start').addEventListener('click', () => act('startGame', {}));
+        $('#btn-copy').addEventListener('click', () => {
+            const link = location.origin + location.pathname + '?room=' + S.code;
+            const text = navigator.clipboard ? link : null;
+            if (text) {
+                navigator.clipboard.writeText(link)
+                    .then(() => notice('Invite link copied.'))
+                    .catch(() => notice(link));
+            } else {
+                notice(link);
+            }
+        });
+        $('#btn-leave-lobby').addEventListener('click', leaveRoom);
+    }
+
+    async function leaveRoom() {
+        try { await NET.act(ROOM, 'leave', {}); } catch (e) { /* ignore */ }
+        if (unsub) unsub();
+        unsub = null;
+        clearInterval(enterRoom._hb);
+        ROOM = null; S = null;
+        try { history.replaceState(null, '', location.pathname); } catch (e) {}
+        showScreen('screen-home');
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Game — turn banner                                                  */
+    /* ------------------------------------------------------------------ */
+
+    function renderGame() {
+        playWalks();
+        renderBanner();
+        renderBoard();
+        renderHero();
+        renderActions();
+        renderLog();
+        renderInventory();
+        renderModal();
+    }
+
+    function renderBanner() {
+        const banner = $('#turn-banner');
+        if (S.phase === 'order') {
+            const waiting = S.players.filter(p => p.orderRoll === null).map(p => p.name);
+            banner.className = 'turn-banner' + (me() && me().orderRoll === null ? ' mine' : '');
+            banner.innerHTML = '<span class="who">Rolling for turn order</span>' +
+                '<span class="muted">' +
+                (waiting.length ? 'Waiting on ' + esc(waiting.join(', ')) : 'Setting the order…') +
+                '</span>';
+            return;
+        }
+        const cur = E.currentPlayer(S);
+        const mine = cur && cur.id === NET.PID;
+        banner.className = 'turn-banner' + (mine ? ' mine' : '');
+        banner.innerHTML =
+            '<span class="who">' + (mine ? 'Your turn' : esc(cur ? cur.name : '—') + '’s turn') + '</span>' +
+            '<span class="muted">Turn ' + S.turnNo + '</span>' +
+            '<span class="timer" id="turn-timer"></span>';
+    }
+
+    function tickTimer() {
+        const el = $('#turn-timer');
+        if (!el || !S || S.phase !== 'playing') return;
+        const left = Math.max(0, D.RULES.turnTimeoutMs - (Date.now() - (S.turnStartedAt || 0)));
+        el.textContent = left > 0 ? Math.ceil(left / 1000) + 's left' : 'skipping…';
+    }
+    setInterval(tickTimer, 1000);
+
+    /* ------------------------------------------------------------------ */
+    /* Game — board                                                        */
+    /* ------------------------------------------------------------------ */
+
+    function tokensOn(index) {
+        return S.players.filter(p => p.cls && p.pos === index).map(p => {
+            const c = D.CLASSES[p.cls];
+            return '<div class="token' + (p.id === NET.PID ? ' me' : '') + '" title="' +
+                esc(p.name) + ' — ' + p.hp + '/' + p.maxHp + ' HP" ' +
+                'style="background-image:url(\'' + esc(c.art) + '\')"></div>';
+        }).join('');
+    }
+
+    function squareKind(sq) {
+        if (sq.arena) return 'arena';
+        if (sq.key === 'start') return 'start';
+        if (sq.key === 'gate') return 'gate';
+        if (sq.action === 'battle') return 'battle';
+        if (sq.action === 'chest' || sq.action === 'crimson_keep') return 'chest';
+        if (sq.action === 'heal') return 'heal';
+        if (sq.scenery === 'water' || sq.action === 'sea_of_castout') return 'water';
+        return 'plain';
+    }
+
+    /* Where each token is drawn right now. While a player is walking this
+       trails behind their real position, one square at a time. */
+    const shownPos = {};
+    const walkedKey = {};
+    const walkTimers = {};
+
+    // Play back the walk the engine recorded, so a move is seen as a move
+    // rather than the token appearing somewhere else.
+    function playWalks() {
+        if (!S || !S.players) return;
+        S.players.forEach(p => {
+            const path = (p.path || []);
+            const key = path.join('-');
+            if (walkedKey[p.id] === key) return;
+
+            const first = !(p.id in walkedKey);
+            walkedKey[p.id] = key;
+            clearInterval(walkTimers[p.id]);
+
+            // Nothing to replay: a fresh join, a reload, or a one-square hop.
+            if (first || path.length < 2) { shownPos[p.id] = p.pos; return; }
+
+            let step = 0;
+            shownPos[p.id] = path[0];
+            walkTimers[p.id] = setInterval(() => {
+                step += 1;
+                if (step >= path.length) {
+                    clearInterval(walkTimers[p.id]);
+                    shownPos[p.id] = p.pos;
+                } else {
+                    shownPos[p.id] = path[step];
+                }
+                renderBoard();
+            }, 210);
+        });
+    }
+
+    function tokensOn(index) {
+        return S.players.filter(p => {
+            if (!p.cls) return false;
+            const at = (p.id in shownPos) ? shownPos[p.id] : p.pos;
+            return at === index;
+        }).map(p => {
+            const c = D.CLASSES[p.cls];
+            const moving = !!walkTimers[p.id] && shownPos[p.id] !== p.pos;
+            return '<div class="token' + (p.id === NET.PID ? ' me' : '') +
+                (moving ? ' walking' : '') + '" title="' +
+                esc(p.name) + ' — ' + esc(c.name) + ' — ' + p.hp + '/' + p.maxHp + ' HP" ' +
+                'style="background-image:url(\'' + esc(c.art) + '\')"></div>';
+        }).join('');
+    }
+
+    function squareKind(sq) {
+        if (sq.arena) return 'arena';
+        if (sq.key === 'start') return 'start';
+        if (sq.key === 'gate') return 'gate';
+        if (sq.action === 'battle') return 'battle';
+        if (sq.action === 'chest' || sq.action === 'crimson_keep') return 'chest';
+        if (sq.action === 'heal') return 'heal';
+        return 'plain';
+    }
+
+    function renderBoard() {
+        const anyoneInArena = S.players.some(p => p.pos === D.ARENA_INDEX);
+
+        const html = D.BOARD.map(sq => {
+            if (sq.arena) {
+                // Bare brown card, as on the board. No picture in the middle.
+                return '<div class="arena' + (anyoneInArena ? ' lit' : '') + '">' +
+                    '<div class="arena-inner">' +
+                        '<div class="arena-title">Fenrirak’s Arena</div>' +
+                        '<div class="arena-sub">The Thunder Dragon</div>' +
+                        '<div class="arena-note">' + esc(sq.text) + '</div>' +
+                        '<div class="tokens">' + tokensOn(sq.i) + '</div>' +
+                    '</div>' +
+                '</div>';
+            }
+            // Only optional stops carry a marker now, and it sits in the corner.
+            const badge = sq.optionalStop ? 'OPTIONAL STOP' : '';
+            return '<div class="sq kind-' + squareKind(sq) + ' key-' + esc(sq.key) +
+                (sq.scenery ? ' scenery-' + esc(sq.scenery) : '') + '" ' +
+                'style="grid-row:' + (sq.row + 1) + ';grid-column:' + (sq.col + 1) + '">' +
+                '<div class="sq-name">' + esc(sq.name) + '</div>' +
+                '<div class="sq-text">' + esc(sq.text) + '</div>' +
+                '<div class="tokens">' + tokensOn(sq.i) + '</div>' +
+                (badge ? '<div class="sq-badge">' + badge + '</div>' : '') +
+            '</div>';
+        }).join('');
+
+        const decor = (D.DECOR || []).map(d =>
+            '<div class="decor" style="grid-row:' + (d.row + 1) +
+            ';grid-column:' + (d.col + 1) + '">' +
+            '<img src="' + esc(d.art) + '" alt="">' +
+            '<div class="decor-name">' + esc(d.name) + '</div></div>').join('');
+
+        $('#board').innerHTML =
+            '<div class="river"></div>' + html + decor +
+            '<div class="merchant-sign">Poor<br><b>Merchant</b></div>';
+    }
+
+    function renderHero() {
+        const p = me();
+        if (!p || !p.cls) { $('#side-hero').innerHTML = ''; return; }
+        const c = D.CLASSES[p.cls];
+        const weapon = E.equippedWeapon(p);
+        const armour = E.equippedArmour(p);
+        const wDef = weapon ? D.ITEMS[weapon.id] : null;
+        const aDef = armour ? D.ITEMS[armour.id] : null;
+
+        $('#side-hero').innerHTML =
+            '<div class="hero-panel">' +
+                '<img src="' + esc(c.art) + '" alt="' + esc(c.name) + '">' +
+                '<div style="flex:1;min-width:0">' +
+                    '<div class="hname">' + esc(p.name) + '</div>' +
+                    '<div class="hsub">' + esc(c.name) + ' &middot; on ' +
+                        esc(E.square(p.pos).name) + '</div>' +
+                    '<div class="bar hp"><i style="width:' +
+                        Math.max(0, Math.round(p.hp / p.maxHp * 100)) + '%"></i></div>' +
+                    '<div class="barlabel"><span>' + p.hp + ' / ' + p.maxHp + ' HP</span>' +
+                        '<span>Defence ' + E.totalDefence(S, p) + '</span></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="stat-row">' +
+                '<span class="chip">Coins <b>' + p.coins + '</b></span>' +
+                '<span class="chip">Energy <b>' + p.energy + '</b></span>' +
+                '<span class="chip">Attack <b>+' + E.totalAttackBonus(p) + '</b></span>' +
+                '<span class="chip">Key fragments <b>' + p.keyFragments + '/3</b></span>' +
+                '<span class="chip">Chest keys <b>' + p.chestKeys + '</b></span>' +
+                '<span class="chip">Steaks <b>' + p.steaks.raw + ' raw, ' +
+                    p.steaks.cooked + ' seared</b></span>' +
+            '</div>' +
+            '<div class="stat-row">' +
+                '<span class="chip">Weapon <b>' + esc(wDef ? wDef.name : 'none') + '</b>' +
+                    (weapon && weapon.uses != null ? ' <span class="muted">(' +
+                        weapon.uses + ' uses)</span>' : '') + '</span>' +
+                '<span class="chip">Armour <b>' + esc(aDef ? aDef.name : 'none') + '</b>' +
+                    (armour && armour.uses != null ? ' <span class="muted">(' +
+                        armour.uses + ' hits)</span>' : '') + '</span>' +
+            '</div>' +
+            '<div class="stat-row">' + S.players.filter(x => x.id !== p.id && x.cls).map(x =>
+                '<span class="chip">' + esc(x.name) + ' <b>' + x.hp + '/' + x.maxHp +
+                '</b> · ' + x.keyFragments + '/3 keys</span>').join('') + '</div>';
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Game — action buttons                                               */
+    /* ------------------------------------------------------------------ */
+
+    function renderActions() {
+        const p = me();
+        const box = $('#side-actions');
+        if (!p) { box.innerHTML = ''; return; }
+
+        if (S.phase === 'order') {
+            box.innerHTML = '<button class="btn primary" id="a-order"' +
+                (p.orderRoll !== null ? ' disabled' : '') + '>' +
+                (p.orderRoll !== null ? 'Rolled ' + p.orderRoll : 'Roll for turn order') +
+                '</button>';
+            const b = $('#a-order');
+            if (b) b.addEventListener('click', () => act('rollForOrder', {}));
+            return;
+        }
+
+        const mine = myTurn();
+        const blocked = !!S.battle || !!S.pending;
+        const cls = D.CLASSES[p.cls];
+        const abilityReady = S.turnNo - p.lastAbilityTurn >= D.RULES.abilityCooldownTurns;
+
+        const buttons = [];
+        buttons.push(btn('a-move', 'Roll & move', 'primary',
+            !mine || blocked || p.hasMoved));
+        buttons.push(btn('a-ability', cls.ability.name, '',
+            !mine || blocked || !abilityReady ||
+            (cls.ability.id === 'agile' && p.hasMoved)));
+        buttons.push(btn('a-shop', 'Visit the Merchant', '', !mine || blocked));
+        buttons.push(btn('a-trade', 'Propose a trade', '', S.players.length < 2));
+        buttons.push(btn('a-who', 'Everyone’s stats', '', false));
+        buttons.push(btn('a-steak-raw', 'Eat raw steak', '', p.steaks.raw < 1));
+        buttons.push(btn('a-steak-cooked', 'Eat seared steak', '', p.steaks.cooked < 1));
+        buttons.push(btn('a-end', 'End turn', '', !mine || blocked));
+
+        box.innerHTML = '<div class="actions">' + buttons.join('') + '</div>' +
+            (blocked ? '<div class="muted" style="margin-top:10px;font-size:13px">' +
+                (S.battle ? 'A battle is under way.' : 'Resolve the square first.') + '</div>' : '');
+
+        bind('a-move', () => act('rollMove', {}));
+        bind('a-ability', () => {
+            if (cls.ability.id === 'illusion') return openIllusion();
+            act('useAbility', {});
+        });
+        bind('a-shop', () => { openPanel = 'merchant'; renderModal(); });
+        bind('a-trade', () => { openPanel = 'trade'; renderModal(); });
+        bind('a-who', () => { openPanel = 'roster'; renderModal(); });
+        bind('a-steak-raw', () => act('eatSteak', { type: 'raw' }));
+        bind('a-steak-cooked', () => act('eatSteak', { type: 'cooked' }));
+        bind('a-end', () => act('endTurn', {}));
+    }
+
+    function btn(id, label, cls, disabled) {
+        return '<button class="btn ' + (cls || '') + '" id="' + id + '"' +
+            (disabled ? ' disabled' : '') + '>' + esc(label) + '</button>';
+    }
+    function bind(id, fn) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', fn);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Game — log                                                          */
+    /* ------------------------------------------------------------------ */
+
+    function renderLog() {
+        $('#log').innerHTML = (S.log || []).slice(-60).reverse()
+            .map(l => '<div class="t-' + esc(l.tone) + '">' + esc(l.t) + '</div>').join('');
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Game — inventory                                                    */
+    /* ------------------------------------------------------------------ */
+
+    function renderInventory() {
+        const p = me();
+        if (!p) return;
+
+        $('#inv-tabs').innerHTML = [
+            ['gear', 'Weapons & armour (' + p.inventory.length + ')'],
+            ['powerups', 'Power-ups (' + p.powerups.length + ')'],
+            ['potions', 'Potions (' + p.potions.length + ')']
+        ].map(([k, label]) =>
+            '<button class="btn small' + (invTab === k ? ' active' : '') +
+            '" data-tab="' + k + '">' + esc(label) + '</button>').join('');
+
+        $$('#inv-tabs button').forEach(b => b.addEventListener('click', () => {
+            invTab = b.dataset.tab;
+            renderInventory();
+        }));
+
+        let html = '';
+        if (invTab === 'gear') {
+            const cls = D.CLASSES[p.cls];
+            const canSwap = S.turnNo - p.lastEquipTurn >= D.RULES.equipCooldownTurns;
+            html = p.inventory.map(inst => {
+                const d = D.ITEMS[inst.id];
+                const equipped = inst.uid === p.weaponUid || inst.uid === p.armourUid;
+                const usable = d.kind === 'weapon'
+                    ? d.subtype === cls.weaponType
+                    : (d.subtype === 'any' || d.subtype === cls.armourType);
+                const foot = (d.kind === 'weapon' ? 'Weapon' : 'Armour') + ' · ' +
+                    esc(d.subtype === 'any' ? 'any class' : d.subtype) +
+                    (inst.uses != null ? ' · ' + inst.uses + ' uses left' : '') +
+                    (equipped ? ' · equipped' : '') +
+                    (usable ? '' : '<br>A ' + esc(cls.name) + ' cannot use this — trade it away.');
+                return '<div class="item' + (equipped ? ' equipped' : '') +
+                    (d.treasure ? ' treasure' : '') + '">' +
+                    paperCardHtml('yellow', d.name, d.text, foot) +
+                    (equipped || !usable ? ''
+                        : '<button class="btn small" data-equip="' + inst.uid + '"' +
+                          (canSwap && myTurn() && !S.battle ? '' : ' disabled') + '>Equip</button>') +
+                    '</div>';
+            }).join('') || '<div class="muted">Nothing yet.</div>';
+        } else if (invTab === 'powerups') {
+            html = p.powerups.map(c => {
+                const d = D.POWERUPS[c.id];
+                return '<div class="item powerup">' +
+                    paperCardHtml('pink', d.name, d.text) +
+                    '<button class="btn small" data-pu="' + c.uid + '">Play card</button>' +
+                    '</div>';
+            }).join('') || '<div class="muted">No power-up cards.</div>';
+        } else {
+            html = p.potions.map(c => {
+                const d = D.POWERUPS[c.id];
+                return '<div class="item powerup">' +
+                    paperCardHtml('pink', d.name + ' potion', d.text) +
+                    '<button class="btn small" data-po="' + c.uid + '">Drink</button>' +
+                    '</div>';
+            }).join('') || '<div class="muted">No potions.</div>';
+        }
+
+        $('#inventory').innerHTML = '<div class="item-grid">' + html + '</div>';
+        $$('#inventory [data-equip]').forEach(b =>
+            b.addEventListener('click', () => act('equip', { uid: b.dataset.equip })));
+        $$('#inventory [data-pu]').forEach(b =>
+            b.addEventListener('click', () => act('usePowerup', { uid: b.dataset.pu })));
+        $$('#inventory [data-po]').forEach(b =>
+            b.addEventListener('click', () => act('usePotion', { uid: b.dataset.po })));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Modals                                                              */
+    /* ------------------------------------------------------------------ */
+
+    let shownKey = null;       // what the modal is currently displaying
+
+    function closeModal() {
+        $('#modal-back').classList.remove('show');
+        $('#modal').innerHTML = '';
+        shownKey = null;
+    }
+
+    function showModal(html, dismissable, key) {
+        const back = $('#modal-back');
+        $('#modal').innerHTML = html;
+        back.classList.add('show');
+        back.dataset.dismissable = dismissable ? '1' : '0';
+        shownKey = key || null;
+    }
+
+    function renderModal() {
+        const incoming = (S.trades || []).find(t =>
+            t.status === 'open' && t.toId === NET.PID);
+
+        if (S.battle || S.pending) openPanel = null;
+
+        if (S.battle) return renderBattleModal();
+        if (S.pending && S.pending.playerId === NET.PID) return renderPendingModal();
+        if (incoming) return renderIncomingTrade(incoming);
+
+        // These two are forms the player is filling in. Re-rendering them
+        // whenever anyone else acts would wipe what they had typed or ticked.
+        if (openPanel === 'merchant') {
+            if (shownKey !== 'merchant') renderMerchant();
+            return;
+        }
+        if (openPanel === 'trade') {
+            if (shownKey !== 'trade') renderTradeBuilder();
+            return;
+        }
+        if (openPanel === 'roster') { renderRosterPanel(); return; }
+        closeModal();
+    }
+
+    /* ---- battle ---- */
+
+    function renderBattleModal() {
+        const b = S.battle;
+        const p = me();
+        const isPvp = b.kind === 'pvp';
+        const a = E.player(S, b.aId);
+        const foe = isPvp ? E.player(S, b.bId) : D.ENEMIES[b.enemyId];
+        const involved = b.aId === NET.PID || b.bId === NET.PID;
+        const actorId = E.battleActorId(S);
+        const myMove = actorId === NET.PID;
+
+        const foeHp = isPvp ? foe.hp : b.enemyHp;
+        const foeMax = isPvp ? foe.maxHp : b.enemyMaxHp;
+        const foePortrait = isPvp
+            ? '<img src="' + esc(D.CLASSES[foe.cls].art) + '" alt="' + esc(foe.name) + '">'
+            : enemyPic(foe, 96);
+
+        // Whose die it is, spelled out. One roll, one strike, then it changes
+        // hands -- so this line is the most important thing in the modal.
+        const enemyPhase = b.phase === 'enemy_roll' || b.phase === 'enemy_act';
+        const roller = isPvp
+            ? (b.turn === 'a' ? a.name : foe.name)
+            : (enemyPhase ? foe.name : a.name);
+        const rollerIsMe = !isPvp ? !enemyPhase && a.id === NET.PID
+                                  : (myMove && involved);
+
+        let body =
+            '<h2>' + (isPvp ? 'Player Battle' : esc(foe.name)) + '</h2>' +
+            '<div class="turn-flag' + (rollerIsMe ? ' mine' : '') + '">' +
+                esc(roller) + (rollerIsMe ? ' — your go' : '') + ': ' +
+                (b.phase === 'roll' || b.phase === 'enemy_roll'
+                    ? 'roll the die' : 'strike') +
+            '</div>' +
+            '<div class="sub">' +
+                (b.illusion ? 'A Mage’s illusion — you will earn coins only. ' : '') +
+                (involved ? (myMove ? 'One hit each: roll, strike, then it is their go.'
+                                    : 'Waiting for the other side…')
+                          : 'You are watching this battle.') +
+            '</div>' +
+            '<div class="battle-top">' +
+                sideHtml('<img src="' + esc(D.CLASSES[a.cls].art) + '" alt="' + esc(a.name) +
+                         '">', a.hp, a.maxHp, a.name, 'hp') +
+                '<div class="battle-vs">VS</div>' +
+                sideHtml(foePortrait, foeHp, foeMax, foe.name, isPvp ? 'hp' : 'enemy') +
+            '</div>' +
+            // The monster's own stat card, as it is dealt on the table.
+            (isPvp ? '' : '<div class="battle-statcard">' + statCardHtml({
+                name: foe.name, hp: foe.maxHp || b.enemyMaxHp, defence: foe.defence,
+                moves: foe.moves, svg: enemyPic(foe, 58)
+            }) + '</div>');
+
+        if (b.lastRoll != null) {
+            body += '<div class="die rolling">' + b.lastRoll + '</div>' +
+                '<div class="muted" style="text-align:center;font-size:13px">' +
+                (b.lastRoll % 2 === 0 ? 'Even — a hit.' : 'Odd — a miss.') + '</div>';
+        }
+
+        // The monster's die is thrown by the player fighting it -- somebody
+        // has to pick it up at the table, and there is nobody else here.
+        if (involved && !isPvp && enemyPhase) {
+            body += '<div class="modal-actions" style="justify-content:center">' +
+                (b.phase === 'enemy_roll'
+                    ? '<button class="btn" id="b-eroll">Roll for the ' + esc(foe.name) + '</button>'
+                    : '<button class="btn danger" id="b-estrike">Let the ' +
+                      esc(foe.name) + ' strike</button>') +
+                '</div>';
+        }
+
+        if (involved && myMove && !enemyPhase) {
+            if (b.phase === 'roll') {
+                body += '<div class="modal-actions" style="justify-content:center">' +
+                    '<button class="btn primary" id="b-roll">Roll to strike</button></div>';
+            } else {
+                const moves = E.availableMoves(S, NET.PID);
+                body += '<h3 style="margin-top:18px">Choose your attack</h3><div class="moves">' +
+                    moves.map(m =>
+                        '<button class="move" data-move="' + esc(m.id) + '"' +
+                        (m.usable ? '' : ' disabled') + '>' +
+                        '<div class="mname">' + esc(m.name) + '</div>' +
+                        '<div class="mmeta">' + m.damage + ' damage · needs ' + m.energy +
+                            ' energy' + (m.usable ? '' : ' (you have ' + p.energy + ')') + '</div>' +
+                        '</button>').join('') + '</div>';
+            }
+        }
+
+        if (involved) {
+            body += '<div class="modal-actions">' +
+                (p.steaks.cooked > 0 ? '<button class="btn small" id="b-cooked">Eat seared steak</button>' : '') +
+                (p.steaks.raw > 0 ? '<button class="btn small" id="b-raw">Eat raw steak</button>' : '') +
+                (p.powerups.length ? '<button class="btn small" id="b-pu">Play a power-up</button>' : '') +
+                (p.potions.length ? '<button class="btn small" id="b-po">Drink a potion</button>' : '') +
+                '</div>';
+        }
+
+        body += '<h3 style="margin-top:18px">Battle log</h3>' +
+            '<div class="log" style="max-height:150px">' +
+            (S.log || []).slice(-12).reverse()
+                .map(l => '<div class="t-' + esc(l.tone) + '">' + esc(l.t) + '</div>').join('') +
+            '</div>';
+
+        showModal(body, false, 'battle');
+
+        bind('b-roll', () => act('battleRoll', {}));
+        bind('b-eroll', () => act('enemyRoll', {}));
+        bind('b-estrike', () => act('enemyStrike', {}));
+        $$('#modal [data-move]').forEach(el =>
+            el.addEventListener('click', () => act('battleAttack', { moveId: el.dataset.move })));
+        bind('b-cooked', () => act('eatSteak', { type: 'cooked' }));
+        bind('b-raw', () => act('eatSteak', { type: 'raw' }));
+        bind('b-pu', () => pickFrom('Play a power-up',
+            p.powerups.map(c => ({ id: c.uid, name: D.POWERUPS[c.id].name, text: D.POWERUPS[c.id].text })),
+            uid => act('usePowerup', { uid: uid })));
+        bind('b-po', () => pickFrom('Drink a potion',
+            p.potions.map(c => ({ id: c.uid, name: D.POWERUPS[c.id].name, text: D.POWERUPS[c.id].text })),
+            uid => act('usePotion', { uid: uid })));
+    }
+
+    // Only Fenrirak has a picture; the rest get a crest so no monster wears
+    // the dragon's portrait by mistake.
+    function crestHtml(enemy) {
+        const c = enemy.crest || {};
+        if (c.art) return '<img src="' + esc(c.art) + '" alt="' + esc(enemy.name) + '">';
+        return '<div class="crest" style="--crest:' + esc(c.tint || '#6a6a6a') + '">' +
+            esc(c.initials || enemy.name.slice(0, 1)) + '</div>';
+    }
+
+    function sideHtml(portrait, hp, max, name, barClass) {
+        return '<div class="battle-side">' +
+            portrait +
+            '<div class="bname">' + esc(name) + '</div>' +
+            '<div class="bar ' + barClass + '"><i style="width:' +
+                Math.max(0, Math.round(hp / max * 100)) + '%"></i></div>' +
+            '<div class="barlabel"><span>' + hp + ' / ' + max + '</span></div>' +
+            '</div>';
+    }
+
+    // The last die anyone threw, shown so no roll happens out of sight.
+    function dieHtml() {
+        const d = S.lastDie;
+        if (!d) return '';
+        return '<div class="die rolling">' + d.roll + '</div>' +
+            '<div class="muted" style="text-align:center;font-size:13px">' +
+            esc(d.who) + ' rolled ' + d.roll + '.</div>';
+    }
+
+    function pickFrom(title, options, onPick) {
+        showModal('<h2>' + esc(title) + '</h2><div class="item-grid">' +
+            options.map(o => '<div class="item">' +
+                paperCardHtml('pink', o.name, o.text || '') +
+                '<button class="btn small" data-pick="' + esc(o.id) + '">Use</button></div>').join('') +
+            '</div><div class="modal-actions"><button class="btn" id="pick-cancel">Back</button></div>', true, 'pick');
+        $$('#modal [data-pick]').forEach(b =>
+            b.addEventListener('click', () => onPick(b.dataset.pick)));
+        bind('pick-cancel', renderModal);
+    }
+
+    /* ---- pending square choices ---- */
+
+    function renderPendingModal() {
+        const pend = S.pending;
+        const p = me();
+        let body = '';
+
+        if (pend.type === 'steak_roll') {
+            body = '<h2>End of your turn</h2>' +
+                '<div class="sub">' + esc(pend.prompt) + '</div>' +
+                dieHtml() +
+                '<div class="modal-actions" style="justify-content:center">' +
+                '<button class="btn primary" data-choice="roll">Roll the die</button></div>';
+        } else if (pend.type === 'optional_stop') {
+            body = '<h2>Optional stop</h2><div class="sub">' + esc(pend.prompt) + '</div>' +
+                '<div class="modal-actions">' +
+                '<button class="btn primary" data-choice="stop">Stop here</button>' +
+                '<button class="btn" data-choice="go">Keep moving (' + p.movesLeft + ' left)</button>' +
+                '</div>';
+        } else if (pend.type === 'pot') {
+            body = '<h2>The Pot</h2><div class="sub">' + esc(pend.prompt) + '</div>' +
+                '<div class="sub">You have ' + p.steaks.raw + ' raw steak' +
+                (p.steaks.raw === 1 ? '' : 's') + '. Seared steak heals 10 HP instead of 5.</div>' +
+                '<div class="modal-actions">' +
+                '<button class="btn primary" data-choice="' + p.steaks.raw + '">Cook all ' +
+                    p.steaks.raw + '</button>' +
+                '<button class="btn" data-choice="0">Cook none</button>' +
+                '</div>';
+        } else if (pend.type === 'chest' || pend.type === 'crimson_keep') {
+            body = '<h2>' + (pend.type === 'chest' ? 'A Chest' : 'The Crimson Keep') + '</h2>' +
+                '<div class="sub">' + esc(pend.prompt) + '</div>' +
+                '<div class="item-grid">' + pend.options.map(id => {
+                    const d = D.ITEMS[id];
+                    return '<div class="item treasure">' +
+                        paperCardHtml('yellow', d.name, d.text,
+                            d.kind === 'weapon' ? 'Weapon · ' + esc(d.subtype)
+                                                : 'Armour · any class') +
+                        '<button class="btn small" data-choice="' + esc(id) + '">Take it</button></div>';
+                }).join('') + '</div>';
+        } else if (pend.type === 'sea_of_castout') {
+            body = '<h2>Sea of Castout</h2><div class="sub">' + esc(pend.prompt) + '</div>' +
+                '<div class="item-grid">' + pend.options.map(o => {
+                    const d = D.ITEMS[o.id];
+                    return '<div class="item">' +
+                        paperCardHtml('yellow', d.name, d.text) +
+                        '<button class="btn small danger" data-choice="' + esc(o.uid) +
+                        '">Let it go</button></div>';
+                }).join('') + '</div>';
+        } else if (pend.type === 'pvp_avoid') {
+            const other = E.player(S, pend.otherId);
+            body = '<h2>Cloak of Invisibility</h2>' +
+                '<div class="sub">' + esc(pend.prompt) + ' You have run into ' +
+                esc(other ? other.name : 'another player') + '.</div>' +
+                '<div class="modal-actions">' +
+                '<button class="btn primary" data-choice="avoid">Slip away</button>' +
+                '<button class="btn danger" data-choice="fight">Fight anyway</button></div>';
+        }
+
+        showModal(body, false, 'pending');
+        $$('#modal [data-choice]').forEach(b => b.addEventListener('click', () => {
+            let c = b.dataset.choice;
+            if (pend.type === 'pot') c = parseInt(c, 10);
+            act('resolvePending', { choice: c });
+        }));
+    }
+
+    /* ---- merchant ---- */
+
+    function renderMerchant() {
+        const p = me();
+        const cls = D.CLASSES[p.cls];
+
+        const gear = D.MERCHANT_GEAR.filter(id => {
+            const d = D.ITEMS[id];
+            if (d.kind === 'weapon') return d.subtype === cls.weaponType;
+            return true;
+        });
+
+        const gearHtml = gear.map(id => {
+            const d = D.ITEMS[id];
+            const stock = S.merchant.gear[id] || 0;
+            const afford = p.coins >= d.price && stock > 0;
+            return '<div class="shop-item' + (stock ? '' : ' out') + '">' +
+                paperCardHtml('yellow', d.name, d.text,
+                    d.price + ' coins · ' + (stock ? stock + ' in stock' : 'sold out')) +
+                '<button class="btn small" data-buy-gear="' + esc(id) + '"' +
+                    (afford ? '' : ' disabled') + '>Buy</button></div>';
+        }).join('');
+
+        const potionHtml = Object.keys(D.MERCHANT_POTIONS).map(id => {
+            const d = D.POWERUPS[id];
+            const price = D.MERCHANT_POTIONS[id].price;
+            const stock = S.merchant.potions[id] || 0;
+            const afford = p.coins >= price && stock > 0;
+            return '<div class="shop-item' + (stock ? '' : ' out') + '">' +
+                paperCardHtml('pink', d.name + ' potion', d.text,
+                    price + ' coins · ' + (stock ? stock + ' left' : 'sold out')) +
+                '<button class="btn small" data-buy-potion="' + esc(id) + '"' +
+                    (afford ? '' : ' disabled') + '>Buy</button></div>';
+        }).join('');
+
+        showModal(
+            '<h2>The Poor Merchant</h2>' +
+            '<div class="sub">You have <span class="gold">' + p.coins + ' coins</span>. ' +
+            'Buying anything ends your turn — choose carefully.</div>' +
+            '<h3>Weapons &amp; armour</h3><div class="shop-grid">' + gearHtml + '</div>' +
+            '<h3 style="margin-top:18px">Potions</h3><div class="shop-grid">' + potionHtml + '</div>' +
+            '<div class="modal-actions"><button class="btn" id="shop-close">Leave the stall</button></div>',
+            true, 'merchant');
+
+        $$('#modal [data-buy-gear]').forEach(b => b.addEventListener('click', () => {
+            openPanel = null;
+            act('buy', { kind: 'gear', id: b.dataset.buyGear });
+        }));
+        $$('#modal [data-buy-potion]').forEach(b => b.addEventListener('click', () => {
+            openPanel = null;
+            act('buy', { kind: 'potion', id: b.dataset.buyPotion });
+        }));
+        bind('shop-close', () => { openPanel = null; renderModal(); });
+    }
+
+    /* ---- illusion ---- */
+
+    function openIllusion() {
+        const others = S.players.filter(x => x.id !== NET.PID && x.cls);
+        const enemies = Object.keys(D.ENEMIES).filter(id => !D.ENEMIES[id].noIllusion);
+        showModal('<h2>Illusion</h2>' +
+            '<div class="sub">Conjure an enemy and set it on another player. They lose their ' +
+            'turn to the fight and keep only the coins.</div>' +
+            '<h3>Enemy</h3><select id="il-enemy">' +
+                enemies.map(id => '<option value="' + id + '">' + esc(D.ENEMIES[id].name) +
+                    ' — ' + D.ENEMIES[id].hp + ' HP</option>').join('') + '</select>' +
+            '<h3 style="margin-top:14px">Victim</h3><select id="il-target">' +
+                others.map(o => '<option value="' + esc(o.id) + '">' + esc(o.name) + ' (' +
+                    esc(D.CLASSES[o.cls].name) + ')</option>').join('') + '</select>' +
+            '<div class="modal-actions">' +
+            '<button class="btn primary" id="il-go">Cast (roll even to succeed)</button>' +
+            '<button class="btn" id="il-cancel">Cancel</button></div>', true, 'illusion');
+
+        bind('il-go', () => act('useAbility', {
+            enemyId: $('#il-enemy').value,
+            targetPlayerId: $('#il-target').value
+        }));
+        bind('il-cancel', renderModal);
+    }
+
+    /* ---- trading ---- */
+
+    function bundleUi(p, prefix) {
+        return '<div class="stat-row">' +
+            '<label class="chip">Coins <input type="number" min="0" max="' + p.coins +
+                '" value="0" id="' + prefix + '-coins" style="width:70px;padding:2px 6px"></label>' +
+            '<label class="chip">Raw steaks <input type="number" min="0" max="' + p.steaks.raw +
+                '" value="0" id="' + prefix + '-raw" style="width:60px;padding:2px 6px"></label>' +
+            '<label class="chip">Seared <input type="number" min="0" max="' + p.steaks.cooked +
+                '" value="0" id="' + prefix + '-cooked" style="width:60px;padding:2px 6px"></label>' +
+            '<label class="chip">Key fragments <input type="number" min="0" max="' + p.keyFragments +
+                '" value="0" id="' + prefix + '-keys" style="width:55px;padding:2px 6px"></label>' +
+            '<label class="chip">Chest keys <input type="number" min="0" max="' + p.chestKeys +
+                '" value="0" id="' + prefix + '-chest" style="width:55px;padding:2px 6px"></label>' +
+            '</div>' +
+            '<div class="item-grid" style="margin-top:10px">' +
+                p.inventory.map(i => checkItem(prefix + '-item', i.uid, D.ITEMS[i.id].name)).join('') +
+                p.powerups.map(i => checkItem(prefix + '-pu', i.uid, D.POWERUPS[i.id].name + ' (card)')).join('') +
+                p.potions.map(i => checkItem(prefix + '-po', i.uid, D.POWERUPS[i.id].name + ' (potion)')).join('') +
+            '</div>';
+    }
+
+    function checkItem(name, uid, label) {
+        return '<label class="item" style="cursor:pointer">' +
+            '<input type="checkbox" data-group="' + name + '" value="' + esc(uid) + '"> ' +
+            esc(label) + '</label>';
+    }
+
+    function readBundle(prefix) {
+        const num = id => Math.max(0, parseInt(($('#' + id) || {}).value || '0', 10) || 0);
+        const checked = group => $$('[data-group="' + group + '"]')
+            .filter(c => c.checked).map(c => c.value);
+        return {
+            coins: num(prefix + '-coins'),
+            rawSteaks: num(prefix + '-raw'),
+            cookedSteaks: num(prefix + '-cooked'),
+            keyFragments: num(prefix + '-keys'),
+            chestKeys: num(prefix + '-chest'),
+            items: checked(prefix + '-item'),
+            powerups: checked(prefix + '-pu'),
+            potions: checked(prefix + '-po')
+        };
+    }
+
+    function renderTradeBuilder() {
+        const p = me();
+        const others = S.players.filter(x => x.id !== NET.PID && x.cls);
+        if (!others.length) { openPanel = null; return closeModal(); }
+
+        const targetId = renderTradeBuilder._target &&
+            others.some(o => o.id === renderTradeBuilder._target)
+            ? renderTradeBuilder._target : others[0].id;
+        const other = E.player(S, targetId);
+
+        showModal('<h2>Propose a trade</h2>' +
+            '<div class="sub">Both sides have to agree. No stealing, no scamming.</div>' +
+            '<h3>Trade with</h3><select id="tr-target">' +
+                others.map(o => '<option value="' + esc(o.id) + '"' +
+                    (o.id === targetId ? ' selected' : '') + '>' + esc(o.name) + '</option>').join('') +
+            '</select>' +
+            '<h3 style="margin-top:16px">You give</h3>' + bundleUi(p, 'give') +
+            '<h3 style="margin-top:16px">You want from ' + esc(other.name) + '</h3>' +
+                bundleUi(other, 'want') +
+            '<div class="modal-actions">' +
+            '<button class="btn primary" id="tr-send">Send offer</button>' +
+            '<button class="btn" id="tr-close">Cancel</button></div>', true, 'trade');
+
+        $('#tr-target').addEventListener('change', e => {
+            renderTradeBuilder._target = e.target.value;
+            renderTradeBuilder();
+        });
+        bind('tr-send', () => {
+            const give = readBundle('give');
+            const want = readBundle('want');
+            openPanel = null;
+            act('proposeTrade', { toId: targetId, give: give, want: want });
+        });
+        bind('tr-close', () => { openPanel = null; renderModal(); });
+    }
+
+    // A trade bundle, drawn as the cards and counters it really is rather
+    // than summed up as "3 card(s)".
+    function bundleCardsHtml(b, owner) {
+        const bits = [];
+        const chip = (label) => '<span class="chip">' + label + '</span>';
+        if (b.coins) bits.push(chip(b.coins + ' coins'));
+        if (b.rawSteaks) bits.push(chip(b.rawSteaks + ' raw steak'));
+        if (b.cookedSteaks) bits.push(chip(b.cookedSteaks + ' seared steak'));
+        if (b.keyFragments) bits.push(chip(b.keyFragments + ' key fragment'));
+        if (b.chestKeys) bits.push(chip(b.chestKeys + ' chest key'));
+
+        const cards = [];
+        (b.items || []).forEach(u => {
+            const inst = owner && owner.inventory.find(x => x.uid === u);
+            const d = inst && D.ITEMS[inst.id];
+            cards.push(d ? paperCardHtml('yellow', d.name, d.text)
+                         : paperCardHtml('yellow', 'A card', 'No longer held.'));
+        });
+        (b.powerups || []).forEach(u => {
+            const inst = owner && owner.powerups.find(x => x.uid === u);
+            const d = inst && D.POWERUPS[inst.id];
+            cards.push(d ? paperCardHtml('pink', d.name, d.text)
+                         : paperCardHtml('pink', 'A card', 'No longer held.'));
+        });
+        (b.potions || []).forEach(u => {
+            const inst = owner && owner.potions.find(x => x.uid === u);
+            const d = inst && D.POWERUPS[inst.id];
+            cards.push(d ? paperCardHtml('pink', d.name + ' potion', d.text)
+                         : paperCardHtml('pink', 'A potion', 'No longer held.'));
+        });
+
+        if (!bits.length && !cards.length) return '<div class="muted">Nothing.</div>';
+        return (bits.length ? '<div class="stat-row">' + bits.join('') + '</div>' : '') +
+            (cards.length ? '<div class="item-grid trade-cards">' + cards.join('') + '</div>' : '');
+    }
+
+    function describeBundle(b) {
+        const parts = [];
+        if (b.coins) parts.push(b.coins + ' coins');
+        if (b.rawSteaks) parts.push(b.rawSteaks + ' raw steak');
+        if (b.cookedSteaks) parts.push(b.cookedSteaks + ' seared steak');
+        if (b.keyFragments) parts.push(b.keyFragments + ' key fragment(s)');
+        if (b.chestKeys) parts.push(b.chestKeys + ' chest key(s)');
+        const n = (b.items || []).length + (b.powerups || []).length + (b.potions || []).length;
+        if (n) parts.push(n + ' card(s)');
+        return parts.length ? parts.join(', ') : 'nothing';
+    }
+
+    function renderIncomingTrade(t) {
+        const from = E.player(S, t.fromId);
+        showModal('<h2>Trade offer</h2>' +
+            '<div class="sub">' + esc(from.name) + ' wants to trade.</div>' +
+            '<div class="card"><b class="gold">They give you</b>' +
+                bundleCardsHtml(t.give, from) + '</div>' +
+            '<div class="card" style="margin-top:10px"><b class="gold">They want from you</b>' +
+                bundleCardsHtml(t.want, me()) + '</div>' +
+            '<div class="modal-actions">' +
+            '<button class="btn primary" id="tr-yes">Accept</button>' +
+            '<button class="btn danger" id="tr-no">Decline</button></div>', false, 'incoming');
+        bind('tr-yes', () => act('respondTrade', { tradeId: t.id, accept: true }));
+        bind('tr-no', () => act('respondTrade', { tradeId: t.id, accept: false }));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Victory                                                             */
+    /* ------------------------------------------------------------------ */
+
+    // Everyone's stat card, side by side, plus what they are carrying. Any
+    // player can open this at any time -- at a table you can see the other
+    // side of the board.
+    function renderRosterPanel() {
+        const rows = S.players.filter(p => p.cls).map(p => {
+            const c = D.CLASSES[p.cls];
+            const w = E.equippedWeapon(p), ar = E.equippedArmour(p);
+            const foot =
+                'Coins ' + p.coins + ' · Keys ' + p.keyFragments + '/3 · Chest keys ' +
+                p.chestKeys + '<br>' +
+                'Weapon: ' + esc(w ? D.ITEMS[w.id].name : 'none') + '<br>' +
+                'Armour: ' + esc(ar ? D.ITEMS[ar.id].name : 'none') + '<br>' +
+                'Steaks: ' + p.steaks.raw + ' raw, ' + p.steaks.cooked + ' seared<br>' +
+                'Cards held: ' + p.inventory.length + ' gear, ' + p.powerups.length +
+                ' power-up, ' + p.potions.length + ' potion<br>' +
+                'On ' + esc(E.square(p.pos).name);
+            return '<div class="who">' +
+                statCardHtml({
+                    name: p.name + (p.id === NET.PID ? ' (you)' : ''),
+                    art: c.art,
+                    hp: p.hp + ' / ' + p.maxHp,
+                    defence: E.totalDefence(S, p),
+                    moves: c.moves,
+                    foot: foot
+                }) +
+                '</div>';
+        }).join('');
+
+        showModal('<h2>Everyone’s stats</h2>' +
+            '<div class="sub">Health and defence are live. Defence includes armour ' +
+            'and anything in play.</div>' +
+            '<div class="who-grid">' + rows + '</div>' +
+            '<div class="modal-actions"><button class="btn" id="who-close">Close</button></div>',
+            true, 'roster');
+        bind('who-close', () => { openPanel = null; closeModal(); });
+    }
+
+    function renderOver() {
+        closeModal();
+        const w = E.player(S, S.winner);
+        $('#over-body').innerHTML =
+            '<div class="victory">' +
+            '<div class="vtitle">Victory</div>' +
+            '<img src="Fenrirak.png" alt="Fenrirak">' +
+            '<h2>' + esc(w ? w.name : 'Someone') + ' has slain Fenrirak.</h2>' +
+            '<p class="muted">' + (w && w.id === NET.PID
+                ? 'The Thunder Dragon falls to you. The legend is yours.'
+                : 'The Thunder Dragon falls to another. Try again.') + '</p>' +
+            '<div class="modal-actions" style="justify-content:center">' +
+            '<button class="btn primary" id="over-home">Back to the start</button></div>' +
+            '</div>';
+        bind('over-home', () => {
+            if (unsub) unsub();
+            clearInterval(enterRoom._hb);
+            ROOM = null; S = null;
+            try { history.replaceState(null, '', location.pathname); } catch (e) {}
+            showScreen('screen-home');
+        });
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Boot                                                                */
+    /* ------------------------------------------------------------------ */
+
+    function boot() {
+        NET = window.LOF_NET;
+        initHome();
+        initLobby();
+
+        $('#modal-back').addEventListener('click', (e) => {
+            if (e.target === $('#modal-back') &&
+                $('#modal-back').dataset.dismissable === '1') {
+                openPanel = null;
+                renderModal();
+            }
+        });
+
+        $('#btn-leave-game').addEventListener('click', leaveRoom);
+
+        const params = new URLSearchParams(location.search);
+        const room = (params.get('room') || '').toUpperCase();
+        if (/^[A-Z]{5}$/.test(room)) {
+            $('#inp-code').value = room;
+            if (NET.localName()) {
+                $('#inp-name').value = NET.localName();
+                NET.joinRoom(room, NET.localName())
+                    .then(() => enterRoom(room))
+                    .catch(err => notice(err.message || 'Could not rejoin that room.'));
+            } else {
+                notice('Enter a name, then press Join to enter room ' + room + '.');
+            }
+        }
+        showScreen(ROOM ? 'screen-lobby' : 'screen-home');
+    }
+
+    if (window.LOF_NET) boot();
+    else window.addEventListener('lof-net-ready', boot, { once: true });
+})();
+
+    </script>
+    <script type="module">
+/* ==== game/net.js ==== */
+/* =========================================================================
+   Legend of Fenrirak™, The Thunder Dragon — Online Version
+   net.js — Firestore multiplayer.
+
+   One document per room: games/{ROOMCODE}. Every action is applied inside a
+   transaction so two players acting at the same instant can never corrupt
+   the board.
+
+   Firestore is used ONLY by this page of the website.
+   ========================================================================= */
+
+import { initializeApp }
+    from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import {
+    getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, runTransaction
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+const firebaseConfig = {
+    apiKey: "AIzaSyB-97iZ8wtRynNvr678178hQdEtZSWrwwo",
+    authDomain: "lof-thunder-dragon.firebaseapp.com",
+    projectId: "lof-thunder-dragon",
+    storageBucket: "lof-thunder-dragon.firebasestorage.app",
+    messagingSenderId: "468883392504",
+    appId: "1:468883392504:web:d6e890328ce97ef6ab380d",
+    measurementId: "G-2YELW607YJ"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const E = window.LOF_ENGINE;
+
+/* ---------------------------------------------------------------------- */
+/* Local identity                                                          */
+/* ---------------------------------------------------------------------- */
+
+function localId() {
+    let id = localStorage.getItem('lof_pid');
+    if (!id) {
+        id = 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+        localStorage.setItem('lof_pid', id);
+    }
+    return id;
+}
+
+function localName() {
+    return localStorage.getItem('lof_name') || '';
+}
+
+function setLocalName(n) {
+    localStorage.setItem('lof_name', n);
+}
+
+const PID = localId();
+
+/* ---------------------------------------------------------------------- */
+/* Actions the engine exposes to the network layer                         */
+/* ---------------------------------------------------------------------- */
+
+const ACTIONS = {
+    chooseClass:   (s, pid, a) => E.chooseClass(s, pid, a.cls),
+    startGame:     (s, pid)    => E.startGame(s, pid),
+    rollForOrder:  (s, pid)    => E.rollForOrder(s, pid),
+    rollMove:      (s, pid)    => E.rollMove(s, pid),
+    endTurn:       (s, pid)    => E.endTurn(s, pid),
+    battleRoll:    (s, pid)    => E.battleRoll(s, pid),
+    battleAttack:  (s, pid, a) => E.battleAttack(s, pid, a.moveId),
+    enemyRoll:     (s, pid)    => E.enemyRoll(s, pid),
+    enemyStrike:   (s, pid)    => E.enemyStrike(s, pid),
+    usePowerup:    (s, pid, a) => E.usePowerup(s, pid, a.uid),
+    usePotion:     (s, pid, a) => E.usePotion(s, pid, a.uid),
+    eatSteak:      (s, pid, a) => E.eatSteak(s, pid, a.type),
+    cookSteaks:    (s, pid, a) => E.cookSteaks(s, pid, a.count),
+    equip:         (s, pid, a) => E.equip(s, pid, a.uid),
+    useAbility:    (s, pid, a) => E.useAbility(s, pid, a),
+    buy:           (s, pid, a) => E.buy(s, pid, a.kind, a.id),
+    resolvePending:(s, pid, a) => E.resolvePending(s, pid, a.choice),
+    proposeTrade:  (s, pid, a) => E.proposeTrade(s, pid, a.toId, a.give, a.want),
+    respondTrade:  (s, pid, a) => E.respondTrade(s, pid, a.tradeId, a.accept),
+    cancelTrade:   (s, pid, a) => E.cancelTrade(s, pid, a.tradeId),
+    leave:         (s, pid)    => E.removePlayer(s, pid),
+    rename:        (s, pid, a) => {
+        const p = E.player(s, pid);
+        if (p) p.name = String(a.name || '').slice(0, 16) || p.name;
+        return { ok: true };
+    },
+    heartbeat:     (s, pid) => {
+        const p = E.player(s, pid);
+        if (p) { p.lastSeen = Date.now(); p.connected = true; }
+        return { ok: true };
+    },
+    timeoutCheck:  (s) => {
+        const changed = E.checkTimeout(s, Date.now());
+        return changed ? { ok: true } : { ok: false, error: 'no-timeout', silent: true };
+    }
+};
+
+/* ---------------------------------------------------------------------- */
+/* Room lifecycle                                                          */
+/* ---------------------------------------------------------------------- */
+
+function roomRef(code) {
+    return doc(db, 'games', code.toUpperCase());
+}
+
+// Firestore rejects undefined; strip it before every write.
+function clean(value) {
+    if (Array.isArray(value)) return value.map(clean);
+    if (value && typeof value === 'object') {
+        const out = {};
+        Object.keys(value).forEach(k => {
+            if (value[k] !== undefined) out[k] = clean(value[k]);
+        });
+        return out;
+    }
+    return value === undefined ? null : value;
+}
+
+async function createRoom(name) {
+    setLocalName(name);
+    for (let attempt = 0; attempt < 8; attempt++) {
+        const code = E.makeRoomCode();
+        const ref = roomRef(code);
+        const snap = await getDoc(ref);
+        if (snap.exists()) continue;
+        const state = E.createGame(code, PID, name);
+        await setDoc(ref, clean(state));
+        return code;
+    }
+    throw new Error('Could not find a free room code. Please try again.');
+}
+
+async function joinRoom(code, name) {
+    setLocalName(name);
+    code = String(code || '').trim().toUpperCase();
+    if (!/^[A-Z]{5}$/.test(code)) throw new Error('Room codes are 5 letters, like ABCDE.');
+
+    const ref = roomRef(code);
+    const result = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) throw new Error('No room with the code ' + code + '.');
+        const state = snap.data();
+        const existing = E.player(state, PID);
+        if (existing) {
+            existing.name = name || existing.name;
+            existing.connected = true;
+            existing.lastSeen = Date.now();
+        } else {
+            const r = E.addPlayer(state, PID, name);
+            if (!r.ok) throw new Error(r.error);
+        }
+        state.updatedAt = Date.now();
+        tx.set(ref, clean(state));
+        return code;
+    });
+    return result;
+}
+
+async function roomExists(code) {
+    const snap = await getDoc(roomRef(code));
+    return snap.exists();
+}
+
+/* ---------------------------------------------------------------------- */
+/* Applying actions                                                        */
+/* ---------------------------------------------------------------------- */
+
+async function act(code, action, args) {
+    const fn = ACTIONS[action];
+    if (!fn) throw new Error('Unknown action: ' + action);
+    const ref = roomRef(code);
+
+    return runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) throw new Error('This room no longer exists.');
+        const state = snap.data();
+
+        const res = fn(state, PID, args || {}) || { ok: true };
+        if (!res.ok) {
+            const err = new Error(res.error || 'That is not allowed.');
+            err.silent = !!res.silent;
+            throw err;
+        }
+        state.updatedAt = Date.now();
+        tx.set(ref, clean(state));
+        return state;
+    });
+}
+
+function subscribe(code, onState, onError) {
+    return onSnapshot(roomRef(code),
+        (snap) => {
+            if (!snap.exists()) {
+                onError && onError(new Error('The room was closed.'));
+                return;
+            }
+            onState(snap.data());
+        },
+        (err) => onError && onError(err));
+}
+
+async function closeRoom(code) {
+    await deleteDoc(roomRef(code));
+}
+
+window.LOF_NET = {
+    PID, localName, setLocalName,
+    createRoom, joinRoom, roomExists, act, subscribe, closeRoom
+};
+window.dispatchEvent(new Event('lof-net-ready'));
+
+    </script>
+
+    <script>
+/* ==== site-nav.js ==== */
+/* =========================================================================
+   Legend of Fenrirak — nav bar behaviour.
+
+   The Games dropdown already opens on hover and on keyboard focus using CSS
+   alone, so the page works fine without this file. This only adds tap/click
+   toggling for touch screens, plus Escape to close.
+   ========================================================================= */
+
+(function () {
+    'use strict';
+
+    function init() {
+        var groups = Array.prototype.slice.call(document.querySelectorAll('.nav-group'));
+        if (!groups.length) return;
+
+        function closeAll(except) {
+            groups.forEach(function (g) {
+                if (g === except) return;
+                g.classList.remove('open');
+                var t = g.querySelector('.nav-trigger');
+                if (t) t.setAttribute('aria-expanded', 'false');
+            });
+        }
+
+        groups.forEach(function (group) {
+            var trigger = group.querySelector('.nav-trigger');
+            if (!trigger) return;
+
+            trigger.addEventListener('click', function (e) {
+                e.preventDefault();
+                var willOpen = !group.classList.contains('open');
+                closeAll(group);
+                group.classList.toggle('open', willOpen);
+                trigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            });
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest || !e.target.closest('.nav-group')) closeAll(null);
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closeAll(null);
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+
+    </script>
+
+</body>
+</html>
