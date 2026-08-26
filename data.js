@@ -119,6 +119,7 @@ function _sharedFetch(map, key, fetcher) {
 
 async function getUser(username) {
   if (!username) return null;
+  await T29_AUTH_READY; // firestore.rules requires request.auth != null
   const data = await _sharedFetch(_inFlightUserFetch, username, () =>
     usersCol().doc(username).get().then(snap => snap.exists ? snap.data() : null)
   );
@@ -126,6 +127,7 @@ async function getUser(username) {
 }
 async function getClass(code) {
   if (!code) return null;
+  await T29_AUTH_READY; // firestore.rules requires request.auth != null
   const data = await _sharedFetch(_inFlightClassFetch, code, () =>
     classesCol().doc(code).get().then(snap => snap.exists ? withNewModuleDefaults(snap.data()) : null)
   );
