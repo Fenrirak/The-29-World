@@ -146,10 +146,12 @@ async function render() {
   const banner = document.getElementById("marketLockedBanner");
   const list = document.getElementById("companyList");
   if (!IS_TEACHER) {
-    applyNavModuleLocks(await getModuleLockReasons(CURRENT.username, CLASS_CODE));
+    const lockReasons = await getModuleLockReasons(CURRENT.username, CLASS_CODE);
+    const lockedModules = Object.keys(lockReasons);
+    applyNavModuleLocks(lockReasons);
     if (lockedModules.includes("market")) {
       banner.classList.remove("hidden");
-      banner.innerHTML = `<p style="margin:0;"><strong>The Stock Market is locked</strong><br>Your lifestyle rating is too low right now to buy or sell shares. Ask your teacher what's needed to unlock it.</p>`;
+      banner.innerHTML = `<p style="margin:0;"><strong>The Stock Market is locked</strong><br>${MODULE_LOCK_MESSAGE[lockReasons.market] || MODULE_LOCK_MESSAGE.lifestyle}</p>`;
       list.innerHTML = "";
       return;
     }

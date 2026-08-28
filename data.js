@@ -4083,7 +4083,7 @@ async function removeSideHustle(classCode, hustleId) {
 // check-in to whenever they happen to be checking in).
 async function requestSideHustleChange(username, classCode, hustleId, hour) {
   if (await isModuleLockedForStudent(username, classCode, "sidehustle")) {
-    return { ok: false, error: "Side hustles are locked for you right now because of your lifestyle rating." };
+    return { ok: false, error: "Side hustles are locked for you right now. Check the message on your dashboard for what will unlock them." };
   }
   const cls = await getClass(classCode);
   if (!cls) return { ok: false, error: "Class not found." };
@@ -4163,7 +4163,7 @@ async function denySideHustleChange(username, reason) {
 // hasn't already checked in today (NZ calendar day).
 async function checkinSideHustle(username, classCode) {
   if (await isModuleLockedForStudent(username, classCode, "sidehustle")) {
-    return { ok: false, error: "Side hustles are locked for you right now because of your lifestyle rating." };
+    return { ok: false, error: "Side hustles are locked for you right now. Check the message on your dashboard for what will unlock them." };
   }
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
@@ -5352,7 +5352,7 @@ const LIFESTYLE_LOCKABLE_MODULES = [
   { key: "tax", label: "Tax" },
   { key: "bigevents", label: "Big Events" },
   { key: "gambling", label: "Gambling" },
-  { key: "marketplace", label: "Marketplace" },
+  { key: "marketplace", label: "Trade Centre" },
   { key: "sidehustle", label: "Side hustle" }
 ];
 
@@ -5450,9 +5450,30 @@ async function isModuleLockedForStudent(username, classCode, moduleKey) {
 // nav a[data-module="key"] attributes matching LIFESTYLE_LOCKABLE_MODULES.
 const MODULE_LOCK_MESSAGE = {
   lifestyle: "This module is locked because your lifestyle rating is too low right now. Check with your teacher about what's needed to unlock it.",
-  quiz: "This module is locked until you pass the quiz your teacher set for it. Head to the Quizzes page to take it.",
-  both: "This module is locked: you need to pass its quiz on the Quizzes page, and your lifestyle rating is too low right now."
+  quiz: "This module is locked until you pass the quiz your teacher set for it.",
+  both: "This module is locked: you need to pass its quiz, and your lifestyle rating is too low right now."
 };
+
+/* Nav links that only make sense for a teacher. Students get to their
+   report card from a button on their own dashboard, and quizzes come to
+   them as a popup the moment they open a module that needs one — so
+   neither earns a permanent tab in a nav bar that is already full.
+   Removed rather than hidden so fitTopbar() measures the real row. */
+const NAV_TEACHER_ONLY = ["reports.html", "quizzes.html"];
+function applyNavRoleVisibility(role) {
+  if (role === "teacher") return;
+  const here = (window.location.pathname.split("/").pop() || "").toLowerCase();
+  let removed = false;
+  document.querySelectorAll("nav a[href]").forEach(a => {
+    const href = (a.getAttribute("href") || "").split("/").pop();
+    // Never strip the link to the page the student is actually on — one
+    // who followed the report-card button should still see where they are
+    // in the nav, even though the tab isn't offered to them.
+    if (href.toLowerCase() === here) return;
+    if (NAV_TEACHER_ONLY.includes(href)) { a.remove(); removed = true; }
+  });
+  if (removed && typeof fitTopbar === "function") fitTopbar();
+}
 
 // `lockedModules` may be either the plain array this has always taken, or
 // the moduleKey -> reason map from getModuleLockReasons(). Accepting both
@@ -5469,6 +5490,14 @@ function applyNavModuleLocks(lockedModules) {
     if (reason) {
       a.onclick = (e) => {
         e.preventDefault();
+        // A quiz lock is the one kind a student can clear on the spot, so
+        // open the quiz right here instead of sending them somewhere else
+        // (see quiz-gate.js). Anything the quiz can't fix falls through
+        // to the plain explanation.
+        if ((reason === "quiz" || reason === "both") && typeof t29OpenQuizGate === "function") {
+          t29OpenQuizGate(key, { alsoLifestyleLocked: reason === "both", href: a.getAttribute("href") });
+          return;
+        }
         alert(MODULE_LOCK_MESSAGE[reason] || MODULE_LOCK_MESSAGE.lifestyle);
       };
     } else {
@@ -5870,7 +5899,7 @@ async function createListing(username, classCode, { assetType, assetId, price, d
       t.update(classRef, { listings: cls.listings });
     });
   } catch (e) {
-    if (e.message === "OFF") return { ok: false, error: "The marketplace is switched off for your class right now." };
+    if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };
     if (e.message === "TYPE_OFF") return { ok: false, error: "Your teacher doesn't allow that kind of thing to be traded." };
     if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that (or it's already listed)." };
     if (e.message === "TOO_MANY") return { ok: false, error: "You already have the maximum number of listings up at once." };
@@ -6056,7 +6085,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
       receipt = { price, fee, proceeds, name: listing.name, seller: seller.username, assetType: listing.assetType };
     });
   } catch (e) {
-    if (e.message === "OFF") return { ok: false, error: "The marketplace is switched off for your class right now." };
+    if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };
     if (e.message === "CLOSED") return { ok: false, error: "Someone got there first — that listing is no longer for sale." };
     if (e.message === "GONE") return { ok: false, error: "The seller doesn't own that any more, so the listing has expired." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
@@ -6095,7 +6124,7 @@ async function makeOffer(username, classCode, listingId, amount, note) {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
-    if (!cls.marketplace.enabled) { error = "The marketplace is switched off for your class right now."; return; }
+    if (!cls.marketplace.enabled) { error = "The Trade Centre is switched off for your class right now."; return; }
     if (!cls.marketplace.allowOffers) { error = "Your teacher has turned offers off — listings are buy-at-the-asking-price only."; return; }
     const l = cls.listings.find(x => x.id === listingId);
     if (!l || l.status !== "active") { error = "That listing is no longer for sale."; return; }
@@ -6179,6 +6208,7 @@ async function anwGlobalBootstrap() {
   if (u.classCode) {
     autoMarketDayIfDue(u.classCode).catch(() => {});
   }
+  applyNavRoleVisibility(u.role);
   if (u.role === "student") {
     mountBalanceWidget(u.username);
   }

@@ -59,6 +59,7 @@ function paintChrome() {
   document.getElementById("hActivity").innerHTML = icon("bank", 18) + " My recent activity (last 3 days)";
   document.getElementById("bankLink").innerHTML = icon("piggy", 14) + " Go to Bank";
   document.getElementById("marketLink").innerHTML = icon("chart", 14) + " Go to Stock Market";
+  document.getElementById("reportCardBtn").innerHTML = icon("idcard", 14) + " My report card";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -133,6 +134,7 @@ async function render() {
   document.getElementById("jobLabel").textContent = job ? `${job.title} — ${fmtMoney(job.wage)}/payday` : "No job assigned";
 
   const lockReasons = await getModuleLockReasons(me.username, me.classCode);
+  const lockedModules = Object.keys(lockReasons);
   applyModuleLocks(lockReasons);
 
   await renderSideHustle(me, cls, lockedModules);
@@ -261,7 +263,7 @@ function applyModuleLocks(reasons) {
   banner.classList.remove("hidden");
   banner.innerHTML = `<p style="margin:0;"><strong>Some modules are locked</strong></p>` +
     (byLifestyle.length ? `<p style="margin:6px 0 0;">Your lifestyle rating is too low right now to use: ${byLifestyle.join(", ")}. Ask your teacher what's needed to unlock them.</p>` : "") +
-    (byQuiz.length ? `<p style="margin:6px 0 0;">Pass the quiz set for each of these to unlock them: ${byQuiz.join(", ")}. <a href="quizzes.html">Go to Quizzes ›</a></p>` : "");
+    (byQuiz.length ? `<p style="margin:6px 0 0;">Pass the quiz set for each of these to unlock them: ${byQuiz.join(", ")}. Click the module in the menu above and the quiz will open right here.</p>` : "");
 }
 
 /* ---------------- Side hustle ----------------

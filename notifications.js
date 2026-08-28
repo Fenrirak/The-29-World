@@ -1,7 +1,14 @@
-/* ===================== The 29 World — Activity feed (bell icon) =====================
-   A single place a student can see everything that happened to them while
-   they weren't looking: pay day, interest, loan due dates, insurance
-   claims, market moves, marketplace offers, quizzes still to pass.
+/* ===================== The 29 World — To-do feed (bell icon) =====================
+   A single place a student can see everything that needs them to DO
+   something — a loan due, a mortgage payment, a decision waiting, a quiz
+   standing between them and a module, an offer on something they listed —
+   plus how the shares they hold moved today.
+
+   Deliberately NOT a record of what they've already done: pay day,
+   interest, purchases and transfers all live in "My recent activity" on
+   the dashboard and in the Bank's history. Repeating them here buried the
+   handful of items that actually need attention, which is the whole point
+   of the bell.
 
    The important design decision here is that this file adds NO new game
    state and writes NOTHING to Firestore. Every notification is derived,
@@ -24,8 +31,7 @@
    the bell included and the top bar still fits on ONE line.
 ================================================================================ */
 
-const NOTIF_MAX = 40;
-const NOTIF_TXN_WINDOW_DAYS = 7;
+const NOTIF_MAX = 30;
 const NOTIF_POLL_MS = 120000; // see the balance widget in data.js for why this is a plain interval
 
 /* ---------------- Read-state (per device, per student) ---------------- */
@@ -68,107 +74,10 @@ function notifRelativeTime(ts) {
   return days + " days ago";
 }
 
-/* ---------------- Transaction -> notification wording ----------------
-   [icon, tone, headline, direction] where direction is +1 money in,
-   -1 money out, 0 no amount worth showing. Anything not listed here still
-   shows up, just with a generic coin icon — a new transaction type can
-   never silently vanish from the feed. */
-const NOTIF_TXN_META = {
-  welcome: ["star", "navy", "Welcome grant", 1],
-  wage: ["briefcase", "mint", "Payday", 1],
-  interest: ["piggy", "gold", "Savings interest", 1],
-  "cash-interest": ["coin", "gold", "Cash interest", 1],
-  bonus: ["star", "mint", "Bonus from your teacher", 1],
-  fine: ["coin", "coral", "Fine from your teacher", -1],
-  transfer: ["send", "navy", "Transfer", 0],
-  automation: ["repeat", "navy", "Automatic payment", 0],
-  "stock-buy": ["chart", "gold", "Shares bought", -1],
-  "stock-sell": ["chart", "gold", "Shares sold", 1],
-  "stock-close": ["building", "coral", "Company delisted", 1],
-  "insurance-buy": ["shield", "lilac", "Insurance taken out", -1],
-  "insurance-premium": ["shield", "coral", "Insurance premium paid", -1],
-  "insurance-claim": ["shield", "mint", "Insurance claim paid out", 1],
-  "store-buy": ["cart", "navy", "Store purchase", -1],
-  "store-sell": ["cart", "gold", "Sold back to the store", 1],
-  "store-gift": ["cart", "mint", "Free item from your teacher", 0],
-  "property-buy": ["house", "navy", "Property bought", -1],
-  "property-sell": ["house", "gold", "Property sold", 1],
-  "property-rent": ["house", "mint", "Rent received", 1],
-  mortgage: ["house", "coral", "Mortgage payment", -1],
-  event: ["dice", "lilac", "Random event", 0],
-  "big-event": ["star", "coral", "Big event", 0],
-  "vehicle-buy": ["car", "navy", "Vehicle bought", -1],
-  "vehicle-sell": ["car", "gold", "Vehicle sold", 1],
-  "truck-drive": ["car", "mint", "Truck drive paid", 1],
-  "truck-licence-buy": ["car", "navy", "Truck licence", -1],
-  "term-deposit-open": ["vault", "lilac", "Term deposit opened", -1],
-  "term-deposit-mature": ["vault", "mint", "Term deposit matured", 1],
-  "term-deposit-early": ["vault", "coral", "Term deposit withdrawn early", 1],
-  gambling: ["dice", "gold", "Gambling", 0],
-  "savings-deposit": ["piggy", "mint", "Moved into savings", -1],
-  "savings-withdraw": ["piggy", "gold", "Moved out of savings", 1],
-  "loan-taken": ["handshake", "navy", "Loan paid out", 1],
-  "loan-repayment": ["handshake", "mint", "Loan repayment", -1],
-  "loan-interest": ["handshake", "coral", "Loan interest added", -1],
-  "side-hustle": ["briefcase", "mint", "Side hustle pay", 1],
-  "quiz-reward": ["idcard", "mint", "Quiz passed", 1],
-  "p2p-buy": ["cart", "navy", "Bought from a classmate", -1],
-  "p2p-sell": ["cart", "gold", "Sold to a classmate", 1]
-};
-
-function notifFromTxn(t, me, nameOf) {
-  const meta = NOTIF_TXN_META[t.type] || ["coin", "navy", t.type, 0];
-  const [ic, tone, headline, dir] = meta;
-  let title = headline;
-  let body = t.note || "";
-  let direction = dir;
-
-  // A handful of types only make sense once you know which side of them
-  // this student was on.
-  if (t.type === "transfer" || t.type === "automation") {
-    if (t.from === me.username) {
-      direction = -1;
-      title = (t.type === "automation" ? "Automatic payment to " : "You sent money to ") + nameOf(t.to);
-    } else {
-      direction = 1;
-      title = (t.type === "automation" ? "Automatic payment from " : "You were paid by ") + nameOf(t.from);
-    }
-  } else if (t.type === "p2p-buy" || t.type === "p2p-sell") {
-    // Both sides of a peer sale log both txns, so pick out the one that's
-    // actually about this student and drop the other.
-    if (t.type === "p2p-buy" && t.from !== me.username) return null;
-    if (t.type === "p2p-sell" && t.to !== me.username) return null;
-  } else if (t.type === "event") {
-    direction = (Number(t.amount) || 0) < 0 ? -1 : 1;
-  } else if (t.type === "big-event") {
-    direction = t.to === me.username ? 1 : -1;
-  } else if (t.type === "gambling") {
-    direction = (t.note || "").includes("WON") ? 1 : -1;
-    title = direction > 0 ? "You won a bet" : "You lost a bet";
-  }
-
-  const amount = Math.abs(Number(t.amount) || 0);
-  if (direction !== 0 && amount > 0) {
-    title += ": " + (direction > 0 ? "+" : "−") + fmtMoney(amount);
-  }
-  return {
-    id: "txn-" + t.id, ts: t.ts || 0, icon: ic, tone, title, body,
-    when: t.date, direction
-  };
-}
-
 /* ---------------- The builders ----------------
    Each one takes the already-loaded user + class and returns notifications.
    They're plain functions with no I/O so they're cheap to call and easy to
    reason about; buildNotifications() below just concatenates them. */
-
-function notifTxnItems(me, cls, nameOf) {
-  const cutoff = Date.now() - NOTIF_TXN_WINDOW_DAYS * 86400000;
-  return (cls.txns || [])
-    .filter(t => (t.to === me.username || t.from === me.username) && (t.ts === undefined || t.ts >= cutoff))
-    .map(t => notifFromTxn(t, me, nameOf))
-    .filter(Boolean);
-}
 
 function notifLoanItems(me) {
   const today = nzDateKey();
@@ -363,27 +272,15 @@ function notifMarketplaceItems(me, cls) {
         href: "marketplace.html"
       });
     }
-    // Somebody outbid you, or the seller turned you down.
-    (l.offers || []).forEach(o => {
-      if (o.buyer !== me.username || o.status !== "declined") return;
-      if (Date.now() - (o.ts || 0) > 3 * 86400000) return;
-      out.push({
-        id: "offdecl-" + o.id, ts: o.ts || dayStart, icon: "handshake", tone: "coral",
-        title: `Your ${fmtMoney(o.amount)} offer on ${l.name} wasn't accepted`,
-        body: l.status === "sold" ? "It sold to someone else." : "The seller declined it — you can try a different offer.",
-        href: "marketplace.html"
-      });
-    });
   });
   return out;
 }
 
-/* Builds the whole feed, newest first. `action: true` items (something the
-   student has to DO) float to the top of their timestamp group so a "loan
-   due today" is never buried under a wall of routine transactions. */
-function buildNotifications(me, cls, nameOf) {
+/* Builds the whole feed. `action: true` items — the things that actually
+   need the student to do something — always sort above the informational
+   market moves, and within each group it's newest first. */
+function buildNotifications(me, cls) {
   const items = [].concat(
-    notifTxnItems(me, cls, nameOf),
     notifLoanItems(me),
     notifMortgageItems(me, cls),
     notifTermDepositItems(me),
@@ -451,7 +348,7 @@ function notifBuildPanel() {
   panel.setAttribute("aria-label", "Notifications");
   panel.innerHTML = `
     <div class="notif-head">
-      <div class="notif-head-title">${notifIconFor("bell", 15)}<span>Activity</span></div>
+      <div class="notif-head-title">${notifIconFor("bell", 15)}<span>To do</span></div>
       <button type="button" class="notif-markread" id="notifMarkRead">Mark all read</button>
     </div>
     <div class="notif-list" id="notifList"></div>
@@ -466,18 +363,53 @@ function notifBuildPanel() {
   return panel;
 }
 
+/* Places the panel relative to the bell, which lives in .topbar-actions —
+   and .topbar-actions is in a very different place depending on the
+   layout the student has chosen:
+     - normal top bar : actions sit top-right, so drop the panel below and
+                        right-align it to the button (the default)
+     - sidebar, wide   : actions sit at the BOTTOM of a fixed left rail, so
+                        "below and to the left" would put the panel
+                        half-off-screen and underneath the rail itself.
+                        Open to the RIGHT of the rail instead.
+     - sidebar, phone  : actions are pinned to the bottom of the slide-in
+                         drawer, so stack the panel directly above them.
+   Everything is clamped into the viewport at the end regardless, so no
+   route through this can leave the panel hanging off an edge. */
 function notifPositionPanel(panel, btn) {
   const rect = btn.getBoundingClientRect();
   const margin = 10;
   panel.style.visibility = "hidden";
   panel.classList.remove("hidden");
   const pr = panel.getBoundingClientRect();
-  let left = rect.right - pr.width;
-  left = Math.max(margin, Math.min(left, window.innerWidth - pr.width - margin));
-  let top = rect.bottom + 8;
-  if (top + pr.height > window.innerHeight - margin) {
-    top = Math.max(margin, window.innerHeight - pr.height - margin);
+
+  const sidebar = document.documentElement.classList.contains("sidebar-nav");
+  const wideRail = sidebar && window.matchMedia("(min-width: 901px)").matches;
+  panel.style.maxHeight = ""; // cleared so a resize out of drawer mode isn't stuck with its cap
+
+  let left, top;
+  if (wideRail) {
+    const rail = document.querySelector(".topbar");
+    const railRight = rail ? rail.getBoundingClientRect().right : rect.right;
+    left = railRight + 8;
+    top = rect.top; // line the panel up with the bell rather than under it
+  } else if (sidebar) {
+    // Phone drawer: the actions bar is pinned to the bottom of the drawer,
+    // so the panel gets the space above it — and is capped to that space
+    // so a long list scrolls internally instead of growing back down over
+    // the very buttons it is supposed to sit on top of.
+    const actions = document.querySelector(".topbar-actions");
+    const actionsTop = actions ? actions.getBoundingClientRect().top : window.innerHeight;
+    panel.style.maxHeight = Math.max(160, actionsTop - (margin * 2) - 8) + "px";
+    left = margin;
+    top = actionsTop - panel.getBoundingClientRect().height - 8;
+  } else {
+    left = rect.right - pr.width;
+    top = rect.bottom + 8;
   }
+
+  left = Math.max(margin, Math.min(left, window.innerWidth - pr.width - margin));
+  top = Math.max(margin, Math.min(top, window.innerHeight - pr.height - margin));
   panel.style.left = left + "px";
   panel.style.top = top + "px";
   panel.style.visibility = "";
@@ -525,13 +457,17 @@ function notifRenderList() {
   if (!list) return;
   const lastRead = notifGetLastRead(NOTIF_USER);
   if (!NOTIF_ITEMS.length) {
-    list.innerHTML = `<div class="notif-empty">${notifIconFor("bell", 26)}<p>Nothing new yet.</p><p class="muted-small">Pay day, interest, market moves and anything due will show up here.</p></div>`;
+    list.innerHTML = `<div class="notif-empty">${notifIconFor("bell", 26)}<p>You're all caught up.</p><p class="muted-small">Anything due, any decision waiting on you, and how your shares moved will show up here.</p></div>`;
     return;
   }
   list.innerHTML = NOTIF_ITEMS.map(n => {
     const unread = (n.ts || 0) > lastRead;
-    const tag = n.href ? "a" : "div";
-    const href = n.href ? ` href="${n.href}"` : "";
+    // A row is a link when it goes somewhere, and a button when it opens
+    // something in place (a quiz popup) — never a dead <div> that looks
+    // tappable but isn't.
+    const clickable = !!(n.href || n.onClick);
+    const tag = clickable ? "a" : "div";
+    const href = n.href ? ` href="${n.href}"` : (n.onClick ? ` href="#" onclick="notifClose();${n.onClick};return false;"` : "");
     return `<${tag}${href} class="notif-row${unread ? " unread" : ""}${n.action ? " action" : ""}">
       <span class="notif-ic ${n.tone}">${notifIconFor(n.icon, 15)}</span>
       <span class="notif-body">
@@ -553,11 +489,7 @@ async function notifRefresh(username, classCode) {
   const [me, cls] = await Promise.all([getUserCached(username), getClassCached(classCode)]);
   if (!me || !cls) return;
   withNewModuleDefaults(cls);
-  // Names are only needed for transfer wording, and the class roster is a
-  // read PER STUDENT — far too expensive for a background refresh. The
-  // usernames students pick are readable enough on their own here.
-  const nameOf = u => u || "someone";
-  NOTIF_ITEMS = buildNotifications(Object.assign({ username }, me), cls, nameOf);
+  NOTIF_ITEMS = buildNotifications(Object.assign({ username }, me), cls);
   notifPaint();
 
   // Every page now gets the module locks applied to its nav, not just the

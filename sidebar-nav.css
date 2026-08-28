@@ -117,7 +117,7 @@
     font-weight: 700;
   }
   html.sidebar-nav #notifBell::after{
-    content: "Activity";
+    content: "To do";
     font-size: .9rem;
     font-weight: 700;
   }
@@ -254,7 +254,7 @@
   }
   html.sidebar-nav .btn-logout .nav-label{ display: inline; }
   html.sidebar-nav #settingsBtn::after{ content: "Settings"; font-size: .92rem; font-weight: 700; }
-  html.sidebar-nav #notifBell::after{ content: "Activity"; font-size: .92rem; font-weight: 700; }
+  html.sidebar-nav #notifBell::after{ content: "To do"; font-size: .92rem; font-weight: 700; }
   html.sidebar-nav #notifBell .notif-dot{ position: static; margin-left: auto; border-color: transparent; }
   html.sidebar-nav .settings-dropdown{ left: 0; right: auto; bottom: calc(100% + 8px); top: auto; width: 100%; }
 

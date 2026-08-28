@@ -38,6 +38,10 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
+  // Students never browse quizzes as a page any more — a quiz reaches them
+  // as a popup on the module it guards (see quiz-gate.js), so anyone
+  // landing here without being a teacher goes back to their dashboard.
+  if (!IS_TEACHER) { window.location.href = "student.html"; return; }
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";

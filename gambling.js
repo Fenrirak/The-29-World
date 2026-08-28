@@ -872,11 +872,13 @@ async function render() {
     return;
   }
 
-  applyNavModuleLocks(await getModuleLockReasons(CURRENT.username, CURRENT.classCode));
+  const lockReasons = await getModuleLockReasons(CURRENT.username, CURRENT.classCode);
+  const lockedModules = Object.keys(lockReasons);
+  applyNavModuleLocks(lockReasons);
   const lockedBanner = document.getElementById("gamblingLockedBanner");
   if (lockedModules.includes("gambling")) {
     lockedBanner.classList.remove("hidden");
-    lockedBanner.innerHTML = `<p style="margin:0;"><strong>Gambling is locked</strong><br>Your lifestyle rating is too low right now to place bets. Ask your teacher what's needed to unlock it.</p>`;
+    lockedBanner.innerHTML = `<p style="margin:0;"><strong>Gambling is locked</strong><br>${MODULE_LOCK_MESSAGE[lockReasons.gambling] || MODULE_LOCK_MESSAGE.lifestyle}</p>`;
     document.getElementById("studentView").classList.add("hidden");
     return;
   }

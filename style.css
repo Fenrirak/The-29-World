@@ -744,7 +744,11 @@ label .icon-slot{color:var(--navy-700);}
 
 .notif-panel{
   position:fixed;
-  z-index:70;
+  /* Matches .settings-popover deliberately: in sidebar-nav mode the rail
+     is z-index 90 on desktop and the mobile drawer runs 130-140, so
+     anything lower than this gets covered by the very bar the bell lives
+     in. Both popovers open from .topbar-actions, so both need to clear it. */
+  z-index:200;
   width:min(380px, calc(100vw - 20px));
   background:var(--card);
   border:1.5px solid var(--line);
@@ -890,6 +894,33 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .qb-opt-row input[type="text"]{margin:0;flex:1;}
 .qb-opt-row .qb-del{flex-shrink:0;}
 .qb-hint{font-size:.74rem;color:var(--muted);margin:0 0 10px;}
+
+/* Student dashboard greeting + its report-card shortcut. Reports left the
+   student nav (it's teacher-only chrome there now), so it lives here as a
+   small button next to the student's own name instead. */
+.greeting-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:.4em;}
+.greeting-row h1{margin:0;}
+.greeting-row .btn{margin-top:0;}
+
+/* ---------------- Quiz gate popup (quiz-gate.js) ----------------
+   Reuses the .quiz-* question/option/score styling above inside the
+   standard .anw-modal-overlay used by the event popups, so a gated module
+   feels like the rest of the app rather than a separate page. Wider and
+   taller than an event popup because it has to hold a whole quiz. */
+.qg-card{max-width:600px;border-top-color:var(--navy-700);}
+.qg-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:6px;}
+.qg-kicker{
+  display:flex;align-items:center;gap:6px;margin:0 0 4px;
+  font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--coral);
+}
+.qg-kicker .icon{width:12px;height:12px;}
+.qg-title{margin:0;font-size:1.2rem;color:var(--navy-900);}
+.qg-desc{margin:4px 0 0;font-size:.86rem;color:var(--muted);line-height:1.45;}
+.qg-meta{
+  margin:10px 0 16px;padding:9px 12px;border-radius:9px;
+  background:#f2f5fb;font-size:.79rem;font-weight:700;color:var(--navy-700);
+}
+.qg-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;}
 
 /* ===================== Peer-to-peer marketplace ===================== */
 .mkt-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;}

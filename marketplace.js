@@ -20,7 +20,7 @@ const ASSET_ICON = { store: "cart", vehicle: "car", property: "house" };
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("users", 26) + " Marketplace";
+  document.getElementById("pageTitle").innerHTML = icon("users", 26) + " Trade Centre";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -127,7 +127,7 @@ async function saveSettings() {
     maxActiveListings: document.getElementById("mpMaxListings").value,
     feePct: document.getElementById("mpFee").value
   });
-  document.getElementById("settingsMsg").innerHTML = `<div class="success-msg">Marketplace settings saved.</div>`;
+  document.getElementById("settingsMsg").innerHTML = `<div class="success-msg">Trade Centre settings saved.</div>`;
   await render();
 }
 
@@ -149,7 +149,7 @@ function renderStudent() {
   const banner = document.getElementById("closedBanner");
   if (!mp.enabled) {
     banner.classList.remove("hidden");
-    banner.innerHTML = `<p style="margin:0;"><strong>The marketplace is closed right now</strong><br>Your teacher has switched off trading between students. You can still buy from the class Store.</p>`;
+    banner.innerHTML = `<p style="margin:0;"><strong>The Trade Centre is closed right now</strong><br>Your teacher has switched off trading between students. You can still buy from the class Store.</p>`;
   } else {
     banner.classList.add("hidden");
   }
@@ -246,7 +246,7 @@ async function listIt(assetType, assetId) {
     description: document.getElementById("desc-" + key).value
   });
   document.getElementById("sellMsg").innerHTML = res.ok
-    ? `<div class="success-msg">Listed${CLS.marketplace.requireApproval ? " — waiting for your teacher to approve it." : "! It's live in the marketplace now."}</div>`
+    ? `<div class="success-msg">Listed${CLS.marketplace.requireApproval ? " — waiting for your teacher to approve it." : "! It's live in the Trade Centre now."}</div>`
     : `<div class="error-msg">${esc(res.error)}</div>`;
   await render();
 }
