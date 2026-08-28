@@ -48,7 +48,7 @@ async function init() {
   // at a time — 8 separate sequential network round-trips — was a big
   // chunk of load time, especially on a slow mobile connection. Running
   // them together cuts that to roughly the time of the single slowest one.
-  await Promise.all([
+  const T29_STARTUP_JOBS = Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
@@ -58,6 +58,13 @@ async function init() {
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
   ]);
+  // Kick the day's jobs off but DON'T block the page on them: paint what
+  // we already have first, then wait. On the first load of the day pay day
+  // alone can take seconds (it writes per student), and blocking here is
+  // what made a phone sit on a blank page. The popups and the final
+  // render() below still run after the jobs, exactly as they did before.
+  await t29FirstPaint(render);
+  await T29_STARTUP_JOBS;
   // These popups read the results of the jobs above (e.g. a weekly event
   // that just got generated), so they still need to run afterwards — but
   // they stay sequential since each checks "is another popup already

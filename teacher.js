@@ -80,7 +80,7 @@ async function init() {
   // Same reasoning as the other pages: these are 8 independent jobs, so
   // running them together instead of one-at-a-time avoids 8 sequential
   // network round-trips on page load.
-  await Promise.all([
+  const T29_STARTUP_JOBS = Promise.all([
     safeBgJob(autoPayDayIfDue(CLASS_CODE), "autoPayDayIfDue"),
     safeBgJob(processAutomations(CLASS_CODE), "processAutomations"),
     safeBgJob(processTermDeposits(CLASS_CODE), "processTermDeposits"),
@@ -90,6 +90,13 @@ async function init() {
     safeBgJob(processWeeklyBigEvents(CLASS_CODE), "processWeeklyBigEvents"),
     safeBgJob(processLoanInterest(CLASS_CODE), "processLoanInterest")
   ]);
+  // Kick the day's jobs off but DON'T block the page on them: paint what
+  // we already have first, then wait. On the first load of the day pay day
+  // alone can take seconds (it writes per student), and blocking here is
+  // what made a phone sit on a blank page. The popups and the final
+  // render() below still run after the jobs, exactly as they did before.
+  await t29FirstPaint(render);
+  await T29_STARTUP_JOBS;
   await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
   await checkBigEventPopup(CURRENT.username, CLASS_CODE);
   await checkAdjustmentPopup(CURRENT.username, CLASS_CODE);

@@ -606,4 +606,13 @@ async function notifInit() {
   if (!document.hidden) notifStartPoll(u.username, u.classCode);
 }
 
-document.addEventListener("DOMContentLoaded", notifInit);
+// The bell is never why someone opened the page, so let the page's own
+// first render have the main thread and the connection to itself, then
+// build the feed in the first idle moment after. requestIdleCallback
+// isn't on every mobile browser, hence the timeout fallback.
+function notifBoot() {
+  const start = () => notifInit().catch(() => {});
+  if (typeof requestIdleCallback === "function") requestIdleCallback(start, { timeout: 2500 });
+  else setTimeout(start, 400);
+}
+document.addEventListener("DOMContentLoaded", notifBoot);

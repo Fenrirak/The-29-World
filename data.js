@@ -1030,6 +1030,24 @@ function isJobTaskApprovedThisWeek(user, cls) {
    looks like the page just hanging. Wrapping each job in this before it
    goes into Promise.all() means one job failing can only skip that one
    job — every other job still runs, and the page still loads normally. */
+/* Draws the page with whatever data is already available, BEFORE the
+   caller waits on the day's background jobs. Every page's init() now does
+   `await t29FirstPaint(render)` the moment its jobs are started rather
+   than after they finish — so a phone shows a usable page in one round
+   trip instead of sitting blank until the slowest job (pay day, which
+   writes once per student) has been through the whole class.
+
+   Wrapped in its own catch for the same reason safeBgJob is: a first
+   paint that throws (e.g. an element a later job was meant to populate)
+   must never stop init() from going on to run the jobs and re-render. */
+async function t29FirstPaint(renderFn) {
+  try {
+    await renderFn();
+  } catch (e) {
+    console.warn("First paint failed (page will re-render after background jobs):", e);
+  }
+}
+
 function safeBgJob(promise, label) {
   return promise.catch(e => {
     console.error(`Background job "${label}" failed (page will still load):`, e);

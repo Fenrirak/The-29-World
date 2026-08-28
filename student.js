@@ -77,7 +77,7 @@ async function init() {
   // them together cuts that to roughly the time of the single slowest one.
   // Note: mortgage payments are NOT auto-deducted here (see payMortgage in
   // data.js) — students pay their own weekly installment on the due day.
-  await Promise.all([
+  const T29_STARTUP_JOBS = Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
@@ -86,6 +86,13 @@ async function init() {
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
   ]);
+  // Kick the day's jobs off but DON'T block the page on them: paint what
+  // we already have first, then wait. On the first load of the day pay day
+  // alone can take seconds (it writes per student), and blocking here is
+  // what made a phone sit on a blank page. The popups and the final
+  // render() below still run after the jobs, exactly as they did before.
+  await t29FirstPaint(render);
+  await T29_STARTUP_JOBS;
   // These popups read the results of the jobs above (e.g. a weekly event
   // that just got generated), so they still need to run afterwards — but
   // they stay sequential since each checks "is another popup already
@@ -95,8 +102,21 @@ async function init() {
   await checkAdjustmentPopup(u.username, u.classCode);
   await render();
   // Keeps the side hustle check-in window (and everything else) in sync
-  // with the clock even if the student just leaves the tab open.
-  setInterval(render, 30000);
+  // with the clock even if the student just leaves the tab open. Paused
+  // while the tab is hidden — this re-reads the user, the class AND the
+  // roster each time, which is real data and battery on a phone that
+  // isn't even looking at the page. Same approach as the balance widget
+  // in data.js, and it catches up with one render on the way back.
+  let refreshTimer = setInterval(render, 30000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+    } else if (!refreshTimer) {
+      render();
+      refreshTimer = setInterval(render, 30000);
+    }
+  });
 }
 
 async function render() {

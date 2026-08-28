@@ -26,7 +26,7 @@ async function init() {
   paintChrome();
   // Same fix as the other pages: run the independent background jobs
   // together instead of one sequential network round-trip each.
-  await Promise.all([
+  const T29_STARTUP_JOBS = Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
@@ -34,6 +34,13 @@ async function init() {
     safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents")
   ]);
+  // Kick the day's jobs off but DON'T block the page on them: paint what
+  // we already have first, then wait. On the first load of the day pay day
+  // alone can take seconds (it writes per student), and blocking here is
+  // what made a phone sit on a blank page. The popups and the final
+  // render() below still run after the jobs, exactly as they did before.
+  await t29FirstPaint(render);
+  await T29_STARTUP_JOBS;
   await checkWeeklyEventPopup(u.username, u.classCode);
   await render();
 }

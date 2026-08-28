@@ -47,7 +47,7 @@ async function init() {
 
   // Same background jobs every other page runs on load, so visiting
   // Reports keeps the class ticking along like any other page.
-  await Promise.all([
+  const T29_STARTUP_JOBS = Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
@@ -57,10 +57,18 @@ async function init() {
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
   ]);
+  // Don't block the report on the day's jobs — fetch the archives
+  // alongside them and draw as soon as that one read lands, then redraw
+  // once the jobs have finished in case they changed anything.
+  ARCHIVES = await getReportArchives(CLASS_CODE);
+  await t29FirstPaint(showCurrentPeriod);
+  await T29_STARTUP_JOBS;
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
-
-  ARCHIVES = await getReportArchives(CLASS_CODE);
+  // ARCHIVES is deliberately NOT re-fetched here — archives only ever
+  // change when a teacher explicitly archives a report, never as a result
+  // of the background jobs above, so the copy fetched a moment ago is
+  // still current. Only the live report is regenerated.
   await showCurrentPeriod();
 }
 
