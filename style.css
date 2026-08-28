@@ -902,6 +902,34 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .greeting-row h1{margin:0;}
 .greeting-row .btn{margin-top:0;}
 
+/* ---------------- Report card section headings ----------------
+   The report is a stack of sections (net worth breakdown, income, spend,
+   loans) that ran together visually because these headings only had the
+   global 0.4em bottom margin and nothing above them — the last row of one
+   table sat almost flush against the next heading. Give each one real
+   breathing room above, plus a hairline rule, so the eye can find the
+   start of a section at a glance. Matches the treatment #profileBody h4
+   already uses in the teacher's student profile. */
+.report-print-area h3,
+.report-print-area h4{
+  margin:34px 0 14px;
+  padding-top:20px;
+  border-top:1.5px solid var(--line);
+  display:flex;align-items:center;gap:9px;
+}
+.report-print-area h3{font-size:1.05rem;}
+.report-print-area h4{font-size:.95rem;}
+.report-print-area h3 .icon,
+.report-print-area h4 .icon{color:var(--navy-700);flex-shrink:0;}
+/* The first heading in a report follows the summary chips, which already
+   provide the separation — a rule there would just look like a stray line. */
+.report-print-area > h3:first-child,
+.report-print-area > h4:first-child{margin-top:6px;padding-top:0;border-top:none;}
+/* Tables and bar charts get a little room under them too, so the gap above
+   the next heading reads as deliberate rather than as a collapsed margin. */
+.report-print-area .table-scroll,
+.report-print-area .rpt-bar-row:last-of-type{margin-bottom:6px;}
+
 /* ---------------- Quiz gate popup (quiz-gate.js) ----------------
    Reuses the .quiz-* question/option/score styling above inside the
    standard .anw-modal-overlay used by the event popups, so a gated module

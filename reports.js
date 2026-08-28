@@ -159,9 +159,12 @@ function renderArchiveList() {
   `).join("");
 }
 
+let MODAL_STUDENT = null;   // whichever student's detail modal is open, for the PDF export
+
 function openStudentReport(username) {
   const s = (VIEWED_REPORT.students || []).find(x => x.username === username);
   if (!s) return;
+  MODAL_STUDENT = s;
   document.getElementById("reportModalName").innerHTML =
     `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${s.name}`;
   document.getElementById("reportModalSubtitle").textContent =
@@ -172,6 +175,7 @@ function openStudentReport(username) {
 
 function closeStudentReport() {
   document.getElementById("reportModal").classList.add("hidden");
+  MODAL_STUDENT = null;
 }
 
 /* ---------------- Student view ---------------- */
@@ -189,7 +193,7 @@ function renderStudent() {
   history.push(s.netWorth);
 
   body.innerHTML = `
-    <h3 style="margin-top:18px;">${icon("chart", 16)} Net worth over time</h3>
+    <h3>${icon("chart", 16)} Net worth over time</h3>
     ${netWorthSparkline(history)}
     ${studentReportHTML(s)}
   `;
@@ -284,6 +288,28 @@ function printReport() {
   if (modalOpen) document.body.classList.add("printing-modal-only");
   window.print();
   setTimeout(() => document.body.classList.remove("printing-modal-only"), 500);
+}
+
+// Downloads the same report as an actual .pdf file rather than going
+// through the browser's print dialog. Which report depends on what's on
+// screen, exactly like printReport() above: the open student modal wins,
+// then a teacher gets the whole class, and a student gets their own card.
+// See pdf-report.js for the writer itself.
+async function downloadReportPDF() {
+  if (!VIEWED_REPORT) return;
+  const modalOpen = !document.getElementById("reportModal").classList.contains("hidden");
+  if (modalOpen && MODAL_STUDENT) {
+    downloadStudentReportPDF(MODAL_STUDENT, VIEWED_REPORT);
+    return;
+  }
+  if (IS_TEACHER) {
+    const cls = await getClassCached(CLASS_CODE);
+    downloadClassReportPDF(VIEWED_REPORT, (cls && cls.name) || "Class report");
+    return;
+  }
+  const me = (VIEWED_REPORT.students || []).find(x => x.username === CURRENT.username);
+  if (!me) { alert("There's no report data to download yet."); return; }
+  downloadStudentReportPDF(me, VIEWED_REPORT);
 }
 
 function reportToRows(report) {
