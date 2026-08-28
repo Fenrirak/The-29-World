@@ -108,13 +108,24 @@
     min-width: 0;
   }
   html.sidebar-nav .btn-logout .nav-label{ display: inline; }
-  /* The settings button has no text label in the markup (icon-only in
-     the top bar) — add one here purely visually; it already carries
-     aria-label="Settings" for assistive tech regardless of this. */
-  html.sidebar-nav .btn-icon-topbar::after{
+  /* The settings and notification buttons have no text label in the
+     markup (icon-only in the top bar) — add one here purely visually;
+     both already carry an aria-label for assistive tech regardless. */
+  html.sidebar-nav #settingsBtn::after{
     content: "Settings";
     font-size: .9rem;
     font-weight: 700;
+  }
+  html.sidebar-nav #notifBell::after{
+    content: "Activity";
+    font-size: .9rem;
+    font-weight: 700;
+  }
+  /* In the rail the unread badge sits inline after the label rather than
+     hanging off the corner of a square icon button. */
+  html.sidebar-nav #notifBell{ position: relative; }
+  html.sidebar-nav #notifBell .notif-dot{
+    position: static; margin-left: auto; border-color: transparent;
   }
   /* The legacy inline settings dropdown (student.html only) anchors
      bottom-left instead of top-right so it opens into the rail rather
@@ -242,7 +253,9 @@
     justify-content: flex-start; padding: 11px 12px; gap: 10px; min-width: 0;
   }
   html.sidebar-nav .btn-logout .nav-label{ display: inline; }
-  html.sidebar-nav .btn-icon-topbar::after{ content: "Settings"; font-size: .92rem; font-weight: 700; }
+  html.sidebar-nav #settingsBtn::after{ content: "Settings"; font-size: .92rem; font-weight: 700; }
+  html.sidebar-nav #notifBell::after{ content: "Activity"; font-size: .92rem; font-weight: 700; }
+  html.sidebar-nav #notifBell .notif-dot{ position: static; margin-left: auto; border-color: transparent; }
   html.sidebar-nav .settings-dropdown{ left: 0; right: auto; bottom: calc(100% + 8px); top: auto; width: 100%; }
 
   /* Keep the closed drawer out of the tab order so keyboard focus can't

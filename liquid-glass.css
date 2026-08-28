@@ -234,6 +234,27 @@ html.liquid-glass .settings-popover{
   border:1px solid rgba(255,255,255,0.6);
   box-shadow:0 24px 60px rgba(31,43,68,0.22), inset 0 1px 0 rgba(255,255,255,0.75);
 }
+/* ---------------- Notification panel ----------------
+   Same frosted treatment as the settings popover, with the list rows kept
+   translucent so the blur reads through the whole panel rather than
+   stopping at the first row. */
+html.liquid-glass .notif-panel{
+  border-radius:20px;
+  background:linear-gradient(165deg, rgba(255,255,255,0.80), rgba(255,255,255,0.58));
+  backdrop-filter:blur(var(--lg-blur-30)) saturate(180%) brightness(1.04);
+  -webkit-backdrop-filter:blur(var(--lg-blur-30)) saturate(180%) brightness(1.04);
+  border:1px solid rgba(255,255,255,0.6);
+  box-shadow:0 24px 60px rgba(31,43,68,0.22), inset 0 1px 0 rgba(255,255,255,0.75);
+}
+html.liquid-glass .notif-head{
+  background:linear-gradient(120deg, rgba(31,43,68,0.88), rgba(44,59,92,0.78));
+  border-bottom:1px solid rgba(255,255,255,0.35);
+}
+html.liquid-glass .notif-row{border-bottom:1px solid rgba(31,43,68,0.09);}
+html.liquid-glass .notif-row.unread{background:rgba(232,184,75,0.10);}
+html.liquid-glass a.notif-row:hover{background:rgba(255,255,255,0.5);}
+html.liquid-glass .notif-foot{background:rgba(255,255,255,0.35);border-top:1px solid rgba(31,43,68,0.09);}
+
 html.liquid-glass .lg-switch-track{
   background:rgba(31,43,68,0.18);
   backdrop-filter:blur(var(--lg-blur-6));

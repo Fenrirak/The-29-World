@@ -28,7 +28,13 @@ function badgeType(type) {
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
     "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"],
     "side-hustle": ["mint", "briefcase", "Side hustle"],
-    "store-gift": ["mint", "cart", "Free item"]
+    "store-gift": ["mint", "cart", "Free item"],
+    "quiz-reward": ["mint", "idcard", "Quiz passed"],
+    "p2p-buy": ["navy", "users", "Bought from a classmate"],
+    "p2p-sell": ["gold", "users", "Sold to a classmate"],
+    "property-rent": ["mint", "house", "Rent received"],
+    "truck-drive": ["mint", "car", "Truck drive"],
+    "loan-interest": ["coral", "handshake", "Loan interest"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -106,8 +112,8 @@ async function render() {
   const job = cls.jobs.find(j => j.id === me.jobId);
   document.getElementById("jobLabel").textContent = job ? `${job.title} — ${fmtMoney(job.wage)}/payday` : "No job assigned";
 
-  const lockedModules = await getLockedModulesForStudent(me.username, me.classCode);
-  applyModuleLocks(lockedModules);
+  const lockReasons = await getModuleLockReasons(me.username, me.classCode);
+  applyModuleLocks(lockReasons);
 
   await renderSideHustle(me, cls, lockedModules);
 
@@ -195,8 +201,8 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "store-gift"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment"].includes(t.type)) { sign = "-"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "store-gift", "quiz-reward", "p2p-sell", "property-rent", "truck-drive"].includes(t.type)) { sign = "+"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment", "p2p-buy", "loan-interest"].includes(t.type)) { sign = "-"; }
     else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
     else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
     else if (t.type === "gambling") { sign = t.note.includes("WON") ? "+" : "-"; }
@@ -210,24 +216,32 @@ async function render() {
 }
 
 /* ---------------- Lifestyle-based module locks ---------------- */
-function applyModuleLocks(locked) {
-  applyNavModuleLocks(locked);
+// `reasons` is the moduleKey -> "lifestyle" | "quiz" | "both" map from
+// getModuleLockReasons(). The two lock systems need different next steps
+// from the student — "your rating is too low" vs "go and pass the quiz" —
+// so the banner splits them out instead of blaming the rating for both.
+function applyModuleLocks(reasons) {
+  applyNavModuleLocks(reasons);
   const banner = document.getElementById("lifestyleLockBanner");
-  const lockedLabels = [];
-  document.querySelectorAll("nav a[data-module]").forEach(a => {
-    if (locked.includes(a.dataset.module)) {
-      const labelEl = a.querySelector(".nav-label");
-      lockedLabels.push(labelEl ? labelEl.textContent : a.dataset.module);
-    }
+  const labelFor = key => {
+    const a = document.querySelector(`nav a[data-module="${key}"] .nav-label`);
+    if (a) return a.textContent;
+    return key === "sidehustle" ? "Side hustle" : key;
+  };
+  const byLifestyle = [], byQuiz = [];
+  Object.keys(reasons || {}).forEach(key => {
+    if (reasons[key] !== "quiz") byLifestyle.push(labelFor(key));
+    if (reasons[key] !== "lifestyle") byQuiz.push(labelFor(key));
   });
-  if (locked.includes("sidehustle")) lockedLabels.push("Side hustle");
 
-  if (lockedLabels.length === 0) {
+  if (!byLifestyle.length && !byQuiz.length) {
     banner.classList.add("hidden");
-  } else {
-    banner.classList.remove("hidden");
-    banner.innerHTML = `<p style="margin:0;"><strong>Some modules are locked</strong><br>Your lifestyle rating is too low right now to use: ${lockedLabels.join(", ")}. Ask your teacher what's needed to unlock them.</p>`;
+    return;
   }
+  banner.classList.remove("hidden");
+  banner.innerHTML = `<p style="margin:0;"><strong>Some modules are locked</strong></p>` +
+    (byLifestyle.length ? `<p style="margin:6px 0 0;">Your lifestyle rating is too low right now to use: ${byLifestyle.join(", ")}. Ask your teacher what's needed to unlock them.</p>` : "") +
+    (byQuiz.length ? `<p style="margin:6px 0 0;">Pass the quiz set for each of these to unlock them: ${byQuiz.join(", ")}. <a href="quizzes.html">Go to Quizzes ›</a></p>` : "");
 }
 
 /* ---------------- Side hustle ----------------

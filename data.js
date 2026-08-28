@@ -535,6 +535,7 @@ async function createTeacherAndClass(name, username, password, className) {
     code, name: className || "Room " + code, teacher: username,
     students: [], jobs: [], companies: [],
     interestRate: 2, txns: [],
+    createdAt: Date.now(), reportArchives: [],
     payDay: "Fri",
     mortgageDay: "Fri",
     mortgageForceDueWeek: null,
@@ -1384,7 +1385,11 @@ async function repayLoan(username, loanId, amount) {
       if (user.balance < amount) throw new Error("BROKE");
       paid = Math.min(amount, loan.owed);
       loan.owed = Math.round((loan.owed - paid) * 100) / 100;
-      if (loan.owed <= 0) { loan.owed = 0; loan.status = "paid"; fullyPaid = true; }
+      // paidDate lets report cards judge on-time vs late repayment against
+      // dueDate — loans repaid before this field existed simply have no
+      // paidDate, and report cards show those as "unknown" rather than
+      // guessing.
+      if (loan.owed <= 0) { loan.owed = 0; loan.status = "paid"; loan.paidDate = nzDateKey(); fullyPaid = true; }
       t.update(userRef, { balance: Math.round((user.balance - amount) * 100) / 100, loans });
     });
   } catch (e) {
@@ -2466,7 +2471,13 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
   return rows;
 }
 
-async function resetClass(classCode) {
+async function resetClass(classCode, teacherUsername) {
+  // Save a permanent report-card snapshot of exactly what's about to be
+  // wiped — txns get cleared below and balances zeroed, so without this a
+  // reset would silently erase the only record of the term that just
+  // finished. Best-effort: a failed archive (e.g. offline) never blocks
+  // the reset itself, since teachers may still need to restart the class.
+  try { await archiveClassReport(classCode, teacherUsername); } catch (e) { /* proceed with reset regardless */ }
   const students = await getClassStudents(classCode);
   await Promise.all(students.map(s => usersCol().doc(s.username).update({
     balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: [], truckLicence: false, truckCheckins: {}
@@ -2476,7 +2487,10 @@ async function resetClass(classCode) {
   const vehicles = (cls.vehicles || []).map(v => ({ ...v, owners: [] }));
   await classesCol().doc(classCode).update({
     companies: [], txns: [], automations: [], jobApplications: [],
-    properties, vehicles, eventLog: []
+    properties, vehicles, eventLog: [],
+    // A fresh createdAt marks where the new term's report-card period
+    // should start counting from, same as when the class was first made.
+    createdAt: Date.now()
   });
   return true;
 }
@@ -2506,6 +2520,223 @@ async function storeItemsValue(username, classCode) {
     if (item && item.countsNetWorth !== false) total += item.price;
   });
   return Math.round(total * 100) / 100;
+}
+
+/* ===================== Reports ===================== */
+// Keeps the class doc from growing forever — same pattern as
+// MAX_STORED_TXNS. ~2 years of weekly report cards before the oldest
+// archive rolls off.
+const MAX_REPORT_ARCHIVES = 104;
+
+// Maps a transaction to a report-card bucket + human category label.
+// Independent from bank.js's own statement rendering (which needs a
+// literal +/- sign for every txn, including ones this treats as
+// "neutral") — report cards care about WHERE money went (spent vs saved/
+// invested vs earned), not just whether a number went up or down.
+//
+//   income   — money the student actually earned/received this period
+//   saved    — money proactively set aside/invested (savings, stocks,
+//              term deposits) — the numerator of "savings rate" below
+//   spent    — money that left the student on consumption, debt service,
+//              or losses — ranked to find the "biggest expense category"
+//   borrowed — loan principal received; tracked separately since it's
+//              debt, not income, and shouldn't inflate a savings rate
+//   (returning null leaves a txn out of every bucket — e.g. a $0
+//   store-gift, or a student's own savings-withdraw, which just moves
+//   their own money and is neither earned nor spent)
+const REPORT_INCOME_TYPES = {
+  wage: "Wages", interest: "Interest earned", "cash-interest": "Interest earned",
+  bonus: "Bonuses", "side-hustle": "Side hustle", "truck-drive": "Side hustle",
+  "property-rent": "Rent received", "insurance-claim": "Insurance claims",
+  "stock-sell": "Asset sales", "stock-close": "Asset sales", "property-sell": "Asset sales",
+  "vehicle-sell": "Asset sales", "store-sell": "Asset sales", "p2p-sell": "Asset sales",
+  "quiz-reward": "Bonuses",
+  "term-deposit-mature": "Term deposit returns", "term-deposit-early": "Term deposit returns",
+  welcome: "Welcome bonus"
+};
+const REPORT_SAVED_TYPES = {
+  "savings-deposit": "Savings account", "stock-buy": "Stocks", "term-deposit-open": "Term deposits"
+};
+const REPORT_SPENT_TYPES = {
+  "store-buy": "Store purchases", "p2p-buy": "Bought from classmates",
+  "vehicle-buy": "Transport", "truck-licence-buy": "Transport",
+  "property-buy": "Housing", "mortgage": "Housing", "insurance-buy": "Insurance",
+  "insurance-signup-fee": "Insurance", "loan-repayment": "Loan repayments",
+  "loan-interest": "Loan interest", fine: "Fines"
+};
+
+function classifyTxnForReport(t, username) {
+  const amt = Math.round(Math.abs(Number(t.amount) || 0) * 100) / 100;
+  if (!amt) return null; // $0 txns (store-gift, unclaimed insurance signup, etc.)
+
+  if (REPORT_INCOME_TYPES[t.type]) return { bucket: "income", category: REPORT_INCOME_TYPES[t.type], amount: amt };
+  if (REPORT_SAVED_TYPES[t.type]) return { bucket: "saved", category: REPORT_SAVED_TYPES[t.type], amount: amt };
+  if (REPORT_SPENT_TYPES[t.type]) return { bucket: "spent", category: REPORT_SPENT_TYPES[t.type], amount: amt };
+  if (t.type === "loan-taken") return { bucket: "borrowed", category: "Loans taken", amount: amt };
+
+  // Gambling always logs `from: username` regardless of outcome (see
+  // placeRouletteBet/bjSettle) — win/loss only lives in the note text.
+  if (t.type === "gambling") {
+    const won = (t.note || "").includes("WON");
+    return won ? { bucket: "income", category: "Gambling winnings", amount: amt }
+               : { bucket: "spent", category: "Gambling losses", amount: amt };
+  }
+  // Small weekly events always log `to: student`, with the sign of
+  // `amount` (not to/from) telling a windfall from a loss.
+  if (t.type === "event") {
+    return t.amount < 0 ? { bucket: "spent", category: "Random events", amount: amt }
+                         : { bucket: "income", category: "Random events", amount: amt };
+  }
+  // Big events, unlike small ones, DO use to/from to mean windfall vs
+  // cost (see processWeeklyBigEvents / resolveBigEvent).
+  if (t.type === "big-event") {
+    if (t.to === username) return { bucket: "income", category: "Random events", amount: amt };
+    if (t.from === username) return { bucket: "spent", category: "Random events", amount: amt };
+    return null;
+  }
+  if (t.type === "transfer" || t.type === "automation") {
+    if (t.to === username) return { bucket: "income", category: "Received from classmates", amount: amt };
+    if (t.from === username) return { bucket: "spent", category: "Sent to classmates", amount: amt };
+    return null;
+  }
+  return null; // savings-withdraw, property-occupancy, store-gift, and any future/unknown type
+}
+
+// Builds one student's report-card data for the period starting at
+// periodStart (ms epoch). Net worth fields are a live snapshot (a point in
+// time); income/saved/spent fields only cover txns still retained on the
+// class doc within that period — see MAX_STORED_TXNS. Generating reports
+// on a regular cadence (e.g. weekly) is what keeps that window accurate
+// rather than truncated by the class-wide cap.
+function buildStudentReportData(student, cls, periodStart) {
+  const username = student.username;
+  const periodTxns = (cls.txns || []).filter(t =>
+    (t.to === username || t.from === username) &&
+    (t.ts === undefined || t.ts >= periodStart)
+  );
+
+  const income = {}, saved = {}, spent = {};
+  let incomeTotal = 0, savedTotal = 0, spentTotal = 0, borrowedTotal = 0;
+  periodTxns.forEach(t => {
+    const c = classifyTxnForReport(t, username);
+    if (!c) return;
+    if (c.bucket === "income") { income[c.category] = Math.round(((income[c.category] || 0) + c.amount) * 100) / 100; incomeTotal += c.amount; }
+    else if (c.bucket === "saved") { saved[c.category] = Math.round(((saved[c.category] || 0) + c.amount) * 100) / 100; savedTotal += c.amount; }
+    else if (c.bucket === "spent") { spent[c.category] = Math.round(((spent[c.category] || 0) + c.amount) * 100) / 100; spentTotal += c.amount; }
+    else if (c.bucket === "borrowed") { borrowedTotal += c.amount; }
+  });
+  const topExpense = Object.entries(spent).sort((a, b) => b[1] - a[1])[0] || null;
+
+  // Loan history lives permanently on the student doc (never capped like
+  // txns), so this is always complete regardless of the txn window above.
+  const loans = (student.loans || []).map(l => ({
+    id: l.id, principal: l.principal, rate: l.rate, termWeeks: l.termWeeks,
+    takenDate: l.takenDate, dueDate: l.dueDate, status: l.status, owed: l.owed,
+    paidDate: l.paidDate || null,
+    onTime: l.status === "paid" ? (l.paidDate ? l.paidDate <= l.dueDate : null) : null
+  }));
+
+  // Current net worth snapshot — same breakdown as classLeaderboard().
+  let invested = 0;
+  (cls.companies || []).forEach(co => { invested += (co.holders[username] || 0) * co.price; });
+  let storeValue = 0;
+  (student.storeItems || []).forEach(itemId => {
+    const item = (cls.storeItems || []).find(i => i.id === itemId);
+    if (item && item.countsNetWorth !== false) storeValue += item.price;
+  });
+  let propertyValue = 0, mortgageOwed = 0;
+  (cls.properties || []).forEach(p => {
+    if (p.owner !== username) return;
+    propertyValue += p.price;
+    if (p.mortgage) mortgageOwed += (p.mortgage.weeklyPayment || 0) * (p.mortgage.weeksLeft || 0);
+  });
+  let vehicleValue = 0;
+  (cls.vehicles || []).forEach(v => { if ((v.owners || []).includes(username)) vehicleValue += v.price; });
+  const savings = student.savings || 0;
+  const termDeposits = (student.termDeposits || []).reduce((s, d) => s + d.amount, 0);
+  const activeLoanOwed = loans.filter(l => l.status === "active").reduce((s, l) => s + l.owed, 0);
+  const owed = Math.round((activeLoanOwed + mortgageOwed) * 100) / 100;
+  const netWorth = Math.round((student.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits - owed) * 100) / 100;
+
+  return {
+    username, name: student.name,
+    netWorth, balance: Math.round(student.balance * 100) / 100, savings: Math.round(savings * 100) / 100,
+    invested: Math.round(invested * 100) / 100, storeValue: Math.round(storeValue * 100) / 100,
+    propertyValue: Math.round(propertyValue * 100) / 100, vehicleValue: Math.round(vehicleValue * 100) / 100,
+    termDeposits: Math.round(termDeposits * 100) / 100, owed,
+    incomeTotal: Math.round(incomeTotal * 100) / 100,
+    savedTotal: Math.round(savedTotal * 100) / 100,
+    spentTotal: Math.round(spentTotal * 100) / 100,
+    borrowedTotal: Math.round(borrowedTotal * 100) / 100,
+    // Percent of income that got saved/invested rather than spent, to 1dp.
+    // Null (not 0) when there was no income at all this period, so the UI
+    // can show "—" instead of a misleading 0%.
+    savingsRate: incomeTotal > 0 ? Math.round((savedTotal / incomeTotal) * 1000) / 10 : null,
+    income, saved, spent,
+    topExpenseCategory: topExpense ? { category: topExpense[0], amount: topExpense[1] } : null,
+    loans
+  };
+}
+
+// Computes a live, unsaved report for the whole class covering the period
+// since the last archive (or since the class was created / a 7-day
+// fallback for older classes with no createdAt). Safe to call as often as
+// you like — this never writes anything, so viewing it doesn't cost a
+// class its "next" period.
+async function generateClassReport(classCode) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  if (!cls) return null;
+  const students = await getClassStudents(classCode, cls);
+  const archives = cls.reportArchives || [];
+  const lastArchive = archives.length ? archives[archives.length - 1] : null;
+  const periodStart = lastArchive ? lastArchive.ts : (cls.createdAt || (Date.now() - 7 * 86400000));
+  return {
+    classCode, className: cls.name, periodStart, periodEnd: Date.now(),
+    students: students.map(s => buildStudentReportData(s, cls, periodStart))
+  };
+}
+
+// Permanently saves the current live report as an archive entry, so it
+// survives future activity rolling old txns off the class doc (and
+// survives resetClass(), which calls this automatically before wiping
+// anything). Can also be triggered manually from the Reports page at any
+// time — e.g. "save this week's report cards" without resetting the class.
+async function archiveClassReport(classCode, generatedBy) {
+  const report = await generateClassReport(classCode);
+  if (!report) return null;
+  const entry = {
+    id: uid("report"), date: nowStr(), ts: Date.now(),
+    generatedBy: generatedBy || null,
+    periodStart: report.periodStart, periodEnd: report.periodEnd,
+    students: report.students
+  };
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = snap.data();
+    const archives = (liveCls.reportArchives || []).concat([entry]);
+    if (archives.length > MAX_REPORT_ARCHIVES) archives.splice(0, archives.length - MAX_REPORT_ARCHIVES);
+    t.update(classRef, { reportArchives: archives });
+  });
+  return entry;
+}
+
+async function getReportArchives(classCode) {
+  const cls = await getClassCached(classCode);
+  return (cls && cls.reportArchives) || [];
+}
+
+async function deleteReportArchive(classCode, archiveId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = snap.data();
+    cls.reportArchives = (cls.reportArchives || []).filter(a => a.id !== archiveId);
+    t.update(classRef, { reportArchives: cls.reportArchives });
+  });
+  return true;
 }
 
 /* ===================== Gambling (Roulette) ===================== */
@@ -3576,6 +3807,12 @@ async function saveWageTaxBrackets(classCode, brackets) {
 /* ===================== Class defaults for new modules ===================== */
 function withNewModuleDefaults(cls) {
   if (!cls) return cls;
+  // Classes created before report cards existed have no createdAt — leave
+  // it unset (null) rather than backdating to "now", since generateClassReport
+  // already falls back sensibly (recent txn history, or a 7-day window)
+  // when this is missing.
+  if (cls.createdAt === undefined) cls.createdAt = null;
+  cls.reportArchives = cls.reportArchives || [];
   cls.insurancePlans = cls.insurancePlans || [];
   cls.storeItems = cls.storeItems || [];
   cls.storeItems.forEach(it => {
@@ -3662,6 +3899,38 @@ function withNewModuleDefaults(cls) {
     cls.wageTaxBrackets = legacyWageRate ? [{ upTo: null, rate: Number(legacyWageRate) || 0 }] : [];
   }
   delete cls.taxRates.wage;
+  /* ---- Financial-literacy quizzes (see the Quizzes section below) ----
+     cls.quizzes holds the teacher's quiz definitions; cls.quizGate.enabled
+     is the single master switch that decides whether failing/not having
+     taken a quiz actually LOCKS its module, or whether quizzes are just
+     optional practice. Off by default so turning the app's existing
+     classes on to this feature can never suddenly lock a student out of a
+     module they were using yesterday. */
+  cls.quizzes = cls.quizzes || [];
+  cls.quizGate = cls.quizGate || {};
+  if (cls.quizGate.enabled === undefined) cls.quizGate.enabled = false;
+
+  /* ---- Peer-to-peer marketplace (see the Marketplace section below) ----
+     Students listing their own store items / vehicles / properties to each
+     other at a price they choose, rather than at the teacher's fixed store
+     price. Every limit here is teacher-configurable — the defaults are a
+     deliberately conservative starting point (a 25-200% price band around
+     the original price, 3 listings each, no approval queue, no fee) so a
+     class that never opens the settings still gets something sane. */
+  cls.marketplace = cls.marketplace || {};
+  const _mp = cls.marketplace;
+  if (_mp.enabled === undefined) _mp.enabled = true;
+  if (_mp.requireApproval === undefined) _mp.requireApproval = false;
+  if (_mp.allowOffers === undefined) _mp.allowOffers = true;
+  if (_mp.minPricePct === undefined) _mp.minPricePct = 25;
+  if (_mp.maxPricePct === undefined) _mp.maxPricePct = 200;
+  if (_mp.maxActiveListings === undefined) _mp.maxActiveListings = 3;
+  if (_mp.feePct === undefined) _mp.feePct = 0;
+  if (_mp.allowStore === undefined) _mp.allowStore = true;
+  if (_mp.allowVehicle === undefined) _mp.allowVehicle = true;
+  if (_mp.allowProperty === undefined) _mp.allowProperty = false;
+  cls.listings = cls.listings || [];
+
   cls.bigEventDefs = cls.bigEventDefs || [];
   cls.bigEventLog = cls.bigEventLog || [];
   cls.lastBigEventWeekRun = cls.lastBigEventWeekRun || null;
@@ -5065,6 +5334,7 @@ const LIFESTYLE_LOCKABLE_MODULES = [
   { key: "tax", label: "Tax" },
   { key: "bigevents", label: "Big Events" },
   { key: "gambling", label: "Gambling" },
+  { key: "marketplace", label: "Marketplace" },
   { key: "sidehustle", label: "Side hustle" }
 ];
 
@@ -5083,25 +5353,74 @@ async function saveLifestyleLock(classCode, threshold, modules) {
 // Pure version of the lock check, for callers that already have `cls` and
 // `user` loaded (see lifestyleRatingFromData above for why). Mirrors
 // getLockedModulesForStudent()'s logic exactly, just without fetching.
-function getLockedModulesForStudentFromData(cls, user, username) {
+function getLifestyleLockedModulesFromData(cls, user, username) {
   const lock = cls.lifestyleLock;
   if (!lock || !lock.modules || lock.modules.length === 0) return [];
   const score = lifestyleRatingFromData(cls, user, username);
   if (score > lock.threshold) return [];
   return lock.modules;
 }
+
+// Modules a student can't get into yet because they haven't PASSED the
+// quiz their teacher attached to that module. Only bites while the
+// teacher's master quiz-gate switch is on (cls.quizGate.enabled) — with it
+// off, quizzes are still there to take, they just don't lock anything.
+// See the Quizzes section for the quiz/result shapes.
+function getQuizLockedModulesFromData(cls, user) {
+  if (!cls.quizGate || !cls.quizGate.enabled) return [];
+  if (!user || user.role === "teacher") return [];
+  const results = user.quizResults || {};
+  const locked = [];
+  (cls.quizzes || []).forEach(q => {
+    if (!q.active || !q.moduleKey) return;
+    if (!LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === q.moduleKey)) return;
+    const r = results[q.id];
+    if (!r || !r.passed) {
+      if (!locked.includes(q.moduleKey)) locked.push(q.moduleKey);
+    }
+  });
+  return locked;
+}
+
+// The two lock systems (lifestyle rating, quiz gate) are independent and
+// can each lock the same module, so this returns a map of
+// moduleKey -> "lifestyle" | "quiz" | "both" rather than a bare list. The
+// UI uses it to explain the RIGHT thing to a student — "your rating is too
+// low" and "you need to pass a quiz first" need very different next steps.
+function getModuleLockReasonsFromData(cls, user, username) {
+  const reasons = {};
+  getLifestyleLockedModulesFromData(cls, user, username).forEach(k => { reasons[k] = "lifestyle"; });
+  getQuizLockedModulesFromData(cls, user).forEach(k => {
+    reasons[k] = reasons[k] ? "both" : "quiz";
+  });
+  return reasons;
+}
+
+function getLockedModulesForStudentFromData(cls, user, username) {
+  return Object.keys(getModuleLockReasonsFromData(cls, user, username));
+}
 function isModuleLockedForStudentFromData(cls, user, username, moduleKey) {
   return getLockedModulesForStudentFromData(cls, user, username).includes(moduleKey);
 }
-async function getLockedModulesForStudent(username, classCode) {
-  const cls = withNewModuleDefaults(await getClassCached(classCode));
-  // Keep the original short-circuit: most classes don't use a lifestyle
-  // lock at all, so avoid the extra getUser() read whenever there's
-  // nothing configured to check against.
+
+// Same short-circuit as before, just widened: skip the extra getUser()
+// read only when NEITHER lock system has anything configured to check
+// against (which is still the common case for most classes).
+function _classHasAnyModuleLock(cls) {
   const lock = cls.lifestyleLock;
-  if (!lock || !lock.modules || lock.modules.length === 0) return [];
+  const lifestyleOn = !!(lock && lock.modules && lock.modules.length);
+  const quizOn = !!(cls.quizGate && cls.quizGate.enabled && (cls.quizzes || []).some(q => q.active && q.moduleKey));
+  return lifestyleOn || quizOn;
+}
+
+async function getModuleLockReasons(username, classCode) {
+  const cls = withNewModuleDefaults(await getClassCached(classCode));
+  if (!cls || !_classHasAnyModuleLock(cls)) return {};
   const user = await getUserCached(username);
-  return getLockedModulesForStudentFromData(cls, user, username);
+  return getModuleLockReasonsFromData(cls, user, username);
+}
+async function getLockedModulesForStudent(username, classCode) {
+  return Object.keys(await getModuleLockReasons(username, classCode));
 }
 async function isModuleLockedForStudent(username, classCode, moduleKey) {
   const locked = await getLockedModulesForStudent(username, classCode);
@@ -5111,20 +5430,720 @@ async function isModuleLockedForStudent(username, classCode, moduleKey) {
 // Shared across every page's topbar: greys out nav links to locked
 // modules and blocks navigating to them. Pages just need
 // nav a[data-module="key"] attributes matching LIFESTYLE_LOCKABLE_MODULES.
+const MODULE_LOCK_MESSAGE = {
+  lifestyle: "This module is locked because your lifestyle rating is too low right now. Check with your teacher about what's needed to unlock it.",
+  quiz: "This module is locked until you pass the quiz your teacher set for it. Head to the Quizzes page to take it.",
+  both: "This module is locked: you need to pass its quiz on the Quizzes page, and your lifestyle rating is too low right now."
+};
+
+// `lockedModules` may be either the plain array this has always taken, or
+// the moduleKey -> reason map from getModuleLockReasons(). Accepting both
+// keeps every existing caller working unchanged while letting newer ones
+// pass the reason through for a more useful message.
 function applyNavModuleLocks(lockedModules) {
+  const reasons = Array.isArray(lockedModules)
+    ? lockedModules.reduce((acc, k) => { acc[k] = "lifestyle"; return acc; }, {})
+    : (lockedModules || {});
   document.querySelectorAll("nav a[data-module]").forEach(a => {
     const key = a.dataset.module;
-    const isLocked = (lockedModules || []).includes(key);
-    a.classList.toggle("nav-locked", isLocked);
-    if (isLocked) {
+    const reason = reasons[key];
+    a.classList.toggle("nav-locked", !!reason);
+    if (reason) {
       a.onclick = (e) => {
         e.preventDefault();
-        alert("This module is locked because your lifestyle rating is too low right now. Check with your teacher about what's needed to unlock it.");
+        alert(MODULE_LOCK_MESSAGE[reason] || MODULE_LOCK_MESSAGE.lifestyle);
       };
     } else {
       a.onclick = null;
     }
   });
+}
+
+/* ===================== Financial-literacy quizzes =====================
+   Short teacher-written quizzes ("how compound interest works", "how
+   mortgages work") that a student must PASS before the module they're
+   attached to unlocks. This deliberately reuses the module-lock plumbing
+   the lifestyle lock already established (see LIFESTYLE_LOCKABLE_MODULES /
+   getModuleLockReasonsFromData above) rather than inventing a second one,
+   so every page that already greys out a locked nav link keeps working
+   with no change.
+
+   Shapes:
+     cls.quizGate = { enabled }                 // master on/off switch
+     cls.quizzes  = [{
+       id, title, description,
+       moduleKey,          // "" = practice only, locks nothing
+       passMark,           // percent, 0-100
+       reward,             // one-off cash bonus the first time it's passed
+       active,
+       questions: [{ id, text, options: [..], answer: <index>, explain }]
+     }]
+     user.quizResults = {
+       [quizId]: { passed, bestPct, lastPct, attempts, lastDate, rewarded }
+     }
+   Results live on the USER doc (not the class) for the same reason
+   balances do: it's per-student state read on every page load, and keeping
+   it off the shared class doc avoids every student's attempt writing to
+   the one document the whole class already contends on.
+====================================================================== */
+const QUIZ_DEFAULT_PASS_MARK = 70;
+const QUIZ_MAX_QUESTIONS = 20;
+
+// Accepts the loose shape the teacher UI collects and returns a clean,
+// fully-populated quiz object. Questions with no text, or fewer than 2
+// options, are dropped rather than saved half-formed.
+function normalizeQuiz(q, existing) {
+  const questions = (q.questions || []).slice(0, QUIZ_MAX_QUESTIONS).map(raw => {
+    const options = (raw.options || []).map(o => String(o || "").trim()).filter(o => o !== "");
+    const text = String(raw.text || "").trim();
+    if (!text || options.length < 2) return null;
+    let answer = Math.floor(Number(raw.answer));
+    if (!(answer >= 0 && answer < options.length)) answer = 0;
+    return {
+      id: raw.id || uid("qq"),
+      text, options, answer,
+      explain: String(raw.explain || "").trim()
+    };
+  }).filter(Boolean);
+
+  return {
+    id: (existing && existing.id) || q.id || uid("quiz"),
+    title: String(q.title || "Untitled quiz").trim(),
+    description: String(q.description || "").trim(),
+    moduleKey: LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === q.moduleKey) ? q.moduleKey : "",
+    passMark: Math.max(0, Math.min(100, Math.round(Number(q.passMark)) || QUIZ_DEFAULT_PASS_MARK)),
+    reward: Math.max(0, Math.round((Number(q.reward) || 0) * 100) / 100),
+    active: q.active === undefined ? true : !!q.active,
+    questions
+  };
+}
+
+async function setQuizGateEnabled(classCode, enabled) {
+  await classesCol().doc(classCode).update({ quizGate: { enabled: !!enabled } });
+  return !!enabled;
+}
+
+async function addQuiz(classCode, quiz) {
+  const clean = normalizeQuiz(quiz);
+  if (!clean.questions.length) return { ok: false, error: "Add at least one question with two or more answer options." };
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.quizzes.push(clean);
+    t.update(classRef, { quizzes: cls.quizzes });
+  });
+  return { ok: true, quiz: clean };
+}
+
+async function updateQuiz(classCode, quizId, quiz) {
+  const classRef = classesCol().doc(classCode);
+  let error = null;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const idx = cls.quizzes.findIndex(q => q.id === quizId);
+    if (idx === -1) { error = "That quiz couldn't be found."; return; }
+    const clean = normalizeQuiz(quiz, cls.quizzes[idx]);
+    if (!clean.questions.length) { error = "Add at least one question with two or more answer options."; return; }
+    cls.quizzes[idx] = clean;
+    t.update(classRef, { quizzes: cls.quizzes });
+  });
+  return error ? { ok: false, error } : { ok: true };
+}
+
+async function removeQuiz(classCode, quizId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.quizzes = cls.quizzes.filter(q => q.id !== quizId);
+    t.update(classRef, { quizzes: cls.quizzes });
+  });
+  return { ok: true };
+}
+
+async function setQuizActive(classCode, quizId, active) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const q = cls.quizzes.find(x => x.id === quizId);
+    if (!q) return;
+    q.active = !!active;
+    t.update(classRef, { quizzes: cls.quizzes });
+  });
+  return { ok: true };
+}
+
+function quizResultFor(user, quizId) {
+  return ((user && user.quizResults) || {})[quizId] || null;
+}
+
+// Grades one attempt and records it. Returns a per-question review so the
+// student immediately sees WHICH ones they got wrong and why — the whole
+// point of a literacy quiz is the explanation, not the score.
+async function submitQuizAttempt(username, classCode, quizId, answers) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let outcome = null, rewardPaid = 0, quizTitle = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const quiz = cls.quizzes.find(q => q.id === quizId);
+      if (!quiz || !quiz.active) throw new Error("NOT_FOUND");
+      quizTitle = quiz.title;
+
+      const review = quiz.questions.map(q => {
+        const raw = answers ? answers[q.id] : undefined;
+        const chosen = (raw === undefined || raw === null || raw === "") ? null : Number(raw);
+        return {
+          id: q.id, text: q.text, options: q.options,
+          chosen, answer: q.answer, correct: chosen === q.answer, explain: q.explain
+        };
+      });
+      const total = review.length;
+      const correct = review.filter(r => r.correct).length;
+      const pct = total ? Math.round((correct / total) * 100) : 0;
+      const passed = pct >= quiz.passMark;
+
+      const results = user.quizResults || {};
+      const prev = results[quizId] || { passed: false, bestPct: 0, attempts: 0, rewarded: false };
+      const newlyPassed = passed && !prev.passed;
+      const payReward = newlyPassed && quiz.reward > 0 && !prev.rewarded && user.role !== "teacher";
+      results[quizId] = {
+        passed: prev.passed || passed,
+        bestPct: Math.max(prev.bestPct || 0, pct),
+        lastPct: pct,
+        attempts: (prev.attempts || 0) + 1,
+        lastDate: nzDateKey(),
+        rewarded: prev.rewarded || payReward
+      };
+
+      const update = { quizResults: results };
+      // The reward is paid once, on the first pass ever — retaking a quiz
+      // you've already passed can never farm it again.
+      if (payReward) {
+        rewardPaid = quiz.reward;
+        update.balance = Math.round((user.balance + quiz.reward) * 100) / 100;
+      }
+      t.update(userRef, update);
+      outcome = { ok: true, correct, total, pct, passed, newlyPassed, passMark: quiz.passMark, review };
+    });
+  } catch (e) {
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That quiz couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  if (rewardPaid > 0) {
+    await logTxn(classCode, { type: "quiz-reward", to: username, amount: rewardPaid, note: `Passed the quiz: ${quizTitle}` });
+  }
+  if (outcome) outcome.reward = rewardPaid;
+  return outcome || { ok: false, error: "Something went wrong. Please try again." };
+}
+
+// Teacher override: wipe one student's result for a quiz so they start
+// again from scratch (which locks the module back up if the gate is on).
+async function resetQuizResult(username, quizId) {
+  const userRef = usersCol().doc(username);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(userRef);
+    if (!snap.exists) return;
+    const user = snap.data();
+    const results = user.quizResults || {};
+    delete results[quizId];
+    t.update(userRef, { quizResults: results });
+  });
+  return { ok: true };
+}
+
+/* ===================== Peer-to-peer marketplace =====================
+   Students listing things they already own — store items, vehicles,
+   properties — to each other at a price THEY set, instead of everything
+   flowing through the teacher's fixed-price store. The teacher keeps the
+   guardrails (see cls.marketplace in withNewModuleDefaults): which asset
+   types can be traded, a price band as a percentage of the original
+   listed price, how many listings each student can have open at once,
+   whether listings need approving first, whether haggling via offers is
+   allowed, and an optional class fee skimmed off each sale.
+
+   Ownership is NOT duplicated anywhere for this — a sale simply moves the
+   asset exactly the way the existing store/transport/property code does
+   (user.storeItems entries, vehicle.owners, property.owner), so lifestyle
+   ratings, net worth and every existing page pick the change up with no
+   extra bookkeeping.
+
+     cls.listings = [{
+       id, seller, assetType: "store"|"vehicle"|"property", assetId,
+       name, description, price, refPrice,
+       status: "pending"|"active"|"sold"|"cancelled"|"rejected",
+       createdKey, ts, soldTo, soldTs, soldPrice, fee, rejectReason,
+       offers: [{ id, buyer, amount, note, status, ts }]
+     }]
+====================================================================== */
+const MARKETPLACE_ASSET_LABEL = { store: "Store item", vehicle: "Vehicle", property: "Property" };
+const MAX_STORED_LISTINGS = 120;
+
+async function saveMarketplaceSettings(classCode, settings) {
+  const clean = {
+    enabled: !!settings.enabled,
+    requireApproval: !!settings.requireApproval,
+    allowOffers: !!settings.allowOffers,
+    allowStore: !!settings.allowStore,
+    allowVehicle: !!settings.allowVehicle,
+    allowProperty: !!settings.allowProperty,
+    minPricePct: Math.max(0, Math.round(Number(settings.minPricePct) || 0)),
+    maxPricePct: Math.max(0, Math.round(Number(settings.maxPricePct) || 0)),
+    maxActiveListings: Math.max(0, Math.round(Number(settings.maxActiveListings) || 0)),
+    feePct: Math.max(0, Math.min(100, Math.round((Number(settings.feePct) || 0) * 10) / 10))
+  };
+  // A max below the min is always a typo, and would silently make every
+  // price invalid — swap them rather than saving something unusable.
+  if (clean.maxPricePct > 0 && clean.maxPricePct < clean.minPricePct) {
+    const tmp = clean.minPricePct; clean.minPricePct = clean.maxPricePct; clean.maxPricePct = tmp;
+  }
+  await classesCol().doc(classCode).update({ marketplace: clean });
+  return clean;
+}
+
+function listingIsOpen(l) { return l.status === "active" || l.status === "pending"; }
+
+// The allowed price window for an asset, given the teacher's percentage
+// band. A max of 0 means "no upper limit".
+function marketplacePriceBounds(cls, refPrice) {
+  const mp = cls.marketplace || {};
+  const min = Math.round(refPrice * (mp.minPricePct || 0)) / 100;
+  const max = mp.maxPricePct > 0 ? Math.round(refPrice * mp.maxPricePct) / 100 : null;
+  return { min: Math.round(min * 100) / 100, max: max === null ? null : Math.round(max * 100) / 100 };
+}
+
+// Everything this student currently owns that they're allowed to list,
+// with copies they've already got up for sale subtracted out. Store items
+// are fungible (you can own three of the same thing), so those come back
+// with a `count` rather than one entry per copy.
+function getSellableAssets(cls, user) {
+  const mp = cls.marketplace || {};
+  const username = user.username;
+  const open = (cls.listings || []).filter(l => l.seller === username && listingIsOpen(l));
+  const out = [];
+
+  if (mp.allowStore) {
+    const ownedCounts = {};
+    (user.storeItems || []).forEach(id => { ownedCounts[id] = (ownedCounts[id] || 0) + 1; });
+    Object.keys(ownedCounts).forEach(itemId => {
+      const item = (cls.storeItems || []).find(i => i.id === itemId);
+      if (!item) return;
+      const listedCount = open.filter(l => l.assetType === "store" && l.assetId === itemId).length;
+      const available = ownedCounts[itemId] - listedCount;
+      if (available > 0) {
+        out.push({
+          assetType: "store", assetId: itemId, name: item.name, refPrice: item.price,
+          count: available, note: item.stars ? `${item.stars}★ lifestyle` : ""
+        });
+      }
+    });
+  }
+
+  if (mp.allowVehicle) {
+    (cls.vehicles || []).forEach(v => {
+      if (!(v.owners || []).includes(username)) return;
+      if (open.some(l => l.assetType === "vehicle" && l.assetId === v.id)) return;
+      out.push({
+        assetType: "vehicle", assetId: v.id, name: v.name, refPrice: v.price, count: 1,
+        note: normalizeVehicleType(v.type) + (v.comfort ? ` · ${v.comfort}★` : "")
+      });
+    });
+  }
+
+  if (mp.allowProperty) {
+    (cls.properties || []).forEach(p => {
+      if (p.owner !== username) return;
+      if (open.some(l => l.assetType === "property" && l.assetId === p.id)) return;
+      // A property still being paid off can't change hands — the mortgage
+      // is an agreement with the bank, not something a classmate inherits.
+      if (p.mortgage && p.mortgage.weeksLeft > 0) {
+        out.push({
+          assetType: "property", assetId: p.id, name: p.name, refPrice: p.price, count: 1,
+          blocked: "Still on a mortgage — pay it off before you can sell it on."
+        });
+        return;
+      }
+      out.push({
+        assetType: "property", assetId: p.id, name: p.name, refPrice: p.price, count: 1,
+        note: p.comfort ? `${p.comfort}★ comfort` : ""
+      });
+    });
+  }
+  return out;
+}
+
+// Confirms — inside a live transaction — that the seller really still owns
+// the thing they listed. Ownership can change between listing and sale
+// (sold back to the store, repossessed by the teacher), so this is
+// re-checked at the moment money moves, never trusted from the listing.
+function _marketplaceStillOwns(cls, user, listing) {
+  if (listing.assetType === "store") return (user.storeItems || []).includes(listing.assetId);
+  if (listing.assetType === "vehicle") {
+    const v = (cls.vehicles || []).find(x => x.id === listing.assetId);
+    return !!v && (v.owners || []).includes(user.username);
+  }
+  if (listing.assetType === "property") {
+    const p = (cls.properties || []).find(x => x.id === listing.assetId);
+    return !!p && p.owner === user.username && !(p.mortgage && p.mortgage.weeksLeft > 0);
+  }
+  return false;
+}
+
+async function createListing(username, classCode, { assetType, assetId, price, description }) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let created = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = Object.assign({ username }, userSnap.data());
+      const cls = withNewModuleDefaults(classSnap.data());
+      const mp = cls.marketplace;
+      if (!mp.enabled) throw new Error("OFF");
+      if (assetType === "store" && !mp.allowStore) throw new Error("TYPE_OFF");
+      if (assetType === "vehicle" && !mp.allowVehicle) throw new Error("TYPE_OFF");
+      if (assetType === "property" && !mp.allowProperty) throw new Error("TYPE_OFF");
+
+      const sellable = getSellableAssets(cls, user)
+        .find(a => a.assetType === assetType && a.assetId === assetId && !a.blocked);
+      if (!sellable) throw new Error("NOT_OWNED");
+
+      const openMine = (cls.listings || []).filter(l => l.seller === username && listingIsOpen(l));
+      if (mp.maxActiveListings > 0 && openMine.length >= mp.maxActiveListings) throw new Error("TOO_MANY");
+
+      const amount = Math.round(Number(price) * 100) / 100;
+      if (!(amount > 0)) throw new Error("BAD_PRICE");
+      const bounds = marketplacePriceBounds(cls, sellable.refPrice);
+      if (amount < bounds.min) throw new Error("UNDER_MIN");
+      if (bounds.max !== null && amount > bounds.max) throw new Error("OVER_MAX");
+
+      created = {
+        id: uid("lst"), seller: username, assetType, assetId,
+        name: sellable.name, refPrice: sellable.refPrice,
+        description: String(description || "").trim().slice(0, 240),
+        price: amount,
+        status: mp.requireApproval ? "pending" : "active",
+        createdKey: nzDateKey(), ts: Date.now(),
+        soldTo: null, soldTs: null, soldPrice: null, fee: 0, offers: []
+      };
+      cls.listings.push(created);
+      // Keeps the class doc from growing forever — same idea as
+      // MAX_STORED_TXNS. Only ever trims FINISHED listings, oldest first,
+      // so nothing still for sale can be dropped out from under anyone.
+      if (cls.listings.length > MAX_STORED_LISTINGS) {
+        const closed = cls.listings.filter(l => !listingIsOpen(l)).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+        const dropIds = new Set(closed.slice(0, cls.listings.length - MAX_STORED_LISTINGS).map(l => l.id));
+        cls.listings = cls.listings.filter(l => !dropIds.has(l.id));
+      }
+      t.update(classRef, { listings: cls.listings });
+    });
+  } catch (e) {
+    if (e.message === "OFF") return { ok: false, error: "The marketplace is switched off for your class right now." };
+    if (e.message === "TYPE_OFF") return { ok: false, error: "Your teacher doesn't allow that kind of thing to be traded." };
+    if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that (or it's already listed)." };
+    if (e.message === "TOO_MANY") return { ok: false, error: "You already have the maximum number of listings up at once." };
+    if (e.message === "BAD_PRICE") return { ok: false, error: "Enter a price greater than zero." };
+    if (e.message === "UNDER_MIN") return { ok: false, error: "That price is below the minimum your teacher allows for this item." };
+    if (e.message === "OVER_MAX") return { ok: false, error: "That price is above the maximum your teacher allows for this item." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  return { ok: true, listing: created };
+}
+
+async function cancelListing(username, classCode, listingId) {
+  const classRef = classesCol().doc(classCode);
+  let error = null;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const l = cls.listings.find(x => x.id === listingId);
+    if (!l) { error = "That listing couldn't be found."; return; }
+    if (l.seller !== username) { error = "That isn't your listing."; return; }
+    if (!listingIsOpen(l)) { error = "That listing is already closed."; return; }
+    l.status = "cancelled";
+    (l.offers || []).forEach(o => { if (o.status === "open") o.status = "declined"; });
+    t.update(classRef, { listings: cls.listings });
+  });
+  return error ? { ok: false, error } : { ok: true };
+}
+
+// Teacher moderation, for classes running with requireApproval on.
+async function decideListing(classCode, listingId, approve, reason) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const l = cls.listings.find(x => x.id === listingId);
+    if (!l || l.status !== "pending") return;
+    l.status = approve ? "active" : "rejected";
+    if (!approve) l.rejectReason = String(reason || "").slice(0, 160);
+    t.update(classRef, { listings: cls.listings });
+  });
+  return { ok: true };
+}
+
+// Teacher override: pull a live listing down (a silly price, something
+// that shouldn't be traded) without it counting as a sale.
+async function teacherRemoveListing(classCode, listingId, reason) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const l = cls.listings.find(x => x.id === listingId);
+    if (!l || !listingIsOpen(l)) return;
+    l.status = "rejected";
+    l.rejectReason = String(reason || "Removed by your teacher").slice(0, 160);
+    (l.offers || []).forEach(o => { if (o.status === "open") o.status = "declined"; });
+    t.update(classRef, { listings: cls.listings });
+  });
+  return { ok: true };
+}
+
+/* The single place a peer-to-peer sale actually happens. Both "Buy now"
+   (at the listed price) and "Accept offer" (at the haggled price) route
+   through here, so the money movement, the ownership transfer and the
+   guards can never drift apart between the two paths. */
+async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) {
+  const classRef = classesCol().doc(classCode);
+  let receipt = null;
+
+  // The seller's username lives on the listing, which we can only read
+  // inside the transaction — but a transaction's reads must all happen
+  // before its writes, and we can't build a doc ref for someone we
+  // haven't read yet. So: read the class doc once first, purely to learn
+  // who the seller is, then do the real, fully-guarded work in the
+  // transaction below with all three refs already in hand. Nothing from
+  // this peek is trusted for the actual sale — it's all re-read and
+  // re-checked against live data inside the transaction.
+  const peek = withNewModuleDefaults(await getClass(classCode));
+  if (!peek) return { ok: false, error: "Class not found." };
+  const peekListing = (peek.listings || []).find(l => l.id === listingId);
+  if (!peekListing) return { ok: false, error: "That listing couldn't be found." };
+  if (peekListing.seller === buyerUsername) return { ok: false, error: "You can't buy your own listing." };
+
+  const buyerRef = usersCol().doc(buyerUsername);
+  const sellerRef = usersCol().doc(peekListing.seller);
+
+  try {
+    await fdb.runTransaction(async (t) => {
+      const classSnap = await t.get(classRef);
+      const buyerSnap = await t.get(buyerRef);
+      const sellerSnap = await t.get(sellerRef);
+      if (!classSnap.exists || !buyerSnap.exists || !sellerSnap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(classSnap.data());
+      const buyer = Object.assign({ username: buyerUsername }, buyerSnap.data());
+      const seller = Object.assign({ username: peekListing.seller }, sellerSnap.data());
+      const mp = cls.marketplace;
+      if (!mp.enabled) throw new Error("OFF");
+
+      const listing = cls.listings.find(l => l.id === listingId);
+      if (!listing) throw new Error("NOT_FOUND");
+      if (listing.status !== "active") throw new Error("CLOSED");
+      if (listing.seller !== seller.username) throw new Error("NOT_FOUND");
+      if (listing.seller === buyerUsername) throw new Error("OWN_LISTING");
+      if (!_marketplaceStillOwns(cls, seller, listing)) throw new Error("GONE");
+
+      const price = Math.round(Number(agreedPrice) * 100) / 100;
+      if (!(price > 0)) throw new Error("BAD_PRICE");
+      const buyerIsTeacher = buyer.role === "teacher";
+      if (!buyerIsTeacher && buyer.balance < price) throw new Error("BROKE");
+
+      // Asset-type-specific transfer + eligibility. Anything the normal
+      // teacher-run store would refuse a buyer (no truck licence, already
+      // owns this vehicle) is refused here too — a peer sale is a
+      // different price, not a loophole around the class's own rules.
+      if (listing.assetType === "store") {
+        seller.storeItems = seller.storeItems || [];
+        const idx = seller.storeItems.indexOf(listing.assetId);
+        if (idx === -1) throw new Error("GONE");
+        seller.storeItems.splice(idx, 1);
+        buyer.storeItems = (buyer.storeItems || []).concat([listing.assetId]);
+      } else if (listing.assetType === "vehicle") {
+        const veh = cls.vehicles.find(v => v.id === listing.assetId);
+        if (!veh) throw new Error("GONE");
+        if ((veh.owners || []).includes(buyerUsername)) throw new Error("ALREADY_OWN");
+        if (normalizeVehicleType(veh.type) === "truck") {
+          if (!buyerIsTeacher && !buyer.truckLicence) throw new Error("NO_LICENCE");
+          const alreadyOwnsTruck = !buyerIsTeacher && cls.vehicles.some(v2 =>
+            v2.id !== veh.id && normalizeVehicleType(v2.type) === "truck" && (v2.owners || []).includes(buyerUsername));
+          if (alreadyOwnsTruck) throw new Error("TRUCK_LIMIT");
+        }
+        veh.owners = (veh.owners || []).filter(o => o !== seller.username).concat([buyerUsername]);
+      } else if (listing.assetType === "property") {
+        const prop = cls.properties.find(p => p.id === listing.assetId);
+        if (!prop || prop.owner !== seller.username) throw new Error("GONE");
+        if (prop.mortgage && prop.mortgage.weeksLeft > 0) throw new Error("GONE");
+        prop.owner = buyerUsername;
+        prop.mortgage = null;
+        // A new owner makes their own live-in-it / rent-it-out call.
+        prop.occupancy = null;
+        prop.rentLastWeekPaid = null;
+      } else {
+        throw new Error("NOT_FOUND");
+      }
+
+      const fee = Math.round(price * ((mp.feePct || 0) / 100) * 100) / 100;
+      const proceeds = Math.round((price - fee) * 100) / 100;
+
+      listing.status = "sold";
+      listing.soldTo = buyerUsername;
+      listing.soldTs = Date.now();
+      listing.soldPrice = price;
+      listing.fee = fee;
+      (listing.offers || []).forEach(o => { if (o.status === "open") o.status = "declined"; });
+      // Any OTHER open listing of this exact asset by this seller is now
+      // stale — they no longer own it — so close those too rather than
+      // leaving a phantom listing that would only fail at checkout.
+      cls.listings.forEach(other => {
+        if (other.id === listing.id || !listingIsOpen(other)) return;
+        if (other.seller !== seller.username) return;
+        if (other.assetType !== listing.assetType || other.assetId !== listing.assetId) return;
+        // ...unless it's a store item they still own another copy of.
+        if (listing.assetType === "store" && (seller.storeItems || []).includes(listing.assetId)) return;
+        other.status = "cancelled";
+      });
+
+      const buyerUpdate = {};
+      if (!buyerIsTeacher) buyerUpdate.balance = Math.round((buyer.balance - price) * 100) / 100;
+      if (listing.assetType === "store") buyerUpdate.storeItems = buyer.storeItems;
+      t.update(buyerRef, buyerUpdate);
+
+      const sellerUpdate = { balance: Math.round((seller.balance + proceeds) * 100) / 100 };
+      if (listing.assetType === "store") sellerUpdate.storeItems = seller.storeItems;
+      t.update(sellerRef, sellerUpdate);
+
+      t.update(classRef, {
+        listings: cls.listings,
+        vehicles: cls.vehicles,
+        properties: cls.properties
+      });
+
+      receipt = { price, fee, proceeds, name: listing.name, seller: seller.username, assetType: listing.assetType };
+    });
+  } catch (e) {
+    if (e.message === "OFF") return { ok: false, error: "The marketplace is switched off for your class right now." };
+    if (e.message === "CLOSED") return { ok: false, error: "Someone got there first — that listing is no longer for sale." };
+    if (e.message === "GONE") return { ok: false, error: "The seller doesn't own that any more, so the listing has expired." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    if (e.message === "OWN_LISTING") return { ok: false, error: "You can't buy your own listing." };
+    if (e.message === "ALREADY_OWN") return { ok: false, error: "You already own that vehicle." };
+    if (e.message === "NO_LICENCE") return { ok: false, error: "You need a truck licence before you can own that vehicle." };
+    if (e.message === "TRUCK_LIMIT") return { ok: false, error: "You can only own one truck at a time." };
+    if (e.message === "BAD_PRICE") return { ok: false, error: "That price isn't valid." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+
+  const label = MARKETPLACE_ASSET_LABEL[receipt.assetType] || "Item";
+  await logTxn(classCode, {
+    type: "p2p-buy", from: buyerUsername, to: receipt.seller, amount: receipt.price,
+    note: `Bought from a classmate: ${receipt.name} (${label})`
+  });
+  await logTxn(classCode, {
+    type: "p2p-sell", to: receipt.seller, from: buyerUsername, amount: receipt.proceeds,
+    note: `Sold to a classmate: ${receipt.name}` + (receipt.fee > 0 ? ` (${fmtMoney(receipt.fee)} market fee deducted)` : "")
+  });
+  return Object.assign({ ok: true }, receipt);
+}
+
+async function buyListing(username, classCode, listingId) {
+  const cls = withNewModuleDefaults(await getClassCached(classCode));
+  const listing = (cls.listings || []).find(l => l.id === listingId);
+  if (!listing) return { ok: false, error: "That listing couldn't be found." };
+  return await _settleListing(classCode, listingId, username, listing.price);
+}
+
+async function makeOffer(username, classCode, listingId, amount, note) {
+  const classRef = classesCol().doc(classCode);
+  let error = null, made = null;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    if (!cls.marketplace.enabled) { error = "The marketplace is switched off for your class right now."; return; }
+    if (!cls.marketplace.allowOffers) { error = "Your teacher has turned offers off — listings are buy-at-the-asking-price only."; return; }
+    const l = cls.listings.find(x => x.id === listingId);
+    if (!l || l.status !== "active") { error = "That listing is no longer for sale."; return; }
+    if (l.seller === username) { error = "You can't make an offer on your own listing."; return; }
+    const value = Math.round(Number(amount) * 100) / 100;
+    if (!(value > 0)) { error = "Enter an offer greater than zero."; return; }
+    const bounds = marketplacePriceBounds(cls, l.refPrice);
+    if (value < bounds.min) { error = `Offers can't go below ${fmtMoney(bounds.min)} for this item.`; return; }
+    if (bounds.max !== null && value > bounds.max) { error = `Offers can't go above ${fmtMoney(bounds.max)} for this item.`; return; }
+    l.offers = l.offers || [];
+    // One live offer each — a new one replaces your old one, so a listing
+    // can't be buried under a dozen offers from the same student.
+    l.offers.forEach(o => { if (o.buyer === username && o.status === "open") o.status = "withdrawn"; });
+    made = { id: uid("off"), buyer: username, amount: value, note: String(note || "").trim().slice(0, 160), status: "open", ts: Date.now() };
+    l.offers.push(made);
+    if (l.offers.length > 40) l.offers = l.offers.slice(-40);
+    t.update(classRef, { listings: cls.listings });
+  });
+  return error ? { ok: false, error } : { ok: true, offer: made };
+}
+
+async function setOfferStatus(username, classCode, listingId, offerId, status) {
+  const classRef = classesCol().doc(classCode);
+  let error = null;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const l = cls.listings.find(x => x.id === listingId);
+    if (!l) { error = "That listing couldn't be found."; return; }
+    const o = (l.offers || []).find(x => x.id === offerId);
+    if (!o || o.status !== "open") { error = "That offer is no longer open."; return; }
+    // A buyer may withdraw their own offer; only the seller may decline one.
+    if (status === "withdrawn" && o.buyer !== username) { error = "That isn't your offer."; return; }
+    if (status === "declined" && l.seller !== username) { error = "That isn't your listing."; return; }
+    o.status = status;
+    t.update(classRef, { listings: cls.listings });
+  });
+  return error ? { ok: false, error } : { ok: true };
+}
+
+async function acceptOffer(username, classCode, listingId, offerId) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const l = (cls.listings || []).find(x => x.id === listingId);
+  if (!l) return { ok: false, error: "That listing couldn't be found." };
+  if (l.seller !== username) return { ok: false, error: "That isn't your listing." };
+  if (l.status !== "active") return { ok: false, error: "That listing is no longer for sale." };
+  const o = (l.offers || []).find(x => x.id === offerId);
+  if (!o || o.status !== "open") return { ok: false, error: "That offer is no longer open." };
+  // The sale itself re-validates everything (funds, ownership, the lot).
+  // Marking the offer "accepted" only means anything once the sale has
+  // actually gone through, so that write happens after it, never before.
+  const res = await _settleListing(classCode, listingId, o.buyer, o.amount);
+  if (!res.ok) return res;
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const live = withNewModuleDefaults(snap.data());
+    const ll = live.listings.find(x => x.id === listingId);
+    if (!ll) return;
+    const oo = (ll.offers || []).find(x => x.id === offerId);
+    if (oo) oo.status = "accepted";
+    t.update(classRef, { listings: live.listings });
+  });
+  return res;
 }
 
 /* ===================== Global page bootstrap =====================

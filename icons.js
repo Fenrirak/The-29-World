@@ -97,7 +97,7 @@ function fitTopbar() {
   // below doesn't apply and would just fight it.
   if (document.documentElement.classList.contains("sidebar-nav")) {
     topbar.style.removeProperty("--navscale");
-    nav.classList.remove("force-icons");
+    nav.classList.remove("force-icons", "nav-tight");
     return;
   }
 
@@ -105,14 +105,14 @@ function fitTopbar() {
   if (isPortrait) {
     // Portrait handles itself via CSS (icon-only + wrapping); don't fight it.
     topbar.style.removeProperty("--navscale");
-    nav.classList.remove("force-icons");
+    nav.classList.remove("force-icons", "nav-tight");
     return;
   }
 
   // Reset to full size and drop any icon-only fallback so we measure the
   // nav's true "natural" width before deciding how much to shrink it.
   topbar.style.setProperty("--navscale", "1");
-  nav.classList.remove("force-icons");
+  nav.classList.remove("force-icons", "nav-tight");
   // Force a reflow so the measurements below reflect the reset state.
   void topbar.offsetWidth;
 
@@ -137,9 +137,25 @@ function fitTopbar() {
   if (!isFinite(scale) || scale > 1) scale = 1;
 
   const MIN_TEXT_SCALE = 0.55; // below this, text stops being legible
+  // Before giving up on labels entirely, try trimming the CHROME instead of
+  // the text: "nav-tight" cuts each link's padding and the gaps between
+  // links right down while leaving the font at a legible size. With ~16
+  // items in the bar that alone is worth roughly two links' worth of
+  // width, which is the difference between a labelled nav and an
+  // icon-only one on a normal laptop screen.
   if (scale < MIN_TEXT_SCALE) {
-    // Full labels can't fit even at the smallest legible size — drop to
-    // icon-only, then re-measure and scale that instead.
+    nav.classList.add("nav-tight");
+    void nav.offsetWidth;
+    const neededTight = nav.scrollWidth;
+    const tightScale = neededTight > 0 ? available / neededTight : 1;
+    if (isFinite(tightScale) && tightScale >= MIN_TEXT_SCALE) {
+      topbar.style.setProperty("--navscale", Math.min(1, tightScale).toFixed(3));
+      return;
+    }
+  }
+  if (scale < MIN_TEXT_SCALE) {
+    // Labels can't fit even tightened up at the smallest legible size —
+    // drop to icon-only, then re-measure and scale that instead.
     nav.classList.add("force-icons");
     void nav.offsetWidth;
     const neededIcons = nav.scrollWidth;

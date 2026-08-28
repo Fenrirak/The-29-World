@@ -865,8 +865,7 @@ async function render() {
     return;
   }
 
-  const lockedModules = await getLockedModulesForStudent(CURRENT.username, CURRENT.classCode);
-  applyNavModuleLocks(lockedModules);
+  applyNavModuleLocks(await getModuleLockReasons(CURRENT.username, CURRENT.classCode));
   const lockedBanner = document.getElementById("gamblingLockedBanner");
   if (lockedModules.includes("gambling")) {
     lockedBanner.classList.remove("hidden");

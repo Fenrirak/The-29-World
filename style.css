@@ -114,6 +114,16 @@ p{color:var(--muted);line-height:1.5;}
   height:calc(17px * var(--navscale));
   flex-shrink:0;
 }
+/* Applied by fitTopbar() one step BEFORE it gives up on labels: trims the
+   padding and gaps around each link while leaving the text at a legible
+   size, which is usually enough to keep a long nav labelled on a laptop
+   screen instead of falling all the way back to icon-only. */
+.topbar nav.nav-tight{gap:calc(3px * var(--navscale));}
+.topbar nav.nav-tight a{
+  padding:calc(7px * var(--navscale)) calc(6px * var(--navscale));
+  gap:calc(4px * var(--navscale));
+}
+
 /* Applied by fitTopbar() when even the minimum legible text scale can't
    make the full-label row fit — drops to icon-only so the row still fits
    on one line rather than shrinking text past readability. */
@@ -696,4 +706,261 @@ label .icon-slot{color:var(--navy-700);}
 @media (max-width:640px){
   .anw-balance-widget{left:10px;top:auto;bottom:14px;padding:10px 14px;min-width:130px;}
   .anw-balance-widget .anw-bw-value{font-size:1.4rem;}
+}
+
+/* ===================== Reports (report cards) ===================== */
+.rpt-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;}
+.rpt-bar-label{flex:0 0 150px;font-size:.85rem;color:var(--navy-900);font-weight:600;}
+.rpt-bar-track{flex:1;height:14px;background:#eef1f7;border-radius:8px;overflow:hidden;}
+.rpt-bar-fill{height:100%;border-radius:8px;min-width:3px;}
+.rpt-bar-fill.gold{background:linear-gradient(90deg,var(--gold),var(--gold-dark));}
+.rpt-bar-fill.mint{background:linear-gradient(90deg,var(--mint),var(--mint-dark));}
+.rpt-bar-fill.coral{background:linear-gradient(90deg,var(--coral),#c9503a);}
+.rpt-bar-amount{flex:0 0 auto;font-size:.85rem;font-weight:800;color:var(--navy-900);min-width:64px;text-align:right;}
+@media (max-width:640px){
+  .rpt-bar-label{flex-basis:100px;font-size:.78rem;}
+  .rpt-bar-amount{min-width:54px;font-size:.78rem;}
+}
+
+
+/* ===================== Notifications (bell + activity panel) =====================
+   The bell is a .btn-icon-topbar like the gear, so it inherits the top
+   bar's --navscale sizing for free and fitTopbar() measures it as part of
+   the trailing actions block — which is what keeps the nav on one line
+   with the bell present. Everything below is just the unread dot and the
+   dropdown panel it opens.
+============================================================================== */
+.notif-bell{position:relative;}
+.notif-dot{
+  position:absolute;top:-4px;right:-4px;
+  min-width:17px;height:17px;padding:0 4px;
+  border-radius:9px;
+  background:linear-gradient(135deg,var(--coral),#c9503a);
+  color:#fff;font-size:.63rem;font-weight:900;line-height:17px;text-align:center;
+  box-shadow:0 2px 6px rgba(200,60,40,.5);
+  border:1.5px solid var(--navy-900);
+  pointer-events:none;
+}
+
+.notif-panel{
+  position:fixed;
+  z-index:70;
+  width:min(380px, calc(100vw - 20px));
+  background:var(--card);
+  border:1.5px solid var(--line);
+  border-radius:16px;
+  box-shadow:0 20px 50px rgba(31,43,68,.28);
+  overflow:hidden;
+  display:flex;flex-direction:column;
+  max-height:min(560px, calc(100vh - 90px));
+}
+.notif-panel.hidden{display:none;}
+.notif-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:13px 16px;
+  border-bottom:1.5px solid var(--line);
+  background:linear-gradient(120deg,var(--navy-900),var(--navy-700));
+  color:#fff;
+}
+.notif-head-title{
+  display:flex;align-items:center;gap:8px;
+  font-weight:800;font-size:.95rem;letter-spacing:.01em;
+}
+.notif-head-title .icon{color:var(--gold);}
+.notif-markread{
+  background:rgba(255,255,255,.12);color:#fff;border:none;
+  border-radius:7px;padding:5px 10px;
+  font:inherit;font-size:.72rem;font-weight:700;cursor:pointer;
+}
+.notif-markread:hover{background:rgba(255,255,255,.24);}
+
+.notif-list{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;}
+.notif-row{
+  display:flex;align-items:flex-start;gap:11px;
+  padding:12px 16px;
+  border-bottom:1px solid var(--line);
+  text-decoration:none;color:inherit;
+  position:relative;
+}
+.notif-row:last-child{border-bottom:none;}
+a.notif-row:hover{background:#f6f8fc;}
+.notif-row.unread{background:#fbfaf3;}
+a.notif-row.unread:hover{background:#f7f3e6;}
+/* A left rail marks the two things worth distinguishing at a glance:
+   gold = unread, coral = something the student actually has to act on. */
+.notif-row.unread::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--gold);
+}
+.notif-row.action::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--coral);
+}
+.notif-ic{
+  width:30px;height:30px;flex-shrink:0;
+  border-radius:9px;
+  display:inline-flex;align-items:center;justify-content:center;
+  margin-top:1px;
+}
+.notif-ic .icon{width:15px;height:15px;}
+.notif-ic.mint{background:#e3f8f0;color:#217a5a;}
+.notif-ic.coral{background:#fceae7;color:#b8402c;}
+.notif-ic.gold{background:#fbf1dd;color:#8a6112;}
+.notif-ic.navy{background:#e7ebf5;color:var(--navy-900);}
+.notif-ic.lilac{background:#efecfb;color:#5a4fb0;}
+.notif-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;}
+.notif-title{font-weight:800;font-size:.86rem;color:var(--navy-900);line-height:1.3;}
+.notif-sub{font-size:.78rem;color:var(--muted);line-height:1.4;}
+.notif-time{font-size:.69rem;color:#9aa4b8;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
+.notif-row.action .notif-time{color:#b8402c;}
+.notif-empty{padding:34px 22px;text-align:center;color:var(--muted);}
+.notif-empty .icon{color:var(--line);margin-bottom:8px;}
+.notif-empty p{margin:0 0 4px;}
+.notif-foot{
+  padding:10px 16px;border-top:1.5px solid var(--line);background:#f6f8fc;text-align:center;
+}
+.notif-foot a{font-size:.78rem;font-weight:700;color:var(--navy-700);text-decoration:none;}
+.notif-foot a:hover{text-decoration:underline;}
+
+@media (max-width:480px){
+  .notif-panel{width:calc(100vw - 16px);max-height:calc(100vh - 76px);}
+}
+
+/* ===================== Quizzes ===================== */
+.quiz-card{
+  border:1.5px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px;
+  transition:box-shadow .15s ease;background:var(--card);
+}
+.quiz-card:hover{box-shadow:0 8px 20px rgba(31,43,68,.09);}
+.quiz-card.passed{border-color:#9fdcc4;background:linear-gradient(180deg,#f4fcf8,var(--card) 60%);}
+.quiz-card.locking{border-color:#f0c3b8;}
+.quiz-card h3{display:flex;align-items:center;gap:9px;margin:0 0 4px;font-size:1.08rem;}
+.quiz-card h3 .icon{color:var(--navy-700);flex-shrink:0;}
+.quiz-meta{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px;}
+.quiz-pill{
+  display:inline-flex;align-items:center;gap:5px;
+  background:#f2f5fb;border:1px solid var(--line);border-radius:999px;
+  padding:4px 11px;font-size:.74rem;font-weight:700;color:var(--navy-700);
+}
+.quiz-pill .icon{width:12px;height:12px;}
+.quiz-pill.mint{background:#e3f8f0;border-color:#bfe9d8;color:#217a5a;}
+.quiz-pill.coral{background:#fceae7;border-color:#f3ccc3;color:#b8402c;}
+.quiz-pill.gold{background:#fbf1dd;border-color:#eddcb4;color:#8a6112;}
+
+.quiz-question{
+  border:1.5px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px;
+  background:#fbfcfe;
+}
+.quiz-question .qtext{font-weight:800;color:var(--navy-900);margin:0 0 12px;line-height:1.4;}
+.quiz-option{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;
+  background:var(--card);margin-bottom:8px;cursor:pointer;
+  transition:border-color .12s ease, background .12s ease;
+}
+.quiz-option:last-child{margin-bottom:0;}
+.quiz-option:hover{border-color:var(--navy-500);}
+.quiz-option input{width:18px;height:18px;min-height:auto;flex-shrink:0;margin:1px 0 0;accent-color:var(--navy-900);}
+.quiz-option span{font-size:.92rem;line-height:1.4;}
+.quiz-option.chosen{border-color:var(--navy-900);background:#f2f5fb;}
+.quiz-option.right{border-color:var(--mint);background:#e9f9f2;}
+.quiz-option.wrong{border-color:var(--coral);background:#fdeeeb;}
+.quiz-explain{
+  margin:10px 0 0;padding:10px 12px;border-radius:9px;
+  background:#f2f5fb;border-left:3px solid var(--navy-500);
+  font-size:.83rem;color:var(--navy-900);line-height:1.5;
+}
+.quiz-score{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:16px 20px;border-radius:14px;margin-bottom:18px;
+}
+.quiz-score.pass{background:linear-gradient(135deg,var(--mint),var(--mint-dark));color:#fff;box-shadow:0 8px 22px rgba(46,152,115,.28);}
+.quiz-score.fail{background:linear-gradient(135deg,var(--coral),#c9503a);color:#fff;box-shadow:0 8px 22px rgba(232,115,95,.28);}
+.quiz-score .big{font-size:2rem;font-weight:900;line-height:1;}
+.quiz-score .txt{font-weight:700;line-height:1.4;}
+
+/* Teacher-side question builder rows */
+.qb-question{
+  border:1.5px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px;background:rgba(0,0,0,.012);
+}
+.qb-question .qb-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;}
+.qb-question .qb-num{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+.qb-opt-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.qb-opt-row input[type="radio"]{width:18px;height:18px;min-height:auto;flex-shrink:0;accent-color:var(--mint-dark);}
+.qb-opt-row input[type="text"]{margin:0;flex:1;}
+.qb-opt-row .qb-del{flex-shrink:0;}
+.qb-hint{font-size:.74rem;color:var(--muted);margin:0 0 10px;}
+
+/* ===================== Peer-to-peer marketplace ===================== */
+.mkt-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;}
+.mkt-filter{
+  border:1.5px solid var(--line);background:var(--card);border-radius:999px;
+  padding:7px 15px;font:inherit;font-size:.82rem;font-weight:700;color:var(--navy-700);cursor:pointer;
+}
+.mkt-filter:hover{border-color:var(--navy-500);}
+.mkt-filter.active{background:var(--navy-900);border-color:var(--navy-900);color:#fff;}
+
+.mkt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:16px;}
+.mkt-listing{
+  border:1.5px solid var(--line);border-radius:14px;padding:16px 18px;background:var(--card);
+  display:flex;flex-direction:column;gap:2px;position:relative;overflow:hidden;
+  transition:box-shadow .15s ease;
+}
+.mkt-listing:hover{box-shadow:0 10px 24px rgba(31,43,68,.1);}
+.mkt-listing.mine{border-color:#eddcb4;background:linear-gradient(180deg,#fffdf6,var(--card) 55%);}
+.mkt-listing h4{display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:1.02rem;}
+.mkt-listing h4 .icon{color:var(--navy-700);flex-shrink:0;}
+.mkt-listing .mkt-desc{font-size:.83rem;color:var(--muted);margin:0 0 8px;line-height:1.45;}
+.mkt-price{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin:4px 0 10px;}
+.mkt-price .now{font-size:1.45rem;font-weight:900;color:var(--navy-900);line-height:1;}
+.mkt-price .ref{font-size:.76rem;color:var(--muted);font-weight:700;}
+.mkt-seller{
+  display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--muted);font-weight:700;
+  margin-bottom:10px;
+}
+.mkt-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto;}
+.mkt-offer-list{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);}
+.mkt-offer{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  padding:8px 0;border-bottom:1px solid var(--line);
+}
+.mkt-offer:last-child{border-bottom:none;}
+.mkt-offer-amt{font-weight:900;color:var(--navy-900);}
+.mkt-offer-note{font-size:.78rem;color:var(--muted);width:100%;}
+.mkt-empty{
+  border:1.5px dashed var(--line);border-radius:14px;padding:30px 22px;text-align:center;color:var(--muted);
+}
+.mkt-empty .icon{color:var(--line);margin-bottom:6px;}
+.mkt-sell-row{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  border:1.5px solid var(--line);border-radius:12px;padding:13px 16px;margin-bottom:10px;
+}
+.mkt-sell-row .grow{flex:1;min-width:170px;}
+.mkt-sell-row .mkt-sell-name{font-weight:800;color:var(--navy-900);}
+.mkt-sell-row input[type="number"],.mkt-sell-row input[type="text"]{margin:0;min-width:110px;}
+.mkt-band{font-size:.74rem;color:var(--muted);font-weight:700;}
+.mkt-status{
+  display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;
+  font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+}
+.mkt-status.active{background:#e3f8f0;color:#217a5a;}
+.mkt-status.pending{background:#fbf1dd;color:#8a6112;}
+.mkt-status.sold{background:#e7ebf5;color:var(--navy-900);}
+.mkt-status.cancelled,.mkt-status.rejected{background:#fceae7;color:#b8402c;}
+
+/* Printing a report card: hide navigation/buttons/every other on-page
+   section and show just the report content full-width. Scoped with
+   .report-print-area (rather than printing the whole <main>) so a page
+   with several report blocks — e.g. the teacher's class table AND a
+   detail modal — can print just the one the person actually opened
+   Print from, instead of everything on screen at once. */
+@media print{
+  .topbar,.footer-note,.no-print,#settingsBtn,.settings-popover,.notif-panel,.notif-bell{display:none !important;}
+  body{background:#fff;}
+  main{max-width:none;padding:0;margin:0;}
+  .card{box-shadow:none;border:none;padding:0;}
+  #reportModal{position:static;background:none;padding:0;display:block;}
+  #reportModal .card{max-width:none;}
+  .rpt-bar-track{border:1px solid #ccc;}
+  body.printing-modal-only main{display:none !important;}
 }

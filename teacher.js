@@ -372,6 +372,10 @@ function describeTxn(t, nameOf) {
     case "side-hustle": return `${nameOf(t.to)} — ${t.note}`;
     case "truck-drive": return `${nameOf(t.to)} — ${t.note}`;
     case "store-gift": return `${nameOf(t.to)} — ${t.note}`;
+    case "quiz-reward": return `${nameOf(t.to)} — ${t.note}`;
+    case "property-rent": return `${nameOf(t.to)} — ${t.note}`;
+    case "p2p-buy": return `${nameOf(t.from)} → ${nameOf(t.to)} — ${t.note}`;
+    case "p2p-sell": return `${nameOf(t.to)} — ${t.note}`;
     default: return t.note || "";
   }
 }
@@ -406,7 +410,11 @@ function badge(type) {
     "loan-interest": ["coral", "handshake", "Loan interest"],
     "side-hustle": ["mint", "briefcase", "Side hustle"],
     "truck-drive": ["mint", "car", "Truck drive"],
-    "store-gift": ["mint", "cart", "Free item"]
+    "store-gift": ["mint", "cart", "Free item"],
+    "quiz-reward": ["mint", "idcard", "Quiz passed"],
+    "property-rent": ["mint", "house", "Rent received"],
+    "p2p-buy": ["navy", "users", "Classmate sale"],
+    "p2p-sell": ["gold", "users", "Classmate sale"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -1113,15 +1121,15 @@ async function removeStudentClick(username, name) {
 async function restartClass() {
   const cls = await getClassCached(CLASS_CODE);
   const typed = prompt(
-    `This will reset every student's balance to $0, remove job assignments, delist all companies, and clear the activity log for "${cls.name}".\n\nThis cannot be undone. Type the class name exactly to confirm:`
+    `This will reset every student's balance to $0, remove job assignments, delist all companies, and clear the activity log for "${cls.name}".\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`
   );
   if (typed === null) return;
   if (typed.trim() !== cls.name) {
     alert("That didn't match the class name, so nothing was changed.");
     return;
   }
-  await resetClass(CLASS_CODE);
-  alert("Class restarted — everyone is back to $0.");
+  await resetClass(CLASS_CODE, CURRENT.username);
+  alert("Class restarted — everyone is back to $0. This term's report cards were saved to the Reports page.");
   await render();
 }
 
