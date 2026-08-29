@@ -1159,6 +1159,12 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .bud-note.warn{border-left-color:var(--gold);background:#fdf8ee;color:#7a5510;}
 .bud-note.bad{border-left-color:var(--coral);background:#fdf2f0;color:#a8371f;}
 #budNotes{margin-top:18px;}
+.bud-estimate-link{
+  background:none;border:none;padding:0;margin-left:2px;
+  color:var(--gold-dark,#8a6112);font-weight:700;font-size:inherit;
+  text-decoration:underline;cursor:pointer;
+}
+.bud-estimate-link:hover{color:var(--navy-900);}
 
 /* Teacher overview. */
 .bud-flag{

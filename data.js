@@ -1489,7 +1489,7 @@ async function openCompany(classCode, name, price, totalShares) {
       cls.companies.push({
         id: uid("co"), name, price: Number(price),
         totalShares: Number(totalShares), availableShares: Number(totalShares),
-        history: [Number(price)], holders: {},
+        history: [Number(price)], historyDates: [nzDateKey()], holders: {},
         priceRange: { min: defaultRange.min, max: defaultRange.max }
       });
       t.update(classRef, { companies: cls.companies });
@@ -1525,7 +1525,9 @@ async function updateCompanyPrice(classCode, companyId, newPrice) {
     if (!co) return;
     co.price = Math.max(0.01, Number(newPrice));
     co.history.push(co.price);
+    (co.historyDates = co.historyDates || []).push(nzDateKey());
     if (co.history.length > 30) co.history.shift();
+    if (co.historyDates.length > 30) co.historyDates.shift();
     t.update(classRef, { companies: cls.companies });
   });
 }
@@ -1550,10 +1552,29 @@ function applyMarketDayMoves(cls) {
     const newPrice = Math.max(0.01, Math.round(co.price * (1 + (direction * pct) / 100) * 100) / 100);
     co.price = newPrice;
     co.history.push(newPrice);
+    (co.historyDates = co.historyDates || []).push(nzDateKey());
     if (co.history.length > 30) co.history.shift();
+    if (co.historyDates.length > 30) co.historyDates.shift();
     results.push({ name: co.name, pct: direction * pct });
   });
   return results;
+}
+
+// The price a company was trading at on or before a given NZ date key,
+// using the parallel history/historyDates arrays built up by
+// updateCompanyPrice and applyMarketDayMoves. Walks newest-to-oldest so it
+// finds the most recent price that was already in effect at the start of
+// that date. Companies opened before this field existed have no dates at
+// all, and a company that started trading partway through the week has no
+// entry before it — both fall back to the oldest price on record, which is
+// the closest honest answer to "what it was worth before we knew about it".
+function companyPriceAtDate(co, dateKey) {
+  const dates = co.historyDates || [];
+  const hist = co.history || [];
+  for (let i = dates.length - 1; i >= 0; i--) {
+    if (dates[i] && dates[i] <= dateKey) return hist[i];
+  }
+  return hist.length ? hist[0] : co.price;
 }
 
 // Runs the market simulation automatically once per NZ calendar day — the
@@ -1624,14 +1645,17 @@ async function closeCompany(classCode, companyId) {
     Object.keys(co.holders).forEach(uname => {
       const shares = co.holders[uname];
       const payout = Math.round(shares * co.price * 100) / 100;
-      payouts.push({ uname, payout, coName: co.name });
+      payouts.push({ uname, payout, coName: co.name, companyId: co.id, shares, pricePerShare: co.price });
     });
     cls.companies = cls.companies.filter(c => c.id !== companyId);
     t.update(classRef, { companies: cls.companies });
   });
   for (const p of payouts) {
     await adjustBalance(p.uname, p.payout);
-    await logTxn(classCode, { type: "stock-close", to: p.uname, amount: p.payout, note: p.coName + " delisted — shares cashed out" });
+    await logTxn(classCode, {
+      type: "stock-close", to: p.uname, amount: p.payout, note: p.coName + " delisted — shares cashed out",
+      companyId: p.companyId, shares: p.shares, pricePerShare: p.pricePerShare
+    });
   }
 }
 
@@ -1670,7 +1694,10 @@ async function buyShares(username, classCode, companyId, shares) {
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "stock-buy", from: username, amount: cost, note: `Bought ${shares} shares of ${coName}` });
+  await logTxn(classCode, {
+    type: "stock-buy", from: username, amount: cost, note: `Bought ${shares} shares of ${coName}`,
+    companyId, shares, pricePerShare: Math.round((cost / shares) * 100) / 100
+  });
   return { ok: true };
 }
 
@@ -1709,7 +1736,10 @@ async function sellShares(username, classCode, companyId, shares) {
     if (e.message === "TOO_MANY") return { ok: false, error: "You don't own that many shares." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "stock-sell", to: username, amount: proceeds, note: `Sold ${shares} shares of ${coName}` });
+  await logTxn(classCode, {
+    type: "stock-sell", to: username, amount: proceeds, note: `Sold ${shares} shares of ${coName}`,
+    companyId, shares, pricePerShare: Math.round((proceeds / shares) * 100) / 100
+  });
   return { ok: true };
 }
 
@@ -6340,6 +6370,50 @@ function budgetScheduledSavingsFromData(cls, username) {
   return Math.round(total * 100) / 100;
 }
 
+/* ---------------- What the stock market has done to your money ----------
+   Two separate numbers, on purpose: "unrealized" is shares still sitting in
+   the portfolio moving in price, which only becomes real money if they're
+   sold; "realized" is shares actually sold (or cashed out by a delisting)
+   since Monday, at whatever the price move handed them. Both can be
+   negative — a falling share is a real loss for the week just as much as
+   a rising one is a gain. */
+function budgetStockEstimateFromData(cls, user, username, weekStartKey) {
+  const unrealizedItems = [];
+  let unrealizedTotal = 0;
+  (cls.companies || []).forEach(co => {
+    const shares = (co.holders || {})[username] || 0;
+    if (shares <= 0) return;
+    const startPrice = companyPriceAtDate(co, weekStartKey);
+    const move = Math.round(shares * (co.price - startPrice) * 100) / 100;
+    if (Math.abs(move) < 0.005) return;
+    unrealizedItems.push({ name: co.name, shares, move, startPrice, price: co.price });
+    unrealizedTotal += move;
+  });
+  unrealizedTotal = Math.round(unrealizedTotal * 100) / 100;
+
+  const realizedItems = [];
+  let realizedTotal = 0;
+  (cls.txns || []).forEach(t => {
+    if (t.to !== username) return;
+    if (t.type !== "stock-sell" && t.type !== "stock-close") return;
+    if (!t.companyId || !t.shares || !t.pricePerShare) return;
+    if (t.ts === undefined || nzDateKey(new Date(t.ts)) < weekStartKey) return;
+    const co = (cls.companies || []).find(c => c.id === t.companyId);
+    // The company may have been delisted since (stock-close removes it from
+    // cls.companies entirely) — without it there's no price history left to
+    // compare against, so that sale is left out rather than guessed at.
+    if (!co) return;
+    const startPrice = companyPriceAtDate(co, weekStartKey);
+    const move = Math.round(t.shares * (t.pricePerShare - startPrice) * 100) / 100;
+    if (Math.abs(move) < 0.005) return;
+    realizedItems.push({ name: co.name, shares: t.shares, move, startPrice, price: t.pricePerShare });
+    realizedTotal += move;
+  });
+  realizedTotal = Math.round(realizedTotal * 100) / 100;
+
+  return { unrealizedItems, unrealizedTotal, realizedItems, realizedTotal };
+}
+
 /* ---------------- What this week is likely to bring in ----------------
    A starting figure for the "expected income" box, which the student can
    always overwrite. Wages and rent are genuinely predictable and come
@@ -6347,7 +6421,7 @@ function budgetScheduledSavingsFromData(cls, username) {
    actually bother to check in, so that line uses what they really earned
    over the last 7 days rather than a theoretical maximum they'd only hit
    with a perfect week. */
-function budgetIncomeEstimateFromData(cls, user, username) {
+function budgetIncomeEstimateFromData(cls, user, username, weekStartKey) {
   const items = [];
 
   const job = user.jobId ? (cls.jobs || []).find(j => j.id === user.jobId) : null;
@@ -6381,7 +6455,22 @@ function budgetIncomeEstimateFromData(cls, user, username) {
     items.push({ icon: "star", label: "Side hustle", amount: hustle, note: "What you actually earned in the last 7 days" });
   }
 
-  return { items, total: Math.round(items.reduce((s, i) => s + i.amount, 0) * 100) / 100 };
+  const stock = budgetStockEstimateFromData(cls, user, username, weekStartKey);
+  if (stock.unrealizedTotal !== 0) {
+    items.push({
+      icon: "chart", label: "Shares you still hold", amount: stock.unrealizedTotal, signed: true,
+      note: (stock.unrealizedTotal >= 0 ? "Up " : "Down ") + fmtMoney(Math.abs(stock.unrealizedTotal)) +
+        " since Monday, on paper — only real money if you sell."
+    });
+  }
+  if (stock.realizedTotal !== 0) {
+    items.push({
+      icon: "coin", label: "Shares sold this week", amount: stock.realizedTotal, signed: true,
+      note: "Compared to what they were worth on Monday — " + (stock.realizedTotal >= 0 ? "a gain" : "a loss") + " you've locked in."
+    });
+  }
+
+  return { items, total: Math.round(items.reduce((s, i) => s + i.amount, 0) * 100) / 100, stock };
 }
 
 /* ---------------- What's really happened so far this week ----------------
@@ -6440,27 +6529,24 @@ function budgetActualsFromData(cls, username) {
 }
 
 /* ---------------- The saved plan ----------------
-   Always returns a usable object. A plan saved for an earlier week isn't
-   silently reused as this week's — it's returned with isForThisWeek false
-   and its old week key intact, so the UI can offer to carry the numbers
-   over instead of pretending they were never written. */
+   Always returns a usable object. A plan, once saved, keeps applying every
+   week — it does NOT expire when the week rolls over. `hasPlan` is true as
+   long as something has ever been saved; `weekKey` just records when it was
+   last written, for display ("set up on..."), not whether it still counts. */
 function normalizeBudgetPlan(raw) {
-  const weekKey = isoWeekKey(new Date());
-  const current = raw && raw.weekKey === weekKey ? raw : null;
-  const source = current || raw || null;
+  const hasPlan = !!raw && Number(raw.plannedIncome) > 0;
   const allocations = {};
   BUDGET_CATEGORIES.forEach(c => {
-    const v = source && source.allocations ? Number(source.allocations[c.key]) : 0;
+    const v = raw && raw.allocations ? Number(raw.allocations[c.key]) : 0;
     allocations[c.key] = Math.max(0, Math.round((v || 0) * 100) / 100);
   });
   return {
-    weekKey,
-    isForThisWeek: !!current,
-    carriedFromWeek: (!current && raw && raw.weekKey) ? raw.weekKey : null,
-    plannedIncome: source ? Math.max(0, Math.round((Number(source.plannedIncome) || 0) * 100) / 100) : 0,
+    hasPlan,
+    weekKey: hasPlan ? raw.weekKey : null,
+    plannedIncome: hasPlan ? Math.max(0, Math.round((Number(raw.plannedIncome) || 0) * 100) / 100) : 0,
     allocations,
     allocated: Math.round(BUDGET_CATEGORIES.reduce((s, c) => s + allocations[c.key], 0) * 100) / 100,
-    updatedAt: current ? (current.updatedAt || null) : null
+    updatedAt: hasPlan ? (raw.updatedAt || null) : null
   };
 }
 
@@ -6501,13 +6587,14 @@ async function clearBudget(username) {
    hand it a class and a user doc the page has already read and it does no
    I/O of its own. */
 function buildBudgetView(cls, user, username) {
+  const weekStartKey = budgetWeekStartKey();
   const plan = normalizeBudgetPlan(user.budget);
   const fixed = budgetFixedCostsFromData(cls, user, username);
-  const estimate = budgetIncomeEstimateFromData(cls, user, username);
+  const estimate = budgetIncomeEstimateFromData(cls, user, username, weekStartKey);
   const actuals = budgetActualsFromData(cls, username);
   const scheduledSavings = budgetScheduledSavingsFromData(cls, username);
 
-  const income = plan.isForThisWeek ? plan.plannedIncome : estimate.total;
+  const income = plan.hasPlan ? plan.plannedIncome : estimate.total;
   const unallocated = Math.round((income - plan.allocated) * 100) / 100;
 
   const notes = []; // { tone: "good"|"warn"|"bad", icon, text }
@@ -6517,7 +6604,7 @@ function buildBudgetView(cls, user, username) {
   const needs = plan.allocations.needs;
   if (fixed.total > 0) {
     const shortfall = Math.round((fixed.total - needs) * 100) / 100;
-    if (!plan.isForThisWeek) {
+    if (!plan.hasPlan) {
       notes.push({ tone: "warn", icon: "calendar", text: `You have ${fmtMoney(fixed.total)} of fixed costs this week. Plan for those first — the rest is yours to split.` });
     } else if (shortfall > 0.005) {
       notes.push({ tone: "bad", icon: "shield", text: `Your Needs are short by ${fmtMoney(shortfall)}. Fixed costs come to ${fmtMoney(fixed.total)} but you've only set aside ${fmtMoney(needs)} — move money across before you spend it on anything else.` });
@@ -6577,7 +6664,7 @@ function buildBudgetView(cls, user, username) {
   }
 
   // --- Saving nothing at all is worth naming; so is doing it well.
-  if (plan.isForThisWeek && income > 0) {
+  if (plan.hasPlan && income > 0) {
     const savePct = Math.round((plan.allocations.savings / income) * 1000) / 10;
     if (plan.allocations.savings <= 0) {
       notes.push({ tone: "warn", icon: "piggy", text: "You haven't put anything aside this week. Even a small amount every week adds up faster than one big deposit later — that's compound interest doing the work." });
@@ -6585,8 +6672,25 @@ function buildBudgetView(cls, user, username) {
       notes.push({ tone: "good", icon: "piggy", text: `You're saving ${savePct}% of your income — at or above the 20% the guide suggests.` });
     }
   }
-  if (plan.isForThisWeek && unallocated > 0.005) {
+  if (plan.hasPlan && unallocated > 0.005) {
     notes.push({ tone: "warn", icon: "coin", text: `${fmtMoney(unallocated)} of your income isn't allocated to anything. Money without a job usually finds one.` });
+  }
+
+  // --- Called out separately from the income line itself, since it's easy
+  // to miss a number buried inside "what I expect to earn".
+  if (estimate.stock.unrealizedTotal !== 0) {
+    const up = estimate.stock.unrealizedTotal > 0;
+    notes.push({
+      tone: up ? "good" : "warn", icon: "chart",
+      text: `Shares you're still holding are ${up ? "up" : "down"} ${fmtMoney(Math.abs(estimate.stock.unrealizedTotal))} since Monday. That's only real money if you sell — the price can move back before then.`
+    });
+  }
+  if (estimate.stock.realizedTotal !== 0) {
+    const up = estimate.stock.realizedTotal > 0;
+    notes.push({
+      tone: up ? "good" : "bad", icon: "coin",
+      text: `Shares you sold this week ${up ? "gained" : "lost"} ${fmtMoney(Math.abs(estimate.stock.realizedTotal))} compared to Monday's price — that one's locked in.`
+    });
   }
 
   // --- Plan versus reality, per category.
@@ -6611,7 +6715,7 @@ function buildBudgetView(cls, user, username) {
     weekStartKey: actuals.startKey,
     // A budget only "covers" the week when it exists AND its Needs slice
     // is big enough for the commitments already on the books.
-    covered: plan.isForThisWeek && plan.allocations.needs + 0.005 >= fixed.total
+    covered: plan.hasPlan && plan.allocations.needs + 0.005 >= fixed.total
   };
 }
 
@@ -6623,14 +6727,14 @@ function classBudgetOverviewFromData(cls, students) {
     const v = buildBudgetView(cls, s, s.username);
     return {
       username: s.username, name: s.name,
-      planned: v.plan.isForThisWeek,
+      planned: v.plan.hasPlan,
       income: v.plan.plannedIncome,
       allocated: v.plan.allocated,
       needs: v.plan.allocations.needs,
       fixedTotal: v.fixed.total,
       covered: v.covered,
       savings: v.plan.allocations.savings,
-      savingsPct: v.plan.isForThisWeek && v.plan.plannedIncome > 0
+      savingsPct: v.plan.hasPlan && v.plan.plannedIncome > 0
         ? Math.round((v.plan.allocations.savings / v.plan.plannedIncome) * 1000) / 10 : null,
       spent: v.actuals.total,
       overspent: v.rows.some(r => r.over && r.planned > 0)

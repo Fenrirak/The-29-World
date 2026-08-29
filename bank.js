@@ -40,7 +40,7 @@ function paintChrome() {
   document.getElementById("labSavAutoAmount").innerHTML = icon("coin", 13) + " Amount";
   document.getElementById("labSavAutoNote").innerHTML = icon("star", 13) + " Note (optional)";
   document.getElementById("addSavAutoBtn").innerHTML = icon("plus", 15) + " Create automatic transfer";
-  document.getElementById("hBudget").innerHTML = icon("calendar", 18) + " This week's plan";
+  document.getElementById("hBudget").innerHTML = icon("calendar", 18) + " Your budget plan";
   document.getElementById("hBudFixed").innerHTML = icon("calendar", 15) + " Already committed";
   document.getElementById("hBudTrack").innerHTML = icon("repeat", 15) + " How this week is actually going";
   document.getElementById("labBudIncome").innerHTML = icon("coin", 13) + " What I expect to earn this week";
@@ -444,6 +444,12 @@ function budIncomeValue() {
   return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
 }
 
+// $12.34 stays as-is; -$12.34 for a loss, rather than fmtMoney's bare "$-12.34".
+function fmtSigned(n) {
+  const v = Number(n) || 0;
+  return (v < 0 ? "-" : "") + fmtMoney(Math.abs(v));
+}
+
 function renderBudgetStudent(me, cls) {
   const v = buildBudgetView(cls, me, CURRENT.username);
   BUDGET_VIEW = v;
@@ -454,13 +460,12 @@ function renderBudgetStudent(me, cls) {
   const verdict = (tone, ic, text) =>
     `<div class="bud-verdict ${tone}">${icon(ic, 19)}<span>${text}</span></div>`;
   let verdictHtml;
-  if (!v.plan.isForThisWeek) {
-    verdictHtml = verdict("warn", "calendar", v.plan.carriedFromWeek
-      ? "Last week's plan has run out. Your old numbers are still filled in below — check them against this week and save again."
-      : "You haven't planned this week yet. Put in what you expect to earn, split it three ways, and save — it takes about a minute.");
+  if (!v.plan.hasPlan) {
+    verdictHtml = verdict("warn", "calendar",
+      "You haven't set up a plan yet. Put in what you expect to earn, split it three ways, and save — it'll keep using those numbers every week until you change them.");
   } else if (!v.covered) {
     verdictHtml = verdict("bad", "shield",
-      `This plan doesn't cover what you already owe. Your fixed costs are ${fmtMoney(v.fixed.total)} this week but you've only set aside ${fmtMoney(v.plan.allocations.needs)} for them.`);
+      `Your plan doesn't cover what you already owe. Your fixed costs are ${fmtMoney(v.fixed.total)} this week but you've only set aside ${fmtMoney(v.plan.allocations.needs)} for them.`);
   } else {
     const over = v.rows.filter(r => r.over && r.planned > 0);
     if (over.length) {
@@ -476,12 +481,19 @@ function renderBudgetStudent(me, cls) {
   }
   document.getElementById("budVerdict").innerHTML = verdictHtml;
 
+  /* ---- The detailed notes (loan interest, insurance, saving rate, stock
+     moves, overspending) — one small card each, instead of burying all of
+     this inside the single verdict line above. */
+  document.getElementById("budNotes").innerHTML = v.notes.map(n =>
+    `<div class="bud-note ${n.tone}">${icon(n.icon, 16)}<span>${n.text}</span></div>`).join("");
+
   /* ---- Expected income ---- */
-  document.getElementById("budIncome").value = v.plan.isForThisWeek ? v.plan.plannedIncome : (v.estimate.total || "");
+  document.getElementById("budIncome").value = v.plan.hasPlan ? v.plan.plannedIncome : (Math.max(0, v.estimate.total) || "");
   const hint = document.getElementById("budIncomeHint");
   hint.innerHTML = v.estimate.items.length
-    ? "Based on " + v.estimate.items.map(i => `${budEsc(i.label)} ${fmtMoney(i.amount)}`).join(" + ") +
-      ` = <strong>${fmtMoney(v.estimate.total)}</strong>. Change it if you think this week will be different.`
+    ? "Based on " + v.estimate.items.map(i => `${budEsc(i.label)} ${i.signed ? fmtSigned(i.amount) : fmtMoney(i.amount)}`).join(" + ") +
+      ` = <strong>${fmtSigned(v.estimate.total)}</strong>. Change it if you think this week will be different.` +
+      (v.plan.hasPlan ? ` <button type="button" class="bud-estimate-link" onclick="budgetUseEstimate()">Use this figure instead</button>` : "")
     : "You don't have a job or any regular income yet, so there's nothing to estimate from — put in what you think you'll make.";
 
   /* ---- The three category boxes ---- */
@@ -504,9 +516,9 @@ function renderBudgetStudent(me, cls) {
       </div>
     </div>`).join("");
 
-  document.getElementById("budClearBtn").classList.toggle("hidden", !v.plan.isForThisWeek);
+  document.getElementById("budClearBtn").classList.toggle("hidden", !v.plan.hasPlan);
   document.getElementById("budSaveBtn").innerHTML =
-    icon(v.plan.isForThisWeek ? "repeat" : "plus", 15) + (v.plan.isForThisWeek ? " Update my plan" : " Save my plan");
+    icon(v.plan.hasPlan ? "repeat" : "plus", 15) + (v.plan.hasPlan ? " Update my plan" : " Save my plan");
 
   /* ---- What's already committed ---- */
   const fixedBox = document.getElementById("budFixedList");
@@ -526,7 +538,7 @@ function renderBudgetStudent(me, cls) {
 
   /* ---- Plan vs what actually happened ---- */
   const track = document.getElementById("budTrack");
-  track.classList.toggle("hidden", !v.plan.isForThisWeek && v.actuals.total <= 0);
+  track.classList.toggle("hidden", !v.plan.hasPlan && v.actuals.total <= 0);
   document.getElementById("budTrackRows").innerHTML = v.rows.map(r => {
     // With no plan to measure against, the bar shows each category's share
     // of what's been spent so far instead of a meaningless 0% of $0.
@@ -572,6 +584,16 @@ function budgetRecalc() {
     ? `<span>Put in what you expect to earn to start splitting it up.</span>`
     : `<span class="bud-total-left">${fmtMoney(Math.abs(left))} ${left < -0.005 ? "over" : left <= 0.005 ? "— all allocated" : "left to allocate"}</span>
        <span>${fmtMoney(allocated)} of ${fmtMoney(income)} given a job</span>`;
+}
+
+// Pulls today's estimate (job + rent + side hustle + stock market moves)
+// straight into the income field, for a student whose plan is carrying over
+// from an earlier week but whose numbers — a share price move, a new side
+// hustle — have since changed.
+function budgetUseEstimate() {
+  if (!BUDGET_VIEW) return;
+  document.getElementById("budIncome").value = BUDGET_VIEW.estimate.total > 0 ? BUDGET_VIEW.estimate.total : "";
+  budgetRecalc();
 }
 
 // Fills all three at once, but nudged: if fixed costs are bigger than the
