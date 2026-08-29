@@ -4666,6 +4666,20 @@ async function sellProperty(classCode, propId, rate) {
 // An unaffordable payment is simply refused (BROKE) — nothing is part-paid
 // and nothing accumulates as debt, since the student is the only one who
 // can ever trigger a charge in the first place.
+// The actual amount a mortgage's next payment will be — principal +
+// interest-on-remaining-balance — worked out the same way whether it's
+// being displayed ahead of time (property.js) or actually charged
+// (payMortgage below), so the number shown to a student is never different
+// from the number they get charged.
+function mortgageWeekAmount(mortgage) {
+  const principalBefore = mortgage.principalRemaining != null
+    ? mortgage.principalRemaining
+    : mortgage.weeklyPayment * mortgage.weeksLeft; // pre-existing mortgages without the field
+  const interest = Math.round(principalBefore * ((mortgage.interestRate || 0) / 100) * 100) / 100;
+  const principal = Math.round(mortgage.weeklyPayment * 100) / 100;
+  return { balanceBefore: Math.round(principalBefore * 100) / 100, interest, principal, total: Math.round((principal + interest) * 100) / 100 };
+}
+
 async function payMortgage(username, classCode, propId) {
   const classRef = classesCol().doc(classCode);
   const userRef = usersCol().doc(username);
@@ -4690,14 +4704,11 @@ async function payMortgage(username, classCode, propId) {
       if (prop.mortgage.purchaseWeekKey === weekKey) throw new Error("PURCHASE_WEEK");
       if (prop.mortgage.lastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
       // Interest is charged on the principal still remaining.
-      const principalBefore = prop.mortgage.principalRemaining != null
-        ? prop.mortgage.principalRemaining
-        : prop.mortgage.weeklyPayment * prop.mortgage.weeksLeft; // pre-existing mortgages without the field
-      const interestAmt = Math.round(principalBefore * ((prop.mortgage.interestRate || 0) / 100) * 100) / 100;
-      amt = Math.round((prop.mortgage.weeklyPayment + interestAmt) * 100) / 100;
+      const weekAmt = mortgageWeekAmount(prop.mortgage);
+      amt = weekAmt.total;
       if (user.balance < amt) throw new Error("BROKE");
       t.update(userRef, { balance: Math.round((user.balance - amt) * 100) / 100 });
-      prop.mortgage.principalRemaining = Math.max(0, Math.round((principalBefore - prop.mortgage.weeklyPayment) * 100) / 100);
+      prop.mortgage.principalRemaining = Math.max(0, Math.round((weekAmt.balanceBefore - prop.mortgage.weeklyPayment) * 100) / 100);
       prop.mortgage.weeksLeft -= 1;
       prop.mortgage.lastWeekPaid = weekKey;
       remainingAfter = prop.mortgage.weeksLeft;
@@ -6297,11 +6308,7 @@ function budgetFixedCostsFromData(cls, user, username) {
   // including its fallback for mortgages taken before interest existed).
   (cls.properties || []).forEach(p => {
     if (p.owner !== username || !p.mortgage || !(p.mortgage.weeksLeft > 0)) return;
-    const principalRemaining = p.mortgage.principalRemaining != null
-      ? p.mortgage.principalRemaining
-      : p.mortgage.weeklyPayment * p.mortgage.weeksLeft;
-    const interest = Math.round(principalRemaining * ((p.mortgage.interestRate || 0) / 100) * 100) / 100;
-    const amount = Math.round(((p.mortgage.weeklyPayment || 0) + interest) * 100) / 100;
+    const amount = mortgageWeekAmount(p.mortgage).total;
     const freeWeek = p.mortgage.purchaseWeekKey === weekKey;
     const settled = p.mortgage.lastWeekPaid === weekKey || freeWeek;
     items.push({

@@ -149,7 +149,7 @@ function ownedUnitBlock(p, isMine, cls, nameOf) {
   const who = isMine ? "You" : nameOf(p.owner);
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
-      <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
+      <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance still owed (shrinks each week)` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
       ${isMine && p.mortgage ? mortgagePayBlock(p, cls) : ""}
       ${occupancyBlock(p, isMine)}
       <div class="row-flex" style="gap:8px;margin-top:6px;">
@@ -198,10 +198,10 @@ function occupancyBlock(p, isMine) {
 
 // Shows this week's mortgage-payment status for the owner, and — only on
 // the exact due day, for the exact due week — a button to pay it. There's
-// never an amount to type in: the weekly installment (+ interest) is
-// fixed by the mortgage itself. A week that's missed simply stays unpaid;
-// nothing accumulates as debt, and weeksLeft only ticks down when a
-// payment actually goes through.
+// never an amount to type in, but the actual dollar figure (principal +
+// interest on whatever's still owed) is worked out and shown up front, so
+// a student is never surprised by what the button is about to charge —
+// it's the same number payMortgage() itself will use.
 function mortgagePayBlock(p, cls) {
   const mortgageDayName = DAY_FULL[cls.mortgageDay || "Fri"];
   const weekKey = isoWeekKey(new Date());
@@ -212,25 +212,30 @@ function mortgagePayBlock(p, cls) {
   // setMortgageDueOverride).
   const forcedDue = cls.mortgageForceDueWeek === weekKey;
   const isDueToday = (cls.mortgageDay || "Fri") === nzDayName() || forcedDue;
+  const amt = mortgageWeekAmount(p.mortgage);
+  const breakdown = amt.interest > 0
+    ? `${fmtMoney(amt.principal)} + ${fmtMoney(amt.interest)} interest on the ${fmtMoney(amt.balanceBefore)} still owed`
+    : `${fmtMoney(amt.principal)}, no interest owing`;
 
   let status, canPay = false;
   if (purchaseWeek) {
-    status = `Your first payment isn't due yet — the week you bought is free.`;
+    status = `Your first payment isn't due yet — the week you bought is free. It'll be ${fmtMoney(amt.total)} (${breakdown}).`;
   } else if (alreadyPaid) {
-    status = `${icon("house", 13)} This week's payment is already sorted.`;
+    status = `${icon("house", 13)} This week's payment of ${fmtMoney(amt.total)} is already sorted.`;
   } else if (!isDueToday) {
-    status = `Mortgage payments are due every ${mortgageDayName} — come back then to pay this week's installment yourself.`;
+    status = `Mortgage payments are due every ${mortgageDayName}. This week's would be ${fmtMoney(amt.total)} (${breakdown}) — come back then to pay it yourself.`;
   } else {
-    status = forcedDue && (cls.mortgageDay || "Fri") !== nzDayName()
+    const dueLine = forcedDue && (cls.mortgageDay || "Fri") !== nzDayName()
       ? `Your teacher has marked this week's mortgage payment as due now.`
       : `This week's payment is due today.`;
+    status = `${dueLine} <strong>${fmtMoney(amt.total)}</strong> — ${breakdown}.`;
     canPay = true;
   }
 
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
       <p class="muted-small">${status}</p>
-      ${canPay ? `<button class="btn small gold" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay this week's mortgage</button>` : ""}
+      ${canPay ? `<button class="btn small gold" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay this week's mortgage — ${fmtMoney(amt.total)}</button>` : ""}
       <div id="mortgageMsg-${p.id}"></div>
     </div>`;
 }

@@ -109,7 +109,7 @@ function notifMortgageItems(me, cls) {
     out.push({
       id: "mortgage-" + p.id + "-" + nzDateKey(), ts: dayStart, icon: "house", tone: "coral",
       title: "Mortgage payment due: " + p.name,
-      body: `${fmtMoney(p.mortgage.weeklyPayment || 0)} this week, ${p.mortgage.weeksLeft} ${p.mortgage.weeksLeft === 1 ? "week" : "weeks"} left to run.`,
+      body: `${fmtMoney(mortgageWeekAmount(p.mortgage).total)} this week, ${p.mortgage.weeksLeft} ${p.mortgage.weeksLeft === 1 ? "week" : "weeks"} left to run.`,
       href: "property.html", action: true
     });
   });
