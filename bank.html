@@ -75,6 +75,72 @@
     </div>
   </div>
 
+  <!-- ---------------- Budgeting tool (student) ---------------- -->
+  <div class="card budget-card hidden" id="budgetCard">
+    <div class="flex-between">
+      <h2 id="hBudget">This week's plan</h2>
+      <span class="bud-week" id="budWeek"></span>
+    </div>
+    <p id="budgetIntro">Decide where your money is going <em>before</em> it goes there. Split what you expect to earn across the three groups below, and this will check the plan against what you've already committed to.</p>
+
+    <div id="budVerdict"></div>
+
+    <div class="bud-layout">
+      <form class="bud-plan" onsubmit="return saveBudgetPlan(event)">
+        <label for="budIncome" id="labBudIncome">What I expect to earn this week</label>
+        <div class="bud-money-field">
+          <span class="bud-currency">$</span>
+          <input id="budIncome" type="number" min="0" step="0.01" required inputmode="decimal">
+        </div>
+        <p class="muted-small" id="budIncomeHint"></p>
+
+        <div id="budRows"></div>
+
+        <div class="bud-total" id="budTotals"></div>
+
+        <div class="bud-actions">
+          <button class="btn gold" type="submit" id="budSaveBtn">Save my plan</button>
+          <button class="btn small secondary" type="button" id="budSuggestBtn" onclick="budgetSuggest()">Suggest a split</button>
+          <button class="btn small secondary hidden" type="button" id="budClearBtn" onclick="budgetClear()">Start again</button>
+        </div>
+        <div id="budMsg"></div>
+      </form>
+
+      <div class="bud-fixed">
+        <h3 id="hBudFixed">Already committed</h3>
+        <p class="muted-small">Money that's leaving your account this week whether you plan for it or not.</p>
+        <div id="budFixedList"></div>
+        <p class="muted-small" id="noBudFixed">Nothing is locked in this week — no mortgage, no loan falling due, no automatic payments.</p>
+        <div class="bud-fixed-total" id="budFixedTotal"></div>
+      </div>
+    </div>
+
+    <div class="bud-track" id="budTrack">
+      <h3 id="hBudTrack">How this week is actually going</h3>
+      <div id="budTrackRows"></div>
+      <p class="muted-small" id="budTrackNote"></p>
+    </div>
+
+    <div id="budNotes"></div>
+  </div>
+
+  <!-- ---------------- Budgeting overview (teacher) ---------------- -->
+  <div class="card hidden" id="budgetTeacherCard">
+    <div class="flex-between">
+      <h2 id="hBudgetTeacher">Who's budgeting this week</h2>
+      <span class="bud-week" id="budWeekTeacher"></span>
+    </div>
+    <p>Every student can plan their week on this page. This is who has, and whether their plan actually covers what they owe.</p>
+    <div class="grid grid-3" id="budTeacherStats"></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Student</th><th>Planned income</th><th>Fixed costs</th><th>Set aside for needs</th><th>Saving</th><th>Spent so far</th></tr></thead>
+        <tbody id="budTeacherTable"></tbody>
+      </table>
+    </div>
+    <p class="muted-small" id="noBudTeacher">No students in this class yet.</p>
+  </div>
+
   <div class="card" id="savingsCard">
     <h2 id="hSavings">Savings account</h2>
     <p id="savingsRateNote">Money in here earns interest whenever your teacher applies it — it doesn't earn anything sitting in your cash balance.</p>

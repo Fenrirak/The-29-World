@@ -40,6 +40,12 @@ function paintChrome() {
   document.getElementById("labSavAutoAmount").innerHTML = icon("coin", 13) + " Amount";
   document.getElementById("labSavAutoNote").innerHTML = icon("star", 13) + " Note (optional)";
   document.getElementById("addSavAutoBtn").innerHTML = icon("plus", 15) + " Create automatic transfer";
+  document.getElementById("hBudget").innerHTML = icon("chart", 18) + " This week's plan";
+  document.getElementById("hBudFixed").innerHTML = icon("calendar", 15) + " Already committed";
+  document.getElementById("hBudTrack").innerHTML = icon("repeat", 15) + " How this week is actually going";
+  document.getElementById("labBudIncome").innerHTML = icon("coin", 13) + " What I expect to earn this week";
+  document.getElementById("budSuggestBtn").innerHTML = icon("star", 14) + " Suggest a split";
+  document.getElementById("hBudgetTeacher").innerHTML = icon("chart", 18) + " Who's budgeting this week";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
@@ -115,6 +121,8 @@ async function render() {
   if (!IS_TEACHER && cashRate > 0) cashRateNote.textContent = `Earning ${cashRate}% interest. ${interestScheduleLabel(cls)}`;
 
   document.getElementById("savingsCard").classList.toggle("hidden", IS_TEACHER);
+  document.getElementById("budgetCard").classList.toggle("hidden", IS_TEACHER);
+  document.getElementById("budgetTeacherCard").classList.toggle("hidden", !IS_TEACHER);
   if (!IS_TEACHER) {
     document.getElementById("savingsBalance").textContent = fmtMoney(me.savings || 0);
     document.getElementById("savingsRateValue").textContent = (cls.interestRate || 0) + "%";
@@ -128,6 +136,12 @@ async function render() {
   // Firestore read PER STUDENT, so every render() (including after every
   // send/deposit/withdraw/automation action) read the whole class twice.
   const allStudents = await getClassStudents(me.classCode, cls);
+
+  // The budgeting tool is pure arithmetic over `cls` and `me` (plus the
+  // roster, for the teacher's overview) — all already in hand — so it
+  // renders here without a single extra read.
+  if (IS_TEACHER) renderBudgetTeacher(cls, allStudents);
+  else renderBudgetStudent(me, cls);
 
   const recipients = await payableRecipients(allStudents);
   const optsHtml = recipients.length
@@ -395,6 +409,279 @@ function cancelEditSavAuto() {
   document.getElementById("hSavingsAuto").innerHTML = "Automatic transfer";
   document.getElementById("addSavAutoBtn").innerHTML = icon("plus", 15) + " Create automatic transfer";
   document.getElementById("cancelSavAutoEditBtn").classList.add("hidden");
+}
+
+/* ---------------- Budgeting tool ----------------
+   All the arithmetic lives in data.js (buildBudgetView and friends); this
+   is only the rendering and the form handling. BUDGET_VIEW keeps the last
+   built view around so the live "you've allocated X of Y" readout can
+   recalculate as the student types, without touching the database or
+   re-rendering the whole page under their cursor. */
+let BUDGET_VIEW = null;
+
+function budEsc(s) {
+  return String(s === undefined || s === null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+// "Week of 25 Aug – 31 Aug", from the Monday date key the week starts on.
+function budWeekLabel(startKey) {
+  const [y, m, d] = startKey.split("-").map(Number);
+  const fmt = new Intl.DateTimeFormat("en-NZ", { timeZone: "UTC", day: "numeric", month: "short" });
+  return "Week of " + fmt.format(new Date(Date.UTC(y, m - 1, d))) +
+         " – " + fmt.format(new Date(Date.UTC(y, m - 1, d + 6)));
+}
+
+function budInputValue(key) {
+  const el = document.getElementById("budAmt-" + key);
+  const n = Number(el ? el.value : 0);
+  return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+}
+
+function budIncomeValue() {
+  const n = Number(document.getElementById("budIncome").value);
+  return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+}
+
+function renderBudgetStudent(me, cls) {
+  const v = buildBudgetView(cls, me, CURRENT.username);
+  BUDGET_VIEW = v;
+
+  document.getElementById("budWeek").textContent = budWeekLabel(v.weekStartKey);
+
+  /* ---- The one-line verdict ---- */
+  const verdict = (tone, ic, text) =>
+    `<div class="bud-verdict ${tone}">${icon(ic, 19)}<span>${text}</span></div>`;
+  let verdictHtml;
+  if (!v.plan.isForThisWeek) {
+    verdictHtml = verdict("warn", "calendar", v.plan.carriedFromWeek
+      ? "Last week's plan has run out. Your old numbers are still filled in below — check them against this week and save again."
+      : "You haven't planned this week yet. Put in what you expect to earn, split it three ways, and save — it takes about a minute.");
+  } else if (!v.covered) {
+    verdictHtml = verdict("bad", "shield",
+      `This plan doesn't cover what you already owe. Your fixed costs are ${fmtMoney(v.fixed.total)} this week but you've only set aside ${fmtMoney(v.plan.allocations.needs)} for them.`);
+  } else {
+    const over = v.rows.filter(r => r.over && r.planned > 0);
+    if (over.length) {
+      verdictHtml = verdict("warn", "chart",
+        `You're over your plan on ${over.map(r => r.label).join(" and ")}. Nothing's broken — but the rest of the week has to come from somewhere.`);
+    } else if (v.fixed.total > 0) {
+      verdictHtml = verdict("good", "trophy",
+        `Your plan covers the ${fmtMoney(v.fixed.total)} you owe this week, and you're inside it so far.`);
+    } else {
+      verdictHtml = verdict("good", "trophy",
+        "Nothing is locked in this week, so it's all yours to allocate — and you're inside your plan so far.");
+    }
+  }
+  document.getElementById("budVerdict").innerHTML = verdictHtml;
+
+  /* ---- Expected income ---- */
+  document.getElementById("budIncome").value = v.plan.isForThisWeek ? v.plan.plannedIncome : (v.estimate.total || "");
+  const hint = document.getElementById("budIncomeHint");
+  hint.innerHTML = v.estimate.items.length
+    ? "Based on " + v.estimate.items.map(i => `${budEsc(i.label)} ${fmtMoney(i.amount)}`).join(" + ") +
+      ` = <strong>${fmtMoney(v.estimate.total)}</strong>. Change it if you think this week will be different.`
+    : "You don't have a job or any regular income yet, so there's nothing to estimate from — put in what you think you'll make.";
+
+  /* ---- The three category boxes ---- */
+  document.getElementById("budRows").innerHTML = v.rows.map(r => `
+    <div class="bud-cat ${r.key}">
+      <div class="bud-cat-head">
+        <span class="bud-cat-icon">${icon(r.icon, 17)}</span>
+        <div class="bud-cat-text">
+          <div class="bud-cat-name">${r.label}</div>
+          <div class="bud-cat-blurb">${budEsc(r.blurb)}</div>
+        </div>
+        <button type="button" class="bud-guide" onclick="budgetUseGuide('${r.key}')"
+                title="Use the ${r.guide}% the 50/30/20 rule suggests">Guide: ${r.guide}%</button>
+      </div>
+      <div class="bud-cat-input">
+        <div class="bud-money-field">
+          <span class="bud-currency">$</span>
+          <input id="budAmt-${r.key}" type="number" min="0" step="0.01" inputmode="decimal"
+                 value="${r.planned || ""}" oninput="budgetRecalc()" aria-label="${r.label} amount">
+        </div>
+        <span class="bud-cat-pct" id="budPct-${r.key}"></span>
+      </div>
+    </div>`).join("");
+
+  document.getElementById("budClearBtn").classList.toggle("hidden", !v.plan.isForThisWeek);
+  document.getElementById("budSaveBtn").innerHTML =
+    icon(v.plan.isForThisWeek ? "repeat" : "plus", 15) + (v.plan.isForThisWeek ? " Update my plan" : " Save my plan");
+
+  /* ---- What's already committed ---- */
+  const fixedBox = document.getElementById("budFixedList");
+  document.getElementById("noBudFixed").classList.toggle("hidden", v.fixed.items.length > 0);
+  fixedBox.innerHTML = v.fixed.items.map(i => `
+    <div class="bud-fix-row${i.settled ? " settled" : ""}${i.overdue ? " overdue" : ""}">
+      <span class="bud-fix-icon">${icon(i.overdue ? "star" : i.settled ? "trophy" : i.icon, 14)}</span>
+      <div class="bud-fix-text">
+        <div class="bud-fix-label">${budEsc(i.label)}</div>
+        <div class="bud-fix-note">${i.overdue ? "Overdue — " : ""}${budEsc(i.note)}${i.auto ? " · runs by itself" : ""}</div>
+      </div>
+      <div class="bud-fix-amt">${fmtMoney(i.amount)}</div>
+    </div>`).join("");
+  document.getElementById("budFixedTotal").innerHTML = v.fixed.items.length
+    ? `<span>Still to pay this week</span><span>${fmtMoney(v.fixed.total)}</span>`
+    : "";
+
+  /* ---- Plan vs what actually happened ---- */
+  const track = document.getElementById("budTrack");
+  track.classList.toggle("hidden", !v.plan.isForThisWeek && v.actuals.total <= 0);
+  document.getElementById("budTrackRows").innerHTML = v.rows.map(r => {
+    // With no plan to measure against, the bar shows each category's share
+    // of what's been spent so far instead of a meaningless 0% of $0.
+    const denom = r.planned > 0 ? r.planned : Math.max(v.actuals.total, r.spent);
+    const pct = denom > 0 ? Math.min(100, (r.spent / denom) * 100) : 0;
+    return `
+    <div class="bud-track-row">
+      <div class="bud-track-head">
+        <span class="bud-track-name">${r.label}</span>
+        <span class="bud-track-nums${r.over ? " over" : ""}">
+          <strong>${fmtMoney(r.spent)}</strong>${r.planned > 0 ? ` of ${fmtMoney(r.planned)}` : " so far"}
+          ${r.planned > 0 ? (r.over ? ` · ${fmtMoney(Math.round((r.spent - r.planned) * 100) / 100)} over` : ` · ${fmtMoney(r.left)} left`) : ""}
+        </span>
+      </div>
+      <div class="bud-track-bar"><div class="bud-track-fill ${r.over ? "over" : r.key}" style="width:${pct}%;"></div></div>
+    </div>`;
+  }).join("");
+  document.getElementById("budTrackNote").textContent = v.actuals.count === 0
+    ? "Nothing has moved yet this week — this fills in as you spend."
+    : `From ${v.actuals.count} ${v.actuals.count === 1 ? "transaction" : "transactions"} since Monday. Money you've moved into savings counts as saved, not spent.`;
+
+  /* ---- Coaching notes ---- */
+  document.getElementById("budNotes").innerHTML = v.notes.map(n =>
+    `<div class="bud-note ${n.tone}">${icon(n.icon, 16)}<span>${n.text}</span></div>`).join("");
+
+  budgetRecalc();
+}
+
+// Live readout under the three boxes. Runs on every keystroke, so it only
+// ever reads the inputs — never the database, and never re-renders.
+function budgetRecalc() {
+  if (!BUDGET_VIEW) return;
+  const income = budIncomeValue();
+  let allocated = 0;
+  BUDGET_CATEGORIES.forEach(c => {
+    const v = budInputValue(c.key);
+    allocated += v;
+    const pctEl = document.getElementById("budPct-" + c.key);
+    if (pctEl) pctEl.textContent = income > 0 ? Math.round((v / income) * 100) + "% of income" : "";
+  });
+  allocated = Math.round(allocated * 100) / 100;
+  const left = Math.round((income - allocated) * 100) / 100;
+  const box = document.getElementById("budTotals");
+  box.classList.toggle("over", left < -0.005);
+  box.classList.toggle("exact", Math.abs(left) <= 0.005 && income > 0);
+  box.innerHTML = income <= 0
+    ? `<span>Put in what you expect to earn to start splitting it up.</span>`
+    : `<span class="bud-total-left">${fmtMoney(Math.abs(left))} ${left < -0.005 ? "over" : left <= 0.005 ? "— all allocated" : "left to allocate"}</span>
+       <span>${fmtMoney(allocated)} of ${fmtMoney(income)} given a job</span>`;
+}
+
+// Tapping a "Guide: 50%" chip fills that box with its share of the income
+// currently in the box above — the fastest way to a sensible first plan.
+function budgetUseGuide(key) {
+  const cat = BUDGET_CATEGORIES.find(c => c.key === key);
+  const income = budIncomeValue();
+  if (!cat || income <= 0) {
+    document.getElementById("budMsg").innerHTML = `<div class="error-msg">Put in what you expect to earn first — the guide is a share of that.</div>`;
+    return;
+  }
+  document.getElementById("budAmt-" + key).value = (Math.round(income * (cat.guide / 100) * 100) / 100).toFixed(2);
+  budgetRecalc();
+}
+
+// Fills all three at once, but nudged: if fixed costs are bigger than the
+// 50% Needs guide, Needs gets what it actually needs and the rest is split
+// between Wants and Savings in their usual 30:20 ratio. A student whose
+// mortgage eats 70% of their pay should be shown that, not handed a
+// textbook split that doesn't fit their situation.
+function budgetSuggest() {
+  const income = budIncomeValue();
+  if (income <= 0) {
+    document.getElementById("budMsg").innerHTML = `<div class="error-msg">Put in what you expect to earn first, then I can suggest a split.</div>`;
+    return;
+  }
+  const fixed = BUDGET_VIEW ? BUDGET_VIEW.fixed.total : 0;
+  const needs = Math.min(income, Math.max(Math.round(income * 0.5 * 100) / 100, fixed));
+  const rest = Math.round((income - needs) * 100) / 100;
+  const wants = Math.round(rest * 0.6 * 100) / 100; // 30:20 of what's left
+  const savings = Math.round((rest - wants) * 100) / 100;
+  document.getElementById("budAmt-needs").value = needs.toFixed(2);
+  document.getElementById("budAmt-wants").value = wants.toFixed(2);
+  document.getElementById("budAmt-savings").value = savings.toFixed(2);
+  budgetRecalc();
+  document.getElementById("budMsg").innerHTML = `<div class="success-msg">${
+    fixed > income * 0.5
+      ? `Needs is set to ${fmtMoney(needs)} because that's what you actually owe this week — more than the 50% the guide suggests. The rest is split 30:20. Change any of it before you save.`
+      : "Split 50/30/20. Change any of it before you save — it's your plan."
+  }</div>`;
+}
+
+async function saveBudgetPlan(e) {
+  e.preventDefault();
+  const box = document.getElementById("budMsg");
+  const allocations = {};
+  BUDGET_CATEGORIES.forEach(c => { allocations[c.key] = budInputValue(c.key); });
+  const btn = document.getElementById("budSaveBtn");
+  btn.disabled = true;
+  const res = await saveBudget(CURRENT.username, budIncomeValue(), allocations);
+  btn.disabled = false;
+  box.innerHTML = res.ok
+    ? `<div class="success-msg">Plan saved for this week.</div>`
+    : `<div class="error-msg">${res.error}</div>`;
+  if (res.ok) await render();
+  return false;
+}
+
+async function budgetClear() {
+  if (!confirm("Clear this week's plan and start again?")) return;
+  await clearBudget(CURRENT.username);
+  document.getElementById("budMsg").innerHTML = "";
+  await render();
+}
+
+/* ---------------- Teacher: who's budgeting ---------------- */
+function renderBudgetTeacher(cls, students) {
+  document.getElementById("budWeekTeacher").textContent = budWeekLabel(budgetWeekStartKey());
+  const rows = classBudgetOverviewFromData(cls, students.filter(s => s.role !== "teacher"));
+  document.getElementById("noBudTeacher").classList.toggle("hidden", rows.length > 0);
+
+  const planned = rows.filter(r => r.planned);
+  const covering = planned.filter(r => r.covered);
+  const savingPcts = planned.map(r => r.savingsPct).filter(p => p !== null);
+  const avgSaving = savingPcts.length
+    ? Math.round((savingPcts.reduce((a, b) => a + b, 0) / savingPcts.length) * 10) / 10 : null;
+
+  document.getElementById("budTeacherStats").innerHTML = `
+    <div class="stat sky"><span class="icon">${icon("idcard", 26)}</span>
+      <div class="label">Planned this week</div>
+      <div class="value">${planned.length}<span style="font-size:1rem;font-weight:700;"> / ${rows.length}</span></div></div>
+    <div class="stat ${planned.length && covering.length === planned.length ? "mint" : "gold"}"><span class="icon">${icon("shield", 26)}</span>
+      <div class="label">Plans that cover their costs</div>
+      <div class="value">${covering.length}<span style="font-size:1rem;font-weight:700;"> / ${planned.length}</span></div></div>
+    <div class="stat mint"><span class="icon">${icon("piggy", 26)}</span>
+      <div class="label">Average share saved</div>
+      <div class="value">${avgSaving === null ? "—" : avgSaving + "%"}</div></div>`;
+
+  document.getElementById("budTeacherTable").innerHTML = rows.map(r => {
+    // A plan "covers" the week when the Needs slice alone is at least the
+    // fixed costs — money parked in Wants doesn't pay a mortgage.
+    const flag = !r.planned
+      ? `<span class="bud-flag none">No plan</span>`
+      : r.covered ? `<span class="bud-flag ok">Covered</span>`
+                  : `<span class="bud-flag short">${fmtMoney(Math.round((r.fixedTotal - r.needs) * 100) / 100)} short</span>`;
+    return `<tr>
+      <td><strong>${budEsc(r.name)}</strong></td>
+      <td>${r.planned ? fmtMoney(r.income) : "—"}</td>
+      <td>${r.fixedTotal > 0 ? fmtMoney(r.fixedTotal) : "—"}</td>
+      <td>${r.planned ? fmtMoney(r.needs) + " " : ""}${flag}</td>
+      <td>${r.savingsPct === null ? "—" : fmtMoney(r.savings) + " (" + r.savingsPct + "%)"}</td>
+      <td class="${r.overspent ? "ticker-down" : ""}">${fmtMoney(r.spent)}${r.overspent ? " — over plan" : ""}</td>
+    </tr>`;
+  }).join("");
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -6193,6 +6193,451 @@ async function acceptOffer(username, classCode, listingId, offerId) {
   return res;
 }
 
+/* ===================== Budgeting tool =====================
+   Every other module in this app is a decision made in the moment: take
+   the loan, buy the car, put the money in savings. Nothing until now
+   asked a student to look at a whole week at once and decide in advance
+   where their money is going — which is the one habit the whole
+   simulation is meant to teach.
+
+   This is that planning layer. A student writes down what they expect to
+   earn this week and splits it across Needs / Wants / Savings, and the
+   app checks that plan against two things it already knows:
+
+     1. What their fixed costs REALLY are this week — mortgage instalment,
+        loan repayments falling due, and every automatic payment they've
+        set up. If the Needs slice doesn't cover those, they're told
+        before they spend, not after they bounce.
+     2. What they've actually spent so far this week, read straight out of
+        cls.txns. So the plan is measured against reality rather than
+        being a wish list they write once and never look at again.
+
+   The plan is one small object on the student's own user doc
+   (user.budget), stamped with an ISO week key so it expires by itself
+   every Monday and asks to be redone rather than quietly going stale.
+
+   Nothing here moves money or blocks anything. Overspending your own plan
+   is allowed — being shown that you did is the lesson. Every function
+   below except saveBudget() is pure over data the page has already
+   loaded, so rendering the entire tool costs zero extra reads.
+========================================================================= */
+
+/* The 50/30/20 rule, which is the thing this tool is really teaching.
+   `guide` is the share of income each category conventionally gets; it's
+   shown as a suggestion next to the student's own number, never enforced. */
+const BUDGET_CATEGORIES = [
+  { key: "needs", label: "Needs", icon: "house", tone: "coral", guide: 50,
+    blurb: "Things you've already committed to: mortgage, loan repayments, insurance, automatic payments." },
+  { key: "wants", label: "Wants", icon: "cart", tone: "gold", guide: 30,
+    blurb: "Things you choose to buy: store items, upgrades, trades with classmates, a punt at the casino." },
+  { key: "savings", label: "Savings", icon: "piggy", tone: "mint", guide: 20,
+    blurb: "Money you put away instead of spending: savings account, term deposits, shares." }
+];
+
+// Monday of the current NZ week, as a date key. isoWeekKey() groups
+// payments into Mon-Sun weeks, so the budget week has to start on the
+// same Monday or "spent so far this week" wouldn't line up with the
+// mortgage/loan-interest cycles it's being compared against.
+function budgetWeekStartKey(d) {
+  const isoIdx = (DAY_NAMES.indexOf(nzDayName(d)) + 6) % 7; // Mon = 0 ... Sun = 6
+  return dateKeyPlusDays(nzDateKey(d), -isoIdx);
+}
+
+// How many times a repeating payment of this frequency lands in a week,
+// so a fortnightly $20 payment budgets as $10/week rather than being
+// either ignored or counted in full.
+function budgetWeeklyShare(amount, frequency) {
+  const days = FREQ_DAYS[frequency] || 7;
+  return Math.round((Number(amount) || 0) * (7 / days) * 100) / 100;
+}
+
+/* ---------------- What this week actually costs ----------------
+   The money that is going to leave this student's account whether they
+   plan for it or not. Deliberately only counts genuine cash commitments:
+   loan interest, for instance, is added to the debt rather than taken
+   from the balance, so it's reported as a warning further down instead of
+   being padded into a total the student can't actually spend against. */
+function budgetFixedCostsFromData(cls, user, username) {
+  const items = [];
+  const weekKey = isoWeekKey(new Date());
+  const todayKey = nzDateKey();
+
+  // --- Mortgage: this week's principal instalment plus interest on
+  // whatever principal is still outstanding (mirrors payMortgage exactly,
+  // including its fallback for mortgages taken before interest existed).
+  (cls.properties || []).forEach(p => {
+    if (p.owner !== username || !p.mortgage || !(p.mortgage.weeksLeft > 0)) return;
+    const principalRemaining = p.mortgage.principalRemaining != null
+      ? p.mortgage.principalRemaining
+      : p.mortgage.weeklyPayment * p.mortgage.weeksLeft;
+    const interest = Math.round(principalRemaining * ((p.mortgage.interestRate || 0) / 100) * 100) / 100;
+    const amount = Math.round(((p.mortgage.weeklyPayment || 0) + interest) * 100) / 100;
+    const freeWeek = p.mortgage.purchaseWeekKey === weekKey;
+    const settled = p.mortgage.lastWeekPaid === weekKey || freeWeek;
+    items.push({
+      key: "mortgage-" + p.id, icon: "house", label: "Mortgage — " + p.name,
+      amount, dueDay: cls.mortgageDay || "Fri", settled,
+      overdue: isMortgagePaymentOverdue(p, cls),
+      auto: false, // mortgages are paid by hand on the Property page
+      note: freeWeek ? "The week you bought is free"
+        : settled ? "Paid this week"
+        : p.mortgage.weeksLeft + (p.mortgage.weeksLeft === 1 ? " payment left" : " payments left")
+    });
+  });
+
+  // --- Loans falling due inside the next 7 days. A loan that isn't due
+  // yet isn't a cost this week — its weekly interest is, but that's debt
+  // growth rather than cash out, so it's raised as a warning instead.
+  (user.loans || []).forEach(l => {
+    if (l.status !== "active") return;
+    const daysLeft = l.dueDate ? daysBetweenKeys(todayKey, l.dueDate) : null;
+    if (daysLeft === null || daysLeft > 7) return;
+    items.push({
+      key: "loan-" + l.id, icon: "handshake",
+      label: daysLeft < 0 ? "Loan repayment (overdue)" : "Loan repayment",
+      amount: Math.round((l.owed || 0) * 100) / 100,
+      dueDay: null, settled: false, overdue: daysLeft < 0, auto: false,
+      note: daysLeft < 0 ? "Was due " + l.dueDate
+        : daysLeft === 0 ? "Due today"
+        : "Due in " + daysLeft + (daysLeft === 1 ? " day" : " days")
+    });
+  });
+
+  // --- Automatic payments the student set up themselves. These are the
+  // most reliable line in the whole list: they run on their own, on a
+  // schedule, whether or not there's money there for them.
+  (cls.automations || []).forEach(a => {
+    if (!a.active || a.studentUser !== username) return;
+    if (a.type === "savings-transfer") return; // saving, not spending — counted separately below
+    items.push({
+      key: "auto-" + a.id, icon: "repeat",
+      label: a.note || "Automatic payment",
+      amount: budgetWeeklyShare(a.amount, a.frequency),
+      dueDay: a.dayOfWeek, settled: false, overdue: false, auto: true,
+      // A weekly payment lands on one known day, so name it. Anything less
+      // frequent is spread across the weeks instead, so say that rather
+      // than implying the full amount goes out this week.
+      note: FREQ_DAYS[a.frequency] === 7
+        ? "Every " + (DAY_FULL[a.dayOfWeek] || a.dayOfWeek)
+        : "Averaged from " + (INTEREST_FREQ_LABEL[a.frequency] || a.frequency)
+    });
+  });
+
+  const total = Math.round(items.reduce((s, i) => s + (i.settled ? 0 : i.amount), 0) * 100) / 100;
+  return { items, total };
+}
+
+// Money already scheduled to move into savings by an automatic transfer.
+// Pre-fills the Savings box so a student who's already automated their
+// saving isn't asked to plan it a second time.
+function budgetScheduledSavingsFromData(cls, username) {
+  let total = 0;
+  (cls.automations || []).forEach(a => {
+    if (!a.active || a.studentUser !== username) return;
+    if (a.type !== "savings-transfer" || a.direction !== "toSavings") return;
+    total += budgetWeeklyShare(a.amount, a.frequency);
+  });
+  return Math.round(total * 100) / 100;
+}
+
+/* ---------------- What this week is likely to bring in ----------------
+   A starting figure for the "expected income" box, which the student can
+   always overwrite. Wages and rent are genuinely predictable and come
+   from settings; side-hustle income depends on how many days they
+   actually bother to check in, so that line uses what they really earned
+   over the last 7 days rather than a theoretical maximum they'd only hit
+   with a perfect week. */
+function budgetIncomeEstimateFromData(cls, user, username) {
+  const items = [];
+
+  const job = user.jobId ? (cls.jobs || []).find(j => j.id === user.jobId) : null;
+  if (job) {
+    const { net, taxAmount } = applyWageTax(cls, job.wage);
+    items.push({
+      icon: "briefcase", label: job.title, amount: net,
+      note: taxAmount > 0
+        ? fmtMoney(job.wage) + " less " + fmtMoney(taxAmount) + " tax"
+        : "Paid every " + (DAY_FULL[cls.payDay] || "pay day")
+    });
+  }
+
+  (cls.properties || []).forEach(p => {
+    if (p.owner !== username || p.occupancy !== "rented" || !(p.rentPerWeek > 0)) return;
+    items.push({
+      icon: "house", label: "Rent from " + p.name, amount: p.rentPerWeek,
+      note: "Every " + (DAY_FULL[p.rentDay || "Fri"] || p.rentDay)
+    });
+  });
+
+  const weekAgo = Date.now() - 7 * 86400000;
+  let hustle = 0;
+  (cls.txns || []).forEach(t => {
+    if (t.to !== username) return;
+    if (t.ts !== undefined && t.ts < weekAgo) return;
+    if (t.type === "side-hustle" || t.type === "truck-drive") hustle += Number(t.amount) || 0;
+  });
+  hustle = Math.round(hustle * 100) / 100;
+  if (hustle > 0) {
+    items.push({ icon: "star", label: "Side hustle", amount: hustle, note: "What you actually earned in the last 7 days" });
+  }
+
+  return { items, total: Math.round(items.reduce((s, i) => s + i.amount, 0) * 100) / 100 };
+}
+
+/* ---------------- What's really happened so far this week ----------------
+   Sorts this week's transactions into the same three buckets the student
+   planned in, so the plan can be shown next to the outcome. Anything that
+   doesn't belong in a bucket (a wage coming in, a savings withdrawal
+   moving money the student already had) returns null and is ignored
+   rather than being forced into a category it would distort. */
+function budgetBucketForTxn(t, username) {
+  const amt = Math.round(Math.abs(Number(t.amount) || 0) * 100) / 100;
+  if (!amt) return null;
+  const out = t.from === username;
+
+  switch (t.type) {
+    case "mortgage": case "loan-repayment": case "insurance-premium":
+    case "insurance-signup-fee": case "property-buy": case "fine":
+      return { bucket: "needs", amount: amt };
+    case "automation":
+      return out ? { bucket: "needs", amount: amt } : null;
+    case "store-buy": case "p2p-buy": case "vehicle-buy":
+    case "truck-licence-buy":
+      return { bucket: "wants", amount: amt };
+    case "transfer":
+      return out ? { bucket: "wants", amount: amt } : null;
+    case "gambling":
+      // Gambling always logs `from: username` whatever the outcome — only
+      // the note says whether it was won or lost (see placeRouletteBet).
+      return (t.note || "").includes("WON") ? null : { bucket: "wants", amount: amt };
+    case "savings-deposit": case "stock-buy": case "term-deposit-open":
+      return { bucket: "savings", amount: amt };
+    case "event":
+      return t.amount < 0 ? { bucket: "needs", amount: amt } : null;
+    case "big-event":
+      return out ? { bucket: "needs", amount: amt } : null;
+    default:
+      return null;
+  }
+}
+
+function budgetActualsFromData(cls, username) {
+  const startKey = budgetWeekStartKey();
+  const spent = { needs: 0, wants: 0, savings: 0 };
+  let count = 0;
+  (cls.txns || []).forEach(t => {
+    if (t.to !== username && t.from !== username) return;
+    // Compare NZ date keys rather than raw timestamps: the class's week
+    // rolls over at NZ midnight, which is nowhere near UTC midnight.
+    if (t.ts === undefined) return;
+    if (nzDateKey(new Date(t.ts)) < startKey) return;
+    const c = budgetBucketForTxn(t, username);
+    if (!c) return;
+    spent[c.bucket] = Math.round((spent[c.bucket] + c.amount) * 100) / 100;
+    count++;
+  });
+  return { spent, count, startKey, total: Math.round((spent.needs + spent.wants + spent.savings) * 100) / 100 };
+}
+
+/* ---------------- The saved plan ----------------
+   Always returns a usable object. A plan saved for an earlier week isn't
+   silently reused as this week's — it's returned with isForThisWeek false
+   and its old week key intact, so the UI can offer to carry the numbers
+   over instead of pretending they were never written. */
+function normalizeBudgetPlan(raw) {
+  const weekKey = isoWeekKey(new Date());
+  const current = raw && raw.weekKey === weekKey ? raw : null;
+  const source = current || raw || null;
+  const allocations = {};
+  BUDGET_CATEGORIES.forEach(c => {
+    const v = source && source.allocations ? Number(source.allocations[c.key]) : 0;
+    allocations[c.key] = Math.max(0, Math.round((v || 0) * 100) / 100);
+  });
+  return {
+    weekKey,
+    isForThisWeek: !!current,
+    carriedFromWeek: (!current && raw && raw.weekKey) ? raw.weekKey : null,
+    plannedIncome: source ? Math.max(0, Math.round((Number(source.plannedIncome) || 0) * 100) / 100) : 0,
+    allocations,
+    allocated: Math.round(BUDGET_CATEGORIES.reduce((s, c) => s + allocations[c.key], 0) * 100) / 100,
+    updatedAt: current ? (current.updatedAt || null) : null
+  };
+}
+
+async function saveBudget(username, plannedIncome, allocations) {
+  const income = Math.max(0, Math.round((Number(plannedIncome) || 0) * 100) / 100);
+  if (!(income > 0)) return { ok: false, error: "Start with what you expect to earn this week." };
+  const alloc = {};
+  let total = 0;
+  for (const c of BUDGET_CATEGORIES) {
+    const raw = Number((allocations || {})[c.key]);
+    if (!isFinite(raw) || raw < 0) return { ok: false, error: "Every amount has to be zero or more." };
+    alloc[c.key] = Math.round(raw * 100) / 100;
+    total += alloc[c.key];
+  }
+  total = Math.round(total * 100) / 100;
+  // Allocating more than you expect to earn is the one plan that isn't a
+  // plan at all, so it's the only thing refused here. Everything else —
+  // under-allocating, ignoring the 50/30/20 guide, saving nothing, not
+  // covering your fixed costs — is a choice the student is allowed to
+  // make and then be shown the consequences of.
+  if (total > income + 0.005) {
+    return { ok: false, error: `You've allocated ${fmtMoney(total)} but only expect to earn ${fmtMoney(income)}. Take ${fmtMoney(Math.round((total - income) * 100) / 100)} back off somewhere.` };
+  }
+  await usersCol().doc(username).update({
+    budget: { weekKey: isoWeekKey(new Date()), plannedIncome: income, allocations: alloc, updatedAt: Date.now() }
+  });
+  return { ok: true };
+}
+
+async function clearBudget(username) {
+  await usersCol().doc(username).update({ budget: null });
+  return { ok: true };
+}
+
+/* ---------------- Everything the page needs, in one pass ----------------
+   Assembles plan + costs + income estimate + actuals into the single
+   object bank.js renders, and works out the feedback messages. Pure —
+   hand it a class and a user doc the page has already read and it does no
+   I/O of its own. */
+function buildBudgetView(cls, user, username) {
+  const plan = normalizeBudgetPlan(user.budget);
+  const fixed = budgetFixedCostsFromData(cls, user, username);
+  const estimate = budgetIncomeEstimateFromData(cls, user, username);
+  const actuals = budgetActualsFromData(cls, username);
+  const scheduledSavings = budgetScheduledSavingsFromData(cls, username);
+
+  const income = plan.isForThisWeek ? plan.plannedIncome : estimate.total;
+  const unallocated = Math.round((income - plan.allocated) * 100) / 100;
+
+  const notes = []; // { tone: "good"|"warn"|"bad", icon, text }
+
+  // --- The headline check the whole tool exists for: does the Needs
+  // slice actually cover what's already committed?
+  const needs = plan.allocations.needs;
+  if (fixed.total > 0) {
+    const shortfall = Math.round((fixed.total - needs) * 100) / 100;
+    if (!plan.isForThisWeek) {
+      notes.push({ tone: "warn", icon: "calendar", text: `You have ${fmtMoney(fixed.total)} of fixed costs this week. Plan for those first — the rest is yours to split.` });
+    } else if (shortfall > 0.005) {
+      notes.push({ tone: "bad", icon: "shield", text: `Your Needs are short by ${fmtMoney(shortfall)}. Fixed costs come to ${fmtMoney(fixed.total)} but you've only set aside ${fmtMoney(needs)} — move money across before you spend it on anything else.` });
+    } else {
+      notes.push({ tone: "good", icon: "shield", text: `Your fixed costs of ${fmtMoney(fixed.total)} are covered, with ${fmtMoney(Math.round((needs - fixed.total) * 100) / 100)} spare in Needs.` });
+    }
+  }
+
+  // --- Loan interest: not cash leaving the account this week, so it's
+  // never in the fixed-cost total, but it's the reason a debt quietly
+  // gets bigger while a student thinks they're on top of it.
+  const weekKey = isoWeekKey(new Date());
+  let loanInterest = 0;
+  (user.loans || []).forEach(l => {
+    if (l.status !== "active" || !l.weeklyCompounding || l.lastInterestWeek === weekKey) return;
+    loanInterest += Math.round((l.owed || 0) * ((l.rate || 0) / 100) * 100) / 100;
+  });
+  loanInterest = Math.round(loanInterest * 100) / 100;
+  if (loanInterest > 0) {
+    notes.push({ tone: "warn", icon: "handshake", text: `Your loans will add ${fmtMoney(loanInterest)} of interest on Monday. That doesn't come out of your balance — it's added to what you owe, so paying loans off early is what stops it.` });
+  }
+
+  // --- Insurance premiums are NOT deducted automatically (see the note on
+  // processInsurancePayments): students are meant to set up their own
+  // automatic payment for them. Not having done so is the single most
+  // common way a budget here quietly goes wrong, so it's checked by name.
+  let premiums = 0;
+  const premiumNames = [];
+  (user.insurance || []).forEach(id => {
+    const plan2 = (cls.insurancePlans || []).find(p => p.id === id);
+    if (!plan2 || !(plan2.price > 0)) return;
+    premiums += applyTaxToExpense(cls, "insurance", plan2.price).total;
+    premiumNames.push(plan2.name);
+  });
+  premiums = Math.round(premiums * 100) / 100;
+  if (premiums > 0) {
+    // Compare against what they've actually scheduled to pay the teacher
+    // in total, rather than trying to match a specific automation to a
+    // specific policy — students name these anything they like.
+    let scheduledToTeacher = 0;
+    (cls.automations || []).forEach(a => {
+      if (!a.active || a.studentUser !== username) return;
+      if (a.type === "savings-transfer" || a.toUser !== cls.teacher) return;
+      scheduledToTeacher += budgetWeeklyShare(a.amount, a.frequency);
+    });
+    scheduledToTeacher = Math.round(scheduledToTeacher * 100) / 100;
+    if (scheduledToTeacher + 0.005 < premiums) {
+      notes.push({
+        tone: "bad", icon: "shield",
+        text: scheduledToTeacher <= 0
+          ? `Your insurance costs ${fmtMoney(premiums)} a week and nothing is set up to pay it. Premiums aren't taken automatically — set up an automatic payment to your teacher below, or you're paying for cover you might not keep.`
+          : `Your insurance costs ${fmtMoney(premiums)} a week but you've only scheduled ${fmtMoney(scheduledToTeacher)} to your teacher. Top up your automatic payment so the cover doesn't lapse.`
+      });
+    } else {
+      notes.push({ tone: "good", icon: "shield", text: `Your ${fmtMoney(premiums)} of weekly premiums (${premiumNames.join(", ")}) are being paid automatically.` });
+    }
+  }
+
+  // --- Saving nothing at all is worth naming; so is doing it well.
+  if (plan.isForThisWeek && income > 0) {
+    const savePct = Math.round((plan.allocations.savings / income) * 1000) / 10;
+    if (plan.allocations.savings <= 0) {
+      notes.push({ tone: "warn", icon: "piggy", text: "You haven't put anything aside this week. Even a small amount every week adds up faster than one big deposit later — that's compound interest doing the work." });
+    } else if (savePct >= 20) {
+      notes.push({ tone: "good", icon: "piggy", text: `You're saving ${savePct}% of your income — at or above the 20% the guide suggests.` });
+    }
+  }
+  if (plan.isForThisWeek && unallocated > 0.005) {
+    notes.push({ tone: "warn", icon: "coin", text: `${fmtMoney(unallocated)} of your income isn't allocated to anything. Money without a job usually finds one.` });
+  }
+
+  // --- Plan versus reality, per category.
+  const rows = BUDGET_CATEGORIES.map(c => {
+    const planned = plan.allocations[c.key];
+    const spent = actuals.spent[c.key];
+    return {
+      ...c, planned, spent,
+      left: Math.round((planned - spent) * 100) / 100,
+      pctOfIncome: income > 0 ? Math.round((planned / income) * 1000) / 10 : null,
+      pctUsed: planned > 0 ? Math.round((spent / planned) * 1000) / 10 : (spent > 0 ? 100 : 0),
+      over: spent > planned + 0.005
+    };
+  });
+  rows.filter(r => r.over && r.planned > 0).forEach(r => {
+    notes.push({ tone: "bad", icon: r.icon, text: `You've spent ${fmtMoney(r.spent)} on ${r.label} against a plan of ${fmtMoney(r.planned)} — ${fmtMoney(Math.round((r.spent - r.planned) * 100) / 100)} over.` });
+  });
+
+  return {
+    plan, rows, fixed, estimate, actuals, scheduledSavings,
+    income, unallocated, loanInterest, premiums, notes,
+    weekStartKey: actuals.startKey,
+    // A budget only "covers" the week when it exists AND its Needs slice
+    // is big enough for the commitments already on the books.
+    covered: plan.isForThisWeek && plan.allocations.needs + 0.005 >= fixed.total
+  };
+}
+
+// Teacher's at-a-glance view: one line per student saying whether they've
+// planned this week and whether the plan holds up. Takes the roster the
+// page has already loaded, so it costs nothing extra to show.
+function classBudgetOverviewFromData(cls, students) {
+  return students.map(s => {
+    const v = buildBudgetView(cls, s, s.username);
+    return {
+      username: s.username, name: s.name,
+      planned: v.plan.isForThisWeek,
+      income: v.plan.plannedIncome,
+      allocated: v.plan.allocated,
+      needs: v.plan.allocations.needs,
+      fixedTotal: v.fixed.total,
+      covered: v.covered,
+      savings: v.plan.allocations.savings,
+      savingsPct: v.plan.isForThisWeek && v.plan.plannedIncome > 0
+        ? Math.round((v.plan.allocations.savings / v.plan.plannedIncome) * 1000) / 10 : null,
+      spent: v.actuals.total,
+      overspent: v.rows.some(r => r.over && r.planned > 0)
+    };
+  }).sort((a, b) => Number(a.planned) - Number(b.planned) || a.name.localeCompare(b.name));
+}
+
 /* ===================== Global page bootstrap =====================
    This runs on EVERY page that loads data.js (i.e. every page in the app),
    regardless of what that page's own init() does. Two jobs:
