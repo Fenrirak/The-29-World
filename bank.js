@@ -190,7 +190,7 @@ async function render() {
   // activity (rare, since their balance is unlimited) keeps full history.
   const activityCutoff = Date.now() - 3 * 24 * 3600 * 1000;
   const my = cls.txns
-    .filter(t => t.to === me.username || t.from === me.username)
+    .filter(t => txnBelongsTo(t, me.username))
     .filter(t => IS_TEACHER || t.ts === undefined || t.ts >= activityCutoff)
     .slice(0, IS_TEACHER ? 30 : 200);
   document.getElementById("noTxns").classList.toggle("hidden", IS_TEACHER || my.length > 0);

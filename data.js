@@ -2659,7 +2659,7 @@ function classifyTxnForReport(t, username) {
 function buildStudentReportData(student, cls, periodStart) {
   const username = student.username;
   const periodTxns = (cls.txns || []).filter(t =>
-    (t.to === username || t.from === username) &&
+    txnBelongsTo(t, username) &&
     (t.ts === undefined || t.ts >= periodStart)
   );
 
@@ -6480,6 +6480,24 @@ function budgetIncomeEstimateFromData(cls, user, username, weekStartKey) {
   return { items, total: Math.round(items.reduce((s, i) => s + i.amount, 0) * 100) / 100, stock };
 }
 
+// Whether a transaction belongs in a particular student's own activity
+// feed. Most types have exactly one participant on each side, so matching
+// "from" or "to" against them is enough. Peer-to-peer marketplace trades
+// are the one exception: a single trade logs TWO records — a p2p-buy leg
+// for the buyer and a p2p-sell leg for the seller — and both legs carry
+// the same buyer/seller pair (so each note can still name the other
+// person). Filtering on "from or to" alone means each side would also
+// pick up the OTHER side's leg of their own trade — a buyer would see a
+// phantom "Sold to a classmate" entry for the thing they just bought, and
+// the seller would see a phantom "Bought from a classmate" for the thing
+// they just sold. Each leg only belongs to the one participant it's
+// actually about.
+function txnBelongsTo(t, username) {
+  if (t.type === "p2p-buy") return t.from === username;
+  if (t.type === "p2p-sell") return t.to === username;
+  return t.to === username || t.from === username;
+}
+
 /* ---------------- What's really happened so far this week ----------------
    Sorts this week's transactions into the same three buckets the student
    planned in, so the plan can be shown next to the outcome. Anything that
@@ -6522,7 +6540,7 @@ function budgetActualsFromData(cls, username) {
   const spent = { needs: 0, wants: 0, savings: 0 };
   let count = 0;
   (cls.txns || []).forEach(t => {
-    if (t.to !== username && t.from !== username) return;
+    if (!txnBelongsTo(t, username)) return;
     // Compare NZ date keys rather than raw timestamps: the class's week
     // rolls over at NZ midnight, which is nowhere near UTC midnight.
     if (t.ts === undefined) return;

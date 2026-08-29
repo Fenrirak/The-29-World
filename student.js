@@ -205,7 +205,7 @@ async function render() {
   // "ts" existed don't have one, so those are kept rather than hidden).
   const activityCutoff = Date.now() - 3 * 24 * 3600 * 1000;
   const my = cls.txns
-    .filter(t => (t.to === me.username || t.from === me.username) && (t.ts === undefined || t.ts >= activityCutoff))
+    .filter(t => txnBelongsTo(t, me.username) && (t.ts === undefined || t.ts >= activityCutoff))
     .slice(0, 200);
   document.getElementById("noTxns").classList.toggle("hidden", my.length > 0);
   const tbody = document.getElementById("txnTable");

@@ -172,27 +172,12 @@ function notifMarketItems(me, cls) {
   return out;
 }
 
+// Only surfaces the (separate, rarer) big-events feature — notifications
+// for the regular weekly random events (decision pending / insurance
+// claim available) have been removed intentionally.
 function notifEventItems(me, cls) {
   const dayStart = notifTodayStartMs();
   const out = [];
-  (cls.eventLog || []).forEach(e => {
-    if (e.studentUser !== me.username) return;
-    if (e.type === "choice" && e.status === "pending") {
-      out.push({
-        id: "ev-" + e.id, ts: dayStart, icon: "dice", tone: "lilac",
-        title: "A decision is waiting for you",
-        body: `${e.name} — open your account page to choose what you do.`,
-        href: "student.html", action: true
-      });
-    } else if (e.severity === "bad" && e.status === "resolved" && !e.claimed) {
-      out.push({
-        id: "evclaim-" + e.id, ts: dayStart, icon: "shield", tone: "gold",
-        title: "You might be able to claim insurance",
-        body: `${e.name} cost you ${fmtMoney(Math.abs(e.amount || 0))}. General cover could pay some of that back.`,
-        href: "insurance.html", action: true
-      });
-    }
-  });
   (cls.bigEventLog || []).forEach(e => {
     if (e.studentUser !== me.username || e.status !== "pending") return;
     out.push({
