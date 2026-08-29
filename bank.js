@@ -467,11 +467,7 @@ function renderBudgetStudent(me, cls) {
     verdictHtml = verdict("bad", "shield",
       `Your plan doesn't cover what you already owe. Your fixed costs are ${fmtMoney(v.fixed.total)} this week but you've only set aside ${fmtMoney(v.plan.allocations.needs)} for them.`);
   } else {
-    const over = v.rows.filter(r => r.over && r.planned > 0);
-    if (over.length) {
-      verdictHtml = verdict("warn", "chart",
-        `You're over your plan on ${over.map(r => r.label).join(" and ")}. Nothing's broken — but the rest of the week has to come from somewhere.`);
-    } else if (v.fixed.total > 0) {
+    if (v.fixed.total > 0) {
       verdictHtml = verdict("good", "trophy",
         `Your plan covers the ${fmtMoney(v.fixed.total)} you owe this week, and you're inside it so far.`);
     } else {
@@ -482,8 +478,8 @@ function renderBudgetStudent(me, cls) {
   document.getElementById("budVerdict").innerHTML = verdictHtml;
 
   /* ---- The detailed notes (loan interest, insurance, saving rate, stock
-     moves, overspending) — one small card each, instead of burying all of
-     this inside the single verdict line above. */
+     moves) — one small card each, instead of burying all of this inside
+     the single verdict line above. */
   document.getElementById("budNotes").innerHTML = v.notes.map(n =>
     `<div class="bud-note ${n.tone}">${icon(n.icon, 16)}<span>${n.text}</span></div>`).join("");
 

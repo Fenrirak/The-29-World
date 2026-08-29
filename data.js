@@ -6705,10 +6705,6 @@ function buildBudgetView(cls, user, username) {
       over: spent > planned + 0.005
     };
   });
-  rows.filter(r => r.over && r.planned > 0).forEach(r => {
-    notes.push({ tone: "bad", icon: r.icon, text: `You've spent ${fmtMoney(r.spent)} on ${r.label} against a plan of ${fmtMoney(r.planned)} — ${fmtMoney(Math.round((r.spent - r.planned) * 100) / 100)} over.` });
-  });
-
   return {
     plan, rows, fixed, estimate, actuals, scheduledSavings,
     income, unallocated, loanInterest, premiums, notes,
