@@ -6227,7 +6227,7 @@ async function acceptOffer(username, classCode, listingId, offerId) {
    shown as a suggestion next to the student's own number, never enforced. */
 const BUDGET_CATEGORIES = [
   { key: "needs", label: "Needs", icon: "house", tone: "coral", guide: 50,
-    blurb: "Things you've already committed to: mortgage, loan repayments, insurance, automatic payments." },
+    blurb: "Things you've already committed to: mortgage, loan repayments and pay-offs, insurance, automatic payments." },
   { key: "wants", label: "Wants", icon: "cart", tone: "gold", guide: 30,
     blurb: "Things you choose to buy: store items, upgrades, trades with classmates, a punt at the casino." },
   { key: "savings", label: "Savings", icon: "piggy", tone: "mint", guide: 20,

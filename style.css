@@ -1011,10 +1011,14 @@ a.notif-row.unread:hover{background:#f7f3e6;}
    The planner is the one card on the Bank page a student is meant to
    stop and think at, so it gets a gold spine down the top edge to set it
    apart from the transactional cards below it. Everything else here is
-   the same tokens the rest of the app uses. */
+   the same tokens the rest of the app uses. Extra top margin (on top of
+   the standard .card gap) keeps it visually separate from whatever sits
+   above it, since it's its own section rather than another card in the
+   same flow. */
 .budget-card{
   position:relative;overflow:hidden;
   border-color:#dfe5f1;
+  margin-top:32px;
 }
 .budget-card::before{
   content:"";position:absolute;left:0;right:0;top:0;height:4px;
@@ -1062,18 +1066,6 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .bud-cat-name{font-weight:800;color:var(--navy-900);font-size:.95rem;line-height:1.3;}
 .bud-cat-blurb{color:var(--muted);font-size:.76rem;line-height:1.45;margin-top:2px;}
 .bud-cat-text{min-width:0;flex:1;}
-
-/* The 50/30/20 suggestion. It's a button, not a label — tapping it drops
-   the suggested amount straight into the box, which is what most students
-   will want on their first go. */
-.bud-guide{
-  flex-shrink:0;border:1.5px dashed var(--line);background:#fff;cursor:pointer;
-  border-radius:999px;padding:5px 11px;font-size:.72rem;font-weight:800;
-  color:var(--navy-700);font-family:inherit;line-height:1.3;white-space:nowrap;
-  min-height:0;transition:border-color .15s ease,background .15s ease,color .15s ease;
-}
-.bud-guide:hover{border-color:var(--gold);background:#fbf1dd;color:#8a6112;}
-.bud-guide:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
 
 .bud-cat-input{display:flex;align-items:center;gap:10px;margin-top:11px;}
 .bud-cat-input .bud-money-field{flex:1;}
@@ -1177,19 +1169,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .bud-flag.ok{background:#e3f8f0;color:#217a5a;}
 .bud-flag.short{background:#fceae7;color:#b8402c;}
 .bud-flag.none{background:#eef1f7;color:var(--muted);}
-/* On a phone the guide chip sitting beside the description squeezed it
-   into a two-word-wide column. Below 560px the head becomes a small grid
-   instead, so the description gets the full width and the chip drops onto
-   its own line underneath, still aligned with the text above it. */
 @media(max-width:560px){
-  .bud-cat-head{
-    display:grid;grid-template-columns:34px 1fr;
-    grid-template-areas:"icon text" ". guide";
-    gap:9px 11px;align-items:start;
-  }
-  .bud-cat-icon{grid-area:icon;}
-  .bud-cat-text{grid-area:text;}
-  .bud-guide{grid-area:guide;justify-self:start;}
   .bud-cat-pct{min-width:58px;font-size:.74rem;}
 }
 

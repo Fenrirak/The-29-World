@@ -40,7 +40,7 @@ function paintChrome() {
   document.getElementById("labSavAutoAmount").innerHTML = icon("coin", 13) + " Amount";
   document.getElementById("labSavAutoNote").innerHTML = icon("star", 13) + " Note (optional)";
   document.getElementById("addSavAutoBtn").innerHTML = icon("plus", 15) + " Create automatic transfer";
-  document.getElementById("hBudget").innerHTML = icon("chart", 18) + " This week's plan";
+  document.getElementById("hBudget").innerHTML = icon("calendar", 18) + " This week's plan";
   document.getElementById("hBudFixed").innerHTML = icon("calendar", 15) + " Already committed";
   document.getElementById("hBudTrack").innerHTML = icon("repeat", 15) + " How this week is actually going";
   document.getElementById("labBudIncome").innerHTML = icon("coin", 13) + " What I expect to earn this week";
@@ -493,8 +493,6 @@ function renderBudgetStudent(me, cls) {
           <div class="bud-cat-name">${r.label}</div>
           <div class="bud-cat-blurb">${budEsc(r.blurb)}</div>
         </div>
-        <button type="button" class="bud-guide" onclick="budgetUseGuide('${r.key}')"
-                title="Use the ${r.guide}% the 50/30/20 rule suggests">Guide: ${r.guide}%</button>
       </div>
       <div class="bud-cat-input">
         <div class="bud-money-field">
@@ -550,10 +548,6 @@ function renderBudgetStudent(me, cls) {
     ? "Nothing has moved yet this week — this fills in as you spend."
     : `From ${v.actuals.count} ${v.actuals.count === 1 ? "transaction" : "transactions"} since Monday. Money you've moved into savings counts as saved, not spent.`;
 
-  /* ---- Coaching notes ---- */
-  document.getElementById("budNotes").innerHTML = v.notes.map(n =>
-    `<div class="bud-note ${n.tone}">${icon(n.icon, 16)}<span>${n.text}</span></div>`).join("");
-
   budgetRecalc();
 }
 
@@ -578,19 +572,6 @@ function budgetRecalc() {
     ? `<span>Put in what you expect to earn to start splitting it up.</span>`
     : `<span class="bud-total-left">${fmtMoney(Math.abs(left))} ${left < -0.005 ? "over" : left <= 0.005 ? "— all allocated" : "left to allocate"}</span>
        <span>${fmtMoney(allocated)} of ${fmtMoney(income)} given a job</span>`;
-}
-
-// Tapping a "Guide: 50%" chip fills that box with its share of the income
-// currently in the box above — the fastest way to a sensible first plan.
-function budgetUseGuide(key) {
-  const cat = BUDGET_CATEGORIES.find(c => c.key === key);
-  const income = budIncomeValue();
-  if (!cat || income <= 0) {
-    document.getElementById("budMsg").innerHTML = `<div class="error-msg">Put in what you expect to earn first — the guide is a share of that.</div>`;
-    return;
-  }
-  document.getElementById("budAmt-" + key).value = (Math.round(income * (cat.guide / 100) * 100) / 100).toFixed(2);
-  budgetRecalc();
 }
 
 // Fills all three at once, but nudged: if fixed costs are bigger than the
