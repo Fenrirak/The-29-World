@@ -8,8 +8,8 @@
 
    How it's driven:
    - `sidebar-nav` class on <html> = the feature is on. Set before paint
-     by the inline snippet in <head> (reads localStorage), same pattern
-     as the Liquid Glass toggle — no flash of the wrong layout.
+     by the inline snippet in <head> (reads localStorage) — no flash of
+     the wrong layout.
    - `sidebar-open` class on <html> = the mobile slide-in drawer is open
      (toggled by sidebar-nav.js via the injected hamburger button).
    - Everything else (building the hamburger + backdrop, persisting the
@@ -117,7 +117,7 @@
     font-weight: 700;
   }
   html.sidebar-nav #notifBell::after{
-    content: "To do";
+    content: "Notifications";
     font-size: .9rem;
     font-weight: 700;
   }
@@ -125,7 +125,11 @@
      hanging off the corner of a square icon button. */
   html.sidebar-nav #notifBell{ position: relative; }
   html.sidebar-nav #notifBell .notif-dot{
-    position: static; margin-left: auto; border-color: transparent;
+    /* The label is a ::after, so it comes after the badge in DOM order and
+       the badge ended up wedged between the bell and the word. `order`
+       moves the badge past it, out to the right edge of the button where
+       an unread count belongs. */
+    position: static; order: 1; margin-left: auto; border-color: transparent;
   }
   /* The legacy inline settings dropdown (student.html only) anchors
      bottom-left instead of top-right so it opens into the rail rather
@@ -205,20 +209,40 @@
     position: fixed;
     top: 0; left: 0; bottom: 0;
     width: var(--sb-mobile-width);
+    /* 100vh is the LARGE viewport on a phone — it includes the space
+       behind the browser's own address/tool bars, so the bottom of the
+       drawer ends up off screen. dvh tracks what's actually visible. */
     height: 100vh;
+    height: 100dvh;
     max-width: none;
     flex-direction: column;
+    /* The top bar's nav wraps by default. Left on in a fixed-height
+       column that becomes a second COLUMN of links off the right edge of
+       the drawer, instead of the list overflowing — so it never scrolled
+       and the tail of the menu was simply unreachable. */
+    flex-wrap: nowrap;
     align-items: stretch;
     background: linear-gradient(165deg, var(--navy-900) 0%, var(--navy-800) 55%, var(--navy-700) 100%);
-    padding: 74px 16px 16px;
+    padding: 74px 16px 0;
     gap: 4px;
     row-gap: 4px;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    /* Don't let a flick that reaches the end of the drawer start
+       scrolling the page underneath it. */
+    overscroll-behavior: contain;
     transform: translateX(-100%);
     transition: transform .24s ease;
     z-index: 130;
     box-shadow: 10px 0 36px rgba(0,0,0,.4);
   }
+  /* The drawer is a fixed-height flex column, so its children default to
+     flex-shrink:1 and quietly squash themselves to fit instead of
+     overflowing. That was half of why the list could never be scrolled:
+     14 links compressed into one screen, with the last of them ending up
+     behind the actions bar. Pinning every child to its natural height is
+     what actually makes the drawer scroll. */
+  html.sidebar-nav .topbar nav > *{ flex-shrink: 0; }
   html.sidebar-nav.sidebar-open .topbar nav{ transform: translateX(0); }
   html.sidebar-nav .topbar nav a{
     width: 100%;
@@ -229,22 +253,35 @@
   }
   html.sidebar-nav .topbar nav a .nav-label{ display: inline !important; }
 
+  /* Notifications / Settings / Log out, along the bottom of the drawer.
+     This used to be position:fixed, which looks equivalent but isn't: the
+     drawer animates with a transform, and a transformed element becomes
+     the containing block for its fixed descendants. So the bar was
+     anchored to the DRAWER rather than the screen — it scrolled with the
+     list and sat on top of whichever links happened to be beneath it,
+     which is what hid the bottom of the menu on a phone.
+
+     Sticky is what was actually wanted: it stays pinned to the bottom of
+     the visible drawer, but it's still in normal flow, so it takes up its
+     own space and every link can be scrolled clear of it. `margin-top:
+     auto` keeps it at the bottom when the menu is short enough to fit,
+     and the negative side margins let it run to the drawer's edges
+     through the nav's own padding. */
   html.sidebar-nav .topbar-actions{
-    position: fixed;
-    left: 0; bottom: 0;
-    width: var(--sb-mobile-width);
+    position: sticky;
+    bottom: 0;
+    left: auto;
+    width: auto;
     flex-direction: column;
     align-items: stretch;
     gap: 6px;
-    margin: 0;
+    margin: auto -16px 0;
     padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
     background: var(--navy-900);
     border-top: 1px solid rgba(255,255,255,.14);
-    transform: translateX(-100%);
-    transition: transform .24s ease;
+    transform: none;
     z-index: 131;
   }
-  html.sidebar-nav.sidebar-open .topbar-actions{ transform: translateX(0); }
   html.sidebar-nav .btn-logout,
   html.sidebar-nav .btn-icon-topbar,
   html.sidebar-nav .settings-dropdown-wrap{ width: 100%; }
@@ -254,8 +291,8 @@
   }
   html.sidebar-nav .btn-logout .nav-label{ display: inline; }
   html.sidebar-nav #settingsBtn::after{ content: "Settings"; font-size: .92rem; font-weight: 700; }
-  html.sidebar-nav #notifBell::after{ content: "To do"; font-size: .92rem; font-weight: 700; }
-  html.sidebar-nav #notifBell .notif-dot{ position: static; margin-left: auto; border-color: transparent; }
+  html.sidebar-nav #notifBell::after{ content: "Notifications"; font-size: .92rem; font-weight: 700; }
+  html.sidebar-nav #notifBell .notif-dot{ position: static; order: 1; margin-left: auto; border-color: transparent; }
   html.sidebar-nav .settings-dropdown{ left: 0; right: auto; bottom: calc(100% + 8px); top: auto; width: 100%; }
 
   /* Keep the closed drawer out of the tab order so keyboard focus can't

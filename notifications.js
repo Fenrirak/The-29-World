@@ -348,7 +348,7 @@ function notifBuildPanel() {
   panel.setAttribute("aria-label", "Notifications");
   panel.innerHTML = `
     <div class="notif-head">
-      <div class="notif-head-title">${notifIconFor("bell", 15)}<span>To do</span></div>
+      <div class="notif-head-title">${notifIconFor("bell", 15)}<span>Notifications</span></div>
       <button type="button" class="notif-markread" id="notifMarkRead">Mark all read</button>
     </div>
     <div class="notif-list" id="notifList"></div>

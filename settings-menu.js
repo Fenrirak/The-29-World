@@ -1,19 +1,18 @@
 /* ===================== The 29 World — Settings menu (always loaded) =====================
-   Builds and drives the gear-icon "Settings" popover (Liquid Glass switch,
-   Sidebar navigation switch, Change password). This file is small and is
-   the ONE settings-related file every page with a #settingsBtn loads
-   unconditionally — it has to be, since it's what lets someone turn a
-   feature on in the first place.
+   Builds and drives the gear-icon "Settings" popover (Sidebar navigation
+   switch, Change password). This file is small and is the ONE settings-
+   related file every page with a #settingsBtn loads unconditionally — it
+   has to be, since it's what lets someone turn a feature on in the first
+   place.
 
    The actual feature code lives in:
-     - liquid-glass.js / liquid-glass.css  (visual theme + nav indicator)
      - sidebar-nav.js  / sidebar-nav.css   (side-panel layout + drawer)
 
-   Those bundles are only fetched when a feature is already on for this
+   That bundle is only fetched when the feature is already on for this
    visitor (via the loader in each page's <head>) or the instant someone
    flips its switch here (see smLoadFeature below) — never "just in case".
-   That's what keeps a phone that has never touched either setting from
-   downloading either bundle.
+   That's what keeps a phone that has never touched the setting from
+   downloading the bundle.
 
    Whether the Sidebar navigation row shows up at all is controlled by
    `window.T29_HAS_SIDEBAR`, set inline in <head> only on pages that offer
@@ -21,7 +20,6 @@
    require sidebar-nav.js to already be loaded to make that decision).
 ================================================================================ */
 
-var LG_STORAGE_KEY = "t29-liquid-glass";
 var SB_STORAGE_KEY = "t29-sidebar-nav";
 
 function smReadFlag(key) {
@@ -37,7 +35,6 @@ function smHasSidebar() {
 }
 
 const SM_BUNDLES = {
-  lg: { css: "liquid-glass.css", js: "liquid-glass.js", setter: "lgSetOn" },
   sb: { css: "sidebar-nav.css", js: "sidebar-nav.js", setter: "sbSetOn" }
 };
 
@@ -86,16 +83,6 @@ function smBuildPopover() {
 
   pop.innerHTML = `
     <div class="settings-popover-heading">${typeof icon === "function" ? icon("settings", 15) : ""}<span>Settings</span></div>
-    <div class="settings-popover-row">
-      <div class="settings-popover-text">
-        <div class="settings-popover-title">Liquid Glass design</div>
-        <div class="settings-popover-desc">Apple-style frosted glass look across the whole site. Off keeps the classic look.</div>
-      </div>
-      <label class="lg-switch">
-        <input type="checkbox" id="t29LiquidGlassToggle">
-        <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
-      </label>
-    </div>
     ${smHasSidebar() ? `
     <div class="settings-popover-row">
       <div class="settings-popover-text">
@@ -118,7 +105,6 @@ function smBuildPopover() {
 
   document.body.appendChild(pop);
 
-  smWireToggle(pop.querySelector("#t29LiquidGlassToggle"), "lg", LG_STORAGE_KEY);
   if (smHasSidebar()) smWireToggle(pop.querySelector("#t29SidebarNavToggle"), "sb", SB_STORAGE_KEY);
 
   // openPasswordModal() lives in data.js (loaded on every page) — the
@@ -205,10 +191,7 @@ function smInit() {
   // Keep in sync if a feature is switched on/off in another tab — loading
   // its bundle first if this tab never has.
   window.addEventListener("storage", e => {
-    if (e.key === LG_STORAGE_KEY) {
-      const on = e.newValue === "1";
-      smLoadFeature("lg").then(() => window.lgSetOn(on));
-    } else if (e.key === SB_STORAGE_KEY && smHasSidebar()) {
+    if (e.key === SB_STORAGE_KEY && smHasSidebar()) {
       const on = e.newValue === "1";
       smLoadFeature("sb").then(() => window.sbSetOn(on));
     }

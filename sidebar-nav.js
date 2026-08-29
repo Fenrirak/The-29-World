@@ -5,17 +5,16 @@
    .topbar-actions markup is reused as-is and simply laid out differently
    by sidebar-nav.css whenever the `sidebar-nav` class is present on
    <html>. This file only:
-     - persists the on/off choice to localStorage ('t29-sidebar-nav'),
-       the same pattern liquid-glass.js uses for its own toggle
+     - persists the on/off choice to localStorage ('t29-sidebar-nav')
      - injects the hamburger button + mobile backdrop once, and wires
        the mobile drawer open/close behaviour
      - exposes sbIsOn()/sbSetOn() for the Settings switch built in
        settings-menu.js (guarded there via window.T29_HAS_SIDEBAR, set
        inline only on pages that load this file — e.g. the teacher
        dashboard never shows that row at all)
-   - this file, like liquid-glass.js, is only loaded when the feature is
-     already on (see the loader in <head>) or the moment someone flips
-     its switch in Settings — never unconditionally
+   - this file is only loaded when the feature is already on (see the
+     loader in <head>) or the moment someone flips its switch in
+     Settings — never unconditionally
 ================================================================================ */
 
 var SB_STORAGE_KEY = "t29-sidebar-nav";
