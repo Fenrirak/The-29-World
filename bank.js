@@ -493,7 +493,18 @@ function renderBudgetStudent(me, cls) {
     : "You don't have a job or any regular income yet, so there's nothing to estimate from — put in what you think you'll make.";
 
   /* ---- The three category boxes ---- */
-  document.getElementById("budRows").innerHTML = v.rows.map(r => `
+  document.getElementById("budRows").innerHTML = v.rows.map(r => {
+    // A student who's already automated part of their saving shouldn't be
+    // asked to plan that amount again from scratch — but only as a
+    // starting point for a plan that doesn't exist yet, never silently
+    // overwriting one they've actually saved.
+    let startValue = r.planned;
+    let hint = "";
+    if (r.key === "savings" && !v.plan.hasPlan && v.scheduledSavings > 0) {
+      startValue = v.scheduledSavings;
+      hint = `<div class="bud-cat-hint">${icon("repeat", 12)}<span>Pre-filled from your ${fmtMoney(v.scheduledSavings)}/week automatic transfer — change it if you'd rather save a different amount.</span></div>`;
+    }
+    return `
     <div class="bud-cat ${r.key}">
       <div class="bud-cat-head">
         <span class="bud-cat-icon">${icon(r.icon, 17)}</span>
@@ -506,11 +517,13 @@ function renderBudgetStudent(me, cls) {
         <div class="bud-money-field">
           <span class="bud-currency">$</span>
           <input id="budAmt-${r.key}" type="number" min="0" step="0.01" inputmode="decimal"
-                 value="${r.planned || ""}" oninput="budgetRecalc()" aria-label="${r.label} amount">
+                 value="${startValue || ""}" oninput="budgetRecalc()" aria-label="${r.label} amount">
         </div>
         <span class="bud-cat-pct" id="budPct-${r.key}"></span>
       </div>
-    </div>`).join("");
+      ${hint}
+    </div>`;
+  }).join("");
 
   document.getElementById("budClearBtn").classList.toggle("hidden", !v.plan.hasPlan);
   document.getElementById("budSaveBtn").innerHTML =
@@ -565,21 +578,47 @@ function budgetRecalc() {
   if (!BUDGET_VIEW) return;
   const income = budIncomeValue();
   let allocated = 0;
+  const vals = {};
   BUDGET_CATEGORIES.forEach(c => {
-    const v = budInputValue(c.key);
-    allocated += v;
+    const val = budInputValue(c.key);
+    vals[c.key] = val;
+    allocated += val;
     const pctEl = document.getElementById("budPct-" + c.key);
-    if (pctEl) pctEl.textContent = income > 0 ? Math.round((v / income) * 100) + "% of income" : "";
+    if (pctEl) pctEl.textContent = income > 0 ? Math.round((val / income) * 100) + "% of income" : "";
   });
   allocated = Math.round(allocated * 100) / 100;
   const left = Math.round((income - allocated) * 100) / 100;
+  const isOver = left < -0.005;
   const box = document.getElementById("budTotals");
-  box.classList.toggle("over", left < -0.005);
+  box.classList.toggle("over", isOver);
   box.classList.toggle("exact", Math.abs(left) <= 0.005 && income > 0);
   box.innerHTML = income <= 0
     ? `<span>Put in what you expect to earn to start splitting it up.</span>`
     : `<span class="bud-total-left">${fmtMoney(Math.abs(left))} ${left < -0.005 ? "over" : left <= 0.005 ? "— all allocated" : "left to allocate"}</span>
        <span>${fmtMoney(allocated)} of ${fmtMoney(income)} given a job</span>`;
+
+  // ---- Live split bar: shape, not just numbers. Segments are sized
+  // against whichever is bigger, income or what's been typed in, so an
+  // over-allocated plan still shows honest relative proportions rather
+  // than clipping silently at 100% — .bud-total above is what already
+  // calls "over" out in words, so the bar can stay purely visual.
+  document.getElementById("budSplitWrap").classList.toggle("hidden", income <= 0);
+  if (income > 0) {
+    const denom = Math.max(income, allocated, 0.01);
+    const leftoverAmt = Math.max(0, Math.round((income - allocated) * 100) / 100);
+    const bar = document.getElementById("budSplitBar");
+    bar.classList.toggle("over", isOver);
+    bar.innerHTML = BUDGET_CATEGORIES.map(c =>
+      `<div class="seg ${c.key}" style="width:${((vals[c.key] / denom) * 100).toFixed(2)}%;"></div>`).join("") +
+      (leftoverAmt > 0.005 ? `<div class="seg leftover" style="width:${((leftoverAmt / denom) * 100).toFixed(2)}%;"></div>` : "");
+    bar.setAttribute("aria-label", BUDGET_CATEGORIES.map(c =>
+      `${c.label} ${Math.round((vals[c.key] / income) * 100)}%`).join(", ") +
+      (leftoverAmt > 0.005 ? `, unallocated ${Math.round((leftoverAmt / income) * 100)}%` : "") +
+      (isOver ? " — over what you expect to earn" : ""));
+    document.getElementById("budSplitLegend").innerHTML = BUDGET_CATEGORIES.map(c =>
+      `<span><span class="dot ${c.key}"></span>${c.label} ${fmtMoney(vals[c.key])}</span>`).join("") +
+      (leftoverAmt > 0.005 ? `<span><span class="dot leftover"></span>Unallocated ${fmtMoney(leftoverAmt)}</span>` : "");
+  }
 }
 
 // Pulls today's estimate (job + rent + side hustle + stock market moves)
@@ -592,11 +631,13 @@ function budgetUseEstimate() {
   budgetRecalc();
 }
 
-// Fills all three at once, but nudged: if fixed costs are bigger than the
-// 50% Needs guide, Needs gets what it actually needs and the rest is split
-// between Wants and Savings in their usual 30:20 ratio. A student whose
-// mortgage eats 70% of their pay should be shown that, not handed a
-// textbook split that doesn't fit their situation.
+// Fills all three at once, but nudged twice: if fixed costs are bigger
+// than the 50% Needs guide, Needs gets what it actually needs first; and
+// if an automatic savings transfer is already running for more than the
+// standard 20% would give it, Savings matches that instead. Wants always
+// absorbs whatever's left. A student whose mortgage eats 70% of their pay,
+// or who already saves more than the textbook rate, should be shown that —
+// not handed a generic split that ignores it.
 function budgetSuggest() {
   const income = budIncomeValue();
   if (income <= 0) {
@@ -604,18 +645,29 @@ function budgetSuggest() {
     return;
   }
   const fixed = BUDGET_VIEW ? BUDGET_VIEW.fixed.total : 0;
+  const scheduled = BUDGET_VIEW ? BUDGET_VIEW.scheduledSavings : 0;
   const needs = Math.min(income, Math.max(Math.round(income * 0.5 * 100) / 100, fixed));
   const rest = Math.round((income - needs) * 100) / 100;
-  const wants = Math.round(rest * 0.6 * 100) / 100; // 30:20 of what's left
-  const savings = Math.round((rest - wants) * 100) / 100;
+  let wants = Math.round(rest * 0.6 * 100) / 100; // 30:20 of what's left
+  let savings = Math.round((rest - wants) * 100) / 100;
+  // An automatic transfer the student already set up is a real commitment,
+  // not a guess — the suggestion shouldn't undercut it just to hit a
+  // textbook 20%.
+  let bumpedForAuto = false;
+  if (scheduled > savings + 0.005 && rest > 0.005) {
+    const bumped = Math.min(rest, Math.round(scheduled * 100) / 100);
+    if (bumped > savings + 0.005) { savings = bumped; wants = Math.round((rest - savings) * 100) / 100; bumpedForAuto = true; }
+  }
   document.getElementById("budAmt-needs").value = needs.toFixed(2);
   document.getElementById("budAmt-wants").value = wants.toFixed(2);
   document.getElementById("budAmt-savings").value = savings.toFixed(2);
   budgetRecalc();
+  const reasons = [];
+  if (fixed > income * 0.5) reasons.push(`Needs is set to ${fmtMoney(needs)} because that's what you actually owe this week — more than the 50% the guide suggests.`);
+  if (bumpedForAuto) reasons.push(`Savings is set to ${fmtMoney(savings)} to match the automatic transfer you already have running.`);
   document.getElementById("budMsg").innerHTML = `<div class="success-msg">${
-    fixed > income * 0.5
-      ? `Needs is set to ${fmtMoney(needs)} because that's what you actually owe this week — more than the 50% the guide suggests. The rest is split 30:20. Change any of it before you save.`
-      : "Split 50/30/20. Change any of it before you save — it's your plan."
+    reasons.length ? reasons.join(" ") + " The rest follows a 30:20 split. Change any of it before you save."
+                   : "Split 50/30/20. Change any of it before you save — it's your plan."
   }</div>`;
 }
 

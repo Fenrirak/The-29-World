@@ -6434,11 +6434,12 @@ function budgetIncomeEstimateFromData(cls, user, username, weekStartKey) {
   const job = user.jobId ? (cls.jobs || []).find(j => j.id === user.jobId) : null;
   if (job) {
     const { net, taxAmount } = applyWageTax(cls, job.wage);
+    const payDay = "Paid every " + (DAY_FULL[cls.payDay] || "pay day");
     items.push({
       icon: "briefcase", label: job.title, amount: net,
       note: taxAmount > 0
-        ? fmtMoney(job.wage) + " less " + fmtMoney(taxAmount) + " tax"
-        : "Paid every " + (DAY_FULL[cls.payDay] || "pay day")
+        ? fmtMoney(job.wage) + " less " + fmtMoney(taxAmount) + " tax, " + payDay.charAt(0).toLowerCase() + payDay.slice(1)
+        : payDay
     });
   }
 
