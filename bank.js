@@ -450,6 +450,17 @@ function fmtSigned(n) {
   return (v < 0 ? "-" : "") + fmtMoney(Math.abs(v));
 }
 
+// Grades a 0..1 ratio from coral (var(--coral), "barely started") to mint
+// (var(--mint), "met the goal") — used for the Savings actual-vs-plan bar,
+// where being further along is always better and a hard red/green cutoff
+// would hide how close someone actually is.
+function budGradeColor(ratio) {
+  const t = Math.max(0, Math.min(1, ratio));
+  const a = [0xe8, 0x73, 0x5f], b = [0x3f, 0xbf, 0x8f]; // coral -> mint
+  const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
 function renderBudgetStudent(me, cls) {
   const v = buildBudgetView(cls, me, CURRENT.username);
   BUDGET_VIEW = v;
@@ -553,16 +564,42 @@ function renderBudgetStudent(me, cls) {
     // of what's been spent so far instead of a meaningless 0% of $0.
     const denom = r.planned > 0 ? r.planned : Math.max(v.actuals.total, r.spent);
     const pct = denom > 0 ? Math.min(100, (r.spent / denom) * 100) : 0;
+
+    // Needs/Wants going past the plan is overspending — bad, red, hatched.
+    // Savings going past the plan means saving MORE than intended, which
+    // is the opposite of bad, so it gets its own colour logic entirely:
+    // a smooth red-to-green gradient by how close to the goal it is, and
+    // green (not a red hatch) once it's met or beaten.
+    const isSavings = r.key === "savings";
+    let numsClass = "", extra = "", fillClass = r.key, fillStyle = "";
+    if (isSavings) {
+      if (r.planned > 0) {
+        const ratio = Math.max(0, Math.min(1, r.spent / r.planned));
+        fillStyle = `background:${budGradeColor(ratio)};`;
+        extra = r.over
+          ? ` · ${fmtMoney(Math.round((r.spent - r.planned) * 100) / 100)} ahead of plan`
+          : ` · ${fmtMoney(r.left)} to go`;
+        numsClass = r.over ? " good" : "";
+      } else if (r.spent > 0) {
+        fillStyle = `background:${budGradeColor(1)};`;
+        numsClass = " good";
+      }
+    } else {
+      fillClass = r.over ? "over" : r.key;
+      numsClass = r.over ? " over" : "";
+      extra = r.planned > 0 ? (r.over ? ` · ${fmtMoney(Math.round((r.spent - r.planned) * 100) / 100)} over` : ` · ${fmtMoney(r.left)} left`) : "";
+    }
+
     return `
     <div class="bud-track-row">
       <div class="bud-track-head">
         <span class="bud-track-name">${r.label}</span>
-        <span class="bud-track-nums${r.over ? " over" : ""}">
+        <span class="bud-track-nums${numsClass}">
           <strong>${fmtMoney(r.spent)}</strong>${r.planned > 0 ? ` of ${fmtMoney(r.planned)}` : " so far"}
-          ${r.planned > 0 ? (r.over ? ` · ${fmtMoney(Math.round((r.spent - r.planned) * 100) / 100)} over` : ` · ${fmtMoney(r.left)} left`) : ""}
+          ${extra}
         </span>
       </div>
-      <div class="bud-track-bar"><div class="bud-track-fill ${r.over ? "over" : r.key}" style="width:${pct}%;"></div></div>
+      <div class="bud-track-bar"><div class="bud-track-fill ${fillClass}" style="width:${pct}%;${fillStyle}"></div></div>
     </div>`;
   }).join("");
   document.getElementById("budTrackNote").textContent = v.actuals.count === 0

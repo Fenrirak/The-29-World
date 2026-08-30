@@ -1171,6 +1171,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .bud-track-nums{font-size:.8rem;font-weight:700;color:var(--muted);}
 .bud-track-nums strong{color:var(--navy-900);}
 .bud-track-nums.over strong,.bud-track-nums.over{color:#b8402c;}
+.bud-track-nums.good strong,.bud-track-nums.good{color:#1c6b4e;}
 .bud-track-bar{height:13px;border-radius:8px;background:#eef1f7;overflow:hidden;}
 .bud-track-fill{height:100%;border-radius:8px;min-width:3px;transition:width .35s ease;}
 .bud-track-fill.needs{background:linear-gradient(90deg,var(--coral),#c9503a);}
