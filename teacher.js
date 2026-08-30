@@ -383,6 +383,9 @@ function describeTxn(t, nameOf) {
     case "property-rent": return `${nameOf(t.to)} — ${t.note}`;
     case "p2p-buy": return `${nameOf(t.from)} → ${nameOf(t.to)} — ${t.note}`;
     case "p2p-sell": return `${nameOf(t.to)} — ${t.note}`;
+    case "truck-licence-buy": return `${nameOf(t.from)} — ${t.note}`;
+    case "insurance-signup-fee": return `${nameOf(t.from)} — ${t.note}`;
+    case "property-occupancy": return `${nameOf(t.to || t.from)} — ${t.note}`;
     default: return t.note || "";
   }
 }
@@ -421,7 +424,10 @@ function badge(type) {
     "quiz-reward": ["mint", "idcard", "Quiz passed"],
     "property-rent": ["mint", "house", "Rent received"],
     "p2p-buy": ["navy", "users", "Classmate sale"],
-    "p2p-sell": ["gold", "users", "Classmate sale"]
+    "p2p-sell": ["gold", "users", "Classmate sale"],
+    "truck-licence-buy": ["navy", "car", "Truck licence"],
+    "insurance-signup-fee": ["lilac", "shield", "Insurance sign-up"],
+    "property-occupancy": ["navy", "house", "Occupancy change"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;

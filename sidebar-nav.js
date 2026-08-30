@@ -10,8 +10,8 @@
        the mobile drawer open/close behaviour
      - exposes sbIsOn()/sbSetOn() for the Settings switch built in
        settings-menu.js (guarded there via window.T29_HAS_SIDEBAR, set
-       inline only on pages that load this file — e.g. the teacher
-       dashboard never shows that row at all)
+       inline on every page that loads this file, teacher dashboard
+       included)
    - this file is only loaded when the feature is already on (see the
      loader in <head>) or the moment someone flips its switch in
      Settings — never unconditionally
