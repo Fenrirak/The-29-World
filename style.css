@@ -1074,6 +1074,36 @@ a.notif-row.unread:hover{background:#f7f3e6;}
   flex:0 0 auto;min-width:74px;text-align:right;
   font-size:.78rem;font-weight:800;color:var(--muted);
 }
+.bud-cat-hint{
+  display:flex;align-items:flex-start;gap:6px;margin-top:8px;
+  font-size:.74rem;line-height:1.4;color:var(--muted);font-style:italic;
+}
+.bud-cat-hint .icon{width:12px;height:12px;flex-shrink:0;margin-top:1px;}
+
+/* The live split bar: one glance at how the three categories (plus
+   whatever's still unallocated) divide up the week's money. Segments are
+   sized against whichever is bigger, income or what's been typed in, so an
+   over-allocated plan still shows honest relative proportions instead of
+   silently clipping at 100% — the numbers in .bud-total right above it are
+   what call out "over", the bar is purely about shape. */
+.bud-split-wrap{margin-top:14px;}
+.bud-split-bar{
+  display:flex;height:15px;border-radius:8px;overflow:hidden;
+  background:#eef1f7;border:1.5px solid var(--line);transition:border-color .18s ease;
+}
+.bud-split-bar.over{border-color:#f0c4bc;}
+.bud-split-bar .seg{height:100%;transition:width .3s ease;min-width:0;}
+.bud-split-bar .seg.needs{background:linear-gradient(90deg,var(--coral),#c9503a);}
+.bud-split-bar .seg.wants{background:linear-gradient(90deg,var(--gold),var(--gold-dark));}
+.bud-split-bar .seg.savings{background:linear-gradient(90deg,var(--mint),var(--mint-dark));}
+.bud-split-bar .seg.leftover{background:repeating-linear-gradient(45deg,#dde2ee,#dde2ee 6px,#eef1f7 6px,#eef1f7 12px);}
+.bud-split-legend{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:9px;}
+.bud-split-legend span{display:inline-flex;align-items:center;gap:6px;font-size:.76rem;font-weight:700;color:var(--muted);}
+.bud-split-legend .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.bud-split-legend .dot.needs{background:var(--coral);}
+.bud-split-legend .dot.wants{background:var(--gold);}
+.bud-split-legend .dot.savings{background:var(--mint);}
+.bud-split-legend .dot.leftover{background:#c7cede;}
 
 /* Running total: allocated vs income, with the leftover called out. */
 .bud-total{
