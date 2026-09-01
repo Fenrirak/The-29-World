@@ -495,7 +495,9 @@ function renderBudgetStudent(me, cls) {
     `<div class="bud-note ${n.tone}">${icon(n.icon, 16)}<span>${n.text}</span></div>`).join("");
 
   /* ---- Expected income ---- */
-  document.getElementById("budIncome").value = v.plan.hasPlan ? v.plan.plannedIncome : (Math.max(0, v.estimate.total) || "");
+  document.getElementById("budIncome").value = v.plan.hasPlan
+    ? v.plan.plannedIncome
+    : (v.estimate.items.length ? Math.max(0, v.estimate.total) : "");
   const hint = document.getElementById("budIncomeHint");
   hint.innerHTML = v.estimate.items.length
     ? "Based on " + v.estimate.items.map(i => `${budEsc(i.label)} ${i.signed ? fmtSigned(i.amount) : fmtMoney(i.amount)}`).join(" + ") +
@@ -664,7 +666,12 @@ function budgetRecalc() {
 // hustle — have since changed.
 function budgetUseEstimate() {
   if (!BUDGET_VIEW) return;
-  document.getElementById("budIncome").value = BUDGET_VIEW.estimate.total > 0 ? BUDGET_VIEW.estimate.total : "";
+  // The income field can't hold a negative number (min="0"), so a week
+  // where losses on paper outweigh everything else clamps to $0 rather
+  // than silently doing nothing — the old `> 0 ? total : ""` check left
+  // the field blank for a $0-or-negative estimate, which was indistinguishable
+  // from the button not working at all when the field was already blank.
+  document.getElementById("budIncome").value = Math.max(0, BUDGET_VIEW.estimate.total);
   budgetRecalc();
 }
 

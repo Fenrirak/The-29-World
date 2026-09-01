@@ -6678,6 +6678,24 @@ function budgetIncomeEstimateFromData(cls, user, username, weekStartKey) {
     });
   });
 
+  // --- Automatic payments the teacher set up to pay this student (e.g. an
+  // allowance). These run from the teacher's own bank page the same way a
+  // student's automations do — the teacher is just the studentUser on the
+  // automation and this student is toUser — so they're every bit as
+  // predictable as wages and belong in the estimate alongside them.
+  (cls.automations || []).forEach(a => {
+    if (!a.active || a.type === "savings-transfer") return;
+    if (a.toUser !== username || a.studentUser !== cls.teacher) return;
+    const amount = budgetWeeklyShare(a.amount, a.frequency);
+    if (amount <= 0) return;
+    items.push({
+      icon: "repeat", label: a.note || "Automatic payment from your teacher", amount,
+      note: FREQ_DAYS[a.frequency] === 7
+        ? "Every " + (DAY_FULL[a.dayOfWeek] || a.dayOfWeek) + ", from your teacher"
+        : "Averaged from " + (INTEREST_FREQ_LABEL[a.frequency] || a.frequency) + ", from your teacher"
+    });
+  });
+
   const weekAgo = Date.now() - 7 * 86400000;
   let hustle = 0;
   (cls.txns || []).forEach(t => {
