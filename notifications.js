@@ -143,15 +143,9 @@ function notifMarketItems(me, cls) {
     return { co, pct, shares: (co.holders || {})[me.username] || 0 };
   }).filter(Boolean);
 
-  // Each holding that moved used to get its own row (up to 4), which meant
-  // the feed could be four-fifths stock noise on a volatile day, crowding
-  // out things that actually need a decision. A single mover still gets
-  // its own clear row; two or more collapse into one summary row instead,
-  // so stock movement can never take up more than one slot in the feed.
   const mine = moves.filter(m => m.shares > 0 && Math.abs(m.pct) >= 1);
   mine.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
-  if (mine.length === 1) {
-    const m = mine[0];
+  mine.slice(0, 4).forEach(m => {
     const up = m.pct > 0;
     out.push({
       id: "mkt-" + m.co.id + "-" + nzDateKey(), ts: dayStart, icon: "chart", tone: up ? "mint" : "coral",
@@ -159,19 +153,7 @@ function notifMarketItems(me, cls) {
       body: `Now ${fmtMoney(m.co.price)} a share. You hold ${m.shares} ${m.shares === 1 ? "share" : "shares"} — ${fmtMoney(m.shares * m.co.price)}.`,
       href: "market.html"
     });
-  } else if (mine.length > 1) {
-    const top = mine[0];
-    const up = top.pct > 0;
-    const gainers = mine.filter(m => m.pct > 0).length;
-    const fallers = mine.length - gainers;
-    const mix = gainers && fallers ? `${gainers} up, ${fallers} down` : (gainers ? "all up" : "all down");
-    out.push({
-      id: "mkt-multi-" + nzDateKey() + "-" + mine.length, ts: dayStart, icon: "chart", tone: up ? "mint" : "coral",
-      title: `${mine.length} of your holdings moved today`,
-      body: `Biggest mover: ${top.co.name} ${up ? "rose" : "fell"} ${Math.abs(top.pct).toFixed(1)}% (${mix}).`,
-      href: "market.html"
-    });
-  }
+  });
 
   // Hold nothing? Still worth knowing what the market did today — that's
   // often exactly the nudge that gets a student to look at it.
