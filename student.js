@@ -211,6 +211,22 @@ async function render() {
     mbody.appendChild(tr);
   });
 
+  // All-time gain/loss: unrealized (current holdings vs. what they cost)
+  // plus realized (locked in from past sells/delistings). See the big
+  // comment on stockAllTimeGain() in data.js for exactly what this can
+  // and can't see — the "at least" wording below only appears when the
+  // number might be missing history that's no longer retrievable.
+  const allTimeEl = document.getElementById("stockAllTime");
+  if (allTimeEl) {
+    const gain = await stockAllTimeGain(me.username, me.classCode);
+    const gainSign = gain.total > 0 ? "+" : gain.total < 0 ? "-" : "";
+    const gainClass = gain.total > 0 ? "ticker-up" : gain.total < 0 ? "ticker-down" : "";
+    allTimeEl.innerHTML = `
+      <span class="${gainClass}">${gainSign}${fmtMoney(Math.abs(gain.total))}</span>
+      <span class="muted-small">(${fmtMoney(gain.unrealized)} unrealized + ${fmtMoney(gain.realized)} realized)${gain.complete ? "" : " — at least, some older history has aged out"}</span>
+    `;
+  }
+
   // my transactions — last 3 days only (txns carry a raw "ts" epoch-ms
   // alongside the display "date" string; very old entries from before
   // "ts" existed don't have one, so those are kept rather than hidden).
