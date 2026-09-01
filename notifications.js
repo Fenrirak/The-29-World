@@ -143,9 +143,15 @@ function notifMarketItems(me, cls) {
     return { co, pct, shares: (co.holders || {})[me.username] || 0 };
   }).filter(Boolean);
 
+  // Each holding that moved used to get its own row (up to 4), which meant
+  // the feed could be four-fifths stock noise on a volatile day, crowding
+  // out things that actually need a decision. A single mover still gets
+  // its own clear row; two or more collapse into one summary row instead,
+  // so stock movement can never take up more than one slot in the feed.
   const mine = moves.filter(m => m.shares > 0 && Math.abs(m.pct) >= 1);
   mine.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
-  mine.slice(0, 4).forEach(m => {
+  if (mine.length === 1) {
+    const m = mine[0];
     const up = m.pct > 0;
     out.push({
       id: "mkt-" + m.co.id + "-" + nzDateKey(), ts: dayStart, icon: "chart", tone: up ? "mint" : "coral",
@@ -153,7 +159,19 @@ function notifMarketItems(me, cls) {
       body: `Now ${fmtMoney(m.co.price)} a share. You hold ${m.shares} ${m.shares === 1 ? "share" : "shares"} — ${fmtMoney(m.shares * m.co.price)}.`,
       href: "market.html"
     });
-  });
+  } else if (mine.length > 1) {
+    const top = mine[0];
+    const up = top.pct > 0;
+    const gainers = mine.filter(m => m.pct > 0).length;
+    const fallers = mine.length - gainers;
+    const mix = gainers && fallers ? `${gainers} up, ${fallers} down` : (gainers ? "all up" : "all down");
+    out.push({
+      id: "mkt-multi-" + nzDateKey() + "-" + mine.length, ts: dayStart, icon: "chart", tone: up ? "mint" : "coral",
+      title: `${mine.length} of your holdings moved today`,
+      body: `Biggest mover: ${top.co.name} ${up ? "rose" : "fell"} ${Math.abs(top.pct).toFixed(1)}% (${mix}).`,
+      href: "market.html"
+    });
+  }
 
   // Hold nothing? Still worth knowing what the market did today — that's
   // often exactly the nudge that gets a student to look at it.
@@ -275,8 +293,16 @@ function buildNotifications(me, cls) {
     notifQuizItems(me, cls),
     notifMarketplaceItems(me, cls)
   );
+  // Order: needs-action first, then unread-over-read, then newest first.
+  // The unread tiebreaker matters because several builders (term deposits,
+  // marketplace listings) carry timestamps that don't reset day to day —
+  // without this, an already-read informational item can keep outranking
+  // something the student genuinely hasn't seen yet.
+  const lastRead = notifGetLastRead(NOTIF_USER);
   items.sort((a, b) => {
     if (!!b.action !== !!a.action) return a.action ? -1 : 1;
+    const aUnread = (a.ts || 0) > lastRead, bUnread = (b.ts || 0) > lastRead;
+    if (aUnread !== bUnread) return aUnread ? -1 : 1;
     return (b.ts || 0) - (a.ts || 0);
   });
   return items.slice(0, NOTIF_MAX);
@@ -286,6 +312,16 @@ function buildNotifications(me, cls) {
 let NOTIF_USER = null;
 let NOTIF_ITEMS = [];
 let NOTIF_POLL_TIMER = null;
+
+// The panel opens showing the top NOTIF_INITIAL_SHOW rows — since
+// buildNotifications() already sorts action-needed and unread items to
+// the top, this means a student always sees whatever needs them first,
+// with a "Show more" row to reveal the rest instead of everything being
+// visible (and stock rows, informational at best, muscling for space)
+// all at once. NOTIF_EXPANDED resets on every open so it never carries a
+// stale "expanded" state into the next visit.
+const NOTIF_INITIAL_SHOW = 10;
+let NOTIF_EXPANDED = false;
 
 function notifIconFor(name, size) {
   return typeof icon === "function" ? icon(name, size || 16) : "";
@@ -404,6 +440,7 @@ function notifOpen() {
   const btn = document.getElementById("notifBell");
   if (!btn) return;
   const panel = notifBuildPanel();
+  NOTIF_EXPANDED = false;
   notifRenderList();
   notifPositionPanel(panel, btn);
   btn.setAttribute("aria-expanded", "true");
@@ -445,7 +482,11 @@ function notifRenderList() {
     list.innerHTML = `<div class="notif-empty">${notifIconFor("bell", 26)}<p>You're all caught up.</p><p class="muted-small">Anything due, any decision waiting on you, and how your shares moved will show up here.</p></div>`;
     return;
   }
-  list.innerHTML = NOTIF_ITEMS.map(n => {
+  const showCount = NOTIF_EXPANDED ? NOTIF_ITEMS.length : Math.min(NOTIF_INITIAL_SHOW, NOTIF_ITEMS.length);
+  const visible = NOTIF_ITEMS.slice(0, showCount);
+  const remaining = NOTIF_ITEMS.length - visible.length;
+
+  const rows = visible.map(n => {
     const unread = (n.ts || 0) > lastRead;
     // A row is a link when it goes somewhere, and a button when it opens
     // something in place (a quiz popup) — never a dead <div> that looks
@@ -462,6 +503,21 @@ function notifRenderList() {
       </span>
     </${tag}>`;
   }).join("");
+
+  const moreRow = remaining > 0
+    ? `<button type="button" class="notif-row notif-showmore" id="notifShowMore">Show ${remaining} more</button>`
+    : "";
+
+  list.innerHTML = rows + moreRow;
+
+  const moreBtn = document.getElementById("notifShowMore");
+  if (moreBtn) {
+    moreBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      NOTIF_EXPANDED = true;
+      notifRenderList();
+    });
+  }
 }
 
 function notifPaint() {
