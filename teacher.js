@@ -1156,8 +1156,8 @@ async function recoverStockCostHistory() {
   try {
     const result = await backfillCostBasisFromTxns(CLASS_CODE);
     msg.textContent = result.filled > 0
-      ? `Done — recovered cost history for ${result.filled} student/company holding${result.filled === 1 ? "" : "s"}. Anything not found was already tracked, or its purchase has aged out of the activity log.`
-      : "Nothing new to recover — either everything's already tracked, or the relevant purchases have aged out of the activity log.";
+      ? `Done — recovered cost history for ${result.filled} company holding${result.filled === 1 ? "" : "s"} across your students. Anything not found was either already tracked, or its purchase has aged out of the shared activity log (the log holds the class's most recent 200 transactions total, not 200 per student, so older stock purchases can already be gone).`
+      : "Nothing new to recover — either everything's already tracked, or the relevant purchases have aged out of the shared activity log (it holds the class's most recent 200 transactions total, not 200 per student).";
   } catch (e) {
     msg.textContent = "Something went wrong — please try again.";
   } finally {
