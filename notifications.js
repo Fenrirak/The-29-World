@@ -355,7 +355,7 @@ function notifBuildPanel() {
       <button type="button" class="notif-markread" id="notifMarkRead">Mark all read</button>
     </div>
     <div class="notif-list" id="notifList"></div>
-    <div class="notif-foot"><a href="student.html">See my full account history ›</a></div>
+    <div class="notif-foot"><a href="bank.html">See my full account history ›</a></div>
   `;
   document.body.appendChild(panel);
   panel.addEventListener("click", e => e.stopPropagation());

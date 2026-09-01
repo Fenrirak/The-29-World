@@ -193,10 +193,21 @@ async function render() {
   const mbody = document.getElementById("marketSnapshot");
   mbody.innerHTML = "";
   document.getElementById("noCompanies").classList.toggle("hidden", cls.companies.length > 0);
+  // "Since Monday" reuses the same Monday-of-the-current-week key and
+  // price-lookup helpers the weekly stock estimate (data.js) already uses,
+  // so this figure lines up with what students see there.
+  const mondayKey = budgetWeekStartKey();
   cls.companies.forEach(co => {
     const mine = co.holders[me.username] || 0;
+    const mondayPrice = companyPriceAtDate(co, mondayKey);
+    const diff = Math.round((co.price - mondayPrice) * 100) / 100;
+    const pct = mondayPrice ? (diff / mondayPrice) * 100 : 0;
+    const sign = diff > 0 ? "+" : diff < 0 ? "-" : "";
+    const moveClass = diff > 0 ? "ticker-up" : diff < 0 ? "ticker-down" : "";
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${co.name}</td><td>${fmtMoney(co.price)}</td><td>${mine}</td>`;
+    tr.innerHTML = `<td>${co.name}</td><td>${fmtMoney(co.price)}</td><td>${mine}</td>
+      <td class="${moveClass}">${sign}${fmtMoney(Math.abs(diff))}</td>
+      <td class="${moveClass}">${sign}${Math.abs(pct).toFixed(1)}%</td>`;
     mbody.appendChild(tr);
   });
 
