@@ -497,7 +497,7 @@ function renderBudgetStudent(me, cls) {
   /* ---- Expected income ---- */
   document.getElementById("budIncome").value = v.plan.hasPlan
     ? v.plan.plannedIncome
-    : (v.estimate.items.length ? Math.max(0, v.estimate.total) : "");
+    : (v.estimate.items.length ? v.estimate.total : "");
   const hint = document.getElementById("budIncomeHint");
   hint.innerHTML = v.estimate.items.length
     ? "Based on " + v.estimate.items.map(i => `${budEsc(i.label)} ${i.signed ? fmtSigned(i.amount) : fmtMoney(i.amount)}`).join(" + ") +
@@ -666,12 +666,13 @@ function budgetRecalc() {
 // hustle — have since changed.
 function budgetUseEstimate() {
   if (!BUDGET_VIEW) return;
-  // The income field can't hold a negative number (min="0"), so a week
-  // where losses on paper outweigh everything else clamps to $0 rather
-  // than silently doing nothing — the old `> 0 ? total : ""` check left
-  // the field blank for a $0-or-negative estimate, which was indistinguishable
-  // from the button not working at all when the field was already blank.
-  document.getElementById("budIncome").value = Math.max(0, BUDGET_VIEW.estimate.total);
+  // Copy in exactly the number the hint text above the button just showed
+  // them (e.g. "-$1,593.99") — not a clamped or substituted figure. The
+  // input has min="0" for typing/stepping, but assigning .value in JS
+  // isn't blocked by that attribute, so a loss week is shown honestly; it
+  // just won't pass form validation until the student changes it, same as
+  // if they'd typed a negative number themselves.
+  document.getElementById("budIncome").value = BUDGET_VIEW.estimate.total;
   budgetRecalc();
 }
 
