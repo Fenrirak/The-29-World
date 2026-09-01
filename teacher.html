@@ -256,6 +256,13 @@
     </div>
 
     <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
+      <h2 id="hCostBasis">Stock cost history</h2>
+      <p>The Market Snapshot on each student's homepage shows an all-time gain/loss per company, compared to what they actually paid. That only works for shares bought after this feature was added — anything bought before then has no recorded cost yet. This looks through the class's recent activity log and fills in whatever purchase history is still there. It's safe to run any time, including more than once: it only fills in gaps and never overwrites tracking that already exists. It can't recover a purchase old enough to have already scrolled out of the activity log — there's no way to reconstruct a cost that isn't stored anywhere.</p>
+      <button class="btn secondary" onclick="recoverStockCostHistory()" id="recoverCostBasisBtn">Recover stock cost history</button>
+      <div id="recoverCostBasisMsg"></div>
+    </div>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
       <h2 id="hDanger" style="color:var(--coral);">Danger zone</h2>
       <p>Reset every student's balance to $0, remove all jobs assignments, delist every company, and clear the activity log. Student logins and the class code stay the same — this just gives everyone a fresh start.</p>
       <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>

@@ -35,6 +35,8 @@ function paintChrome() {
   document.getElementById("hAdjust").innerHTML = icon("star", 18) + " Quick transactions";
   document.getElementById("hSettings").innerHTML = icon("bank", 18) + " Class settings";
   document.getElementById("hDanger").innerHTML = icon("coin", 18) + " Danger zone";
+  document.getElementById("hCostBasis").innerHTML = icon("chart", 18) + " Stock cost history";
+  document.getElementById("recoverCostBasisBtn").innerHTML = icon("chart", 15) + " Recover stock cost history";
   document.getElementById("restartBtn").innerHTML = icon("chart", 15) + " Restart class";
   document.getElementById("hActivity").innerHTML = icon("chart", 18) + " Recent activity";
   document.getElementById("labAdjStudent").innerHTML = icon("users", 13) + " Student";
@@ -1144,6 +1146,23 @@ async function restartClass() {
   await resetClass(CLASS_CODE, CURRENT.username);
   alert("Class restarted — everyone is back to $0. This term's report cards were saved to the Reports page.");
   await render();
+}
+
+async function recoverStockCostHistory() {
+  const btn = document.getElementById("recoverCostBasisBtn");
+  const msg = document.getElementById("recoverCostBasisMsg");
+  btn.disabled = true;
+  msg.textContent = "Working…";
+  try {
+    const result = await backfillCostBasisFromTxns(CLASS_CODE);
+    msg.textContent = result.filled > 0
+      ? `Done — recovered cost history for ${result.filled} student/company holding${result.filled === 1 ? "" : "s"}. Anything not found was already tracked, or its purchase has aged out of the activity log.`
+      : "Nothing new to recover — either everything's already tracked, or the relevant purchases have aged out of the activity log.";
+  } catch (e) {
+    msg.textContent = "Something went wrong — please try again.";
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);
