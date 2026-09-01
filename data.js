@@ -9,7 +9,7 @@
 ====================================================================== */
 
 const SESSION_KEY = "anw_session"; // session stays in localStorage — it's fine for this to be per-device
-const MAX_STORED_TXNS = 200; // keep class docs from growing forever
+const MAX_STORED_TXNS = 250; // keep class docs from growing forever
 
 function usersCol() { installReadCache(); return fdb.collection("users"); }
 function classesCol() { installReadCache(); return fdb.collection("classes"); }

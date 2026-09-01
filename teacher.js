@@ -323,12 +323,16 @@ async function render() {
   const sel = document.getElementById("adjStudent");
   sel.innerHTML = students.map(s => `<option value="${s.username}">${s.name}</option>`).join("");
 
-  // txns
+  // txns — the teacher dashboard shows however many transactions are
+  // currently stored (up to MAX_STORED_TXNS), independent of the student
+  // dashboard's own 3-day window on the same underlying array. cls.txns is
+  // stored newest-first (logTxn unshifts), so the first MAX_STORED_TXNS
+  // entries already ARE "the most recent" — no extra sort/filter needed.
   const txbody = document.querySelector("#txnTable tbody");
   txbody.innerHTML = "";
   const nameOf = u => nameCache[u] || u;
-  const recentTxns = getRecentTxns(cls, 4);
-  document.getElementById("hActivity").innerHTML = icon("chart", 18) + " Recent activity (last 4 days)";
+  const recentTxns = (cls.txns || []).slice(0, MAX_STORED_TXNS);
+  document.getElementById("hActivity").innerHTML = icon("chart", 18) + ` Recent activity (last ${MAX_STORED_TXNS} transactions)`;
   recentTxns.forEach(t => {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badge(t.type)}</td><td>${describeTxn(t, nameOf)}</td><td>${fmtMoney(t.amount)}</td>`;
