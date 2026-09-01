@@ -197,6 +197,14 @@ async function render() {
   // price-lookup helpers the weekly stock estimate (data.js) already uses,
   // so this figure lines up with what students see there.
   const mondayKey = budgetWeekStartKey();
+  // All-time $ / % per company: unrealized (current holdings vs. what they
+  // cost) plus realized (locked in from past sells/delistings). See the
+  // big comment on stockAllTimeGain() in data.js for exactly what this can
+  // and can't see — a "*" after a row's all-time figures means that row's
+  // number might be missing history that's no longer retrievable (a
+  // legacy holding bought before this feature existed, or an older sale
+  // that's aged out of the shared transaction log).
+  const gain = await stockAllTimeGain(me.username, me.classCode);
   cls.companies.forEach(co => {
     const mine = co.holders[me.username] || 0;
     const mondayPrice = companyPriceAtDate(co, mondayKey);
@@ -204,28 +212,23 @@ async function render() {
     const pct = mondayPrice ? (diff / mondayPrice) * 100 : 0;
     const sign = diff > 0 ? "+" : diff < 0 ? "-" : "";
     const moveClass = diff > 0 ? "ticker-up" : diff < 0 ? "ticker-down" : "";
+
+    const g = gain.perCompany[co.id] || { total: 0, pct: null, complete: true };
+    const gSign = g.total > 0 ? "+" : g.total < 0 ? "-" : "";
+    const gClass = g.total > 0 ? "ticker-up" : g.total < 0 ? "ticker-down" : "";
+    const gStar = g.complete ? "" : "*";
+    const gPctText = g.pct === null ? "—" : `${g.pct > 0 ? "+" : g.pct < 0 ? "-" : ""}${Math.abs(g.pct).toFixed(1)}%`;
+
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${co.name}</td><td>${fmtMoney(co.price)}</td><td>${mine}</td>
       <td class="${moveClass}">${sign}${fmtMoney(Math.abs(diff))}</td>
-      <td class="${moveClass}">${sign}${Math.abs(pct).toFixed(1)}%</td>`;
+      <td class="${moveClass}">${sign}${Math.abs(pct).toFixed(1)}%</td>
+      <td class="${gClass}">${gSign}${fmtMoney(Math.abs(g.total))}${gStar}</td>
+      <td class="${gClass}">${gPctText}${gStar}</td>`;
     mbody.appendChild(tr);
   });
-
-  // All-time gain/loss: unrealized (current holdings vs. what they cost)
-  // plus realized (locked in from past sells/delistings). See the big
-  // comment on stockAllTimeGain() in data.js for exactly what this can
-  // and can't see — the "at least" wording below only appears when the
-  // number might be missing history that's no longer retrievable.
-  const allTimeEl = document.getElementById("stockAllTime");
-  if (allTimeEl) {
-    const gain = await stockAllTimeGain(me.username, me.classCode);
-    const gainSign = gain.total > 0 ? "+" : gain.total < 0 ? "-" : "";
-    const gainClass = gain.total > 0 ? "ticker-up" : gain.total < 0 ? "ticker-down" : "";
-    allTimeEl.innerHTML = `
-      <span class="${gainClass}">${gainSign}${fmtMoney(Math.abs(gain.total))}</span>
-      <span class="muted-small">(${fmtMoney(gain.unrealized)} unrealized + ${fmtMoney(gain.realized)} realized)${gain.complete ? "" : " — at least, some older history has aged out"}</span>
-    `;
-  }
+  const allTimeNote = document.getElementById("allTimeNote");
+  if (allTimeNote) allTimeNote.classList.toggle("hidden", gain.complete);
 
   // my transactions — last 3 days only (txns carry a raw "ts" epoch-ms
   // alongside the display "date" string; very old entries from before

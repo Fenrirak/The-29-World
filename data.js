@@ -1690,18 +1690,25 @@ async function buyShares(username, classCode, companyId, shares) {
       coName = co.name;
 
       // All-time gain/loss needs to know what each student actually paid,
-      // not just today's price — a single running total (shares bought +
-      // total spent, ever) per student per company. Buying more at a new
-      // price folds in as a weighted average, same idea as an investing
-      // app's "average cost basis": there's no way to track which
-      // individual share came from which purchase once they're pooled
-      // together in co.holders, so average cost is the correct (and only
-      // sane) way to answer "did this holding make or lose money overall".
+      // not just today's price. co.costBasis[username] tracks two related
+      // but different things per company:
+      //   - shares/totalCost: the average-cost pool for CURRENTLY HELD
+      //     shares only. This shrinks when shares are sold (see
+      //     sellShares) — it answers "what would it cost to buy back what
+      //     I hold right now".
+      //   - totalBought: cumulative cost of every buy ever made for this
+      //     company, and it NEVER decreases on a sell. It answers "how
+      //     much money have I ever put into this company", which is the
+      //     denominator a %-return figure needs — using the shrinking pool
+      //     instead would make % return swing wildly (or divide by zero)
+      //     the moment shares are sold off, which isn't what "all-time %
+      //     return" should mean.
       co.costBasis = co.costBasis || {};
-      const basis = co.costBasis[username] || { shares: 0, totalCost: 0 };
+      const basis = co.costBasis[username] || { shares: 0, totalCost: 0, totalBought: 0 };
       co.costBasis[username] = {
         shares: basis.shares + shares,
-        totalCost: Math.round((basis.totalCost + cost) * 100) / 100
+        totalCost: Math.round((basis.totalCost + cost) * 100) / 100,
+        totalBought: Math.round((basis.totalBought + cost) * 100) / 100
       };
 
       t.update(userRef, { balance: Math.round((user.balance - cost) * 100) / 100 });
@@ -1747,27 +1754,31 @@ async function sellShares(username, classCode, companyId, shares) {
       if (co.holders[username] === 0) delete co.holders[username];
       coName = co.name;
 
-      // Pull this sale's share out of the average-cost pool: the cost that
-      // "leaves" is shares-sold × the average price paid across every buy
-      // so far, exactly mirroring how the shares themselves are pooled
-      // (not tracked buy-lot by buy-lot) in co.holders. realizedGain is
-      // what actually separates "made money" from "lost money" on this
-      // sale, and gets stamped onto the stock-sell txn below so both the
-      // live cost basis AND the transaction-log fallback agree with it.
+      // Pull this sale's shares out of the average-cost pool: the cost
+      // that "leaves" is shares-sold × the average price paid across
+      // every buy so far, exactly mirroring how the shares themselves are
+      // pooled (not tracked buy-lot by buy-lot) in co.holders.
+      // realizedGain is what actually separates "made money" from "lost
+      // money" on this sale, and gets stamped onto the stock-sell txn
+      // below so both the live cost basis AND the transaction-log
+      // fallback agree with it.
+      //
+      // Note: even when a student sells every share they hold (shares
+      // drops to 0), the costBasis entry is kept rather than deleted —
+      // totalBought (cumulative money ever invested in this company) has
+      // to survive a full sell-out, or a company someone fully exited
+      // would lose its all-time %-return history the moment they sold.
       co.costBasis = co.costBasis || {};
-      const basis = co.costBasis[username] || { shares: owned, totalCost: proceeds };
+      const basis = co.costBasis[username] || { shares: owned, totalCost: proceeds, totalBought: proceeds };
       const avgCost = basis.shares > 0 ? basis.totalCost / basis.shares : co.price;
       const costOfSold = Math.round(avgCost * shares * 100) / 100;
       costBasisSold = costOfSold;
-      const remainingShares = basis.shares - shares;
-      if (remainingShares <= 0) {
-        delete co.costBasis[username];
-      } else {
-        co.costBasis[username] = {
-          shares: remainingShares,
-          totalCost: Math.round((basis.totalCost - costOfSold) * 100) / 100
-        };
-      }
+      const remainingShares = Math.max(0, basis.shares - shares);
+      co.costBasis[username] = {
+        shares: remainingShares,
+        totalCost: Math.max(0, Math.round((basis.totalCost - costOfSold) * 100) / 100),
+        totalBought: basis.totalBought // cumulative — a sale never reduces this
+      };
 
       t.update(userRef, { balance: Math.round((user.balance + proceeds) * 100) / 100 });
       t.update(classRef, { companies: cls.companies });
@@ -2596,8 +2607,9 @@ async function portfolioValue(username, classCode) {
   return Math.round(total * 100) / 100;
 }
 
-// All-time stock gain/loss: unrealized (current holdings vs what they cost)
-// plus realized (profit/loss already locked in from past sells/delistings).
+// All-time stock gain/loss, broken out per company plus a portfolio-wide
+// total: unrealized (current holdings vs what they cost) plus realized
+// (profit/loss already locked in from past sells/delistings).
 //
 // Two sources feed this, because co.costBasis only started being written
 // the day this feature shipped:
@@ -2610,54 +2622,90 @@ async function portfolioValue(username, classCode) {
 //     cls.txns is a SHARED, class-wide log capped at MAX_STORED_TXNS (200)
 //     total, not 200 per student — so on an active class this rolls over
 //     within days/weeks, and a sale from a while back can already be gone.
-//     complete === false is the honest signal for that: it flips false the
-//     moment we can no longer see far enough back to be sure we have every
-//     sale, so the UI can say "at least" instead of implying a total that
-//     silently excludes history nobody can retrieve anymore.
+//
+// PERCENT is total gain ÷ totalBought (cumulative money ever put into that
+// company, tracked separately in co.costBasis and never reduced by a
+// sale — see buyShares/sellShares). That's "return on everything ever
+// invested here", not an annualized/time-weighted return; if the student
+// never has a tracked buy for a company (only ever held pre-feature
+// shares), pct is null rather than a fabricated number.
+//
+// `complete` (both per-company and overall) is false whenever the figure
+// might be missing something no longer retrievable — legacy pre-feature
+// shares with no recorded cost, or a transaction log full enough that
+// older sales may have scrolled out — so the UI can say "at least"
+// instead of implying a total that silently excludes lost history.
 async function stockAllTimeGain(username, classCode) {
   const cls = await getClassCached(classCode);
-  if (!cls) return { unrealized: 0, realized: 0, total: 0, complete: true };
+  if (!cls) return { unrealized: 0, realized: 0, total: 0, complete: true, perCompany: {} };
+
+  const txns = cls.txns || [];
+  const logMayBeTruncated = txns.length >= MAX_STORED_TXNS;
+  const perCompany = {}; // companyId -> { unrealized, realized, total, totalBought, pct, complete }
 
   let unrealized = 0;
-  let untracked = false;
+  let anyUntracked = false;
   cls.companies.forEach(co => {
     const shares = co.holders[username] || 0;
-    if (shares <= 0) return;
     const basis = (co.costBasis && co.costBasis[username]) || null;
+
     // A holding with shares but no costBasis entry (or fewer tracked
     // shares than actually held) means some or all of those shares predate
     // this feature — bought before costBasis existed, so there's no
     // honest cost recorded for them. Only the tracked portion is valued
     // against its real cost; the untracked remainder is left out of
-    // unrealized entirely (not guessed at) and flips `complete` off below,
-    // rather than pairing a partial cost basis against the FULL share
-    // count and overstating the gain.
-    if (!basis || basis.shares <= 0) { untracked = true; return; }
-    if (basis.shares < shares) untracked = true;
-    const trackedShares = Math.min(basis.shares, shares);
-    unrealized += trackedShares * co.price - basis.totalCost;
+    // unrealized entirely (not guessed at) rather than pairing a partial
+    // cost basis against the FULL share count and overstating the gain.
+    let coUntracked = false;
+    let coUnrealized = 0;
+    if (shares > 0) {
+      if (!basis || basis.shares <= 0) {
+        coUntracked = true;
+      } else {
+        if (basis.shares < shares) coUntracked = true;
+        const trackedShares = Math.min(basis.shares, shares);
+        coUnrealized = trackedShares * co.price - basis.totalCost;
+      }
+    }
+    unrealized += coUnrealized;
+    if (coUntracked) anyUntracked = true;
+
+    perCompany[co.id] = {
+      unrealized: Math.round(coUnrealized * 100) / 100,
+      realized: 0, // filled in from txns below
+      totalBought: basis ? basis.totalBought : 0,
+      _untracked: coUntracked // stripped before returning
+    };
   });
 
   let realized = 0;
-  const txns = cls.txns || [];
   txns.forEach(t => {
     if (t.realizedGain === undefined) return;
-    if (t.type === "stock-sell" && t.to === username) realized += t.realizedGain;
-    else if (t.type === "stock-close" && t.to === username) realized += t.realizedGain;
+    const isMine = (t.type === "stock-sell" || t.type === "stock-close") && t.to === username;
+    if (!isMine) return;
+    realized += t.realizedGain;
+    if (t.companyId && perCompany[t.companyId]) {
+      perCompany[t.companyId].realized = Math.round((perCompany[t.companyId].realized + t.realizedGain) * 100) / 100;
+    }
   });
-  // If the log is full (right at MAX_STORED_TXNS) there could be older
-  // stock-sell/stock-close rows that already scrolled off — no way to
-  // distinguish "this student simply never sold anything else" from "the
-  // older sales are gone", so treat a full log as potentially incomplete.
-  const logMayBeTruncated = txns.length >= MAX_STORED_TXNS;
+
+  Object.keys(perCompany).forEach(id => {
+    const b = perCompany[id];
+    b.total = Math.round((b.unrealized + b.realized) * 100) / 100;
+    b.pct = b.totalBought > 0 ? Math.round((b.total / b.totalBought) * 1000) / 10 : null;
+    b.complete = !b._untracked && !logMayBeTruncated;
+    delete b._untracked;
+  });
 
   return {
     unrealized: Math.round(unrealized * 100) / 100,
     realized: Math.round(realized * 100) / 100,
     total: Math.round((unrealized + realized) * 100) / 100,
-    complete: !untracked && !logMayBeTruncated
+    complete: !anyUntracked && !logMayBeTruncated,
+    perCompany
   };
 }
+
 
 // Value of everything a student has bought from the class store, counted
 // toward net worth. Looks up each owned item's current listed price by id,

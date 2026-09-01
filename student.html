@@ -141,13 +141,14 @@
       <h2 id="hMarket">Market snapshot</h2>
       <a class="btn small gold" href="market.html" id="marketLink">Go to Stock Market</a>
     </div>
-    <p class="muted-small">All-time gain/loss on stocks: <span id="stockAllTime">—</span></p>
     <div class="table-scroll">
     <table>
-      <thead><tr><th>Company</th><th>Price</th><th>My shares</th><th>Since Mon ($)</th><th>Since Mon (%)</th></tr></thead>
+      <thead><tr><th>Company</th><th>Price</th><th>My shares</th><th>Since Mon ($)</th><th>Since Mon (%)</th><th>All-time ($)</th><th>All-time (%)</th></tr></thead>
       <tbody id="marketSnapshot"></tbody>
     </table>
     </div>
+    <p class="muted-small">All-time = every share you've ever bought/sold in that company, gains and losses combined, compared to what you paid.</p>
+    <p class="muted-small hidden" id="allTimeNote">* means that row's all-time figure may be incomplete — either it includes shares bought before this feature existed (no recorded cost), or a past sale old enough to have aged out of the activity log.</p>
     <p class="muted-small" id="noCompanies">Your teacher hasn't opened any companies yet.</p>
   </div>
 
