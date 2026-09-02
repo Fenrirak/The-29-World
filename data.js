@@ -6708,20 +6708,13 @@ function budgetIncomeEstimateFromData(cls, user, username, weekStartKey) {
     items.push({ icon: "star", label: "Side hustle", amount: hustle, note: "What you actually earned in the last 7 days" });
   }
 
+  // Stock moves (paper gains/losses on shares still held, and gains/losses
+  // locked in on shares sold this week) are deliberately NOT folded into
+  // the income estimate — they're too volatile to treat as expected
+  // "income" for planning a week's budget around. They're still shown to
+  // the student separately, in the notes below, so nothing disappears —
+  // just isn't costed into "what I expect to earn".
   const stock = budgetStockEstimateFromData(cls, user, username, weekStartKey);
-  if (stock.unrealizedTotal !== 0) {
-    items.push({
-      icon: "chart", label: "Shares you still hold", amount: stock.unrealizedTotal, signed: true,
-      note: (stock.unrealizedTotal >= 0 ? "Up " : "Down ") + fmtMoney(Math.abs(stock.unrealizedTotal)) +
-        " since Monday, on paper — only real money if you sell."
-    });
-  }
-  if (stock.realizedTotal !== 0) {
-    items.push({
-      icon: "coin", label: "Shares sold this week", amount: stock.realizedTotal, signed: true,
-      note: "Compared to what they were worth on Monday — " + (stock.realizedTotal >= 0 ? "a gain" : "a loss") + " you've locked in."
-    });
-  }
 
   return { items, total: Math.round(items.reduce((s, i) => s + i.amount, 0) * 100) / 100, stock };
 }
