@@ -1704,7 +1704,18 @@ async function buyShares(username, classCode, companyId, shares) {
       //     the moment shares are sold off, which isn't what "all-time %
       //     return" should mean.
       co.costBasis = co.costBasis || {};
-      const basis = co.costBasis[username] || { shares: 0, totalCost: 0, totalBought: 0 };
+      // Older cost-basis records (saved before totalBought existed) may
+      // have shares/totalCost but no totalBought — fall back to totalCost
+      // so we never write `undefined` into totalBought below (Firestore
+      // rejects any field value of undefined in the whole companies array).
+      const rawBasis = co.costBasis[username];
+      const basis = rawBasis
+        ? {
+            shares: rawBasis.shares || 0,
+            totalCost: rawBasis.totalCost || 0,
+            totalBought: typeof rawBasis.totalBought === "number" ? rawBasis.totalBought : (rawBasis.totalCost || 0)
+          }
+        : { shares: 0, totalCost: 0, totalBought: 0 };
       co.costBasis[username] = {
         shares: basis.shares + shares,
         totalCost: Math.round((basis.totalCost + cost) * 100) / 100,
@@ -1770,7 +1781,18 @@ async function sellShares(username, classCode, companyId, shares) {
       // to survive a full sell-out, or a company someone fully exited
       // would lose its all-time %-return history the moment they sold.
       co.costBasis = co.costBasis || {};
-      const basis = co.costBasis[username] || { shares: owned, totalCost: proceeds, totalBought: proceeds };
+      // Older cost-basis records (saved before totalBought existed) may
+      // have shares/totalCost but no totalBought — fall back to totalCost
+      // so we never write `undefined` into totalBought below (Firestore
+      // rejects any field value of undefined in the whole companies array).
+      const rawBasis = co.costBasis[username];
+      const basis = rawBasis
+        ? {
+            shares: rawBasis.shares || 0,
+            totalCost: rawBasis.totalCost || 0,
+            totalBought: typeof rawBasis.totalBought === "number" ? rawBasis.totalBought : (rawBasis.totalCost || 0)
+          }
+        : { shares: owned, totalCost: proceeds, totalBought: proceeds };
       const avgCost = basis.shares > 0 ? basis.totalCost / basis.shares : co.price;
       const costOfSold = Math.round(avgCost * shares * 100) / 100;
       costBasisSold = costOfSold;
