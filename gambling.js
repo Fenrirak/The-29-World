@@ -217,8 +217,20 @@ function renderGamblingAccountCard(view) {
 }
 
 async function refreshGamblingAccountCard() {
-  const view = await getGamblingAccountView(CURRENT.username, CURRENT.classCode);
-  renderGamblingAccountCard(view);
+  // Defensive by design, not just at the render() call site: this now adds
+  // a real network round-trip (a fresh user-doc read) into render() and
+  // every Blackjack action, none of which used to touch the network for
+  // this. A slow/failed fetch here (bad wifi, a transient Firestore hiccup)
+  // must never take the rest of the page down with it — see
+  // t29FirstPaint/safeBgJob above for the same pattern elsewhere in this
+  // file. Worst case on failure: the account card just shows whatever it
+  // last showed, instead of the whole tab failing to render.
+  try {
+    const view = await getGamblingAccountView(CURRENT.username, CURRENT.classCode);
+    renderGamblingAccountCard(view);
+  } catch (e) {
+    console.warn("Gambling account card failed to refresh:", e);
+  }
 }
 
 async function gaBuyIn() {
@@ -986,7 +998,13 @@ async function render() {
   /* ---- Shared gambling account card ---- */
   const gamblingOverallEnabled = g.enabled !== false;
   if (gamblingOverallEnabled) {
-    await refreshGamblingAccountCard();
+    // Deliberately NOT awaited: this is a network fetch of the student's
+    // own account balance, and on a slow connection waiting on it here
+    // would delay the rest of the tab (Roulette/Blackjack sections below)
+    // from painting at all. refreshGamblingAccountCard() is self-contained
+    // and never throws, so firing it off and letting it fill in the card
+    // whenever it resolves is safe.
+    refreshGamblingAccountCard();
   } else {
     document.getElementById("gamblingAccountCard").classList.add("hidden");
   }
