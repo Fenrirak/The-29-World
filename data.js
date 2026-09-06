@@ -553,17 +553,7 @@ async function createTeacherAndClass(name, username, password, className) {
     dailyTimeLimitMinutes: null, // null/0 = no limit; minutes of active time per student per day
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
     insuranceDay: "Fri", lastInsuranceWeekRun: null,
-    gambling: {
-      enabled: true, minBet: 1, maxBet: 20,
-      // dailyBuyInLimit caps how much a student can move from cash into
-      // their gambling account per NZ calendar day (null = no limit).
-      // dailyWinLimit locks them out of gambling for the rest of the day
-      // once their NET winnings (wins minus losses) reach it, and shows
-      // winLimitMessage when that happens.
-      dailyBuyInLimit: null, dailyWinLimit: null,
-      winLimitMessage: "You've hit your winning limit for today \u2014 nice work! Come back and play again tomorrow.",
-      payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 }
-    },
+    gambling: { enabled: true, minBet: 1, maxBet: 20, dailyBetCap: null, payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 } },
     taxRates: { store: 0, insurance: 0, property: 0, transport: 0, interest: 0, gambling: 0 },
     wageTaxBrackets: [],
     bigEventDefs: [], bigEventLog: [], lastBigEventWeekRun: null,
@@ -1725,6 +1715,7 @@ async function buyShares(username, classCode, companyId, shares) {
       t.update(classRef, { companies: cls.companies });
     });
   } catch (e) {
+    console.error("buyShares failed:", e);
     if (e.message === "NOT_FOUND") return { ok: false, error: "Not found." };
     if (e.message === "NO_SHARES") return { ok: false, error: "Not enough shares available." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
@@ -1794,6 +1785,7 @@ async function sellShares(username, classCode, companyId, shares) {
       t.update(classRef, { companies: cls.companies });
     });
   } catch (e) {
+    console.error("sellShares failed:", e);
     if (e.message === "NOT_FOUND") return { ok: false, error: "Not found." };
     if (e.message === "TOO_MANY") return { ok: false, error: "You don't own that many shares." };
     return { ok: false, error: "Something went wrong. Please try again." };
@@ -3031,9 +3023,7 @@ async function saveGamblingSettings(classCode, settings) {
       enabled: settings.enabled !== false,
       minBet: Math.max(0, Number(settings.minBet) || 0),
       maxBet: Math.max(0, Number(settings.maxBet) || 0),
-      dailyBuyInLimit: (settings.dailyBuyInLimit === "" || settings.dailyBuyInLimit === undefined || settings.dailyBuyInLimit === null) ? null : Math.max(0, Number(settings.dailyBuyInLimit) || 0),
-      dailyWinLimit: (settings.dailyWinLimit === "" || settings.dailyWinLimit === undefined || settings.dailyWinLimit === null) ? null : Math.max(0, Number(settings.dailyWinLimit) || 0),
-      winLimitMessage: (settings.winLimitMessage || "").trim() || "You've hit your winning limit for today \u2014 nice work! Come back and play again tomorrow.",
+      dailyBetCap: (settings.dailyBetCap === "" || settings.dailyBetCap === undefined || settings.dailyBetCap === null) ? null : Math.max(0, Number(settings.dailyBetCap) || 0),
       payouts: {
         straightUp: Number(settings.straightUp) || 0,
         split: Number(settings.split) || 0,
@@ -3079,155 +3069,8 @@ function isValidSixLine(nums) {
 }
 function rouletteIsOdd(n) { return n > 0 && n % 2 === 1; }
 
-/* ===================== Gambling account (buy-in / cash-out) =====================
-   Students no longer stake cash straight from their balance. Instead they
-   Buy In from cash into a separate per-student "gambling account", play
-   Roulette/Blackjack against THAT balance (shared between both games),
-   and can Cash Out back to cash whenever they like. Two teacher-set daily
-   limits apply:
-     - dailyBuyInLimit: most that can be moved from cash into the account
-       per NZ calendar day. Once reached, the student can still play with
-       whatever's already in the account, but can't top it up again until
-       the next day.
-     - dailyWinLimit: once the student's NET winnings for the day (wins
-       minus losses, tracked as `netToday`) reach this, they're locked out
-       of buying in AND placing further bets for the rest of the day, and
-       shown the teacher's winLimitMessage.
-   Money left in the account at day's end is left exactly where it is —
-   only boughtInToday/netToday/winLimitHit reset when a new NZ day starts;
-   the chip balance itself carries over untouched. */
-
-// Pure, non-writing "what does today look like" view of a user's gambling
-// account — used both for display and as the read-side of every
-// transaction below. If the stored account is from an earlier day, the
-// daily counters reset for this computed view; the actual write only
-// takes effect once one of the functions below saves it back.
-function gamblingAccountToday(user) {
-  const today = nzDateKey();
-  const acc = (user && user.gamblingAccount) || null;
-  const balance = acc ? Math.round((acc.balance || 0) * 100) / 100 : 0;
-  if (!acc || acc.dayKey !== today) {
-    return { dayKey: today, balance, boughtInToday: 0, netToday: 0, winLimitHit: false };
-  }
-  return { dayKey: acc.dayKey, balance, boughtInToday: acc.boughtInToday || 0, netToday: acc.netToday || 0, winLimitHit: !!acc.winLimitHit };
-}
-
-// Read-only view combining the student's account with the class's current
-// gambling settings, for rendering the shared account card.
-async function getGamblingAccountView(username, classCode) {
-  const [user, cls] = await Promise.all([getUserCached(username), getClassCached(classCode)]);
-  if (!user || !cls) return null;
-  const acc = gamblingAccountToday(user);
-  const g = cls.gambling;
-  return {
-    balance: acc.balance,
-    boughtInToday: acc.boughtInToday,
-    netToday: acc.netToday,
-    winLimitHit: acc.winLimitHit,
-    dailyBuyInLimit: g.dailyBuyInLimit,
-    remainingBuyIn: g.dailyBuyInLimit ? Math.max(0, Math.round((g.dailyBuyInLimit - acc.boughtInToday) * 100) / 100) : null,
-    dailyWinLimit: g.dailyWinLimit,
-    winLimitMessage: g.winLimitMessage
-  };
-}
-
-// Moves cash into the gambling account, re-checking the buy-in cap and
-// cash balance fresh inside the transaction so concurrent requests can't
-// blow past either.
-async function buyIntoGamblingAccount(username, classCode, amount) {
-  amount = Number(amount);
-  const userRef = usersCol().doc(username);
-  const classRef = classesCol().doc(classCode);
-  let newBalance = 0;
-  try {
-    await fdb.runTransaction(async (t) => {
-      const [userSnap, classSnap] = await Promise.all([t.get(userRef), t.get(classRef)]);
-      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
-      const user = userSnap.data();
-      const cls = withNewModuleDefaults(classSnap.data());
-      if (!(amount > 0)) throw new Error("BAD_AMOUNT");
-      if (!cls.gambling.enabled) throw new Error("DISABLED");
-      if (user.balance < amount) throw new Error("BROKE");
-      const acc = gamblingAccountToday(user);
-      if (acc.winLimitHit) throw new Error("WIN_LIMIT");
-      const cap = cls.gambling.dailyBuyInLimit;
-      if (cap && Math.round((acc.boughtInToday + amount) * 100) / 100 > cap) throw new Error("OVER_CAP");
-      acc.balance = Math.round((acc.balance + amount) * 100) / 100;
-      acc.boughtInToday = Math.round((acc.boughtInToday + amount) * 100) / 100;
-      newBalance = acc.balance;
-      t.update(userRef, { balance: Math.round((user.balance - amount) * 100) / 100, gamblingAccount: acc });
-    });
-  } catch (e) {
-    if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than zero." };
-    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for that." };
-    if (e.message === "DISABLED") return { ok: false, error: "Your teacher has temporarily turned off gambling for this class." };
-    if (e.message === "WIN_LIMIT") return { ok: false, error: "You've hit today's winning limit and can't buy back in until tomorrow." };
-    if (e.message === "OVER_CAP") return { ok: false, error: "That's over today's buy-in limit." };
-    return { ok: false, error: "Something went wrong. Please try again." };
-  }
-  await logTxn(classCode, { type: "gambling-buyin", from: username, amount, note: `Bought in to Gambling: ${fmtMoney(amount)}` });
-  return { ok: true, balance: newBalance };
-}
-
-// Moves the whole gambling account balance back to cash. Doesn't touch
-// boughtInToday/netToday/winLimitHit — cashing out just moves chips back,
-// it isn't a reset of the day's tracking.
-async function cashOutGamblingAccount(username, classCode) {
-  const userRef = usersCol().doc(username);
-  let cashedOut = 0;
-  try {
-    await fdb.runTransaction(async (t) => {
-      const snap = await t.get(userRef);
-      if (!snap.exists) throw new Error("NOT_FOUND");
-      const user = snap.data();
-      const acc = gamblingAccountToday(user);
-      if (!(acc.balance > 0)) throw new Error("EMPTY");
-      cashedOut = acc.balance;
-      const newBalance = Math.round((user.balance + acc.balance) * 100) / 100;
-      acc.balance = 0;
-      t.update(userRef, { balance: newBalance, gamblingAccount: acc });
-    });
-  } catch (e) {
-    if (e.message === "EMPTY") return { ok: false, error: "There's nothing in your gambling account to cash out." };
-    return { ok: false, error: "Something went wrong. Please try again." };
-  }
-  await logTxn(classCode, { type: "gambling-cashout", to: username, amount: cashedOut, note: `Cashed out from Gambling: ${fmtMoney(cashedOut)}` });
-  return { ok: true, amount: cashedOut };
-}
-
-// Applies a stake/payout delta to the gambling account balance (used for
-// every bet, escrow, and settlement — Roulette and Blackjack alike).
-// `delta` doubles as the net-profit delta too: since escrow debits and
-// their matching later credits always sum to the round's true profit or
-// loss, just folding every single movement into netToday keeps it correct
-// without having to special-case "which calls count as a settlement".
-// Teachers are exempt entirely (parallels adjustBalance's "teachers have
-// unlimited funds" — see above), so this silently no-ops for them.
-async function adjustGamblingAccount(username, delta, dailyWinLimit) {
-  const ref = usersCol().doc(username);
-  let winLimitHit = false;
-  try {
-    await fdb.runTransaction(async (t) => {
-      const snap = await t.get(ref);
-      if (!snap.exists) throw new Error("NO_USER");
-      const user = snap.data();
-      if (user.role === "teacher") return;
-      const acc = gamblingAccountToday(user);
-      acc.balance = Math.round((acc.balance + delta) * 100) / 100;
-      acc.netToday = Math.round((acc.netToday + delta) * 100) / 100;
-      if (dailyWinLimit && acc.netToday >= dailyWinLimit) acc.winLimitHit = true;
-      winLimitHit = acc.winLimitHit;
-      t.update(ref, { gamblingAccount: acc });
-    });
-    return { ok: true, winLimitHit };
-  } catch (e) {
-    return { ok: false, winLimitHit: false };
-  }
-}
-
 // selection: array of numbers (0-36) chosen by the student, meaning
-// depends on betType. Returns { ok, error } or resolves via a gambling
-// account update (see adjustGamblingAccount above).
+// depends on betType. Returns { ok, error } or resolves via balance update.
 async function placeRouletteBet(username, classCode, betType, betAmount, selection) {
   // Same fix as startBlackjackRound: fetch the class/user docs once and
   // reuse them for the lock check instead of letting isModuleLockedForStudent
@@ -3244,6 +3087,20 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   if (!(betAmount > 0)) return { ok: false, error: "Enter a bet amount greater than zero." };
   if (betAmount < g.minBet || betAmount > g.maxBet) return { ok: false, error: `Bets must be between ${fmtMoney(g.minBet)} and ${fmtMoney(g.maxBet)}.` };
 
+  if (g.dailyBetCap) {
+    const todayKey = nzDateKey();
+    const betToday = (cls.txns || [])
+      .filter(t => t.type === "gambling" && t.from === username && nzDateKey(new Date(t.ts || 0)) === todayKey)
+      // t.bet is the actual stake placed; fall back to t.amount for older
+      // txns logged before this field existed (imprecise on wins, since
+      // amount was the net winnings there, but better than nothing).
+      .reduce((sum, t) => sum + (t.bet !== undefined ? t.bet : t.amount), 0);
+    if (betToday + betAmount > g.dailyBetCap) {
+      const remaining = Math.max(0, g.dailyBetCap - betToday);
+      return { ok: false, error: `Daily betting limit reached — you can bet up to ${fmtMoney(g.dailyBetCap)} per day, and you've already bet ${fmtMoney(betToday)} today (${fmtMoney(remaining)} left).` };
+    }
+  }
+
   let valid = false, count = 0;
   if (betType === "straightUp") { valid = selection.length === 1 && selection[0] >= 0 && selection[0] <= 36; count = 1; }
   else if (betType === "split") { valid = selection.length === 2 && isValidSplit(selection[0], selection[1]); count = 2; }
@@ -3256,11 +3113,7 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
 
   if (!user) return { ok: false, error: "User not found." };
   const isTeacher = user.role === "teacher";
-  if (!isTeacher) {
-    const acc = gamblingAccountToday(user);
-    if (acc.winLimitHit) return { ok: false, error: g.winLimitMessage || "You've hit today's winning limit and can't gamble again until tomorrow." };
-    if (acc.balance < betAmount) return { ok: false, error: "You don't have enough in your gambling account for that bet — buy in first." };
-  }
+  if (!isTeacher && user.balance < betAmount) return { ok: false, error: "You don't have enough money for that bet." };
 
   const spin = Math.floor(Math.random() * 37); // 0-36
   let win = false;
@@ -3273,18 +3126,14 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   // Bet amount is deducted; on a win, the taxed winnings are credited back (winnings only, stake already "spent").
   const netChange = win ? taxedWinnings : -betAmount;
 
-  let hitWinLimit = false;
-  if (!isTeacher) {
-    const r = await adjustGamblingAccount(username, netChange, g.dailyWinLimit);
-    hitWinLimit = r.winLimitHit;
-  }
+  if (!isTeacher) await adjustBalance(username, netChange);
 
   await logTxn(classCode, {
     type: "gambling", from: username, amount: Math.abs(netChange), bet: betAmount,
     note: `Roulette (${betTypeLabel(betType)}): ${win ? "WON" : "lost"} — ball landed on ${spin}` + (win && taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "")
   });
 
-  return { ok: true, spin, win, netChange, hitWinLimit, winLimitMessage: hitWinLimit ? g.winLimitMessage : null };
+  return { ok: true, spin, win, netChange };
 }
 function betTypeLabel(t) {
   return { straightUp: "Straight up", split: "Split", street: "Street", corner: "Corner", sixLine: "Six line", oddEven: "Odd/Even" }[t] || t;
@@ -3590,13 +3439,20 @@ async function startBlackjackRound(username, classCode, betAmount) {
   if (!(betAmount > 0)) return { ok: false, error: "Enter a bet amount greater than zero." };
   if (betAmount < bj.minBet || betAmount > bj.maxBet) return { ok: false, error: `Bets must be between ${fmtMoney(bj.minBet)} and ${fmtMoney(bj.maxBet)}.` };
 
+  if (cls.gambling.dailyBetCap) {
+    const todayKey = nzDateKey();
+    const betToday = (cls.txns || [])
+      .filter(t => t.type === "gambling" && t.from === username && nzDateKey(new Date(t.ts || 0)) === todayKey)
+      .reduce((sum, t) => sum + (t.bet !== undefined ? t.bet : t.amount), 0);
+    if (betToday + betAmount > cls.gambling.dailyBetCap) {
+      const remaining = Math.max(0, cls.gambling.dailyBetCap - betToday);
+      return { ok: false, error: `Daily betting limit reached — you can bet up to ${fmtMoney(cls.gambling.dailyBetCap)} per day, and you've already bet ${fmtMoney(betToday)} today (${fmtMoney(remaining)} left).` };
+    }
+  }
+
   if (!user) return { ok: false, error: "User not found." };
   if (user.blackjackRound) return { ok: false, error: "You already have a Blackjack round in progress." };
-  if (user.role !== "teacher") {
-    const acc0 = gamblingAccountToday(user);
-    if (acc0.winLimitHit) return { ok: false, error: cls.gambling.winLimitMessage || "You've hit today's winning limit and can't gamble again until tomorrow." };
-    if (acc0.balance < betAmount) return { ok: false, error: "You don't have enough in your gambling account for that bet — buy in first." };
-  }
+  if (user.role !== "teacher" && user.balance < betAmount) return { ok: false, error: "You don't have enough money for that bet." };
 
   // Build and deal the whole round in memory FIRST, before any money moves.
   // Shuffling/dealing/bot-play never touch the network and can't fail for a
@@ -3657,7 +3513,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
     await usersCol().doc(username).update({ lastBjSeat: humanSeat });
   } catch (e) { /* not critical */ }
 
-  await adjustGamblingAccount(username, -betAmount, cls.gambling.dailyWinLimit);
+  await adjustBalance(username, -betAmount);
 
   // From here on the bet is escrowed, so any failure must refund it rather
   // than leave the student down money with no round to show for it.
@@ -3668,7 +3524,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
     await usersCol().doc(username).update({ blackjackRound: round });
     return { ok: true, round: bjClientView(round) };
   } catch (e) {
-    await adjustGamblingAccount(username, betAmount, cls.gambling.dailyWinLimit);
+    await adjustBalance(username, betAmount);
     return { ok: false, error: "Something went wrong starting that round — your bet has been refunded. Please try again." };
   }
 }
@@ -3680,18 +3536,16 @@ async function startBlackjackRound(username, classCode, betAmount) {
 // stage in a round none have been placed yet since insurance is offered
 // before any other action).
 async function blackjackInsurance(username, classCode, takeInsurance) {
-  const [user, cls] = await Promise.all([getUser(username), getClass(classCode)]);
+  const user = await getUser(username);
   if (!user || !user.blackjackRound) return { ok: false, error: "No Blackjack round in progress." };
-  const dailyWinLimit = cls && cls.gambling ? cls.gambling.dailyWinLimit : null;
-  const isTeacher = user.role === "teacher";
   const round = user.blackjackRound;
   if (round.phase !== "insurance") return { ok: false, error: "Insurance isn't available right now." };
 
   let insAmount = 0;
   if (takeInsurance) {
     insAmount = Math.round((round.betAmount / 2) * 100) / 100;
-    if (!isTeacher && gamblingAccountToday(user).balance < insAmount) return { ok: false, error: "You don't have enough in your gambling account for insurance." };
-    await adjustGamblingAccount(username, -insAmount, dailyWinLimit);
+    if (user.balance < insAmount) return { ok: false, error: "You don't have enough money for insurance." };
+    await adjustBalance(username, -insAmount);
     round.insurance.taken = true;
     round.insurance.amount = insAmount;
   }
@@ -3708,7 +3562,7 @@ async function blackjackInsurance(username, classCode, takeInsurance) {
     const dealerBJ = bjIsNaturalBlackjack(round.dealer.cards);
 
     if (dealerBJ) {
-      if (round.insurance.taken) await adjustGamblingAccount(username, round.insurance.amount * 3, dailyWinLimit); // stake back + 2:1
+      if (round.insurance.taken) await adjustBalance(username, round.insurance.amount * 3); // stake back + 2:1
       if (round.hands[0].status === "blackjack") round.hands[0].status = "push";
       else round.hands[0].status = "lost-to-dealer-blackjack";
       round.phase = "dealer";
@@ -3724,7 +3578,7 @@ async function blackjackInsurance(username, classCode, takeInsurance) {
     await usersCol().doc(username).update({ blackjackRound: round });
     return { ok: true, round: bjClientView(round) };
   } catch (e) {
-    if (insAmount > 0) await adjustGamblingAccount(username, insAmount, dailyWinLimit);
+    if (insAmount > 0) await adjustBalance(username, insAmount);
     return { ok: false, error: "Something went wrong resolving insurance — any insurance stake has been refunded. Please try again." };
   }
 }
@@ -3747,9 +3601,6 @@ async function bjAdvance(username, classCode, round) {
 async function blackjackAction(username, classCode, action) {
   const user = await getUser(username);
   if (!user || !user.blackjackRound) return { ok: false, error: "No Blackjack round in progress." };
-  const cls = await getClass(classCode);
-  const dailyWinLimit = cls && cls.gambling ? cls.gambling.dailyWinLimit : null;
-  const isTeacher = user.role === "teacher";
   const round = user.blackjackRound;
   if (round.phase !== "playing") return { ok: false, error: "It's not your turn to act." };
   const hand = bjActiveHand(round);
@@ -3771,8 +3622,8 @@ async function blackjackAction(username, classCode, action) {
     if (action === "double") {
       const eligible = hand.cards.length === 2 && !hand.doubled && !hand.isSplitAces && !hand.cards.some(c => c.r === "A");
       if (!eligible) return { ok: false, error: "You can only double on your first two cards, and not if either card is an Ace." };
-      if (!isTeacher && gamblingAccountToday(user).balance < hand.bet) return { ok: false, error: "You don't have enough in your gambling account to double down." };
-      await adjustGamblingAccount(username, -hand.bet, dailyWinLimit);
+      if (user.balance < hand.bet) return { ok: false, error: "You don't have enough money to double down." };
+      await adjustBalance(username, -hand.bet);
       try {
         hand.doubled = true;
         hand.bet *= 2;
@@ -3780,7 +3631,7 @@ async function blackjackAction(username, classCode, action) {
         hand.status = bjIsBust(hand.cards) ? "bust" : "stand";
         return await bjAdvance(username, classCode, round);
       } catch (e) {
-        await adjustGamblingAccount(username, hand.bet / 2, dailyWinLimit); // undo the doubled stake just taken
+        await adjustBalance(username, hand.bet / 2); // undo the doubled stake just taken
         return { ok: false, error: "Something went wrong doubling down — your extra stake has been refunded. Please try again." };
       }
     }
@@ -3789,9 +3640,9 @@ async function blackjackAction(username, classCode, action) {
       const eligible = hand.cards.length === 2 && !hand.isSplitAces && round.splitCount < 2 &&
         bjCardValue(hand.cards[0].r) === bjCardValue(hand.cards[1].r);
       if (!eligible) return { ok: false, error: "That hand can't be split." };
-      if (!isTeacher && gamblingAccountToday(user).balance < hand.bet) return { ok: false, error: "You don't have enough in your gambling account to split." };
+      if (user.balance < hand.bet) return { ok: false, error: "You don't have enough money to split." };
       const splitStake = hand.bet;
-      await adjustGamblingAccount(username, -splitStake, dailyWinLimit);
+      await adjustBalance(username, -splitStake);
       try {
         const isAces = hand.cards[0].r === "A";
         const otherCard = hand.cards.pop();
@@ -3806,7 +3657,7 @@ async function blackjackAction(username, classCode, action) {
         round.splitCount++;
         return await bjAdvance(username, classCode, round);
       } catch (e) {
-        await adjustGamblingAccount(username, splitStake, dailyWinLimit); // undo the split stake just taken
+        await adjustBalance(username, splitStake); // undo the split stake just taken
         return { ok: false, error: "Something went wrong splitting that hand — your stake has been refunded. Please try again." };
       }
     }
@@ -3861,14 +3712,7 @@ async function bjSettle(username, classCode, round) {
     results.push({ hand: h, outcome });
   }
 
-  if (totalCredit > 0) await adjustGamblingAccount(username, totalCredit, cls.gambling.dailyWinLimit);
-  // Read back the account's current lock state rather than relying only on
-  // this call's own return value — an earlier movement in the SAME round
-  // (e.g. an insurance payout before this settle, or one of several split
-  // hands) may have already tripped the winning limit even when this
-  // particular credit is zero or negative.
-  const finalUser = await getUser(username);
-  const hitWinLimit = finalUser ? gamblingAccountToday(finalUser).winLimitHit : false;
+  if (totalCredit > 0) await adjustBalance(username, totalCredit);
 
   const insuranceNote = round.insurance.taken
     ? (round.insurance.amount > 0 && dealerBJ ? ` Insurance won ${fmtMoney(round.insurance.amount * 2)}.` : ` Insurance lost ${fmtMoney(round.insurance.amount)}.`)
@@ -3889,21 +3733,20 @@ async function bjSettle(username, classCode, round) {
   }
 
   await logTxn(classCode, {
-    // `bet` here is the original stake for the round (round.betAmount) —
-    // not the total actually risked, which can be higher once doubling
-    // down or splitting adds more on top. Kept for the teacher's ledger;
-    // it's no longer summed anywhere for a daily cap (that's now enforced
-    // at buy-in time — see startBlackjackRound/buyIntoGamblingAccount).
+    // `bet` here is what the daily bet cap (placeRouletteBet/
+    // startBlackjackRound) sums up to see how much a student has bet
+    // today — it should only reflect what they actually chose to risk by
+    // starting the round, not money added afterwards by doubling down or
+    // splitting (each of which increases totalStaked without the student
+    // placing a new, separate bet), and not the side insurance bet
+    // either. round.betAmount is exactly that original stake.
     type: "gambling", from: username, amount: Math.abs(netForTxn), bet: round.betAmount,
     note: `Blackjack: ${handsDesc}; ${dealerDesc} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
   });
 
-  const finalRound = Object.assign({}, round, {
-    phase: "done", results: results.map(r => r.outcome), netChange: netForTxn,
-    hitWinLimit, winLimitMessage: hitWinLimit ? cls.gambling.winLimitMessage : null
-  });
+  const finalRound = Object.assign({}, round, { phase: "done", results: results.map(r => r.outcome), netChange: netForTxn });
   await usersCol().doc(username).update({ blackjackRound: null });
-  return { ok: true, round: bjClientView(finalRound), netChange: netForTxn, hitWinLimit };
+  return { ok: true, round: bjClientView(finalRound), netChange: netForTxn };
 }
 
 // Strips the shoe (never sent to the client) and hides the dealer's hole
@@ -3920,9 +3763,7 @@ function bjClientView(round) {
     hands: round.hands.map(h => ({ cards: h.cards, bet: h.bet, doubled: h.doubled, isSplitAces: h.isSplitAces, status: h.status, total: bjHandValue(h.cards).total })),
     activeHandIndex: round.activeHandIndex,
     results: round.results || null,
-    netChange: round.netChange !== undefined ? round.netChange : null,
-    hitWinLimit: !!round.hitWinLimit,
-    winLimitMessage: round.winLimitMessage || null
+    netChange: round.netChange !== undefined ? round.netChange : null
   };
 }
 
@@ -4321,18 +4162,7 @@ function withNewModuleDefaults(cls) {
     payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 }
   };
   if (cls.gambling.enabled === undefined) cls.gambling.enabled = true;
-  // Migrate the old shared "dailyBetCap" (a pure spending cap) into the
-  // new "dailyBuyInLimit" (a cap on cash moved into the gambling account)
-  // the first time a class with legacy data is loaded — same number,
-  // same meaning in practice (most a student could put at risk per day).
-  if (cls.gambling.dailyBuyInLimit === undefined) {
-    cls.gambling.dailyBuyInLimit = (cls.gambling.dailyBetCap !== undefined && cls.gambling.dailyBetCap !== null)
-      ? cls.gambling.dailyBetCap : null;
-  }
-  if (cls.gambling.dailyWinLimit === undefined) cls.gambling.dailyWinLimit = null;
-  if (cls.gambling.winLimitMessage === undefined) {
-    cls.gambling.winLimitMessage = "You've hit your winning limit for today \u2014 nice work! Come back and play again tomorrow.";
-  }
+  if (cls.gambling.dailyBetCap === undefined) cls.gambling.dailyBetCap = null;
   cls.blackjack = cls.blackjack || { enabled: true, minBet: 1, maxBet: 20 };
   if (cls.blackjack.enabled === undefined) cls.blackjack.enabled = true;
   if (cls.blackjack.minBet === undefined) cls.blackjack.minBet = 1;
