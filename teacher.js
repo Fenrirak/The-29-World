@@ -373,6 +373,8 @@ function describeTxn(t, nameOf) {
     case "term-deposit-early": return `${nameOf(t.to)} — ${t.note}`;
     case "term-deposit-mature": return `${nameOf(t.to)} — ${t.note}`;
     case "gambling": return `${nameOf(t.to || t.from)} — ${t.note}`;
+    case "gambling-buyin": return `${nameOf(t.from)} — ${t.note}`;
+    case "gambling-cashout": return `${nameOf(t.to)} — ${t.note}`;
     case "big-event": return `${nameOf(t.to || t.from)} — ${t.note}`;
     case "insurance-claim": return `${nameOf(t.to)} — ${t.note}`;
     case "insurance-premium": return `${nameOf(t.from)} — ${t.note}`;
@@ -418,7 +420,9 @@ function badge(type) {
     "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
     "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
     "term-deposit-mature": ["mint", "vault", "Deposit matured"],
-    "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
+    "gambling": ["gold", "dice", "Gambling"],
+    "gambling-buyin": ["gold", "dice", "Gambling buy-in"], "gambling-cashout": ["mint", "dice", "Gambling cash-out"],
+    "big-event": ["coral", "star", "Big event"],
     "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
     "cash-interest": ["gold", "coin", "Cash interest"],
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],

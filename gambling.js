@@ -184,6 +184,85 @@ function toggleNumber(n, need) {
   lastSelection = [...selection];
 }
 
+/* ===================== Gambling account (shared buy-in/cash-out) ===================== */
+
+function renderGamblingAccountCard(view) {
+  const card = document.getElementById("gamblingAccountCard");
+  if (!view) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  document.getElementById("gAcctBalance").textContent = fmtMoney(view.balance);
+  document.getElementById("gAcctCashOutBtn").disabled = !(view.balance > 0);
+
+  const buyInNote = document.getElementById("gAcctBuyInNote");
+  buyInNote.textContent = view.dailyBuyInLimit
+    ? `You can buy in up to ${fmtMoney(view.dailyBuyInLimit)} per day (shared by Roulette and Blackjack) — ${fmtMoney(view.remainingBuyIn)} left today.`
+    : "No daily buy-in limit set.";
+
+  const winNote = document.getElementById("gAcctWinNote");
+  const buyInForm = document.getElementById("gAcctBuyInForm");
+  const lockedMsg = document.getElementById("gAcctLockedMsg");
+  if (view.winLimitHit) {
+    winNote.textContent = "";
+    buyInForm.classList.add("hidden");
+    lockedMsg.classList.remove("hidden");
+    lockedMsg.innerHTML = `<div class="success-msg">${view.winLimitMessage || "You've hit today's winning limit — come back tomorrow."}</div>`;
+  } else {
+    lockedMsg.classList.add("hidden");
+    buyInForm.classList.remove("hidden");
+    winNote.textContent = view.dailyWinLimit ? `Daily winning limit: ${fmtMoney(view.dailyWinLimit)} net.` : "";
+    const overCap = view.dailyBuyInLimit !== null && view.remainingBuyIn <= 0;
+    document.getElementById("gAcctBuyInBtn").disabled = overCap;
+    document.getElementById("gAcctBuyInAmount").disabled = overCap;
+  }
+}
+
+async function refreshGamblingAccountCard() {
+  const view = await getGamblingAccountView(CURRENT.username, CURRENT.classCode);
+  renderGamblingAccountCard(view);
+}
+
+async function gaBuyIn() {
+  const amount = document.getElementById("gAcctBuyInAmount").value;
+  const box = document.getElementById("gAcctMsg");
+  const btn = document.getElementById("gAcctBuyInBtn");
+  box.innerHTML = "";
+  btn.disabled = true;
+  try {
+    const res = await buyIntoGamblingAccount(CURRENT.username, CURRENT.classCode, amount);
+    if (!res.ok) {
+      box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+    document.getElementById("gAcctBuyInAmount").value = "";
+    box.innerHTML = `<div class="success-msg">Bought in ${fmtMoney(Number(amount))}.</div>`;
+    await refreshGamblingAccountCard();
+  } catch (e) {
+    box.innerHTML = `<div class="error-msg">Something went wrong. Please try again.</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function gaCashOut() {
+  const box = document.getElementById("gAcctMsg");
+  const btn = document.getElementById("gAcctCashOutBtn");
+  box.innerHTML = "";
+  btn.disabled = true;
+  try {
+    const res = await cashOutGamblingAccount(CURRENT.username, CURRENT.classCode);
+    if (!res.ok) {
+      box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+    box.innerHTML = `<div class="success-msg">Cashed out ${fmtMoney(res.amount)} to your cash balance.</div>`;
+    await refreshGamblingAccountCard();
+  } catch (e) {
+    box.innerHTML = `<div class="error-msg">Something went wrong. Please try again.</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function spin() {
   const type = document.getElementById("betType").value;
   const amount = document.getElementById("betAmount").value;
@@ -209,6 +288,9 @@ async function spin() {
     box.innerHTML = res.win
       ? `<div class="success-msg">Ball landed on ${res.spin}. You WON ${fmtMoney(res.netChange)}!</div>`
       : `<div class="error-msg">Ball landed on ${res.spin}. You lost ${fmtMoney(Math.abs(res.netChange))}.</div>`;
+    if (res.hitWinLimit && res.winLimitMessage) {
+      box.innerHTML += `<div class="success-msg" style="margin-top:8px;">${res.winLimitMessage}</div>`;
+    }
     document.getElementById("betAmount").value = "";
     await render();
   } catch (e) {
@@ -243,7 +325,9 @@ async function saveRouletteSettings() {
     enabled: document.getElementById("gEnabled").checked,
     minBet: document.getElementById("gMin").value,
     maxBet: document.getElementById("gMax").value,
-    dailyBetCap: document.getElementById("gDailyCap").value,
+    dailyBuyInLimit: document.getElementById("gDailyBuyIn").value,
+    dailyWinLimit: document.getElementById("gDailyWinLimit").value,
+    winLimitMessage: document.getElementById("gWinLimitMessage").value,
     straightUp: document.getElementById("pStraight").value,
     split: document.getElementById("pSplit").value,
     street: document.getElementById("pStreet").value,
@@ -300,6 +384,7 @@ async function bjDeal() {
     document.getElementById("bjTableArea").classList.remove("hidden");
     document.getElementById("bjNewRoundBtn").classList.add("hidden");
     document.getElementById("bjRoundMsg").innerHTML = "";
+    await refreshGamblingAccountCard();
 
     const token = ++DEAL_TOKEN;
     await bjAnimateInitialDeal(CURRENT_ROUND, token);
@@ -336,6 +421,7 @@ async function bjDoInsurance(take) {
     CURRENT_ROUND = res.round;
     document.getElementById("bjInsuranceArea").classList.add("hidden");
     const token = DEAL_TOKEN;
+    await refreshGamblingAccountCard();
 
     const dealerHadBlackjack = CURRENT_ROUND.hands[0].status === "push" || CURRENT_ROUND.hands[0].status === "lost-to-dealer-blackjack";
     if (CURRENT_ROUND.phase === "done" && dealerHadBlackjack) {
@@ -403,6 +489,7 @@ async function bjDoAction(action) {
       document.getElementById("bjActionArea")?.classList.add("hidden");
       await bjRunRemainingSeats(CURRENT_ROUND, CURRENT_ROUND.humanSeat + 1, token);
     }
+    await refreshGamblingAccountCard();
   } catch (e) {
     document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong with that action. Please refresh the page — any stake taken for it is automatically refunded on failure.</div>`;
   } finally {
@@ -423,11 +510,16 @@ async function bjFinalizeRound(round) {
   SHOW_RESULTS = true;
   renderBlackjackRound(bjBuildDisplayRound());
   document.getElementById("bjNewRoundBtn").classList.remove("hidden");
-  document.getElementById("bjRoundMsg").innerHTML = round.netChange >= 0
+  let msg = round.netChange >= 0
     ? `<div class="success-msg">You WON ${fmtMoney(round.netChange)} this round!</div>`
     : `<div class="error-msg">You lost ${fmtMoney(Math.abs(round.netChange))} this round.</div>`;
+  if (round.hitWinLimit && round.winLimitMessage) {
+    msg += `<div class="success-msg" style="margin-top:8px;">${round.winLimitMessage}</div>`;
+  }
+  document.getElementById("bjRoundMsg").innerHTML = msg;
   CLS = await getClassCached(CURRENT.classCode);
   await renderRecentBlackjack();
+  await refreshGamblingAccountCard();
 }
 
 async function bjResetTable() {
@@ -635,9 +727,13 @@ function bjShowRoundStatic(round) {
   if (round.phase === "playing") { document.getElementById("bjActionArea").classList.remove("hidden"); bjUpdateActionButtons(); }
   if (round.phase === "done") {
     document.getElementById("bjNewRoundBtn").classList.remove("hidden");
-    document.getElementById("bjRoundMsg").innerHTML = round.netChange >= 0
+    let msg = round.netChange >= 0
       ? `<div class="success-msg">You WON ${fmtMoney(round.netChange)} this round!</div>`
       : `<div class="error-msg">You lost ${fmtMoney(Math.abs(round.netChange))} this round.</div>`;
+    if (round.hitWinLimit && round.winLimitMessage) {
+      msg += `<div class="success-msg" style="margin-top:8px;">${round.winLimitMessage}</div>`;
+    }
+    document.getElementById("bjRoundMsg").innerHTML = msg;
   }
 }
 
@@ -858,7 +954,9 @@ async function render() {
     document.getElementById("gEnabled").checked = g.enabled !== false;
     document.getElementById("gMin").value = g.minBet;
     document.getElementById("gMax").value = g.maxBet;
-    document.getElementById("gDailyCap").value = g.dailyBetCap === null || g.dailyBetCap === undefined ? "" : g.dailyBetCap;
+    document.getElementById("gDailyBuyIn").value = g.dailyBuyInLimit === null || g.dailyBuyInLimit === undefined ? "" : g.dailyBuyInLimit;
+    document.getElementById("gDailyWinLimit").value = g.dailyWinLimit === null || g.dailyWinLimit === undefined ? "" : g.dailyWinLimit;
+    document.getElementById("gWinLimitMessage").value = g.winLimitMessage || "";
     document.getElementById("pStraight").value = g.payouts.straightUp;
     document.getElementById("pSplit").value = g.payouts.split;
     document.getElementById("pStreet").value = g.payouts.street;
@@ -885,23 +983,20 @@ async function render() {
   lockedBanner.classList.add("hidden");
   document.getElementById("studentView").classList.remove("hidden");
 
+  /* ---- Shared gambling account card ---- */
+  const gamblingOverallEnabled = g.enabled !== false;
+  if (gamblingOverallEnabled) {
+    await refreshGamblingAccountCard();
+  } else {
+    document.getElementById("gamblingAccountCard").classList.add("hidden");
+  }
+
   /* ---- Roulette tab ---- */
   const rouletteEnabled = g.enabled !== false;
   document.getElementById("disabledBanner").classList.toggle("hidden", rouletteEnabled);
   document.getElementById("rouletteStudentView").classList.toggle("hidden", !rouletteEnabled);
   if (rouletteEnabled) {
     document.getElementById("betLimits").textContent = `Bets must be between ${fmtMoney(g.minBet)} and ${fmtMoney(g.maxBet)}.`;
-    const capEl = document.getElementById("dailyCapStatus");
-    if (g.dailyBetCap) {
-      const todayKey = nzDateKey();
-      const betToday = CLS.txns
-        .filter(t => t.type === "gambling" && t.from === CURRENT.username && nzDateKey(new Date(t.ts || 0)) === todayKey)
-        .reduce((sum, t) => sum + (t.bet !== undefined ? t.bet : t.amount), 0);
-      const remaining = Math.max(0, g.dailyBetCap - betToday);
-      capEl.textContent = `Daily limit (shared with Blackjack): ${fmtMoney(g.dailyBetCap)} — you've bet ${fmtMoney(betToday)} today, ${fmtMoney(remaining)} left.`;
-    } else {
-      capEl.textContent = "";
-    }
     renderPicker();
     await renderRecentRoulette();
   }
@@ -915,17 +1010,6 @@ async function render() {
   document.getElementById("bjStudentView").classList.toggle("hidden", !blackjackEnabled);
   if (blackjackEnabled) {
     document.getElementById("bjBetLimits").textContent = `Bets must be between ${fmtMoney(bj.minBet)} and ${fmtMoney(bj.maxBet)}.`;
-    const bjCapEl = document.getElementById("bjDailyCapStatus");
-    if (g.dailyBetCap) {
-      const todayKey = nzDateKey();
-      const betToday = CLS.txns
-        .filter(t => t.type === "gambling" && t.from === CURRENT.username && nzDateKey(new Date(t.ts || 0)) === todayKey)
-        .reduce((sum, t) => sum + (t.bet !== undefined ? t.bet : t.amount), 0);
-      const remaining = Math.max(0, g.dailyBetCap - betToday);
-      bjCapEl.textContent = `Daily limit (shared with Roulette): ${fmtMoney(g.dailyBetCap)} — you've bet ${fmtMoney(betToday)} today, ${fmtMoney(remaining)} left.`;
-    } else {
-      bjCapEl.textContent = "";
-    }
 
     // Resume an in-progress Blackjack round if the page was refreshed
     // mid-hand — the bet is already escrowed server-side, so this just
