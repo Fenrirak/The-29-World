@@ -1005,7 +1005,7 @@ async function init() {
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
   await render();
-  switchMode("roulette");
+  switchMode("account");
 }
 
 async function render() {

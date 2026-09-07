@@ -65,20 +65,20 @@
   <div class="card hidden" id="gamblingLockedBanner" style="border-color:var(--coral);"></div>
 
   <div class="mode-switch" id="modeSwitch">
-    <button class="mode-btn active" id="modeBtnRoulette" onclick="switchMode('roulette')">
+    <button class="mode-btn active" id="modeBtnAccount" onclick="switchMode('account')">
+      <span class="icon-slot" data-icon="piggy"></span> Account
+    </button>
+    <button class="mode-btn" id="modeBtnRoulette" onclick="switchMode('roulette')">
       <span class="icon-slot" data-icon="dice"></span> Roulette
     </button>
     <button class="mode-btn" id="modeBtnBlackjack" onclick="switchMode('blackjack')">
       <span class="icon-slot" data-icon="cards"></span> Blackjack
     </button>
-    <button class="mode-btn" id="modeBtnAccount" onclick="switchMode('account')">
-      <span class="icon-slot" data-icon="piggy"></span> Account
-    </button>
   </div>
 
   <div id="teacherPanel" class="card hidden">
 
-    <div id="teacherRouletteSettings">
+    <div id="teacherRouletteSettings" class="hidden">
       <h2 id="hSettings">Roulette settings</h2>
       <p class="muted-small">The overall on/off switch, daily buy-in limit, and daily winning limit now live on the Account tab — they're shared with Blackjack.</p>
       <div class="grid grid-2" style="margin-top:14px;">
@@ -126,7 +126,7 @@
       <div id="bjSettingsMsg"></div>
     </div>
 
-    <div id="teacherAccountSettings" class="hidden">
+    <div id="teacherAccountSettings">
       <h2 id="hAccountSettings">Gambling account settings</h2>
       <label style="display:flex;align-items:center;gap:8px;">
         <input type="checkbox" id="gEnabled" style="width:20px;height:20px;min-height:auto;">
@@ -158,7 +158,7 @@
 
   <div id="studentView" class="hidden">
 
-    <div id="rouletteSection">
+    <div id="rouletteSection" class="hidden">
       <div id="disabledBanner" class="card hidden">
         <h2 id="hDisabled">Gambling is paused</h2>
         <p id="disabledText">Your teacher has temporarily turned off the Gambling module. Check back later!</p>
@@ -245,7 +245,7 @@
       </div>
     </div>
 
-    <div id="accountSection" class="hidden">
+    <div id="accountSection">
       <div id="acctDisabledBanner" class="card hidden">
         <h2 id="acctHDisabled">Gambling is paused</h2>
         <p id="acctDisabledText">Your teacher has temporarily turned off the Gambling module. You can still cash out below, but buying in and betting are paused.</p>
