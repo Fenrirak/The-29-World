@@ -3274,16 +3274,21 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   // Bet amount is deducted; on a win, the taxed winnings are credited back (winnings only, stake already "spent").
   const netChange = win ? taxedWinnings : -betAmount;
 
-  let hitWinLimit = false;
-  if (!isTeacher) {
-    const r = await adjustGamblingAccount(username, netChange, g.dailyWinLimit);
-    hitWinLimit = r.winLimitHit;
-  }
-
-  await logTxn(classCode, {
+  // These two are independent — logTxn only needs values already computed
+  // above, not adjustGamblingAccount's result (only hitWinLimit does, read
+  // off its own return value below) — so run them together instead of
+  // back-to-back. That's one fewer round-trip on every single spin.
+  const logPromise = logTxn(classCode, {
     type: "gambling", from: username, amount: Math.abs(netChange), bet: betAmount,
     note: `Roulette (${betTypeLabel(betType)}): ${win ? "WON" : "lost"} — ball landed on ${spin}` + (win && taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "")
   });
+  let hitWinLimit = false;
+  if (!isTeacher) {
+    const [r] = await Promise.all([adjustGamblingAccount(username, netChange, g.dailyWinLimit), logPromise]);
+    hitWinLimit = r.winLimitHit;
+  } else {
+    await logPromise;
+  }
 
   return { ok: true, spin, win, netChange, hitWinLimit, winLimitMessage: hitWinLimit ? g.winLimitMessage : null };
 }
@@ -3652,13 +3657,14 @@ async function startBlackjackRound(username, classCode, betAmount) {
   }
 
   // Best-effort — remembering the seat is only used to keep future seat
-  // draws fair, it's not part of the actual round/money, so a failure
-  // here shouldn't stop the round from being dealt.
-  try {
-    await usersCol().doc(username).update({ lastBjSeat: humanSeat });
-  } catch (e) { /* not critical */ }
-
-  await adjustGamblingAccount(username, -betAmount, cls.gambling.dailyWinLimit);
+  // draws fair, it's not part of the actual round/money, so a failure here
+  // shouldn't stop the round from being dealt. It's also unrelated to the
+  // money movement below, so the two run together instead of one after the
+  // other — that was an extra sequential round-trip on every single Deal.
+  await Promise.all([
+    usersCol().doc(username).update({ lastBjSeat: humanSeat }).catch(() => {}),
+    adjustGamblingAccount(username, -betAmount, cls.gambling.dailyWinLimit)
+  ]);
 
   // From here on the bet is escrowed, so any failure must refund it rather
   // than leave the student down money with no round to show for it.
@@ -3746,9 +3752,8 @@ async function bjAdvance(username, classCode, round) {
 }
 
 async function blackjackAction(username, classCode, action) {
-  const user = await getUser(username);
+  const [user, cls] = await Promise.all([getUser(username), getClass(classCode)]);
   if (!user || !user.blackjackRound) return { ok: false, error: "No Blackjack round in progress." };
-  const cls = await getClass(classCode);
   const dailyWinLimit = cls && cls.gambling ? cls.gambling.dailyWinLimit : null;
   const isTeacher = user.role === "teacher";
   const round = user.blackjackRound;
@@ -3863,13 +3868,6 @@ async function bjSettle(username, classCode, round) {
   }
 
   if (totalCredit > 0) await adjustGamblingAccount(username, totalCredit, cls.gambling.dailyWinLimit);
-  // Read back the account's current lock state rather than relying only on
-  // this call's own return value — an earlier movement in the SAME round
-  // (e.g. an insurance payout before this settle, or one of several split
-  // hands) may have already tripped the winning limit even when this
-  // particular credit is zero or negative.
-  const finalUser = await getUser(username);
-  const hitWinLimit = finalUser ? gamblingAccountToday(finalUser).winLimitHit : false;
 
   const insuranceNote = round.insurance.taken
     ? (round.insurance.amount > 0 && dealerBJ ? ` Insurance won ${fmtMoney(round.insurance.amount * 2)}.` : ` Insurance lost ${fmtMoney(round.insurance.amount)}.`)
@@ -3889,21 +3887,35 @@ async function bjSettle(username, classCode, round) {
     handsDesc = results.map((r, i) => `hand ${i + 1}: ${bjHandValue(r.hand.cards).total}${r.hand.status === "bust" ? " (bust)" : ""} (${outcomeWord[r.outcome]})`).join(", ");
   }
 
-  await logTxn(classCode, {
-    // `bet` here is the original stake for the round (round.betAmount) —
-    // not the total actually risked, which can be higher once doubling
-    // down or splitting adds more on top. Kept for the teacher's ledger;
-    // it's no longer summed anywhere for a daily cap (that's now enforced
-    // at buy-in time — see startBlackjackRound/buyIntoGamblingAccount).
-    type: "gambling", from: username, amount: Math.abs(netForTxn), bet: round.betAmount,
-    note: `Blackjack: ${handsDesc}; ${dealerDesc} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
-  });
+  // Read back the account's current lock state rather than relying only on
+  // this call's own return value — an earlier movement in the SAME round
+  // (e.g. an insurance payout before this settle, or one of several split
+  // hands) may have already tripped the winning limit even when this
+  // particular credit is zero or negative. This read, the ledger write, and
+  // clearing the finished round off the user doc don't depend on each
+  // other — they used to run one after another, which meant every single
+  // finished hand (Stand, a bust, a split resolving) paid for 3 sequential
+  // round-trips here on top of everything before it. Firing them together
+  // cuts that to the time of whichever one is slowest.
+  const [finalUser] = await Promise.all([
+    getUser(username),
+    logTxn(classCode, {
+      // `bet` here is the original stake for the round (round.betAmount) —
+      // not the total actually risked, which can be higher once doubling
+      // down or splitting adds more on top. Kept for the teacher's ledger;
+      // it's no longer summed anywhere for a daily cap (that's now enforced
+      // at buy-in time — see startBlackjackRound/buyIntoGamblingAccount).
+      type: "gambling", from: username, amount: Math.abs(netForTxn), bet: round.betAmount,
+      note: `Blackjack: ${handsDesc}; ${dealerDesc} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
+    }),
+    usersCol().doc(username).update({ blackjackRound: null })
+  ]);
+  const hitWinLimit = finalUser ? gamblingAccountToday(finalUser).winLimitHit : false;
 
   const finalRound = Object.assign({}, round, {
     phase: "done", results: results.map(r => r.outcome), netChange: netForTxn,
     hitWinLimit, winLimitMessage: hitWinLimit ? cls.gambling.winLimitMessage : null
   });
-  await usersCol().doc(username).update({ blackjackRound: null });
   return { ok: true, round: bjClientView(finalRound), netChange: netForTxn, hitWinLimit };
 }
 
@@ -7216,12 +7228,26 @@ const ANW_BALANCE_POLL_MS = 20000;
 let _anwPollTimer = null;
 let _anwPollUsername = null;
 
+// The widget shows cash balance everywhere except on the Gambling pages,
+// where cash isn't what's in play — it shows the student's chip balance
+// (their gambling account) instead. Checked by pathname rather than by
+// which section/mode is active, so it stays correct across Account,
+// Roulette, and Blackjack alike.
+function _anwIsGamblingPage() {
+  return /(^|\/)gambling\.html/i.test(location.pathname);
+}
+
 async function _anwPollTick() {
   const el = document.getElementById("anwBalanceWidgetValue");
   if (!el || !_anwPollUsername) return;
   try {
     const fresh = await getUser(_anwPollUsername); // uncached: this IS the poll, no point caching a 20s-apart call
-    if (fresh) el.textContent = fmtMoney(fresh.balance);
+    if (!fresh) return;
+    if (_anwIsGamblingPage()) {
+      el.textContent = fmtMoney(gamblingAccountToday(fresh).balance);
+    } else {
+      el.textContent = fmtMoney(fresh.balance);
+    }
   } catch (e) {
     console.warn("Balance widget poll failed (will retry next tick):", e);
   }
@@ -7247,10 +7273,16 @@ document.addEventListener("visibilitychange", () => {
 
 async function mountBalanceWidget(username) {
   if (document.getElementById("anwBalanceWidget")) return;
+  const onGambling = _anwIsGamblingPage();
   const box = document.createElement("div");
   box.id = "anwBalanceWidget";
   box.className = "anw-balance-widget";
-  box.innerHTML = `
+  box.innerHTML = onGambling
+    ? `
+    <div class="anw-bw-label">${icon("dice", 14)} Chips balance</div>
+    <div class="anw-bw-value" id="anwBalanceWidgetValue">—</div>
+  `
+    : `
     <div class="anw-bw-label">${icon("piggy", 14)} Cash balance</div>
     <div class="anw-bw-value" id="anwBalanceWidgetValue">—</div>
   `;
@@ -7259,7 +7291,11 @@ async function mountBalanceWidget(username) {
   window.addEventListener("resize", positionBalanceWidget);
 
   const cached = await getUserCached(username);
-  if (cached) box.querySelector("#anwBalanceWidgetValue").textContent = fmtMoney(cached.balance);
+  if (cached) {
+    box.querySelector("#anwBalanceWidgetValue").textContent = onGambling
+      ? fmtMoney(gamblingAccountToday(cached).balance)
+      : fmtMoney(cached.balance);
+  }
 
   _anwPollUsername = username;
   if (!document.hidden) _anwPollStart();
