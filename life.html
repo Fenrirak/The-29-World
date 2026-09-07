@@ -19,7 +19,7 @@
 })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Big Events — The 29 World</title>
+<title>Life — The 29 World</title>
 <link rel="icon" type="image/png" href="Favicon.png">
 <link rel="stylesheet" href="style.css">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
@@ -32,7 +32,7 @@
 <body>
 
 <div class="topbar">
-  <a class="brand" href="bigevents.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <a class="brand" href="life.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
   <nav>
     <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
     <a href="bank.html" data-module="bank"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
@@ -46,8 +46,8 @@
     <a href="property.html" data-module="property"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
     <a href="insurance.html" data-module="insurance"><span class="icon-slot" data-icon="shield"></span><span class="nav-label">Insurance</span></a>
     <a href="tax.html" data-module="tax"><span class="icon-slot" data-icon="percent"></span><span class="nav-label">Tax</span></a>
-    <a href="bigevents.html" data-module="bigevents" class="active"><span class="icon-slot" data-icon="star"></span><span class="nav-label">Big Events</span></a>
-    <a href="life.html" data-module="life"><span class="icon-slot" data-icon="trophy"></span><span class="nav-label">Life</span></a>
+    <a href="bigevents.html" data-module="bigevents"><span class="icon-slot" data-icon="star"></span><span class="nav-label">Big Events</span></a>
+    <a href="life.html" data-module="life" class="active"><span class="icon-slot" data-icon="trophy"></span><span class="nav-label">Life</span></a>
     <a href="gambling.html" data-module="gambling"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
     <a href="quizzes.html"><span class="icon-slot" data-icon="key"></span><span class="nav-label">Quizzes</span></a>
     <a href="reports.html"><span class="icon-slot" data-icon="idcard"></span><span class="nav-label">Reports</span></a>
@@ -60,67 +60,91 @@
 </div>
 
 <main>
-  <h1 id="pageTitle">Big Events</h1>
-  <p>Rare, high-stakes random events. Each week every student has a small chance of being hit with one — when it happens they must choose to pay the cost, lose the associated thing, or claim matching insurance.</p>
+  <h1 id="pageTitle">Life</h1>
+  <p id="pageIntro">Give a student a "life event" — got a job promotion, got married, had a kid, whatever fits your class — bundled with real in-game perks. Build each one once, then hand it out to as many students as you like. Students can hold more than one at a time and the perks stack.</p>
 
   <div id="teacherPanel" class="card hidden">
-    <h2 id="hAdd">Add a big event</h2>
-    <form onsubmit="return addEvent(event)">
+    <h2 id="hAdd">Create a life item</h2>
+    <form onsubmit="return saveLifeItemForm(event)">
       <div class="grid grid-3">
         <div>
-          <label for="beName" id="labName">Event name</label>
-          <input id="beName" placeholder="e.g. Made redundant" required>
+          <label for="liName" id="labName">Name</label>
+          <input id="liName" placeholder="e.g. Got married" required>
         </div>
         <div>
-          <label for="beKind" id="labKind">Good or bad?</label>
-          <select id="beKind" onchange="updateCostLabel()">
-            <option value="bad">Bad — student pays or loses something</option>
-            <option value="good">Good — student gets paid</option>
-          </select>
+          <label for="liIcon" id="labIcon">Icon (any emoji)</label>
+          <input id="liIcon" placeholder="💍" maxlength="4">
         </div>
         <div>
-          <label for="beModule" id="labModule">What it affects</label>
-          <select id="beModule">
-            <option value="income">Income (job)</option>
-            <option value="property">Property (house)</option>
-            <option value="transport">Transport (vehicle)</option>
-            <option value="general" id="beModuleGeneral">General (not tied to anything — good events only)</option>
-          </select>
+          <label for="liDesc" id="labDesc">Description (shown to the student)</label>
+          <input id="liDesc" placeholder="e.g. Congrats — shared expenses mean a bit more room in the budget.">
+        </div>
+      </div>
+
+      <p class="muted-small" style="margin-top:14px;">Fill in only the benefits you want this item to have — leave the rest at 0. Percentages from every life item a student holds add together.</p>
+      <div class="grid grid-3">
+        <div>
+          <label for="liCash" id="labCash">One-time cash bonus ($)</label>
+          <input id="liCash" type="number" step="0.5" placeholder="0">
+        </div>
+        <div>
+          <label for="liAllowance" id="labAllowance">Recurring allowance, paid every pay day ($)</label>
+          <input id="liAllowance" type="number" min="0" step="0.5" placeholder="0">
+        </div>
+        <div>
+          <label for="liIncome" id="labIncome">Job income boost — wages &amp; side hustle pay (%)</label>
+          <input id="liIncome" type="number" step="1" placeholder="0">
         </div>
       </div>
       <div class="grid grid-3">
         <div>
-          <label for="beCost" id="labCost">Cost to fix / avoid</label>
-          <input id="beCost" type="number" min="0" step="0.5" required>
+          <label for="liDiscStore" id="labDiscStore">Store discount (%)</label>
+          <input id="liDiscStore" type="number" min="0" max="95" step="1" placeholder="0">
+        </div>
+        <div>
+          <label for="liDiscTransport" id="labDiscTransport">Transport discount (%)</label>
+          <input id="liDiscTransport" type="number" min="0" max="95" step="1" placeholder="0">
+        </div>
+        <div>
+          <label for="liDiscProperty" id="labDiscProperty">Property discount (%)</label>
+          <input id="liDiscProperty" type="number" min="0" max="95" step="1" placeholder="0">
         </div>
       </div>
-      <label for="beDesc" id="labDesc">Description (shown to students)</label>
-      <input id="beDesc" placeholder="e.g. Your workplace had to let you go">
-      <div id="takesAssetRow" class="flex-row" style="align-items:center;gap:8px;margin-top:10px;">
-        <input type="checkbox" id="beTakesAsset" checked style="width:auto;">
-        <label for="beTakesAsset" id="labTakesAsset" style="margin:0;">If the student doesn't pay, also take away the related job/property/vehicle</label>
+      <div class="grid grid-3">
+        <div>
+          <label for="liDiscInsurance" id="labDiscInsurance">Insurance sign-up discount (%)</label>
+          <input id="liDiscInsurance" type="number" min="0" max="95" step="1" placeholder="0">
+        </div>
+        <div>
+          <label for="liLifestyle" id="labLifestyle">Lifestyle rating bonus (points)</label>
+          <input id="liLifestyle" type="number" step="1" placeholder="0">
+        </div>
+        <div>
+          <label for="liTaxCut" id="labTaxCut">Tax bill discount (%)</label>
+          <input id="liTaxCut" type="number" min="0" max="95" step="1" placeholder="0">
+        </div>
       </div>
-      <p class="muted-small" id="takesAssetHint">Untick this for events that are just a cost (e.g. a fine, a repair bill) — the student will only be able to pay or claim insurance, never lose the asset itself.</p>
-      <button class="btn gold" type="submit" id="addBtn">Add event</button>
+      <button class="btn gold" type="submit" id="addBtn">Add life item</button>
     </form>
     <div id="addMsg"></div>
-
-    <div style="margin-top:20px;padding-top:16px;border-top:1.5px solid var(--line);">
-      <button class="btn secondary" onclick="runBigEventsNow()" id="runBigEventsBtn">Run this week's big events now</button>
-      <p class="muted-small">Normally each eligible student only has a 25% chance of getting one per week — this forces it onto every eligible student right now (someone with a job/property/vehicle depending on the event), bypassing that chance and the once-per-week limit.</p>
-      <div id="runBigEventsMsg"></div>
-    </div>
   </div>
 
   <div id="defListCard" class="hidden">
+    <h2 id="hDefs">Life items</h2>
     <div id="defList"></div>
-    <p class="muted-small" id="noDefs">No big events have been set up yet.</p>
+    <p class="muted-small" id="noDefs">No life items have been created yet.</p>
   </div>
 
-  <div class="card" id="historyCard">
-    <h2 id="hHistory">My big event history</h2>
-    <div id="historyList"></div>
-    <p class="muted-small" id="noHistory">Nothing has happened yet — hopefully it stays that way!</p>
+  <div class="card hidden" id="grantedCard">
+    <h2 id="hGranted">Who has what</h2>
+    <div id="grantedList"></div>
+    <p class="muted-small" id="noGranted">No students have been given a life item yet.</p>
+  </div>
+
+  <div class="card hidden" id="myLifeCard">
+    <h2 id="hMyLife">My life</h2>
+    <div id="myLifeList"></div>
+    <p class="muted-small" id="noMine">You haven't been given any life events yet.</p>
   </div>
 </main>
 
@@ -136,6 +160,6 @@
 <script defer src="events-ui.js"></script>
 <script defer src="quiz-gate.js"></script>
 <script defer src="notifications.js"></script>
-<script defer src="bigevents.js"></script>
+<script defer src="life.js"></script>
 </body>
 </html>

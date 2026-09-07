@@ -1102,7 +1102,8 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
     alreadyRun = cls.lastPayDayRun === dateKey;
     if (alreadyRun && !force) { progress = "SKIP"; return; }
     const existing = cls.payDayProgress;
-    progress = (existing && existing.dateKey === dateKey) ? existing : { dateKey, paidUsernames: [] };
+    progress = (existing && existing.dateKey === dateKey) ? existing : { dateKey, paidUsernames: [], paidAllowanceUsernames: [] };
+    progress.paidAllowanceUsernames = progress.paidAllowanceUsernames || [];
     t.update(classRef, { payDayProgress: progress });
   });
   if (progress === "SKIP") return { paidCount: 0, newlyPaid: 0, hasJobs: null, alreadyRun: true, unapprovedCount: 0 };
@@ -1111,6 +1112,7 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
   if (!cls) return { paidCount: 0, newlyPaid: 0, hasJobs: false, alreadyRun, unapprovedCount: 0 };
   const students = await getClassStudents(classCode);
   const alreadyPaid = new Set(progress.paidUsernames || []);
+  const alreadyPaidAllowance = new Set(progress.paidAllowanceUsernames || []);
   let paidCount = alreadyPaid.size;
   let newlyPaid = 0;
   let hasJobs = false;
@@ -1129,7 +1131,18 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
     // catch them up rather than having missed the week for good.
     if (!isJobTaskApprovedThisWeek(student, cls)) { unapprovedCount++; continue; }
     try {
-      const { net, taxAmount } = applyWageTax(cls, job.wage);
+      let { net, taxAmount } = applyWageTax(cls, job.wage);
+      // Life items can boost/cut take-home wage (incomePercent) and knock
+      // a percentage off the tax bill just withheld (taxCutPercent) —
+      // applied here, after the normal bracket tax, so they layer on top
+      // instead of interacting with the bracket math itself.
+      const life = getLifeBenefitTotals(student);
+      if (life.incomePercent) net = Math.round(net * (1 + life.incomePercent / 100) * 100) / 100;
+      if (life.taxCutPercent && taxAmount > 0) {
+        const refund = Math.round(taxAmount * (life.taxCutPercent / 100) * 100) / 100;
+        net = Math.round((net + refund) * 100) / 100;
+        taxAmount = Math.round((taxAmount - refund) * 100) / 100;
+      }
       await adjustBalance(student.username, net);
       await logTxn(classCode, { type: "wage", to: student.username, amount: net, note: "Pay day: " + job.title + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
       alreadyPaid.add(student.username);
@@ -1137,11 +1150,29 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
       newlyPaid++;
       // Persist progress after each successful payment so a crash
       // mid-loop doesn't cause a re-run to pay this student twice.
-      await classRef.update({ payDayProgress: { dateKey, paidUsernames: Array.from(alreadyPaid) } });
+      await classRef.update({ payDayProgress: { dateKey, paidUsernames: Array.from(alreadyPaid), paidAllowanceUsernames: Array.from(alreadyPaidAllowance) } });
     } catch (e) {
       // Don't let one student's failure stop the rest of the class
       // from getting paid — but don't mark the day as fully done either,
       // so the next run (auto or manual) will retry just this student.
+      allSucceeded = false;
+    }
+  }
+
+  // Life-item recurring allowances: independent of having a job, so this
+  // runs for every student, not just the ones the loop above touched.
+  // Tracked with its own paidAllowanceUsernames set (alongside the
+  // wage-specific paidUsernames above) so a retry never double-pays.
+  for (const student of students) {
+    if (alreadyPaidAllowance.has(student.username)) continue;
+    const life = getLifeBenefitTotals(student);
+    if (!life.allowance) { alreadyPaidAllowance.add(student.username); continue; }
+    try {
+      await adjustBalance(student.username, life.allowance);
+      await logTxn(classCode, { type: "life-allowance", to: student.username, amount: life.allowance, note: "Life event allowance" });
+      alreadyPaidAllowance.add(student.username);
+      await classRef.update({ "payDayProgress.paidAllowanceUsernames": Array.from(alreadyPaidAllowance) });
+    } catch (e) {
       allSucceeded = false;
     }
   }
@@ -2092,7 +2123,8 @@ async function buyVehicle(username, classCode, vehId) {
           normalizeVehicleType(v2.type) === "truck" && (v2.owners || []).includes(username));
         if (alreadyOwnsTruck) throw new Error("TRUCK_LIMIT");
       }
-      const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "transport", veh.price);
+      const discountedVehPrice = applyLifeDiscount(user, "transport", veh.price);
+      const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "transport", discountedVehPrice);
       taxAmount = tax;
       if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
       veh.owners.push(username);
@@ -4293,6 +4325,13 @@ function withNewModuleDefaults(cls) {
   // weekly due day. Naturally expires once the ISO week rolls over — see
   // setMortgageDueOverride, payMortgage, and isMortgagePaymentOverdue.
   if (cls.mortgageForceDueWeek === undefined) cls.mortgageForceDueWeek = null;
+  // Life module: teacher-defined "life events" (got married, had a kid,
+  // promotion, whatever the class wants) that a teacher grants to one or
+  // more students. Each template's `benefits` object is snapshotted onto
+  // the student's own record at grant time (see grantLifeItem) so a later
+  // edit/removal of the template never retroactively changes what an
+  // already-granted student is receiving.
+  cls.lifeItems = cls.lifeItems || [];
   cls.eventDefs = cls.eventDefs || [];
   cls.eventLog = cls.eventLog || [];
   cls.lastEventWeekRun = cls.lastEventWeekRun || null;
@@ -4629,6 +4668,8 @@ async function checkinSideHustle(username, classCode) {
       if (sh.lastCheckin === todayKey) throw new Error("ALREADY");
 
       amount = Number(hustle.payouts[sh.checkinHour]) || 0;
+      const life = getLifeBenefitTotals(user);
+      if (life.incomePercent) amount = Math.round(amount * (1 + life.incomePercent / 100) * 100) / 100;
       hustleName = hustle.name;
       streak = (sh.streak || 0) + 1;
       const newBal = Math.round((user.balance + amount) * 100) / 100;
@@ -4664,10 +4705,11 @@ async function buyInsurance(username, classCode, planId) {
       if (!plan) throw new Error("NOT_FOUND");
       user.insurance = user.insurance || [];
       if (user.insurance.includes(planId)) throw new Error("ALREADY");
+      planName = plan.name;
       fee = Math.max(0, Number(plan.signupFee) || 0);
+      fee = applyLifeDiscount(user, "insurance", fee);
       const isTeacher = user.role === "teacher";
       if (!isTeacher && fee > 0 && user.balance < fee) throw new Error("BROKE");
-      planName = plan.name;
       user.insurance.push(planId);
       const update = { insurance: user.insurance };
       if (!isTeacher && fee > 0) update.balance = Math.round((user.balance - fee) * 100) / 100;
@@ -4774,7 +4816,8 @@ async function buyStoreItem(username, classCode, itemId) {
       const item = cls.storeItems.find(i => i.id === itemId);
       if (!item || item.archived) throw new Error("NOT_FOUND");
       if (item.stock !== null && item.stock <= 0) throw new Error("OUT");
-      const { total, taxAmount: tax } = applyTaxToExpense(cls, "store", item.price);
+      const discountedPrice = applyLifeDiscount(user, "store", item.price);
+      const { total, taxAmount: tax } = applyTaxToExpense(cls, "store", discountedPrice);
       taxAmount = tax;
       cashPaid = total;
       const isTeacher = user.role === "teacher";
@@ -4863,6 +4906,154 @@ async function sellStoreItem(username, classCode, itemId, rate) {
   }
   await logTxn(classCode, { type: "store-sell", to: username, amount: payout, note: `Sold back to store: ${itemName} (${Math.round(effectiveRate * 100)}% refund)` });
   return { ok: true, payout };
+}
+
+/* ===================== Life module =====================
+   Teacher-defined "life event" templates (cls.lifeItems), each bundling
+   any mix of benefits. Granting one to a student (grantLifeItem) copies a
+   snapshot of the template's benefits onto user.lifeItems — a student can
+   hold any number of these at once and their effects stack (see
+   getLifeBenefitTotals, used everywhere a benefit actually applies). */
+function sanitizeLifeBenefits(b) {
+  b = b || {};
+  const num = v => { const n = Number(v); return isFinite(n) ? n : 0; };
+  return {
+    cashOnce: num(b.cashOnce),                                  // one-time, paid the moment it's granted
+    allowance: Math.max(0, num(b.allowance)),                   // recurring $, paid alongside every pay day
+    incomePercent: num(b.incomePercent),                        // % added to job wages + side hustle pay (can be negative)
+    discountStore: Math.max(0, Math.min(95, num(b.discountStore))),
+    discountTransport: Math.max(0, Math.min(95, num(b.discountTransport))),
+    discountProperty: Math.max(0, Math.min(95, num(b.discountProperty))),
+    discountInsurance: Math.max(0, Math.min(95, num(b.discountInsurance))),
+    lifestylePoints: num(b.lifestylePoints),                    // flat add to lifestyle rating (can be negative)
+    taxCutPercent: Math.max(0, Math.min(95, num(b.taxCutPercent))) // % knocked off the student's wage tax bill
+  };
+}
+// Sums every benefit across all of a student's currently-held life items.
+// Percentage fields are clamped after summing so stacking several
+// generous items can't push a discount to/past 100% or flip income
+// negative in a runaway way. Safe to call with a bare user doc (or one
+// with no lifeItems at all) from anywhere in this file.
+function getLifeBenefitTotals(user) {
+  const items = (user && user.lifeItems) || [];
+  const totals = { allowance: 0, incomePercent: 0, discountStore: 0, discountTransport: 0, discountProperty: 0, discountInsurance: 0, lifestylePoints: 0, taxCutPercent: 0 };
+  items.forEach(it => {
+    const b = it.benefits || {};
+    Object.keys(totals).forEach(k => { totals[k] += Number(b[k]) || 0; });
+  });
+  ["discountStore", "discountTransport", "discountProperty", "discountInsurance", "taxCutPercent"].forEach(k => {
+    totals[k] = Math.min(95, Math.max(0, totals[k]));
+  });
+  totals.incomePercent = Math.max(-95, totals.incomePercent);
+  return totals;
+}
+// Applies a student's stacked discount for one category ("store",
+// "transport", "property", "insurance") to a base price.
+function applyLifeDiscount(user, category, baseAmount) {
+  const totals = getLifeBenefitTotals(user);
+  const key = "discount" + category.charAt(0).toUpperCase() + category.slice(1);
+  const pct = totals[key] || 0;
+  if (!pct || !(baseAmount > 0)) return Math.round((baseAmount || 0) * 100) / 100;
+  return Math.round(baseAmount * (1 - pct / 100) * 100) / 100;
+}
+async function addLifeItem(classCode, item) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.lifeItems.push({
+      id: uid("life"),
+      name: (item.name || "").trim() || "Untitled life event",
+      icon: (item.icon || "").trim() || "🎉",
+      description: (item.description || "").trim(),
+      benefits: sanitizeLifeBenefits(item.benefits)
+    });
+    t.update(classRef, { lifeItems: cls.lifeItems });
+  });
+}
+async function updateLifeItem(classCode, itemId, item) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const existing = cls.lifeItems.find(i => i.id === itemId);
+    if (!existing) return;
+    existing.name = (item.name || "").trim() || "Untitled life event";
+    existing.icon = (item.icon || "").trim() || "🎉";
+    existing.description = (item.description || "").trim();
+    existing.benefits = sanitizeLifeBenefits(item.benefits);
+    t.update(classRef, { lifeItems: cls.lifeItems });
+  });
+}
+// Removing a template only stops it being handed out again — students who
+// already have it keep their snapshot of its benefits untouched.
+async function removeLifeItem(classCode, itemId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.lifeItems = cls.lifeItems.filter(i => i.id !== itemId);
+    t.update(classRef, { lifeItems: cls.lifeItems });
+  });
+}
+// Grants a snapshot of a life item template to a student. Any one-time
+// cash benefit is paid immediately; everything else (allowance, income %,
+// discounts, lifestyle points, tax cut) takes effect passively wherever
+// getLifeBenefitTotals()/applyLifeDiscount() are consulted. Students can
+// hold more than one at once — nothing here dedupes against what they
+// already have, so giving the same template twice stacks it twice.
+async function grantLifeItem(classCode, username, templateId, teacherUsername) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let tmpl = null, cashOnce = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      tmpl = cls.lifeItems.find(i => i.id === templateId);
+      if (!tmpl) throw new Error("NOT_FOUND");
+      user.lifeItems = user.lifeItems || [];
+      const benefits = sanitizeLifeBenefits(tmpl.benefits);
+      cashOnce = benefits.cashOnce;
+      user.lifeItems.push({
+        id: uid("life"), templateId: tmpl.id, name: tmpl.name, icon: tmpl.icon,
+        description: tmpl.description, benefits,
+        grantedAt: nzDateKey(), grantedBy: teacherUsername || null
+      });
+      const isTeacher = user.role === "teacher";
+      const update = { lifeItems: user.lifeItems };
+      if (!isTeacher && cashOnce) update.balance = Math.round((user.balance + cashOnce) * 100) / 100;
+      t.update(userRef, update);
+    });
+  } catch (e) {
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That life item no longer exists." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "life-grant", to: username, amount: cashOnce, note: `Life event: ${tmpl.name}` });
+  return { ok: true };
+}
+async function revokeLifeItem(classCode, username, grantId) {
+  const userRef = usersCol().doc(username);
+  let itemName = "";
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(userRef);
+    if (!snap.exists) return;
+    const user = snap.data();
+    const items = user.lifeItems || [];
+    const found = items.find(i => i.id === grantId);
+    if (found) itemName = found.name;
+    t.update(userRef, { lifeItems: items.filter(i => i.id !== grantId) });
+  });
+  if (itemName) {
+    await logTxn(classCode, { type: "life-revoke", from: username, amount: 0, note: `Life event removed: ${itemName}` });
+  }
+  return { ok: true };
 }
 
 /* ===================== Property =====================
@@ -4996,7 +5187,8 @@ async function buyProperty(username, classCode, propId, financed) {
       if (!prop) throw new Error("NOT_FOUND");
       if (prop.owner) throw new Error("TAKEN");
       propName = prop.name;
-      const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "property", prop.price);
+      const discountedPropPrice = applyLifeDiscount(user, "property", prop.price);
+      const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "property", discountedPropPrice);
       taxAmount = tax;
       const isTeacher = user.role === "teacher";
       if (financed && prop.mortgageWeeks > 0) {
@@ -5697,6 +5889,7 @@ function lifestyleRatingFromData(cls, user, username) {
       .reduce((sum, l) => sum + l.owed, 0);
     score -= Math.floor(owedTotal / cfg.loan.perAmount) * cfg.loan.points;
   }
+  score += getLifeBenefitTotals(user).lifestylePoints;
   // Uncapped — a student's computed score can grow without limit as they
   // accumulate property/transport/store/insurance comfort, it just can't
   // go negative.
@@ -5773,6 +5966,13 @@ async function lifestyleRatingBreakdown(username, classCode) {
       items.push({ type: "loss", label: "Outstanding loans", detail: `${fmtMoney(owedTotal)} owed &middot; ${cfg.loan.points} pt${cfg.loan.points === 1 ? "" : "s"} per ${fmtMoney(cfg.loan.perAmount)} owed`, points: penalty });
     }
   }
+  (user.lifeItems || []).forEach(it => {
+    const pts = Number(it.benefits && it.benefits.lifestylePoints) || 0;
+    if (pts) {
+      score += pts;
+      items.push({ type: pts >= 0 ? "gain" : "loss", label: it.name || "Life event", detail: "Life event bonus", points: Math.abs(pts) });
+    }
+  });
 
   return { items, total: Math.max(0, Math.round(score)), overridden: false };
 }

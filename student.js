@@ -34,7 +34,9 @@ function badgeType(type) {
     "p2p-sell": ["gold", "users", "Sold to a classmate"],
     "property-rent": ["mint", "house", "Rent received"],
     "truck-drive": ["mint", "car", "Truck drive"],
-    "loan-interest": ["coral", "handshake", "Loan interest"]
+    "loan-interest": ["coral", "handshake", "Loan interest"],
+    "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
+    "life-allowance": ["mint", "trophy", "Life allowance"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -259,6 +261,9 @@ async function render() {
     else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
     else if (t.type === "gambling") { sign = t.note.includes("WON") ? "+" : "-"; }
     else if (t.type === "big-event") { sign = amt > 0 ? "-" : ""; }
+    else if (t.type === "life-grant") { sign = amt < 0 ? "-" : (amt > 0 ? "+" : ""); amt = Math.abs(amt); }
+    else if (t.type === "life-allowance") { sign = "+"; }
+    else if (t.type === "life-revoke") { sign = ""; }
 
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${detail}</td>

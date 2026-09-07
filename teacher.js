@@ -428,6 +428,8 @@ function badge(type) {
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
     "loan-taken": ["navy", "handshake", "Loan"], "loan-repayment": ["mint", "handshake", "Loan repayment"],
     "loan-interest": ["coral", "handshake", "Loan interest"],
+    "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
+    "life-allowance": ["mint", "trophy", "Life allowance"],
     "side-hustle": ["mint", "briefcase", "Side hustle"],
     "truck-drive": ["mint", "car", "Truck drive"],
     "store-gift": ["mint", "cart", "Free item"],
