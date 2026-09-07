@@ -1772,7 +1772,20 @@ async function buyShares(username, classCode, companyId, shares) {
       //     the moment shares are sold off, which isn't what "all-time %
       //     return" should mean.
       co.costBasis = co.costBasis || {};
-      const basis = co.costBasis[username] || { shares: 0, totalCost: 0, totalBought: 0 };
+      // Normalize whatever's already on file: entries written by an older
+      // version of this code (or otherwise missing a field) can have
+      // shares/totalCost/totalBought as undefined. Left alone, undefined
+      // turns into NaN through arithmetic here (silently wrong numbers,
+      // Firestore accepts NaN) or gets copied through as literal undefined
+      // in sellShares (Firestore REJECTS undefined and the whole
+      // transaction fails). Coerce every field to a finite number now so
+      // neither of those can happen again.
+      const rawBasis = co.costBasis[username];
+      const basis = {
+        shares: Number.isFinite(rawBasis && rawBasis.shares) ? rawBasis.shares : 0,
+        totalCost: Number.isFinite(rawBasis && rawBasis.totalCost) ? rawBasis.totalCost : 0,
+        totalBought: Number.isFinite(rawBasis && rawBasis.totalBought) ? rawBasis.totalBought : 0
+      };
       co.costBasis[username] = {
         shares: basis.shares + shares,
         totalCost: Math.round((basis.totalCost + cost) * 100) / 100,
@@ -1840,7 +1853,19 @@ async function sellShares(username, classCode, companyId, shares) {
       // to survive a full sell-out, or a company someone fully exited
       // would lose its all-time %-return history the moment they sold.
       co.costBasis = co.costBasis || {};
-      const basis = co.costBasis[username] || { shares: owned, totalCost: proceeds, totalBought: proceeds };
+      // Same normalization as buyShares (see the comment there): coerce
+      // whatever's on file to finite numbers before using it. This matters
+      // even more here, because unlike buyShares this function copies
+      // totalBought straight through with no arithmetic on it — if it were
+      // left as undefined, Firestore would reject the whole write with
+      // "Unsupported field value: undefined", which is exactly what was
+      // locking students out of selling.
+      const rawBasis = co.costBasis[username];
+      const basis = {
+        shares: Number.isFinite(rawBasis && rawBasis.shares) ? rawBasis.shares : owned,
+        totalCost: Number.isFinite(rawBasis && rawBasis.totalCost) ? rawBasis.totalCost : proceeds,
+        totalBought: Number.isFinite(rawBasis && rawBasis.totalBought) ? rawBasis.totalBought : proceeds
+      };
       const avgCost = basis.shares > 0 ? basis.totalCost / basis.shares : co.price;
       const costOfSold = Math.round(avgCost * shares * 100) / 100;
       costBasisSold = costOfSold;
