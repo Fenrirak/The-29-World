@@ -152,11 +152,48 @@
   margin-top: 16px;
 }
 .ga-balance-stat {
-  display: flex;
+  display: flex !important;
   flex-direction: column;
   justify-content: center;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+  min-height: 150px;
+  padding: 22px 24px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #e6bd66 0%, #d4a24c 55%, #c28f2e 100%);
+  box-shadow: 0 8px 20px -8px rgba(178, 132, 42, 0.55);
 }
-.ga-balance-stat .value { font-size: 2.4rem; }
+/* Faint repeating diamond motif so the gold panel doesn't read as an
+   empty flat block — decorative only, sits behind the icon/label/value. */
+.ga-balance-stat::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: .5;
+  background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 34px),
+                     repeating-linear-gradient(-45deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 34px);
+  pointer-events: none;
+}
+.ga-balance-stat > * { position: relative; z-index: 1; }
+.ga-balance-stat .icon-slot {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(31, 43, 68, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+.ga-balance-stat .label {
+  color: rgba(31, 43, 68, 0.75);
+}
+.ga-balance-stat .value {
+  font-size: 2.6rem;
+  color: #1f2b44;
+  line-height: 1;
+}
 
 .ga-actions-panel {
   background: rgba(232, 184, 75, 0.07);
