@@ -487,7 +487,15 @@ async function bjDeal() {
     }
     await bjRunTurnSequence(CURRENT_ROUND, 1, token);
   } catch (e) {
-    document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong dealing that round. If your balance looks off, refresh the page — any escrowed bet is automatically refunded on failure.</div>`;
+    // bjResetTable() below hides #bjTableArea, and #bjRoundMsg lives
+    // inside it — writing the error there (as this used to) meant it was
+    // shown and then instantly hidden again, so students just saw the
+    // Deal button flash and revert with no visible explanation. #bjBetMsg
+    // lives inside #bjBetForm, which bjResetTable() un-hides, so it's the
+    // one place a message here will actually stay visible.
+    console.error("bjDeal failed:", e);
+    const betMsgBox = document.getElementById("bjBetMsg");
+    if (betMsgBox) betMsgBox.innerHTML = `<div class="error-msg">Something went wrong dealing that round. If your balance looks off, refresh the page — any escrowed bet is automatically refunded on failure.</div>`;
     await bjResetTable();
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = "Deal"; }
