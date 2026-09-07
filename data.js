@@ -5337,13 +5337,31 @@ function weekKeyOrder(key) {
   return y * 100 + w;
 }
 
+// Which ISO week the most recently-passed mortgage due day falls in —
+// today's week if today IS the due day (see isMortgagePaymentOverdue for
+// why that one doesn't count as "passed" yet), otherwise the due day one
+// cycle before that. Independent of any one property, since the due day is
+// a class-wide setting (see setMortgageDay).
+function lastMortgageDueWeekKey(cls) {
+  // ISO weekday ordinal, Monday = 0 ... Sunday = 6 — matches the Mon-Sun
+  // weeks isoWeekKey groups payments into, unlike DAY_NAMES' Sun-first order.
+  const isoIdx = day => (DAY_NAMES.indexOf(day) + 6) % 7;
+  const dueIdx = isoIdx(cls.mortgageDay || "Fri");
+  const todayIdx = isoIdx(nzDayName());
+  let daysSinceDue = todayIdx - dueIdx;
+  if (daysSinceDue <= 0) daysSinceDue += 7;
+  const lastDueDateKey = dateKeyPlusDays(nzDateKey(), -daysSinceDue);
+  return isoWeekKey(new Date(dateKeyToUTC(lastDueDateKey)));
+}
+
 // Whether this property's mortgage currently has a missed weekly payment —
 // i.e. its most recent due day (see setMortgageDay) has already fully
 // passed without the student paying it themselves (see payMortgage above).
 // Used to show a red "payment overdue" warning on the teacher's student
-// profile popup. Purely a read of already-loaded data — doesn't touch the
-// database or move any money, and doesn't count how many weeks running
-// it's been missed, just whether it's currently overdue.
+// profile popup, alongside a button to waive it (see
+// resolveMortgageOverdue). Purely a read of already-loaded data — doesn't
+// touch the database or move any money, and doesn't count how many weeks
+// running it's been missed, just whether it's currently overdue.
 // Deliberately looks back to the most recently-passed due day rather than
 // only checking "this ISO week": a mortgage due on Friday that's missed
 // stays flagged as overdue through the weekend AND the following week
@@ -5359,18 +5377,7 @@ function isMortgagePaymentOverdue(prop, cls) {
   // A teacher-forced due week (see setMortgageDueOverride) counts as
   // overdue-until-paid immediately, same as the normal due day passing.
   if (cls.mortgageForceDueWeek === weekKey) return true;
-  // ISO weekday ordinal, Monday = 0 ... Sunday = 6 — matches the Mon-Sun
-  // weeks isoWeekKey groups payments into, unlike DAY_NAMES' Sun-first order.
-  const isoIdx = day => (DAY_NAMES.indexOf(day) + 6) % 7;
-  const dueIdx = isoIdx(cls.mortgageDay || "Fri");
-  const todayIdx = isoIdx(nzDayName());
-  // Days back to the most recent due day. If today IS the due day, that
-  // occurrence isn't due yet (the student still has all of today to pay),
-  // so step back a full week to the previous occurrence instead of 0.
-  let daysSinceDue = todayIdx - dueIdx;
-  if (daysSinceDue <= 0) daysSinceDue += 7;
-  const lastDueDateKey = dateKeyPlusDays(nzDateKey(), -daysSinceDue);
-  const lastDueWeekKey = isoWeekKey(new Date(dateKeyToUTC(lastDueDateKey)));
+  const lastDueWeekKey = lastMortgageDueWeekKey(cls);
   if (lastDueWeekKey === weekKey) return true; // this week's due day already passed, and neither check above cleared it
   if (mortgage.lastWeekPaid === lastDueWeekKey) return false; // that earlier cycle was paid
   // Guard against looking back further than the mortgage has existed — if
@@ -5378,6 +5385,46 @@ function isMortgagePaymentOverdue(prop, cls) {
   // no payment owed for it.
   if (weekKeyOrder(lastDueWeekKey) < weekKeyOrder(mortgage.purchaseWeekKey)) return false;
   return true; // an earlier due day passed without payment and hasn't been caught up since
+}
+
+// Teacher-only: clear a mortgage's currently-missed payment without taking
+// any money from the student — same bookkeeping as an ordinary payment
+// (see payMortgage) — principal drops by this week's instalment, weeksLeft
+// ticks down one, and the mortgage finishes off entirely if that was the
+// last payment — except the student's balance is never touched. Called
+// from the "Mortgage payment overdue" banner on the teacher's student
+// profile popup (see isMortgagePaymentOverdue), e.g. to waive a payment
+// the class missed while away, or a mistake the teacher doesn't want to
+// chase the student for. Refuses if the mortgage isn't actually overdue,
+// so it can't be used to skip ahead on a payment that's still on schedule.
+async function resolveMortgageOverdue(classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "", ownerUsername = "", remainingAfter = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const classSnap = await t.get(classRef);
+      if (!classSnap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(classSnap.data());
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop || !prop.mortgage || prop.mortgage.weeksLeft <= 0) throw new Error("NOT_FOUND");
+      if (!isMortgagePaymentOverdue(prop, cls)) throw new Error("NOT_OVERDUE");
+      propName = prop.name;
+      ownerUsername = prop.owner;
+      const weekAmt = mortgageWeekAmount(prop.mortgage);
+      prop.mortgage.principalRemaining = Math.max(0, Math.round((weekAmt.balanceBefore - prop.mortgage.weeklyPayment) * 100) / 100);
+      prop.mortgage.weeksLeft -= 1;
+      prop.mortgage.lastWeekPaid = isoWeekKey(new Date());
+      remainingAfter = prop.mortgage.weeksLeft;
+      if (remainingAfter <= 0) prop.mortgage = null;
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "NOT_OVERDUE") return { ok: false, error: "This mortgage isn't currently overdue." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That mortgage couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "mortgage", from: ownerUsername, note: `Mortgage payment marked as resolved by teacher, no charge: ${propName}` + (remainingAfter <= 0 ? " — paid off!" : "") });
+  return { ok: true, fullyPaid: remainingAfter <= 0 };
 }
 
 // Student picks (or changes, any time) whether they live in their property

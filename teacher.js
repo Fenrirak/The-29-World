@@ -967,7 +967,10 @@ async function renderProfile(username) {
           <strong>${icon("house", 14)} Mortgage payment overdue — ${poss.property.name}</strong>
           <div class="muted-small">This week's payment (due ${DAY_FULL[cls.mortgageDay || "Fri"]}) hasn't been paid yet.</div>
         </div>
-        <div class="status-declined">Unpaid</div>
+        <div class="row-flex" style="gap:8px;align-items:center;">
+          <div class="status-declined">Unpaid</div>
+          <button class="btn small secondary" onclick="profileResolveMortgageOverdue('${poss.property.id}')">Mark as resolved</button>
+        </div>
       </div>`);
   }
   rows.push(poss.property
@@ -1094,6 +1097,13 @@ async function profileRemoveProperty(propId) {
 async function profileEndRental(propId) {
   if (!confirm("Stop this rental and kick out the tenants? The student keeps the property, but stops earning rent immediately and will be asked to choose living-in-it or renting-out again next time they visit Property.")) return;
   const res = await teacherEndRental(CLASS_CODE, propId);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+  await renderProfile(PROFILE_USER);
+}
+async function profileResolveMortgageOverdue(propId) {
+  if (!confirm("Mark this week's mortgage payment as resolved? It'll count as paid — the payment schedule moves on as normal — but no money will be taken from the student.")) return;
+  const res = await resolveMortgageOverdue(CLASS_CODE, propId);
   if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);
