@@ -362,8 +362,7 @@ async function spin() {
   }
 }
 
-async function renderRecentRoulette() {
-  const cls = await getClassCached(CURRENT.classCode);
+function renderRecentRoulette(cls) {
   const mine = cls.txns.filter(t => t.type === "gambling" && t.from === CURRENT.username && !t.note.startsWith("Blackjack")).slice(0, 15);
   const box = document.getElementById("recentBets");
   document.getElementById("noBets").classList.toggle("hidden", mine.length > 0);
@@ -603,9 +602,15 @@ async function bjFinalizeRound(round) {
     msg += `<div class="success-msg" style="margin-top:8px;">${round.winLimitMessage}</div>`;
   }
   document.getElementById("bjRoundMsg").innerHTML = msg;
-  CLS = await getClassCached(CURRENT.classCode);
-  await renderRecentBlackjack();
-  await refreshGamblingAccountCard();
+  // These two used to run one after another (three network round-trips in
+  // total, since renderRecentBlackjack() also re-fetched the same class
+  // doc getClassCached() had just returned) — every one of those trips
+  // adds up fast on a slow mobile connection, and this runs after every
+  // single hand. They're independent, so fire them together instead.
+  await Promise.all([
+    getClassCached(CURRENT.classCode).then(cls => { CLS = cls; renderRecentBlackjack(cls); }),
+    refreshGamblingAccountCard()
+  ]);
 }
 
 async function bjResetTable() {
@@ -903,8 +908,7 @@ function renderBlackjackRound(r) {
   if (r.phase !== "playing" || r.activeSeat !== r.humanSeat) document.getElementById("bjActionArea")?.classList.add("hidden");
 }
 
-async function renderRecentBlackjack() {
-  const cls = await getClassCached(CURRENT.classCode);
+function renderRecentBlackjack(cls) {
   const mine = cls.txns.filter(t => t.type === "gambling" && t.from === CURRENT.username && t.note.startsWith("Blackjack")).slice(0, 15);
   const box = document.getElementById("bjRecentBets");
   document.getElementById("bjNoBets").classList.toggle("hidden", mine.length > 0);
@@ -1060,7 +1064,19 @@ async function render() {
     return;
   }
 
-  const lockReasons = await getModuleLockReasons(CURRENT.username, CURRENT.classCode);
+  const blackjackEnabled = g.enabled !== false && bj.enabled !== false;
+  // getModuleLockReasons and getBlackjackRound are independent reads (one's
+  // cross-module lock state, the other is "does this student have a round
+  // in progress"), but used to run one after the other — a second full
+  // network round-trip on every render(), which happens after nearly every
+  // action in this file. Firing them together halves that wait. The one
+  // trade-off: if the module turns out to be locked below, the resumed-round
+  // fetch was wasted — an acceptable cost for a rare state, to save a trip
+  // on every normal render.
+  const [lockReasons, resumedRound] = await Promise.all([
+    getModuleLockReasons(CURRENT.username, CURRENT.classCode),
+    blackjackEnabled ? getBlackjackRound(CURRENT.username) : Promise.resolve(null)
+  ]);
   const lockedModules = Object.keys(lockReasons);
   applyNavModuleLocks(lockReasons);
   const lockedBanner = document.getElementById("gamblingLockedBanner");
@@ -1087,11 +1103,10 @@ async function render() {
   if (rouletteEnabled) {
     document.getElementById("betLimits").textContent = `Bets must be between ${fmtMoney(g.minBet)} and ${fmtMoney(g.maxBet)}.`;
     renderPicker();
-    await renderRecentRoulette();
+    renderRecentRoulette(CLS);
   }
 
   /* ---- Blackjack tab ---- */
-  const blackjackEnabled = g.enabled !== false && bj.enabled !== false;
   document.getElementById("bjDisabledBanner").classList.toggle("hidden", blackjackEnabled);
   document.getElementById("bjDisabledText").textContent = (g.enabled === false)
     ? "Your teacher has temporarily turned off the Gambling module. Check back later!"
@@ -1103,17 +1118,17 @@ async function render() {
     // Resume an in-progress Blackjack round if the page was refreshed
     // mid-hand — the bet is already escrowed server-side, so this just
     // re-shows it (statically, no reveal animation) instead of losing it.
-    const resumed = await getBlackjackRound(CURRENT.username);
-    if (resumed) {
+    // (Fetched together with lockReasons above, not here.)
+    if (resumedRound) {
       document.getElementById("bjBetForm").classList.add("hidden");
       document.getElementById("bjTableArea").classList.remove("hidden");
-      CURRENT_ROUND = resumed;
-      bjShowRoundStatic(resumed);
+      CURRENT_ROUND = resumedRound;
+      bjShowRoundStatic(resumedRound);
     } else {
       document.getElementById("bjBetForm").classList.remove("hidden");
       document.getElementById("bjTableArea").classList.add("hidden");
     }
-    await renderRecentBlackjack();
+    renderRecentBlackjack(CLS);
   }
 }
 
