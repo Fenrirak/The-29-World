@@ -165,7 +165,7 @@ async function render() {
           <h4>${icon("car", 20)}${v.name} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span> ${isMine ? '<span class="badge mint">Yours</span>' : ""}</h4>
           <p>${v.description || "No description provided."}</p>
           <p>${comfortStars(v.comfort)} comfort</p>
-          <p><strong>${fmtMoney(v.price)}</strong> &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
+          <p>${priceWithLifeDiscount(me, "transport", v.price)} &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
           <p class="muted-small">${ownedLabel}</p>
           ${needsLicence ? `<p class="muted-small">Requires a truck licence — see above.</p>` : ""}
           ${truckLimitReached ? `<p class="muted-small">You can only own one truck at a time.</p>` : ""}

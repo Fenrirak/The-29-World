@@ -71,7 +71,7 @@ async function render() {
           <h4>${icon("cart", 20)}${it.name} ${owned ? `<span class="badge mint">Owned ×${owned}</span>` : ""}</h4>
           <p>${it.description || "No description provided."}</p>
           ${it.effect ? `<p class="muted-small">Does: ${it.effect}</p>` : ""}
-          <p><strong>${fmtMoney(it.price)}</strong> ${starsHtml(it.stars)}</p>
+          <p>${priceWithLifeDiscount(me, "store", it.price)} ${starsHtml(it.stars)}</p>
           <p class="muted-small">${it.stock === null ? "Unlimited stock" : `${it.stock} left in stock`}</p>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">

@@ -1520,6 +1520,14 @@ async function processLoanInterest(classCode) {
 
 /* ---------------- Stock market ---------------- */
 async function openCompany(classCode, name, price, totalShares) {
+  const parsedPrice = Number(price);
+  const parsedShares = Number(totalShares);
+  if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+    return { ok: false, error: "Enter a valid starting price greater than 0." };
+  }
+  if (!Number.isFinite(parsedShares) || parsedShares < 1) {
+    return { ok: false, error: "Enter a valid whole number of shares (1 or more)." };
+  }
   const classRef = classesCol().doc(classCode);
   try {
     await fdb.runTransaction(async (t) => {
@@ -1529,9 +1537,9 @@ async function openCompany(classCode, name, price, totalShares) {
       if (cls.companies.some(c => c.name.toLowerCase() === name.toLowerCase())) throw new Error("DUP");
       const defaultRange = cls.priceRange || { min: 1, max: 5 };
       cls.companies.push({
-        id: uid("co"), name, price: Number(price),
-        totalShares: Number(totalShares), availableShares: Number(totalShares),
-        history: [Number(price)], historyDates: [nzDateKey()], holders: {},
+        id: uid("co"), name, price: parsedPrice,
+        totalShares: parsedShares, availableShares: parsedShares,
+        history: [parsedPrice], historyDates: [nzDateKey()], holders: {},
         priceRange: { min: defaultRange.min, max: defaultRange.max }
       });
       t.update(classRef, { companies: cls.companies });
@@ -1539,12 +1547,17 @@ async function openCompany(classCode, name, price, totalShares) {
   } catch (e) {
     if (e.message === "NO_CLASS") return { ok: false, error: "Class not found." };
     if (e.message === "DUP") return { ok: false, error: "A company with that name already exists in your class." };
-    return { ok: false, error: "Something went wrong. Please try again." };
+    console.error("openCompany failed:", e);
+    return { ok: false, error: "Something went wrong. Please try again. (" + (e.code || e.message || "unknown") + ")" };
   }
   return { ok: true };
 }
 
 async function setCompanyPriceRange(classCode, companyId, min, max) {
+  const parsedMin = Number(min), parsedMax = Number(max);
+  if (!Number.isFinite(parsedMin) || !Number.isFinite(parsedMax)) {
+    return { ok: false, error: "Enter valid numbers for the price range." };
+  }
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
@@ -1552,12 +1565,24 @@ async function setCompanyPriceRange(classCode, companyId, min, max) {
     const cls = snap.data();
     const co = cls.companies.find(c => c.id === companyId);
     if (!co) return;
-    co.priceRange = { min: Math.max(0, Number(min)), max: Math.max(0, Number(max)) };
+    co.priceRange = { min: Math.max(0, parsedMin), max: Math.max(0, parsedMax) };
     t.update(classRef, { companies: cls.companies });
   });
+  return { ok: true };
 }
 
 async function updateCompanyPrice(classCode, companyId, newPrice) {
+  // Number("") is 0 and Math.max(0.01, 0) quietly "fixes" that, but
+  // Number() of anything non-numeric (a stray "$", a comma, empty-after-
+  // trim garbage) is NaN — and Math.max(0.01, NaN) is ALSO NaN, not 0.01,
+  // because any comparison against NaN is false. That NaN then gets
+  // pushed into co.history and used in every later cost/proceeds
+  // calculation for this company (buy, sell, close), silently poisoning
+  // them. Reject it here instead of writing it.
+  const parsed = Number(newPrice);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return { ok: false, error: "Enter a valid price greater than 0." };
+  }
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
@@ -1565,13 +1590,14 @@ async function updateCompanyPrice(classCode, companyId, newPrice) {
     const cls = snap.data();
     const co = cls.companies.find(c => c.id === companyId);
     if (!co) return;
-    co.price = Math.max(0.01, Number(newPrice));
+    co.price = Math.max(0.01, parsed);
     co.history.push(co.price);
     (co.historyDates = co.historyDates || []).push(nzDateKey());
     if (co.history.length > 30) co.history.shift();
     if (co.historyDates.length > 30) co.historyDates.shift();
     t.update(classRef, { companies: cls.companies });
   });
+  return { ok: true };
 }
 
 async function setPriceRange(classCode, min, max) {
@@ -1722,6 +1748,7 @@ async function buyShares(username, classCode, companyId, shares) {
       const cls = classSnap.data();
       const co = cls.companies.find(c => c.id === companyId);
       if (!co) throw new Error("NOT_FOUND");
+      if (!Number.isFinite(co.price)) throw new Error("BAD_PRICE");
       if (shares > co.availableShares) throw new Error("NO_SHARES");
       cost = Math.round(shares * co.price * 100) / 100;
       if (user.balance < cost) throw new Error("BROKE");
@@ -1759,7 +1786,9 @@ async function buyShares(username, classCode, companyId, shares) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "Not found." };
     if (e.message === "NO_SHARES") return { ok: false, error: "Not enough shares available." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
-    return { ok: false, error: "Something went wrong. Please try again." };
+    if (e.message === "BAD_PRICE") return { ok: false, error: "This company's price is invalid — ask your teacher to set a new price before buying." };
+    console.error("buyShares failed:", e);
+    return { ok: false, error: "Something went wrong. Please try again. (" + (e.code || e.message || "unknown") + ")" };
   }
   await logTxn(classCode, {
     type: "stock-buy", from: username, amount: cost, note: `Bought ${shares} shares of ${coName}`,
@@ -1786,6 +1815,7 @@ async function sellShares(username, classCode, companyId, shares) {
       const cls = classSnap.data();
       const co = cls.companies.find(c => c.id === companyId);
       if (!co) throw new Error("NOT_FOUND");
+      if (!Number.isFinite(co.price)) throw new Error("BAD_PRICE");
       const owned = co.holders[username] || 0;
       if (shares > owned) throw new Error("TOO_MANY");
 
@@ -1827,7 +1857,9 @@ async function sellShares(username, classCode, companyId, shares) {
   } catch (e) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "Not found." };
     if (e.message === "TOO_MANY") return { ok: false, error: "You don't own that many shares." };
-    return { ok: false, error: "Something went wrong. Please try again." };
+    if (e.message === "BAD_PRICE") return { ok: false, error: "This company's price is invalid — ask your teacher to set a new price before selling." };
+    console.error("sellShares failed:", e);
+    return { ok: false, error: "Something went wrong. Please try again. (" + (e.code || e.message || "unknown") + ")" };
   }
   await logTxn(classCode, {
     type: "stock-sell", to: username, amount: proceeds, note: `Sold ${shares} shares of ${coName}`,
@@ -4955,6 +4987,28 @@ function applyLifeDiscount(user, category, baseAmount) {
   const pct = totals[key] || 0;
   if (!pct || !(baseAmount > 0)) return Math.round((baseAmount || 0) * 100) / 100;
   return Math.round(baseAmount * (1 - pct / 100) * 100) / 100;
+}
+// Builds the price markup shown on browse cards in Store/Transport/
+// Property/Insurance: a plain price normally, or — when the signed-in
+// student's stacked Life family-event benefits knock a % off this
+// category — the original price crossed out next to the discounted one,
+// with a small badge naming the cut. Safe to call with a teacher doc (or
+// any user with no lifeItems): falls back to a plain price since
+// getLifeBenefitTotals then returns all zeros.
+function priceWithLifeDiscount(user, category, baseAmount) {
+  const base = Math.round((Number(baseAmount) || 0) * 100) / 100;
+  const totals = getLifeBenefitTotals(user);
+  const key = "discount" + category.charAt(0).toUpperCase() + category.slice(1);
+  const pct = totals[key] || 0;
+  if (!pct || !(base > 0)) {
+    return `<strong>${fmtMoney(base)}</strong>`;
+  }
+  const discounted = applyLifeDiscount(user, category, base);
+  return `<span class="life-discount-price" style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <s class="muted-small" style="opacity:.7;">${fmtMoney(base)}</s>
+      <strong class="ticker-up" style="font-size:1.05em;">${fmtMoney(discounted)}</strong>
+      <span class="badge lilac">${icon("trophy", 11)}${pct}% off</span>
+    </span>`;
 }
 async function addLifeItem(classCode, item) {
   const classRef = classesCol().doc(classCode);

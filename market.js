@@ -268,13 +268,15 @@ async function openCo(e) {
 
 async function setPrice(id) {
   const val = document.getElementById("price-" + id).value;
-  await updateCompanyPrice(CLASS_CODE, id, val);
+  const res = await updateCompanyPrice(CLASS_CODE, id, val);
+  if (res && !res.ok) setCompanyMsg(id, `<div class="error-msg">${res.error}</div>`);
   await render();
 }
 async function setCoRange(id) {
   const min = document.getElementById("rmin-" + id).value;
   const max = document.getElementById("rmax-" + id).value;
-  await setCompanyPriceRange(CLASS_CODE, id, min, max);
+  const res = await setCompanyPriceRange(CLASS_CODE, id, min, max);
+  if (res && !res.ok) setCompanyMsg(id, `<div class="error-msg">${res.error}</div>`);
   await render();
 }
 async function closeCo(id) {
