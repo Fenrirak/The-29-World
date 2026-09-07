@@ -5329,25 +5329,55 @@ async function payMortgage(username, classCode, propId) {
   return { ok: true, amount: amt, fullyPaid: remainingAfter <= 0 };
 }
 
+// Turns an isoWeekKey() string ("2026-W9") into a plain number that sorts
+// the same way chronologically (2026-W9 < 2026-W10), which a plain string
+// comparison gets wrong ("2026-W9" > "2026-W10" lexically).
+function weekKeyOrder(key) {
+  const [y, w] = key.split("-W").map(Number);
+  return y * 100 + w;
+}
+
 // Whether this property's mortgage currently has a missed weekly payment —
-// i.e. its due day (see setMortgageDay) has already fully passed for the
-// current week and the student hasn't paid it themselves yet (see
-// payMortgage above). Used to show a red "payment overdue" warning on the
-// teacher's student profile popup. Purely a read of already-loaded data —
-// doesn't touch the database or move any money, and doesn't count how many
-// weeks running it's been missed, just whether it's currently overdue.
+// i.e. its most recent due day (see setMortgageDay) has already fully
+// passed without the student paying it themselves (see payMortgage above).
+// Used to show a red "payment overdue" warning on the teacher's student
+// profile popup. Purely a read of already-loaded data — doesn't touch the
+// database or move any money, and doesn't count how many weeks running
+// it's been missed, just whether it's currently overdue.
+// Deliberately looks back to the most recently-passed due day rather than
+// only checking "this ISO week": a mortgage due on Friday that's missed
+// stays flagged as overdue through the weekend AND the following week
+// (Mon-Thu) right up until the next due day passes — not just for the two
+// days before the ISO week rolls over, which used to hide a still-missed
+// payment from the teacher for most of the week.
 function isMortgagePaymentOverdue(prop, cls) {
   if (!prop || !prop.mortgage || prop.mortgage.weeksLeft <= 0) return false;
+  const mortgage = prop.mortgage;
   const weekKey = isoWeekKey(new Date());
-  if (prop.mortgage.purchaseWeekKey === weekKey) return false; // first week is always free
-  if (prop.mortgage.lastWeekPaid === weekKey) return false; // already paid this week
+  if (mortgage.purchaseWeekKey === weekKey) return false; // first week is always free
+  if (mortgage.lastWeekPaid === weekKey) return false; // already paid this week
   // A teacher-forced due week (see setMortgageDueOverride) counts as
   // overdue-until-paid immediately, same as the normal due day passing.
   if (cls.mortgageForceDueWeek === weekKey) return true;
   // ISO weekday ordinal, Monday = 0 ... Sunday = 6 — matches the Mon-Sun
   // weeks isoWeekKey groups payments into, unlike DAY_NAMES' Sun-first order.
   const isoIdx = day => (DAY_NAMES.indexOf(day) + 6) % 7;
-  return isoIdx(nzDayName()) > isoIdx(cls.mortgageDay || "Fri"); // due day has fully passed this week without payment
+  const dueIdx = isoIdx(cls.mortgageDay || "Fri");
+  const todayIdx = isoIdx(nzDayName());
+  // Days back to the most recent due day. If today IS the due day, that
+  // occurrence isn't due yet (the student still has all of today to pay),
+  // so step back a full week to the previous occurrence instead of 0.
+  let daysSinceDue = todayIdx - dueIdx;
+  if (daysSinceDue <= 0) daysSinceDue += 7;
+  const lastDueDateKey = dateKeyPlusDays(nzDateKey(), -daysSinceDue);
+  const lastDueWeekKey = isoWeekKey(new Date(dateKeyToUTC(lastDueDateKey)));
+  if (lastDueWeekKey === weekKey) return true; // this week's due day already passed, and neither check above cleared it
+  if (mortgage.lastWeekPaid === lastDueWeekKey) return false; // that earlier cycle was paid
+  // Guard against looking back further than the mortgage has existed — if
+  // the last due day falls before the property was even bought, there was
+  // no payment owed for it.
+  if (weekKeyOrder(lastDueWeekKey) < weekKeyOrder(mortgage.purchaseWeekKey)) return false;
+  return true; // an earlier due day passed without payment and hasn't been caught up since
 }
 
 // Student picks (or changes, any time) whether they live in their property
