@@ -5338,10 +5338,10 @@ function weekKeyOrder(key) {
 }
 
 // Which ISO week the most recently-passed mortgage due day falls in —
-// today's week if today IS the due day (see isMortgagePaymentOverdue for
-// why that one doesn't count as "passed" yet), otherwise the due day one
-// cycle before that. Independent of any one property, since the due day is
-// a class-wide setting (see setMortgageDay).
+// today's week if today IS the due day (see overdueMortgageWeekKey for why
+// that one doesn't count as "passed" yet), otherwise the due day one cycle
+// before that. Independent of any one property, since the due day is a
+// class-wide setting (see setMortgageDay).
 function lastMortgageDueWeekKey(cls) {
   // ISO weekday ordinal, Monday = 0 ... Sunday = 6 — matches the Mon-Sun
   // weeks isoWeekKey groups payments into, unlike DAY_NAMES' Sun-first order.
@@ -5354,37 +5354,47 @@ function lastMortgageDueWeekKey(cls) {
   return isoWeekKey(new Date(dateKeyToUTC(lastDueDateKey)));
 }
 
-// Whether this property's mortgage currently has a missed weekly payment —
-// i.e. its most recent due day (see setMortgageDay) has already fully
-// passed without the student paying it themselves (see payMortgage above).
-// Used to show a red "payment overdue" warning on the teacher's student
-// profile popup, alongside a button to waive it (see
-// resolveMortgageOverdue). Purely a read of already-loaded data — doesn't
-// touch the database or move any money, and doesn't count how many weeks
-// running it's been missed, just whether it's currently overdue.
+// The ISO week key of this mortgage's currently-unpaid cycle, or null if
+// there isn't one right now. Backs both isMortgagePaymentOverdue (the red
+// banner) and resolveMortgageOverdue (its "mark as resolved" button) so
+// the two always agree on exactly which cycle is missing — resolving has
+// to clear the specific week that's actually overdue, not just "this
+// week", or waiving an old missed payment before this week's own due day
+// arrives would also silently mark the upcoming one as paid (see
+// resolveMortgageOverdue). Doesn't count how many weeks running it's been
+// missed, just which cycle (if any) is currently unpaid.
 // Deliberately looks back to the most recently-passed due day rather than
 // only checking "this ISO week": a mortgage due on Friday that's missed
 // stays flagged as overdue through the weekend AND the following week
 // (Mon-Thu) right up until the next due day passes — not just for the two
 // days before the ISO week rolls over, which used to hide a still-missed
 // payment from the teacher for most of the week.
-function isMortgagePaymentOverdue(prop, cls) {
-  if (!prop || !prop.mortgage || prop.mortgage.weeksLeft <= 0) return false;
+function overdueMortgageWeekKey(prop, cls) {
+  if (!prop || !prop.mortgage || prop.mortgage.weeksLeft <= 0) return null;
   const mortgage = prop.mortgage;
   const weekKey = isoWeekKey(new Date());
-  if (mortgage.purchaseWeekKey === weekKey) return false; // first week is always free
-  if (mortgage.lastWeekPaid === weekKey) return false; // already paid this week
+  if (mortgage.purchaseWeekKey === weekKey) return null; // first week is always free
+  if (mortgage.lastWeekPaid === weekKey) return null; // already paid this week
   // A teacher-forced due week (see setMortgageDueOverride) counts as
   // overdue-until-paid immediately, same as the normal due day passing.
-  if (cls.mortgageForceDueWeek === weekKey) return true;
+  if (cls.mortgageForceDueWeek === weekKey) return weekKey;
   const lastDueWeekKey = lastMortgageDueWeekKey(cls);
-  if (lastDueWeekKey === weekKey) return true; // this week's due day already passed, and neither check above cleared it
-  if (mortgage.lastWeekPaid === lastDueWeekKey) return false; // that earlier cycle was paid
+  if (lastDueWeekKey === weekKey) return weekKey; // this week's due day already passed, and neither check above cleared it
+  if (mortgage.lastWeekPaid === lastDueWeekKey) return null; // that earlier cycle was paid
   // Guard against looking back further than the mortgage has existed — if
   // the last due day falls before the property was even bought, there was
   // no payment owed for it.
-  if (weekKeyOrder(lastDueWeekKey) < weekKeyOrder(mortgage.purchaseWeekKey)) return false;
-  return true; // an earlier due day passed without payment and hasn't been caught up since
+  if (weekKeyOrder(lastDueWeekKey) < weekKeyOrder(mortgage.purchaseWeekKey)) return null;
+  return lastDueWeekKey; // an earlier due day passed without payment and hasn't been caught up since
+}
+
+// Whether this property's mortgage currently has a missed weekly payment.
+// Used to show a red "payment overdue" warning on the teacher's student
+// profile popup, alongside a button to waive it (see
+// resolveMortgageOverdue). Purely a read of already-loaded data — doesn't
+// touch the database or move any money.
+function isMortgagePaymentOverdue(prop, cls) {
+  return overdueMortgageWeekKey(prop, cls) !== null;
 }
 
 // Teacher-only: clear a mortgage's currently-missed payment without taking
@@ -5397,6 +5407,10 @@ function isMortgagePaymentOverdue(prop, cls) {
 // the class missed while away, or a mistake the teacher doesn't want to
 // chase the student for. Refuses if the mortgage isn't actually overdue,
 // so it can't be used to skip ahead on a payment that's still on schedule.
+// Marks the specific overdue cycle as paid (see overdueMortgageWeekKey)
+// rather than just "this week" — waiving an old missed payment mid-week,
+// before this week's own due day has even arrived, must not also mark
+// that still-upcoming payment as settled.
 async function resolveMortgageOverdue(classCode, propId) {
   const classRef = classesCol().doc(classCode);
   let propName = "", ownerUsername = "", remainingAfter = 0;
@@ -5407,13 +5421,14 @@ async function resolveMortgageOverdue(classCode, propId) {
       const cls = withNewModuleDefaults(classSnap.data());
       const prop = cls.properties.find(p => p.id === propId);
       if (!prop || !prop.mortgage || prop.mortgage.weeksLeft <= 0) throw new Error("NOT_FOUND");
-      if (!isMortgagePaymentOverdue(prop, cls)) throw new Error("NOT_OVERDUE");
+      const overdueWeekKey = overdueMortgageWeekKey(prop, cls);
+      if (!overdueWeekKey) throw new Error("NOT_OVERDUE");
       propName = prop.name;
       ownerUsername = prop.owner;
       const weekAmt = mortgageWeekAmount(prop.mortgage);
       prop.mortgage.principalRemaining = Math.max(0, Math.round((weekAmt.balanceBefore - prop.mortgage.weeklyPayment) * 100) / 100);
       prop.mortgage.weeksLeft -= 1;
-      prop.mortgage.lastWeekPaid = isoWeekKey(new Date());
+      prop.mortgage.lastWeekPaid = overdueWeekKey;
       remainingAfter = prop.mortgage.weeksLeft;
       if (remainingAfter <= 0) prop.mortgage = null;
       t.update(classRef, { properties: cls.properties });
