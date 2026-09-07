@@ -144,15 +144,56 @@
 }
 
 /* ===================== Gambling account tab ===================== */
-.ga-head-row {
+.ga-hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 20px;
+  align-items: stretch;
+  margin-top: 16px;
+}
+.ga-balance-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.ga-balance-stat .value { font-size: 2.4rem; }
+
+.ga-actions-panel {
+  background: rgba(232, 184, 75, 0.07);
+  border: 1.5px solid rgba(212, 162, 76, 0.35);
+  border-radius: 14px;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.ga-buyin-row {
   display: flex;
   align-items: flex-end;
-  gap: 18px;
-  flex-wrap: wrap;
-  margin-top: 14px;
+  gap: 12px;
 }
-.ga-balance-stat { flex: 1 1 220px; min-width: 200px; }
-.ga-head-row .btn { margin-top: 0; }
+.ga-buyin-row > div { flex: 1; min-width: 0; }
+.ga-buyin-row label { margin: 0 0 6px; }
+.ga-buyin-row .btn { margin-top: 0; flex-shrink: 0; }
+
+.ga-action-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  color: var(--muted, #7a8299);
+  font-size: .72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+.ga-action-divider::before, .ga-action-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(212, 162, 76, 0.35);
+}
+.ga-cashout-btn { width: 100%; margin-top: 0; }
 
 .ga-limits-grid { margin-top: 20px; }
 .ga-limit-block {
@@ -175,25 +216,12 @@
 .progress-bar > div.mint { background: linear-gradient(90deg, var(--mint, #3fbf8f), var(--mint-dark, #2e9873)); }
 .progress-bar > div.coral { background: linear-gradient(90deg, var(--coral, #e8735f), #c9503a); }
 
-.ga-buyin-form {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1.5px dashed var(--line, #e6e6ea);
+@media (max-width: 760px) {
+  .ga-hero-grid { grid-template-columns: 1fr; }
 }
-.ga-buyin-form label { margin: 0 0 6px; }
-.ga-buyin-form input { max-width: 200px; }
-.ga-buyin-form .btn { margin-top: 0; }
-
 @media (max-width: 560px) {
-  .ga-head-row { align-items: stretch; }
-  .ga-head-row .btn { width: 100%; }
-  .ga-buyin-form { align-items: stretch; }
-  .ga-buyin-form input { max-width: none; width: 100%; }
-  .ga-buyin-form .btn { width: 100%; }
+  .ga-buyin-row { flex-direction: column; align-items: stretch; }
+  .ga-buyin-row .btn { width: 100%; }
 }
 
 /* Roulette/Blackjack mode switcher — a single segmented control (one

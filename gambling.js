@@ -193,6 +193,7 @@ function renderGamblingAccountCard(view) {
   const buyInBtn = document.getElementById("gAcctBuyInBtn");
   const buyInAmountInput = document.getElementById("gAcctBuyInAmount");
   const lockedMsg = document.getElementById("gAcctLockedMsg");
+  const divider = document.getElementById("gAcctDivider");
   const disabledBanner = document.getElementById("acctDisabledBanner");
 
   if (!view) return; // couldn't load (offline etc.) — leave whatever was last shown
@@ -242,16 +243,21 @@ function renderGamblingAccountCard(view) {
   }
 
   /* ---- Locked / disabled states for the buy-in form ---- */
+  // Cash Out is deliberately never hidden here — students should always
+  // be able to get their chips back, even when locked or paused.
   if (view.winLimitHit) {
     buyInForm.classList.add("hidden");
+    divider.classList.add("hidden");
     lockedMsg.classList.remove("hidden");
     lockedMsg.innerHTML = `<div class="success-msg">${view.winLimitMessage || "You've hit today's winning limit — come back tomorrow."}</div>`;
   } else if (view.gamblingEnabled === false) {
     buyInForm.classList.add("hidden");
+    divider.classList.add("hidden");
     lockedMsg.classList.add("hidden");
   } else {
     lockedMsg.classList.add("hidden");
     buyInForm.classList.remove("hidden");
+    divider.classList.remove("hidden");
     const overCap = view.dailyBuyInLimit !== null && view.remainingBuyIn <= 0;
     buyInBtn.disabled = overCap;
     buyInAmountInput.disabled = overCap;

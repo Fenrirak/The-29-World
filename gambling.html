@@ -255,13 +255,26 @@
         <h2 id="hGamblingAccount">Gambling account</h2>
         <p class="muted-small">Buy in from your cash balance to play Roulette or Blackjack. Cash out any time to move chips back to your cash balance.</p>
 
-        <div class="ga-head-row">
+        <div class="ga-hero-grid">
           <div class="stat gold ga-balance-stat">
             <span class="icon icon-slot" data-icon="dice"></span>
             <div class="label">Chips in account</div>
             <div class="value" id="gAcctBalance">$0.00</div>
           </div>
-          <button class="btn secondary" id="gAcctCashOutBtn" onclick="gaCashOut()">Cash out</button>
+
+          <div class="ga-actions-panel">
+            <div id="gAcctBuyInForm" class="ga-buyin-row">
+              <div>
+                <label for="gAcctBuyInAmount" id="labBuyInAmount">Buy in</label>
+                <input id="gAcctBuyInAmount" type="number" min="0" step="0.5" placeholder="Amount">
+              </div>
+              <button class="btn gold" onclick="gaBuyIn()" id="gAcctBuyInBtn">Buy in</button>
+            </div>
+            <div id="gAcctLockedMsg" class="hidden"></div>
+            <div class="ga-action-divider" id="gAcctDivider"><span>or</span></div>
+            <button class="btn secondary ga-cashout-btn" id="gAcctCashOutBtn" onclick="gaCashOut()">Cash out to your cash balance</button>
+            <div id="gAcctMsg"></div>
+          </div>
         </div>
 
         <div class="grid grid-2 ga-limits-grid">
@@ -276,17 +289,6 @@
             <p class="muted-small" id="gAcctWinNote"></p>
           </div>
         </div>
-
-        <div id="gAcctLockedMsg" class="hidden" style="margin-top:16px;"></div>
-
-        <div id="gAcctBuyInForm" class="ga-buyin-form">
-          <div>
-            <label for="gAcctBuyInAmount" id="labBuyInAmount">Buy in</label>
-            <input id="gAcctBuyInAmount" type="number" min="0" step="0.5">
-          </div>
-          <button class="btn gold" onclick="gaBuyIn()" id="gAcctBuyInBtn">Buy in</button>
-        </div>
-        <div id="gAcctMsg"></div>
       </div>
     </div>
 
