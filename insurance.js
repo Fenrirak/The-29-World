@@ -99,7 +99,7 @@ async function render() {
           <h4>${icon("shield", 20)}${p.name} ${owned ? '<span class="badge mint">You have this</span>' : ""}</h4>
           <p>${p.description || "No description provided."}</p>
           <p class="muted-small">Covers: ${COVERAGE_LABEL[p.coverage] || "—"}</p>
-          <p><strong>${fmtMoney(p.price)}</strong>/week &middot; ${fmtMoney(p.excess)} excess ${p.signupFee ? `&middot; ${fmtMoney(p.signupFee)} sign-up fee` : ""} ${p.stars ? `&middot; <span class="ticker-up">${stars(p.stars)}</span>` : ""}</p>
+          <p><strong>${fmtMoney(p.price)}</strong>/week &middot; ${fmtMoney(p.excess)} excess ${p.signupFee ? `&middot; ${priceWithLifeDiscount(me, "insurance", p.signupFee)} sign-up fee` : ""} ${p.stars ? `&middot; <span class="ticker-up">${stars(p.stars)}</span>` : ""}</p>
         </div>
         <div>
           ${IS_TEACHER
@@ -107,7 +107,7 @@ async function render() {
                <button class="btn small coral" onclick="deletePlan('${p.id}')">${icon("trash", 13)} Remove</button>`
             : owned
               ? `<button class="btn small secondary" onclick="cancelPlan('${p.id}')">Cancel cover</button>`
-              : `<button class="btn small gold" onclick="buyPlan('${p.id}', ${Number(p.signupFee) || 0})">${icon("shield", 13)} Sign up</button>`}
+              : `<button class="btn small gold" onclick="buyPlan('${p.id}', ${applyLifeDiscount(me, "insurance", Number(p.signupFee) || 0)})">${icon("shield", 13)} Sign up</button>`}
         </div>
       </div>
       <div id="msg-${p.id}"></div>
