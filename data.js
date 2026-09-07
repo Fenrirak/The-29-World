@@ -3662,7 +3662,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
   // money movement below, so the two run together instead of one after the
   // other — that was an extra sequential round-trip on every single Deal.
   await Promise.all([
-    usersCol().doc(username).update({ lastBjSeat: humanSeat }).catch(() => {}),
+    usersCol().doc(username).update({ lastBjSeat: round.humanSeat }).catch(() => {}),
     adjustGamblingAccount(username, -betAmount, cls.gambling.dailyWinLimit)
   ]);
 
@@ -7228,13 +7228,32 @@ const ANW_BALANCE_POLL_MS = 20000;
 let _anwPollTimer = null;
 let _anwPollUsername = null;
 
-// The widget shows cash balance everywhere except on the Gambling pages,
-// where cash isn't what's in play — it shows the student's chip balance
-// (their gambling account) instead. Checked by pathname rather than by
-// which section/mode is active, so it stays correct across Account,
-// Roulette, and Blackjack alike.
+// Which sub-tab of the Gambling page is active — "account", "roulette", or
+// "blackjack". Only gambling.html's switchMode() ever sets this (via
+// anwSetGamblingMode below); it stays null on every other page, which
+// _anwShowsChips() below treats the same as "account" (i.e. show cash).
+// This is deliberately driven by an explicit call from gambling.js rather
+// than read off gambling.js's own MODE variable — mountBalanceWidget can
+// run before gambling.js's init() has called switchMode("account") for the
+// first time, and polling a global that isn't set yet would show the wrong
+// balance until the student happened to switch tabs.
+let _anwGamblingMode = null;
+
 function _anwIsGamblingPage() {
   return /(^|\/)gambling\.html/i.test(location.pathname);
+}
+
+// On the Account tab, cash is what's actually moving (buy-in/cash-out), so
+// the widget shows cash there too — only Roulette and Blackjack, where
+// chips are what's being bet, show the chip balance instead.
+function _anwShowsChips() {
+  return _anwIsGamblingPage() && (_anwGamblingMode === "roulette" || _anwGamblingMode === "blackjack");
+}
+
+function _anwWidgetLabelHtml() {
+  return _anwShowsChips()
+    ? `${icon("dice", 14)} Chips balance`
+    : `${icon("piggy", 14)} Cash balance`;
 }
 
 async function _anwPollTick() {
@@ -7243,11 +7262,7 @@ async function _anwPollTick() {
   try {
     const fresh = await getUser(_anwPollUsername); // uncached: this IS the poll, no point caching a 20s-apart call
     if (!fresh) return;
-    if (_anwIsGamblingPage()) {
-      el.textContent = fmtMoney(gamblingAccountToday(fresh).balance);
-    } else {
-      el.textContent = fmtMoney(fresh.balance);
-    }
+    el.textContent = _anwShowsChips() ? fmtMoney(gamblingAccountToday(fresh).balance) : fmtMoney(fresh.balance);
   } catch (e) {
     console.warn("Balance widget poll failed (will retry next tick):", e);
   }
@@ -7271,19 +7286,36 @@ document.addEventListener("visibilitychange", () => {
   else _anwPollStart();
 });
 
+// Called by gambling.html's switchMode() every time the student switches
+// between the Account/Roulette/Blackjack sub-tabs, so the widget's label
+// and value flip immediately rather than waiting up to 20s for the next
+// poll. Safe to call from pages/roles where the widget doesn't exist (e.g.
+// a teacher) — it just no-ops if there's nothing mounted yet.
+async function anwSetGamblingMode(mode) {
+  _anwGamblingMode = mode;
+  const box = document.getElementById("anwBalanceWidget");
+  if (!box) return;
+  const labelEl = box.querySelector(".anw-bw-label");
+  if (labelEl) labelEl.innerHTML = _anwWidgetLabelHtml();
+  if (!_anwPollUsername) return;
+  try {
+    const cached = await getUserCached(_anwPollUsername);
+    const el = document.getElementById("anwBalanceWidgetValue");
+    if (cached && el) {
+      el.textContent = _anwShowsChips() ? fmtMoney(gamblingAccountToday(cached).balance) : fmtMoney(cached.balance);
+    }
+  } catch (e) {
+    // Next poll (or the next tab switch) will pick it up.
+  }
+}
+
 async function mountBalanceWidget(username) {
   if (document.getElementById("anwBalanceWidget")) return;
-  const onGambling = _anwIsGamblingPage();
   const box = document.createElement("div");
   box.id = "anwBalanceWidget";
   box.className = "anw-balance-widget";
-  box.innerHTML = onGambling
-    ? `
-    <div class="anw-bw-label">${icon("dice", 14)} Chips balance</div>
-    <div class="anw-bw-value" id="anwBalanceWidgetValue">—</div>
-  `
-    : `
-    <div class="anw-bw-label">${icon("piggy", 14)} Cash balance</div>
+  box.innerHTML = `
+    <div class="anw-bw-label">${_anwWidgetLabelHtml()}</div>
     <div class="anw-bw-value" id="anwBalanceWidgetValue">—</div>
   `;
   document.body.appendChild(box);
@@ -7292,7 +7324,7 @@ async function mountBalanceWidget(username) {
 
   const cached = await getUserCached(username);
   if (cached) {
-    box.querySelector("#anwBalanceWidgetValue").textContent = onGambling
+    box.querySelector("#anwBalanceWidgetValue").textContent = _anwShowsChips()
       ? fmtMoney(gamblingAccountToday(cached).balance)
       : fmtMoney(cached.balance);
   }

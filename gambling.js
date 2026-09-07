@@ -968,6 +968,10 @@ function mountBjRotatePrompt() {
 
 function switchMode(mode) {
   MODE = mode;
+  // Tells the floating balance widget (data.js) to switch between showing
+  // cash (Account tab) and chips (Roulette/Blackjack) — a no-op if the
+  // widget isn't mounted (e.g. for a teacher).
+  if (typeof anwSetGamblingMode === "function") anwSetGamblingMode(mode);
   document.getElementById("modeBtnRoulette").classList.toggle("active", mode === "roulette");
   document.getElementById("modeBtnBlackjack").classList.toggle("active", mode === "blackjack");
   document.getElementById("modeBtnAccount").classList.toggle("active", mode === "account");
