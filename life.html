@@ -64,7 +64,7 @@
   <p id="pageIntro">Give a student a "life event" — got a job promotion, got married, had a kid, whatever fits your class — bundled with real in-game perks. Build each one once, then hand it out to as many students as you like. Students can hold more than one at a time and the perks stack.</p>
 
   <div id="teacherPanel" class="card hidden">
-    <h2 id="hAdd">Create a life item</h2>
+    <h2 id="hAdd">Create a family event</h2>
     <form onsubmit="return saveLifeItemForm(event)">
       <div class="grid grid-3">
         <div>
@@ -77,7 +77,7 @@
         </div>
       </div>
 
-      <p class="muted-small" style="margin-top:14px;">Fill in only the benefits you want this item to have — leave the rest at 0. Percentages from every life item a student holds add together.</p>
+      <p class="muted-small" style="margin-top:14px;">Fill in only the benefits you want this item to have — leave the rest at 0. Percentages from every family event a student holds add together.</p>
       <div class="grid grid-3">
         <div>
           <label for="liCash" id="labCash">One-time cash bonus ($)</label>
@@ -120,27 +120,27 @@
           <input id="liTaxCut" type="number" min="0" max="95" step="1" placeholder="0">
         </div>
       </div>
-      <button class="btn gold" type="submit" id="addBtn">Add life item</button>
+      <button class="btn gold" type="submit" id="addBtn">Add family event</button>
     </form>
     <div id="addMsg"></div>
   </div>
 
   <div id="defListCard" class="hidden">
-    <h2 id="hDefs">Life items</h2>
+    <h2 id="hDefs">Family events</h2>
     <div id="defList"></div>
-    <p class="muted-small" id="noDefs">No life items have been created yet.</p>
+    <p class="muted-small" id="noDefs">No family events have been created yet.</p>
   </div>
 
   <div class="card hidden" id="grantedCard">
     <h2 id="hGranted">Who has what</h2>
     <div id="grantedList"></div>
-    <p class="muted-small" id="noGranted">No students have been given a life item yet.</p>
+    <p class="muted-small" id="noGranted">No students have been given a family event yet.</p>
   </div>
 
   <div class="card hidden" id="myLifeCard">
     <h2 id="hMyLife">My life</h2>
     <div id="myLifeList"></div>
-    <p class="muted-small" id="noMine">You haven't been given any life events yet.</p>
+    <p class="muted-small" id="noMine">You haven't been given any family events yet.</p>
   </div>
 </main>
 

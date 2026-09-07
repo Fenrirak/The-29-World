@@ -3,7 +3,7 @@ let CURRENT, IS_TEACHER, EDITING_ID = null;
 const LIFE_FORM_IDS = ["liName", "liDesc", "liCash", "liAllowance", "liIncome", "liDiscStore", "liDiscTransport", "liDiscProperty", "liDiscInsurance", "liLifestyle", "liTaxCut"];
 
 // Turns a benefits object into the small row of badges shown next to a
-// life item, wherever it's rendered (teacher's list, a student's own
+// family event, wherever it's rendered (teacher's list, a student's own
 // cards). Only benefits that are actually non-zero are shown.
 function lifeBenefitChips(b) {
   b = b || {};
@@ -24,9 +24,9 @@ function lifeBenefitChips(b) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("trophy", 26) + " Life";
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Create a life item";
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add life item";
-  document.getElementById("hDefs").innerHTML = icon("trophy", 18) + " Life items";
+  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Create a family event";
+  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add family event";
+  document.getElementById("hDefs").innerHTML = icon("trophy", 18) + " Family events";
   document.getElementById("hGranted").innerHTML = icon("users", 18) + " Who has what";
   document.getElementById("hMyLife").innerHTML = icon("trophy", 18) + " My life";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
@@ -164,10 +164,10 @@ async function saveLifeItemForm(e) {
   if (!item.name) return false;
   if (EDITING_ID) {
     await updateLifeItem(CURRENT.classCode, EDITING_ID, item);
-    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Life item updated!</div>`;
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Family event updated!</div>`;
   } else {
     await addLifeItem(CURRENT.classCode, item);
-    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Life item added!</div>`;
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Family event added!</div>`;
   }
   resetLifeForm();
   await render();
@@ -177,7 +177,7 @@ async function saveLifeItemForm(e) {
 function resetLifeForm() {
   EDITING_ID = null;
   LIFE_FORM_IDS.forEach(id => document.getElementById(id).value = "");
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add life item";
+  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add family event";
   const cancelBtn = document.getElementById("cancelEditBtn");
   if (cancelBtn) cancelBtn.remove();
 }
@@ -215,7 +215,7 @@ function startEditLifeItem(id) {
 }
 
 async function deleteLifeItem(id) {
-  if (confirm("Remove this life item? Students who already have it keep their benefits — this only stops it being given out again.")) {
+  if (confirm("Remove this family event? Students who already have it keep their benefits — this only stops it being given out again.")) {
     if (id === EDITING_ID) resetLifeForm();
     await removeLifeItem(CURRENT.classCode, id);
     await render();
@@ -232,7 +232,7 @@ async function giveLifeItem(templateId) {
 }
 
 async function revokeLifeItemFor(username, grantId) {
-  if (!confirm("Remove this life item from this student? Their benefits from it will stop immediately.")) return;
+  if (!confirm("Remove this family event from this student? Their benefits from it will stop immediately.")) return;
   await revokeLifeItem(CURRENT.classCode, username, grantId);
   await render();
 }
