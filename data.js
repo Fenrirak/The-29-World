@@ -3124,6 +3124,7 @@ async function getGamblingAccountView(username, classCode) {
     boughtInToday: acc.boughtInToday,
     netToday: acc.netToday,
     winLimitHit: acc.winLimitHit,
+    gamblingEnabled: g.enabled !== false,
     dailyBuyInLimit: g.dailyBuyInLimit,
     remainingBuyIn: g.dailyBuyInLimit ? Math.max(0, Math.round((g.dailyBuyInLimit - acc.boughtInToday) * 100) / 100) : null,
     dailyWinLimit: g.dailyWinLimit,

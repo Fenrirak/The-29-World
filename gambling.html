@@ -71,17 +71,16 @@
     <button class="mode-btn" id="modeBtnBlackjack" onclick="switchMode('blackjack')">
       <span class="icon-slot" data-icon="cards"></span> Blackjack
     </button>
+    <button class="mode-btn" id="modeBtnAccount" onclick="switchMode('account')">
+      <span class="icon-slot" data-icon="piggy"></span> Account
+    </button>
   </div>
 
   <div id="teacherPanel" class="card hidden">
 
     <div id="teacherRouletteSettings">
       <h2 id="hSettings">Roulette settings</h2>
-      <label style="display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" id="gEnabled" style="width:20px;height:20px;min-height:auto;">
-        <span id="labEnabled">Allow students to gamble</span>
-      </label>
-      <p class="muted-small">Turn this off to pause BOTH games at once — students will see a "paused" message on either tab instead of the bet form. Use the Blackjack tab's own switch below to pause just Blackjack.</p>
+      <p class="muted-small">The overall on/off switch, daily buy-in limit, and daily winning limit now live on the Account tab — they're shared with Blackjack.</p>
       <div class="grid grid-2" style="margin-top:14px;">
         <div>
           <label for="gMin" id="labMin">Minimum bet</label>
@@ -92,16 +91,6 @@
           <input id="gMax" type="number" min="0" step="0.5">
         </div>
       </div>
-      <label for="gDailyBuyIn" id="labDailyBuyIn" style="margin-top:14px;">Daily buy-in limit per student (leave blank for no limit)</label>
-      <input id="gDailyBuyIn" type="number" min="0" step="0.5" style="max-width:220px;" placeholder="e.g. 20">
-      <p class="muted-small" id="dailyBuyInNote">Most a student can move from cash into their gambling account, across Roulette AND Blackjack combined, in one NZ calendar day. Once they've bought in this much, they can keep playing with whatever's still in the account, but can't top it up again until tomorrow.</p>
-
-      <label for="gDailyWinLimit" id="labDailyWinLimit" style="margin-top:14px;">Daily winning limit per student (leave blank for no limit)</label>
-      <input id="gDailyWinLimit" type="number" min="0" step="0.5" style="max-width:220px;" placeholder="e.g. 50">
-      <p class="muted-small" id="dailyWinLimitNote">Once a student's NET winnings for the day (total won minus total lost, across both games) reach this amount, they're locked out of buying in or betting until tomorrow, and shown the message below.</p>
-
-      <label for="gWinLimitMessage" id="labWinLimitMessage" style="margin-top:14px;">Message shown when a student hits the winning limit</label>
-      <textarea id="gWinLimitMessage" rows="3" style="width:100%;max-width:480px;" placeholder="e.g. Nice work! You've hit today's winning limit — come back tomorrow."></textarea>
       <p class="muted-small">Payout multipliers — a win pays out this many times the bet, on top of keeping the stake.</p>
       <div class="grid grid-3">
         <div><label for="pStraight">Straight up (single number)</label><input id="pStraight" type="number" min="0" step="1"></div>
@@ -111,7 +100,7 @@
         <div><label for="pSixLine">Six line (6 numbers)</label><input id="pSixLine" type="number" min="0" step="1"></div>
         <div><label for="pOddEven">Odd / Even</label><input id="pOddEven" type="number" min="0" step="1"></div>
       </div>
-      <button class="btn secondary" onclick="saveRouletteSettings()" id="saveSettingsBtn">Save settings</button>
+      <button class="btn secondary" onclick="saveGamblingConfig('settingsMsg')" id="saveSettingsBtn">Save settings</button>
       <div id="settingsMsg"></div>
     </div>
 
@@ -121,7 +110,7 @@
         <input type="checkbox" id="bjEnabled" style="width:20px;height:20px;min-height:auto;">
         <span id="bjLabEnabled">Allow students to play Blackjack</span>
       </label>
-      <p class="muted-small">Turning this off only pauses Blackjack — Roulette keeps working. The overall "Allow students to gamble" switch, the daily buy-in limit, and the daily winning limit on the Roulette tab apply to both games (they share one gambling account).</p>
+      <p class="muted-small">Turning this off only pauses Blackjack — Roulette keeps working. The overall "Allow students to gamble" switch, the daily buy-in limit, and the daily winning limit on the Account tab apply to both games (they share one gambling account).</p>
       <div class="grid grid-2" style="margin-top:14px;">
         <div>
           <label for="bjMin" id="bjLabMin">Minimum bet</label>
@@ -137,32 +126,37 @@
       <div id="bjSettingsMsg"></div>
     </div>
 
+    <div id="teacherAccountSettings" class="hidden">
+      <h2 id="hAccountSettings">Gambling account settings</h2>
+      <label style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="gEnabled" style="width:20px;height:20px;min-height:auto;">
+        <span id="labEnabled">Allow students to gamble</span>
+      </label>
+      <p class="muted-small">Turn this off to pause BOTH games at once — students can still cash out, but can't buy in or place bets. Use the Blackjack tab's own switch to pause just Blackjack.</p>
+
+      <div class="grid grid-2" style="margin-top:14px;">
+        <div>
+          <label for="gDailyBuyIn" id="labDailyBuyIn">Daily buy-in limit per student</label>
+          <input id="gDailyBuyIn" type="number" min="0" step="0.5" placeholder="e.g. 20 (blank = no limit)">
+        </div>
+        <div>
+          <label for="gDailyWinLimit" id="labDailyWinLimit">Daily winning limit per student</label>
+          <input id="gDailyWinLimit" type="number" min="0" step="0.5" placeholder="e.g. 50 (blank = no limit)">
+        </div>
+      </div>
+      <p class="muted-small" id="dailyBuyInNote">Most a student can move from cash into their gambling account, shared across Roulette AND Blackjack, in one NZ calendar day. Once they've bought in this much, they can keep playing with whatever's still in the account, but can't top it up again until tomorrow.</p>
+      <p class="muted-small" id="dailyWinLimitNote">Once a student's NET winnings for the day (total won minus total lost, across both games) reach this amount, they're locked out of buying in or betting until tomorrow, and shown the message below.</p>
+
+      <label for="gWinLimitMessage" id="labWinLimitMessage" style="margin-top:14px;">Message shown when a student hits the winning limit</label>
+      <textarea id="gWinLimitMessage" rows="3" style="width:100%;max-width:480px;" placeholder="e.g. Nice work! You've hit today's winning limit — come back tomorrow."></textarea>
+
+      <button class="btn secondary" onclick="saveGamblingConfig('acctSettingsMsg')" id="acctSaveSettingsBtn">Save settings</button>
+      <div id="acctSettingsMsg"></div>
+    </div>
+
   </div>
 
   <div id="studentView" class="hidden">
-
-    <div id="gamblingAccountCard" class="card hidden">
-      <h2 id="hGamblingAccount"><span class="icon-slot" data-icon="piggy"></span> Gambling account</h2>
-      <p class="muted-small">Buy in from your cash balance to play. Cash out any time to move it back.</p>
-      <div class="grid grid-2" style="align-items:flex-end;">
-        <div>
-          <div class="muted-small">Chips in your gambling account</div>
-          <div style="font-size:24px;font-weight:900;" id="gAcctBalance">$0.00</div>
-        </div>
-        <div style="text-align:right;">
-          <button class="btn secondary" id="gAcctCashOutBtn" onclick="gaCashOut()">Cash out</button>
-        </div>
-      </div>
-      <p class="muted-small" id="gAcctBuyInNote"></p>
-      <p class="muted-small" id="gAcctWinNote"></p>
-      <div id="gAcctBuyInForm" style="margin-top:10px;">
-        <label for="gAcctBuyInAmount" id="labBuyInAmount">Buy in</label>
-        <input id="gAcctBuyInAmount" type="number" min="0" step="0.5" style="max-width:200px;">
-        <button class="btn gold" onclick="gaBuyIn()" id="gAcctBuyInBtn">Buy in</button>
-      </div>
-      <div id="gAcctLockedMsg" class="hidden" style="margin-top:10px;"></div>
-      <div id="gAcctMsg"></div>
-    </div>
 
     <div id="rouletteSection">
       <div id="disabledBanner" class="card hidden">
@@ -248,6 +242,51 @@
           <div id="bjRecentBets"></div>
           <p class="muted-small" id="bjNoBets">You haven't placed any bets yet.</p>
         </div>
+      </div>
+    </div>
+
+    <div id="accountSection" class="hidden">
+      <div id="acctDisabledBanner" class="card hidden">
+        <h2 id="acctHDisabled">Gambling is paused</h2>
+        <p id="acctDisabledText">Your teacher has temporarily turned off the Gambling module. You can still cash out below, but buying in and betting are paused.</p>
+      </div>
+
+      <div class="card">
+        <h2 id="hGamblingAccount">Gambling account</h2>
+        <p class="muted-small">Buy in from your cash balance to play Roulette or Blackjack. Cash out any time to move chips back to your cash balance.</p>
+
+        <div class="ga-head-row">
+          <div class="stat gold ga-balance-stat">
+            <span class="icon icon-slot" data-icon="dice"></span>
+            <div class="label">Chips in account</div>
+            <div class="value" id="gAcctBalance">$0.00</div>
+          </div>
+          <button class="btn secondary" id="gAcctCashOutBtn" onclick="gaCashOut()">Cash out</button>
+        </div>
+
+        <div class="grid grid-2 ga-limits-grid">
+          <div class="ga-limit-block" id="gAcctBuyInBlock">
+            <div class="ga-limit-head"><span>Daily buy-in</span><span class="ga-limit-figure" id="gAcctBuyInFig"></span></div>
+            <div class="progress-bar"><div id="gAcctBuyInBar" style="width:0%"></div></div>
+            <p class="muted-small" id="gAcctBuyInNote"></p>
+          </div>
+          <div class="ga-limit-block" id="gAcctWinBlock">
+            <div class="ga-limit-head"><span>Today's net winnings</span><span class="ga-limit-figure" id="gAcctWinFig"></span></div>
+            <div class="progress-bar"><div class="mint" id="gAcctWinBar" style="width:0%"></div></div>
+            <p class="muted-small" id="gAcctWinNote"></p>
+          </div>
+        </div>
+
+        <div id="gAcctLockedMsg" class="hidden" style="margin-top:16px;"></div>
+
+        <div id="gAcctBuyInForm" class="ga-buyin-form">
+          <div>
+            <label for="gAcctBuyInAmount" id="labBuyInAmount">Buy in</label>
+            <input id="gAcctBuyInAmount" type="number" min="0" step="0.5">
+          </div>
+          <button class="btn gold" onclick="gaBuyIn()" id="gAcctBuyInBtn">Buy in</button>
+        </div>
+        <div id="gAcctMsg"></div>
       </div>
     </div>
 

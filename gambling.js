@@ -187,32 +187,74 @@ function toggleNumber(n, need) {
 /* ===================== Gambling account (shared buy-in/cash-out) ===================== */
 
 function renderGamblingAccountCard(view) {
-  const card = document.getElementById("gamblingAccountCard");
-  if (!view) { card.classList.add("hidden"); return; }
-  card.classList.remove("hidden");
-  document.getElementById("gAcctBalance").textContent = fmtMoney(view.balance);
-  document.getElementById("gAcctCashOutBtn").disabled = !(view.balance > 0);
-
-  const buyInNote = document.getElementById("gAcctBuyInNote");
-  buyInNote.textContent = view.dailyBuyInLimit
-    ? `You can buy in up to ${fmtMoney(view.dailyBuyInLimit)} per day (shared by Roulette and Blackjack) — ${fmtMoney(view.remainingBuyIn)} left today.`
-    : "No daily buy-in limit set.";
-
-  const winNote = document.getElementById("gAcctWinNote");
+  const balanceEl = document.getElementById("gAcctBalance");
+  const cashOutBtn = document.getElementById("gAcctCashOutBtn");
   const buyInForm = document.getElementById("gAcctBuyInForm");
+  const buyInBtn = document.getElementById("gAcctBuyInBtn");
+  const buyInAmountInput = document.getElementById("gAcctBuyInAmount");
   const lockedMsg = document.getElementById("gAcctLockedMsg");
+  const disabledBanner = document.getElementById("acctDisabledBanner");
+
+  if (!view) return; // couldn't load (offline etc.) — leave whatever was last shown
+
+  disabledBanner.classList.toggle("hidden", view.gamblingEnabled !== false);
+
+  balanceEl.textContent = fmtMoney(view.balance);
+  cashOutBtn.disabled = !(view.balance > 0);
+
+  /* ---- Daily buy-in progress ---- */
+  const buyInBar = document.getElementById("gAcctBuyInBar");
+  const buyInFig = document.getElementById("gAcctBuyInFig");
+  const buyInNote = document.getElementById("gAcctBuyInNote");
+  const buyInBlock = document.getElementById("gAcctBuyInBlock");
+  if (view.dailyBuyInLimit) {
+    const pct = Math.min(100, Math.round((view.boughtInToday / view.dailyBuyInLimit) * 100));
+    buyInBar.style.width = pct + "%";
+    buyInBar.className = pct >= 100 ? "coral" : "";
+    buyInFig.textContent = `${fmtMoney(view.boughtInToday)} / ${fmtMoney(view.dailyBuyInLimit)}`;
+    buyInBlock.classList.toggle("over", pct >= 100);
+    buyInNote.textContent = view.remainingBuyIn > 0
+      ? `${fmtMoney(view.remainingBuyIn)} left to buy in today.`
+      : "You've reached today's buy-in limit — you can still play with what's in your account.";
+  } else {
+    buyInBar.style.width = "0%";
+    buyInBar.className = "";
+    buyInFig.textContent = fmtMoney(view.boughtInToday) + " today";
+    buyInBlock.classList.remove("over");
+    buyInNote.textContent = "No daily buy-in limit set.";
+  }
+
+  /* ---- Daily winning limit progress ---- */
+  const winBlock = document.getElementById("gAcctWinBlock");
+  const winBar = document.getElementById("gAcctWinBar");
+  const winFig = document.getElementById("gAcctWinFig");
+  const winNote = document.getElementById("gAcctWinNote");
+  if (view.dailyWinLimit) {
+    winBlock.classList.remove("hidden");
+    const pct = Math.min(100, Math.max(0, Math.round((view.netToday / view.dailyWinLimit) * 100)));
+    winBar.style.width = pct + "%";
+    winBar.className = pct >= 100 ? "coral" : "mint";
+    winFig.textContent = `${fmtMoney(view.netToday)} / ${fmtMoney(view.dailyWinLimit)}`;
+    winBlock.classList.toggle("over", pct >= 100);
+    winNote.textContent = view.winLimitHit ? "Limit reached." : "Net profit for the day.";
+  } else {
+    winBlock.classList.add("hidden");
+  }
+
+  /* ---- Locked / disabled states for the buy-in form ---- */
   if (view.winLimitHit) {
-    winNote.textContent = "";
     buyInForm.classList.add("hidden");
     lockedMsg.classList.remove("hidden");
     lockedMsg.innerHTML = `<div class="success-msg">${view.winLimitMessage || "You've hit today's winning limit — come back tomorrow."}</div>`;
+  } else if (view.gamblingEnabled === false) {
+    buyInForm.classList.add("hidden");
+    lockedMsg.classList.add("hidden");
   } else {
     lockedMsg.classList.add("hidden");
     buyInForm.classList.remove("hidden");
-    winNote.textContent = view.dailyWinLimit ? `Daily winning limit: ${fmtMoney(view.dailyWinLimit)} net.` : "";
     const overCap = view.dailyBuyInLimit !== null && view.remainingBuyIn <= 0;
-    document.getElementById("gAcctBuyInBtn").disabled = overCap;
-    document.getElementById("gAcctBuyInAmount").disabled = overCap;
+    buyInBtn.disabled = overCap;
+    buyInAmountInput.disabled = overCap;
   }
 }
 
@@ -332,7 +374,7 @@ async function renderRecentRoulette() {
   });
 }
 
-async function saveRouletteSettings() {
+async function saveGamblingConfig(msgElId) {
   await saveGamblingSettings(CURRENT.classCode, {
     enabled: document.getElementById("gEnabled").checked,
     minBet: document.getElementById("gMin").value,
@@ -347,7 +389,7 @@ async function saveRouletteSettings() {
     sixLine: document.getElementById("pSixLine").value,
     oddEven: document.getElementById("pOddEven").value
   });
-  document.getElementById("settingsMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
+  document.getElementById(msgElId).innerHTML = `<div class="success-msg">Saved!</div>`;
   await render();
 }
 
@@ -889,10 +931,14 @@ function switchMode(mode) {
   MODE = mode;
   document.getElementById("modeBtnRoulette").classList.toggle("active", mode === "roulette");
   document.getElementById("modeBtnBlackjack").classList.toggle("active", mode === "blackjack");
+  document.getElementById("modeBtnAccount").classList.toggle("active", mode === "account");
   document.getElementById("rouletteSection").classList.toggle("hidden", mode !== "roulette");
   document.getElementById("blackjackSection").classList.toggle("hidden", mode !== "blackjack");
+  document.getElementById("accountSection").classList.toggle("hidden", mode !== "account");
   document.getElementById("teacherRouletteSettings").classList.toggle("hidden", mode !== "roulette");
   document.getElementById("teacherBlackjackSettings").classList.toggle("hidden", mode !== "blackjack");
+  document.getElementById("teacherAccountSettings").classList.toggle("hidden", mode !== "account");
+  if (mode === "account" && !IS_TEACHER) refreshGamblingAccountCard();
 }
 
 function paintChrome() {
@@ -912,6 +958,11 @@ function paintChrome() {
   document.getElementById("bjHDisabled").innerHTML = icon("cards", 20) + " Blackjack is paused";
   document.getElementById("bjHTable").innerHTML = icon("cards", 18) + " Blackjack table";
   document.getElementById("bjHRecent").innerHTML = icon("bank", 18) + " My recent bets";
+
+  document.getElementById("hAccountSettings").innerHTML = icon("piggy", 18) + " Gambling account settings";
+  document.getElementById("acctSaveSettingsBtn").innerHTML = icon("bank", 14) + " Save settings";
+  document.getElementById("acctHDisabled").innerHTML = icon("piggy", 20) + " Gambling is paused";
+  document.getElementById("hGamblingAccount").innerHTML = icon("piggy", 18) + " Gambling account";
 }
 
 async function init() {
@@ -995,19 +1046,12 @@ async function render() {
   lockedBanner.classList.add("hidden");
   document.getElementById("studentView").classList.remove("hidden");
 
-  /* ---- Shared gambling account card ---- */
-  const gamblingOverallEnabled = g.enabled !== false;
-  if (gamblingOverallEnabled) {
-    // Deliberately NOT awaited: this is a network fetch of the student's
-    // own account balance, and on a slow connection waiting on it here
-    // would delay the rest of the tab (Roulette/Blackjack sections below)
-    // from painting at all. refreshGamblingAccountCard() is self-contained
-    // and never throws, so firing it off and letting it fill in the card
-    // whenever it resolves is safe.
-    refreshGamblingAccountCard();
-  } else {
-    document.getElementById("gamblingAccountCard").classList.add("hidden");
-  }
+  /* ---- Shared gambling account tab (Account) ---- */
+  // Deliberately not gated on g.enabled — even when the whole module is
+  // paused, the tab itself stays reachable so a student can still cash
+  // out; renderGamblingAccountCard() handles showing the paused banner
+  // and hiding the buy-in form for that case.
+  refreshGamblingAccountCard();
 
   /* ---- Roulette tab ---- */
   const rouletteEnabled = g.enabled !== false;

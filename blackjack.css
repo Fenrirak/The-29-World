@@ -143,6 +143,59 @@
   .bj-card { width: 30px; height: 42px; font-size: 12px; }
 }
 
+/* ===================== Gambling account tab ===================== */
+.ga-head-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.ga-balance-stat { flex: 1 1 220px; min-width: 200px; }
+.ga-head-row .btn { margin-top: 0; }
+
+.ga-limits-grid { margin-top: 20px; }
+.ga-limit-block {
+  border: 1.5px solid var(--line, #e6e6ea);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.ga-limit-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 800;
+  font-size: .85rem;
+  color: var(--navy-900, #1f2b44);
+}
+.ga-limit-head .ga-limit-figure { font-weight: 900; }
+.ga-limit-block .progress-bar { margin-top: 8px; }
+.ga-limit-block .muted-small { margin-top: 8px; }
+.ga-limit-block.over .ga-limit-figure { color: var(--coral, #e8735f); }
+.progress-bar > div.mint { background: linear-gradient(90deg, var(--mint, #3fbf8f), var(--mint-dark, #2e9873)); }
+.progress-bar > div.coral { background: linear-gradient(90deg, var(--coral, #e8735f), #c9503a); }
+
+.ga-buyin-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1.5px dashed var(--line, #e6e6ea);
+}
+.ga-buyin-form label { margin: 0 0 6px; }
+.ga-buyin-form input { max-width: 200px; }
+.ga-buyin-form .btn { margin-top: 0; }
+
+@media (max-width: 560px) {
+  .ga-head-row { align-items: stretch; }
+  .ga-head-row .btn { width: 100%; }
+  .ga-buyin-form { align-items: stretch; }
+  .ga-buyin-form input { max-width: none; width: 100%; }
+  .ga-buyin-form .btn { width: 100%; }
+}
+
 /* Roulette/Blackjack mode switcher — a single segmented control (one
    pill-shaped track holding both options) reads more clearly as "pick
    one of two modes" than two separate outlined buttons floating with a
