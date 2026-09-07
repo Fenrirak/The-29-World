@@ -418,6 +418,24 @@ function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
 const BJ_CARD_DELAY = 500; // ms between each card appearing
 const BJ_SEAT_PAUSE = 400; // ms pause after a seat finishes, before the next seat's turn starts
 
+// Resets DISPLAY_* to an empty, pre-deal table for the given round and
+// renders it immediately. Used both right before bjTableArea is unhidden
+// for a new deal (so it's never unhidden showing the *previous* round's
+// finished cards while we wait on the network) and at the start of the
+// reveal animation itself.
+function bjClearTableDisplay(round) {
+  _bjAnimatedCardKeys = new Set(); // fresh deal — every card slot is new again
+  DISPLAY_BOTS = {};
+  DISPLAY_DEALER = { cards: [], revealed: false, total: null };
+  DISPLAY_HUMAN_HANDS = [{ cards: [], bet: round.hands[0].bet, doubled: false, isSplitAces: false, status: "playing", total: 0 }];
+  ACTIVE_SEAT = null;
+  SHOW_RESULTS = false;
+  [1, 2, 3].forEach(seat => {
+    if (seat !== round.humanSeat) DISPLAY_BOTS[seat] = { name: round.bots[seat].name, hands: [{ cards: [], total: null, bust: false, doubled: false }] };
+  });
+  renderBlackjackRound(bjBuildDisplayRound());
+}
+
 async function bjDeal() {
   const box = document.getElementById("bjBetMsg");
   const btn = document.getElementById("bjDealBtn");
@@ -441,6 +459,14 @@ async function bjDeal() {
     }
     CURRENT_ROUND = res.round;
     document.getElementById("bjBetForm").classList.add("hidden");
+    // Blank the table BEFORE it's unhidden, and before the awaited account
+    // refresh below — bjTableArea's HTML still holds the finished, resolved
+    // previous round (bjResetTable only hides the container, it never
+    // clears its content). Unhiding first and clearing afterwards leaves a
+    // window, while refreshGamblingAccountCard() is in flight, where the
+    // browser can paint the table showing last round's final hands before
+    // this one's cards are dealt — clearing first closes that window.
+    bjClearTableDisplay(CURRENT_ROUND);
     document.getElementById("bjTableArea").classList.remove("hidden");
     document.getElementById("bjNewRoundBtn").classList.add("hidden");
     document.getElementById("bjRoundMsg").innerHTML = "";
@@ -647,15 +673,11 @@ function bjCardValueClient(rank) {
 // dealer's hidden hole card — one card at a time with a short pause, so
 // it visually reads exactly like a real dealer working around the table.
 async function bjAnimateInitialDeal(round, token) {
-  _bjAnimatedCardKeys = new Set(); // fresh deal — every card slot is new again
-  DISPLAY_BOTS = {};
-  DISPLAY_DEALER = { cards: [], revealed: false, total: null };
-  DISPLAY_HUMAN_HANDS = [{ cards: [], bet: round.hands[0].bet, doubled: false, isSplitAces: false, status: "playing", total: 0 }];
-  ACTIVE_SEAT = null;
-  SHOW_RESULTS = false;
-  [1, 2, 3].forEach(seat => {
-    if (seat !== round.humanSeat) DISPLAY_BOTS[seat] = { name: round.bots[seat].name, hands: [{ cards: [], total: null, bust: false, doubled: false }] };
-  });
+  // bjDeal() already blanks the table via bjClearTableDisplay() right
+  // before unhiding it, but this is called from other places too (e.g.
+  // it's the only reset step reachable if that pre-clear were ever
+  // skipped), so it stays idempotent and re-clears here as well.
+  bjClearTableDisplay(round);
 
   const seatCardOf = (seat, idx) => (seat === round.humanSeat ? round.hands[0].cards[idx] : round.bots[seat].hands[0].cards[idx]);
   const steps = [
@@ -663,7 +685,6 @@ async function bjAnimateInitialDeal(round, token) {
     { seat: 1, idx: 1 }, { seat: 2, idx: 1 }, { seat: 3, idx: 1 }, { seat: "dealer", idx: 1, hidden: true }
   ];
 
-  renderBlackjackRound(bjBuildDisplayRound());
   for (const step of steps) {
     if (token !== DEAL_TOKEN) return;
     await sleep(BJ_CARD_DELAY);
