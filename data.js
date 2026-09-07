@@ -4965,7 +4965,6 @@ async function addLifeItem(classCode, item) {
     cls.lifeItems.push({
       id: uid("life"),
       name: (item.name || "").trim() || "Untitled life event",
-      icon: (item.icon || "").trim() || "🎉",
       description: (item.description || "").trim(),
       benefits: sanitizeLifeBenefits(item.benefits)
     });
@@ -4981,7 +4980,6 @@ async function updateLifeItem(classCode, itemId, item) {
     const existing = cls.lifeItems.find(i => i.id === itemId);
     if (!existing) return;
     existing.name = (item.name || "").trim() || "Untitled life event";
-    existing.icon = (item.icon || "").trim() || "🎉";
     existing.description = (item.description || "").trim();
     existing.benefits = sanitizeLifeBenefits(item.benefits);
     t.update(classRef, { lifeItems: cls.lifeItems });
@@ -5022,7 +5020,7 @@ async function grantLifeItem(classCode, username, templateId, teacherUsername) {
       const benefits = sanitizeLifeBenefits(tmpl.benefits);
       cashOnce = benefits.cashOnce;
       user.lifeItems.push({
-        id: uid("life"), templateId: tmpl.id, name: tmpl.name, icon: tmpl.icon,
+        id: uid("life"), templateId: tmpl.id, name: tmpl.name,
         description: tmpl.description, benefits,
         grantedAt: nzDateKey(), grantedBy: teacherUsername || null
       });

@@ -1,6 +1,6 @@
 let CURRENT, IS_TEACHER, EDITING_ID = null;
 
-const LIFE_FORM_IDS = ["liName", "liIcon", "liDesc", "liCash", "liAllowance", "liIncome", "liDiscStore", "liDiscTransport", "liDiscProperty", "liDiscInsurance", "liLifestyle", "liTaxCut"];
+const LIFE_FORM_IDS = ["liName", "liDesc", "liCash", "liAllowance", "liIncome", "liDiscStore", "liDiscTransport", "liDiscProperty", "liDiscInsurance", "liLifestyle", "liTaxCut"];
 
 // Turns a benefits object into the small row of badges shown next to a
 // life item, wherever it's rendered (teacher's list, a student's own
@@ -84,7 +84,7 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${item.icon || "🎉"} ${item.name}</h4>
+            <h4>${icon("trophy", 16)} ${item.name}</h4>
             <p>${item.description || "No description provided."}</p>
             <div style="margin-top:6px;">${lifeBenefitChips(item.benefits)}</div>
           </div>
@@ -113,7 +113,7 @@ async function render() {
       row.className = "auto-row";
       const chips = (s.lifeItems || []).map(it => `
         <span class="badge navy" style="margin-right:6px;margin-bottom:4px;display:inline-flex;align-items:center;gap:4px;">
-          ${it.icon || "🎉"} ${it.name}
+          ${icon("trophy", 12)} ${it.name}
           <button type="button" onclick="revokeLifeItemFor('${s.username}','${it.id}')" title="Revoke" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:800;padding:0 0 0 2px;line-height:1;">&times;</button>
         </span>
       `).join("");
@@ -130,7 +130,7 @@ async function render() {
       const div = document.createElement("div");
       div.className = "card company-card";
       div.innerHTML = `
-        <h4>${it.icon || "🎉"} ${it.name}</h4>
+        <h4>${icon("trophy", 16)} ${it.name}</h4>
         <p>${it.description || ""}</p>
         <div>${lifeBenefitChips(it.benefits)}</div>
         <p class="muted-small" style="margin-top:8px;">Given ${it.grantedAt || ""}</p>
@@ -158,7 +158,6 @@ async function saveLifeItemForm(e) {
   e.preventDefault();
   const item = {
     name: document.getElementById("liName").value.trim(),
-    icon: document.getElementById("liIcon").value.trim(),
     description: document.getElementById("liDesc").value.trim(),
     benefits: readLifeFormBenefits()
   };
@@ -189,7 +188,6 @@ function startEditLifeItem(id) {
     if (!d) return;
     EDITING_ID = id;
     document.getElementById("liName").value = d.name || "";
-    document.getElementById("liIcon").value = d.icon || "";
     document.getElementById("liDesc").value = d.description || "";
     const b = d.benefits || {};
     document.getElementById("liCash").value = b.cashOnce || "";
