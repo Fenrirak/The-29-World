@@ -85,15 +85,22 @@
           <input id="liCash" type="number" step="0.5" placeholder="0">
         </div>
         <div>
-          <label for="liAllowance" id="labAllowance">Recurring allowance, paid every pay day ($)</label>
+          <label for="liAllowance" id="labAllowance">Recurring allowance ($)</label>
           <input id="liAllowance" type="number" min="0" step="0.5" placeholder="0">
         </div>
+        <div>
+          <label for="liAllowanceFrequency" id="labAllowanceFrequency">Allowance paid</label>
+          <select id="liAllowanceFrequency">
+            <option value="weekly">Every pay day (weekly)</option>
+            <option value="daily">Every day</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-3">
         <div>
           <label for="liIncome" id="labIncome">Job income boost — wages &amp; side hustle pay (%)</label>
           <input id="liIncome" type="number" step="1" placeholder="0">
         </div>
-      </div>
-      <div class="grid grid-3">
         <div>
           <label for="liDiscStore" id="labDiscStore">Store discount (%)</label>
           <input id="liDiscStore" type="number" min="0" max="95" step="1" placeholder="0">
@@ -102,12 +109,12 @@
           <label for="liDiscTransport" id="labDiscTransport">Transport discount (%)</label>
           <input id="liDiscTransport" type="number" min="0" max="95" step="1" placeholder="0">
         </div>
+      </div>
+      <div class="grid grid-3">
         <div>
           <label for="liDiscProperty" id="labDiscProperty">Property discount (%)</label>
           <input id="liDiscProperty" type="number" min="0" max="95" step="1" placeholder="0">
         </div>
-      </div>
-      <div class="grid grid-3">
         <div>
           <label for="liDiscInsurance" id="labDiscInsurance">Insurance sign-up discount (%)</label>
           <input id="liDiscInsurance" type="number" min="0" max="95" step="1" placeholder="0">
@@ -116,6 +123,8 @@
           <label for="liLifestyle" id="labLifestyle">Lifestyle rating bonus (points)</label>
           <input id="liLifestyle" type="number" step="1" placeholder="0">
         </div>
+      </div>
+      <div class="grid grid-3">
         <div>
           <label for="liTaxCut" id="labTaxCut">Tax bill discount (%)</label>
           <input id="liTaxCut" type="number" min="0" max="95" step="1" placeholder="0">
