@@ -383,8 +383,31 @@ tr:last-child td{border-bottom:none;}
   color:rgba(255,255,255,0.05);
   pointer-events:none;
 }
-.auth-wrap::before{font-size:22rem;top:-6rem;left:-4rem;transform:rotate(-12deg);}
-.auth-wrap::after{font-size:16rem;bottom:-5rem;right:-3rem;transform:rotate(10deg);}
+.auth-wrap::before{font-size:13rem;top:-4rem;left:-2.5rem;transform:rotate(-12deg);}
+.auth-wrap::after{font-size:10rem;bottom:-3rem;right:-2rem;transform:rotate(10deg);}
+.dollar-bg{
+  position:absolute;
+  font-family:"Trebuchet MS",sans-serif;
+  font-weight:900;
+  color:rgba(255,255,255,0.05);
+  pointer-events:none;
+  z-index:0;
+}
+.dollar-bg.d1{font-size:8rem;top:8%;right:8%;transform:rotate(8deg);}
+.dollar-bg.d2{font-size:6rem;bottom:10%;left:6%;transform:rotate(-10deg);}
+.dollar-bg.d3{font-size:9rem;top:40%;left:-3rem;transform:rotate(15deg);}
+.dollar-bg.d4{font-size:7rem;top:60%;right:-2rem;transform:rotate(-6deg);}
+.support-creator-link{
+  display:block;
+  text-align:center;
+  margin-top:14px;
+  font-size:.85rem;
+  color:rgba(255,255,255,0.85);
+  text-decoration:none;
+  position:relative;
+  z-index:1;
+}
+.support-creator-link:hover{color:#fff;text-decoration:underline;}
 .auth-card{
   background:#fff;
   border-radius:20px;
