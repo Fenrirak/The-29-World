@@ -43,6 +43,7 @@ async function init() {
 
   const T29_STARTUP_JOBS = Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
+    safeBgJob(processDailyLifeAllowance(u.classCode), "processDailyLifeAllowance"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue")
   ]);

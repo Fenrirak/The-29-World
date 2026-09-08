@@ -31,6 +31,7 @@ async function init() {
   // them together cuts that to roughly the time of the single slowest one.
   const T29_STARTUP_JOBS = Promise.all([
     safeBgJob(autoPayDayIfDue(CURRENT.classCode), "autoPayDayIfDue"),
+    safeBgJob(processDailyLifeAllowance(CURRENT.classCode), "processDailyLifeAllowance"),
     safeBgJob(processAutomations(CURRENT.classCode), "processAutomations"),
     safeBgJob(processLoanInterest(CURRENT.classCode), "processLoanInterest"),
     safeBgJob(processTermDeposits(CURRENT.classCode), "processTermDeposits"),

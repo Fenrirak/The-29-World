@@ -82,6 +82,7 @@ async function init() {
   // data.js) — students pay their own weekly installment on the due day.
   const T29_STARTUP_JOBS = Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
+    safeBgJob(processDailyLifeAllowance(u.classCode), "processDailyLifeAllowance"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
     safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
