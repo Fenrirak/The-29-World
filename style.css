@@ -383,43 +383,8 @@ tr:last-child td{border-bottom:none;}
   color:rgba(255,255,255,0.05);
   pointer-events:none;
 }
-.auth-wrap::before{font-size:13rem;top:-4rem;left:-2.5rem;transform:rotate(-12deg);}
-.auth-wrap::after{font-size:10rem;bottom:-3rem;right:-2rem;transform:rotate(10deg);}
-.dollar-bg{
-  position:absolute;
-  font-family:"Trebuchet MS",sans-serif;
-  font-weight:900;
-  color:rgba(255,255,255,0.05);
-  pointer-events:none;
-  z-index:0;
-}
-.dollar-bg.d1{font-size:8rem;top:8%;right:8%;transform:rotate(8deg);}
-.dollar-bg.d2{font-size:6rem;bottom:10%;left:6%;transform:rotate(-10deg);}
-.dollar-bg.d3{font-size:9rem;top:40%;left:-3rem;transform:rotate(15deg);}
-.dollar-bg.d4{font-size:7rem;top:60%;right:-2rem;transform:rotate(-6deg);}
-.support-creator-btn{
-  position:fixed;
-  bottom:36px;
-  right:36px;
-  display:flex;
-  align-items:center;
-  gap:8px;
-  padding:14px 24px;
-  background:linear-gradient(135deg,var(--gold),var(--gold-dark));
-  color:var(--navy-900);
-  font-weight:800;
-  font-size:1rem;
-  text-decoration:none;
-  border-radius:999px;
-  box-shadow:0 8px 24px rgba(201,154,46,0.45);
-  z-index:5;
-  transition:transform .15s ease, box-shadow .15s ease;
-}
-.support-creator-btn:hover{
-  transform:translateY(-2px) scale(1.03);
-  box-shadow:0 12px 30px rgba(201,154,46,0.55);
-  color:var(--navy-900);
-}
+.auth-wrap::before{font-size:22rem;top:-6rem;left:-4rem;transform:rotate(-12deg);}
+.auth-wrap::after{font-size:16rem;bottom:-5rem;right:-3rem;transform:rotate(10deg);}
 .auth-card{
   background:#fff;
   border-radius:20px;
@@ -462,6 +427,42 @@ label .icon-slot{color:var(--navy-700);}
 }
 .hidden{display:none !important;}
 .muted-small{color:var(--muted);font-size:.8rem;}
+
+/* "Stroll down memory lane" read-only banner for archived classes — see
+   applyArchivedReadOnlyLock() in data.js. */
+.t29-archived-banner{
+  position:sticky;top:0;z-index:60;text-align:center;
+  background:linear-gradient(135deg,#fde2e2,#fbd9b0);
+  border-bottom:1.5px solid var(--coral);color:#7a2f1f;
+  padding:10px 18px;font-size:.85rem;font-weight:600;
+}
+.t29-archived-banner .icon{vertical-align:middle;margin-right:2px;}
+.t29-archived-readonly main button:disabled,
+.t29-archived-readonly main input:disabled,
+.t29-archived-readonly main select:disabled,
+.t29-archived-readonly main textarea:disabled{opacity:.45;cursor:not-allowed;}
+
+/* Teacher Home — class picker cards */
+.class-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px;}
+.class-card{
+  border:1.5px solid var(--line);border-radius:14px;padding:20px 22px;
+  background:#fff;cursor:pointer;transition:box-shadow .15s,transform .15s;
+  display:flex;flex-direction:column;gap:10px;position:relative;
+}
+.class-card:hover{box-shadow:0 10px 24px rgba(31,43,68,0.12);transform:translateY(-2px);}
+.class-card.archived{background:rgba(0,0,0,0.02);}
+.class-card h3{margin:0;font-size:1.15rem;}
+.class-card .class-card-meta{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:.85rem;}
+.class-card .class-card-meta span{display:flex;align-items:center;gap:6px;}
+.class-card .class-card-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:8px;}
+.class-card .class-card-actions button{position:relative;z-index:2;}
+.new-class-card{
+  border:1.5px dashed var(--line);border-radius:14px;padding:20px 22px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;text-align:center;cursor:pointer;color:var(--muted);min-height:150px;
+  background:rgba(0,0,0,0.012);transition:box-shadow .15s,transform .15s;
+}
+.new-class-card:hover{box-shadow:0 10px 24px rgba(31,43,68,0.1);transform:translateY(-2px);color:var(--navy-900);}
 .flex-between{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 .student-avatar{
   width:38px;height:38px;border-radius:50%;

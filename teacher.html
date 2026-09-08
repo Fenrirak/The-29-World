@@ -63,6 +63,7 @@
 <div class="topbar">
   <a class="brand" href="teacher.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
   <nav>
+    <a href="teacher-home.html"><span class="icon-slot" data-icon="building"></span><span class="nav-label">My Classes</span></a>
     <a href="teacher.html" class="active"><span class="icon-slot" data-icon="bank"></span><span class="nav-label">Dashboard</span></a>
     <a href="bank.html" data-module="bank"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
     <a href="termdeposit.html" data-module="termdeposit"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
@@ -98,6 +99,11 @@
       <button class="btn gold" onclick="runPayDay()" id="payDayBtn">Run Pay Day</button>
       <button class="btn secondary" onclick="runInterest()" id="interestBtn">Apply Interest</button>
     </div>
+  </div>
+
+  <div id="classArchivedBanner" class="hidden" style="margin-top:16px;padding:14px 18px;border-radius:12px;background:linear-gradient(135deg,#fde2e2,#fbd9b0);border:1.5px solid var(--coral);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+    <span><span id="classArchivedIcon" style="vertical-align:middle;margin-right:6px;"></span>This class is archived — students can't do anything in it until you reopen it.</span>
+    <button class="btn small gold" onclick="reopenThisClass()" id="reopenClassBtn">Reopen this class</button>
   </div>
 
   <div id="timeExemptionBanner" class="hidden" style="margin-top:16px;padding:14px 18px;border-radius:12px;background:linear-gradient(135deg,#fde2e2,#fbd9b0);border:1.5px solid var(--coral);">

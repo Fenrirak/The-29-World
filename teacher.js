@@ -29,6 +29,7 @@ function paintChrome() {
   document.getElementById("interestBtn").innerHTML = icon("chart", 15) + " Apply Interest";
   document.getElementById("iconStudents").innerHTML = icon("users", 30);
   document.getElementById("iconSavings").innerHTML = icon("piggy", 30);
+  document.getElementById("classArchivedIcon").innerHTML = icon("lock", 15);
   document.getElementById("iconCompanies").innerHTML = icon("building", 30);
   document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students";
   document.getElementById("hNetWorth").innerHTML = icon("medal", 18) + " Net worth ranking";
@@ -76,6 +77,12 @@ async function init() {
   if (u.role !== "teacher") { window.location.href = "student.html"; return; }
   CURRENT = u;
   CLASS_CODE = u.classCode;
+  // A teacher with no active class (e.g. they just deleted it, or their
+  // account somehow has no classCode set) should land on Home to pick or
+  // create one, instead of this page crashing on a null class doc.
+  if (!CLASS_CODE) { window.location.href = "teacher-home.html"; return; }
+  const clsCheck = await getClassCached(CLASS_CODE);
+  if (!clsCheck) { window.location.href = "teacher-home.html"; return; }
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintChrome();
   enablePasswordToggles();
@@ -110,6 +117,7 @@ async function render() {
   const cls = await getClassCached(CLASS_CODE);
   document.getElementById("className").textContent = cls.name;
   document.getElementById("classCode").textContent = cls.code;
+  document.getElementById("classArchivedBanner").classList.toggle("hidden", !cls.archived);
   document.getElementById("rate").value = cls.interestRate;
   document.getElementById("cashRate").value = cls.cashInterestRate || 0;
   document.getElementById("interestAuto").checked = !!cls.interestAuto;
@@ -1152,6 +1160,14 @@ async function removeStudentClick(username, name) {
     await removeStudent(CLASS_CODE, username);
     await render();
   }
+}
+
+async function reopenThisClass() {
+  const btn = document.getElementById("reopenClassBtn");
+  btn.disabled = true;
+  await setClassArchived(CLASS_CODE, false);
+  await render();
+  btn.disabled = false;
 }
 
 async function restartClass() {

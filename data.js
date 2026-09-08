@@ -497,6 +497,53 @@ function startTimeTracking(u) {
   window.addEventListener("blur", () => flush(false));
 }
 
+/* ---------------- Archived-class "memory lane" (students only) ----------
+   An archived class blocks students from doing anything, but the teacher
+   can still choose to let them browse it read-only ("stroll down memory
+   lane" on archived.html). That choice is remembered per class, per
+   browser tab, in sessionStorage — not on the user doc — since it's just
+   "did this student click through today's memory-lane prompt", not real
+   class state. See requireLogin() below for where this is enforced. */
+function _memoryLaneKey(classCode) { return "t29_memlane_" + classCode; }
+function isMemoryLaneActive(classCode) {
+  try { return sessionStorage.getItem(_memoryLaneKey(classCode)) === "1"; } catch (e) { return false; }
+}
+function enterMemoryLane(classCode) {
+  try { sessionStorage.setItem(_memoryLaneKey(classCode), "1"); } catch (e) { /* ignore */ }
+}
+function _clearMemoryLane(classCode) {
+  try { sessionStorage.removeItem(_memoryLaneKey(classCode)); } catch (e) { /* ignore */ }
+}
+
+// Generically locks down every page a "memory lane" student visits,
+// without each of the ~15 module pages needing its own disabled-state
+// logic: disables every button/input/select/textarea inside <main> (the
+// topbar's nav links and logout/settings stay usable so they can still
+// browse around) and keeps re-disabling anything a page's own render()
+// adds afterwards, since most pages build their content after this runs.
+function applyArchivedReadOnlyLock(className) {
+  if (typeof document === "undefined") return;
+  const lockField = () => {
+    document.querySelectorAll("main button, main input, main select, main textarea").forEach(el => {
+      if (el.dataset.archivedExempt !== undefined) return;
+      el.disabled = true;
+    });
+  };
+  if (document.getElementById("t29ArchivedBanner")) { lockField(); return; }
+  const run = () => {
+    const banner = document.createElement("div");
+    banner.id = "t29ArchivedBanner";
+    banner.className = "t29-archived-banner";
+    banner.innerHTML = (typeof icon === "function" ? icon("lock", 14) : "") +
+      ` <strong>${className ? String(className).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])) + " — " : ""}Archived class.</strong> You're strolling down memory lane — everything here is view-only.`;
+    document.body.prepend(banner);
+    document.body.classList.add("t29-archived-readonly");
+    lockField();
+    new MutationObserver(lockField).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) run(); else document.addEventListener("DOMContentLoaded", run);
+}
+
 async function requireLogin(opts) {
   opts = opts || {};
   const u = await getSessionUser();
@@ -504,7 +551,27 @@ async function requireLogin(opts) {
     window.location.href = "index.html";
     return null;
   }
-  if (u.role === "student" && !opts.skipTimeLimit) {
+  // Tracked locally rather than as a property on u — u is the shared
+  // object cached by getUserCached()/getSessionUser() (same reference
+  // returned on every cache hit for ~2s), so writing to it here would
+  // leak this page-only flag into that cache for any other code that
+  // reads the same cached user in that window.
+  let archivedReadOnly = false;
+  if (u.role === "student" && !opts.allowArchived) {
+    const cls = await getClassCached(u.classCode);
+    if (cls && cls.archived) {
+      if (isMemoryLaneActive(u.classCode)) {
+        archivedReadOnly = true;
+        applyArchivedReadOnlyLock(cls.name);
+      } else {
+        window.location.href = "archived.html";
+        return null;
+      }
+    } else if (cls) {
+      _clearMemoryLane(u.classCode);
+    }
+  }
+  if (u.role === "student" && !opts.skipTimeLimit && !archivedReadOnly) {
     if (timeLimitStatus(u).reached) {
       window.location.href = "timeup.html";
       return null;
@@ -519,23 +586,17 @@ function logout() {
 }
 
 /* ---------------- Teacher account + class creation ---------------- */
-async function createTeacherAndClass(name, username, password, className) {
-  const existing = await getUser(username);
-  if (existing) return { ok: false, error: "That username is already taken." };
-
-  let code;
-  do { code = genCode(5); } while ((await getClass(code)));
-
-  const user = {
-    username, password, role: "teacher", name,
-    classCode: code, balance: 0, sessionVersion: 0
-  };
-
-  const cls = {
-    code, name: className || "Room " + code, teacher: username,
+// The full set of fields a brand new class starts with — shared by the
+// original "new teacher" signup flow, "create a brand new class" on the
+// teacher's Home page, and (as a starting point before its config gets
+// overwritten by the template) "new class from a template".
+function defaultClassData(code, className, teacherUsername) {
+  return {
+    code, name: className || "Room " + code, teacher: teacherUsername,
     students: [], jobs: [], companies: [],
     interestRate: 2, txns: [],
     createdAt: Date.now(), reportArchives: [],
+    archived: false, archivedAt: null,
     payDay: "Fri",
     mortgageDay: "Fri",
     mortgageForceDueWeek: null,
@@ -575,10 +636,203 @@ async function createTeacherAndClass(name, username, password, className) {
       loan: { enabled: false, perAmount: 0, points: 0 }
     }
   };
+}
+
+async function createTeacherAndClass(name, username, password, className) {
+  const existing = await getUser(username);
+  if (existing) return { ok: false, error: "That username is already taken." };
+
+  let code;
+  do { code = genCode(5); } while ((await getClass(code)));
+
+  const user = {
+    username, password, role: "teacher", name,
+    classCode: code, balance: 0, sessionVersion: 0
+  };
+  const cls = defaultClassData(code, className, username);
 
   await usersCol().doc(username).set(user);
   await classesCol().doc(code).set(cls);
   return { ok: true, code };
+}
+
+/* ---------------- Teacher Home: multi-class management ----------------
+   A teacher account can own several classes (one Firestore "classes" doc
+   each, all with teacher === the teacher's username). The user doc's own
+   classCode field is kept as-is everywhere else in this app to mean "the
+   class this teacher currently has open" — every existing page reads
+   CLASS_CODE from it unchanged. Opening a class from Home, or creating a
+   new one, just points that field at a different class doc. */
+
+// Summary cards for the Home page — deliberately doesn't fetch each
+// class's students individually (getClassStudents would be one extra
+// batch of reads per class); cls.students is already the full roster
+// array on the class doc itself, so its length is enough for a count.
+async function getTeacherClasses(username) {
+  if (!username) return [];
+  await T29_AUTH_READY; // firestore.rules requires request.auth != null
+  const snap = await classesCol().where("teacher", "==", username).get();
+  const list = [];
+  snap.forEach(doc => {
+    const cls = withNewModuleDefaults(_cloneDoc(doc.data()));
+    list.push({
+      code: cls.code,
+      name: cls.name,
+      createdAt: cls.createdAt || null,
+      archived: !!cls.archived,
+      archivedAt: cls.archivedAt || null,
+      studentCount: (cls.students || []).length
+    });
+  });
+  list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return list;
+}
+
+// "Create a brand new class" from Home — identical result to the original
+// teacher signup flow's class half, just without creating another account.
+async function createClassForTeacher(teacherUsername, className) {
+  const teacher = await getUser(teacherUsername);
+  if (!teacher || teacher.role !== "teacher") return { ok: false, error: "Teacher account not found." };
+  if (!className || !className.trim()) return { ok: false, error: "Enter a class name." };
+
+  let code;
+  do { code = genCode(5); } while ((await getClass(code)));
+  const cls = defaultClassData(code, className.trim(), teacherUsername);
+
+  await classesCol().doc(code).set(cls);
+  await usersCol().doc(teacherUsername).update({ classCode: code });
+  return { ok: true, code };
+}
+
+// "New class from an existing template" — starts from the same clean
+// slate as a brand new class, then overlays every setting that describes
+// how the class is configured (jobs, properties, side hustles, random
+// events, tax/interest settings, and so on). Anything student-specific —
+// the roster, balances, activity log, job applications, automations, and
+// any event/report history — always starts empty, exactly like a normal
+// new class. A handful of fields (store stock sold, property ownership,
+// vehicle owners, company share holders/price history) describe *live*
+// state rather than configuration, so those are reset to their starting
+// values instead of copied as-is.
+async function createClassFromTemplate(teacherUsername, className, templateCode) {
+  const teacher = await getUser(teacherUsername);
+  if (!teacher || teacher.role !== "teacher") return { ok: false, error: "Teacher account not found." };
+  if (!className || !className.trim()) return { ok: false, error: "Enter a class name." };
+
+  const template = await getClass(templateCode);
+  if (!template || template.teacher !== teacherUsername) {
+    return { ok: false, error: "That template class couldn't be found." };
+  }
+
+  let code;
+  do { code = genCode(5); } while ((await getClass(code)));
+  const cls = defaultClassData(code, className.trim(), teacherUsername);
+
+  cls.jobs = _cloneDoc(template.jobs || []);
+  cls.insurancePlans = _cloneDoc(template.insurancePlans || []);
+  cls.storeItems = (template.storeItems || []).map(it => {
+    const item = _cloneDoc(it);
+    item.stock = (item.stockTotal === null || item.stockTotal === undefined) ? null : item.stockTotal;
+    item.sold = 0;
+    return item;
+  });
+  cls.properties = (template.properties || []).map(p => {
+    const prop = _cloneDoc(p);
+    prop.owner = null; prop.occupancy = null; prop.rentLastWeekPaid = null;
+    return prop;
+  });
+  cls.vehicles = (template.vehicles || []).map(v => {
+    const veh = _cloneDoc(v);
+    veh.owners = [];
+    return veh;
+  });
+  cls.companies = (template.companies || []).map(co => {
+    const c = _cloneDoc(co);
+    const startPrice = (c.history && c.history.length) ? c.history[0] : c.price;
+    c.price = startPrice;
+    c.availableShares = c.totalShares;
+    c.holders = {};
+    c.history = [startPrice];
+    c.historyDates = [nzDateKey()];
+    return c;
+  });
+  cls.sideHustles = _cloneDoc(template.sideHustles || []);
+  cls.lifeItems = _cloneDoc(template.lifeItems || []);
+  cls.eventDefs = _cloneDoc(template.eventDefs || []);
+  cls.bigEventDefs = _cloneDoc(template.bigEventDefs || []);
+  cls.loanTiers = _cloneDoc(template.loanTiers || []);
+  cls.maxLoanAmount = template.maxLoanAmount || 0;
+  cls.maxLoanCount = template.maxLoanCount || 0;
+  cls.termDepositPlans = _cloneDoc(template.termDepositPlans || []);
+  cls.quizzes = _cloneDoc(template.quizzes || []);
+  cls.quizGate = _cloneDoc(template.quizGate || cls.quizGate);
+  cls.lifestyleConfig = _cloneDoc(template.lifestyleConfig || cls.lifestyleConfig);
+  cls.lifestyleLock = _cloneDoc(template.lifestyleLock || cls.lifestyleLock);
+  if (template.lifestyleThresholds) cls.lifestyleThresholds = _cloneDoc(template.lifestyleThresholds);
+  cls.gambling = _cloneDoc(template.gambling || cls.gambling);
+  cls.blackjack = _cloneDoc(template.blackjack || cls.blackjack);
+  cls.marketplace = _cloneDoc(template.marketplace || cls.marketplace);
+  cls.taxRates = _cloneDoc(template.taxRates || cls.taxRates);
+  cls.wageTaxBrackets = _cloneDoc(template.wageTaxBrackets || []);
+  cls.priceRange = _cloneDoc(template.priceRange || cls.priceRange);
+  cls.sellBackRates = _cloneDoc(template.sellBackRates || cls.sellBackRates);
+  cls.truckLicence = _cloneDoc(template.truckLicence || cls.truckLicence);
+  cls.dailyTimeLimitMinutes = template.dailyTimeLimitMinutes || null;
+  cls.interestRate = template.interestRate;
+  cls.cashInterestRate = template.cashInterestRate || 0;
+  cls.interestAuto = !!template.interestAuto;
+  cls.interestFrequency = template.interestFrequency || "weekly";
+  cls.interestDay = template.interestDay || "Fri";
+  cls.payDay = template.payDay || "Fri";
+  cls.mortgageDay = template.mortgageDay || "Fri";
+  cls.insuranceDay = template.insuranceDay || "Fri";
+
+  await classesCol().doc(code).set(cls);
+  await usersCol().doc(teacherUsername).update({ classCode: code });
+  return { ok: true, code };
+}
+
+// Points the teacher's "currently open" class at a different one of their
+// own classes (used when clicking a class card on Home).
+async function switchActiveClass(teacherUsername, classCode) {
+  const cls = await getClass(classCode);
+  if (!cls) return { ok: false, error: "Class not found." };
+  if (cls.teacher !== teacherUsername) return { ok: false, error: "You don't have permission to open this class." };
+  await usersCol().doc(teacherUsername).update({ classCode });
+  return { ok: true };
+}
+
+// Archiving just pauses a class for students (see requireLogin below and
+// archived.html) — nothing is deleted, and it can be reopened, or still
+// used as a "new class from template" source, at any time.
+async function setClassArchived(classCode, archived) {
+  await classesCol().doc(classCode).update({
+    archived: !!archived,
+    archivedAt: archived ? Date.now() : null
+  });
+  return { ok: true };
+}
+
+// Permanently deletes a class AND every student account in it. This is
+// the one truly irreversible class action — the teacher.js UI backs it
+// with a "type the class name to confirm" prompt, same pattern already
+// used for "Restart class".
+async function deleteClassPermanently(teacherUsername, classCode) {
+  const cls = await getClass(classCode);
+  if (!cls) return { ok: false, error: "Class not found." };
+  if (cls.teacher !== teacherUsername) return { ok: false, error: "You don't have permission to delete this class." };
+
+  // Individual doc deletes (not a batch) so each one still goes through
+  // the wrapped docRef.delete() in installReadCache(), which is what
+  // keeps the read cache correct — a raw WriteBatch would bypass that.
+  await Promise.all((cls.students || []).map(u => usersCol().doc(u).delete()));
+  await classesCol().doc(classCode).delete();
+
+  const teacher = await getUser(teacherUsername);
+  if (teacher && teacher.classCode === classCode) {
+    await usersCol().doc(teacherUsername).update({ classCode: null });
+  }
+  return { ok: true };
 }
 
 /* ---------------- Student joins a class ---------------- */
@@ -1068,7 +1322,7 @@ function safeBgJob(promise, label) {
 
 async function autoPayDayIfDue(classCode) {
   const cls = await getClass(classCode);
-  if (!cls || !cls.payDay) return 0;
+  if (!cls || !cls.payDay || cls.archived) return 0;
   const todayName = nzDayName();
   const todayKey = nzDateKey();
   if (todayName !== cls.payDay) return 0;
@@ -1201,6 +1455,7 @@ async function processDailyLifeAllowance(classCode) {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
+    if (cls.archived) { progress = "SKIP"; return; }
     if (cls.lastLifeDailyRun === todayKey) { progress = "SKIP"; return; }
     const existing = cls.lifeDailyProgress;
     progress = (existing && existing.dateKey === todayKey) ? existing : { dateKey: todayKey, paidUsernames: [] };
@@ -1530,6 +1785,8 @@ async function repayLoan(username, loanId, amount) {
 // again, so it stops accruing interest for good, whatever day that happens.
 async function processLoanInterest(classCode) {
   if (nzDayName() !== "Mon") return 0;
+  const cls = await getClass(classCode);
+  if (!cls || cls.archived) return 0;
   const weekKey = isoWeekKey(new Date());
   const students = await getClassStudents(classCode);
   let count = 0;
@@ -1719,7 +1976,7 @@ function companyPriceAtDate(co, dateKey) {
 // moved the prices, or it does neither.
 async function autoMarketDayIfDue(classCode) {
   const cls = await getClass(classCode);
-  if (!cls) return [];
+  if (!cls || cls.archived) return [];
   const todayKey = nzDateKey();
   if (cls.lastMarketDayRun === todayKey) return [];
   if (!cls.companies || cls.companies.length === 0) {
@@ -2062,7 +2319,7 @@ async function getStudentAutomations(classCode, studentUser) {
 // today and whose frequency interval has elapsed since it last ran.
 async function processAutomations(classCode) {
   const cls = await getClass(classCode);
-  if (!cls || !cls.automations || cls.automations.length === 0) return 0;
+  if (!cls || !cls.automations || cls.automations.length === 0 || cls.archived) return 0;
 
   const todayName = nzDayName();
   const todayKey = nzDateKey();
@@ -2559,7 +2816,7 @@ async function processTermDeposits(classCode) {
   try {
     const classRef = classesCol().doc(classCode);
     const cls = await getClassCached(classCode);
-    if (!cls) return 0;
+    if (!cls || cls.archived) return 0;
     if (cls.lastTermDepositCheckDay === todayKey) return 0;
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(classRef);
@@ -2636,7 +2893,7 @@ async function saveInterestSettings(classCode, settings) {
 }
 async function autoInterestIfDue(classCode) {
   const cls = await getClass(classCode);
-  if (!cls || !cls.interestAuto) return 0;
+  if (!cls || !cls.interestAuto || cls.archived) return 0;
   const todayKey = nzDateKey();
   if (cls.lastInterestRun === todayKey) return 0;
   if (cls.interestFrequency !== "daily") {
@@ -4177,6 +4434,7 @@ async function processWeeklyBigEvents(classCode, opts) {
   const weekKey = isoWeekKey(new Date());
   const cls = withNewModuleDefaults(await getClass(classCode));
   if (!cls || cls.lastBigEventWeekRun === weekKey) return 0;
+  if (cls.archived && !forceAll) return 0;
   const activeDefs = (cls.bigEventDefs || []).filter(e => e.active);
   if (activeDefs.length === 0) {
     await classRef.update({ lastBigEventWeekRun: weekKey }).catch(() => {});
@@ -4403,6 +4661,11 @@ function withNewModuleDefaults(cls) {
   // already falls back sensibly (recent txn history, or a 7-day window)
   // when this is missing.
   if (cls.createdAt === undefined) cls.createdAt = null;
+  // Archiving pauses a class for students (see requireLogin/archived.html)
+  // without deleting anything, so it can still be reopened later or used
+  // as a template for a brand new class.
+  if (cls.archived === undefined) cls.archived = false;
+  if (cls.archivedAt === undefined) cls.archivedAt = null;
   cls.reportArchives = cls.reportArchives || [];
   cls.insurancePlans = cls.insurancePlans || [];
   cls.storeItems = cls.storeItems || [];
@@ -4438,11 +4701,9 @@ function withNewModuleDefaults(cls) {
   // Life module: teacher-defined "life events" (got married, had a kid,
   // promotion, whatever the class wants) that a teacher grants to one or
   // more students. Each template's `benefits` object is snapshotted onto
-  // the student's own record at grant time (see grantLifeItem) so nothing
-  // reads the template live — but editing a template (updateLifeItem)
-  // does push the new name/description/benefits/frequency out to every
-  // student already holding a grant of it. Removing a template does NOT:
-  // it only stops new grants, existing students keep what they had.
+  // the student's own record at grant time (see grantLifeItem) so a later
+  // edit/removal of the template never retroactively changes what an
+  // already-granted student is receiving.
   cls.lifeItems = cls.lifeItems || [];
   cls.eventDefs = cls.eventDefs || [];
   cls.eventLog = cls.eventLog || [];
@@ -5128,18 +5389,8 @@ async function addLifeItem(classCode, item) {
     t.update(classRef, { lifeItems: cls.lifeItems });
   });
 }
-// Editing a template pushes the new name/description/benefits/frequency
-// out to every student who already holds a grant of it too — not just
-// future grants. Each grant keeps its own id/templateId/grantedAt/
-// grantedBy; only the snapshot fields below are refreshed to match the
-// template. Deliberately separate from the class-doc transaction above:
-// the number of affected students is unbounded, and Firestore transactions
-// can't span that many unpredictable document reads/writes reliably, so
-// this walks students and writes them in batches instead (same chunking
-// pattern as setStudentTimeLimit).
 async function updateLifeItem(classCode, itemId, item) {
   const classRef = classesCol().doc(classCode);
-  let saved = null;
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
@@ -5151,22 +5402,7 @@ async function updateLifeItem(classCode, itemId, item) {
     existing.benefits = sanitizeLifeBenefits(item.benefits);
     existing.frequency = normalizeLifeFrequency(item.frequency);
     t.update(classRef, { lifeItems: cls.lifeItems });
-    saved = existing;
   });
-  if (!saved) return;
-
-  const students = await getClassStudents(classCode);
-  const toUpdate = students.filter(s => (s.lifeItems || []).some(it => it.templateId === itemId));
-  for (let i = 0; i < toUpdate.length; i += 500) {
-    const batch = fdb.batch();
-    toUpdate.slice(i, i + 500).forEach(s => {
-      const updatedItems = s.lifeItems.map(it => it.templateId === itemId
-        ? { ...it, name: saved.name, description: saved.description, benefits: saved.benefits, frequency: saved.frequency }
-        : it);
-      batch.set(usersCol().doc(s.username), { lifeItems: updatedItems }, { merge: true });
-    });
-    await batch.commit();
-  }
 }
 // Removing a template only stops it being handed out again — students who
 // already have it keep their snapshot of its benefits untouched.
@@ -5698,7 +5934,7 @@ async function setPropertyOccupancy(username, classCode, propId, occupancy) {
 // just paying the owner instead of charging them.
 async function processPropertyRent(classCode) {
   const cls = withNewModuleDefaults(await getClass(classCode));
-  if (!cls) return 0;
+  if (!cls || cls.archived) return 0;
   const todayName = nzDayName();
   const weekKey = isoWeekKey(new Date());
   let ran = 0;
@@ -5797,9 +6033,9 @@ async function processWeeklyEvents(classCode, opts) {
   const weekKey = isoWeekKey(new Date());
   const cls = withNewModuleDefaults(await getClass(classCode));
   if (!cls) return 0;
+  if (cls.archived && ignoreAlreadyHad === false) return 0;
 
-  // The auto-trigger (page load) only ever runs once per NZ calendar day —
-  // that's what makes "max 1 event a day" hold without any extra bookkeeping.
+  // The auto-trigger (page load) only ever runs once per NZ calendar day —  // that's what makes "max 1 event a day" hold without any extra bookkeeping.
   // A manual run skips this guard entirely, which is what lets it override
   // the caps below.
   if (!ignoreAlreadyHad && cls.lastEventDayRun === dayKey) return 0;

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+(function(){
+  try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}
+  window.T29_HAS_SIDEBAR = true;
+  function loadIfOn(flagKey, cls, css, js){
+    var on;
+    try { on = localStorage.getItem(flagKey) === '1'; } catch(e) { on = false; }
+    if (!on) return;
+    document.documentElement.classList.add(cls);
+    var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = css;
+    document.head.appendChild(l);
+    var s = document.createElement('script'); s.src = js;
+    document.head.appendChild(s);
+  }
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css', 'sidebar-nav.js');
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Class archived — The 29 World</title>
+<link rel="icon" type="image/png" href="Favicon.png">
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="archived.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <span class="who" id="whoami"></span>
+    <div class="topbar-actions">
+      <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+    </div>
+  </nav>
+</div>
+
+<main>
+  <div class="card" style="max-width:520px;margin:40px auto;text-align:center;">
+    <div style="font-size:40px;margin-bottom:8px;" id="lockIcon"></div>
+    <h1 id="pageTitle">This class has been archived</h1>
+    <p id="explainText">Sorry — your teacher has archived this class, so it's paused for now. You can't do anything in it while it's archived.</p>
+    <div style="margin-top:20px;padding-top:16px;border-top:1.5px solid var(--line);">
+      <button class="btn gold" id="memoryLaneBtn" onclick="strollDownMemoryLane()">Stroll down memory lane</button>
+      <p class="muted-small" style="margin-top:10px;">This lets you look back through everything without being able to change anything.</p>
+    </div>
+  </div>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script defer src="firebase-init.js"></script>
+<script defer src="icons.js"></script>
+<script defer src="data.js"></script>
+<script defer src="archived.js"></script>
+</body>
+</html>

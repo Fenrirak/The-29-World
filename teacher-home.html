@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+(function(){
+  try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}
+  window.T29_HAS_SIDEBAR = true;
+  function loadIfOn(flagKey, cls, css, js){
+    var on;
+    try { on = localStorage.getItem(flagKey) === '1'; } catch(e) { on = false; }
+    if (!on) return;
+    document.documentElement.classList.add(cls);
+    var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = css;
+    document.head.appendChild(l);
+    var s = document.createElement('script'); s.src = js;
+    document.head.appendChild(s);
+  }
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css', 'sidebar-nav.js');
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Classes — The 29 World</title>
+<link rel="icon" type="image/png" href="Favicon.png">
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="teacher-home.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <span class="who" id="whoami"></span>
+    <div class="topbar-actions">
+      <button class="btn-icon-topbar" id="settingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Settings" title="Settings"><span class="icon-slot" data-icon="settings"></span></button>
+      <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+    </div>
+  </nav>
+</div>
+
+<main>
+  <div class="flex-between">
+    <div>
+      <h1 id="pageTitle">Your classes</h1>
+      <p id="pageSubtitle">Pick a class to open it, or set up a new one.</p>
+    </div>
+  </div>
+
+  <div id="msg"></div>
+
+  <div class="class-card-grid" id="classGrid" style="margin-top:20px;"></div>
+  <p class="muted-small hidden" id="noClasses">You don't have any classes yet — create one below to get started.</p>
+
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<!-- Create-class modal: handles both "brand new" and "from template" -->
+<div id="newClassModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:40px 16px;" ondblclick="if(event.target===this)closeNewClassModal()">
+  <div class="card" style="width:100%;max-width:480px;margin-top:0;">
+    <div class="flex-between">
+      <h2 id="newClassModalTitle" style="margin-bottom:2px;">Create a brand new class</h2>
+      <button class="btn small secondary" type="button" onclick="closeNewClassModal()">Close</button>
+    </div>
+    <form onsubmit="return submitNewClass(event)">
+      <label for="ncName"><span class="icon-slot" data-icon="building"></span> Class name</label>
+      <input id="ncName" required placeholder="Class name, e.g. Room 12">
+      <div id="ncTemplateWrap" class="hidden">
+        <label for="ncTemplate"><span class="icon-slot" data-icon="repeat"></span> Copy settings from</label>
+        <select id="ncTemplate"></select>
+        <p class="muted-small">Jobs, properties, side hustles, the store, random events, tax rates and every other class setting will be copied over. Students, balances, and activity history always start fresh.</p>
+      </div>
+      <button class="btn gold" style="width:100%;justify-content:center;margin-top:6px;" type="submit" id="ncSubmitBtn">Create class</button>
+    </form>
+    <div id="ncMsg"></div>
+  </div>
+</div>
+
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script defer src="firebase-init.js"></script>
+<script defer src="icons.js"></script>
+<script defer src="settings-menu.js"></script>
+<script defer src="data.js"></script>
+<script defer src="teacher-home.js"></script>
+</body>
+</html>
