@@ -44,6 +44,20 @@
     font: inherit; color: inherit; cursor: pointer;
   }
   .settings-dropdown-item:hover { background: rgba(0,0,0,.05); }
+  .support-creator-menu-item {
+    order: 999;
+    background: linear-gradient(135deg,var(--gold),var(--gold-dark));
+    color: var(--navy-900);
+    font-weight: 800;
+    justify-content: center;
+    text-decoration: none;
+  }
+  .support-creator-menu-item:hover {
+    background: linear-gradient(135deg,var(--gold),var(--gold-dark));
+    filter: brightness(1.05);
+  }
+  #settingsDropdown { display: flex; flex-direction: column; }
+  #settingsDropdown.hidden { display: none; }
   .field-label { display: block; margin: 12px 0 4px; font-size: .9rem; }
   .field-label:first-of-type { margin-top: 0; }
 </style>
@@ -76,6 +90,7 @@
         <button class="btn-icon-topbar" id="settingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Settings" title="Settings" onclick="toggleSettingsDropdown(event)"><span class="icon-slot" data-icon="settings"></span></button>
         <div class="settings-dropdown hidden" id="settingsDropdown">
           <button class="settings-dropdown-item" type="button" onclick="openPasswordModal()">Change password</button>
+          <a class="settings-dropdown-item support-creator-menu-item" href="https://buymeacoffee.com/29world" target="_blank" rel="noopener">☕ Support the Creator</a>
         </div>
       </div>
       <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
