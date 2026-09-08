@@ -1252,7 +1252,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 @media screen {
 
 html.dark-mode{
-  --bg:#121828;
+  --bg:#151515;
   --card:#1c2440;
   --ink:#e8ecf8;
   --muted:#94a1c2;
@@ -1263,6 +1263,21 @@ html.dark-mode{
   --heading-text:#f4f7ff;
   --accent-text:#8fb4ff;
   --muted-2:#8895b8;
+
+  /* Dimmed stand-ins for the gold/mint/sky/lilac family, used only on
+     large filled surfaces (dashboard stat cards, solid buttons, avatars,
+     game tiles). Keeps the same hue/identity but knocks the lightness
+     down so big saturated fills don't glare against the dark backdrop.
+     Small accents (links, icons, thin borders, dots) still use the
+     original full-brightness variables on purpose. */
+  --gold-dim:#8a6a24;
+  --gold-dark-dim:#6d5219;
+  --mint-dim:#217a5c;
+  --mint-dark-dim:#1a5f47;
+  --sky-dim:#3d5fa6;
+  --sky-dark-dim:#2c477f;
+  --lilac-dim:#5c5497;
+  --lilac-dark-dim:#463f79;
 
   --pastel-mint-bg: rgba(63,191,143,0.16);
   --pastel-mint-border: rgba(63,191,143,0.4);
@@ -1500,5 +1515,46 @@ html.dark-mode .settings-dropdown-item:hover{background:rgba(255,255,255,.08);}
 
 /* Mortgage toggle switch (property.html) */
 html.dark-mode .mortgage-toggle-track{background:#3a4568;}
+
+/* ---------------- Dim the big saturated fills (dashboard stat cards
+   and anything using the same bright gold/mint/sky/lilac gradients at
+   a similar size) so they don't glare next to the dark background. ---------------- */
+html.dark-mode .stat.gold{background:linear-gradient(135deg,var(--gold-dim),var(--gold-dark-dim));color:var(--heading-text);box-shadow:0 8px 20px rgba(0,0,0,0.45);}
+html.dark-mode .stat.gold .label{color:rgba(244,247,255,0.75);}
+html.dark-mode .stat.mint{background:linear-gradient(135deg,var(--mint-dim),var(--mint-dark-dim));box-shadow:0 8px 20px rgba(0,0,0,0.45);}
+html.dark-mode .stat.sky{background:linear-gradient(135deg,var(--sky-dim),var(--sky-dark-dim));box-shadow:0 8px 20px rgba(0,0,0,0.45);}
+html.dark-mode .stat.lilac{background:linear-gradient(135deg,var(--lilac-dim),var(--lilac-dark-dim));box-shadow:0 8px 20px rgba(0,0,0,0.45);}
+html.dark-mode .stat.gold .icon, html.dark-mode .stat.mint .icon{color:rgba(255,255,255,0.55);}
+
+html.dark-mode .btn.gold{background:linear-gradient(135deg,var(--gold-dim),var(--gold-dark-dim));color:var(--heading-text);box-shadow:0 4px 12px rgba(0,0,0,0.4);}
+html.dark-mode .btn.mint{background:linear-gradient(135deg,var(--mint-dim),var(--mint-dark-dim));box-shadow:0 4px 12px rgba(0,0,0,0.4);}
+
+html.dark-mode .student-avatar.c1{background:linear-gradient(135deg,var(--sky-dim),var(--sky-dark-dim));}
+html.dark-mode .student-avatar.c2{background:linear-gradient(135deg,var(--mint-dim),var(--mint-dark-dim));}
+html.dark-mode .student-avatar.c3{background:linear-gradient(135deg,var(--gold-dim),var(--gold-dark-dim));}
+html.dark-mode .student-avatar.c4{background:linear-gradient(135deg,var(--lilac-dim),var(--lilac-dark-dim));}
+
+html.dark-mode .quiz-score.pass{background:linear-gradient(135deg,var(--mint-dim),var(--mint-dark-dim));box-shadow:0 8px 20px rgba(0,0,0,0.4);}
+html.dark-mode .rank-pill.gold{background:linear-gradient(135deg,var(--gold-dim),var(--gold-dark-dim));color:var(--heading-text);}
+html.dark-mode .lg-switch input:checked + .lg-switch-track{background:linear-gradient(135deg,var(--gold-dim),var(--gold-dark-dim));}
+html.dark-mode .number-zero.selected{background:var(--gold-dim);border-color:var(--gold-dark-dim);}
+html.dark-mode .number-cell.selected{background:var(--gold-dim);border-color:var(--gold-dark-dim);color:var(--heading-text);}
+
+html.dark-mode .progress-bar > div,
+html.dark-mode .rpt-bar-fill.gold,
+html.dark-mode .bud-split-bar .seg.wants,
+html.dark-mode .bud-track-fill.wants{background:linear-gradient(90deg,var(--gold-dim),var(--gold-dark-dim));}
+html.dark-mode .rpt-bar-fill.mint,
+html.dark-mode .bud-split-bar .seg.savings,
+html.dark-mode .bud-track-fill.savings{background:linear-gradient(90deg,var(--mint-dim),var(--mint-dark-dim));}
+
+/* ---------------- Text sitting on those fills was inheriting the
+   regular dark-mode muted colour (light blue-grey), which is very low
+   contrast against gold/mint/sky/lilac. Match it to the label colour
+   already used on each fill instead. ---------------- */
+html.dark-mode .stat.gold .muted-small{color:rgba(244,247,255,0.8);}
+html.dark-mode .stat.mint .muted-small,
+html.dark-mode .stat.sky .muted-small,
+html.dark-mode .stat.lilac .muted-small{color:rgba(244,247,255,0.8);}
 
 }
