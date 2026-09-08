@@ -1,16 +1,19 @@
 let CURRENT, IS_TEACHER, EDITING_ID = null;
 
 const LIFE_FORM_IDS = ["liName", "liDesc", "liCash", "liAllowance", "liIncome", "liDiscStore", "liDiscTransport", "liDiscProperty", "liDiscInsurance", "liLifestyle", "liTaxCut"];
+// liAllowanceFrequency is a <select> with its own default ("weekly"), so
+// it's handled separately from the plain inputs above (see
+// resetLifeForm/startEditLifeItem/readLifeFormBenefits).
 
 // Turns a benefits object into the small row of badges shown next to a
 // family event, wherever it's rendered (teacher's list, a student's own
 // cards). Only benefits that are actually non-zero are shown.
-function lifeBenefitChips(b) {
+function lifeBenefitChips(b, frequency) {
   b = b || {};
   const chips = [];
   const num = k => Number(b[k]) || 0;
   if (num("cashOnce")) chips.push(`<span class="badge gold">${icon("coin", 12)}${num("cashOnce") >= 0 ? "+" : ""}${fmtMoney(b.cashOnce)} one-time</span>`);
-  if (num("allowance")) chips.push(`<span class="badge mint">${icon("coin", 12)}+${fmtMoney(b.allowance)} every pay day</span>`);
+  if (num("allowance")) chips.push(`<span class="badge mint">${icon("coin", 12)}+${fmtMoney(b.allowance)} ${frequency === "daily" ? "every day" : "every pay day"}</span>`);
   if (num("incomePercent")) chips.push(`<span class="badge ${num("incomePercent") >= 0 ? "mint" : "coral"}">${icon("briefcase", 12)}${num("incomePercent") >= 0 ? "+" : ""}${b.incomePercent}% job income</span>`);
   if (num("discountStore")) chips.push(`<span class="badge lilac">${icon("cart", 12)}${b.discountStore}% off Store</span>`);
   if (num("discountTransport")) chips.push(`<span class="badge lilac">${icon("car", 12)}${b.discountTransport}% off Transport</span>`);
@@ -52,6 +55,7 @@ async function init() {
   // life-item recurring allowance, which rides along inside pay day.
   const T29_STARTUP_JOBS = Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
+    safeBgJob(processDailyLifeAllowance(u.classCode), "processDailyLifeAllowance"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
@@ -86,7 +90,7 @@ async function render() {
           <div>
             <h4>${icon("trophy", 16)} ${item.name}</h4>
             <p>${item.description || "No description provided."}</p>
-            <div style="margin-top:6px;">${lifeBenefitChips(item.benefits)}</div>
+            <div style="margin-top:6px;">${lifeBenefitChips(item.benefits, item.frequency)}</div>
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn small secondary" type="button" onclick="startEditLifeItem('${item.id}')">${icon("idcard", 13)} Edit</button>
@@ -132,7 +136,7 @@ async function render() {
       div.innerHTML = `
         <h4>${icon("trophy", 16)} ${it.name}</h4>
         <p>${it.description || ""}</p>
-        <div>${lifeBenefitChips(it.benefits)}</div>
+        <div>${lifeBenefitChips(it.benefits, it.frequency)}</div>
         <p class="muted-small" style="margin-top:8px;">Given ${it.grantedAt || ""}</p>
       `;
       box.appendChild(div);
@@ -159,7 +163,8 @@ async function saveLifeItemForm(e) {
   const item = {
     name: document.getElementById("liName").value.trim(),
     description: document.getElementById("liDesc").value.trim(),
-    benefits: readLifeFormBenefits()
+    benefits: readLifeFormBenefits(),
+    frequency: document.getElementById("liAllowanceFrequency").value
   };
   if (!item.name) return false;
   if (EDITING_ID) {
@@ -177,6 +182,7 @@ async function saveLifeItemForm(e) {
 function resetLifeForm() {
   EDITING_ID = null;
   LIFE_FORM_IDS.forEach(id => document.getElementById(id).value = "");
+  document.getElementById("liAllowanceFrequency").value = "weekly";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add family event";
   const cancelBtn = document.getElementById("cancelEditBtn");
   if (cancelBtn) cancelBtn.remove();
@@ -199,6 +205,7 @@ function startEditLifeItem(id) {
     document.getElementById("liDiscInsurance").value = b.discountInsurance || "";
     document.getElementById("liLifestyle").value = b.lifestylePoints || "";
     document.getElementById("liTaxCut").value = b.taxCutPercent || "";
+    document.getElementById("liAllowanceFrequency").value = d.frequency === "daily" ? "daily" : "weekly";
     document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
     if (!document.getElementById("cancelEditBtn")) {
       const cancelBtn = document.createElement("button");
