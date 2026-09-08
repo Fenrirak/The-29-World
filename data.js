@@ -1162,14 +1162,16 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
   // Life-item recurring allowances: independent of having a job, so this
   // runs for every student, not just the ones the loop above touched.
   // Tracked with its own paidAllowanceUsernames set (alongside the
-  // wage-specific paidUsernames above) so a retry never double-pays.
+  // wage-specific paidUsernames above) so a retry never double-pays. Only
+  // items set to "weekly" frequency are paid here — "daily" ones are paid
+  // by processDailyLifeAllowance instead, once per calendar day.
   for (const student of students) {
     if (alreadyPaidAllowance.has(student.username)) continue;
-    const life = getLifeBenefitTotals(student);
-    if (!life.allowance) { alreadyPaidAllowance.add(student.username); continue; }
+    const weeklyAllowance = getLifeAllowanceByFrequency(student, "weekly");
+    if (!weeklyAllowance) { alreadyPaidAllowance.add(student.username); continue; }
     try {
-      await adjustBalance(student.username, life.allowance);
-      await logTxn(classCode, { type: "life-allowance", to: student.username, amount: life.allowance, note: "Life event allowance" });
+      await adjustBalance(student.username, weeklyAllowance);
+      await logTxn(classCode, { type: "life-allowance", to: student.username, amount: weeklyAllowance, note: "Life event allowance (weekly)" });
       alreadyPaidAllowance.add(student.username);
       await classRef.update({ "payDayProgress.paidAllowanceUsernames": Array.from(alreadyPaidAllowance) });
     } catch (e) {
@@ -1181,6 +1183,57 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
     await classRef.update({ lastPayDayRun: dateKey });
   }
   return { paidCount, newlyPaid, hasJobs, alreadyRun, unapprovedCount };
+}
+
+// Pays out "daily" life-item allowances — runs every calendar day,
+// completely independent of the class's weekly Pay Day. Mirrors
+// runPayDayInternal's own idempotency approach: a per-date progress
+// record (lifeDailyProgress) tracks which students have already been
+// paid today, so re-running this on every page load (like every other
+// startup job) only ever pays each student once per day, and a crash
+// mid-loop just resumes where it left off on the next call.
+async function processDailyLifeAllowance(classCode) {
+  const classRef = classesCol().doc(classCode);
+  const todayKey = nzDateKey();
+
+  let progress = null;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = snap.data();
+    if (cls.lastLifeDailyRun === todayKey) { progress = "SKIP"; return; }
+    const existing = cls.lifeDailyProgress;
+    progress = (existing && existing.dateKey === todayKey) ? existing : { dateKey: todayKey, paidUsernames: [] };
+    t.update(classRef, { lifeDailyProgress: progress });
+  });
+  if (progress === "SKIP") return 0;
+
+  const cls = await getClass(classCode);
+  if (!cls) return 0;
+  const students = await getClassStudents(classCode, cls);
+  const alreadyPaid = new Set(progress.paidUsernames || []);
+  let newlyPaid = 0;
+  let allSucceeded = true;
+
+  for (const student of students) {
+    if (alreadyPaid.has(student.username)) continue;
+    const dailyAllowance = getLifeAllowanceByFrequency(student, "daily");
+    if (!dailyAllowance) { alreadyPaid.add(student.username); continue; }
+    try {
+      await adjustBalance(student.username, dailyAllowance);
+      await logTxn(classCode, { type: "life-allowance", to: student.username, amount: dailyAllowance, note: "Life event allowance (daily)" });
+      alreadyPaid.add(student.username);
+      newlyPaid++;
+      await classRef.update({ "lifeDailyProgress.paidUsernames": Array.from(alreadyPaid) });
+    } catch (e) {
+      allSucceeded = false;
+    }
+  }
+
+  if (allSucceeded) {
+    await classRef.update({ lastLifeDailyRun: todayKey });
+  }
+  return newlyPaid;
 }
 
 // Plain-English description of when interest is next applied, for
@@ -4971,6 +5024,15 @@ async function sellStoreItem(username, classCode, itemId, rate) {
    snapshot of the template's benefits onto user.lifeItems — a student can
    hold any number of these at once and their effects stack (see
    getLifeBenefitTotals, used everywhere a benefit actually applies). */
+// Each life item template also carries its own allowance frequency —
+// "weekly" (default: paid alongside the class's normal Pay Day, see
+// runPayDayInternal) or "daily" (paid once per calendar day regardless of
+// Pay Day, see processDailyLifeAllowance). Only the allowance benefit
+// cares about this; every other benefit (income %, discounts, lifestyle
+// points, tax cut) applies continuously either way.
+function normalizeLifeFrequency(f) {
+  return f === "daily" ? "daily" : "weekly";
+}
 function sanitizeLifeBenefits(b) {
   b = b || {};
   const num = v => { const n = Number(v); return isFinite(n) ? n : 0; };
@@ -5003,6 +5065,19 @@ function getLifeBenefitTotals(user) {
   });
   totals.incomePercent = Math.max(-95, totals.incomePercent);
   return totals;
+}
+// Sums just the allowance from a student's life items that match one
+// frequency ("weekly" or "daily"), so the two payout jobs (weekly, inside
+// Pay Day; daily, processDailyLifeAllowance) each only pay their own
+// slice and never double up on the other's items.
+function getLifeAllowanceByFrequency(user, frequency) {
+  const items = (user && user.lifeItems) || [];
+  let total = 0;
+  items.forEach(it => {
+    if (normalizeLifeFrequency(it.frequency) !== frequency) return;
+    total += Number((it.benefits || {}).allowance) || 0;
+  });
+  return Math.round(total * 100) / 100;
 }
 // Applies a student's stacked discount for one category ("store",
 // "transport", "property", "insurance") to a base price.
@@ -5045,7 +5120,8 @@ async function addLifeItem(classCode, item) {
       id: uid("life"),
       name: (item.name || "").trim() || "Untitled life event",
       description: (item.description || "").trim(),
-      benefits: sanitizeLifeBenefits(item.benefits)
+      benefits: sanitizeLifeBenefits(item.benefits),
+      frequency: normalizeLifeFrequency(item.frequency)
     });
     t.update(classRef, { lifeItems: cls.lifeItems });
   });
@@ -5061,6 +5137,7 @@ async function updateLifeItem(classCode, itemId, item) {
     existing.name = (item.name || "").trim() || "Untitled life event";
     existing.description = (item.description || "").trim();
     existing.benefits = sanitizeLifeBenefits(item.benefits);
+    existing.frequency = normalizeLifeFrequency(item.frequency);
     t.update(classRef, { lifeItems: cls.lifeItems });
   });
 }
@@ -5101,6 +5178,7 @@ async function grantLifeItem(classCode, username, templateId, teacherUsername) {
       user.lifeItems.push({
         id: uid("life"), templateId: tmpl.id, name: tmpl.name,
         description: tmpl.description, benefits,
+        frequency: normalizeLifeFrequency(tmpl.frequency),
         grantedAt: nzDateKey(), grantedBy: teacherUsername || null
       });
       const isTeacher = user.role === "teacher";

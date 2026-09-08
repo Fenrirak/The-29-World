@@ -962,7 +962,7 @@ async function renderProfile(username) {
   rows.push(`<h4>${icon("house", 16)} Property</h4>`);
   if (poss.property && isMortgagePaymentOverdue(poss.property, cls)) {
     rows.push(`
-      <div class="auto-row" style="background:#fde2e2;border:1px solid #f3a6a6;border-radius:8px;">
+      <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;">
         <div class="auto-details">
           <strong>${icon("house", 14)} Mortgage payment overdue — ${poss.property.name}</strong>
           <div class="muted-small">This week's payment (due ${DAY_FULL[cls.mortgageDay || "Fri"]}) hasn't been paid yet.</div>

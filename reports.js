@@ -212,8 +212,10 @@ function netWorthSparkline(history) {
     const up = p.y <= prev.y; // y is inverted (smaller y = higher net worth)
     return `<line x1="${prev.x.toFixed(1)}" y1="${prev.y.toFixed(1)}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${up ? "#3fbf8f" : "#e8735f"}" stroke-width="2.5" stroke-linecap="round"/>`;
   }).join("");
-  const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.2" fill="#1f2b44"/>`).join("");
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="max-width:100%;">${segments}${dots}</svg>`;
+  const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.2" fill="currentColor"/>`).join("");
+  // color:var(--ink) so the dots stay readable in dark mode (they'd
+  // otherwise be a fixed dark navy, invisible on a dark card background).
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="max-width:100%;color:var(--ink);">${segments}${dots}</svg>`;
 }
 
 /* ---------------- Shared per-student breakdown ---------------- */

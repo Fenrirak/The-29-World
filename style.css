@@ -1235,3 +1235,270 @@ a.notif-row.unread:hover{background:#f7f3e6;}
   .rpt-bar-track{border:1px solid #ccc;}
   body.printing-modal-only main{display:none !important;}
 }
+
+/* =====================================================================
+   Dark mode — togglable from Settings (see settings-menu.js).
+   `dark-mode` class on <html>, set before paint by the inline snippet in
+   each page's <head> (reads localStorage) so there's no flash of the
+   light theme. Purely additive: every rule below targets an existing
+   selector prefixed with `.dark-mode`, which always wins on specificity,
+   so nothing above this block needs to change. Wrapped in @media screen
+   so printing (which forces its own light styles) is never affected.
+   The brand blue (--sky/--gold family) is intentionally left untouched —
+   both already read as accent colours against a dark navy surface (see
+   the topbar, which has always used them this way), so dark mode keeps
+   the blue-and-gold identity front and centre instead of dimming it.
+===================================================================== */
+@media screen {
+
+html.dark-mode{
+  --bg:#121828;
+  --card:#1c2440;
+  --ink:#e8ecf8;
+  --muted:#94a1c2;
+  --line:#2d3856;
+  --shadow:0 6px 20px rgba(0,0,0,0.45);
+
+  --surface-2:#212a4a;
+  --heading-text:#f4f7ff;
+  --accent-text:#8fb4ff;
+  --muted-2:#8895b8;
+
+  --pastel-mint-bg: rgba(63,191,143,0.16);
+  --pastel-mint-border: rgba(63,191,143,0.4);
+  --pastel-mint-text: #7be3b8;
+
+  --pastel-coral-bg: rgba(232,115,95,0.16);
+  --pastel-coral-border: rgba(232,115,95,0.45);
+  --pastel-coral-text: #ff9d87;
+
+  --pastel-gold-bg: rgba(232,184,75,0.18);
+  --pastel-gold-border: rgba(232,184,75,0.45);
+  --pastel-gold-text: #f6cf7e;
+
+  --pastel-navy-bg: rgba(143,180,255,0.14);
+  --pastel-lilac-bg: rgba(138,127,214,0.22);
+  --pastel-lilac-text: #cabdf7;
+}
+
+/* Body backdrop glow — keep the same sky/gold/mint accents, they read as
+   soft glowing orbs against a dark surface instead of a light one. */
+html.dark-mode body{
+  background-image:
+    radial-gradient(circle at 6% 10%, rgba(91,141,239,0.16), transparent 40%),
+    radial-gradient(circle at 96% 18%, rgba(232,184,75,0.16), transparent 40%),
+    radial-gradient(circle at 90% 92%, rgba(63,191,143,0.14), transparent 40%);
+}
+
+/* ---------------- Generic text & surfaces ---------------- */
+html.dark-mode a{color:var(--accent-text);}
+html.dark-mode th{color:var(--accent-text);}
+html.dark-mode input,
+html.dark-mode select{background:var(--card);color:var(--ink);border-color:var(--line);}
+html.dark-mode ::placeholder{color:var(--muted);opacity:.8;}
+
+/* ---------------- Headings / strong dark-navy text -> bright text ---------------- */
+html.dark-mode h1, html.dark-mode h2, html.dark-mode h3, html.dark-mode h4,
+html.dark-mode .profile-chip .value,
+html.dark-mode .settings-popover-title,
+html.dark-mode .card h2 .icon,
+html.dark-mode label,
+html.dark-mode .leaderboard-net,
+html.dark-mode .auto-details strong,
+html.dark-mode .anw-event-name,
+html.dark-mode .number-cell,
+html.dark-mode .rpt-bar-label,
+html.dark-mode .rpt-bar-amount,
+html.dark-mode .notif-title,
+html.dark-mode .quiz-question .qtext,
+html.dark-mode .quiz-explain,
+html.dark-mode .qg-title,
+html.dark-mode .mkt-price .now,
+html.dark-mode .mkt-offer-amt,
+html.dark-mode .mkt-sell-row .mkt-sell-name,
+html.dark-mode .bud-cat-name,
+html.dark-mode .bud-fix-label,
+html.dark-mode .bud-fix-amt,
+html.dark-mode .bud-fixed-total,
+html.dark-mode .bud-track-name,
+html.dark-mode .bud-track-nums strong,
+html.dark-mode .badge.navy,
+html.dark-mode .notif-ic.navy,
+html.dark-mode .mkt-status.sold{
+  color:var(--heading-text);
+}
+html.dark-mode .pw-toggle:hover{background:var(--surface-2);color:var(--heading-text);}
+html.dark-mode .bud-estimate-link:hover{color:var(--heading-text);}
+html.dark-mode .btn.secondary{background:var(--card);color:var(--heading-text);border-color:var(--heading-text);}
+html.dark-mode .quiz-option.chosen{border-color:var(--heading-text);background:var(--surface-2);}
+
+/* ---------------- Accent (navy-700) text/icons -> soft blue ---------------- */
+html.dark-mode #profileBody h4 .icon,
+html.dark-mode .settings-popover-heading .icon,
+html.dark-mode label .icon-slot,
+html.dark-mode .company-card h4 .icon,
+html.dark-mode .job-card h4 .icon,
+html.dark-mode .notif-showmore,
+html.dark-mode .notif-foot a,
+html.dark-mode .quiz-card h3 .icon,
+html.dark-mode .quiz-pill,
+html.dark-mode .report-print-area h3 .icon,
+html.dark-mode .report-print-area h4 .icon,
+html.dark-mode .qg-meta,
+html.dark-mode .mkt-filter,
+html.dark-mode .mkt-listing h4 .icon,
+html.dark-mode .bud-fixed h3 .icon,
+html.dark-mode .bud-fix-icon,
+html.dark-mode .bud-track h3 .icon{
+  color:var(--accent-text);
+}
+html.dark-mode .qg-card{border-top-color:var(--accent-text);}
+html.dark-mode .quiz-option:hover{border-color:var(--accent-text);}
+html.dark-mode .mkt-filter:hover{border-color:var(--accent-text);}
+
+/* ---------------- Off-white panels -> dark raised surface ---------------- */
+html.dark-mode .profile-chip,
+html.dark-mode a.notif-row:hover,
+html.dark-mode .notif-showmore,
+html.dark-mode .notif-showmore:hover,
+html.dark-mode .notif-foot,
+html.dark-mode .quiz-pill,
+html.dark-mode .quiz-question,
+html.dark-mode .quiz-option.chosen,
+html.dark-mode .quiz-explain,
+html.dark-mode .qg-meta,
+html.dark-mode .bud-week,
+html.dark-mode .bud-cat,
+html.dark-mode .bud-split-bar,
+html.dark-mode .bud-total,
+html.dark-mode .bud-fixed,
+html.dark-mode .bud-track-bar,
+html.dark-mode .bud-note,
+html.dark-mode .bud-flag.none,
+html.dark-mode .rpt-bar-track{
+  background:var(--surface-2);
+}
+html.dark-mode .tabs.subtabs,
+html.dark-mode .bud-fix-icon{
+  background:var(--bg);
+}
+
+/* ---------------- Card-white surfaces -> dark card ---------------- */
+html.dark-mode .settings-popover,
+html.dark-mode .auth-card,
+html.dark-mode .anw-modal-card,
+html.dark-mode .number-cell,
+html.dark-mode .settings-dropdown{
+  background:var(--card);
+}
+
+/* ---------------- Notification unread highlight ---------------- */
+html.dark-mode .notif-row.unread{background:rgba(232,184,75,0.08);}
+html.dark-mode a.notif-row.unread:hover{background:rgba(232,184,75,0.14);}
+html.dark-mode .notif-time{color:var(--muted-2);}
+
+/* ---------------- Mint (success) pastel family ---------------- */
+html.dark-mode .badge.mint,
+html.dark-mode .success-msg,
+html.dark-mode .number-zero,
+html.dark-mode .number-cell.zero,
+html.dark-mode .notif-ic.mint,
+html.dark-mode .mkt-status.active,
+html.dark-mode .bud-cat.savings .bud-cat-icon,
+html.dark-mode .bud-fix-row.settled .bud-fix-icon,
+html.dark-mode .bud-verdict.good,
+html.dark-mode .bud-flag.ok,
+html.dark-mode .bud-note.good,
+html.dark-mode .quiz-option.right{
+  background:var(--pastel-mint-bg);color:var(--pastel-mint-text);
+}
+html.dark-mode .quiz-pill.mint{background:var(--pastel-mint-bg);border-color:var(--pastel-mint-border);color:var(--pastel-mint-text);}
+html.dark-mode .bud-total.exact{background:var(--pastel-mint-bg);border-color:var(--pastel-mint-border);color:var(--pastel-mint-text);}
+html.dark-mode .bud-verdict.good{border-color:var(--pastel-mint-border);}
+html.dark-mode .ticker-up,
+html.dark-mode .status-approved,
+html.dark-mode .bud-track-nums.good,
+html.dark-mode .bud-track-nums.good strong{color:var(--pastel-mint-text);}
+
+/* ---------------- Coral (danger) pastel family ---------------- */
+html.dark-mode .badge.coral,
+html.dark-mode .error-msg,
+html.dark-mode .notif-ic.coral,
+html.dark-mode .mkt-status.cancelled,
+html.dark-mode .mkt-status.rejected,
+html.dark-mode .bud-cat.needs .bud-cat-icon,
+html.dark-mode .bud-fix-row.overdue .bud-fix-icon,
+html.dark-mode .bud-verdict.bad,
+html.dark-mode .bud-flag.short,
+html.dark-mode .bud-note.bad,
+html.dark-mode .quiz-option.wrong{
+  background:var(--pastel-coral-bg);color:var(--pastel-coral-text);
+}
+html.dark-mode .quiz-pill.coral{background:var(--pastel-coral-bg);border-color:var(--pastel-coral-border);color:var(--pastel-coral-text);}
+html.dark-mode .bud-total.over{background:var(--pastel-coral-bg);border-color:var(--pastel-coral-border);color:var(--pastel-coral-text);}
+html.dark-mode .bud-verdict.bad{border-color:var(--pastel-coral-border);}
+html.dark-mode .bud-split-bar.over{border-color:var(--pastel-coral-border);}
+html.dark-mode .ticker-down,
+html.dark-mode .status-declined,
+html.dark-mode .notif-row.action .notif-time,
+html.dark-mode .bud-fix-row.overdue .bud-fix-amt,
+html.dark-mode .bud-track-nums.over,
+html.dark-mode .bud-track-nums.over strong{color:var(--pastel-coral-text);}
+
+/* ---------------- Gold (warning / highlight) pastel family ---------------- */
+html.dark-mode .badge.gold,
+html.dark-mode .notif-ic.gold,
+html.dark-mode .mkt-status.pending,
+html.dark-mode .bud-cat.wants .bud-cat-icon,
+html.dark-mode .bud-verdict.warn,
+html.dark-mode .leaderboard-row.me,
+html.dark-mode .bud-note.warn{
+  background:var(--pastel-gold-bg);color:var(--pastel-gold-text);
+}
+html.dark-mode .quiz-pill.gold{background:var(--pastel-gold-bg);border-color:var(--pastel-gold-border);color:var(--pastel-gold-text);}
+html.dark-mode .bud-verdict.warn{border-color:var(--pastel-gold-border);}
+html.dark-mode .mkt-listing.mine{border-color:var(--pastel-gold-border);}
+html.dark-mode .bud-estimate-link{color:var(--pastel-gold-text);}
+
+/* ---------------- Lilac pastel family ---------------- */
+html.dark-mode .badge.lilac,
+html.dark-mode .notif-ic.lilac{
+  background:var(--pastel-lilac-bg);color:var(--pastel-lilac-text);
+}
+
+/* ---------------- Navy/neutral pastel family ---------------- */
+html.dark-mode .badge.navy,
+html.dark-mode .notif-ic.navy,
+html.dark-mode .mkt-status.sold{
+  background:var(--pastel-navy-bg);
+}
+
+/* ---------------- Misc borders & one-off tints ---------------- */
+html.dark-mode .budget-card{border-color:var(--line);}
+html.dark-mode .quiz-card.passed{
+  border-color:var(--pastel-mint-border);
+  background:linear-gradient(180deg,var(--pastel-mint-bg),var(--card) 60%);
+}
+html.dark-mode .quiz-card.locking{border-color:var(--pastel-coral-border);}
+html.dark-mode .mkt-listing.mine{background:linear-gradient(180deg,var(--pastel-gold-bg),var(--card) 55%);}
+html.dark-mode .bud-split-bar .seg.leftover{
+  background:repeating-linear-gradient(45deg, rgba(255,255,255,.07), rgba(255,255,255,.07) 6px, transparent 6px, transparent 12px);
+}
+html.dark-mode .bud-split-legend .dot.leftover{background:rgba(255,255,255,.28);}
+html.dark-mode .lg-switch-track{background:#3a4568;}
+html.dark-mode .qb-question,
+html.dark-mode .mortgage-toggle-row,
+html.dark-mode .threshold-row{background:rgba(255,255,255,.03);}
+
+/* Small accent controls pop in gold against the dark surface */
+html.dark-mode .remember-row input[type="checkbox"],
+html.dark-mode .quiz-option input{accent-color:var(--gold);}
+
+/* Legacy per-page dropdown (student.html) */
+html.dark-mode .settings-dropdown{border-color:rgba(255,255,255,.12);}
+html.dark-mode .settings-dropdown-item:hover{background:rgba(255,255,255,.08);}
+
+/* Mortgage toggle switch (property.html) */
+html.dark-mode .mortgage-toggle-track{background:#3a4568;}
+
+}
