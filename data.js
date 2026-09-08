@@ -4438,9 +4438,11 @@ function withNewModuleDefaults(cls) {
   // Life module: teacher-defined "life events" (got married, had a kid,
   // promotion, whatever the class wants) that a teacher grants to one or
   // more students. Each template's `benefits` object is snapshotted onto
-  // the student's own record at grant time (see grantLifeItem) so a later
-  // edit/removal of the template never retroactively changes what an
-  // already-granted student is receiving.
+  // the student's own record at grant time (see grantLifeItem) so nothing
+  // reads the template live — but editing a template (updateLifeItem)
+  // does push the new name/description/benefits/frequency out to every
+  // student already holding a grant of it. Removing a template does NOT:
+  // it only stops new grants, existing students keep what they had.
   cls.lifeItems = cls.lifeItems || [];
   cls.eventDefs = cls.eventDefs || [];
   cls.eventLog = cls.eventLog || [];
@@ -5126,8 +5128,18 @@ async function addLifeItem(classCode, item) {
     t.update(classRef, { lifeItems: cls.lifeItems });
   });
 }
+// Editing a template pushes the new name/description/benefits/frequency
+// out to every student who already holds a grant of it too — not just
+// future grants. Each grant keeps its own id/templateId/grantedAt/
+// grantedBy; only the snapshot fields below are refreshed to match the
+// template. Deliberately separate from the class-doc transaction above:
+// the number of affected students is unbounded, and Firestore transactions
+// can't span that many unpredictable document reads/writes reliably, so
+// this walks students and writes them in batches instead (same chunking
+// pattern as setStudentTimeLimit).
 async function updateLifeItem(classCode, itemId, item) {
   const classRef = classesCol().doc(classCode);
+  let saved = null;
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
@@ -5139,7 +5151,22 @@ async function updateLifeItem(classCode, itemId, item) {
     existing.benefits = sanitizeLifeBenefits(item.benefits);
     existing.frequency = normalizeLifeFrequency(item.frequency);
     t.update(classRef, { lifeItems: cls.lifeItems });
+    saved = existing;
   });
+  if (!saved) return;
+
+  const students = await getClassStudents(classCode);
+  const toUpdate = students.filter(s => (s.lifeItems || []).some(it => it.templateId === itemId));
+  for (let i = 0; i < toUpdate.length; i += 500) {
+    const batch = fdb.batch();
+    toUpdate.slice(i, i + 500).forEach(s => {
+      const updatedItems = s.lifeItems.map(it => it.templateId === itemId
+        ? { ...it, name: saved.name, description: saved.description, benefits: saved.benefits, frequency: saved.frequency }
+        : it);
+      batch.set(usersCol().doc(s.username), { lifeItems: updatedItems }, { merge: true });
+    });
+    await batch.commit();
+  }
 }
 // Removing a template only stops it being handed out again — students who
 // already have it keep their snapshot of its benefits untouched.

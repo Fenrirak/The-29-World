@@ -169,7 +169,7 @@ async function saveLifeItemForm(e) {
   if (!item.name) return false;
   if (EDITING_ID) {
     await updateLifeItem(CURRENT.classCode, EDITING_ID, item);
-    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Family event updated!</div>`;
+    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Family event updated — everyone who already has it was updated too!</div>`;
   } else {
     await addLifeItem(CURRENT.classCode, item);
     document.getElementById("addMsg").innerHTML = `<div class="success-msg">Family event added!</div>`;
