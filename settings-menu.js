@@ -21,6 +21,7 @@
 ================================================================================ */
 
 var SB_STORAGE_KEY = "t29-sidebar-nav";
+var DM_STORAGE_KEY = "t29-dark-mode";
 
 function smReadFlag(key) {
   try {
@@ -32,6 +33,14 @@ function smReadFlag(key) {
 
 function smHasSidebar() {
   return window.T29_HAS_SIDEBAR === true;
+}
+
+// Dark mode is plain CSS baked into style.css (loaded on every page
+// already) — unlike the sidebar feature there's no separate bundle to
+// fetch, so switching it on/off is just a class + a stored flag.
+function dmSetOn(on) {
+  document.documentElement.classList.toggle("dark-mode", !!on);
+  try { localStorage.setItem(DM_STORAGE_KEY, on ? "1" : "0"); } catch (e) {}
 }
 
 const SM_BUNDLES = {
@@ -83,6 +92,16 @@ function smBuildPopover() {
 
   pop.innerHTML = `
     <div class="settings-popover-heading">${typeof icon === "function" ? icon("settings", 15) : ""}<span>Settings</span></div>
+    <div class="settings-popover-row">
+      <div class="settings-popover-text">
+        <div class="settings-popover-title">Dark mode</div>
+        <div class="settings-popover-desc">Switch to a dark theme — easier on the eyes in low light.</div>
+      </div>
+      <label class="lg-switch">
+        <input type="checkbox" id="t29DarkModeToggle">
+        <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
+      </label>
+    </div>
     ${smHasSidebar() ? `
     <div class="settings-popover-row">
       <div class="settings-popover-text">
@@ -104,6 +123,12 @@ function smBuildPopover() {
   `;
 
   document.body.appendChild(pop);
+
+  const dmToggle = pop.querySelector("#t29DarkModeToggle");
+  if (dmToggle) {
+    dmToggle.checked = smReadFlag(DM_STORAGE_KEY);
+    dmToggle.addEventListener("change", () => dmSetOn(dmToggle.checked));
+  }
 
   if (smHasSidebar()) smWireToggle(pop.querySelector("#t29SidebarNavToggle"), "sb", SB_STORAGE_KEY);
 
@@ -194,6 +219,11 @@ function smInit() {
     if (e.key === SB_STORAGE_KEY && smHasSidebar()) {
       const on = e.newValue === "1";
       smLoadFeature("sb").then(() => window.sbSetOn(on));
+    }
+    if (e.key === DM_STORAGE_KEY) {
+      dmSetOn(e.newValue === "1");
+      const dmToggle = document.getElementById("t29DarkModeToggle");
+      if (dmToggle) dmToggle.checked = e.newValue === "1";
     }
   });
 }
