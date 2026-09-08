@@ -120,7 +120,9 @@ function smBuildPopover() {
       </div>
       <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
     </div>
-    <a href="https://buymeacoffee.com/29world" target="_blank" rel="noopener" id="t29SupportCreatorRow" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;padding:12px 14px;border-radius:10px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);font-weight:800;text-decoration:none;">☕ Support the Creator</a>
+    <div style="border-top:1px solid rgba(0,0,0,.08);margin-top:10px;padding-top:10px;">
+      <a href="https://buymeacoffee.com/29world" target="_blank" rel="noopener" id="t29SupportCreatorRow" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 14px;border-radius:10px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);font-weight:800;text-decoration:none;">☕ Support the Creator</a>
+    </div>
   `;
 
   document.body.appendChild(pop);
