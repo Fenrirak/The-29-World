@@ -399,8 +399,8 @@ tr:last-child td{border-bottom:none;}
 .dollar-bg.d4{font-size:7rem;top:60%;right:-2rem;transform:rotate(-6deg);}
 .support-creator-btn{
   position:fixed;
-  bottom:20px;
-  right:20px;
+  bottom:36px;
+  right:36px;
   display:flex;
   align-items:center;
   gap:8px;
