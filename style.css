@@ -397,17 +397,29 @@ tr:last-child td{border-bottom:none;}
 .dollar-bg.d2{font-size:6rem;bottom:10%;left:6%;transform:rotate(-10deg);}
 .dollar-bg.d3{font-size:9rem;top:40%;left:-3rem;transform:rotate(15deg);}
 .dollar-bg.d4{font-size:7rem;top:60%;right:-2rem;transform:rotate(-6deg);}
-.support-creator-link{
-  display:block;
-  text-align:center;
-  margin-top:14px;
-  font-size:.85rem;
-  color:rgba(255,255,255,0.85);
+.support-creator-btn{
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:12px 20px;
+  background:linear-gradient(135deg,var(--gold),var(--gold-dark));
+  color:var(--navy-900);
+  font-weight:800;
+  font-size:.9rem;
   text-decoration:none;
-  position:relative;
-  z-index:1;
+  border-radius:999px;
+  box-shadow:0 8px 24px rgba(201,154,46,0.45);
+  z-index:5;
+  transition:transform .15s ease, box-shadow .15s ease;
 }
-.support-creator-link:hover{color:#fff;text-decoration:underline;}
+.support-creator-btn:hover{
+  transform:translateY(-2px) scale(1.03);
+  box-shadow:0 12px 30px rgba(201,154,46,0.55);
+  color:var(--navy-900);
+}
 .auth-card{
   background:#fff;
   border-radius:20px;
