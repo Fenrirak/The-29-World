@@ -13,6 +13,8 @@
   --bg:#eef2fa;
   --card:#ffffff;
   --ink:#1a2233;
+  --warm-white:#f7f1e6;
+  --warm-white-dim:#d9cfba;
   --muted:#697389;
   --line:#e2e7f0;
   --radius:14px;
@@ -49,7 +51,7 @@ p{color:var(--muted);line-height:1.5;}
 .topbar{
   --navscale:1; /* set by fitTopbar() in icons.js after measuring real widths */
   background:linear-gradient(120deg,var(--navy-900) 0%,var(--navy-800) 55%,var(--navy-700) 100%);
-  color:#fff;
+  color:var(--warm-white);
   padding:12px 16px;
   display:flex;
   align-items:center;
@@ -79,7 +81,7 @@ p{color:var(--muted);line-height:1.5;}
   gap:calc(6px * var(--navscale));
   font-weight:800;
   font-size:calc(1.15rem * var(--navscale));
-  color:#fff;
+  color:var(--warm-white);
   text-decoration:none;
   flex-shrink:0;
   white-space:nowrap;
@@ -99,7 +101,7 @@ p{color:var(--muted);line-height:1.5;}
   align-items:center;
 }
 .topbar nav a{
-  color:#cfd8ea;text-decoration:none;font-weight:600;
+  color:var(--warm-white-dim);text-decoration:none;font-weight:600;
   font-size:calc(0.95rem * var(--navscale));
   display:inline-flex;align-items:center;
   gap:calc(6px * var(--navscale));
@@ -129,7 +131,7 @@ p{color:var(--muted);line-height:1.5;}
    on one line rather than shrinking text past readability. */
 .topbar nav.force-icons a .nav-label{display:none;}
 .topbar nav.force-icons a{padding:calc(8px * var(--navscale));justify-content:center;}
-.topbar nav a:hover{color:#fff;background:rgba(255,255,255,0.08);}
+.topbar nav a:hover{color:var(--warm-white);background:rgba(255,255,255,0.08);}
 .topbar nav a.active{background:rgba(232,184,75,0.16);color:var(--gold);}
 .topbar nav a.nav-locked{opacity:.4;cursor:not-allowed;}
 .topbar nav a.nav-locked:hover{background:none;color:inherit;}
@@ -171,7 +173,7 @@ p{color:var(--muted);line-height:1.5;}
   flex-shrink:0;
 }
 .btn-logout{
-  background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
+  background:rgba(255,255,255,0.08);color:var(--warm-white);border:none;border-radius:8px;
   padding:calc(8px * var(--navscale));
   font-weight:700;cursor:pointer;font-size:.85rem;
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
@@ -189,7 +191,7 @@ p{color:var(--muted);line-height:1.5;}
 /* Settings icon button (topbar) — same footprint as the logout button so
    the pair scales together cleanly. */
 .btn-icon-topbar{
-  background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
+  background:rgba(255,255,255,0.08);color:var(--warm-white);border:none;border-radius:8px;
   cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center;
   flex-shrink:0;
@@ -1278,6 +1280,8 @@ html.dark-mode{
   --sky-dark-dim:#2c477f;
   --lilac-dim:#5c5497;
   --lilac-dark-dim:#463f79;
+  --coral-dim:#8a4638;
+  --coral-dark-dim:#6b352a;
 
   --pastel-mint-bg: rgba(63,191,143,0.16);
   --pastel-mint-border: rgba(63,191,143,0.4);
@@ -1296,13 +1300,9 @@ html.dark-mode{
   --pastel-lilac-text: #cabdf7;
 }
 
-/* Body backdrop glow — keep the same sky/gold/mint accents, they read as
-   soft glowing orbs against a dark surface instead of a light one. */
+/* Flat background — no gradient/glow behind the page in dark mode. */
 html.dark-mode body{
-  background-image:
-    radial-gradient(circle at 6% 10%, rgba(91,141,239,0.16), transparent 40%),
-    radial-gradient(circle at 96% 18%, rgba(232,184,75,0.16), transparent 40%),
-    radial-gradient(circle at 90% 92%, rgba(63,191,143,0.14), transparent 40%);
+  background-image:none;
 }
 
 /* ---------------- Generic text & surfaces ---------------- */
@@ -1556,5 +1556,32 @@ html.dark-mode .stat.gold .muted-small{color:rgba(244,247,255,0.8);}
 html.dark-mode .stat.mint .muted-small,
 html.dark-mode .stat.sky .muted-small,
 html.dark-mode .stat.lilac .muted-small{color:rgba(244,247,255,0.8);}
+
+/* ---------------- Remove the remaining glow/shine effects (colored
+   drop-shadows, colored box-shadows, radial "shine" circles) so nothing
+   throws a bright halo against the dark surface. ---------------- */
+html.dark-mode .brand .coin, html.dark-mode .brand .icon-slot{filter:none;}
+html.dark-mode .auth-logo .coin{filter:none;}
+html.dark-mode .company-card::before{background:none;}
+
+html.dark-mode .anw-balance-widget{
+  background:linear-gradient(135deg,var(--gold-dim),var(--gold-dark-dim));
+  color:var(--heading-text);
+  box-shadow:0 8px 20px rgba(0,0,0,0.45);
+}
+html.dark-mode .anw-balance-widget .anw-bw-label{color:rgba(244,247,255,0.75);}
+
+html.dark-mode .btn.coral{background:linear-gradient(135deg,var(--coral-dim),var(--coral-dark-dim));box-shadow:0 4px 12px rgba(0,0,0,0.4);}
+html.dark-mode .quiz-score.fail{background:linear-gradient(135deg,var(--coral-dim),var(--coral-dark-dim));box-shadow:0 8px 20px rgba(0,0,0,0.4);}
+html.dark-mode .student-avatar.c5{background:linear-gradient(135deg,var(--coral-dim),var(--coral-dark-dim));}
+html.dark-mode .rpt-bar-fill.coral,
+html.dark-mode .bud-split-bar .seg.needs,
+html.dark-mode .bud-track-fill.needs{background:linear-gradient(90deg,var(--coral-dim),var(--coral-dark-dim));}
+
+html.dark-mode .btn.gold:hover{box-shadow:0 8px 18px rgba(0,0,0,0.5);}
+html.dark-mode .notif-dot{
+  background:linear-gradient(135deg,var(--coral-dim),var(--coral-dark-dim));
+  box-shadow:none;
+}
 
 }
