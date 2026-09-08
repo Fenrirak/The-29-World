@@ -1,4 +1,5 @@
 :root{
+  color-scheme:light;
   --navy-900:#1f2b44;
   --navy-800:#243a5e;
   --navy-700:#2c3b5c;
@@ -51,7 +52,7 @@ p{color:var(--muted);line-height:1.5;}
 .topbar{
   --navscale:1; /* set by fitTopbar() in icons.js after measuring real widths */
   background:linear-gradient(120deg,var(--navy-900) 0%,var(--navy-800) 55%,var(--navy-700) 100%);
-  color:var(--warm-white);
+  color:#fff;
   padding:12px 16px;
   display:flex;
   align-items:center;
@@ -81,7 +82,7 @@ p{color:var(--muted);line-height:1.5;}
   gap:calc(6px * var(--navscale));
   font-weight:800;
   font-size:calc(1.15rem * var(--navscale));
-  color:var(--warm-white);
+  color:#fff;
   text-decoration:none;
   flex-shrink:0;
   white-space:nowrap;
@@ -101,7 +102,7 @@ p{color:var(--muted);line-height:1.5;}
   align-items:center;
 }
 .topbar nav a{
-  color:var(--warm-white-dim);text-decoration:none;font-weight:600;
+  color:#cfd8ea;text-decoration:none;font-weight:600;
   font-size:calc(0.95rem * var(--navscale));
   display:inline-flex;align-items:center;
   gap:calc(6px * var(--navscale));
@@ -131,7 +132,7 @@ p{color:var(--muted);line-height:1.5;}
    on one line rather than shrinking text past readability. */
 .topbar nav.force-icons a .nav-label{display:none;}
 .topbar nav.force-icons a{padding:calc(8px * var(--navscale));justify-content:center;}
-.topbar nav a:hover{color:var(--warm-white);background:rgba(255,255,255,0.08);}
+.topbar nav a:hover{color:#fff;background:rgba(255,255,255,0.08);}
 .topbar nav a.active{background:rgba(232,184,75,0.16);color:var(--gold);}
 .topbar nav a.nav-locked{opacity:.4;cursor:not-allowed;}
 .topbar nav a.nav-locked:hover{background:none;color:inherit;}
@@ -173,7 +174,7 @@ p{color:var(--muted);line-height:1.5;}
   flex-shrink:0;
 }
 .btn-logout{
-  background:rgba(255,255,255,0.08);color:var(--warm-white);border:none;border-radius:8px;
+  background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
   padding:calc(8px * var(--navscale));
   font-weight:700;cursor:pointer;font-size:.85rem;
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
@@ -191,7 +192,7 @@ p{color:var(--muted);line-height:1.5;}
 /* Settings icon button (topbar) — same footprint as the logout button so
    the pair scales together cleanly. */
 .btn-icon-topbar{
-  background:rgba(255,255,255,0.08);color:var(--warm-white);border:none;border-radius:8px;
+  background:rgba(255,255,255,0.08);color:#fff;border:none;border-radius:8px;
   cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center;
   flex-shrink:0;
@@ -1254,6 +1255,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 @media screen {
 
 html.dark-mode{
+  color-scheme:dark;
   --bg:#151515;
   --card:#1c2440;
   --ink:#e8ecf8;
@@ -1262,7 +1264,7 @@ html.dark-mode{
   --shadow:0 6px 20px rgba(0,0,0,0.45);
 
   --surface-2:#212a4a;
-  --heading-text:#f4f7ff;
+  --heading-text:#f7f1e6;
   --accent-text:#8fb4ff;
   --muted-2:#8895b8;
 
@@ -1311,6 +1313,8 @@ html.dark-mode .topbar a{color:var(--warm-white);}
 html.dark-mode .topbar nav a{color:var(--warm-white-dim);}
 html.dark-mode .topbar nav a:hover{color:var(--warm-white);}
 html.dark-mode .topbar nav a.active{color:var(--gold);}
+html.dark-mode .btn-logout,
+html.dark-mode .btn-icon-topbar{color:var(--warm-white);}
 html.dark-mode th{color:var(--accent-text);}
 html.dark-mode input,
 html.dark-mode select{background:var(--card);color:var(--ink);border-color:var(--line);}
@@ -1512,6 +1516,7 @@ html.dark-mode .threshold-row{background:rgba(255,255,255,.03);}
 /* Small accent controls pop in gold against the dark surface */
 html.dark-mode .remember-row input[type="checkbox"],
 html.dark-mode .quiz-option input{accent-color:var(--gold);}
+html.dark-mode .qb-opt-row input[type="radio"]{accent-color:var(--mint);}
 
 /* Legacy per-page dropdown (student.html) */
 html.dark-mode .settings-dropdown{border-color:rgba(255,255,255,.12);}
@@ -1586,6 +1591,22 @@ html.dark-mode .btn.gold:hover{box-shadow:0 8px 18px rgba(0,0,0,0.5);}
 html.dark-mode .notif-dot{
   background:linear-gradient(135deg,var(--coral-dim),var(--coral-dark-dim));
   box-shadow:none;
+}
+
+/* ---------------- Remaining plain-white text -> same warm white as the
+   topbar, so every bright/white bit of text in dark mode matches. ---------------- */
+html.dark-mode .stat,
+html.dark-mode .btn,
+html.dark-mode .btn:hover,
+html.dark-mode .btn.mint,
+html.dark-mode .btn.coral,
+html.dark-mode .btn.secondary:hover,
+html.dark-mode .quiz-score.fail,
+html.dark-mode .tabs button.active,
+html.dark-mode .rank-pill,
+html.dark-mode .student-avatar,
+html.dark-mode .notif-dot{
+  color:var(--heading-text);
 }
 
 }
