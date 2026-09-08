@@ -1307,6 +1307,10 @@ html.dark-mode body{
 
 /* ---------------- Generic text & surfaces ---------------- */
 html.dark-mode a{color:var(--accent-text);}
+html.dark-mode .topbar a{color:var(--warm-white);}
+html.dark-mode .topbar nav a{color:var(--warm-white-dim);}
+html.dark-mode .topbar nav a:hover{color:var(--warm-white);}
+html.dark-mode .topbar nav a.active{color:var(--gold);}
 html.dark-mode th{color:var(--accent-text);}
 html.dark-mode input,
 html.dark-mode select{background:var(--card);color:var(--ink);border-color:var(--line);}
