@@ -120,8 +120,9 @@ async function openShareModal(code, name) {
     document.getElementById("shareLinkArea").classList.remove("hidden");
     document.getElementById("shareModalMsg").innerHTML = "";
   } catch (err) {
+    console.error("getOrCreateTemplateShare failed:", err);
     document.getElementById("shareModalMsg").innerHTML =
-      `<div class="error-msg">Couldn't generate a share link right now. Please try again.</div>`;
+      `<div class="error-msg">Couldn't generate a share link right now (${err && err.message ? err.message : "unknown error"}). Please try again.</div>`;
   }
 }
 
