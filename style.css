@@ -445,7 +445,7 @@ label .icon-slot{color:var(--navy-700);}
 /* Teacher Home — class picker rows (one class per line, full-width) */
 .class-card-grid{display:flex;flex-direction:column;gap:14px;}
 .class-card{
-  border:1.5px solid var(--line);border-radius:14px;padding:18px 24px;
+  border:1.5px solid var(--line);border-radius:14px;padding:26px 24px;
   background:#fff;cursor:pointer;transition:box-shadow .15s,transform .15s;
   display:flex;align-items:center;justify-content:space-between;
   gap:18px;flex-wrap:wrap;position:relative;
@@ -459,7 +459,7 @@ label .icon-slot{color:var(--navy-700);}
 .class-card .class-card-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
 .class-card .class-card-actions button{position:relative;z-index:2;}
 .new-class-card{
-  border:1.5px dashed var(--line);border-radius:14px;padding:18px 24px;
+  border:1.5px dashed var(--line);border-radius:14px;padding:26px 24px;
   display:flex;align-items:center;justify-content:center;
   gap:14px;flex-wrap:wrap;text-align:center;color:var(--muted);
   background:rgba(0,0,0,0.045);transition:box-shadow .15s,transform .15s;
