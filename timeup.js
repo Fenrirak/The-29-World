@@ -11,7 +11,7 @@ let CURRENT;
 async function init() {
   const u = await requireLogin({ skipTimeLimit: true });
   if (!u) return;
-  if (u.role !== "student") { window.location.href = "teacher.html"; return; }
+  if (u.role !== "student") { window.location.href = "teacher-home.html"; return; }
   CURRENT = u;
 
   paintIconSlots();

@@ -68,7 +68,7 @@ function paintChrome() {
 async function init() {
   const u = await requireLogin();
   if (!u) return;
-  if (u.role !== "student") { window.location.href = "teacher.html"; return; }
+  if (u.role !== "student") { window.location.href = "teacher-home.html"; return; }
   CURRENT = u;
   document.getElementById("whoami").textContent = u.name;
   paintChrome();
