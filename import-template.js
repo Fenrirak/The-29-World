@@ -68,6 +68,7 @@ async function submitImport(e) {
       btn.disabled = false;
       return false;
     }
+    sessionStorage.setItem("t29-class-opened", "1");
     window.location.href = "teacher.html";
   } catch (err) {
     document.getElementById("importMsg").innerHTML = `<div class="error-msg">Something went wrong. Please try again.</div>`;

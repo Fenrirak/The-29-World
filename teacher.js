@@ -83,6 +83,14 @@ async function init() {
   if (!CLASS_CODE) { window.location.href = "teacher-home.html"; return; }
   const clsCheck = await getClassCached(CLASS_CODE);
   if (!clsCheck) { window.location.href = "teacher-home.html"; return; }
+  // teacher.html should never act as a landing/home page — it's only ever
+  // reached by explicitly opening a class from My Classes (or right after
+  // creating/importing one). sessionStorage is per-tab, so a tab that
+  // jumped straight here (a bookmark, a typed URL, a fresh tab) won't have
+  // this flag set and gets sent to My Classes instead; a tab that already
+  // opened a class keeps working normally on reload or via the Dashboard
+  // nav link.
+  if (sessionStorage.getItem("t29-class-opened") !== "1") { window.location.href = "teacher-home.html"; return; }
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintChrome();
   enablePasswordToggles();

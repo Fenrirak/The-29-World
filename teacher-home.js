@@ -75,6 +75,7 @@ async function openClass(code) {
   showMsg("");
   const res = await switchActiveClass(CURRENT.username, code);
   if (!res.ok) { showMsg(res.error, false); return; }
+  sessionStorage.setItem("t29-class-opened", "1");
   window.location.href = "teacher.html";
 }
 
@@ -196,6 +197,7 @@ async function submitNewClass(e) {
       btn.disabled = false;
       return false;
     }
+    sessionStorage.setItem("t29-class-opened", "1");
     window.location.href = "teacher.html?welcome=1";
   } catch (err) {
     document.getElementById("ncMsg").innerHTML = `<div class="error-msg">Something went wrong. Please try again.</div>`;
