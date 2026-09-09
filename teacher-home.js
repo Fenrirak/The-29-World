@@ -32,14 +32,14 @@ async function render() {
     const card = document.createElement("div");
     card.className = "class-card" + (cls.archived ? " archived" : "");
     card.innerHTML = `
-      <div class="flex-between" style="align-items:flex-start;">
+      <div class="class-card-main">
         <h3>${icon("building", 18)} ${escapeHtml(cls.name)}</h3>
         ${cls.archived ? `<span class="badge coral">${icon("lock", 12)} Archived</span>` : ""}
-      </div>
-      <div class="class-card-meta">
-        <span>${icon("users", 14)} ${cls.studentCount} student${cls.studentCount === 1 ? "" : "s"}</span>
-        <span>${icon("calendar", 14)} Created ${fmtDate(cls.createdAt)}</span>
-        <span>${icon("key", 14)} Class code: ${cls.code}</span>
+        <div class="class-card-meta">
+          <span>${icon("users", 14)} ${cls.studentCount} student${cls.studentCount === 1 ? "" : "s"}</span>
+          <span>${icon("calendar", 14)} Created ${fmtDate(cls.createdAt)}</span>
+          <span>${icon("key", 14)} Class code: ${cls.code}</span>
+        </div>
       </div>
       <div class="class-card-actions">
         <button class="btn small gold" type="button" data-open="${cls.code}">${icon("send", 12)} Open</button>

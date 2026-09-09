@@ -442,27 +442,29 @@ label .icon-slot{color:var(--navy-700);}
 .t29-archived-readonly main select:disabled,
 .t29-archived-readonly main textarea:disabled{opacity:.45;cursor:not-allowed;}
 
-/* Teacher Home — class picker cards */
-.class-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px;}
+/* Teacher Home — class picker rows (one class per line, full-width) */
+.class-card-grid{display:flex;flex-direction:column;gap:14px;}
 .class-card{
-  border:1.5px solid var(--line);border-radius:14px;padding:20px 22px;
+  border:1.5px solid var(--line);border-radius:14px;padding:18px 24px;
   background:#fff;cursor:pointer;transition:box-shadow .15s,transform .15s;
-  display:flex;flex-direction:column;gap:10px;position:relative;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:18px;flex-wrap:wrap;position:relative;
 }
 .class-card:hover{box-shadow:0 10px 24px rgba(31,43,68,0.12);transform:translateY(-2px);}
 .class-card.archived{background:rgba(0,0,0,0.02);}
-.class-card h3{margin:0;font-size:1.15rem;}
-.class-card .class-card-meta{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:.85rem;}
-.class-card .class-card-meta span{display:flex;align-items:center;gap:6px;}
-.class-card .class-card-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:8px;}
+.class-card .class-card-main{display:flex;align-items:center;gap:22px;flex-wrap:wrap;flex:1;min-width:0;}
+.class-card h3{margin:0;font-size:1.15rem;white-space:nowrap;display:flex;align-items:center;gap:8px;}
+.class-card .class-card-meta{display:flex;flex-direction:row;gap:20px;color:var(--muted);font-size:.85rem;flex-wrap:wrap;}
+.class-card .class-card-meta span{display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.class-card .class-card-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
 .class-card .class-card-actions button{position:relative;z-index:2;}
 .new-class-card{
-  border:1.5px dashed var(--line);border-radius:14px;padding:20px 22px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:8px;text-align:center;cursor:pointer;color:var(--muted);min-height:150px;
+  border:1.5px dashed var(--line);border-radius:14px;padding:18px 24px;
+  display:flex;align-items:center;justify-content:center;
+  gap:14px;flex-wrap:wrap;text-align:center;color:var(--muted);
   background:rgba(0,0,0,0.012);transition:box-shadow .15s,transform .15s;
 }
-.new-class-card:hover{box-shadow:0 10px 24px rgba(31,43,68,0.1);transform:translateY(-2px);color:var(--navy-900);}
+.new-class-card:hover{box-shadow:0 10px 24px rgba(31,43,68,0.1);color:var(--navy-900);}
 .flex-between{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 .student-avatar{
   width:38px;height:38px;border-radius:50%;
@@ -596,6 +598,9 @@ label .icon-slot{color:var(--navy-700);}
   .stat{padding:16px;}
   .stat .value{font-size:1.5rem;}
   .company-card .row-flex svg{width:90px;}
+  .class-card{flex-direction:column;align-items:stretch;}
+  .class-card .class-card-main{flex-direction:column;align-items:flex-start;gap:10px;}
+  .class-card .class-card-actions{justify-content:flex-start;}
 }
 
 @media (max-width: 420px){
