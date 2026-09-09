@@ -103,20 +103,26 @@ async function deleteClassClick(code, name) {
 
 async function openShareModal(code, name) {
   SHARE_CODE = code;
-  document.getElementById("shareModalMsg").innerHTML = "";
   document.getElementById("shareModalClassName").textContent = name;
   document.getElementById("shareLinkArea").classList.add("hidden");
   document.getElementById("shareLinkInput").value = "";
+  document.getElementById("shareModalMsg").innerHTML = `<p class="muted-small">Generating your link…</p>`;
   document.getElementById("shareTemplateModal").classList.remove("hidden");
 
-  const res = await getOrCreateTemplateShare(code, CURRENT.username);
-  if (!res.ok) {
-    document.getElementById("shareModalMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
-    return;
+  try {
+    const res = await getOrCreateTemplateShare(code, CURRENT.username);
+    if (!res.ok) {
+      document.getElementById("shareModalMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+    const link = new URL("import-template.html?token=" + encodeURIComponent(res.token), window.location.href).href;
+    document.getElementById("shareLinkInput").value = link;
+    document.getElementById("shareLinkArea").classList.remove("hidden");
+    document.getElementById("shareModalMsg").innerHTML = "";
+  } catch (err) {
+    document.getElementById("shareModalMsg").innerHTML =
+      `<div class="error-msg">Couldn't generate a share link right now. Please try again.</div>`;
   }
-  const link = new URL("import-template.html?token=" + encodeURIComponent(res.token), window.location.href).href;
-  document.getElementById("shareLinkInput").value = link;
-  document.getElementById("shareLinkArea").classList.remove("hidden");
 }
 
 function closeShareModal() {
