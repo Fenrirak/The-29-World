@@ -1,4 +1,4 @@
-let CURRENT, ALL_CLASSES = [], NC_MODE = "new";
+let CURRENT, ALL_CLASSES = [], NC_MODE = "new", SHARE_CODE = null;
 
 function fmtDate(ts) {
   if (!ts) return "Unknown date";
@@ -43,6 +43,7 @@ async function render() {
       </div>
       <div class="class-card-actions">
         <button class="btn small gold" type="button" data-open="${cls.code}">${icon("send", 12)} Open</button>
+        <button class="btn small secondary" type="button" data-share="${cls.code}">${icon("handshake", 12)} Share Template</button>
         <button class="btn small secondary" type="button" data-archive="${cls.code}">${cls.archived ? icon("repeat", 12) + " Reopen" : icon("lock", 12) + " Archive"}</button>
         <button class="btn small coral" type="button" data-delete="${cls.code}">${icon("trash", 12)} Delete</button>
       </div>
@@ -50,6 +51,7 @@ async function render() {
     card.querySelector("h3").addEventListener("click", () => openClass(cls.code));
     card.addEventListener("click", () => openClass(cls.code));
     card.querySelector("[data-open]").addEventListener("click", (e) => { e.stopPropagation(); openClass(cls.code); });
+    card.querySelector("[data-share]").addEventListener("click", (e) => { e.stopPropagation(); openShareModal(cls.code, cls.name); });
     card.querySelector("[data-archive]").addEventListener("click", (e) => { e.stopPropagation(); toggleArchive(cls.code, cls.archived, cls.name); });
     card.querySelector("[data-delete]").addEventListener("click", (e) => { e.stopPropagation(); deleteClassClick(cls.code, cls.name); });
     grid.appendChild(card);
@@ -97,6 +99,53 @@ async function deleteClassClick(code, name) {
   const res = await deleteClassPermanently(CURRENT.username, code);
   if (!res.ok) { alert(res.error); return; }
   await render();
+}
+
+async function openShareModal(code, name) {
+  SHARE_CODE = code;
+  document.getElementById("shareModalMsg").innerHTML = "";
+  document.getElementById("shareModalClassName").textContent = name;
+  document.getElementById("shareLinkArea").classList.add("hidden");
+  document.getElementById("shareLinkInput").value = "";
+  document.getElementById("shareTemplateModal").classList.remove("hidden");
+
+  const res = await getOrCreateTemplateShare(code, CURRENT.username);
+  if (!res.ok) {
+    document.getElementById("shareModalMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
+    return;
+  }
+  const link = new URL("import-template.html?token=" + encodeURIComponent(res.token), window.location.href).href;
+  document.getElementById("shareLinkInput").value = link;
+  document.getElementById("shareLinkArea").classList.remove("hidden");
+}
+
+function closeShareModal() {
+  document.getElementById("shareTemplateModal").classList.add("hidden");
+  SHARE_CODE = null;
+}
+
+async function copyShareLink() {
+  const input = document.getElementById("shareLinkInput");
+  input.select();
+  const btn = document.getElementById("copyShareLinkBtn");
+  try {
+    await navigator.clipboard.writeText(input.value);
+    const original = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  } catch (err) {
+    // Clipboard API unavailable/blocked — the link is already selected
+    // in the input, so the teacher can just press Ctrl/Cmd+C themselves.
+    document.getElementById("shareModalMsg").innerHTML =
+      `<div class="error-msg">Couldn't copy automatically — the link is selected, so press Ctrl/Cmd+C to copy it.</div>`;
+  }
+}
+
+async function stopSharing() {
+  if (!SHARE_CODE) return;
+  if (!confirm("Stop sharing this class? The current link will stop working — you can share it again anytime, which creates a brand new link.")) return;
+  await revokeTemplateShare(SHARE_CODE, CURRENT.username);
+  closeShareModal();
 }
 
 function openNewClassModal(mode) {

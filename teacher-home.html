@@ -81,6 +81,25 @@
   </div>
 </div>
 
+<!-- Share Template modal: generates/shows a link another teacher can use
+     to import this class's settings into their own account -->
+<div id="shareTemplateModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:40px 16px;" ondblclick="if(event.target===this)closeShareModal()">
+  <div class="card" style="width:100%;max-width:480px;margin-top:0;">
+    <div class="flex-between">
+      <h2 id="shareModalTitle" style="margin-bottom:2px;">Share as a template</h2>
+      <button class="btn small secondary" type="button" onclick="closeShareModal()">Close</button>
+    </div>
+    <p class="muted-small">Anyone with this link can use <strong id="shareModalClassName"></strong>'s settings — jobs, properties, side hustles, the store, and every other class setting — as a starting point for a brand new class in their own account. Your students, their data, and this class itself are never shared.</p>
+    <div id="shareLinkArea" class="hidden">
+      <label for="shareLinkInput">Share link</label>
+      <input id="shareLinkInput" readonly onclick="this.select()">
+      <button class="btn gold" style="width:100%;justify-content:center;margin-top:10px;" type="button" onclick="copyShareLink()" id="copyShareLinkBtn">Copy link</button>
+      <button class="btn small coral" style="width:100%;justify-content:center;margin-top:8px;" type="button" onclick="stopSharing()">Stop sharing (revoke this link)</button>
+    </div>
+    <div id="shareModalMsg"></div>
+  </div>
+</div>
+
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>

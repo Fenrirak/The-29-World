@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+(function(){
+  try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}
+  window.T29_HAS_SIDEBAR = true;
+  function loadIfOn(flagKey, cls, css, js){
+    var on;
+    try { on = localStorage.getItem(flagKey) === '1'; } catch(e) { on = false; }
+    if (!on) return;
+    document.documentElement.classList.add(cls);
+    var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = css;
+    document.head.appendChild(l);
+    var s = document.createElement('script'); s.src = js;
+    document.head.appendChild(s);
+  }
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css', 'sidebar-nav.js');
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Import class template — The 29 World</title>
+<link rel="icon" type="image/png" href="Favicon.png">
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="teacher-home.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <span class="who" id="whoami"></span>
+    <div class="topbar-actions">
+      <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+    </div>
+  </nav>
+</div>
+
+<main>
+  <div class="card" style="max-width:520px;margin:40px auto;">
+
+    <div id="stateError" class="hidden" style="text-align:center;">
+      <div style="font-size:36px;margin-bottom:6px;" id="errorIcon"></div>
+      <h1>Can't open this link</h1>
+      <p id="errorMsg" class="muted-small"></p>
+      <a class="btn gold" href="teacher-home.html" style="justify-content:center;">Go to my classes</a>
+    </div>
+
+    <div id="stateWrongRole" class="hidden" style="text-align:center;">
+      <div style="font-size:36px;margin-bottom:6px;" id="wrongRoleIcon"></div>
+      <h1>This link is for teachers</h1>
+      <p class="muted-small">You're currently logged in as a student. Log out and log back in with a teacher account to import this class template.</p>
+      <button class="btn gold" onclick="logout()" style="justify-content:center;">Log out</button>
+    </div>
+
+    <div id="stateReady" class="hidden">
+      <div style="text-align:center;">
+        <div style="font-size:36px;margin-bottom:6px;" id="readyIcon"></div>
+        <h1>You've been sent a class template</h1>
+        <p id="shareIntro" class="muted-small"></p>
+      </div>
+      <form onsubmit="return submitImport(event)" style="margin-top:14px;">
+        <label for="newClassName"><span class="icon-slot" data-icon="building"></span> Name your new class</label>
+        <input id="newClassName" required placeholder="Class name, e.g. Room 12">
+        <p class="muted-small">Jobs, properties, side hustles, the store, random events, tax rates and every other class setting from the shared class will be copied over. It won't affect the class it came from, and no students or activity history come with it.</p>
+        <button class="btn gold" style="width:100%;justify-content:center;margin-top:6px;" type="submit" id="importSubmitBtn">Create my class</button>
+      </form>
+      <div id="importMsg"></div>
+    </div>
+
+  </div>
+</main>
+
+<div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
+
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script defer src="firebase-init.js"></script>
+<script defer src="icons.js"></script>
+<script defer src="data.js"></script>
+<script defer src="import-template.js"></script>
+</body>
+</html>

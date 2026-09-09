@@ -597,6 +597,7 @@ function defaultClassData(code, className, teacherUsername) {
     interestRate: 2, txns: [],
     createdAt: Date.now(), reportArchives: [],
     archived: false, archivedAt: null,
+    templateShareToken: null,
     payDay: "Fri",
     mortgageDay: "Fri",
     mortgageForceDueWeek: null,
@@ -714,19 +715,12 @@ async function createClassForTeacher(teacherUsername, className) {
 // vehicle owners, company share holders/price history) describe *live*
 // state rather than configuration, so those are reset to their starting
 // values instead of copied as-is.
-async function createClassFromTemplate(teacherUsername, className, templateCode) {
-  const teacher = await getUser(teacherUsername);
-  if (!teacher || teacher.role !== "teacher") return { ok: false, error: "Teacher account not found." };
-  if (!className || !className.trim()) return { ok: false, error: "Enter a class name." };
-
-  const template = await getClass(templateCode);
-  if (!template || template.teacher !== teacherUsername) {
-    return { ok: false, error: "That template class couldn't be found." };
-  }
-
-  let code;
-  do { code = genCode(5); } while ((await getClass(code)));
-  const cls = defaultClassData(code, className.trim(), teacherUsername);
+// Builds the class-doc data for "new class from a template", shared by
+// same-account templating (createClassFromTemplate) and cross-account
+// sharing (importSharedTemplate) below — the copy/reset rules are
+// identical either way, only who ends up owning the result differs.
+function _classDataFromTemplate(code, className, teacherUsername, template) {
+  const cls = defaultClassData(code, className, teacherUsername);
 
   cls.jobs = _cloneDoc(template.jobs || []);
   cls.insurancePlans = _cloneDoc(template.insurancePlans || []);
@@ -787,8 +781,116 @@ async function createClassFromTemplate(teacherUsername, className, templateCode)
   cls.mortgageDay = template.mortgageDay || "Fri";
   cls.insuranceDay = template.insuranceDay || "Fri";
 
+  return cls;
+}
+
+async function createClassFromTemplate(teacherUsername, className, templateCode) {
+  const teacher = await getUser(teacherUsername);
+  if (!teacher || teacher.role !== "teacher") return { ok: false, error: "Teacher account not found." };
+  if (!className || !className.trim()) return { ok: false, error: "Enter a class name." };
+
+  const template = await getClass(templateCode);
+  if (!template || template.teacher !== teacherUsername) {
+    return { ok: false, error: "That template class couldn't be found." };
+  }
+
+  let code;
+  do { code = genCode(5); } while ((await getClass(code)));
+  const cls = _classDataFromTemplate(code, className.trim(), teacherUsername, template);
+
   await classesCol().doc(code).set(cls);
   await usersCol().doc(teacherUsername).update({ classCode: code });
+  return { ok: true, code };
+}
+
+/* ---------------- Sharing a class as a template with another teacher ----
+   A separate "templateShares" collection maps a random, unguessable
+   token to the source class — deliberately not the class's own join
+   code, so a share link can be copied/posted/revoked without touching
+   (or exposing) the code students use to log in, and a teacher can kill
+   a share link at any time without affecting the class itself. */
+function templateSharesCol() { return fdb.collection("templateShares"); }
+
+function genShareToken() {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const bytes = new Uint8Array(22);
+  if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  let out = "";
+  for (let i = 0; i < bytes.length; i++) out += chars[bytes[i] % chars.length];
+  return out;
+}
+
+// "Share Template" button — mints a link the first time, then just keeps
+// returning the same one so repeat clicks don't invalidate a link a
+// teacher already handed out.
+async function getOrCreateTemplateShare(classCode, teacherUsername) {
+  const cls = await getClass(classCode);
+  if (!cls) return { ok: false, error: "Class not found." };
+  if (cls.teacher !== teacherUsername) return { ok: false, error: "You don't have permission to share this class." };
+
+  if (cls.templateShareToken) {
+    const existing = await templateSharesCol().doc(cls.templateShareToken).get();
+    if (existing.exists) return { ok: true, token: cls.templateShareToken };
+    // The class still points at a token whose share record is gone
+    // (shouldn't normally happen) — fall through and mint a fresh one.
+  }
+
+  const token = genShareToken();
+  await templateSharesCol().doc(token).set({
+    token, classCode, teacher: teacherUsername, createdAt: Date.now()
+  });
+  await classesCol().doc(classCode).update({ templateShareToken: token });
+  return { ok: true, token };
+}
+
+// Invalidates a class's current share link. Sharing again afterwards
+// mints a brand new one.
+async function revokeTemplateShare(classCode, teacherUsername) {
+  const cls = await getClass(classCode);
+  if (!cls) return { ok: false, error: "Class not found." };
+  if (cls.teacher !== teacherUsername) return { ok: false, error: "You don't have permission to manage sharing for this class." };
+  if (cls.templateShareToken) {
+    await templateSharesCol().doc(cls.templateShareToken).delete();
+    await classesCol().doc(classCode).update({ templateShareToken: null });
+  }
+  return { ok: true };
+}
+
+// What import-template.html shows before the receiving teacher commits —
+// deliberately requires no permission on the source class, since the
+// whole point of a share link is letting a different teacher use it.
+async function getTemplateShareInfo(token) {
+  if (!token) return null;
+  await T29_AUTH_READY; // firestore.rules requires request.auth != null
+  const snap = await templateSharesCol().doc(token).get();
+  if (!snap.exists) return null;
+  const share = snap.data();
+  const [cls, teacher] = await Promise.all([getClass(share.classCode), getUser(share.teacher)]);
+  if (!cls) return null; // source class was deleted after sharing
+  return { token, className: cls.name, teacherName: teacher ? teacher.name : "another teacher" };
+}
+
+// Creates a brand new class in the IMPORTING teacher's account from a
+// share link — same copy/reset rules as createClassFromTemplate, just
+// sourced from a share token instead of one of their own classes.
+async function importSharedTemplate(importingTeacherUsername, token, className) {
+  const teacher = await getUser(importingTeacherUsername);
+  if (!teacher || teacher.role !== "teacher") return { ok: false, error: "Teacher account not found." };
+  if (!className || !className.trim()) return { ok: false, error: "Enter a class name." };
+
+  const shareSnap = await templateSharesCol().doc(token).get();
+  if (!shareSnap.exists) return { ok: false, error: "This share link is invalid or has been revoked." };
+  const share = shareSnap.data();
+  const template = await getClass(share.classCode);
+  if (!template) return { ok: false, error: "The shared class no longer exists." };
+
+  let code;
+  do { code = genCode(5); } while ((await getClass(code)));
+  const cls = _classDataFromTemplate(code, className.trim(), importingTeacherUsername, template);
+
+  await classesCol().doc(code).set(cls);
+  await usersCol().doc(importingTeacherUsername).update({ classCode: code });
   return { ok: true, code };
 }
 
@@ -826,6 +928,9 @@ async function deleteClassPermanently(teacherUsername, classCode) {
   // the wrapped docRef.delete() in installReadCache(), which is what
   // keeps the read cache correct — a raw WriteBatch would bypass that.
   await Promise.all((cls.students || []).map(u => usersCol().doc(u).delete()));
+  if (cls.templateShareToken) {
+    await templateSharesCol().doc(cls.templateShareToken).delete();
+  }
   await classesCol().doc(classCode).delete();
 
   const teacher = await getUser(teacherUsername);
@@ -4666,6 +4771,7 @@ function withNewModuleDefaults(cls) {
   // as a template for a brand new class.
   if (cls.archived === undefined) cls.archived = false;
   if (cls.archivedAt === undefined) cls.archivedAt = null;
+  if (cls.templateShareToken === undefined) cls.templateShareToken = null;
   cls.reportArchives = cls.reportArchives || [];
   cls.insurancePlans = cls.insurancePlans || [];
   cls.storeItems = cls.storeItems || [];

@@ -156,6 +156,17 @@ function showMsg(text, ok) {
     `<div class="${ok ? 'success-msg' : 'error-msg'}">${text}</div>`;
 }
 
+// Lets a link like import-template.html send a not-yet-logged-in teacher
+// through the login/signup form and straight back afterwards. Only ever
+// a bare same-origin page name (+ optional query string) is accepted —
+// never an absolute or protocol-relative URL — so this can't be turned
+// into an open redirect.
+function getSafeReturnTo() {
+  const rt = new URLSearchParams(window.location.search).get("returnTo");
+  if (!rt) return null;
+  return /^[a-zA-Z0-9_-]+\.html(\?[^\s]*)?$/.test(rt) ? rt : null;
+}
+
 async function doLogin(e) {
   e.preventDefault();
   const isTeacherForm = e.target.id === "panel-teacher-login";
@@ -176,7 +187,7 @@ async function doLogin(e) {
     localStorage.removeItem(key);
   }
 
-  window.location.href = res.user.role === "teacher" ? "teacher-home.html" : "student.html";
+  window.location.href = getSafeReturnTo() || (res.user.role === "teacher" ? "teacher-home.html" : "student.html");
   return false;
 }
 
@@ -206,7 +217,7 @@ async function doTeacherSignup(e) {
   const res = await createTeacherAndClass(name, username, password, className);
   if (!res.ok) { showMsg(res.error, false); return false; }
   setSession(username);
-  window.location.href = "teacher.html?welcome=1";
+  window.location.href = getSafeReturnTo() || "teacher.html?welcome=1";
   return false;
 }
 
@@ -230,7 +241,7 @@ loadRememberedLogins();
 // If already logged in, skip straight to dashboard
 (async function () {
   const u = await getSessionUser();
-  if (u) window.location.href = u.role === "teacher" ? "teacher-home.html" : "student.html";
+  if (u) window.location.href = getSafeReturnTo() || (u.role === "teacher" ? "teacher-home.html" : "student.html");
 })();
 </script>
 </body>
