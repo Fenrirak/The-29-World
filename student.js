@@ -68,7 +68,14 @@ function paintChrome() {
 async function init() {
   const u = await requireLogin();
   if (!u) return;
-  if (u.role !== "student") { window.location.href = "teacher-home.html"; return; }
+  // A mismatched role here means the session on this device belongs to
+  // someone else (e.g. a shared classroom computer where a teacher
+  // account was left signed in). Forwarding straight to teacher-home.html
+  // used to hand whoever's now sitting at the machine that teacher's
+  // dashboard — confusing at best. Instead, sign this stale session out
+  // and send them back to the login screen so the right person can log
+  // in as themselves.
+  if (u.role !== "student") { clearSession(); window.location.href = "index.html"; return; }
   CURRENT = u;
   document.getElementById("whoami").textContent = u.name;
   paintChrome();
