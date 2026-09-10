@@ -702,7 +702,7 @@ function thresholdRowHtml(t) {
       <p class="muted-small threshold-reqs-label">Optional requirements — a student must also meet these to be shown this band, even if their score qualifies. Leave at 0 for no requirement.</p>
       <div class="grid grid-3">
         <div><label>Min net worth</label><input class="th-min-networth" type="number" min="0" step="1" value="${t.minNetWorth || 0}"></div>
-        <div><label>Min property comfort (0-5 stars)</label><input class="th-min-property" type="number" min="0" max="5" step="1" value="${t.minPropertyComfort || 0}"></div>
+        <div><label>Min property comfort (stars, incl. living-in bonus)</label><input class="th-min-property" type="number" min="0" step="1" value="${t.minPropertyComfort || 0}"></div>
         <div><label>Min transport comfort (total stars across owned vehicles)</label><input class="th-min-transport" type="number" min="0" step="1" value="${t.minTransportComfort || 0}"></div>
       </div>
     </div>
