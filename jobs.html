@@ -61,59 +61,128 @@
 </div>
 
 <main>
-  <h1 id="pageTitle">Jobs</h1>
+  <h1>Jobs</h1>
 
-  <!-- TEACHER VIEW -->
+  <!-- ══════════════════════════ TEACHER VIEW ══════════════════════════ -->
   <div id="teacherView" class="hidden">
+
+    <!-- Jobs grid -->
     <div class="card">
-      <h2 id="hJobs">Jobs board</h2>
-      <p>Create jobs and assign one to each student. Students can also apply for jobs below.</p>
-      <div class="table-scroll">
-      <table id="jobsTable">
-        <thead><tr><th>Job</th><th>Wage</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="flex-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h2>Job roles</h2>
+          <p class="muted-small" style="margin:0;">Each job has a tier ladder — students start at the bottom and can be promoted up.</p>
+        </div>
       </div>
-      <form onsubmit="return addJobForm(event)">
-        <label for="jobTitle" id="labJobTitle">New job title</label>
-        <input id="jobTitle" placeholder="e.g. Librarian" required>
-        <label for="jobWage" id="labJobWage">Weekly wage</label>
-        <input id="jobWage" type="number" min="0" step="0.5" placeholder="e.g. 15" required>
-        <label for="jobDesc" id="labJobDesc">Job description (shown to students)</label>
-        <input id="jobDesc" placeholder="e.g. Keep the class library tidy and log borrowed books">
-        <button class="btn gold" type="submit" id="addJobBtn">Add job</button>
-      </form>
+      <div id="jobsGrid" class="jobs-family-grid" style="margin-top:20px;"></div>
     </div>
 
+    <!-- Add new job -->
+    <div class="card" id="addJobCard">
+      <h2>Create new job</h2>
+      <p class="muted-small">Set up a job with as many tiers as you like. Each tier has its own name, pay, and description.</p>
+
+      <label for="addJobTitle">Job name</label>
+      <input id="addJobTitle" placeholder="e.g. Librarian" style="max-width:360px;">
+
+      <label for="addJobAutoWeeks" style="margin-top:14px;">
+        Auto-promote every
+        <input id="addJobAutoWeeks" type="number" min="0" step="1" value="0"
+          style="width:70px;display:inline-block;margin:0 6px;vertical-align:middle;">
+        weeks &nbsp;<span class="muted-small">(0 = disabled — teacher promotes manually)</span>
+      </label>
+
+      <h3 style="margin:20px 0 10px;font-size:.95rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);">Tiers</h3>
+      <div id="addTiersList"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+        <button class="btn small secondary" type="button" onclick="addTierRowBtn('add')">+ Add tier</button>
+        <div style="flex:1;"></div>
+        <div id="addJobSuccess" class="success-msg hidden" style="align-self:center;">Job created!</div>
+        <button class="btn gold" type="button" id="addJobBtn" onclick="submitAddJob()">
+          + Add job
+        </button>
+      </div>
+    </div>
+
+    <!-- Applications -->
     <div class="card">
-      <h2 id="hApplications">Pending job applications</h2>
-      <p>Students apply for jobs below — approve or decline them here.</p>
-      <div id="applicationsList"></div>
-      <p class="muted-small" id="noApplications">No pending applications right now.</p>
+      <div class="flex-between">
+        <h2>Pending applications <span id="applicationsBadge" class="badge coral hidden" style="font-size:.7rem;vertical-align:middle;"></span></h2>
+      </div>
+      <p class="muted-small">When students apply for a job, they always start at the entry tier.</p>
+      <div id="applicationsBox"></div>
     </div>
-  </div>
 
-  <!-- STUDENT VIEW -->
+  </div><!-- /teacherView -->
+
+  <!-- ══════════════════════════ STUDENT VIEW ══════════════════════════ -->
   <div id="studentView" class="hidden">
+
     <div class="card">
-      <h2 id="hMyJob">My current job</h2>
+      <h2>My current job</h2>
       <div id="myJobBox"></div>
     </div>
 
     <div class="card">
-      <h2 id="hBoard">Job board</h2>
-      <p>Click a job to see the full description and wage, then apply. Your teacher will approve or decline your application.</p>
-      <div id="jobList"></div>
-      <p class="muted-small" id="noJobs">Your teacher hasn't posted any jobs yet.</p>
+      <h2>Job board</h2>
+      <p class="muted-small">Each job has a progression of tiers — you start at the bottom and work your way up.</p>
+      <div id="jobBoardGrid" class="job-board-grid" style="margin-top:16px;"></div>
+      <p class="muted-small hidden" id="noJobs">Your teacher hasn't posted any jobs yet.</p>
     </div>
 
     <div class="card">
-      <h2 id="hMyApps">My applications</h2>
-      <div id="myAppsList"></div>
-      <p class="muted-small" id="noApps">You haven't applied for anything yet.</p>
+      <h2>My applications</h2>
+      <div id="myApplicationsBox"></div>
+    </div>
+
+  </div><!-- /studentView -->
+</main>
+
+<!-- ══ Edit job modal ══════════════════════════════════════════════════ -->
+<div id="editModal" class="hidden" style="position:fixed;inset:0;background:rgba(14,27,55,0.6);z-index:100;display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto;backdrop-filter:blur(4px);">
+  <div class="card" style="max-width:680px;width:100%;margin:auto;">
+    <div class="flex-between" style="margin-bottom:4px;">
+      <h2 style="margin:0;">Edit job</h2>
+      <button class="btn small secondary" onclick="closeEditModal()">Cancel</button>
+    </div>
+
+    <label for="editJobTitle" style="margin-top:16px;">Job name</label>
+    <input id="editJobTitle" placeholder="e.g. Librarian" style="max-width:360px;">
+
+    <label for="editJobAutoWeeks" style="margin-top:14px;">
+      Auto-promote every
+      <input id="editJobAutoWeeks" type="number" min="0" step="1" value="0"
+        style="width:70px;display:inline-block;margin:0 6px;vertical-align:middle;">
+      weeks &nbsp;<span class="muted-small">(0 = off)</span>
+    </label>
+
+    <h3 style="margin:20px 0 10px;font-size:.95rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);">Tiers</h3>
+    <div id="editTiersList"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center;">
+      <button class="btn small secondary" type="button" onclick="addTierRowBtn('edit')">+ Add tier</button>
+      <div style="flex:1;"></div>
+      <div id="editModalMsg"></div>
+      <button class="btn gold" id="saveEditBtn" onclick="saveEditJob()">Save changes</button>
     </div>
   </div>
-</main>
+</div>
+
+<!-- ══ Apply modal ════════════════════════════════════════════════════ -->
+<div id="applyModal" class="hidden" style="position:fixed;inset:0;background:rgba(14,27,55,0.6);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);">
+  <div class="card" style="max-width:480px;width:100%;">
+    <div class="flex-between">
+      <h2 style="margin:0;">Apply for <span id="applyJobName"></span></h2>
+      <button class="btn small secondary" onclick="closeApplyModal()">Cancel</button>
+    </div>
+    <p id="applyStartingTier" class="muted-small" style="margin:8px 0 14px;"></p>
+    <label for="applyLetter">Cover letter (optional)</label>
+    <textarea id="applyLetter" rows="3" placeholder="Tell your teacher why you're great for this job…" style="resize:vertical;"></textarea>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:12px;">
+      <button class="btn gold" id="submitApplyBtn" onclick="submitApplication()">Submit application</button>
+      <div id="applyModalMsg"></div>
+    </div>
+  </div>
+</div>
 
 <div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
 
@@ -128,5 +197,6 @@
 <script defer src="quiz-gate.js"></script>
 <script defer src="notifications.js"></script>
 <script defer src="jobs.js"></script>
+<script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
 </body>
 </html>

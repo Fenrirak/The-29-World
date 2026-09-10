@@ -106,7 +106,8 @@ async function init() {
     safeBgJob(processInsurancePayments(CLASS_CODE), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(CLASS_CODE), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(CLASS_CODE), "processWeeklyBigEvents"),
-    safeBgJob(processLoanInterest(CLASS_CODE), "processLoanInterest")
+    safeBgJob(processLoanInterest(CLASS_CODE), "processLoanInterest"),
+    safeBgJob(processJobPromotions(CLASS_CODE), "processJobPromotions")
   ]);
   // Kick the day's jobs off but DON'T block the page on them: paint what
   // we already have first, then wait. On the first load of the day pay day
@@ -219,7 +220,7 @@ async function render() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${s.name}<div class="muted-small">@${s.username}</div></td>
-      <td>${jobSelectHtml(cls, s)}${s.jobId ? `<div class="muted-small">${isJobTaskApprovedThisWeek(s, cls) ? `${icon("star", 11)} Task approved this week` : `Task not yet approved`}</div>` : ""}</td>
+      <td>${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${_t.name}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `${icon("star", 11)} Task ✓` : `Task ✗`}</div>`; })() : ""}</td>
       <td><strong>${fmtMoney(s.balance)}</strong></td>
       <td>${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</td>
       <td>${fmtMoney(netByUser[s.username] || 0)}</td>
@@ -359,8 +360,8 @@ async function render() {
 
 function jobSelectHtml(cls, student) {
   let opts = `<option value="">— no job —</option>`;
-  cls.jobs.forEach(j => {
-    opts += `<option value="${j.id}" ${student.jobId === j.id ? "selected" : ""}>${j.title} (${fmtMoney(j.wage)})</option>`;
+  (cls.jobs || []).forEach(j => {
+    opts += `<option value="${j.id}" ${student.jobId === j.id ? "selected" : ""}>${j.title}</option>`;
   });
   return `<select onchange="onAssignJob('${student.username}', this.value)">${opts}</select>`;
 }
@@ -469,7 +470,7 @@ function avatarClass(username) {
 }
 
 async function onAssignJob(username, jobId) {
-  await assignJob(username, jobId);
+  await assignJob(username, jobId, CLASS_CODE);
   await render();
 }
 
@@ -876,6 +877,35 @@ function closeProfile() {
   document.getElementById("profileModal").classList.add("hidden");
 }
 
+async function applyProfileTierChange(username) {
+  const sel = document.getElementById("profileTierSelect");
+  if (!sel) return;
+  const tierId = sel.value;
+  const btn = event && event.target;
+  if (btn) btn.disabled = true;
+  const res = await setStudentJobTier(CLASS_CODE, username, tierId);
+  if (!res.ok) { alert(res.error || "Couldn't update tier."); if (btn) btn.disabled = false; return; }
+  await render();
+  await renderProfile(username);
+}
+
+async function promoteProfileStudent(username) {
+  const btn = event && event.target;
+  if (btn) btn.disabled = true;
+  const [cls, student] = await Promise.all([getClassCached(CLASS_CODE), getUserCached(username)]);
+  if (!cls || !student || !student.jobId) { if (btn) btn.disabled = false; return; }
+  const job = (cls.jobs || []).find(j => j.id === student.jobId);
+  if (!job || !job.tiers) { if (btn) btn.disabled = false; return; }
+  const tier = getStudentTier(job, student);
+  const curIdx = tier ? job.tiers.indexOf(tier) : 0;
+  const nextTier = job.tiers[curIdx + 1];
+  if (!nextTier) { if (btn) btn.disabled = false; return; }
+  const res = await setStudentJobTier(CLASS_CODE, username, nextTier.id);
+  if (!res.ok) { alert(res.error || "Couldn't promote."); if (btn) btn.disabled = false; return; }
+  await render();
+  await renderProfile(username);
+}
+
 async function renderProfile(username) {
   const s = await getUserCached(username);
   if (!s) return;
@@ -888,9 +918,11 @@ async function renderProfile(username) {
 
   const job = cls.jobs.find(j => j.id === s.jobId);
   const taskApproved = isJobTaskApprovedThisWeek(s, cls);
+  const tier = job ? getStudentTier(job, s) : null;
+  const tierIdx = (job && tier && job.tiers) ? job.tiers.indexOf(tier) : -1;
 
   document.getElementById("profileName").innerHTML = `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${s.name}`;
-  document.getElementById("profileSubtitle").textContent = `@${s.username}${job ? ` · ${job.title}` : " · No job assigned"}`;
+  document.getElementById("profileSubtitle").textContent = `@${s.username}${job ? ` · ${tier ? tier.name : job.title}` : " · No job assigned"}`;
 
   const rows = [];
   const isOverride = s.lifestyleOverride !== undefined && s.lifestyleOverride !== null;
@@ -903,16 +935,58 @@ async function renderProfile(username) {
     </div>
   `);
 
-  rows.push(`<h4>${icon("briefcase", 16)} This week's job task</h4>`);
+  /* ---- Job & tier management ---- */
+  rows.push(`<h4>${icon("briefcase", 16)} Job & tier</h4>`);
+  if (!job) {
+    rows.push(`<p class="muted-small">No job assigned — assign one using the job dropdown in the Students table.</p>`);
+  } else {
+    const tiers = job.tiers || [];
+    const tierOpts = tiers.map((t, i) =>
+      `<option value="${t.id}" ${tier && t.id === tier.id ? "selected" : ""}>${i + 1}. ${t.name} — ${fmtMoney(t.wage)}/pay day</option>`
+    ).join("");
+    rows.push(`
+      <div class="tier-ladder profile-tier-ladder">
+        ${tiers.map((t, i) => {
+          const isCurrent = tier && t.id === tier.id;
+          const isPast = tierIdx > -1 && i < tierIdx;
+          return `<div class="tier-rung${isCurrent ? " active" : isPast ? " completed" : ""}">
+            <div class="tier-rung-badge">${i + 1}</div>
+            <div class="tier-rung-body">
+              <strong>${t.name}</strong>
+              <span class="muted-small"> &middot; ${fmtMoney(t.wage)}/pay day</span>
+              ${t.description ? `<div class="muted-small" style="margin-top:2px;">${t.description}</div>` : ""}
+            </div>
+            ${isCurrent ? `<span class="badge gold" style="flex-shrink:0;margin-left:auto;">Current</span>` : ""}
+          </div>`;
+        }).join("")}
+      </div>
+      ${tiers.length > 1 ? `
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-top:14px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:180px;">
+            <label for="profileTierSelect" style="margin-top:0;">Move to tier</label>
+            <select id="profileTierSelect">${tierOpts}</select>
+          </div>
+          <button class="btn small" onclick="applyProfileTierChange('${username}')">Save</button>
+          ${tierIdx >= 0 && tierIdx < tiers.length - 1
+            ? `<button class="btn small mint" onclick="promoteProfileStudent('${username}')">⬆ Promote to ${tiers[tierIdx + 1].name}</button>`
+            : `<span class="badge mint" style="align-self:flex-end;">At top tier</span>`}
+        </div>
+      ` : `<p class="muted-small" style="margin-top:8px;">This job has only one tier.</p>`}
+    `);
+  }
+
+  /* ---- This week's job task ---- */
+  rows.push(`<h4>${icon("briefcase", 16)} This week\'s job task</h4>`);
   if (!job) {
     rows.push(`<p class="muted-small">No job assigned — nothing to approve.</p>`);
   } else {
+    const tierName = tier ? tier.name : job.title;
     rows.push(`
       <label style="display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" id="profileJobTaskCheck" ${taskApproved ? "checked" : ""} onchange="profileSetJobTaskApproval('${username}', this.checked)" style="width:20px;height:20px;min-height:auto;">
-        <span>Completed this week's task for <strong>${job.title}</strong> — pay day will pay them once this is ticked</span>
+        <input type="checkbox" id="profileJobTaskCheck" ${taskApproved ? "checked" : ""} onchange="profileSetJobTaskApproval(\'${username}\', this.checked)" style="width:20px;height:20px;min-height:auto;">
+        <span>Completed this week\'s task for <strong>${tierName}</strong> — pay day will pay them once this is ticked</span>
       </label>
-      <p class="muted-small">Resets automatically the moment pay day (${DAY_FULL[cls.payDay || "Fri"]}) begins — you'll need to tick it again for next cycle. If it's unticked on pay day, ${s.name.split(" ")[0]} won't be paid until you tick it and re-run pay day.</p>
+      <p class="muted-small">Resets automatically the moment pay day (${DAY_FULL[cls.payDay || "Fri"]}) begins — you\'ll need to tick it again for next cycle. If it\'s unticked on pay day, ${s.name.split(" ")[0]} won\'t be paid until you tick it and re-run pay day.</p>
     `);
   }
 

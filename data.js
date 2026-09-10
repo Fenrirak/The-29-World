@@ -954,7 +954,7 @@ async function createStudentAccount(name, username, password, classCode) {
 
       const user = {
         username, password, role: "student", name,
-        classCode, balance: 20, jobId: null, savings: 0, loans: [],
+        classCode, balance: 20, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
         sessionVersion: 0,
         // Denormalized copy of the class's daily time limit (see
         // setStudentTimeLimit below). Kept on the user doc itself so
@@ -1204,13 +1204,31 @@ async function acknowledgeTxn(classCode, txnId) {
 }
 
 /* ---------------- Jobs ---------------- */
-async function addJob(classCode, title, wage, description) {
+/* Resolves the student's effective tier within a job — falls back to the
+   first tier if jobTierId is unset or no longer valid (tier was removed). */
+function getStudentTier(job, student) {
+  if (!job || !job.tiers || !job.tiers.length) return null;
+  if (student && student.jobTierId) {
+    const found = job.tiers.find(t => t.id === student.jobTierId);
+    if (found) return found;
+  }
+  return job.tiers[0]; // entry-level fallback
+}
+
+async function addJob(classCode, title, tiers, autoPromoteWeeks) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
-    cls.jobs.push({ id: uid("j"), title, wage: Number(wage), description: description || "" });
+    cls.jobs.push({
+      id: uid("j"), title,
+      tiers: (tiers || []).map(tier => ({
+        id: uid("t"), name: tier.name || "Tier 1",
+        wage: Number(tier.wage) || 0, description: tier.description || ""
+      })),
+      autoPromoteWeeks: Number(autoPromoteWeeks) || 0
+    });
     t.update(classRef, { jobs: cls.jobs });
   });
 }
@@ -1223,8 +1241,8 @@ async function updateJob(classCode, jobId, updates) {
     const job = cls.jobs.find(j => j.id === jobId);
     if (!job) return;
     job.title = updates.title;
-    job.wage = Number(updates.wage);
-    job.description = updates.description || "";
+    if (updates.tiers) job.tiers = updates.tiers;
+    job.autoPromoteWeeks = Number(updates.autoPromoteWeeks) || 0;
     t.update(classRef, { jobs: cls.jobs });
   });
 }
@@ -1243,41 +1261,29 @@ async function removeJob(classCode, jobId) {
   // unassign anyone with this job (separate user docs)
   const students = await Promise.all(affectedStudents.map(getUser));
   await Promise.all(students.filter(s => s && s.jobId === jobId).map(s =>
-    usersCol().doc(s.username).update({ jobId: null })
+    usersCol().doc(s.username).update({ jobId: null, jobTierId: null, jobTierSince: null })
   ));
 }
-async function assignJob(studentUser, jobId) {
-  await usersCol().doc(studentUser).update({ jobId: jobId || null });
+async function assignJob(studentUser, jobId, classCode) {
+  let tierId = null;
+  if (jobId && classCode) {
+    const cls = await getClass(classCode);
+    if (cls) {
+      const job = (cls.jobs || []).find(j => j.id === jobId);
+      if (job && job.tiers && job.tiers.length) tierId = job.tiers[0].id;
+    }
+  }
+  await usersCol().doc(studentUser).update({
+    jobId: jobId || null,
+    jobTierId: tierId,
+    jobTierSince: tierId ? nzDateKey() : null
+  });
 }
 
 /* ---------------- Job applications ---------------- */
-async function applyForJob(classCode, studentUser, jobId) {
-  const classRef = classesCol().doc(classCode);
-  try {
-    let result = { ok: true };
-    await fdb.runTransaction(async (t) => {
-      const snap = await t.get(classRef);
-      if (!snap.exists) throw new Error("NO_CLASS");
-      const cls = snap.data();
-      const job = cls.jobs.find(j => j.id === jobId);
-      if (!job) throw new Error("NO_JOB");
-      cls.jobApplications = cls.jobApplications || [];
-      const existing = cls.jobApplications.find(a => a.studentUser === studentUser && a.jobId === jobId && a.status === "pending");
-      if (existing) throw new Error("ALREADY");
-      cls.jobApplications.unshift({ id: uid("app"), studentUser, jobId, status: "pending", date: nowStr() });
-      t.update(classRef, { jobApplications: cls.jobApplications });
-    });
-    return result;
-  } catch (e) {
-    if (e.message === "NO_CLASS") return { ok: false, error: "Class not found." };
-    if (e.message === "NO_JOB") return { ok: false, error: "That job no longer exists." };
-    if (e.message === "ALREADY") return { ok: false, error: "You've already applied for this job." };
-    return { ok: false, error: "Something went wrong. Please try again." };
-  }
-}
 async function approveApplication(classCode, appId) {
   const classRef = classesCol().doc(classCode);
-  let studentUser = null, jobId = null;
+  let studentUser = null, jobId = null, tierId = null;
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
@@ -1287,9 +1293,15 @@ async function approveApplication(classCode, appId) {
     app.status = "approved";
     studentUser = app.studentUser;
     jobId = app.jobId;
+    const job = (cls.jobs || []).find(j => j.id === jobId);
+    if (job && job.tiers && job.tiers.length) tierId = job.tiers[0].id;
     t.update(classRef, { jobApplications: cls.jobApplications });
   });
-  if (studentUser) await usersCol().doc(studentUser).update({ jobId });
+  if (studentUser) await usersCol().doc(studentUser).update({
+    jobId,
+    jobTierId: tierId,
+    jobTierSince: tierId ? nzDateKey() : null
+  });
 }
 async function declineApplication(classCode, appId) {
   const classRef = classesCol().doc(classCode);
@@ -1302,6 +1314,99 @@ async function declineApplication(classCode, appId) {
     app.status = "declined";
     t.update(classRef, { jobApplications: cls.jobApplications });
   });
+}
+
+
+/* ---------------- Job tier management ---------------- */
+
+// Set a student to any specific tier within their current job.
+// Promotes (higher index) → queues a congratulations notification.
+// Demotes (lower index) → silent.
+async function setStudentJobTier(classCode, username, tierId) {
+  const [cls, student] = await Promise.all([getClass(classCode), getUser(username)]);
+  if (!cls || !student) return { ok: false, error: "Not found." };
+  const job = (cls.jobs || []).find(j => j.id === student.jobId);
+  if (!job || !job.tiers || !job.tiers.length) return { ok: false, error: "No job or tiers found." };
+  const newTier = job.tiers.find(t => t.id === tierId);
+  if (!newTier) return { ok: false, error: "Tier not found." };
+  const curIdx = student.jobTierId ? job.tiers.findIndex(t => t.id === student.jobTierId) : 0;
+  const effectiveCurIdx = curIdx === -1 ? 0 : curIdx;
+  const newIdx = job.tiers.indexOf(newTier);
+  // No-op save (teacher re-submitted the tier the student is already on) —
+  // skip the write entirely so we don't reset jobTierSince and silently
+  // restart their auto-promotion countdown for no reason.
+  if (newIdx === effectiveCurIdx) return { ok: true, tier: newTier, isPromotion: false, unchanged: true };
+  const isPromotion = newIdx > effectiveCurIdx;
+  const update = { jobTierId: tierId, jobTierSince: nzDateKey() };
+  if (isPromotion) {
+    update.pendingPromotion = { jobTitle: job.title, tierName: newTier.name, wage: newTier.wage, date: nowStr() };
+  }
+  await usersCol().doc(username).update(update);
+  return { ok: true, tier: newTier, isPromotion };
+}
+
+// Auto-promotion background job. Runs on every page load alongside the other
+// startup jobs. For each job with autoPromoteWeeks > 0, promotes eligible
+// students exactly one tier. Uses per-student transactions for idempotency —
+// safe against concurrent tab loads. Fast no-op when no jobs are configured
+// for auto-promotion.
+async function processJobPromotions(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls || cls.archived) return 0;
+  const promotableJobs = (cls.jobs || []).filter(
+    j => j.autoPromoteWeeks > 0 && j.tiers && j.tiers.length > 1
+  );
+  if (!promotableJobs.length) return 0;
+  const students = await getClassStudents(classCode);
+  const today = nzDateKey();
+  let count = 0;
+  for (const student of students) {
+    if (!student.jobId || !student.jobTierSince) continue;
+    const job = promotableJobs.find(j => j.id === student.jobId);
+    if (!job) continue;
+    const curIdx = student.jobTierId ? job.tiers.findIndex(t => t.id === student.jobTierId) : 0;
+    const effectiveIdx = curIdx === -1 ? 0 : curIdx;
+    if (effectiveIdx >= job.tiers.length - 1) continue;
+    const weeksSince = Math.floor(daysBetweenKeys(student.jobTierSince, today) / 7);
+    if (weeksSince < Number(job.autoPromoteWeeks)) continue;
+    let promoted = false;
+    try {
+      const userRef = usersCol().doc(student.username);
+      await fdb.runTransaction(async (t) => {
+        const snap = await t.get(userRef);
+        if (!snap.exists) return;
+        const live = snap.data();
+        if (!live.jobId || !live.jobTierSince) return;
+        const liveIdx = live.jobTierId ? job.tiers.findIndex(ti => ti.id === live.jobTierId) : 0;
+        const liveEff = liveIdx === -1 ? 0 : liveIdx;
+        if (liveEff >= job.tiers.length - 1) return;
+        const liveWeeks = Math.floor(daysBetweenKeys(live.jobTierSince, today) / 7);
+        if (liveWeeks < Number(job.autoPromoteWeeks)) return;
+        const nextTier = job.tiers[liveEff + 1];
+        promoted = true;
+        t.update(userRef, {
+          jobTierId: nextTier.id,
+          jobTierSince: today,
+          pendingPromotion: {
+            jobTitle: job.title, tierName: nextTier.name,
+            wage: nextTier.wage, date: nowStr()
+          }
+        });
+      });
+    } catch (e) { promoted = false; }
+    if (promoted) count++;
+  }
+  return count;
+}
+
+// Read and clear a student's pending promotion notification.
+// Call after startup jobs on student-facing pages.
+async function checkPromotionNotification(username) {
+  const user = await getUser(username);
+  if (!user || !user.pendingPromotion) return null;
+  const promo = user.pendingPromotion;
+  try { await usersCol().doc(username).update({ pendingPromotion: null }); } catch (e) {}
+  return promo;
 }
 
 /* ---------------- Remove a student ---------------- */
@@ -1490,7 +1595,9 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
     // catch them up rather than having missed the week for good.
     if (!isJobTaskApprovedThisWeek(student, cls)) { unapprovedCount++; continue; }
     try {
-      let { net, taxAmount } = applyWageTax(cls, job.wage);
+      const tier = getStudentTier(job, student);
+      const wage = tier ? tier.wage : 0;
+      let { net, taxAmount } = applyWageTax(cls, wage);
       // Life items can boost/cut take-home wage (incomePercent) and knock
       // a percentage off the tax bill just withheld (taxCutPercent) —
       // applied here, after the normal bracket tax, so they layer on top
@@ -1503,7 +1610,8 @@ async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
         taxAmount = Math.round((taxAmount - refund) * 100) / 100;
       }
       await adjustBalance(student.username, net);
-      await logTxn(classCode, { type: "wage", to: student.username, amount: net, note: "Pay day: " + job.title + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
+      const tierLabel = tier ? tier.name : job.title;
+      await logTxn(classCode, { type: "wage", to: student.username, amount: net, note: "Pay day: " + tierLabel + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
       alreadyPaid.add(student.username);
       paidCount++;
       newlyPaid++;
@@ -3095,7 +3203,7 @@ async function resetClass(classCode, teacherUsername) {
   try { await archiveClassReport(classCode, teacherUsername); } catch (e) { /* proceed with reset regardless */ }
   const students = await getClassStudents(classCode);
   await Promise.all(students.map(s => usersCol().doc(s.username).update({
-    balance: 0, jobId: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: [], truckLicence: false, truckCheckins: {}
+    balance: 0, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: [], truckLicence: false, truckCheckins: {}
   })));
   const cls = await getClass(classCode);
   const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null, occupancy: null, rentLastWeekPaid: null }));
@@ -4643,7 +4751,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource) {
         entry.status = "lost";
         outcomeNote = `Didn't pay for "${entry.name}" — lost the associated ${entry.module}`;
         if (entry.module === "income") {
-          t.update(userRef, { jobId: null });
+          t.update(userRef, { jobId: null, jobTierId: null, jobTierSince: null });
         } else if (entry.module === "property") {
           const prop = cls.properties.find(p => p.owner === username);
           if (prop) { prop.owner = null; prop.mortgage = null; prop.occupancy = null; prop.rentLastWeekPaid = null; }
@@ -4933,6 +5041,21 @@ function withNewModuleDefaults(cls) {
     if (t.minNetWorth === undefined) t.minNetWorth = 0;
     if (t.minPropertyComfort === undefined) t.minPropertyComfort = 0;
     if (t.minTransportComfort === undefined) t.minTransportComfort = 0;
+  });
+  // Migrate legacy flat jobs (wage/description at job level) to the tiered
+  // structure. Uses a deterministic tier ID (jobId + "_t0") so this migration
+  // is stable across repeated reads — the same ID is generated every time,
+  // keeping students' existing jobTierId references valid without a write.
+  (cls.jobs || []).forEach(j => {
+    if (!j.tiers || j.tiers.length === 0) {
+      j.tiers = [{
+        id: j.id + "_t0",
+        name: j.title || "Tier 1",
+        wage: Number(j.wage) || 0,
+        description: j.description || ""
+      }];
+    }
+    if (j.autoPromoteWeeks === undefined) j.autoPromoteWeeks = 0;
   });
   return cls;
 }
@@ -7661,12 +7784,14 @@ function budgetIncomeEstimateFromData(cls, user, username, weekStartKey) {
 
   const job = user.jobId ? (cls.jobs || []).find(j => j.id === user.jobId) : null;
   if (job) {
-    const { net, taxAmount } = applyWageTax(cls, job.wage);
+    const tier = getStudentTier(job, user);
+    const wage = tier ? tier.wage : 0;
+    const { net, taxAmount } = applyWageTax(cls, wage);
     const payDay = "Paid every " + (DAY_FULL[cls.payDay] || "pay day");
     items.push({
-      icon: "briefcase", label: job.title, amount: net,
+      icon: "briefcase", label: tier ? tier.name : job.title, amount: net,
       note: taxAmount > 0
-        ? fmtMoney(job.wage) + " less " + fmtMoney(taxAmount) + " tax, " + payDay.charAt(0).toLowerCase() + payDay.slice(1)
+        ? fmtMoney(wage) + " less " + fmtMoney(taxAmount) + " tax, " + payDay.charAt(0).toLowerCase() + payDay.slice(1)
         : payDay
     });
   }

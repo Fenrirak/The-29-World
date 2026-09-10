@@ -95,22 +95,15 @@ async function init() {
     safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
-    safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
+    safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents"),
+    safeBgJob(processJobPromotions(u.classCode), "processJobPromotions")
   ]);
-  // Kick the day's jobs off but DON'T block the page on them: paint what
-  // we already have first, then wait. On the first load of the day pay day
-  // alone can take seconds (it writes per student), and blocking here is
-  // what made a phone sit on a blank page. The popups and the final
-  // render() below still run after the jobs, exactly as they did before.
   await t29FirstPaint(render);
   await T29_STARTUP_JOBS;
-  // These popups read the results of the jobs above (e.g. a weekly event
-  // that just got generated), so they still need to run afterwards — but
-  // they stay sequential since each checks "is another popup already
-  // showing" before deciding to show its own.
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
   await checkAdjustmentPopup(u.username, u.classCode);
+  await checkAndShowPromotionPopup(u.username);
   await render();
   // Keeps the side hustle check-in window (and everything else) in sync
   // with the clock even if the student just leaves the tab open. Paused
@@ -141,7 +134,10 @@ async function render() {
   document.getElementById("portfolio").textContent = fmtMoney(await portfolioValue(me.username, me.classCode));
 
   const job = cls.jobs.find(j => j.id === me.jobId);
-  document.getElementById("jobLabel").textContent = job ? `${job.title} — ${fmtMoney(job.wage)}/payday` : "No job assigned";
+  const myTier = job ? getStudentTier(job, me) : null;
+  document.getElementById("jobLabel").textContent = job
+    ? (myTier ? `${myTier.name} — ${fmtMoney(myTier.wage)}/payday` : `${job.title}/payday`)
+    : "No job assigned";
 
   const lockReasons = await getModuleLockReasons(me.username, me.classCode);
   const lockedModules = Object.keys(lockReasons);
@@ -194,8 +190,9 @@ async function render() {
   ctbl.innerHTML = "";
   classmates.forEach(s => {
     const j = cls.jobs.find(jj => jj.id === s.jobId);
+    const sTier = j ? getStudentTier(j, s) : null;
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${s.name}</td><td>${j ? j.title : "—"}</td>`;
+    tr.innerHTML = `<td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${s.name}</td><td>${sTier ? sTier.name : (j ? j.title : "—")}</td>`;
     ctbl.appendChild(tr);
   });
 
@@ -600,3 +597,36 @@ async function submitPasswordChange() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+/* ── Promotion popup ─────────────────────────────────────── */
+async function checkAndShowPromotionPopup(username) {
+  try {
+    const promo = await checkPromotionNotification(username);
+    if (promo) showPromotionPopup(promo);
+  } catch (e) {}
+}
+
+function showPromotionPopup(promo) {
+  const existing = document.getElementById("t29PromoOverlay");
+  if (existing) existing.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "t29PromoOverlay";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(14,27,55,0.72);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);";
+  overlay.innerHTML = `
+    <div class="promo-popup-card">
+      <div class="promo-popup-stars">✦ ✦ ✦</div>
+      <div class="promo-popup-emoji">🎉</div>
+      <h2 class="promo-popup-title">You've been promoted!</h2>
+      <p class="promo-popup-sub">You're now a</p>
+      <div class="promo-popup-tier">
+        <div class="promo-popup-tier-name">${promo.tierName}</div>
+        <div class="promo-popup-tier-meta">${promo.jobTitle} &middot; ${typeof fmtMoney === "function" ? fmtMoney(promo.wage) : "$" + promo.wage}/pay day</div>
+      </div>
+      <button class="btn gold promo-popup-btn" onclick="document.getElementById('t29PromoOverlay').remove()">
+        🎊 Let's go!
+      </button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+

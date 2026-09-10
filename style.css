@@ -1039,10 +1039,6 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .mkt-offer:last-child{border-bottom:none;}
 .mkt-offer-amt{font-weight:900;color:var(--navy-900);}
 .mkt-offer-note{font-size:.78rem;color:var(--muted);width:100%;}
-.mkt-empty{
-  border:1.5px dashed var(--line);border-radius:14px;padding:30px 22px;text-align:center;color:var(--muted);
-}
-.mkt-empty .icon{color:var(--line);margin-bottom:6px;}
 .mkt-sell-row{
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;
   border:1.5px solid var(--line);border-radius:12px;padding:13px 16px;margin-bottom:10px;
@@ -1650,4 +1646,511 @@ html.dark-mode .notif-dot{
   color:var(--heading-text);
 }
 
+}
+
+/* ================================================================
+   JOB TIERS — complete visual system
+   ================================================================ */
+
+/* ── Teacher jobs grid ──────────────────────────────────────────── */
+.jobs-family-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 18px;
+}
+
+.job-family-card {
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  background: var(--bg);
+  transition: box-shadow .2s, border-color .2s;
+}
+.job-family-card:hover {
+  box-shadow: 0 6px 24px rgba(14,27,55,.1);
+  border-color: var(--navy-200, #c8d0e0);
+}
+
+.job-family-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.job-family-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0 0 2px;
+  color: var(--navy-900);
+}
+.job-family-auto { margin-top: 2px; }
+.job-family-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* ── Tier ladder (teacher job card + student profile) ──────────── */
+.tier-ladder {
+  display: flex;
+  flex-direction: column;
+}
+
+.tier-connector {
+  width: 2px;
+  height: 14px;
+  background: var(--line);
+  margin-left: 18px; /* centres under badge */
+  flex-shrink: 0;
+}
+
+.tier-rung {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+  transition: background .18s, border-color .18s;
+  position: relative;
+}
+.tier-rung.has-students {
+  background: var(--pastel-mint-bg, #e8faf2);
+  border-color: var(--mint);
+}
+.tier-rung.active {
+  background: linear-gradient(135deg, rgba(201,154,46,.08), rgba(201,154,46,.16));
+  border-color: var(--gold);
+}
+.tier-rung.completed {
+  background: var(--pastel-mint-bg, #e8faf2);
+  border-color: var(--mint);
+}
+
+.tier-rung-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: .82rem;
+  flex-shrink: 0;
+  background: var(--line);
+  color: var(--muted);
+  border: 2px solid var(--line);
+  position: relative;
+  z-index: 1;
+  transition: background .2s, border-color .2s, box-shadow .2s;
+}
+.tier-rung.active .tier-rung-badge {
+  background: linear-gradient(135deg, var(--gold), #b8870a);
+  color: #fff;
+  border-color: #b8870a;
+  box-shadow: 0 3px 10px rgba(201,154,46,.45);
+}
+.tier-rung.completed .tier-rung-badge {
+  background: var(--mint);
+  color: #fff;
+  border-color: var(--mint);
+}
+
+.tier-rung-body { flex: 1; min-width: 0; }
+.tier-rung-title {
+  font-weight: 700;
+  font-size: .9rem;
+  color: var(--navy-900);
+}
+.tier-rung-wage {
+  font-size: .88rem;
+  font-weight: 600;
+  color: var(--navy-700);
+  margin-top: 1px;
+}
+.tier-rung-desc { margin-top: 2px; }
+
+.tier-rung-students {
+  display: flex;
+  align-items: center;
+  gap: -4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.tier-rung-students .student-avatar { width: 26px; height: 26px; font-size: .62rem; }
+.tier-rung-count {
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-left: 5px;
+}
+
+/* Profile modal tier ladder variant */
+.profile-tier-ladder .tier-rung { padding: 8px 10px; }
+.profile-tier-ladder .tier-rung-badge { width: 30px; height: 30px; font-size: .78rem; }
+
+/* ── Tier form rows (add / edit) ────────────────────────────────── */
+.tier-form-row {
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  background: var(--bg);
+}
+.tier-form-row-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.tier-form-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: var(--navy-900);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .75rem;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+.tier-form-label { font-weight: 700; font-size: .88rem; flex: 1; }
+.tier-form-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.tier-form-fields .tier-desc-wrap { grid-column: 1 / -1; }
+.tier-form-fields label { font-size: .8rem; margin-bottom: 4px; display: block; }
+.tier-form-fields input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.tier-form-remove { margin-left: auto; }
+
+/* ── Tiny tier badge in teacher's student table ─────────────────── */
+.tier-micro-badge {
+  display: inline-block;
+  background: rgba(201,154,46,.15);
+  color: var(--navy-700);
+  font-size: .68rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 20px;
+  border: 1px solid rgba(201,154,46,.3);
+  vertical-align: middle;
+}
+
+/* ── Student: my current job card ──────────────────────────────── */
+.my-job-card {
+  border-radius: 14px;
+  padding: 0;
+  overflow: hidden;
+}
+.my-job-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 20px 16px;
+  background: linear-gradient(135deg, var(--navy-900, #0e1b37) 0%, #1a3070 100%);
+  color: #fff;
+  flex-wrap: wrap;
+}
+.my-job-family {
+  font-size: .78rem;
+  font-weight: 600;
+  opacity: .72;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.my-job-tier-name {
+  font-size: 1.5rem;
+  font-weight: 900;
+  margin: 4px 0 0;
+  color: #fff;
+}
+.my-job-wage {
+  text-align: right;
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--gold);
+  line-height: 1;
+}
+.my-job-wage-label {
+  display: block;
+  font-size: .72rem;
+  font-weight: 600;
+  opacity: .8;
+  color: #fff;
+}
+.my-job-desc {
+  padding: 14px 20px 0;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* ── Tier progress bar (student "my job" card) ──────────────────── */
+.tier-progress-wrap {
+  padding: 16px 20px 20px;
+}
+.tier-progress-bar-bg {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.tier-progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--gold), #e8aa18);
+  transition: width .5s cubic-bezier(.4,0,.2,1);
+}
+
+.tier-progress-steps {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 4px;
+}
+.tier-progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+}
+.tier-progress-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--line);
+  flex-shrink: 0;
+  transition: background .25s, box-shadow .25s;
+}
+.tier-progress-step.past .tier-progress-dot {
+  background: var(--mint);
+}
+.tier-progress-step.current .tier-progress-dot {
+  background: var(--gold);
+  box-shadow: 0 0 0 3px rgba(201,154,46,.3);
+  transform: scale(1.25);
+}
+.tier-progress-label {
+  font-size: .65rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.tier-progress-step.current .tier-progress-label { color: var(--navy-900); font-weight: 800; }
+
+.tier-auto-note {
+  padding: 0 20px 16px;
+  margin: 0;
+}
+.my-job-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ── Student: job board ─────────────────────────────────────────── */
+.job-board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.job-board-card {
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  background: var(--bg);
+  transition: box-shadow .2s, border-color .2s;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.job-board-card:hover {
+  box-shadow: 0 4px 18px rgba(14,27,55,.09);
+  border-color: var(--navy-200, #c8d0e0);
+}
+.job-board-card.is-mine {
+  border-color: var(--gold);
+  background: linear-gradient(135deg, rgba(201,154,46,.04), rgba(201,154,46,.10));
+}
+
+.job-board-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  gap: 8px;
+}
+.job-board-title {
+  font-size: 1rem;
+  font-weight: 800;
+  margin: 0 0 4px;
+}
+
+.job-board-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.job-board-tier-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  transition: background .15s, border-color .15s;
+}
+.job-board-tier-row.active {
+  background: linear-gradient(135deg, rgba(201,154,46,.08), rgba(201,154,46,.18));
+  border-color: var(--gold);
+}
+.job-board-tier-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .68rem;
+  font-weight: 900;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.job-board-tier-row.active .job-board-tier-num {
+  background: var(--gold);
+  color: var(--navy-900);
+}
+.job-board-tier-info { flex: 1; min-width: 0; font-size: .84rem; }
+.job-board-tier-wage {
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--navy-700);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.job-board-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+/* ── Promotion popup ────────────────────────────────────────────── */
+.promo-popup-card {
+  background: var(--card, #fff);
+  border-radius: 22px;
+  padding: 36px 32px 32px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 32px 80px rgba(0,0,0,.4);
+  border-top: 5px solid var(--gold);
+  animation: promoPop .35s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes promoPop {
+  from { opacity:0; transform:scale(.88) translateY(24px); }
+  to   { opacity:1; transform:scale(1)  translateY(0); }
+}
+.promo-popup-stars {
+  font-size: 1rem;
+  letter-spacing: .5em;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.promo-popup-emoji { font-size: 3.4rem; margin-bottom: 10px; }
+.promo-popup-title {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--navy-900);
+  margin: 0 0 6px;
+}
+.promo-popup-sub { color: var(--muted); margin: 0 0 18px; }
+.promo-popup-tier {
+  background: linear-gradient(135deg, #fdf3d4, #fce9a0);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 22px;
+  border: 2px solid var(--gold);
+}
+.promo-popup-tier-name {
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: var(--navy-900);
+}
+.promo-popup-tier-meta {
+  font-size: .88rem;
+  color: var(--navy-700);
+  margin-top: 4px;
+}
+.promo-popup-btn { width: 100%; font-size: 1rem; padding: 14px; }
+
+/* ── Dark mode overrides ────────────────────────────────────────── */
+html.dark-mode .job-family-card,
+html.dark-mode .job-board-card,
+html.dark-mode .tier-form-row,
+html.dark-mode .tier-rung {
+  background: var(--card);
+  border-color: var(--line);
+}
+html.dark-mode .tier-rung.active {
+  background: rgba(201,154,46,.13);
+  border-color: var(--gold);
+}
+html.dark-mode .tier-rung.has-students,
+html.dark-mode .tier-rung.completed {
+  background: rgba(46,201,120,.08);
+}
+html.dark-mode .job-board-card.is-mine {
+  background: rgba(201,154,46,.08);
+  border-color: var(--gold);
+}
+html.dark-mode .promo-popup-card { background: var(--card); }
+html.dark-mode .promo-popup-tier {
+  background: rgba(201,154,46,.12);
+  border-color: var(--gold);
+}
+html.dark-mode .my-job-header {
+  background: linear-gradient(135deg, #06091a 0%, #0d1a3a 100%);
+}
+html.dark-mode .job-board-tier-row { background: var(--card); }
+html.dark-mode .job-board-tier-row.active {
+  background: rgba(201,154,46,.12);
+  border-color: var(--gold);
+}
+html.dark-mode .tier-micro-badge {
+  background: rgba(201,154,46,.12);
+  border-color: rgba(201,154,46,.25);
+  color: var(--gold);
+}
+
+/* ── Responsive tweaks ──────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .jobs-family-grid,
+  .job-board-grid { grid-template-columns: 1fr; }
+  .tier-form-fields { grid-template-columns: 1fr; }
+  .tier-form-fields .tier-desc-wrap { grid-column: 1; }
+  .my-job-wage { font-size: 1.4rem; }
 }

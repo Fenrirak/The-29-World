@@ -95,7 +95,8 @@ async function init() {
     safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
-    safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
+    safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents"),
+    safeBgJob(processJobPromotions(u.classCode), "processJobPromotions")
   ]);
   // Kick the day's jobs off but DON'T block the page on them: paint what
   // we already have first, then wait. On the first load of the day pay day
