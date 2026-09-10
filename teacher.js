@@ -294,7 +294,7 @@ async function render() {
 
   // lifestyle settings
   const cfg = cls.lifestyleConfig || {
-    property: { enabled: true, weight: 4 }, store: { enabled: true, weight: 2 },
+    property: { enabled: true, weight: 4, livingBonusStars: 1 }, store: { enabled: true, weight: 2 },
     insurance: { enabled: true, weight: 2 }, transport: { enabled: true, weight: 3 }
   };
   const lsBox = document.getElementById("lifestyleSettings");
@@ -313,6 +313,11 @@ async function render() {
       </label>
       <label for="ls-${s.key}-weight">Points per star</label>
       <input type="number" id="ls-${s.key}-weight" min="0" step="1" value="${cfg[s.key] ? cfg[s.key].weight : 0}">
+      ${s.key === "property" ? `
+      <label for="ls-property-livingbonus">Bonus stars for living in it</label>
+      <input type="number" id="ls-property-livingbonus" min="0" step="1" value="${cfg.property && cfg.property.livingBonusStars !== undefined ? cfg.property.livingBonusStars : 1}">
+      <p class="muted-small" style="margin-top:4px;">Extra stars (on top of the property's own comfort) a student earns while living in a property they own, instead of renting it out. Multiplied by "Points per star" above, and stacks across every property they own and live in.</p>
+      ` : ""}
     </div>
   `).join("");
 
@@ -751,11 +756,22 @@ async function saveLifestyleLockSettings() {
 }
 
 async function saveLifestyle() {
+  // loan config lives in this same lifestyleConfig object but is edited
+  // from its own section (see setLoanLifestylePenalty in data.js), so it's
+  // read back here and carried through untouched — otherwise saving this
+  // form would wipe out whatever the teacher set there.
+  const cls = await getClassCached(CLASS_CODE);
+  const existingLoanCfg = (cls.lifestyleConfig && cls.lifestyleConfig.loan) || { enabled: false, perAmount: 0, points: 0 };
   const config = {
-    property: { enabled: document.getElementById("ls-property-on").checked, weight: Number(document.getElementById("ls-property-weight").value) || 0 },
+    property: {
+      enabled: document.getElementById("ls-property-on").checked,
+      weight: Number(document.getElementById("ls-property-weight").value) || 0,
+      livingBonusStars: Math.max(0, Number(document.getElementById("ls-property-livingbonus").value) || 0)
+    },
     transport: { enabled: document.getElementById("ls-transport-on").checked, weight: Number(document.getElementById("ls-transport-weight").value) || 0 },
     store: { enabled: document.getElementById("ls-store-on").checked, weight: Number(document.getElementById("ls-store-weight").value) || 0 },
-    insurance: { enabled: document.getElementById("ls-insurance-on").checked, weight: Number(document.getElementById("ls-insurance-weight").value) || 0 }
+    insurance: { enabled: document.getElementById("ls-insurance-on").checked, weight: Number(document.getElementById("ls-insurance-weight").value) || 0 },
+    loan: existingLoanCfg
   };
   await saveLifestyleConfig(CLASS_CODE, config);
   document.getElementById("lifestyleMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
@@ -1061,27 +1077,31 @@ async function renderProfile(username) {
   }
 
   rows.push(`<h4>${icon("house", 16)} Property</h4>`);
-  if (poss.property && isMortgagePaymentOverdue(poss.property, cls)) {
+  const ownedProps = poss.properties || (poss.property ? [poss.property] : []);
+  ownedProps.filter(p => isMortgagePaymentOverdue(p, cls)).forEach(p => {
     rows.push(`
       <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;">
         <div class="auto-details">
-          <strong>${icon("house", 14)} Mortgage payment overdue — ${poss.property.name}</strong>
+          <strong>${icon("house", 14)} Mortgage payment overdue — ${p.name}</strong>
           <div class="muted-small">This week's payment (due ${DAY_FULL[cls.mortgageDay || "Fri"]}) hasn't been paid yet.</div>
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
           <div class="status-declined">Unpaid</div>
-          <button class="btn small secondary" onclick="profileResolveMortgageOverdue('${poss.property.id}')">Mark as resolved</button>
+          <button class="btn small secondary" onclick="profileResolveMortgageOverdue('${p.id}')">Mark as resolved</button>
         </div>
       </div>`);
-  }
-  rows.push(poss.property
-    ? `<div class="auto-row"><div class="auto-details"><strong>${poss.property.name}</strong> — ${fmtMoney(poss.property.price)}
-        <div class="muted-small">${poss.property.occupancy === "living" ? "Living in it (lifestyle bonus applied)" : poss.property.occupancy === "rented" ? `Rented out — earning ${fmtMoney(poss.property.rentPerWeek || 0)}/week, paid ${DAY_FULL[poss.property.rentDay || "Fri"]}` : "Hasn't chosen to live in it or rent it out yet"}</div>
-        ${poss.property.mortgage ? `<div class="muted-small">Mortgage: ${fmtMoney(poss.property.mortgage.weeklyPayment)}/week base${poss.property.mortgage.interestRate > 0 ? ` + ${poss.property.mortgage.interestRate}% interest on the balance owed` : ""}, ${poss.property.mortgage.weeksLeft} week${poss.property.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]} — this week's payment is ${fmtMoney(mortgageWeekAmount(poss.property.mortgage).total)}</div>` : ""}</div>
+  });
+  // A student can own more than one property — their lifestyle bonus
+  // stacks across all of them (see lifestyleRatingFromData), so every
+  // owned unit gets its own row here rather than just the first one.
+  rows.push(ownedProps.length
+    ? ownedProps.map(p => `<div class="auto-row"><div class="auto-details"><strong>${p.name}</strong> — ${fmtMoney(p.price)}
+        <div class="muted-small">${p.occupancy === "living" ? "Living in it (lifestyle bonus applied)" : p.occupancy === "rented" ? `Rented out — earning ${fmtMoney(p.rentPerWeek || 0)}/week, paid ${DAY_FULL[p.rentDay || "Fri"]}` : "Hasn't chosen to live in it or rent it out yet"}</div>
+        ${p.mortgage ? `<div class="muted-small">Mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance owed` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]} — this week's payment is ${fmtMoney(mortgageWeekAmount(p.mortgage).total)}</div>` : ""}</div>
         <div class="row-flex" style="gap:8px;">
-          ${poss.property.occupancy === "rented" ? `<button class="btn small secondary" onclick="profileEndRental('${poss.property.id}')">Stop renting / kick out tenants</button>` : ""}
-          <button class="btn small coral" onclick="profileRemoveProperty('${poss.property.id}')">Repossess</button>
-        </div></div>`
+          ${p.occupancy === "rented" ? `<button class="btn small secondary" onclick="profileEndRental('${p.id}')">Stop renting / kick out tenants</button>` : ""}
+          <button class="btn small coral" onclick="profileRemoveProperty('${p.id}')">Repossess</button>
+        </div></div>`).join("")
     : `<p class="muted-small">No property owned.</p>`);
 
   rows.push(`<h4>${icon("car", 16)} Transport</h4>`);

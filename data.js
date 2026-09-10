@@ -5061,13 +5061,20 @@ function withNewModuleDefaults(cls) {
   cls.bigEventLog = cls.bigEventLog || [];
   cls.lastBigEventWeekRun = cls.lastBigEventWeekRun || null;
   cls.lifestyleConfig = cls.lifestyleConfig || {
-    property: { enabled: true, weight: 4 },
+    property: { enabled: true, weight: 4, livingBonusStars: 1 },
     store: { enabled: true, weight: 2 },
     insurance: { enabled: true, weight: 2 },
     transport: { enabled: true, weight: 3 }
   };
   if (!cls.lifestyleConfig.transport) cls.lifestyleConfig.transport = { enabled: true, weight: 3 };
   if (!cls.lifestyleConfig.loan) cls.lifestyleConfig.loan = { enabled: false, perAmount: 0, points: 0 };
+  // Teacher-set number of "stars" a student earns for choosing to live in
+  // an owned property (as opposed to renting it out), multiplied by the
+  // same points-per-star weight as the property's own comfort rating —
+  // replaces the old fixed +5 flat bonus so teachers can tune it themselves.
+  if (cls.lifestyleConfig.property && cls.lifestyleConfig.property.livingBonusStars === undefined) {
+    cls.lifestyleConfig.property.livingBonusStars = 1;
+  }
   cls.lifestyleThresholds = cls.lifestyleThresholds && cls.lifestyleThresholds.length ? cls.lifestyleThresholds : [
     { min: 0, max: 10, label: "Poor", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
     { min: 10, max: 20, label: "Modest", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
@@ -6517,23 +6524,51 @@ async function processInsurancePayments(classCode) {
 }
 
 // Everything a single student owns, for the teacher's "view student" panel.
+// `properties` holds every unit the student owns (a student can own more
+// than one — their lifestyle bonus stacks across all of them, see
+// lifestyleRatingFromData); `property` is kept as the first one for any
+// old caller that only ever expected a single property.
 async function getStudentPossessions(username, classCode) {
   const cls = withNewModuleDefaults(await getClass(classCode));
   const user = await getUser(username);
   if (!cls || !user) return null;
-  const property = cls.properties.find(p => p.owner === username) || null;
+  const properties = cls.properties.filter(p => p.owner === username);
+  const property = properties[0] || null;
   const vehicles = cls.vehicles.filter(v => (v.owners || []).includes(username));
   const vehicle = vehicles.reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
   const storeItems = (user.storeItems || []).map(id => cls.storeItems.find(i => i.id === id)).filter(Boolean)
     .map(i => ({ ...i }));
   const insurance = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).filter(Boolean);
-  return { property, vehicle, vehicles, storeItems, insurance };
+  return { property, properties, vehicle, vehicles, storeItems, insurance };
 }
 
 /* ===================== Lifestyle rating ===================== */
-// Flat lifestyle-score bonus for choosing to live in an owned property
-// instead of renting it out (see setPropertyOccupancy).
-const PROPERTY_LIVING_BONUS = 5;
+// Lifestyle-score bonus for choosing to live in an owned property instead
+// of renting it out (see setPropertyOccupancy). The teacher sets how many
+// "stars" living-in-it is worth (cfg.property.livingBonusStars); it's
+// converted to points the same way comfort stars are, using the property
+// category's own points-per-star weight.
+function propertyLivingBonusPoints(cfg) {
+  const stars = (cfg && cfg.property) ? Number(cfg.property.livingBonusStars) || 0 : 0;
+  const weight = (cfg && cfg.property) ? Number(cfg.property.weight) || 0 : 0;
+  return stars * weight;
+}
+// Lets a listing preview its lifestyle impact before a student buys it:
+// the points they'd get just for owning it, plus the extra points on top
+// if they choose to live in it. Returns null if the property category is
+// switched off entirely, so callers know not to show anything.
+function propertyLifestylePreview(cls, comfort) {
+  const cfg = (cls && cls.lifestyleConfig) || {};
+  if (!cfg.property || !cfg.property.enabled) return null;
+  const weight = Number(cfg.property.weight) || 0;
+  const livingStars = Number(cfg.property.livingBonusStars) || 0;
+  return {
+    ownPoints: (Number(comfort) || 0) * weight,
+    livingBonusPoints: livingStars * weight,
+    livingBonusStars: livingStars,
+    weight
+  };
+}
 
 async function saveLifestyleConfig(classCode, config) {
   await classesCol().doc(classCode).update({ lifestyleConfig: config });
@@ -6604,11 +6639,13 @@ async function lifestyleBandForStudent(username, classCode, precomputedBoard) {
   // a second time here for a single student's band was wasteful.
   const board = precomputedBoard || await classLeaderboard(classCode);
   const row = board.find(r => r.username === username);
-  const property = (cls.properties || []).find(p => p.owner === username);
+  // Stacked total across every property the student owns, not just one,
+  // matching how the property category now contributes to the score itself.
+  const ownedProperties = (cls.properties || []).filter(p => p.owner === username);
   const ownedVehicles = (cls.vehicles || []).filter(v => (v.owners || []).includes(username));
   const stats = {
     netWorth: row ? row.net : 0,
-    propertyComfort: property ? (property.comfort || 0) : 0,
+    propertyComfort: ownedProperties.reduce((sum, p) => sum + (p.comfort || 0), 0),
     // Stacked total across every vehicle the student owns, not just their
     // best one, matching how transport now contributes to the score itself.
     transportComfort: ownedVehicles.reduce((sum, v) => sum + (v.comfort || 0), 0)
@@ -6631,15 +6668,19 @@ function lifestyleRatingFromData(cls, user, username) {
   let score = 0;
 
   if (cfg.property && cfg.property.enabled) {
-    const owned = cls.properties.find(p => p.owner === username);
-    if (owned) {
-      score += owned.comfort * (cfg.property.weight || 0);
-      // Living in the property (as opposed to renting it out) earns a
-      // flat +5 lifestyle bonus on top of its base comfort score. Renting
-      // it out instead earns weekly rent (see processPropertyRent) but no
-      // bonus — the property still only counts for its base comfort.
-      if (owned.occupancy === "living") score += PROPERTY_LIVING_BONUS;
-    }
+    // Every owned property contributes its own comfort × weight — stars
+    // stack across all properties a student owns, the same way transport
+    // stacks across every owned vehicle below.
+    const owned = cls.properties.filter(p => p.owner === username);
+    owned.forEach(p => {
+      score += (p.comfort || 0) * (cfg.property.weight || 0);
+      // Living in a property (as opposed to renting it out) earns a
+      // teacher-set number of bonus "stars" on top of its base comfort
+      // score, for each property the student is living in. Renting one
+      // out instead earns weekly rent (see processPropertyRent) but no
+      // bonus — that property still only counts for its base comfort.
+      if (p.occupancy === "living") score += propertyLivingBonusPoints(cfg);
+    });
   }
   if (cfg.transport && cfg.transport.enabled) {
     // Every owned vehicle contributes its own comfort × weight — stars
@@ -6694,16 +6735,19 @@ async function lifestyleRatingBreakdown(username, classCode) {
   let score = 0;
 
   if (cfg.property && cfg.property.enabled) {
-    const owned = cls.properties.find(p => p.owner === username);
-    if (owned) {
-      const pts = owned.comfort * (cfg.property.weight || 0);
+    // Every owned property gets its own line (and its own living bonus
+    // line, if applicable) — points stack across all properties owned.
+    const owned = cls.properties.filter(p => p.owner === username);
+    owned.forEach(p => {
+      const pts = (p.comfort || 0) * (cfg.property.weight || 0);
       score += pts;
-      items.push({ type: "gain", label: owned.name || "Property", detail: `${owned.comfort} comfort &times; ${cfg.property.weight || 0} pts/star`, points: pts });
-      if (owned.occupancy === "living") {
-        score += PROPERTY_LIVING_BONUS;
-        items.push({ type: "gain", label: "Living in your property", detail: "Flat bonus for living in it instead of renting it out", points: PROPERTY_LIVING_BONUS });
+      items.push({ type: "gain", label: p.name || "Property", detail: `${p.comfort || 0} comfort &times; ${cfg.property.weight || 0} pts/star`, points: pts });
+      if (p.occupancy === "living") {
+        const bonus = propertyLivingBonusPoints(cfg);
+        score += bonus;
+        items.push({ type: "gain", label: `Living in ${p.name || "your property"}`, detail: `${cfg.property.livingBonusStars || 0} bonus star${(cfg.property.livingBonusStars || 0) === 1 ? "" : "s"} &times; ${cfg.property.weight || 0} pts/star for living in it instead of renting it out`, points: bonus });
       }
-    }
+    });
   }
   if (cfg.transport && cfg.transport.enabled) {
     const owned = cls.vehicles.filter(v => (v.owners || []).includes(username));

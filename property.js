@@ -6,6 +6,18 @@ function comfortStars(n) {
   return `<span class="ticker-up">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span>`;
 }
 
+// Shows a student browsing a listing what owning it (and, on top of that,
+// living in it) would do to their lifestyle rating — the owning bonus
+// applies as soon as it's bought, the living bonus is extra on top if they
+// then choose to live in it rather than rent it out. Note: for a listing
+// with several units, every unit shares the same comfort rating, so this
+// preview is the same regardless of which unit gets bought.
+function lifestylePreviewLine(cls, p) {
+  const preview = propertyLifestylePreview(cls, p.comfort);
+  if (!preview) return "";
+  return `<p class="muted-small">Owning this: +${preview.ownPoints} lifestyle points. Living in it instead of renting it out: +${preview.livingBonusPoints} more on top (${preview.livingBonusStars} bonus star${preview.livingBonusStars === 1 ? "" : "s"} &times; ${preview.weight} pts/star).</p>`;
+}
+
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("house", 26) + " Property";
@@ -120,6 +132,7 @@ async function render() {
           <h4>${icon("house", 20)}${p.name} ${myUnit ? '<span class="badge mint">Your home</span>' : ""}</h4>
           <p>${p.description || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
+          ${lifestylePreviewLine(cls, p)}
           <p>${priceWithLifeDiscount(me, "property", p.price)} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""}` : "&middot; cash purchase only"}
             ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
           <p class="muted-small">${units.length > 1 ? `${available.length} of ${units.length} available` : (available.length > 0 ? "Available" : `Owned by ${nameOf(owned[0].owner)}`)}</p>
@@ -152,7 +165,7 @@ function ownedUnitBlock(p, isMine, cls, nameOf) {
     <div class="card" style="margin-top:8px;padding:10px 12px;">
       <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance still owed (shrinks each week)` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
       ${isMine && p.mortgage ? mortgagePayBlock(p, cls) : ""}
-      ${occupancyBlock(p, isMine)}
+      ${occupancyBlock(p, isMine, cls)}
       <div class="row-flex" style="gap:8px;margin-top:6px;">
         ${IS_TEACHER ? `<button class="btn small secondary" onclick="forceSell('${p.id}')">Sell back (${who})</button>` : (isMine ? `<button class="btn small secondary" onclick="sellMine('${p.id}')">Sell back</button>` : "")}
       </div>
@@ -162,7 +175,9 @@ function ownedUnitBlock(p, isMine, cls, nameOf) {
 // Renders the "living in it / rented out" status + choice for an owned
 // property. Only the owner sees the choice buttons — everyone else just
 // sees whether the property is currently occupied or rented out.
-function occupancyBlock(p, isMine) {
+function occupancyBlock(p, isMine, cls) {
+  const preview = propertyLifestylePreview(cls, p.comfort);
+  const livingBonusPts = preview ? preview.livingBonusPoints : 0;
   if (!isMine) {
     if (p.occupancy === "living") return `<p class="muted-small">${icon("house", 13)} Owner is living here.</p>`;
     if (p.occupancy === "rented") return `<p class="muted-small">This property is currently rented out.</p>`;
@@ -171,7 +186,7 @@ function occupancyBlock(p, isMine) {
   if (p.occupancy === "living") {
     return `
       <div class="card" style="margin-top:8px;padding:10px 12px;">
-        <p><strong>${icon("house", 14)} You're living here</strong> — your lifestyle rating gets a +5 bonus (property category) while you live in it. You're not collecting rent.</p>
+        <p><strong>${icon("house", 14)} You're living here</strong> — your lifestyle rating gets a +${livingBonusPts} bonus (property category) while you live in it. You're not collecting rent.</p>
         ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out instead</button>` : `<p class="muted-small">Your teacher hasn't set a rent amount for this property, so it can't be rented out yet.</p>`}
       </div>`;
   }
@@ -187,7 +202,7 @@ function occupancyBlock(p, isMine) {
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
       <p><strong>Live in it, or rent it out?</strong></p>
-      <p class="muted-small">Live in it: no rent income, but +5 to your lifestyle rating (property category) while you live there.<br>
+      <p class="muted-small">Live in it: no rent income, but +${livingBonusPts} to your lifestyle rating (property category) while you live there.<br>
       Rent it out: ${p.rentPerWeek > 0 ? `${fmtMoney(p.rentPerWeek)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}` : "your teacher hasn't set a rent amount yet"} — but no lifestyle bonus, only the property's base comfort rating counts.<br>
       You can change your mind at any time.</p>
       <div class="row-flex" style="gap:8px;">
@@ -298,9 +313,13 @@ async function saveMortgageForceDue() {
 }
 
 async function chooseOccupancy(id, choice) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const prop = (cls.properties || []).find(p => p.id === id);
+  const preview = propertyLifestylePreview(cls, prop ? prop.comfort : 0);
+  const bonus = preview ? preview.livingBonusPoints : 0;
   const msg = choice === "living"
-    ? "Live in this property?\n\nYou'll get a +5 bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time."
-    : "Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +5 lifestyle bonus for living in it — only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.";
+    ? `Live in this property?\n\nYou'll get a +${bonus} bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time.`
+    : `Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +${bonus} lifestyle bonus for living in it — only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.`;
   if (!confirm(msg)) return;
   const res = await setPropertyOccupancy(CURRENT.username, CURRENT.classCode, id, choice);
   if (!res.ok) { alert(res.error); return; }
