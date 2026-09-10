@@ -1855,6 +1855,7 @@ html.dark-mode .notif-dot{
   background: linear-gradient(135deg, var(--navy-900, #0e1b37) 0%, #1a3070 100%);
   color: #fff;
   flex-wrap: wrap;
+  border-radius: 14px;
 }
 .my-job-family {
   font-size: .78rem;
@@ -2106,6 +2107,8 @@ html.dark-mode .notif-dot{
   margin-top: 4px;
 }
 .promo-popup-btn { width: 100%; font-size: 1rem; padding: 14px; }
+.promo-popup-actions { display: flex; gap: 10px; margin-top: 4px; }
+.promo-popup-actions .btn { flex: 1; padding: 14px; font-size: 1rem; }
 
 /* ── Dark mode overrides ────────────────────────────────────────── */
 html.dark-mode .job-family-card,

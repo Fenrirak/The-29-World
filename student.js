@@ -616,17 +616,28 @@ function showPromotionPopup(promo) {
     <div class="promo-popup-card">
       <div class="promo-popup-stars">✦ ✦ ✦</div>
       <div class="promo-popup-emoji">🎉</div>
-      <h2 class="promo-popup-title">You've been promoted!</h2>
-      <p class="promo-popup-sub">You're now a</p>
+      <h2 class="promo-popup-title">You've been offered a promotion!</h2>
+      <p class="promo-popup-sub">Move up to</p>
       <div class="promo-popup-tier">
         <div class="promo-popup-tier-name">${promo.tierName}</div>
         <div class="promo-popup-tier-meta">${promo.jobTitle} &middot; ${typeof fmtMoney === "function" ? fmtMoney(promo.wage) : "$" + promo.wage}/pay day</div>
       </div>
-      <button class="btn gold promo-popup-btn" onclick="document.getElementById('t29PromoOverlay').remove()">
-        🎊 Let's go!
-      </button>
+      <div class="promo-popup-actions">
+        <button class="btn secondary" onclick="respondPromotionPopup(false)">Not right now</button>
+        <button class="btn gold" onclick="respondPromotionPopup(true)">🎉 Accept</button>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
+}
+
+async function respondPromotionPopup(accept) {
+  const overlay = document.getElementById("t29PromoOverlay");
+  if (overlay) overlay.querySelectorAll("button").forEach(b => b.disabled = true);
+  try {
+    await respondToPromotion(CURRENT.username, accept);
+  } catch (e) {}
+  if (overlay) overlay.remove();
+  await render();
 }
 

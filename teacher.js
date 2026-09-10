@@ -83,14 +83,6 @@ async function init() {
   if (!CLASS_CODE) { window.location.href = "teacher-home.html"; return; }
   const clsCheck = await getClassCached(CLASS_CODE);
   if (!clsCheck) { window.location.href = "teacher-home.html"; return; }
-  // teacher.html should never act as a landing/home page — it's only ever
-  // reached by explicitly opening a class from My Classes (or right after
-  // creating/importing one). sessionStorage is per-tab, so a tab that
-  // jumped straight here (a bookmark, a typed URL, a fresh tab) won't have
-  // this flag set and gets sent to My Classes instead; a tab that already
-  // opened a class keeps working normally on reload or via the Dashboard
-  // nav link.
-  if (sessionStorage.getItem("t29-class-opened") !== "1") { window.location.href = "teacher-home.html"; return; }
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintChrome();
   enablePasswordToggles();
@@ -901,7 +893,15 @@ async function promoteProfileStudent(username) {
   const nextTier = job.tiers[curIdx + 1];
   if (!nextTier) { if (btn) btn.disabled = false; return; }
   const res = await setStudentJobTier(CLASS_CODE, username, nextTier.id);
-  if (!res.ok) { alert(res.error || "Couldn't promote."); if (btn) btn.disabled = false; return; }
+  if (!res.ok) { alert(res.error || "Couldn't offer that promotion."); if (btn) btn.disabled = false; return; }
+  await render();
+  await renderProfile(username);
+}
+
+async function cancelPendingPromotionClick(username) {
+  const btn = event && event.target;
+  if (btn) btn.disabled = true;
+  await cancelPendingPromotion(username);
   await render();
   await renderProfile(username);
 }
@@ -941,6 +941,7 @@ async function renderProfile(username) {
     rows.push(`<p class="muted-small">No job assigned — assign one using the job dropdown in the Students table.</p>`);
   } else {
     const tiers = job.tiers || [];
+    const pendingPromo = s.pendingPromotion && s.pendingPromotion.jobId === job.id ? s.pendingPromotion : null;
     const tierOpts = tiers.map((t, i) =>
       `<option value="${t.id}" ${tier && t.id === tier.id ? "selected" : ""}>${i + 1}. ${t.name} — ${fmtMoney(t.wage)}/pay day</option>`
     ).join("");
@@ -960,7 +961,15 @@ async function renderProfile(username) {
           </div>`;
         }).join("")}
       </div>
-      ${tiers.length > 1 ? `
+      ${pendingPromo ? `
+        <div class="auto-row" style="margin-top:12px;">
+          <div class="auto-details">
+            <strong>Promotion offered:</strong> ${pendingPromo.tierName} (${fmtMoney(pendingPromo.wage)}/pay day)
+            <div class="muted-small">Waiting on ${s.name.split(" ")[0]} to accept or decline — their tier won't change until they respond.</div>
+          </div>
+          <button class="btn small coral" onclick="cancelPendingPromotionClick('${username}')">Cancel offer</button>
+        </div>
+      ` : tiers.length > 1 ? `
         <div style="display:flex;gap:8px;align-items:flex-end;margin-top:14px;flex-wrap:wrap;">
           <div style="flex:1;min-width:180px;">
             <label for="profileTierSelect" style="margin-top:0;">Move to tier</label>
@@ -968,9 +977,10 @@ async function renderProfile(username) {
           </div>
           <button class="btn small" onclick="applyProfileTierChange('${username}')">Save</button>
           ${tierIdx >= 0 && tierIdx < tiers.length - 1
-            ? `<button class="btn small mint" onclick="promoteProfileStudent('${username}')">⬆ Promote to ${tiers[tierIdx + 1].name}</button>`
+            ? `<button class="btn small mint" onclick="promoteProfileStudent('${username}')">⬆ Offer promotion to ${tiers[tierIdx + 1].name}</button>`
             : `<span class="badge mint" style="align-self:flex-end;">At top tier</span>`}
         </div>
+        <p class="muted-small" style="margin-top:6px;">Moving up requires ${s.name.split(" ")[0]} to accept the offer first; moving down applies right away.</p>
       ` : `<p class="muted-small" style="margin-top:8px;">This job has only one tier.</p>`}
     `);
   }

@@ -1261,7 +1261,7 @@ async function removeJob(classCode, jobId) {
   // unassign anyone with this job (separate user docs)
   const students = await Promise.all(affectedStudents.map(getUser));
   await Promise.all(students.filter(s => s && s.jobId === jobId).map(s =>
-    usersCol().doc(s.username).update({ jobId: null, jobTierId: null, jobTierSince: null })
+    usersCol().doc(s.username).update({ jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null })
   ));
 }
 async function assignJob(studentUser, jobId, classCode) {
@@ -1276,7 +1276,8 @@ async function assignJob(studentUser, jobId, classCode) {
   await usersCol().doc(studentUser).update({
     jobId: jobId || null,
     jobTierId: tierId,
-    jobTierSince: tierId ? nzDateKey() : null
+    jobTierSince: tierId ? nzDateKey() : null,
+    pendingPromotion: null
   });
 }
 
@@ -1300,7 +1301,8 @@ async function approveApplication(classCode, appId) {
   if (studentUser) await usersCol().doc(studentUser).update({
     jobId,
     jobTierId: tierId,
-    jobTierSince: tierId ? nzDateKey() : null
+    jobTierSince: tierId ? nzDateKey() : null,
+    pendingPromotion: null
   });
 }
 async function declineApplication(classCode, appId) {
@@ -1320,8 +1322,9 @@ async function declineApplication(classCode, appId) {
 /* ---------------- Job tier management ---------------- */
 
 // Set a student to any specific tier within their current job.
-// Promotes (higher index) → queues a congratulations notification.
-// Demotes (lower index) → silent.
+// Promotes (higher index) → queues an OFFER the student must accept before
+// it takes effect (see respondToPromotion below) — their tier/wage does not
+// change yet. Demotes (lower index) → applied immediately, no consent needed.
 async function setStudentJobTier(classCode, username, tierId) {
   const [cls, student] = await Promise.all([getClass(classCode), getUser(username)]);
   if (!cls || !student) return { ok: false, error: "Not found." };
@@ -1337,19 +1340,27 @@ async function setStudentJobTier(classCode, username, tierId) {
   // restart their auto-promotion countdown for no reason.
   if (newIdx === effectiveCurIdx) return { ok: true, tier: newTier, isPromotion: false, unchanged: true };
   const isPromotion = newIdx > effectiveCurIdx;
-  const update = { jobTierId: tierId, jobTierSince: nzDateKey() };
   if (isPromotion) {
-    update.pendingPromotion = { jobTitle: job.title, tierName: newTier.name, wage: newTier.wage, date: nowStr() };
+    if (student.pendingPromotion) return { ok: false, error: "This student already has a pending promotion offer." };
+    await usersCol().doc(username).update({
+      pendingPromotion: {
+        jobId: job.id, tierId: newTier.id,
+        jobTitle: job.title, tierName: newTier.name, wage: newTier.wage, date: nowStr()
+      }
+    });
+    return { ok: true, tier: newTier, isPromotion: true, offered: true };
   }
-  await usersCol().doc(username).update(update);
-  return { ok: true, tier: newTier, isPromotion };
+  await usersCol().doc(username).update({ jobTierId: tierId, jobTierSince: nzDateKey() });
+  return { ok: true, tier: newTier, isPromotion: false };
 }
 
 // Auto-promotion background job. Runs on every page load alongside the other
-// startup jobs. For each job with autoPromoteWeeks > 0, promotes eligible
-// students exactly one tier. Uses per-student transactions for idempotency —
-// safe against concurrent tab loads. Fast no-op when no jobs are configured
-// for auto-promotion.
+// startup jobs. For each job with autoPromoteWeeks > 0, queues a promotion
+// OFFER (does not apply it) for eligible students exactly one tier up.
+// Skips students who already have an unresolved offer, so it won't pile
+// on/overwrite one every time the page reloads while they're deciding.
+// Uses per-student transactions for idempotency — safe against concurrent
+// tab loads. Fast no-op when no jobs are configured for auto-promotion.
 async function processJobPromotions(classCode) {
   const cls = await getClass(classCode);
   if (!cls || cls.archived) return 0;
@@ -1362,6 +1373,7 @@ async function processJobPromotions(classCode) {
   let count = 0;
   for (const student of students) {
     if (!student.jobId || !student.jobTierSince) continue;
+    if (student.pendingPromotion) continue; // already has an unresolved offer
     const job = promotableJobs.find(j => j.id === student.jobId);
     if (!job) continue;
     const curIdx = student.jobTierId ? job.tiers.findIndex(t => t.id === student.jobTierId) : 0;
@@ -1369,7 +1381,7 @@ async function processJobPromotions(classCode) {
     if (effectiveIdx >= job.tiers.length - 1) continue;
     const weeksSince = Math.floor(daysBetweenKeys(student.jobTierSince, today) / 7);
     if (weeksSince < Number(job.autoPromoteWeeks)) continue;
-    let promoted = false;
+    let offered = false;
     try {
       const userRef = usersCol().doc(student.username);
       await fdb.runTransaction(async (t) => {
@@ -1377,36 +1389,64 @@ async function processJobPromotions(classCode) {
         if (!snap.exists) return;
         const live = snap.data();
         if (!live.jobId || !live.jobTierSince) return;
+        if (live.pendingPromotion) return; // race guard
         const liveIdx = live.jobTierId ? job.tiers.findIndex(ti => ti.id === live.jobTierId) : 0;
         const liveEff = liveIdx === -1 ? 0 : liveIdx;
         if (liveEff >= job.tiers.length - 1) return;
         const liveWeeks = Math.floor(daysBetweenKeys(live.jobTierSince, today) / 7);
         if (liveWeeks < Number(job.autoPromoteWeeks)) return;
         const nextTier = job.tiers[liveEff + 1];
-        promoted = true;
+        offered = true;
         t.update(userRef, {
-          jobTierId: nextTier.id,
-          jobTierSince: today,
           pendingPromotion: {
+            jobId: job.id, tierId: nextTier.id,
             jobTitle: job.title, tierName: nextTier.name,
             wage: nextTier.wage, date: nowStr()
           }
         });
       });
-    } catch (e) { promoted = false; }
-    if (promoted) count++;
+    } catch (e) { offered = false; }
+    if (offered) count++;
   }
   return count;
 }
 
-// Read and clear a student's pending promotion notification.
-// Call after startup jobs on student-facing pages.
+// Peek at a student's pending promotion offer. Does NOT clear it — the
+// offer stays in place (and keeps showing) until the student explicitly
+// accepts or declines via respondToPromotion. Call after startup jobs on
+// student-facing pages.
 async function checkPromotionNotification(username) {
   const user = await getUser(username);
-  if (!user || !user.pendingPromotion) return null;
+  return (user && user.pendingPromotion) || null;
+}
+
+// Student responds to a pending promotion offer, whether it was queued
+// automatically or offered manually by the teacher. Accepting applies the
+// new tier; declining leaves them exactly where they are. Either way
+// jobTierSince resets to today — for an accept that's just the normal start
+// of the new tier's clock, and for a decline it pushes the next
+// auto-promotion check out a full cycle instead of re-offering the very
+// next time a page loads.
+async function respondToPromotion(username, accept) {
+  const user = await getUser(username);
+  if (!user || !user.pendingPromotion) return { ok: false, error: "No pending promotion." };
   const promo = user.pendingPromotion;
-  try { await usersCol().doc(username).update({ pendingPromotion: null }); } catch (e) {}
-  return promo;
+  const update = { pendingPromotion: null, jobTierSince: nzDateKey() };
+  // Only actually move them if they're still in the job the offer was for —
+  // guards against the rare case where they switched jobs while it sat
+  // unanswered, which would otherwise apply a stale tier id to a new job.
+  if (accept && user.jobId === promo.jobId) {
+    update.jobTierId = promo.tierId;
+  }
+  await usersCol().doc(username).update(update);
+  return { ok: true, accepted: !!accept, promo };
+}
+
+// Teacher revokes an outstanding promotion offer before the student has
+// responded to it. No side effects beyond removing the offer itself.
+async function cancelPendingPromotion(username) {
+  await usersCol().doc(username).update({ pendingPromotion: null });
+  return { ok: true };
 }
 
 /* ---------------- Remove a student ---------------- */
@@ -4751,7 +4791,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource) {
         entry.status = "lost";
         outcomeNote = `Didn't pay for "${entry.name}" — lost the associated ${entry.module}`;
         if (entry.module === "income") {
-          t.update(userRef, { jobId: null, jobTierId: null, jobTierSince: null });
+          t.update(userRef, { jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null });
         } else if (entry.module === "property") {
           const prop = cls.properties.find(p => p.owner === username);
           if (prop) { prop.owner = null; prop.mortgage = null; prop.occupancy = null; prop.rentLastWeekPaid = null; }
