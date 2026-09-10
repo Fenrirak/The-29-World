@@ -180,9 +180,13 @@ async function doLogin(e) {
   const res = await login(username, password);
   if (!res.ok) { showMsg(res.error, false); return false; }
 
+  // SECURITY FIX: this used to also save the plaintext password to
+  // localStorage for autofill. That's no longer needed — Firebase Auth
+  // already keeps the visitor signed in on this device on its own — so
+  // "remember" now only prefills the username field, never the password.
   const key = "anw_remember_" + (isTeacherForm ? "teacher" : "student");
   if (remember) {
-    localStorage.setItem(key, JSON.stringify({ username, password }));
+    localStorage.setItem(key, JSON.stringify({ username }));
   } else {
     localStorage.removeItem(key);
   }
@@ -202,7 +206,6 @@ function loadRememberedLogins() {
       const pField = role === "teacher" ? "l-password" : "sl-password";
       const rField = role === "teacher" ? "l-remember" : "sl-remember";
       document.getElementById(uField).value = saved.username || "";
-      document.getElementById(pField).value = saved.password || "";
       document.getElementById(rField).checked = true;
     } catch (e) { /* ignore corrupt storage */ }
   });

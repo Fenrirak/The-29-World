@@ -16,13 +16,33 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const fdb = firebase.firestore();
 
-// firestore.rules now requires request.auth != null on every read/write.
-// This app still does its own username/password check against Firestore
-// documents (see login() in data.js) — anonymous sign-in doesn't replace
-// that, it only satisfies the security-rules gate so a request has SOME
-// auth token attached. getUser()/getClass() in data.js (the two functions
-// every read/write path in this app goes through first) await this
-// before their first Firestore call, so a slow sign-in never races a
-// query out with a permission-denied error.
-const T29_AUTH_READY = firebase.auth().signInAnonymously()
-  .catch(err => console.error("T29: anonymous sign-in failed —", err));
+// ---------------- Auth ----------------
+// SECURITY FIX: this app used to sign every visitor in anonymously and
+// rely only on Firestore rules checking "is SOME auth token present" —
+// which made every document readable/writable by any visitor, logged in
+// or not. Real per-account identity now comes from Firebase Auth's
+// email/password provider (see t29AuthEmail()/login()/createTeacherAndClass()/
+// createStudentAccount() in data.js), and firestore.rules checks the
+// SPECIFIC signed-in user against the document's owner, not just "is
+// someone signed in".
+//
+// There is deliberately no more unconditional signInAnonymously() call
+// here. T29_AUTH_READY now just waits for Firebase to restore whatever
+// session already exists (a real logged-in user, or nobody) before the
+// rest of the app makes its first Firestore call — it does NOT create a
+// new session itself. A page that needs someone to actually be logged in
+// still goes through requireLogin() in data.js, same as before.
+const T29_AUTH_READY = new Promise(resolve => {
+  const unsub = firebase.auth().onAuthStateChanged(() => {
+    unsub();
+    resolve();
+  });
+});
+
+// Every account is stored in Firebase Auth under a synthetic email built
+// from its app-level username, since this app never collects real email
+// addresses. Centralised here so login/signup/migration all construct it
+// identically.
+function t29AuthEmail(username) {
+  return String(username).trim().toLowerCase() + "@t29.local";
+}

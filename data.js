@@ -639,6 +639,12 @@ function defaultClassData(code, className, teacherUsername) {
   };
 }
 
+// SECURITY FIX: signup now creates a real Firebase Auth account (which
+// handles password storage/hashing itself — nothing password-related is
+// ever written to Firestore anymore) instead of storing the password as
+// a plain Firestore field. See firebase-init.js for t29AuthEmail() and
+// firestore.rules for how /uidIndex maps the resulting Auth uid back to
+// this app's own username.
 async function createTeacherAndClass(name, username, password, className) {
   const existing = await getUser(username);
   if (existing) return { ok: false, error: "That username is already taken." };
@@ -646,15 +652,44 @@ async function createTeacherAndClass(name, username, password, className) {
   let code;
   do { code = genCode(5); } while ((await getClass(code)));
 
+  let cred;
+  try {
+    cred = await firebase.auth().createUserWithEmailAndPassword(t29AuthEmail(username), password);
+  } catch (e) {
+    return { ok: false, error: t29AuthErrorMessage(e) };
+  }
+
   const user = {
-    username, password, role: "teacher", name,
+    username, authUid: cred.user.uid, role: "teacher", name,
     classCode: code, balance: 0, sessionVersion: 0
   };
   const cls = defaultClassData(code, className, username);
 
-  await usersCol().doc(username).set(user);
-  await classesCol().doc(code).set(cls);
+  try {
+    await fdb.runTransaction(async (t) => {
+      t.set(fdb.collection("uidIndex").doc(cred.user.uid), { username });
+      t.set(usersCol().doc(username), user);
+      t.set(classesCol().doc(code), cls);
+    });
+  } catch (e) {
+    // Don't leave an orphaned Auth account with no matching app data.
+    await cred.user.delete().catch(() => {});
+    return { ok: false, error: "Something went wrong creating your account. Please try again." };
+  }
+
+  setSession(username, 0);
   return { ok: true, code };
+}
+
+// Turns a firebase.auth() error into the kind of short, user-facing
+// message this app already shows for every other form error.
+function t29AuthErrorMessage(e) {
+  switch (e && e.code) {
+    case "auth/email-already-in-use": return "That username is already taken.";
+    case "auth/weak-password": return "Password must be at least 6 characters.";
+    case "auth/invalid-email": return "That username can't be used — try letters and numbers only.";
+    default: return "Something went wrong. Please try again.";
+  }
 }
 
 /* ---------------- Teacher Home: multi-class management ----------------
@@ -941,10 +976,21 @@ async function deleteClassPermanently(teacherUsername, classCode) {
 }
 
 /* ---------------- Student joins a class ---------------- */
+// SECURITY FIX: same change as createTeacherAndClass() above — a real
+// Firebase Auth account is created first (password never touches
+// Firestore), then /uidIndex, /users, and the class-doc update happen
+// together in one transaction.
 async function createStudentAccount(name, username, password, classCode) {
   const existing = await getUser(username);
   if (existing) return { ok: false, error: "That username is already taken." };
   const classRef = classesCol().doc(classCode);
+
+  let cred;
+  try {
+    cred = await firebase.auth().createUserWithEmailAndPassword(t29AuthEmail(username), password);
+  } catch (e) {
+    return { ok: false, error: t29AuthErrorMessage(e) };
+  }
 
   try {
     await fdb.runTransaction(async (t) => {
@@ -952,8 +998,10 @@ async function createStudentAccount(name, username, password, classCode) {
       if (!clsSnap.exists) throw new Error("NO_CLASS");
       const cls = clsSnap.data();
 
+      t.set(fdb.collection("uidIndex").doc(cred.user.uid), { username });
+
       const user = {
-        username, password, role: "student", name,
+        username, authUid: cred.user.uid, role: "student", name,
         classCode, balance: 20, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
         sessionVersion: 0,
         // Denormalized copy of the class's daily time limit (see
@@ -982,18 +1030,96 @@ async function createStudentAccount(name, username, password, classCode) {
       t.update(classRef, { students: cls.students, txns: cls.txns });
     });
   } catch (e) {
+    await cred.user.delete().catch(() => {}); // don't leave an orphaned Auth account
     if (e.message === "NO_CLASS") return { ok: false, error: "That class code doesn't exist." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
+  setSession(username, 0);
   return { ok: true };
 }
 
-/* ---------------- Login ---------------- */
+/* ---------------- Login ----------------
+   SECURITY FIX: password verification is now done entirely by Firebase
+   Auth (signInWithEmailAndPassword) instead of comparing a plaintext
+   Firestore field. Accounts created before this fix ("legacy" accounts —
+   no authUid on their /users doc yet) are migrated automatically, once,
+   the first time they successfully log in: this function falls back to
+   checking their still-present legacy `password` field, and if it
+   matches, creates their real Firebase Auth account right then using the
+   password they just typed, links it via /uidIndex, and deletes the
+   legacy plaintext field so it's gone for good.
+
+   Note on the migration window: until a given legacy account logs in
+   once, firestore.rules still allows a single targeted read of that
+   specific account's own /users doc by any signed-in (incl. anonymous)
+   visitor who already knows its exact username — this is what lets the
+   fallback check below run at all without a server component. It does
+   NOT allow listing/enumerating accounts, and it closes automatically,
+   per account, the moment that account logs in. If you'd rather not have
+   that window at all, the alternative is a "hard cutover": clear every
+   legacy password now and have the teacher reset each student's password
+   individually — ask if you want that version instead. */
 async function login(username, password) {
+  try {
+    await firebase.auth().signInWithEmailAndPassword(t29AuthEmail(username), password);
+  } catch (e) {
+    if (e.code === "auth/user-not-found") {
+      const migrated = await t29TryMigrateLegacyLogin(username, password);
+      if (!migrated.ok) return { ok: false, error: "Incorrect username or password." };
+    } else {
+      return { ok: false, error: "Incorrect username or password." };
+    }
+  }
+
   const u = await getUser(username);
-  if (!u || u.password !== password) return { ok: false, error: "Incorrect username or password." };
+  if (!u) {
+    await firebase.auth().signOut().catch(() => {});
+    return { ok: false, error: "Incorrect username or password." };
+  }
   setSession(username, u.sessionVersion || 0);
   return { ok: true, user: u };
+}
+
+// One-time bridge for accounts created before this fix. See the comment
+// on login() above for what this does and its trade-off.
+async function t29TryMigrateLegacyLogin(username, password) {
+  let anon;
+  try {
+    anon = await firebase.auth().signInAnonymously();
+  } catch (e) {
+    return { ok: false };
+  }
+
+  let legacyOk = false;
+  try {
+    const snap = await usersCol().doc(username).get();
+    legacyOk = snap.exists && snap.data().password === password && !snap.data().authUid;
+  } catch (e) {
+    legacyOk = false;
+  }
+  await firebase.auth().signOut().catch(() => {});
+  if (!legacyOk) return { ok: false };
+
+  let cred;
+  try {
+    cred = await firebase.auth().createUserWithEmailAndPassword(t29AuthEmail(username), password);
+  } catch (e) {
+    return { ok: false };
+  }
+
+  try {
+    await fdb.runTransaction(async (t) => {
+      t.set(fdb.collection("uidIndex").doc(cred.user.uid), { username });
+      t.update(usersCol().doc(username), {
+        authUid: cred.user.uid,
+        password: firebase.firestore.FieldValue.delete()
+      });
+    });
+  } catch (e) {
+    await cred.user.delete().catch(() => {});
+    return { ok: false };
+  }
+  return { ok: true };
 }
 
 /* ---------------- Change password ----------------
@@ -1006,23 +1132,38 @@ async function changePassword(username, oldPassword, newPassword) {
   if (!newPassword || newPassword.length < 4) {
     return { ok: false, error: "New password must be at least 4 characters." };
   }
+  if (newPassword === oldPassword) {
+    return { ok: false, error: "New password must be different from your current password." };
+  }
+
+  // SECURITY FIX: reauthenticate + change the password through Firebase
+  // Auth itself, rather than comparing/overwriting a plaintext Firestore
+  // field. sessionVersion (the "sign out other devices" counter) still
+  // lives on the Firestore user doc, so it's bumped separately below.
+  const authUser = firebase.auth().currentUser;
+  if (!authUser) return { ok: false, error: "You need to be logged in." };
+  try {
+    const cred = firebase.auth.EmailAuthProvider.credential(t29AuthEmail(username), oldPassword);
+    await authUser.reauthenticateWithCredential(cred);
+    await authUser.updatePassword(newPassword);
+  } catch (e) {
+    if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential" || e.code === "auth/invalid-login-credentials") {
+      return { ok: false, error: "Current password is incorrect." };
+    }
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+
   const ref = usersCol().doc(username);
   let newVersion;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) throw new Error("NO_USER");
-      const u = snap.data();
-      if (u.password !== oldPassword) throw new Error("BAD_PASSWORD");
-      if (newPassword === oldPassword) throw new Error("SAME_PASSWORD");
-      newVersion = (u.sessionVersion || 0) + 1;
-      t.update(ref, { password: newPassword, sessionVersion: newVersion });
+      newVersion = (snap.data().sessionVersion || 0) + 1;
+      t.update(ref, { sessionVersion: newVersion });
     });
   } catch (e) {
-    if (e.message === "NO_USER") return { ok: false, error: "Account not found." };
-    if (e.message === "BAD_PASSWORD") return { ok: false, error: "Current password is incorrect." };
-    if (e.message === "SAME_PASSWORD") return { ok: false, error: "New password must be different from your current password." };
-    return { ok: false, error: "Something went wrong. Please try again." };
+    return { ok: false, error: "Password changed, but something went wrong finishing up. Please try again." };
   }
   // Re-stamp THIS device's own session with the new version immediately,
   // so the device that just changed the password stays logged in — only
