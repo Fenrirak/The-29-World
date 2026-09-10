@@ -567,19 +567,34 @@ async function requireLogin(opts) {
   // leak this page-only flag into that cache for any other code that
   // reads the same cached user in that window.
   let archivedReadOnly = false;
-  if (u.role === "student" && !opts.allowArchived) {
-    const cls = await getClassCached(u.classCode);
-    if (cls && cls.archived) {
-      if (isMemoryLaneActive(u.classCode)) {
-        archivedReadOnly = true;
-        applyArchivedReadOnlyLock(cls.name);
-      } else {
-        window.location.href = "archived.html";
-        return null;
+  // BUGFIX: getSessionUser() already catches its own read of the user's
+  // OWN doc and gracefully logs out/redirects on failure — but that read
+  // can succeed (e.g. via the legacy-account bypass in firestore.rules)
+  // while the requester's underlying Firebase Auth identity is still
+  // stale or only partially migrated (see the T29_AUTH_READY fix in
+  // firebase-init.js). Everything below this point needs a fully-working
+  // identity (myUsername()/myUserDoc() in firestore.rules), so wrap it
+  // the same way: any permission failure here means "not really logged
+  // in", not a page crash.
+  try {
+    if (u.role === "student" && !opts.allowArchived) {
+      const cls = await getClassCached(u.classCode);
+      if (cls && cls.archived) {
+        if (isMemoryLaneActive(u.classCode)) {
+          archivedReadOnly = true;
+          applyArchivedReadOnlyLock(cls.name);
+        } else {
+          window.location.href = "archived.html";
+          return null;
+        }
+      } else if (cls) {
+        _clearMemoryLane(u.classCode);
       }
-    } else if (cls) {
-      _clearMemoryLane(u.classCode);
     }
+  } catch (e) {
+    clearSession();
+    window.location.href = "index.html";
+    return null;
   }
   if (u.role === "student" && !opts.skipTimeLimit && !archivedReadOnly) {
     if (timeLimitStatus(u).reached) {

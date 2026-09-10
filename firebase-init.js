@@ -33,8 +33,41 @@ const fdb = firebase.firestore();
 // new session itself. A page that needs someone to actually be logged in
 // still goes through requireLogin() in data.js, same as before.
 const T29_AUTH_READY = new Promise(resolve => {
-  const unsub = firebase.auth().onAuthStateChanged(() => {
+  const unsub = firebase.auth().onAuthStateChanged(async (user) => {
     unsub();
+    // BUGFIX: before this security fix shipped, EVERY visitor was signed
+    // into Firebase Auth anonymously, and firestore.rules only checked
+    // "is someone signed in" — so an anonymous session was enough to read
+    // and write anything. Firebase Auth persists that anonymous session
+    // in the browser itself, so a browser that visited before this fix
+    // can still restore that old anonymous session here, even though
+    // this file no longer creates new ones ("There is deliberately no
+    // more unconditional signInAnonymously() call here", above).
+    //
+    // firestore.rules now keys almost everything off request.auth.uid
+    // matching a real /uidIndex entry (myUsername()/myUserDoc()) — an
+    // anonymous uid never has one. That means signedIn() reports true (a
+    // token IS present), so a legacy, not-yet-migrated account can still
+    // read its OWN /users doc (the explicit legacy bypass in
+    // firestore.rules covers that one case) and so requireLogin()
+    // succeeds and the page starts to load — but every other read that
+    // needs myUsername()/myUserDoc() (the class doc, classmates, jobs,
+    // anything) throws, which Firestore reports to the client as
+    // "Missing or insufficient permissions". That's what was showing up
+    // on student.html/teacher.html: the page gets partway in on a stale
+    // anonymous session, then fails everywhere else.
+    //
+    // Signing out a restored anonymous session here, before anything else
+    // in the app runs, forces that visitor through a real login() instead
+    // — which is exactly what runs the one-time legacy migration (see
+    // t29TryMigrateLegacyLogin() in data.js) and leaves them with a real,
+    // fully-working per-account identity instead of a half-working one.
+    // This never interferes with that migration's own brief, self-managed
+    // signInAnonymously() call — that one signs itself back out again
+    // before this promise is even created on the next page load.
+    if (user && user.isAnonymous) {
+      await firebase.auth().signOut().catch(() => {});
+    }
     resolve();
   });
 });
