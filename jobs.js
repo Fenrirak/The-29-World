@@ -605,3 +605,5 @@ function showPromotionPopup(promo) {
   `;
   document.body.appendChild(overlay);
 }
+
+document.addEventListener("DOMContentLoaded", init);
