@@ -136,27 +136,24 @@ async function getClass(code) {
 async function getClassStudents(code, precomputedCls) {
   const cls = precomputedCls || await getClass(code);
   if (!cls || !cls.students || cls.students.length === 0) return [];
-  // Was one individual .get() per student (25 students = 25 separate
-  // requests, all fired at once). Firestore supports fetching up to 30
-  // docs by ID in a single query, so batch into chunks of 30 instead —
-  // any normal-sized class now costs 1 request instead of one per student.
-  // Falls back to the old one-by-one approach if this Firestore version/
-  // build doesn't expose FieldPath (defensive only — it's been standard
-  // for years, this just avoids a hard failure if it's ever missing).
-  if (!(firebase && firebase.firestore && firebase.firestore.FieldPath)) {
-    const users = await Promise.all(cls.students.map(u => getUser(u)));
-    return users.filter(Boolean);
-  }
-  const usernames = cls.students;
-  const chunks = [];
-  for (let i = 0; i < usernames.length; i += 30) chunks.push(usernames.slice(i, i + 30));
-  const snaps = await Promise.all(chunks.map(chunk =>
-    usersCol().where(firebase.firestore.FieldPath.documentId(), "in", chunk).get()
-  ));
-  const byUsername = {};
-  snaps.forEach(snap => snap.forEach(doc => { byUsername[doc.id] = doc.data(); }));
-  // Keep the same order and "drop missing users" behavior as before.
-  return usernames.map(u => byUsername[u]).filter(Boolean);
+  // SECURITY FIX: this used to batch student lookups into one
+  // `where(documentId(), "in", chunk)` query per 30 students, to save
+  // reads. That broke completely under firestore.rules: Firestore will
+  // only allow a `list`/query request if it can prove, from the query's
+  // OWN filters alone, that every possible matching document satisfies
+  // the rule — and our /users `list` rule checks resource.data.classCode,
+  // a field that isn't part of a document-ID filter. Firestore refuses to
+  // read a candidate document just to check the rule, so it denied the
+  // ENTIRE query outright with "Missing or insufficient permissions" —
+  // for every teacher and every student, every time, on every page load.
+  // Individual getUser() calls below go through the `get` rule instead,
+  // which Firestore evaluates per document against that document's real
+  // data — no such restriction applies. This costs one read per student
+  // rather than one per 30, but a class tops out at 8 students, so the
+  // difference is negligible, and getUser() already coalesces duplicate
+  // in-flight requests for the same username.
+  const users = await Promise.all(cls.students.map(u => getUser(u)));
+  return users.filter(Boolean);
 }
 
 /* ---------------- Lightweight per-page read cache ----------------
