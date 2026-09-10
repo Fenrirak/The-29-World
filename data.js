@@ -6893,7 +6893,16 @@ const MODULE_LOCK_MESSAGE = {
    Removed rather than hidden so fitTopbar() measures the real row. */
 const NAV_TEACHER_ONLY = ["reports.html", "quizzes.html"];
 function applyNavRoleVisibility(role) {
-  if (role === "teacher") return;
+  // These two links are hidden by default in CSS (see style.css) so a
+  // student never sees so much as a flash of them before this function
+  // gets to run. For a teacher, add the class that reveals them; for a
+  // student, leave the CSS default-hide in place and also strip the
+  // elements out of the DOM entirely below (belt-and-suspenders, and
+  // needed so fitTopbar() measures the real row).
+  if (role === "teacher") {
+    document.documentElement.classList.add("role-teacher");
+    return;
+  }
   const here = (window.location.pathname.split("/").pop() || "").toLowerCase();
   let removed = false;
   document.querySelectorAll("nav a[href]").forEach(a => {

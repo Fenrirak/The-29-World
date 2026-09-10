@@ -137,6 +137,17 @@ p{color:var(--muted);line-height:1.5;}
 .topbar nav a.nav-locked{opacity:.4;cursor:not-allowed;}
 .topbar nav a.nav-locked:hover{background:none;color:inherit;}
 
+/* Quizzes/Reports are teacher-only nav items. Hidden by default (CSS,
+   before any script runs) so a student never even sees them flash on
+   screen while data.js is still figuring out who's logged in; JS only
+   ever adds the "role-teacher" class to <html> once it confirms the
+   user is a teacher, it never removes it, so students get no trace of
+   these tabs at any point in the page load. */
+.topbar nav a[href="quizzes.html"],
+.topbar nav a[href="reports.html"]{display:none;}
+html.role-teacher .topbar nav a[href="quizzes.html"],
+html.role-teacher .topbar nav a[href="reports.html"]{display:inline-flex;}
+
 /* Student profile modal */
 #profileModal .card{max-width:680px;max-height:88vh;overflow:auto;}
 #profileSubtitle{color:var(--muted);font-size:.9rem;margin:-6px 0 0;}
