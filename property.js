@@ -6,18 +6,6 @@ function comfortStars(n) {
   return `<span class="ticker-up">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span>`;
 }
 
-// Shows a student browsing a listing what owning it (and, on top of that,
-// living in it) would do to their lifestyle rating — the owning bonus
-// applies as soon as it's bought, the living bonus is extra on top if they
-// then choose to live in it rather than rent it out. Note: for a listing
-// with several units, every unit shares the same comfort rating, so this
-// preview is the same regardless of which unit gets bought.
-function lifestylePreviewLine(cls, p) {
-  const preview = propertyLifestylePreview(cls, p);
-  if (!preview) return "";
-  return `<p class="muted-small">Owning this: +${preview.ownPoints} lifestyle points. Living in it instead of renting it out: +${preview.livingBonusPoints} more on top (${preview.livingBonusStars} bonus star${preview.livingBonusStars === 1 ? "" : "s"} &times; ${preview.weight} pts/star).</p>`;
-}
-
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("house", 26) + " Property";
@@ -27,6 +15,8 @@ function paintChrome() {
   document.getElementById("saveMortgageDayBtn").innerHTML = icon("calendar", 14) + " Save mortgage day";
   document.getElementById("hMortgageForceDue").innerHTML = icon("send", 15) + " Manual override";
   document.getElementById("saveMortgageForceDueBtn").innerHTML = icon("send", 14) + " Save";
+  document.getElementById("hRentalSettings").innerHTML = icon("users", 18) + " Renting to classmates";
+  document.getElementById("saveRentalSettingsBtn").innerHTML = icon("send", 14) + " Save settings";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a property";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add property";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
@@ -42,6 +32,7 @@ async function init() {
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("mortgagePanel").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("rentalsPanel").classList.toggle("hidden", !IS_TEACHER);
   paintChrome();
   // These 7 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
@@ -98,7 +89,14 @@ async function render() {
   const students = await getClassStudents(me.classCode);
   const nameOf = un => (students.find(s => s.username === un) || {}).name || un;
 
-  if (IS_TEACHER) populateMortgageSettings(cls);
+  if (IS_TEACHER) {
+    populateMortgageSettings(cls);
+    populateRentalSettings(cls);
+    renderPendingSublets(cls, nameOf);
+  } else {
+    renderMyRentedHome(cls, me, nameOf);
+    renderAvailableSublets(cls, me, nameOf);
+  }
 
   const list = document.getElementById("propList");
   list.innerHTML = "";
@@ -132,7 +130,6 @@ async function render() {
           <h4>${icon("house", 20)}${p.name} ${myUnit ? '<span class="badge mint">Your home</span>' : ""}</h4>
           <p>${p.description || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
-          ${lifestylePreviewLine(cls, p)}
           <p>${priceWithLifeDiscount(me, "property", p.price)} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""}` : "&middot; cash purchase only"}
             ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
           <p class="muted-small">${units.length > 1 ? `${available.length} of ${units.length} available` : (available.length > 0 ? "Available" : `Owned by ${nameOf(owned[0].owner)}`)}</p>
@@ -165,51 +162,295 @@ function ownedUnitBlock(p, isMine, cls, nameOf) {
     <div class="card" style="margin-top:8px;padding:10px 12px;">
       <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance still owed (shrinks each week)` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
       ${isMine && p.mortgage ? mortgagePayBlock(p, cls) : ""}
-      ${occupancyBlock(p, isMine, cls)}
+      ${occupancyBlock(p, isMine, cls, nameOf)}
       <div class="row-flex" style="gap:8px;margin-top:6px;">
         ${IS_TEACHER ? `<button class="btn small secondary" onclick="forceSell('${p.id}')">Sell back (${who})</button>` : (isMine ? `<button class="btn small secondary" onclick="sellMine('${p.id}')">Sell back</button>` : "")}
       </div>
     </div>`;
 }
 
-// Renders the "living in it / rented out" status + choice for an owned
-// property. Only the owner sees the choice buttons — everyone else just
-// sees whether the property is currently occupied or rented out.
-function occupancyBlock(p, isMine, cls) {
-  const preview = propertyLifestylePreview(cls, p);
-  const livingBonusPts = preview ? preview.livingBonusPoints : 0;
+// Renders the "living in it / rented out / rented to a classmate" status +
+// choice for an owned property. Only the owner sees the choice controls —
+// everyone else (only ever the teacher — students never see another
+// student's owned-unit card, see the `owned.filter` in render() above) just
+// sees a summary of what's currently going on with it.
+function occupancyBlock(p, isMine, cls, nameOf) {
+  const pr = (cls && cls.propertyRentals) || {};
+  const canSublet = pr.enabled && p.rentPerWeek > 0;
+
   if (!isMine) {
     if (p.occupancy === "living") return `<p class="muted-small">${icon("house", 13)} Owner is living here.</p>`;
     if (p.occupancy === "rented") return `<p class="muted-small">This property is currently rented out.</p>`;
+    if (p.occupancy === "sublet" && p.sublet) return subletStatusForTeacher(p, nameOf);
     return "";
   }
+
   if (p.occupancy === "living") {
     return `
       <div class="card" style="margin-top:8px;padding:10px 12px;">
-        <p><strong>${icon("house", 14)} You're living here</strong> — your lifestyle rating gets a +${livingBonusPts} bonus (property category) while you live in it. You're not collecting rent.</p>
-        ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out instead</button>` : `<p class="muted-small">Your teacher hasn't set a rent amount for this property, so it can't be rented out yet.</p>`}
+        <p><strong>${icon("house", 14)} You're living here</strong> — your lifestyle rating gets a +5 bonus (property category) while you live in it. You're not collecting rent.</p>
+        <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
+          ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out instead</button>` : ""}
+          ${canSublet ? `<button class="btn small secondary" onclick="showSubletForm('${p.id}')">Rent it to a classmate instead</button>` : ""}
+        </div>
+        ${!p.rentPerWeek ? `<p class="muted-small">Your teacher hasn't set a rent amount for this property, so it can't be rented out yet.</p>` : ""}
+        <div id="subletForm-${p.id}"></div>
       </div>`;
   }
   if (p.occupancy === "rented") {
     return `
       <div class="card" style="margin-top:8px;padding:10px 12px;">
         <p><strong>${icon("coin", 14)} Rented out</strong> — you're earning ${fmtMoney(p.rentPerWeek)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}. You're not getting the living-in-it lifestyle bonus.</p>
-        <button class="btn small secondary" onclick="chooseOccupancy('${p.id}','living')">Move in instead</button>
+        <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
+          <button class="btn small secondary" onclick="chooseOccupancy('${p.id}','living')">Move in instead</button>
+          ${canSublet ? `<button class="btn small secondary" onclick="showSubletForm('${p.id}')">Rent it to a classmate instead</button>` : ""}
+        </div>
+        <div id="subletForm-${p.id}"></div>
       </div>`;
   }
-  // Owned but no choice made yet — explain the consequences of both
-  // options up front before the student picks either one.
+  if (p.occupancy === "sublet" && p.sublet) {
+    return subletStatusForOwner(p, cls, nameOf);
+  }
+  // Owned but no choice made yet — explain the consequences of all
+  // available options up front before the student picks one.
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
-      <p><strong>Live in it, or rent it out?</strong></p>
-      <p class="muted-small">Live in it: no rent income, but +${livingBonusPts} to your lifestyle rating (property category) while you live there.<br>
+      <p><strong>Live in it, rent it out, or rent it to a classmate?</strong></p>
+      <p class="muted-small">Live in it: no rent income, but +5 to your lifestyle rating (property category) while you live there.<br>
       Rent it out: ${p.rentPerWeek > 0 ? `${fmtMoney(p.rentPerWeek)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}` : "your teacher hasn't set a rent amount yet"} — but no lifestyle bonus, only the property's base comfort rating counts.<br>
+      ${canSublet ? `Rent it to a classmate: you set the price and a minimum lease length yourself, and get real weekly rent paid by whoever moves in — also no living-in-it lifestyle bonus for you.<br>` : ""}
       You can change your mind at any time.</p>
-      <div class="row-flex" style="gap:8px;">
+      <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
         <button class="btn small gold" onclick="chooseOccupancy('${p.id}','living')">Live in it</button>
         ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out</button>` : ""}
+        ${canSublet ? `<button class="btn small secondary" onclick="showSubletForm('${p.id}')">Rent to a classmate</button>` : ""}
       </div>
+      <div id="subletForm-${p.id}"></div>
     </div>`;
+}
+
+// The inline "list it for rent" form — price + minimum lease length, both
+// bounded by the teacher's settings. Shown on demand (showSubletForm)
+// rather than always, so the plain living/rented choice isn't crowded out
+// for classes that never turn this feature on.
+function showSubletForm(id) {
+  const box = document.getElementById(`subletForm-${id}`);
+  if (!box) return;
+  if (box.dataset.open === "1") { box.innerHTML = ""; box.dataset.open = "0"; return; }
+  box.dataset.open = "1";
+  box.innerHTML = `
+    <div class="card" style="margin-top:8px;padding:10px 12px;">
+      <div class="grid grid-2">
+        <div>
+          <label for="subletPrice-${id}">Weekly rent to charge</label>
+          <input id="subletPrice-${id}" type="number" min="0" step="0.01">
+        </div>
+        <div>
+          <label for="subletWeeks-${id}">Minimum lease length (weeks)</label>
+          <input id="subletWeeks-${id}" type="number" min="1" step="1" value="1">
+        </div>
+      </div>
+      <p class="muted-small" id="subletHint-${id}"></p>
+      <button class="btn small gold" onclick="createSubletClick('${id}')">${icon("send", 13)} List it</button>
+      <div id="subletFormMsg-${id}"></div>
+    </div>`;
+}
+async function createSubletClick(id) {
+  const price = document.getElementById(`subletPrice-${id}`).value;
+  const weeks = document.getElementById(`subletWeeks-${id}`).value;
+  const res = await createSublet(CURRENT.username, CURRENT.classCode, id, price, weeks);
+  const box = document.getElementById(`subletFormMsg-${id}`);
+  if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
+  await render();
+}
+
+// What the OWNER sees for their own property once it's set to "sublet" —
+// covers all three sublet states: still pending teacher approval, actively
+// searching for a tenant, or already occupied.
+function subletStatusForOwner(p, cls, nameOf) {
+  const s = p.sublet;
+  if (s.status === "pending") {
+    return `
+      <div class="card" style="margin-top:8px;padding:10px 12px;">
+        <p><strong>${icon("send", 14)} Waiting for teacher approval</strong> — listed at ${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum lease. It'll be visible to classmates once approved.</p>
+        <button class="btn small secondary" onclick="cancelSubletClick('${p.id}')">Withdraw listing</button>
+      </div>`;
+  }
+  if (s.status === "rejected") {
+    return `
+      <div class="card" style="margin-top:8px;padding:10px 12px;">
+        <p><strong>${icon("house", 14)} Listing declined by your teacher</strong>${s.rejectReason ? `: ${s.rejectReason}` : "."}</p>
+        <button class="btn small secondary" onclick="cancelSubletClick('${p.id}')">Remove listing</button>
+      </div>`;
+  }
+  if (!s.tenant) {
+    return `
+      <div class="card" style="margin-top:8px;padding:10px 12px;">
+        <p><strong>${icon("users", 14)} Listed for rent to classmates</strong> — ${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum lease. No one's moved in yet.</p>
+        <button class="btn small secondary" onclick="cancelSubletClick('${p.id}')">Withdraw listing</button>
+      </div>`;
+  }
+  const canEnd = leaseMinWeeksElapsed(s);
+  return `
+    <div class="card" style="margin-top:8px;padding:10px 12px;">
+      <p><strong>${icon("coin", 14)} Rented to ${nameOf(s.tenant)}</strong> — ${fmtMoney(s.price)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}. Minimum ${s.minWeeks}-week lease${canEnd ? " (met — you can end it any time now)" : " (still running)"}.</p>
+      ${canEnd ? `<button class="btn small secondary" onclick="cancelSubletClick('${p.id}')">End lease</button>` : ""}
+    </div>`;
+}
+
+// What the TEACHER sees for a student's property once it's set to
+// "sublet" — same information as subletStatusForOwner, but read-only
+// (the teacher's own override lives in the "End rental" button below, via
+// teacherEndSubletClick, not here).
+function subletStatusForTeacher(p, nameOf) {
+  const s = p.sublet;
+  if (s.status === "pending") return `<p class="muted-small">Waiting for your approval to rent to classmates — ${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum. See "Pending rental requests" above.</p>`;
+  if (s.status === "rejected") return `<p class="muted-small">Rental listing declined${s.rejectReason ? `: ${s.rejectReason}` : "."}</p>`;
+  if (!s.tenant) return `<p class="muted-small">Listed for rent to classmates — ${fmtMoney(s.price)}/week, no tenant yet. <button class="btn small coral" onclick="teacherEndSubletClick('${p.id}')">End listing</button></p>`;
+  return `<p class="muted-small">Rented to ${nameOf(s.tenant)} at ${fmtMoney(s.price)}/week. <button class="btn small coral" onclick="teacherEndSubletClick('${p.id}')">End rental</button></p>`;
+}
+
+async function cancelSubletClick(id) {
+  const res = await cancelSublet(CURRENT.username, CURRENT.classCode, id);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+}
+async function teacherEndSubletClick(id) {
+  if (!confirm("End this classmate rental? If someone's living there, they'll be kicked out immediately.")) return;
+  const res = await teacherEndSublet(CURRENT.classCode, id);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+}
+
+/* ---------------- Teacher: rental settings & moderation ---------------- */
+function populateRentalSettings(cls) {
+  const pr = cls.propertyRentals || {};
+  document.getElementById("rentalEnabled").checked = !!pr.enabled;
+  document.getElementById("rentalRequireApproval").checked = !!pr.requireApproval;
+  document.getElementById("rentalMinPricePct").value = pr.minPricePct != null ? pr.minPricePct : 25;
+  document.getElementById("rentalMaxPricePct").value = pr.maxPricePct != null ? pr.maxPricePct : 200;
+  document.getElementById("rentalMaxLeaseWeeks").value = pr.maxLeaseWeeks != null ? pr.maxLeaseWeeks : 8;
+}
+async function saveRentalSettingsClick() {
+  const settings = {
+    enabled: document.getElementById("rentalEnabled").checked,
+    requireApproval: document.getElementById("rentalRequireApproval").checked,
+    minPricePct: document.getElementById("rentalMinPricePct").value,
+    maxPricePct: document.getElementById("rentalMaxPricePct").value,
+    maxLeaseWeeks: document.getElementById("rentalMaxLeaseWeeks").value
+  };
+  await saveSubletSettings(CURRENT.classCode, settings);
+  document.getElementById("rentalSettingsMsg").innerHTML = `<div class="success-msg">Settings saved.</div>`;
+  await render();
+}
+function renderPendingSublets(cls, nameOf) {
+  const box = document.getElementById("pendingSublets");
+  if (!box) return;
+  const pending = (cls.properties || []).filter(p => p.sublet && p.sublet.status === "pending");
+  if (!pending.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<h3 style="margin-top:22px;">${icon("send", 15)} Pending rental requests</h3>` + pending.map(p => `
+    <div class="auto-row">
+      <div class="auto-details">
+        <strong>${p.name}</strong> — ${nameOf(p.owner)} wants to rent it out at ${fmtMoney(p.sublet.price)}/week, ${p.sublet.minWeeks}-week minimum lease.
+      </div>
+      <div class="row-flex" style="gap:8px;">
+        <button class="btn small mint" onclick="approveSubletClick('${p.id}')">Approve</button>
+        <button class="btn small coral" onclick="rejectSubletClick('${p.id}')">Reject</button>
+      </div>
+    </div>
+  `).join("");
+}
+async function approveSubletClick(id) {
+  await decideSublet(CURRENT.classCode, id, true);
+  await render();
+}
+async function rejectSubletClick(id) {
+  const reason = prompt("Optional reason to show the student (leave blank for none):", "");
+  if (reason === null) return;
+  await decideSublet(CURRENT.classCode, id, false, reason);
+  await render();
+}
+
+/* ---------------- Student: my rented home & browsing rentals ---------------- */
+function renderMyRentedHome(cls, me, nameOf) {
+  const box = document.getElementById("myRentedHome");
+  if (!box) return;
+  const prop = (cls.properties || []).find(p => p.sublet && p.sublet.tenant === me.username);
+  if (!prop) { box.innerHTML = ""; return; }
+  const s = prop.sublet;
+  const weekKey = isoWeekKey(new Date());
+  const moveInWeek = s.leaseStartWeekKey === weekKey;
+  const alreadyPaid = s.rentLastWeekPaid === weekKey;
+  const isDueToday = (prop.rentDay || "Fri") === nzDayName();
+  const overdue = isSubletRentOverdue(prop, cls);
+  const canMoveOut = leaseMinWeeksElapsed(s);
+
+  let status;
+  if (moveInWeek) {
+    status = `Your first payment isn't due yet — the week you moved in is free. It'll be ${fmtMoney(s.price)}, due ${DAY_FULL[prop.rentDay || "Fri"]}.`;
+  } else if (alreadyPaid) {
+    status = `This week's rent of ${fmtMoney(s.price)} is already sorted.`;
+  } else if (!isDueToday) {
+    status = `Rent is due every ${DAY_FULL[prop.rentDay || "Fri"]}. This week's will be ${fmtMoney(s.price)} — come back then to pay it yourself.`;
+  } else {
+    status = `${overdue ? "This week's rent is overdue. " : "Rent is due today. "}<strong>${fmtMoney(s.price)}</strong>.`;
+  }
+
+  box.innerHTML = `
+    <div class="card">
+      <h2>${icon("house", 18)} Your rented home</h2>
+      <p><strong>${prop.name}</strong> — renting from ${nameOf(prop.owner)} at ${fmtMoney(s.price)}/week.</p>
+      <p class="muted-small">${status}</p>
+      ${isDueToday && !alreadyPaid && !moveInWeek ? `<button class="btn small gold" onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>` : ""}
+      <div id="tenantRentMsg-${prop.id}"></div>
+      <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${s.minWeeks}-week lease, so you can't move out just yet.`}</p>
+      ${canMoveOut ? `<button class="btn small secondary" onclick="tenantMoveOutClick('${prop.id}')">Move out</button>` : ""}
+    </div>`;
+}
+async function payTenantRentClick(id) {
+  const res = await payTenantRent(CURRENT.username, CURRENT.classCode, id);
+  const box = document.getElementById(`tenantRentMsg-${id}`);
+  if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
+  await render();
+}
+async function tenantMoveOutClick(id) {
+  if (!confirm("Move out of this rental? You'll stop paying rent, but you'll also lose the lifestyle bonus for living here.")) return;
+  const res = await tenantMoveOut(CURRENT.username, CURRENT.classCode, id);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+}
+
+function renderAvailableSublets(cls, me, nameOf) {
+  const box = document.getElementById("availableSublets");
+  if (!box) return;
+  const pr = cls.propertyRentals || {};
+  if (!pr.enabled) { box.innerHTML = ""; return; }
+  const listings = (cls.properties || []).filter(p =>
+    p.sublet && p.sublet.status === "active" && !p.sublet.tenant && p.owner !== me.username
+  );
+  if (!listings.length) { box.innerHTML = ""; return; }
+  const alreadyHoused = !!currentHomeOf(cls, me.username);
+  box.innerHTML = `
+    <div class="card">
+      <h2>${icon("users", 18)} Rent from a classmate</h2>
+      ${alreadyHoused ? `<p class="muted-small">You're already living somewhere — move out first if you'd rather rent one of these instead.</p>` : ""}
+      ${listings.map(p => `
+        <div class="auto-row">
+          <div class="auto-details">
+            <strong>${p.name}</strong> — ${comfortStars(p.comfort)}<br>
+            <span class="muted-small">${fmtMoney(p.sublet.price)}/week from ${nameOf(p.owner)}, ${p.sublet.minWeeks}-week minimum lease</span>
+          </div>
+          <button class="btn small gold" ${alreadyHoused ? "disabled" : ""} onclick="claimSubletClick('${p.id}')">Move in</button>
+        </div>
+      `).join("")}
+      <div id="claimSubletMsg"></div>
+    </div>`;
+}
+async function claimSubletClick(id) {
+  const res = await claimSublet(CURRENT.username, CURRENT.classCode, id);
+  const box = document.getElementById("claimSubletMsg");
+  if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
+  await render();
 }
 
 // Shows this week's mortgage-payment status for the owner, and — only on
@@ -313,13 +554,9 @@ async function saveMortgageForceDue() {
 }
 
 async function chooseOccupancy(id, choice) {
-  const cls = await getClassCached(CURRENT.classCode);
-  const prop = (cls.properties || []).find(p => p.id === id);
-  const preview = propertyLifestylePreview(cls, prop);
-  const bonus = preview ? preview.livingBonusPoints : 0;
   const msg = choice === "living"
-    ? `Live in this property?\n\nYou'll get a +${bonus} bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time.`
-    : `Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +${bonus} lifestyle bonus for living in it — only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.`;
+    ? "Live in this property?\n\nYou'll get a +5 bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time."
+    : "Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +5 lifestyle bonus for living in it — only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.";
   if (!confirm(msg)) return;
   const res = await setPropertyOccupancy(CURRENT.username, CURRENT.classCode, id, choice);
   if (!res.ok) { alert(res.error); return; }
@@ -333,7 +570,6 @@ async function addProp(e) {
     price: document.getElementById("hPrice").value,
     comfort: document.getElementById("hComfort").value,
     quantity: document.getElementById("hQuantity").value,
-    livingBonusStars: document.getElementById("hLivingBonus").value,
     mortgageWeeks: document.getElementById("hMortgage").value,
     mortgageInterestRate: document.getElementById("hMortgageRate").value,
     description: document.getElementById("hDesc").value.trim(),
@@ -350,7 +586,6 @@ async function addProp(e) {
     ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("hComfort").value = 3;
     document.getElementById("hQuantity").value = 1;
-    document.getElementById("hLivingBonus").value = 1;
     document.getElementById("hMortgage").value = 0;
     document.getElementById("hMortgageRate").value = 0;
     document.getElementById("hRent").value = 0;
@@ -375,7 +610,6 @@ async function editProp(id) {
   document.getElementById("hPrice").value = prop.price;
   document.getElementById("hComfort").value = prop.comfort;
   document.getElementById("hQuantity").value = groupSize;
-  document.getElementById("hLivingBonus").value = prop.livingBonusStars !== undefined ? prop.livingBonusStars : 1;
   document.getElementById("hMortgage").value = prop.mortgageWeeks || 0;
   document.getElementById("hMortgageRate").value = prop.mortgageInterestRate || 0;
   document.getElementById("hDesc").value = prop.description || "";
@@ -393,7 +627,6 @@ function cancelEditProp() {
   ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("hComfort").value = 3;
   document.getElementById("hQuantity").value = 1;
-  document.getElementById("hLivingBonus").value = 1;
   document.getElementById("hMortgage").value = 0;
   document.getElementById("hMortgageRate").value = 0;
   document.getElementById("hRent").value = 0;

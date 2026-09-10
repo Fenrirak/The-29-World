@@ -33,6 +33,8 @@ function badgeType(type) {
     "p2p-buy": ["navy", "users", "Bought from a classmate"],
     "p2p-sell": ["gold", "users", "Sold to a classmate"],
     "property-rent": ["mint", "house", "Rent received"],
+    "property-rent-pay": ["coral", "house", "Rent paid"],
+    "property-rent-receive": ["mint", "house", "Rent received"],
     "truck-drive": ["mint", "car", "Truck drive"],
     "loan-interest": ["coral", "handshake", "Loan interest"],
     "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
@@ -260,8 +262,8 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "store-gift", "quiz-reward", "p2p-sell", "property-rent", "truck-drive"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment", "p2p-buy", "loan-interest"].includes(t.type)) { sign = "-"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "store-gift", "quiz-reward", "p2p-sell", "property-rent", "property-rent-receive", "truck-drive"].includes(t.type)) { sign = "+"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "property-rent-pay", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment", "p2p-buy", "loan-interest"].includes(t.type)) { sign = "-"; }
     else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
     else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
     else if (t.type === "gambling") { sign = t.note.includes("WON") ? "+" : "-"; }

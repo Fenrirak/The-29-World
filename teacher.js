@@ -313,7 +313,6 @@ async function render() {
       </label>
       <label for="ls-${s.key}-weight">Points per star</label>
       <input type="number" id="ls-${s.key}-weight" min="0" step="1" value="${cfg[s.key] ? cfg[s.key].weight : 0}">
-      ${s.key === "property" ? `<p class="muted-small" style="margin-top:4px;">The living-in bonus (extra stars for living in a property instead of renting it out) is set per property, in the Add/Edit property form below.</p>` : ""}
     </div>
   `).join("");
 
@@ -702,7 +701,7 @@ function thresholdRowHtml(t) {
       <p class="muted-small threshold-reqs-label">Optional requirements — a student must also meet these to be shown this band, even if their score qualifies. Leave at 0 for no requirement.</p>
       <div class="grid grid-3">
         <div><label>Min net worth</label><input class="th-min-networth" type="number" min="0" step="1" value="${t.minNetWorth || 0}"></div>
-        <div><label>Min property comfort (stars, incl. living-in bonus)</label><input class="th-min-property" type="number" min="0" step="1" value="${t.minPropertyComfort || 0}"></div>
+        <div><label>Min property comfort (0-5 stars)</label><input class="th-min-property" type="number" min="0" max="5" step="1" value="${t.minPropertyComfort || 0}"></div>
         <div><label>Min transport comfort (total stars across owned vehicles)</label><input class="th-min-transport" type="number" min="0" step="1" value="${t.minTransportComfort || 0}"></div>
       </div>
     </div>
@@ -752,18 +751,11 @@ async function saveLifestyleLockSettings() {
 }
 
 async function saveLifestyle() {
-  // loan config lives in this same lifestyleConfig object but is edited
-  // from its own section (see setLoanLifestylePenalty in data.js), so it's
-  // read back here and carried through untouched — otherwise saving this
-  // form would wipe out whatever the teacher set there.
-  const cls = await getClassCached(CLASS_CODE);
-  const existingLoanCfg = (cls.lifestyleConfig && cls.lifestyleConfig.loan) || { enabled: false, perAmount: 0, points: 0 };
   const config = {
     property: { enabled: document.getElementById("ls-property-on").checked, weight: Number(document.getElementById("ls-property-weight").value) || 0 },
     transport: { enabled: document.getElementById("ls-transport-on").checked, weight: Number(document.getElementById("ls-transport-weight").value) || 0 },
     store: { enabled: document.getElementById("ls-store-on").checked, weight: Number(document.getElementById("ls-store-weight").value) || 0 },
-    insurance: { enabled: document.getElementById("ls-insurance-on").checked, weight: Number(document.getElementById("ls-insurance-weight").value) || 0 },
-    loan: existingLoanCfg
+    insurance: { enabled: document.getElementById("ls-insurance-on").checked, weight: Number(document.getElementById("ls-insurance-weight").value) || 0 }
   };
   await saveLifestyleConfig(CLASS_CODE, config);
   document.getElementById("lifestyleMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
@@ -1069,32 +1061,55 @@ async function renderProfile(username) {
   }
 
   rows.push(`<h4>${icon("house", 16)} Property</h4>`);
-  const ownedProps = poss.properties || (poss.property ? [poss.property] : []);
-  ownedProps.filter(p => isMortgagePaymentOverdue(p, cls)).forEach(p => {
+  if (poss.property && isMortgagePaymentOverdue(poss.property, cls)) {
     rows.push(`
       <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;">
         <div class="auto-details">
-          <strong>${icon("house", 14)} Mortgage payment overdue — ${p.name}</strong>
+          <strong>${icon("house", 14)} Mortgage payment overdue — ${poss.property.name}</strong>
           <div class="muted-small">This week's payment (due ${DAY_FULL[cls.mortgageDay || "Fri"]}) hasn't been paid yet.</div>
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
           <div class="status-declined">Unpaid</div>
-          <button class="btn small secondary" onclick="profileResolveMortgageOverdue('${p.id}')">Mark as resolved</button>
+          <button class="btn small secondary" onclick="profileResolveMortgageOverdue('${poss.property.id}')">Mark as resolved</button>
         </div>
       </div>`);
-  });
-  // A student can own more than one property — their lifestyle bonus
-  // stacks across all of them (see lifestyleRatingFromData), so every
-  // owned unit gets its own row here rather than just the first one.
-  rows.push(ownedProps.length
-    ? ownedProps.map(p => `<div class="auto-row"><div class="auto-details"><strong>${p.name}</strong> — ${fmtMoney(p.price)}
-        <div class="muted-small">${p.occupancy === "living" ? "Living in it (lifestyle bonus applied)" : p.occupancy === "rented" ? `Rented out — earning ${fmtMoney(p.rentPerWeek || 0)}/week, paid ${DAY_FULL[p.rentDay || "Fri"]}` : "Hasn't chosen to live in it or rent it out yet"}</div>
-        ${p.mortgage ? `<div class="muted-small">Mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance owed` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]} — this week's payment is ${fmtMoney(mortgageWeekAmount(p.mortgage).total)}</div>` : ""}</div>
+  }
+  const occupancyLine = poss.property
+    ? (poss.property.occupancy === "living" ? "Living in it (lifestyle bonus applied)"
+      : poss.property.occupancy === "rented" ? `Rented out — earning ${fmtMoney(poss.property.rentPerWeek || 0)}/week, paid ${DAY_FULL[poss.property.rentDay || "Fri"]}`
+      : poss.property.occupancy === "sublet" && poss.property.sublet
+        ? (poss.property.sublet.status === "pending" ? `Waiting for approval to rent to a classmate at ${fmtMoney(poss.property.sublet.price)}/week`
+          : poss.property.sublet.status === "rejected" ? `Rental listing declined${poss.property.sublet.rejectReason ? `: ${poss.property.sublet.rejectReason}` : ""}`
+          : poss.property.sublet.tenant ? `Rented to a classmate (@${poss.property.sublet.tenant}) at ${fmtMoney(poss.property.sublet.price)}/week`
+          : `Listed for rent to classmates at ${fmtMoney(poss.property.sublet.price)}/week — no tenant yet`)
+      : "Hasn't chosen to live in it, rent it out, or rent it to a classmate yet")
+    : "";
+  rows.push(poss.property
+    ? `<div class="auto-row"><div class="auto-details"><strong>${poss.property.name}</strong> — ${fmtMoney(poss.property.price)}
+        <div class="muted-small">${occupancyLine}</div>
+        ${poss.property.mortgage ? `<div class="muted-small">Mortgage: ${fmtMoney(poss.property.mortgage.weeklyPayment)}/week base${poss.property.mortgage.interestRate > 0 ? ` + ${poss.property.mortgage.interestRate}% interest on the balance owed` : ""}, ${poss.property.mortgage.weeksLeft} week${poss.property.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]} — this week's payment is ${fmtMoney(mortgageWeekAmount(poss.property.mortgage).total)}</div>` : ""}</div>
         <div class="row-flex" style="gap:8px;">
-          ${p.occupancy === "rented" ? `<button class="btn small secondary" onclick="profileEndRental('${p.id}')">Stop renting / kick out tenants</button>` : ""}
-          <button class="btn small coral" onclick="profileRemoveProperty('${p.id}')">Repossess</button>
-        </div></div>`).join("")
+          ${poss.property.occupancy === "rented" ? `<button class="btn small secondary" onclick="profileEndRental('${poss.property.id}')">Stop renting / kick out tenants</button>` : ""}
+          ${poss.property.occupancy === "sublet" ? `<button class="btn small secondary" onclick="profileEndSublet('${poss.property.id}')">End classmate rental</button>` : ""}
+          <button class="btn small coral" onclick="profileRemoveProperty('${poss.property.id}')">Repossess</button>
+        </div></div>`
     : `<p class="muted-small">No property owned.</p>`);
+
+  if (poss.rentedHome) {
+    const rh = poss.rentedHome;
+    const overdue = isSubletRentOverdue(rh, cls);
+    rows.push(`
+      <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;"' : ""}>
+        <div class="auto-details">
+          <strong>Renting from a classmate:</strong> ${rh.name} — ${fmtMoney(rh.sublet.price)}/week from @${rh.owner}
+          <div class="muted-small">${overdue ? "This week's rent hasn't been paid yet. " : ""}Minimum lease: ${rh.sublet.minWeeks} week${rh.sublet.minWeeks === 1 ? "" : "s"}.</div>
+        </div>
+        <div class="row-flex" style="gap:8px;align-items:center;">
+          ${overdue ? `<button class="btn small secondary" onclick="profileResolveSubletOverdue('${rh.id}')">Mark as resolved</button>` : ""}
+          <button class="btn small coral" onclick="profileEndSublet('${rh.id}')">End rental</button>
+        </div>
+      </div>`);
+  }
 
   rows.push(`<h4>${icon("car", 16)} Transport</h4>`);
   rows.push(poss.vehicles && poss.vehicles.length
@@ -1210,6 +1225,20 @@ async function profileRemoveProperty(propId) {
 async function profileEndRental(propId) {
   if (!confirm("Stop this rental and kick out the tenants? The student keeps the property, but stops earning rent immediately and will be asked to choose living-in-it or renting-out again next time they visit Property.")) return;
   const res = await teacherEndRental(CLASS_CODE, propId);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+  await renderProfile(PROFILE_USER);
+}
+async function profileEndSublet(propId) {
+  if (!confirm("End this classmate rental? If someone's living there, they'll be kicked out immediately, and the minimum lease length is ignored.")) return;
+  const res = await teacherEndSublet(CLASS_CODE, propId);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+  await renderProfile(PROFILE_USER);
+}
+async function profileResolveSubletOverdue(propId) {
+  if (!confirm("Mark this week's rent as resolved? It'll count as paid, but no money will be taken from the tenant.")) return;
+  const res = await resolveSubletRentOverdue(CLASS_CODE, propId);
   if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);

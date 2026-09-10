@@ -116,6 +116,46 @@ function notifMortgageItems(me, cls) {
   return out;
 }
 
+// Covers both sides of a classmate rental: a tenant with rent due/overdue,
+// and an owner whose listing is pending approval or was just declined —
+// same idea (and same three states) as notifMarketplaceItems below, just
+// for a lease instead of a one-off sale.
+function notifPropertyRentalItems(me, cls) {
+  const dayStart = notifTodayStartMs();
+  const out = [];
+  (cls.properties || []).forEach(p => {
+    if (p.sublet && p.sublet.tenant === me.username) {
+      if (isSubletRentOverdue(p, cls)) {
+        out.push({
+          id: "rent-" + p.id + "-" + nzDateKey(), ts: dayStart, icon: "house", tone: "coral",
+          title: "Rent due: " + p.name,
+          body: `${fmtMoney(p.sublet.price)} this week, renting from a classmate.`,
+          href: "property.html", action: true
+        });
+      }
+    }
+    if (p.sublet && p.owner === me.username) {
+      if (p.sublet.status === "pending") {
+        out.push({
+          id: "sublet-pending-" + p.id, ts: p.sublet.createdTs || dayStart, icon: "house", tone: "navy",
+          title: `${p.name} is waiting for teacher approval`,
+          body: `Listed at ${fmtMoney(p.sublet.price)}/week. It's visible to classmates once your teacher approves it.`,
+          href: "property.html"
+        });
+      }
+      if (p.sublet.status === "rejected" && Date.now() - (p.sublet.createdTs || 0) < 3 * 86400000) {
+        out.push({
+          id: "sublet-rejected-" + p.id, ts: p.sublet.createdTs || dayStart, icon: "house", tone: "coral",
+          title: `Your rental listing for ${p.name} was declined`,
+          body: p.sublet.rejectReason || "Your teacher didn't approve this listing.",
+          href: "property.html"
+        });
+      }
+    }
+  });
+  return out;
+}
+
 function notifTermDepositItems(me) {
   const today = nzDateKey();
   const dayStart = notifTodayStartMs();
@@ -268,6 +308,7 @@ function buildNotifications(me, cls) {
   const items = [].concat(
     notifLoanItems(me),
     notifMortgageItems(me, cls),
+    notifPropertyRentalItems(me, cls),
     notifTermDepositItems(me),
     notifMarketItems(me, cls),
     notifEventItems(me, cls),

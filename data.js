@@ -3484,7 +3484,7 @@ const MAX_REPORT_ARCHIVES = 104;
 const REPORT_INCOME_TYPES = {
   wage: "Wages", interest: "Interest earned", "cash-interest": "Interest earned",
   bonus: "Bonuses", "side-hustle": "Side hustle", "truck-drive": "Side hustle",
-  "property-rent": "Rent received", "insurance-claim": "Insurance claims",
+  "property-rent": "Rent received", "property-rent-receive": "Rent received", "insurance-claim": "Insurance claims",
   "stock-sell": "Asset sales", "stock-close": "Asset sales", "property-sell": "Asset sales",
   "vehicle-sell": "Asset sales", "store-sell": "Asset sales", "p2p-sell": "Asset sales",
   "quiz-reward": "Bonuses",
@@ -3497,7 +3497,7 @@ const REPORT_SAVED_TYPES = {
 const REPORT_SPENT_TYPES = {
   "store-buy": "Store purchases", "p2p-buy": "Bought from classmates",
   "vehicle-buy": "Transport", "truck-licence-buy": "Transport",
-  "property-buy": "Housing", "mortgage": "Housing", "insurance-buy": "Insurance",
+  "property-buy": "Housing", "mortgage": "Housing", "property-rent-pay": "Housing", "insurance-buy": "Insurance",
   "insurance-signup-fee": "Insurance", "loan-repayment": "Loan repayments",
   "loan-interest": "Loan interest", fine: "Fines"
 };
@@ -4941,12 +4941,6 @@ function withNewModuleDefaults(cls) {
     // (payMortgage falls back to weeklyPayment*weeksLeft for
     // principalRemaining and 0 for interestRate on those).
     if (p.mortgageInterestRate === undefined) p.mortgageInterestRate = 0;
-    // Teacher-set number of bonus "stars" this specific property is worth
-    // (on top of its own comfort rating) when its owner chooses to live in
-    // it rather than rent it out — see lifestyleRatingFromData. Properties
-    // saved before this existed default to 1, matching the old flat +5
-    // bonus closely enough for the default weight of 4 pts/star.
-    if (p.livingBonusStars === undefined) p.livingBonusStars = 1;
   });
   // Class-wide day mortgage installments are due on (like payDay/interestDay).
   cls.mortgageDay = DAY_NAMES.includes(cls.mortgageDay) ? cls.mortgageDay : "Fri";
@@ -5062,6 +5056,22 @@ function withNewModuleDefaults(cls) {
   if (_mp.allowVehicle === undefined) _mp.allowVehicle = true;
   if (_mp.allowProperty === undefined) _mp.allowProperty = false;
   cls.listings = cls.listings || [];
+
+  /* ---- Peer-to-peer property rentals (see the section just below
+     processPropertyRent) ----
+     Separate from the Trade Centre above: this is a recurring lease, not a
+     one-off sale — ownership never changes hands, a classmate just moves in
+     and pays the owner weekly rent instead of the owner earning the
+     teacher's flat passive rent. Every limit is teacher-configurable, same
+     spirit as cls.marketplace — a class that never opens the settings still
+     gets a sane, conservative default. */
+  cls.propertyRentals = cls.propertyRentals || {};
+  const _pr = cls.propertyRentals;
+  if (_pr.enabled === undefined) _pr.enabled = true;
+  if (_pr.requireApproval === undefined) _pr.requireApproval = false;
+  if (_pr.minPricePct === undefined) _pr.minPricePct = 25;
+  if (_pr.maxPricePct === undefined) _pr.maxPricePct = 200;
+  if (_pr.maxLeaseWeeks === undefined) _pr.maxLeaseWeeks = 8;
 
   cls.bigEventDefs = cls.bigEventDefs || [];
   cls.bigEventLog = cls.bigEventLog || [];
@@ -5786,10 +5796,6 @@ async function addProperty(classCode, prop) {
         // current choice — "living" | "rented" | null (not yet chosen).
         rentPerWeek: Math.max(0, Number(prop.rentPerWeek) || 0),
         rentDay: DAY_NAMES.includes(prop.rentDay) ? prop.rentDay : "Fri",
-        // Bonus lifestyle stars this property is worth to its owner while
-        // they live in it (on top of its own comfort rating) — see
-        // propertyLivingBonusPoints.
-        livingBonusStars: Math.max(0, Number(prop.livingBonusStars) || 0),
         occupancy: null, rentLastWeekPaid: null
       });
     }
@@ -5840,7 +5846,6 @@ async function updateProperty(classCode, propId, updates) {
       prop.description = updates.description || "";
       prop.rentPerWeek = Math.max(0, Number(updates.rentPerWeek) || 0);
       prop.rentDay = DAY_NAMES.includes(updates.rentDay) ? updates.rentDay : "Fri";
-      prop.livingBonusStars = Math.max(0, Number(updates.livingBonusStars) || 0);
     });
     const desiredQty = Math.max(1, Math.floor(Number(updates.quantity)) || 1);
     const currentQty = units.length;
@@ -5853,7 +5858,6 @@ async function updateProperty(classCode, propId, updates) {
           mortgageInterestRate: template.mortgageInterestRate || 0,
           description: template.description, owner: null,
           rentPerWeek: template.rentPerWeek, rentDay: template.rentDay,
-          livingBonusStars: template.livingBonusStars || 0,
           occupancy: null, rentLastWeekPaid: null
         });
       }
@@ -5945,6 +5949,9 @@ async function sellProperty(classCode, propId, rate) {
     prop.mortgage = null;
     prop.occupancy = null;
     prop.rentLastWeekPaid = null;
+    // Repossession/sell-back also ends any classmate rental in progress —
+    // there's no owner left for the tenant to be renting from.
+    prop.sublet = null;
     t.update(classRef, { properties: cls.properties });
   });
   if (owner) {
@@ -6250,6 +6257,409 @@ async function processPropertyRent(classCode) {
   return ran;
 }
 
+/* ===================== Peer-to-peer property rentals =====================
+   A student who owns a property can list it for rent to classmates instead
+   of (or as well as, over time — never simultaneously) living in it or
+   renting it out passively (see setPropertyOccupancy/processPropertyRent
+   above, which are unchanged and still work exactly as before). This is a
+   genuine two-sided arrangement: another student moves in, and pays the
+   OWNER real weekly rent out of their own balance — nothing is conjured
+   from nowhere the way the passive scheme's income is.
+
+     prop.sublet = {
+       id, price, minWeeks,
+       status: "pending" | "active" | "rejected",
+       rejectReason,
+       tenant: username | null,
+       leaseStartTs, leaseStartWeekKey, rentLastWeekPaid,
+       createdTs
+     }
+
+   occupancy on the unit itself is set to "sublet" for as long as prop.sublet
+   is non-null (whether it's still searching for a tenant or already
+   occupied), the same way "living"/"rented" mark the other two choices.
+   Settings live at cls.propertyRentals (see withNewModuleDefaults). */
+
+async function saveSubletSettings(classCode, settings) {
+  const clean = {
+    enabled: !!settings.enabled,
+    requireApproval: !!settings.requireApproval,
+    minPricePct: Math.max(0, Math.round(Number(settings.minPricePct) || 0)),
+    maxPricePct: Math.max(0, Math.round(Number(settings.maxPricePct) || 0)),
+    maxLeaseWeeks: Math.max(1, Math.round(Number(settings.maxLeaseWeeks) || 1))
+  };
+  // A max below the min is always a typo — swap rather than saving
+  // something no price could ever satisfy.
+  if (clean.maxPricePct > 0 && clean.maxPricePct < clean.minPricePct) {
+    const tmp = clean.minPricePct; clean.minPricePct = clean.maxPricePct; clean.maxPricePct = tmp;
+  }
+  await classesCol().doc(classCode).update({ propertyRentals: clean });
+  return clean;
+}
+
+// The allowed price window for a sublet listing, as a percentage band
+// around the property's own teacher-set rentPerWeek (the same figure the
+// passive rent-it-out scheme uses) — mirrors marketplacePriceBounds. A max
+// of 0 means "no upper limit".
+function subletPriceBounds(cls, refPrice) {
+  const pr = cls.propertyRentals || {};
+  const min = Math.round(refPrice * (pr.minPricePct || 0)) / 100;
+  const max = pr.maxPricePct > 0 ? Math.round(refPrice * pr.maxPricePct) / 100 : null;
+  return { min: Math.round(min * 100) / 100, max: max === null ? null : Math.round(max * 100) / 100 };
+}
+
+// A student can only ever be "living" in one place at a time — either
+// occupying a property they own, or renting one from a classmate — though
+// they're free to own a property they DON'T live in (renting it out, either
+// passively or to a classmate) while living somewhere else themselves. Used
+// to stop a student claiming a second home out from under their first.
+function currentHomeOf(cls, username) {
+  const owned = cls.properties.find(p => p.owner === username && p.occupancy === "living");
+  if (owned) return { type: "own", prop: owned };
+  const rented = cls.properties.find(p => p.sublet && p.sublet.tenant === username);
+  if (rented) return { type: "tenant", prop: rented };
+  return null;
+}
+
+// Whether a tenanted sublet has run long enough to satisfy the minimum
+// lease length the owner set when they listed it — before this, neither
+// side can end it through normal self-service means (the teacher always
+// can, via teacherEndSublet). Measured in real elapsed time from move-in
+// rather than calendar weeks, same idea as a real lease term.
+function leaseMinWeeksElapsed(sublet) {
+  if (!sublet || !sublet.tenant || !sublet.leaseStartTs) return true;
+  const elapsedMs = Date.now() - sublet.leaseStartTs;
+  return elapsedMs >= (sublet.minWeeks || 0) * 7 * 24 * 60 * 60 * 1000;
+}
+
+// Owner: lists an owned, tenant-free property up for rent to classmates,
+// at a price they choose within the teacher's band around the property's
+// rentPerWeek, and a minimum lease length (in weeks) they choose up to the
+// teacher's cap. Switches the unit's occupancy to "sublet" immediately —
+// same as choosing "living" or "rented" — even while it's still pending
+// teacher approval, since it's no longer available for the owner to live in
+// or passively rent out while they're trying to find a tenant for it.
+async function createSublet(username, classCode, propId, price, minWeeks) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const pr = cls.propertyRentals;
+      if (!pr.enabled) throw new Error("OFF");
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop) throw new Error("NOT_FOUND");
+      if (prop.owner !== username) throw new Error("NOT_OWNER");
+      if (!(prop.rentPerWeek > 0)) throw new Error("NO_REF_PRICE");
+      if (prop.sublet && prop.sublet.tenant) throw new Error("HAS_TENANT");
+      propName = prop.name;
+
+      const amount = Math.round(Number(price) * 100) / 100;
+      if (!(amount > 0)) throw new Error("BAD_PRICE");
+      const bounds = subletPriceBounds(cls, prop.rentPerWeek);
+      if (amount < bounds.min) throw new Error("UNDER_MIN");
+      if (bounds.max !== null && amount > bounds.max) throw new Error("OVER_MAX");
+
+      const weeks = Math.max(1, Math.min(pr.maxLeaseWeeks, Math.round(Number(minWeeks)) || 1));
+
+      prop.occupancy = "sublet";
+      prop.rentLastWeekPaid = null;
+      prop.sublet = {
+        id: uid("sublet"), price: amount, minWeeks: weeks,
+        status: pr.requireApproval ? "pending" : "active", rejectReason: "",
+        tenant: null, leaseStartTs: null, leaseStartWeekKey: null, rentLastWeekPaid: null,
+        createdTs: Date.now()
+      };
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "OFF") return { ok: false, error: "Renting to classmates is switched off for your class right now." };
+    if (e.message === "NOT_OWNER") return { ok: false, error: "You don't own that property." };
+    if (e.message === "NO_REF_PRICE") return { ok: false, error: "Your teacher hasn't set a rent amount for this property yet." };
+    if (e.message === "HAS_TENANT") return { ok: false, error: "This property already has a tenant — end that lease first." };
+    if (e.message === "BAD_PRICE") return { ok: false, error: "Enter a price greater than zero." };
+    if (e.message === "UNDER_MIN") return { ok: false, error: "That price is below the minimum your teacher allows." };
+    if (e.message === "OVER_MAX") return { ok: false, error: "That price is above the maximum your teacher allows." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That property couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", from: username, note: `Listed for rent to classmates: ${propName}` });
+  return { ok: true };
+}
+
+// Owner: withdraws a sublet listing. If nobody's moved in yet this is
+// instant; if a tenant's already living there, it's blocked until the
+// minimum lease length has run (the teacher can always override — see
+// teacherEndSublet). Either way the unit goes back to "no choice made yet",
+// same as teacherEndRental does for the passive scheme.
+async function cancelSublet(username, classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "", hadTenant = false;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop || !prop.sublet) throw new Error("NOT_FOUND");
+      if (prop.owner !== username) throw new Error("NOT_OWNER");
+      propName = prop.name;
+      if (prop.sublet.tenant) {
+        if (!leaseMinWeeksElapsed(prop.sublet)) throw new Error("LOCKED_IN");
+        hadTenant = true;
+      }
+      prop.occupancy = null;
+      prop.sublet = null;
+      prop.rentLastWeekPaid = null;
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "NOT_OWNER") return { ok: false, error: "You don't own that property." };
+    if (e.message === "LOCKED_IN") return { ok: false, error: "You agreed to a minimum lease length for this tenant — you can't end it yet." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", from: username, note: hadTenant ? `Ended a classmate's lease: ${propName}` : `Withdrew rental listing: ${propName}` });
+  return { ok: true };
+}
+
+// A classmate claims an active (approved, still tenant-free) sublet
+// listing — instant, like buying an active Trade Centre listing, no
+// separate approval from the owner. Blocked if the claimant is already
+// living somewhere (see currentHomeOf) — one home at a time.
+async function claimSublet(username, classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "", ownerUsername = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const pr = cls.propertyRentals;
+      if (!pr.enabled) throw new Error("OFF");
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop || !prop.sublet) throw new Error("NOT_FOUND");
+      if (prop.owner === username) throw new Error("OWN_PROPERTY");
+      if (prop.sublet.status !== "active") throw new Error("NOT_AVAILABLE");
+      if (prop.sublet.tenant) throw new Error("TAKEN");
+      if (currentHomeOf(cls, username)) throw new Error("ALREADY_HOUSED");
+      propName = prop.name;
+      ownerUsername = prop.owner;
+      prop.sublet.tenant = username;
+      prop.sublet.leaseStartTs = Date.now();
+      prop.sublet.leaseStartWeekKey = isoWeekKey(new Date());
+      prop.sublet.rentLastWeekPaid = null;
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "OFF") return { ok: false, error: "Renting to classmates is switched off for your class right now." };
+    if (e.message === "OWN_PROPERTY") return { ok: false, error: "You can't rent your own property." };
+    if (e.message === "NOT_AVAILABLE") return { ok: false, error: "That listing isn't available right now." };
+    if (e.message === "TAKEN") return { ok: false, error: "Someone already moved in." };
+    if (e.message === "ALREADY_HOUSED") return { ok: false, error: "You're already living somewhere else — move out of that first." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", to: username, note: `Moved in as a tenant: ${propName} (renting from ${ownerUsername})` });
+  return { ok: true };
+}
+
+// Tenant: moves out of their own accord, once the minimum lease length has
+// run. Same "back to undecided" reset as cancelSublet/teacherEndSublet.
+async function tenantMoveOut(username, classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop || !prop.sublet || prop.sublet.tenant !== username) throw new Error("NOT_TENANT");
+      if (!leaseMinWeeksElapsed(prop.sublet)) throw new Error("LOCKED_IN");
+      propName = prop.name;
+      prop.occupancy = null;
+      prop.sublet = null;
+      prop.rentLastWeekPaid = null;
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "NOT_TENANT") return { ok: false, error: "You're not renting that property." };
+    if (e.message === "LOCKED_IN") return { ok: false, error: "You agreed to a minimum lease length — you can't move out yet." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", from: username, note: `Moved out: ${propName}` });
+  return { ok: true };
+}
+
+// Teacher moderation, for classes running with propertyRentals.requireApproval on.
+async function decideSublet(classCode, propId, approve, reason) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const prop = cls.properties.find(p => p.id === propId);
+    if (!prop || !prop.sublet || prop.sublet.status !== "pending") return;
+    if (approve) {
+      prop.sublet.status = "active";
+    } else {
+      prop.sublet.status = "rejected";
+      prop.sublet.rejectReason = String(reason || "").slice(0, 160);
+    }
+    t.update(classRef, { properties: cls.properties });
+  });
+  return { ok: true };
+}
+
+// Teacher override: ends a classmate rental arrangement on the spot,
+// whatever state it's in (still searching for a tenant, pending approval,
+// or occupied) — unlike cancelSublet/tenantMoveOut this ignores the minimum
+// lease length and doesn't check who's asking. Kicks any tenant out
+// immediately and resets the unit to "no choice made yet", same as
+// teacherEndRental does for the passive scheme.
+async function teacherEndSublet(classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "", owner = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop || !prop.sublet) throw new Error("NOT_FOUND");
+      propName = prop.name;
+      owner = prop.owner;
+      prop.occupancy = null;
+      prop.sublet = null;
+      prop.rentLastWeekPaid = null;
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", to: owner, note: `Teacher ended the classmate rental: ${propName}` });
+  return { ok: true };
+}
+
+// Generic version of lastMortgageDueWeekKey, parameterised by day name
+// since a sublet's due day is the property's own rentDay rather than a
+// single class-wide setting. Which ISO week the most recently-passed due
+// day falls in — today's week if today IS the due day, otherwise the due
+// day one cycle before that.
+function lastDueWeekKeyForDay(dayName) {
+  const isoIdx = day => (DAY_NAMES.indexOf(day) + 6) % 7;
+  const dueIdx = isoIdx(dayName || "Fri");
+  const todayIdx = isoIdx(nzDayName());
+  let daysSinceDue = todayIdx - dueIdx;
+  if (daysSinceDue <= 0) daysSinceDue += 7;
+  const lastDueDateKey = dateKeyPlusDays(nzDateKey(), -daysSinceDue);
+  return isoWeekKey(new Date(dateKeyToUTC(lastDueDateKey)));
+}
+
+// The ISO week key of this sublet's currently-unpaid rent cycle, or null if
+// there isn't one right now — same "look back to the most recently-passed
+// due day" logic as overdueMortgageWeekKey, just keyed to the property's
+// own rentDay instead of the class's mortgageDay.
+function overdueSubletRentWeekKey(prop, cls) {
+  if (!prop || !prop.sublet || !prop.sublet.tenant) return null;
+  const sublet = prop.sublet;
+  const weekKey = isoWeekKey(new Date());
+  if (sublet.leaseStartWeekKey === weekKey) return null; // move-in week is free
+  if (sublet.rentLastWeekPaid === weekKey) return null; // already paid this week
+  const lastDueWeekKey = lastDueWeekKeyForDay(prop.rentDay || "Fri");
+  if (lastDueWeekKey === weekKey) return weekKey;
+  if (sublet.rentLastWeekPaid === lastDueWeekKey) return null;
+  if (weekKeyOrder(lastDueWeekKey) < weekKeyOrder(sublet.leaseStartWeekKey)) return null;
+  return lastDueWeekKey;
+}
+
+// Whether a tenant currently has a missed weekly rent payment. Used for the
+// red "payment overdue" warning, same idea as isMortgagePaymentOverdue.
+function isSubletRentOverdue(prop, cls) {
+  return overdueSubletRentWeekKey(prop, cls) !== null;
+}
+
+// The one and only way a tenant's weekly rent is ever paid: the tenant
+// pays it themselves, on the property's own rentDay, same self-service
+// pattern as payMortgage — nothing in this app ever deducts it
+// automatically, since real money has to move from a specific tenant who
+// might not have it. Splits the money movement into two steps (mark the
+// week paid + debit the tenant inside the transaction, then credit the
+// owner via adjustBalance afterwards) the same way processPropertyRent
+// already does for the passive scheme.
+async function payTenantRent(username, classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  const tenantRef = usersCol().doc(username);
+  let amt = 0, propName = "", ownerUsername = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const classSnap = await t.get(classRef);
+      const tenantSnap = await t.get(tenantRef);
+      if (!classSnap.exists || !tenantSnap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(classSnap.data());
+      const tenant = tenantSnap.data();
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop || !prop.sublet || prop.sublet.tenant !== username) throw new Error("NOT_FOUND");
+      const weekKey = isoWeekKey(new Date());
+      if ((prop.rentDay || "Fri") !== nzDayName()) throw new Error("WRONG_DAY");
+      if (prop.sublet.leaseStartWeekKey === weekKey) throw new Error("MOVE_IN_WEEK");
+      if (prop.sublet.rentLastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
+      amt = prop.sublet.price;
+      if (tenant.balance < amt) throw new Error("BROKE");
+      ownerUsername = prop.owner;
+      propName = prop.name;
+      t.update(tenantRef, { balance: Math.round((tenant.balance - amt) * 100) / 100 });
+      prop.sublet.rentLastWeekPaid = weekKey;
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay rent on its due day." };
+    if (e.message === "MOVE_IN_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you moved in is free." };
+    if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's rent has already been paid." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's rent." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await adjustBalance(ownerUsername, amt);
+  await logTxn(classCode, { type: "property-rent-pay", from: username, to: ownerUsername, amount: amt, note: `Paid weekly rent: ${propName}` });
+  await logTxn(classCode, { type: "property-rent-receive", to: ownerUsername, from: username, amount: amt, note: `Weekly rent received from a classmate: ${propName}` });
+  return { ok: true, amount: amt };
+}
+
+// Teacher-only: waives a tenant's currently-missed rent payment without
+// taking any money from them — same idea as resolveMortgageOverdue. Marks
+// the specific overdue cycle as paid rather than just "this week", for the
+// same reason resolveMortgageOverdue does.
+async function resolveSubletRentOverdue(classCode, propId) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "", tenantUsername = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop || !prop.sublet || !prop.sublet.tenant) throw new Error("NOT_FOUND");
+      const overdueWeekKey = overdueSubletRentWeekKey(prop, cls);
+      if (!overdueWeekKey) throw new Error("NOT_OVERDUE");
+      propName = prop.name;
+      tenantUsername = prop.sublet.tenant;
+      prop.sublet.rentLastWeekPaid = overdueWeekKey;
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "NOT_OVERDUE") return { ok: false, error: "This rent isn't currently overdue." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", from: tenantUsername, note: `Weekly rent marked as resolved by teacher, no charge: ${propName}` });
+  return { ok: true };
+}
+
 /* ===================== Random events ===================== */
 async function addEventDef(classCode, ev) {
   const classRef = classesCol().doc(classCode);
@@ -6529,51 +6939,33 @@ async function processInsurancePayments(classCode) {
 }
 
 // Everything a single student owns, for the teacher's "view student" panel.
-// `properties` holds every unit the student owns (a student can own more
-// than one — their lifestyle bonus stacks across all of them, see
-// lifestyleRatingFromData); `property` is kept as the first one for any
-// old caller that only ever expected a single property.
 async function getStudentPossessions(username, classCode) {
   const cls = withNewModuleDefaults(await getClass(classCode));
   const user = await getUser(username);
   if (!cls || !user) return null;
-  const properties = cls.properties.filter(p => p.owner === username);
-  const property = properties[0] || null;
+  const property = cls.properties.find(p => p.owner === username) || null;
+  // The property (if any) this student is renting FROM A CLASSMATE — a
+  // separate thing from `property` above, since a student can own a place
+  // they don't live in while renting somewhere else themselves.
+  const rentedHome = cls.properties.find(p => p.sublet && p.sublet.tenant === username) || null;
   const vehicles = cls.vehicles.filter(v => (v.owners || []).includes(username));
   const vehicle = vehicles.reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
   const storeItems = (user.storeItems || []).map(id => cls.storeItems.find(i => i.id === id)).filter(Boolean)
     .map(i => ({ ...i }));
   const insurance = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).filter(Boolean);
-  return { property, properties, vehicle, vehicles, storeItems, insurance };
+  return { property, rentedHome, vehicle, vehicles, storeItems, insurance };
 }
 
 /* ===================== Lifestyle rating ===================== */
-// Lifestyle-score bonus for choosing to live in an owned property instead
-// of renting it out (see setPropertyOccupancy). Each property has its own
-// teacher-set number of "stars" this bonus is worth (prop.livingBonusStars,
-// set on the property itself alongside its comfort rating), converted to
-// points using the property category's own points-per-star weight.
-function propertyLivingBonusPoints(cfg, prop) {
-  const stars = Number(prop && prop.livingBonusStars) || 0;
-  const weight = (cfg && cfg.property) ? Number(cfg.property.weight) || 0 : 0;
-  return stars * weight;
-}
-// Lets a listing preview its lifestyle impact before a student buys it:
-// the points they'd get just for owning it, plus the extra points on top
-// if they choose to live in it. Returns null if the property category is
-// switched off entirely, so callers know not to show anything.
-function propertyLifestylePreview(cls, prop) {
-  const cfg = (cls && cls.lifestyleConfig) || {};
-  if (!cfg.property || !cfg.property.enabled || !prop) return null;
-  const weight = Number(cfg.property.weight) || 0;
-  const livingStars = Number(prop.livingBonusStars) || 0;
-  return {
-    ownPoints: (Number(prop.comfort) || 0) * weight,
-    livingBonusPoints: livingStars * weight,
-    livingBonusStars: livingStars,
-    weight
-  };
-}
+// Flat lifestyle-score bonus for choosing to live in an owned property
+// instead of renting it out (see setPropertyOccupancy).
+const PROPERTY_LIVING_BONUS = 5;
+// Flat lifestyle-score bonus for renting a home from a classmate — same
+// "somewhere to live" idea as PROPERTY_LIVING_BONUS, but deliberately
+// ignores the rented property's own comfort rating (a tenant doesn't own
+// the asset, just occupies it) rather than stacking a comfort×weight score
+// on top, the way an owner living in their own place does.
+const TENANT_LIVING_BONUS = 5;
 
 async function saveLifestyleConfig(classCode, config) {
   await classesCol().doc(classCode).update({ lifestyleConfig: config });
@@ -6596,10 +6988,7 @@ async function saveLifestyleThresholds(classCode, thresholds) {
       max: Math.max(0, Number(t.max) || 0), // uncapped — score can exceed 100
       label: (t.label || "").trim() || "Untitled",
       minNetWorth: Math.max(0, Number(t.minNetWorth) || 0),
-      // Uncapped — living-in bonus stars can push a property's effective
-      // comfort well past 5, so a teacher may want a requirement above that
-      // too. Transport stays capped at 5 (no equivalent bonus there).
-      minPropertyComfort: Math.max(0, Number(t.minPropertyComfort) || 0),
+      minPropertyComfort: Math.max(0, Math.min(5, Number(t.minPropertyComfort) || 0)),
       minTransportComfort: Math.max(0, Math.min(5, Number(t.minTransportComfort) || 0))
     }))
     .sort((a, b) => a.min - b.min);
@@ -6647,17 +7036,11 @@ async function lifestyleBandForStudent(username, classCode, precomputedBoard) {
   // a second time here for a single student's band was wasteful.
   const board = precomputedBoard || await classLeaderboard(classCode);
   const row = board.find(r => r.username === username);
-  // Stacked total across every property the student owns, not just one,
-  // matching how the property category now contributes to the score itself.
-  const ownedProperties = (cls.properties || []).filter(p => p.owner === username);
+  const property = (cls.properties || []).find(p => p.owner === username);
   const ownedVehicles = (cls.vehicles || []).filter(v => (v.owners || []).includes(username));
   const stats = {
     netWorth: row ? row.net : 0,
-    // Includes each property's living-in bonus stars on top of its comfort
-    // rating, but only while the student is actually living in it (not
-    // renting it out) — matches how living-in bonus stars count toward the
-    // lifestyle score itself (see propertyLivingBonusPoints).
-    propertyComfort: ownedProperties.reduce((sum, p) => sum + (p.comfort || 0) + (p.occupancy === "living" ? (p.livingBonusStars || 0) : 0), 0),
+    propertyComfort: property ? (property.comfort || 0) : 0,
     // Stacked total across every vehicle the student owns, not just their
     // best one, matching how transport now contributes to the score itself.
     transportComfort: ownedVehicles.reduce((sum, v) => sum + (v.comfort || 0), 0)
@@ -6680,19 +7063,23 @@ function lifestyleRatingFromData(cls, user, username) {
   let score = 0;
 
   if (cfg.property && cfg.property.enabled) {
-    // Every owned property contributes its own comfort × weight — stars
-    // stack across all properties a student owns, the same way transport
-    // stacks across every owned vehicle below.
-    const owned = cls.properties.filter(p => p.owner === username);
-    owned.forEach(p => {
-      score += (p.comfort || 0) * (cfg.property.weight || 0);
-      // Living in a property (as opposed to renting it out) earns a
-      // teacher-set number of bonus "stars" on top of its base comfort
-      // score, for each property the student is living in. Renting one
-      // out instead earns weekly rent (see processPropertyRent) but no
-      // bonus — that property still only counts for its base comfort.
-      if (p.occupancy === "living") score += propertyLivingBonusPoints(cfg, p);
-    });
+    const owned = cls.properties.find(p => p.owner === username);
+    if (owned) {
+      score += owned.comfort * (cfg.property.weight || 0);
+      // Living in the property (as opposed to renting it out) earns a
+      // flat +5 lifestyle bonus on top of its base comfort score. Renting
+      // it out instead earns weekly rent (see processPropertyRent) but no
+      // bonus — the property still only counts for its base comfort.
+      if (owned.occupancy === "living") score += PROPERTY_LIVING_BONUS;
+    }
+    // Renting a home from a classmate earns the same flat "somewhere to
+    // live" bonus an owner gets for living in their own place — but never
+    // both at once, since a student can only live in one home at a time
+    // (see currentHomeOf), and never scaled by the rented property's
+    // comfort rating the way owning one is.
+    if (cls.properties.some(p => p.sublet && p.sublet.tenant === username)) {
+      score += TENANT_LIVING_BONUS;
+    }
   }
   if (cfg.transport && cfg.transport.enabled) {
     // Every owned vehicle contributes its own comfort × weight — stars
@@ -6747,19 +7134,21 @@ async function lifestyleRatingBreakdown(username, classCode) {
   let score = 0;
 
   if (cfg.property && cfg.property.enabled) {
-    // Every owned property gets its own line (and its own living bonus
-    // line, if applicable) — points stack across all properties owned.
-    const owned = cls.properties.filter(p => p.owner === username);
-    owned.forEach(p => {
-      const pts = (p.comfort || 0) * (cfg.property.weight || 0);
+    const owned = cls.properties.find(p => p.owner === username);
+    if (owned) {
+      const pts = owned.comfort * (cfg.property.weight || 0);
       score += pts;
-      items.push({ type: "gain", label: p.name || "Property", detail: `${p.comfort || 0} comfort &times; ${cfg.property.weight || 0} pts/star`, points: pts });
-      if (p.occupancy === "living") {
-        const bonus = propertyLivingBonusPoints(cfg, p);
-        score += bonus;
-        items.push({ type: "gain", label: `Living in ${p.name || "your property"}`, detail: `${p.livingBonusStars || 0} bonus star${(p.livingBonusStars || 0) === 1 ? "" : "s"} &times; ${cfg.property.weight || 0} pts/star for living in it instead of renting it out`, points: bonus });
+      items.push({ type: "gain", label: owned.name || "Property", detail: `${owned.comfort} comfort &times; ${cfg.property.weight || 0} pts/star`, points: pts });
+      if (owned.occupancy === "living") {
+        score += PROPERTY_LIVING_BONUS;
+        items.push({ type: "gain", label: "Living in your property", detail: "Flat bonus for living in it instead of renting it out", points: PROPERTY_LIVING_BONUS });
       }
-    });
+    }
+    const tenantHome = cls.properties.find(p => p.sublet && p.sublet.tenant === username);
+    if (tenantHome) {
+      score += TENANT_LIVING_BONUS;
+      items.push({ type: "gain", label: "Renting a home from a classmate", detail: `${tenantHome.name} — flat bonus for having somewhere to live (comfort rating not counted, since you don't own it)`, points: TENANT_LIVING_BONUS });
+    }
   }
   if (cfg.transport && cfg.transport.enabled) {
     const owned = cls.vehicles.filter(v => (v.owners || []).includes(username));
@@ -6949,16 +7338,7 @@ const MODULE_LOCK_MESSAGE = {
    Removed rather than hidden so fitTopbar() measures the real row. */
 const NAV_TEACHER_ONLY = ["reports.html", "quizzes.html"];
 function applyNavRoleVisibility(role) {
-  // These two links are hidden by default in CSS (see style.css) so a
-  // student never sees so much as a flash of them before this function
-  // gets to run. For a teacher, add the class that reveals them; for a
-  // student, leave the CSS default-hide in place and also strip the
-  // elements out of the DOM entirely below (belt-and-suspenders, and
-  // needed so fitTopbar() measures the real row).
-  if (role === "teacher") {
-    document.documentElement.classList.add("role-teacher");
-    return;
-  }
+  if (role === "teacher") return;
   const here = (window.location.pathname.split("/").pop() || "").toLowerCase();
   let removed = false;
   document.querySelectorAll("nav a[href]").forEach(a => {
@@ -7319,6 +7699,16 @@ function getSellableAssets(cls, user) {
         });
         return;
       }
+      // Same idea for a property currently listed for rent to classmates
+      // (or already leased to one) — the new owner shouldn't inherit
+      // someone else's tenant or listing sight unseen.
+      if (p.sublet) {
+        out.push({
+          assetType: "property", assetId: p.id, name: p.name, refPrice: p.price, count: 1,
+          blocked: "Currently listed for rent to classmates — cancel that first."
+        });
+        return;
+      }
       out.push({
         assetType: "property", assetId: p.id, name: p.name, refPrice: p.price, count: 1,
         note: p.comfort ? `${p.comfort}★ comfort` : ""
@@ -7340,7 +7730,7 @@ function _marketplaceStillOwns(cls, user, listing) {
   }
   if (listing.assetType === "property") {
     const p = (cls.properties || []).find(x => x.id === listing.assetId);
-    return !!p && p.owner === user.username && !(p.mortgage && p.mortgage.weeksLeft > 0);
+    return !!p && p.owner === user.username && !(p.mortgage && p.mortgage.weeksLeft > 0) && !p.sublet;
   }
   return false;
 }
@@ -7534,6 +7924,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
         const prop = cls.properties.find(p => p.id === listing.assetId);
         if (!prop || prop.owner !== seller.username) throw new Error("GONE");
         if (prop.mortgage && prop.mortgage.weeksLeft > 0) throw new Error("GONE");
+        if (prop.sublet) throw new Error("GONE");
         prop.owner = buyerUsername;
         prop.mortgage = null;
         // A new owner makes their own live-in-it / rent-it-out call.

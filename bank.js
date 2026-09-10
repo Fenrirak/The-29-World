@@ -221,6 +221,7 @@ async function render() {
       "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"],
       "loan-interest": ["coral", "handshake", "Loan interest"], "side-hustle": ["mint", "briefcase", "Side hustle"],
       "truck-drive": ["mint", "car", "Truck drive"], "property-rent": ["mint", "house", "Rent received"],
+      "property-rent-pay": ["coral", "house", "Rent paid"], "property-rent-receive": ["mint", "house", "Rent received"],
       "store-gift": ["mint", "cart", "Free item"], "quiz-reward": ["mint", "idcard", "Quiz passed"],
       "p2p-buy": ["navy", "users", "Bought from a classmate"], "p2p-sell": ["gold", "users", "Sold to a classmate"]
     };
@@ -234,8 +235,8 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "truck-drive", "property-rent", "store-gift", "quiz-reward", "p2p-sell"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment", "loan-interest", "p2p-buy"].includes(t.type)) { sign = "-"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "truck-drive", "property-rent", "property-rent-receive", "store-gift", "quiz-reward", "p2p-sell"].includes(t.type)) { sign = "+"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-rent-pay", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment", "loan-interest", "p2p-buy"].includes(t.type)) { sign = "-"; }
     else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
     else if (t.type === "property-buy") { sign = "-"; }
 

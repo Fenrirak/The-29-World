@@ -116,7 +116,10 @@
 
 <main>
   <h1 id="pageTitle">Property</h1>
-  <p>Buy a house outright, or finance it with a weekly mortgage.</p>
+  <p>Buy a house outright, or finance it with a weekly mortgage — or rent one from your teacher's listings or from a classmate.</p>
+
+  <div id="myRentedHome"></div>
+  <div id="availableSublets"></div>
 
   <div id="mortgagePanel" class="card hidden">
     <h2 id="hMortgageSettings">Mortgage settings</h2>
@@ -163,6 +166,53 @@
     </div>
   </div>
 
+  <div id="rentalsPanel" class="card hidden">
+    <h2 id="hRentalSettings">Renting to classmates</h2>
+    <p>Let students who own a property lease it to a classmate for real weekly rent, instead of just living in it or renting it out for free passive income.</p>
+
+    <label class="mortgage-toggle-row" for="rentalEnabled">
+      <input type="checkbox" id="rentalEnabled">
+      <span class="mortgage-toggle-track"><span class="mortgage-toggle-thumb"></span></span>
+      <span class="mortgage-toggle-text">
+        <strong>Allow renting to classmates</strong>
+        <span class="muted-small">When off, students can still buy properties, live in them, or rent them out for passive income — but not lease them to a specific classmate.</span>
+      </span>
+    </label>
+
+    <label class="mortgage-toggle-row" for="rentalRequireApproval" style="margin-top:12px;">
+      <input type="checkbox" id="rentalRequireApproval">
+      <span class="mortgage-toggle-track"><span class="mortgage-toggle-thumb"></span></span>
+      <span class="mortgage-toggle-text">
+        <strong>New rental listings need your approval</strong>
+        <span class="muted-small">When on, a listing only becomes visible to classmates once you approve it below. When off, listings go live the moment a student creates them.</span>
+      </span>
+    </label>
+
+    <div class="mortgage-subsection">
+      <div class="mortgage-subsection-head">
+        <h3>Price &amp; lease limits</h3>
+      </div>
+      <div class="grid grid-3">
+        <div>
+          <label for="rentalMinPricePct">Minimum price (% of the property's set rent)</label>
+          <input id="rentalMinPricePct" type="number" min="0" step="1">
+        </div>
+        <div>
+          <label for="rentalMaxPricePct">Maximum price (% of set rent, 0 = no limit)</label>
+          <input id="rentalMaxPricePct" type="number" min="0" step="1">
+        </div>
+        <div>
+          <label for="rentalMaxLeaseWeeks">Longest minimum lease an owner can require (weeks)</label>
+          <input id="rentalMaxLeaseWeeks" type="number" min="1" step="1">
+        </div>
+      </div>
+      <button class="btn secondary small" onclick="saveRentalSettingsClick()" id="saveRentalSettingsBtn">Save settings</button>
+      <div id="rentalSettingsMsg"></div>
+    </div>
+
+    <div id="pendingSublets"></div>
+  </div>
+
   <div id="teacherPanel" class="card hidden">
     <h2 id="hAdd">Add a property</h2>
     <form onsubmit="return addProp(event)">
@@ -180,17 +230,8 @@
           <input id="hComfort" type="number" min="1" max="5" step="1" value="3" required>
         </div>
       </div>
-      <div class="grid grid-2">
-        <div>
-          <label for="hQuantity" id="labQuantity">Quantity available for sale</label>
-          <input id="hQuantity" type="number" min="1" step="1" value="1" required>
-        </div>
-        <div>
-          <label for="hLivingBonus" id="labLivingBonus">Living-in bonus (stars, 0 = none)</label>
-          <input id="hLivingBonus" type="number" min="0" step="1" value="1">
-        </div>
-      </div>
-      <p class="muted-small" id="pLivingBonus" style="margin-top:6px;">Extra lifestyle-rating stars the owner gets on top of the comfort rating above, while they choose to live in this property instead of renting it out (multiplied by the class's property points-per-star setting).</p>
+      <label for="hQuantity" id="labQuantity">Quantity available for sale</label>
+      <input id="hQuantity" type="number" min="1" step="1" value="1" required>
       <div class="grid grid-2">
         <div>
           <label for="hMortgage" id="labMortgage">Mortgage length in weeks (0 = cash only)</label>
