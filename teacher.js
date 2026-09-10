@@ -294,7 +294,7 @@ async function render() {
 
   // lifestyle settings
   const cfg = cls.lifestyleConfig || {
-    property: { enabled: true, weight: 4, livingBonusStars: 1 }, store: { enabled: true, weight: 2 },
+    property: { enabled: true, weight: 4 }, store: { enabled: true, weight: 2 },
     insurance: { enabled: true, weight: 2 }, transport: { enabled: true, weight: 3 }
   };
   const lsBox = document.getElementById("lifestyleSettings");
@@ -313,11 +313,7 @@ async function render() {
       </label>
       <label for="ls-${s.key}-weight">Points per star</label>
       <input type="number" id="ls-${s.key}-weight" min="0" step="1" value="${cfg[s.key] ? cfg[s.key].weight : 0}">
-      ${s.key === "property" ? `
-      <label for="ls-property-livingbonus">Bonus stars for living in it</label>
-      <input type="number" id="ls-property-livingbonus" min="0" step="1" value="${cfg.property && cfg.property.livingBonusStars !== undefined ? cfg.property.livingBonusStars : 1}">
-      <p class="muted-small" style="margin-top:4px;">Extra stars (on top of the property's own comfort) a student earns while living in a property they own, instead of renting it out. Multiplied by "Points per star" above, and stacks across every property they own and live in.</p>
-      ` : ""}
+      ${s.key === "property" ? `<p class="muted-small" style="margin-top:4px;">The living-in bonus (extra stars for living in a property instead of renting it out) is set per property, in the Add/Edit property form below.</p>` : ""}
     </div>
   `).join("");
 
@@ -763,11 +759,7 @@ async function saveLifestyle() {
   const cls = await getClassCached(CLASS_CODE);
   const existingLoanCfg = (cls.lifestyleConfig && cls.lifestyleConfig.loan) || { enabled: false, perAmount: 0, points: 0 };
   const config = {
-    property: {
-      enabled: document.getElementById("ls-property-on").checked,
-      weight: Number(document.getElementById("ls-property-weight").value) || 0,
-      livingBonusStars: Math.max(0, Number(document.getElementById("ls-property-livingbonus").value) || 0)
-    },
+    property: { enabled: document.getElementById("ls-property-on").checked, weight: Number(document.getElementById("ls-property-weight").value) || 0 },
     transport: { enabled: document.getElementById("ls-transport-on").checked, weight: Number(document.getElementById("ls-transport-weight").value) || 0 },
     store: { enabled: document.getElementById("ls-store-on").checked, weight: Number(document.getElementById("ls-store-weight").value) || 0 },
     insurance: { enabled: document.getElementById("ls-insurance-on").checked, weight: Number(document.getElementById("ls-insurance-weight").value) || 0 },

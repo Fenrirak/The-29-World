@@ -4941,6 +4941,12 @@ function withNewModuleDefaults(cls) {
     // (payMortgage falls back to weeklyPayment*weeksLeft for
     // principalRemaining and 0 for interestRate on those).
     if (p.mortgageInterestRate === undefined) p.mortgageInterestRate = 0;
+    // Teacher-set number of bonus "stars" this specific property is worth
+    // (on top of its own comfort rating) when its owner chooses to live in
+    // it rather than rent it out — see lifestyleRatingFromData. Properties
+    // saved before this existed default to 1, matching the old flat +5
+    // bonus closely enough for the default weight of 4 pts/star.
+    if (p.livingBonusStars === undefined) p.livingBonusStars = 1;
   });
   // Class-wide day mortgage installments are due on (like payDay/interestDay).
   cls.mortgageDay = DAY_NAMES.includes(cls.mortgageDay) ? cls.mortgageDay : "Fri";
@@ -5061,20 +5067,13 @@ function withNewModuleDefaults(cls) {
   cls.bigEventLog = cls.bigEventLog || [];
   cls.lastBigEventWeekRun = cls.lastBigEventWeekRun || null;
   cls.lifestyleConfig = cls.lifestyleConfig || {
-    property: { enabled: true, weight: 4, livingBonusStars: 1 },
+    property: { enabled: true, weight: 4 },
     store: { enabled: true, weight: 2 },
     insurance: { enabled: true, weight: 2 },
     transport: { enabled: true, weight: 3 }
   };
   if (!cls.lifestyleConfig.transport) cls.lifestyleConfig.transport = { enabled: true, weight: 3 };
   if (!cls.lifestyleConfig.loan) cls.lifestyleConfig.loan = { enabled: false, perAmount: 0, points: 0 };
-  // Teacher-set number of "stars" a student earns for choosing to live in
-  // an owned property (as opposed to renting it out), multiplied by the
-  // same points-per-star weight as the property's own comfort rating —
-  // replaces the old fixed +5 flat bonus so teachers can tune it themselves.
-  if (cls.lifestyleConfig.property && cls.lifestyleConfig.property.livingBonusStars === undefined) {
-    cls.lifestyleConfig.property.livingBonusStars = 1;
-  }
   cls.lifestyleThresholds = cls.lifestyleThresholds && cls.lifestyleThresholds.length ? cls.lifestyleThresholds : [
     { min: 0, max: 10, label: "Poor", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
     { min: 10, max: 20, label: "Modest", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
@@ -5787,6 +5786,10 @@ async function addProperty(classCode, prop) {
         // current choice — "living" | "rented" | null (not yet chosen).
         rentPerWeek: Math.max(0, Number(prop.rentPerWeek) || 0),
         rentDay: DAY_NAMES.includes(prop.rentDay) ? prop.rentDay : "Fri",
+        // Bonus lifestyle stars this property is worth to its owner while
+        // they live in it (on top of its own comfort rating) — see
+        // propertyLivingBonusPoints.
+        livingBonusStars: Math.max(0, Number(prop.livingBonusStars) || 0),
         occupancy: null, rentLastWeekPaid: null
       });
     }
@@ -5837,6 +5840,7 @@ async function updateProperty(classCode, propId, updates) {
       prop.description = updates.description || "";
       prop.rentPerWeek = Math.max(0, Number(updates.rentPerWeek) || 0);
       prop.rentDay = DAY_NAMES.includes(updates.rentDay) ? updates.rentDay : "Fri";
+      prop.livingBonusStars = Math.max(0, Number(updates.livingBonusStars) || 0);
     });
     const desiredQty = Math.max(1, Math.floor(Number(updates.quantity)) || 1);
     const currentQty = units.length;
@@ -5849,6 +5853,7 @@ async function updateProperty(classCode, propId, updates) {
           mortgageInterestRate: template.mortgageInterestRate || 0,
           description: template.description, owner: null,
           rentPerWeek: template.rentPerWeek, rentDay: template.rentDay,
+          livingBonusStars: template.livingBonusStars || 0,
           occupancy: null, rentLastWeekPaid: null
         });
       }
@@ -6544,12 +6549,12 @@ async function getStudentPossessions(username, classCode) {
 
 /* ===================== Lifestyle rating ===================== */
 // Lifestyle-score bonus for choosing to live in an owned property instead
-// of renting it out (see setPropertyOccupancy). The teacher sets how many
-// "stars" living-in-it is worth (cfg.property.livingBonusStars); it's
-// converted to points the same way comfort stars are, using the property
-// category's own points-per-star weight.
-function propertyLivingBonusPoints(cfg) {
-  const stars = (cfg && cfg.property) ? Number(cfg.property.livingBonusStars) || 0 : 0;
+// of renting it out (see setPropertyOccupancy). Each property has its own
+// teacher-set number of "stars" this bonus is worth (prop.livingBonusStars,
+// set on the property itself alongside its comfort rating), converted to
+// points using the property category's own points-per-star weight.
+function propertyLivingBonusPoints(cfg, prop) {
+  const stars = Number(prop && prop.livingBonusStars) || 0;
   const weight = (cfg && cfg.property) ? Number(cfg.property.weight) || 0 : 0;
   return stars * weight;
 }
@@ -6557,13 +6562,13 @@ function propertyLivingBonusPoints(cfg) {
 // the points they'd get just for owning it, plus the extra points on top
 // if they choose to live in it. Returns null if the property category is
 // switched off entirely, so callers know not to show anything.
-function propertyLifestylePreview(cls, comfort) {
+function propertyLifestylePreview(cls, prop) {
   const cfg = (cls && cls.lifestyleConfig) || {};
-  if (!cfg.property || !cfg.property.enabled) return null;
+  if (!cfg.property || !cfg.property.enabled || !prop) return null;
   const weight = Number(cfg.property.weight) || 0;
-  const livingStars = Number(cfg.property.livingBonusStars) || 0;
+  const livingStars = Number(prop.livingBonusStars) || 0;
   return {
-    ownPoints: (Number(comfort) || 0) * weight,
+    ownPoints: (Number(prop.comfort) || 0) * weight,
     livingBonusPoints: livingStars * weight,
     livingBonusStars: livingStars,
     weight
@@ -6679,7 +6684,7 @@ function lifestyleRatingFromData(cls, user, username) {
       // score, for each property the student is living in. Renting one
       // out instead earns weekly rent (see processPropertyRent) but no
       // bonus — that property still only counts for its base comfort.
-      if (p.occupancy === "living") score += propertyLivingBonusPoints(cfg);
+      if (p.occupancy === "living") score += propertyLivingBonusPoints(cfg, p);
     });
   }
   if (cfg.transport && cfg.transport.enabled) {
@@ -6743,9 +6748,9 @@ async function lifestyleRatingBreakdown(username, classCode) {
       score += pts;
       items.push({ type: "gain", label: p.name || "Property", detail: `${p.comfort || 0} comfort &times; ${cfg.property.weight || 0} pts/star`, points: pts });
       if (p.occupancy === "living") {
-        const bonus = propertyLivingBonusPoints(cfg);
+        const bonus = propertyLivingBonusPoints(cfg, p);
         score += bonus;
-        items.push({ type: "gain", label: `Living in ${p.name || "your property"}`, detail: `${cfg.property.livingBonusStars || 0} bonus star${(cfg.property.livingBonusStars || 0) === 1 ? "" : "s"} &times; ${cfg.property.weight || 0} pts/star for living in it instead of renting it out`, points: bonus });
+        items.push({ type: "gain", label: `Living in ${p.name || "your property"}`, detail: `${p.livingBonusStars || 0} bonus star${(p.livingBonusStars || 0) === 1 ? "" : "s"} &times; ${cfg.property.weight || 0} pts/star for living in it instead of renting it out`, points: bonus });
       }
     });
   }
