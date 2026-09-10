@@ -340,7 +340,20 @@ async function getSessionUser() {
   // asks for the same current-user doc again — using the cached fetch here
   // means that second ask is a cache hit instead of a second, fully
   // redundant Firestore read of the identical document.
-  const u = await getUserCached(sess.username);
+  let u;
+  try {
+    u = await getUserCached(sess.username);
+  } catch (e) {
+    // BUGFIX: a browser that was logged in before the Firebase-Auth
+    // security fix shipped still has this old localStorage flag, but no
+    // real signed-in Firebase Auth session behind it anymore — so this
+    // read gets denied by firestore.rules. Previously that denial was
+    // uncaught here, which crashed the entire page instead of just
+    // sending them back to log in again. Any other unexpected read
+    // failure gets the same graceful treatment, rather than a blank page.
+    clearSession();
+    return null;
+  }
   if (!u) { clearSession(); return null; }
   if ((u.sessionVersion || 0) !== (sess.sv || 0)) {
     // Password was changed (here or elsewhere) since this device's
@@ -1063,7 +1076,17 @@ async function login(username, password) {
   try {
     await firebase.auth().signInWithEmailAndPassword(t29AuthEmail(username), password);
   } catch (e) {
-    if (e.code === "auth/user-not-found") {
+    // BUGFIX: newer Firebase projects have "email enumeration protection"
+    // on by default, which reports a nonexistent account as
+    // auth/invalid-credential (identical to a wrong password) rather than
+    // auth/user-not-found — checking only for the latter meant every
+    // not-yet-migrated account failed here and never reached the
+    // migration attempt below. Trying the migration on either code is
+    // safe: t29TryMigrateLegacyLogin() only succeeds for an account that
+    // both matches the legacy plaintext password AND has no authUid yet,
+    // so an already-migrated account with a genuinely wrong password
+    // still correctly falls through to "Incorrect username or password."
+    if (e.code === "auth/user-not-found" || e.code === "auth/invalid-credential") {
       const migrated = await t29TryMigrateLegacyLogin(username, password);
       if (!migrated.ok) return { ok: false, error: "Incorrect username or password." };
     } else {
