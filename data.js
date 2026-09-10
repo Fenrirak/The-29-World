@@ -1127,13 +1127,27 @@ async function t29TryMigrateLegacyLogin(username, password) {
     return { ok: false };
   }
 
+  // BUGFIX: this used to write /uidIndex and update /users in one
+  // fdb.runTransaction(). That always failed: the /users update rule
+  // checks myUsername(), which reads /uidIndex/{newUid} — and Firestore's
+  // security rules only ever see the database's already-COMMITTED state,
+  // never another write staged earlier in the same transaction. So at
+  // the instant the rule checked the update, /uidIndex/{newUid} didn't
+  // exist yet as far as the rule could see, myUsername() threw, and the
+  // whole transaction was denied — every time, for every legacy account,
+  // regardless of the get-rule ordering fix above. Writing /uidIndex
+  // first as its own committed operation, then updating /users as a
+  // separate step afterward, means the update's rule check reads a
+  // /uidIndex doc that's actually there. This trades strict atomicity
+  // for a migration that actually completes; if the second write fails,
+  // the account just falls back to a normal signInWithEmailAndPassword
+  // (its Auth credential and uidIndex mapping already exist) on the next
+  // attempt, rather than staying migrated halfway.
   try {
-    await fdb.runTransaction(async (t) => {
-      t.set(fdb.collection("uidIndex").doc(cred.user.uid), { username });
-      t.update(usersCol().doc(username), {
-        authUid: cred.user.uid,
-        password: firebase.firestore.FieldValue.delete()
-      });
+    await fdb.collection("uidIndex").doc(cred.user.uid).set({ username });
+    await usersCol().doc(username).update({
+      authUid: cred.user.uid,
+      password: firebase.firestore.FieldValue.delete()
     });
   } catch (e) {
     await cred.user.delete().catch(() => {});
