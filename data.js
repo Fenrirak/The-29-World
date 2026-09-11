@@ -5790,6 +5790,51 @@ async function sellStoreItem(username, classCode, itemId, rate) {
   return { ok: true, payout };
 }
 
+// Same as sellStoreItem, but removes `qty` units of the same item in one
+// transaction and logs a single combined activity entry instead of one
+// per unit. Used by the teacher's bulk-remove control on a student's
+// profile. Silently caps qty at how many the student actually owns.
+async function sellStoreItemBulk(username, classCode, itemId, qty, rate) {
+  qty = Math.max(1, Math.floor(Number(qty)) || 1);
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let itemName = "", totalPayout = 0, effectiveRate = 0, removedCount = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const item = cls.storeItems.find(i => i.id === itemId);
+      if (!item) throw new Error("NOT_FOUND");
+      user.storeItems = user.storeItems || [];
+      const ownedCount = user.storeItems.filter(id => id === itemId).length;
+      if (ownedCount === 0) throw new Error("NOT_OWNED");
+      removedCount = Math.min(qty, ownedCount);
+      itemName = item.name;
+      effectiveRate = rate !== undefined ? rate : 0.8;
+      const perUnitPayout = Math.round(item.price * effectiveRate * 100) / 100;
+      for (let i = 0; i < removedCount; i++) {
+        const idx = user.storeItems.indexOf(itemId);
+        user.storeItems.splice(idx, 1);
+        if (item.stock !== null) item.stock += 1;
+        item.sold = Math.max(0, (item.sold || 0) - 1);
+      }
+      totalPayout = Math.round(perUnitPayout * removedCount * 100) / 100;
+      const isTeacher = user.role === "teacher";
+      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + totalPayout) * 100) / 100, storeItems: user.storeItems });
+      else t.update(userRef, { storeItems: user.storeItems });
+      t.update(classRef, { storeItems: cls.storeItems });
+    });
+  } catch (e) {
+    if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that item." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "store-sell", to: username, amount: totalPayout, note: `Sold back to store: ${itemName} ×${removedCount} (${Math.round(effectiveRate * 100)}% refund)` });
+  return { ok: true, payout: totalPayout, removed: removedCount };
+}
+
 /* ===================== Life module =====================
    Teacher-defined "life event" templates (cls.lifeItems), each bundling
    any mix of benefits. Granting one to a student (grantLifeItem) copies a

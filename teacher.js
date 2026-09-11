@@ -1147,7 +1147,14 @@ async function renderProfile(username) {
   rows.push(`<h4>${icon("cart", 16)} Store items</h4>`);
   rows.push(storeGroups.length
     ? storeGroups.map(g => `<div class="auto-row"><div class="auto-details">${g.item.name} <span class="badge mint">×${g.qty}</span>${g.item.countsNetWorth === false ? ' <span class="muted-small">(not counted)</span>' : ""}</div>
-        <button class="btn small coral" onclick="profileRemoveStoreItem('${username}','${g.item.id}')">Remove one</button></div>`).join("")
+        <div class="row-flex" style="gap:8px;align-items:center;">
+          <div class="qty-stepper">
+            <button class="qty-btn" type="button" onclick="bulkRemoveQtyStep('${g.item.id}',-1,${g.qty})" aria-label="Decrease quantity">−</button>
+            <input class="qty-input" type="number" inputmode="numeric" id="bulkRemoveQty_${g.item.id}" min="1" max="${g.qty}" step="1" value="1" onchange="bulkRemoveQtyClamp('${g.item.id}',${g.qty})">
+            <button class="qty-btn" type="button" onclick="bulkRemoveQtyStep('${g.item.id}',1,${g.qty})" aria-label="Increase quantity">+</button>
+          </div>
+          <button class="btn small coral" onclick="profileRemoveStoreItemBulk('${username}','${g.item.id}',${g.qty})">Remove</button>
+        </div></div>`).join("")
     : `<p class="muted-small">No store items owned.</p>`);
 
   const giftableItems = (cls.storeItems || []).filter(it => !it.archived);
@@ -1302,6 +1309,40 @@ async function profileRemoveStoreItem(username, itemId) {
   const rate = confirmRefundRate("Remove this item from the student?", 80);
   if (rate === null) return;
   await sellStoreItem(username, CLASS_CODE, itemId, rate);
+  await render();
+  await renderProfile(username);
+}
+
+// Quantity stepper for the bulk-remove control on each owned store item
+// row: clamps to [1, owned qty] so a teacher can't type/step past what
+// the student actually has.
+function bulkRemoveQtyStep(itemId, delta, maxQty) {
+  const input = document.getElementById(`bulkRemoveQty_${itemId}`);
+  if (!input) return;
+  let val = (parseInt(input.value, 10) || 1) + delta;
+  val = Math.max(1, Math.min(maxQty, val));
+  input.value = val;
+}
+function bulkRemoveQtyClamp(itemId, maxQty) {
+  const input = document.getElementById(`bulkRemoveQty_${itemId}`);
+  if (!input) return;
+  let val = parseInt(input.value, 10);
+  if (isNaN(val)) val = 1;
+  val = Math.max(1, Math.min(maxQty, val));
+  input.value = val;
+}
+async function profileRemoveStoreItemBulk(username, itemId, maxQty) {
+  const input = document.getElementById(`bulkRemoveQty_${itemId}`);
+  let qty = input ? parseInt(input.value, 10) : 1;
+  if (isNaN(qty) || qty < 1) qty = 1;
+  qty = Math.min(qty, maxQty);
+  const rate = confirmRefundRate(
+    qty === 1 ? "Remove this item from the student?" : `Remove ${qty} of this item from the student?`,
+    80
+  );
+  if (rate === null) return;
+  const res = await sellStoreItemBulk(username, CLASS_CODE, itemId, qty, rate);
+  if (res && res.ok === false) { alert(res.error); return; }
   await render();
   await renderProfile(username);
 }
