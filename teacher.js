@@ -174,11 +174,16 @@ async function render() {
   }));
   students.forEach(s => {
     const row = board.find(r => r.username === s.username);
-    const property = (cls.properties || []).find(p => p.owner === s.username);
+    // Stacked total across every property the student owns, not just one,
+    // plus its living-in bonus stars when they're actually living in it
+    // (rather than renting it out) — matching lifestyleBandForStudent in
+    // data.js, so this table's band agrees with what the student sees on
+    // their own property page. This total can legitimately exceed 5.
+    const ownedProperties = (cls.properties || []).filter(p => p.owner === s.username);
     const ownedVehicles = (cls.vehicles || []).filter(v => (v.owners || []).includes(s.username));
     const stats = {
       netWorth: row ? row.net : 0,
-      propertyComfort: property ? (property.comfort || 0) : 0,
+      propertyComfort: ownedProperties.reduce((sum, p) => sum + (p.comfort || 0) + (p.occupancy === "living" ? (Number(p.livingBonusStars) || 0) : 0), 0),
       transportComfort: ownedVehicles.reduce((sum, v) => sum + (v.comfort || 0), 0)
     };
     lifestyleBandByUser[s.username] = lifestyleLabelFor(lifestyleByUser[s.username], cls.lifestyleThresholds || [], stats);
@@ -701,7 +706,7 @@ function thresholdRowHtml(t) {
       <p class="muted-small threshold-reqs-label">Optional requirements — a student must also meet these to be shown this band, even if their score qualifies. Leave at 0 for no requirement.</p>
       <div class="grid grid-3">
         <div><label>Min net worth</label><input class="th-min-networth" type="number" min="0" step="1" value="${t.minNetWorth || 0}"></div>
-        <div><label>Min property comfort (0-5 stars)</label><input class="th-min-property" type="number" min="0" max="5" step="1" value="${t.minPropertyComfort || 0}"></div>
+        <div><label>Min property comfort (base comfort + living-in bonus stars)</label><input class="th-min-property" type="number" min="0" step="1" value="${t.minPropertyComfort || 0}"></div>
         <div><label>Min transport comfort (total stars across owned vehicles)</label><input class="th-min-transport" type="number" min="0" step="1" value="${t.minTransportComfort || 0}"></div>
       </div>
     </div>

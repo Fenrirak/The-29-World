@@ -7292,7 +7292,11 @@ async function saveLifestyleThresholds(classCode, thresholds) {
       max: Math.max(0, Number(t.max) || 0), // uncapped — score can exceed 100
       label: (t.label || "").trim() || "Untitled",
       minNetWorth: Math.max(0, Number(t.minNetWorth) || 0),
-      minPropertyComfort: Math.max(0, Math.min(5, Number(t.minPropertyComfort) || 0)),
+      // Uncapped — a property's comfort can exceed 5 once a living-in bonus
+      // (see propertyLivingBonusPoints/TENANT_LIVING_BONUS) is stacked on
+      // top of its base comfort rating, so a band requirement must be able
+      // to ask for more than 5 too.
+      minPropertyComfort: Math.max(0, Number(t.minPropertyComfort) || 0),
       minTransportComfort: Math.max(0, Math.min(5, Number(t.minTransportComfort) || 0))
     }))
     .sort((a, b) => a.min - b.min);
@@ -7346,7 +7350,12 @@ async function lifestyleBandForStudent(username, classCode, precomputedBoard) {
   const ownedVehicles = (cls.vehicles || []).filter(v => (v.owners || []).includes(username));
   const stats = {
     netWorth: row ? row.net : 0,
-    propertyComfort: ownedProperties.reduce((sum, p) => sum + (p.comfort || 0), 0),
+    // Base comfort for every owned property, plus its living-in bonus
+    // stars when the student is actually living in it (rather than renting
+    // it out) — same stacking the score itself uses in
+    // lifestyleRatingFromData, so this can legitimately exceed 5 and a
+    // band's minPropertyComfort requirement is allowed to ask for that.
+    propertyComfort: ownedProperties.reduce((sum, p) => sum + (p.comfort || 0) + (p.occupancy === "living" ? (Number(p.livingBonusStars) || 0) : 0), 0),
     // Stacked total across every vehicle the student owns, not just their
     // best one, matching how transport now contributes to the score itself.
     transportComfort: ownedVehicles.reduce((sum, v) => sum + (v.comfort || 0), 0)
