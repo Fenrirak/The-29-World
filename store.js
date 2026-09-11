@@ -89,21 +89,14 @@ async function render() {
                      <button type="button" class="qty-btn" aria-label="Decrease quantity" onclick="qtyStep('${it.id}', -1)">−</button>
                      <input id="qty-${it.id}" class="qty-input" type="number" inputmode="numeric" min="1"
                        ${maxQty !== null ? `max="${maxQty}"` : ""} step="1" value="1"
-                       oninput="qtyNormalize('${it.id}')">
+                       onfocus="this.select()" onclick="this.select()"
+                       oninput="qtyLiveInput('${it.id}')" onblur="qtyNormalize('${it.id}')"
+                       onkeydown="if(event.key==='Enter'){qtyNormalize('${it.id}');event.preventDefault();}">
                      <button type="button" class="qty-btn" aria-label="Increase quantity" onclick="qtyStep('${it.id}', 1)">+</button>
                    </div>
                    <button class="btn small gold qty-buy-btn" onclick="buyItem('${it.id}')">${icon("cart", 13)} <span id="buyLabel-${it.id}">Buy</span></button>
                  </div>`}
-          ${(!IS_TEACHER && owned) ? `
-            <div class="qty-buy-block">
-              <div class="qty-stepper">
-                <button type="button" class="qty-btn" aria-label="Decrease quantity" onclick="sellQtyStep('${it.id}', -1)">−</button>
-                <input id="sellqty-${it.id}" class="qty-input" type="number" inputmode="numeric" min="1" max="${owned}" step="1" value="1"
-                  oninput="sellQtyNormalize('${it.id}')">
-                <button type="button" class="qty-btn" aria-label="Increase quantity" onclick="sellQtyStep('${it.id}', 1)">+</button>
-              </div>
-              <button class="btn small secondary qty-buy-btn" onclick="sellItem('${it.id}')">${icon("trash", 13)} <span id="sellLabel-${it.id}">Sell back (80%)</span></button>
-            </div>` : ""}
+          ${(!IS_TEACHER && owned) ? `<button class="btn small secondary" onclick="sellItem('${it.id}')">${icon("trash", 13)} Sell back (80%)</button>` : ""}
         </div>
       </div>
       <div id="edit-${it.id}" class="hidden"></div>
@@ -112,12 +105,7 @@ async function render() {
     list.appendChild(div);
   });
   ITEMS_CACHE = items;
-  if (!IS_TEACHER) {
-    items.forEach(it => {
-      if (!(it.stock !== null && it.stock <= 0)) updateBuyLabel(it.id);
-      if (ownedCounts[it.id]) updateSellLabel(it.id);
-    });
-  }
+  if (!IS_TEACHER) items.forEach(it => { if (!(it.stock !== null && it.stock <= 0)) updateBuyLabel(it.id); });
 }
 
 function qtyStep(id, delta) {
@@ -128,6 +116,14 @@ function qtyStep(id, delta) {
   if (v < 1) v = 1;
   if (max !== null && max !== "" && v > Number(max)) v = Number(max);
   input.value = v;
+  updateBuyLabel(id);
+}
+
+// Live-updates the price label as the person types, without forcing
+// the field back into range mid-keystroke (that would make it feel
+// like you can't type a two-digit number). Out-of-range values are
+// only clamped once they finish editing, in qtyNormalize below.
+function qtyLiveInput(id) {
   updateBuyLabel(id);
 }
 
@@ -148,43 +144,13 @@ function updateBuyLabel(id) {
   if (!input || !label || !ME_CACHE) return;
   const it = ITEMS_CACHE.find(i => i.id === id);
   if (!it) return;
-  const qty = Math.max(1, parseInt(input.value, 10) || 1);
+  const max = input.getAttribute("max");
+  let qty = parseInt(input.value, 10);
+  if (!qty || qty < 1) qty = 1;
+  if (max !== null && max !== "" && qty > Number(max)) qty = Number(max);
   const unitPrice = applyLifeDiscount(ME_CACHE, "store", it.price);
   const total = Math.round(unitPrice * qty * 100) / 100;
   label.textContent = qty > 1 ? `Buy ×${qty} — ${fmtMoney(total)}` : `Buy — ${fmtMoney(total)}`;
-}
-
-function sellQtyStep(id, delta) {
-  const input = document.getElementById("sellqty-" + id);
-  if (!input) return;
-  const max = input.getAttribute("max");
-  let v = (parseInt(input.value, 10) || 1) + delta;
-  if (v < 1) v = 1;
-  if (max !== null && max !== "" && v > Number(max)) v = Number(max);
-  input.value = v;
-  updateSellLabel(id);
-}
-
-function sellQtyNormalize(id) {
-  const input = document.getElementById("sellqty-" + id);
-  if (!input) return;
-  const max = input.getAttribute("max");
-  let v = parseInt(input.value, 10);
-  if (!v || v < 1) v = 1;
-  if (max !== null && max !== "" && v > Number(max)) v = Number(max);
-  input.value = v;
-  updateSellLabel(id);
-}
-
-function updateSellLabel(id) {
-  const input = document.getElementById("sellqty-" + id);
-  const label = document.getElementById("sellLabel-" + id);
-  if (!input || !label) return;
-  const it = ITEMS_CACHE.find(i => i.id === id);
-  if (!it) return;
-  const qty = Math.max(1, parseInt(input.value, 10) || 1);
-  const total = Math.round(it.price * 0.8 * qty * 100) / 100;
-  label.textContent = qty > 1 ? `Sell ×${qty} (80%) — ${fmtMoney(total)}` : `Sell back (80%) — ${fmtMoney(total)}`;
 }
 
 async function addItem(e) {
@@ -272,19 +238,23 @@ async function deleteItem(id) {
 }
 
 async function sellItem(id) {
-  const input = document.getElementById("sellqty-" + id);
-  const qty = input ? Math.max(1, parseInt(input.value, 10) || 1) : 1;
-  if (!confirm(`Sell ${qty > 1 ? `×${qty} of this item` : "this item"} back to the store for an 80% refund?`)) return;
-  const res = await sellStoreItem(CURRENT.username, CURRENT.classCode, id, undefined, qty);
+  if (!confirm("Sell this item back to the store for an 80% refund?")) return;
+  const res = await sellStoreItem(CURRENT.username, CURRENT.classCode, id);
   document.getElementById("msg-" + id).innerHTML = res.ok
-    ? `<div class="success-msg">Sold back ${res.qty > 1 ? `×${res.qty} for ` : "for "}${fmtMoney(res.payout)}!</div>`
+    ? `<div class="success-msg">Sold back for ${fmtMoney(res.payout)}!</div>`
     : `<div class="error-msg">${res.error}</div>`;
   await render();
 }
 
 async function buyItem(id) {
   const input = document.getElementById("qty-" + id);
-  const qty = input ? Math.max(1, parseInt(input.value, 10) || 1) : 1;
+  let qty = 1;
+  if (input) {
+    qty = parseInt(input.value, 10) || 1;
+    if (qty < 1) qty = 1;
+    const max = input.getAttribute("max");
+    if (max !== null && max !== "" && qty > Number(max)) qty = Number(max);
+  }
   const res = await buyStoreItem(CURRENT.username, CURRENT.classCode, id, qty);
   document.getElementById("msg-" + id).innerHTML = res.ok
     ? `<div class="success-msg">Purchased ${res.qty > 1 ? `×${res.qty}` : ""}!</div>`

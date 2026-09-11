@@ -2174,19 +2174,23 @@ html.dark-mode .tier-micro-badge {
 .qty-stepper{
   display:inline-flex;align-items:center;gap:0;
   border:1.5px solid var(--line);border-radius:9px;overflow:hidden;background:#fff;
+  position:relative;
 }
 .qty-stepper .qty-btn{
   appearance:none;border:none;background:#fff;color:var(--navy-900);
-  width:34px;height:36px;font-size:1.1rem;font-weight:800;line-height:1;
+  width:36px;height:38px;font-size:1.15rem;font-weight:800;line-height:1;
   cursor:pointer;display:flex;align-items:center;justify-content:center;
   transition:background .12s ease;flex-shrink:0;
+  touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent;
+  position:relative;z-index:1;
 }
 .qty-stepper .qty-btn:hover{background:rgba(201,154,46,0.14);color:var(--gold-dark);}
 .qty-stepper .qty-btn:active{background:rgba(201,154,46,0.24);}
 .qty-stepper .qty-input{
-  width:48px;min-width:0;height:36px;padding:0;margin:0;text-align:center;
+  width:48px;min-width:0;height:38px;min-height:38px;padding:0;margin:0;text-align:center;
   border:none;border-left:1.5px solid var(--line);border-right:1.5px solid var(--line);
   border-radius:0;font-weight:800;font-size:.92rem;-moz-appearance:textfield;
+  touch-action:manipulation;position:relative;z-index:1;
 }
 .qty-stepper .qty-input::-webkit-outer-spin-button,
 .qty-stepper .qty-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
