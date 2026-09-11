@@ -5152,6 +5152,18 @@ function withNewModuleDefaults(cls) {
     if (p.rentDay === undefined) p.rentDay = "Fri";
     if (p.occupancy === undefined) p.occupancy = null;
     if (p.rentLastWeekPaid === undefined) p.rentLastWeekPaid = null;
+    // NZ calendar-date (see nzDateKey) rent was last actually credited to
+    // the owner, tracked separately from rentLastWeekPaid (an ISO week
+    // key). rentLastWeekPaid alone gets reset to null whenever occupancy
+    // changes (see setPropertyOccupancy) so a mid-week switch can't
+    // double- or skip-pay that week — but that reset also means a student
+    // who changes occupancy again on the same day rent was already paid
+    // could otherwise trigger a second payout for the same day. This field
+    // is never reset by an occupancy change, only ever set the moment rent
+    // is actually paid (see processPropertyRent), so it survives moves and
+    // reliably blocks a same-day double payout no matter what the student
+    // does with their occupancy in between.
+    if (p.rentLastPaidDate === undefined) p.rentLastPaidDate = null;
     // Weekly mortgage interest rate on the listing (percent, 0 = none).
     // Existing mortgages already in progress keep accruing interest-free
     // (payMortgage falls back to weeklyPayment*weeksLeft for
@@ -5164,8 +5176,35 @@ function withNewModuleDefaults(cls) {
     // bonus closely enough for the default weight of 4 pts/star.
     if (p.livingBonusStars === undefined) p.livingBonusStars = 1;
   });
+  // Teacher-listed rentals with no student owner — "the school" is the
+  // landlord. A student rents a unit directly from the teacher's listing
+  // (rent, minimum lease, and the lifestyle-rating bonus for living there
+  // are all set by the teacher on the listing itself, not chosen by the
+  // student the way a classmate sublet's price is). Same flat "units
+  // grouped by groupId" shape as cls.properties (see addProperty), just
+  // without owner/mortgage/comfort fields since nobody ever buys these.
+  cls.npcProperties = cls.npcProperties || [];
+  cls.npcProperties.forEach(p => {
+    if (p.rentDay === undefined) p.rentDay = "Fri";
+    if (p.minWeeks === undefined) p.minWeeks = 1;
+    // Direct lifestyle-score points a tenant earns while renting this unit
+    // — set by the teacher on the listing, unlike an owned property's
+    // comfort/living-bonus which are converted via the property category's
+    // points-per-star weight. See lifestyleRatingFromData.
+    if (p.lifestylePoints === undefined) p.lifestylePoints = 0;
+    if (p.tenant === undefined) p.tenant = null;
+    if (p.leaseStartTs === undefined) p.leaseStartTs = null;
+    if (p.leaseStartWeekKey === undefined) p.leaseStartWeekKey = null;
+    if (p.rentLastWeekPaid === undefined) p.rentLastWeekPaid = null;
+    if (p.rentLastPaidDate === undefined) p.rentLastPaidDate = null;
+  });
   // Class-wide day mortgage installments are due on (like payDay/interestDay).
   cls.mortgageDay = DAY_NAMES.includes(cls.mortgageDay) ? cls.mortgageDay : "Fri";
+  // Teacher-set flat fee charged to a student the moment they move into a
+  // new home — either moving into a property they own (setPropertyOccupancy
+  // with "living") or moving in as a classmate's tenant (claimSublet). 0 by
+  // default (free to move). See setMovingCost, chargeMoveOrThrow.
+  if (cls.movingCost === undefined) cls.movingCost = 0;
   // Teacher manual override: an ISO week key (see isoWeekKey) for which the
   // teacher has declared mortgage payments due *right now*, regardless of
   // what day it actually is. Lets a teacher who missed the normal
@@ -6466,27 +6505,43 @@ async function setPropertyOccupancy(username, classCode, propId, occupancy) {
     return { ok: false, error: "Invalid choice." };
   }
   const classRef = classesCol().doc(classCode);
-  let propName = "";
+  const userRef = usersCol().doc(username);
+  let propName = "", moveCost = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(classRef);
-      if (!snap.exists) throw new Error("NOT_FOUND");
+      const userSnap = await t.get(userRef);
+      if (!snap.exists || !userSnap.exists) throw new Error("NOT_FOUND");
       const cls = withNewModuleDefaults(snap.data());
+      const user = userSnap.data();
       const prop = cls.properties.find(p => p.id === propId);
       if (!prop) throw new Error("NOT_FOUND");
       if (prop.owner !== username) throw new Error("NOT_OWNER");
       propName = prop.name;
+      // Choosing to live here is only an actual "move" if they weren't
+      // already living here (re-confirming the same choice is a no-op, and
+      // costs nothing). Choosing "rented" is never a move-in — it's the
+      // owner opting out of living somewhere, never opting into it — so it
+      // never touches the one-home guard, the daily cooldown, or the cost.
+      if (occupancy === "living" && prop.occupancy !== "living") {
+        moveCost = chargeMoveOrThrow(t, userRef, username, user, cls, propId);
+      }
       prop.occupancy = occupancy;
       prop.rentLastWeekPaid = null;
       t.update(classRef, { properties: cls.properties });
     });
   } catch (e) {
     if (e.message === "NOT_OWNER") return { ok: false, error: "You don't own that property." };
+    if (e.message === "ALREADY_HOUSED") return { ok: false, error: "You're already living somewhere else — move out of that first." };
+    if (e.message === "MOVED_TODAY") return { ok: false, error: "You've already moved house today — try again tomorrow." };
+    if (e.message === "BROKE_MOVE") return { ok: false, error: "You can't afford the moving cost right now." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, {
     type: "property-occupancy", from: username,
-    note: occupancy === "living" ? `Moved into: ${propName}` : `Started renting out: ${propName}`
+    note: occupancy === "living"
+      ? `Moved into: ${propName}` + (moveCost > 0 ? ` (paid ${fmtMoney(moveCost)} moving cost)` : "")
+      : `Started renting out: ${propName}`
   });
   return { ok: true };
 }
@@ -6500,12 +6555,20 @@ async function processPropertyRent(classCode) {
   if (!cls || cls.archived) return 0;
   const todayName = nzDayName();
   const weekKey = isoWeekKey(new Date());
+  const todayKey = nzDateKey();
   let ran = 0;
   for (const prop of cls.properties) {
     if (!prop.owner || prop.occupancy !== "rented") continue;
     if (!(prop.rentPerWeek > 0)) continue;
     if ((prop.rentDay || "Fri") !== todayName) continue;
     if (prop.rentLastWeekPaid === weekKey) continue;
+    // Belt-and-suspenders against a same-day double payout: rentLastWeekPaid
+    // gets reset to null whenever occupancy changes (see
+    // setPropertyOccupancy), so a student moving houses more than once on
+    // rent day could otherwise make this loop think that week's rent still
+    // needs paying even though it already went out earlier today.
+    // rentLastPaidDate is never reset by a move, so it still remembers.
+    if (prop.rentLastPaidDate === todayKey) continue;
     const classRef = classesCol().doc(classCode);
     let didRun = false, amt = 0, owner = "";
     try {
@@ -6516,9 +6579,11 @@ async function processPropertyRent(classCode) {
         const liveProp = liveCls.properties.find(p => p.id === prop.id);
         if (!liveProp || !liveProp.owner || liveProp.occupancy !== "rented") return;
         if (liveProp.rentLastWeekPaid === weekKey) return;
+        if (liveProp.rentLastPaidDate === todayKey) return;
         amt = liveProp.rentPerWeek;
         owner = liveProp.owner;
         liveProp.rentLastWeekPaid = weekKey;
+        liveProp.rentLastPaidDate = todayKey;
         t.update(classRef, { properties: liveCls.properties });
         didRun = true;
       });
@@ -6593,7 +6658,53 @@ function currentHomeOf(cls, username) {
   if (owned) return { type: "own", prop: owned };
   const rented = cls.properties.find(p => p.sublet && p.sublet.tenant === username);
   if (rented) return { type: "tenant", prop: rented };
+  const npcRented = (cls.npcProperties || []).find(p => p.tenant === username);
+  if (npcRented) return { type: "npc-tenant", prop: npcRented };
   return null;
+}
+
+// Teacher-only: sets the flat fee (0 = free) charged to a student the
+// instant they move into a new home. See withNewModuleDefaults for the
+// default and chargeMoveOrThrow for where it's actually applied.
+async function setMovingCost(classCode, cost) {
+  const clean = Math.max(0, Math.round((Number(cost) || 0) * 100) / 100);
+  await classesCol().doc(classCode).update({ movingCost: clean });
+  return clean;
+}
+
+// Shared guard + charge for the moment a student actually moves into a new
+// home — buying and choosing to live in a property, moving in as a
+// classmate's tenant, or moving in as the tenant of a teacher-listed NPC
+// rental (as opposed to just choosing to rent out a property they already
+// live in, or vacating with nowhere lined up yet — neither of those is
+// "moving into" anywhere, so neither goes through here). Called from
+// inside the same Firestore transaction that performs the move, with the
+// live `user` and `cls` docs already read. Throws (never returns) on
+// failure so callers can just let the transaction's own catch block handle
+// the error like any other invariant violation:
+//   - ALREADY_HOUSED: the student is currently living somewhere else
+//   - MOVED_TODAY: the student already moved house once today
+//   - BROKE_MOVE: the student can't afford the moving cost
+// On success, queues (via t.update) the balance debit and today's move
+// date onto the student's own doc, and returns the amount charged (for
+// the caller's transaction log message) — teachers are exempt from both
+// the cooldown and the cost, same as they're exempt from other costs.
+function chargeMoveOrThrow(t, userRef, username, user, cls, excludePropId) {
+  if (user.role === "teacher") return 0;
+  const home = currentHomeOf(cls, username);
+  // Callers pass the property id being moved into so a no-op re-selection
+  // of the home they're already living in isn't treated as a fresh move.
+  if (home && !(excludePropId && home.prop.id === excludePropId)) {
+    throw new Error("ALREADY_HOUSED");
+  }
+  if (user.lastMoveDate === nzDateKey()) throw new Error("MOVED_TODAY");
+  const cost = Math.max(0, Number(cls.movingCost) || 0);
+  if (cost > 0 && (user.balance || 0) < cost) throw new Error("BROKE_MOVE");
+  t.update(userRef, {
+    lastMoveDate: nzDateKey(),
+    balance: Math.round(((user.balance || 0) - cost) * 100) / 100
+  });
+  return cost;
 }
 
 // Whether a tenanted sublet has run long enough to satisfy the minimum
@@ -6706,12 +6817,15 @@ async function cancelSublet(username, classCode, propId) {
 // living somewhere (see currentHomeOf) — one home at a time.
 async function claimSublet(username, classCode, propId) {
   const classRef = classesCol().doc(classCode);
-  let propName = "", ownerUsername = "";
+  const userRef = usersCol().doc(username);
+  let propName = "", ownerUsername = "", moveCost = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(classRef);
-      if (!snap.exists) throw new Error("NOT_FOUND");
+      const userSnap = await t.get(userRef);
+      if (!snap.exists || !userSnap.exists) throw new Error("NOT_FOUND");
       const cls = withNewModuleDefaults(snap.data());
+      const user = userSnap.data();
       const pr = cls.propertyRentals;
       if (!pr.enabled) throw new Error("OFF");
       const prop = cls.properties.find(p => p.id === propId);
@@ -6719,7 +6833,10 @@ async function claimSublet(username, classCode, propId) {
       if (prop.owner === username) throw new Error("OWN_PROPERTY");
       if (prop.sublet.status !== "active") throw new Error("NOT_AVAILABLE");
       if (prop.sublet.tenant) throw new Error("TAKEN");
-      if (currentHomeOf(cls, username)) throw new Error("ALREADY_HOUSED");
+      // Claiming a sublet is always a move into somewhere new — there's no
+      // "re-confirm the place I'm already in" case here (that's tenantMoveOut
+      // then a fresh claim), so no excludePropId.
+      moveCost = chargeMoveOrThrow(t, userRef, username, user, cls, null);
       propName = prop.name;
       ownerUsername = prop.owner;
       prop.sublet.tenant = username;
@@ -6734,10 +6851,12 @@ async function claimSublet(username, classCode, propId) {
     if (e.message === "NOT_AVAILABLE") return { ok: false, error: "That listing isn't available right now." };
     if (e.message === "TAKEN") return { ok: false, error: "Someone already moved in." };
     if (e.message === "ALREADY_HOUSED") return { ok: false, error: "You're already living somewhere else — move out of that first." };
+    if (e.message === "MOVED_TODAY") return { ok: false, error: "You've already moved house today — try again tomorrow." };
+    if (e.message === "BROKE_MOVE") return { ok: false, error: "You can't afford the moving cost right now." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "property-occupancy", to: username, note: `Moved in as a tenant: ${propName} (renting from ${ownerUsername})` });
+  await logTxn(classCode, { type: "property-occupancy", to: username, note: `Moved in as a tenant: ${propName} (renting from ${ownerUsername})` + (moveCost > 0 ? ` — paid ${fmtMoney(moveCost)} moving cost` : "") });
   return { ok: true };
 }
 
@@ -6932,6 +7051,310 @@ async function resolveSubletRentOverdue(classCode, propId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "property-occupancy", from: tenantUsername, note: `Weekly rent marked as resolved by teacher, no charge: ${propName}` });
+  return { ok: true };
+}
+
+/* ===================== NPC (school-owned) property rentals =====================
+   A third way for a student to have somewhere to live, alongside owning a
+   property outright/on mortgage and renting one from a classmate: the
+   teacher lists a rental directly — no student ever owns it, "the school"
+   is the landlord. Unlike a classmate sublet, every term is fixed by the
+   teacher on the listing itself: rent, minimum lease length, and the
+   lifestyle-rating bonus a tenant earns while living there. A student pays
+   rent the same self-service way as every other recurring payment in this
+   app (mortgage, classmate rent) — on the listing's own due day, from this
+   page — and the money is simply removed from circulation (a sink, the
+   same way buying a teacher-listed property or a store item is), since
+   there's no student on the other end to receive it.
+
+     cls.npcProperties: flat list of units, grouped by groupId exactly like
+     cls.properties (see groupProperties in property.js) —
+     { id, groupId, name, description, rentPerWeek, rentDay, minWeeks,
+       lifestylePoints, tenant, leaseStartTs, leaseStartWeekKey,
+       rentLastWeekPaid, rentLastPaidDate } */
+
+async function addNpcProperty(classCode, listing) {
+  const classRef = classesCol().doc(classCode);
+  const qty = Math.max(1, Math.floor(Number(listing.quantity)) || 1);
+  const groupId = uid("npcgrp");
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    for (let i = 0; i < qty; i++) {
+      cls.npcProperties.push({
+        id: uid("npcprop"), groupId,
+        name: listing.name, description: listing.description || "",
+        rentPerWeek: Math.max(0, Number(listing.rentPerWeek) || 0),
+        rentDay: DAY_NAMES.includes(listing.rentDay) ? listing.rentDay : "Fri",
+        minWeeks: Math.max(1, Math.round(Number(listing.minWeeks)) || 1),
+        lifestylePoints: Math.max(0, Math.round(Number(listing.lifestylePoints)) || 0),
+        tenant: null, leaseStartTs: null, leaseStartWeekKey: null,
+        rentLastWeekPaid: null, rentLastPaidDate: null
+      });
+    }
+    t.update(classRef, { npcProperties: cls.npcProperties });
+  });
+}
+// unitId is the id of ANY unit in the listing — shared fields apply to
+// every unit in the group, tenanted or not, without touching anyone's
+// current tenancy. Quantity grows/shrinks the same way updateProperty does
+// — shrinking only ever removes currently-untenanted units.
+async function updateNpcProperty(classCode, unitId, updates) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const target = cls.npcProperties.find(p => p.id === unitId);
+    if (!target) return;
+    const gid = groupIdOf(target);
+    const units = cls.npcProperties.filter(p => groupIdOf(p) === gid);
+    units.forEach(u => {
+      u.groupId = gid;
+      u.name = updates.name;
+      u.description = updates.description || "";
+      u.rentPerWeek = Math.max(0, Number(updates.rentPerWeek) || 0);
+      u.rentDay = DAY_NAMES.includes(updates.rentDay) ? updates.rentDay : "Fri";
+      u.minWeeks = Math.max(1, Math.round(Number(updates.minWeeks)) || 1);
+      u.lifestylePoints = Math.max(0, Math.round(Number(updates.lifestylePoints)) || 0);
+    });
+    const desiredQty = Math.max(1, Math.floor(Number(updates.quantity)) || 1);
+    const currentQty = units.length;
+    if (desiredQty > currentQty) {
+      const template = units[0];
+      for (let i = 0; i < desiredQty - currentQty; i++) {
+        cls.npcProperties.push({
+          id: uid("npcprop"), groupId: gid, name: template.name, description: template.description,
+          rentPerWeek: template.rentPerWeek, rentDay: template.rentDay, minWeeks: template.minWeeks,
+          lifestylePoints: template.lifestylePoints,
+          tenant: null, leaseStartTs: null, leaseStartWeekKey: null,
+          rentLastWeekPaid: null, rentLastPaidDate: null
+        });
+      }
+    } else if (desiredQty < currentQty) {
+      let toRemove = currentQty - desiredQty;
+      const removeIds = new Set();
+      for (const u of units) {
+        if (toRemove <= 0) break;
+        if (!u.tenant) { removeIds.add(u.id); toRemove--; }
+      }
+      if (removeIds.size > 0) {
+        cls.npcProperties = cls.npcProperties.filter(p => !removeIds.has(p.id));
+      }
+    }
+    t.update(classRef, { npcProperties: cls.npcProperties });
+  });
+}
+// Removes every unit in the listing (whole group). Any current tenants are
+// simply displaced — same permissive, no-refund-owed pattern as
+// removeProperty, since nobody paid anything up front for a rental.
+async function removeNpcProperty(classCode, unitId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const target = cls.npcProperties.find(p => p.id === unitId);
+    if (!target) return;
+    const gid = groupIdOf(target);
+    cls.npcProperties = cls.npcProperties.filter(p => groupIdOf(p) !== gid);
+    t.update(classRef, { npcProperties: cls.npcProperties });
+  });
+}
+
+// A student moves in as the tenant of a specific (untenanted) unit. Every
+// term — rent, minimum lease, lifestyle bonus — is whatever the teacher
+// already set on the listing, so there's no price/lease negotiation the
+// way createSublet has. Blocked if the student is already living
+// somewhere else (currentHomeOf, via chargeMoveOrThrow, now checks NPC
+// tenancy too) — one home at a time, same as every other move.
+async function rentNpcProperty(username, classCode, unitId) {
+  const classRef = classesCol().doc(classCode);
+  const userRef = usersCol().doc(username);
+  let propName = "", moveCost = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      const userSnap = await t.get(userRef);
+      if (!snap.exists || !userSnap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const user = userSnap.data();
+      const unit = cls.npcProperties.find(p => p.id === unitId);
+      if (!unit) throw new Error("NOT_FOUND");
+      if (unit.tenant) throw new Error("TAKEN");
+      moveCost = chargeMoveOrThrow(t, userRef, username, user, cls, null);
+      propName = unit.name;
+      unit.tenant = username;
+      unit.leaseStartTs = Date.now();
+      unit.leaseStartWeekKey = isoWeekKey(new Date());
+      unit.rentLastWeekPaid = null;
+      unit.rentLastPaidDate = null;
+      t.update(classRef, { npcProperties: cls.npcProperties });
+    });
+  } catch (e) {
+    if (e.message === "TAKEN") return { ok: false, error: "Someone already moved in." };
+    if (e.message === "ALREADY_HOUSED") return { ok: false, error: "You're already living somewhere else — move out of that first." };
+    if (e.message === "MOVED_TODAY") return { ok: false, error: "You've already moved house today — try again tomorrow." };
+    if (e.message === "BROKE_MOVE") return { ok: false, error: "You can't afford the moving cost right now." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", to: username, note: `Moved in as a tenant: ${propName} (renting from the school)` + (moveCost > 0 ? ` — paid ${fmtMoney(moveCost)} moving cost` : "") });
+  return { ok: true };
+}
+
+// Tenant: moves out of their own accord, once the minimum lease length has
+// run. leaseMinWeeksElapsed only reads .tenant/.leaseStartTs/.minWeeks, all
+// of which live directly on the NPC unit (no nested .sublet), so it works
+// unchanged here.
+async function moveOutNpcProperty(username, classCode, unitId) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const unit = cls.npcProperties.find(p => p.id === unitId);
+      if (!unit || unit.tenant !== username) throw new Error("NOT_TENANT");
+      if (!leaseMinWeeksElapsed(unit)) throw new Error("LOCKED_IN");
+      propName = unit.name;
+      unit.tenant = null;
+      unit.leaseStartTs = null;
+      unit.leaseStartWeekKey = null;
+      unit.rentLastWeekPaid = null;
+      unit.rentLastPaidDate = null;
+      t.update(classRef, { npcProperties: cls.npcProperties });
+    });
+  } catch (e) {
+    if (e.message === "NOT_TENANT") return { ok: false, error: "You're not renting that property." };
+    if (e.message === "LOCKED_IN") return { ok: false, error: "You agreed to a minimum lease length — you can't move out yet." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", from: username, note: `Moved out: ${propName} (school rental)` });
+  return { ok: true };
+}
+
+// Teacher override: ends a tenancy on the spot regardless of minimum lease
+// length, freeing the unit up for someone else — the listing itself isn't
+// touched, unlike teacherEndSublet (there's no listing to withdraw here,
+// since the teacher owns it permanently).
+async function teacherEndNpcTenancy(classCode, unitId) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "", tenantUsername = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const unit = cls.npcProperties.find(p => p.id === unitId);
+      if (!unit || !unit.tenant) throw new Error("NOT_FOUND");
+      propName = unit.name;
+      tenantUsername = unit.tenant;
+      unit.tenant = null;
+      unit.leaseStartTs = null;
+      unit.leaseStartWeekKey = null;
+      unit.rentLastWeekPaid = null;
+      unit.rentLastPaidDate = null;
+      t.update(classRef, { npcProperties: cls.npcProperties });
+    });
+  } catch (e) {
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", to: tenantUsername, note: `Teacher ended the school rental tenancy: ${propName}` });
+  return { ok: true };
+}
+
+// The ISO week key of this unit's currently-unpaid rent cycle, or null —
+// same "look back to the most recently-passed due day" logic as
+// overdueSubletRentWeekKey, just reading the due day straight off the
+// unit instead of a nested .sublet object.
+function overdueNpcRentWeekKey(unit) {
+  if (!unit || !unit.tenant) return null;
+  const weekKey = isoWeekKey(new Date());
+  if (unit.leaseStartWeekKey === weekKey) return null; // move-in week is free
+  if (unit.rentLastWeekPaid === weekKey) return null; // already paid this week
+  const lastDueWeekKey = lastDueWeekKeyForDay(unit.rentDay || "Fri");
+  if (lastDueWeekKey === weekKey) return weekKey;
+  if (unit.rentLastWeekPaid === lastDueWeekKey) return null;
+  if (weekKeyOrder(lastDueWeekKey) < weekKeyOrder(unit.leaseStartWeekKey)) return null;
+  return lastDueWeekKey;
+}
+// Whether a tenant currently has a missed weekly rent payment — powers the
+// red "payment overdue" warning and the bell notification that fires on
+// (and after) the day rent is due.
+function isNpcRentOverdue(unit) {
+  return overdueNpcRentWeekKey(unit) !== null;
+}
+
+// The one and only way rent on a school rental is ever paid: the tenant
+// pays it themselves, on the unit's own rentDay, exactly like payTenantRent
+// — except the money simply leaves circulation instead of crediting an
+// owner, since the landlord here isn't a student.
+async function payNpcRent(username, classCode, unitId) {
+  const classRef = classesCol().doc(classCode);
+  const tenantRef = usersCol().doc(username);
+  let amt = 0, propName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const classSnap = await t.get(classRef);
+      const tenantSnap = await t.get(tenantRef);
+      if (!classSnap.exists || !tenantSnap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(classSnap.data());
+      const tenant = tenantSnap.data();
+      const unit = cls.npcProperties.find(p => p.id === unitId);
+      if (!unit || unit.tenant !== username) throw new Error("NOT_FOUND");
+      const weekKey = isoWeekKey(new Date());
+      if ((unit.rentDay || "Fri") !== nzDayName()) throw new Error("WRONG_DAY");
+      if (unit.leaseStartWeekKey === weekKey) throw new Error("MOVE_IN_WEEK");
+      if (unit.rentLastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
+      amt = unit.rentPerWeek;
+      if (tenant.balance < amt) throw new Error("BROKE");
+      propName = unit.name;
+      t.update(tenantRef, { balance: Math.round((tenant.balance - amt) * 100) / 100 });
+      unit.rentLastWeekPaid = weekKey;
+      unit.rentLastPaidDate = nzDateKey();
+      t.update(classRef, { npcProperties: cls.npcProperties });
+    });
+  } catch (e) {
+    if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay rent on its due day." };
+    if (e.message === "MOVE_IN_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you moved in is free." };
+    if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's rent has already been paid." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's rent." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-rent-pay", from: username, amount: amt, note: `Paid weekly rent: ${propName} (school rental)` });
+  return { ok: true, amount: amt };
+}
+
+// Teacher-only: waives a tenant's currently-missed rent payment without
+// taking any money from them — same idea as resolveSubletRentOverdue.
+async function resolveNpcRentOverdue(classCode, unitId) {
+  const classRef = classesCol().doc(classCode);
+  let propName = "", tenantUsername = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(snap.data());
+      const unit = cls.npcProperties.find(p => p.id === unitId);
+      if (!unit || !unit.tenant) throw new Error("NOT_FOUND");
+      const overdueWeekKey = overdueNpcRentWeekKey(unit);
+      if (!overdueWeekKey) throw new Error("NOT_OVERDUE");
+      propName = unit.name;
+      tenantUsername = unit.tenant;
+      unit.rentLastWeekPaid = overdueWeekKey;
+      t.update(classRef, { npcProperties: cls.npcProperties });
+    });
+  } catch (e) {
+    if (e.message === "NOT_OVERDUE") return { ok: false, error: "This rent isn't currently overdue." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "property-occupancy", from: tenantUsername, note: `Weekly rent marked as resolved by teacher, no charge: ${propName} (school rental)` });
   return { ok: true };
 }
 
@@ -7228,12 +7651,17 @@ async function getStudentPossessions(username, classCode) {
   // separate thing from `property`/`properties` above, since a student can
   // own places they don't live in while renting somewhere else themselves.
   const rentedHome = cls.properties.find(p => p.sublet && p.sublet.tenant === username) || null;
+  // Same idea as rentedHome above, but for a teacher-listed (NPC) rental —
+  // a student can only ever be in one of property/rentedHome/rentedNpcHome
+  // at once (see currentHomeOf), but they're fetched independently here
+  // since a profile view may want to show whichever one applies.
+  const rentedNpcHome = (cls.npcProperties || []).find(p => p.tenant === username) || null;
   const vehicles = cls.vehicles.filter(v => (v.owners || []).includes(username));
   const vehicle = vehicles.reduce((best, v) => (!best || v.comfort > best.comfort) ? v : best, null);
   const storeItems = (user.storeItems || []).map(id => cls.storeItems.find(i => i.id === id)).filter(Boolean)
     .map(i => ({ ...i }));
   const insurance = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).filter(Boolean);
-  return { property, properties, rentedHome, vehicle, vehicles, storeItems, insurance };
+  return { property, properties, rentedHome, rentedNpcHome, vehicle, vehicles, storeItems, insurance };
 }
 
 /* ===================== Lifestyle rating ===================== */
@@ -7399,6 +7827,13 @@ function lifestyleRatingFromData(cls, user, username) {
     if (cls.properties.some(p => p.sublet && p.sublet.tenant === username)) {
       score += TENANT_LIVING_BONUS;
     }
+    // Renting a school-listed (NPC) property earns whatever flat lifestyle
+    // bonus the teacher set directly on that listing, instead of the flat
+    // TENANT_LIVING_BONUS a classmate sublet gives — a student can only
+    // ever be in one of these three housing states at once (see
+    // currentHomeOf), so this never stacks with the two blocks above.
+    const npcHome = (cls.npcProperties || []).find(p => p.tenant === username);
+    if (npcHome) score += Number(npcHome.lifestylePoints) || 0;
   }
   if (cfg.transport && cfg.transport.enabled) {
     // Every owned vehicle contributes its own comfort × weight — stars
@@ -7428,6 +7863,15 @@ function lifestyleRatingFromData(cls, user, username) {
     score -= Math.floor(owedTotal / cfg.loan.perAmount) * cfg.loan.points;
   }
   score += getLifeBenefitTotals(user).lifestylePoints;
+  // A student with nowhere to live — not living in a property they own,
+  // not renting from a classmate, not renting a school listing — has their
+  // whole lifestyle rating reset to 0, no matter what else they own. Gated
+  // on the property category being enabled at all: if a teacher has
+  // switched property scoring off entirely, "having a home" isn't part of
+  // lifestyle for this class and this rule doesn't apply either.
+  if (cfg.property && cfg.property.enabled && !currentHomeOf(cls, username)) {
+    return 0;
+  }
   // Uncapped — a student's computed score can grow without limit as they
   // accumulate property/transport/store/insurance comfort, it just can't
   // go negative.
@@ -7470,6 +7914,14 @@ async function lifestyleRatingBreakdown(username, classCode) {
     if (tenantHome) {
       score += TENANT_LIVING_BONUS;
       items.push({ type: "gain", label: "Renting a home from a classmate", detail: `${tenantHome.name} — flat bonus for having somewhere to live (comfort rating not counted, since you don't own it)`, points: TENANT_LIVING_BONUS });
+    }
+    const npcHome = (cls.npcProperties || []).find(p => p.tenant === username);
+    if (npcHome) {
+      const pts = Number(npcHome.lifestylePoints) || 0;
+      if (pts) {
+        score += pts;
+        items.push({ type: "gain", label: `Renting ${npcHome.name || "a school listing"}`, detail: "Renting directly from the school — bonus set by your teacher for this listing", points: pts });
+      }
     }
   }
   if (cfg.transport && cfg.transport.enabled) {
@@ -7520,7 +7972,20 @@ async function lifestyleRatingBreakdown(username, classCode) {
     }
   });
 
-  return { items, total: Math.max(0, Math.round(score)), overridden: false };
+  // Same "no home = 0" rule as lifestyleRatingFromData — shown here as an
+  // explicit line item (rather than just silently returning 0) so a
+  // student isn't left wondering why their total doesn't match the gains
+  // list above it.
+  const rawTotal = Math.max(0, Math.round(score));
+  let total = rawTotal;
+  if (cfg.property && cfg.property.enabled && !currentHomeOf(cls, username)) {
+    if (rawTotal > 0) {
+      items.push({ type: "loss", label: "No stable home", detail: "You're not living anywhere right now — not a property you own, a classmate's rental, or a school rental. Everything above is worth 0 until you move in somewhere.", points: rawTotal });
+    }
+    total = 0;
+  }
+
+  return { items, total, overridden: false };
 }
 // Teacher-set lifestyle score that overrides the computed one entirely —
 // the student can't move it by buying/selling anything while it's active.

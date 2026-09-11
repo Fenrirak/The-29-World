@@ -120,6 +120,7 @@
 
   <div id="myRentedHome"></div>
   <div id="availableSublets"></div>
+  <div id="availableNpcRentals"></div>
 
   <div id="mortgagePanel" class="card hidden">
     <h2 id="hMortgageSettings">Mortgage settings</h2>
@@ -163,6 +164,21 @@
       </label>
       <button class="btn secondary small" style="margin-top:12px;" onclick="saveMortgageForceDue()" id="saveMortgageForceDueBtn">Save</button>
       <div id="mortgageForceDueMsg"></div>
+    </div>
+
+    <div class="mortgage-subsection">
+      <div class="mortgage-subsection-head">
+        <h3>Moving cost</h3>
+      </div>
+      <p class="muted-small">A one-off fee charged the moment a student moves into a new home — moving into a property they own, moving in as a classmate's tenant, or moving in as the tenant of one of your NPC property listings below. Set to 0 for free moves. Students can only move into one home at a time, and only once per day, no matter what this is set to.</p>
+      <div class="mortgage-day-row">
+        <div>
+          <label for="movingCostInput">Moving cost ($)</label>
+          <input id="movingCostInput" type="number" min="0" step="0.01" style="max-width:200px;">
+        </div>
+        <button class="btn secondary small" onclick="saveMovingCostClick()" id="saveMovingCostBtn">Save moving cost</button>
+      </div>
+      <div id="movingCostMsg"></div>
     </div>
   </div>
 
@@ -211,6 +227,55 @@
     </div>
 
     <div id="pendingSublets"></div>
+  </div>
+
+  <div id="npcPanel" class="card hidden">
+    <h2 id="hAddNpc">Add an NPC property</h2>
+    <p>List a rental with no student owner — "the school" is the landlord. Rent, minimum lease, and the lifestyle-rating bonus for living there are all fixed by you on the listing itself, so students just move straight in at the terms you set.</p>
+    <form onsubmit="return addNpcProp(event)">
+      <div class="grid grid-2">
+        <div>
+          <label for="npcName" id="labNpcName">Property name</label>
+          <input id="npcName" placeholder="e.g. Riverside Dorms" required>
+        </div>
+        <div>
+          <label for="npcQuantity" id="labNpcQuantity">Quantity available</label>
+          <input id="npcQuantity" type="number" min="1" step="1" value="1" required>
+        </div>
+      </div>
+      <label for="npcDesc" id="labNpcDesc">Description</label>
+      <input id="npcDesc" placeholder="Shown to students">
+      <div class="grid grid-3">
+        <div>
+          <label for="npcRent" id="labNpcRent">Rent (per week)</label>
+          <input id="npcRent" type="number" min="0" step="0.01" required>
+        </div>
+        <div>
+          <label for="npcRentDay" id="labNpcRentDay">Rent paid on</label>
+          <select id="npcRentDay">
+            <option value="Mon">Monday</option>
+            <option value="Tue">Tuesday</option>
+            <option value="Wed">Wednesday</option>
+            <option value="Thu">Thursday</option>
+            <option value="Fri" selected>Friday</option>
+            <option value="Sat">Saturday</option>
+            <option value="Sun">Sunday</option>
+          </select>
+        </div>
+        <div>
+          <label for="npcMinWeeks" id="labNpcMinWeeks">Minimum lease (weeks)</label>
+          <input id="npcMinWeeks" type="number" min="1" step="1" value="1" required>
+        </div>
+      </div>
+      <label for="npcLifestylePoints" id="labNpcLifestylePoints">Lifestyle rating increase (points, while a tenant lives here)</label>
+      <input id="npcLifestylePoints" type="number" min="0" step="1" value="0">
+      <p class="muted-small" id="pNpcLifestylePoints" style="margin-top:8px;">Added straight to a tenant's lifestyle score for as long as they live here — set directly in points, not stars, so it isn't affected by the property category's points-per-star weight.</p>
+      <button class="btn gold" type="submit" id="addNpcBtn">Add NPC property</button>
+      <button type="button" class="btn small secondary hidden" id="cancelEditNpcBtn" onclick="cancelEditNpcProp()">Cancel edit</button>
+    </form>
+    <div id="addNpcMsg"></div>
+    <div id="npcPropList" style="margin-top:18px;"></div>
+    <p class="muted-small" id="noNpcProps">No NPC properties are listed yet.</p>
   </div>
 
   <div id="teacherPanel" class="card hidden">

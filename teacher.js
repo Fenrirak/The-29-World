@@ -404,6 +404,8 @@ function describeTxn(t, nameOf) {
     case "store-gift": return `${nameOf(t.to)} — ${t.note}`;
     case "quiz-reward": return `${nameOf(t.to)} — ${t.note}`;
     case "property-rent": return `${nameOf(t.to)} — ${t.note}`;
+    case "property-rent-pay": return `${nameOf(t.from)} — ${t.note}`;
+    case "property-rent-receive": return `${nameOf(t.to)} ← ${nameOf(t.from)} — ${t.note}`;
     case "p2p-buy": return `${nameOf(t.from)} → ${nameOf(t.to)} — ${t.note}`;
     case "p2p-sell": return `${nameOf(t.to)} — ${t.note}`;
     case "truck-licence-buy": return `${nameOf(t.from)} — ${t.note}`;
@@ -450,6 +452,8 @@ function badge(type) {
     "store-gift": ["mint", "cart", "Free item"],
     "quiz-reward": ["mint", "idcard", "Quiz passed"],
     "property-rent": ["mint", "house", "Rent received"],
+    "property-rent-pay": ["coral", "house", "Rent paid"],
+    "property-rent-receive": ["mint", "house", "Rent received"],
     "p2p-buy": ["navy", "users", "Classmate sale"],
     "p2p-sell": ["gold", "users", "Classmate sale"],
     "truck-licence-buy": ["navy", "car", "Truck licence"],
@@ -1126,6 +1130,21 @@ async function renderProfile(username) {
         </div>
       </div>`);
   }
+  if (poss.rentedNpcHome) {
+    const rn = poss.rentedNpcHome;
+    const overdue = isNpcRentOverdue(rn);
+    rows.push(`
+      <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;"' : ""}>
+        <div class="auto-details">
+          <strong>Renting a school property:</strong> ${rn.name} — ${fmtMoney(rn.rentPerWeek)}/week
+          <div class="muted-small">${overdue ? "This week's rent hasn't been paid yet. " : ""}Minimum lease: ${rn.minWeeks} week${rn.minWeeks === 1 ? "" : "s"}.</div>
+        </div>
+        <div class="row-flex" style="gap:8px;align-items:center;">
+          ${overdue ? `<button class="btn small secondary" onclick="profileResolveNpcOverdue('${rn.id}')">Mark as resolved</button>` : ""}
+          <button class="btn small coral" onclick="profileEndNpcTenancy('${rn.id}')">End tenancy</button>
+        </div>
+      </div>`);
+  }
 
   rows.push(`<h4>${icon("car", 16)} Transport</h4>`);
   rows.push(poss.vehicles && poss.vehicles.length
@@ -1275,6 +1294,20 @@ async function profileEndSublet(propId) {
 async function profileResolveSubletOverdue(propId) {
   if (!confirm("Mark this week's rent as resolved? It'll count as paid, but no money will be taken from the tenant.")) return;
   const res = await resolveSubletRentOverdue(CLASS_CODE, propId);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+  await renderProfile(PROFILE_USER);
+}
+async function profileEndNpcTenancy(unitId) {
+  if (!confirm("End this student's school rental tenancy right now? They'll be moved out immediately, regardless of their minimum lease.")) return;
+  const res = await teacherEndNpcTenancy(CLASS_CODE, unitId);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+  await renderProfile(PROFILE_USER);
+}
+async function profileResolveNpcOverdue(unitId) {
+  if (!confirm("Mark this week's rent as resolved? It'll count as paid, but no money will be taken from the tenant.")) return;
+  const res = await resolveNpcRentOverdue(CLASS_CODE, unitId);
   if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);

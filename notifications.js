@@ -156,6 +156,28 @@ function notifPropertyRentalItems(me, cls) {
   return out;
 }
 
+// A student renting a teacher-listed (NPC) property with this week's rent
+// due/overdue — same trigger (isNpcRentOverdue fires from the due day
+// onward, until paid) and same "button where the rented house is" pattern
+// as notifPropertyRentalItems above, just for a school rental instead of a
+// classmate's. There's no pending/rejected state to cover here, since a
+// teacher's own listing needs no approval from anyone.
+function notifNpcRentalItems(me, cls) {
+  const dayStart = notifTodayStartMs();
+  const out = [];
+  (cls.npcProperties || []).forEach(p => {
+    if (p.tenant !== me.username) return;
+    if (!isNpcRentOverdue(p)) return;
+    out.push({
+      id: "npc-rent-" + p.id + "-" + nzDateKey(), ts: dayStart, icon: "building", tone: "coral",
+      title: "Rent due: " + p.name,
+      body: `${fmtMoney(p.rentPerWeek)} this week, renting from the school.`,
+      href: "property.html", action: true
+    });
+  });
+  return out;
+}
+
 function notifTermDepositItems(me) {
   const today = nzDateKey();
   const dayStart = notifTodayStartMs();
@@ -309,6 +331,7 @@ function buildNotifications(me, cls) {
     notifLoanItems(me),
     notifMortgageItems(me, cls),
     notifPropertyRentalItems(me, cls),
+    notifNpcRentalItems(me, cls),
     notifTermDepositItems(me),
     notifMarketItems(me, cls),
     notifEventItems(me, cls),

@@ -1,4 +1,4 @@
-let CURRENT, IS_TEACHER, EDITING_ID = null;
+let CURRENT, IS_TEACHER, EDITING_ID = null, EDITING_NPC_ID = null;
 let MORTGAGE_SETTINGS_CLS = null; // last-loaded class doc, used to preview the force-due toggle before saving
 
 function comfortStars(n) {
@@ -29,6 +29,8 @@ function paintChrome() {
   document.getElementById("saveMortgageForceDueBtn").innerHTML = icon("send", 14) + " Save";
   document.getElementById("hRentalSettings").innerHTML = icon("users", 18) + " Renting to classmates";
   document.getElementById("saveRentalSettingsBtn").innerHTML = icon("send", 14) + " Save settings";
+  document.getElementById("hAddNpc").innerHTML = icon("building", 18) + " Add an NPC property";
+  document.getElementById("addNpcBtn").innerHTML = icon("plus", 15) + " Add NPC property";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a property";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add property";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
@@ -45,6 +47,7 @@ async function init() {
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("mortgagePanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("rentalsPanel").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("npcPanel").classList.toggle("hidden", !IS_TEACHER);
   paintChrome();
   // These 7 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
@@ -105,9 +108,11 @@ async function render() {
     populateMortgageSettings(cls);
     populateRentalSettings(cls);
     renderPendingSublets(cls, nameOf);
+    renderNpcListings(cls, nameOf);
   } else {
     renderMyRentedHome(cls, me, nameOf);
     renderAvailableSublets(cls, me, nameOf);
+    renderAvailableNpcRentals(cls, me, nameOf);
   }
 
   const list = document.getElementById("propList");
@@ -387,36 +392,45 @@ async function rejectSubletClick(id) {
 }
 
 /* ---------------- Student: my rented home & browsing rentals ---------------- */
+// Shared status-line builder for a tenant's own rented home — works for
+// both a classmate sublet and an NPC unit, since both carry the same
+// leaseStartWeekKey/rentLastWeekPaid shape, just at different paths on the
+// caller's object (prop.sublet.* vs unit.* directly), so callers pass the
+// individual fields in rather than the whole record.
+function tenantRentStatusLine(leaseStartWeekKey, rentLastWeekPaid, rentDay, price, overdue) {
+  const weekKey = isoWeekKey(new Date());
+  const moveInWeek = leaseStartWeekKey === weekKey;
+  const alreadyPaid = rentLastWeekPaid === weekKey;
+  const isDueToday = (rentDay || "Fri") === nzDayName();
+  if (moveInWeek) return { status: `Your first payment isn't due yet — the week you moved in is free. It'll be ${fmtMoney(price)}, due ${DAY_FULL[rentDay || "Fri"]}.`, canPay: false };
+  if (alreadyPaid) return { status: `This week's rent of ${fmtMoney(price)} is already sorted.`, canPay: false };
+  if (!isDueToday) return { status: `Rent is due every ${DAY_FULL[rentDay || "Fri"]}. This week's will be ${fmtMoney(price)} — come back then to pay it yourself.`, canPay: false };
+  return { status: `${overdue ? "This week's rent is overdue. " : "Rent is due today. "}<strong>${fmtMoney(price)}</strong>.`, canPay: true };
+}
+
+// A student can only ever have ONE current home (see currentHomeOf), so
+// this checks the classmate-sublet case first and falls back to the NPC
+// case — never both at once.
 function renderMyRentedHome(cls, me, nameOf) {
   const box = document.getElementById("myRentedHome");
   if (!box) return;
   const prop = (cls.properties || []).find(p => p.sublet && p.sublet.tenant === me.username);
-  if (!prop) { box.innerHTML = ""; return; }
+  if (prop) { renderMyClassmateRentedHome(box, prop, cls, nameOf); return; }
+  const unit = (cls.npcProperties || []).find(p => p.tenant === me.username);
+  if (unit) { renderMyNpcRentedHome(box, unit); return; }
+  box.innerHTML = "";
+}
+function renderMyClassmateRentedHome(box, prop, cls, nameOf) {
   const s = prop.sublet;
-  const weekKey = isoWeekKey(new Date());
-  const moveInWeek = s.leaseStartWeekKey === weekKey;
-  const alreadyPaid = s.rentLastWeekPaid === weekKey;
-  const isDueToday = (prop.rentDay || "Fri") === nzDayName();
   const overdue = isSubletRentOverdue(prop, cls);
+  const { status, canPay } = tenantRentStatusLine(s.leaseStartWeekKey, s.rentLastWeekPaid, prop.rentDay, s.price, overdue);
   const canMoveOut = leaseMinWeeksElapsed(s);
-
-  let status;
-  if (moveInWeek) {
-    status = `Your first payment isn't due yet — the week you moved in is free. It'll be ${fmtMoney(s.price)}, due ${DAY_FULL[prop.rentDay || "Fri"]}.`;
-  } else if (alreadyPaid) {
-    status = `This week's rent of ${fmtMoney(s.price)} is already sorted.`;
-  } else if (!isDueToday) {
-    status = `Rent is due every ${DAY_FULL[prop.rentDay || "Fri"]}. This week's will be ${fmtMoney(s.price)} — come back then to pay it yourself.`;
-  } else {
-    status = `${overdue ? "This week's rent is overdue. " : "Rent is due today. "}<strong>${fmtMoney(s.price)}</strong>.`;
-  }
-
   box.innerHTML = `
     <div class="card">
       <h2>${icon("house", 18)} Your rented home</h2>
       <p><strong>${prop.name}</strong> — renting from ${nameOf(prop.owner)} at ${fmtMoney(s.price)}/week.</p>
       <p class="muted-small">${status}</p>
-      ${isDueToday && !alreadyPaid && !moveInWeek ? `<button class="btn small gold" onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>` : ""}
+      ${canPay ? `<button class="btn small gold" onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>` : ""}
       <div id="tenantRentMsg-${prop.id}"></div>
       <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${s.minWeeks}-week lease, so you can't move out just yet.`}</p>
       ${canMoveOut ? `<button class="btn small secondary" onclick="tenantMoveOutClick('${prop.id}')">Move out</button>` : ""}
@@ -464,6 +478,86 @@ function renderAvailableSublets(cls, me, nameOf) {
 async function claimSubletClick(id) {
   const res = await claimSublet(CURRENT.username, CURRENT.classCode, id);
   const box = document.getElementById("claimSubletMsg");
+  if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
+  await render();
+}
+
+/* ---------------- Student: NPC (school) rentals ---------------- */
+function renderMyNpcRentedHome(box, unit) {
+  const overdue = isNpcRentOverdue(unit);
+  const { status, canPay } = tenantRentStatusLine(unit.leaseStartWeekKey, unit.rentLastWeekPaid, unit.rentDay, unit.rentPerWeek, overdue);
+  const canMoveOut = leaseMinWeeksElapsed(unit);
+  box.innerHTML = `
+    <div class="card">
+      <h2>${icon("building", 18)} Your rented home</h2>
+      <p><strong>${unit.name}</strong> <span class="badge lilac">${icon("building", 12)}School rental</span><br>
+      renting from the school at ${fmtMoney(unit.rentPerWeek)}/week.</p>
+      ${unit.description ? `<p class="muted-small">${unit.description}</p>` : ""}
+      <p class="muted-small">${status}</p>
+      ${canPay ? `<button class="btn small gold" onclick="payNpcRentClick('${unit.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(unit.rentPerWeek)}</button>` : ""}
+      <div id="npcRentMsg-${unit.id}"></div>
+      <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${unit.minWeeks}-week lease, so you can't move out just yet.`}</p>
+      ${canMoveOut ? `<button class="btn small secondary" onclick="npcMoveOutClick('${unit.id}')">Move out</button>` : ""}
+    </div>`;
+}
+async function payNpcRentClick(id) {
+  const res = await payNpcRent(CURRENT.username, CURRENT.classCode, id);
+  const box = document.getElementById(`npcRentMsg-${id}`);
+  if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
+  await render();
+}
+async function npcMoveOutClick(id) {
+  if (!confirm("Move out of this rental? You'll stop paying rent, but you'll also lose the lifestyle bonus for living here.")) return;
+  const res = await moveOutNpcProperty(CURRENT.username, CURRENT.classCode, id);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+}
+
+// Groups NPC units into listings the same way groupProperties does for
+// purchasable properties, so a listing with several units shows as one
+// card with "X of Y available" rather than one row per unit.
+function renderAvailableNpcRentals(cls, me, nameOf) {
+  const box = document.getElementById("availableNpcRentals");
+  if (!box) return;
+  const units = cls.npcProperties || [];
+  if (!units.length) { box.innerHTML = ""; return; }
+  const groups = groupProperties(units); // groupProperties is generic — works on any id/groupId array
+  const alreadyHoused = !!currentHomeOf(cls, me.username);
+  const cardsHtml = groups.map(g => {
+    const gid = g[0].groupId || g[0].id;
+    const p = g[0];
+    const available = g.filter(u => !u.tenant);
+    if (!available.length) return "";
+    return `
+      <div class="auto-row">
+        <div class="auto-details">
+          <strong>${p.name}</strong> <span class="badge lilac">${icon("building", 12)}School rental</span><br>
+          ${p.description ? `<span class="muted-small">${p.description}</span><br>` : ""}
+          <span class="muted-small">${fmtMoney(p.rentPerWeek)}/week from the school, ${p.minWeeks}-week minimum lease${p.lifestylePoints > 0 ? `, +${p.lifestylePoints} lifestyle points while you live there` : ""}
+          &middot; ${g.length > 1 ? `${available.length} of ${g.length} available` : "Available"}</span>
+        </div>
+        <button class="btn small gold" ${alreadyHoused ? "disabled" : ""} onclick="rentNpcClick('${gid}')">Move in</button>
+      </div>`;
+  }).join("");
+  if (!cardsHtml.trim()) { box.innerHTML = ""; return; }
+  box.innerHTML = `
+    <div class="card">
+      <h2>${icon("building", 18)} Rent from the school</h2>
+      ${alreadyHoused ? `<p class="muted-small">You're already living somewhere — move out first if you'd rather rent one of these instead.</p>` : ""}
+      ${cardsHtml}
+      <div id="rentNpcMsg"></div>
+    </div>`;
+}
+async function pickAvailableNpcUnitId(gid) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const unit = (cls.npcProperties || []).find(p => (p.groupId || p.id) === gid && !p.tenant);
+  return unit ? unit.id : null;
+}
+async function rentNpcClick(gid) {
+  const id = await pickAvailableNpcUnitId(gid);
+  const box = document.getElementById("rentNpcMsg");
+  if (!id) { if (box) box.innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
+  const res = await rentNpcProperty(CURRENT.username, CURRENT.classCode, id);
   if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
   await render();
 }
@@ -544,6 +638,14 @@ function populateMortgageSettings(cls) {
   document.getElementById("mortgageDaySelect").value = cls.mortgageDay || "Fri";
   document.getElementById("mortgageForceDue").checked = cls.mortgageForceDueWeek === isoWeekKey(new Date());
   document.getElementById("mortgageStatusRow").innerHTML = mortgageStatusBadges(cls);
+  document.getElementById("movingCostInput").value = cls.movingCost || 0;
+}
+
+async function saveMovingCostClick() {
+  const val = document.getElementById("movingCostInput").value;
+  await setMovingCost(CURRENT.classCode, val);
+  document.getElementById("movingCostMsg").innerHTML = `<div class="success-msg">Moving cost saved. Students are charged this the moment they move into a new home (buying and choosing to live in it, or moving in as a classmate's tenant) — capped at one move per student per day.</div>`;
+  await render();
 }
 
 // Live-updates the status badges as soon as the teacher flips the toggle,
@@ -573,8 +675,12 @@ async function chooseOccupancy(id, choice) {
   const prop = (cls.properties || []).find(p => p.id === id);
   const preview = propertyLifestylePreview(cls, prop);
   const bonus = preview ? preview.livingBonusPoints : 0;
+  const movingCost = cls.movingCost || 0;
+  const movingNote = choice === "living" && prop && prop.occupancy !== "living"
+    ? `\n\nMoving in ${movingCost > 0 ? `costs ${fmtMoney(movingCost)} and ` : ""}counts as your one house-move for today, and you can't already be living somewhere else.`
+    : "";
   const msg = choice === "living"
-    ? `Live in this property?\n\nYou'll get a +${bonus} bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time.`
+    ? `Live in this property?\n\nYou'll get a +${bonus} bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time, for free.${movingNote}`
     : `Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +${bonus} lifestyle bonus for living in it — only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.`;
   if (!confirm(msg)) return;
   const res = await setPropertyOccupancy(CURRENT.username, CURRENT.classCode, id, choice);
@@ -698,6 +804,136 @@ async function buyFinanced(gid) {
   const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true);
   document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Financed! Weekly payments will come out automatically.</div>` : `<div class="error-msg">${res.error}</div>`;
   await render();
+}
+
+/* ---------------- Teacher: NPC (school) property listings ---------------- */
+function renderNpcListings(cls, nameOf) {
+  const list = document.getElementById("npcPropList");
+  const units = cls.npcProperties || [];
+  document.getElementById("noNpcProps").classList.toggle("hidden", units.length > 0);
+  if (!units.length) { list.innerHTML = ""; return; }
+  const groups = groupProperties(units);
+  list.innerHTML = groups.map(g => {
+    const p = g[0];
+    const gid = p.groupId || p.id;
+    const tenanted = g.filter(u => u.tenant);
+    const vacant = g.filter(u => !u.tenant);
+    return `
+      <div class="card company-card">
+        <div class="flex-between">
+          <div>
+            <h4>${icon("building", 20)}${p.name} <span class="badge lilac">School rental</span></h4>
+            <p>${p.description || "No description provided."}</p>
+            <p>${fmtMoney(p.rentPerWeek)}/week &middot; ${p.minWeeks}-week minimum lease &middot; due ${DAY_FULL[p.rentDay || "Fri"]}s${p.lifestylePoints > 0 ? ` &middot; +${p.lifestylePoints} lifestyle points while renting` : ""}</p>
+            <p class="muted-small">${g.length > 1 ? `${vacant.length} of ${g.length} available` : (vacant.length > 0 ? "Available" : "Tenanted")}</p>
+          </div>
+          <div class="row-flex" style="gap:8px;">
+            <button class="btn small secondary" onclick="editNpcProp('${p.id}')">${icon("plus", 13)} Edit</button>
+            <button class="btn small coral" onclick="deleteNpcProp('${p.id}')">${icon("trash", 13)} Remove</button>
+          </div>
+        </div>
+        <div id="npcMsg-${gid}"></div>
+        ${tenanted.map(u => npcTenantBlock(u, nameOf)).join("")}
+      </div>`;
+  }).join("");
+}
+// Renders one tenanted unit's status within a listing card — who's
+// renting it, whether this week's rent is overdue, and the teacher's
+// override controls (waive the overdue payment, or end the tenancy
+// outright). Mirrors subletStatusForTeacher's role for classmate rentals.
+function npcTenantBlock(u, nameOf) {
+  const overdue = isNpcRentOverdue(u);
+  return `
+    <div class="auto-row">
+      <div class="auto-details">
+        <strong>${nameOf(u.tenant)}</strong> is renting this
+        ${overdue ? `<span class="badge coral">${icon("bell", 12)}Rent overdue</span>` : ""}
+      </div>
+      <div class="row-flex" style="gap:8px;">
+        ${overdue ? `<button class="btn small secondary" onclick="resolveNpcOverdueClick('${u.id}')">Mark as resolved</button>` : ""}
+        <button class="btn small coral" onclick="teacherEndNpcTenancyClick('${u.id}')">End tenancy</button>
+      </div>
+    </div>`;
+}
+async function resolveNpcOverdueClick(id) {
+  const res = await resolveNpcRentOverdue(CURRENT.classCode, id);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+}
+async function teacherEndNpcTenancyClick(id) {
+  if (!confirm("End this student's tenancy right now? They'll be moved out immediately, regardless of their minimum lease.")) return;
+  const res = await teacherEndNpcTenancy(CURRENT.classCode, id);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+}
+
+function resetNpcForm() {
+  ["npcName", "npcDesc"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("npcQuantity").value = 1;
+  document.getElementById("npcRent").value = "";
+  document.getElementById("npcRentDay").value = "Fri";
+  document.getElementById("npcMinWeeks").value = 1;
+  document.getElementById("npcLifestylePoints").value = 0;
+}
+async function addNpcProp(e) {
+  e.preventDefault();
+  const listing = {
+    name: document.getElementById("npcName").value.trim(),
+    description: document.getElementById("npcDesc").value.trim(),
+    quantity: document.getElementById("npcQuantity").value,
+    rentPerWeek: document.getElementById("npcRent").value,
+    rentDay: document.getElementById("npcRentDay").value,
+    minWeeks: document.getElementById("npcMinWeeks").value,
+    lifestylePoints: document.getElementById("npcLifestylePoints").value
+  };
+  if (EDITING_NPC_ID) {
+    await updateNpcProperty(CURRENT.classCode, EDITING_NPC_ID, listing);
+    document.getElementById("addNpcMsg").innerHTML = `<div class="success-msg">NPC property updated!</div>`;
+    cancelEditNpcProp();
+  } else {
+    await addNpcProperty(CURRENT.classCode, listing);
+    document.getElementById("addNpcMsg").innerHTML = `<div class="success-msg">NPC property added!</div>`;
+    resetNpcForm();
+  }
+  await render();
+  return false;
+}
+// id is any unit's id within the listing — edits apply to the whole
+// group (see updateNpcProperty in data.js). Quantity shown is how many
+// units currently exist in that group.
+async function editNpcProp(id) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const units = cls.npcProperties || [];
+  const p = units.find(u => u.id === id);
+  if (!p) return;
+  const gid = p.groupId || p.id;
+  const groupSize = units.filter(u => (u.groupId || u.id) === gid).length;
+  EDITING_NPC_ID = id;
+  document.getElementById("npcName").value = p.name;
+  document.getElementById("npcDesc").value = p.description || "";
+  document.getElementById("npcQuantity").value = groupSize;
+  document.getElementById("npcRent").value = p.rentPerWeek;
+  document.getElementById("npcRentDay").value = p.rentDay || "Fri";
+  document.getElementById("npcMinWeeks").value = p.minWeeks || 1;
+  document.getElementById("npcLifestylePoints").value = p.lifestylePoints || 0;
+  document.getElementById("hAddNpc").innerHTML = icon("building", 18) + " Edit NPC property";
+  document.getElementById("addNpcBtn").innerHTML = icon("plus", 15) + " Save changes";
+  document.getElementById("cancelEditNpcBtn").classList.remove("hidden");
+  document.getElementById("addNpcMsg").innerHTML = "";
+  document.getElementById("npcPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function cancelEditNpcProp() {
+  EDITING_NPC_ID = null;
+  resetNpcForm();
+  document.getElementById("hAddNpc").innerHTML = icon("building", 18) + " Add an NPC property";
+  document.getElementById("addNpcBtn").innerHTML = icon("plus", 15) + " Add NPC property";
+  document.getElementById("cancelEditNpcBtn").classList.add("hidden");
+}
+async function deleteNpcProp(id) {
+  if (confirm("Remove this NPC property listing (all units of it)? Any current tenants will be moved out immediately.")) {
+    await removeNpcProperty(CURRENT.classCode, id);
+    await render();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);
