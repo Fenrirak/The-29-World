@@ -671,6 +671,15 @@ function defaultClassData(code, className, teacherUsername) {
 // firestore.rules for how /uidIndex maps the resulting Auth uid back to
 // this app's own username.
 async function createTeacherAndClass(name, username, password, className) {
+  // Firebase itself already refuses to create an account with a password
+  // under 6 characters (see t29AuthErrorMessage's "auth/weak-password"
+  // case below) — this check just catches that instantly, client-side,
+  // instead of making a round trip to Firebase first just to get told
+  // the same thing.
+  if (!password || password.length < 6) {
+    return { ok: false, error: "Password must be at least 6 characters." };
+  }
+
   const existing = await getUser(username);
   if (existing) return { ok: false, error: "That username is already taken." };
 
@@ -1006,6 +1015,11 @@ async function deleteClassPermanently(teacherUsername, classCode) {
 // Firestore), then /uidIndex, /users, and the class-doc update happen
 // together in one transaction.
 async function createStudentAccount(name, username, password, classCode) {
+  // See the matching check in createTeacherAndClass above — same reason.
+  if (!password || password.length < 6) {
+    return { ok: false, error: "Password must be at least 6 characters." };
+  }
+
   const existing = await getUser(username);
   if (existing) return { ok: false, error: "That username is already taken." };
   const classRef = classesCol().doc(classCode);
@@ -1178,8 +1192,8 @@ async function t29TryMigrateLegacyLogin(username, password) {
    password so a student walking away from an unlocked device can't have
    their password silently swapped out from under them. */
 async function changePassword(username, oldPassword, newPassword) {
-  if (!newPassword || newPassword.length < 4) {
-    return { ok: false, error: "New password must be at least 4 characters." };
+  if (!newPassword || newPassword.length < 6) {
+    return { ok: false, error: "New password must be at least 6 characters." };
   }
   if (newPassword === oldPassword) {
     return { ok: false, error: "New password must be different from your current password." };
@@ -1198,6 +1212,9 @@ async function changePassword(username, oldPassword, newPassword) {
   } catch (e) {
     if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential" || e.code === "auth/invalid-login-credentials") {
       return { ok: false, error: "Current password is incorrect." };
+    }
+    if (e.code === "auth/weak-password") {
+      return { ok: false, error: "New password must be at least 6 characters." };
     }
     return { ok: false, error: "Something went wrong. Please try again." };
   }
