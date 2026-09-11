@@ -17,7 +17,11 @@
      Settings — never unconditionally
 ================================================================================ */
 
-var SB_STORAGE_KEY = "t29-sidebar-nav";
+// Storage key is normally already defined by settings-menu.js (loaded on
+// every page, always before or alongside this file — see the comment atop
+// settings-menu.js). Falling back to the literal here only matters if this
+// file is ever loaded on its own without settings-menu.js.
+var SB_STORAGE_KEY = typeof SB_STORAGE_KEY !== "undefined" ? SB_STORAGE_KEY : "t29-sidebar-nav";
 var SB_DESKTOP_QUERY = "(min-width: 901px)";
 
 function sbIsOn() {
@@ -89,6 +93,18 @@ function sbApply(on) {
   } else {
     sbSetDrawerOpen(false);
   }
+  // Switching modes changes the topbar's whole layout (horizontal row vs
+  // vertical rail), but icons.js only ever recalculates --navscale on
+  // load/resize/orientationchange — never when the mode itself flips via
+  // the Settings switch (no resize event fires for that). Without this,
+  // whatever scale was last measured for the OLD mode just carries over
+  // into the new one: switching off the sidebar leaves the topbar at the
+  // sidebar's unscaled --navscale:1 (never shrunk to fit the row, so it
+  // overflows/looks oversized) until the next real resize; switching the
+  // sidebar on can just as easily leave it stuck at a shrunk topbar scale
+  // instead of the rail's intended full size. Re-running fitTopbar() right
+  // here recalculates immediately for whichever mode we just switched to.
+  if (typeof fitTopbar === "function") fitTopbar();
   if (typeof positionBalanceWidget === "function") positionBalanceWidget();
 }
 
