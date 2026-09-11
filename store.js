@@ -1,5 +1,6 @@
 let CURRENT, IS_TEACHER;
 let ITEMS_CACHE = [];
+let ME_CACHE = null;
 
 function starsHtml(n) {
   n = Number(n) || 0;
@@ -51,6 +52,7 @@ async function render() {
   // already known without needing `me` first, so fetch both at once
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+  ME_CACHE = me;
   const items = (cls.storeItems || []).filter(i => !i.archived);
 
   const list = document.getElementById("itemList");
@@ -62,6 +64,7 @@ async function render() {
 
   items.forEach(it => {
     const outOfStock = it.stock !== null && it.stock <= 0;
+    const maxQty = it.stock !== null ? it.stock : null;
     const owned = ownedCounts[it.id] || 0;
     const div = document.createElement("div");
     div.className = "card company-card";
@@ -79,8 +82,19 @@ async function render() {
           ${IS_TEACHER
             ? `<button class="btn small secondary" onclick="editItem('${it.id}')">${icon("plus", 13)} Edit</button>
                <button class="btn small coral" onclick="deleteItem('${it.id}')">${icon("trash", 13)} Remove</button>`
-            : `<button class="btn small gold" ${outOfStock ? "disabled" : ""} onclick="buyItem('${it.id}')">${icon("cart", 13)} ${outOfStock ? "Out of stock" : "Buy"}</button>
-               ${owned ? `<button class="btn small secondary" onclick="sellItem('${it.id}')">${icon("trash", 13)} Sell back (80%)</button>` : ""}`}
+            : outOfStock
+              ? `<button class="btn small gold" disabled>${icon("cart", 13)} Out of stock</button>`
+              : `<div class="qty-buy-block">
+                   <div class="qty-stepper">
+                     <button type="button" class="qty-btn" aria-label="Decrease quantity" onclick="qtyStep('${it.id}', -1)">−</button>
+                     <input id="qty-${it.id}" class="qty-input" type="number" inputmode="numeric" min="1"
+                       ${maxQty !== null ? `max="${maxQty}"` : ""} step="1" value="1"
+                       oninput="qtyNormalize('${it.id}')">
+                     <button type="button" class="qty-btn" aria-label="Increase quantity" onclick="qtyStep('${it.id}', 1)">+</button>
+                   </div>
+                   <button class="btn small gold qty-buy-btn" onclick="buyItem('${it.id}')">${icon("cart", 13)} <span id="buyLabel-${it.id}">Buy</span></button>
+                 </div>`}
+          ${(!IS_TEACHER && owned) ? `<button class="btn small secondary" onclick="sellItem('${it.id}')">${icon("trash", 13)} Sell back (80%)</button>` : ""}
         </div>
       </div>
       <div id="edit-${it.id}" class="hidden"></div>
@@ -89,6 +103,41 @@ async function render() {
     list.appendChild(div);
   });
   ITEMS_CACHE = items;
+  if (!IS_TEACHER) items.forEach(it => { if (!(it.stock !== null && it.stock <= 0)) updateBuyLabel(it.id); });
+}
+
+function qtyStep(id, delta) {
+  const input = document.getElementById("qty-" + id);
+  if (!input) return;
+  const max = input.getAttribute("max");
+  let v = (parseInt(input.value, 10) || 1) + delta;
+  if (v < 1) v = 1;
+  if (max !== null && max !== "" && v > Number(max)) v = Number(max);
+  input.value = v;
+  updateBuyLabel(id);
+}
+
+function qtyNormalize(id) {
+  const input = document.getElementById("qty-" + id);
+  if (!input) return;
+  const max = input.getAttribute("max");
+  let v = parseInt(input.value, 10);
+  if (!v || v < 1) v = 1;
+  if (max !== null && max !== "" && v > Number(max)) v = Number(max);
+  input.value = v;
+  updateBuyLabel(id);
+}
+
+function updateBuyLabel(id) {
+  const input = document.getElementById("qty-" + id);
+  const label = document.getElementById("buyLabel-" + id);
+  if (!input || !label || !ME_CACHE) return;
+  const it = ITEMS_CACHE.find(i => i.id === id);
+  if (!it) return;
+  const qty = Math.max(1, parseInt(input.value, 10) || 1);
+  const unitPrice = applyLifeDiscount(ME_CACHE, "store", it.price);
+  const total = Math.round(unitPrice * qty * 100) / 100;
+  label.textContent = qty > 1 ? `Buy ×${qty} — ${fmtMoney(total)}` : `Buy — ${fmtMoney(total)}`;
 }
 
 async function addItem(e) {
@@ -185,9 +234,11 @@ async function sellItem(id) {
 }
 
 async function buyItem(id) {
-  const res = await buyStoreItem(CURRENT.username, CURRENT.classCode, id);
+  const input = document.getElementById("qty-" + id);
+  const qty = input ? Math.max(1, parseInt(input.value, 10) || 1) : 1;
+  const res = await buyStoreItem(CURRENT.username, CURRENT.classCode, id, qty);
   document.getElementById("msg-" + id).innerHTML = res.ok
-    ? `<div class="success-msg">Purchased!</div>`
+    ? `<div class="success-msg">Purchased ${res.qty > 1 ? `×${res.qty}` : ""}!</div>`
     : `<div class="error-msg">${res.error}</div>`;
   await render();
 }

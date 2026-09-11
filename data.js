@@ -5682,7 +5682,9 @@ async function removeStoreItem(classCode, itemId) {
     t.update(classRef, { storeItems: cls.storeItems });
   });
 }
-async function buyStoreItem(username, classCode, itemId) {
+async function buyStoreItem(username, classCode, itemId, qty) {
+  qty = Math.floor(Number(qty)) || 1;
+  if (qty < 1) qty = 1;
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let itemName = "", taxAmount = 0, cashPaid = 0;
@@ -5695,29 +5697,29 @@ async function buyStoreItem(username, classCode, itemId) {
       const cls = withNewModuleDefaults(classSnap.data());
       const item = cls.storeItems.find(i => i.id === itemId);
       if (!item || item.archived) throw new Error("NOT_FOUND");
-      if (item.stock !== null && item.stock <= 0) throw new Error("OUT");
+      if (item.stock !== null && item.stock < qty) throw new Error("OUT");
       const discountedPrice = applyLifeDiscount(user, "store", item.price);
-      const { total, taxAmount: tax } = applyTaxToExpense(cls, "store", discountedPrice);
+      const { total, taxAmount: tax } = applyTaxToExpense(cls, "store", discountedPrice * qty);
       taxAmount = tax;
       cashPaid = total;
       const isTeacher = user.role === "teacher";
       if (!isTeacher && user.balance < total) throw new Error("BROKE");
       itemName = item.name;
-      if (item.stock !== null) item.stock -= 1;
-      item.sold = (item.sold || 0) + 1;
+      if (item.stock !== null) item.stock -= qty;
+      item.sold = (item.sold || 0) + qty;
       user.storeItems = user.storeItems || [];
-      user.storeItems.push(itemId);
+      for (let i = 0; i < qty; i++) user.storeItems.push(itemId);
       if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - total) * 100) / 100, storeItems: user.storeItems });
       else t.update(userRef, { storeItems: user.storeItems });
       t.update(classRef, { storeItems: cls.storeItems });
     });
   } catch (e) {
-    if (e.message === "OUT") return { ok: false, error: "That item is out of stock." };
+    if (e.message === "OUT") return { ok: false, error: "Not enough stock left for that quantity." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "store-buy", from: username, amount: cashPaid, note: `Bought from store: ${itemName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
-  return { ok: true };
+  await logTxn(classCode, { type: "store-buy", from: username, amount: cashPaid, note: `Bought from store: ${itemName}${qty > 1 ? ` ×${qty}` : ""}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
+  return { ok: true, qty };
 }
 
 // Sell back one unit of an owned store item for 80% of its base price.

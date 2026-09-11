@@ -2168,3 +2168,38 @@ html.dark-mode .tier-micro-badge {
   .tier-form-fields .tier-desc-wrap { grid-column: 1; }
   .my-job-wage { font-size: 1.4rem; }
 }
+
+/* ── Store: quantity stepper + buy control ─────────────────────── */
+.qty-buy-block{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+.qty-stepper{
+  display:inline-flex;align-items:center;gap:0;
+  border:1.5px solid var(--line);border-radius:9px;overflow:hidden;background:#fff;
+}
+.qty-stepper .qty-btn{
+  appearance:none;border:none;background:#fff;color:var(--navy-900);
+  width:34px;height:36px;font-size:1.1rem;font-weight:800;line-height:1;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .12s ease;flex-shrink:0;
+}
+.qty-stepper .qty-btn:hover{background:rgba(201,154,46,0.14);color:var(--gold-dark);}
+.qty-stepper .qty-btn:active{background:rgba(201,154,46,0.24);}
+.qty-stepper .qty-input{
+  width:48px;min-width:0;height:36px;padding:0;margin:0;text-align:center;
+  border:none;border-left:1.5px solid var(--line);border-right:1.5px solid var(--line);
+  border-radius:0;font-weight:800;font-size:.92rem;-moz-appearance:textfield;
+}
+.qty-stepper .qty-input::-webkit-outer-spin-button,
+.qty-stepper .qty-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.qty-stepper .qty-input:focus{outline:none;background:rgba(201,154,46,0.08);}
+.qty-buy-btn{white-space:nowrap;}
+
+html.dark-mode .qty-stepper{background:var(--card);border-color:var(--line);}
+html.dark-mode .qty-stepper .qty-btn{background:var(--card);color:var(--warm-white);}
+html.dark-mode .qty-stepper .qty-btn:hover{background:rgba(201,154,46,0.18);}
+html.dark-mode .qty-stepper .qty-input{background:var(--card);color:var(--ink);border-left-color:var(--line);border-right-color:var(--line);}
+
+@media (max-width: 600px) {
+  .qty-buy-block{align-items:stretch;width:100%;}
+  .qty-stepper{align-self:flex-end;}
+  .qty-buy-btn{width:100%;justify-content:center;}
+}
