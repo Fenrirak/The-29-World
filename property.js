@@ -6,6 +6,18 @@ function comfortStars(n) {
   return `<span class="ticker-up">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span>`;
 }
 
+// Shows a student browsing a listing what owning it (and, on top of that,
+// living in it) would do to their lifestyle rating — the owning bonus
+// applies as soon as it's bought, the living bonus is extra on top if they
+// then choose to live in it rather than rent it out. Note: for a listing
+// with several units, every unit shares the same comfort and living-bonus
+// values, so this preview is the same regardless of which unit gets bought.
+function lifestylePreviewLine(cls, p) {
+  const preview = propertyLifestylePreview(cls, p);
+  if (!preview) return "";
+  return `<p class="muted-small">Owning this: +${preview.ownPoints} lifestyle points. Living in it instead of renting it out: +${preview.livingBonusPoints} more on top (${preview.livingBonusStars} bonus star${preview.livingBonusStars === 1 ? "" : "s"} &times; ${preview.weight} pts/star).</p>`;
+}
+
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("house", 26) + " Property";
@@ -130,6 +142,7 @@ async function render() {
           <h4>${icon("house", 20)}${p.name} ${myUnit ? '<span class="badge mint">Your home</span>' : ""}</h4>
           <p>${p.description || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
+          ${lifestylePreviewLine(cls, p)}
           <p>${priceWithLifeDiscount(me, "property", p.price)} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""}` : "&middot; cash purchase only"}
             ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
           <p class="muted-small">${units.length > 1 ? `${available.length} of ${units.length} available` : (available.length > 0 ? "Available" : `Owned by ${nameOf(owned[0].owner)}`)}</p>
@@ -177,6 +190,8 @@ function ownedUnitBlock(p, isMine, cls, nameOf) {
 function occupancyBlock(p, isMine, cls, nameOf) {
   const pr = (cls && cls.propertyRentals) || {};
   const canSublet = pr.enabled && p.rentPerWeek > 0;
+  const preview = propertyLifestylePreview(cls, p);
+  const livingBonusPts = preview ? preview.livingBonusPoints : 0;
 
   if (!isMine) {
     if (p.occupancy === "living") return `<p class="muted-small">${icon("house", 13)} Owner is living here.</p>`;
@@ -188,7 +203,7 @@ function occupancyBlock(p, isMine, cls, nameOf) {
   if (p.occupancy === "living") {
     return `
       <div class="card" style="margin-top:8px;padding:10px 12px;">
-        <p><strong>${icon("house", 14)} You're living here</strong> — your lifestyle rating gets a +5 bonus (property category) while you live in it. You're not collecting rent.</p>
+        <p><strong>${icon("house", 14)} You're living here</strong> — your lifestyle rating gets a +${livingBonusPts} bonus (property category) while you live in it. You're not collecting rent.</p>
         <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
           ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out instead</button>` : ""}
           ${canSublet ? `<button class="btn small secondary" onclick="showSubletForm('${p.id}')">Rent it to a classmate instead</button>` : ""}
@@ -216,7 +231,7 @@ function occupancyBlock(p, isMine, cls, nameOf) {
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
       <p><strong>Live in it, rent it out, or rent it to a classmate?</strong></p>
-      <p class="muted-small">Live in it: no rent income, but +5 to your lifestyle rating (property category) while you live there.<br>
+      <p class="muted-small">Live in it: no rent income, but +${livingBonusPts} to your lifestyle rating (property category) while you live there.<br>
       Rent it out: ${p.rentPerWeek > 0 ? `${fmtMoney(p.rentPerWeek)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}` : "your teacher hasn't set a rent amount yet"} — but no lifestyle bonus, only the property's base comfort rating counts.<br>
       ${canSublet ? `Rent it to a classmate: you set the price and a minimum lease length yourself, and get real weekly rent paid by whoever moves in — also no living-in-it lifestyle bonus for you.<br>` : ""}
       You can change your mind at any time.</p>
@@ -554,9 +569,13 @@ async function saveMortgageForceDue() {
 }
 
 async function chooseOccupancy(id, choice) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const prop = (cls.properties || []).find(p => p.id === id);
+  const preview = propertyLifestylePreview(cls, prop);
+  const bonus = preview ? preview.livingBonusPoints : 0;
   const msg = choice === "living"
-    ? "Live in this property?\n\nYou'll get a +5 bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time."
-    : "Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +5 lifestyle bonus for living in it — only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.";
+    ? `Live in this property?\n\nYou'll get a +${bonus} bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time.`
+    : `Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +${bonus} lifestyle bonus for living in it — only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.`;
   if (!confirm(msg)) return;
   const res = await setPropertyOccupancy(CURRENT.username, CURRENT.classCode, id, choice);
   if (!res.ok) { alert(res.error); return; }
@@ -570,6 +589,7 @@ async function addProp(e) {
     price: document.getElementById("hPrice").value,
     comfort: document.getElementById("hComfort").value,
     quantity: document.getElementById("hQuantity").value,
+    livingBonusStars: document.getElementById("hLivingBonus").value,
     mortgageWeeks: document.getElementById("hMortgage").value,
     mortgageInterestRate: document.getElementById("hMortgageRate").value,
     description: document.getElementById("hDesc").value.trim(),
@@ -586,6 +606,7 @@ async function addProp(e) {
     ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("hComfort").value = 3;
     document.getElementById("hQuantity").value = 1;
+    document.getElementById("hLivingBonus").value = 1;
     document.getElementById("hMortgage").value = 0;
     document.getElementById("hMortgageRate").value = 0;
     document.getElementById("hRent").value = 0;
@@ -610,6 +631,7 @@ async function editProp(id) {
   document.getElementById("hPrice").value = prop.price;
   document.getElementById("hComfort").value = prop.comfort;
   document.getElementById("hQuantity").value = groupSize;
+  document.getElementById("hLivingBonus").value = prop.livingBonusStars !== undefined ? prop.livingBonusStars : 1;
   document.getElementById("hMortgage").value = prop.mortgageWeeks || 0;
   document.getElementById("hMortgageRate").value = prop.mortgageInterestRate || 0;
   document.getElementById("hDesc").value = prop.description || "";
@@ -627,6 +649,7 @@ function cancelEditProp() {
   ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("hComfort").value = 3;
   document.getElementById("hQuantity").value = 1;
+  document.getElementById("hLivingBonus").value = 1;
   document.getElementById("hMortgage").value = 0;
   document.getElementById("hMortgageRate").value = 0;
   document.getElementById("hRent").value = 0;

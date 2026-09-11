@@ -306,14 +306,23 @@ async function gaBuyIn() {
 async function gaCashOut() {
   const box = document.getElementById("gAcctMsg");
   const btn = document.getElementById("gAcctCashOutBtn");
+  const amountInput = document.getElementById("gAcctCashOutAmount");
+  // "00" is a shorthand for "cash out everything" — treat it the same as
+  // leaving the field blank, which cashOutGamblingAccount already reads
+  // as "no specific amount, cash out the full balance".
+  const rawAmount = amountInput ? amountInput.value.trim() : "";
+  const cashOutAll = rawAmount === "" || rawAmount === "00";
   box.innerHTML = "";
   btn.disabled = true;
   try {
-    const res = await cashOutGamblingAccount(CURRENT.username, CURRENT.classCode);
+    const res = cashOutAll
+      ? await cashOutGamblingAccount(CURRENT.username, CURRENT.classCode)
+      : await cashOutGamblingAccount(CURRENT.username, CURRENT.classCode, rawAmount);
     if (!res.ok) {
       box.innerHTML = `<div class="error-msg">${res.error}</div>`;
       return;
     }
+    if (amountInput) amountInput.value = "";
     box.innerHTML = `<div class="success-msg">Cashed out ${fmtMoney(res.amount)} to your cash balance.</div>`;
     await refreshGamblingAccountCard();
   } catch (e) {

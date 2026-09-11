@@ -234,6 +234,13 @@
       <input id="hQuantity" type="number" min="1" step="1" value="1" required>
       <div class="grid grid-2">
         <div>
+          <label for="hLivingBonus" id="labLivingBonus">Living-in bonus (stars, 0 = none)</label>
+          <input id="hLivingBonus" type="number" min="0" step="1" value="1">
+        </div>
+      </div>
+      <p class="muted-small" id="pLivingBonus" style="margin-top:8px;">Extra lifestyle-rating stars the owner gets on top of the comfort rating above, while they choose to live in this property instead of renting it out (multiplied by the class's property points-per-star setting).</p>
+      <div class="grid grid-2">
+        <div>
           <label for="hMortgage" id="labMortgage">Mortgage length in weeks (0 = cash only)</label>
           <input id="hMortgage" type="number" min="0" step="1" value="0">
         </div>
