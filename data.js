@@ -5755,7 +5755,9 @@ async function giveFreeStoreItem(classCode, username, itemId) {
   return { ok: true };
 }
 
-async function sellStoreItem(username, classCode, itemId, rate) {
+async function sellStoreItem(username, classCode, itemId, rate, qty) {
+  qty = Math.floor(Number(qty)) || 1;
+  if (qty < 1) qty = 1;
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let itemName = "", payout = 0, effectiveRate = 0;
@@ -5769,25 +5771,28 @@ async function sellStoreItem(username, classCode, itemId, rate) {
       const item = cls.storeItems.find(i => i.id === itemId);
       if (!item) throw new Error("NOT_FOUND");
       user.storeItems = user.storeItems || [];
-      const idx = user.storeItems.indexOf(itemId);
-      if (idx === -1) throw new Error("NOT_OWNED");
-      user.storeItems.splice(idx, 1);
+      const ownedCount = user.storeItems.filter(id => id === itemId).length;
+      if (ownedCount < qty) throw new Error("NOT_OWNED");
+      for (let i = 0; i < qty; i++) {
+        const idx = user.storeItems.indexOf(itemId);
+        user.storeItems.splice(idx, 1);
+      }
       itemName = item.name;
       effectiveRate = rate !== undefined ? rate : 0.8;
-      payout = Math.round(item.price * effectiveRate * 100) / 100;
-      if (item.stock !== null) item.stock += 1;
-      item.sold = Math.max(0, (item.sold || 0) - 1);
+      payout = Math.round(item.price * effectiveRate * qty * 100) / 100;
+      if (item.stock !== null) item.stock += qty;
+      item.sold = Math.max(0, (item.sold || 0) - qty);
       const isTeacher = user.role === "teacher";
       if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + payout) * 100) / 100, storeItems: user.storeItems });
       else t.update(userRef, { storeItems: user.storeItems });
       t.update(classRef, { storeItems: cls.storeItems });
     });
   } catch (e) {
-    if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that item." };
+    if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that many of that item." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "store-sell", to: username, amount: payout, note: `Sold back to store: ${itemName} (${Math.round(effectiveRate * 100)}% refund)` });
-  return { ok: true, payout };
+  await logTxn(classCode, { type: "store-sell", to: username, amount: payout, note: `Sold back to store: ${itemName}${qty > 1 ? ` ×${qty}` : ""} (${Math.round(effectiveRate * 100)}% refund)` });
+  return { ok: true, payout, qty };
 }
 
 /* ===================== Life module =====================
