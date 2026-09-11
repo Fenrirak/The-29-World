@@ -1131,10 +1131,23 @@ async function renderProfile(username) {
     ? `<button class="btn small coral" onclick="profileRevokeTruckLicence('${username}')">Revoke</button>`
     : `<span class="muted-small">Not held</span>`}</div>`);
 
+  // Group owned store items by item id: poss.storeItems is a flat list
+  // with one entry per unit owned, so a student who bought the same
+  // item 5 times used to get 5 near-identical rows. Collapse those into
+  // one row per distinct item with a ×qty badge instead.
+  const storeGroups = [];
+  const storeGroupIndex = {};
+  poss.storeItems.forEach(it => {
+    if (!storeGroupIndex[it.id]) {
+      storeGroupIndex[it.id] = { item: it, qty: 0 };
+      storeGroups.push(storeGroupIndex[it.id]);
+    }
+    storeGroupIndex[it.id].qty++;
+  });
   rows.push(`<h4>${icon("cart", 16)} Store items</h4>`);
-  rows.push(poss.storeItems.length
-    ? poss.storeItems.map(it => `<div class="auto-row"><div class="auto-details">${it.name} — ${fmtMoney(it.price)}${it.countsNetWorth === false ? ' <span class="muted-small">(not counted)</span>' : ""}</div>
-        <button class="btn small coral" onclick="profileRemoveStoreItem('${username}','${it.id}')">Remove</button></div>`).join("")
+  rows.push(storeGroups.length
+    ? storeGroups.map(g => `<div class="auto-row"><div class="auto-details">${g.item.name} <span class="badge mint">×${g.qty}</span>${g.item.countsNetWorth === false ? ' <span class="muted-small">(not counted)</span>' : ""}</div>
+        <button class="btn small coral" onclick="profileRemoveStoreItem('${username}','${g.item.id}')">Remove one</button></div>`).join("")
     : `<p class="muted-small">No store items owned.</p>`);
 
   const giftableItems = (cls.storeItems || []).filter(it => !it.archived);
