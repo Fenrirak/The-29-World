@@ -6,6 +6,17 @@ function comfortStars(n) {
   return `<span class="ticker-up">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span>`;
 }
 
+// Shown next to every action that actually moves a student into a new
+// home (choosing to live in an owned property, claiming a classmate's
+// sublet, or renting an NPC listing) so the cost is visible right where
+// they're about to trigger it, not just buried in the confirm() prompt or
+// the teacher's settings panel. cls.movingCost is a single class-wide
+// value, so this reads the same wherever it's shown.
+function movingCostNote(cls) {
+  const cost = Number(cls && cls.movingCost) || 0;
+  return `<p class="muted-small">${icon("send", 12)} Moving cost: <strong>${cost > 0 ? fmtMoney(cost) : "Free"}</strong> &middot; you can only move house once a day.</p>`;
+}
+
 // Shows a student browsing a listing what owning it (and, on top of that,
 // living in it) would do to their lifestyle rating — the owning bonus
 // applies as soon as it's bought, the living bonus is extra on top if they
@@ -221,6 +232,7 @@ function occupancyBlock(p, isMine, cls, nameOf) {
     return `
       <div class="card" style="margin-top:8px;padding:10px 12px;">
         <p><strong>${icon("coin", 14)} Rented out</strong> — you're earning ${fmtMoney(p.rentPerWeek)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}. You're not getting the living-in-it lifestyle bonus.</p>
+        ${movingCostNote(cls)}
         <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
           <button class="btn small secondary" onclick="chooseOccupancy('${p.id}','living')">Move in instead</button>
           ${canSublet ? `<button class="btn small secondary" onclick="showSubletForm('${p.id}')">Rent it to a classmate instead</button>` : ""}
@@ -240,6 +252,7 @@ function occupancyBlock(p, isMine, cls, nameOf) {
       Rent it out: ${p.rentPerWeek > 0 ? `${fmtMoney(p.rentPerWeek)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}` : "your teacher hasn't set a rent amount yet"} — but no lifestyle bonus, only the property's base comfort rating counts.<br>
       ${canSublet ? `Rent it to a classmate: you set the price and a minimum lease length yourself, and get real weekly rent paid by whoever moves in — also no living-in-it lifestyle bonus for you.<br>` : ""}
       You can change your mind at any time.</p>
+      ${movingCostNote(cls)}
       <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
         <button class="btn small gold" onclick="chooseOccupancy('${p.id}','living')">Live in it</button>
         ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out</button>` : ""}
@@ -462,6 +475,7 @@ function renderAvailableSublets(cls, me, nameOf) {
   box.innerHTML = `
     <div class="card">
       <h2>${icon("users", 18)} Rent from a classmate</h2>
+      ${movingCostNote(cls)}
       ${alreadyHoused ? `<p class="muted-small">You're already living somewhere — move out first if you'd rather rent one of these instead.</p>` : ""}
       ${listings.map(p => `
         <div class="auto-row">
@@ -543,6 +557,7 @@ function renderAvailableNpcRentals(cls, me, nameOf) {
   box.innerHTML = `
     <div class="card">
       <h2>${icon("building", 18)} Rent from the school</h2>
+      ${movingCostNote(cls)}
       ${alreadyHoused ? `<p class="muted-small">You're already living somewhere — move out first if you'd rather rent one of these instead.</p>` : ""}
       ${cardsHtml}
       <div id="rentNpcMsg"></div>
