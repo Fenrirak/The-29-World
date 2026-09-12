@@ -1,5 +1,13 @@
 let CURRENT, IS_TEACHER, EDITING_ID = null, EDITING_NPC_ID = null;
 let MORTGAGE_SETTINGS_CLS = null; // last-loaded class doc, used to preview the force-due toggle before saving
+// render() rebuilds every listing card from scratch (list.innerHTML = "")
+// on every action, so a plain <details open> would snap shut the moment a
+// teacher saves anything inside it. Track which listings' "Pricing
+// controls" are open here and re-apply it after each rebuild instead.
+const OPEN_PRICING = new Set();
+function onPricingToggle(id, isOpen) {
+  if (isOpen) OPEN_PRICING.add(id); else OPEN_PRICING.delete(id);
+}
 
 function comfortStars(n) {
   n = Number(n) || 0;
@@ -93,6 +101,18 @@ function paintChrome() {
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
+// Used by the quick-nav pills (property.html) and by editProp/editNpcProp
+// below — a settings panel is a <details class="card"> now (see
+// property.html), so jumping to one that's collapsed needs to open it
+// first or the person scrolls straight to a blank header. Plain
+// non-<details> targets (teacherPanel, propList) just scroll as before.
+function jumpTo(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.tagName === "DETAILS") el.open = true;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 async function init() {
   const u = await requireLogin();
   if (!u) return;
@@ -106,6 +126,7 @@ async function init() {
   document.getElementById("propertyMarketPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("rentalsPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("npcPanel").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("teacherQuickNav").classList.toggle("hidden", !IS_TEACHER);
   paintChrome();
   // These 7 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
@@ -231,31 +252,32 @@ async function render() {
               : "")}
       </div>
       ${IS_TEACHER ? `
-        <div class="grid grid-2" style="margin-top:10px;">
-          <div>
-            <label>Set new price</label>
-            <div class="row-flex" style="gap:8px;">
-              <input type="number" min="0.01" step="0.01" id="price-${p.id}" value="${p.price}">
-              <button class="btn small" onclick="overridePriceClick('${p.id}')">${icon("chart", 13)} Update</button>
+        <details class="listing-advanced" ontoggle="onPricingToggle('${p.id}', this.open)"${OPEN_PRICING.has(p.id) ? " open" : ""}>
+          <summary>${icon("chart", 13)} Pricing controls <span class="muted-small">(${p.priceRange ? "custom" : "class default"}: ${listingRange.min}%\u2013${listingRange.max}% per day)</span></summary>
+          <div class="grid grid-2" style="margin-top:10px;">
+            <div>
+              <label>Set new price</label>
+              <div class="row-flex" style="gap:8px;">
+                <input type="number" min="0.01" step="0.01" id="price-${p.id}" value="${p.price}">
+                <button class="btn small" onclick="overridePriceClick('${p.id}')">${icon("chart", 13)} Update</button>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="grid grid-3" style="margin-top:10px;">
-          <div>
-            <label>Min % change (this listing)</label>
-            <input type="number" min="0" step="0.1" id="prmin-${p.id}" value="${listingRange.min}">
+          <div class="grid grid-3" style="margin-top:10px;">
+            <div>
+              <label>Min % change (this listing)</label>
+              <input type="number" min="0" step="0.1" id="prmin-${p.id}" value="${listingRange.min}">
+            </div>
+            <div>
+              <label>Max % change (this listing)</label>
+              <input type="number" min="0" step="0.1" id="prmax-${p.id}" value="${listingRange.max}">
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:8px;">
+              <button class="btn small secondary" style="width:100%;" onclick="setListingRangeClick('${p.id}')">${icon("chart", 13)} Save range</button>
+            </div>
           </div>
-          <div>
-            <label>Max % change (this listing)</label>
-            <input type="number" min="0" step="0.1" id="prmax-${p.id}" value="${listingRange.max}">
-          </div>
-          <div style="display:flex;align-items:flex-end;gap:8px;">
-            <button class="btn small secondary" style="width:100%;" onclick="setListingRangeClick('${p.id}')">${icon("chart", 13)} Save range</button>
-          </div>
-        </div>
-        <p class="muted-small">${p.priceRange
-          ? `Custom range for this listing (${listingRange.min}%\u2013${listingRange.max}%). <a href="#" onclick="clearListingRangeClick('${p.id}');return false;">Reset to class default</a>`
-          : `Using the class default (${listingRange.min}%\u2013${listingRange.max}% per day).`}</p>
+          ${p.priceRange ? `<p class="muted-small">Using a custom range for this listing. <a href="#" onclick="clearListingRangeClick('${p.id}');return false;">Reset to class default</a></p>` : `<p class="muted-small">Using the class-wide default range (set above under "Daily price movement").</p>`}
+        </details>
       ` : ""}
       ${owned.filter(u => IS_TEACHER || u.owner === me.username)
              .map(u => ownedUnitBlock(u, u.owner === me.username, cls, nameOf)).join("")}
@@ -534,8 +556,13 @@ async function saveRentalSettingsClick() {
 }
 function renderPendingSublets(cls, nameOf) {
   const box = document.getElementById("pendingSublets");
+  const badge = document.getElementById("pendingSubletsBadge");
   if (!box) return;
   const pending = (cls.properties || []).filter(p => p.sublet && p.sublet.status === "pending");
+  if (badge) {
+    badge.classList.toggle("hidden", pending.length === 0);
+    badge.textContent = pending.length ? `${pending.length} pending` : "";
+  }
   if (!pending.length) { box.innerHTML = ""; return; }
   box.innerHTML = `<h3 style="margin-top:22px;">${icon("send", 15)} Pending rental requests</h3>` + pending.map(p => `
     <div class="auto-row">
@@ -1091,7 +1118,7 @@ async function editNpcProp(id) {
   document.getElementById("addNpcBtn").innerHTML = icon("plus", 15) + " Save changes";
   document.getElementById("cancelEditNpcBtn").classList.remove("hidden");
   document.getElementById("addNpcMsg").innerHTML = "";
-  document.getElementById("npcPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  jumpTo("npcPanel");
 }
 function cancelEditNpcProp() {
   EDITING_NPC_ID = null;

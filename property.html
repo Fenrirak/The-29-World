@@ -82,6 +82,65 @@
   .mortgage-toggle-row input:focus-visible ~ .mortgage-toggle-track { outline: 2px solid #c9932e; outline-offset: 2px; }
   .mortgage-toggle-text { flex: 1; }
   .mortgage-toggle-text strong { display: block; margin-bottom: 2px; }
+
+  /* Collapsible settings panels (teacher-only) — Mortgage settings, Daily
+     price movement, Renting to classmates, Add an NPC property all wrap a
+     <details class="card"> instead of a plain <div class="card"> now, so a
+     class with everything configured can collapse them out of the way
+     instead of stacking four fully-expanded cards above the listings every
+     single time. */
+  details.card { padding: 0; }
+  details.card > summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px;
+  }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card > summary h2 { margin: 0; flex: 1; }
+  details.card > summary::after {
+    content: "▾";
+    font-size: .75em;
+    opacity: .55;
+    flex-shrink: 0;
+    transition: transform .15s ease;
+  }
+  details.card[open] > summary::after { transform: rotate(180deg); }
+  details.card > summary:hover::after { opacity: .9; }
+  details.card > *:not(summary):first-of-type { margin-top: 0; }
+  details.card > :not(summary) { padding: 0 22px; }
+  details.card > summary + * { margin-top: 0; }
+  details.card > *:last-child { padding-bottom: 22px; }
+
+  /* Quick-jump pills to each settings panel (teacher-only) — a flat page
+     of several collapsed cards still needs an at-a-glance way to find the
+     right one without scanning past all of them. */
+  .property-quicknav { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
+  .property-quicknav a {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 999px;
+    border: 1.5px solid var(--line); background: var(--card);
+    font-size: .85rem; font-weight: 600; text-decoration: none; color: inherit;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .property-quicknav a:hover { border-color: var(--gold); background: rgba(201,147,46,0.08); }
+  .property-quicknav a .icon-slot { width: 14px; height: 14px; }
+
+  /* Per-listing "Pricing controls" — the price override + per-listing
+     daily-range settings tucked behind a small collapsible toggle inside
+     each property card, so a page with many listings doesn't show two
+     extra input grids per card by default. */
+  .listing-advanced { margin-top: 12px; padding-top: 12px; border-top: 1.5px solid var(--line); }
+  .listing-advanced > summary {
+    cursor: pointer; list-style: none;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: .85rem; font-weight: 700; color: var(--muted);
+  }
+  .listing-advanced > summary::-webkit-details-marker { display: none; }
+  .listing-advanced > summary::after { content: "▾"; font-size: .75em; opacity: .7; }
+  .listing-advanced[open] > summary::after { content: "▴"; }
 </style>
 </head>
 <body>
@@ -118,12 +177,21 @@
   <h1 id="pageTitle">Property</h1>
   <p>Buy a house outright, or finance it with a weekly mortgage — or rent one from your teacher's listings or from a classmate.</p>
 
+  <div id="teacherQuickNav" class="property-quicknav hidden">
+    <a href="#" onclick="jumpTo('mortgagePanel');return false;"><span class="icon-slot" data-icon="house"></span>Mortgage</a>
+    <a href="#" onclick="jumpTo('propertyMarketPanel');return false;"><span class="icon-slot" data-icon="chart"></span>Pricing</a>
+    <a href="#" onclick="jumpTo('rentalsPanel');return false;"><span class="icon-slot" data-icon="users"></span>Rentals</a>
+    <a href="#" onclick="jumpTo('npcPanel');return false;"><span class="icon-slot" data-icon="building"></span>NPC listings</a>
+    <a href="#" onclick="jumpTo('teacherPanel');return false;"><span class="icon-slot" data-icon="plus"></span>Add property</a>
+    <a href="#" onclick="jumpTo('propList');return false;"><span class="icon-slot" data-icon="house"></span>Listings</a>
+  </div>
+
   <div id="myRentedHome"></div>
   <div id="availableSublets"></div>
   <div id="availableNpcRentals"></div>
 
-  <div id="mortgagePanel" class="card hidden">
-    <h2 id="hMortgageSettings">Mortgage settings</h2>
+  <details id="mortgagePanel" class="card hidden">
+    <summary><h2 id="hMortgageSettings">Mortgage settings</h2></summary>
     <p>Control when weekly mortgage installments become payable for financed properties.</p>
     <div class="mortgage-status-row" id="mortgageStatusRow"></div>
 
@@ -180,11 +248,11 @@
       </div>
       <div id="movingCostMsg"></div>
     </div>
-  </div>
+  </details>
 
-  <div id="propertyMarketPanel" class="card hidden">
-    <h2 id="hPropertyMarket">Daily price movement</h2>
-    <p>Just like the Stock Market, property prices drift by a random percentage every simulated day — up or down, within the range below. It runs automatically once per day (the first page load of the day, on any page, triggers it), or you can trigger an extra day right now with the button below. Any listing can also be given its own range instead of this class-wide default — see the "Save range" control under each listing further down the page.</p>
+  <details id="propertyMarketPanel" class="card hidden">
+    <summary><h2 id="hPropertyMarket">Daily price movement</h2></summary>
+    <p>Just like the Stock Market, property prices drift by a random percentage every simulated day — up or down, within the range below. It runs automatically once per day (the first page load of the day, on any page, triggers it), or you can trigger an extra day right now with the button below. Any listing can also be given its own range instead of this class-wide default — see the "Pricing controls" toggle under each listing further down the page.</p>
     <div class="grid grid-2">
       <div>
         <label for="propRangeMin" id="labPropRangeMin">Minimum % change</label>
@@ -200,10 +268,10 @@
       <button class="btn small gold" onclick="runPropertyMarketDay()" id="simPropDayBtn">Simulate a property day</button>
     </div>
     <div id="propRangeMsg"></div>
-  </div>
+  </details>
 
-  <div id="rentalsPanel" class="card hidden">
-    <h2 id="hRentalSettings">Renting to classmates</h2>
+  <details id="rentalsPanel" class="card hidden">
+    <summary><h2 id="hRentalSettings">Renting to classmates</h2><span id="pendingSubletsBadge" class="badge coral hidden"></span></summary>
     <p>Let students who own a property lease it to a classmate for real weekly rent, instead of just living in it or renting it out for free passive income.</p>
 
     <label class="mortgage-toggle-row" for="rentalEnabled">
@@ -247,10 +315,10 @@
     </div>
 
     <div id="pendingSublets"></div>
-  </div>
+  </details>
 
-  <div id="npcPanel" class="card hidden">
-    <h2 id="hAddNpc">Add an NPC property</h2>
+  <details id="npcPanel" class="card hidden">
+    <summary><h2 id="hAddNpc">Add an NPC property</h2></summary>
     <p>List a rental with no student owner — "the school" is the landlord. Rent, minimum lease, and the lifestyle-rating bonus for living there are all fixed by you on the listing itself, so students just move straight in at the terms you set.</p>
     <form onsubmit="return addNpcProp(event)">
       <div class="grid grid-2">
@@ -296,7 +364,7 @@
     <div id="addNpcMsg"></div>
     <div id="npcPropList" style="margin-top:18px;"></div>
     <p class="muted-small" id="noNpcProps">No NPC properties are listed yet.</p>
-  </div>
+  </details>
 
   <div id="teacherPanel" class="card hidden">
     <h2 id="hAdd">Add a property</h2>
