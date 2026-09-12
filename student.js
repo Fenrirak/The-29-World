@@ -271,6 +271,11 @@ async function render() {
     else if (t.type === "life-grant") { sign = amt < 0 ? "-" : (amt > 0 ? "+" : ""); amt = Math.abs(amt); }
     else if (t.type === "life-allowance") { sign = "+"; }
     else if (t.type === "life-revoke") { sign = ""; }
+    // Only the "moved in and paid a moving cost" entries of this type ever
+    // carry a nonzero amount (see chargeMoveOrThrow) — the rest (renting a
+    // property out, moving out, ending a lease) are just status notes with
+    // nothing to sign.
+    else if (t.type === "property-occupancy") { sign = amt > 0 ? (t.from === me.username ? "-" : "+") : ""; }
 
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${detail}</td>

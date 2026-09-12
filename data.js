@@ -6539,6 +6539,7 @@ async function setPropertyOccupancy(username, classCode, propId, occupancy) {
   }
   await logTxn(classCode, {
     type: "property-occupancy", from: username,
+    amount: occupancy === "living" ? moveCost : 0,
     note: occupancy === "living"
       ? `Moved into: ${propName}` + (moveCost > 0 ? ` (paid ${fmtMoney(moveCost)} moving cost)` : "")
       : `Started renting out: ${propName}`
@@ -6856,7 +6857,7 @@ async function claimSublet(username, classCode, propId) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "property-occupancy", to: username, note: `Moved in as a tenant: ${propName} (renting from ${ownerUsername})` + (moveCost > 0 ? ` — paid ${fmtMoney(moveCost)} moving cost` : "") });
+  await logTxn(classCode, { type: "property-occupancy", to: username, amount: moveCost, note: `Moved in as a tenant: ${propName} (renting from ${ownerUsername})` + (moveCost > 0 ? ` — paid ${fmtMoney(moveCost)} moving cost` : "") });
   return { ok: true };
 }
 
@@ -7200,7 +7201,7 @@ async function rentNpcProperty(username, classCode, unitId) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "property-occupancy", to: username, note: `Moved in as a tenant: ${propName} (renting from the school)` + (moveCost > 0 ? ` — paid ${fmtMoney(moveCost)} moving cost` : "") });
+  await logTxn(classCode, { type: "property-occupancy", to: username, amount: moveCost, note: `Moved in as a tenant: ${propName} (renting from the school)` + (moveCost > 0 ? ` — paid ${fmtMoney(moveCost)} moving cost` : "") });
   return { ok: true };
 }
 
