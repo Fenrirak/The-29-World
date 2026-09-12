@@ -516,7 +516,7 @@ async function openLifestyleBreakdown() {
   }
 
   if (breakdown.items.length === 0) {
-    body.innerHTML = `<p class="muted-small">Nothing is affecting your score yet — property, a vehicle, store items, or insurance can raise it.</p>` + nextTierHtml(tier);
+    body.innerHTML = nextTierHtml(tier) + `<p class="muted-small">Nothing is affecting your score yet — property, a vehicle, store items, or insurance can raise it.</p>`;
     return;
   }
 
@@ -553,6 +553,7 @@ async function openLifestyleBreakdown() {
     : `<p class="muted-small">None right now.</p>`;
 
   body.innerHTML = `
+    ${nextTierHtml(tier)}
     <div class="grid grid-2" style="align-items:start;">
       <div>
         <h4>${icon("star", 14)} Adding to your score</h4>
@@ -563,7 +564,6 @@ async function openLifestyleBreakdown() {
         ${rows(losses)}
       </div>
     </div>
-    ${nextTierHtml(tier)}
   `;
 }
 
@@ -575,7 +575,7 @@ function nextTierHtml(tier) {
   if (!tier) return "";
   if (tier.atTop) {
     return `
-      <div style="margin-top:18px;padding-top:14px;border-top:1.5px solid var(--line);">
+      <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1.5px solid var(--line);">
         <h4>${icon("trophy", 14)} Next tier</h4>
         <p class="muted-small">You're already at the top tier${tier.currentLabel ? ` — <strong>${tier.currentLabel}</strong>` : ""}. Nothing more needed!</p>
       </div>
@@ -587,7 +587,7 @@ function nextTierHtml(tier) {
   if (tier.propertyComfortNeeded > 0) needs.push(`${tier.propertyComfortNeeded} more property comfort`);
   if (tier.transportComfortNeeded > 0) needs.push(`${tier.transportComfortNeeded} more transport comfort`);
   return `
-    <div style="margin-top:18px;padding-top:14px;border-top:1.5px solid var(--line);">
+    <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1.5px solid var(--line);">
       <h4>${icon("trophy", 14)} Next tier</h4>
       <p class="muted-small">To reach <strong>${tier.nextLabel}</strong>${tier.currentLabel ? ` from ${tier.currentLabel}` : ""}, you still need:</p>
       ${needs.length
