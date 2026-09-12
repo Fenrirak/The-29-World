@@ -637,6 +637,7 @@ function defaultClassData(code, className, teacherUsername) {
     vehicles: [], termDepositPlans: [],
     truckLicence: { price: 0, description: "" },
     sellBackRates: { car: 0.85, truck: 0.85, bike: 0.85 },
+    propertyBreakFee: 0,
     sideHustles: [],
     lifestyleLock: { threshold: 0, modules: [] },
     dailyTimeLimitMinutes: null, // null/0 = no limit; minutes of active time per student per day
@@ -5240,6 +5241,11 @@ function withNewModuleDefaults(cls) {
   // with "living") or moving in as a classmate's tenant (claimSublet). 0 by
   // default (free to move). See setMovingCost, chargeMoveOrThrow.
   if (cls.movingCost === undefined) cls.movingCost = 0;
+  // Teacher-set flat fee charged on top of paying off whatever's left on a
+  // mortgage when a student sells a mortgaged property back to the class.
+  // Never charged on a sale where there's no mortgage in progress. 0 by
+  // default (no break fee). See setPropertyBreakFee, sellProperty.
+  if (cls.propertyBreakFee === undefined) cls.propertyBreakFee = 0;
   // Teacher manual override: an ISO week key (see isoWeekKey) for which the
   // teacher has declared mortgage payments due *right now*, regardless of
   // what day it actually is. Lets a teacher who missed the normal
@@ -6482,9 +6488,25 @@ async function buyProperty(username, classCode, propId, financed) {
   await logTxn(classCode, { type: "property-buy", from: username, amount: financed ? deposit : cashPaid, note: (financed ? `Bought (mortgaged): ${propName} — ${fmtMoney(deposit)} deposit` : `Bought outright: ${propName}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
 }
-async function sellProperty(classCode, propId, rate) {
+// Sells a property back to the class. The owner is paid whatever the
+// property's current market price is (prop.price — already reflects daily
+// price drift from applyPropertyMarketDayMoves, teacher edits, etc., so
+// it's the exact same number shown on the listing right now; there's no
+// separate sell-back discount). If the property still has an active
+// mortgage, whatever's left to pay off (see mortgageWeekAmount's
+// balanceBefore) is deducted from that payout, and on top of that so is
+// the teacher-set break fee (see setPropertyBreakFee) — neither is ever
+// charged on a sale with no mortgage in progress. The payout can go
+// negative if the debts being cleared exceed the market price; that's
+// simply taken out of the owner's balance rather than blocked, so a
+// student can always get out from under a mortgage they can no longer
+// afford. Returns the full breakdown so property.js's confirmation popup
+// (see openSellModal) can show a student or teacher exactly what a sale
+// will do *before* it's confirmed — the popup previews these same numbers
+// itself, but this is the one place that actually charges anyone.
+async function sellProperty(classCode, propId) {
   const classRef = classesCol().doc(classCode);
-  let owner = null, payout = 0, propName = "";
+  let owner = null, propName = "", marketPrice = 0, mortgagePayoff = 0, breakFee = 0, payout = 0;
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
@@ -6493,7 +6515,12 @@ async function sellProperty(classCode, propId, rate) {
     if (!prop || !prop.owner) return;
     owner = prop.owner;
     propName = prop.name;
-    payout = Math.round(prop.price * (rate !== undefined ? rate : 0.9) * 100) / 100;
+    marketPrice = prop.price;
+    if (prop.mortgage) {
+      mortgagePayoff = mortgageWeekAmount(prop.mortgage).balanceBefore;
+      breakFee = Math.max(0, Number(cls.propertyBreakFee) || 0);
+    }
+    payout = Math.round((marketPrice - mortgagePayoff - breakFee) * 100) / 100;
     prop.owner = null;
     prop.mortgage = null;
     prop.occupancy = null;
@@ -6504,11 +6531,13 @@ async function sellProperty(classCode, propId, rate) {
     prop.sublet = null;
     t.update(classRef, { properties: cls.properties });
   });
-  if (owner) {
-    await adjustBalance(owner, payout);
-    await logTxn(classCode, { type: "property-sell", to: owner, amount: payout, note: `Sold back: ${propName}` });
-  }
-  return true;
+  if (!owner) return { ok: false };
+  await adjustBalance(owner, payout);
+  const breakdown = mortgagePayoff > 0
+    ? ` (market price ${fmtMoney(marketPrice)} minus ${fmtMoney(mortgagePayoff)} mortgage payoff${breakFee > 0 ? ` and ${fmtMoney(breakFee)} break fee` : ""})`
+    : "";
+  await logTxn(classCode, { type: "property-sell", to: owner, amount: payout, note: `Sold back: ${propName}${breakdown}` });
+  return { ok: true, marketPrice, mortgagePayoff, breakFee, payout };
 }
 // The one and only way a mortgage installment is ever paid: the student
 // pays this week's installment themselves. Nothing in this app ever
@@ -6906,6 +6935,16 @@ function currentHomeOf(cls, username) {
 async function setMovingCost(classCode, cost) {
   const clean = Math.max(0, Math.round((Number(cost) || 0) * 100) / 100);
   await classesCol().doc(classCode).update({ movingCost: clean });
+  return clean;
+}
+
+// Teacher-only: sets the flat break fee (0 = none) charged on top of the
+// remaining mortgage payoff when a student sells back a property that
+// still has an active mortgage on it. See withNewModuleDefaults for the
+// default and sellProperty for where it's actually applied.
+async function setPropertyBreakFee(classCode, fee) {
+  const clean = Math.max(0, Math.round((Number(fee) || 0) * 100) / 100);
+  await classesCol().doc(classCode).update({ propertyBreakFee: clean });
   return clean;
 }
 

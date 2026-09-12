@@ -837,12 +837,20 @@ function populateMortgageSettings(cls) {
   document.getElementById("mortgageForceDue").checked = cls.mortgageForceDueWeek === isoWeekKey(new Date());
   document.getElementById("mortgageStatusRow").innerHTML = mortgageStatusBadges(cls);
   document.getElementById("movingCostInput").value = cls.movingCost || 0;
+  document.getElementById("mortgageBreakFeeInput").value = cls.propertyBreakFee || 0;
 }
 
 async function saveMovingCostClick() {
   const val = document.getElementById("movingCostInput").value;
   await setMovingCost(CURRENT.classCode, val);
   document.getElementById("movingCostMsg").innerHTML = `<div class="success-msg">Moving cost saved. Students are charged this the moment they move into a new home (buying and choosing to live in it, or moving in as a classmate's tenant) — capped at one move per student per day.</div>`;
+  await render();
+}
+
+async function saveMortgageBreakFeeClick() {
+  const val = document.getElementById("mortgageBreakFeeInput").value;
+  await setPropertyBreakFee(CURRENT.classCode, val);
+  document.getElementById("mortgageBreakFeeMsg").innerHTML = `<div class="success-msg">Break fee saved. It'll be deducted on top of the remaining mortgage payoff whenever a student sells back a property that still has a mortgage on it.</div>`;
   await render();
 }
 
@@ -969,17 +977,85 @@ async function deleteProp(id) {
     await render();
   }
 }
-async function forceSell(id) {
-  if (confirm("Sell this property back to the class (owner gets 90% of price)?")) {
+/* ---------------- Sell-back confirmation popup ----------------
+   Both the teacher's "force sell" button on a student's listing and a
+   student's own "sell back" button route through here, so the two ways of
+   triggering a sale always show the exact same breakdown before it
+   actually happens. Built the same way the change-password popup is
+   (see _pwBuildModal in data.js) — plain DOM injection reusing the
+   .anw-modal-overlay/.anw-modal-card classes already in style.css, so
+   there's no extra HTML to keep in sync and no new CSS needed. */
+function _sellBuildModal() {
+  const existing = document.getElementById("sellConfirmModal");
+  if (existing) return existing;
+  const overlay = document.createElement("div");
+  overlay.id = "sellConfirmModal";
+  overlay.className = "anw-modal-overlay hidden";
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeSellModal(); });
+  overlay.innerHTML = `
+    <div class="anw-modal-card">
+      <div class="flex-between">
+        <h2 style="margin:0 0 2px;" id="sellModalTitle">Sell property</h2>
+        <button class="btn small secondary" type="button" id="sellModalCloseBtn">Close</button>
+      </div>
+      <div id="sellModalBody" style="margin-top:12px;"></div>
+      <div class="row-flex" style="gap:8px;margin-top:16px;">
+        <button class="btn gold" type="button" id="sellModalConfirmBtn">Confirm sale</button>
+        <button class="btn secondary" type="button" id="sellModalCancelBtn">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#sellModalCloseBtn").addEventListener("click", closeSellModal);
+  overlay.querySelector("#sellModalCancelBtn").addEventListener("click", closeSellModal);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !overlay.classList.contains("hidden")) closeSellModal();
+  });
+  return overlay;
+}
+function closeSellModal() {
+  const overlay = document.getElementById("sellConfirmModal");
+  if (overlay) overlay.classList.add("hidden");
+}
+// Looks the property up fresh, works out exactly what selling it right now
+// would pay out — current market price, minus any mortgage payoff and
+// break fee (see sellProperty in data.js, which this mirrors so the
+// number shown here is never different from what the student/owner
+// actually gets) — shows that in the popup above, and only calls
+// sellProperty if the user actually confirms.
+async function openSellModal(id, isTeacherSelling) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const prop = (cls.properties || []).find(p => p.id === id);
+  if (!prop) return;
+  const marketPrice = prop.price;
+  let mortgagePayoff = 0, breakFee = 0;
+  if (prop.mortgage) {
+    mortgagePayoff = mortgageWeekAmount(prop.mortgage).balanceBefore;
+    breakFee = Math.max(0, Number(cls.propertyBreakFee) || 0);
+  }
+  const payout = Math.round((marketPrice - mortgagePayoff - breakFee) * 100) / 100;
+  const overlay = _sellBuildModal();
+  document.getElementById("sellModalTitle").innerHTML = icon("house", 18) + ` Sell ${prop.name}`;
+  let body = `<p>Current market price: <strong>${fmtMoney(marketPrice)}</strong></p>`;
+  if (prop.mortgage) {
+    body += `<p>This property still has a mortgage on it. <strong>${fmtMoney(mortgagePayoff)}</strong> will be deducted from the sale to pay off the remaining mortgage`;
+    body += breakFee > 0 ? `, plus a <strong>${fmtMoney(breakFee)}</strong> break fee for selling with financing still owing.</p>` : `.</p>`;
+  }
+  const who = isTeacherSelling ? "The owner" : "You";
+  body += `<p class="muted-small">${who} will receive <strong>${fmtMoney(payout)}</strong>${payout < 0 ? " — this will come out of their balance instead, since what's owed is more than the sale is worth" : ""}.</p>`;
+  document.getElementById("sellModalBody").innerHTML = body;
+  const confirmBtn = document.getElementById("sellModalConfirmBtn");
+  confirmBtn.onclick = async () => {
+    closeSellModal();
     await sellProperty(CURRENT.classCode, id);
     await render();
-  }
+  };
+  overlay.classList.remove("hidden");
+}
+async function forceSell(id) {
+  await openSellModal(id, true);
 }
 async function sellMine(id) {
-  if (confirm("Sell your property back for 90% of its price?")) {
-    await sellProperty(CURRENT.classCode, id);
-    await render();
-  }
+  await openSellModal(id, false);
 }
 // gid is a listing's groupId — picks whichever unit in that listing is
 // still unowned (fresh read, to keep the race window with another buyer

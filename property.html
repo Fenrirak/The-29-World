@@ -248,6 +248,21 @@
       </div>
       <div id="movingCostMsg"></div>
     </div>
+
+    <div class="mortgage-subsection">
+      <div class="mortgage-subsection-head">
+        <h3>Break fee</h3>
+      </div>
+      <p class="muted-small">An extra flat fee charged on top of paying off the remaining mortgage when a student sells back a property that still has a mortgage on it. Selling a property with no mortgage never charges this. Set to 0 for no break fee.</p>
+      <div class="mortgage-day-row">
+        <div>
+          <label for="mortgageBreakFeeInput">Break fee ($)</label>
+          <input id="mortgageBreakFeeInput" type="number" min="0" step="0.01" style="max-width:200px;">
+        </div>
+        <button class="btn secondary small" onclick="saveMortgageBreakFeeClick()" id="saveMortgageBreakFeeBtn">Save break fee</button>
+      </div>
+      <div id="mortgageBreakFeeMsg"></div>
+    </div>
   </details>
 
   <details id="propertyMarketPanel" class="card hidden">
