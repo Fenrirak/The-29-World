@@ -627,6 +627,8 @@ function defaultClassData(code, className, teacherUsername) {
     mortgageDay: "Fri",
     mortgageForceDueWeek: null,
     priceRange: { min: 1, max: 5 },
+    propertyPriceRange: { min: 0.5, max: 2 },
+    lastPropertyMarketDayRun: null,
     automations: [],
     jobApplications: [],
     lastPayDayRun: null,
@@ -802,6 +804,15 @@ function _classDataFromTemplate(code, className, teacherUsername, template) {
   cls.properties = (template.properties || []).map(p => {
     const prop = _cloneDoc(p);
     prop.owner = null; prop.occupancy = null; prop.rentLastWeekPaid = null;
+    prop.purchasePrice = null;
+    // Reset to the listing's original starting price rather than wherever
+    // its daily drift had wandered to in the template class — same idea as
+    // the company reset just below, and the same reason: a fresh class
+    // shouldn't inherit another class's accumulated price history.
+    const startPrice = (prop.priceHistory && prop.priceHistory.length) ? prop.priceHistory[0] : prop.price;
+    prop.price = startPrice;
+    prop.priceHistory = [startPrice];
+    prop.priceHistoryDates = [nzDateKey()];
     return prop;
   });
   cls.vehicles = (template.vehicles || []).map(v => {
@@ -838,6 +849,7 @@ function _classDataFromTemplate(code, className, teacherUsername, template) {
   cls.taxRates = _cloneDoc(template.taxRates || cls.taxRates);
   cls.wageTaxBrackets = _cloneDoc(template.wageTaxBrackets || []);
   cls.priceRange = _cloneDoc(template.priceRange || cls.priceRange);
+  cls.propertyPriceRange = _cloneDoc(template.propertyPriceRange || cls.propertyPriceRange);
   cls.sellBackRates = _cloneDoc(template.sellBackRates || cls.sellBackRates);
   cls.truckLicence = _cloneDoc(template.truckLicence || cls.truckLicence);
   cls.dailyTimeLimitMinutes = template.dailyTimeLimitMinutes || null;
@@ -5175,7 +5187,30 @@ function withNewModuleDefaults(cls) {
     // saved before this existed default to 1, matching the old flat +5
     // bonus closely enough for the default weight of 4 pts/star.
     if (p.livingBonusStars === undefined) p.livingBonusStars = 1;
+    // Daily-fluctuating price support (see applyPropertyMarketDayMoves) —
+    // properties saved before this feature existed get a fresh one-point
+    // history starting at their current price, same treatment
+    // openCompany/applyMarketDayMoves give a company with no history yet.
+    if (!Array.isArray(p.priceHistory) || p.priceHistory.length === 0) p.priceHistory = [p.price];
+    if (!Array.isArray(p.priceHistoryDates) || p.priceHistoryDates.length === 0) p.priceHistoryDates = [nzDateKey()];
+    if (p.priceRange === undefined) p.priceRange = null;
+    // Cost basis for the "since you bought it" gain/loss a student sees on
+    // their own home (see propertyGainSinceBought in property.js). Set at
+    // purchase time going forward (buyProperty) and cleared on sell-back
+    // (sellProperty) — this migration only ever fires ONCE per property,
+    // for records saved before purchasePrice existed: an owned property
+    // locks in whatever its price happens to be right now (so it starts
+    // this new feature at $0 gain/loss rather than comparing against a
+    // price it was never actually bought at), and an unowned one simply
+    // has no cost basis yet.
+    if (p.purchasePrice === undefined) p.purchasePrice = p.owner ? p.price : null;
   });
+  // Class-wide default daily % move range for property listings that don't
+  // set their own (see applyPropertyMarketDayMoves). Real estate is meant
+  // to feel steadier than the stock market, so this defaults to a gentler
+  // band than cls.priceRange's stock default of 1-5%.
+  if (!cls.propertyPriceRange) cls.propertyPriceRange = { min: 0.5, max: 2 };
+  if (cls.lastPropertyMarketDayRun === undefined) cls.lastPropertyMarketDayRun = null;
   // Teacher-listed rentals with no student owner — "the school" is the
   // landlord. A student rents a unit directly from the teacher's listing
   // (rent, minimum lease, and the lifestyle-rating bonus for living there
@@ -6108,7 +6143,14 @@ async function addProperty(classCode, prop) {
         // they live in it (on top of its own comfort rating) — see
         // propertyLivingBonusPoints.
         livingBonusStars: Math.max(0, Number(prop.livingBonusStars) || 0),
-        occupancy: null, rentLastWeekPaid: null
+        occupancy: null, rentLastWeekPaid: null,
+        // Daily-fluctuating price support, mirroring the stock market's
+        // co.history/historyDates/priceRange (see applyPropertyMarketDayMoves
+        // below). priceRange is per-listing and null by default, meaning
+        // "use the class-wide cls.propertyPriceRange" — set via
+        // setListingPriceRange to override just this listing.
+        priceHistory: [Number(prop.price)], priceHistoryDates: [nzDateKey()],
+        priceRange: null, purchasePrice: null
       });
     }
     t.update(classRef, { properties: cls.properties });
@@ -6148,6 +6190,16 @@ async function updateProperty(classCode, propId, updates) {
     if (!target) return;
     const gid = groupIdOf(target);
     const units = cls.properties.filter(p => groupIdOf(p) === gid);
+    // A manual price edit here is a deliberate teacher override, same as
+    // clicking "Update" on a company's price in the Stock Market — it
+    // should show up in the price history/sparkline too, not just silently
+    // change the number. Every unit in the listing shares one price, so
+    // this only needs deciding once, against whatever the (shared) price
+    // was before this edit.
+    const oldPrice = Number(target.price);
+    const newPrice = Number(updates.price);
+    const priceChanged = Number.isFinite(newPrice) && newPrice > 0 && newPrice !== oldPrice;
+    const editDateKey = nzDateKey();
     units.forEach(prop => {
       prop.groupId = gid;
       prop.name = updates.name;
@@ -6159,6 +6211,12 @@ async function updateProperty(classCode, propId, updates) {
       prop.rentPerWeek = Math.max(0, Number(updates.rentPerWeek) || 0);
       prop.rentDay = DAY_NAMES.includes(updates.rentDay) ? updates.rentDay : "Fri";
       prop.livingBonusStars = Math.max(0, Number(updates.livingBonusStars) || 0);
+      if (priceChanged) {
+        (prop.priceHistory = prop.priceHistory || [oldPrice]).push(newPrice);
+        (prop.priceHistoryDates = prop.priceHistoryDates || []).push(editDateKey);
+        if (prop.priceHistory.length > 30) prop.priceHistory.shift();
+        if (prop.priceHistoryDates.length > 30) prop.priceHistoryDates.shift();
+      }
     });
     const desiredQty = Math.max(1, Math.floor(Number(updates.quantity)) || 1);
     const currentQty = units.length;
@@ -6172,7 +6230,10 @@ async function updateProperty(classCode, propId, updates) {
           description: template.description, owner: null,
           rentPerWeek: template.rentPerWeek, rentDay: template.rentDay,
           livingBonusStars: template.livingBonusStars || 0,
-          occupancy: null, rentLastWeekPaid: null
+          occupancy: null, rentLastWeekPaid: null,
+          priceHistory: (template.priceHistory || [template.price]).slice(),
+          priceHistoryDates: (template.priceHistoryDates || [editDateKey]).slice(),
+          priceRange: template.priceRange || null, purchasePrice: null
         });
       }
     } else if (desiredQty < currentQty) {
@@ -6189,6 +6250,174 @@ async function updateProperty(classCode, propId, updates) {
     t.update(classRef, { properties: cls.properties });
   });
 }
+
+/* ---------------- Property: daily price movement ----------------
+   Mirrors the Stock Market's cls.priceRange / co.priceRange /
+   applyMarketDayMoves / autoMarketDayIfDue / simulateMarketDay pattern
+   (see "Stock market" section above) so property prices drift by a random
+   teacher-set percentage every simulated day, exactly like share prices
+   do. The main difference is that a property "listing" is several
+   identical units (see groupIdOf) sharing one price, so a day's move is
+   rolled ONCE per listing and then applied to every unit in that group,
+   never once per unit — otherwise two units of the same listing could
+   silently end up at different prices. NPC properties have no price field
+   (they're rent-only, "the school" is the landlord) and are untouched. */
+
+// Class-wide default daily move range (percent), used by any listing that
+// doesn't have its own priceRange override. Fire-and-forget, matching
+// setPriceRange's style for the stock market.
+async function setPropertyPriceRange(classCode, min, max) {
+  await classesCol().doc(classCode).update({
+    propertyPriceRange: { min: Math.max(0, Number(min)), max: Math.max(0, Number(max)) }
+  });
+}
+
+// Quick teacher override for a listing's price alone — same idea as the
+// Stock Market's updateCompanyPrice "Set new price" control, without
+// having to reopen the full Edit form and resubmit every other field.
+// propId can be any unit's id within the listing; the new price applies to
+// every unit in the group and is recorded in history exactly like a
+// simulated market day or a full edit-form price change (see
+// updateProperty). Does NOT touch purchasePrice — an owner's "since you
+// bought it" gain/loss should react to this the same way it reacts to any
+// other price move, not be reset by it.
+async function setPropertyPrice(classCode, propId, newPrice) {
+  const parsed = Number(newPrice);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return { ok: false, error: "Enter a valid price greater than 0." };
+  }
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const target = cls.properties.find(p => p.id === propId);
+    if (!target) return;
+    const gid = groupIdOf(target);
+    const oldPrice = target.price;
+    const newP = Math.max(0.01, Math.round(parsed * 100) / 100);
+    const dateKey = nzDateKey();
+    cls.properties.filter(p => groupIdOf(p) === gid).forEach(p => {
+      if (!Array.isArray(p.priceHistory) || p.priceHistory.length === 0) p.priceHistory = [oldPrice];
+      if (!Array.isArray(p.priceHistoryDates)) p.priceHistoryDates = [];
+      p.price = newP;
+      p.priceHistory.push(newP);
+      p.priceHistoryDates.push(dateKey);
+      if (p.priceHistory.length > 30) p.priceHistory.shift();
+      if (p.priceHistoryDates.length > 30) p.priceHistoryDates.shift();
+    });
+    t.update(classRef, { properties: cls.properties });
+  });
+  return { ok: true };
+}
+
+// Per-listing override (or, passed null/blank, clears back to "use the
+// class-wide default"). propId can be any unit's id within the listing —
+// applies to every unit in the group, same convention as updateProperty.
+async function setListingPriceRange(classCode, propId, min, max) {
+  const hasMin = min !== null && min !== "" && min !== undefined;
+  const hasMax = max !== null && max !== "" && max !== undefined;
+  if (hasMin !== hasMax) {
+    return { ok: false, error: "Set both a minimum and a maximum, or leave both blank to use the class default." };
+  }
+  const parsedMin = hasMin ? Number(min) : null;
+  const parsedMax = hasMax ? Number(max) : null;
+  if (hasMin && (!Number.isFinite(parsedMin) || !Number.isFinite(parsedMax))) {
+    return { ok: false, error: "Enter valid numbers for the price range." };
+  }
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const target = cls.properties.find(p => p.id === propId);
+    if (!target) return;
+    const gid = groupIdOf(target);
+    const range = hasMin ? { min: Math.max(0, parsedMin), max: Math.max(0, parsedMax) } : null;
+    cls.properties.filter(p => groupIdOf(p) === gid).forEach(p => { p.priceRange = range; });
+    t.update(classRef, { properties: cls.properties });
+  });
+  return { ok: true };
+}
+
+// Applies one simulated day's random price move to every for-sale property
+// LISTING on `cls` IN PLACE (all units in a listing move together — see
+// the header comment above), and returns one result per listing. Shared by
+// the auto-trigger and the manual "Simulate a property day" button, same
+// division of labour as applyMarketDayMoves/simulateMarketDay.
+function applyPropertyMarketDayMoves(cls) {
+  const results = [];
+  const range = cls.propertyPriceRange || { min: 0.5, max: 2 };
+  const dateKey = nzDateKey();
+  const groups = new Map();
+  (cls.properties || []).forEach(p => {
+    const gid = groupIdOf(p);
+    if (!groups.has(gid)) groups.set(gid, []);
+    groups.get(gid).push(p);
+  });
+  groups.forEach(units => {
+    const first = units[0];
+    const oldPrice = first.price;
+    const listingRange = first.priceRange || range;
+    const pct = listingRange.min + Math.random() * (listingRange.max - listingRange.min);
+    const direction = Math.random() < 0.5 ? -1 : 1;
+    const newPrice = Math.max(0.01, Math.round(oldPrice * (1 + (direction * pct) / 100) * 100) / 100);
+    units.forEach(u => {
+      if (!Array.isArray(u.priceHistory) || u.priceHistory.length === 0) u.priceHistory = [oldPrice];
+      if (!Array.isArray(u.priceHistoryDates)) u.priceHistoryDates = [];
+      u.price = newPrice;
+      u.priceHistory.push(newPrice);
+      u.priceHistoryDates.push(dateKey);
+      if (u.priceHistory.length > 30) u.priceHistory.shift();
+      if (u.priceHistoryDates.length > 30) u.priceHistoryDates.shift();
+    });
+    results.push({ name: first.name, pct: direction * pct });
+  });
+  return results;
+}
+
+// Runs the property price simulation automatically once per NZ calendar
+// day, the same "first page load of the day wins" pattern as
+// autoMarketDayIfDue — see the big comment on that function for why the
+// "claim today" flag and the actual price move have to be one atomic
+// transaction rather than two.
+async function autoPropertyMarketDayIfDue(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls || cls.archived) return [];
+  const todayKey = nzDateKey();
+  if (cls.lastPropertyMarketDayRun === todayKey) return [];
+  if (!cls.properties || cls.properties.length === 0) {
+    await classesCol().doc(classCode).update({ lastPropertyMarketDayRun: todayKey }).catch(() => {});
+    return [];
+  }
+  const classRef = classesCol().doc(classCode);
+  let results = [];
+  await fdb.runTransaction(async (t) => {
+    results = []; // reset every attempt — this callback can be retried
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = withNewModuleDefaults(snap.data());
+    if (liveCls.lastPropertyMarketDayRun === todayKey) return;
+    results = applyPropertyMarketDayMoves(liveCls);
+    t.update(classRef, { properties: liveCls.properties, lastPropertyMarketDayRun: todayKey });
+  });
+  return results;
+}
+
+async function simulatePropertyMarketDay(classCode) {
+  const classRef = classesCol().doc(classCode);
+  let results = [];
+  await fdb.runTransaction(async (t) => {
+    results = []; // reset every attempt — this callback can be retried
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    results = applyPropertyMarketDayMoves(cls);
+    t.update(classRef, { properties: cls.properties });
+  });
+  return results;
+}
+
 async function buyProperty(username, classCode, propId, financed) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
@@ -6208,6 +6437,12 @@ async function buyProperty(username, classCode, propId, financed) {
       const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "property", discountedPropPrice);
       taxAmount = tax;
       const isTeacher = user.role === "teacher";
+      // Snapshot what was actually paid (post-discount, post-tax, and the
+      // same whether bought outright or financed — a mortgage just spreads
+      // this same total out) as the baseline students see their "since you
+      // bought it" gain/loss against later, once the price keeps drifting
+      // day to day. See propertyGainSinceBought in property.js.
+      prop.purchasePrice = Math.round(taxedPrice * 100) / 100;
       if (financed && prop.mortgageWeeks > 0) {
         deposit = Math.round(taxedPrice * 0.1 * 100) / 100;
         weekly = Math.round(((taxedPrice - deposit) / prop.mortgageWeeks) * 100) / 100;
@@ -6263,6 +6498,7 @@ async function sellProperty(classCode, propId, rate) {
     prop.mortgage = null;
     prop.occupancy = null;
     prop.rentLastWeekPaid = null;
+    prop.purchasePrice = null;
     // Repossession/sell-back also ends any classmate rental in progress —
     // there's no owner left for the tenant to be renting from.
     prop.sublet = null;
@@ -8718,6 +8954,12 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
         // A new owner makes their own live-in-it / rent-it-out call.
         prop.occupancy = null;
         prop.rentLastWeekPaid = null;
+        // The buyer's "since you bought it" baseline (see
+        // propertyGainSinceBought in property.js) is what THEY actually
+        // paid the classmate, not whatever the previous owner originally
+        // paid — a peer sale is a fresh cost basis, same as buying fresh
+        // from the class in buyProperty.
+        prop.purchasePrice = price;
       } else {
         throw new Error("NOT_FOUND");
       }
@@ -9414,9 +9656,11 @@ function classBudgetOverviewFromData(cls, students) {
 
 /* ===================== Global page bootstrap =====================
    This runs on EVERY page that loads data.js (i.e. every page in the app),
-   regardless of what that page's own init() does. Two jobs:
+   regardless of what that page's own init() does. Three jobs:
    1. Make sure the market simulates itself once per NZ calendar day, even
       if nobody happens to visit the Market page that day.
+   1b. Same idea for property prices, so they drift daily even if nobody
+      visits the Property page that day — see autoPropertyMarketDayIfDue.
    2. Mount a small floating "cash balance" widget in the corner of the
       screen for logged-in students, so they can see their balance no
       matter which module they're in.
@@ -9426,6 +9670,7 @@ async function anwGlobalBootstrap() {
   if (!u) return; // not logged in (e.g. on the login page) — nothing to do
   if (u.classCode) {
     autoMarketDayIfDue(u.classCode).catch(() => {});
+    autoPropertyMarketDayIfDue(u.classCode).catch(() => {});
   }
   applyNavRoleVisibility(u.role);
   if (u.role === "student") {

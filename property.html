@@ -182,6 +182,26 @@
     </div>
   </div>
 
+  <div id="propertyMarketPanel" class="card hidden">
+    <h2 id="hPropertyMarket">Daily price movement</h2>
+    <p>Just like the Stock Market, property prices drift by a random percentage every simulated day — up or down, within the range below. It runs automatically once per day (the first page load of the day, on any page, triggers it), or you can trigger an extra day right now with the button below. Any listing can also be given its own range instead of this class-wide default — see the "Save range" control under each listing further down the page.</p>
+    <div class="grid grid-2">
+      <div>
+        <label for="propRangeMin" id="labPropRangeMin">Minimum % change</label>
+        <input id="propRangeMin" type="number" min="0" step="0.1">
+      </div>
+      <div>
+        <label for="propRangeMax" id="labPropRangeMax">Maximum % change</label>
+        <input id="propRangeMax" type="number" min="0" step="0.1">
+      </div>
+    </div>
+    <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
+      <button class="btn secondary small" onclick="savePropRange()" id="savePropRangeBtn">Save range</button>
+      <button class="btn small gold" onclick="runPropertyMarketDay()" id="simPropDayBtn">Simulate a property day</button>
+    </div>
+    <div id="propRangeMsg"></div>
+  </div>
+
   <div id="rentalsPanel" class="card hidden">
     <h2 id="hRentalSettings">Renting to classmates</h2>
     <p>Let students who own a property lease it to a classmate for real weekly rent, instead of just living in it or renting it out for free passive income.</p>

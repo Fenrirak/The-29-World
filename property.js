@@ -6,6 +6,47 @@ function comfortStars(n) {
   return `<span class="ticker-up">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span>`;
 }
 
+// Small inline "recent days" price trend chart for a property listing —
+// same look as the Stock Market's own sparkline() (data.js's
+// applyPropertyMarketDayMoves keeps the two features' price history in
+// the same shape), kept as its own copy here since this page doesn't load
+// market.js. Green when the most recent point is higher than the one
+// before it, coral when it's lower. Safe to call with a one-point history
+// (a brand-new listing that hasn't seen a simulated day yet) — it just
+// draws no line segments.
+function sparkline(history) {
+  const hist = (history && history.length ? history : [0]);
+  const w = 140, h = 40;
+  const max = Math.max(...hist), min = Math.min(...hist);
+  const range = (max - min) || 1;
+  const pts = hist.map((v, i) => {
+    const x = (i / (hist.length - 1 || 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    return { x, y };
+  });
+  const segments = pts.slice(1).map((pt, i) => {
+    const prev = pts[i];
+    const up = pt.y <= prev.y; // y is inverted (smaller y = higher price)
+    return `<line x1="${prev.x.toFixed(1)}" y1="${prev.y.toFixed(1)}" x2="${pt.x.toFixed(1)}" y2="${pt.y.toFixed(1)}" stroke="${up ? '#3fbf8f' : '#e8735f'}" stroke-width="2.5" stroke-linecap="round"/>`;
+  }).join("");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="max-width:140px;width:100%;height:auto;flex-shrink:0;">${segments}</svg>`;
+}
+
+// "Today's" price move for a listing — the difference between the most
+// recent two points in its priceHistory (NOT the oldest-vs-newest of the
+// whole up-to-30-day window, which would blur many days together into one
+// number). A listing with only one history point (brand new, or hasn't
+// been through a simulated day yet) has no "today" to report — callers
+// check hist.length before showing this.
+function propertyDailyChange(p) {
+  const hist = p.priceHistory && p.priceHistory.length ? p.priceHistory : [p.price];
+  const last = hist[hist.length - 1];
+  const prev = hist.length > 1 ? hist[hist.length - 2] : last;
+  const diff = Math.round((last - prev) * 100) / 100;
+  const pct = prev ? (diff / prev) * 100 : 0;
+  return { diff, pct };
+}
+
 // Shown next to every action that actually moves a student into a new
 // home (choosing to live in an owned property, claiming a classmate's
 // sublet, or renting an NPC listing) so the cost is visible right where
@@ -40,6 +81,11 @@ function paintChrome() {
   document.getElementById("saveMortgageForceDueBtn").innerHTML = icon("send", 14) + " Save";
   document.getElementById("hRentalSettings").innerHTML = icon("users", 18) + " Renting to classmates";
   document.getElementById("saveRentalSettingsBtn").innerHTML = icon("send", 14) + " Save settings";
+  document.getElementById("hPropertyMarket").innerHTML = icon("chart", 18) + " Daily price movement";
+  document.getElementById("labPropRangeMin").innerHTML = icon("chart", 13) + " Minimum % change";
+  document.getElementById("labPropRangeMax").innerHTML = icon("chart", 13) + " Maximum % change";
+  document.getElementById("savePropRangeBtn").innerHTML = icon("bank", 14) + " Save range";
+  document.getElementById("simPropDayBtn").innerHTML = icon("repeat", 15) + " Simulate a property day";
   document.getElementById("hAddNpc").innerHTML = icon("building", 18) + " Add an NPC property";
   document.getElementById("addNpcBtn").innerHTML = icon("plus", 15) + " Add NPC property";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a property";
@@ -57,6 +103,7 @@ async function init() {
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("mortgagePanel").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("propertyMarketPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("rentalsPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("npcPanel").classList.toggle("hidden", !IS_TEACHER);
   paintChrome();
@@ -117,6 +164,7 @@ async function render() {
 
   if (IS_TEACHER) {
     populateMortgageSettings(cls);
+    populatePropertyMarketSettings(cls);
     populateRentalSettings(cls);
     renderPendingSublets(cls, nameOf);
     renderNpcListings(cls, nameOf);
@@ -150,6 +198,14 @@ async function render() {
     const available = units.filter(u => !u.owner);
     const myUnit = units.find(u => u.owner === me.username);
 
+    // Daily price movement — see applyPropertyMarketDayMoves in data.js.
+    const hist = p.priceHistory && p.priceHistory.length ? p.priceHistory : [p.price];
+    const chg = propertyDailyChange(p);
+    const chgClass = chg.diff > 0 ? "ticker-up" : chg.diff < 0 ? "ticker-down" : "";
+    const chgSign = chg.diff > 0 ? "+" : chg.diff < 0 ? "-" : "";
+    const chgBadge = hist.length > 1 ? ` <span class="${chgClass} muted-small">(${chgSign}${Math.abs(chg.pct).toFixed(1)}% today)</span>` : "";
+    const listingRange = p.priceRange || cls.propertyPriceRange || { min: 0.5, max: 2 };
+
     const div = document.createElement("div");
     div.className = "card company-card";
     div.innerHTML = `
@@ -159,25 +215,118 @@ async function render() {
           <p>${p.description || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
           ${lifestylePreviewLine(cls, p)}
-          <p>${priceWithLifeDiscount(me, "property", p.price)} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""}` : "&middot; cash purchase only"}
+          <p>${priceWithLifeDiscount(me, "property", p.price)}${chgBadge} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""}` : "&middot; cash purchase only"}
             ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
           <p class="muted-small">${units.length > 1 ? `${available.length} of ${units.length} available` : (available.length > 0 ? "Available" : `Owned by ${nameOf(owned[0].owner)}`)}</p>
         </div>
-        <div class="row-flex" style="gap:8px;">
-          ${IS_TEACHER
-            ? `<button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button><button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>`
-            : (!myUnit && available.length > 0
-                ? `<button class="btn small gold" onclick="buyOutright('${gid}')">Buy cash</button>
-                   ${p.mortgageWeeks > 0 ? `<button class="btn small secondary" onclick="buyFinanced('${gid}')">Finance (10% deposit)</button>` : ""}`
-                : "")}
-        </div>
+        ${sparkline(hist)}
       </div>
       <div id="msg-${gid}"></div>
+      <div class="row-flex" style="gap:8px;margin-top:10px;flex-wrap:wrap;">
+        ${IS_TEACHER
+          ? `<button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button><button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>`
+          : (!myUnit && available.length > 0
+              ? `<button class="btn small gold" onclick="buyOutright('${gid}')">Buy cash</button>
+                 ${p.mortgageWeeks > 0 ? `<button class="btn small secondary" onclick="buyFinanced('${gid}')">Finance (10% deposit)</button>` : ""}`
+              : "")}
+      </div>
+      ${IS_TEACHER ? `
+        <div class="grid grid-2" style="margin-top:10px;">
+          <div>
+            <label>Set new price</label>
+            <div class="row-flex" style="gap:8px;">
+              <input type="number" min="0.01" step="0.01" id="price-${p.id}" value="${p.price}">
+              <button class="btn small" onclick="overridePriceClick('${p.id}')">${icon("chart", 13)} Update</button>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-3" style="margin-top:10px;">
+          <div>
+            <label>Min % change (this listing)</label>
+            <input type="number" min="0" step="0.1" id="prmin-${p.id}" value="${listingRange.min}">
+          </div>
+          <div>
+            <label>Max % change (this listing)</label>
+            <input type="number" min="0" step="0.1" id="prmax-${p.id}" value="${listingRange.max}">
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:8px;">
+            <button class="btn small secondary" style="width:100%;" onclick="setListingRangeClick('${p.id}')">${icon("chart", 13)} Save range</button>
+          </div>
+        </div>
+        <p class="muted-small">${p.priceRange
+          ? `Custom range for this listing (${listingRange.min}%\u2013${listingRange.max}%). <a href="#" onclick="clearListingRangeClick('${p.id}');return false;">Reset to class default</a>`
+          : `Using the class default (${listingRange.min}%\u2013${listingRange.max}% per day).`}</p>
+      ` : ""}
       ${owned.filter(u => IS_TEACHER || u.owner === me.username)
              .map(u => ownedUnitBlock(u, u.owner === me.username, cls, nameOf)).join("")}
     `;
     list.appendChild(div);
   });
+}
+
+/* ---------------- Teacher: property daily price movement ---------------- */
+function populatePropertyMarketSettings(cls) {
+  const range = cls.propertyPriceRange || { min: 0.5, max: 2 };
+  document.getElementById("propRangeMin").value = range.min;
+  document.getElementById("propRangeMax").value = range.max;
+}
+async function savePropRange() {
+  const min = document.getElementById("propRangeMin").value;
+  const max = document.getElementById("propRangeMax").value;
+  await setPropertyPriceRange(CURRENT.classCode, min, max);
+  document.getElementById("propRangeMsg").innerHTML = `<div class="success-msg">Saved — listings without their own custom range will move between ${min}% and ${max}% per simulated day.</div>`;
+  await render();
+}
+async function runPropertyMarketDay() {
+  const results = await simulatePropertyMarketDay(CURRENT.classCode);
+  if (results.length === 0) {
+    alert("There are no properties listed for sale yet.");
+    return;
+  }
+  const summary = results.map(r => `${r.name}: ${r.pct >= 0 ? "+" : ""}${r.pct.toFixed(1)}%`).join("\n");
+  alert("Property market day complete!\n\n" + summary);
+  await render();
+}
+// id is any unit's id within the listing (see setListingPriceRange in
+// data.js) — the msg box lives at msg-<groupId>, so this looks up the
+// listing's groupId fresh rather than trying to thread it through the
+// onclick call.
+async function overridePriceClick(id) {
+  const val = document.getElementById("price-" + id).value;
+  const res = await setPropertyPrice(CURRENT.classCode, id, val);
+  await showListingActionResult(id, res, "Price updated.");
+}
+async function setListingRangeClick(id) {
+  const min = document.getElementById("prmin-" + id).value;
+  const max = document.getElementById("prmax-" + id).value;
+  const res = await setListingPriceRange(CURRENT.classCode, id, min, max);
+  await showListingActionResult(id, res, "Range saved for this listing.");
+}
+async function clearListingRangeClick(id) {
+  const res = await setListingPriceRange(CURRENT.classCode, id, "", "");
+  await showListingActionResult(id, res, "Reset to the class default range.");
+}
+async function showListingActionResult(id, res, successMsg) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const target = (cls.properties || []).find(pp => pp.id === id);
+  const gid = target ? (target.groupId || target.id) : id;
+  const box = document.getElementById("msg-" + gid);
+  if (box) box.innerHTML = res.ok ? `<div class="success-msg">${successMsg}</div>` : `<div class="error-msg">${res.error}</div>`;
+  await render();
+}
+
+// "Since you bought it" gain/loss for an owned unit — how today's
+// (fluctuating — see applyPropertyMarketDayMoves) price compares to what
+// was actually paid at purchase time (p.purchasePrice, set by buyProperty;
+// see the comment there for exactly what it captures, and the migration
+// note on withNewModuleDefaults for how a property owned before this
+// feature existed gets a starting baseline). Returns null when there's no
+// baseline to compare against, which should only ever be an unowned unit.
+function propertyGainSinceBought(p) {
+  if (!Number.isFinite(p.purchasePrice) || p.purchasePrice <= 0) return null;
+  const diff = Math.round((p.price - p.purchasePrice) * 100) / 100;
+  const pct = (diff / p.purchasePrice) * 100;
+  return { diff, pct };
 }
 
 // Renders one owned unit's status/actions within a listing card — mortgage
@@ -187,8 +336,15 @@ async function render() {
 // same listing.
 function ownedUnitBlock(p, isMine, cls, nameOf) {
   const who = isMine ? "You" : nameOf(p.owner);
+  const gain = propertyGainSinceBought(p);
+  const gainClass = gain ? (gain.diff > 0 ? "ticker-up" : gain.diff < 0 ? "ticker-down" : "") : "";
+  const gainSign = gain && gain.diff > 0 ? "+" : gain && gain.diff < 0 ? "-" : "";
+  const gainLine = gain
+    ? `<p class="muted-small">${isMine ? "You" : who} bought this for ${fmtMoney(p.purchasePrice)} — it's now worth <strong class="${gainClass}">${fmtMoney(p.price)}</strong> <span class="${gainClass}">(${gainSign}${fmtMoney(Math.abs(gain.diff))}, ${gainSign}${Math.abs(gain.pct).toFixed(1)}%)</span> since ${isMine ? "you bought it" : "purchase"}.</p>`
+    : "";
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
+      ${gainLine}
       <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance still owed (shrinks each week)` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
       ${isMine && p.mortgage ? mortgagePayBlock(p, cls) : ""}
       ${occupancyBlock(p, isMine, cls, nameOf)}
