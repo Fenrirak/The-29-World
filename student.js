@@ -501,9 +501,10 @@ async function openLifestyleBreakdown() {
   body.innerHTML = `<p class="muted-small">Loading...</p>`;
   modal.classList.remove("hidden");
 
-  const [breakdown, label] = await Promise.all([
+  const [breakdown, label, tier] = await Promise.all([
     lifestyleRatingBreakdown(CURRENT.username, CURRENT.classCode),
-    lifestyleBandForStudent(CURRENT.username, CURRENT.classCode)
+    lifestyleBandForStudent(CURRENT.username, CURRENT.classCode),
+    lifestyleTierProgress(CURRENT.username, CURRENT.classCode)
   ]);
 
   document.getElementById("lifestyleModalTitle").innerHTML =
@@ -515,16 +516,37 @@ async function openLifestyleBreakdown() {
   }
 
   if (breakdown.items.length === 0) {
-    body.innerHTML = `<p class="muted-small">Nothing is affecting your score yet — property, a vehicle, store items, or insurance can raise it.</p>`;
+    body.innerHTML = `<p class="muted-small">Nothing is affecting your score yet — property, a vehicle, store items, or insurance can raise it.</p>` + nextTierHtml(tier);
     return;
   }
 
-  const gains = breakdown.items.filter(i => i.type === "gain");
-  const losses = breakdown.items.filter(i => i.type === "loss");
+  // Collapse repeats of the exact same line (same label/detail/type, e.g.
+  // several identical "Pot Plants" store items) into one row with a "xN"
+  // count and the points summed, instead of listing each copy separately.
+  const groupItems = arr => {
+    const grouped = [];
+    const byKey = new Map();
+    arr.forEach(i => {
+      const key = i.type + "|" + i.label + "|" + i.detail;
+      if (byKey.has(key)) {
+        const g = byKey.get(key);
+        g.count += 1;
+        g.points += i.points;
+      } else {
+        const g = { ...i, count: 1 };
+        byKey.set(key, g);
+        grouped.push(g);
+      }
+    });
+    return grouped;
+  };
+
+  const gains = groupItems(breakdown.items.filter(i => i.type === "gain"));
+  const losses = groupItems(breakdown.items.filter(i => i.type === "loss"));
   const rows = arr => arr.length
     ? arr.map(i => `
         <div class="auto-row">
-          <div class="auto-details">${i.label}<div class="muted-small">${i.detail}</div></div>
+          <div class="auto-details">${i.label}${i.count > 1 ? ` &times;${i.count}` : ""}<div class="muted-small">${i.detail}</div></div>
           <div class="${i.type === "gain" ? "status-approved" : "status-declined"}">${i.type === "gain" ? "+" : "-"}${i.points}</div>
         </div>
       `).join("")
@@ -540,6 +562,37 @@ async function openLifestyleBreakdown() {
         <h4>${icon("coin", 14)} Taking away from your score</h4>
         ${rows(losses)}
       </div>
+    </div>
+    ${nextTierHtml(tier)}
+  `;
+}
+
+// Renders the "what do I need for the next tier" block shown at the bottom
+// of the lifestyle breakdown modal. `tier` comes from lifestyleTierProgress
+// and is null when the class has no lifestyle bands configured at all, in
+// which case this renders nothing.
+function nextTierHtml(tier) {
+  if (!tier) return "";
+  if (tier.atTop) {
+    return `
+      <div style="margin-top:18px;padding-top:14px;border-top:1.5px solid var(--line);">
+        <h4>${icon("trophy", 14)} Next tier</h4>
+        <p class="muted-small">You're already at the top tier${tier.currentLabel ? ` — <strong>${tier.currentLabel}</strong>` : ""}. Nothing more needed!</p>
+      </div>
+    `;
+  }
+  const needs = [];
+  if (tier.pointsNeeded > 0) needs.push(`${tier.pointsNeeded} more lifestyle point${tier.pointsNeeded === 1 ? "" : "s"}`);
+  if (tier.netWorthNeeded > 0) needs.push(`${fmtMoney(tier.netWorthNeeded)} more net worth`);
+  if (tier.propertyComfortNeeded > 0) needs.push(`${tier.propertyComfortNeeded} more property comfort`);
+  if (tier.transportComfortNeeded > 0) needs.push(`${tier.transportComfortNeeded} more transport comfort`);
+  return `
+    <div style="margin-top:18px;padding-top:14px;border-top:1.5px solid var(--line);">
+      <h4>${icon("trophy", 14)} Next tier</h4>
+      <p class="muted-small">To reach <strong>${tier.nextLabel}</strong>${tier.currentLabel ? ` from ${tier.currentLabel}` : ""}, you still need:</p>
+      ${needs.length
+        ? `<ul style="margin:6px 0 0 18px;padding:0;">${needs.map(n => `<li class="muted-small">${n}</li>`).join("")}</ul>`
+        : `<p class="muted-small">You already meet the requirements — your rating should update shortly.</p>`}
     </div>
   `;
 }

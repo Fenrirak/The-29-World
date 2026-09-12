@@ -8027,6 +8027,66 @@ async function lifestyleBandForStudent(username, classCode, precomputedBoard) {
   };
   return lifestyleLabelFor(score, cls.lifestyleThresholds, stats);
 }
+// Works out what a student still needs — in score points, net worth, owned
+// property comfort, and owned transport comfort — to reach the next
+// lifestyle band above the one they currently qualify for. Mirrors the same
+// score-range + requirements-met walk that lifestyleLabelFor/
+// lifestyleBandForStudent use, so "next tier" always lines up with whatever
+// band the student is actually shown. Returns null when there's nothing to
+// show (no thresholds configured for this class). Returns
+// { atTop: true, currentLabel } when the student already qualifies for the
+// highest configured band, or { atTop: false, currentLabel, nextLabel,
+// pointsNeeded, netWorthNeeded, propertyComfortNeeded, transportComfortNeeded }
+// otherwise, where every *Needed field is a >=0 remaining gap (0 = already met).
+async function lifestyleTierProgress(username, classCode, precomputedBoard) {
+  const cls = withNewModuleDefaults(await getClassCached(classCode));
+  if (!cls) return null;
+  const thresholds = cls.lifestyleThresholds || [];
+  if (!thresholds.length) return null;
+
+  const score = await lifestyleRating(username, classCode);
+  const board = precomputedBoard || await classLeaderboard(classCode);
+  const row = board.find(r => r.username === username);
+  const ownedProperties = (cls.properties || []).filter(p => p.owner === username);
+  const ownedVehicles = (cls.vehicles || []).filter(v => (v.owners || []).includes(username));
+  const stats = {
+    netWorth: row ? row.net : 0,
+    propertyComfort: ownedProperties.reduce((sum, p) => sum + (p.comfort || 0) + (p.occupancy === "living" ? (Number(p.livingBonusStars) || 0) : 0), 0),
+    transportComfort: ownedVehicles.reduce((sum, v) => sum + (v.comfort || 0), 0)
+  };
+
+  // Same score-range lookup as lifestyleLabelFor.
+  let targetIndex = thresholds.findIndex(t => score >= t.min && score < t.max);
+  if (targetIndex === -1) {
+    const last = thresholds[thresholds.length - 1];
+    if (score >= last.max) targetIndex = thresholds.length - 1;
+  }
+
+  // Walk down from the score-qualified band to find the one whose extra
+  // requirements are actually met — same rule lifestyleLabelFor applies —
+  // so "current" here always matches the label shown on the account page.
+  let currentIndex = -1;
+  for (let i = targetIndex; i >= 0; i--) {
+    if (bandRequirementsMet(thresholds[i], stats)) { currentIndex = i; break; }
+  }
+
+  const currentLabel = currentIndex >= 0 ? thresholds[currentIndex].label : "";
+  const nextIndex = currentIndex + 1;
+  if (nextIndex >= thresholds.length) {
+    return { atTop: true, currentLabel };
+  }
+
+  const next = thresholds[nextIndex];
+  return {
+    atTop: false,
+    currentLabel,
+    nextLabel: next.label,
+    pointsNeeded: Math.max(0, Math.ceil(next.min) - score),
+    netWorthNeeded: Math.max(0, next.minNetWorth - stats.netWorth),
+    propertyComfortNeeded: Math.max(0, next.minPropertyComfort - stats.propertyComfort),
+    transportComfortNeeded: Math.max(0, next.minTransportComfort - stats.transportComfort)
+  };
+}
 // Pure calculation, no fetching — split out of lifestyleRating() so callers
 // that already have `cls`/`user` in hand (e.g. startBlackjackRound, which
 // needs both anyway regardless of lock status) can compute a rating without
