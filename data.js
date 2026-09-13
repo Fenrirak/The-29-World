@@ -1965,8 +1965,7 @@ async function processDailyLifeAllowance(classCode) {
 }
 
 // Plain-English description of when interest is next applied, for
-// whichever page shows a student's interest rate/amount. Not wired into
-// any page yet — bank.html/bank.js would need to call this and render it.
+// whichever page shows a student's interest rate/amount. Used in bank.js.
 const INTEREST_FREQ_LABEL = { daily: "every day", weekly: "every week", fortnightly: "every 2 weeks", monthly: "every 4 weeks" };
 const DAY_FULL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
 function interestScheduleLabel(cls) {
@@ -2224,6 +2223,7 @@ async function repayLoan(username, loanId, amount) {
       const loan = loans.find(l => l.id === loanId && l.status === "active");
       if (!loan) throw new Error("NOT_FOUND");
       if (user.balance < amount) throw new Error("BROKE");
+      if (amount > loan.owed) throw new Error("TOO_MUCH");
       paid = Math.min(amount, loan.owed);
       loan.owed = Math.round((loan.owed - paid) * 100) / 100;
       // paidDate lets report cards judge on-time vs late repayment against
@@ -2237,6 +2237,7 @@ async function repayLoan(username, loanId, amount) {
     if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than zero." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for that." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That loan couldn't be found." };
+    if (e.message === "TOO_MUCH") return { ok: false, error: "That's more than you owe on this loan. Enter an amount up to what's left." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   const user = await getUser(username);
@@ -3441,10 +3442,15 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
     const savings = s.savings || 0;
     const owed = (s.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0) + mortgageOwed;
     const termDeposits = (s.termDeposits || []).reduce((sum, d) => sum + d.amount, 0);
+    // Gambling account balance counts toward net worth like any other
+    // place a student can hold value, but it isn't a line in the
+    // breakdown shown on the leaderboard/report — it's folded silently
+    // into `net` via gamblingBalance below.
+    const gamblingBalance = gamblingAccountToday(s).balance;
     return {
       username: s.username, name: s.name,
       balance: s.balance, invested, storeValue, propertyValue, vehicleValue, savings, owed, termDeposits,
-      net: Math.round((s.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits - owed) * 100) / 100
+      net: Math.round((s.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits + gamblingBalance - owed) * 100) / 100
     };
   });
   // Loan/mortgage debt ("owed") is shown for every student on the
@@ -3813,7 +3819,10 @@ function buildStudentReportData(student, cls, periodStart) {
   const termDeposits = (student.termDeposits || []).reduce((s, d) => s + d.amount, 0);
   const activeLoanOwed = loans.filter(l => l.status === "active").reduce((s, l) => s + l.owed, 0);
   const owed = Math.round((activeLoanOwed + mortgageOwed) * 100) / 100;
-  const netWorth = Math.round((student.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits - owed) * 100) / 100;
+  // Gambling account balance counts toward net worth (same as
+  // classLeaderboard()) but isn't broken out as its own field below.
+  const gamblingBalance = gamblingAccountToday(student).balance;
+  const netWorth = Math.round((student.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits + gamblingBalance - owed) * 100) / 100;
 
   return {
     username, name: student.name,
@@ -4095,7 +4104,16 @@ async function adjustGamblingAccount(username, delta, dailyWinLimit) {
       const user = snap.data();
       if (user.role === "teacher") return;
       const acc = gamblingAccountToday(user);
-      acc.balance = Math.round((acc.balance + delta) * 100) / 100;
+      const newBalance = Math.round((acc.balance + delta) * 100) / 100;
+      // Re-validate the balance fresh, inside the transaction — same fix
+      // as buyIntoGamblingAccount. Every caller already does a snapshot
+      // check before calling this, but that check is a stale read taken
+      // outside any transaction, so two concurrent debits (double-click,
+      // two tabs) can both pass it and both land here. Rejecting a debit
+      // that would push the account negative closes that race instead of
+      // silently letting the balance go negative.
+      if (newBalance < 0) throw new Error("INSUFFICIENT");
+      acc.balance = newBalance;
       acc.netToday = Math.round((acc.netToday + delta) * 100) / 100;
       if (dailyWinLimit && acc.netToday >= dailyWinLimit) acc.winLimitHit = true;
       winLimitHit = acc.winLimitHit;
@@ -4103,7 +4121,7 @@ async function adjustGamblingAccount(username, delta, dailyWinLimit) {
     });
     return { ok: true, winLimitHit };
   } catch (e) {
-    return { ok: false, winLimitHit: false };
+    return { ok: false, winLimitHit: false, insufficientFunds: e.message === "INSUFFICIENT" };
   }
 }
 
@@ -4155,21 +4173,24 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   // Bet amount is deducted; on a win, the taxed winnings are credited back (winnings only, stake already "spent").
   const netChange = win ? taxedWinnings : -betAmount;
 
-  // These two are independent — logTxn only needs values already computed
-  // above, not adjustGamblingAccount's result (only hitWinLimit does, read
-  // off its own return value below) — so run them together instead of
-  // back-to-back. That's one fewer round-trip on every single spin.
-  const logPromise = logTxn(classCode, {
+  // Apply the balance change first and check it actually went through
+  // before logging/settling anything. adjustGamblingAccount re-validates
+  // the balance atomically, so if a concurrent bet already spent the
+  // funds this check (not the stale one above) is what actually catches
+  // it — bail out here rather than logging a spin that was never paid
+  // for.
+  let hitWinLimit = false;
+  if (!isTeacher) {
+    const r = await adjustGamblingAccount(username, netChange, g.dailyWinLimit);
+    if (!r.ok) {
+      return { ok: false, error: "Your gambling balance changed before this bet could be settled — please try again." };
+    }
+    hitWinLimit = r.winLimitHit;
+  }
+  await logTxn(classCode, {
     type: "gambling", from: username, amount: Math.abs(netChange), bet: betAmount,
     note: `Roulette (${betTypeLabel(betType)}): ${win ? "WON" : "lost"} — ball landed on ${spin}` + (win && taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "")
   });
-  let hitWinLimit = false;
-  if (!isTeacher) {
-    const [r] = await Promise.all([adjustGamblingAccount(username, netChange, g.dailyWinLimit), logPromise]);
-    hitWinLimit = r.winLimitHit;
-  } else {
-    await logPromise;
-  }
 
   return { ok: true, spin, win, netChange, hitWinLimit, winLimitMessage: hitWinLimit ? g.winLimitMessage : null };
 }
@@ -5683,7 +5704,7 @@ async function buyInsurance(username, classCode, planId) {
   if (fee > 0) {
     await logTxn(classCode, { type: "insurance-signup-fee", from: username, amount: fee, note: `Sign-up fee for insurance: ${planName}` });
   }
-  await logTxn(classCode, { type: "insurance-buy", from: username, amount: 0, note: `Signed up for insurance: ${planName} — premiums are charged weekly` });
+  await logTxn(classCode, { type: "insurance-buy", from: username, amount: 0, note: `Signed up for insurance: ${planName} — premiums due weekly` });
   return { ok: true };
 }
 async function cancelInsurance(username, planId) {
@@ -8351,6 +8372,7 @@ const LIFESTYLE_LOCKABLE_MODULES = [
   { key: "insurance", label: "Insurance" },
   { key: "tax", label: "Tax" },
   { key: "bigevents", label: "Big Events" },
+  { key: "life", label: "Life" },
   { key: "gambling", label: "Gambling" },
   { key: "marketplace", label: "Trade Centre" },
   { key: "sidehustle", label: "Side hustle" }

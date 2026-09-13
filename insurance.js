@@ -125,7 +125,7 @@ async function render() {
     mine.forEach(p => {
       const row = document.createElement("div");
       row.className = "auto-row";
-      let payText = `premiums charged on ${cls.insuranceDay}s`;
+      let payText = `premiums due on ${cls.insuranceDay}s`;
       if (payInfo) {
         payText = payInfo.isToday
           ? `<span class="badge gold">Payment due today</span>`
@@ -201,7 +201,7 @@ async function buyPlan(id, fee) {
   if (fee > 0 && !confirm(`This plan has a one-off sign-up fee of ${fmtMoney(fee)}, charged immediately. Continue?`)) return;
   const res = await buyInsurance(CURRENT.username, CURRENT.classCode, id);
   document.getElementById("msg-" + id).innerHTML = res.ok
-    ? `<div class="success-msg">You're covered! Premiums will be charged weekly.</div>`
+    ? `<div class="success-msg">You're covered! Premiums are due weekly — remember to set up an automatic payment to your teacher from the Bank tab so your cover doesn't lapse.</div>`
     : `<div class="error-msg">${res.error}</div>`;
   await render();
 }
