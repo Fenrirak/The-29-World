@@ -228,7 +228,7 @@ function installReadCache() {
         const orig = docRef[method].bind(docRef);
         docRef[method] = function (...args) {
           const result = orig(...args);
-          result.then(() => store.delete(cacheKey(name, id)), () => {});
+          result.then(() => { store.delete(cacheKey(name, id)); _anwOnWriteSettled(); }, () => {});
           return result;
         };
       });
@@ -245,7 +245,7 @@ function installReadCache() {
   const origRunTransaction = fdb.runTransaction.bind(fdb);
   fdb.runTransaction = function (updateFn) {
     const result = origRunTransaction(updateFn);
-    result.then(() => store.clear(), () => {});
+    result.then(() => { store.clear(); _anwOnWriteSettled(); }, () => {});
     return result;
   };
 }
@@ -854,7 +854,12 @@ function _classDataFromTemplate(code, className, teacherUsername, template) {
   cls.sellBackRates = _cloneDoc(template.sellBackRates || cls.sellBackRates);
   cls.truckLicence = _cloneDoc(template.truckLicence || cls.truckLicence);
   cls.dailyTimeLimitMinutes = template.dailyTimeLimitMinutes || null;
-  cls.interestRate = template.interestRate;
+  // template.interestRate is a genuine 0-or-more rate — a teacher setting
+  // 0% is a real, meaningful choice, so this can't use `|| cls.interestRate`
+  // like the other fields above (that would silently turn an intentional
+  // 0% back into the default). Only fall back when the template genuinely
+  // doesn't have the field at all (e.g. an older template predating it).
+  cls.interestRate = (template.interestRate === undefined || template.interestRate === null) ? cls.interestRate : template.interestRate;
   cls.cashInterestRate = template.cashInterestRate || 0;
   cls.interestAuto = !!template.interestAuto;
   cls.interestFrequency = template.interestFrequency || "weekly";
@@ -4563,10 +4568,17 @@ async function startBlackjackRound(username, classCode, betAmount) {
   // shouldn't stop the round from being dealt. It's also unrelated to the
   // money movement below, so the two run together instead of one after the
   // other — that was an extra sequential round-trip on every single Deal.
-  await Promise.all([
+  const [, debitResult] = await Promise.all([
     usersCol().doc(username).update({ lastBjSeat: round.humanSeat }).catch(() => {}),
     adjustGamblingAccount(username, -betAmount, cls.gambling.dailyWinLimit)
   ]);
+  // adjustGamblingAccount re-validates the balance atomically and can
+  // fail here (e.g. a concurrent bet spent the funds between the stale
+  // check above and now) — the round was only ever built in memory, so
+  // bail out cleanly rather than dealing a round nothing was staked on.
+  if (!debitResult.ok) {
+    return { ok: false, error: "Your gambling balance changed before this bet could be placed — please try again." };
+  }
 
   // From here on the bet is escrowed, so any failure must refund it rather
   // than leave the student down money with no round to show for it.
@@ -4600,7 +4612,10 @@ async function blackjackInsurance(username, classCode, takeInsurance) {
   if (takeInsurance) {
     insAmount = Math.round((round.betAmount / 2) * 100) / 100;
     if (!isTeacher && gamblingAccountToday(user).balance < insAmount) return { ok: false, error: "You don't have enough in your gambling account for insurance." };
-    await adjustGamblingAccount(username, -insAmount, dailyWinLimit);
+    const r = await adjustGamblingAccount(username, -insAmount, dailyWinLimit);
+    // Same re-validation-can-fail case as everywhere else adjustGamblingAccount
+    // is called — the check above is a stale read, this is the real one.
+    if (!r.ok) return { ok: false, error: "Your gambling balance changed before insurance could be taken — please try again." };
     round.insurance.taken = true;
     round.insurance.amount = insAmount;
   }
@@ -4680,7 +4695,8 @@ async function blackjackAction(username, classCode, action) {
       const eligible = hand.cards.length === 2 && !hand.doubled && !hand.isSplitAces && !hand.cards.some(c => c.r === "A");
       if (!eligible) return { ok: false, error: "You can only double on your first two cards, and not if either card is an Ace." };
       if (!isTeacher && gamblingAccountToday(user).balance < hand.bet) return { ok: false, error: "You don't have enough in your gambling account to double down." };
-      await adjustGamblingAccount(username, -hand.bet, dailyWinLimit);
+      const debit = await adjustGamblingAccount(username, -hand.bet, dailyWinLimit);
+      if (!debit.ok) return { ok: false, error: "Your gambling balance changed before you could double down — please try again." };
       try {
         hand.doubled = true;
         hand.bet *= 2;
@@ -4699,7 +4715,8 @@ async function blackjackAction(username, classCode, action) {
       if (!eligible) return { ok: false, error: "That hand can't be split." };
       if (!isTeacher && gamblingAccountToday(user).balance < hand.bet) return { ok: false, error: "You don't have enough in your gambling account to split." };
       const splitStake = hand.bet;
-      await adjustGamblingAccount(username, -splitStake, dailyWinLimit);
+      const debit = await adjustGamblingAccount(username, -splitStake, dailyWinLimit);
+      if (!debit.ok) return { ok: false, error: "Your gambling balance changed before you could split — please try again." };
       try {
         const isAces = hand.cards[0].r === "A";
         const otherCard = hand.cards.pop();
@@ -5057,7 +5074,13 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource) {
         const cash = user.balance || 0;
         const savings = user.savings || 0;
         const available = source === "savings" ? savings : cash;
-        if (!isTeacher && available < entry.cost) throw new Error(source === "savings" ? "BROKE_SAVINGS" : "BROKE");
+        // Cash is allowed to go negative here, same as fines and choice
+        // events elsewhere in the app — savings is the one balance that's
+        // never allowed to go negative, so that check stays. Hard-blocking
+        // the cash option too used to leave students with takesAsset:false
+        // events, no savings, and no matching insurance stuck in a modal
+        // with every button disabled and no way out.
+        if (!isTeacher && source === "savings" && available < entry.cost) throw new Error("BROKE_SAVINGS");
         entry.status = "paid";
         amount = entry.cost;
         outcomeNote = `Paid ${fmtMoney(entry.cost)} for "${entry.name}"` + (source === "savings" ? " (from savings)" : "");
@@ -9799,25 +9822,32 @@ async function anwGlobalBootstrap() {
   }
 }
 
-/* ---------------- Balance widget: simple polling ----------------
-   This has gone through two more "clever" designs (a live Firestore
-   listener, then a MutationObserver watching the page for popups) that
-   both turned out to cause real breakage — the observer approach in
-   particular caused an infinite loop (any DOM change repainted the
-   widget, which was itself a DOM change, forever) that froze the page
-   entirely. Given the choice between "a few more reads" and "the page
-   sometimes doesn't load", reads lose. This is deliberately the simplest
-   possible version: poll on a plain interval, full stop. No listeners,
-   no DOM observation, no auto-detected pause states — nothing here can
-   get into a feedback loop with anything else on the page, because it
-   doesn't watch anything on the page at all.
-   Cost: ~1 read per POLL_MS per open tab while visible. At 20s that's
-   180 reads/hour/open-tab — a small, flat, predictable number, not the
-   360/hour the original 10s poll cost, and nowhere near the accidental
-   36000+/hour an infinite loop can cause. */
-const ANW_BALANCE_POLL_MS = 20000;
-let _anwPollTimer = null;
-let _anwPollUsername = null;
+/* ---------------- Balance widget: refresh on actual cash movement ----------------
+   This has gone through two more "clever" designs before this one (a live
+   Firestore listener, then a MutationObserver watching the page for
+   popups) that both turned out to cause real breakage — the observer
+   approach in particular caused an infinite loop (any DOM change
+   repainted the widget, which was itself a DOM change, forever) that
+   froze the page entirely. It also went through a plain 20-second poll,
+   which was simple and never looped, but polled the raw balance on a
+   timer regardless of what was on screen — including mid-animation on
+   Roulette (~15s wheel spin) and Blackjack (seat-by-seat reveal), where
+   the server write actually lands the instant the bet settles, well
+   before the animation finishes. A poll landing in that window let a
+   glance at the corner widget spoil "No peeking..." before the reveal did.
+
+   This version drops the timer entirely: the widget only ever refreshes
+   in response to an actual write completing (hooked into the same
+   docRef.update/set/delete and fdb.runTransaction wrappers above that
+   already exist to invalidate the read cache — see _anwOnWriteSettled
+   below), not on a schedule. On every page except Roulette/Blackjack
+   that means the widget updates the moment a cash-moving action actually
+   happens, which is both more accurate and cheaper than a fixed poll. On
+   Roulette/Blackjack specifically, _anwOnWriteSettled skips the refresh
+   (see _anwShowsChips) and the page itself calls anwRefreshBalanceWidget()
+   once the reveal animation has actually finished — see spin() in
+   gambling.js and bjFinalizeRound(). */
+let _anwWidgetUsername = null;
 
 // Which sub-tab of the Gambling page is active — "account", "roulette", or
 // "blackjack". Only gambling.html's switchMode() ever sets this (via
@@ -9826,8 +9856,8 @@ let _anwPollUsername = null;
 // This is deliberately driven by an explicit call from gambling.js rather
 // than read off gambling.js's own MODE variable — mountBalanceWidget can
 // run before gambling.js's init() has called switchMode("account") for the
-// first time, and polling a global that isn't set yet would show the wrong
-// balance until the student happened to switch tabs.
+// first time, and refreshing off a global that isn't set yet would show
+// the wrong balance until the student happened to switch tabs.
 let _anwGamblingMode = null;
 
 function _anwIsGamblingPage() {
@@ -9847,56 +9877,57 @@ function _anwWidgetLabelHtml() {
     : `${icon("piggy", 14)} Cash balance`;
 }
 
-async function _anwPollTick() {
+// The one place that actually repaints the widget's number. Always an
+// uncached, fresh read — deliberately, since this only ever runs right
+// after a write we already know just happened (or, on Roulette/
+// Blackjack, right after the page confirms the reveal animation is done),
+// so there's no benefit to reading a possibly-stale cached copy.
+async function anwRefreshBalanceWidget() {
   const el = document.getElementById("anwBalanceWidgetValue");
-  if (!el || !_anwPollUsername) return;
+  if (!el || !_anwWidgetUsername) return;
   try {
-    const fresh = await getUser(_anwPollUsername); // uncached: this IS the poll, no point caching a 20s-apart call
+    const fresh = await getUser(_anwWidgetUsername);
     if (!fresh) return;
     el.textContent = _anwShowsChips() ? fmtMoney(gamblingAccountToday(fresh).balance) : fmtMoney(fresh.balance);
   } catch (e) {
-    console.warn("Balance widget poll failed (will retry next tick):", e);
+    console.warn("Balance widget refresh failed:", e);
   }
 }
 
-function _anwPollStart() {
-  if (_anwPollTimer) return;
-  _anwPollTimer = setInterval(_anwPollTick, ANW_BALANCE_POLL_MS);
+// Called from inside installReadCache()'s write wrappers every time a
+// users/classes doc write (direct or transactional) settles — i.e. every
+// time the app processes cash of any kind, not on a fixed schedule. On
+// Roulette/Blackjack this is deliberately a no-op: those writes land
+// mid-animation, and it's up to the gambling page itself to call
+// anwRefreshBalanceWidget() once the reveal is actually done (see
+// spin()/bjFinalizeRound() in gambling.js). Safe to call from any page,
+// including ones with no widget mounted (mountBalanceWidget not yet
+// called, or a teacher session) — it just no-ops via the username guard
+// inside anwRefreshBalanceWidget.
+function _anwOnWriteSettled() {
+  if (_anwShowsChips()) return;
+  anwRefreshBalanceWidget();
 }
-function _anwPollStop() {
-  if (!_anwPollTimer) return;
-  clearInterval(_anwPollTimer);
-  _anwPollTimer = null;
-}
-
-// Only real optimization kept: stop polling while the tab is backgrounded
-// (a plain visibilitychange listener — not a MutationObserver — so it
-// can only ever fire on an actual tab-visibility change, nothing else).
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) _anwPollStop();
-  else _anwPollStart();
-});
 
 // Called by gambling.html's switchMode() every time the student switches
 // between the Account/Roulette/Blackjack sub-tabs, so the widget's label
-// and value flip immediately rather than waiting up to 20s for the next
-// poll. Safe to call from pages/roles where the widget doesn't exist (e.g.
-// a teacher) — it just no-ops if there's nothing mounted yet.
+// and value flip immediately to match the new mode, rather than showing
+// the wrong balance type until the next cash-moving action.
 async function anwSetGamblingMode(mode) {
   _anwGamblingMode = mode;
   const box = document.getElementById("anwBalanceWidget");
   if (!box) return;
   const labelEl = box.querySelector(".anw-bw-label");
   if (labelEl) labelEl.innerHTML = _anwWidgetLabelHtml();
-  if (!_anwPollUsername) return;
+  if (!_anwWidgetUsername) return;
   try {
-    const cached = await getUserCached(_anwPollUsername);
+    const cached = await getUserCached(_anwWidgetUsername);
     const el = document.getElementById("anwBalanceWidgetValue");
     if (cached && el) {
       el.textContent = _anwShowsChips() ? fmtMoney(gamblingAccountToday(cached).balance) : fmtMoney(cached.balance);
     }
   } catch (e) {
-    // Next poll (or the next tab switch) will pick it up.
+    // The next cash-moving action (or the next tab switch) will pick it up.
   }
 }
 
@@ -9920,8 +9951,7 @@ async function mountBalanceWidget(username) {
       : fmtMoney(cached.balance);
   }
 
-  _anwPollUsername = username;
-  if (!document.hidden) _anwPollStart();
+  _anwWidgetUsername = username;
 }
 
 // Sits just under the sticky top nav bar, on the left, rather than being

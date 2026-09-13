@@ -217,12 +217,18 @@ async function render() {
       "term-deposit-mature": ["mint", "vault", "Deposit matured"],
       "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
       "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
+      "insurance-signup-fee": ["lilac", "shield", "Insurance sign-up"],
       "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
       "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"],
       "loan-interest": ["coral", "handshake", "Loan interest"], "side-hustle": ["mint", "briefcase", "Side hustle"],
-      "truck-drive": ["mint", "car", "Truck drive"], "property-rent": ["mint", "house", "Rent received"],
+      "truck-drive": ["mint", "car", "Truck drive"], "truck-licence-buy": ["navy", "car", "Truck licence"],
+      "property-rent": ["mint", "house", "Rent received"],
       "property-rent-pay": ["coral", "house", "Rent paid"], "property-rent-receive": ["mint", "house", "Rent received"],
+      "property-occupancy": ["navy", "house", "Occupancy change"],
       "store-gift": ["mint", "cart", "Free item"], "quiz-reward": ["mint", "idcard", "Quiz passed"],
+      "gambling-buyin": ["gold", "dice", "Gambling buy-in"], "gambling-cashout": ["mint", "dice", "Gambling cash-out"],
+      "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
+      "life-allowance": ["mint", "trophy", "Life allowance"],
       "p2p-buy": ["navy", "users", "Bought from a classmate"], "p2p-sell": ["gold", "users", "Sold to a classmate"]
     };
     const [c, ic, label] = map[type] || ["navy", "coin", type];
@@ -230,15 +236,24 @@ async function render() {
   };
   my.forEach(t => {
     let detail = t.note || "";
+    let amt = t.amount;
     let sign = "";
     if (t.type === "transfer" || t.type === "automation") {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "truck-drive", "property-rent", "property-rent-receive", "store-gift", "quiz-reward", "p2p-sell"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-rent-pay", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment", "loan-interest", "p2p-buy"].includes(t.type)) { sign = "-"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "truck-drive", "property-rent", "property-rent-receive", "store-gift", "quiz-reward", "p2p-sell", "gambling-cashout"].includes(t.type)) { sign = "+"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-rent-pay", "vehicle-buy", "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "loan-interest", "p2p-buy", "truck-licence-buy", "gambling-buyin"].includes(t.type)) { sign = "-"; }
     else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
     else if (t.type === "property-buy") { sign = "-"; }
+    // Only the "moved in and paid a moving cost" entries of this type ever
+    // carry a nonzero amount (see chargeMoveOrThrow) — the rest (renting a
+    // property out, moving out, ending a lease) are just status notes with
+    // nothing to sign.
+    else if (t.type === "property-occupancy") { sign = amt > 0 ? (t.from === me.username ? "-" : "+") : ""; }
+    else if (t.type === "life-grant") { sign = amt < 0 ? "-" : (amt > 0 ? "+" : ""); amt = Math.abs(amt); }
+    else if (t.type === "life-allowance") { sign = "+"; }
+    else if (t.type === "life-revoke") { sign = ""; }
 
     let amtDisplay;
     if (t.type === "event") {
@@ -251,7 +266,7 @@ async function render() {
       sign = t.amount > 0 ? "-" : "";
       amtDisplay = fmtMoney(t.amount);
     } else {
-      amtDisplay = fmtMoney(t.amount);
+      amtDisplay = fmtMoney(amt);
     }
 
     const tr = document.createElement("tr");

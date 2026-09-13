@@ -37,6 +37,34 @@ async function init() {
   document.getElementById("studentPanel").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
   document.getElementById("loanAmount").addEventListener("input", updateLoanPreview);
+  // Same fix as the other pages: run the independent background jobs
+  // together instead of one sequential network round-trip each. This page
+  // previously fired none of these at all — not even its own
+  // processLoanInterest — so loan interest/pay day/etc. for the class only
+  // ever got processed by whichever other page a student happened to load.
+  const T29_STARTUP_JOBS = Promise.all([
+    safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
+    safeBgJob(processDailyLifeAllowance(u.classCode), "processDailyLifeAllowance"),
+    safeBgJob(processAutomations(u.classCode), "processAutomations"),
+    safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
+    safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
+    safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
+    safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
+    safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
+    safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
+  ]);
+  // Kick the day's jobs off but DON'T block the page on them: paint what
+  // we already have first, then wait. On the first load of the day pay day
+  // alone can take seconds (it writes per student), and blocking here is
+  // what made a phone sit on a blank page. The popups and the final
+  // render() below still run after the jobs, exactly as they did before.
+  await t29FirstPaint(render);
+  await T29_STARTUP_JOBS;
+  // These popups read the results of the jobs above, so they still need
+  // to run afterwards — but stay sequential since each checks whether
+  // another popup is already showing before deciding to show its own.
+  await checkWeeklyEventPopup(u.username, u.classCode);
+  await checkBigEventPopup(u.username, u.classCode);
   await render();
 }
 

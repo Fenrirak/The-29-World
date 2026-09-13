@@ -360,6 +360,13 @@ async function spin() {
     if (res.hitWinLimit && res.winLimitMessage) {
       box.innerHTML += `<div class="success-msg" style="margin-top:8px;">${res.winLimitMessage}</div>`;
     }
+    // The chip balance already changed server-side the instant
+    // placeRouletteBet() resolved, well before the wheel finished
+    // spinning — the floating widget deliberately doesn't auto-refresh
+    // on that write (see _anwOnWriteSettled/_anwShowsChips in data.js) so
+    // it can't spoil the result early. Now that the animation and result
+    // message are both showing, it's safe to bring the widget up to date.
+    anwRefreshBalanceWidget();
     document.getElementById("betAmount").value = "";
     await render();
   } catch (e) {
@@ -619,6 +626,13 @@ async function bjFinalizeRound(round) {
     msg += `<div class="success-msg" style="margin-top:8px;">${round.winLimitMessage}</div>`;
   }
   document.getElementById("bjRoundMsg").innerHTML = msg;
+  // Same reasoning as spin() in Roulette: the chip balance already
+  // settled server-side well before this reveal finished animating, and
+  // the floating widget deliberately skipped auto-refreshing on that
+  // write so it couldn't spoil the outcome early (see _anwOnWriteSettled/
+  // _anwShowsChips in data.js). The reveal is fully shown now, so bring
+  // it up to date.
+  anwRefreshBalanceWidget();
   // These two used to run one after another (three network round-trips in
   // total, since renderRecentBlackjack() also re-fetched the same class
   // doc getClassCached() had just returned) — every one of those trips

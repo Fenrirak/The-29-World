@@ -338,8 +338,14 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
   const isTeacher = user && user.role === "teacher";
   const cash = (user && user.balance) || 0;
   const savings = (user && user.savings) || 0;
-  const cashOk = isTeacher || cash >= entry.cost;
+  // Cash payment is never disabled for insufficient funds — it's allowed
+  // to take the balance negative, same as fines and choice events
+  // elsewhere in the app (see resolveBigEvent). Savings genuinely can't go
+  // negative anywhere in the app, so that gate stays. Without this, an
+  // event with takesAsset:false plus no savings/insurance could disable
+  // every single button and leave the modal with no way out.
   const savingsOk = isTeacher || savings >= entry.cost;
+  const cashWouldGoNegative = !isTeacher && cash < entry.cost;
 
   overlay.innerHTML = `
     <div class="anw-modal-card">
@@ -349,8 +355,8 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
       <p class="muted-small">${canForfeit ? "You need to choose how to handle this before you can continue." : `This doesn't put ${assetLabel} at risk — you just need to cover the cost, or claim insurance if you have it.`}</p>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
         ${canForfeit ? `<button class="btn coral" id="bigForfeitBtn">Don't pay — lose ${assetLabel}</button>` : ""}
-        <button class="btn gold" id="bigPayCashBtn" ${cashOk ? "" : "disabled"}>
-          Pay ${fmtMoney(entry.cost)} from cash${cashOk ? "" : ` (only ${fmtMoney(cash)} available)`}
+        <button class="btn gold" id="bigPayCashBtn">
+          Pay ${fmtMoney(entry.cost)} from cash${cashWouldGoNegative ? ` (will take your balance negative — you have ${fmtMoney(cash)})` : ""}
         </button>
         <button class="btn gold" id="bigPaySavingsBtn" ${savingsOk ? "" : "disabled"}>
           Pay ${fmtMoney(entry.cost)} from savings${savingsOk ? "" : ` (only ${fmtMoney(savings)} available)`}
@@ -370,9 +376,8 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
   // failed attempt at a different option — previously ALL buttons were
   // blindly re-enabled on any error, which could un-disable e.g. "Claim
   // insurance" for a student with no matching plan.
-  const eligibleIds = [];
+  const eligibleIds = ["bigPayCashBtn"];
   if (canForfeit) eligibleIds.push("bigForfeitBtn");
-  if (cashOk) eligibleIds.push("bigPayCashBtn");
   if (savingsOk) eligibleIds.push("bigPaySavingsBtn");
   if (plan) eligibleIds.push("bigClaimBtn");
   const setBusy = (busy) => {

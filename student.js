@@ -25,6 +25,7 @@ function badgeType(type) {
     "term-deposit-mature": ["mint", "vault", "Deposit matured"],
     "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
     "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
+    "insurance-signup-fee": ["lilac", "shield", "Insurance sign-up"],
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
     "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"],
     "side-hustle": ["mint", "briefcase", "Side hustle"],
@@ -35,8 +36,11 @@ function badgeType(type) {
     "property-rent": ["mint", "house", "Rent received"],
     "property-rent-pay": ["coral", "house", "Rent paid"],
     "property-rent-receive": ["mint", "house", "Rent received"],
+    "property-occupancy": ["navy", "house", "Occupancy change"],
     "truck-drive": ["mint", "car", "Truck drive"],
+    "truck-licence-buy": ["navy", "car", "Truck licence"],
     "loan-interest": ["coral", "handshake", "Loan interest"],
+    "gambling-buyin": ["gold", "dice", "Gambling buy-in"], "gambling-cashout": ["mint", "dice", "Gambling cash-out"],
     "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
     "life-allowance": ["mint", "trophy", "Life allowance"]
   };
@@ -262,8 +266,8 @@ async function render() {
       if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "store-gift", "quiz-reward", "p2p-sell", "property-rent", "property-rent-receive", "truck-drive"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "property-rent-pay", "vehicle-buy", "term-deposit-open", "insurance-premium", "savings-deposit", "loan-repayment", "p2p-buy", "loan-interest"].includes(t.type)) { sign = "-"; }
+    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "store-gift", "quiz-reward", "p2p-sell", "property-rent", "property-rent-receive", "truck-drive", "gambling-cashout"].includes(t.type)) { sign = "+"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "property-rent-pay", "vehicle-buy", "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "p2p-buy", "loan-interest", "truck-licence-buy", "gambling-buyin"].includes(t.type)) { sign = "-"; }
     else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
     else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
     else if (t.type === "gambling") { sign = t.note.includes("WON") ? "+" : "-"; }
