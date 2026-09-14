@@ -1,0 +1,368 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ===================== How this maps to the app =====================
+       The app now signs every real user into Firebase Auth (email/password,
+       using a synthetic "<username>@t29.local" email — see data.js). That
+       gives every request a real, per-account request.auth.uid.
+
+       /uidIndex/{authUid} -> { username }  is a one-time, self-written
+       mapping from that Firebase Auth uid back to this app's own
+       "username" (which is what /users and /classes documents are keyed
+       by, and what all the existing app code already expects). It's
+       created once, by the user themselves, in the same transaction as
+       their /users doc, and never changes after that.
+
+       Everything below is written in terms of "the requester's own
+       username" (myUsername()) and "the requester's own user doc"
+       (myUserDoc()), resolved via that mapping, rather than trusting
+       anything the client claims about itself.
+       ===================================================================== */
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myUsername() {
+      return get(/databases/$(database)/documents/uidIndex/$(request.auth.uid)).data.username;
+    }
+
+    function myUserDoc() {
+      return get(/databases/$(database)/documents/users/$(myUsername())).data;
+    }
+
+    function isTeacher() {
+      return signedIn() && myUserDoc().role == 'teacher';
+    }
+
+    // BUGFIX: transferMoney() (see data.js / bank.js "Send money") runs ONE
+    // atomic transaction that debits the sender's own doc AND credits the
+    // recipient's doc. Without this, a student could only ever write their
+    // own doc, so the credit half of every peer-to-peer transfer was denied
+    // — and because both writes are in the same commit, that denial failed
+    // the WHOLE transaction, including the sender's own debit.
+    //
+    // This lets a student credit a SAME-CLASS classmate's balance, but only
+    // as the credit half of a genuine transfer: the amount credited here
+    // must exactly match an equal debit already applied, in this same
+    // commit, to the caller's OWN balance (checked via getAfter(), which
+    // sees post-commit values, unlike plain get()/myUserDoc()). It still
+    // can't touch any field but balance, can't credit itself, and can't
+    // move money that didn't come out of the caller's own account.
+    function isPeerTransferCredit(username) {
+      let delta = request.resource.data.balance - resource.data.balance;
+      return myUserDoc().classCode == resource.data.classCode
+        && username != myUsername()
+        && delta > 0
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance'])
+        && getAfter(/databases/$(database)/documents/users/$(myUsername())).data.balance
+             == myUserDoc().balance - delta;
+    }
+
+    // ---------------- Student self-write guardrails ----------------
+    // SECURITY FIX: the old `allow update: if ... myUsername() == username
+    // ...` let a signed-in student rewrite ANY field on their own /users
+    // doc directly (via the browser console / Firestore SDK) — not just
+    // the ones data.js's own functions touch. The functions below narrow
+    // that specific self-write branch. They do NOT touch the isTeacher()
+    // or isPeerTransferCredit() branches below, since those already run
+    // under a different, already-trusted identity.
+    //
+    // KNOWN LIMITS (Firestore Rules has no loops and no way to read an
+    // individual array element — see rules.List's method list: concat,
+    // hasAll/Any/Only, join, removeAll, size — nothing that inspects one
+    // entry). That means:
+    //   - `loans` (an array) can only be checked at the whole-array level.
+    //     isSafeSelfEconomyChange() below blocks it from ever shrinking
+    //     (closes "delete my loans to erase debt"), but can't validate an
+    //     individual loan's `owed`/`status` fields, so directly editing
+    //     an existing entry in place is still possible.
+    //   - `quizResults` is a map (keyed by quiz id), which DOES support
+    //     precise per-key diffing via Map#diff(). isSafeSelfEconomyChange()
+    //     uses that to block deleting a result and to block touching more
+    //     than one quiz per write — but it can't re-grade a submission
+    //     (no loop over `quiz.questions`), so a self-reported pass on a
+    //     quiz still can't be verified as genuine without a backend.
+    //   - jobId/jobTierId/jobTierSince/pendingPromotion have no such
+    //     limit: they're plain scalar fields, so they CAN be locked down
+    //     completely (see jobFieldsUnchanged/isPromotionResponse).
+
+    // True only for the EXACT field-diff produced by respondToPromotion()'s
+    // accept/decline paths in data.js: pendingPromotion goes from a real
+    // offer to null, jobId never changes, and jobTierId either stays the
+    // same (decline) or becomes exactly the tierId that was already sitting
+    // in that offer (accept). This can never be used to grant a job, a
+    // tier, or an offer that wasn't already on the account — every OTHER
+    // way jobId/jobTierId change (assignJob, approveApplication,
+    // setStudentJobTier, declineApplication, cancelPendingPromotion) is
+    // teacher-invoked and goes through the isTeacher() branch instead.
+    function isPromotionResponse() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let promo = before.get('pendingPromotion', null);
+      return promo != null
+        && after.get('pendingPromotion', null) == null
+        && after.get('jobId', null) == before.get('jobId', null)
+        && (
+          after.get('jobTierId', null) == before.get('jobTierId', null) ||
+          after.get('jobTierId', null) == promo.tierId
+        )
+        && after.diff(before).affectedKeys().hasOnly(['pendingPromotion', 'jobTierSince', 'jobTierId']);
+    }
+
+    // .get(key, null) rather than plain dot access throughout this file's
+    // new checks: a teacher's own /users doc has no jobId/jobTierId/
+    // jobTierSince/pendingPromotion fields at all (see createTeacherAndClass
+    // in data.js), and plain dot access on a missing map key THROWS in
+    // Firestore Rules — which, same as the `allow get` bug fixed above,
+    // would deny the entire containing `||` rather than just this clause.
+    function jobFieldsUnchanged() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return before.get('jobId', null) == after.get('jobId', null)
+        && before.get('jobTierId', null) == after.get('jobTierId', null)
+        && before.get('jobTierSince', null) == after.get('jobTierSince', null)
+        && before.get('pendingPromotion', null) == after.get('pendingPromotion', null);
+    }
+
+    function isSafeSelfEconomyChange() {
+      let before = resource.data;
+      let after = request.resource.data;
+      // BUGFIX: this used to read `!('loans' in after) || ...`, which
+      // meant deleting the WHOLE field outright (a raw
+      // update({loans: FieldValue.delete()}) call, not just shrinking the
+      // array) was treated as "nothing to check" and sailed straight
+      // through — a more direct way to erase debt/quiz history than the
+      // thing this was built to block. Fix: once a field exists in
+      // `before`, it must still exist in `after`, not just satisfy the
+      // size/diff check — only a field that never existed before this
+      // write (nothing to protect yet) skips the check entirely.
+      let loansOk = !('loans' in before)
+        || ('loans' in after && after.loans.size() >= before.loans.size());
+      let qrOk = !('quizResults' in before)
+        || (
+          'quizResults' in after &&
+          after.quizResults.diff(before.quizResults).removedKeys().size() == 0 &&
+          after.quizResults.diff(before.quizResults).affectedKeys().size() <= 1
+        );
+      return loansOk && qrOk;
+    }
+
+    function isAllowedSelfUpdate(username) {
+      return myUsername() == username
+        && (jobFieldsUnchanged() || isPromotionResponse())
+        && isSafeSelfEconomyChange();
+    }
+
+    // ---------------- uid -> username mapping ----------------
+    match /uidIndex/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      // Written exactly once, by the account it belongs to, right after
+      // that Firebase Auth account is created (signup, or a legacy
+      // account's one-time migration on first login post-fix).
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['username'])
+        && request.resource.data.username is string;
+      allow update, delete: if false;
+    }
+
+    // ---------------- Students & teachers ----------------
+    match /users/{username} {
+      // Read access: anyone signed in gets their own doc. Anyone signed
+      // in and currently a member of the SAME class — teacher or fellow
+      // student — can also read this doc, which is what actually powers
+      // things like the teacher's roster, a student's "My classmates"
+      // list, and marketplace/leaderboard displays that show another
+      // student's name. (The old fully-open rules let this work by
+      // accident for literally anyone on the internet; this keeps it
+      // working for classmates only.) WRITE access stays far narrower —
+      // see `allow update` below — this only ever grants read.
+      allow get: if signedIn() && (
+        // BUGFIX: this branch must come FIRST, not last. Firestore
+        // evaluates `||` left to right, and if an earlier branch throws,
+        // the WHOLE rule denies — it does not fall through to a later
+        // branch that would have allowed it. myUsername() (below) does a
+        // get() on /uidIndex/{request.auth.uid} and reads .data straight
+        // off it, which throws for the anonymous session that
+        // t29TryMigrateLegacyLogin() uses (an anonymous uid has no
+        // /uidIndex entry). With this branch ordered last, as it
+        // originally was, that throw always happened first and no
+        // legacy (pre-fix) account could ever complete migration in
+        // login() — every one of them was permanently locked out.
+        // Putting this cheap, throw-free check first lets it
+        // short-circuit before myUsername() ever runs. Deliberately not
+        // included in `list` below, so this can't be used to enumerate
+        // accounts in bulk — only a single doc, by exact username, and
+        // only until that specific account logs in once.
+        !('authUid' in resource.data) ||
+        myUsername() == username ||
+        myUserDoc().classCode == resource.data.classCode
+      );
+      allow list: if signedIn() && (
+        myUsername() == username ||
+        myUserDoc().classCode == resource.data.classCode
+      );
+
+      // Account creation: the brand-new Firebase Auth uid creating this
+      // doc must be the same uid the username is being claimed for, and a
+      // username can only ever be claimed once. (Legacy accounts created
+      // before this fix don't have authUid set yet — see the migration
+      // note in data.js for how those get one on first login.)
+      allow create: if signedIn()
+        && request.resource.data.authUid == request.auth.uid
+        && request.resource.data.username == username
+        && !exists(/databases/$(database)/documents/users/$(username));
+
+      allow update: if signedIn() && (
+        isAllowedSelfUpdate(username) ||
+        (isTeacher() && myUserDoc().classCode == resource.data.classCode) ||
+        isPeerTransferCredit(username)
+      )
+      // Identity fields are never client-editable once claimed. authUid
+      // is the one exception: a legacy (pre-fix) account has none yet, so
+      // it may be SET once, but never changed afterwards.
+      && request.resource.data.username == resource.data.username
+      && request.resource.data.role == resource.data.role
+      && (
+        !('authUid' in resource.data) ||
+        request.resource.data.authUid == resource.data.authUid
+      );
+
+      allow delete: if signedIn() && isTeacher() && myUserDoc().classCode == resource.data.classCode;
+    }
+
+    // ---------------- Student self-write guardrails (classes) ----------------
+    // SECURITY FIX: the old `allow update` on /classes let ANY member —
+    // student or teacher — rewrite ANY field on the shared class doc:
+    // tax rates, interest rate, loan tiers, job pay, store/quiz
+    // definitions, the roster, all of it. This narrows what a NON-teacher
+    // member can touch. The teacher branch below is untouched (full
+    // access), since background jobs (pay day, interest, market days —
+    // see runPayDayInternal/applyInterest/etc. in data.js) write to
+    // MULTIPLE students' own /users docs in the same run, which only
+    // isTeacher() is allowed to do — meaning these jobs already only
+    // succeed when triggered under a teacher's own session, before or
+    // after this change.
+    //
+    // REMAINING GAP, precisely stated (same root cause as the /users
+    // loans/quizResults limits above): `companies`, `storeItems`,
+    // `properties`, `vehicles`, and `npcProperties` are each "mixed" —
+    // buying/selling modifies fields (shares held, stock sold, occupancy)
+    // INSIDE an existing catalog entry, the exact same shape as a student
+    // directly editing that entry's price. Verified against every
+    // student-facing buy/sell function in data.js (buyShares/sellShares,
+    // buyVehicle/sellVehicle, buyProperty/sellProperty, buyStoreItem,
+    // rentNpcProperty/moveOutNpcProperty): none of them ever add or
+    // remove a catalog entry, only modify one in place — only the
+    // teacher's own add/remove functions change how many entries exist.
+    // So isSafeStudentCatalogChange() below locks each array's LENGTH for
+    // student writes, which blocks wiping out a whole catalog AND
+    // sneaking in a fake new entry (e.g. planting a cheap fake company to
+    // buy shares of) — but it can't stop editing an EXISTING entry's
+    // price, because that requires inspecting one array element, and
+    // Firestore Rules has no way to do that (see rules.List's method
+    // list in the /users section above — no indexing, no loops).
+    // Converting these to id-keyed maps would NOT fix this either: a
+    // map's diff() can tell you a key changed, but there's no way to
+    // extract WHICH key from that result to then inspect it, so per-field
+    // validation of "the one entry that changed" isn't achievable that
+    // way. Actually closing this needs either Cloud Functions, or
+    // splitting each of these into two separate fields (teacher-only
+    // config vs. student-writable activity) — which requires updating
+    // every page that renders this data, not just this file.
+    function isSafeStudentCatalogChange() {
+      let before = resource.data;
+      let after = request.resource.data;
+      // Same bug/fix as isSafeSelfEconomyChange above: once one of these
+      // fields exists, deleting it outright must be rejected exactly like
+      // shrinking or replacing it would be — not waved through as
+      // "nothing to check."
+      return (!('companies' in before) || ('companies' in after && after.companies.size() == before.companies.size()))
+        && (!('storeItems' in before) || ('storeItems' in after && after.storeItems.size() == before.storeItems.size()))
+        && (!('properties' in before) || ('properties' in after && after.properties.size() == before.properties.size()))
+        && (!('vehicles' in before) || ('vehicles' in after && after.vehicles.size() == before.vehicles.size()))
+        && (!('npcProperties' in before) || ('npcProperties' in after && after.npcProperties.size() == before.npcProperties.size()));
+    }
+
+    function isSafeStudentsFieldChange() {
+      let before = resource.data;
+      let after = request.resource.data;
+      // Joining a class appends the new student's own username in the
+      // same transaction as their signup (see createStudentAccount) —
+      // the only legitimate way a non-teacher ever changes this field.
+      // Never permits an existing name to disappear (removeStudent,
+      // which does this, is teacher-only), the list to be replaced, or
+      // (same bug/fix as above) the whole field deleted outright.
+      return !('students' in before)
+        || (
+          'students' in after && (
+            after.students == before.students
+            || (after.students.size() == before.students.size() + 1 && after.students.hasAll(before.students))
+          )
+        );
+    }
+
+    function isAllowedStudentClassUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      // Pure teacher-configured settings/definitions and maintenance-job
+      // bookkeeping (payDayProgress/lastXRun) — no legitimate student
+      // action writes any of these directly. Locking the lastXRun/
+      // Progress fields also closes a real "free money" replay: without
+      // this, a student could reset their own already-been-paid marker
+      // and re-trigger a pay day/interest run to collect it twice.
+      let lockedFields = [
+        'name', 'teacher', 'code', 'createdAt',
+        'interestRate', 'cashInterestRate', 'interestAuto', 'interestFrequency', 'interestDay',
+        'taxRates', 'wageTaxBrackets',
+        'loanTiers', 'maxLoanAmount', 'maxLoanCount', 'termDepositPlans',
+        'jobs', 'quizzes', 'quizGate', 'insurancePlans', 'insuranceDay',
+        'gambling', 'blackjack',
+        'priceRange', 'propertyPriceRange',
+        'sellBackRates', 'truckLicence', 'movingCost', 'propertyBreakFee',
+        'mortgageDay', 'mortgageForceDueWeek', 'payDay',
+        'lifestyleConfig', 'lifestyleThresholds', 'lifestyleLock',
+        'marketplace', 'propertyRentals', 'dailyTimeLimitMinutes',
+        'archived', 'archivedAt', 'templateShareToken',
+        'eventDefs', 'bigEventDefs', 'sideHustles', 'lifeItems',
+        'payDayProgress', 'lastPayDayRun', 'lastInterestRun', 'lastInsuranceWeekRun',
+        'lastPropertyMarketDayRun', 'lastEventWeekRun', 'lastEventDayRun', 'lastBigEventWeekRun'
+      ];
+      return !changed.hasAny(lockedFields) && isSafeStudentsFieldChange() && isSafeStudentCatalogChange();
+    }
+
+    // ---------------- Classes ----------------
+    match /classes/{classCode} {
+      // Any member of the class (student or teacher) can read/write the
+      // shared class doc. A teacher who owns several classes can also
+      // read/write any of THEIR OTHER classes, not just the one they
+      // currently have open (matches multi-class support in teacher-home).
+      allow get: if signedIn() && (
+        myUserDoc().classCode == classCode ||
+        resource.data.teacher == myUsername()
+      );
+      // Query used by "My Classes" (where teacher == username) — scoped
+      // narrowly to owned classes only, no broader than that.
+      allow list: if signedIn() && resource.data.teacher == myUsername();
+
+      allow create: if signedIn() && request.resource.data.teacher == myUsername();
+
+      allow update: if signedIn() && (
+        (isTeacher() && (myUserDoc().classCode == classCode || resource.data.teacher == myUsername())) ||
+        (!isTeacher() && myUserDoc().classCode == classCode && isAllowedStudentClassUpdate())
+      );
+
+      allow delete: if signedIn() && resource.data.teacher == myUsername();
+    }
+
+    // ---------------- Cross-account template sharing ----------------
+    match /templateShares/{token} {
+      allow get: if signedIn();       // needed to preview a share link before importing
+      allow list: if false;
+      allow create: if signedIn() && isTeacher() && request.resource.data.teacher == myUsername();
+      allow delete: if signedIn() && isTeacher() && resource.data.teacher == myUsername();
+      allow update: if false;
+    }
+  }
+}

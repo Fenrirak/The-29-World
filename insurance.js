@@ -97,8 +97,8 @@ async function render() {
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${icon("shield", 20)}${p.name} ${owned ? '<span class="badge mint">You have this</span>' : ""}</h4>
-          <p>${p.description || "No description provided."}</p>
+          <h4>${icon("shield", 20)}${escapeHtml(p.name)} ${owned ? '<span class="badge mint">You have this</span>' : ""}</h4>
+          <p>${escapeHtml(p.description) || "No description provided."}</p>
           <p class="muted-small">Covers: ${COVERAGE_LABEL[p.coverage] || "—"}</p>
           <p><strong>${fmtMoney(p.price)}</strong>/week &middot; ${fmtMoney(p.excess)} excess ${p.signupFee ? `&middot; ${priceWithLifeDiscount(me, "insurance", p.signupFee)} sign-up fee` : ""} ${p.stars ? `&middot; <span class="ticker-up">${stars(p.stars)}</span>` : ""}</p>
         </div>
@@ -131,7 +131,7 @@ async function render() {
           ? `<span class="badge gold">Payment due today</span>`
           : `Next payment: ${payInfo.dateStr} (in ${payInfo.daysUntil} day${payInfo.daysUntil === 1 ? "" : "s"})`;
       }
-      row.innerHTML = `<div class="auto-details">${icon("shield", 14)} <strong>${p.name}</strong> &middot; ${fmtMoney(p.price)}/week &middot; ${fmtMoney(p.excess)} excess &middot; ${payText}</div>`;
+      row.innerHTML = `<div class="auto-details">${icon("shield", 14)} <strong>${escapeHtml(p.name)}</strong> &middot; ${fmtMoney(p.price)}/week &middot; ${fmtMoney(p.excess)} excess &middot; ${payText}</div>`;
       box.appendChild(row);
     });
   }

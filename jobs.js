@@ -114,7 +114,7 @@ function buildJobCard(j, jobStudents) {
   card.innerHTML = `
     <div class="job-family-header">
       <div>
-        <h3 class="job-family-title">${icon("briefcase", 16)} ${j.title}</h3>
+        <h3 class="job-family-title">${icon("briefcase", 16)} ${escapeHtml(j.title)}</h3>
         <div class="job-family-auto muted-small">${autoLabel}</div>
       </div>
       <div class="job-family-actions">
@@ -129,15 +129,15 @@ function buildJobCard(j, jobStudents) {
           return st && st.id === t.id;
         });
         const avatars = here.map(s =>
-          `<span class="student-avatar ${avatarClass(s.username)}" title="${s.name}">${initials(s.name)}</span>`
+          `<span class="student-avatar ${avatarClass(s.username)}" title="${escapeHtml(s.name)}">${initials(s.name)}</span>`
         ).join("");
         return `
           <div class="tier-rung${here.length ? " has-students" : ""}">
             <div class="tier-rung-badge">${i + 1}</div>
             <div class="tier-rung-body">
-              <div class="tier-rung-title">${t.name}</div>
+              <div class="tier-rung-title">${escapeHtml(t.name)}</div>
               <div class="tier-rung-wage">${fmtMoney(t.wage)}<span class="muted-small">/pay day</span></div>
-              ${t.description ? `<div class="tier-rung-desc muted-small">${t.description}</div>` : ""}
+              ${t.description ? `<div class="tier-rung-desc muted-small">${escapeHtml(t.description)}</div>` : ""}
             </div>
             ${here.length ? `<div class="tier-rung-students">${avatars}<span class="tier-rung-count">${here.length}</span></div>` : ""}
           </div>
@@ -184,7 +184,7 @@ function buildTierRow(t, i, prefix) {
     <div class="tier-form-fields">
       <div>
         <label>Tier name</label>
-        <input type="text" class="tier-name-input" placeholder="e.g. Junior Librarian" value="${t.name || ""}"
+        <input type="text" class="tier-name-input" placeholder="e.g. Junior Librarian" value="${escapeHtml(t.name || "")}"
           oninput="updateTierField('${prefix}', ${i}, 'name', this.value)">
       </div>
       <div>
@@ -194,7 +194,7 @@ function buildTierRow(t, i, prefix) {
       </div>
       <div class="tier-desc-wrap">
         <label>Description (optional)</label>
-        <input type="text" class="tier-desc-input" placeholder="What does this tier do?" value="${t.description || ""}"
+        <input type="text" class="tier-desc-input" placeholder="What does this tier do?" value="${escapeHtml(t.description || "")}"
           oninput="updateTierField('${prefix}', ${i}, 'description', this.value)">
       </div>
     </div>
@@ -360,9 +360,9 @@ function renderApplications(cls, students) {
     row.className = "auto-row";
     row.innerHTML = `
       <div class="auto-details">
-        <strong>${s ? s.name : a.studentUser}</strong> applied for <strong>${j ? j.title : "Unknown job"}</strong>
-        ${j && j.tiers && j.tiers.length ? `<div class="muted-small">Starting at: ${j.tiers[0].name} — ${fmtMoney(j.tiers[0].wage)}/pay day</div>` : ""}
-        <div class="muted-small">${a.coverLetter ? `"${a.coverLetter}"` : "No cover letter."}</div>
+        <strong>${s ? escapeHtml(s.name) : escapeHtml(a.studentUser)}</strong> applied for <strong>${j ? escapeHtml(j.title) : "Unknown job"}</strong>
+        ${j && j.tiers && j.tiers.length ? `<div class="muted-small">Starting at: ${escapeHtml(j.tiers[0].name)} — ${fmtMoney(j.tiers[0].wage)}/pay day</div>` : ""}
+        <div class="muted-small">${a.coverLetter ? `"${escapeHtml(a.coverLetter)}"` : "No cover letter."}</div>
       </div>
       <div class="row-flex" style="gap:8px;">
         <button class="btn small mint"  onclick="approveApp('${a.id}')">Approve</button>
@@ -416,12 +416,12 @@ function renderMyJob(me, cls) {
     <div class="my-job-card">
       <div class="my-job-header">
         <div>
-          <div class="my-job-family">${job.title}</div>
-          <h2 class="my-job-tier-name">${tier.name}</h2>
+          <div class="my-job-family">${escapeHtml(job.title)}</div>
+          <h2 class="my-job-tier-name">${escapeHtml(tier.name)}</h2>
         </div>
         <div class="my-job-wage">${fmtMoney(tier.wage)}<span class="my-job-wage-label">/pay day</span></div>
       </div>
-      ${tier.description ? `<p class="my-job-desc">${tier.description}</p>` : ""}
+      ${tier.description ? `<p class="my-job-desc">${escapeHtml(tier.description)}</p>` : ""}
 
       ${tiers.length > 1 ? `
         <div class="tier-progress-wrap">
@@ -432,7 +432,7 @@ function renderMyJob(me, cls) {
             ${tiers.map((t, i) => `
               <div class="tier-progress-step ${i < tierIdx ? "past" : i === tierIdx ? "current" : ""}">
                 <div class="tier-progress-dot"></div>
-                <div class="tier-progress-label">${t.name}</div>
+                <div class="tier-progress-label">${escapeHtml(t.name)}</div>
               </div>
             `).join("")}
           </div>
@@ -463,7 +463,7 @@ function renderJobBoard(me, cls) {
     card.innerHTML = `
       <div class="job-board-header">
         <div>
-          <h3 class="job-board-title">${j.title}</h3>
+          <h3 class="job-board-title">${escapeHtml(j.title)}</h3>
           ${isMine ? `<span class="badge mint">Your job</span>` : ""}
         </div>
       </div>
@@ -472,8 +472,8 @@ function renderJobBoard(me, cls) {
           <div class="job-board-tier-row ${isMine && myTier && t.id === myTier.id ? "active" : ""}">
             <span class="job-board-tier-num">${i + 1}</span>
             <div class="job-board-tier-info">
-              <strong>${t.name}</strong>
-              ${t.description ? `<span class="muted-small"> — ${t.description}</span>` : ""}
+              <strong>${escapeHtml(t.name)}</strong>
+              ${t.description ? `<span class="muted-small"> — ${escapeHtml(t.description)}</span>` : ""}
             </div>
             <span class="job-board-tier-wage">${fmtMoney(t.wage)}</span>
             ${isMine && myTier && t.id === myTier.id ? `<span class="badge gold" style="flex-shrink:0;">You</span>` : ""}
@@ -568,9 +568,9 @@ function renderMyApplications(me, cls) {
                                 `<span class="status-declined">Declined</span>`;
     row.innerHTML = `
       <div class="auto-details">
-        <strong>${j ? j.title : "Unknown job"}</strong>
-        ${j && j.tiers && j.tiers[0] ? `<div class="muted-small">Entry tier: ${j.tiers[0].name}</div>` : ""}
-        ${a.coverLetter ? `<div class="muted-small">"${a.coverLetter}"</div>` : ""}
+        <strong>${j ? escapeHtml(j.title) : "Unknown job"}</strong>
+        ${j && j.tiers && j.tiers[0] ? `<div class="muted-small">Entry tier: ${escapeHtml(j.tiers[0].name)}</div>` : ""}
+        ${a.coverLetter ? `<div class="muted-small">"${escapeHtml(a.coverLetter)}"</div>` : ""}
         <div class="muted-small">${a.date || ""}</div>
       </div>
       ${statusBadge}

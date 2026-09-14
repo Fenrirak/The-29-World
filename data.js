@@ -11,6 +11,62 @@
 const SESSION_KEY = "anw_session"; // session stays in localStorage — it's fine for this to be per-device
 const MAX_STORED_TXNS = 250; // keep class docs from growing forever
 
+// Shared HTML-escaping helper. data.js loads before every other The 29
+// World script on every page, so this is available globally as soon as
+// any page script runs. ALWAYS wrap user-supplied strings (student/teacher
+// display names, job titles, event/property/vehicle/store item names,
+// notes, etc.) in this before inserting them via innerHTML. Escaping at
+// render time (rather than sanitizing at write time) is the deliberate
+// choice here: it's the single place that actually prevents the browser
+// from parsing user text as markup, it can't be bypassed by a new
+// call site that writes data some other way, and it avoids double-encoding
+// data that's read back out for editing.
+function escapeHtml(s) {
+  return String(s === undefined || s === null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// For the very common `onclick="doThing('${...}')"` pattern: a raw name
+// dropped into that spot is TWO separate injection contexts at once (the
+// double-quoted HTML attribute, and the single-quoted JS string literal
+// inside it), and escapeHtml() alone doesn't close the JS one — the browser
+// HTML-decodes the attribute value (turning our escaped "&#39;" back into
+// an actual "'") before handing it to the JS parser, so a name containing
+// a quote can still break out of the inline string. Escape the JS layer
+// first (so a real quote never reaches the JS parser even after HTML
+// decoding), then escape the HTML layer on top of that.
+function escapeJsAttr(s) {
+  const jsSafe = String(s === undefined || s === null ? "" : s)
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'");
+  return escapeHtml(jsSafe);
+}
+
+// Defense-in-depth for the handful of writes that create brand-new
+// user-supplied text (a student's name at signup, a teacher's class name,
+// a job title). escapeHtml() at render time is the fix that actually
+// stops the browser from running this as HTML — this is a second,
+// independent layer so that even if some future page forgets to escape a
+// name before dropping it into innerHTML, there's nothing dangerous
+// sitting in Firestore for it to forget to escape in the first place.
+//
+// Deliberately just strips the two characters that can open/close an HTML
+// tag (`<` and `>`) rather than HTML-entity-encoding them: encoding here
+// would store literal "&amp;" etc., which then shows up wrong everywhere
+// this name is ever displayed (including this file's own admin views) —
+// escaping belongs at render time, not at rest. Also trims and caps
+// length so one long paste can't bloat a class doc.
+function sanitizeUserText(s, maxLen) {
+  return String(s === undefined || s === null ? "" : s)
+    .replace(/[<>]/g, "")
+    .trim()
+    .slice(0, maxLen || 60);
+}
+
 function usersCol() { installReadCache(); return fdb.collection("users"); }
 function classesCol() { installReadCache(); return fdb.collection("classes"); }
 
@@ -298,7 +354,11 @@ async function getClassCached(code) {
 }
 function initials(name) {
   if (!name) return "?";
-  return name.trim().split(/\s+/).map(p => p[0]).join("").slice(0, 2).toUpperCase();
+  // The result is almost always dropped straight into innerHTML by callers
+  // (avatar badges), and it's still built from a couple of characters of
+  // raw, attacker-controlled display name (e.g. a name of "<b " would slice
+  // down to "<B"), so escape here once rather than trust every call site.
+  return escapeHtml(name.trim().split(/\s+/).map(p => p[0]).join("").slice(0, 2).toUpperCase());
 }
 
 /* ---------------- Session ---------------- */
@@ -683,6 +743,9 @@ async function createTeacherAndClass(name, username, password, className) {
     return { ok: false, error: "Password must be at least 6 characters." };
   }
 
+  name = sanitizeUserText(name, 60);
+  className = sanitizeUserText(className, 60);
+
   const existing = await getUser(username);
   if (existing) return { ok: false, error: "That username is already taken." };
 
@@ -1037,6 +1100,8 @@ async function createStudentAccount(name, username, password, classCode) {
   if (!password || password.length < 6) {
     return { ok: false, error: "Password must be at least 6 characters." };
   }
+
+  name = sanitizeUserText(name, 60);
 
   const existing = await getUser(username);
   if (existing) return { ok: false, error: "That username is already taken." };
@@ -1447,10 +1512,10 @@ async function addJob(classCode, title, tiers, autoPromoteWeeks) {
     if (!snap.exists) return;
     const cls = snap.data();
     cls.jobs.push({
-      id: uid("j"), title,
+      id: uid("j"), title: sanitizeUserText(title, 60),
       tiers: (tiers || []).map(tier => ({
-        id: uid("t"), name: tier.name || "Tier 1",
-        wage: Number(tier.wage) || 0, description: tier.description || ""
+        id: uid("t"), name: sanitizeUserText(tier.name, 60) || "Tier 1",
+        wage: Number(tier.wage) || 0, description: sanitizeUserText(tier.description, 200)
       })),
       autoPromoteWeeks: Number(autoPromoteWeeks) || 0
     });
@@ -1465,8 +1530,15 @@ async function updateJob(classCode, jobId, updates) {
     const cls = snap.data();
     const job = cls.jobs.find(j => j.id === jobId);
     if (!job) return;
-    job.title = updates.title;
-    if (updates.tiers) job.tiers = updates.tiers;
+    // Same sanitizing as addJob — editing a job is the same write path and
+    // shouldn't be a way to sneak back in what creating one blocks.
+    job.title = sanitizeUserText(updates.title, 60);
+    if (updates.tiers) {
+      job.tiers = updates.tiers.map(tier => ({
+        id: tier.id || uid("t"), name: sanitizeUserText(tier.name, 60) || "Tier 1",
+        wage: Number(tier.wage) || 0, description: sanitizeUserText(tier.description, 200)
+      }));
+    }
     job.autoPromoteWeeks = Number(updates.autoPromoteWeeks) || 0;
     t.update(classRef, { jobs: cls.jobs });
   });

@@ -182,7 +182,7 @@ async function render() {
       <span class="rank-pill ${medalClass(i)}">${i + 1}</span>
       <span class="student-avatar ${avatarClass(row.username)}">${initials(row.name)}</span>
       <div style="flex:1;">
-        <div class="leaderboard-name">${row.name}${row.username === me.username ? " (you)" : ""}</div>
+        <div class="leaderboard-name">${escapeHtml(row.name)}${row.username === me.username ? " (you)" : ""}</div>
         <div class="leaderboard-sub">${fmtMoney(row.balance)} cash + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.savings ? ` + ${fmtMoney(row.savings)} savings` : ""}${row.owed ? ` - ${fmtMoney(row.owed)} owed` : ""}</div>
       </div>
       <div class="leaderboard-net">${fmtMoney(row.net)}</div>
@@ -198,7 +198,7 @@ async function render() {
     const j = cls.jobs.find(jj => jj.id === s.jobId);
     const sTier = j ? getStudentTier(j, s) : null;
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${s.name}</td><td>${sTier ? sTier.name : (j ? j.title : "—")}</td>`;
+    tr.innerHTML = `<td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${escapeHtml(s.name)}</td><td>${sTier ? escapeHtml(sTier.name) : (j ? escapeHtml(j.title) : "—")}</td>`;
     ctbl.appendChild(tr);
   });
 
@@ -233,7 +233,7 @@ async function render() {
     const gPctText = g.pct === null ? "—" : `${g.pct > 0 ? "+" : g.pct < 0 ? "-" : ""}${Math.abs(g.pct).toFixed(1)}%`;
 
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${co.name}</td><td>${fmtMoney(co.price)}</td><td>${mine}</td>
+    tr.innerHTML = `<td>${escapeHtml(co.name)}</td><td>${fmtMoney(co.price)}</td><td>${mine}</td>
       <td class="${moveClass}">${sign}${fmtMoney(Math.abs(diff))}</td>
       <td class="${moveClass}">${sign}${Math.abs(pct).toFixed(1)}%</td>
       <td class="${gClass}">${gSign}${fmtMoney(Math.abs(g.total))}${gStar}</td>
@@ -282,7 +282,7 @@ async function render() {
     else if (t.type === "property-occupancy") { sign = amt > 0 ? (t.from === me.username ? "-" : "+") : ""; }
 
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${detail}</td>
+    tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${escapeHtml(detail)}</td>
       <td class="${sign === '-' ? 'ticker-down' : 'ticker-up'}">${sign}${fmtMoney(amt)}</td>`;
     tbody.appendChild(tr);
   });
@@ -421,7 +421,7 @@ async function renderSideHustle(me, cls, lockedModules) {
   if (denialEl) {
     if (me.sideHustleDenialNote) {
       denialEl.classList.remove("hidden");
-      denialEl.innerHTML = `<span class="badge coral">Change request denied</span> <span class="muted-small">${me.sideHustleDenialNote}</span>`;
+      denialEl.innerHTML = `<span class="badge coral">Change request denied</span> <span class="muted-small">${escapeHtml(me.sideHustleDenialNote)}</span>`;
     } else {
       denialEl.classList.add("hidden");
     }
@@ -550,7 +550,7 @@ async function openLifestyleBreakdown() {
   const rows = arr => arr.length
     ? arr.map(i => `
         <div class="auto-row">
-          <div class="auto-details">${i.label}${i.count > 1 ? ` &times;${i.count}` : ""}<div class="muted-small">${i.detail}</div></div>
+          <div class="auto-details">${escapeHtml(i.label)}${i.count > 1 ? ` &times;${i.count}` : ""}<div class="muted-small">${escapeHtml(i.detail)}</div></div>
           <div class="${i.type === "gain" ? "status-approved" : "status-declined"}">${i.type === "gain" ? "+" : "-"}${i.points}</div>
         </div>
       `).join("")
@@ -605,60 +605,11 @@ function closeLifestyleBreakdown() {
   document.getElementById("lifestyleModal").classList.add("hidden");
 }
 
-/* ---------------- Settings dropdown / change password ---------------- */
-function toggleSettingsDropdown(evtOrForce) {
-  const dd = document.getElementById("settingsDropdown");
-  const btn = document.getElementById("settingsBtn");
-  if (!dd || !btn) return;
-  if (evtOrForce && evtOrForce.stopPropagation) evtOrForce.stopPropagation();
-  const forceShow = typeof evtOrForce === "boolean" ? evtOrForce : dd.classList.contains("hidden");
-  dd.classList.toggle("hidden", !forceShow);
-  btn.setAttribute("aria-expanded", String(forceShow));
-}
-// Click-away closes the dropdown — matches how the lifestyle modal closes
-// on a double-click outside its card.
-document.addEventListener("click", (e) => {
-  const wrap = document.querySelector(".settings-dropdown-wrap");
-  const dd = document.getElementById("settingsDropdown");
-  if (!wrap || !dd || dd.classList.contains("hidden")) return;
-  if (!wrap.contains(e.target)) toggleSettingsDropdown(false);
-});
-
-function openPasswordModal() {
-  toggleSettingsDropdown(false);
-  document.getElementById("pwCurrent").value = "";
-  document.getElementById("pwNew").value = "";
-  document.getElementById("pwConfirm").value = "";
-  document.getElementById("pwMsg").textContent = "";
-  document.getElementById("passwordModal").classList.remove("hidden");
-  document.getElementById("pwCurrent").focus();
-}
-function closePasswordModal() {
-  document.getElementById("passwordModal").classList.add("hidden");
-}
-
-async function submitPasswordChange() {
-  const oldPw = document.getElementById("pwCurrent").value;
-  const newPw = document.getElementById("pwNew").value;
-  const confirmPw = document.getElementById("pwConfirm").value;
-  const msg = document.getElementById("pwMsg");
-  const btn = document.getElementById("pwSubmitBtn");
-
-  if (!oldPw || !newPw || !confirmPw) { msg.textContent = "Please fill in all three fields."; return; }
-  if (newPw !== confirmPw) { msg.textContent = "New passwords don't match."; return; }
-
-  btn.disabled = true;
-  msg.textContent = "Updating...";
-  const res = await changePassword(CURRENT.username, oldPw, newPw);
-  btn.disabled = false;
-
-  if (!res.ok) { msg.textContent = res.error; return; }
-
-  document.getElementById("pwCurrent").value = "";
-  document.getElementById("pwNew").value = "";
-  document.getElementById("pwConfirm").value = "";
-  msg.textContent = "Password updated — you're still signed in here. Any other device you were logged in on will need to sign back in.";
-}
+// Settings (gear icon), Dark Mode, Sidebar Navigation, and Change password
+// are all handled by the shared settings-menu.js popover + data.js's
+// openPasswordModal()/_pwBuildModal(), exactly like every other page.
+// This page used to hardcode its own second copy of all of that — see the
+// changelog / audit notes for why it was removed.
 
 document.addEventListener("DOMContentLoaded", init);
 

@@ -183,7 +183,7 @@ async function render() {
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${icon("building", 20)}${co.name}</h4>
+          <h4>${icon("building", 20)}${escapeHtml(co.name)}</h4>
           <div class="${change >= 0 ? 'ticker-up' : 'ticker-down'}">${fmtMoney(co.price)} <span class="muted-small">(${change >= 0 ? '+' : ''}${changePct}% today)</span></div>
         </div>
         ${sparkline(co.history)}

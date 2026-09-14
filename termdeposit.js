@@ -70,7 +70,7 @@ async function render() {
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${icon("vault", 20)}${p.name}</h4>
+          <h4>${icon("vault", 20)}${escapeHtml(p.name)}</h4>
           <p class="muted-small">Minimum ${fmtMoney(p.minAmount)} &middot; ${p.days} days &middot; ${p.rate}% interest/week (compounds to maturity) &middot; ${p.earlyFeePct}% fee if broken early</p>
         </div>
         <div>
@@ -99,7 +99,7 @@ async function render() {
       const row = document.createElement("div");
       row.className = "auto-row";
       row.innerHTML = `
-        <div class="auto-details">${icon("vault", 14)} <strong>${fmtMoney(d.amount)}</strong> in ${d.plan.name}
+        <div class="auto-details">${icon("vault", 14)} <strong>${fmtMoney(d.amount)}</strong> in ${escapeHtml(d.plan.name)}
           <div class="muted-small">Matures ${d.matureDate} &middot; ${d.plan.earlyFeePct}% fee if withdrawn early</div>
         </div>
         <button class="btn small coral" onclick="withdrawEarly('${d.id}')">Withdraw early</button>

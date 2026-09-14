@@ -103,14 +103,14 @@ function showChoiceEventPopup(entry, username, classCode) {
   // The actual amount + outcome only appears after they've committed.
   const optionsHtml = (entry.options || []).map(o => `
     <button class="btn secondary" style="width:100%;justify-content:flex-start;" data-opt="${o.id}">
-      <span>${o.label}</span>
+      <span>${escapeHtml(o.label)}</span>
     </button>
   `).join("");
 
   overlay.innerHTML = `
     <div class="anw-modal-card">
-      <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${entry.name}</h2>
-      <p>${entry.description || ""}</p>
+      <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${escapeHtml(entry.name)}</h2>
+      <p>${escapeHtml(entry.description) || ""}</p>
       <p class="muted-small">You need to choose how to handle this before you can continue.</p>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
         ${optionsHtml}
@@ -146,7 +146,7 @@ function showChoiceOutcome(overlay, entry, amount, outcome, username, classCode)
   // nothing to claim, even though the event itself is tagged bad.
   const claimable = entry.severity === "bad" && amount < 0;
   card.innerHTML = `
-    <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${entry.name}</h2>
+    <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${escapeHtml(entry.name)}</h2>
     ${outcome ? `<p>${outcome}</p>` : ""}
     <p class="${amount < 0 ? 'ticker-down' : 'ticker-up'}" style="font-weight:900;font-size:1.2em;">${amount >= 0 ? "+" : "-"}${fmtMoney(Math.abs(amount))}</p>
     ${claimable ? `<button class="btn small secondary" onclick="claimFromPopup('${entry.id}', '${username}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
@@ -167,8 +167,8 @@ function showEventPopup(events, username, classCode) {
     <div class="anw-event-row">
       <span class="icon" style="width:26px;height:26px;flex-shrink:0;">${icon("dice", 26)}</span>
       <div style="flex:1;">
-        <div class="anw-event-name">${e.name}</div>
-        ${e.description ? `<div class="muted-small">${e.description}</div>` : ""}
+        <div class="anw-event-name">${escapeHtml(e.name)}</div>
+        ${e.description ? `<div class="muted-small">${escapeHtml(e.description)}</div>` : ""}
         ${e.claimable ? `<button class="btn small secondary" style="margin-top:6px;" onclick="claimFromPopup('${e.id}', '${username}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
         ${e.claimed ? `<div class="muted-small ticker-up">Claimed on insurance</div>` : ""}
       </div>
@@ -238,7 +238,7 @@ function showAdjustmentPopup(txn) {
   overlay.innerHTML = `
     <div class="anw-modal-card">
       <h2 style="display:flex;align-items:center;gap:9px;">${icon(isBonus ? "star" : "coin", 24)} ${isBonus ? "You got a bonus!" : "You got a fine"}</h2>
-      ${txn.note ? `<p>${txn.note}</p>` : ""}
+      ${txn.note ? `<p>${escapeHtml(txn.note)}</p>` : ""}
       <p class="${isBonus ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;font-size:1.2em;">${isBonus ? "+" : "-"}${fmtMoney(txn.amount)}</p>
       <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwAdjustmentCloseBtn">Nice, got it</button>
     </div>
@@ -309,8 +309,8 @@ function showGoodBigEventPopup(entry) {
 
   overlay.innerHTML = `
     <div class="anw-modal-card">
-      <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${entry.name}</h2>
-      <p>${entry.description || ""}</p>
+      <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${escapeHtml(entry.name)}</h2>
+      <p>${escapeHtml(entry.description) || ""}</p>
       <p class="ticker-up" style="font-weight:900;font-size:1.2em;">+${fmtMoney(entry.cost)}</p>
       <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwGoodBigEventCloseBtn">Nice, got it</button>
     </div>
@@ -349,8 +349,8 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
 
   overlay.innerHTML = `
     <div class="anw-modal-card">
-      <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${entry.name}</h2>
-      <p>${entry.description || ""}</p>
+      <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${escapeHtml(entry.name)}</h2>
+      <p>${escapeHtml(entry.description) || ""}</p>
       <p><strong>${BIG_EVENT_MODULE_LABEL[entry.module]}</strong> &middot; costs <strong>${fmtMoney(entry.cost)}</strong> to resolve</p>
       <p class="muted-small">${canForfeit ? "You need to choose how to handle this before you can continue." : `This doesn't put ${assetLabel} at risk — you just need to cover the cost, or claim insurance if you have it.`}</p>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
@@ -362,7 +362,7 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
           Pay ${fmtMoney(entry.cost)} from savings${savingsOk ? "" : ` (only ${fmtMoney(savings)} available)`}
         </button>
         <button class="btn secondary" id="bigClaimBtn" ${plan ? "" : "disabled"}>
-          ${plan ? `Claim insurance (${plan.name}) — pay ${fmtMoney(plan.excess)} excess` : "Claim insurance (no matching plan)"}
+          ${plan ? `Claim insurance (${escapeHtml(plan.name)}) — pay ${fmtMoney(plan.excess)} excess` : "Claim insurance (no matching plan)"}
         </button>
       </div>
       <div id="bigEventMsg"></div>

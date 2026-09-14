@@ -88,8 +88,8 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${icon("trophy", 16)} ${item.name}</h4>
-            <p>${item.description || "No description provided."}</p>
+            <h4>${icon("trophy", 16)} ${escapeHtml(item.name)}</h4>
+            <p>${escapeHtml(item.description) || "No description provided."}</p>
             <div style="margin-top:6px;">${lifeBenefitChips(item.benefits, item.frequency)}</div>
           </div>
           <div style="display:flex;gap:8px;">
@@ -105,7 +105,7 @@ async function render() {
       `;
       list.appendChild(div);
       const sel = div.querySelector(`#give-${item.id}`);
-      sel.innerHTML = students.map(s => `<option value="${s.username}">${s.name}</option>`).join("");
+      sel.innerHTML = students.map(s => `<option value="${escapeHtml(s.username)}">${escapeHtml(s.name)}</option>`).join("");
     });
 
     const grantedBox = document.getElementById("grantedList");
@@ -117,11 +117,11 @@ async function render() {
       row.className = "auto-row";
       const chips = (s.lifeItems || []).map(it => `
         <span class="badge navy" style="margin-right:6px;margin-bottom:4px;display:inline-flex;align-items:center;gap:4px;">
-          ${icon("trophy", 12)} ${it.name}
-          <button type="button" onclick="revokeLifeItemFor('${s.username}','${it.id}')" title="Revoke" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:800;padding:0 0 0 2px;line-height:1;">&times;</button>
+          ${icon("trophy", 12)} ${escapeHtml(it.name)}
+          <button type="button" onclick="revokeLifeItemFor('${escapeHtml(s.username)}','${it.id}')" title="Revoke" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:800;padding:0 0 0 2px;line-height:1;">&times;</button>
         </span>
       `).join("");
-      row.innerHTML = `<div class="auto-details"><strong>${s.name}</strong><div style="margin-top:4px;">${chips}</div></div>`;
+      row.innerHTML = `<div class="auto-details"><strong>${escapeHtml(s.name)}</strong><div style="margin-top:4px;">${chips}</div></div>`;
       grantedBox.appendChild(row);
     });
   } else {
@@ -134,8 +134,8 @@ async function render() {
       const div = document.createElement("div");
       div.className = "card company-card";
       div.innerHTML = `
-        <h4>${icon("trophy", 16)} ${it.name}</h4>
-        <p>${it.description || ""}</p>
+        <h4>${icon("trophy", 16)} ${escapeHtml(it.name)}</h4>
+        <p>${escapeHtml(it.description) || ""}</p>
         <div>${lifeBenefitChips(it.benefits, it.frequency)}</div>
         <p class="muted-small" style="margin-top:8px;">Given ${it.grantedAt || ""}</p>
       `;

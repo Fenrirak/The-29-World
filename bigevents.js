@@ -93,8 +93,8 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${icon("star", 20)}${d.name} <span class="badge navy">${MODULE_LABEL[d.module]}</span> <span class="badge ${isGood ? "gold" : "coral"}">${isGood ? "Good" : "Bad"}</span></h4>
-            <p>${d.description || "No description provided."}</p>
+            <h4>${icon("star", 20)}${escapeHtml(d.name)} <span class="badge navy">${MODULE_LABEL[d.module]}</span> <span class="badge ${isGood ? "gold" : "coral"}">${isGood ? "Good" : "Bad"}</span></h4>
+            <p>${escapeHtml(d.description) || "No description provided."}</p>
             <p><strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay or claim's excess"}</p>
             ${!isGood ? `<p class="muted-small">${takesAsset ? "Not paying costs the student the related job/property/vehicle." : "Cost only — the student can't lose the asset over this."}</p>` : ""}
             ${isGood && isGeneral ? `<p class="muted-small">Open to everyone — not tied to any job, property, or vehicle.</p>` : ""}
@@ -120,7 +120,7 @@ async function render() {
       row.className = "auto-row";
       const isGood = e.kind === "good";
       row.innerHTML = `
-        <div class="auto-details"><strong>${e.name}</strong> (${MODULE_LABEL[e.module]}) — <span class="${isGood ? "ticker-up" : ""}">${isGood ? "+" : ""}${fmtMoney(e.cost)}</span>
+        <div class="auto-details"><strong>${escapeHtml(e.name)}</strong> (${MODULE_LABEL[e.module]}) — <span class="${isGood ? "ticker-up" : ""}">${isGood ? "+" : ""}${fmtMoney(e.cost)}</span>
           <div class="muted-small">${e.date}</div>
         </div>
         <span class="${STATUS_CLASS[e.status]}">${STATUS_LABEL[e.status]}</span>

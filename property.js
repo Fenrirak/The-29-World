@@ -232,8 +232,8 @@ async function render() {
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${icon("house", 20)}${p.name} ${myUnit ? '<span class="badge mint">Your home</span>' : ""}</h4>
-          <p>${p.description || "No description provided."}</p>
+          <h4>${icon("house", 20)}${escapeHtml(p.name)} ${myUnit ? '<span class="badge mint">Your home</span>' : ""}</h4>
+          <p>${escapeHtml(p.description) || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
           ${lifestylePreviewLine(cls, p)}
           <p>${priceWithLifeDiscount(me, "property", p.price)}${chgBadge} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""}` : "&middot; cash purchase only"}
@@ -567,7 +567,7 @@ function renderPendingSublets(cls, nameOf) {
   box.innerHTML = `<h3 style="margin-top:22px;">${icon("send", 15)} Pending rental requests</h3>` + pending.map(p => `
     <div class="auto-row">
       <div class="auto-details">
-        <strong>${p.name}</strong> — ${nameOf(p.owner)} wants to rent it out at ${fmtMoney(p.sublet.price)}/week, ${p.sublet.minWeeks}-week minimum lease.
+        <strong>${escapeHtml(p.name)}</strong> — ${nameOf(p.owner)} wants to rent it out at ${fmtMoney(p.sublet.price)}/week, ${p.sublet.minWeeks}-week minimum lease.
       </div>
       <div class="row-flex" style="gap:8px;">
         <button class="btn small mint" onclick="approveSubletClick('${p.id}')">Approve</button>
@@ -624,7 +624,7 @@ function renderMyClassmateRentedHome(box, prop, cls, nameOf) {
   box.innerHTML = `
     <div class="card">
       <h2>${icon("house", 18)} Your rented home</h2>
-      <p><strong>${prop.name}</strong> — renting from ${nameOf(prop.owner)} at ${fmtMoney(s.price)}/week.</p>
+      <p><strong>${escapeHtml(prop.name)}</strong> — renting from ${nameOf(prop.owner)} at ${fmtMoney(s.price)}/week.</p>
       <p class="muted-small">${status}</p>
       ${canPay ? `<button class="btn small gold" onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>` : ""}
       <div id="tenantRentMsg-${prop.id}"></div>
@@ -663,7 +663,7 @@ function renderAvailableSublets(cls, me, nameOf) {
       ${listings.map(p => `
         <div class="auto-row">
           <div class="auto-details">
-            <strong>${p.name}</strong> — ${comfortStars(p.comfort)}<br>
+            <strong>${escapeHtml(p.name)}</strong> — ${comfortStars(p.comfort)}<br>
             <span class="muted-small">${fmtMoney(p.sublet.price)}/week from ${nameOf(p.owner)}, ${p.sublet.minWeeks}-week minimum lease</span>
           </div>
           <button class="btn small gold" ${alreadyHoused ? "disabled" : ""} onclick="claimSubletClick('${p.id}')">Move in</button>
@@ -687,9 +687,9 @@ function renderMyNpcRentedHome(box, unit) {
   box.innerHTML = `
     <div class="card">
       <h2>${icon("building", 18)} Your rented home</h2>
-      <p><strong>${unit.name}</strong> <span class="badge lilac">${icon("building", 12)}School rental</span><br>
+      <p><strong>${escapeHtml(unit.name)}</strong> <span class="badge lilac">${icon("building", 12)}School rental</span><br>
       renting from the school at ${fmtMoney(unit.rentPerWeek)}/week.</p>
-      ${unit.description ? `<p class="muted-small">${unit.description}</p>` : ""}
+      ${unit.description ? `<p class="muted-small">${escapeHtml(unit.description)}</p>` : ""}
       <p class="muted-small">${status}</p>
       ${canPay ? `<button class="btn small gold" onclick="payNpcRentClick('${unit.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(unit.rentPerWeek)}</button>` : ""}
       <div id="npcRentMsg-${unit.id}"></div>
@@ -728,8 +728,8 @@ function renderAvailableNpcRentals(cls, me, nameOf) {
     return `
       <div class="auto-row">
         <div class="auto-details">
-          <strong>${p.name}</strong> <span class="badge lilac">${icon("building", 12)}School rental</span><br>
-          ${p.description ? `<span class="muted-small">${p.description}</span><br>` : ""}
+          <strong>${escapeHtml(p.name)}</strong> <span class="badge lilac">${icon("building", 12)}School rental</span><br>
+          ${p.description ? `<span class="muted-small">${escapeHtml(p.description)}</span><br>` : ""}
           <span class="muted-small">${fmtMoney(p.rentPerWeek)}/week from the school, ${p.minWeeks}-week minimum lease${p.lifestylePoints > 0 ? `, +${p.lifestylePoints} lifestyle points while you live there` : ""}
           &middot; ${g.length > 1 ? `${available.length} of ${g.length} available` : "Available"}</span>
         </div>
@@ -1034,7 +1034,7 @@ async function openSellModal(id, isTeacherSelling) {
   }
   const payout = Math.round((marketPrice - mortgagePayoff - breakFee) * 100) / 100;
   const overlay = _sellBuildModal();
-  document.getElementById("sellModalTitle").innerHTML = icon("house", 18) + ` Sell ${prop.name}`;
+  document.getElementById("sellModalTitle").innerHTML = icon("house", 18) + ` Sell ${escapeHtml(prop.name)}`;
   let body = `<p>Current market price: <strong>${fmtMoney(marketPrice)}</strong></p>`;
   if (prop.mortgage) {
     body += `<p>This property still has a mortgage on it. <strong>${fmtMoney(mortgagePayoff)}</strong> will be deducted from the sale to pay off the remaining mortgage`;
@@ -1096,8 +1096,8 @@ function renderNpcListings(cls, nameOf) {
       <div class="card company-card">
         <div class="flex-between">
           <div>
-            <h4>${icon("building", 20)}${p.name} <span class="badge lilac">School rental</span></h4>
-            <p>${p.description || "No description provided."}</p>
+            <h4>${icon("building", 20)}${escapeHtml(p.name)} <span class="badge lilac">School rental</span></h4>
+            <p>${escapeHtml(p.description) || "No description provided."}</p>
             <p>${fmtMoney(p.rentPerWeek)}/week &middot; ${p.minWeeks}-week minimum lease &middot; due ${DAY_FULL[p.rentDay || "Fri"]}s${p.lifestylePoints > 0 ? ` &middot; +${p.lifestylePoints} lifestyle points while renting` : ""}</p>
             <p class="muted-small">${g.length > 1 ? `${vacant.length} of ${g.length} available` : (vacant.length > 0 ? "Available" : "Tenanted")}</p>
           </div>

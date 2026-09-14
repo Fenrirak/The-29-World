@@ -148,10 +148,10 @@ async function render() {
     const row = document.createElement("div");
     row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;";
     row.innerHTML = `
-      <div>${icon("bell", 15)} <strong>${s.name}</strong> has requested more time — they're out for today.</div>
+      <div>${icon("bell", 15)} <strong>${escapeHtml(s.name)}</strong> has requested more time — they're out for today.</div>
       <div class="row-flex" style="gap:8px;">
-        <button class="btn small gold" onclick="approveTimeExemptionRequest('${s.username}')">Accept</button>
-        <button class="btn small coral" onclick="declineTimeExemptionRequest('${s.username}')">Decline</button>
+        <button class="btn small gold" onclick="approveTimeExemptionRequest('${escapeHtml(s.username)}')">Accept</button>
+        <button class="btn small coral" onclick="declineTimeExemptionRequest('${escapeHtml(s.username)}')">Decline</button>
       </div>
     `;
     bannerList.appendChild(row);
@@ -199,7 +199,7 @@ async function render() {
       <span class="rank-pill ${medalClass(i)}">${i + 1}</span>
       <span class="student-avatar ${avatarClass(row.username)}">${initials(row.name)}</span>
       <div style="flex:1;">
-        <div class="leaderboard-name">${row.name}</div>
+        <div class="leaderboard-name">${escapeHtml(row.name)}</div>
         <div class="leaderboard-sub">${fmtMoney(row.balance)} cash + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.owed ? ` - ${fmtMoney(row.owed)} owed` : ""}</div>
       </div>
       <div class="leaderboard-net">${fmtMoney(row.net)}</div>
@@ -216,14 +216,14 @@ async function render() {
   students.forEach(s => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${s.name}<div class="muted-small">@${s.username}</div></td>
-      <td>${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${_t.name}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `${icon("star", 11)} Task ✓` : `Task ✗`}</div>`; })() : ""}</td>
+      <td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${escapeHtml(s.name)}<div class="muted-small">@${escapeHtml(s.username)}</div></td>
+      <td>${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `${icon("star", 11)} Task ✓` : `Task ✗`}</div>`; })() : ""}</td>
       <td><strong>${fmtMoney(s.balance)}</strong></td>
       <td>${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</td>
       <td>${fmtMoney(netByUser[s.username] || 0)}</td>
       <td>
-        <button class="btn small secondary" onclick="quickView('${s.username}')">View</button>
-        <button class="btn small coral" onclick="removeStudentClick('${s.username}', '${s.name.replace(/'/g, "\\'")}')">${icon("trash", 13)}</button>
+        <button class="btn small secondary" onclick="quickView('${escapeHtml(s.username)}')">View</button>
+        <button class="btn small coral" onclick="removeStudentClick('${escapeHtml(s.username)}', '${escapeJsAttr(s.name)}')">${icon("trash", 13)}</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -238,14 +238,14 @@ async function render() {
     const row = document.createElement("div");
     row.className = "auto-row";
     const middle = ev.type === "choice"
-      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${o.label} (${o.amount >= 0 ? "+" : ""}${fmtMoney(o.amount)})${o.outcome ? ` — ${o.outcome}` : ""}`).join(", ")}`
+      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${escapeHtml(o.label)} (${o.amount >= 0 ? "+" : ""}${fmtMoney(o.amount)})${o.outcome ? ` — ${o.outcome}` : ""}`).join(", ")}`
       : `&middot; ${ev.amount >= 0 ? "+" : ""}${fmtMoney(ev.amount)}`;
     row.innerHTML = `
-      <div class="auto-details">${icon("dice", 14)} <strong>${ev.name}</strong>
+      <div class="auto-details">${icon("dice", 14)} <strong>${escapeHtml(ev.name)}</strong>
         ${middle}
         &middot; ${ev.repeatable ? "Can repeat" : "Once per student"}
         &middot; <span class="badge ${ev.severity === 'bad' ? 'coral' : 'navy'}">${ev.severity === 'bad' ? 'Bad' : 'Neutral'}</span>
-        ${ev.description ? `<div class="muted-small">${ev.description}</div>` : ""}
+        ${ev.description ? `<div class="muted-small">${escapeHtml(ev.description)}</div>` : ""}
       </div>
       <button class="btn small secondary" onclick="startEditEvent('${ev.id}')">${icon("idcard", 13)} Edit</button>
       <button class="btn small coral" onclick="removeEvent('${ev.id}')">${icon("trash", 13)} Remove</button>
@@ -266,12 +266,12 @@ async function render() {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details"><strong>${s.name}</strong>
-        wants to switch ${from ? `from ${from.name} (${hourLabel((s.sideHustle || {}).checkinHour)})` : "(no current hustle)"}
+      <div class="auto-details"><strong>${escapeHtml(s.name)}</strong>
+        wants to switch ${from ? `from ${escapeHtml(from.name)} (${hourLabel((s.sideHustle || {}).checkinHour)})` : "(no current hustle)"}
         to <strong>${to ? to.name : "—"}</strong> at ${hourLabel(req.checkinHour)}
       </div>
-      <button class="btn small" onclick="approveSideHustleRequest('${s.username}')">Approve</button>
-      <button class="btn small coral" onclick="denySideHustleRequest('${s.username}')">Deny</button>
+      <button class="btn small" onclick="approveSideHustleRequest('${escapeHtml(s.username)}')">Approve</button>
+      <button class="btn small coral" onclick="denySideHustleRequest('${escapeHtml(s.username)}')">Deny</button>
     `;
     reqBox.appendChild(row);
   });
@@ -287,9 +287,9 @@ async function render() {
       .map(Number).sort((a, b) => a - b)
       .map(hr => `${hourLabel(hr)}: ${fmtMoney(h.payouts[hr])}`).join(", ") || "No payouts set";
     row.innerHTML = `
-      <div class="auto-details">${icon("briefcase", 14)} <strong>${h.name}</strong>
+      <div class="auto-details">${icon("briefcase", 14)} <strong>${escapeHtml(h.name)}</strong>
         <div class="muted-small">${payoutSummary}</div>
-        ${h.description ? `<div class="muted-small">${h.description}</div>` : ""}
+        ${h.description ? `<div class="muted-small">${escapeHtml(h.description)}</div>` : ""}
       </div>
       <button class="btn small secondary" onclick="startEditSideHustle('${h.id}')">${icon("idcard", 13)} Edit</button>
       <button class="btn small coral" onclick="removeSideHustleClick('${h.id}')">${icon("trash", 13)} Remove</button>
@@ -314,7 +314,7 @@ async function render() {
     <div class="card" style="margin-bottom:0;box-shadow:none;border:1.5px solid var(--line);">
       <label style="display:flex;align-items:center;gap:8px;margin-top:0;">
         <input type="checkbox" id="ls-${s.key}-on" ${cfg[s.key] && cfg[s.key].enabled ? "checked" : ""} style="width:20px;height:20px;min-height:auto;">
-        ${s.label}
+        ${escapeHtml(s.label)}
       </label>
       <label for="ls-${s.key}-weight">Points per star</label>
       <input type="number" id="ls-${s.key}-weight" min="0" step="1" value="${cfg[s.key] ? cfg[s.key].weight : 0}">
@@ -330,13 +330,13 @@ async function render() {
   document.getElementById("lifestyleLockModules").innerHTML = LIFESTYLE_LOCKABLE_MODULES.map(m => `
     <label style="display:flex;align-items:center;gap:8px;">
       <input type="checkbox" class="lifestyleLockModuleBox" value="${m.key}" ${lock.modules.includes(m.key) ? "checked" : ""} style="width:20px;height:20px;min-height:auto;flex-shrink:0;">
-      ${m.label}
+      ${escapeHtml(m.label)}
     </label>
   `).join("");
 
   // adjustment select
   const sel = document.getElementById("adjStudent");
-  sel.innerHTML = students.map(s => `<option value="${s.username}">${s.name}</option>`).join("");
+  sel.innerHTML = students.map(s => `<option value="${escapeHtml(s.username)}">${escapeHtml(s.name)}</option>`).join("");
 
   // txns — the teacher dashboard shows however many transactions are
   // currently stored (up to MAX_STORED_TXNS), independent of the student
@@ -358,60 +358,60 @@ async function render() {
 function jobSelectHtml(cls, student) {
   let opts = `<option value="">— no job —</option>`;
   (cls.jobs || []).forEach(j => {
-    opts += `<option value="${j.id}" ${student.jobId === j.id ? "selected" : ""}>${j.title}</option>`;
+    opts += `<option value="${j.id}" ${student.jobId === j.id ? "selected" : ""}>${escapeHtml(j.title)}</option>`;
   });
-  return `<select onchange="onAssignJob('${student.username}', this.value)">${opts}</select>`;
+  return `<select onchange="onAssignJob('${escapeHtml(student.username)}', this.value)">${opts}</select>`;
 }
 
 function describeTxn(t, nameOf) {
   switch (t.type) {
-    case "welcome": return `${nameOf(t.to)} joined the class`;
-    case "wage": return `${nameOf(t.to)} — ${t.note}`;
-    case "interest": return `${nameOf(t.to)} — ${t.note}`;
-    case "bonus": return `${nameOf(t.to)} — ${t.note}`;
-    case "fine": return `${nameOf(t.to)} — ${t.note}`;
-    case "transfer": return `${nameOf(t.from)} → ${nameOf(t.to)} ${t.note ? "— " + t.note : ""}`;
-    case "automation": return `${nameOf(t.from)} → ${nameOf(t.to)} — ${t.note || "Automatic payment"}`;
-    case "stock-buy": return `${nameOf(t.from)} — ${t.note}`;
-    case "stock-sell": return `${nameOf(t.to)} — ${t.note}`;
-    case "stock-close": return `${nameOf(t.to)} — ${t.note}`;
-    case "insurance-buy": return `${nameOf(t.from)} — ${t.note}`;
-    case "store-buy": return `${nameOf(t.from)} — ${t.note}`;
-    case "store-sell": return `${nameOf(t.to)} — ${t.note}`;
-    case "property-buy": return `${nameOf(t.from)} — ${t.note}`;
-    case "property-sell": return `${nameOf(t.to)} — ${t.note}`;
-    case "mortgage": return `${nameOf(t.from)} — ${t.note}`;
-    case "event": return `${nameOf(t.to)} — ${t.note}`;
-    case "vehicle-buy": return `${nameOf(t.from)} — ${t.note}`;
-    case "vehicle-sell": return `${nameOf(t.to)} — ${t.note}`;
-    case "term-deposit-open": return `${nameOf(t.from)} — ${t.note}`;
-    case "term-deposit-early": return `${nameOf(t.to)} — ${t.note}`;
-    case "term-deposit-mature": return `${nameOf(t.to)} — ${t.note}`;
-    case "gambling": return `${nameOf(t.to || t.from)} — ${t.note}`;
-    case "gambling-buyin": return `${nameOf(t.from)} — ${t.note}`;
-    case "gambling-cashout": return `${nameOf(t.to)} — ${t.note}`;
-    case "big-event": return `${nameOf(t.to || t.from)} — ${t.note}`;
-    case "insurance-claim": return `${nameOf(t.to)} — ${t.note}`;
-    case "insurance-premium": return `${nameOf(t.from)} — ${t.note}`;
-    case "cash-interest": return `${nameOf(t.to)} — ${t.note}`;
-    case "savings-deposit": return `${nameOf(t.from)} — ${t.note || "Deposited into Savings Account"}`;
-    case "savings-withdraw": return `${nameOf(t.to)} — ${t.note || "Withdrew from Savings Account"}`;
-    case "loan-taken": return `${nameOf(t.to)} — ${t.note}`;
-    case "loan-repayment": return `${nameOf(t.from)} — ${t.note}`;
-    case "loan-interest": return `${nameOf(t.to)} — ${t.note}`;
-    case "side-hustle": return `${nameOf(t.to)} — ${t.note}`;
-    case "truck-drive": return `${nameOf(t.to)} — ${t.note}`;
-    case "store-gift": return `${nameOf(t.to)} — ${t.note}`;
-    case "quiz-reward": return `${nameOf(t.to)} — ${t.note}`;
-    case "property-rent": return `${nameOf(t.to)} — ${t.note}`;
-    case "property-rent-pay": return `${nameOf(t.from)} — ${t.note}`;
-    case "property-rent-receive": return `${nameOf(t.to)} ← ${nameOf(t.from)} — ${t.note}`;
-    case "p2p-buy": return `${nameOf(t.from)} → ${nameOf(t.to)} — ${t.note}`;
-    case "p2p-sell": return `${nameOf(t.to)} — ${t.note}`;
-    case "truck-licence-buy": return `${nameOf(t.from)} — ${t.note}`;
-    case "insurance-signup-fee": return `${nameOf(t.from)} — ${t.note}`;
-    case "property-occupancy": return `${nameOf(t.to || t.from)} — ${t.note}`;
-    default: return t.note || "";
+    case "welcome": return escapeHtml(`${nameOf(t.to)} joined the class`);
+    case "wage": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "interest": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "bonus": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "fine": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "transfer": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)} ${t.note ? "— " + t.note : ""}`);
+    case "automation": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)} — ${t.note || "Automatic payment"}`);
+    case "stock-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "stock-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "stock-close": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "insurance-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "store-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "store-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "property-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "property-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "mortgage": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "event": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "vehicle-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "vehicle-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "term-deposit-open": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "term-deposit-early": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "term-deposit-mature": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "gambling": return escapeHtml(`${nameOf(t.to || t.from)} — ${t.note}`);
+    case "gambling-buyin": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "gambling-cashout": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "big-event": return escapeHtml(`${nameOf(t.to || t.from)} — ${t.note}`);
+    case "insurance-claim": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "insurance-premium": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "cash-interest": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "savings-deposit": return escapeHtml(`${nameOf(t.from)} — ${t.note || "Deposited into Savings Account"}`);
+    case "savings-withdraw": return escapeHtml(`${nameOf(t.to)} — ${t.note || "Withdrew from Savings Account"}`);
+    case "loan-taken": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "loan-repayment": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "loan-interest": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "side-hustle": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "truck-drive": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "store-gift": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "quiz-reward": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "property-rent": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "property-rent-pay": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "property-rent-receive": return escapeHtml(`${nameOf(t.to)} ← ${nameOf(t.from)} — ${t.note}`);
+    case "p2p-buy": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)} — ${t.note}`);
+    case "p2p-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "truck-licence-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "insurance-signup-fee": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "property-occupancy": return escapeHtml(`${nameOf(t.to || t.from)} — ${t.note}`);
+    default: return escapeHtml(t.note || "");
   }
 }
 
@@ -574,7 +574,7 @@ function startEditEvent(id) {
     document.getElementById("evDesc").value = ev.description || "";
     if (ev.type === "choice") {
       document.getElementById("evOptionsArea").value = (ev.options || [])
-        .map(o => `${o.label} | ${o.amount}${o.outcome ? " | " + o.outcome : ""}`).join("\n");
+        .map(o => `${escapeHtml(o.label)} | ${o.amount}${o.outcome ? " | " + o.outcome : ""}`).join("\n");
     } else {
       document.getElementById("evAmount").value = ev.amount;
     }
@@ -937,8 +937,8 @@ async function renderProfile(username) {
   const tier = job ? getStudentTier(job, s) : null;
   const tierIdx = (job && tier && job.tiers) ? job.tiers.indexOf(tier) : -1;
 
-  document.getElementById("profileName").innerHTML = `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${s.name}`;
-  document.getElementById("profileSubtitle").textContent = `@${s.username}${job ? ` · ${tier ? tier.name : job.title}` : " · No job assigned"}`;
+  document.getElementById("profileName").innerHTML = `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${escapeHtml(s.name)}`;
+  document.getElementById("profileSubtitle").textContent = `@${escapeHtml(s.username)}${job ? ` · ${tier ? tier.name : job.title}` : " · No job assigned"}`;
 
   const rows = [];
   const isOverride = s.lifestyleOverride !== undefined && s.lifestyleOverride !== null;
@@ -959,7 +959,7 @@ async function renderProfile(username) {
     const tiers = job.tiers || [];
     const pendingPromo = s.pendingPromotion && s.pendingPromotion.jobId === job.id ? s.pendingPromotion : null;
     const tierOpts = tiers.map((t, i) =>
-      `<option value="${t.id}" ${tier && t.id === tier.id ? "selected" : ""}>${i + 1}. ${t.name} — ${fmtMoney(t.wage)}/pay day</option>`
+      `<option value="${t.id}" ${tier && t.id === tier.id ? "selected" : ""}>${i + 1}. ${escapeHtml(t.name)} — ${fmtMoney(t.wage)}/pay day</option>`
     ).join("");
     rows.push(`
       <div class="tier-ladder profile-tier-ladder">
@@ -969,9 +969,9 @@ async function renderProfile(username) {
           return `<div class="tier-rung${isCurrent ? " active" : isPast ? " completed" : ""}">
             <div class="tier-rung-badge">${i + 1}</div>
             <div class="tier-rung-body">
-              <strong>${t.name}</strong>
+              <strong>${escapeHtml(t.name)}</strong>
               <span class="muted-small"> &middot; ${fmtMoney(t.wage)}/pay day</span>
-              ${t.description ? `<div class="muted-small" style="margin-top:2px;">${t.description}</div>` : ""}
+              ${t.description ? `<div class="muted-small" style="margin-top:2px;">${escapeHtml(t.description)}</div>` : ""}
             </div>
             ${isCurrent ? `<span class="badge gold" style="flex-shrink:0;margin-left:auto;">Current</span>` : ""}
           </div>`;
@@ -1024,7 +1024,7 @@ async function renderProfile(username) {
     rows.push(`
       <div class="auto-row">
         <div class="auto-details">
-          <strong>${shDef.name}</strong>
+          <strong>${escapeHtml(shDef.name)}</strong>
           <div class="muted-small">Checks in at ${hourLabel(sh.checkinHour)} &middot; ${fmtMoney(payout)} per check-in${sh.streak ? ` &middot; streak: ${sh.streak}` : ""}</div>
           <div class="muted-small">Last checked in: ${sh.lastCheckin || "Never"}</div>
         </div>
@@ -1082,7 +1082,7 @@ async function renderProfile(username) {
     rows.push(`
       <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;">
         <div class="auto-details">
-          <strong>${icon("house", 14)} Mortgage payment overdue — ${p.name}</strong>
+          <strong>${icon("house", 14)} Mortgage payment overdue — ${escapeHtml(p.name)}</strong>
           <div class="muted-small">This week's payment (due ${DAY_FULL[cls.mortgageDay || "Fri"]}) hasn't been paid yet.</div>
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
@@ -1104,7 +1104,7 @@ async function renderProfile(username) {
               : p.sublet.tenant ? `Rented to a classmate (@${p.sublet.tenant}) at ${fmtMoney(p.sublet.price)}/week`
               : `Listed for rent to classmates at ${fmtMoney(p.sublet.price)}/week — no tenant yet`)
             : "Hasn't chosen to live in it, rent it out, or rent it to a classmate yet";
-        return `<div class="auto-row"><div class="auto-details"><strong>${p.name}</strong> — ${fmtMoney(p.price)}
+        return `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(p.name)}</strong> — ${fmtMoney(p.price)}
           <div class="muted-small">${occupancyLine}</div>
           ${p.mortgage ? `<div class="muted-small">Mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance owed` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]} — this week's payment is ${fmtMoney(mortgageWeekAmount(p.mortgage).total)}</div>` : ""}</div>
           <div class="row-flex" style="gap:8px;">
@@ -1121,7 +1121,7 @@ async function renderProfile(username) {
     rows.push(`
       <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;"' : ""}>
         <div class="auto-details">
-          <strong>Renting from a classmate:</strong> ${rh.name} — ${fmtMoney(rh.sublet.price)}/week from @${rh.owner}
+          <strong>Renting from a classmate:</strong> ${escapeHtml(rh.name)} — ${fmtMoney(rh.sublet.price)}/week from @${rh.owner}
           <div class="muted-small">${overdue ? "This week's rent hasn't been paid yet. " : ""}Minimum lease: ${rh.sublet.minWeeks} week${rh.sublet.minWeeks === 1 ? "" : "s"}.</div>
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
@@ -1136,7 +1136,7 @@ async function renderProfile(username) {
     rows.push(`
       <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;"' : ""}>
         <div class="auto-details">
-          <strong>Renting a school property:</strong> ${rn.name} — ${fmtMoney(rn.rentPerWeek)}/week
+          <strong>Renting a school property:</strong> ${escapeHtml(rn.name)} — ${fmtMoney(rn.rentPerWeek)}/week
           <div class="muted-small">${overdue ? "This week's rent hasn't been paid yet. " : ""}Minimum lease: ${rn.minWeeks} week${rn.minWeeks === 1 ? "" : "s"}.</div>
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
@@ -1148,7 +1148,7 @@ async function renderProfile(username) {
 
   rows.push(`<h4>${icon("car", 16)} Transport</h4>`);
   rows.push(poss.vehicles && poss.vehicles.length
-    ? poss.vehicles.map(v => `<div class="auto-row"><div class="auto-details"><strong>${v.name}</strong> — ${fmtMoney(v.price)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span></div>
+    ? poss.vehicles.map(v => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(v.name)}</strong> — ${fmtMoney(v.price)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span></div>
         <button class="btn small coral" onclick="profileRemoveVehicle('${v.id}','${username}')">Repossess</button></div>`).join("")
     : `<p class="muted-small">No vehicles owned.</p>`);
   rows.push(`<div class="auto-row"><div class="auto-details">Truck licence</div>${s.truckLicence
@@ -1170,7 +1170,7 @@ async function renderProfile(username) {
   });
   rows.push(`<h4>${icon("cart", 16)} Store items</h4>`);
   rows.push(storeGroups.length
-    ? storeGroups.map(g => `<div class="auto-row"><div class="auto-details">${g.item.name} <span class="badge mint">×${g.qty}</span>${g.item.countsNetWorth === false ? ' <span class="muted-small">(not counted)</span>' : ""}</div>
+    ? storeGroups.map(g => `<div class="auto-row"><div class="auto-details">${escapeHtml(g.item.name)} <span class="badge mint">×${g.qty}</span>${g.item.countsNetWorth === false ? ' <span class="muted-small">(not counted)</span>' : ""}</div>
         <div class="row-flex" style="gap:8px;align-items:center;">
           <div class="qty-stepper">
             <button class="qty-btn" type="button" onclick="bulkRemoveQtyStep('${g.item.id}',-1,${g.qty})" aria-label="Decrease quantity">−</button>
@@ -1188,7 +1188,7 @@ async function renderProfile(username) {
         <div style="flex:1;">
           <label for="profileGiftItemSelect" style="margin-top:0;">Give a store item for free</label>
           <select id="profileGiftItemSelect">
-            ${giftableItems.map(it => `<option value="${it.id}">${it.name} — ${fmtMoney(it.price)}${it.stock !== null && it.stock <= 0 ? " (out of stock)" : ""}</option>`).join("")}
+            ${giftableItems.map(it => `<option value="${it.id}">${escapeHtml(it.name)} — ${fmtMoney(it.price)}${it.stock !== null && it.stock <= 0 ? " (out of stock)" : ""}</option>`).join("")}
           </select>
         </div>
         <button class="btn small" onclick="profileGiveStoreItem('${username}')">Give free</button>
@@ -1199,7 +1199,7 @@ async function renderProfile(username) {
 
   rows.push(`<h4>${icon("shield", 16)} Insurance</h4>`);
   rows.push(poss.insurance.length
-    ? poss.insurance.map(p => `<div class="auto-row"><div class="auto-details">${p.name} — ${fmtMoney(p.price)}/week</div>
+    ? poss.insurance.map(p => `<div class="auto-row"><div class="auto-details">${escapeHtml(p.name)} — ${fmtMoney(p.price)}/week</div>
         <button class="btn small coral" onclick="profileRemoveInsurance('${username}','${p.id}')">Cancel</button></div>`).join("")
     : `<p class="muted-small">No insurance plans.</p>`);
 
@@ -1229,7 +1229,7 @@ async function renderProfile(username) {
     .filter(h => h.qty > 0);
   rows.push(`<h4>${icon("chart", 16)} Stock Market shares</h4>`);
   rows.push(heldShares.length
-    ? heldShares.map(h => `<div class="auto-row"><div class="auto-details"><strong>${h.name}</strong></div><div class="auto-details">${h.qty} share${h.qty === 1 ? "" : "s"}</div></div>`).join("")
+    ? heldShares.map(h => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(h.name)}</strong></div><div class="auto-details">${h.qty} share${h.qty === 1 ? "" : "s"}</div></div>`).join("")
     : `<p class="muted-small">No shares owned.</p>`);
 
   document.getElementById("profileBody").innerHTML = rows.join("");
@@ -1409,7 +1409,7 @@ async function reopenThisClass() {
 async function restartClass() {
   const cls = await getClassCached(CLASS_CODE);
   const typed = prompt(
-    `This will reset every student's balance to $0, remove job assignments, delist all companies, and clear the activity log for "${cls.name}".\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`
+    `This will reset every student's balance to $0, remove job assignments, delist all companies, and clear the activity log for "${escapeHtml(cls.name)}".\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`
   );
   if (typed === null) return;
   if (typed.trim() !== cls.name) {

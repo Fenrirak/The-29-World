@@ -388,7 +388,7 @@ function renderRecentRoulette(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details">${icon("dice", 14)} ${t.note} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details">${icon("dice", 14)} ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);
@@ -922,7 +922,7 @@ function renderBlackjackRound(r) {
         div.innerHTML = html;
       } else {
         const bot = r.bots[seat];
-        let html = `<div class="bj-seat-name">${icon("users", 14)} ${bot.name}</div>${playingCaption}`;
+        let html = `<div class="bj-seat-name">${icon("users", 14)} ${escapeHtml(bot.name)}</div>${playingCaption}`;
         bot.hands.forEach((h, hi) => {
           html += `<div class="bj-hand-group">
             <div class="bj-hand">${bjHandHtml(h.cards, 0, `seat${seat}-b${hi}`)}</div>
@@ -949,7 +949,7 @@ function renderRecentBlackjack(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details">${icon("cards", 14)} ${t.note} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details">${icon("cards", 14)} ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);

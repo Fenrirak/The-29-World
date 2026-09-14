@@ -5,6 +5,7 @@
 <script>
 (function(){
   try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}
+  window.T29_HAS_SIDEBAR = true;
   function loadIfOn(flagKey, cls, css, js){
     var on;
     try { on = localStorage.getItem(flagKey) === '1'; } catch(e) { on = false; }
@@ -15,12 +16,13 @@
     var s = document.createElement('script'); s.src = js;
     document.head.appendChild(s);
   }
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css', 'sidebar-nav.js');
 })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Time's up — The 29 World</title>
 <link rel="icon" type="image/png" href="Favicon.png">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=1">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -55,10 +57,10 @@
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
-<script defer src="firebase-init.js"></script>
-<script defer src="icons.js"></script>
-<script defer src="data.js"></script>
-<script defer src="quiz-gate.js"></script>
-<script defer src="timeup.js"></script>
+<script defer src="firebase-init.js?v=1"></script>
+<script defer src="icons.js?v=1"></script>
+<script defer src="data.js?v=1"></script>
+<script defer src="quiz-gate.js?v=1"></script>
+<script defer src="timeup.js?v=1"></script>
 </body>
 </html>

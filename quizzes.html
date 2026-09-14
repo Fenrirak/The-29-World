@@ -22,7 +22,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Quizzes — The 29 World</title>
 <link rel="icon" type="image/png" href="Favicon.png">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=1">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -130,26 +130,6 @@
       <p class="muted-small" id="noResults">Add a quiz and some students to see results here.</p>
     </div>
   </div>
-
-  <!-- ---------------- Student ---------------- -->
-  <div id="studentPanel" class="hidden">
-    <div class="card hidden" id="gateBanner" style="border-color:var(--gold);"></div>
-
-    <div id="quizList"></div>
-    <p class="muted-small" id="noQuizzes">Your teacher hasn't set any quizzes yet.</p>
-
-    <div class="card hidden" id="takeCard">
-      <div class="flex-between">
-        <h2 id="takeTitle">Quiz</h2>
-        <button class="btn small secondary" onclick="closeQuiz()" id="closeQuizBtn">Back to all quizzes</button>
-      </div>
-      <p id="takeIntro" class="muted-small"></p>
-      <div id="takeResult"></div>
-      <div id="takeBody"></div>
-      <button class="btn gold" onclick="submitQuiz()" id="submitQuizBtn">Submit answers</button>
-      <div id="takeMsg"></div>
-    </div>
-  </div>
 </main>
 
 <div class="footer-note"><span class="icon" id="footerIcon"></span> The 29 World — a classroom economy simulator.</div>
@@ -157,13 +137,13 @@
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
-<script defer src="firebase-init.js"></script>
-<script defer src="icons.js"></script>
-<script defer src="settings-menu.js"></script>
-<script defer src="data.js"></script>
-<script defer src="events-ui.js"></script>
-<script defer src="quiz-gate.js"></script>
-<script defer src="notifications.js"></script>
-<script defer src="quizzes.js"></script>
+<script defer src="firebase-init.js?v=1"></script>
+<script defer src="icons.js?v=1"></script>
+<script defer src="settings-menu.js?v=1"></script>
+<script defer src="data.js?v=1"></script>
+<script defer src="events-ui.js?v=1"></script>
+<script defer src="quiz-gate.js?v=1"></script>
+<script defer src="notifications.js?v=1"></script>
+<script defer src="quizzes.js?v=1"></script>
 </body>
 </html>

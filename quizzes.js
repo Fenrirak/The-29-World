@@ -46,7 +46,6 @@ async function init() {
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
-  document.getElementById("studentPanel").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
 
   if (IS_TEACHER) {
@@ -82,8 +81,10 @@ async function render() {
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
   ME = Object.assign({ username: CURRENT.username }, me);
   CLS = withNewModuleDefaults(cls);
-  if (IS_TEACHER) await renderTeacher();
-  else renderStudent();
+  // init() already redirects any non-teacher away before this can ever run
+  // (see the comment there) — renderStudent() used to live here for the
+  // other branch, but it's been removed as dead code.
+  await renderTeacher();
 }
 
 /* ================= Teacher ================= */
@@ -347,167 +348,6 @@ function loadStarterQuiz() {
   paintBuilder();
   document.getElementById("builderMsg").innerHTML =
     `<div class="success-msg">Starter quiz loaded into the form — edit anything you like, then press Save quiz.</div>`;
-}
-
-/* ================= Student ================= */
-function renderStudent() {
-  const quizzes = (CLS.quizzes || []).filter(q => q.active);
-  const gateOn = !!(CLS.quizGate && CLS.quizGate.enabled);
-  const banner = document.getElementById("gateBanner");
-  const stillLocked = getQuizLockedModulesFromData(CLS, ME);
-
-  document.getElementById("pageIntro").textContent = gateOn
-    ? "Pass the quiz attached to a module and that module unlocks. You can retake one as many times as you need."
-    : "Short quizzes on how money actually works. Nothing is locked behind them right now — they're here to practise on.";
-
-  if (gateOn && stillLocked.length) {
-    banner.classList.remove("hidden");
-    banner.innerHTML = `<p style="margin:0;"><strong>${stillLocked.length} ${stillLocked.length === 1 ? "module is" : "modules are"} still locked</strong><br>
-      Pass the matching quiz below to unlock: ${stillLocked.map(k => esc(moduleLabel(k))).join(", ")}.</p>`;
-  } else if (gateOn && quizzes.length) {
-    banner.classList.remove("hidden");
-    banner.style.borderColor = "var(--mint)";
-    banner.innerHTML = `<p style="margin:0;"><strong>All unlocked</strong><br>You've passed every quiz your teacher set. Nothing is locked behind a quiz for you.</p>`;
-  } else {
-    banner.classList.add("hidden");
-  }
-
-  document.getElementById("noQuizzes").classList.toggle("hidden", quizzes.length > 0);
-  const list = document.getElementById("quizList");
-  list.innerHTML = quizzes.map(q => {
-    const r = quizResultFor(ME, q.id);
-    const passed = !!(r && r.passed);
-    const locks = gateOn && q.moduleKey && !passed;
-    return `
-      <div class="quiz-card${passed ? " passed" : locks ? " locking" : ""}">
-        <div class="flex-between">
-          <div style="flex:1;min-width:220px;">
-            <h3>${icon(passed ? "medal" : "key", 18)}${esc(q.title)}</h3>
-            ${q.description ? `<p class="muted-small" style="margin:0 0 6px;">${esc(q.description)}</p>` : ""}
-            <div class="quiz-meta">
-              ${passed
-                ? `<span class="quiz-pill mint">${icon("star", 12)}Passed — best ${r.bestPct}%</span>`
-                : locks
-                  ? `<span class="quiz-pill coral">${icon("lock", 12)}Locks ${esc(moduleLabel(q.moduleKey))}</span>`
-                  : q.moduleKey
-                    ? `<span class="quiz-pill">${icon("key", 12)}Linked to ${esc(moduleLabel(q.moduleKey))}</span>`
-                    : `<span class="quiz-pill">${icon("cards", 12)}Practice</span>`}
-              <span class="quiz-pill">${icon("percent", 12)}Pass at ${q.passMark}%</span>
-              <span class="quiz-pill">${icon("cards", 12)}${q.questions.length} ${q.questions.length === 1 ? "question" : "questions"}</span>
-              ${q.reward > 0 && !(r && r.rewarded) ? `<span class="quiz-pill gold">${icon("coin", 12)}${fmtMoney(q.reward)} for passing</span>` : ""}
-              ${r && !passed ? `<span class="quiz-pill coral">Last try ${r.lastPct}%</span>` : ""}
-            </div>
-          </div>
-          <div>
-            <button class="btn ${passed ? "secondary" : "gold"} small" onclick="openQuiz('${q.id}')">
-              ${icon(passed ? "repeat" : "key", 13)} ${passed ? "Retake" : r ? "Try again" : "Start quiz"}
-            </button>
-          </div>
-        </div>
-      </div>`;
-  }).join("");
-}
-
-function openQuiz(id) {
-  const q = (CLS.quizzes || []).find(x => x.id === id && x.active);
-  if (!q) return;
-  TAKING = q;
-  document.getElementById("quizList").classList.add("hidden");
-  document.getElementById("noQuizzes").classList.add("hidden");
-  document.getElementById("gateBanner").classList.add("hidden");
-  const card = document.getElementById("takeCard");
-  card.classList.remove("hidden");
-  document.getElementById("takeTitle").innerHTML = icon("key", 20) + " " + esc(q.title);
-  document.getElementById("takeIntro").textContent =
-    `${q.questions.length} ${q.questions.length === 1 ? "question" : "questions"} · you need ${q.passMark}% to pass` +
-    (q.moduleKey ? ` · passing unlocks ${moduleLabel(q.moduleKey)}` : "");
-  document.getElementById("takeResult").innerHTML = "";
-  document.getElementById("takeMsg").innerHTML = "";
-  document.getElementById("submitQuizBtn").classList.remove("hidden");
-  document.getElementById("takeBody").innerHTML = q.questions.map((qq, i) => `
-    <div class="quiz-question" id="qq-${qq.id}">
-      <p class="qtext">${i + 1}. ${esc(qq.text)}</p>
-      ${qq.options.map((opt, j) => `
-        <label class="quiz-option" id="opt-${qq.id}-${j}">
-          <input type="radio" name="ans-${qq.id}" value="${j}" onchange="markChosen('${qq.id}', ${j})">
-          <span>${esc(opt)}</span>
-        </label>`).join("")}
-    </div>`).join("");
-  card.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function markChosen(qid, idx) {
-  const q = TAKING.questions.find(x => x.id === qid);
-  if (!q) return;
-  q.options.forEach((_, j) => {
-    const el = document.getElementById(`opt-${qid}-${j}`);
-    if (el) el.classList.toggle("chosen", j === idx);
-  });
-}
-
-function closeQuiz() {
-  TAKING = null;
-  document.getElementById("takeCard").classList.add("hidden");
-  document.getElementById("quizList").classList.remove("hidden");
-  render();
-}
-
-async function submitQuiz() {
-  if (!TAKING) return;
-  const answers = {};
-  let unanswered = 0;
-  TAKING.questions.forEach(q => {
-    const checked = document.querySelector(`input[name="ans-${q.id}"]:checked`);
-    if (checked) answers[q.id] = Number(checked.value);
-    else unanswered++;
-  });
-  if (unanswered > 0 && !confirm(`${unanswered} ${unanswered === 1 ? "question is" : "questions are"} still blank — they'll be marked wrong. Submit anyway?`)) return;
-
-  const btn = document.getElementById("submitQuizBtn");
-  btn.disabled = true;
-  const res = await submitQuizAttempt(CURRENT.username, CURRENT.classCode, TAKING.id, answers);
-  btn.disabled = false;
-  if (!res.ok) {
-    document.getElementById("takeMsg").innerHTML = `<div class="error-msg">${esc(res.error)}</div>`;
-    return;
-  }
-
-  document.getElementById("takeResult").innerHTML = `
-    <div class="quiz-score ${res.passed ? "pass" : "fail"}">
-      <span class="big">${res.pct}%</span>
-      <span class="txt">
-        ${res.correct} out of ${res.total} correct — ${res.passed ? "you passed!" : `you need ${res.passMark}% to pass.`}<br>
-        ${res.passed
-          ? (res.reward > 0 ? `${fmtMoney(res.reward)} bonus paid into your account.` : (TAKING.moduleKey ? `${esc(moduleLabel(TAKING.moduleKey))} is unlocked.` : "Nice work."))
-          : "Read the explanations below, then have another go."}
-      </span>
-    </div>`;
-
-  // Mark the paper: colour every option, and surface the explanations.
-  res.review.forEach(r => {
-    r.options.forEach((_, j) => {
-      const el = document.getElementById(`opt-${r.id}-${j}`);
-      if (!el) return;
-      el.classList.remove("chosen");
-      if (j === r.answer) el.classList.add("right");
-      else if (j === r.chosen) el.classList.add("wrong");
-      const input = el.querySelector("input");
-      if (input) input.disabled = true;
-    });
-    const box = document.getElementById(`qq-${r.id}`);
-    if (box && r.explain && !box.querySelector(".quiz-explain")) {
-      const p = document.createElement("p");
-      p.className = "quiz-explain";
-      p.innerHTML = `<strong>${r.correct ? "Correct." : "Not quite."}</strong> ${esc(r.explain)}`;
-      box.appendChild(p);
-    }
-  });
-
-  document.getElementById("submitQuizBtn").classList.add("hidden");
-  document.getElementById("takeResult").scrollIntoView({ behavior: "smooth", block: "center" });
-  // Refresh the cached user so the list behind the quiz (and the nav locks)
-  // reflect the new result the moment the student goes back.
-  ME = Object.assign({ username: CURRENT.username }, await getUser(CURRENT.username));
 }
 
 document.addEventListener("DOMContentLoaded", init);

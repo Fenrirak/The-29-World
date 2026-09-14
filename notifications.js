@@ -543,8 +543,8 @@ function notifRenderList() {
     return `<${tag}${href} class="notif-row${unread ? " unread" : ""}${n.action ? " action" : ""}">
       <span class="notif-ic ${n.tone}">${notifIconFor(n.icon, 15)}</span>
       <span class="notif-body">
-        <span class="notif-title">${n.title}</span>
-        ${n.body ? `<span class="notif-sub">${n.body}</span>` : ""}
+        <span class="notif-title">${escapeHtml(n.title)}</span>
+        ${n.body ? `<span class="notif-sub">${escapeHtml(n.body)}</span>` : ""}
         <span class="notif-time">${n.action ? "Needs your attention · " : ""}${notifRelativeTime(n.ts)}</span>
       </span>
     </${tag}>`;

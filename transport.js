@@ -115,8 +115,8 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${icon("car", 20)}${v.name} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span></h4>
-            <p>${v.description || "No description provided."}</p>
+            <h4>${icon("car", 20)}${escapeHtml(v.name)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span></h4>
+            <p>${escapeHtml(v.description) || "No description provided."}</p>
             <p>${comfortStars(v.comfort)} comfort</p>
             <p><strong>${fmtMoney(v.price)}</strong> paid</p>
             ${isTruck ? `<p class="muted-small">Driving pays ${fmtMoney(v.drivePayout || 0)}/day &middot; ${drivenToday ? "already driven today" : "not driven today yet"}</p>` : ""}
@@ -163,8 +163,8 @@ async function render() {
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${icon("car", 20)}${v.name} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span> ${isMine ? '<span class="badge mint">Yours</span>' : ""}</h4>
-          <p>${v.description || "No description provided."}</p>
+          <h4>${icon("car", 20)}${escapeHtml(v.name)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span> ${isMine ? '<span class="badge mint">Yours</span>' : ""}</h4>
+          <p>${escapeHtml(v.description) || "No description provided."}</p>
           <p>${comfortStars(v.comfort)} comfort</p>
           <p>${priceWithLifeDiscount(me, "transport", v.price)} &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
           <p class="muted-small">${ownedLabel}</p>
