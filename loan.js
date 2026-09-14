@@ -200,7 +200,20 @@ async function updateLoanPreview() {
   // live (first charge the moment you borrow, then again every Monday
   // until it's paid off), so there's no single "total you'll owe" to
   // calculate in advance. Just flag the rate and let them reason about it.
-  preview.innerHTML = `This falls in the ${tier.rate}%/week range. Interest is charged as soon as you borrow, then again every Monday until it's paid off — the longer it takes you to pay it back, the more you'll end up owing.`;
+  let msg = `This falls in the ${tier.rate}%/week range. Interest is charged as soon as you borrow, then again every Monday until it's paid off — the longer it takes you to pay it back, the more you'll end up owing.`;
+  // maxLoanAmount is a TOTAL cap across every active loan a student is
+  // carrying at once (see takeLoan in data.js), so warn here using what's
+  // already borrowed, not just this one amount, to match what the server
+  // will actually enforce.
+  if (cls.maxLoanAmount > 0) {
+    const me = await getUserCached(CURRENT.username);
+    const activePrincipal = (me.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.principal, 0);
+    const remaining = Math.max(0, cls.maxLoanAmount - activePrincipal);
+    if (amount > remaining) {
+      msg += ` <span class="ticker-down">You've already borrowed ${fmtMoney(activePrincipal)} — your teacher's overall cap of ${fmtMoney(cls.maxLoanAmount)} leaves you ${fmtMoney(remaining)} of room, so this amount would be rejected.</span>`;
+    }
+  }
+  preview.innerHTML = msg;
 }
 
 async function addTier(e) {

@@ -310,24 +310,36 @@ async function sendMoney(e) {
 
 async function addAuto(e) {
   e.preventDefault();
-  const day = document.getElementById("autoDay").value;
-  const freq = document.getElementById("autoFreq").value;
-  const amount = document.getElementById("autoAmount").value;
-  const to = document.getElementById("autoTo").value;
-  const note = document.getElementById("autoNote").value.trim();
-  const box = document.getElementById("autoMsg");
-  if (!to) { box.innerHTML = `<div class="error-msg">There's no one to pay yet.</div>`; return false; }
-  const res = EDITING_AUTO_ID
-    ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note)
-    : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note);
-  if (res.ok) {
-    box.innerHTML = `<div class="success-msg">${EDITING_AUTO_ID ? "Automatic payment updated!" : "Automatic payment created!"}</div>`;
-    cancelEditAuto();
-  } else {
-    box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+  // Disable the button for the duration of the request — without this, a
+  // slow connection plus an eager double-tap (nothing visibly happens
+  // until the await resolves) can fire this handler twice, creating two
+  // near-identical automations that each later fire on their own and look
+  // like the same auto-pay running more than once in a day.
+  const btn = document.getElementById("addAutoBtn");
+  if (btn.disabled) return false;
+  btn.disabled = true;
+  try {
+    const day = document.getElementById("autoDay").value;
+    const freq = document.getElementById("autoFreq").value;
+    const amount = document.getElementById("autoAmount").value;
+    const to = document.getElementById("autoTo").value;
+    const note = document.getElementById("autoNote").value.trim();
+    const box = document.getElementById("autoMsg");
+    if (!to) { box.innerHTML = `<div class="error-msg">There's no one to pay yet.</div>`; return false; }
+    const res = EDITING_AUTO_ID
+      ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note)
+      : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note);
+    if (res.ok) {
+      box.innerHTML = `<div class="success-msg">${EDITING_AUTO_ID ? "Automatic payment updated!" : "Automatic payment created!"}</div>`;
+      cancelEditAuto();
+    } else {
+      box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+    }
+    await render();
+    return false;
+  } finally {
+    btn.disabled = false;
   }
-  await render();
-  return false;
 }
 
 function startEditAuto(a) {
@@ -386,23 +398,31 @@ async function withdrawSavings(e) {
 
 async function addSavingsAuto(e) {
   e.preventDefault();
-  const direction = document.getElementById("savAutoDirection").value;
-  const day = document.getElementById("savAutoDay").value;
-  const freq = document.getElementById("savAutoFreq").value;
-  const amount = document.getElementById("savAutoAmount").value;
-  const note = document.getElementById("savAutoNote").value.trim();
-  const box = document.getElementById("savAutoMsg");
-  const res = EDITING_SAV_AUTO_ID
-    ? await editSavingsAutomation(CURRENT.classCode, EDITING_SAV_AUTO_ID, CURRENT.username, day, freq, amount, direction, note)
-    : await addSavingsAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, direction, note);
-  if (res.ok) {
-    box.innerHTML = `<div class="success-msg">${EDITING_SAV_AUTO_ID ? "Automatic transfer updated!" : "Automatic transfer created!"}</div>`;
-    cancelEditSavAuto();
-  } else {
-    box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+  // Same double-submit guard as addAuto() above.
+  const btn = document.getElementById("addSavAutoBtn");
+  if (btn.disabled) return false;
+  btn.disabled = true;
+  try {
+    const direction = document.getElementById("savAutoDirection").value;
+    const day = document.getElementById("savAutoDay").value;
+    const freq = document.getElementById("savAutoFreq").value;
+    const amount = document.getElementById("savAutoAmount").value;
+    const note = document.getElementById("savAutoNote").value.trim();
+    const box = document.getElementById("savAutoMsg");
+    const res = EDITING_SAV_AUTO_ID
+      ? await editSavingsAutomation(CURRENT.classCode, EDITING_SAV_AUTO_ID, CURRENT.username, day, freq, amount, direction, note)
+      : await addSavingsAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, direction, note);
+    if (res.ok) {
+      box.innerHTML = `<div class="success-msg">${EDITING_SAV_AUTO_ID ? "Automatic transfer updated!" : "Automatic transfer created!"}</div>`;
+      cancelEditSavAuto();
+    } else {
+      box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+    }
+    await render();
+    return false;
+  } finally {
+    btn.disabled = false;
   }
-  await render();
-  return false;
 }
 
 function startEditSavAuto(a) {

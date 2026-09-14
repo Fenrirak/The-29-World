@@ -2281,7 +2281,16 @@ async function takeLoan(username, classCode, amount) {
       const activeLoans = existingLoans.filter(l => l.status === "active");
       const tier = findLoanTier(cls, amount);
       if (!tier) throw new Error("NO_TIER");
-      if (cls.maxLoanAmount > 0 && amount > cls.maxLoanAmount) throw new Error("OVER_MAX");
+      // "Overall maximum loan amount" is a TOTAL cap across every active
+      // loan a student is carrying at once, not just a per-loan cap — a
+      // student with two loans already open could otherwise stack them
+      // past this limit even though neither individual loan exceeds it
+      // on its own. Compare against principal (what they actually
+      // borrowed), not owed (which includes interest), so the cap tracks
+      // how much a student has chosen to take out rather than fluctuating
+      // with interest accrual.
+      const totalPrincipalAfter = activeLoans.reduce((sum, l) => sum + l.principal, 0) + amount;
+      if (cls.maxLoanAmount > 0 && totalPrincipalAfter > cls.maxLoanAmount) throw new Error("OVER_MAX");
       // Cap on how many loans a student can have open (active) at the same
       // time — paid-off loans don't count against it, so a student can
       // reborrow after repaying, separate from the per-loan amount cap.
@@ -2319,7 +2328,7 @@ async function takeLoan(username, classCode, amount) {
   } catch (e) {
     if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than zero." };
     if (e.message === "NO_TIER") return { ok: false, error: "That amount doesn't fall within any of the loan options your teacher has set up." };
-    if (e.message === "OVER_MAX") return { ok: false, error: "That's above the maximum loan amount your teacher allows." };
+    if (e.message === "OVER_MAX") return { ok: false, error: "That would put your total borrowing above the maximum loan amount your teacher allows." };
     if (e.message === "OVER_COUNT") return { ok: false, error: "You already have the maximum number of loans open that your teacher allows at once." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -2815,6 +2824,21 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       if (cls.automations.filter(a => a.studentUser === studentUser).length >= MAX_AUTOMATIONS_PER_STUDENT) {
         throw new Error("TOO_MANY");
       }
+      // Guards against the classic double-submit bug: a student double-taps
+      // "Create automatic payment" (slow connection, no visual feedback yet)
+      // and ends up with two — or more — otherwise-identical automations.
+      // Each one is a perfectly valid, independently-guarded recurring
+      // payment on its own, so the same-day-once guard in processAutomations
+      // never catches this: it just looks like the same auto-pay firing
+      // more than once in a day, when really several near-identical
+      // automations each fired exactly once. Reject an exact duplicate
+      // (same payer, payee, day, frequency and amount) outright rather than
+      // silently creating another copy.
+      const dup = cls.automations.find(a =>
+        a.studentUser === studentUser && a.toUser === toUser && a.active &&
+        a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount)
+      );
+      if (dup) throw new Error("DUPLICATE");
       cls.automations.push({
         id: uid("auto"), studentUser, dayOfWeek, frequency,
         amount: Number(amount), toUser, note: (note || "").trim(), lastRun: null, active: true
@@ -2823,6 +2847,7 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
     });
   } catch (e) {
     if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day and frequency)." };
     return { ok: false, error: "Class not found." };
   }
   return { ok: true };
@@ -2845,6 +2870,13 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
       if (cls.automations.filter(a => a.studentUser === studentUser).length >= MAX_AUTOMATIONS_PER_STUDENT) {
         throw new Error("TOO_MANY");
       }
+      // Same double-submit guard as addAutomation() above.
+      const dup = cls.automations.find(a =>
+        a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
+        a.direction === direction && a.dayOfWeek === dayOfWeek && a.frequency === frequency &&
+        Number(a.amount) === Number(amount)
+      );
+      if (dup) throw new Error("DUPLICATE");
       cls.automations.push({
         id: uid("auto"), studentUser, dayOfWeek, frequency, type: "savings-transfer", direction,
         amount: Number(amount), toUser: studentUser, note: (note || "").trim(), lastRun: null, active: true
@@ -2853,6 +2885,7 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
     });
   } catch (e) {
     if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction, day and frequency)." };
     return { ok: false, error: "Class not found." };
   }
   return { ok: true };
@@ -7406,7 +7439,6 @@ function overdueSubletRentWeekKey(prop, cls) {
   if (!prop || !prop.sublet || !prop.sublet.tenant) return null;
   const sublet = prop.sublet;
   const weekKey = isoWeekKey(new Date());
-  if (sublet.leaseStartWeekKey === weekKey) return null; // move-in week is free
   if (sublet.rentLastWeekPaid === weekKey) return null; // already paid this week
   const lastDueWeekKey = lastDueWeekKeyForDay(prop.rentDay || "Fri");
   if (lastDueWeekKey === weekKey) return weekKey;
