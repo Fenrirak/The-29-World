@@ -10,6 +10,16 @@
 
 const SESSION_KEY = "anw_session"; // session stays in localStorage — it's fine for this to be per-device
 const MAX_STORED_TXNS = 250; // keep class docs from growing forever
+// `automations` (student-set-up recurring payments, see addAutomation/
+// addSavingsAutomation below) lives on the shared /classes/{code} doc and
+// is walked in full by processAutomations() on every page load for every
+// student in the class — unlike txns/listings/report archives, it had no
+// cap at all. Capped PER STUDENT (not class-wide like MAX_STORED_TXNS/
+// MAX_STORED_LISTINGS) since the risk here is one student spamming the
+// "add automatic payment" form, not the class's collective usage over
+// time; 20 recurring payments is already far more than any real student
+// budget needs.
+const MAX_AUTOMATIONS_PER_STUDENT = 20;
 
 // Shared HTML-escaping helper. data.js loads before every other The 29
 // World script on every page, so this is available globally as soon as
@@ -1749,6 +1759,13 @@ async function cancelPendingPromotion(username) {
 /* ---------------- Remove a student ---------------- */
 async function removeStudent(classCode, studentUser) {
   const classRef = classesCol().doc(classCode);
+  const userRef = usersCol().doc(studentUser);
+  // Both the class-doc cleanup and the user-doc deletion happen in ONE
+  // transaction now (they used to be two separate calls — see BUGFIX
+  // note below), so a departing student is either fully removed or the
+  // whole removal is rolled back; there's no window where the class doc
+  // has already been cleaned up but the /users doc is still sitting
+  // around orphaned (or vice versa).
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
@@ -1765,13 +1782,40 @@ async function removeStudent(classCode, studentUser) {
     cls.jobApplications = (cls.jobApplications || []).filter(a => a.studentUser !== studentUser);
     (cls.properties || []).forEach(p => { if (p.owner === studentUser) { p.owner = null; p.mortgage = null; p.occupancy = null; p.rentLastWeekPaid = null; } });
     (cls.vehicles || []).forEach(v => { v.owners = (v.owners || []).filter(o => o !== studentUser); });
+    // BUGFIX: a departing student's still-open Trade Centre listings used
+    // to be left behind entirely untouched. The purchase path already
+    // rejects buying from a student no longer in the class, so this was
+    // never exploitable — but the listing stayed visible in the
+    // marketplace (under the student's bare username, since the name
+    // lookup that powers the display comes from the roster this same
+    // function just removed them from) until a teacher noticed and
+    // cleared it manually. Pull down any of their still-open ("active" or
+    // "pending") listings here, same as teacherRemoveListing() does when a
+    // teacher pulls one down directly, including declining any open offers
+    // on it.
+    cls.listings = (cls.listings || []).map(l => {
+      if (l.seller !== studentUser || !listingIsOpen(l)) return l;
+      return {
+        ...l, status: "rejected", rejectReason: "Seller left the class",
+        offers: (l.offers || []).map(o => o.status === "open" ? { ...o, status: "declined" } : o)
+      };
+    });
     t.update(classRef, {
       companies: cls.companies, students: cls.students,
       automations: cls.automations, jobApplications: cls.jobApplications,
-      properties: cls.properties || [], vehicles: cls.vehicles || []
+      properties: cls.properties || [], vehicles: cls.vehicles || [],
+      listings: cls.listings
     });
+    // BUGFIX: this used to be a separate `await usersCol().doc(studentUser)
+    // .delete()` call made AFTER this transaction committed. If the app
+    // (or the network) died in between, the class doc would already show
+    // the student as removed everywhere while their /users doc — balance,
+    // history, everything — was still sitting in Firestore forever,
+    // unreachable from any UI and never cleaned up. Deleting it inside
+    // this same transaction means it can no longer happen independently
+    // of the rest of the removal.
+    t.delete(userRef);
   });
-  await usersCol().doc(studentUser).delete();
   return true;
 }
 
@@ -2768,6 +2812,9 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       if (!snap.exists) throw new Error("NO_CLASS");
       const cls = snap.data();
       cls.automations = cls.automations || [];
+      if (cls.automations.filter(a => a.studentUser === studentUser).length >= MAX_AUTOMATIONS_PER_STUDENT) {
+        throw new Error("TOO_MANY");
+      }
       cls.automations.push({
         id: uid("auto"), studentUser, dayOfWeek, frequency,
         amount: Number(amount), toUser, note: (note || "").trim(), lastRun: null, active: true
@@ -2775,6 +2822,7 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
+    if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
     return { ok: false, error: "Class not found." };
   }
   return { ok: true };
@@ -2794,6 +2842,9 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
       if (!snap.exists) throw new Error("NO_CLASS");
       const cls = snap.data();
       cls.automations = cls.automations || [];
+      if (cls.automations.filter(a => a.studentUser === studentUser).length >= MAX_AUTOMATIONS_PER_STUDENT) {
+        throw new Error("TOO_MANY");
+      }
       cls.automations.push({
         id: uid("auto"), studentUser, dayOfWeek, frequency, type: "savings-transfer", direction,
         amount: Number(amount), toUser: studentUser, note: (note || "").trim(), lastRun: null, active: true
@@ -2801,6 +2852,7 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
+    if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
     return { ok: false, error: "Class not found." };
   }
   return { ok: true };

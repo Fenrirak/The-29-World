@@ -20,6 +20,14 @@
   --line:#e2e7f0;
   --radius:14px;
   --shadow:0 6px 20px rgba(31,43,68,0.08);
+
+  /* Warning/attention banner (class archived, time-limit exemptions, etc.)
+     — a pink-to-gold gradient with dark-brown text. Kept as its own
+     variable pair (rather than reusing --coral directly) so dark mode can
+     swap in a muted equivalent instead of this glaring light-mode gradient. */
+  --warn-banner-grad-start:#fde2e2;
+  --warn-banner-grad-end:#fbd9b0;
+  --warn-banner-text:#7a2f1f;
 }
 
 html{-webkit-text-size-adjust:100%;}
@@ -443,8 +451,8 @@ label .icon-slot{color:var(--navy-700);}
    applyArchivedReadOnlyLock() in data.js. */
 .t29-archived-banner{
   position:sticky;top:0;z-index:60;text-align:center;
-  background:linear-gradient(135deg,#fde2e2,#fbd9b0);
-  border-bottom:1.5px solid var(--coral);color:#7a2f1f;
+  background:linear-gradient(135deg,var(--warn-banner-grad-start),var(--warn-banner-grad-end));
+  border-bottom:1.5px solid var(--coral);color:var(--warn-banner-text);
   padding:10px 18px;font-size:.85rem;font-weight:600;
 }
 .t29-archived-banner .icon{vertical-align:middle;margin-right:2px;}
@@ -1332,6 +1340,13 @@ html.dark-mode{
   --lilac-dark-dim:#463f79;
   --coral-dim:#8a4638;
   --coral-dark-dim:#6b352a;
+
+  /* Muted equivalent of the light-mode warning-banner gradient (see
+     :root) — same pink->gold identity, knocked down to dark-surface
+     brightness, with light text instead of dark-brown. */
+  --warn-banner-grad-start:var(--coral-dim);
+  --warn-banner-grad-end:var(--gold-dim);
+  --warn-banner-text:var(--heading-text);
 
   --pastel-mint-bg: rgba(63,191,143,0.16);
   --pastel-mint-border: rgba(63,191,143,0.4);
