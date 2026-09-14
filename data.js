@@ -8477,12 +8477,21 @@ async function lifestyleRatingBreakdown(username, classCode) {
     }
   }
   if (cfg.transport && cfg.transport.enabled) {
+    // Transport does NOT stack — only the single highest-comfort owned
+    // vehicle counts. Sort so the counted vehicle is listed first, then
+    // show any other owned vehicles as 0-point lines so it's clear why
+    // they aren't adding to the score.
     const owned = cls.vehicles.filter(v => (v.owners || []).includes(username));
-    owned.forEach(v => {
-      const pts = (v.comfort || 0) * (cfg.transport.weight || 0);
-      score += pts;
-      items.push({ type: "gain", label: v.name || "Vehicle", detail: `${v.comfort || 0} comfort &times; ${cfg.transport.weight || 0} pts/star`, points: pts });
-    });
+    if (owned.length) {
+      const sorted = owned.slice().sort((a, b) => (b.comfort || 0) - (a.comfort || 0));
+      const best = sorted[0];
+      const bestPts = (best.comfort || 0) * (cfg.transport.weight || 0);
+      score += bestPts;
+      items.push({ type: "gain", label: best.name || "Vehicle", detail: `${best.comfort || 0} comfort &times; ${cfg.transport.weight || 0} pts/star — your best vehicle, only the highest counts`, points: bestPts });
+      sorted.slice(1).forEach(v => {
+        items.push({ type: "gain", label: v.name || "Vehicle", detail: `${v.comfort || 0} comfort — doesn't add extra points, since transport doesn't stack`, points: 0 });
+      });
+    }
   }
   if (cfg.store && cfg.store.enabled) {
     const owned = user.storeItems || [];
