@@ -146,7 +146,7 @@ async function render() {
 
   const recipients = await payableRecipients(allStudents);
   const optsHtml = recipients.length
-    ? recipients.map(r => `<option value="${r.username}">${r.label}</option>`).join("")
+    ? recipients.map(r => `<option value="${escapeHtml(r.username)}">${escapeHtml(r.label)}</option>`).join("")
     : `<option value="">No one to pay yet</option>`;
   document.getElementById("toStudent").innerHTML = optsHtml;
   document.getElementById("autoTo").innerHTML = optsHtml;
@@ -165,7 +165,7 @@ async function render() {
       row.innerHTML = `
         <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> ${dirLabel}
           &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
-          ${a.note ? `<div class="muted-small">${a.note}</div>` : ""}
+          ${a.note ? `<div class="muted-small">${escapeHtml(a.note)}</div>` : ""}
           ${a.lastRun ? `<div class="muted-small">Last ran: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
         </div>
         <button class="btn small secondary" onclick='startEditSavAuto(${JSON.stringify(a).replace(/'/g, "&#39;")})'>Edit</button>
@@ -176,9 +176,9 @@ async function render() {
     }
     const toUser = await getUserCached(a.toUser);
     row.innerHTML = `
-      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toUser ? toUser.name : a.toUser}</strong>
+      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${escapeHtml(toUser ? toUser.name : a.toUser)}</strong>
         &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
-        ${a.note ? `<div class="muted-small">${a.note}</div>` : ""}
+        ${a.note ? `<div class="muted-small">${escapeHtml(a.note)}</div>` : ""}
         ${a.lastRun ? `<div class="muted-small">Last paid: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
       </div>
       <button class="btn small secondary" onclick='startEditAuto(${JSON.stringify(a).replace(/'/g, "&#39;")})'>Edit</button>
@@ -235,12 +235,12 @@ async function render() {
     return `<span class="badge ${c}">${icon(ic, 12)}${label}</span>`;
   };
   my.forEach(t => {
-    let detail = t.note || "";
+    let detail = escapeHtml(t.note || "");
     let amt = t.amount;
     let sign = "";
     if (t.type === "transfer" || t.type === "automation") {
-      if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
-      else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
+      if (t.from === me.username) { detail = "To " + escapeHtml(nameOf(t.to)) + (t.note ? " — " + escapeHtml(t.note) : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
+      else { detail = "From " + escapeHtml(nameOf(t.from)) + (t.note ? " — " + escapeHtml(t.note) : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
     else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "truck-drive", "property-rent", "property-rent-receive", "store-gift", "quiz-reward", "p2p-sell", "gambling-cashout"].includes(t.type)) { sign = "+"; }
     else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-rent-pay", "vehicle-buy", "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "loan-interest", "p2p-buy", "truck-licence-buy", "gambling-buyin"].includes(t.type)) { sign = "-"; }

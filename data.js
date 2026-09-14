@@ -1421,6 +1421,13 @@ async function submitPasswordChange() {
 
 /* ---------------- Money movement ---------------- */
 async function adjustBalance(username, delta) {
+  // BUGFIX (defensive): every current caller already passes a genuine
+  // number, so this was never live — but `data.balance + delta` silently
+  // turns into string CONCATENATION instead of addition if a future
+  // caller ever passes something like "5" instead of 5. Coercing here
+  // means this function is safe regardless of what a caller hands it,
+  // instead of relying on every caller to remember to do it themselves.
+  delta = Number(delta) || 0;
   const ref = usersCol().doc(username);
   try {
     await fdb.runTransaction(async (t) => {
@@ -1450,6 +1457,10 @@ async function logTxn(classCode, txn) {
 }
 
 async function transferMoney(fromUser, toUser, amount, note) {
+  // BUGFIX (defensive, same as adjustBalance above): coerce here rather
+  // than trusting the caller, so `fromData.balance - amount` can never
+  // silently become string concatenation.
+  amount = Math.round((Number(amount) || 0) * 100) / 100;
   const fromRef = usersCol().doc(fromUser);
   const toRef = usersCol().doc(toUser);
   const from = await getUser(fromUser);
@@ -1478,6 +1489,8 @@ async function transferMoney(fromUser, toUser, amount, note) {
 }
 
 async function teacherAdjust(teacherUser, studentUser, amount, note, kind) {
+  // BUGFIX (defensive, same as adjustBalance/transferMoney above).
+  amount = Math.round((Number(amount) || 0) * 100) / 100;
   const student = await getUser(studentUser);
   if (!student) return { ok: false, error: "Student not found." };
   await adjustBalance(studentUser, amount);
