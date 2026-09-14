@@ -8385,11 +8385,14 @@ function lifestyleRatingFromData(cls, user, username) {
     if (npcHome) score += Number(npcHome.lifestylePoints) || 0;
   }
   if (cfg.transport && cfg.transport.enabled) {
-    // Every owned vehicle contributes its own comfort × weight — stars
-    // stack across all vehicles a student owns instead of only counting
-    // their single best one.
+    // Transport does NOT stack — only the single highest-comfort vehicle a
+    // student owns counts toward their lifestyle score (owning several
+    // vehicles gives no extra stars beyond the best one).
     const owned = cls.vehicles.filter(v => (v.owners || []).includes(username));
-    owned.forEach(v => { score += (v.comfort || 0) * (cfg.transport.weight || 0); });
+    if (owned.length) {
+      const bestComfort = Math.max(...owned.map(v => v.comfort || 0));
+      score += bestComfort * (cfg.transport.weight || 0);
+    }
   }
   if (cfg.store && cfg.store.enabled) {
     const owned = user.storeItems || [];
