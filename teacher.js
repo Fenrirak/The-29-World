@@ -86,6 +86,21 @@ async function init() {
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintChrome();
   enablePasswordToggles();
+  // BUGFIX: get a server-trustworthy "now" before any of the day-gated
+  // jobs below decide "has this already run today?" — see
+  // syncServerClock in data.js for why a device's own clock isn't good
+  // enough for that check (a teacher's dashboard reload triggers these
+  // same class-wide jobs, same as a student's page does). Started here,
+  // in parallel with the first paint below, so it doesn't add to the time
+  // before the page first paints; only the jobs themselves wait for it.
+  const T29_CLOCK_SYNC = syncServerClock(CLASS_CODE);
+  // Kick the day's jobs off but DON'T block the page on them: paint what
+  // we already have first, then wait. On the first load of the day pay day
+  // alone can take seconds (it writes per student), and blocking here is
+  // what made a phone sit on a blank page. The popups and the final
+  // render() below still run after the jobs, exactly as they did before.
+  await t29FirstPaint(render);
+  await T29_CLOCK_SYNC;
   // Same reasoning as the other pages: these are 8 independent jobs, so
   // running them together instead of one-at-a-time avoids 8 sequential
   // network round-trips on page load.
@@ -101,12 +116,6 @@ async function init() {
     safeBgJob(processLoanInterest(CLASS_CODE), "processLoanInterest"),
     safeBgJob(processJobPromotions(CLASS_CODE), "processJobPromotions")
   ]);
-  // Kick the day's jobs off but DON'T block the page on them: paint what
-  // we already have first, then wait. On the first load of the day pay day
-  // alone can take seconds (it writes per student), and blocking here is
-  // what made a phone sit on a blank page. The popups and the final
-  // render() below still run after the jobs, exactly as they did before.
-  await t29FirstPaint(render);
   await T29_STARTUP_JOBS;
   await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
   await checkBigEventPopup(CURRENT.username, CLASS_CODE);

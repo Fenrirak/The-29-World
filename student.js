@@ -85,6 +85,13 @@ async function init() {
   CURRENT = u;
   document.getElementById("whoami").textContent = u.name;
   paintChrome();
+  // BUGFIX: get a server-trustworthy "now" before any of the day-gated
+  // jobs below decide "has this already run today?" — see
+  // syncServerClock in data.js for why a device's own clock isn't good
+  // enough for that check. Started here, in parallel with the first paint
+  // below, so it doesn't add to the time before the student first sees
+  // their balance; only the jobs themselves wait for it.
+  const T29_CLOCK_SYNC = syncServerClock(u.classCode);
   // Fire any wages or automatic payments that have come due since last visit
   // These 7 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
@@ -93,6 +100,8 @@ async function init() {
   // them together cuts that to roughly the time of the single slowest one.
   // Note: mortgage payments are NOT auto-deducted here (see payMortgage in
   // data.js) — students pay their own weekly installment on the due day.
+  await t29FirstPaint(render);
+  await T29_CLOCK_SYNC;
   const T29_STARTUP_JOBS = Promise.all([
     safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
     safeBgJob(processDailyLifeAllowance(u.classCode), "processDailyLifeAllowance"),
@@ -104,7 +113,6 @@ async function init() {
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents"),
     safeBgJob(processJobPromotions(u.classCode), "processJobPromotions")
   ]);
-  await t29FirstPaint(render);
   await T29_STARTUP_JOBS;
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);

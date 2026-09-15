@@ -97,20 +97,72 @@ function fmtMoney(n) {
 }
 
 function nowStr() {
-  return new Date().toLocaleString("en-NZ", { timeZone: "Pacific/Auckland" });
+  return trustedNow().toLocaleString("en-NZ", { timeZone: "Pacific/Auckland" });
 }
+
+/* ---------------- Server-trusted clock ----------------
+   BUGFIX: every "has this already run today?" check below (pay day,
+   automatic payments, interest, term deposits...) used to read the
+   VISITING DEVICE's own clock via `new Date()`. That's fine as long as
+   every device's clock is right, but a shared classroom Chromebook with a
+   dead backup battery (or any device whose date/time is just wrong) can
+   report a "today" that doesn't match everyone else's — so on that one
+   device, an automatic payment that already ran today looks like it
+   hasn't, and it fires again. Repeated across a school day as a device
+   sleeps and wakes and its clock drifts, that's what produced the same
+   automatic payment going through many times in one real day.
+
+   Firestore's serverTimestamp() sentinel is resolved by Google's servers,
+   not the device asking for it, so writing it and reading the resolved
+   value back gives one trustworthy instant per page load, independent of
+   whatever the local clock says. We measure the gap between that and the
+   device's own Date.now() once (syncServerClock, called from each page's
+   init() before any day-gated job runs), then apply the same gap to
+   every trustedNow() call for the rest of the session, so this doesn't
+   need a network round trip per check. If the sync can't complete
+   (offline, or the write is rejected), we fall back to the device's own
+   clock — exactly today's behaviour — rather than blocking the page. */
+let SERVER_CLOCK_OFFSET_MS = 0;
+let SERVER_CLOCK_SYNCED = false;
+async function syncServerClock(classCode) {
+  if (SERVER_CLOCK_SYNCED || !classCode) return;
+  try {
+    const ref = classesCol().doc(classCode);
+    const sentAt = Date.now();
+    await ref.set({ _clockProbe: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    const snap = await ref.get({ source: "server" });
+    const probe = snap.data() && snap.data()._clockProbe;
+    if (probe && typeof probe.toMillis === "function") {
+      const receivedAt = Date.now();
+      // The server timestamp was resolved somewhere during that round
+      // trip — splitting the difference is closer than assuming either
+      // endpoint.
+      const roundTripMidpoint = sentAt + (receivedAt - sentAt) / 2;
+      SERVER_CLOCK_OFFSET_MS = probe.toMillis() - roundTripMidpoint;
+    }
+  } catch (e) {
+    SERVER_CLOCK_OFFSET_MS = 0; // offline, or the write was rejected — fall back to the device clock
+  }
+  SERVER_CLOCK_SYNCED = true;
+}
+// The current instant, corrected by the offset measured above. Behaves
+// exactly like `new Date()` (i.e. no correction) until syncServerClock()
+// has run at least once this session.
+function trustedNow() { return new Date(Date.now() + SERVER_CLOCK_OFFSET_MS); }
 
 /* ---------------- New Zealand game-clock helpers ----------------
    Everything that depends on "what day/date is it" (pay day, automations,
    mortgages, interest, term deposits, random events) reads NZ wall-clock
-   time, not the visiting device's local time zone. */
+   time, not the visiting device's local time zone — and, since the
+   BUGFIX above, the server-corrected clock rather than the device's own
+   idea of "now". */
 function nzParts(d) {
   const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: "Pacific/Auckland", weekday: "short",
     year: "numeric", month: "2-digit", day: "2-digit"
   });
   const map = {};
-  fmt.formatToParts(d || new Date()).forEach(p => { map[p.type] = p.value; });
+  fmt.formatToParts(d || trustedNow()).forEach(p => { map[p.type] = p.value; });
   return map; // { weekday: "Mon", year: "2026", month: "07", day: "15" }
 }
 function nzDayName(d) { return nzParts(d).weekday; } // "Mon".."Sun" — matches DAY_NAMES values
@@ -129,7 +181,7 @@ function nzHourMinute(d) {
     timeZone: "Pacific/Auckland", hourCycle: "h23", hour: "2-digit", minute: "2-digit"
   });
   const map = {};
-  fmt.formatToParts(d || new Date()).forEach(p => { map[p.type] = p.value; });
+  fmt.formatToParts(d || trustedNow()).forEach(p => { map[p.type] = p.value; });
   return { hour: Number(map.hour), minute: Number(map.minute) };
 }
 // "12am", "1am", ... "12pm", "1pm", ... "11pm" for hour 0-23.
@@ -2915,12 +2967,22 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
       const idx = cls.automations.findIndex(a => a.id === id && a.studentUser === studentUser);
       if (idx === -1) throw new Error("NOT_FOUND");
       const existing = cls.automations[idx];
+      // Same de-dup guard as addAutomation(): without this, editing one
+      // automation to match another already-active one silently produces
+      // two identical payments firing on the same day — indistinguishable
+      // from the same automation firing twice.
+      const dup = cls.automations.find(a =>
+        a.id !== id && a.studentUser === studentUser && a.toUser === toUser && a.active &&
+        a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount)
+      );
+      if (dup) throw new Error("DUPLICATE");
       cls.automations[idx] = {
         ...existing, dayOfWeek, frequency, amount: Number(amount), toUser, note: (note || "").trim()
       };
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day and frequency)." };
     return { ok: false, error: e.message === "NOT_FOUND" ? "Automatic payment not found." : "Class not found." };
   }
   return { ok: true };
@@ -2938,12 +3000,23 @@ async function editSavingsAutomation(classCode, id, studentUser, dayOfWeek, freq
       const idx = cls.automations.findIndex(a => a.id === id && a.studentUser === studentUser);
       if (idx === -1) throw new Error("NOT_FOUND");
       const existing = cls.automations[idx];
+      // Same de-dup guard as addSavingsAutomation(): without this, editing
+      // one transfer to match another already-active one silently produces
+      // two identical transfers firing on the same day — indistinguishable
+      // from the same one firing twice.
+      const dup = cls.automations.find(a =>
+        a.id !== id && a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
+        a.direction === direction && a.dayOfWeek === dayOfWeek && a.frequency === frequency &&
+        Number(a.amount) === Number(amount)
+      );
+      if (dup) throw new Error("DUPLICATE");
       cls.automations[idx] = {
         ...existing, dayOfWeek, frequency, amount: Number(amount), direction, note: (note || "").trim()
       };
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction, day and frequency)." };
     return { ok: false, error: e.message === "NOT_FOUND" ? "Automatic transfer not found." : "Class not found." };
   }
   return { ok: true };
