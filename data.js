@@ -3037,11 +3037,76 @@ async function getStudentAutomations(classCode, studentUser) {
   return (cls.automations || []).filter(a => a.studentUser === studentUser);
 }
 
+// Key used to detect "exact duplicate" automations — same fields as the
+// double-submit guards in addAutomation/addSavingsAutomation/editAutomation/
+// editSavingsAutomation above. Any automations sharing a key are really one
+// recurring payment that got accidentally created more than once (double-tap
+// on a slow connection, or a device with a drifted clock, before those
+// guards existed) — each copy is independently valid and fires on its own
+// schedule, which is what shows up as "the same auto-pay running several
+// times a day".
+function _autoDedupeKey(a) {
+  return a.type === "savings-transfer"
+    ? ["sav", a.studentUser, a.direction, a.dayOfWeek, a.frequency, Number(a.amount)].join("|")
+    : ["pay", a.studentUser, a.toUser, a.dayOfWeek, a.frequency, Number(a.amount)].join("|");
+}
+// Self-healing cleanup for automations created before the double-submit
+// guards existed: merges each group of exact duplicates down to a single
+// copy. Keeps whichever copy last ran most recently (falling back to the
+// first one created if none have run yet) so merging never makes a
+// payment due again sooner than it already was. Only opens a transaction
+// when a duplicate is actually found — the common case (no duplicates)
+// costs nothing beyond the read already done by the caller.
+async function dedupeAutomations(classCode, automations) {
+  const groups = new Map();
+  for (const a of automations) {
+    if (!a.active) continue;
+    const key = _autoDedupeKey(a);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(a);
+  }
+  if (![...groups.values()].some(g => g.length > 1)) return false; // nothing to merge
+
+  const classRef = classesCol().doc(classCode);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) return;
+      const cls = snap.data();
+      const list = cls.automations || [];
+      const liveGroups = new Map();
+      for (const a of list) {
+        if (!a.active) continue;
+        const key = _autoDedupeKey(a);
+        if (!liveGroups.has(key)) liveGroups.set(key, []);
+        liveGroups.get(key).push(a);
+      }
+      const toRemove = new Set();
+      for (const group of liveGroups.values()) {
+        if (group.length < 2) continue;
+        let keep = group[0];
+        for (const a of group) if ((a.lastRun || "") > (keep.lastRun || "")) keep = a;
+        for (const a of group) if (a !== keep) toRemove.add(a.id);
+      }
+      if (toRemove.size === 0) return;
+      t.update(classRef, { automations: list.filter(a => !toRemove.has(a.id)) });
+    });
+  } catch (e) { return false; } // best-effort; will retry on the next load
+  return true;
+}
+
 // Runs on dashboard load: fires any automation whose day-of-week matches
 // today and whose frequency interval has elapsed since it last ran.
 async function processAutomations(classCode) {
-  const cls = await getClass(classCode);
+  let cls = await getClass(classCode);
   if (!cls || !cls.automations || cls.automations.length === 0 || cls.archived) return 0;
+
+  // Heal any leftover duplicate automations before processing so a class
+  // with old double-submitted entries doesn't keep firing them forever.
+  if (await dedupeAutomations(classCode, cls.automations)) {
+    cls = await getClass(classCode);
+    if (!cls || !cls.automations || cls.automations.length === 0 || cls.archived) return 0;
+  }
 
   const todayName = nzDayName();
   const todayKey = nzDateKey();
@@ -3111,13 +3176,23 @@ async function processAutomations(classCode) {
         const toSnap = await t.get(toRef);
         if (!classSnap.exists || !fromSnap.exists || !toSnap.exists) return;
         const from = fromSnap.data(), to = toSnap.data();
-        if (from.balance < a.amount) return; // skip silently if they can't afford it
+        // Teachers have unlimited funds (same rule as the manual transfer
+        // in transferMoney()) — a teacher-run automation like "Universal
+        // Basic Income" must not be gated on their real balance field,
+        // which normally sits at 0 (or whatever incidental amount
+        // students have paid them) and has nothing to do with the
+        // "Unlimited ∞" shown in the UI. Without this bypass the payment
+        // would either silently do nothing once that field ran out, or
+        // — if it happened to hold enough — actually drain it, neither of
+        // which matches what the teacher sees on screen.
+        const fromIsTeacher = from.role === "teacher";
+        if (!fromIsTeacher && from.balance < a.amount) return; // skip silently if they can't afford it
 
         const liveCls = classSnap.data();
         const liveAuto = (liveCls.automations || []).find(x => x.id === a.id);
         if (!liveAuto || liveAuto.lastRun === todayKey) return; // already ran (race guard)
 
-        t.update(fromRef, { balance: Math.round((from.balance - a.amount) * 100) / 100 });
+        if (!fromIsTeacher) t.update(fromRef, { balance: Math.round((from.balance - a.amount) * 100) / 100 });
         t.update(toRef, { balance: Math.round((to.balance + a.amount) * 100) / 100 });
         liveAuto.lastRun = todayKey;
         t.update(classRef, { automations: liveCls.automations });
