@@ -181,6 +181,15 @@
     <div id="ptfMsg"></div>
   </div>
 
+  <div id="lifeFeeOverridesPanel" class="card hidden">
+    <h2 id="hLifeFeeOverrides">Public transport fee by life event</h2>
+    <p class="muted-small">Optional: charge a different public transport fee to a student currently holding a specific life event, instead of the flat fee above. If a student holds more than one of these at once, the most recently granted life event's fee applies. Leave a box blank to just use the flat fee for that life event.</p>
+    <div id="lifeFeeOverridesBody"></div>
+    <p class="muted-small hidden" id="noLifeItemsForFees">No life events have been created yet — add some in the Life module first.</p>
+    <button class="btn gold" type="button" id="lifeFeeSaveBtn" onclick="saveLifeFeeOverrides()">Save life event fees</button>
+    <div id="lifeFeeMsg"></div>
+  </div>
+
   <div id="transportExpensesPanel" class="card hidden">
     <h2 id="hTransportExpenses">Weekly transport expenses</h2>
     <div id="transportExpensesBody"></div>

@@ -3461,15 +3461,65 @@ async function checkinTruckDrive(username, classCode, vehId) {
    modelling "owning a car means you don't need the bus as much". A
    student can own several vehicles, but — matching the existing
    "comfort doesn't stack" rule for lifestyle scoring — only their
-   comfiest owned vehicle's weeklyExpense/publicTransportOffset count;
-   owning a second, less comfortable vehicle costs nothing extra here. */
+   comfiest owned vehicle's weeklyExpense/publicTransportOffset count.
+
+   On top of that flat fee, a teacher can also set a different public
+   transport fee for students currently holding a specific Life-module
+   life event (see setPublicTransportFeeOverrides/currentLifeTransportFee
+   below) — e.g. "Moved to the city" could carry its own, higher fee than
+   the class default. Still entirely teacher-set, just per life event
+   instead of one single number. A student with no matching life event
+   (or in a class that's never touched this) just pays the flat fee,
+   exactly as before this existed. */
 
 // Teacher-set flat weekly public transport fee every student owes by
-// default (see transportWeeklyAmount), before any vehicle offset.
+// default (see transportWeeklyAmount) — used whenever a student holds no
+// life event with its own fee override (see setPublicTransportFeeOverrides).
 async function setPublicTransportFee(classCode, amount, description) {
   const clean = { amount: Math.max(0, Number(amount) || 0), description: (description || "").trim() };
   await classesCol().doc(classCode).update({ publicTransportFee: clean });
   return clean;
+}
+// Teacher control for per-life-event public transport fees: `overrides` is
+// a { [lifeItemTemplateId]: amount } map, normally built from every life
+// item template currently in cls.lifeItems (see saveLifeFeeOverrides in
+// transport.js). Like setSellBackRates, the whole map is replaced in one
+// write rather than merged — the caller always sends back every row it
+// rendered, so a template dropped from the form (e.g. because its life
+// item was deleted) is correctly dropped here too. A blank/invalid entry
+// for a given id simply omits it, clearing that life event back to the
+// flat fee above.
+async function setPublicTransportFeeOverrides(classCode, overrides) {
+  const clean = {};
+  Object.keys(overrides || {}).forEach(id => {
+    const raw = overrides[id];
+    const n = Number(raw);
+    if (raw !== "" && raw !== null && raw !== undefined && isFinite(n) && n >= 0) {
+      clean[id] = Math.round(n * 100) / 100;
+    }
+  });
+  await classesCol().doc(classCode).update({ publicTransportFeeOverrides: clean });
+  return clean;
+}
+// Which of a student's currently-held life events (if any) carries a
+// teacher-set override for the public transport fee. Matched by
+// templateId — the id of the *template* the life item was granted from
+// (see grantLifeItem) — so it keeps applying even if the teacher later
+// tweaks the template's name or other benefits. A student's life keeps
+// moving forward, so when more than one held life event has an override,
+// the most recently granted one wins rather than combining — this models
+// a student's *current* circumstances, not every life event they've ever
+// been granted. Returns null (meaning: fall back to the flat
+// cls.publicTransportFee) if nothing they hold has an override configured,
+// including for a user with no lifeItems at all (e.g. a teacher).
+function currentLifeTransportFee(cls, user) {
+  const overrides = cls.publicTransportFeeOverrides || {};
+  const eligible = ((user && user.lifeItems) || [])
+    .filter(it => it.templateId && overrides[it.templateId] !== undefined)
+    .sort((a, b) => (b.grantedAt || "").localeCompare(a.grantedAt || ""));
+  if (!eligible.length) return null;
+  const chosen = eligible[0];
+  return { amount: Math.max(0, Number(overrides[chosen.templateId]) || 0), name: chosen.name };
 }
 // Class-wide day transport expenses are payable on (like payDay/mortgageDay).
 async function setTransportDay(classCode, day) {
@@ -3487,15 +3537,19 @@ function comfiestOwnedVehicle(vehicles, username) {
 // The full breakdown of what a student owes this week — used both to
 // display the amount ahead of time (transport.js) and to actually charge
 // it (payTransportExpenses below), so the number shown is never different
-// from the number they get charged.
-function transportWeeklyAmount(cls, username) {
+// from the number they get charged. Takes the student's full user doc
+// (not just their username) since a life-event fee override (see
+// currentLifeTransportFee) needs to read their lifeItems.
+function transportWeeklyAmount(cls, user) {
+  const username = user.username;
   const vehicle = comfiestOwnedVehicle(cls.vehicles, username);
   const vehicleExpense = vehicle ? Math.max(0, Number(vehicle.weeklyExpense) || 0) : 0;
-  const publicFeeBase = Math.max(0, Number((cls.publicTransportFee || {}).amount) || 0);
+  const lifeFee = currentLifeTransportFee(cls, user);
+  const publicFeeBase = lifeFee ? lifeFee.amount : Math.max(0, Number((cls.publicTransportFee || {}).amount) || 0);
   const publicFeeOffset = vehicle ? Math.max(0, Number(vehicle.publicTransportOffset) || 0) : 0;
   const publicFeeDue = Math.max(0, Math.round((publicFeeBase - publicFeeOffset) * 100) / 100);
   const total = Math.round((vehicleExpense + publicFeeDue) * 100) / 100;
-  return { vehicle, vehicleExpense, publicFeeBase, publicFeeOffset, publicFeeDue, total };
+  return { vehicle, vehicleExpense, publicFeeBase, publicFeeOffset, publicFeeDue, total, lifeFeeName: lifeFee ? lifeFee.name : null };
 }
 
 // Which ISO week the most recently-passed transport due day falls in —
@@ -3553,7 +3607,7 @@ async function payTransportExpenses(username, classCode) {
       const weekKey = isoWeekKey(new Date());
       if ((cls.transportDay || "Fri") !== nzDayName()) throw new Error("WRONG_DAY");
       if ((user.transportLastWeekPaid || null) === weekKey) throw new Error("ALREADY_PAID");
-      breakdown = transportWeeklyAmount(cls, username);
+      breakdown = transportWeeklyAmount(cls, Object.assign({ username }, user));
       const amt = breakdown.total;
       if (amt > 0 && user.balance < amt) throw new Error("BROKE");
       const update = { transportLastWeekPaid: weekKey };
@@ -5845,6 +5899,13 @@ function withNewModuleDefaults(cls) {
   // existing class starts this feature completely free until the teacher
   // configures it.
   cls.publicTransportFee = cls.publicTransportFee || { amount: 0, description: "" };
+  // Optional per-life-event override of the fee just above, keyed by life
+  // item *template* id (see currentLifeTransportFee/setPublicTransportFeeOverrides
+  // below) — lets a student currently holding a specific life event pay a
+  // different public transport fee than the flat class-wide default.
+  // Empty object = no overrides configured, so every student just pays the
+  // flat fee, exactly like before this existed.
+  cls.publicTransportFeeOverrides = cls.publicTransportFeeOverrides || {};
   cls.transportDay = DAY_NAMES.includes(cls.transportDay) ? cls.transportDay : "Fri";
   cls.truckLicence = cls.truckLicence || { price: 0, description: "" };
   cls.sellBackRates = cls.sellBackRates || {};

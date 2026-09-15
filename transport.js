@@ -21,6 +21,7 @@ function paintChrome() {
   document.getElementById("hSellBack").innerHTML = icon("car", 18) + " Sell-back rates";
   document.getElementById("hTransportSettings").innerHTML = icon("repeat", 18) + " Weekly transport expenses";
   document.getElementById("hTransportExpenses").innerHTML = icon("repeat", 18) + " Weekly transport expenses";
+  document.getElementById("hLifeFeeOverrides").innerHTML = icon("trophy", 18) + " Public transport fee by life event";
   document.getElementById("labStock").textContent = "Stock limit (leave blank for unlimited)";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
@@ -37,6 +38,7 @@ async function init() {
   document.getElementById("licenceSettingsPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("sellBackPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("transportSettingsPanel").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("lifeFeeOverridesPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("transportExpensesPanel").classList.toggle("hidden", IS_TEACHER);
   document.getElementById("myVehiclesPanel").classList.toggle("hidden", IS_TEACHER);
   if (IS_TEACHER) onTypeChange();
@@ -94,6 +96,23 @@ async function render() {
     document.getElementById("ptfAmount").value = ptf.amount || "";
     document.getElementById("ptfDesc").value = ptf.description || "";
     document.getElementById("transportDaySelect").value = cls.transportDay || "Fri";
+
+    // One row per life event template currently defined in the Life
+    // module, pre-filled with its current fee override (blank = none, so
+    // that life event just uses the flat fee above). Rebuilt fresh every
+    // render so a life event added/renamed/removed elsewhere shows up
+    // here without needing its own separate sync logic.
+    const lifeItemsForFees = cls.lifeItems || [];
+    const feeOverrides = cls.publicTransportFeeOverrides || {};
+    document.getElementById("noLifeItemsForFees").classList.toggle("hidden", lifeItemsForFees.length > 0);
+    document.getElementById("lifeFeeSaveBtn").classList.toggle("hidden", lifeItemsForFees.length === 0);
+    document.getElementById("lifeFeeOverridesBody").innerHTML = lifeItemsForFees.map(it => `
+      <div class="auto-row">
+        <div class="auto-details">${escapeHtml(it.name)}</div>
+        <input id="lifeFee-${it.id}" type="number" min="0" step="0.01" placeholder="Flat fee" style="max-width:140px;"
+          value="${feeOverrides[it.id] !== undefined ? feeOverrides[it.id] : ""}">
+      </div>
+    `).join("");
   } else {
     // Only bother showing the licence card to students if there's actually
     // a truck listed (or they already hold the licence) — otherwise it's
@@ -363,7 +382,7 @@ async function buyVeh(id) {
 }
 
 function renderTransportExpenses(me, cls) {
-  const amt = transportWeeklyAmount(cls, me.username);
+  const amt = transportWeeklyAmount(cls, me);
   const dueDay = cls.transportDay || "Fri";
   const weekKey = isoWeekKey(new Date());
   const paidThisWeek = me.transportLastWeekPaid === weekKey;
@@ -391,7 +410,7 @@ function renderTransportExpenses(me, cls) {
   if (amt.vehicle && amt.vehicleExpense > 0) {
     lines.push(`<p>${escapeHtml(amt.vehicle.name)} upkeep &middot; <strong>${fmtMoney(amt.vehicleExpense)}</strong></p>`);
   }
-  lines.push(`<p>Public transport fee${amt.publicFeeOffset > 0 ? ` <span class="muted-small">(${fmtMoney(amt.publicFeeBase)} − ${fmtMoney(amt.publicFeeOffset)} vehicle discount)</span>` : ""} &middot; <strong>${fmtMoney(amt.publicFeeDue)}</strong></p>`);
+  lines.push(`<p>Public transport fee${amt.lifeFeeName ? ` <span class="muted-small">(${escapeHtml(amt.lifeFeeName)} rate)</span>` : ""}${amt.publicFeeOffset > 0 ? ` <span class="muted-small">(${fmtMoney(amt.publicFeeBase)} − ${fmtMoney(amt.publicFeeOffset)} vehicle discount)</span>` : ""} &middot; <strong>${fmtMoney(amt.publicFeeDue)}</strong></p>`);
 
   document.getElementById("transportExpensesBody").innerHTML = `
     <div class="flex-between" style="align-items:flex-start;">
@@ -431,6 +450,18 @@ async function saveTransportSettings() {
   await setPublicTransportFee(CURRENT.classCode, amount, desc);
   await setTransportDay(CURRENT.classCode, day);
   document.getElementById("ptfMsg").innerHTML = `<div class="success-msg">Transport settings saved!</div>`;
+  await render();
+}
+
+async function saveLifeFeeOverrides() {
+  const cls = await getClassCached(CURRENT.classCode);
+  const overrides = {};
+  (cls.lifeItems || []).forEach(it => {
+    const el = document.getElementById(`lifeFee-${it.id}`);
+    if (el) overrides[it.id] = el.value;
+  });
+  await setPublicTransportFeeOverrides(CURRENT.classCode, overrides);
+  document.getElementById("lifeFeeMsg").innerHTML = `<div class="success-msg">Life event fees saved!</div>`;
   await render();
 }
 
