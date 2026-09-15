@@ -748,6 +748,8 @@ function defaultClassData(code, className, teacherUsername) {
     payDay: "Fri",
     mortgageDay: "Fri",
     mortgageForceDueWeek: null,
+    transportDay: "Fri",
+    publicTransportFee: { amount: 0, description: "" },
     priceRange: { min: 1, max: 5 },
     propertyPriceRange: { min: 0.5, max: 2 },
     lastPropertyMarketDayRun: null,
@@ -3228,6 +3230,11 @@ async function addVehicle(classCode, v) {
       // check in to "drive" it (see checkinTruckDrive). Stored regardless
       // of type so switching a vehicle's type later doesn't lose the value.
       drivePayout: Math.max(0, Number(v.drivePayout) || 0),
+      // Weekly running cost (see payTransportExpenses) and how much this
+      // vehicle knocks off the class-wide public transport fee for its
+      // owner (see transportWeeklyAmount) — both teacher-set per vehicle.
+      weeklyExpense: Math.max(0, Number(v.weeklyExpense) || 0),
+      publicTransportOffset: Math.max(0, Number(v.publicTransportOffset) || 0),
       stockLimit: (v.stockLimit === "" || v.stockLimit === undefined || v.stockLimit === null) ? null : Math.max(0, Math.floor(Number(v.stockLimit)))
     });
     t.update(classRef, { vehicles: cls.vehicles });
@@ -3257,6 +3264,8 @@ async function updateVehicle(classCode, vehId, updates) {
     veh.description = updates.description || "";
     veh.type = normalizeVehicleType(updates.type);
     veh.drivePayout = Math.max(0, Number(updates.drivePayout) || 0);
+    veh.weeklyExpense = Math.max(0, Number(updates.weeklyExpense) || 0);
+    veh.publicTransportOffset = Math.max(0, Number(updates.publicTransportOffset) || 0);
     veh.stockLimit = (updates.stockLimit === "" || updates.stockLimit === undefined || updates.stockLimit === null) ? null : Math.max(0, Math.floor(Number(updates.stockLimit)));
     t.update(classRef, { vehicles: cls.vehicles });
   });
@@ -3441,6 +3450,156 @@ async function checkinTruckDrive(username, classCode, vehId) {
   }
   await logTxn(classCode, { type: "truck-drive", to: username, amount, note: `Drove truck — ${vehName}` });
   return { ok: true, amount };
+}
+
+/* ===================== Weekly transport expenses =====================
+   Every student owes a weekly transport cost even if they own nothing —
+   the class-wide public transport fee (setPublicTransportFee) — payable
+   once a week via payTransportExpenses. Owning a vehicle adds that
+   vehicle's own weeklyExpense on top, but also knocks its own
+   publicTransportOffset off the public transport fee (floored at $0),
+   modelling "owning a car means you don't need the bus as much". A
+   student can own several vehicles, but — matching the existing
+   "comfort doesn't stack" rule for lifestyle scoring — only their
+   comfiest owned vehicle's weeklyExpense/publicTransportOffset count;
+   owning a second, less comfortable vehicle costs nothing extra here. */
+
+// Teacher-set flat weekly public transport fee every student owes by
+// default (see transportWeeklyAmount), before any vehicle offset.
+async function setPublicTransportFee(classCode, amount, description) {
+  const clean = { amount: Math.max(0, Number(amount) || 0), description: (description || "").trim() };
+  await classesCol().doc(classCode).update({ publicTransportFee: clean });
+  return clean;
+}
+// Class-wide day transport expenses are payable on (like payDay/mortgageDay).
+async function setTransportDay(classCode, day) {
+  await classesCol().doc(classCode).update({ transportDay: DAY_NAMES.includes(day) ? day : "Fri" });
+}
+
+// A student's comfiest owned vehicle — the only one whose weeklyExpense
+// and publicTransportOffset count if they own more than one (see header
+// comment above). Returns null if they own nothing.
+function comfiestOwnedVehicle(vehicles, username) {
+  return (vehicles || []).filter(v => (v.owners || []).includes(username))
+    .reduce((best, v) => (!best || (Number(v.comfort) || 0) > (Number(best.comfort) || 0)) ? v : best, null);
+}
+
+// The full breakdown of what a student owes this week — used both to
+// display the amount ahead of time (transport.js) and to actually charge
+// it (payTransportExpenses below), so the number shown is never different
+// from the number they get charged.
+function transportWeeklyAmount(cls, username) {
+  const vehicle = comfiestOwnedVehicle(cls.vehicles, username);
+  const vehicleExpense = vehicle ? Math.max(0, Number(vehicle.weeklyExpense) || 0) : 0;
+  const publicFeeBase = Math.max(0, Number((cls.publicTransportFee || {}).amount) || 0);
+  const publicFeeOffset = vehicle ? Math.max(0, Number(vehicle.publicTransportOffset) || 0) : 0;
+  const publicFeeDue = Math.max(0, Math.round((publicFeeBase - publicFeeOffset) * 100) / 100);
+  const total = Math.round((vehicleExpense + publicFeeDue) * 100) / 100;
+  return { vehicle, vehicleExpense, publicFeeBase, publicFeeOffset, publicFeeDue, total };
+}
+
+// Which ISO week the most recently-passed transport due day falls in —
+// same logic as lastMortgageDueWeekKey, just keyed off cls.transportDay.
+function lastTransportDueWeekKey(cls) {
+  const isoIdx = day => (DAY_NAMES.indexOf(day) + 6) % 7;
+  const dueIdx = isoIdx(cls.transportDay || "Fri");
+  const todayIdx = isoIdx(nzDayName());
+  let daysSinceDue = todayIdx - dueIdx;
+  if (daysSinceDue <= 0) daysSinceDue += 7;
+  const lastDueDateKey = dateKeyPlusDays(nzDateKey(), -daysSinceDue);
+  return isoWeekKey(new Date(dateKeyToUTC(lastDueDateKey)));
+}
+
+// The ISO week key of this student's currently-unpaid transport cycle, or
+// null if there isn't one — mirrors overdueMortgageWeekKey. There's no
+// "first week is free" exemption here (unlike a mortgage's purchase week):
+// the public transport fee applies to every student from the moment the
+// teacher sets one, whether or not they own a vehicle.
+function overdueTransportWeekKey(user, cls) {
+  const weekKey = isoWeekKey(new Date());
+  if ((user.transportLastWeekPaid || null) === weekKey) return null; // already paid this week
+  const lastDueWeekKey = lastTransportDueWeekKey(cls);
+  if (lastDueWeekKey === weekKey) return weekKey; // this week's due day already passed
+  if ((user.transportLastWeekPaid || null) === lastDueWeekKey) return null; // that earlier cycle was paid
+  return lastDueWeekKey; // an earlier due day passed without payment and hasn't been caught up since
+}
+// Whether a student currently has a missed weekly transport payment. Used
+// to show a red "payment overdue" warning on the teacher's student profile
+// popup, alongside a button to waive it (see resolveTransportOverdue).
+// Purely a read of already-loaded data — doesn't touch the database.
+function isTransportPaymentOverdue(user, cls) {
+  return overdueTransportWeekKey(user, cls) !== null;
+}
+
+// Student-initiated weekly payment — only works on the class's transportDay
+// (teacher-set), once per ISO week. An unaffordable payment is simply
+// refused (BROKE); nothing is part-paid and nothing accumulates as debt,
+// since only the student can trigger a charge in the first place. If a due
+// day is missed entirely, the week is just skipped over (see
+// overdueTransportWeekKey) and flagged for the teacher, rather than being
+// charged retroactively — the teacher can only waive it, never force-collect
+// it, matching how mortgage overdue works.
+async function payTransportExpenses(username, classCode) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let breakdown = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const weekKey = isoWeekKey(new Date());
+      if ((cls.transportDay || "Fri") !== nzDayName()) throw new Error("WRONG_DAY");
+      if ((user.transportLastWeekPaid || null) === weekKey) throw new Error("ALREADY_PAID");
+      breakdown = transportWeeklyAmount(cls, username);
+      const amt = breakdown.total;
+      if (amt > 0 && user.balance < amt) throw new Error("BROKE");
+      const update = { transportLastWeekPaid: weekKey };
+      if (amt > 0) update.balance = Math.round((user.balance - amt) * 100) / 100;
+      t.update(userRef, update);
+    });
+  } catch (e) {
+    if (e.message === "WRONG_DAY") return { ok: false, error: "Transport expenses can only be paid on their due day." };
+    if (e.message === "ALREADY_PAID") return { ok: false, error: "You've already paid this week." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's transport expenses." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  if (breakdown.total > 0) {
+    const parts = [];
+    if (breakdown.vehicleExpense > 0) parts.push(`${fmtMoney(breakdown.vehicleExpense)} vehicle upkeep`);
+    if (breakdown.publicFeeDue > 0) parts.push(`${fmtMoney(breakdown.publicFeeDue)} public transport`);
+    await logTxn(classCode, { type: "transport-expense", from: username, amount: breakdown.total, note: `Weekly transport expenses (${parts.join(" + ") || "none"})` });
+  }
+  return { ok: true, amount: breakdown.total, breakdown };
+}
+
+// Teacher-only: clear a student's currently-missed transport payment
+// without taking any money from them — mirrors resolveMortgageOverdue.
+// Refuses if there's nothing actually overdue, so it can't be used to
+// pre-pay ahead of schedule.
+async function resolveTransportOverdue(classCode, username) {
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let resolved = false;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      const overdueWeekKey = overdueTransportWeekKey(user, cls);
+      if (!overdueWeekKey) throw new Error("NOT_OVERDUE");
+      resolved = true;
+      t.update(userRef, { transportLastWeekPaid: overdueWeekKey });
+    });
+  } catch (e) {
+    if (e.message === "NOT_OVERDUE") return { ok: false, error: "This student doesn't have an overdue transport payment." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  return { ok: resolved };
 }
 
 /* ===================== Term deposits ===================== */
@@ -5671,7 +5830,22 @@ function withNewModuleDefaults(cls) {
     // they aren't mistaken for trucks (which require a licence).
     if (!VEHICLE_TYPES.includes(v.type)) v.type = "car";
     if (v.drivePayout === undefined || v.drivePayout === null) v.drivePayout = 0;
+    // Weekly running cost charged via payTransportExpenses, and how much
+    // owning this vehicle knocks off the class-wide public transport fee
+    // (see transportWeeklyAmount). Vehicles saved before this existed
+    // default to $0 of each — free to own, no public transport discount —
+    // rather than silently starting to cost a student money.
+    if (v.weeklyExpense === undefined || v.weeklyExpense === null) v.weeklyExpense = 0;
+    if (v.publicTransportOffset === undefined || v.publicTransportOffset === null) v.publicTransportOffset = 0;
   });
+  // Class-wide weekly transport expenses: a flat public transport fee every
+  // student owes (see transportWeeklyAmount), and the day of the week it's
+  // payable on (like mortgageDay/payDay). Vehicles saved before this existed
+  // default their own weeklyExpense/publicTransportOffset to 0 above, so an
+  // existing class starts this feature completely free until the teacher
+  // configures it.
+  cls.publicTransportFee = cls.publicTransportFee || { amount: 0, description: "" };
+  cls.transportDay = DAY_NAMES.includes(cls.transportDay) ? cls.transportDay : "Fri";
   cls.truckLicence = cls.truckLicence || { price: 0, description: "" };
   cls.sellBackRates = cls.sellBackRates || {};
   VEHICLE_TYPES.forEach(type => {

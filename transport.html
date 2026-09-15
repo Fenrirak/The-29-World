@@ -100,6 +100,16 @@
           <input id="hPayout" type="number" min="0" step="0.01" value="0">
         </div>
       </div>
+      <div class="grid grid-3">
+        <div>
+          <label for="hWeeklyExpense" id="labWeeklyExpense">Weekly running cost ($)</label>
+          <input id="hWeeklyExpense" type="number" min="0" step="0.01" value="0">
+        </div>
+        <div>
+          <label for="hPublicOffset" id="labPublicOffset">Knocks off public transport fee ($/week)</label>
+          <input id="hPublicOffset" type="number" min="0" step="0.01" value="0">
+        </div>
+      </div>
       <label for="hDesc" id="labDesc">Description</label>
       <input id="hDesc" placeholder="Shown to students">
       <button class="btn gold" type="submit" id="addBtn">Add vehicle</button>
@@ -142,6 +152,38 @@
     </div>
     <button class="btn gold" type="button" id="sbSaveBtn" onclick="saveSellBackRates()">Save sell-back rates</button>
     <div id="sbMsg"></div>
+  </div>
+
+  <div id="transportSettingsPanel" class="card hidden">
+    <h2 id="hTransportSettings">Weekly transport expenses</h2>
+    <p class="muted-small">Every student owes a public transport fee each week. Owning a vehicle can knock money off that fee (set per-vehicle above) but adds its own running cost on top. Only a student's comfiest owned vehicle counts.</p>
+    <div class="grid grid-3">
+      <div>
+        <label for="ptfAmount" id="labPtfAmount">Public transport fee ($/week)</label>
+        <input id="ptfAmount" type="number" min="0" step="0.01">
+      </div>
+      <div>
+        <label for="transportDaySelect" id="labTransportDay">Due day</label>
+        <select id="transportDaySelect">
+          <option value="Mon">Monday</option>
+          <option value="Tue">Tuesday</option>
+          <option value="Wed">Wednesday</option>
+          <option value="Thu">Thursday</option>
+          <option value="Fri">Friday</option>
+          <option value="Sat">Saturday</option>
+          <option value="Sun">Sunday</option>
+        </select>
+      </div>
+    </div>
+    <label for="ptfDesc" id="labPtfDesc">Description (shown to students)</label>
+    <input id="ptfDesc" placeholder="e.g. Covers the bus pass everyone needs">
+    <button class="btn gold" type="button" id="ptfSaveBtn" onclick="saveTransportSettings()">Save transport settings</button>
+    <div id="ptfMsg"></div>
+  </div>
+
+  <div id="transportExpensesPanel" class="card hidden">
+    <h2 id="hTransportExpenses">Weekly transport expenses</h2>
+    <div id="transportExpensesBody"></div>
   </div>
 
   <div id="licencePanel" class="card hidden">

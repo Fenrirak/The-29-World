@@ -19,6 +19,8 @@ function paintChrome() {
   document.getElementById("hLicenceSettings").innerHTML = icon("car", 18) + " Truck licence";
   document.getElementById("hLicenceBuy").innerHTML = icon("car", 18) + " Truck licence";
   document.getElementById("hSellBack").innerHTML = icon("car", 18) + " Sell-back rates";
+  document.getElementById("hTransportSettings").innerHTML = icon("repeat", 18) + " Weekly transport expenses";
+  document.getElementById("hTransportExpenses").innerHTML = icon("repeat", 18) + " Weekly transport expenses";
   document.getElementById("labStock").textContent = "Stock limit (leave blank for unlimited)";
   document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
@@ -34,6 +36,8 @@ async function init() {
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("licenceSettingsPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("sellBackPanel").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("transportSettingsPanel").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("transportExpensesPanel").classList.toggle("hidden", IS_TEACHER);
   document.getElementById("myVehiclesPanel").classList.toggle("hidden", IS_TEACHER);
   if (IS_TEACHER) onTypeChange();
   paintChrome();
@@ -86,6 +90,10 @@ async function render() {
     document.getElementById("sbCar").value = Math.round((rates.car !== undefined ? rates.car : 0.85) * 100);
     document.getElementById("sbTruck").value = Math.round((rates.truck !== undefined ? rates.truck : 0.85) * 100);
     document.getElementById("sbBike").value = Math.round((rates.bike !== undefined ? rates.bike : 0.85) * 100);
+    const ptf = cls.publicTransportFee || { amount: 0, description: "" };
+    document.getElementById("ptfAmount").value = ptf.amount || "";
+    document.getElementById("ptfDesc").value = ptf.description || "";
+    document.getElementById("transportDaySelect").value = cls.transportDay || "Fri";
   } else {
     // Only bother showing the licence card to students if there's actually
     // a truck listed (or they already hold the licence) — otherwise it's
@@ -99,6 +107,7 @@ async function render() {
         : `<div class="flex-between"><strong>${fmtMoney(licence.price || 0)}</strong>
              <button class="btn small gold" onclick="buyLicence()">Buy licence</button></div><div id="licenceMsg"></div>`;
     }
+    renderTransportExpenses(me, cls);
   }
 
   if (!IS_TEACHER) {
@@ -120,6 +129,7 @@ async function render() {
             <p>${comfortStars(v.comfort)} comfort</p>
             <p><strong>${fmtMoney(v.price)}</strong> paid</p>
             ${isTruck ? `<p class="muted-small">Driving pays ${fmtMoney(v.drivePayout || 0)}/day &middot; ${drivenToday ? "already driven today" : "not driven today yet"}</p>` : ""}
+            ${(v.weeklyExpense > 0 || v.publicTransportOffset > 0) ? `<p class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffset > 0 ? " &middot; " : ""}${v.publicTransportOffset > 0 ? `knocks ${fmtMoney(v.publicTransportOffset)} off your public transport fee` : ""}</p>` : ""}
           </div>
           <div class="row-flex" style="gap:8px;">
             ${isTruck ? `<button class="btn small gold" ${drivenToday ? "disabled" : ""} onclick="driveTruck('${v.id}')">${drivenToday ? "Driven today" : "Drive today"}</button>` : ""}
@@ -168,6 +178,7 @@ async function render() {
           <p>${comfortStars(v.comfort)} comfort</p>
           <p>${priceWithLifeDiscount(me, "transport", v.price)} &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
           <p class="muted-small">${ownedLabel}</p>
+          ${(v.weeklyExpense > 0 || v.publicTransportOffset > 0) ? `<p class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffset > 0 ? " &middot; " : ""}${v.publicTransportOffset > 0 ? `knocks ${fmtMoney(v.publicTransportOffset)} off public transport` : ""}</p>` : ""}
           ${needsLicence ? `<p class="muted-small">Requires a truck licence — see above.</p>` : ""}
           ${truckLimitReached ? `<p class="muted-small">You can only own one truck at a time.</p>` : ""}
           ${ownerRows}
@@ -201,6 +212,8 @@ async function addProp(e) {
     description: document.getElementById("hDesc").value.trim(),
     type: document.getElementById("hType").value,
     drivePayout: document.getElementById("hPayout").value,
+    weeklyExpense: document.getElementById("hWeeklyExpense").value,
+    publicTransportOffset: document.getElementById("hPublicOffset").value,
     stockLimit: document.getElementById("hStock").value.trim()
   };
   if (EDITING_ID) {
@@ -214,6 +227,8 @@ async function addProp(e) {
     document.getElementById("hComfort").value = 3;
     document.getElementById("hType").value = "car";
     document.getElementById("hPayout").value = 0;
+    document.getElementById("hWeeklyExpense").value = 0;
+    document.getElementById("hPublicOffset").value = 0;
     onTypeChange();
   }
   await render();
@@ -236,6 +251,8 @@ async function editVeh(id) {
   document.getElementById("hDesc").value = veh.description || "";
   document.getElementById("hType").value = veh.type || "car";
   document.getElementById("hPayout").value = veh.drivePayout || 0;
+  document.getElementById("hWeeklyExpense").value = veh.weeklyExpense || 0;
+  document.getElementById("hPublicOffset").value = veh.publicTransportOffset || 0;
   onTypeChange();
   document.getElementById("hStock").value = (veh.stockLimit === null || veh.stockLimit === undefined) ? "" : veh.stockLimit;
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit vehicle";
@@ -251,6 +268,8 @@ function cancelEditVeh() {
   document.getElementById("hComfort").value = 3;
   document.getElementById("hType").value = "car";
   document.getElementById("hPayout").value = 0;
+  document.getElementById("hWeeklyExpense").value = 0;
+  document.getElementById("hPublicOffset").value = 0;
   onTypeChange();
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a vehicle";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add vehicle";
@@ -341,6 +360,78 @@ async function buyVeh(id) {
     msgEl.innerHTML = `<div class="success-msg">Congratulations, it's yours!</div>`;
     setTimeout(() => { msgEl.innerHTML = ""; }, 3000);
   }
+}
+
+function renderTransportExpenses(me, cls) {
+  const amt = transportWeeklyAmount(cls, me.username);
+  const dueDay = cls.transportDay || "Fri";
+  const weekKey = isoWeekKey(new Date());
+  const paidThisWeek = me.transportLastWeekPaid === weekKey;
+  const overdue = isTransportPaymentOverdue(me, cls);
+  const isDueToday = nzDayName() === dueDay;
+
+  let statusBadge, actionHtml;
+  if (paidThisWeek) {
+    statusBadge = `<span class="badge mint">${icon("car", 12)}Paid this week</span>`;
+    actionHtml = `<p class="muted-small">All sorted — next payment due ${DAY_FULL[dueDay]}.</p>`;
+  } else if (overdue) {
+    statusBadge = `<span class="badge coral">${icon("car", 12)}Overdue</span>`;
+    actionHtml = isDueToday
+      ? `<button class="btn gold" onclick="payTransport()">Pay now — ${fmtMoney(amt.total)}</button>`
+      : `<p class="muted-small">A past payment was missed — check with your teacher. You can pay again on ${DAY_FULL[dueDay]}.</p>`;
+  } else if (isDueToday) {
+    statusBadge = `<span class="badge gold">${icon("car", 12)}Due today</span>`;
+    actionHtml = `<button class="btn gold" onclick="payTransport()">Pay now — ${fmtMoney(amt.total)}</button>`;
+  } else {
+    statusBadge = `<span class="badge navy">${icon("car", 12)}Not due yet</span>`;
+    actionHtml = `<p class="muted-small">Next payment due ${DAY_FULL[dueDay]}.</p>`;
+  }
+
+  const lines = [];
+  if (amt.vehicle && amt.vehicleExpense > 0) {
+    lines.push(`<p>${escapeHtml(amt.vehicle.name)} upkeep &middot; <strong>${fmtMoney(amt.vehicleExpense)}</strong></p>`);
+  }
+  lines.push(`<p>Public transport fee${amt.publicFeeOffset > 0 ? ` <span class="muted-small">(${fmtMoney(amt.publicFeeBase)} − ${fmtMoney(amt.publicFeeOffset)} vehicle discount)</span>` : ""} &middot; <strong>${fmtMoney(amt.publicFeeDue)}</strong></p>`);
+
+  document.getElementById("transportExpensesBody").innerHTML = `
+    <div class="flex-between" style="align-items:flex-start;">
+      <div>${lines.join("")}</div>
+      <div style="text-align:right;">
+        <div style="font-size:1.4em;font-weight:700;">${fmtMoney(amt.total)}</div>
+        ${statusBadge}
+      </div>
+    </div>
+    <div style="margin-top:10px;">${actionHtml}</div>
+    <div id="transportPayMsg"></div>
+  `;
+}
+
+async function payTransport() {
+  const res = await payTransportExpenses(CURRENT.username, CURRENT.classCode);
+  const msgEl = document.getElementById("transportPayMsg");
+  if (!res.ok) {
+    if (msgEl) msgEl.innerHTML = `<div class="error-msg">${res.error}</div>`;
+    return;
+  }
+  await render();
+  // render() rebuilds transportExpensesBody (and wipes transportPayMsg in the
+  // process), so the success message is set *after* render, same pattern as
+  // buyVeh's msg-<id> handling above.
+  const newMsgEl = document.getElementById("transportPayMsg");
+  if (newMsgEl) {
+    newMsgEl.innerHTML = `<div class="success-msg">Paid ${fmtMoney(res.amount)} for this week's transport.</div>`;
+    setTimeout(() => { newMsgEl.innerHTML = ""; }, 3000);
+  }
+}
+
+async function saveTransportSettings() {
+  const amount = document.getElementById("ptfAmount").value;
+  const desc = document.getElementById("ptfDesc").value.trim();
+  const day = document.getElementById("transportDaySelect").value;
+  await setPublicTransportFee(CURRENT.classCode, amount, desc);
+  await setTransportDay(CURRENT.classCode, day);
+  document.getElementById("ptfMsg").innerHTML = `<div class="success-msg">Transport settings saved!</div>`;
+  await render();
 }
 
 async function driveTruck(vehId) {

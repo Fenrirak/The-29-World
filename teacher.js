@@ -393,6 +393,7 @@ function describeTxn(t, nameOf) {
     case "event": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "vehicle-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "vehicle-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "transport-expense": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "term-deposit-open": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "term-deposit-early": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "term-deposit-mature": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
@@ -444,6 +445,7 @@ function badge(type) {
     "mortgage": ["coral", "house", "Mortgage"],
     "event": ["lilac", "dice", "Random event"],
     "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
+    "transport-expense": ["coral", "car", "Transport expenses"],
     "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
     "term-deposit-mature": ["mint", "vault", "Deposit matured"],
     "gambling": ["gold", "dice", "Gambling"],
@@ -1156,8 +1158,26 @@ async function renderProfile(username) {
   }
 
   rows.push(`<h4>${icon("car", 16)} Transport</h4>`);
+  if (isTransportPaymentOverdue(s, cls)) {
+    rows.push(`
+      <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;">
+        <div class="auto-details">
+          <strong>${icon("car", 14)} Transport payment overdue</strong>
+          <div class="muted-small">This week's transport expenses (due ${DAY_FULL[cls.transportDay || "Fri"]}) haven't been paid yet.</div>
+        </div>
+        <div class="row-flex" style="gap:8px;align-items:center;">
+          <div class="status-declined">Unpaid</div>
+          <button class="btn small secondary" onclick="profileResolveTransportOverdue('${username}')">Mark as resolved</button>
+        </div>
+      </div>`);
+  }
+  const transportAmt = transportWeeklyAmount(cls, username);
+  rows.push(`<p class="muted-small">Weekly transport expenses: ${fmtMoney(transportAmt.total)}
+    (${transportAmt.vehicleExpense > 0 ? `${fmtMoney(transportAmt.vehicleExpense)} vehicle upkeep + ` : ""}${fmtMoney(transportAmt.publicFeeDue)} public transport),
+    due ${DAY_FULL[cls.transportDay || "Fri"]} &middot; ${(s.transportLastWeekPaid === isoWeekKey(new Date())) ? "paid this week" : "not yet paid this week"}</p>`);
   rows.push(poss.vehicles && poss.vehicles.length
-    ? poss.vehicles.map(v => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(v.name)}</strong> — ${fmtMoney(v.price)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span></div>
+    ? poss.vehicles.map(v => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(v.name)}</strong> — ${fmtMoney(v.price)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span>
+        ${(v.weeklyExpense > 0 || v.publicTransportOffset > 0) ? `<div class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffset > 0 ? " &middot; " : ""}${v.publicTransportOffset > 0 ? `knocks ${fmtMoney(v.publicTransportOffset)} off public transport` : ""}</div>` : ""}</div>
         <button class="btn small coral" onclick="profileRemoveVehicle('${v.id}','${username}')">Repossess</button></div>`).join("")
     : `<p class="muted-small">No vehicles owned.</p>`);
   rows.push(`<div class="auto-row"><div class="auto-details">Truck licence</div>${s.truckLicence
@@ -1324,6 +1344,13 @@ async function profileResolveNpcOverdue(unitId) {
 async function profileResolveMortgageOverdue(propId) {
   if (!confirm("Mark this week's mortgage payment as resolved? It'll count as paid — the payment schedule moves on as normal — but no money will be taken from the student.")) return;
   const res = await resolveMortgageOverdue(CLASS_CODE, propId);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+  await renderProfile(PROFILE_USER);
+}
+async function profileResolveTransportOverdue(username) {
+  if (!confirm("Mark this week's transport expenses as resolved? It'll count as paid, but no money will be taken from the student.")) return;
+  const res = await resolveTransportOverdue(CLASS_CODE, username);
   if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);
