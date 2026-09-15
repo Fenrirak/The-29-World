@@ -8446,9 +8446,10 @@ async function lifestyleBandForStudent(username, classCode, precomputedBoard) {
     // lifestyleRatingFromData, so this can legitimately exceed 5 and a
     // band's minPropertyComfort requirement is allowed to ask for that.
     propertyComfort: ownedProperties.reduce((sum, p) => sum + (p.comfort || 0) + (p.occupancy === "living" ? (Number(p.livingBonusStars) || 0) : 0), 0),
-    // Stacked total across every vehicle the student owns, not just their
-    // best one, matching how transport now contributes to the score itself.
-    transportComfort: ownedVehicles.reduce((sum, v) => sum + (v.comfort || 0), 0)
+    // Best comfort among the vehicles the student owns — transport stars
+    // don't stack, matching how transport now contributes to the score
+    // itself (see lifestyleRatingFromData).
+    transportComfort: ownedVehicles.reduce((best, v) => Math.max(best, v.comfort || 0), 0)
   };
   return lifestyleLabelFor(score, cls.lifestyleThresholds, stats);
 }
@@ -8477,7 +8478,9 @@ async function lifestyleTierProgress(username, classCode, precomputedBoard) {
   const stats = {
     netWorth: row ? row.net : 0,
     propertyComfort: ownedProperties.reduce((sum, p) => sum + (p.comfort || 0) + (p.occupancy === "living" ? (Number(p.livingBonusStars) || 0) : 0), 0),
-    transportComfort: ownedVehicles.reduce((sum, v) => sum + (v.comfort || 0), 0)
+    // Best comfort among owned vehicles, not a sum — see the matching note
+    // in lifestyleBandForStudent above.
+    transportComfort: ownedVehicles.reduce((best, v) => Math.max(best, v.comfort || 0), 0)
   };
 
   // Same score-range lookup as lifestyleLabelFor.
@@ -8529,8 +8532,8 @@ function lifestyleRatingFromData(cls, user, username) {
 
   if (cfg.property && cfg.property.enabled) {
     // Every owned property contributes its own comfort × weight — stars
-    // stack across all properties a student owns, the same way transport
-    // stacks across every owned vehicle below.
+    // stack across all properties a student owns (unlike transport below,
+    // which only counts a student's single best vehicle).
     const owned = cls.properties.filter(p => p.owner === username);
     owned.forEach(p => {
       score += (p.comfort || 0) * (cfg.property.weight || 0);
@@ -8558,11 +8561,12 @@ function lifestyleRatingFromData(cls, user, username) {
     if (npcHome) score += Number(npcHome.lifestylePoints) || 0;
   }
   if (cfg.transport && cfg.transport.enabled) {
-    // Every owned vehicle contributes its own comfort × weight — stars
-    // stack across all vehicles a student owns instead of only counting
-    // their single best one.
+    // Transport stars don't stack — only the comfiest vehicle a student
+    // owns counts towards their score, the same as if that were the only
+    // vehicle they owned. Owning a second or third vehicle adds no points.
     const owned = cls.vehicles.filter(v => (v.owners || []).includes(username));
-    owned.forEach(v => { score += (v.comfort || 0) * (cfg.transport.weight || 0); });
+    const best = owned.reduce((b, v) => (!b || (v.comfort || 0) > (b.comfort || 0)) ? v : b, null);
+    if (best) score += (best.comfort || 0) * (cfg.transport.weight || 0);
   }
   if (cfg.store && cfg.store.enabled) {
     const owned = user.storeItems || [];
@@ -8647,11 +8651,23 @@ async function lifestyleRatingBreakdown(username, classCode) {
     }
   }
   if (cfg.transport && cfg.transport.enabled) {
+    // Transport stars don't stack — only the comfiest owned vehicle scores
+    // points. Every other owned vehicle still gets its own line so a
+    // student can see it, but at 0 points with a note explaining why.
     const owned = cls.vehicles.filter(v => (v.owners || []).includes(username));
+    const best = owned.reduce((b, v) => (!b || (v.comfort || 0) > (b.comfort || 0)) ? v : b, null);
     owned.forEach(v => {
-      const pts = (v.comfort || 0) * (cfg.transport.weight || 0);
-      score += pts;
-      items.push({ type: "gain", label: v.name || "Vehicle", detail: `${v.comfort || 0} comfort &times; ${cfg.transport.weight || 0} pts/star`, points: pts });
+      const isBest = !!best && v.id === best.id;
+      const pts = isBest ? (v.comfort || 0) * (cfg.transport.weight || 0) : 0;
+      if (isBest) score += pts;
+      items.push({
+        type: "gain",
+        label: v.name || "Vehicle",
+        detail: isBest
+          ? `${v.comfort || 0} comfort &times; ${cfg.transport.weight || 0} pts/star (your comfiest vehicle)`
+          : `${v.comfort || 0} comfort — not counted, since only your comfiest vehicle scores points`,
+        points: pts
+      });
     });
   }
   if (cfg.store && cfg.store.enabled) {
