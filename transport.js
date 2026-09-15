@@ -455,10 +455,16 @@ async function saveTransportSettings() {
 
 async function saveLifeFeeOverrides() {
   const cls = await getClassCached(CURRENT.classCode);
+  const existing = cls.publicTransportFeeOverrides || {};
   const overrides = {};
+  // Only life items that currently exist get carried into the new map (so
+  // one removed elsewhere is correctly dropped), but if a life item's row
+  // isn't actually in the DOM right now for some reason, fall back to its
+  // existing saved value instead of wiping it — the save button should
+  // never erase an override it never showed the teacher.
   (cls.lifeItems || []).forEach(it => {
     const el = document.getElementById(`lifeFee-${it.id}`);
-    if (el) overrides[it.id] = el.value;
+    overrides[it.id] = el ? el.value : existing[it.id];
   });
   await setPublicTransportFeeOverrides(CURRENT.classCode, overrides);
   document.getElementById("lifeFeeMsg").innerHTML = `<div class="success-msg">Life event fees saved!</div>`;
