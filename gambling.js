@@ -352,7 +352,20 @@ async function spin() {
       return;
     }
 
+    // render() re-fetches the class doc, lock state, etc. — several
+    // network round-trips that used to happen AFTER the ~16s wheel
+    // animation, adding straight onto the wait. Nothing it touches is
+    // visible while the wheel overlay is up (a fixed, full-screen overlay
+    // — see .anw-modal-overlay — sits above it), and the one element that
+    // COULD spoil the result early, the floating balance widget, is kept
+    // separate on purpose (see _anwOnWriteSettled/_anwShowsChips in
+    // data.js) and untouched by render(). So start it now and let it run
+    // underneath the animation instead of waiting for the animation to
+    // finish first — on a slow connection this hides most or all of that
+    // fetch behind time already being spent watching the wheel spin.
+    const renderPromise = render();
     await showRouletteAnimation(res.spin);
+    await renderPromise;
 
     box.innerHTML = res.win
       ? `<div class="success-msg">Ball landed on ${res.spin}. You WON ${fmtMoney(res.netChange)}!</div>`
@@ -368,7 +381,6 @@ async function spin() {
     // message are both showing, it's safe to bring the widget up to date.
     anwRefreshBalanceWidget();
     document.getElementById("betAmount").value = "";
-    await render();
   } catch (e) {
     document.getElementById("wheelOverlay")?.remove();
     box.innerHTML = `<div class="error-msg">Something went wrong placing that bet. Please try again.</div>`;
@@ -474,18 +486,24 @@ async function bjDeal() {
     }
     CURRENT_ROUND = res.round;
     document.getElementById("bjBetForm").classList.add("hidden");
-    // Blank the table BEFORE it's unhidden, and before the awaited account
-    // refresh below — bjTableArea's HTML still holds the finished, resolved
-    // previous round (bjResetTable only hides the container, it never
-    // clears its content). Unhiding first and clearing afterwards leaves a
-    // window, while refreshGamblingAccountCard() is in flight, where the
-    // browser can paint the table showing last round's final hands before
-    // this one's cards are dealt — clearing first closes that window.
+    // Blank the table BEFORE it's unhidden, and before kicking off the
+    // account refresh below — bjTableArea's HTML still holds the finished,
+    // resolved previous round (bjResetTable only hides the container, it
+    // never clears its content). Unhiding first and clearing afterwards
+    // leaves a window, while refreshGamblingAccountCard() is in flight,
+    // where the browser can paint the table showing last round's final
+    // hands before this one's cards are dealt — clearing first closes
+    // that window.
     bjClearTableDisplay(CURRENT_ROUND);
     document.getElementById("bjTableArea").classList.remove("hidden");
     document.getElementById("bjNewRoundBtn").classList.add("hidden");
     document.getElementById("bjRoundMsg").innerHTML = "";
-    await refreshGamblingAccountCard();
+    // Not awaited: this only repaints the separate Account-tab balance
+    // card (it can't throw — it catches its own errors internally), so
+    // there's nothing below for it to protect. Letting it run alongside
+    // the deal instead of blocking in front of it means a slow mobile
+    // connection no longer delays the very first card of every hand.
+    refreshGamblingAccountCard();
 
     const token = ++DEAL_TOKEN;
     await bjAnimateInitialDeal(CURRENT_ROUND, token);
@@ -530,7 +548,10 @@ async function bjDoInsurance(take) {
     CURRENT_ROUND = res.round;
     document.getElementById("bjInsuranceArea").classList.add("hidden");
     const token = DEAL_TOKEN;
-    await refreshGamblingAccountCard();
+    // Not awaited — same reasoning as bjDeal() above: this only repaints
+    // the separate Account-tab card and can't throw, so the reveal below
+    // has nothing to wait on.
+    refreshGamblingAccountCard();
 
     const dealerHadBlackjack = CURRENT_ROUND.hands[0].status === "push" || CURRENT_ROUND.hands[0].status === "lost-to-dealer-blackjack";
     if (CURRENT_ROUND.phase === "done" && dealerHadBlackjack) {

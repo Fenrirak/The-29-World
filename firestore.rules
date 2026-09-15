@@ -60,6 +60,99 @@ service cloud.firestore {
              == myUserDoc().balance - delta;
     }
 
+    // BUGFIX: _settleListing() (see data.js — powers both buyListing() and
+    // acceptOffer(), the Trade Centre's two purchase paths) runs ONE
+    // transaction that writes to BOTH the buyer's and the seller's own
+    // /users docs — whichever one ISN'T the caller needs a peer-write
+    // allowance the same way transferMoney's credit half does above. But
+    // isPeerTransferCredit() above doesn't fit either shape here:
+    //   - It only ever CREDITS a peer. buyListing() (buyer calls, seller
+    //     is the peer) needs that same credit — but acceptOffer() (SELLER
+    //     calls, buyer is the peer) needs the reverse: the caller DEBITS a
+    //     peer's balance. Peer debits didn't exist anywhere else in this
+    //     file, so this was flatly impossible before.
+    //   - It requires the amount credited to match the caller's own debit
+    //     EXACTLY. A Trade Centre sale can charge a marketplace fee (see
+    //     `marketplace.feePct` in data.js), so the seller is credited
+    //     LESS than the buyer is debited — never an exact match whenever
+    //     a class has any fee configured at all.
+    //   - It only ever allows `balance` to change. A store-item trade
+    //     also has to move the item itself between the two users'
+    //     `storeItems` arrays, which isPeerTransferCredit flatly refuses.
+    // Net effect: before this fix, EVERY acceptOffer() call failed
+    // outright (wrong direction), and every buyListing() call failed too
+    // except the specific case of a non-store item in a class with its
+    // marketplace fee set to exactly 0% (the one shape that happens to
+    // satisfy isPeerTransferCredit by accident) — which is likely why
+    // this could plausibly have seemed to "work" for some trades and not
+    // others, depending on what was being sold and what fee the class had
+    // configured, rather than failing (or working) consistently.
+    //
+    // These two functions cover both directions. Same spirit as
+    // isPeerTransferCredit — verify the MONEY-CONSERVATION invariant
+    // (nothing is credited that wasn't debited from the other side, a
+    // market fee can only ever shrink what the seller nets, never grow
+    // it), not the specific listing's exact price/fee, which (same
+    // limitation noted throughout this file) would require reading one
+    // specific element out of the class doc's `listings` array — not
+    // possible in Rules. A colluding buyer+seller pair could still use
+    // this to move money between themselves at a self-chosen "price"
+    // instead of a listing's real one — but that's no more than
+    // isPeerTransferCredit (and plain transferMoney) already allow today
+    // for ANY two classmates, fee-free, no listing required at all — so
+    // this doesn't introduce a new category of risk, just extends the
+    // existing one to tolerate a fee and an optional item hand-off.
+    //
+    // storeItems is deliberately constrained beyond "allowed to change":
+    // whichever side is a store trade must change size by EXACTLY 1, in
+    // the direction that matches which side of the money this write is
+    // (the side losing money gains an item; the side gaining money loses
+    // one) — without this, the same collusion pair could use a
+    // fee-conserving trade purely as cover to freely inject or duplicate
+    // arbitrary store items on either side, which would be a strictly
+    // worse hole than the money-only case.
+    function isPeerTradeCredit(username) {
+      // Caller is receiving payment for something they sold (the seller
+      // side of buyListing(), called by the buyer) — this doc's balance
+      // goes UP, and if a store item changed hands, THIS doc (the seller)
+      // is the one that must have given it up.
+      let before = resource.data;
+      let after = request.resource.data;
+      let delta = after.balance - before.balance;
+      let myDelta = myUserDoc().balance
+        - getAfter(/databases/$(database)/documents/users/$(myUsername())).data.balance;
+      return myUserDoc().classCode == before.classCode
+        && username != myUsername()
+        && delta > 0
+        && myDelta >= delta
+        && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems'])
+        && (
+          !after.diff(before).affectedKeys().hasAny(['storeItems']) ||
+          after.storeItems.size() == before.get('storeItems', []).size() - 1
+        );
+    }
+    function isPeerTradeDebit(username) {
+      // Caller is receiving payment for something they sold (the seller
+      // side of acceptOffer(), called by the seller) and this write is
+      // the OTHER half — the buyer paying for it. This doc's balance
+      // goes DOWN, and if a store item changed hands, THIS doc (the
+      // buyer) is the one that must have received it.
+      let before = resource.data;
+      let after = request.resource.data;
+      let delta = before.balance - after.balance;
+      let myDelta = getAfter(/databases/$(database)/documents/users/$(myUsername())).data.balance
+        - myUserDoc().balance;
+      return myUserDoc().classCode == before.classCode
+        && username != myUsername()
+        && delta > 0
+        && myDelta <= delta
+        && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems'])
+        && (
+          !after.diff(before).affectedKeys().hasAny(['storeItems']) ||
+          after.storeItems.size() == before.get('storeItems', []).size() + 1
+        );
+    }
+
     // ---------------- Student self-write guardrails ----------------
     // SECURITY FIX: the old `allow update: if ... myUsername() == username
     // ...` let a signed-in student rewrite ANY field on their own /users
@@ -149,10 +242,85 @@ service cloud.firestore {
       return loansOk && qrOk;
     }
 
+    // SECURITY FIX: isSafeSelfEconomyChange() above only ever validated
+    // `loans` and `quizResults` — every OTHER field on a student's own
+    // doc (balance, savings, gamblingAccount, storeItems, insurance,
+    // sideHustle, truckLicence, termDeposits, and more) had NO check at
+    // all, meaning a signed-in student could set any of them to anything
+    // via a raw Firestore SDK call (browser console — no exploit tooling
+    // needed). This function switches that from a blocklist (only 2
+    // fields ever examined) to an allowlist: every top-level field a
+    // self-write is allowed to touch anywhere in the app must be named
+    // here, or the write is denied outright, whatever value it carries.
+    //
+    // This list was built by tracing every place in data.js that writes
+    // to a user's OWN /users/{username} doc (i.e. every call reachable
+    // with `username` equal to the caller's own logged-in identity, not
+    // a teacher acting on someone else) — buying/selling shares, taking/
+    // repaying a loan, the store, insurance, side hustles, the truck
+    // licence, term deposits, gambling/blackjack, quizzes, budgets,
+    // property moves/rent, time-limit tracking, and the one-time legacy-
+    // login migration. Fields only ever written by a TEACHER-invoked
+    // action on ANOTHER student's doc (jobTaskApproval, lifeItems,
+    // lifestyleOverride, extraMinutesToday/-Date, dailyLimitMinutes, and
+    // so on) are deliberately left OFF this list — those already go
+    // through the isTeacher() branch below, which has full access, so
+    // leaving them off here is what actually blocks a student granting
+    // these to themselves directly.
+    //
+    // NOTE ON VALUES vs. FIELD NAMES: this closes "a student can rewrite
+    // literally any field" — it does NOT (and structurally can't, in
+    // Firestore Rules alone, same limitation noted throughout this file)
+    // verify that e.g. a `balance` change is the CORRECT amount for
+    // whatever action supposedly caused it. That would mean re-deriving
+    // every action's business logic — share prices, tax, interest, quiz
+    // grading — inside the rules themselves, which Firestore Rules has
+    // no facility for. A student could still, say, buy a share and claim
+    // a self-picked price via a direct SDK call instead of the real one.
+    // Genuinely closing THAT needs the same Cloud Functions move already
+    // called out for the companies/storeItems/properties/vehicles gap
+    // above and the quizResults grading gap in the comment further up.
+    function isAllowedSelfFieldSet() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let changed = after.diff(before).affectedKeys();
+      let selfWritableFields = [
+        // Identity/session bookkeeping a self-write legitimately touches.
+        'authUid', 'password', 'sessionVersion',
+        // Job-offer response — already independently constrained to the
+        // EXACT diff shape by jobFieldsUnchanged()/isPromotionResponse()
+        // below; listed here too so this allowlist doesn't reject what
+        // that check already validated.
+        'jobId', 'jobTierId', 'jobTierSince', 'pendingPromotion',
+        // Core economy.
+        'balance', 'savings', 'loans', 'quizResults', 'gamblingAccount',
+        'storeItems', 'insurance', 'sideHustle', 'termDeposits', 'truckLicence',
+        // Economy-adjacent state each feature's own self-service flow owns.
+        'sideHustleRequest', 'sideHustleDenialNote', 'truckCheckins',
+        'lastMoveDate', 'blackjackRound', 'lastBjSeat', 'budget',
+        // Time-limit tracking/exemption requests.
+        'timeSpentTodaySec', 'timeSpentDate',
+        'timeExemptionStatus', 'timeExemptionDate', 'timeExemptionRequestedAt'
+      ];
+      // classCode: the ONE self-writable identity-ish field, and ONLY for
+      // a teacher's own account — see createClassForTeacher/
+      // switchActiveClass/deleteClassPermanently/importSharedTemplate in
+      // data.js, all of which change the CALLER's own classCode as part
+      // of managing their own classes. A student never legitimately
+      // changes their own classCode after joining — allowing it would
+      // let a student "teleport" into any class whose code they can
+      // guess, reading its roster/balances. So it's allowed here only
+      // when the account already is (and, per the role-lock above,
+      // remains) a teacher.
+      return changed.hasOnly(selfWritableFields)
+        || (before.role == 'teacher' && changed.hasOnly(selfWritableFields.concat(['classCode'])));
+    }
+
     function isAllowedSelfUpdate(username) {
       return myUsername() == username
         && (jobFieldsUnchanged() || isPromotionResponse())
-        && isSafeSelfEconomyChange();
+        && isSafeSelfEconomyChange()
+        && isAllowedSelfFieldSet();
     }
 
     // ---------------- uid -> username mapping ----------------
@@ -218,7 +386,9 @@ service cloud.firestore {
       allow update: if signedIn() && (
         isAllowedSelfUpdate(username) ||
         (isTeacher() && myUserDoc().classCode == resource.data.classCode) ||
-        isPeerTransferCredit(username)
+        isPeerTransferCredit(username) ||
+        isPeerTradeCredit(username) ||
+        isPeerTradeDebit(username)
       )
       // Identity fields are never client-editable once claimed. authUid
       // is the one exception: a legacy (pre-fix) account has none yet, so
@@ -327,7 +497,15 @@ service cloud.firestore {
         'archived', 'archivedAt', 'templateShareToken',
         'eventDefs', 'bigEventDefs', 'sideHustles', 'lifeItems',
         'payDayProgress', 'lastPayDayRun', 'lastInterestRun', 'lastInsuranceWeekRun',
-        'lastPropertyMarketDayRun', 'lastEventWeekRun', 'lastEventDayRun', 'lastBigEventWeekRun'
+        'lastPropertyMarketDayRun', 'lastEventWeekRun', 'lastEventDayRun', 'lastBigEventWeekRun',
+        // BUGFIX: lifeDailyProgress/lastLifeDailyRun (see
+        // processDailyLifeAllowance in data.js) are the exact same shape
+        // of "already paid today" bookkeeping as payDayProgress/
+        // lastPayDayRun right above — and were missing from this list.
+        // Without this, a student could reset their own class's copy of
+        // these two fields directly and re-trigger their Daily Life
+        // Allowance for a second (or hundredth) payout the same day.
+        'lifeDailyProgress', 'lastLifeDailyRun'
       ];
       return !changed.hasAny(lockedFields) && isSafeStudentsFieldChange() && isSafeStudentCatalogChange();
     }

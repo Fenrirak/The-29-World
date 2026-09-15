@@ -104,12 +104,22 @@
   </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
-<script src="firebase-init.js?v=1"></script>
-<script src="icons.js?v=1"></script>
-<script src="data.js?v=1"></script>
+<!-- These were the only non-deferred scripts on any page in the app — every
+     other page (bank.html, gambling.html, teacher.html, ...) already loads
+     this same stack with `defer`. That meant this specific page, the very
+     first thing every visitor's browser loads, blocked on three external
+     Firebase fetches plus a large local data.js before it could paint or
+     parse anything else — the slowest possible page to hit that cost on,
+     since there's nothing cached yet and no connection warmed up. `defer`
+     lets the HTML parse and paint immediately while these load in the
+     background, in the same relative order, still finishing before
+     DOMContentLoaded — matching how every other page already does it. -->
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script defer src="firebase-init.js?v=1"></script>
+<script defer src="icons.js?v=1"></script>
+<script defer src="data.js?v=1"></script>
 <script>
 // Fill every .icon-slot next to its text with the matching icon. This is
 // purely decorative — every label/button already has real text, so the
@@ -243,15 +253,21 @@ async function doStudentSignup(e) {
   return false;
 }
 
-paintIcons();
-enablePasswordToggles();
-loadRememberedLogins();
+// The functions called here (paintIcons/enablePasswordToggles -> icons.js,
+// getSessionUser -> data.js) now load with `defer`, so — same as every
+// other page's init script — this waits for DOMContentLoaded, which the
+// spec guarantees only fires after every deferred script has finished
+// running. Same calls, same order, just no longer relying on blocking
+// script tags to guarantee that.
+document.addEventListener("DOMContentLoaded", async () => {
+  paintIcons();
+  enablePasswordToggles();
+  loadRememberedLogins();
 
-// If already logged in, skip straight to dashboard
-(async function () {
+  // If already logged in, skip straight to dashboard
   const u = await getSessionUser();
   if (u) window.location.href = getSafeReturnTo() || (u.role === "teacher" ? "teacher-home.html" : "student.html");
-})();
+});
 </script>
 </body>
 </html>

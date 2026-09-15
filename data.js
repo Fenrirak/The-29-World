@@ -4306,9 +4306,17 @@ async function adjustGamblingAccount(username, delta, dailyWinLimit) {
 async function placeRouletteBet(username, classCode, betType, betAmount, selection) {
   // Same fix as startBlackjackRound: fetch the class/user docs once and
   // reuse them for the lock check instead of letting isModuleLockedForStudent
-  // fetch them again independently.
+  // fetch them again independently. Reads the class doc through the cache
+  // (getClassCached), not getClass: cls here only feeds settings the
+  // teacher configures (enabled/min/max/payouts), which don't change as a
+  // side effect of a bet, so the ~2s-stale read this file's own cache
+  // already considers safe for settings is safe here too — and it saves a
+  // full network round-trip on every single spin, by far the highest-
+  // frequency click in the app. Nothing downstream trusts this copy for
+  // money: adjustGamblingAccount below re-checks the real balance fresh,
+  // inside its own transaction, regardless of what this read shows.
   betAmount = Number(betAmount);
-  const [clsRaw, user] = await Promise.all([getClass(classCode), getUser(username)]);
+  const [clsRaw, user] = await Promise.all([getClassCached(classCode), getUser(username)]);
   const cls = withNewModuleDefaults(clsRaw);
   if (!cls) return { ok: false, error: "Class not found." };
   if (isModuleLockedForStudentFromData(cls, user, username, "gambling")) {
@@ -4659,9 +4667,15 @@ async function startBlackjackRound(username, classCode, betAmount) {
   // getLockedModulesForStudent() -> lifestyleRating()), and again right
   // here. Fetching both docs once, up front, and reusing them for the lock
   // check removes those duplicate reads — same checks, same order, same
-  // error messages, just no redundant round-trips.
+  // error messages, just no redundant round-trips. Reads the class doc
+  // through the cache (getClassCached), not getClass: nothing here trusts
+  // this copy for money-critical state — it's only ever used for
+  // teacher-configured settings (enabled/min/max) that don't change out
+  // from under a single Deal click — so a Deal button no longer pays for a
+  // guaranteed-fresh fetch of a doc that, on a gambling-heavy class, is
+  // also the single busiest document in the whole app.
   betAmount = Number(betAmount);
-  const [clsRaw, user] = await Promise.all([getClass(classCode), getUser(username)]);
+  const [clsRaw, user] = await Promise.all([getClassCached(classCode), getUser(username)]);
   const cls = withNewModuleDefaults(clsRaw);
   if (!cls) return { ok: false, error: "Class not found." };
   if (isModuleLockedForStudentFromData(cls, user, username, "gambling")) {
@@ -4839,7 +4853,14 @@ async function bjAdvance(username, classCode, round) {
 }
 
 async function blackjackAction(username, classCode, action) {
-  const [user, cls] = await Promise.all([getUser(username), getClass(classCode)]);
+  // getClassCached, not getClass: every hit/stand/double/split click ran
+  // through here paid for a full fresh class-doc fetch just to read
+  // cls.gambling.dailyWinLimit, a teacher-configured number that doesn't
+  // change mid-round — by far the single most-clicked action in the app,
+  // with no animation to hide a slow mobile round-trip behind. The cache
+  // is invalidated instantly on any real write to this doc, so this only
+  // ever skips a redundant re-fetch, never serves genuinely stale settings.
+  const [user, cls] = await Promise.all([getUser(username), getClassCached(classCode)]);
   if (!user || !user.blackjackRound) return { ok: false, error: "No Blackjack round in progress." };
   const dailyWinLimit = cls && cls.gambling ? cls.gambling.dailyWinLimit : null;
   const isTeacher = user.role === "teacher";
@@ -4916,7 +4937,11 @@ async function blackjackAction(username, classCode, action) {
 // hand is settled against it and the round is closed out with a single
 // transaction log entry.
 async function bjSettle(username, classCode, round) {
-  const cls = withNewModuleDefaults(await getClass(classCode));
+  // getClassCached: cls here only feeds tax rates and the win-limit
+  // message/threshold, all teacher-configured and never changed by a
+  // settling round — same reasoning as blackjackAction above. This runs
+  // once per finished hand, i.e. constantly during active play.
+  const cls = withNewModuleDefaults(await getClassCached(classCode));
 
   if (!round.dealer.revealed) {
     round.dealer.revealed = true;
@@ -8385,14 +8410,11 @@ function lifestyleRatingFromData(cls, user, username) {
     if (npcHome) score += Number(npcHome.lifestylePoints) || 0;
   }
   if (cfg.transport && cfg.transport.enabled) {
-    // Transport does NOT stack — only the single highest-comfort vehicle a
-    // student owns counts toward their lifestyle score (owning several
-    // vehicles gives no extra stars beyond the best one).
+    // Every owned vehicle contributes its own comfort × weight — stars
+    // stack across all vehicles a student owns instead of only counting
+    // their single best one.
     const owned = cls.vehicles.filter(v => (v.owners || []).includes(username));
-    if (owned.length) {
-      const bestComfort = Math.max(...owned.map(v => v.comfort || 0));
-      score += bestComfort * (cfg.transport.weight || 0);
-    }
+    owned.forEach(v => { score += (v.comfort || 0) * (cfg.transport.weight || 0); });
   }
   if (cfg.store && cfg.store.enabled) {
     const owned = user.storeItems || [];
@@ -8477,21 +8499,12 @@ async function lifestyleRatingBreakdown(username, classCode) {
     }
   }
   if (cfg.transport && cfg.transport.enabled) {
-    // Transport does NOT stack — only the single highest-comfort owned
-    // vehicle counts. Sort so the counted vehicle is listed first, then
-    // show any other owned vehicles as 0-point lines so it's clear why
-    // they aren't adding to the score.
     const owned = cls.vehicles.filter(v => (v.owners || []).includes(username));
-    if (owned.length) {
-      const sorted = owned.slice().sort((a, b) => (b.comfort || 0) - (a.comfort || 0));
-      const best = sorted[0];
-      const bestPts = (best.comfort || 0) * (cfg.transport.weight || 0);
-      score += bestPts;
-      items.push({ type: "gain", label: best.name || "Vehicle", detail: `${best.comfort || 0} comfort &times; ${cfg.transport.weight || 0} pts/star — your best vehicle, only the highest counts`, points: bestPts });
-      sorted.slice(1).forEach(v => {
-        items.push({ type: "gain", label: v.name || "Vehicle", detail: `${v.comfort || 0} comfort — doesn't add extra points, since transport doesn't stack`, points: 0 });
-      });
-    }
+    owned.forEach(v => {
+      const pts = (v.comfort || 0) * (cfg.transport.weight || 0);
+      score += pts;
+      items.push({ type: "gain", label: v.name || "Vehicle", detail: `${v.comfort || 0} comfort &times; ${cfg.transport.weight || 0} pts/star`, points: pts });
+    });
   }
   if (cfg.store && cfg.store.enabled) {
     const owned = user.storeItems || [];
