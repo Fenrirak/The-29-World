@@ -154,6 +154,13 @@
 
       <button class="btn secondary" onclick="saveGamblingConfig('acctSettingsMsg')" id="acctSaveSettingsBtn">Save settings</button>
       <div id="acctSettingsMsg"></div>
+
+      <div style="margin-top:24px;border-top:1.5px solid var(--line);padding-top:18px;">
+        <h2 id="hTeacherGamblingRecent"><span class="icon-slot" data-icon="bank"></span> Class gambling activity</h2>
+        <p class="muted-small">Every student's Roulette and Blackjack bets, plus every buy-in and cash-out, most recent first.</p>
+        <div id="teacherGamblingRecentTxns"></div>
+        <p class="muted-small" id="teacherGamblingNoTxns">No gambling activity yet.</p>
+      </div>
     </div>
 
   </div>
@@ -296,6 +303,13 @@
             <p class="muted-small" id="gAcctWinNote"></p>
           </div>
         </div>
+      </div>
+
+      <div class="card">
+        <h2 id="hGamblingRecent"><span class="icon-slot" data-icon="bank"></span> My gambling activity</h2>
+        <p class="muted-small">Every Roulette and Blackjack bet, plus every buy-in and cash-out, all in one place.</p>
+        <div id="gAcctRecentTxns"></div>
+        <p class="muted-small" id="gAcctNoRecentTxns">No gambling activity yet.</p>
       </div>
     </div>
 

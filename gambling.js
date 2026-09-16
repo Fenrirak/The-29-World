@@ -281,6 +281,22 @@ async function refreshGamblingAccountCard() {
   }
 }
 
+// After a buy-in or cash-out, the class doc's cached read is dropped
+// automatically (see installReadCache in data.js), so this re-fetch always
+// picks up the entry that write just logged. Kept separate from
+// refreshGamblingAccountCard() (which only reads the lightweight balance/
+// limits view, not the txns array) so a buy-in/cash-out doesn't pay for a
+// full render() just to update this one list.
+async function refreshGamblingAccountRecent() {
+  try {
+    const cls = await getClassCached(CURRENT.classCode);
+    CLS = cls;
+    renderGamblingAccountRecent(cls);
+  } catch (e) {
+    console.warn("Gambling recent-activity list failed to refresh:", e);
+  }
+}
+
 async function gaBuyIn() {
   const amount = document.getElementById("gAcctBuyInAmount").value;
   const box = document.getElementById("gAcctMsg");
@@ -295,7 +311,7 @@ async function gaBuyIn() {
     }
     document.getElementById("gAcctBuyInAmount").value = "";
     box.innerHTML = `<div class="success-msg">Bought in ${fmtMoney(Number(amount))}.</div>`;
-    await refreshGamblingAccountCard();
+    await Promise.all([refreshGamblingAccountCard(), refreshGamblingAccountRecent()]);
   } catch (e) {
     box.innerHTML = `<div class="error-msg">Something went wrong. Please try again.</div>`;
   } finally {
@@ -324,7 +340,7 @@ async function gaCashOut() {
     }
     if (amountInput) amountInput.value = "";
     box.innerHTML = `<div class="success-msg">Cashed out ${fmtMoney(res.amount)} to your cash balance.</div>`;
-    await refreshGamblingAccountCard();
+    await Promise.all([refreshGamblingAccountCard(), refreshGamblingAccountRecent()]);
   } catch (e) {
     box.innerHTML = `<div class="error-msg">Something went wrong. Please try again.</div>`;
   } finally {
@@ -401,6 +417,76 @@ function renderRecentRoulette(cls) {
     row.className = "auto-row";
     row.innerHTML = `
       <div class="auto-details">${icon("dice", 14)} ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
+    `;
+    box.appendChild(row);
+  });
+}
+
+// Combined "My gambling activity" list on the Account tab. Unlike
+// renderRecentRoulette/renderRecentBlackjack (which each only show that
+// one game's bets), this shows a student's gambling bets from BOTH games
+// together with their buy-ins and cash-outs, in one chronological feed —
+// so it doubles as the one place a student's full gambling picture lives
+// now that plain bets ("gambling") are left out of the main Account
+// activity feed on student.html. Purely a display filter over the same
+// cls.txns array everything else here already reads — nothing is
+// recomputed or double-counted.
+function renderGamblingAccountRecent(cls) {
+  const box = document.getElementById("gAcctRecentTxns");
+  const noBox = document.getElementById("gAcctNoRecentTxns");
+  if (!box || !noBox) return;
+  const mine = (cls.txns || [])
+    .filter(t => (t.type === "gambling" || t.type === "gambling-buyin" || t.type === "gambling-cashout") && txnBelongsTo(t, CURRENT.username))
+    .slice(0, 30);
+  noBox.classList.toggle("hidden", mine.length > 0);
+  box.innerHTML = "";
+  mine.forEach(t => {
+    let won, ic;
+    if (t.type === "gambling-buyin") { won = false; ic = "piggy"; }
+    else if (t.type === "gambling-cashout") { won = true; ic = "piggy"; }
+    else { won = t.note.includes("WON"); ic = t.note.startsWith("Blackjack") ? "cards" : "dice"; }
+    const row = document.createElement("div");
+    row.className = "auto-row";
+    row.innerHTML = `
+      <div class="auto-details">${icon(ic, 14)} ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
+    `;
+    box.appendChild(row);
+  });
+}
+
+// Class-wide "Class gambling activity" list on the teacher's Account tab —
+// the teacher-side counterpart to renderGamblingAccountRecent above.
+// Teachers never see individual "gambling" bets on the main dashboard feed
+// either (see teacher.js), so this is their only view into actual betting
+// activity, alongside every buy-in and cash-out, across the whole class.
+// Only fetches student names (for display) when there's actually something
+// to show, to avoid extra reads on a class with no gambling activity yet.
+async function renderTeacherGamblingRecent(cls) {
+  const box = document.getElementById("teacherGamblingRecentTxns");
+  const noBox = document.getElementById("teacherGamblingNoTxns");
+  if (!box || !noBox) return;
+  const relevant = (cls.txns || [])
+    .filter(t => t.type === "gambling" || t.type === "gambling-buyin" || t.type === "gambling-cashout")
+    .slice(0, 60);
+  noBox.classList.toggle("hidden", relevant.length > 0);
+  box.innerHTML = "";
+  if (relevant.length === 0) return;
+  const students = await getClassStudents(CURRENT.classCode, cls);
+  const nameCache = {};
+  students.forEach(s => { nameCache[s.username] = s.name; });
+  const nameOf = u => nameCache[u] || u;
+  relevant.forEach(t => {
+    const who = nameOf(t.to || t.from);
+    let won, ic;
+    if (t.type === "gambling-buyin") { won = false; ic = "piggy"; }
+    else if (t.type === "gambling-cashout") { won = true; ic = "piggy"; }
+    else { won = t.note.includes("WON"); ic = t.note.startsWith("Blackjack") ? "cards" : "dice"; }
+    const row = document.createElement("div");
+    row.className = "auto-row";
+    row.innerHTML = `
+      <div class="auto-details">${icon(ic, 14)} <strong>${escapeHtml(who)}</strong> — ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);
@@ -659,8 +745,11 @@ async function bjFinalizeRound(round) {
   // doc getClassCached() had just returned) — every one of those trips
   // adds up fast on a slow mobile connection, and this runs after every
   // single hand. They're independent, so fire them together instead.
+  // renderGamblingAccountRecent() reuses this same already-fetched `cls`
+  // too, so the combined Account-tab list picks up this hand immediately
+  // instead of waiting for the next full render() (e.g. "New round").
   await Promise.all([
-    getClassCached(CURRENT.classCode).then(cls => { CLS = cls; renderRecentBlackjack(cls); }),
+    getClassCached(CURRENT.classCode).then(cls => { CLS = cls; renderRecentBlackjack(cls); renderGamblingAccountRecent(cls); }),
     refreshGamblingAccountCard()
   ]);
 }
@@ -1117,6 +1206,7 @@ async function render() {
     document.getElementById("bjEnabled").checked = bj.enabled !== false;
     document.getElementById("bjMin").value = bj.minBet;
     document.getElementById("bjMax").value = bj.maxBet;
+    await renderTeacherGamblingRecent(CLS);
     return;
   }
 
@@ -1151,6 +1241,7 @@ async function render() {
   // out; renderGamblingAccountCard() handles showing the paused banner
   // and hiding the buy-in form for that case.
   refreshGamblingAccountCard();
+  renderGamblingAccountRecent(CLS);
 
   /* ---- Roulette tab ---- */
   const rouletteEnabled = g.enabled !== false;

@@ -255,9 +255,15 @@ async function render() {
   // my transactions — last 3 days only (txns carry a raw "ts" epoch-ms
   // alongside the display "date" string; very old entries from before
   // "ts" existed don't have one, so those are kept rather than hidden).
+  // Individual gambling bets ("gambling") are left out of this general feed
+  // on purpose — they now have their own dedicated list on the Gambling
+  // module's Account tab (see renderGamblingAccountRecent in gambling.js) —
+  // but buying into/cashing out of the gambling account still shows up
+  // here like any other money movement, since those touch the student's
+  // main cash balance.
   const activityCutoff = Date.now() - 3 * 24 * 3600 * 1000;
   const my = cls.txns
-    .filter(t => txnBelongsTo(t, me.username) && (t.ts === undefined || t.ts >= activityCutoff))
+    .filter(t => txnBelongsTo(t, me.username) && t.type !== "gambling" && (t.ts === undefined || t.ts >= activityCutoff))
     .slice(0, 200);
   document.getElementById("noTxns").classList.toggle("hidden", my.length > 0);
   const tbody = document.getElementById("txnTable");

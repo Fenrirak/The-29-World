@@ -351,11 +351,15 @@ async function render() {
   // currently stored (up to MAX_STORED_TXNS), independent of the student
   // dashboard's own 3-day window on the same underlying array. cls.txns is
   // stored newest-first (logTxn unshifts), so the first MAX_STORED_TXNS
-  // entries already ARE "the most recent" — no extra sort/filter needed.
+  // matching entries already ARE "the most recent" — no extra sort needed.
+  // Individual gambling bets ("gambling") are filtered out here — they now
+  // have their own dedicated, class-wide list on the Gambling module's
+  // Account tab (see renderTeacherGamblingRecent in gambling.js) — but
+  // buy-ins/cash-outs still show up here like any other cash movement.
   const txbody = document.querySelector("#txnTable tbody");
   txbody.innerHTML = "";
   const nameOf = u => nameCache[u] || u;
-  const recentTxns = (cls.txns || []).slice(0, MAX_STORED_TXNS);
+  const recentTxns = (cls.txns || []).filter(t => t.type !== "gambling").slice(0, MAX_STORED_TXNS);
   document.getElementById("hActivity").innerHTML = icon("chart", 18) + ` Recent activity (last ${MAX_STORED_TXNS} transactions)`;
   recentTxns.forEach(t => {
     const tr = document.createElement("tr");
