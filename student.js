@@ -21,6 +21,7 @@ function badgeType(type) {
     "mortgage": ["coral", "house", "Mortgage"],
     "event": ["lilac", "dice", "Random event"],
     "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
+    "transport-expense": ["coral", "car", "Transport expenses"],
     "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
     "term-deposit-mature": ["mint", "vault", "Deposit matured"],
     "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
@@ -275,11 +276,15 @@ async function render() {
       else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
     else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "store-gift", "quiz-reward", "p2p-sell", "property-rent", "property-rent-receive", "truck-drive", "gambling-cashout"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "property-rent-pay", "vehicle-buy", "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "p2p-buy", "loan-interest", "truck-licence-buy", "gambling-buyin"].includes(t.type)) { sign = "-"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "property-rent-pay", "vehicle-buy", "transport-expense", "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "p2p-buy", "loan-interest", "truck-licence-buy", "gambling-buyin"].includes(t.type)) { sign = "-"; }
     else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
     else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
     else if (t.type === "gambling") { sign = t.note.includes("WON") ? "+" : "-"; }
-    else if (t.type === "big-event") { sign = amt > 0 ? "-" : ""; }
+    // BUGFIX: see the matching note in bank.js — a big event logs a
+    // windfall as `to: student` and a cost as `from: student`, both with
+    // a positive amount, so the old `amt > 0 ? "-" : ""` showed every
+    // windfall as a deduction. Direction comes from to/from.
+    else if (t.type === "big-event") { sign = t.to === me.username ? "+" : (t.from === me.username ? "-" : ""); amt = Math.abs(amt); }
     else if (t.type === "life-grant") { sign = amt < 0 ? "-" : (amt > 0 ? "+" : ""); amt = Math.abs(amt); }
     else if (t.type === "life-allowance") { sign = "+"; }
     else if (t.type === "life-revoke") { sign = ""; }

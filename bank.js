@@ -221,6 +221,7 @@ async function render() {
       "property-buy": ["navy", "house", "Property"], "property-sell": ["gold", "house", "Property sold"],
       "mortgage": ["coral", "house", "Mortgage"], "event": ["lilac", "dice", "Random event"],
       "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
+      "transport-expense": ["coral", "car", "Transport expenses"],
       "term-deposit-open": ["lilac", "vault", "Term deposit"], "term-deposit-early": ["coral", "vault", "Early withdrawal"],
       "term-deposit-mature": ["mint", "vault", "Deposit matured"],
       "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
@@ -251,7 +252,7 @@ async function render() {
       else { detail = "From " + escapeHtml(nameOf(t.from)) + (t.note ? " — " + escapeHtml(t.note) : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
     } else if (t.type === "stock-buy") { sign = "-"; }
     else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "truck-drive", "property-rent", "property-rent-receive", "store-gift", "quiz-reward", "p2p-sell", "gambling-cashout"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-rent-pay", "vehicle-buy", "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "loan-interest", "p2p-buy", "truck-licence-buy", "gambling-buyin"].includes(t.type)) { sign = "-"; }
+    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-rent-pay", "vehicle-buy", "transport-expense", "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "loan-interest", "p2p-buy", "truck-licence-buy", "gambling-buyin"].includes(t.type)) { sign = "-"; }
     else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
     else if (t.type === "property-buy") { sign = "-"; }
     // Only the "moved in and paid a moving cost" entries of this type ever
@@ -271,8 +272,16 @@ async function render() {
       sign = t.note.includes("WON") ? "+" : "-";
       amtDisplay = fmtMoney(t.amount);
     } else if (t.type === "big-event") {
-      sign = t.amount > 0 ? "-" : "";
-      amtDisplay = fmtMoney(t.amount);
+      // BUGFIX: this used to read `sign = t.amount > 0 ? "-" : ""`, which
+      // showed every big-event WINDFALL as a deduction. Unlike small
+      // weekly events (which always log `to: student` and carry the
+      // direction in the sign of `amount`), big events log a windfall as
+      // `to: student` and a cost as `from: student`, both with a POSITIVE
+      // amount — see processWeeklyBigEvents/resolveBigEvent in data.js.
+      // So the direction has to come from to/from, exactly as
+      // classifyTxnForReport already does for this type.
+      sign = t.to === me.username ? "+" : (t.from === me.username ? "-" : "");
+      amtDisplay = fmtMoney(Math.abs(t.amount));
     } else {
       amtDisplay = fmtMoney(amt);
     }

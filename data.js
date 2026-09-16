@@ -4253,6 +4253,7 @@ const REPORT_INCOME_TYPES = {
   "vehicle-sell": "Asset sales", "store-sell": "Asset sales", "p2p-sell": "Asset sales",
   "quiz-reward": "Bonuses",
   "term-deposit-mature": "Term deposit returns", "term-deposit-early": "Term deposit returns",
+  "life-allowance": "Life allowance",
   welcome: "Welcome bonus"
 };
 const REPORT_SAVED_TYPES = {
@@ -4261,6 +4262,11 @@ const REPORT_SAVED_TYPES = {
 const REPORT_SPENT_TYPES = {
   "store-buy": "Store purchases", "p2p-buy": "Bought from classmates",
   "vehicle-buy": "Transport", "truck-licence-buy": "Transport",
+  // The recurring weekly transport charge (vehicle upkeep + public
+  // transport fee, see payTransportExpenses) — same "Transport" category
+  // as the one-off purchases above, since from the student's point of
+  // view it's all money going out on getting around.
+  "transport-expense": "Transport",
   "property-buy": "Housing", "mortgage": "Housing", "property-rent-pay": "Housing", "insurance-buy": "Insurance",
   "insurance-signup-fee": "Insurance", "loan-repayment": "Loan repayments",
   "loan-interest": "Loan interest", fine: "Fines"
@@ -4282,6 +4288,15 @@ function classifyTxnForReport(t, username) {
     return won ? { bucket: "income", category: "Gambling winnings", amount: amt }
                : { bucket: "spent", category: "Gambling losses", amount: amt };
   }
+  // A one-off life-event payment always logs `to: student`, but the
+  // teacher can set a NEGATIVE one-off amount (a life event that costs
+  // money rather than pays out — see sanitizeLifeBenefits/grantLifeItem),
+  // so the sign of `amount` is what says which way it went, exactly like
+  // small weekly events just below.
+  if (t.type === "life-grant") {
+    return t.amount < 0 ? { bucket: "spent", category: "Life events", amount: amt }
+                        : { bucket: "income", category: "Life events", amount: amt };
+  }
   // Small weekly events always log `to: student`, with the sign of
   // `amount` (not to/from) telling a windfall from a loss.
   if (t.type === "event") {
@@ -4300,7 +4315,12 @@ function classifyTxnForReport(t, username) {
     if (t.from === username) return { bucket: "spent", category: "Sent to classmates", amount: amt };
     return null;
   }
-  return null; // savings-withdraw, property-occupancy, store-gift, and any future/unknown type
+  // savings-withdraw, gambling-buyin/-cashout and property-occupancy all
+  // just move the student's own money between their own pockets, and
+  // store-gift/life-revoke are always $0 — none of them is earned, saved
+  // or spent, so they stay out of every bucket, same as any future or
+  // unknown type.
+  return null;
 }
 
 // Builds one student's report-card data for the period starting at
@@ -10165,7 +10185,25 @@ function budgetBucketForTxn(t, username) {
   const out = t.from === username;
 
   switch (t.type) {
+    // BUGFIX: weekly rent and weekly transport expenses are two of the
+    // largest, least avoidable cash outgoings in the app, and both were
+    // missing here — so they were charged to the student's balance but
+    // never appeared in "how this week is actually going", making Needs
+    // spending read far lower than it really was. "property-rent-pay"
+    // covers both a classmate's sublet and a school (NPC) listing; both
+    // log `from: the tenant` and both debit cash (see payTenantRent /
+    // payNpcRent). "transport-expense" likewise (payTransportExpenses).
+    //
+    // Deliberately NOT included: "loan-interest", which is added to the
+    // loan's `owed` and never touches the balance (see
+    // processLoanInterest) — counting it here would charge a student's
+    // budget for money that never left their account. It shows up as a
+    // debt-growth warning in the budget view instead, which is also why
+    // budgetFixedCostsFromData() leaves it out of "Already committed".
+    // "insurance-premium" is kept only for classes with old transactions
+    // still retained on the class doc — nothing logs that type any more.
     case "mortgage": case "loan-repayment": case "insurance-premium":
+    case "property-rent-pay": case "transport-expense":
     case "insurance-signup-fee": case "property-buy": case "fine":
       return { bucket: "needs", amount: amt };
     case "automation":

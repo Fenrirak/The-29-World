@@ -142,7 +142,7 @@ async function renderTeacher() {
             return `<td>
               <span class="${tone}">${r.passed ? "Passed" : "Not yet"} · ${r.bestPct}%</span>
               <span class="muted-small"> (${r.attempts} ${r.attempts === 1 ? "try" : "tries"})</span><br>
-              <button class="btn small secondary" style="margin-top:5px;" onclick="resetResult('${esc(s.username)}','${q.id}')">Reset</button>
+              <button class="btn small secondary" style="margin-top:5px;" onclick="resetResult('${escapeJsAttr(s.username)}','${q.id}')">Reset</button>
             </td>`;
           }).join("")}
         </tr>`).join("")}

@@ -298,6 +298,19 @@ service cloud.firestore {
         // Economy-adjacent state each feature's own self-service flow owns.
         'sideHustleRequest', 'sideHustleDenialNote', 'truckCheckins',
         'lastMoveDate', 'blackjackRound', 'lastBjSeat', 'budget',
+        // BUGFIX: payTransportExpenses() (see data.js — the "Pay this
+        // week's transport expenses" button on transport.html) is a
+        // STUDENT-invoked action on the student's OWN doc: it debits
+        // their balance and stamps transportLastWeekPaid with the ISO
+        // week so the same week can't be charged twice. This field was
+        // missing from the allowlist, so that write — and therefore the
+        // whole transaction, including the debit — was denied for every
+        // student, every week, surfacing as the generic "Something went
+        // wrong. Please try again." The teacher-only counterpart
+        // (resolveTransportOverdue) writes the same field but goes
+        // through the isTeacher() branch, which is why clearing an
+        // overdue payment worked while paying one never did.
+        'transportLastWeekPaid',
         // Time-limit tracking/exemption requests.
         'timeSpentTodaySec', 'timeSpentDate',
         'timeExemptionStatus', 'timeExemptionDate', 'timeExemptionRequestedAt'
@@ -492,6 +505,23 @@ service cloud.firestore {
         'priceRange', 'propertyPriceRange',
         'sellBackRates', 'truckLicence', 'movingCost', 'propertyBreakFee',
         'mortgageDay', 'mortgageForceDueWeek', 'payDay',
+        // SECURITY FIX: these four are teacher-only settings that were
+        // missing from this list, so a student could rewrite them
+        // directly via the SDK. transportDay/publicTransportFee/
+        // publicTransportFeeOverrides (see setTransportDay/
+        // setPublicTransportFee/setPublicTransportFeeOverrides in
+        // data.js) together decide WHEN weekly transport expenses fall
+        // due and HOW MUCH they are — leaving them open meant a student
+        // could zero out their own class's transport fee, or move the
+        // due day so the charge never came round, which is the same
+        // "skip a recurring cost" hole the payDay/interest bookkeeping
+        // fields further down were locked to close. reportArchives is
+        // only ever written by archiveClassReport/deleteReportArchive,
+        // both teacher-only (reports.html is in NAV_TEACHER_ONLY), so
+        // leaving it open let any student delete the class's saved
+        // report cards.
+        'transportDay', 'publicTransportFee', 'publicTransportFeeOverrides',
+        'reportArchives',
         'lifestyleConfig', 'lifestyleThresholds', 'lifestyleLock',
         'marketplace', 'propertyRentals', 'dailyTimeLimitMinutes',
         'archived', 'archivedAt', 'templateShareToken',

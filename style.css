@@ -243,6 +243,13 @@ html.role-teacher .topbar nav a[href="reports.html"]{display:inline-flex;}
 .settings-popover.hidden{display:none;}
 @keyframes t29PopIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
 .settings-popover-row{display:flex;align-items:center;justify-content:space-between;gap:14px;}
+/* The label+description block beside each row's switch. settings-menu.js
+   emits this class on every row but nothing ever styled it, so the block
+   kept its default flex sizing and couldn't shrink below its content —
+   enough to push the switch out of the popover's fixed 272px width on a
+   long description. flex:1 lets it take the leftover space; min-width:0
+   is what actually permits the text to wrap instead of overflowing. */
+.settings-popover-text{flex:1;min-width:0;}
 .settings-popover-row + .settings-popover-row{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
 .settings-popover-title{font-weight:800;color:var(--navy-900);font-size:.92rem;line-height:1.3;}
 .settings-popover-desc{color:var(--muted);font-size:.78rem;margin-top:3px;line-height:1.4;}
@@ -1101,6 +1108,13 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 /* Planner on the left, the costs they can't avoid on the right — side by
    side on purpose, so the number they're planning against is never off
    screen while they type. */
+/* Used by bigevents.html's "takes an asset" row and life.js's "give to
+   student" row, both of which set align-items/gap/flex-wrap inline but
+   relied on this class for the display mode itself — which was never
+   defined anywhere, so those rows stacked vertically and their inline
+   flex properties did nothing. */
+.flex-row{display:flex;}
+
 .bud-layout{display:grid;grid-template-columns:1.35fr 1fr;gap:22px;margin-top:16px;align-items:start;}
 @media(max-width:900px){.bud-layout{grid-template-columns:1fr;}}
 

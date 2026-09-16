@@ -147,9 +147,9 @@ function showChoiceOutcome(overlay, entry, amount, outcome, username, classCode)
   const claimable = entry.severity === "bad" && amount < 0;
   card.innerHTML = `
     <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${escapeHtml(entry.name)}</h2>
-    ${outcome ? `<p>${outcome}</p>` : ""}
+    ${outcome ? `<p>${escapeHtml(outcome)}</p>` : ""}
     <p class="${amount < 0 ? 'ticker-down' : 'ticker-up'}" style="font-weight:900;font-size:1.2em;">${amount >= 0 ? "+" : "-"}${fmtMoney(Math.abs(amount))}</p>
-    ${claimable ? `<button class="btn small secondary" onclick="claimFromPopup('${entry.id}', '${username}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
+    ${claimable ? `<button class="btn small secondary" onclick="claimFromPopup('${entry.id}', '${escapeJsAttr(username)}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
     <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwChoiceOutcomeCloseBtn">Nice, got it</button>
   `;
   document.getElementById("anwChoiceOutcomeCloseBtn").addEventListener("click", () => overlay.remove());
@@ -169,7 +169,7 @@ function showEventPopup(events, username, classCode) {
       <div style="flex:1;">
         <div class="anw-event-name">${escapeHtml(e.name)}</div>
         ${e.description ? `<div class="muted-small">${escapeHtml(e.description)}</div>` : ""}
-        ${e.claimable ? `<button class="btn small secondary" style="margin-top:6px;" onclick="claimFromPopup('${e.id}', '${username}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
+        ${e.claimable ? `<button class="btn small secondary" style="margin-top:6px;" onclick="claimFromPopup('${e.id}', '${escapeJsAttr(username)}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
         ${e.claimed ? `<div class="muted-small ticker-up">Claimed on insurance</div>` : ""}
       </div>
       <div class="${e.amount < 0 ? 'ticker-down' : 'ticker-up'}" style="font-weight:900;">

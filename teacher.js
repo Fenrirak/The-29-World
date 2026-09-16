@@ -159,8 +159,8 @@ async function render() {
     row.innerHTML = `
       <div>${icon("bell", 15)} <strong>${escapeHtml(s.name)}</strong> has requested more time — they're out for today.</div>
       <div class="row-flex" style="gap:8px;">
-        <button class="btn small gold" onclick="approveTimeExemptionRequest('${escapeHtml(s.username)}')">Accept</button>
-        <button class="btn small coral" onclick="declineTimeExemptionRequest('${escapeHtml(s.username)}')">Decline</button>
+        <button class="btn small gold" onclick="approveTimeExemptionRequest('${escapeJsAttr(s.username)}')">Accept</button>
+        <button class="btn small coral" onclick="declineTimeExemptionRequest('${escapeJsAttr(s.username)}')">Decline</button>
       </div>
     `;
     bannerList.appendChild(row);
@@ -231,8 +231,8 @@ async function render() {
       <td>${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</td>
       <td>${fmtMoney(netByUser[s.username] || 0)}</td>
       <td>
-        <button class="btn small secondary" onclick="quickView('${escapeHtml(s.username)}')">View</button>
-        <button class="btn small coral" onclick="removeStudentClick('${escapeHtml(s.username)}', '${escapeJsAttr(s.name)}')">${icon("trash", 13)}</button>
+        <button class="btn small secondary" onclick="quickView('${escapeJsAttr(s.username)}')">View</button>
+        <button class="btn small coral" onclick="removeStudentClick('${escapeJsAttr(s.username)}', '${escapeJsAttr(s.name)}')">${icon("trash", 13)}</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -247,7 +247,7 @@ async function render() {
     const row = document.createElement("div");
     row.className = "auto-row";
     const middle = ev.type === "choice"
-      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${escapeHtml(o.label)} (${o.amount >= 0 ? "+" : ""}${fmtMoney(o.amount)})${o.outcome ? ` — ${o.outcome}` : ""}`).join(", ")}`
+      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${escapeHtml(o.label)} (${o.amount >= 0 ? "+" : ""}${fmtMoney(o.amount)})${o.outcome ? ` — ${escapeHtml(o.outcome)}` : ""}`).join(", ")}`
       : `&middot; ${ev.amount >= 0 ? "+" : ""}${fmtMoney(ev.amount)}`;
     row.innerHTML = `
       <div class="auto-details">${icon("dice", 14)} <strong>${escapeHtml(ev.name)}</strong>
@@ -279,8 +279,8 @@ async function render() {
         wants to switch ${from ? `from ${escapeHtml(from.name)} (${hourLabel((s.sideHustle || {}).checkinHour)})` : "(no current hustle)"}
         to <strong>${to ? to.name : "—"}</strong> at ${hourLabel(req.checkinHour)}
       </div>
-      <button class="btn small" onclick="approveSideHustleRequest('${escapeHtml(s.username)}')">Approve</button>
-      <button class="btn small coral" onclick="denySideHustleRequest('${escapeHtml(s.username)}')">Deny</button>
+      <button class="btn small" onclick="approveSideHustleRequest('${escapeJsAttr(s.username)}')">Approve</button>
+      <button class="btn small coral" onclick="denySideHustleRequest('${escapeJsAttr(s.username)}')">Deny</button>
     `;
     reqBox.appendChild(row);
   });
@@ -369,7 +369,7 @@ function jobSelectHtml(cls, student) {
   (cls.jobs || []).forEach(j => {
     opts += `<option value="${j.id}" ${student.jobId === j.id ? "selected" : ""}>${escapeHtml(j.title)}</option>`;
   });
-  return `<select onchange="onAssignJob('${escapeHtml(student.username)}', this.value)">${opts}</select>`;
+  return `<select onchange="onAssignJob('${escapeJsAttr(student.username)}', this.value)">${opts}</select>`;
 }
 
 function describeTxn(t, nameOf) {
@@ -421,6 +421,9 @@ function describeTxn(t, nameOf) {
     case "truck-licence-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "insurance-signup-fee": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "property-occupancy": return escapeHtml(`${nameOf(t.to || t.from)} — ${t.note}`);
+    case "life-grant": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "life-revoke": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "life-allowance": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     default: return escapeHtml(t.note || "");
   }
 }
@@ -465,8 +468,8 @@ function badge(type) {
     "property-rent": ["mint", "house", "Rent received"],
     "property-rent-pay": ["coral", "house", "Rent paid"],
     "property-rent-receive": ["mint", "house", "Rent received"],
-    "p2p-buy": ["navy", "users", "Classmate sale"],
-    "p2p-sell": ["gold", "users", "Classmate sale"],
+    "p2p-buy": ["navy", "users", "Bought from a classmate"],
+    "p2p-sell": ["gold", "users", "Sold to a classmate"],
     "truck-licence-buy": ["navy", "car", "Truck licence"],
     "insurance-signup-fee": ["lilac", "shield", "Insurance sign-up"],
     "property-occupancy": ["navy", "house", "Occupancy change"]
@@ -584,8 +587,18 @@ function startEditEvent(id) {
     document.getElementById("evRepeat").checked = !!ev.repeatable;
     document.getElementById("evDesc").value = ev.description || "";
     if (ev.type === "choice") {
+      // BUGFIX: this used to run the label through escapeHtml() before
+      // writing it into the textarea. A textarea's .value is plain text,
+      // not HTML, so escaping there is both wrong to look at AND
+      // destructive: submitEventForm() (above) reads this exact textarea
+      // back and saves whatever is in it, so an option labelled
+      // "Don't pay" came back as "Don&#39;t pay", got saved that way, and
+      // was escaped AGAIN into "Don&amp;#39;t pay" the next time round —
+      // corrupting a little further on every edit. Escaping belongs at
+      // render time (where the label is dropped into innerHTML), never on
+      // the way into a form field.
       document.getElementById("evOptionsArea").value = (ev.options || [])
-        .map(o => `${escapeHtml(o.label)} | ${o.amount}${o.outcome ? " | " + o.outcome : ""}`).join("\n");
+        .map(o => `${o.label} | ${o.amount}${o.outcome ? " | " + o.outcome : ""}`).join("\n");
     } else {
       document.getElementById("evAmount").value = ev.amount;
     }
@@ -949,7 +962,11 @@ async function renderProfile(username) {
   const tierIdx = (job && tier && job.tiers) ? job.tiers.indexOf(tier) : -1;
 
   document.getElementById("profileName").innerHTML = `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${escapeHtml(s.name)}`;
-  document.getElementById("profileSubtitle").textContent = `@${escapeHtml(s.username)}${job ? ` · ${tier ? tier.name : job.title}` : " · No job assigned"}`;
+  // BUGFIX: this sets textContent, which does its own escaping — running
+  // the value through escapeHtml() first meant a username or job title
+  // containing an apostrophe rendered literally as "&#39;" on screen.
+  // (profileName just above is innerHTML, so it correctly DOES escape.)
+  document.getElementById("profileSubtitle").textContent = `@${s.username}${job ? ` · ${tier ? tier.name : job.title}` : " · No job assigned"}`;
 
   const rows = [];
   const isOverride = s.lifestyleOverride !== undefined && s.lifestyleOverride !== null;
@@ -991,10 +1008,10 @@ async function renderProfile(username) {
       ${pendingPromo ? `
         <div class="auto-row" style="margin-top:12px;">
           <div class="auto-details">
-            <strong>Promotion offered:</strong> ${pendingPromo.tierName} (${fmtMoney(pendingPromo.wage)}/pay day)
-            <div class="muted-small">Waiting on ${s.name.split(" ")[0]} to accept or decline — their tier won't change until they respond.</div>
+            <strong>Promotion offered:</strong> ${escapeHtml(pendingPromo.tierName)} (${fmtMoney(pendingPromo.wage)}/pay day)
+            <div class="muted-small">Waiting on ${escapeHtml(s.name.split(" ")[0])} to accept or decline — their tier won't change until they respond.</div>
           </div>
-          <button class="btn small coral" onclick="cancelPendingPromotionClick('${username}')">Cancel offer</button>
+          <button class="btn small coral" onclick="cancelPendingPromotionClick('${escapeJsAttr(username)}')">Cancel offer</button>
         </div>
       ` : tiers.length > 1 ? `
         <div style="display:flex;gap:8px;align-items:flex-end;margin-top:14px;flex-wrap:wrap;">
@@ -1002,12 +1019,12 @@ async function renderProfile(username) {
             <label for="profileTierSelect" style="margin-top:0;">Move to tier</label>
             <select id="profileTierSelect">${tierOpts}</select>
           </div>
-          <button class="btn small" onclick="applyProfileTierChange('${username}')">Save</button>
+          <button class="btn small" onclick="applyProfileTierChange('${escapeJsAttr(username)}')">Save</button>
           ${tierIdx >= 0 && tierIdx < tiers.length - 1
-            ? `<button class="btn small mint" onclick="promoteProfileStudent('${username}')">⬆ Offer promotion to ${tiers[tierIdx + 1].name}</button>`
+            ? `<button class="btn small mint" onclick="promoteProfileStudent('${escapeJsAttr(username)}')">⬆ Offer promotion to ${escapeHtml(tiers[tierIdx + 1].name)}</button>`
             : `<span class="badge mint" style="align-self:flex-end;">At top tier</span>`}
         </div>
-        <p class="muted-small" style="margin-top:6px;">Moving up requires ${s.name.split(" ")[0]} to accept the offer first; moving down applies right away.</p>
+        <p class="muted-small" style="margin-top:6px;">Moving up requires ${escapeHtml(s.name.split(" ")[0])} to accept the offer first; moving down applies right away.</p>
       ` : `<p class="muted-small" style="margin-top:8px;">This job has only one tier.</p>`}
     `);
   }
@@ -1020,10 +1037,10 @@ async function renderProfile(username) {
     const tierName = tier ? tier.name : job.title;
     rows.push(`
       <label style="display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" id="profileJobTaskCheck" ${taskApproved ? "checked" : ""} onchange="profileSetJobTaskApproval(\'${username}\', this.checked)" style="width:20px;height:20px;min-height:auto;">
-        <span>Completed this week\'s task for <strong>${tierName}</strong> — pay day will pay them once this is ticked</span>
+        <input type="checkbox" id="profileJobTaskCheck" ${taskApproved ? "checked" : ""} onchange="profileSetJobTaskApproval(\'${escapeJsAttr(username)}\', this.checked)" style="width:20px;height:20px;min-height:auto;">
+        <span>Completed this week\'s task for <strong>${escapeHtml(tierName)}</strong> — pay day will pay them once this is ticked</span>
       </label>
-      <p class="muted-small">Resets automatically the moment pay day (${DAY_FULL[cls.payDay || "Fri"]}) begins — you\'ll need to tick it again for next cycle. If it\'s unticked on pay day, ${s.name.split(" ")[0]} won\'t be paid until you tick it and re-run pay day.</p>
+      <p class="muted-small">Resets automatically the moment pay day (${DAY_FULL[cls.payDay || "Fri"]}) begins — you\'ll need to tick it again for next cycle. If it\'s unticked on pay day, ${escapeHtml(s.name.split(" ")[0])} won\'t be paid until you tick it and re-run pay day.</p>
     `);
   }
 
@@ -1071,7 +1088,7 @@ async function renderProfile(username) {
       <p class="muted-small">This student's lifestyle rating is locked at <strong>${s.lifestyleOverride}</strong> — nothing they buy, sell, or do will change it until you remove the override.</p>
       <div class="auto-row">
         <div class="auto-details">Locked at ${s.lifestyleOverride}</div>
-        <button class="btn small secondary" onclick="removeProfileLifestyleOverride('${username}')">Remove override</button>
+        <button class="btn small secondary" onclick="removeProfileLifestyleOverride('${escapeJsAttr(username)}')">Remove override</button>
       </div>
     `);
   } else {
@@ -1082,7 +1099,7 @@ async function renderProfile(username) {
           <label for="profileLifestyleOverrideInput" style="margin-top:0;">Override value (0 or more)</label>
           <input id="profileLifestyleOverrideInput" type="number" min="0" step="1" placeholder="e.g. 50">
         </div>
-        <button class="btn small" onclick="applyProfileLifestyleOverride('${username}')">Set override</button>
+        <button class="btn small" onclick="applyProfileLifestyleOverride('${escapeJsAttr(username)}')">Set override</button>
       </div>
     `);
   }
@@ -1167,7 +1184,7 @@ async function renderProfile(username) {
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
           <div class="status-declined">Unpaid</div>
-          <button class="btn small secondary" onclick="profileResolveTransportOverdue('${username}')">Mark as resolved</button>
+          <button class="btn small secondary" onclick="profileResolveTransportOverdue('${escapeJsAttr(username)}')">Mark as resolved</button>
         </div>
       </div>`);
   }
@@ -1178,10 +1195,10 @@ async function renderProfile(username) {
   rows.push(poss.vehicles && poss.vehicles.length
     ? poss.vehicles.map(v => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(v.name)}</strong> — ${fmtMoney(v.price)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span>
         ${(v.weeklyExpense > 0 || v.publicTransportOffsetPct > 0) ? `<div class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffsetPct > 0 ? " &middot; " : ""}${v.publicTransportOffsetPct > 0 ? `knocks ${v.publicTransportOffsetPct}% off public transport` : ""}</div>` : ""}</div>
-        <button class="btn small coral" onclick="profileRemoveVehicle('${v.id}','${username}')">Repossess</button></div>`).join("")
+        <button class="btn small coral" onclick="profileRemoveVehicle('${v.id}','${escapeJsAttr(username)}')">Repossess</button></div>`).join("")
     : `<p class="muted-small">No vehicles owned.</p>`);
   rows.push(`<div class="auto-row"><div class="auto-details">Truck licence</div>${s.truckLicence
-    ? `<button class="btn small coral" onclick="profileRevokeTruckLicence('${username}')">Revoke</button>`
+    ? `<button class="btn small coral" onclick="profileRevokeTruckLicence('${escapeJsAttr(username)}')">Revoke</button>`
     : `<span class="muted-small">Not held</span>`}</div>`);
 
   // Group owned store items by item id: poss.storeItems is a flat list
@@ -1206,7 +1223,7 @@ async function renderProfile(username) {
             <input class="qty-input" type="number" inputmode="numeric" id="bulkRemoveQty_${g.item.id}" min="1" max="${g.qty}" step="1" value="1" onchange="bulkRemoveQtyClamp('${g.item.id}',${g.qty})">
             <button class="qty-btn" type="button" onclick="bulkRemoveQtyStep('${g.item.id}',1,${g.qty})" aria-label="Increase quantity">+</button>
           </div>
-          <button class="btn small coral" onclick="profileRemoveStoreItemBulk('${username}','${g.item.id}',${g.qty})">Remove</button>
+          <button class="btn small coral" onclick="profileRemoveStoreItemBulk('${escapeJsAttr(username)}','${g.item.id}',${g.qty})">Remove</button>
         </div></div>`).join("")
     : `<p class="muted-small">No store items owned.</p>`);
 
@@ -1220,7 +1237,7 @@ async function renderProfile(username) {
             ${giftableItems.map(it => `<option value="${it.id}">${escapeHtml(it.name)} — ${fmtMoney(it.price)}${it.stock !== null && it.stock <= 0 ? " (out of stock)" : ""}</option>`).join("")}
           </select>
         </div>
-        <button class="btn small" onclick="profileGiveStoreItem('${username}')">Give free</button>
+        <button class="btn small" onclick="profileGiveStoreItem('${escapeJsAttr(username)}')">Give free</button>
       </div>
       <p class="muted-small">Doesn't cost the student anything and ignores stock — works even if the item shows 0 left.</p>
     `);
@@ -1229,7 +1246,7 @@ async function renderProfile(username) {
   rows.push(`<h4>${icon("shield", 16)} Insurance</h4>`);
   rows.push(poss.insurance.length
     ? poss.insurance.map(p => `<div class="auto-row"><div class="auto-details">${escapeHtml(p.name)} — ${fmtMoney(p.price)}/week</div>
-        <button class="btn small coral" onclick="profileRemoveInsurance('${username}','${p.id}')">Cancel</button></div>`).join("")
+        <button class="btn small coral" onclick="profileRemoveInsurance('${escapeJsAttr(username)}','${p.id}')">Cancel</button></div>`).join("")
     : `<p class="muted-small">No insurance plans.</p>`);
 
   const activeLoans = (s.loans || []).filter(l => l.status === "active");
@@ -1299,10 +1316,33 @@ function confirmRefundRate(removeQuestion, defaultPct) {
   pct = Math.max(0, Math.min(100, pct));
   return pct / 100;
 }
+// BUGFIX: this used to run confirmRefundRate() and pass the resulting
+// percentage to sellProperty() as a third argument. sellProperty() takes
+// only (classCode, propId) and always pays out the property's CURRENT
+// market price — deliberately, since property prices move every market
+// day, so a fixed percentage of a moving price would be meaningless (and
+// would quietly under- or over-pay depending on which way the market had
+// drifted since purchase). The percentage the teacher typed was silently
+// discarded and the student was paid full market price regardless — so
+// the prompt promised a refund rate that nothing honoured. Vehicles and
+// store items DO take a rate (their prices are fixed), which is why
+// profileRemoveVehicle/profileRemoveStoreItem below still use
+// confirmRefundRate. This now asks a question that matches what actually
+// happens, and reports the real numbers afterwards.
 async function profileRemoveProperty(propId) {
-  const rate = confirmRefundRate("Repossess this property?", 90);
-  if (rate === null) return;
-  await sellProperty(CLASS_CODE, propId, rate);
+  if (!confirm(
+    "Repossess this property?\n\n" +
+    "It goes back on the market and the student is paid its CURRENT market price " +
+    "(property prices move on every market day, so this won't necessarily match what they paid). " +
+    "Any mortgage still owing — plus the class's break fee, if one is set — comes out of that payout first, " +
+    "so the student can end up receiving nothing, or going backwards, on a heavily mortgaged property."
+  )) return;
+  const res = await sellProperty(CLASS_CODE, propId);
+  if (!res.ok) { alert("That property couldn't be repossessed — it may have already been sold."); return; }
+  const parts = [`Market price ${fmtMoney(res.marketPrice)}`];
+  if (res.mortgagePayoff > 0) parts.push(`less ${fmtMoney(res.mortgagePayoff)} mortgage payoff`);
+  if (res.breakFee > 0) parts.push(`less ${fmtMoney(res.breakFee)} break fee`);
+  alert(`Repossessed.\n\n${parts.join("\n")}\n\nPaid to the student: ${fmtMoney(res.payout)}`);
   await render();
   await renderProfile(PROFILE_USER);
 }

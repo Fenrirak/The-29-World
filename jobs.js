@@ -438,7 +438,7 @@ function renderMyJob(me, cls) {
           </div>
         </div>
         ${!isTop && job.autoPromoteWeeks > 0
-          ? `<p class="muted-small tier-auto-note">${icon("repeat", 12)} Auto-promotes every ${job.autoPromoteWeeks} week${job.autoPromoteWeeks === 1 ? "" : "s"} — next tier: <strong>${tiers[tierIdx + 1].name}</strong> (${fmtMoney(tiers[tierIdx + 1].wage)}/pay day)</p>`
+          ? `<p class="muted-small tier-auto-note">${icon("repeat", 12)} Auto-promotes every ${job.autoPromoteWeeks} week${job.autoPromoteWeeks === 1 ? "" : "s"} — next tier: <strong>${escapeHtml(tiers[tierIdx + 1].name)}</strong> (${fmtMoney(tiers[tierIdx + 1].wage)}/pay day)</p>`
           : isTop ? `<p class="muted-small tier-auto-note">🏆 Top tier — you've reached the highest level!</p>` : ""}
       ` : ""}
     </div>
