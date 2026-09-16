@@ -148,7 +148,7 @@ async function render() {
             <p>${comfortStars(v.comfort)} comfort</p>
             <p><strong>${fmtMoney(v.price)}</strong> paid</p>
             ${isTruck ? `<p class="muted-small">Driving pays ${fmtMoney(v.drivePayout || 0)}/day &middot; ${drivenToday ? "already driven today" : "not driven today yet"}</p>` : ""}
-            ${(v.weeklyExpense > 0 || v.publicTransportOffset > 0) ? `<p class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffset > 0 ? " &middot; " : ""}${v.publicTransportOffset > 0 ? `knocks ${fmtMoney(v.publicTransportOffset)} off your public transport fee` : ""}</p>` : ""}
+            ${(v.weeklyExpense > 0 || v.publicTransportOffsetPct > 0) ? `<p class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffsetPct > 0 ? " &middot; " : ""}${v.publicTransportOffsetPct > 0 ? `knocks ${v.publicTransportOffsetPct}% off your public transport fee` : ""}</p>` : ""}
           </div>
           <div class="row-flex" style="gap:8px;">
             ${isTruck ? `<button class="btn small gold" ${drivenToday ? "disabled" : ""} onclick="driveTruck('${v.id}')">${drivenToday ? "Driven today" : "Drive today"}</button>` : ""}
@@ -197,7 +197,7 @@ async function render() {
           <p>${comfortStars(v.comfort)} comfort</p>
           <p>${priceWithLifeDiscount(me, "transport", v.price)} &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
           <p class="muted-small">${ownedLabel}</p>
-          ${(v.weeklyExpense > 0 || v.publicTransportOffset > 0) ? `<p class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffset > 0 ? " &middot; " : ""}${v.publicTransportOffset > 0 ? `knocks ${fmtMoney(v.publicTransportOffset)} off public transport` : ""}</p>` : ""}
+          ${(v.weeklyExpense > 0 || v.publicTransportOffsetPct > 0) ? `<p class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffsetPct > 0 ? " &middot; " : ""}${v.publicTransportOffsetPct > 0 ? `knocks ${v.publicTransportOffsetPct}% off public transport` : ""}</p>` : ""}
           ${needsLicence ? `<p class="muted-small">Requires a truck licence — see above.</p>` : ""}
           ${truckLimitReached ? `<p class="muted-small">You can only own one truck at a time.</p>` : ""}
           ${ownerRows}
@@ -232,7 +232,7 @@ async function addProp(e) {
     type: document.getElementById("hType").value,
     drivePayout: document.getElementById("hPayout").value,
     weeklyExpense: document.getElementById("hWeeklyExpense").value,
-    publicTransportOffset: document.getElementById("hPublicOffset").value,
+    publicTransportOffsetPct: document.getElementById("hPublicOffset").value,
     stockLimit: document.getElementById("hStock").value.trim()
   };
   if (EDITING_ID) {
@@ -271,7 +271,7 @@ async function editVeh(id) {
   document.getElementById("hType").value = veh.type || "car";
   document.getElementById("hPayout").value = veh.drivePayout || 0;
   document.getElementById("hWeeklyExpense").value = veh.weeklyExpense || 0;
-  document.getElementById("hPublicOffset").value = veh.publicTransportOffset || 0;
+  document.getElementById("hPublicOffset").value = veh.publicTransportOffsetPct || 0;
   onTypeChange();
   document.getElementById("hStock").value = (veh.stockLimit === null || veh.stockLimit === undefined) ? "" : veh.stockLimit;
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit vehicle";

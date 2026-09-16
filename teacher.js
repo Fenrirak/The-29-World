@@ -1177,7 +1177,7 @@ async function renderProfile(username) {
     due ${DAY_FULL[cls.transportDay || "Fri"]} &middot; ${(s.transportLastWeekPaid === isoWeekKey(new Date())) ? "paid this week" : "not yet paid this week"}</p>`);
   rows.push(poss.vehicles && poss.vehicles.length
     ? poss.vehicles.map(v => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(v.name)}</strong> — ${fmtMoney(v.price)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span>
-        ${(v.weeklyExpense > 0 || v.publicTransportOffset > 0) ? `<div class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffset > 0 ? " &middot; " : ""}${v.publicTransportOffset > 0 ? `knocks ${fmtMoney(v.publicTransportOffset)} off public transport` : ""}</div>` : ""}</div>
+        ${(v.weeklyExpense > 0 || v.publicTransportOffsetPct > 0) ? `<div class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffsetPct > 0 ? " &middot; " : ""}${v.publicTransportOffsetPct > 0 ? `knocks ${v.publicTransportOffsetPct}% off public transport` : ""}</div>` : ""}</div>
         <button class="btn small coral" onclick="profileRemoveVehicle('${v.id}','${username}')">Repossess</button></div>`).join("")
     : `<p class="muted-small">No vehicles owned.</p>`);
   rows.push(`<div class="auto-row"><div class="auto-details">Truck licence</div>${s.truckLicence

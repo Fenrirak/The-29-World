@@ -3232,9 +3232,10 @@ async function addVehicle(classCode, v) {
       drivePayout: Math.max(0, Number(v.drivePayout) || 0),
       // Weekly running cost (see payTransportExpenses) and how much this
       // vehicle knocks off the class-wide public transport fee for its
-      // owner (see transportWeeklyAmount) — both teacher-set per vehicle.
+      // owner, as a percentage of that fee (see transportWeeklyAmount) —
+      // both teacher-set per vehicle.
       weeklyExpense: Math.max(0, Number(v.weeklyExpense) || 0),
-      publicTransportOffset: Math.max(0, Number(v.publicTransportOffset) || 0),
+      publicTransportOffsetPct: Math.max(0, Math.min(100, Number(v.publicTransportOffsetPct) || 0)),
       stockLimit: (v.stockLimit === "" || v.stockLimit === undefined || v.stockLimit === null) ? null : Math.max(0, Math.floor(Number(v.stockLimit)))
     });
     t.update(classRef, { vehicles: cls.vehicles });
@@ -3265,7 +3266,7 @@ async function updateVehicle(classCode, vehId, updates) {
     veh.type = normalizeVehicleType(updates.type);
     veh.drivePayout = Math.max(0, Number(updates.drivePayout) || 0);
     veh.weeklyExpense = Math.max(0, Number(updates.weeklyExpense) || 0);
-    veh.publicTransportOffset = Math.max(0, Number(updates.publicTransportOffset) || 0);
+    veh.publicTransportOffsetPct = Math.max(0, Math.min(100, Number(updates.publicTransportOffsetPct) || 0));
     veh.stockLimit = (updates.stockLimit === "" || updates.stockLimit === undefined || updates.stockLimit === null) ? null : Math.max(0, Math.floor(Number(updates.stockLimit)));
     t.update(classRef, { vehicles: cls.vehicles });
   });
@@ -3456,12 +3457,12 @@ async function checkinTruckDrive(username, classCode, vehId) {
    Every student owes a weekly transport cost even if they own nothing —
    the class-wide public transport fee (setPublicTransportFee) — payable
    once a week via payTransportExpenses. Owning a vehicle adds that
-   vehicle's own weeklyExpense on top, but also knocks its own
-   publicTransportOffset off the public transport fee (floored at $0),
-   modelling "owning a car means you don't need the bus as much". A
+   vehicle's own weeklyExpense on top, but also knocks a percentage of its
+   own publicTransportOffsetPct off the public transport fee (floored at
+   $0), modelling "owning a car means you don't need the bus as much". A
    student can own several vehicles, but — matching the existing
    "comfort doesn't stack" rule for lifestyle scoring — only their
-   comfiest owned vehicle's weeklyExpense/publicTransportOffset count.
+   comfiest owned vehicle's weeklyExpense/publicTransportOffsetPct count.
 
    On top of that flat fee, a teacher can also set a different public
    transport fee for students currently holding a specific Life-module
@@ -3527,7 +3528,7 @@ async function setTransportDay(classCode, day) {
 }
 
 // A student's comfiest owned vehicle — the only one whose weeklyExpense
-// and publicTransportOffset count if they own more than one (see header
+// and publicTransportOffsetPct count if they own more than one (see header
 // comment above). Returns null if they own nothing.
 function comfiestOwnedVehicle(vehicles, username) {
   return (vehicles || []).filter(v => (v.owners || []).includes(username))
@@ -3546,10 +3547,11 @@ function transportWeeklyAmount(cls, user) {
   const vehicleExpense = vehicle ? Math.max(0, Number(vehicle.weeklyExpense) || 0) : 0;
   const lifeFee = currentLifeTransportFee(cls, user);
   const publicFeeBase = lifeFee ? lifeFee.amount : Math.max(0, Number((cls.publicTransportFee || {}).amount) || 0);
-  const publicFeeOffset = vehicle ? Math.max(0, Number(vehicle.publicTransportOffset) || 0) : 0;
+  const publicFeeOffsetPct = vehicle ? Math.max(0, Math.min(100, Number(vehicle.publicTransportOffsetPct) || 0)) : 0;
+  const publicFeeOffset = Math.round(publicFeeBase * (publicFeeOffsetPct / 100) * 100) / 100;
   const publicFeeDue = Math.max(0, Math.round((publicFeeBase - publicFeeOffset) * 100) / 100);
   const total = Math.round((vehicleExpense + publicFeeDue) * 100) / 100;
-  return { vehicle, vehicleExpense, publicFeeBase, publicFeeOffset, publicFeeDue, total, lifeFeeName: lifeFee ? lifeFee.name : null };
+  return { vehicle, vehicleExpense, publicFeeBase, publicFeeOffsetPct, publicFeeOffset, publicFeeDue, total, lifeFeeName: lifeFee ? lifeFee.name : null };
 }
 
 // Which ISO week the most recently-passed transport due day falls in —
@@ -5905,19 +5907,23 @@ function withNewModuleDefaults(cls) {
     // they aren't mistaken for trucks (which require a licence).
     if (!VEHICLE_TYPES.includes(v.type)) v.type = "car";
     if (v.drivePayout === undefined || v.drivePayout === null) v.drivePayout = 0;
-    // Weekly running cost charged via payTransportExpenses, and how much
-    // owning this vehicle knocks off the class-wide public transport fee
-    // (see transportWeeklyAmount). Vehicles saved before this existed
-    // default to $0 of each — free to own, no public transport discount —
-    // rather than silently starting to cost a student money.
+    // Weekly running cost charged via payTransportExpenses, and what
+    // percentage of the class-wide public transport fee owning this
+    // vehicle knocks off (see transportWeeklyAmount). Vehicles saved
+    // before this existed default to $0/0% — free to own, no public
+    // transport discount — rather than silently starting to cost a
+    // student money. Vehicles saved back when the discount was a flat
+    // dollar amount (publicTransportOffset) are also swept up here since
+    // that old field no longer means anything under the percentage model.
     if (v.weeklyExpense === undefined || v.weeklyExpense === null) v.weeklyExpense = 0;
-    if (v.publicTransportOffset === undefined || v.publicTransportOffset === null) v.publicTransportOffset = 0;
+    if (v.publicTransportOffsetPct === undefined || v.publicTransportOffsetPct === null) v.publicTransportOffsetPct = 0;
+    delete v.publicTransportOffset;
   });
   // Class-wide weekly transport expenses: a flat public transport fee every
   // student owes (see transportWeeklyAmount), and the day of the week it's
   // payable on (like mortgageDay/payDay). Vehicles saved before this existed
-  // default their own weeklyExpense/publicTransportOffset to 0 above, so an
-  // existing class starts this feature completely free until the teacher
+  // default their own weeklyExpense/publicTransportOffsetPct to 0 above, so
+  // an existing class starts this feature completely free until the teacher
   // configures it.
   cls.publicTransportFee = cls.publicTransportFee || { amount: 0, description: "" };
   // Optional per-life-event override of the fee just above, keyed by life
