@@ -5344,10 +5344,31 @@ async function bjSettle(username, classCode, round) {
 
   if (totalCredit > 0) await adjustGamblingAccount(username, totalCredit, cls.gambling.dailyWinLimit);
 
-  const insuranceNote = round.insurance.taken
-    ? (round.insurance.amount > 0 && dealerBJ ? ` Insurance won ${fmtMoney(round.insurance.amount * 2)}.` : ` Insurance lost ${fmtMoney(round.insurance.amount)}.`)
+  // BUGFIX: insurance is settled directly against the gambling account
+  // back in blackjackInsurance() (stake debited when taken; stake back +
+  // 2:1 credited immediately if the dealer turns out to have blackjack) —
+  // by the time we get here that money has already moved. The round's
+  // headline "won/lost $X overall" figure (netChange, also what gets
+  // written to the ledger below) has to fold that result in correctly:
+  //   - insurance not taken: no effect.
+  //   - insurance taken and LOST (dealer had no blackjack): the stake was
+  //     spent and never came back — a real loss of `amount`.
+  //   - insurance taken and WON (dealer had blackjack): the stake was
+  //     already paid back plus a 2:1 payout, i.e. a real PROFIT of
+  //     `amount * 2` — not a loss of `amount`. The old code always
+  //     subtracted `amount` here regardless of outcome, understating the
+  //     round's result by 3x the insurance stake specifically whenever
+  //     insurance won (e.g. reporting "you lost $15" — and logging that
+  //     same wrong figure to the transaction ledger — on a round that had
+  //     actually broken even).
+  const insuranceTaken = round.insurance.taken;
+  const insuranceWon = insuranceTaken && dealerBJ;
+  const insuranceResult = insuranceTaken ? (insuranceWon ? round.insurance.amount * 2 : -round.insurance.amount) : 0;
+
+  const insuranceNote = insuranceTaken
+    ? (insuranceWon ? ` Insurance won ${fmtMoney(round.insurance.amount * 2)}.` : ` Insurance lost ${fmtMoney(round.insurance.amount)}.`)
     : "";
-  const netChange = Math.round((totalCredit - totalStaked - round.insurance.amount) * 100) / 100;
+  const netChange = Math.round((totalCredit - totalStaked + insuranceResult) * 100) / 100;
   const netForTxn = Math.round((netChange) * 100) / 100;
   const dealerDesc = `dealer had ${dealerVal}${dealerBust ? " (bust)" : dealerBJ ? " (blackjack)" : ""}`;
 

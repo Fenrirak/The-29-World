@@ -67,10 +67,6 @@ async function render() {
   grid.appendChild(newCard);
 }
 
-function escapeHtml(s) {
-  return String(s || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
 async function openClass(code) {
   showMsg("");
   const res = await switchActiveClass(CURRENT.username, code);
