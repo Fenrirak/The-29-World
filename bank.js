@@ -79,8 +79,10 @@ async function init() {
   // chunk of load time, especially on a slow mobile connection. Running
   // them together cuts that to roughly the time of the single slowest one.
   const T29_STARTUP_JOBS = Promise.all([
-    safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
-    safeBgJob(processDailyLifeAllowance(u.classCode), "processDailyLifeAllowance"),
+    // Same reasoning as the interest line below — a student session can
+    // only ever safely pay their OWN wage/allowance, never a classmate's.
+    safeBgJob(IS_TEACHER ? payDayForClassIfDue(u.classCode) : payMyWageIfDue(u.username), "autoPayDay"),
+    safeBgJob(IS_TEACHER ? dailyLifeAllowanceForClassIfDue(u.classCode) : payMyDailyLifeAllowanceIfDue(u.username), "autoDailyLifeAllowance"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),

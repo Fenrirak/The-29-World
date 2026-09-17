@@ -104,8 +104,8 @@ async function init() {
   await t29FirstPaint(render);
   await T29_CLOCK_SYNC;
   const T29_STARTUP_JOBS = Promise.all([
-    safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
-    safeBgJob(processDailyLifeAllowance(u.classCode), "processDailyLifeAllowance"),
+    safeBgJob(payMyWageIfDue(u.username), "payMyWageIfDue"),
+    safeBgJob(payMyDailyLifeAllowanceIfDue(u.username), "payMyDailyLifeAllowanceIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
     safeBgJob(applyMyInterestIfDue(u.username), "applyMyInterestIfDue"),

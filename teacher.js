@@ -105,8 +105,8 @@ async function init() {
   // running them together instead of one-at-a-time avoids 8 sequential
   // network round-trips on page load.
   const T29_STARTUP_JOBS = Promise.all([
-    safeBgJob(autoPayDayIfDue(CLASS_CODE), "autoPayDayIfDue"),
-    safeBgJob(processDailyLifeAllowance(CLASS_CODE), "processDailyLifeAllowance"),
+    safeBgJob(payDayForClassIfDue(CLASS_CODE), "payDayForClassIfDue"),
+    safeBgJob(dailyLifeAllowanceForClassIfDue(CLASS_CODE), "dailyLifeAllowanceForClassIfDue"),
     safeBgJob(processAutomations(CLASS_CODE), "processAutomations"),
     safeBgJob(processTermDeposits(CLASS_CODE), "processTermDeposits"),
     safeBgJob(applyInterestToClassIfDue(CLASS_CODE), "applyInterestToClassIfDue"),

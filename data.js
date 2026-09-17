@@ -194,7 +194,7 @@ function hourLabel(h) {
 
 /* ---------------- Basic doc fetch helpers ----------------
    Every page fires several independent background jobs together via
-   Promise.all (autoPayDayIfDue, processAutomations,
+   Promise.all (payDayForClassIfDue/payMyWageIfDue, processAutomations,
    processTermDeposits, applyMyInterestIfDue/applyInterestToClassIfDue,
    processInsurancePayments,
    processWeeklyEvents, processWeeklyBigEvents, ...) and most of them start
@@ -756,7 +756,7 @@ function defaultClassData(code, className, teacherUsername) {
     lastPropertyMarketDayRun: null,
     automations: [],
     jobApplications: [],
-    lastPayDayRun: null,
+    lastPayDayRun: null, // legacy/unused — pay day due-ness is now tracked per student (see lastWagePaid, near payMyWageIfDue)
     insurancePlans: [], storeItems: [], properties: [],
     eventDefs: [], eventLog: [], lastEventWeekRun: null, lastEventDayRun: null,
     vehicles: [], termDepositPlans: [],
@@ -1980,176 +1980,273 @@ function safeBgJob(promise, label) {
   });
 }
 
-async function autoPayDayIfDue(classCode) {
+// ===================== Wages & life-item allowances — two entry points =====================
+// Same fix, same reasoning as interest (see the big comment above
+// applyMyInterestIfDue/applyInterestToClassIfDue in this file): wages and
+// life-item allowances are also brand-new money with no matching debit
+// anywhere, so a student's session can only ever safely credit THEIR OWN
+// account, never a classmate's. The old design tracked "who's been paid"
+// in ONE shared object per job (payDayProgress/lifeDailyProgress) on the
+// class doc — locked to teacher writes for exactly the "free money
+// replay" reason explained on lockedFields in firestore.rules — so a
+// student's page load calling autoPayDayIfDue/processDailyLifeAllowance
+// always failed silently (caught, logged, page kept loading) and only a
+// teacher's visit ever actually paid anyone.
+//
+// Fix: track "was I paid" PER STUDENT, on their own /users doc
+// (lastWagePaid / lastLifeAllowanceWeeklyPaid / lastLifeAllowanceDailyPaid
+// — plain self-writable date-key stamps, same idea as interest's
+// lastInterestApplied). Every path that pays money funnels through the
+// small _pay...() helpers below, each of which credits + stamps in ONE
+// transaction on that one student's own doc — Firestore serializes
+// concurrent transactions on the same document, so whichever path gets
+// to a given student first "wins" and every other path's fresh re-check
+// sees the stamp and backs off. This holds regardless of how many
+// tabs/devices/paths hit the same student at once, exactly like interest.
+//
+//   1. payMyWageIfDue(username) / payMyDailyLifeAllowanceIfDue(username)
+//      — called from student.js and from bank.js when the CURRENT
+//      visitor is a student. Pays ONLY that one student's own wage/
+//      allowance, if their own schedule says it's due. A student in a
+//      class with no teacher currently online still gets paid exactly
+//      on schedule, on their own next visit.
+//
+//   2. payDayForClassIfDue(classCode) / dailyLifeAllowanceForClassIfDue
+//      (classCode) — called from teacher.js and from bank.js when the
+//      CURRENT visitor is a teacher (the direct replacements for the old
+//      class-wide autoPayDayIfDue/processDailyLifeAllowance). A
+//      teacher's session CAN write every student's doc, so these keep
+//      doing what the old auto-runs did — walk the whole roster and pay
+//      everyone who's due — but the "who's due" and "don't double-pay"
+//      checks are now per student, so anyone already paid via their own
+//      visit is correctly skipped, and only the ones who haven't opened
+//      anything yet get topped up. A teacher's visit is still a full
+//      safety-net sweep of the class; it just no longer re-pays people
+//      who don't need it.
+//
+// payDay(classCode) — the manual "Run Pay Day" button — shares the exact
+// same per-student stamp, just with the schedule/day check bypassed
+// (force): it can never double-pay someone the automatic path (or that
+// student's own visit) already paid today, for the same reason the
+// manual "Apply Interest" button can't.
+
+// Pure: what would this student's wage payment be right now, if they're
+// eligible? Returns null if they have no job, an unrecognized job, or
+// haven't had this week's job task ticked as approved yet.
+function computeWageCredit(cls, student) {
+  if (!student.jobId) return null;
+  const job = (cls.jobs || []).find(j => j.id === student.jobId);
+  if (!job) return null;
+  if (!isJobTaskApprovedThisWeek(student, cls)) return null;
+  const tier = getStudentTier(job, student);
+  const wage = tier ? tier.wage : 0;
+  let { net, taxAmount } = applyWageTax(cls, wage);
+  // Life items can boost/cut take-home wage (incomePercent) and knock a
+  // percentage off the tax bill just withheld (taxCutPercent) — applied
+  // here, after the normal bracket tax, so they layer on top instead of
+  // interacting with the bracket math itself.
+  const life = getLifeBenefitTotals(student);
+  if (life.incomePercent) net = Math.round(net * (1 + life.incomePercent / 100) * 100) / 100;
+  if (life.taxCutPercent && taxAmount > 0) {
+    const refund = Math.round(taxAmount * (life.taxCutPercent / 100) * 100) / 100;
+    net = Math.round((net + refund) * 100) / 100;
+    taxAmount = Math.round((taxAmount - refund) * 100) / 100;
+  }
+  const tierLabel = tier ? tier.name : job.title;
+  return { net, taxAmount, tierLabel };
+}
+
+// Credits ONE student's wage in a single transaction on their own doc.
+// Returns { credited: {net, taxAmount, tierLabel} } if paid,
+// { skippedUnapproved: true } if they have a job but this week's task
+// isn't ticked yet, or null (nothing to do / already paid today / no
+// job / error). `force` skips the day-of-week check (manual button); it
+// never skips the "already paid today" check.
+async function _payStudentWage(classCode, username, dateKey, { force = false, cls: precomputedCls } = {}) {
+  const userRef = usersCol().doc(username);
+  let result = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) return;
+      const user = snap.data();
+      if (user.role !== "student") return;
+      if (user.lastWagePaid === dateKey) return; // ALREADY paid today — the actual double-pay guard
+      const cls = precomputedCls || await getClass(classCode);
+      if (!cls || cls.archived) return;
+      if (!force && nzDayName() !== cls.payDay) return;
+      if (!user.jobId) return; // no job at all — leave unstamped, nothing to skip-guard against
+      const job = (cls.jobs || []).find(j => j.id === user.jobId);
+      if (!job) return;
+      if (!isJobTaskApprovedThisWeek(user, cls)) {
+        // Has a job, just isn't ticked yet — leave unstamped (same as the
+        // old design) so ticking it later THIS SAME cycle still catches
+        // them on the next run, rather than being locked out for the week.
+        result = { skippedUnapproved: true };
+        return;
+      }
+      const credit = computeWageCredit(cls, user);
+      if (!credit) return;
+      const newBalance = Math.round(((user.balance || 0) + credit.net) * 100) / 100;
+      t.update(userRef, { balance: newBalance, lastWagePaid: dateKey });
+      result = { credited: credit };
+    });
+  } catch (e) {
+    return null;
+  }
+  if (result && result.credited) {
+    await logTxn(classCode, { type: "wage", to: username, amount: result.credited.net, note: "Pay day: " + result.credited.tierLabel + (result.credited.taxAmount > 0 ? ` (${fmtMoney(result.credited.taxAmount)} tax withheld)` : "") });
+  }
+  return result;
+}
+
+// Credits ONE student's WEEKLY life-item allowance (paid alongside wages,
+// on the class's pay day) in a single transaction on their own doc.
+async function _payStudentWeeklyLifeAllowance(classCode, username, dateKey, { cls: precomputedCls } = {}) {
+  const userRef = usersCol().doc(username);
+  let credited = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) return;
+      const user = snap.data();
+      if (user.role !== "student") return;
+      if (user.lastLifeAllowanceWeeklyPaid === dateKey) return;
+      const amount = getLifeAllowanceByFrequency(user, "weekly");
+      if (!amount) return; // nothing to pay — leave unstamped so a same-day life-item change can still be caught
+      const newBalance = Math.round(((user.balance || 0) + amount) * 100) / 100;
+      t.update(userRef, { balance: newBalance, lastLifeAllowanceWeeklyPaid: dateKey });
+      credited = amount;
+    });
+  } catch (e) {
+    return null;
+  }
+  if (credited) {
+    await logTxn(classCode, { type: "life-allowance", to: username, amount: credited, note: "Life event allowance (weekly)" });
+  }
+  return credited;
+}
+
+// Credits ONE student's DAILY life-item allowance (its own schedule,
+// every calendar day, independent of pay day) in a single transaction.
+async function _payStudentDailyLifeAllowance(classCode, username, dateKey) {
+  const userRef = usersCol().doc(username);
+  let credited = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) return;
+      const user = snap.data();
+      if (user.role !== "student") return;
+      if (user.lastLifeAllowanceDailyPaid === dateKey) return;
+      const amount = getLifeAllowanceByFrequency(user, "daily");
+      if (!amount) return;
+      const newBalance = Math.round(((user.balance || 0) + amount) * 100) / 100;
+      t.update(userRef, { balance: newBalance, lastLifeAllowanceDailyPaid: dateKey });
+      credited = amount;
+    });
+  } catch (e) {
+    return null;
+  }
+  if (credited) {
+    await logTxn(classCode, { type: "life-allowance", to: username, amount: credited, note: "Life event allowance (daily)" });
+  }
+  return credited;
+}
+
+// Self-apply entry point — student.js, and bank.js for a student. Pays
+// wages + weekly life allowance into ONLY the current student's own
+// account, if their own schedule says it's due today.
+async function payMyWageIfDue(username) {
+  const todayKey = nzDateKey();
+  const user = await getUser(username);
+  if (!user || user.role !== "student") return 0;
+  const cls = await getClass(user.classCode);
+  if (!cls || !cls.payDay || cls.archived) return 0;
+  if (nzDayName() !== cls.payDay) return 0;
+  let count = 0;
+  if (user.lastWagePaid !== todayKey) {
+    const r = await _payStudentWage(user.classCode, username, todayKey, { cls });
+    if (r && r.credited) count++;
+  }
+  if (user.lastLifeAllowanceWeeklyPaid !== todayKey) {
+    const credited = await _payStudentWeeklyLifeAllowance(user.classCode, username, todayKey, { cls });
+    if (credited) count++;
+  }
+  return count;
+}
+
+// Self-apply entry point for the DAILY life-item allowance — runs every
+// calendar day regardless of the class's pay day.
+async function payMyDailyLifeAllowanceIfDue(username) {
+  const todayKey = nzDateKey();
+  const user = await getUser(username);
+  if (!user || user.role !== "student") return 0;
+  if (user.lastLifeAllowanceDailyPaid === todayKey) return 0;
+  const credited = await _payStudentDailyLifeAllowance(user.classCode, username, todayKey);
+  return credited ? 1 : 0;
+}
+
+// Teacher-triggered entry point (auto, on page load) — replaces the old
+// class-wide autoPayDayIfDue. Sweeps every student, paying whoever's due
+// and hasn't already been paid today (by their own visit or an earlier
+// pass of this same sweep).
+async function payDayForClassIfDue(classCode) {
   const cls = await getClass(classCode);
   if (!cls || !cls.payDay || cls.archived) return 0;
-  const todayName = nzDayName();
-  const todayKey = nzDateKey();
-  if (todayName !== cls.payDay) return 0;
-  if (cls.lastPayDayRun === todayKey) return 0; // cheap skip — already fully ran today
-  const result = await runPayDayInternal(classCode, todayKey, { force: false });
+  if (nzDayName() !== cls.payDay) return 0;
+  const result = await _runPayDayForClass(classCode, nzDateKey(), { force: false, cls });
   return result.newlyPaid;
 }
 
+// Manual "Run Pay Day" button (teacher.js) — always actually checks
+// every student, even if today's auto-run (or students' own visits)
+// already covered some of them. It will still never pay the same
+// student twice for the same day; it only pays students who have a job
+// but haven't been paid yet today (e.g. ones missed by an earlier
+// partial/failed run, or ones assigned a job/approved after auto-run).
 async function payDay(classCode) {
-  // Manual "Run Pay Day" button — always actually checks every student,
-  // even if today's auto-run already completed. It will still never pay
-  // the same student twice for the same day; it only pays students who
-  // have a job but haven't been paid yet today (e.g. ones missed by an
-  // earlier partial/failed run, or ones assigned a job after auto-run).
-  return await runPayDayInternal(classCode, nzDateKey(), { force: true });
+  return await _runPayDayForClass(classCode, nzDateKey(), { force: true });
 }
 
-async function runPayDayInternal(classCode, dateKey, { force = false } = {}) {
-  const classRef = classesCol().doc(classCode);
-
-  // Figure out today's progress record. `force` (manual button) always
-  // proceeds to check students even if lastPayDayRun already says today
-  // is done — the per-student paidUsernames list is what actually
-  // prevents double-payment, not the coarse lastPayDayRun flag.
-  let progress = null;
-  let alreadyRun = false;
-  await fdb.runTransaction(async (t) => {
-    const snap = await t.get(classRef);
-    if (!snap.exists) return;
-    const cls = snap.data();
-    alreadyRun = cls.lastPayDayRun === dateKey;
-    if (alreadyRun && !force) { progress = "SKIP"; return; }
-    const existing = cls.payDayProgress;
-    progress = (existing && existing.dateKey === dateKey) ? existing : { dateKey, paidUsernames: [], paidAllowanceUsernames: [] };
-    progress.paidAllowanceUsernames = progress.paidAllowanceUsernames || [];
-    t.update(classRef, { payDayProgress: progress });
-  });
-  if (progress === "SKIP") return { paidCount: 0, newlyPaid: 0, hasJobs: null, alreadyRun: true, unapprovedCount: 0 };
-
-  const cls = await getClass(classCode);
-  if (!cls) return { paidCount: 0, newlyPaid: 0, hasJobs: false, alreadyRun, unapprovedCount: 0 };
-  const students = await getClassStudents(classCode);
-  const alreadyPaid = new Set(progress.paidUsernames || []);
-  const alreadyPaidAllowance = new Set(progress.paidAllowanceUsernames || []);
-  let paidCount = alreadyPaid.size;
-  let newlyPaid = 0;
+async function _runPayDayForClass(classCode, dateKey, { force = false, cls: precomputedCls } = {}) {
+  const cls = precomputedCls || await getClass(classCode);
+  if (!cls) return { paidCount: 0, newlyPaid: 0, hasJobs: false, unapprovedCount: 0 };
+  const students = await getClassStudents(classCode, cls);
   let hasJobs = false;
-  let allSucceeded = true;
-  let unapprovedCount = 0; // has a job, not yet paid today, just isn't ticked
-
+  let paidCount = 0;
+  let newlyPaid = 0;
+  let unapprovedCount = 0;
   for (const student of students) {
-    if (!student.jobId) continue;
-    const job = cls.jobs.find(j => j.id === student.jobId);
-    if (!job) continue;
-    hasJobs = true;
-    if (alreadyPaid.has(student.username)) continue;
-    // Not marked as having done this week's job task yet — skip without
-    // touching alreadyPaid/allSucceeded, so as soon as the teacher ticks
-    // the box, the next pay day run (auto or the manual button) will
-    // catch them up rather than having missed the week for good.
-    if (!isJobTaskApprovedThisWeek(student, cls)) { unapprovedCount++; continue; }
-    try {
-      const tier = getStudentTier(job, student);
-      const wage = tier ? tier.wage : 0;
-      let { net, taxAmount } = applyWageTax(cls, wage);
-      // Life items can boost/cut take-home wage (incomePercent) and knock
-      // a percentage off the tax bill just withheld (taxCutPercent) —
-      // applied here, after the normal bracket tax, so they layer on top
-      // instead of interacting with the bracket math itself.
-      const life = getLifeBenefitTotals(student);
-      if (life.incomePercent) net = Math.round(net * (1 + life.incomePercent / 100) * 100) / 100;
-      if (life.taxCutPercent && taxAmount > 0) {
-        const refund = Math.round(taxAmount * (life.taxCutPercent / 100) * 100) / 100;
-        net = Math.round((net + refund) * 100) / 100;
-        taxAmount = Math.round((taxAmount - refund) * 100) / 100;
-      }
-      await adjustBalance(student.username, net);
-      const tierLabel = tier ? tier.name : job.title;
-      await logTxn(classCode, { type: "wage", to: student.username, amount: net, note: "Pay day: " + tierLabel + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
-      alreadyPaid.add(student.username);
-      paidCount++;
-      newlyPaid++;
-      // Persist progress after each successful payment so a crash
-      // mid-loop doesn't cause a re-run to pay this student twice.
-      await classRef.update({ payDayProgress: { dateKey, paidUsernames: Array.from(alreadyPaid), paidAllowanceUsernames: Array.from(alreadyPaidAllowance) } });
-    } catch (e) {
-      // Don't let one student's failure stop the rest of the class
-      // from getting paid — but don't mark the day as fully done either,
-      // so the next run (auto or manual) will retry just this student.
-      allSucceeded = false;
-    }
+    if (student.jobId && (cls.jobs || []).find(j => j.id === student.jobId)) hasJobs = true;
+    if (student.lastWagePaid === dateKey) { paidCount++; continue; } // already covered — cheap in-memory skip before opening a transaction
+    const r = await _payStudentWage(classCode, student.username, dateKey, { force, cls });
+    if (r && r.credited) { newlyPaid++; paidCount++; }
+    else if (r && r.skippedUnapproved) { unapprovedCount++; }
   }
-
   // Life-item recurring allowances: independent of having a job, so this
   // runs for every student, not just the ones the loop above touched.
-  // Tracked with its own paidAllowanceUsernames set (alongside the
-  // wage-specific paidUsernames above) so a retry never double-pays. Only
-  // items set to "weekly" frequency are paid here — "daily" ones are paid
-  // by processDailyLifeAllowance instead, once per calendar day.
   for (const student of students) {
-    if (alreadyPaidAllowance.has(student.username)) continue;
-    const weeklyAllowance = getLifeAllowanceByFrequency(student, "weekly");
-    if (!weeklyAllowance) { alreadyPaidAllowance.add(student.username); continue; }
-    try {
-      await adjustBalance(student.username, weeklyAllowance);
-      await logTxn(classCode, { type: "life-allowance", to: student.username, amount: weeklyAllowance, note: "Life event allowance (weekly)" });
-      alreadyPaidAllowance.add(student.username);
-      await classRef.update({ "payDayProgress.paidAllowanceUsernames": Array.from(alreadyPaidAllowance) });
-    } catch (e) {
-      allSucceeded = false;
-    }
+    if (student.lastLifeAllowanceWeeklyPaid === dateKey) continue;
+    await _payStudentWeeklyLifeAllowance(classCode, student.username, dateKey, { cls });
   }
-
-  if (allSucceeded) {
-    await classRef.update({ lastPayDayRun: dateKey });
-  }
-  return { paidCount, newlyPaid, hasJobs, alreadyRun, unapprovedCount };
+  return { paidCount, newlyPaid, hasJobs, unapprovedCount };
 }
 
-// Pays out "daily" life-item allowances — runs every calendar day,
-// completely independent of the class's weekly Pay Day. Mirrors
-// runPayDayInternal's own idempotency approach: a per-date progress
-// record (lifeDailyProgress) tracks which students have already been
-// paid today, so re-running this on every page load (like every other
-// startup job) only ever pays each student once per day, and a crash
-// mid-loop just resumes where it left off on the next call.
-async function processDailyLifeAllowance(classCode) {
-  const classRef = classesCol().doc(classCode);
-  const todayKey = nzDateKey();
-
-  let progress = null;
-  await fdb.runTransaction(async (t) => {
-    const snap = await t.get(classRef);
-    if (!snap.exists) return;
-    const cls = snap.data();
-    if (cls.archived) { progress = "SKIP"; return; }
-    if (cls.lastLifeDailyRun === todayKey) { progress = "SKIP"; return; }
-    const existing = cls.lifeDailyProgress;
-    progress = (existing && existing.dateKey === todayKey) ? existing : { dateKey: todayKey, paidUsernames: [] };
-    t.update(classRef, { lifeDailyProgress: progress });
-  });
-  if (progress === "SKIP") return 0;
-
+// Teacher-triggered entry point (auto, on page load) for the DAILY
+// life-item allowance — replaces the old class-wide
+// processDailyLifeAllowance. Runs every calendar day, completely
+// independent of the class's weekly Pay Day.
+async function dailyLifeAllowanceForClassIfDue(classCode) {
   const cls = await getClass(classCode);
-  if (!cls) return 0;
+  if (!cls || cls.archived) return 0;
+  const todayKey = nzDateKey();
   const students = await getClassStudents(classCode, cls);
-  const alreadyPaid = new Set(progress.paidUsernames || []);
   let newlyPaid = 0;
-  let allSucceeded = true;
-
   for (const student of students) {
-    if (alreadyPaid.has(student.username)) continue;
-    const dailyAllowance = getLifeAllowanceByFrequency(student, "daily");
-    if (!dailyAllowance) { alreadyPaid.add(student.username); continue; }
-    try {
-      await adjustBalance(student.username, dailyAllowance);
-      await logTxn(classCode, { type: "life-allowance", to: student.username, amount: dailyAllowance, note: "Life event allowance (daily)" });
-      alreadyPaid.add(student.username);
-      newlyPaid++;
-      await classRef.update({ "lifeDailyProgress.paidUsernames": Array.from(alreadyPaid) });
-    } catch (e) {
-      allSucceeded = false;
-    }
-  }
-
-  if (allSucceeded) {
-    await classRef.update({ lastLifeDailyRun: todayKey });
+    if (student.lastLifeAllowanceDailyPaid === todayKey) continue; // cheap in-memory skip
+    const credited = await _payStudentDailyLifeAllowance(classCode, student.username, todayKey);
+    if (credited) newlyPaid++;
   }
   return newlyPaid;
 }
@@ -2677,11 +2774,16 @@ function companyPriceAtDate(co, dateKey) {
 
 // Runs the market simulation automatically once per NZ calendar day — the
 // first page load of the day (from any student or teacher) that hits this
-// triggers it, same pattern as autoPayDayIfDue. (Interest no longer works
-// this way — see applyMyInterestIfDue/applyInterestToClassIfDue — because,
-// same as this function, a single class-wide "claimed today" flag can only
-// ever be written by a teacher session; this function has that same
-// limitation today and isn't in scope for this change.)
+// triggers it. Unlike interest/pay day/property market day, this one
+// already works fine from a student's own session as-is: the only things
+// this writes are `companies` (an in-place price/history update, which
+// firestore.rules already allows any class member to make — it never
+// changes how many companies exist) and `lastMarketDayRun` (which was
+// never added to the student lockedFields list in the first place,
+// unlike its property-market and pay-day counterparts). Nothing here
+// credits money into any student's own account, so there's no
+// conservation-of-money problem to design around — no per-student stamp
+// needed, this one class-wide flag is safe for anyone to claim.
 //
 // The "claim today" flag and the actual price simulation used to be two
 // SEPARATE transactions (claim, then simulate). That let a Firestore
@@ -6725,10 +6827,10 @@ async function sellStoreItemBulk(username, classCode, itemId, qty, rate) {
    getLifeBenefitTotals, used everywhere a benefit actually applies). */
 // Each life item template also carries its own allowance frequency —
 // "weekly" (default: paid alongside the class's normal Pay Day, see
-// runPayDayInternal) or "daily" (paid once per calendar day regardless of
-// Pay Day, see processDailyLifeAllowance). Only the allowance benefit
-// cares about this; every other benefit (income %, discounts, lifestyle
-// points, tax cut) applies continuously either way.
+// _payStudentWeeklyLifeAllowance) or "daily" (paid once per calendar day
+// regardless of Pay Day, see _payStudentDailyLifeAllowance). Only the
+// allowance benefit cares about this; every other benefit (income %,
+// discounts, lifestyle points, tax cut) applies continuously either way.
 function normalizeLifeFrequency(f) {
   return f === "daily" ? "daily" : "weekly";
 }
@@ -6767,7 +6869,7 @@ function getLifeBenefitTotals(user) {
 }
 // Sums just the allowance from a student's life items that match one
 // frequency ("weekly" or "daily"), so the two payout jobs (weekly, inside
-// Pay Day; daily, processDailyLifeAllowance) each only pay their own
+// Pay Day; daily, _payStudentDailyLifeAllowance) each only pay their own
 // slice and never double up on the other's items.
 function getLifeAllowanceByFrequency(user, frequency) {
   const items = (user && user.lifeItems) || [];
