@@ -66,12 +66,12 @@ async function init() {
     // chunk of load time, especially on a slow mobile connection. Running
     // them together cuts that to roughly the time of the single slowest one.
     const T29_STARTUP_JOBS = Promise.all([
-      safeBgJob(autoPayDayIfDue(CLASS_CODE), "autoPayDayIfDue"),
-      safeBgJob(processDailyLifeAllowance(CLASS_CODE), "processDailyLifeAllowance"),
+      safeBgJob(payDayForClassIfDue(CLASS_CODE), "payDayForClassIfDue"),
+      safeBgJob(dailyLifeAllowanceForClassIfDue(CLASS_CODE), "dailyLifeAllowanceForClassIfDue"),
       safeBgJob(processAutomations(CLASS_CODE), "processAutomations"),
       safeBgJob(processLoanInterest(CLASS_CODE), "processLoanInterest"),
       safeBgJob(processTermDeposits(CLASS_CODE), "processTermDeposits"),
-      safeBgJob(autoInterestIfDue(CLASS_CODE), "autoInterestIfDue"),
+      safeBgJob(applyInterestToClassIfDue(CLASS_CODE), "applyInterestToClassIfDue"),
       safeBgJob(processInsurancePayments(CLASS_CODE), "processInsurancePayments"),
       safeBgJob(processWeeklyEvents(CLASS_CODE), "processWeeklyEvents"),
       safeBgJob(processWeeklyBigEvents(CLASS_CODE), "processWeeklyBigEvents")
