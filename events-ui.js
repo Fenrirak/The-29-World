@@ -34,8 +34,25 @@ function saveShownEventState(username, state) {
 async function checkWeeklyEventPopup(username, classCode) {
   if (!username || !classCode) return;
   if (anyModalShowing()) return; // something's already showing
-  let cls = await getClass(classCode);
-  const user = await getUser(username);
+  // PERF FIX: this, checkBigEventPopup and checkAdjustmentPopup (below)
+  // and checkPromotionNotification (data.js) all run back-to-back, in
+  // this order, from every page's init() (see the callers list — that's
+  // ~17 pages), and each used to call the uncached getClass()/getUser()
+  // — the ones the write-path/background-job functions elsewhere in
+  // data.js deliberately use because THEY need guaranteed-fresh state for
+  // a read-modify-write. These four are pure reads with no such need, so
+  // that bought nothing but up to 4 extra sequential Firestore round
+  // trips on every single page load, back-to-back, on top of the ~9
+  // background jobs that already just ran. Switching to
+  // getClassCached()/getUserCached() — the same helpers render() already
+  // uses for exactly this "read the same doc again a moment later"
+  // situation — means only the first of these four calls actually hits
+  // the network; the rest reuse that cached copy (still safe: any write
+  // in between, e.g. revealFixedEvent() below, invalidates the cache the
+  // instant it resolves, so a later check in this same sequence still
+  // never sees stale data).
+  let cls = await getClassCached(classCode);
+  const user = await getUserCached(username);
   if (!cls || !user) return;
   const weekKey = isoWeekKey(new Date());
   const now = Date.now();
@@ -220,7 +237,11 @@ function anyModalShowing() {
 async function checkAdjustmentPopup(username, classCode) {
   if (!username || !classCode) return;
   if (anyModalShowing()) return;
-  const cls = await getClass(classCode);
+  // PERF FIX: see the comment on checkWeeklyEventPopup above — same
+  // reasoning, this reuses whatever it (or checkBigEventPopup, just
+  // before this in every page's init()) already fetched a moment ago
+  // instead of paying for its own round trip.
+  const cls = await getClassCached(classCode);
   if (!cls) return;
   const pending = (cls.txns || []).find(t => t.announce && !t.acknowledged && t.to === username && (t.type === "bonus" || t.type === "fine"));
   if (!pending) return;
@@ -273,14 +294,15 @@ function saveShownBigEventState(username, state) {
 async function checkBigEventPopup(username, classCode) {
   if (!username || !classCode) return;
   if (anyModalShowing()) return; // something's already showing
-  const cls = await getClass(classCode);
+  // PERF FIX: see the comment on checkWeeklyEventPopup above.
+  const cls = await getClassCached(classCode);
   if (!cls) return;
 
   // Bad events (job/property/vehicle at risk) take priority — forced
   // modal, must be resolved via pay / forfeit / claim before continuing.
   const pending = (cls.bigEventLog || []).find(e => e.studentUser === username && e.status === "pending");
   if (pending) {
-    const user = await getUser(username);
+    const user = await getUserCached(username);
     const coverage = BIG_EVENT_COVERAGE[pending.module];
     const plan = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).find(p => p && p.coverage === coverage);
     showBigEventPopup(pending, plan, username, classCode, user);

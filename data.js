@@ -1791,8 +1791,14 @@ async function processJobPromotions(classCode) {
 // offer stays in place (and keeps showing) until the student explicitly
 // accepts or declines via respondToPromotion. Call after startup jobs on
 // student-facing pages.
+// PERF FIX: this is the last of a chain of four checks that run
+// back-to-back at the end of every page's init() — see the comment on
+// checkWeeklyEventPopup in events-ui.js. Was an uncached getUser(); this
+// student's own doc was almost certainly just fetched (and cached) by
+// one of the three checks immediately before this one, so reuse it
+// instead of paying for a fifth network round trip in the same chain.
 async function checkPromotionNotification(username) {
-  const user = await getUser(username);
+  const user = await getUserCached(username);
   return (user && user.pendingPromotion) || null;
 }
 
