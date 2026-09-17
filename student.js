@@ -108,7 +108,7 @@ async function init() {
     safeBgJob(processDailyLifeAllowance(u.classCode), "processDailyLifeAllowance"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
-    safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
+    safeBgJob(applyMyInterestIfDue(u.username), "applyMyInterestIfDue"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents"),

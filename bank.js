@@ -84,7 +84,12 @@ async function init() {
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
-    safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
+    // Teacher sessions can write every student's doc, so they still run
+    // the full class-wide sweep (and act as a safety net for anyone who
+    // hasn't opened anything yet). A student session only ever pays
+    // their OWN interest — see the big comment above these two functions
+    // in data.js for why a student's login can't safely pay classmates.
+    safeBgJob(IS_TEACHER ? applyInterestToClassIfDue(u.classCode) : applyMyInterestIfDue(u.username), "autoInterest"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")

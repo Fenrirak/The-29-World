@@ -109,7 +109,7 @@ async function init() {
     safeBgJob(processDailyLifeAllowance(CLASS_CODE), "processDailyLifeAllowance"),
     safeBgJob(processAutomations(CLASS_CODE), "processAutomations"),
     safeBgJob(processTermDeposits(CLASS_CODE), "processTermDeposits"),
-    safeBgJob(autoInterestIfDue(CLASS_CODE), "autoInterestIfDue"),
+    safeBgJob(applyInterestToClassIfDue(CLASS_CODE), "applyInterestToClassIfDue"),
     safeBgJob(processInsurancePayments(CLASS_CODE), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(CLASS_CODE), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(CLASS_CODE), "processWeeklyBigEvents"),
@@ -823,7 +823,10 @@ async function runPayDay() {
 }
 async function runInterest() {
   const count = await applyInterest(CLASS_CODE);
-  alert(count > 0 ? `Interest applied to ${count} student(s).` : "No balances to apply interest to.");
+  // count only reflects students who HADN'T already been paid today —
+  // anyone already covered (their own visit, or an earlier automatic
+  // sweep today) is correctly skipped rather than paid twice.
+  alert(count > 0 ? `Interest applied to ${count} student(s).` : "No one was due interest just now — either balances/rates are zero, or everyone's already been paid today.");
   await render();
 }
 async function runWeeklyEventsNow() {

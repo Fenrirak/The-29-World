@@ -195,7 +195,8 @@ function hourLabel(h) {
 /* ---------------- Basic doc fetch helpers ----------------
    Every page fires several independent background jobs together via
    Promise.all (autoPayDayIfDue, processAutomations,
-   processTermDeposits, autoInterestIfDue, processInsurancePayments,
+   processTermDeposits, applyMyInterestIfDue/applyInterestToClassIfDue,
+   processInsurancePayments,
    processWeeklyEvents, processWeeklyBigEvents, ...) and most of them start
    by reading the SAME class doc — so on every page load, up to ~8-10
    near-simultaneous getClass() calls were each independently hitting
@@ -765,7 +766,8 @@ function defaultClassData(code, className, teacherUsername) {
     sideHustles: [],
     lifestyleLock: { threshold: 0, modules: [] },
     dailyTimeLimitMinutes: null, // null/0 = no limit; minutes of active time per student per day
-    interestAuto: false, interestFrequency: "weekly", interestDay: "Fri", lastInterestRun: null,
+    interestAuto: false, interestFrequency: "weekly", interestDay: "Fri",
+    lastInterestRun: null, // legacy/unused — interest due-ness is now tracked per student (see lastInterestApplied, near applyMyInterestIfDue)
     insuranceDay: "Fri", lastInsuranceWeekRun: null,
     gambling: {
       enabled: true, minBet: 1, maxBet: 20,
@@ -2166,35 +2168,82 @@ function interestScheduleLabel(cls) {
   return `Interest is paid automatically ${INTEREST_FREQ_LABEL[freq] || "every week"}, on ${dayName}.`;
 }
 
+// Pure calculation shared by every path that pays interest (self-apply,
+// the teacher-triggered auto batch, and the teacher's manual "Apply
+// Interest" button) — see the three callers below. Keeping the math in
+// ONE place means all three can never quietly disagree on how much
+// interest a given balance/savings figure is worth.
+function computeInterestCredit(cls, student) {
+  const savingsRate = (cls.interestRate || 0) / 100;
+  const cashRate = (cls.cashInterestRate || 0) / 100;
+  const savingsInterestGross = Math.round((student.savings || 0) * savingsRate * 100) / 100;
+  const cashInterestGross = Math.round((student.balance || 0) * cashRate * 100) / 100;
+  const savingsTax = savingsInterestGross > 0 ? applyTaxToIncome(cls, "interest", savingsInterestGross) : { net: 0, taxAmount: 0 };
+  const cashTax = cashInterestGross > 0 ? applyTaxToIncome(cls, "interest", cashInterestGross) : { net: 0, taxAmount: 0 };
+  return {
+    savingsNet: savingsTax.net, savingsTaxAmount: savingsTax.taxAmount,
+    cashNet: cashTax.net, cashTaxAmount: cashTax.taxAmount,
+    newSavings: Math.round(((student.savings || 0) + savingsTax.net) * 100) / 100,
+    newBalance: Math.round(((student.balance || 0) + cashTax.net) * 100) / 100
+  };
+}
+
+// Credits ONE student's interest, in a single transaction on THEIR OWN
+// /users doc (balance + savings + the lastInterestApplied stamp all move
+// together), then logs it. Returns the credited amounts, or null if
+// someone else's transaction already stamped `dateKey` on this student
+// first (the actual thing that prevents a double payment — see the
+// callers below for why this can race in more than one way). `force`
+// skips the schedule/day check (used by the teacher's manual button);
+// it never skips the "already paid today" check — that one is not
+// optional, or a teacher clicking the button twice would double-pay.
+async function _creditStudentInterest(classCode, username, dateKey, { force = false, cls: precomputedCls } = {}) {
+  const userRef = usersCol().doc(username);
+  let credited = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) return;
+      const user = snap.data();
+      if (user.role !== "student") return; // interest is a student-only concept
+      if (user.lastInterestApplied === dateKey) return; // ALREADY paid today — this is the actual double-pay guard
+      const cls = precomputedCls || await getClass(classCode);
+      if (!cls) return;
+      if (!force && !isInterestDueForUser(cls, user, dateKey)) return;
+      const credit = computeInterestCredit(cls, user);
+      if (credit.savingsNet <= 0 && credit.cashNet <= 0) return; // nothing to pay — leave unstamped so a same-day rate change can still catch them
+      t.update(userRef, { savings: credit.newSavings, balance: credit.newBalance, lastInterestApplied: dateKey });
+      credited = credit;
+    });
+  } catch (e) {
+    return null;
+  }
+  if (!credited) return null;
+  if (credited.savingsNet > 0) {
+    await logTxn(classCode, { type: "interest", to: username, amount: credited.savingsNet, note: "Savings account interest" + (credited.savingsTaxAmount > 0 ? ` (${fmtMoney(credited.savingsTaxAmount)} tax withheld)` : "") });
+  }
+  if (credited.cashNet > 0) {
+    await logTxn(classCode, { type: "cash-interest", to: username, amount: credited.cashNet, note: "Cash balance interest" + (credited.cashTaxAmount > 0 ? ` (${fmtMoney(credited.cashTaxAmount)} tax withheld)` : "") });
+  }
+  return credited;
+}
+
+// Manual "Apply Interest" button (teacher.js) — pays every student who
+// hasn't already been paid TODAY, regardless of the interestAuto
+// schedule (it's a deliberate override, same spirit as payDay()'s manual
+// "force" button). It can never double-pay someone the automatic
+// schedule (or that student's own visit) already paid today — see
+// _creditStudentInterest's lastInterestApplied check above, which this
+// shares with every other path that pays interest.
 async function applyInterest(classCode) {
   const cls = await getClass(classCode);
   if (!cls) return 0;
-  const savingsRate = (cls.interestRate || 0) / 100;
-  const cashRate = (cls.cashInterestRate || 0) / 100;
-  const students = await getClassStudents(classCode);
+  const todayKey = nzDateKey();
+  const students = await getClassStudents(classCode, cls);
   let count = 0;
   for (const student of students) {
-    // Savings and cash can now earn (or not earn) interest at different
-    // teacher-set rates — money in the Savings Account uses interestRate,
-    // the everyday cash balance uses cashInterestRate (0 by default, so
-    // existing classes behave exactly as before unless the teacher opts in).
-    const savings = student.savings || 0;
-    const savingsInterest = Math.round(savings * savingsRate * 100) / 100;
-    const cashInterest = Math.round(student.balance * cashRate * 100) / 100;
-    let touched = false;
-    if (savingsInterest > 0) {
-      const { net, taxAmount } = applyTaxToIncome(cls, "interest", savingsInterest);
-      await adjustSavings(student.username, net);
-      await logTxn(classCode, { type: "interest", to: student.username, amount: net, note: "Savings account interest" + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
-      touched = true;
-    }
-    if (cashInterest > 0) {
-      const { net, taxAmount } = applyTaxToIncome(cls, "interest", cashInterest);
-      await adjustBalance(student.username, net);
-      await logTxn(classCode, { type: "cash-interest", to: student.username, amount: net, note: "Cash balance interest" + (taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "") });
-      touched = true;
-    }
-    if (touched) count++;
+    const credited = await _creditStudentInterest(classCode, student.username, todayKey, { force: true, cls });
+    if (credited) count++;
   }
   return count;
 }
@@ -2444,7 +2493,7 @@ async function repayLoan(username, loanId, amount) {
 
 // Charges another week of compounding interest on every still-active loan,
 // first thing every Monday — same "first thing on day X" idea as
-// autoInterestIfDue, but on a fixed Monday schedule rather than a
+// applyMyInterestIfDue/applyInterestToClassIfDue, but on a fixed Monday schedule rather than a
 // teacher-configurable day, since loan interest isn't tied to the bank's
 // interest settings. A loan's very first week of interest is charged the
 // moment it's taken out (see takeLoan) — this only ever adds the 2nd, 3rd,
@@ -2628,7 +2677,11 @@ function companyPriceAtDate(co, dateKey) {
 
 // Runs the market simulation automatically once per NZ calendar day — the
 // first page load of the day (from any student or teacher) that hits this
-// triggers it, same pattern as autoPayDayIfDue / autoInterestIfDue.
+// triggers it, same pattern as autoPayDayIfDue. (Interest no longer works
+// this way — see applyMyInterestIfDue/applyInterestToClassIfDue — because,
+// same as this function, a single class-wide "claimed today" flag can only
+// ever be written by a teacher session; this function has that same
+// limitation today and isn't in scope for this change.)
 //
 // The "claim today" flag and the actual price simulation used to be two
 // SEPARATE transactions (claim, then simulate). That let a Firestore
@@ -3903,30 +3956,110 @@ async function saveInterestSettings(classCode, settings) {
     interestDay: settings.day || "Fri"
   });
 }
-async function autoInterestIfDue(classCode) {
+// Is it THIS student's turn for interest, going by the class's schedule
+// and THEIR OWN lastInterestApplied stamp (not a single class-wide
+// flag — see the big comment above applyMyInterestIfDue/
+// applyInterestToClassIfDue below for why it has to work this way).
+// Same day/frequency logic the old class-wide autoInterestIfDue used,
+// just evaluated per student instead of once for the whole class.
+function isInterestDueForUser(cls, user, todayKey) {
+  if (!cls || !cls.interestAuto || cls.archived) return false;
+  if (!user || user.role !== "student") return false;
+  if (user.lastInterestApplied === todayKey) return false;
+  if (cls.interestFrequency !== "daily") {
+    if (nzDayName() !== (cls.interestDay || "Fri")) return false;
+    if (user.lastInterestApplied) {
+      const need = FREQ_DAYS[cls.interestFrequency] || 7;
+      if (daysBetweenKeys(user.lastInterestApplied, todayKey) < need) return false;
+    }
+  }
+  return true;
+}
+
+// ===================== Automatic interest — two entry points =====================
+// BACKGROUND: interest used to be gated by ONE flag on the shared class
+// doc (lastInterestRun) — whoever's page happened to claim it for the
+// day paid the WHOLE class in one go. That doesn't work from a student's
+// own session: firestore.rules only lets a TEACHER write more than one
+// student's /users doc in a single run (see the big comment above
+// isAllowedStudentClassUpdate() in firestore.rules) — crediting interest
+// into 20 OTHER accounts isn't something a student's login can ever be
+// safely trusted to do, because unlike a peer-to-peer transfer, interest
+// isn't conservation-of-money: there's no matching debit anywhere a rule
+// could check the credited amount against. So under the old design, a
+// student's tab opening always failed the class-doc write silently
+// (caught, logged, page kept loading) and only a teacher's visit ever
+// actually paid anyone.
+//
+// Fix: track "was I paid today" PER STUDENT, on their own /users doc
+// (lastInterestApplied — a plain self-writable field, exactly like the
+// `loans[].lastInterestWeek` stamp processLoanInterest above already
+// uses for the same reason). That makes two independent entry points
+// both safe AND unable to double-pay anyone, because they both funnel
+// through _creditStudentInterest(), which does the credit + the stamp
+// as ONE transaction on that one student's own doc — Firestore
+// serializes concurrent transactions on the same document, so whichever
+// of the two paths below gets there first for a given student "wins",
+// and the other's transaction re-reads, sees lastInterestApplied already
+// set to today, and does nothing. This holds regardless of how many
+// tabs/devices/paths hit the same student at once.
+//
+//   1. applyMyInterestIfDue(username) — called from student.js and from
+//      bank.js when the CURRENT visitor is a student. Pays interest into
+//      ONLY that one student's own account, if their own schedule says
+//      it's due. This is what makes interest arrive for a student who
+//      never happens to share a class with a teacher who's currently
+//      online — they get paid on their OWN next visit, whatever day that
+//      turns out to be, rather than being stuck waiting for a teacher.
+//
+//   2. applyInterestToClassIfDue(classCode) — called from teacher.js and
+//      from bank.js when the CURRENT visitor is a teacher (this is the
+//      direct replacement for the old class-wide autoInterestIfDue). A
+//      teacher's session CAN write every student's doc, so this keeps
+//      doing what the old auto-run did — walk the whole roster and pay
+//      everyone who's due — but the "who's due" and "don't double-pay"
+//      checks are now per student, so it correctly SKIPS anyone who
+//      already got paid via their own visit (path 1) earlier that day,
+//      and only tops up the ones who haven't opened anything yet. This
+//      is exactly "runs like right now for students who haven't opened
+//      yet" — a teacher's visit is still a full safety-net sweep of the
+//      class, it just no longer re-pays people who don't need it.
+//
+// A class with no teacher visiting for days still pays every student
+// exactly on schedule, one by one, as they show up. A class where the
+// teacher visits daily behaves exactly like before. Nobody is ever paid
+// twice for the same day, from any combination of the two paths.
+
+async function applyMyInterestIfDue(username) {
+  const todayKey = nzDateKey();
+  const user = await getUser(username);
+  if (!user || user.role !== "student") return 0;
+  const cls = await getClass(user.classCode);
+  // Cheap pre-check against the (slightly-stale-is-fine) plain reads
+  // above, so a page load that isn't due today never even opens a
+  // transaction. The REAL guard — the one that actually prevents a
+  // double payment — is the fresh re-check inside _creditStudentInterest.
+  if (!isInterestDueForUser(cls, user, todayKey)) return 0;
+  const credited = await _creditStudentInterest(user.classCode, username, todayKey, { cls });
+  return credited ? 1 : 0;
+}
+
+async function applyInterestToClassIfDue(classCode) {
   const cls = await getClass(classCode);
   if (!cls || !cls.interestAuto || cls.archived) return 0;
   const todayKey = nzDateKey();
-  if (cls.lastInterestRun === todayKey) return 0;
-  if (cls.interestFrequency !== "daily") {
-    if (nzDayName() !== (cls.interestDay || "Fri")) return 0;
-    if (cls.lastInterestRun) {
-      const need = FREQ_DAYS[cls.interestFrequency] || 7;
-      if (daysBetweenKeys(cls.lastInterestRun, todayKey) < need) return 0;
-    }
+  const students = await getClassStudents(classCode, cls);
+  let count = 0;
+  for (const student of students) {
+    // Cheap in-memory skip before opening a transaction, same reasoning
+    // as applyMyInterestIfDue above — students who already got paid
+    // today (whether by their own visit or an earlier pass of this same
+    // loop) are the common case, and this check is free.
+    if (!isInterestDueForUser(cls, student, todayKey)) continue;
+    const credited = await _creditStudentInterest(classCode, student.username, todayKey, { cls });
+    if (credited) count++;
   }
-  const classRef = classesCol().doc(classCode);
-  let claimed = false;
-  await fdb.runTransaction(async (t) => {
-    const snap = await t.get(classRef);
-    if (!snap.exists) return;
-    const liveCls = snap.data();
-    if (liveCls.lastInterestRun === todayKey) return;
-    t.update(classRef, { lastInterestRun: todayKey });
-    claimed = true;
-  });
-  if (!claimed) return 0;
-  return await applyInterest(classCode);
+  return count;
 }
 
 /* ---------------- Leaderboard ---------------- */
