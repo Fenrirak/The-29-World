@@ -34,10 +34,14 @@ async function init() {
   paintChrome();
 
   const T29_STARTUP_JOBS = Promise.all([
-    safeBgJob(autoPayDayIfDue(CLASS_CODE), "autoPayDayIfDue"),
+    IS_TEACHER
+      ? safeBgJob(payDayForClassIfDue(CLASS_CODE), "payDayForClassIfDue")
+      : safeBgJob(payMyWageIfDue(CURRENT.username), "payMyWageIfDue"),
     safeBgJob(processAutomations(CLASS_CODE), "processAutomations"),
     safeBgJob(processTermDeposits(CLASS_CODE), "processTermDeposits"),
-    safeBgJob(autoInterestIfDue(CLASS_CODE), "autoInterestIfDue"),
+    IS_TEACHER
+      ? safeBgJob(applyInterestToClassIfDue(CLASS_CODE), "applyInterestToClassIfDue")
+      : safeBgJob(applyMyInterestIfDue(CURRENT.username), "applyMyInterestIfDue"),
     safeBgJob(processInsurancePayments(CLASS_CODE), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(CLASS_CODE), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(CLASS_CODE), "processWeeklyBigEvents"),

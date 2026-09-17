@@ -42,12 +42,18 @@ async function init() {
   }
 
   const T29_STARTUP_JOBS = Promise.all([
-    safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
-    safeBgJob(processDailyLifeAllowance(u.classCode), "processDailyLifeAllowance"),
+    IS_TEACHER
+      ? safeBgJob(payDayForClassIfDue(u.classCode), "payDayForClassIfDue")
+      : safeBgJob(payMyWageIfDue(u.username), "payMyWageIfDue"),
+    IS_TEACHER
+      ? safeBgJob(dailyLifeAllowanceForClassIfDue(u.classCode), "dailyLifeAllowanceForClassIfDue")
+      : safeBgJob(payMyDailyLifeAllowanceIfDue(u.username), "payMyDailyLifeAllowanceIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
-    safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
+    IS_TEACHER
+      ? safeBgJob(applyInterestToClassIfDue(u.classCode), "applyInterestToClassIfDue")
+      : safeBgJob(applyMyInterestIfDue(u.username), "applyMyInterestIfDue"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")

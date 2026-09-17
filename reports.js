@@ -48,11 +48,15 @@ async function init() {
   // Same background jobs every other page runs on load, so visiting
   // Reports keeps the class ticking along like any other page.
   const T29_STARTUP_JOBS = Promise.all([
-    safeBgJob(autoPayDayIfDue(u.classCode), "autoPayDayIfDue"),
+    IS_TEACHER
+      ? safeBgJob(payDayForClassIfDue(u.classCode), "payDayForClassIfDue")
+      : safeBgJob(payMyWageIfDue(u.username), "payMyWageIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
-    safeBgJob(autoInterestIfDue(u.classCode), "autoInterestIfDue"),
+    IS_TEACHER
+      ? safeBgJob(applyInterestToClassIfDue(u.classCode), "applyInterestToClassIfDue")
+      : safeBgJob(applyMyInterestIfDue(u.username), "applyMyInterestIfDue"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
