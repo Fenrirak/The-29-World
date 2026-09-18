@@ -1,0 +1,15 @@
+{
+  "name": "The 29 World",
+  "short_name": "29 World",
+  "description": "A classroom economy simulator \u2014 banking, jobs, property, the stock market and more.",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#1f2b44",
+  "theme_color": "#1f2b44",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
