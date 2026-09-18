@@ -8166,14 +8166,17 @@ function isSubletRentOverdue(prop, cls) {
 // pays it themselves, on the property's own rentDay, same self-service
 // pattern as payMortgage — nothing in this app ever deducts it
 // automatically, since real money has to move from a specific tenant who
-// might not have it. Splits the money movement into two steps (mark the
-// week paid + debit the tenant inside the transaction, then credit the
-// owner via adjustBalance afterwards) the same way processPropertyRent
-// already does for the passive scheme.
+// might not have it. The tenant's debit, the owner's credit, and marking
+// the week paid all happen inside ONE Firestore transaction (same
+// atomic-transfer pattern as transferMoney above) so the money can never
+// leave the tenant without landing on the owner — unlike a bare
+// adjustBalance() call afterwards, which swallows its own errors and
+// returns false instead of throwing, this can't silently no-op while the
+// week still gets marked paid and logged as a success.
 async function payTenantRent(username, classCode, propId) {
   const classRef = classesCol().doc(classCode);
   const tenantRef = usersCol().doc(username);
-  let amt = 0, propName = "", ownerUsername = "";
+  let amt = 0, propName = "", ownerUsername = "", ownerRef = null;
   try {
     await fdb.runTransaction(async (t) => {
       const classSnap = await t.get(classRef);
@@ -8191,7 +8194,20 @@ async function payTenantRent(username, classCode, propId) {
       if (tenant.balance < amt) throw new Error("BROKE");
       ownerUsername = prop.owner;
       propName = prop.name;
+      // Read the owner inside the same transaction (Firestore transactions
+      // require all reads before any writes) so their credit commits or
+      // fails together with the tenant's debit — never one without the
+      // other.
+      ownerRef = usersCol().doc(ownerUsername);
+      const ownerSnap = await t.get(ownerRef);
+      if (!ownerSnap.exists) throw new Error("OWNER_NOT_FOUND");
+      const owner = ownerSnap.data();
       t.update(tenantRef, { balance: Math.round((tenant.balance - amt) * 100) / 100 });
+      if (!(owner.role === "teacher")) {
+        // Teachers have unlimited funds and don't track a real balance,
+        // same convention adjustBalance uses.
+        t.update(ownerRef, { balance: Math.round((owner.balance + amt) * 100) / 100 });
+      }
       prop.sublet.rentLastWeekPaid = weekKey;
       t.update(classRef, { properties: cls.properties });
     });
@@ -8201,9 +8217,9 @@ async function payTenantRent(username, classCode, propId) {
     if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's rent has already been paid." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's rent." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
+    if (e.message === "OWNER_NOT_FOUND") return { ok: false, error: "The property owner's account couldn't be found. Ask your teacher for help." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await adjustBalance(ownerUsername, amt);
   await logTxn(classCode, { type: "property-rent-pay", from: username, to: ownerUsername, amount: amt, note: `Paid weekly rent: ${propName}` });
   await logTxn(classCode, { type: "property-rent-receive", to: ownerUsername, from: username, amount: amt, note: `Weekly rent received from a classmate: ${propName}` });
   return { ok: true, amount: amt };
