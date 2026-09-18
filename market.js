@@ -224,14 +224,14 @@ async function render() {
             <label>Buy shares</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="1" step="1" id="buy-${co.id}" placeholder="qty">
-              <button class="btn small gold" onclick="buy('${co.id}')">${icon("plus",13)} Buy</button>
+              <button class="btn small gold" id="buyBtn-${co.id}" onclick="buy('${co.id}')">${icon("plus",13)} Buy</button>
             </div>
           </div>
           <div>
             <label>Sell shares</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="1" step="1" id="sell-${co.id}" placeholder="qty">
-              <button class="btn small secondary" onclick="sell('${co.id}')">${icon("send",13)} Sell</button>
+              <button class="btn small secondary" id="sellBtn-${co.id}" onclick="sell('${co.id}')">${icon("send",13)} Sell</button>
             </div>
           </div>
         </div>
@@ -287,16 +287,39 @@ async function closeCo(id) {
   }
 }
 async function buy(id) {
-  const qty = document.getElementById("buy-" + id).value;
-  const res = await buyShares(CURRENT.username, CLASS_CODE, id, qty);
-  setCompanyMsg(id, res.ok ? `<div class="success-msg">Purchased!</div>` : `<div class="error-msg">${res.error}</div>`);
-  await render();
+  // Same fix, same reasoning as addAuto in bank.js: without this, a slow
+  // connection plus an eager double-tap on Buy fires two purchases before
+  // the first one's result is even visible. render() below rebuilds this
+  // button from scratch (it's redrawn fresh on every render, including
+  // the 5s auto-refresh), so re-enabling it here in `finally` only
+  // matters on the rare path where something throws before that rebuild
+  // happens — otherwise it's just disabling a node that's about to be
+  // thrown away anyway.
+  const btn = document.getElementById("buyBtn-" + id);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const qty = document.getElementById("buy-" + id).value;
+    const res = await buyShares(CURRENT.username, CLASS_CODE, id, qty);
+    setCompanyMsg(id, res.ok ? `<div class="success-msg">Purchased!</div>` : `<div class="error-msg">${res.error}</div>`);
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 async function sell(id) {
-  const qty = document.getElementById("sell-" + id).value;
-  const res = await sellShares(CURRENT.username, CLASS_CODE, id, qty);
-  setCompanyMsg(id, res.ok ? `<div class="success-msg">Sold!</div>` : `<div class="error-msg">${res.error}</div>`);
-  await render();
+  // Same double-tap guard as buy() above.
+  const btn = document.getElementById("sellBtn-" + id);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const qty = document.getElementById("sell-" + id).value;
+    const res = await sellShares(CURRENT.username, CLASS_CODE, id, qty);
+    setCompanyMsg(id, res.ok ? `<div class="success-msg">Sold!</div>` : `<div class="error-msg">${res.error}</div>`);
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function saveRange() {

@@ -294,25 +294,44 @@ async function saveLoanLifestylePenalty() {
 
 async function takeLoanForm(e) {
   e.preventDefault();
-  const amount = document.getElementById("loanAmount").value;
-  const res = await takeLoan(CURRENT.username, CURRENT.classCode, amount);
-  const box = document.getElementById("takeLoanMsg");
-  box.innerHTML = res.ok ? `<div class="success-msg">Loan approved — you owe ${fmtMoney(res.owed)} right now (more will be added every Monday until it's paid off).</div>` : `<div class="error-msg">${res.error}</div>`;
-  if (res.ok) document.getElementById("loanAmount").value = "";
-  await render();
-  return false;
+  // Same double-submit guard as addAuto in bank.js — this form has no
+  // confirm() dialog, so a slow connection plus an eager double-tap on
+  // submit could otherwise take out two loans before the first result
+  // is visible.
+  const btn = e.target.querySelector("button[type=submit]");
+  if (btn && btn.disabled) return false;
+  if (btn) btn.disabled = true;
+  try {
+    const amount = document.getElementById("loanAmount").value;
+    const res = await takeLoan(CURRENT.username, CURRENT.classCode, amount);
+    const box = document.getElementById("takeLoanMsg");
+    box.innerHTML = res.ok ? `<div class="success-msg">Loan approved — you owe ${fmtMoney(res.owed)} right now (more will be added every Monday until it's paid off).</div>` : `<div class="error-msg">${res.error}</div>`;
+    if (res.ok) document.getElementById("loanAmount").value = "";
+    await render();
+    return false;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function repayLoanForm(e, loanId) {
   e.preventDefault();
-  const amount = document.getElementById(`repayAmount-${loanId}`).value;
-  const res = await repayLoan(CURRENT.username, loanId, amount);
-  if (!res.ok) {
-    document.getElementById(`repayMsg-${loanId}`).innerHTML = `<div class="error-msg">${res.error}</div>`;
+  // Same guard as takeLoanForm above.
+  const btn = e.target.querySelector("button[type=submit]");
+  if (btn && btn.disabled) return false;
+  if (btn) btn.disabled = true;
+  try {
+    const amount = document.getElementById(`repayAmount-${loanId}`).value;
+    const res = await repayLoan(CURRENT.username, loanId, amount);
+    if (!res.ok) {
+      document.getElementById(`repayMsg-${loanId}`).innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return false;
+    }
+    await render();
     return false;
+  } finally {
+    if (btn) btn.disabled = false;
   }
-  await render();
-  return false;
 }
 
 document.addEventListener("DOMContentLoaded", init);

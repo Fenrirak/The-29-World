@@ -102,7 +102,7 @@ async function render() {
                        onkeydown="if(event.key==='Enter'){qtyNormalize('${it.id}');event.preventDefault();}">
                      <button type="button" class="qty-btn" aria-label="Increase quantity" onclick="qtyStep('${it.id}', 1)">+</button>
                    </div>
-                   <button class="btn small gold qty-buy-btn" onclick="buyItem('${it.id}')">${icon("cart", 13)} <span id="buyLabel-${it.id}">Buy</span></button>
+                   <button class="btn small gold qty-buy-btn" id="buyBtn-${it.id}" onclick="buyItem('${it.id}')">${icon("cart", 13)} <span id="buyLabel-${it.id}">Buy</span></button>
                  </div>`}
           ${(!IS_TEACHER && owned) ? `<button class="btn small secondary" onclick="sellItem('${it.id}')">${icon("trash", 13)} Sell back (80%)</button>` : ""}
         </div>
@@ -255,19 +255,30 @@ async function sellItem(id) {
 }
 
 async function buyItem(id) {
-  const input = document.getElementById("qty-" + id);
-  let qty = 1;
-  if (input) {
-    qty = parseInt(input.value, 10) || 1;
-    if (qty < 1) qty = 1;
-    const max = input.getAttribute("max");
-    if (max !== null && max !== "" && qty > Number(max)) qty = Number(max);
+  // Same double-tap guard as buy() in market.js — unlike deleteItem/
+  // sellItem just above, this has no confirm() dialog to naturally
+  // absorb an eager double-click, so without this a slow connection
+  // could fire two purchases before the first's result shows up.
+  const btn = document.getElementById("buyBtn-" + id);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const input = document.getElementById("qty-" + id);
+    let qty = 1;
+    if (input) {
+      qty = parseInt(input.value, 10) || 1;
+      if (qty < 1) qty = 1;
+      const max = input.getAttribute("max");
+      if (max !== null && max !== "" && qty > Number(max)) qty = Number(max);
+    }
+    const res = await buyStoreItem(CURRENT.username, CURRENT.classCode, id, qty);
+    document.getElementById("msg-" + id).innerHTML = res.ok
+      ? `<div class="success-msg">Purchased ${res.qty > 1 ? `×${res.qty}` : ""}!</div>`
+      : `<div class="error-msg">${res.error}</div>`;
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
   }
-  const res = await buyStoreItem(CURRENT.username, CURRENT.classCode, id, qty);
-  document.getElementById("msg-" + id).innerHTML = res.ok
-    ? `<div class="success-msg">Purchased ${res.qty > 1 ? `×${res.qty}` : ""}!</div>`
-    : `<div class="error-msg">${res.error}</div>`;
-  await render();
 }
 
 document.addEventListener("DOMContentLoaded", init);

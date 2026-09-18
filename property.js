@@ -253,8 +253,8 @@ async function render() {
         ${IS_TEACHER
           ? `<button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button><button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>`
           : (!myUnit && available.length > 0
-              ? `<button class="btn small gold" onclick="buyOutright('${gid}')">Buy cash</button>
-                 ${p.mortgageWeeks > 0 ? `<button class="btn small secondary" onclick="buyFinanced('${gid}')">Finance (10% deposit)</button>` : ""}`
+              ? `<button class="btn small gold" id="buyOutrightBtn-${gid}" onclick="buyOutright('${gid}')">Buy cash</button>
+                 ${p.mortgageWeeks > 0 ? `<button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Finance (10% deposit)</button>` : ""}`
               : "")}
       </div>
       ${IS_TEACHER ? `
@@ -632,17 +632,25 @@ function renderMyClassmateRentedHome(box, prop, cls, nameOf) {
       <h2>${icon("house", 18)} Your rented home</h2>
       <p><strong>${escapeHtml(prop.name)}</strong> — renting from ${nameOf(prop.owner)} at ${fmtMoney(s.price)}/week.</p>
       <p class="muted-small">${status}</p>
-      ${canPay ? `<button class="btn small gold" onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>` : ""}
+      ${canPay ? `<button class="btn small gold" id="payTenantRentBtn-${prop.id}" onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>` : ""}
       <div id="tenantRentMsg-${prop.id}"></div>
       <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${s.minWeeks}-week lease, so you can't move out just yet.`}</p>
       ${canMoveOut ? `<button class="btn small secondary" onclick="tenantMoveOutClick('${prop.id}')">Move out</button>` : ""}
     </div>`;
 }
 async function payTenantRentClick(id) {
-  const res = await payTenantRent(CURRENT.username, CURRENT.classCode, id);
-  const box = document.getElementById(`tenantRentMsg-${id}`);
-  if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
-  await render();
+  // Same double-tap guard as buy() in market.js.
+  const btn = document.getElementById("payTenantRentBtn-" + id);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await payTenantRent(CURRENT.username, CURRENT.classCode, id);
+    const box = document.getElementById(`tenantRentMsg-${id}`);
+    if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 async function tenantMoveOutClick(id) {
   if (!confirm("Move out of this rental? You'll stop paying rent, but you'll also lose the lifestyle bonus for living here.")) return;
@@ -697,17 +705,25 @@ function renderMyNpcRentedHome(box, unit) {
       renting from the school at ${fmtMoney(unit.rentPerWeek)}/week.</p>
       ${unit.description ? `<p class="muted-small">${escapeHtml(unit.description)}</p>` : ""}
       <p class="muted-small">${status}</p>
-      ${canPay ? `<button class="btn small gold" onclick="payNpcRentClick('${unit.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(unit.rentPerWeek)}</button>` : ""}
+      ${canPay ? `<button class="btn small gold" id="payNpcRentBtn-${unit.id}" onclick="payNpcRentClick('${unit.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(unit.rentPerWeek)}</button>` : ""}
       <div id="npcRentMsg-${unit.id}"></div>
       <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${unit.minWeeks}-week lease, so you can't move out just yet.`}</p>
       ${canMoveOut ? `<button class="btn small secondary" onclick="npcMoveOutClick('${unit.id}')">Move out</button>` : ""}
     </div>`;
 }
 async function payNpcRentClick(id) {
-  const res = await payNpcRent(CURRENT.username, CURRENT.classCode, id);
-  const box = document.getElementById(`npcRentMsg-${id}`);
-  if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
-  await render();
+  // Same double-tap guard as buy() in market.js.
+  const btn = document.getElementById("payNpcRentBtn-" + id);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await payNpcRent(CURRENT.username, CURRENT.classCode, id);
+    const box = document.getElementById(`npcRentMsg-${id}`);
+    if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 async function npcMoveOutClick(id) {
   if (!confirm("Move out of this rental? You'll stop paying rent, but you'll also lose the lifestyle bonus for living here.")) return;
@@ -805,19 +821,27 @@ function mortgagePayBlock(p, cls) {
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
       <p class="muted-small">${status}</p>
-      ${canPay ? `<button class="btn small gold" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay this week's mortgage — ${fmtMoney(amt.total)}</button>` : ""}
+      ${canPay ? `<button class="btn small gold" id="payMortgageBtn-${p.id}" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay this week's mortgage — ${fmtMoney(amt.total)}</button>` : ""}
       <div id="mortgageMsg-${p.id}"></div>
     </div>`;
 }
 
 async function payMortgageClick(id) {
-  const res = await payMortgage(CURRENT.username, CURRENT.classCode, id);
-  if (!res.ok) {
-    const box = document.getElementById(`mortgageMsg-${id}`);
-    if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`;
-    return;
+  // Same double-tap guard as buy() in market.js.
+  const btn = document.getElementById("payMortgageBtn-" + id);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await payMortgage(CURRENT.username, CURRENT.classCode, id);
+    if (!res.ok) {
+      const box = document.getElementById(`mortgageMsg-${id}`);
+      if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
   }
-  await render();
 }
 
 // Builds the status badge row for the teacher-only mortgage settings card.
@@ -1072,18 +1096,46 @@ async function pickAvailableUnitId(gid) {
   return unit ? unit.id : null;
 }
 async function buyOutright(gid) {
-  const id = await pickAvailableUnitId(gid);
-  if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
-  const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, false);
-  document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Congratulations, it's yours!</div>` : `<div class="error-msg">${res.error}</div>`;
-  await render();
+  // Double-tap guard (same reasoning as buy() in market.js) — matters
+  // more here than most: pickAvailableUnitId() below can hand out a
+  // *different* unit from the same listing group to each overlapping
+  // call, so an unguarded double-click could actually buy two houses,
+  // not just fire the same purchase twice.
+  const btn = document.getElementById("buyOutrightBtn-" + gid);
+  const btn2 = document.getElementById("buyFinancedBtn-" + gid);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  if (btn2) btn2.disabled = true;
+  try {
+    const id = await pickAvailableUnitId(gid);
+    if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
+    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, false);
+    document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Congratulations, it's yours!</div>` : `<div class="error-msg">${res.error}</div>`;
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btn2) btn2.disabled = false;
+  }
 }
 async function buyFinanced(gid) {
-  const id = await pickAvailableUnitId(gid);
-  if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
-  const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true);
-  document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Financed! Weekly payments will come out automatically.</div>` : `<div class="error-msg">${res.error}</div>`;
-  await render();
+  // Same guard as buyOutright above, and for the same reason — this and
+  // buyOutright both draw from the same available-units pool for this
+  // listing group.
+  const btn = document.getElementById("buyFinancedBtn-" + gid);
+  const btn2 = document.getElementById("buyOutrightBtn-" + gid);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  if (btn2) btn2.disabled = true;
+  try {
+    const id = await pickAvailableUnitId(gid);
+    if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
+    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true);
+    document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Financed! Weekly payments will come out automatically.</div>` : `<div class="error-msg">${res.error}</div>`;
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btn2) btn2.disabled = false;
+  }
 }
 
 /* ---------------- Teacher: NPC (school) property listings ---------------- */

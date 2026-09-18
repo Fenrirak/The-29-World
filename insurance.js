@@ -113,8 +113,8 @@ async function render() {
             ? `<button class="btn small secondary" onclick='startEditPlan(${JSON.stringify(p).replace(/'/g, "&#39;")})'>Edit</button>
                <button class="btn small coral" onclick="deletePlan('${p.id}')">${icon("trash", 13)} Remove</button>`
             : owned
-              ? `<button class="btn small secondary" onclick="cancelPlan('${p.id}')">Cancel cover</button>`
-              : `<button class="btn small gold" onclick="buyPlan('${p.id}', ${applyLifeDiscount(me, "insurance", Number(p.signupFee) || 0)})">${icon("shield", 13)} Sign up</button>`}
+              ? `<button class="btn small secondary" id="cancelBtn-${p.id}" onclick="cancelPlan('${p.id}')">Cancel cover</button>`
+              : `<button class="btn small gold" id="buyBtn-${p.id}" onclick="buyPlan('${p.id}', ${applyLifeDiscount(me, "insurance", Number(p.signupFee) || 0)})">${icon("shield", 13)} Sign up</button>`}
         </div>
       </div>
       <div id="msg-${p.id}"></div>
@@ -205,16 +205,34 @@ async function deletePlan(id) {
 
 async function buyPlan(id, fee) {
   if (fee > 0 && !confirm(`This plan has a one-off sign-up fee of ${fmtMoney(fee)}, charged immediately. Continue?`)) return;
-  const res = await buyInsurance(CURRENT.username, CURRENT.classCode, id);
-  document.getElementById("msg-" + id).innerHTML = res.ok
-    ? `<div class="success-msg">You're covered! Premiums are due weekly — remember to set up an automatic payment to your teacher from the Bank tab so your cover doesn't lapse.</div>`
-    : `<div class="error-msg">${res.error}</div>`;
-  await render();
+  // A free plan (fee === 0) skips the confirm() above, so — same as
+  // buy() in market.js — nothing else blocks a fast double-tap here.
+  const btn = document.getElementById("buyBtn-" + id);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await buyInsurance(CURRENT.username, CURRENT.classCode, id);
+    document.getElementById("msg-" + id).innerHTML = res.ok
+      ? `<div class="success-msg">You're covered! Premiums are due weekly — remember to set up an automatic payment to your teacher from the Bank tab so your cover doesn't lapse.</div>`
+      : `<div class="error-msg">${res.error}</div>`;
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function cancelPlan(id) {
-  await cancelInsurance(CURRENT.username, id);
-  await render();
+  // Same double-tap guard as buyPlan above — this one has no confirm()
+  // at all.
+  const btn = document.getElementById("cancelBtn-" + id);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    await cancelInsurance(CURRENT.username, id);
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function saveInsuranceDay() {

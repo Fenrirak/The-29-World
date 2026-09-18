@@ -130,7 +130,7 @@ async function render() {
       document.getElementById("licenceStatus").innerHTML = me.truckLicence
         ? `<span class="badge mint">Licenced</span>`
         : `<div class="flex-between"><strong>${fmtMoney(licence.price || 0)}</strong>
-             <button class="btn small gold" onclick="buyLicence()">Buy licence</button></div><div id="licenceMsg"></div>`;
+             <button class="btn small gold" id="buyLicenceBtn" onclick="buyLicence()">Buy licence</button></div><div id="licenceMsg"></div>`;
     }
     renderTransportExpenses(me, cls);
   }
@@ -157,7 +157,7 @@ async function render() {
             ${(v.weeklyExpense > 0 || v.publicTransportOffsetPct > 0) ? `<p class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffsetPct > 0 ? " &middot; " : ""}${v.publicTransportOffsetPct > 0 ? `knocks ${v.publicTransportOffsetPct}% off your public transport fee` : ""}</p>` : ""}
           </div>
           <div class="row-flex" style="gap:8px;">
-            ${isTruck ? `<button class="btn small gold" ${drivenToday ? "disabled" : ""} onclick="driveTruck('${v.id}')">${drivenToday ? "Driven today" : "Drive today"}</button>` : ""}
+            ${isTruck ? `<button class="btn small gold" id="driveBtn-${v.id}" ${drivenToday ? "disabled" : ""} onclick="driveTruck('${v.id}')">${drivenToday ? "Driven today" : "Drive today"}</button>` : ""}
             <button class="btn small secondary" onclick="sellMine('${v.id}')">Sell back</button>
           </div>
         </div>
@@ -219,7 +219,7 @@ async function render() {
                   ? `<button class="btn small gold" disabled>Licence required</button>`
                   : truckLimitReached
                     ? `<button class="btn small gold" disabled>One truck max</button>`
-                    : `<button class="btn small gold" onclick="buyVeh('${v.id}')">Buy</button>`}
+                    : `<button class="btn small gold" id="buyVehBtn-${v.id}" onclick="buyVeh('${v.id}')">Buy</button>`}
         </div>
       </div>
       <div id="msg-${v.id}"></div>
@@ -321,13 +321,21 @@ async function saveSellBackRates() {
 }
 
 async function buyLicence() {
-  const res = await buyTruckLicence(CURRENT.username, CURRENT.classCode);
-  const msgEl = document.getElementById("licenceMsg");
-  if (!res.ok) {
-    if (msgEl) msgEl.innerHTML = `<div class="error-msg">${res.error}</div>`;
-    return;
+  // Same double-tap guard as buy() in market.js.
+  const btn = document.getElementById("buyLicenceBtn");
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await buyTruckLicence(CURRENT.username, CURRENT.classCode);
+    const msgEl = document.getElementById("licenceMsg");
+    if (!res.ok) {
+      if (msgEl) msgEl.innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
   }
-  await render();
 }
 
 // Shared flow for a teacher-initiated removal that might warrant a refund:
@@ -370,20 +378,28 @@ async function sellMine(id) {
   }
 }
 async function buyVeh(id) {
-  const res = await buyVehicle(CURRENT.username, CURRENT.classCode, id);
-  if (!res.ok) {
-    document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`;
+  // Same double-tap guard as buy() in market.js.
+  const btn = document.getElementById("buyVehBtn-" + id);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await buyVehicle(CURRENT.username, CURRENT.classCode, id);
+    if (!res.ok) {
+      document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`;
+      await render();
+      return;
+    }
     await render();
-    return;
-  }
-  await render();
-  // render() rebuilds the vehicle list (and wipes msg-<id> in the process),
-  // so the success message is set *after* render and given its own timer
-  // rather than being written pre-render, where it'd disappear instantly.
-  const msgEl = document.getElementById("msg-" + id);
-  if (msgEl) {
-    msgEl.innerHTML = `<div class="success-msg">Congratulations, it's yours!</div>`;
-    setTimeout(() => { msgEl.innerHTML = ""; }, 3000);
+    // render() rebuilds the vehicle list (and wipes msg-<id> in the process),
+    // so the success message is set *after* render and given its own timer
+    // rather than being written pre-render, where it'd disappear instantly.
+    const msgEl = document.getElementById("msg-" + id);
+    if (msgEl) {
+      msgEl.innerHTML = `<div class="success-msg">Congratulations, it's yours!</div>`;
+      setTimeout(() => { msgEl.innerHTML = ""; }, 3000);
+    }
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -402,11 +418,11 @@ function renderTransportExpenses(me, cls) {
   } else if (overdue) {
     statusBadge = `<span class="badge coral">${icon("car", 12)}Overdue</span>`;
     actionHtml = isDueToday
-      ? `<button class="btn gold" onclick="payTransport()">Pay now — ${fmtMoney(amt.total)}</button>`
+      ? `<button class="btn gold" id="payTransportBtn" onclick="payTransport()">Pay now — ${fmtMoney(amt.total)}</button>`
       : `<p class="muted-small">A past payment was missed — check with your teacher. You can pay again on ${DAY_FULL[dueDay]}.</p>`;
   } else if (isDueToday) {
     statusBadge = `<span class="badge gold">${icon("car", 12)}Due today</span>`;
-    actionHtml = `<button class="btn gold" onclick="payTransport()">Pay now — ${fmtMoney(amt.total)}</button>`;
+    actionHtml = `<button class="btn gold" id="payTransportBtn" onclick="payTransport()">Pay now — ${fmtMoney(amt.total)}</button>`;
   } else {
     statusBadge = `<span class="badge navy">${icon("car", 12)}Not due yet</span>`;
     actionHtml = `<p class="muted-small">Next payment due ${DAY_FULL[dueDay]}.</p>`;
@@ -432,20 +448,28 @@ function renderTransportExpenses(me, cls) {
 }
 
 async function payTransport() {
-  const res = await payTransportExpenses(CURRENT.username, CURRENT.classCode);
-  const msgEl = document.getElementById("transportPayMsg");
-  if (!res.ok) {
-    if (msgEl) msgEl.innerHTML = `<div class="error-msg">${res.error}</div>`;
-    return;
-  }
-  await render();
-  // render() rebuilds transportExpensesBody (and wipes transportPayMsg in the
-  // process), so the success message is set *after* render, same pattern as
-  // buyVeh's msg-<id> handling above.
-  const newMsgEl = document.getElementById("transportPayMsg");
-  if (newMsgEl) {
-    newMsgEl.innerHTML = `<div class="success-msg">Paid ${fmtMoney(res.amount)} for this week's transport.</div>`;
-    setTimeout(() => { newMsgEl.innerHTML = ""; }, 3000);
+  // Same double-tap guard as buy() in market.js.
+  const btn = document.getElementById("payTransportBtn");
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await payTransportExpenses(CURRENT.username, CURRENT.classCode);
+    const msgEl = document.getElementById("transportPayMsg");
+    if (!res.ok) {
+      if (msgEl) msgEl.innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+    await render();
+    // render() rebuilds transportExpensesBody (and wipes transportPayMsg in the
+    // process), so the success message is set *after* render, same pattern as
+    // buyVeh's msg-<id> handling above.
+    const newMsgEl = document.getElementById("transportPayMsg");
+    if (newMsgEl) {
+      newMsgEl.innerHTML = `<div class="success-msg">Paid ${fmtMoney(res.amount)} for this week's transport.</div>`;
+      setTimeout(() => { newMsgEl.innerHTML = ""; }, 3000);
+    }
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -478,17 +502,28 @@ async function saveLifeFeeOverrides() {
 }
 
 async function driveTruck(vehId) {
-  const res = await checkinTruckDrive(CURRENT.username, CURRENT.classCode, vehId);
-  const msgEl = document.getElementById("drive-msg-" + vehId);
-  if (!res.ok) {
-    if (msgEl) msgEl.innerHTML = `<div class="error-msg">${res.error}</div>`;
-    return;
-  }
-  await render();
-  const newMsgEl = document.getElementById("drive-msg-" + vehId);
-  if (newMsgEl) {
-    newMsgEl.innerHTML = `<div class="success-msg">Nice driving! You earned ${fmtMoney(res.amount)}.</div>`;
-    setTimeout(() => { newMsgEl.innerHTML = ""; }, 3000);
+  // Same double-tap guard as buy() in market.js — the disabled-after-
+  // driven-today state baked into the button's markup only covers days
+  // after the first successful drive; it doesn't stop a fast double-tap
+  // on the very click that's currently in flight.
+  const btn = document.getElementById("driveBtn-" + vehId);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await checkinTruckDrive(CURRENT.username, CURRENT.classCode, vehId);
+    const msgEl = document.getElementById("drive-msg-" + vehId);
+    if (!res.ok) {
+      if (msgEl) msgEl.innerHTML = `<div class="error-msg">${res.error}</div>`;
+      return;
+    }
+    await render();
+    const newMsgEl = document.getElementById("drive-msg-" + vehId);
+    if (newMsgEl) {
+      newMsgEl.innerHTML = `<div class="success-msg">Nice driving! You earned ${fmtMoney(res.amount)}.</div>`;
+      setTimeout(() => { newMsgEl.innerHTML = ""; }, 3000);
+    }
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 

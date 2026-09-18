@@ -87,7 +87,7 @@ async function render() {
                </div>`
             : `<div class="row-flex" style="gap:8px;">
                  <input type="number" min="${p.minAmount}" step="0.01" id="amt-${p.id}" placeholder="Amount" style="max-width:140px;">
-                 <button class="btn small gold" onclick="openDeposit('${p.id}')">${icon("vault", 13)} Deposit</button>
+                 <button class="btn small gold" id="depositBtn-${p.id}" onclick="openDeposit('${p.id}')">${icon("vault", 13)} Deposit</button>
                </div>`}
         </div>
       </div>
@@ -174,12 +174,21 @@ async function deletePlan(id) {
 }
 
 async function openDeposit(id) {
-  const amt = document.getElementById("amt-" + id).value;
-  const res = await openTermDeposit(CURRENT.username, CURRENT.classCode, id, amt);
-  document.getElementById("msg-" + id).innerHTML = res.ok
-    ? `<div class="success-msg">Locked in!</div>`
-    : `<div class="error-msg">${res.error}</div>`;
-  await render();
+  // Same double-tap guard as buy() in market.js — no confirm() here to
+  // absorb an eager double-click before the first deposit's result shows.
+  const btn = document.getElementById("depositBtn-" + id);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    const amt = document.getElementById("amt-" + id).value;
+    const res = await openTermDeposit(CURRENT.username, CURRENT.classCode, id, amt);
+    document.getElementById("msg-" + id).innerHTML = res.ok
+      ? `<div class="success-msg">Locked in!</div>`
+      : `<div class="error-msg">${res.error}</div>`;
+    await render();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function withdrawEarly(depositId) {

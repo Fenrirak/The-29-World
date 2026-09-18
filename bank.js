@@ -302,34 +302,45 @@ async function render() {
 
 async function sendMoney(e) {
   e.preventDefault();
-  const to = document.getElementById("toStudent").value;
-  const amount = Number(document.getElementById("amount").value);
-  const note = document.getElementById("note").value.trim();
-  const box = document.getElementById("sendMsg");
-  if (!to) { box.innerHTML = `<div class="error-msg">There's no one to send money to yet.</div>`; return false; }
-  if (Number.isNaN(amount) || amount === 0) { box.innerHTML = `<div class="error-msg">Enter an amount.</div>`; return false; }
-  if (!IS_TEACHER && amount < 0) { box.innerHTML = `<div class="error-msg">Enter an amount greater than zero.</div>`; return false; }
+  // Same guard as addAuto below — arguably the single most important
+  // place in the app for it: an unguarded double-tap here (a slow
+  // connection plus an eager double-click, with nothing visibly changing
+  // until the await resolves) sends the money twice.
+  const btn = document.getElementById("sendBtn");
+  if (btn.disabled) return false;
+  btn.disabled = true;
+  try {
+    const to = document.getElementById("toStudent").value;
+    const amount = Number(document.getElementById("amount").value);
+    const note = document.getElementById("note").value.trim();
+    const box = document.getElementById("sendMsg");
+    if (!to) { box.innerHTML = `<div class="error-msg">There's no one to send money to yet.</div>`; return false; }
+    if (Number.isNaN(amount) || amount === 0) { box.innerHTML = `<div class="error-msg">Enter an amount.</div>`; return false; }
+    if (!IS_TEACHER && amount < 0) { box.innerHTML = `<div class="error-msg">Enter an amount greater than zero.</div>`; return false; }
 
-  // A teacher entering a negative amount is deducting from the student,
-  // not "sending" them money — there's no one to credit it to on the
-  // teacher's side (their balance is unlimited), so this goes through the
-  // same balance-adjustment path as the "Give a bonus or fine" tool
-  // instead of the peer-to-peer transfer path.
-  const res = (IS_TEACHER && amount < 0)
-    ? await teacherAdjust(CURRENT.username, to, amount, note)
-    : await transferMoney(CURRENT.username, to, amount, note);
+    // A teacher entering a negative amount is deducting from the student,
+    // not "sending" them money — there's no one to credit it to on the
+    // teacher's side (their balance is unlimited), so this goes through the
+    // same balance-adjustment path as the "Give a bonus or fine" tool
+    // instead of the peer-to-peer transfer path.
+    const res = (IS_TEACHER && amount < 0)
+      ? await teacherAdjust(CURRENT.username, to, amount, note)
+      : await transferMoney(CURRENT.username, to, amount, note);
 
-  if (res.ok) {
-    box.innerHTML = amount < 0
-      ? `<div class="success-msg">Deducted ${fmtMoney(Math.abs(amount))}.</div>`
-      : `<div class="success-msg">Sent ${fmtMoney(amount)}!</div>`;
-    document.getElementById("amount").value = "";
-    document.getElementById("note").value = "";
-  } else {
-    box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+    if (res.ok) {
+      box.innerHTML = amount < 0
+        ? `<div class="success-msg">Deducted ${fmtMoney(Math.abs(amount))}.</div>`
+        : `<div class="success-msg">Sent ${fmtMoney(amount)}!</div>`;
+      document.getElementById("amount").value = "";
+      document.getElementById("note").value = "";
+    } else {
+      box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+    }
+    await render();
+    return false;
+  } finally {
+    btn.disabled = false;
   }
-  await render();
-  return false;
 }
 
 async function addAuto(e) {
@@ -400,24 +411,40 @@ async function removeAuto(id) {
 
 async function depositSavings(e) {
   e.preventDefault();
-  const amount = Number(document.getElementById("depositAmount").value);
-  const box = document.getElementById("savingsMsg");
-  const res = await depositToSavings(CURRENT.username, amount);
-  box.innerHTML = res.ok ? `<div class="success-msg">Deposited ${fmtMoney(amount)} into savings!</div>` : `<div class="error-msg">${res.error}</div>`;
-  if (res.ok) document.getElementById("depositAmount").value = "";
-  await render();
-  return false;
+  // Same guard as sendMoney above.
+  const btn = document.getElementById("depositBtn");
+  if (btn.disabled) return false;
+  btn.disabled = true;
+  try {
+    const amount = Number(document.getElementById("depositAmount").value);
+    const box = document.getElementById("savingsMsg");
+    const res = await depositToSavings(CURRENT.username, amount);
+    box.innerHTML = res.ok ? `<div class="success-msg">Deposited ${fmtMoney(amount)} into savings!</div>` : `<div class="error-msg">${res.error}</div>`;
+    if (res.ok) document.getElementById("depositAmount").value = "";
+    await render();
+    return false;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function withdrawSavings(e) {
   e.preventDefault();
-  const amount = Number(document.getElementById("withdrawAmount").value);
-  const box = document.getElementById("savingsMsg");
-  const res = await withdrawFromSavings(CURRENT.username, amount);
-  box.innerHTML = res.ok ? `<div class="success-msg">Withdrew ${fmtMoney(amount)} back to cash.</div>` : `<div class="error-msg">${res.error}</div>`;
-  if (res.ok) document.getElementById("withdrawAmount").value = "";
-  await render();
-  return false;
+  // Same guard as sendMoney above.
+  const btn = document.getElementById("withdrawBtn");
+  if (btn.disabled) return false;
+  btn.disabled = true;
+  try {
+    const amount = Number(document.getElementById("withdrawAmount").value);
+    const box = document.getElementById("savingsMsg");
+    const res = await withdrawFromSavings(CURRENT.username, amount);
+    box.innerHTML = res.ok ? `<div class="success-msg">Withdrew ${fmtMoney(amount)} back to cash.</div>` : `<div class="error-msg">${res.error}</div>`;
+    if (res.ok) document.getElementById("withdrawAmount").value = "";
+    await render();
+    return false;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function addSavingsAuto(e) {
