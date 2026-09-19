@@ -3260,6 +3260,38 @@ async function dedupeAutomations(classCode, automations) {
 
 // Runs on dashboard load: fires any automation whose day-of-week matches
 // today and whose frequency interval has elapsed since it last ran.
+//
+// BUGFIX: the "have I already paid out today?" check used to live ONLY on
+// each automation's own `id` (`liveAuto.lastRun === todayKey`). That's a
+// correct guard against the SAME automation firing twice, but it does
+// nothing for leftover duplicate automations — several separate entries
+// with the same payer/payee/day/frequency/amount, created by an old
+// double-submit before addAutomation()'s DUPLICATE guard existed. Each
+// duplicate is independently valid and independently "hasn't run today",
+// so the id-based check let every single one of them pay out once, which
+// from the student's side looks exactly like "the same automatic payment
+// running several times a day" (see screenshot: one "Weekly Expenses"
+// automation charging $110 more than a dozen times in under an hour).
+//
+// dedupeAutomations() above is supposed to merge those duplicates away
+// before this loop ever runs — but it's a best-effort cleanup: its own
+// transaction can lose a contention retry or hit a transient failure, and
+// because it decides whether to even attempt the merge from whatever
+// snapshot of `cls.automations` this call happened to see, it can also
+// simply miss duplicates that exist live but weren't in that snapshot. In
+// either case the loop below used to fall straight back to firing every
+// surviving duplicate by id, once each.
+//
+// Fix: track which PAYMENTS (not which automation ids) have already paid
+// out today, keyed by _autoDedupeKey — the same "what is this payment,
+// really" signature dedupeAutomations uses to spot duplicates in the
+// first place. `firedKeysToday` covers duplicates encountered earlier in
+// this same loop; the `alreadyCoveredLive` check inside each transaction
+// covers duplicates paid out by a different page load (another tab, a
+// second device) since this function started. Either way, once ANY copy
+// of a given recurring payment has paid out today, every other copy just
+// gets its own lastRun stamped to match — no money moves twice — and sits
+// there ready for dedupeAutomations() to fold away for good next time.
 async function processAutomations(classCode) {
   let cls = await getClass(classCode);
   if (!cls || !cls.automations || cls.automations.length === 0 || cls.archived) return 0;
@@ -3274,16 +3306,19 @@ async function processAutomations(classCode) {
   const todayName = nzDayName();
   const todayKey = nzDateKey();
   let ran = 0;
+  const firedKeysToday = new Set();
 
   for (const a of cls.automations) {
     if (!a.active) continue;
     if (a.dayOfWeek !== todayName) continue;
-    if (a.lastRun === todayKey) continue;
+    if (a.lastRun === todayKey) { firedKeysToday.add(_autoDedupeKey(a)); continue; }
     if (a.lastRun) {
       const daysSince = daysBetweenKeys(a.lastRun, todayKey);
       const need = FREQ_DAYS[a.frequency] || 7;
       if (daysSince < need) continue;
     }
+    const dedupeKey = _autoDedupeKey(a);
+    if (firedKeysToday.has(dedupeKey)) continue; // a duplicate already paid this out today
 
     const classRef = classesCol().doc(classCode);
 
@@ -3291,7 +3326,7 @@ async function processAutomations(classCode) {
       // Self-to-self: only one user doc involved, so this is handled
       // separately from the peer-to-peer path below (which reads/writes
       // two different docs).
-      let didRun = false;
+      let didRun = false, coveredByDuplicate = false;
       try {
         await fdb.runTransaction(async (t) => {
           const userRef = usersCol().doc(a.studentUser);
@@ -3302,6 +3337,17 @@ async function processAutomations(classCode) {
           const liveCls = classSnap.data();
           const liveAuto = (liveCls.automations || []).find(x => x.id === a.id);
           if (!liveAuto || liveAuto.lastRun === todayKey) return;
+          // A duplicate copy of this exact transfer may have already run
+          // today via a different page load — check the freshest data
+          // this transaction can see, not just this call's own progress.
+          const alreadyCoveredLive = (liveCls.automations || []).some(x =>
+            x.id !== a.id && x.lastRun === todayKey && _autoDedupeKey(x) === dedupeKey);
+          if (alreadyCoveredLive) {
+            liveAuto.lastRun = todayKey;
+            t.update(classRef, { automations: liveCls.automations });
+            coveredByDuplicate = true;
+            return;
+          }
 
           const savings = user.savings || 0;
           const fromCash = a.direction === "toSavings";
@@ -3317,6 +3363,7 @@ async function processAutomations(classCode) {
         });
       } catch (e) { /* ignore, try next */ }
 
+      if (didRun || coveredByDuplicate) firedKeysToday.add(dedupeKey);
       if (didRun) {
         await logTxn(classCode, {
           type: a.direction === "toSavings" ? "savings-deposit" : "savings-withdraw",
@@ -3329,7 +3376,7 @@ async function processAutomations(classCode) {
       continue;
     }
 
-    let didRun = false;
+    let didRun = false, coveredByDuplicate = false;
     try {
       await fdb.runTransaction(async (t) => {
         const fromRef = usersCol().doc(a.studentUser);
@@ -3354,6 +3401,18 @@ async function processAutomations(classCode) {
         const liveCls = classSnap.data();
         const liveAuto = (liveCls.automations || []).find(x => x.id === a.id);
         if (!liveAuto || liveAuto.lastRun === todayKey) return; // already ran (race guard)
+        // Same duplicate-safe check as the savings-transfer path above:
+        // if another copy of this exact recurring payment already paid
+        // out today (a different tab/page load got there first), don't
+        // pay it again — just stamp this copy so it stops being retried.
+        const alreadyCoveredLive = (liveCls.automations || []).some(x =>
+          x.id !== a.id && x.lastRun === todayKey && _autoDedupeKey(x) === dedupeKey);
+        if (alreadyCoveredLive) {
+          liveAuto.lastRun = todayKey;
+          t.update(classRef, { automations: liveCls.automations });
+          coveredByDuplicate = true;
+          return;
+        }
 
         if (!fromIsTeacher) t.update(fromRef, { balance: Math.round((from.balance - a.amount) * 100) / 100 });
         t.update(toRef, { balance: Math.round((to.balance + a.amount) * 100) / 100 });
@@ -3363,6 +3422,7 @@ async function processAutomations(classCode) {
       });
     } catch (e) { /* ignore, try next */ }
 
+    if (didRun || coveredByDuplicate) firedKeysToday.add(dedupeKey);
     if (didRun) {
       await logTxn(classCode, { type: "automation", from: a.studentUser, to: a.toUser, amount: a.amount, note: a.note ? a.note : "Automatic payment" });
       ran++;
