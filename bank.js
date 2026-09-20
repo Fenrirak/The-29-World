@@ -361,9 +361,27 @@ async function addAuto(e) {
     const note = document.getElementById("autoNote").value.trim();
     const box = document.getElementById("autoMsg");
     if (!to) { box.innerHTML = `<div class="error-msg">There's no one to pay yet.</div>`; return false; }
-    const res = EDITING_AUTO_ID
+    let res = EDITING_AUTO_ID
       ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note)
       : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note);
+    if (!res.ok && res.needsConfirm) {
+      // Same amount/recipient/day/frequency already exists, but with a
+      // different reference note — not a hard block, just a "are you sure"
+      // in case they've forgotten about the one they already have.
+      const already = res.existingNote
+        ? ` It's labelled "${res.existingNote}".`
+        : " It doesn't have a reference message.";
+      const goAhead = confirm(`You already have an automatic payment set up for the same amount, recipient, day and frequency.${already}\n\nSet up this one too?`);
+      if (goAhead) {
+        res = EDITING_AUTO_ID
+          ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, true)
+          : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note, true);
+      } else {
+        box.innerHTML = "";
+        await render();
+        return false;
+      }
+    }
     if (res.ok) {
       box.innerHTML = `<div class="success-msg">${EDITING_AUTO_ID ? "Automatic payment updated!" : "Automatic payment created!"}</div>`;
       cancelEditAuto();

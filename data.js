@@ -3040,9 +3040,10 @@ async function sellShares(username, classCode, companyId, shares) {
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FREQ_DAYS = { weekly: 7, fortnightly: 14, monthly: 28 };
 
-async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amount, toUser, note) {
+async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   const classRef = classesCol().doc(classCode);
+  let confirmInfo = null;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(classRef);
@@ -3052,6 +3053,7 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       if (cls.automations.filter(a => a.studentUser === studentUser).length >= MAX_AUTOMATIONS_PER_STUDENT) {
         throw new Error("TOO_MANY");
       }
+      const noteTrimmed = (note || "").trim();
       // Guards against the classic double-submit bug: a student double-taps
       // "Create automatic payment" (slow connection, no visual feedback yet)
       // and ends up with two — or more — otherwise-identical automations.
@@ -3060,22 +3062,40 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       // never catches this: it just looks like the same auto-pay firing
       // more than once in a day, when really several near-identical
       // automations each fired exactly once. Reject an exact duplicate
-      // (same payer, payee, day, frequency and amount) outright rather than
-      // silently creating another copy.
-      const dup = cls.automations.find(a =>
+      // (same payer, payee, day, frequency, amount AND reference note)
+      // outright rather than silently creating another copy — nobody means
+      // to create this one on purpose.
+      const exactDup = cls.automations.find(a =>
         a.studentUser === studentUser && a.toUser === toUser && a.active &&
-        a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount)
+        a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount) &&
+        (a.note || "") === noteTrimmed
       );
-      if (dup) throw new Error("DUPLICATE");
+      if (exactDup) throw new Error("DUPLICATE");
+      // Same amount/recipient/day/frequency but a *different* reference
+      // note is a legitimate, deliberate case — e.g. "$5 to Alex, chores"
+      // and "$5 to Alex, lunch money" both landing on Fridays — so unlike
+      // the exact-duplicate case above it isn't rejected outright. But it's
+      // also exactly what someone creates by accident if they've simply
+      // forgotten they already have one of these running, so it still gets
+      // a confirmation step rather than sailing through silently. Skipped
+      // once the caller has confirmed and resubmitted.
+      if (!confirmed) {
+        const softDup = cls.automations.find(a =>
+          a.studentUser === studentUser && a.toUser === toUser && a.active &&
+          a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount)
+        );
+        if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
+      }
       cls.automations.push({
         id: uid("auto"), studentUser, dayOfWeek, frequency,
-        amount: Number(amount), toUser, note: (note || "").trim(), lastRun: null, active: true
+        amount: Number(amount), toUser, note: noteTrimmed, lastRun: null, active: true
       });
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
     if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
-    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day and frequency)." };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day, frequency and reference message)." };
+    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic payment set up with the same amount, recipient, day and frequency." };
     return { ok: false, error: "Class not found." };
   }
   return { ok: true };
@@ -3118,9 +3138,10 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
   }
   return { ok: true };
 }
-async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, toUser, note) {
+async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   const classRef = classesCol().doc(classCode);
+  let confirmInfo = null;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(classRef);
@@ -3130,22 +3151,37 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
       const idx = cls.automations.findIndex(a => a.id === id && a.studentUser === studentUser);
       if (idx === -1) throw new Error("NOT_FOUND");
       const existing = cls.automations[idx];
+      const noteTrimmed = (note || "").trim();
       // Same de-dup guard as addAutomation(): without this, editing one
-      // automation to match another already-active one silently produces
-      // two identical payments firing on the same day — indistinguishable
-      // from the same automation firing twice.
-      const dup = cls.automations.find(a =>
+      // automation to exactly match another already-active one (same
+      // amount, recipient, day, frequency AND reference note) silently
+      // produces two truly identical payments firing on the same day —
+      // indistinguishable from the same automation firing twice.
+      const exactDup = cls.automations.find(a =>
         a.id !== id && a.studentUser === studentUser && a.toUser === toUser && a.active &&
-        a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount)
+        a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount) &&
+        (a.note || "") === noteTrimmed
       );
-      if (dup) throw new Error("DUPLICATE");
+      if (exactDup) throw new Error("DUPLICATE");
+      // Same amount/recipient/day/frequency but a different reference note
+      // is allowed (see addAutomation()) but still asks for confirmation
+      // first, in case the edit was really meant to update the existing
+      // one rather than create a second lookalike.
+      if (!confirmed) {
+        const softDup = cls.automations.find(a =>
+          a.id !== id && a.studentUser === studentUser && a.toUser === toUser && a.active &&
+          a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount)
+        );
+        if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
+      }
       cls.automations[idx] = {
-        ...existing, dayOfWeek, frequency, amount: Number(amount), toUser, note: (note || "").trim()
+        ...existing, dayOfWeek, frequency, amount: Number(amount), toUser, note: noteTrimmed
       };
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
-    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day and frequency)." };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day, frequency and reference message)." };
+    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic payment set up with the same amount, recipient, day and frequency." };
     return { ok: false, error: e.message === "NOT_FOUND" ? "Automatic payment not found." : "Class not found." };
   }
   return { ok: true };
@@ -3202,16 +3238,24 @@ async function getStudentAutomations(classCode, studentUser) {
 
 // Key used to detect "exact duplicate" automations — same fields as the
 // double-submit guards in addAutomation/addSavingsAutomation/editAutomation/
-// editSavingsAutomation above. Any automations sharing a key are really one
-// recurring payment that got accidentally created more than once (double-tap
-// on a slow connection, or a device with a drifted clock, before those
-// guards existed) — each copy is independently valid and fires on its own
-// schedule, which is what shows up as "the same auto-pay running several
-// times a day".
+// editSavingsAutomation above, INCLUDING the reference note. Any automations
+// sharing a key are really one recurring payment that got accidentally
+// created more than once (double-tap on a slow connection, or a device with
+// a drifted clock, before those guards existed) — each copy is independently
+// valid and fires on its own schedule, which is what shows up as "the same
+// auto-pay running several times a day".
+//
+// The note is part of the key deliberately: a student can have two active
+// automations that share everything else (same amount, recipient, day and
+// frequency) but carry different reference notes — e.g. "$5 to Alex, chores"
+// and "$5 to Alex, lunch money", both on Fridays. Those are two genuinely
+// different payments that both happen to be due at once, not duplicates of
+// each other, so they must NOT be folded together here or treated as
+// "already covered" by one another below — each needs to actually fire.
 function _autoDedupeKey(a) {
   return a.type === "savings-transfer"
-    ? ["sav", a.studentUser, a.direction, a.dayOfWeek, a.frequency, Number(a.amount)].join("|")
-    : ["pay", a.studentUser, a.toUser, a.dayOfWeek, a.frequency, Number(a.amount)].join("|");
+    ? ["sav", a.studentUser, a.direction, a.dayOfWeek, a.frequency, Number(a.amount), a.note || ""].join("|")
+    : ["pay", a.studentUser, a.toUser, a.dayOfWeek, a.frequency, Number(a.amount), a.note || ""].join("|");
 }
 // Self-healing cleanup for automations created before the double-submit
 // guards existed: merges each group of exact duplicates down to a single
