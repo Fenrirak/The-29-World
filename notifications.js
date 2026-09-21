@@ -33,7 +33,7 @@
    the bell included and the top bar still fits on ONE line.
 ================================================================================ */
 
-const NOTIF_MAX = 30;
+const NOTIF_MAX = 60;
 const NOTIF_POLL_MS = 120000; // see the balance widget in data.js for why this is a plain interval
 
 /* ---------------- Read-state (per device, per student) ---------------- */
@@ -216,8 +216,12 @@ function notifMarketItems(me, cls) {
   }).filter(Boolean);
 
   const mine = moves.filter(m => m.shares > 0 && Math.abs(m.pct) >= 1);
+  // Every company they hold that moved gets its own row — not just the
+  // biggest few. Sorted by size of move so the ones most worth a look
+  // still land first if the "Show more" cutoff or the panel scroll splits
+  // them across a click.
   mine.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
-  mine.slice(0, 4).forEach(m => {
+  mine.forEach(m => {
     const up = m.pct > 0;
     out.push({
       id: "mkt-" + m.co.id + "-" + nzDateKey(), ts: dayStart, icon: "chart", tone: up ? "mint" : "coral",
@@ -430,10 +434,12 @@ let NOTIF_POLL_TIMER = null;
 // buildNotifications() already sorts action-needed and unread items to
 // the top, this means a student always sees whatever needs them first,
 // with a "Show more" row to reveal the rest instead of everything being
-// visible (and stock rows, informational at best, muscling for space)
-// all at once. NOTIF_EXPANDED resets on every open so it never carries a
-// stale "expanded" state into the next visit.
-const NOTIF_INITIAL_SHOW = 10;
+// visible all at once. Raised from 10 now that every held company's move
+// gets its own row (see notifMarketItems) instead of just the top 4, so a
+// student holding several companies isn't immediately funnelled into an
+// extra click just to see all of them. NOTIF_EXPANDED resets on every
+// open so it never carries a stale "expanded" state into the next visit.
+const NOTIF_INITIAL_SHOW = 15;
 let NOTIF_EXPANDED = false;
 
 function notifIconFor(name, size) {
