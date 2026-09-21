@@ -632,7 +632,7 @@ function renderMyClassmateRentedHome(box, prop, cls, nameOf) {
       <h2>${icon("house", 18)} Your rented home</h2>
       <p><strong>${escapeHtml(prop.name)}</strong> — renting from ${nameOf(prop.owner)} at ${fmtMoney(s.price)}/week.</p>
       <p class="muted-small">${status}</p>
-      ${canPay ? `<button class="btn small gold" id="payTenantRentBtn-${prop.id}" onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>` : ""}
+      <button class="btn small gold" id="payTenantRentBtn-${prop.id}" ${canPay ? "" : "disabled"} onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>
       <div id="tenantRentMsg-${prop.id}"></div>
       <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${s.minWeeks}-week lease, so you can't move out just yet.`}</p>
       ${canMoveOut ? `<button class="btn small secondary" onclick="tenantMoveOutClick('${prop.id}')">Move out</button>` : ""}
@@ -705,7 +705,7 @@ function renderMyNpcRentedHome(box, unit) {
       renting from the school at ${fmtMoney(unit.rentPerWeek)}/week.</p>
       ${unit.description ? `<p class="muted-small">${escapeHtml(unit.description)}</p>` : ""}
       <p class="muted-small">${status}</p>
-      ${canPay ? `<button class="btn small gold" id="payNpcRentBtn-${unit.id}" onclick="payNpcRentClick('${unit.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(unit.rentPerWeek)}</button>` : ""}
+      <button class="btn small gold" id="payNpcRentBtn-${unit.id}" ${canPay ? "" : "disabled"} onclick="payNpcRentClick('${unit.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(unit.rentPerWeek)}</button>
       <div id="npcRentMsg-${unit.id}"></div>
       <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${unit.minWeeks}-week lease, so you can't move out just yet.`}</p>
       ${canMoveOut ? `<button class="btn small secondary" onclick="npcMoveOutClick('${unit.id}')">Move out</button>` : ""}

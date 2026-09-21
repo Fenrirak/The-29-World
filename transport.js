@@ -403,6 +403,28 @@ async function buyVeh(id) {
   }
 }
 
+// Guards autoSettleZeroTransport below against firing twice while its
+// await is in flight (e.g. two renders back-to-back before the first
+// write lands) — same shape as the disabled-button double-tap guards
+// used elsewhere in this file, just for a call render() triggers itself
+// rather than a click.
+let TRANSPORT_AUTO_SETTLING = false;
+// A student with $0 net transport expense (fee fully offset by a vehicle,
+// or no fee set) still needs transportLastWeekPaid marked so they don't
+// show as overdue next render — but there's nothing to actually charge,
+// so this settles it the same way payTransportExpenses always has,
+// without making the student click a "Pay now — $0.00" button first.
+async function autoSettleZeroTransport() {
+  if (TRANSPORT_AUTO_SETTLING) return;
+  TRANSPORT_AUTO_SETTLING = true;
+  try {
+    await payTransportExpenses(CURRENT.username, CURRENT.classCode);
+  } finally {
+    TRANSPORT_AUTO_SETTLING = false;
+  }
+  await render();
+}
+
 function renderTransportExpenses(me, cls) {
   const amt = transportWeeklyAmount(cls, me);
   const dueDay = cls.transportDay || "Fri";
@@ -415,6 +437,12 @@ function renderTransportExpenses(me, cls) {
   if (paidThisWeek) {
     statusBadge = `<span class="badge mint">${icon("car", 12)}Paid this week</span>`;
     actionHtml = `<p class="muted-small">All sorted — next payment due ${DAY_FULL[dueDay]}.</p>`;
+  } else if (amt.total === 0 && isDueToday) {
+    // Nothing owed this cycle — settle it in the background (see
+    // autoSettleZeroTransport) instead of asking for a click on a $0 charge.
+    autoSettleZeroTransport();
+    statusBadge = `<span class="badge mint">${icon("car", 12)}Paid this week</span>`;
+    actionHtml = `<p class="muted-small">Nothing owed this week — next check ${DAY_FULL[dueDay]}.</p>`;
   } else if (overdue) {
     statusBadge = `<span class="badge coral">${icon("car", 12)}Overdue</span>`;
     actionHtml = isDueToday
