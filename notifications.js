@@ -1,8 +1,10 @@
 /* ===================== The 29 World — To-do feed (bell icon) =====================
    A single place a student can see everything that needs them to DO
-   something — a loan due, a mortgage payment, a decision waiting, a quiz
-   standing between them and a module, an offer on something they listed —
-   plus how the shares they hold moved today.
+   something — a loan due, a mortgage payment, a decision waiting (a big
+   event, a job promotion offer), a quiz standing between them and a
+   module, an offer on something they listed, a side hustle change stuck
+   waiting on the teacher (or denied) — plus how the shares they hold
+   moved today.
 
    Deliberately NOT a record of what they've already done: pay day,
    interest, purchases and transfers all live in "My recent activity" on
@@ -56,14 +58,22 @@ function notifSetLastRead(username, ts) {
    once per day and then goes quiet, instead of either nagging forever or
    never showing up at all. */
 function notifTodayStartMs() {
-  const { hour, minute } = nzHourMinute();
-  const d = new Date();
-  return d.getTime() - ((hour * 3600 + minute * 60 + d.getSeconds()) * 1000);
+  // BUGFIX: this used to read hour/minute from the trusted, server-
+  // corrected clock (nzHourMinute() defaults to trustedNow()) but then
+  // anchor the actual subtraction to a fresh, UNCORRECTED `new Date()` —
+  // so on exactly the drifting-device-clock case data.js's own
+  // trustedNow() exists to fix (see the BUGFIX comment above it), this
+  // silently produced a "day start" as wrong as that device's clock was,
+  // which then fed into every notification's timestamp. Deriving
+  // hour/minute/seconds from the SAME trusted instant fixes that.
+  const now = trustedNow();
+  const { hour, minute } = nzHourMinute(now);
+  return now.getTime() - ((hour * 3600 + minute * 60 + now.getSeconds()) * 1000);
 }
 
 function notifRelativeTime(ts) {
   if (!ts) return "";
-  const diff = Date.now() - ts;
+  const diff = trustedNow().getTime() - ts;
   if (diff < 60000) return "just now";
   const mins = Math.floor(diff / 60000);
   if (mins < 60) return mins + (mins === 1 ? " min ago" : " mins ago");
@@ -143,7 +153,7 @@ function notifPropertyRentalItems(me, cls) {
           href: "property.html"
         });
       }
-      if (p.sublet.status === "rejected" && Date.now() - (p.sublet.createdTs || 0) < 3 * 86400000) {
+      if (p.sublet.status === "rejected" && trustedNow().getTime() - (p.sublet.createdTs || 0) < 3 * 86400000) {
         out.push({
           id: "sublet-rejected-" + p.id, ts: p.sublet.createdTs || dayStart, icon: "house", tone: "coral",
           title: `Your rental listing for ${p.name} was declined`,
@@ -252,6 +262,25 @@ function notifEventItems(me, cls) {
   return out;
 }
 
+// A job promotion (auto-triggered after enough weeks in a tier, or
+// offered manually by the teacher) sits on the user doc as an unresolved
+// offer until the student explicitly accepts or declines it — see
+// respondToPromotion in data.js. That's exactly a "decision waiting on
+// you", the same category as a big event, but it had no builder here at
+// all: the only place it previously surfaced was a one-off popup on page
+// load (checkPromotionNotification), which is easy to miss or click past
+// without noticing, and never comes back once dismissed.
+function notifPromotionItems(me) {
+  const promo = me.pendingPromotion;
+  if (!promo) return [];
+  return [{
+    id: "promo-" + promo.jobId + "-" + promo.tierId, ts: notifTodayStartMs(), icon: "briefcase", tone: "gold",
+    title: `Promotion offer: ${promo.tierName}`,
+    body: `${promo.jobTitle} — accept to move up to ${fmtMoney(promo.wage)} a week.`,
+    href: "student.html", action: true
+  }];
+}
+
 function notifSideHustleItems(me, cls) {
   const sh = me.sideHustle;
   if (!sh || !sh.hustleId) return [];
@@ -267,6 +296,42 @@ function notifSideHustleItems(me, cls) {
     body: `${hustle.name} — you have until ${hourLabel(sh.checkinHour)}:15 to check in and get paid ${fmtMoney(Number(hustle.payouts[sh.checkinHour]) || 0)}.`,
     href: "student.html", action: true
   }];
+}
+
+// A student who already has a side hustle running needs the teacher's
+// sign-off to switch to a different one or a different check-in hour
+// (requestSideHustleChange in data.js) — the exact same "pending, then
+// approved or denied" shape as a marketplace listing or a classmate
+// sublet above, just for the hustle itself. Denial carries a note
+// (sideHustleDenialNote) that otherwise just sits on the user doc with
+// nothing pointing the student at it.
+function notifSideHustleRequestItems(me, cls) {
+  const dayStart = notifTodayStartMs();
+  const out = [];
+  const req = me.sideHustleRequest;
+  if (req && req.status === "pending") {
+    const hustle = (cls.sideHustles || []).find(h => h.id === req.hustleId);
+    out.push({
+      id: "sh-request-" + req.hustleId + "-" + req.checkinHour, ts: dayStart, icon: "briefcase", tone: "navy",
+      title: "Side hustle change waiting for approval",
+      body: `Switching to ${hustle ? hustle.name : "a new hustle"}, checking in at ${hourLabel(req.checkinHour)}. It applies once your teacher approves it.`,
+      href: "student.html"
+    });
+  }
+  // No timestamp is stored on the denial itself (data.js only clears it
+  // when the student submits a fresh request), so — like the loan/mortgage
+  // reminders above — this is stamped with today's start and keeps showing
+  // once per day for as long as it sits unaddressed, rather than vanishing
+  // after a fixed window the way a resolved listing rejection does.
+  if (me.sideHustleDenialNote) {
+    out.push({
+      id: "sh-denied-" + nzDateKey(), ts: dayStart, icon: "briefcase", tone: "coral",
+      title: "Your side hustle change was denied",
+      body: me.sideHustleDenialNote,
+      href: "student.html"
+    });
+  }
+  return out;
 }
 
 function notifQuizItems(me, cls) {
@@ -311,7 +376,7 @@ function notifMarketplaceItems(me, cls) {
         href: "marketplace.html"
       });
     }
-    if (l.seller === me.username && l.status === "rejected" && Date.now() - (l.ts || 0) < 3 * 86400000) {
+    if (l.seller === me.username && l.status === "rejected" && trustedNow().getTime() - (l.ts || 0) < 3 * 86400000) {
       out.push({
         id: "rejected-" + l.id, ts: l.ts || dayStart, icon: "cart", tone: "coral",
         title: `Your listing for ${l.name} was taken down`,
@@ -335,7 +400,9 @@ function buildNotifications(me, cls) {
     notifTermDepositItems(me),
     notifMarketItems(me, cls),
     notifEventItems(me, cls),
+    notifPromotionItems(me),
     notifSideHustleItems(me, cls),
+    notifSideHustleRequestItems(me, cls),
     notifQuizItems(me, cls),
     notifMarketplaceItems(me, cls)
   );
@@ -424,7 +491,7 @@ function notifBuildPanel() {
   document.body.appendChild(panel);
   panel.addEventListener("click", e => e.stopPropagation());
   panel.querySelector("#notifMarkRead").addEventListener("click", () => {
-    notifSetLastRead(NOTIF_USER, Date.now());
+    notifSetLastRead(NOTIF_USER, trustedNow().getTime());
     notifPaint();
   });
   return panel;
@@ -494,7 +561,12 @@ function notifOpen() {
   // Opening the panel is what marks things read — but the badge only
   // clears once the list has actually been rendered, so nothing can be
   // marked read without having been shown.
-  notifSetLastRead(NOTIF_USER, Date.now());
+  // BUGFIX: was Date.now() — the device's own, possibly-wrong clock. Every
+  // item's ts is derived from the trusted clock (see notifTodayStartMs),
+  // so stamping "read" from a different, uncorrected clock could leave a
+  // slow device's last-read watermark behind the items it was just shown,
+  // and they'd reappear as unread the moment the badge repainted.
+  notifSetLastRead(NOTIF_USER, trustedNow().getTime());
   notifUpdateBadge();
 }
 
