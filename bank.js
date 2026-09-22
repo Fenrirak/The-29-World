@@ -371,7 +371,7 @@ async function addAuto(e) {
       const already = res.existingNote
         ? ` It's labelled "${res.existingNote}".`
         : " It doesn't have a reference message.";
-      const goAhead = confirm(`You already have an automatic payment set up for the same amount, recipient, day and frequency.${already}\n\nSet up this one too?`);
+      const goAhead = confirm(`You already have an automatic payment set up for the same amount, recipient and day.${already}\n\nSet up this one too?`);
       if (goAhead) {
         res = EDITING_AUTO_ID
           ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, true)

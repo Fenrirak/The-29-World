@@ -3062,19 +3062,35 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       // never catches this: it just looks like the same auto-pay firing
       // more than once in a day, when really several near-identical
       // automations each fired exactly once. Reject an exact duplicate
-      // (same payer, payee, day, frequency, amount AND reference note)
-      // outright rather than silently creating another copy — nobody means
-      // to create this one on purpose.
+      // (same payer, payee, day, amount AND reference note) outright rather
+      // than silently creating another copy — nobody means to create this
+      // one on purpose.
+      //
+      // BUGFIX: this used to also require `frequency` to match before
+      // counting as a duplicate, on BOTH this hard-block check and the soft
+      // "are you sure" one below. That meant two automations that look
+      // completely identical to a student on the Bank page (same payer,
+      // payee, amount, day and reference note) got ZERO warning if they
+      // merely differed in "how often" — because unlike the reference note
+      // (see comment below), frequency was never meant to be a legitimate
+      // way to distinguish one recurring payment from another. In practice
+      // that let someone end up with, say, "$35 to Nathan, Iron Shield
+      // Insurance Payment, every Tuesday" created three separate times with
+      // three different frequencies and no warning at all — each is due
+      // for the first time on whatever Tuesday it was created, so all three
+      // fire on the SAME day, which looks exactly like one automatic
+      // payment charging several times in a row. Frequency is dropped from
+      // both checks below so this is now caught like any other duplicate.
       const exactDup = cls.automations.find(a =>
         a.studentUser === studentUser && a.toUser === toUser && a.active &&
-        a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount) &&
+        a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount) &&
         (a.note || "") === noteTrimmed
       );
       if (exactDup) throw new Error("DUPLICATE");
-      // Same amount/recipient/day/frequency but a *different* reference
-      // note is a legitimate, deliberate case — e.g. "$5 to Alex, chores"
-      // and "$5 to Alex, lunch money" both landing on Fridays — so unlike
-      // the exact-duplicate case above it isn't rejected outright. But it's
+      // Same amount/recipient/day but a *different* reference note is a
+      // legitimate, deliberate case — e.g. "$5 to Alex, chores" and "$5 to
+      // Alex, lunch money" both landing on Fridays — so unlike the
+      // exact-duplicate case above it isn't rejected outright. But it's
       // also exactly what someone creates by accident if they've simply
       // forgotten they already have one of these running, so it still gets
       // a confirmation step rather than sailing through silently. Skipped
@@ -3082,7 +3098,7 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       if (!confirmed) {
         const softDup = cls.automations.find(a =>
           a.studentUser === studentUser && a.toUser === toUser && a.active &&
-          a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount)
+          a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount)
         );
         if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
       }
@@ -3094,8 +3110,8 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
     });
   } catch (e) {
     if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
-    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day, frequency and reference message)." };
-    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic payment set up with the same amount, recipient, day and frequency." };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day and reference message)." };
+    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic payment set up with the same amount, recipient and day." };
     return { ok: false, error: "Class not found." };
   }
   return { ok: true };
@@ -3118,10 +3134,16 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
       if (cls.automations.filter(a => a.studentUser === studentUser).length >= MAX_AUTOMATIONS_PER_STUDENT) {
         throw new Error("TOO_MANY");
       }
-      // Same double-submit guard as addAutomation() above.
+      // Same double-submit guard as addAutomation() above — and the same
+      // BUGFIX: `frequency` is deliberately left out of this comparison.
+      // It used to be required to match too, which meant two transfers
+      // that looked identical on the Bank page (same amount, direction and
+      // day) got no duplicate warning at all if they merely differed in
+      // "how often", each firing in full on whatever day they first came
+      // due — see the matching comment on addAutomation() above.
       const dup = cls.automations.find(a =>
         a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
-        a.direction === direction && a.dayOfWeek === dayOfWeek && a.frequency === frequency &&
+        a.direction === direction && a.dayOfWeek === dayOfWeek &&
         Number(a.amount) === Number(amount)
       );
       if (dup) throw new Error("DUPLICATE");
@@ -3133,7 +3155,7 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
     });
   } catch (e) {
     if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
-    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction, day and frequency)." };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction and day)." };
     return { ok: false, error: "Class not found." };
   }
   return { ok: true };
@@ -3152,25 +3174,27 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
       if (idx === -1) throw new Error("NOT_FOUND");
       const existing = cls.automations[idx];
       const noteTrimmed = (note || "").trim();
-      // Same de-dup guard as addAutomation(): without this, editing one
-      // automation to exactly match another already-active one (same
-      // amount, recipient, day, frequency AND reference note) silently
-      // produces two truly identical payments firing on the same day —
-      // indistinguishable from the same automation firing twice.
+      // Same de-dup guard as addAutomation() (including the BUGFIX there
+      // dropping `frequency` from the comparison): without this, editing
+      // one automation to match another already-active one (same amount,
+      // recipient, day AND reference note — frequency doesn't count as a
+      // distinguishing feature) silently produces two truly identical
+      // payments firing on the same day — indistinguishable from the same
+      // automation firing twice.
       const exactDup = cls.automations.find(a =>
         a.id !== id && a.studentUser === studentUser && a.toUser === toUser && a.active &&
-        a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount) &&
+        a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount) &&
         (a.note || "") === noteTrimmed
       );
       if (exactDup) throw new Error("DUPLICATE");
-      // Same amount/recipient/day/frequency but a different reference note
-      // is allowed (see addAutomation()) but still asks for confirmation
+      // Same amount/recipient/day but a different reference note is
+      // allowed (see addAutomation()) but still asks for confirmation
       // first, in case the edit was really meant to update the existing
       // one rather than create a second lookalike.
       if (!confirmed) {
         const softDup = cls.automations.find(a =>
           a.id !== id && a.studentUser === studentUser && a.toUser === toUser && a.active &&
-          a.dayOfWeek === dayOfWeek && a.frequency === frequency && Number(a.amount) === Number(amount)
+          a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount)
         );
         if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
       }
@@ -3180,8 +3204,8 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
-    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day, frequency and reference message)." };
-    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic payment set up with the same amount, recipient, day and frequency." };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day and reference message)." };
+    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic payment set up with the same amount, recipient and day." };
     return { ok: false, error: e.message === "NOT_FOUND" ? "Automatic payment not found." : "Class not found." };
   }
   return { ok: true };
@@ -3199,13 +3223,14 @@ async function editSavingsAutomation(classCode, id, studentUser, dayOfWeek, freq
       const idx = cls.automations.findIndex(a => a.id === id && a.studentUser === studentUser);
       if (idx === -1) throw new Error("NOT_FOUND");
       const existing = cls.automations[idx];
-      // Same de-dup guard as addSavingsAutomation(): without this, editing
-      // one transfer to match another already-active one silently produces
-      // two identical transfers firing on the same day — indistinguishable
-      // from the same one firing twice.
+      // Same de-dup guard as addSavingsAutomation() (including the BUGFIX
+      // there dropping `frequency` from the comparison): without this,
+      // editing one transfer to match another already-active one silently
+      // produces two identical transfers firing on the same day —
+      // indistinguishable from the same one firing twice.
       const dup = cls.automations.find(a =>
         a.id !== id && a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
-        a.direction === direction && a.dayOfWeek === dayOfWeek && a.frequency === frequency &&
+        a.direction === direction && a.dayOfWeek === dayOfWeek &&
         Number(a.amount) === Number(amount)
       );
       if (dup) throw new Error("DUPLICATE");
@@ -3215,7 +3240,7 @@ async function editSavingsAutomation(classCode, id, studentUser, dayOfWeek, freq
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
-    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction, day and frequency)." };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction and day)." };
     return { ok: false, error: e.message === "NOT_FOUND" ? "Automatic transfer not found." : "Class not found." };
   }
   return { ok: true };
@@ -3246,16 +3271,28 @@ async function getStudentAutomations(classCode, studentUser) {
 // auto-pay running several times a day".
 //
 // The note is part of the key deliberately: a student can have two active
-// automations that share everything else (same amount, recipient, day and
-// frequency) but carry different reference notes — e.g. "$5 to Alex, chores"
-// and "$5 to Alex, lunch money", both on Fridays. Those are two genuinely
-// different payments that both happen to be due at once, not duplicates of
-// each other, so they must NOT be folded together here or treated as
-// "already covered" by one another below — each needs to actually fire.
+// automations that share everything else (same amount, recipient and day)
+// but carry different reference notes — e.g. "$5 to Alex, chores" and "$5
+// to Alex, lunch money", both on Fridays. Those are two genuinely different
+// payments that both happen to be due at once, not duplicates of each
+// other, so they must NOT be folded together here or treated as "already
+// covered" by one another below — each needs to actually fire.
+//
+// BUGFIX: `frequency` used to be part of this key too, which is what let
+// two (or three) automations that a student would see as completely
+// identical on the Bank page — same payer, payee, amount, day and note —
+// count as separate payments just because "how often" was set differently.
+// The first time each was due, none of them showed up as a duplicate here
+// (or in the create/edit-time checks — see addAutomation()), so all of
+// them fired in full on the same day: exactly the "one automatic payment
+// charging several times in a row" symptom. Frequency is dropped from the
+// key so any such automations already sitting in a class's data are
+// recognised as the same recurring payment from here on — only one of them
+// pays out per day, and dedupeAutomations() below will fold the rest away.
 function _autoDedupeKey(a) {
   return a.type === "savings-transfer"
-    ? ["sav", a.studentUser, a.direction, a.dayOfWeek, a.frequency, Number(a.amount), a.note || ""].join("|")
-    : ["pay", a.studentUser, a.toUser, a.dayOfWeek, a.frequency, Number(a.amount), a.note || ""].join("|");
+    ? ["sav", a.studentUser, a.direction, a.dayOfWeek, Number(a.amount), a.note || ""].join("|")
+    : ["pay", a.studentUser, a.toUser, a.dayOfWeek, Number(a.amount), a.note || ""].join("|");
 }
 // Self-healing cleanup for automations created before the double-submit
 // guards existed: merges each group of exact duplicates down to a single
@@ -3309,7 +3346,8 @@ async function dedupeAutomations(classCode, automations) {
 // each automation's own `id` (`liveAuto.lastRun === todayKey`). That's a
 // correct guard against the SAME automation firing twice, but it does
 // nothing for leftover duplicate automations — several separate entries
-// with the same payer/payee/day/frequency/amount, created by an old
+// with the same payer/payee/day/amount/note (see _autoDedupeKey — note
+// `frequency` is deliberately NOT part of this), created by an old
 // double-submit before addAutomation()'s DUPLICATE guard existed. Each
 // duplicate is independently valid and independently "hasn't run today",
 // so the id-based check let every single one of them pay out once, which
