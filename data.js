@@ -3121,10 +3121,11 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
 // Savings Account — same idea as a regular automatic payment, but both
 // sides belong to the same person, so it's stored distinctly (type:
 // "savings-transfer") and handled on a single user doc rather than two.
-async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency, amount, direction, note) {
+async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency, amount, direction, note, confirmed = false) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   if (direction !== "toSavings" && direction !== "toCash") return { ok: false, error: "Invalid direction." };
   const classRef = classesCol().doc(classCode);
+  let confirmInfo = null;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(classRef);
@@ -3134,28 +3135,45 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
       if (cls.automations.filter(a => a.studentUser === studentUser).length >= MAX_AUTOMATIONS_PER_STUDENT) {
         throw new Error("TOO_MANY");
       }
-      // Same double-submit guard as addAutomation() above — and the same
-      // BUGFIX: `frequency` is deliberately left out of this comparison.
-      // It used to be required to match too, which meant two transfers
-      // that looked identical on the Bank page (same amount, direction and
-      // day) got no duplicate warning at all if they merely differed in
-      // "how often", each firing in full on whatever day they first came
-      // due — see the matching comment on addAutomation() above.
-      const dup = cls.automations.find(a =>
+      const noteTrimmed = (note || "").trim();
+      // BUGFIX: this used to hard-block on direction+day+amount ALONE —
+      // `frequency` was already dropped (same reasoning as
+      // addAutomation() above), but `note` was never part of the check at
+      // all, on either side. That's the mirror image of the peer-payment
+      // bug: instead of letting silent near-duplicates through, it made it
+      // impossible to ever have two genuinely different savings transfers
+      // that happen to share a direction/day/amount — e.g. "$20 to
+      // savings, book fund" and "$20 to savings, trip fund", both
+      // Mondays — even though the note field exists precisely to tell
+      // those apart (see _autoDedupeKey and the matching comment on
+      // addAutomation()'s softDup below). Split into the same two-tier
+      // check peer payments use: identical down to the note is blocked
+      // outright, same amount/direction/day but a different note asks for
+      // confirmation instead of refusing outright or sailing through
+      // silently.
+      const exactDup = cls.automations.find(a =>
         a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
-        a.direction === direction && a.dayOfWeek === dayOfWeek &&
-        Number(a.amount) === Number(amount)
+        a.direction === direction && a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount) &&
+        (a.note || "") === noteTrimmed
       );
-      if (dup) throw new Error("DUPLICATE");
+      if (exactDup) throw new Error("DUPLICATE");
+      if (!confirmed) {
+        const softDup = cls.automations.find(a =>
+          a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
+          a.direction === direction && a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount)
+        );
+        if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
+      }
       cls.automations.push({
         id: uid("auto"), studentUser, dayOfWeek, frequency, type: "savings-transfer", direction,
-        amount: Number(amount), toUser: studentUser, note: (note || "").trim(), lastRun: null, active: true
+        amount: Number(amount), toUser: studentUser, note: noteTrimmed, lastRun: null, active: true
       });
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
     if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
-    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction and day)." };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction, day and note)." };
+    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic transfer set up with the same amount, direction and day." };
     return { ok: false, error: "Class not found." };
   }
   return { ok: true };
@@ -3210,10 +3228,11 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
   }
   return { ok: true };
 }
-async function editSavingsAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, direction, note) {
+async function editSavingsAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, direction, note, confirmed = false) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   if (direction !== "toSavings" && direction !== "toCash") return { ok: false, error: "Invalid direction." };
   const classRef = classesCol().doc(classCode);
+  let confirmInfo = null;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(classRef);
@@ -3223,24 +3242,35 @@ async function editSavingsAutomation(classCode, id, studentUser, dayOfWeek, freq
       const idx = cls.automations.findIndex(a => a.id === id && a.studentUser === studentUser);
       if (idx === -1) throw new Error("NOT_FOUND");
       const existing = cls.automations[idx];
+      const noteTrimmed = (note || "").trim();
       // Same de-dup guard as addSavingsAutomation() (including the BUGFIX
-      // there dropping `frequency` from the comparison): without this,
-      // editing one transfer to match another already-active one silently
-      // produces two identical transfers firing on the same day —
-      // indistinguishable from the same one firing twice.
-      const dup = cls.automations.find(a =>
+      // there splitting this into an exact-match hard block plus a
+      // same-amount/direction/day-but-different-note soft confirm, the
+      // same way addAutomation()/editAutomation() already work): without
+      // this, editing one transfer to exactly match another already-active
+      // one silently produces two identical transfers firing on the same
+      // day — indistinguishable from the same one firing twice.
+      const exactDup = cls.automations.find(a =>
         a.id !== id && a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
-        a.direction === direction && a.dayOfWeek === dayOfWeek &&
-        Number(a.amount) === Number(amount)
+        a.direction === direction && a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount) &&
+        (a.note || "") === noteTrimmed
       );
-      if (dup) throw new Error("DUPLICATE");
+      if (exactDup) throw new Error("DUPLICATE");
+      if (!confirmed) {
+        const softDup = cls.automations.find(a =>
+          a.id !== id && a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
+          a.direction === direction && a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount)
+        );
+        if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
+      }
       cls.automations[idx] = {
-        ...existing, dayOfWeek, frequency, amount: Number(amount), direction, note: (note || "").trim()
+        ...existing, dayOfWeek, frequency, amount: Number(amount), direction, note: noteTrimmed
       };
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
-    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction and day)." };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction, day and note)." };
+    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic transfer set up with the same amount, direction and day." };
     return { ok: false, error: e.message === "NOT_FOUND" ? "Automatic transfer not found." : "Class not found." };
   }
   return { ok: true };

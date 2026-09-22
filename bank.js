@@ -478,9 +478,26 @@ async function addSavingsAuto(e) {
     const amount = document.getElementById("savAutoAmount").value;
     const note = document.getElementById("savAutoNote").value.trim();
     const box = document.getElementById("savAutoMsg");
-    const res = EDITING_SAV_AUTO_ID
+    let res = EDITING_SAV_AUTO_ID
       ? await editSavingsAutomation(CURRENT.classCode, EDITING_SAV_AUTO_ID, CURRENT.username, day, freq, amount, direction, note)
       : await addSavingsAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, direction, note);
+    if (!res.ok && res.needsConfirm) {
+      // Same "are you sure" step as addAuto() above — same amount,
+      // direction and day already exists, but with a different note.
+      const already = res.existingNote
+        ? ` It's labelled "${res.existingNote}".`
+        : " It doesn't have a note.";
+      const goAhead = confirm(`You already have an automatic transfer set up for the same amount, direction and day.${already}\n\nSet up this one too?`);
+      if (goAhead) {
+        res = EDITING_SAV_AUTO_ID
+          ? await editSavingsAutomation(CURRENT.classCode, EDITING_SAV_AUTO_ID, CURRENT.username, day, freq, amount, direction, note, true)
+          : await addSavingsAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, direction, note, true);
+      } else {
+        box.innerHTML = "";
+        await render();
+        return false;
+      }
+    }
     if (res.ok) {
       box.innerHTML = `<div class="success-msg">${EDITING_SAV_AUTO_ID ? "Automatic transfer updated!" : "Automatic transfer created!"}</div>`;
       cancelEditSavAuto();
