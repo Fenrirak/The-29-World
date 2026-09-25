@@ -2749,7 +2749,9 @@ function applyMarketDayMoves(cls) {
   cls.companies.forEach(co => {
     const coRange = co.priceRange || range;
     const pct = coRange.min + Math.random() * (coRange.max - coRange.min);
-    const direction = Math.random() < 0.5 ? -1 : 1;
+    // Slight upward bias: ~55% chance of an up day vs 45% down, rather than
+    // a straight coin flip.
+    const direction = Math.random() < 0.45 ? -1 : 1;
     const newPrice = Math.max(0.01, Math.round(co.price * (1 + (direction * pct) / 100) * 100) / 100);
     co.price = newPrice;
     co.history.push(newPrice);
