@@ -7920,26 +7920,36 @@ async function processPropertyRent(classCode) {
     // rentLastPaidDate is never reset by a move, so it still remembers.
     if (prop.rentLastPaidDate === todayKey) continue;
     const classRef = classesCol().doc(classCode);
+    const ownerRef = usersCol().doc(prop.owner);
     let didRun = false, amt = 0, owner = "";
     try {
+      // Owner credit + the "paid" stamp now happen in ONE transaction (same
+      // atomic pattern as payTenantRent) — a bare adjustBalance() call
+      // afterwards can silently no-op on contention while the week still
+      // gets marked paid and logged as a success, which is exactly the
+      // "rent paid but never arrived" bug this replaces.
       await fdb.runTransaction(async (t) => {
         const classSnap = await t.get(classRef);
-        if (!classSnap.exists) return;
+        const ownerSnap = await t.get(ownerRef); // all reads before any writes
+        if (!classSnap.exists || !ownerSnap.exists) return;
         const liveCls = withNewModuleDefaults(classSnap.data());
         const liveProp = liveCls.properties.find(p => p.id === prop.id);
         if (!liveProp || !liveProp.owner || liveProp.occupancy !== "rented") return;
         if (liveProp.rentLastWeekPaid === weekKey) return;
         if (liveProp.rentLastPaidDate === todayKey) return;
+        const ownerData = ownerSnap.data();
         amt = liveProp.rentPerWeek;
         owner = liveProp.owner;
         liveProp.rentLastWeekPaid = weekKey;
         liveProp.rentLastPaidDate = todayKey;
         t.update(classRef, { properties: liveCls.properties });
+        if (ownerData.role !== "teacher") {
+          t.update(ownerRef, { balance: Math.round((ownerData.balance + amt) * 100) / 100 });
+        }
         didRun = true;
       });
     } catch (e) { /* ignore, try next */ }
     if (didRun) {
-      await adjustBalance(owner, amt);
       await logTxn(classCode, { type: "property-rent", to: owner, amount: amt, note: `Weekly rent received: ${prop.name}` });
       ran++;
     }
