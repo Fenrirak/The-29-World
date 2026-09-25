@@ -1,10 +1,12 @@
 /* ===================== The 29 World — Reports page =====================
-   Teacher side: a live "current period" report for the whole class (net
+   Teacher side: a live "this month" report for the whole class (net
    worth, savings rate, biggest expense category, loan history per
    student), plus a permanent list of previously saved report cards
    (see archiveClassReport() in data.js) that survive class resets.
    Student side: the same breakdown, but scoped to just their own numbers,
-   with a simple net-worth trend built from their own past saved reports.
+   with a simple net-worth trend built from their own past saved reports,
+   plus an "entire history" breakdown that never resets (see
+   recordReportActivity()/reportLifetime in data.js).
 ========================================================================== */
 
 let CURRENT, IS_TEACHER, CLASS_CODE;
@@ -23,7 +25,7 @@ function avatarClass(username) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("idcard", 26) + " Reports";
-  document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + " Current period";
+  document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + " This month";
   document.getElementById("hPastReports").innerHTML = icon("vault", 18) + " Past reports";
   document.getElementById("hMyReport").innerHTML = icon("idcard", 18) + " My report card";
   document.getElementById("saveSnapshotBtn").innerHTML = icon("star", 15) + " Save a report card now";
@@ -42,7 +44,7 @@ async function init() {
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
   if (!IS_TEACHER) document.getElementById("pageIntro").textContent =
-    "Your report card: net worth, savings rate, biggest expenses and loan history for this period.";
+    "Your report card: net worth, savings rate, biggest expenses and loan history for this month — plus your entire history.";
   paintChrome();
 
   // Same background jobs every other page runs on load, so visiting
@@ -123,7 +125,7 @@ function render() {
 /* ---------------- Teacher view ---------------- */
 function renderTeacher() {
   const isArchive = VIEWING !== "current";
-  document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + (isArchive ? " Saved report" : " Current period");
+  document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + (isArchive ? " Saved report" : " This month");
   document.getElementById("periodRange").textContent = isArchive
     ? `Saved ${VIEWED_REPORT.archivedDate} — covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`
     : `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)} — not yet saved`;
@@ -172,7 +174,7 @@ function openStudentReport(username) {
   document.getElementById("reportModalName").innerHTML =
     `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${escapeHtml(s.name)}`;
   document.getElementById("reportModalSubtitle").textContent =
-    `@${s.username} — ${VIEWING === "current" ? "current period" : "saved " + VIEWED_REPORT.archivedDate}, covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
+    `@${s.username} — ${VIEWING === "current" ? "this month" : "saved " + VIEWED_REPORT.archivedDate}, covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
   document.getElementById("reportModalBody").innerHTML = studentReportHTML(s);
   document.getElementById("reportModal").classList.remove("hidden");
 }
@@ -225,7 +227,7 @@ function netWorthSparkline(history) {
 /* ---------------- Shared per-student breakdown ---------------- */
 function renderBars(map, colorClass) {
   const entries = Object.entries(map || {}).sort((a, b) => b[1] - a[1]);
-  if (!entries.length) return `<p class="muted-small">Nothing here this period.</p>`;
+  if (!entries.length) return `<p class="muted-small">Nothing here yet.</p>`;
   const max = Math.max(...entries.map(e => e[1]));
   return entries.map(([label, amt]) => `
     <div class="rpt-bar-row">
@@ -253,7 +255,7 @@ function studentReportHTML(s) {
     <div class="profile-summary">
       <div class="profile-chip"><div class="label">Net worth</div><div class="value">${fmtMoney(s.netWorth)}</div></div>
       <div class="profile-chip"><div class="label">Savings rate</div><div class="value">${s.savingsRate === null ? "—" : s.savingsRate + "%"}</div></div>
-      <div class="profile-chip"><div class="label">Income this period</div><div class="value">${fmtMoney(s.incomeTotal)}</div></div>
+      <div class="profile-chip"><div class="label">Income this month</div><div class="value">${fmtMoney(s.incomeTotal)}</div></div>
       <div class="profile-chip"><div class="label">Biggest expense</div><div class="value">${s.topExpenseCategory ? s.topExpenseCategory.category : "—"}</div>${s.topExpenseCategory ? `<div class="muted-small">${fmtMoney(s.topExpenseCategory.amount)}</div>` : ""}</div>
     </div>
 
@@ -269,15 +271,28 @@ function studentReportHTML(s) {
       <tr><td>Owed (loans + mortgage)</td><td>-${fmtMoney(s.owed)}</td></tr>
     </tbody></table></div>
 
-    <h4>${icon("piggy", 16)} Income this period ${fmtMoney(s.incomeTotal)}</h4>
+    <h4>${icon("piggy", 16)} Income this month ${fmtMoney(s.incomeTotal)}</h4>
     ${renderBars(s.income, "gold")}
 
-    <h4>${icon("vault", 16)} Saved &amp; invested this period ${fmtMoney(s.savedTotal)}</h4>
+    <h4>${icon("vault", 16)} Saved &amp; invested this month ${fmtMoney(s.savedTotal)}</h4>
     ${renderBars(s.saved, "mint")}
-    ${s.borrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this period (not counted as income).</p>` : ""}
+    ${s.borrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this month (not counted as income).</p>` : ""}
 
-    <h4>${icon("cart", 16)} Spent this period ${fmtMoney(s.spentTotal)}</h4>
+    <h4>${icon("cart", 16)} Spent this month ${fmtMoney(s.spentTotal)}</h4>
     ${renderBars(s.spent, "coral")}
+
+    <h3 style="margin-top:26px;">${icon("vault", 17)} Entire history</h3>
+    <p class="muted-small">Everything on this account since it was created — never resets, including when the month rolls over or the class is reset.</p>
+
+    <h4>${icon("piggy", 16)} All-time income ${fmtMoney(s.lifetimeIncomeTotal)}</h4>
+    ${renderBars(s.lifetimeIncome, "gold")}
+
+    <h4>${icon("vault", 16)} All-time saved &amp; invested ${fmtMoney(s.lifetimeSavedTotal)}</h4>
+    ${renderBars(s.lifetimeSaved, "mint")}
+    ${s.lifetimeBorrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.lifetimeBorrowedTotal)} in loans in total (not counted as income).</p>` : ""}
+
+    <h4>${icon("cart", 16)} All-time spent ${fmtMoney(s.lifetimeSpentTotal)}</h4>
+    ${renderBars(s.lifetimeSpent, "coral")}
 
     <h4>${icon("handshake", 16)} Loan history</h4>
     ${renderLoanHistory(s.loans)}
@@ -320,11 +335,13 @@ async function downloadReportPDF() {
 
 function reportToRows(report) {
   const rows = [["Name", "Username", "Net worth", "Cash", "Savings", "Term deposits", "Invested", "Property", "Vehicles", "Store items",
-    "Owed", "Income (period)", "Saved/invested (period)", "Spent (period)", "Borrowed (period)", "Savings rate %", "Top expense category", "Top expense amount"]];
+    "Owed", "Income (this month)", "Saved/invested (this month)", "Spent (this month)", "Borrowed (this month)", "Savings rate %", "Top expense category", "Top expense amount",
+    "Income (all-time)", "Saved/invested (all-time)", "Spent (all-time)", "Borrowed (all-time)"]];
   (report.students || []).forEach(s => rows.push([
     s.name, s.username, s.netWorth, s.balance, s.savings, s.termDeposits, s.invested, s.propertyValue, s.vehicleValue, s.storeValue,
     s.owed, s.incomeTotal, s.savedTotal, s.spentTotal, s.borrowedTotal, s.savingsRate === null ? "" : s.savingsRate,
-    s.topExpenseCategory ? s.topExpenseCategory.category : "", s.topExpenseCategory ? s.topExpenseCategory.amount : ""
+    s.topExpenseCategory ? s.topExpenseCategory.category : "", s.topExpenseCategory ? s.topExpenseCategory.amount : "",
+    s.lifetimeIncomeTotal, s.lifetimeSavedTotal, s.lifetimeSpentTotal, s.lifetimeBorrowedTotal
   ]));
   return rows;
 }

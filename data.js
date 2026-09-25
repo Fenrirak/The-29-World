@@ -1208,8 +1208,15 @@ async function createStudentAccount(name, username, password, classCode) {
         timeExemptionStatus: null,
         timeExemptionDate: null,
         extraMinutesToday: 0,
-        extraMinutesDate: null
+        extraMinutesDate: null,
+        // Rolling report totals (see recordReportActivity below) — seeded
+        // here with the welcome grant itself, since it's logged inline
+        // below rather than through logTxn's usual recordReportActivity hook.
+        reportMonth: Object.assign(emptyReportBucket(), { monthKey: nzMonthKey() }),
+        reportLifetime: emptyReportBucket()
       };
+      addClassificationToBucket(user.reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: 20 });
+      addClassificationToBucket(user.reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: 20 });
       t.set(usersCol().doc(username), user);
 
       cls.students.push(username);
@@ -1502,14 +1509,27 @@ async function adjustBalance(username, delta) {
 
 async function logTxn(classCode, txn) {
   const classRef = classesCol().doc(classCode);
-  await fdb.runTransaction(async (t) => {
+  // Built once, outside the transaction, so every retry (Firestore retries
+  // on contention) pushes the exact same entry rather than a new id/ts each
+  // time, and so recordReportActivity() below has a stable reference to the
+  // entry that actually got committed.
+  const built = Object.assign({ id: uid("t"), date: nowStr(), ts: Date.now() }, txn);
+  const committed = await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
-    if (!snap.exists) return;
+    if (!snap.exists) return false;
     const cls = snap.data();
-    cls.txns.unshift(Object.assign({ id: uid("t"), date: nowStr(), ts: Date.now() }, txn));
+    cls.txns.unshift(built);
     if (cls.txns.length > MAX_STORED_TXNS) cls.txns.length = MAX_STORED_TXNS;
     t.update(classRef, { txns: cls.txns });
+    return true;
   });
+  if (!committed) return; // class didn't exist — nothing was logged, so nothing to report either
+  // Feed this txn into the rolling per-student report totals (see
+  // recordReportActivity below) for whichever real student(s) it belongs
+  // to. Best-effort and non-blocking of the money movement above, which
+  // has already committed by this point regardless of what happens here.
+  const affected = new Set([built.to, built.from].filter(Boolean));
+  await Promise.all([...affected].map(u => recordReportActivity(u, built)));
 }
 
 async function transferMoney(fromUser, toUser, amount, note) {
@@ -4738,29 +4758,25 @@ function classifyTxnForReport(t, username) {
   return null;
 }
 
-// Builds one student's report-card data for the period starting at
-// periodStart (ms epoch). Net worth fields are a live snapshot (a point in
-// time); income/saved/spent fields only cover txns still retained on the
-// class doc within that period — see MAX_STORED_TXNS. Generating reports
-// on a regular cadence (e.g. weekly) is what keeps that window accurate
-// rather than truncated by the class-wide cap.
-function buildStudentReportData(student, cls, periodStart) {
+// Builds one student's report-card data. Net worth fields are a live
+// snapshot (a point in time). Income/saved/spent fields cover THIS NZ
+// CALENDAR MONTH, read from the rolling totals recordReportActivity() keeps
+// on the student's own doc (see above) rather than scanning cls.txns —
+// that log is shared class-wide and capped, so it can't be trusted to
+// still hold a full month's activity. If the stored bucket is from an
+// earlier month (or doesn't exist yet, e.g. a student who joined before
+// this feature shipped), it's treated as empty rather than shown stale —
+// it starts filling in from their next transaction.
+function buildStudentReportData(student, cls) {
   const username = student.username;
-  const periodTxns = (cls.txns || []).filter(t =>
-    txnBelongsTo(t, username) &&
-    (t.ts === undefined || t.ts >= periodStart)
-  );
+  const monthKey = nzMonthKey();
+  const month = (student.reportMonth && student.reportMonth.monthKey === monthKey)
+    ? student.reportMonth : emptyReportBucket();
+  const lifetime = student.reportLifetime || emptyReportBucket();
 
-  const income = {}, saved = {}, spent = {};
-  let incomeTotal = 0, savedTotal = 0, spentTotal = 0, borrowedTotal = 0;
-  periodTxns.forEach(t => {
-    const c = classifyTxnForReport(t, username);
-    if (!c) return;
-    if (c.bucket === "income") { income[c.category] = Math.round(((income[c.category] || 0) + c.amount) * 100) / 100; incomeTotal += c.amount; }
-    else if (c.bucket === "saved") { saved[c.category] = Math.round(((saved[c.category] || 0) + c.amount) * 100) / 100; savedTotal += c.amount; }
-    else if (c.bucket === "spent") { spent[c.category] = Math.round(((spent[c.category] || 0) + c.amount) * 100) / 100; spentTotal += c.amount; }
-    else if (c.bucket === "borrowed") { borrowedTotal += c.amount; }
-  });
+  const income = month.income, saved = month.saved, spent = month.spent;
+  const incomeTotal = month.incomeTotal, savedTotal = month.savedTotal,
+        spentTotal = month.spentTotal, borrowedTotal = month.borrowedTotal;
   const topExpense = Object.entries(spent).sort((a, b) => b[1] - a[1])[0] || null;
 
   // Loan history lives permanently on the student doc (never capped like
@@ -4813,25 +4829,25 @@ function buildStudentReportData(student, cls, periodStart) {
     savingsRate: incomeTotal > 0 ? Math.round((savedTotal / incomeTotal) * 1000) / 10 : null,
     income, saved, spent,
     topExpenseCategory: topExpense ? { category: topExpense[0], amount: topExpense[1] } : null,
-    loans
+    loans,
+    // Entire history — never reset, see recordReportActivity above.
+    lifetimeIncome: lifetime.income, lifetimeSaved: lifetime.saved, lifetimeSpent: lifetime.spent,
+    lifetimeIncomeTotal: lifetime.incomeTotal, lifetimeSavedTotal: lifetime.savedTotal,
+    lifetimeSpentTotal: lifetime.spentTotal, lifetimeBorrowedTotal: lifetime.borrowedTotal
   };
 }
 
-// Computes a live, unsaved report for the whole class covering the period
-// since the last archive (or since the class was created / a 7-day
-// fallback for older classes with no createdAt). Safe to call as often as
-// you like — this never writes anything, so viewing it doesn't cost a
-// class its "next" period.
+// Computes a live, unsaved report for the whole class covering the current
+// NZ calendar month so far. Safe to call as often as you like — this never
+// writes anything, so viewing it doesn't cost a class its "next" period.
 async function generateClassReport(classCode) {
   const cls = withNewModuleDefaults(await getClass(classCode));
   if (!cls) return null;
   const students = await getClassStudents(classCode, cls);
-  const archives = cls.reportArchives || [];
-  const lastArchive = archives.length ? archives[archives.length - 1] : null;
-  const periodStart = lastArchive ? lastArchive.ts : (cls.createdAt || (Date.now() - 7 * 86400000));
+  const periodStart = dateKeyToUTC(nzMonthKey() + "-01");
   return {
     classCode, className: cls.name, periodStart, periodEnd: Date.now(),
-    students: students.map(s => buildStudentReportData(s, cls, periodStart))
+    students: students.map(s => buildStudentReportData(s, cls))
   };
 }
 
@@ -4876,6 +4892,87 @@ async function deleteReportArchive(classCode, archiveId) {
     t.update(classRef, { reportArchives: cls.reportArchives });
   });
   return true;
+}
+
+/* ---------------- Rolling per-student report totals ----------------
+   "This month" and "entire history" can't be built by re-scanning
+   cls.txns the way the old "since the last save" report was: that log is
+   ONE SHARED list for the whole class, capped at MAX_STORED_TXNS — a busy
+   class can push transactions off that cap well within a single month, at
+   which point they'd silently vanish from a month-scoped report, and a
+   lifetime total would be wrong from day one.
+
+   Instead, every transaction ALSO updates two small totals kept on the
+   STUDENT'S OWN doc (not the shared, capped class doc), the instant it
+   happens — see recordReportActivity, called from logTxn:
+     - reportMonth    — this NZ calendar month only. Lazily reset to zero
+                         the first time an txn lands after the month has
+                         turned over (same "compare a stored date key,
+                         reset if stale" pattern already used for
+                         timeExemptionDate/extraMinutesDate elsewhere in
+                         this file) — nothing proactively resets it at
+                         midnight, and nothing ever auto-saves it.
+     - reportLifetime — every month, forever. Never reset by anything,
+                         including a class reset (resetClass only updates
+                         specific fields on each student doc and doesn't
+                         touch this one, so it survives automatically).
+   Both reuse the exact same categorisation as classifyTxnForReport/
+   txnBelongsTo above, so a txn is counted here if and only if the old
+   scan would have counted it too. This is purely additive: cls.txns,
+   generateClassReport's net-worth/loan fields, and the whole archive
+   feature are unchanged.
+
+   Caveat this can't get around: it only counts forward from the moment
+   it ships. A class with existing history won't have it retroactively
+   added to "lifetime" — there was nowhere recording it before now. */
+function emptyReportBucket() {
+  return { income: {}, saved: {}, spent: {}, incomeTotal: 0, savedTotal: 0, spentTotal: 0, borrowedTotal: 0 };
+}
+
+function addClassificationToBucket(bucket, c) {
+  if (c.bucket === "borrowed") {
+    bucket.borrowedTotal = Math.round(((bucket.borrowedTotal || 0) + c.amount) * 100) / 100;
+    return;
+  }
+  const map = bucket[c.bucket]; // "income" | "saved" | "spent"
+  map[c.category] = Math.round(((map[c.category] || 0) + c.amount) * 100) / 100;
+  const totalKey = c.bucket + "Total";
+  bucket[totalKey] = Math.round(((bucket[totalKey] || 0) + c.amount) * 100) / 100;
+}
+
+// "YYYY-MM" in NZ wall-clock time — the reset key for reportMonth, same
+// convention as nzDateKey()'s "YYYY-MM-DD" just above.
+function nzMonthKey(d) { const p = nzParts(d); return `${p.year}-${p.month}`; }
+
+// Applies one txn's effect (if any) to a single student's rolling report
+// totals. Safe to call for any (txn, username) pair, including ones the
+// txn has nothing to do with — txnBelongsTo/classifyTxnForReport make it a
+// no-op unless this leg of the txn actually belongs to this student.
+// Wrapped in try/catch and never thrown back to the caller: a reporting
+// hiccup here must never surface as a failure of the money action that
+// already committed in logTxn before this runs.
+async function recordReportActivity(username, txn) {
+  if (!username || !txnBelongsTo(txn, username)) return;
+  const c = classifyTxnForReport(txn, username);
+  if (!c) return;
+  const userRef = usersCol().doc(username);
+  const monthKey = nzMonthKey();
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) return; // e.g. student removed mid-flight — nothing to update
+      const u = snap.data();
+      const month = (u.reportMonth && u.reportMonth.monthKey === monthKey)
+        ? u.reportMonth
+        : Object.assign(emptyReportBucket(), { monthKey });
+      const lifetime = u.reportLifetime || emptyReportBucket();
+      addClassificationToBucket(month, c);
+      addClassificationToBucket(lifetime, c);
+      t.update(userRef, { reportMonth: month, reportLifetime: lifetime });
+    });
+  } catch (e) {
+    console.warn("recordReportActivity failed (rolling report totals only — money already moved):", e);
+  }
 }
 
 /* ===================== Gambling (Roulette) ===================== */
