@@ -128,6 +128,18 @@ async function init() {
   document.getElementById("npcPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("teacherQuickNav").classList.toggle("hidden", !IS_TEACHER);
   paintChrome();
+  // BUGFIX: this page runs the same day-gated jobs (automations, rent,
+  // interest, term deposits...) as bank.js/teacher.js/student.js but was
+  // missing the server-clock sync those pages already do first — see
+  // syncServerClock in data.js. Without it, a device with a wrong local
+  // clock decides "today" for every job below off its own drifted clock,
+  // which is exactly what makes an automatic payment fire more than once
+  // in the same real day. Kicked off here, in parallel with the first
+  // paint below, so it doesn't add to load time; the jobs themselves
+  // aren't constructed until it resolves (same order as the other pages).
+  const T29_CLOCK_SYNC = syncServerClock(u.classCode);
+  await t29FirstPaint(render);
+  await T29_CLOCK_SYNC;
   // These 7 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
   // at a time — 7 separate sequential network round-trips — was a big
@@ -150,12 +162,6 @@ async function init() {
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
   ]);
-  // Kick the day's jobs off but DON'T block the page on them: paint what
-  // we already have first, then wait. On the first load of the day pay day
-  // alone can take seconds (it writes per student), and blocking here is
-  // what made a phone sit on a blank page. The popups and the final
-  // render() below still run after the jobs, exactly as they did before.
-  await t29FirstPaint(render);
   await T29_STARTUP_JOBS;
   // These popups read the results of the jobs above, so they still need
   // to run afterwards — but stay sequential since each checks whether
