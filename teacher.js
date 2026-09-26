@@ -68,7 +68,6 @@ function paintChrome() {
   document.getElementById("hThresholds").innerHTML = icon("star", 18) + " Lifestyle rating bands";
   document.getElementById("addThresholdBtn").innerHTML = icon("plus", 13) + " Add band";
   document.getElementById("saveThresholdsBtn").innerHTML = icon("bank", 14) + " Save bands";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

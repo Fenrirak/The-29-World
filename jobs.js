@@ -16,7 +16,6 @@ let EDIT_TIERS  = []; // { id, name, wage, description } — id="" means new
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 /* ══════════════════════════════════════════════════════════════════════

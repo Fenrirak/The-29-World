@@ -32,7 +32,6 @@ function paintChrome() {
   document.getElementById("hMine").innerHTML = icon("shield", 18) + " My cover";
   document.getElementById("hPayDay").innerHTML = icon("calendar", 18) + " Premium payment day";
   document.getElementById("saveDayBtn").innerHTML = icon("calendar", 14) + " Save day";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

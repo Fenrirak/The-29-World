@@ -98,7 +98,6 @@ function paintChrome() {
   document.getElementById("addNpcBtn").innerHTML = icon("plus", 15) + " Add NPC property";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a property";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add property";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 // Used by the quick-nav pills (property.html) and by editProp/editNpcProp

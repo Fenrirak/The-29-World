@@ -12,7 +12,6 @@ async function init() {
 
   paintIconSlots();
   document.getElementById("lockIcon").innerHTML = icon("lock", 40);
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
   document.getElementById("whoami").textContent = u.name;
 
   CLASS = await getClassCached(u.classCode);

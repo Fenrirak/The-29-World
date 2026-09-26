@@ -30,7 +30,6 @@ function moduleLabel(key) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("key", 26) + " Quizzes";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

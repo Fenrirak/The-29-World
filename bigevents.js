@@ -27,7 +27,6 @@ function paintChrome() {
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add event";
   document.getElementById("runBigEventsBtn").innerHTML = icon("repeat", 14) + " Run this week's big events now";
   document.getElementById("hHistory").innerHTML = icon("star", 18) + " My big event history";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

@@ -23,7 +23,6 @@ function paintChrome() {
   document.getElementById("hTransportExpenses").innerHTML = icon("repeat", 18) + " Weekly transport expenses";
   document.getElementById("hLifeFeeOverrides").innerHTML = icon("trophy", 18) + " Public transport fee by life event";
   document.getElementById("labStock").textContent = "Stock limit (leave blank for unlimited)";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

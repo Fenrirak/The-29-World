@@ -32,7 +32,6 @@ function paintChrome() {
   document.getElementById("hDefs").innerHTML = icon("trophy", 18) + " Family events";
   document.getElementById("hGranted").innerHTML = icon("users", 18) + " Who has what";
   document.getElementById("hMyLife").innerHTML = icon("trophy", 18) + " My life";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

@@ -21,7 +21,6 @@ const ASSET_ICON = { store: "cart", vehicle: "car", property: "house" };
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("users", 26) + " Trade Centre";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

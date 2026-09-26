@@ -69,7 +69,6 @@ function paintChrome() {
   document.getElementById("bankLink").innerHTML = icon("piggy", 14) + " Go to Bank";
   document.getElementById("marketLink").innerHTML = icon("chart", 14) + " Go to Stock Market";
   document.getElementById("reportCardBtn").innerHTML = icon("idcard", 14) + " My report card";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

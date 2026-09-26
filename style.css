@@ -283,6 +283,29 @@ main{
   padding:28px 20px 60px;
 }
 
+/* Standalone legal/info pages (privacy policy, etc.) — a lightweight
+   header that doesn't depend on icons.js/session state, since these
+   pages must render the same whether or not anyone is logged in. */
+.legal-header{
+  background:linear-gradient(120deg,var(--navy-900) 0%,var(--navy-800) 55%,var(--navy-700) 100%);
+  padding:18px 16px;
+  text-align:center;
+  box-shadow:var(--shadow);
+}
+.legal-header-brand{
+  color:#fff;
+  text-decoration:none;
+  font-weight:800;
+  font-size:1.2rem;
+  font-family:"Trebuchet MS","Segoe UI",Verdana,sans-serif;
+}
+main.legal-main{max-width:760px;}
+.legal-main .card h1{margin-bottom:.2em;}
+.legal-main .card .muted-small{display:block;margin-bottom:1.6em;}
+.legal-main .card h2{margin-top:1.7em;font-size:1.15rem;}
+.legal-main .card ul{color:var(--muted);line-height:1.6;padding-left:1.25em;margin:0.6em 0;}
+.legal-main .card li{margin-bottom:.4em;}
+
 .card{
   background:var(--card);
   border:1px solid var(--line);
@@ -505,8 +528,49 @@ label .icon-slot{color:var(--navy-700);}
 .student-avatar.c4{background:linear-gradient(135deg,var(--lilac),#6a5fc0);}
 .student-avatar.c5{background:linear-gradient(135deg,var(--coral),#c9503a);}
 .row-flex{display:flex;align-items:center;}
-.footer-note{text-align:center;color:var(--muted);font-size:.78rem;padding:24px;display:flex;align-items:center;justify-content:center;gap:8px;}
-.footer-note .icon{width:14px;height:14px;opacity:.6;}
+/* ===== Site footer =====
+   Brand/links/copyright use div/nav/a (never <p>), and width/padding are
+   set explicitly here, so no page-specific `p{...}` rule (max-width,
+   padding, etc.) can ever reach into the footer's text. */
+.site-footer{
+  width:100%;
+  max-width:none;
+  margin:0;
+  padding:36px 20px 28px;
+  text-align:center;
+  box-sizing:border-box;
+}
+.site-footer-brand{
+  font-family:Georgia,"Iowan Old Style","Palatino Linotype","Book Antiqua",serif;
+  font-size:1.35rem;
+  font-weight:700;
+  color:var(--navy-900);
+  letter-spacing:.01em;
+}
+.site-footer-links{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  align-items:center;
+  gap:24px;
+  margin-top:12px;
+  font-family:"Segoe UI","Trebuchet MS",Verdana,sans-serif;
+}
+.site-footer-links a{color:var(--muted);text-decoration:none;font-size:.92rem;font-weight:600;}
+.site-footer-links a:hover{color:var(--navy-700);text-decoration:underline;}
+.site-footer-copy{
+  margin-top:16px;
+  font-size:14.5px;
+  color:var(--muted);
+  font-family:"Segoe UI","Trebuchet MS",Verdana,sans-serif;
+}
+@media (max-width:600px){
+  .site-footer{padding:26px 16px 22px;}
+  .site-footer-brand{font-size:1.12rem;}
+  .site-footer-links{gap:16px;margin-top:10px;}
+  .site-footer-links a{font-size:.85rem;}
+  .site-footer-copy{font-size:12.5px;margin-top:12px;}
+}
 .class-code-pill{
   display:inline-flex;align-items:center;gap:8px;
   background:linear-gradient(135deg,var(--navy-900),var(--navy-700));color:var(--gold);
@@ -1299,7 +1363,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
    detail modal — can print just the one the person actually opened
    Print from, instead of everything on screen at once. */
 @media print{
-  .topbar,.footer-note,.no-print,#settingsBtn,.settings-popover,.notif-panel,.notif-bell{display:none !important;}
+  .topbar,.site-footer,.no-print,#settingsBtn,.settings-popover,.notif-panel,.notif-bell{display:none !important;}
   body{background:#fff;}
   main{max-width:none;padding:0;margin:0;}
   .card{box-shadow:none;border:none;padding:0;}
@@ -1424,7 +1488,8 @@ html.dark-mode .bud-track-name,
 html.dark-mode .bud-track-nums strong,
 html.dark-mode .badge.navy,
 html.dark-mode .notif-ic.navy,
-html.dark-mode .mkt-status.sold{
+html.dark-mode .mkt-status.sold,
+html.dark-mode .site-footer-brand{
   color:var(--heading-text);
 }
 html.dark-mode .pw-toggle:hover{background:var(--surface-2);color:var(--heading-text);}

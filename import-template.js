@@ -13,7 +13,6 @@ function showState(name) {
 
 async function init() {
   paintIconSlots();
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
   document.getElementById("errorIcon").innerHTML = icon("lock", 34);
   document.getElementById("wrongRoleIcon").innerHTML = icon("idcard", 34);
   document.getElementById("readyIcon").innerHTML = icon("handshake", 34);

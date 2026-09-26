@@ -29,7 +29,6 @@ function paintChrome() {
   document.getElementById("hPastReports").innerHTML = icon("vault", 18) + " Past reports";
   document.getElementById("hMyReport").innerHTML = icon("idcard", 18) + " My report card";
   document.getElementById("saveSnapshotBtn").innerHTML = icon("star", 15) + " Save a report card now";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

@@ -68,7 +68,6 @@ function paintChrome() {
   document.getElementById("saveBtn").innerHTML = icon("bank", 15) + " Save tax rates";
   document.getElementById("hWageBrackets").innerHTML = icon("percent", 18) + " Wage tax brackets";
   document.getElementById("hCurrent").innerHTML = icon("percent", 18) + " Current tax rates";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

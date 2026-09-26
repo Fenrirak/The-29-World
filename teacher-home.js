@@ -17,7 +17,6 @@ async function init() {
   CURRENT = u;
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintIconSlots();
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
   await render();
 }
 

@@ -12,7 +12,6 @@ function paintChrome() {
   document.getElementById("pageTitle").innerHTML = icon("cart", 26) + " Class Store";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add an item";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add item";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

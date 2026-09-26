@@ -22,7 +22,6 @@ function paintChrome() {
   document.getElementById("takeLoanBtn").innerHTML = icon("send", 15) + " Borrow";
   document.getElementById("hMyLoan").innerHTML = icon("handshake", 18) + " My loans";
   document.getElementById("hPastLoans").innerHTML = icon("handshake", 18) + " Loan history";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

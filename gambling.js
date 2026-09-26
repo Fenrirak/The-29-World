@@ -1126,7 +1126,6 @@ function paintChrome() {
   document.getElementById("hDisabled").innerHTML = icon("dice", 20) + " Gambling is paused";
   document.getElementById("hBet").innerHTML = icon("dice", 18) + " Place a bet";
   document.getElementById("hRecent").innerHTML = icon("bank", 18) + " My recent bets";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 
   document.getElementById("bjHSettings").innerHTML = icon("cards", 18) + " Blackjack settings";
   document.getElementById("bjSaveSettingsBtn").innerHTML = icon("bank", 14) + " Save settings";

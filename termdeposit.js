@@ -7,7 +7,6 @@ function paintChrome() {
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add plan";
   document.getElementById("hMine").innerHTML = icon("vault", 18) + " My term deposits";
   document.getElementById("hEdit").innerHTML = icon("vault", 18) + " Edit term deposit plan";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {

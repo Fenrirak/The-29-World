@@ -46,7 +46,6 @@ function paintChrome() {
   document.getElementById("labBudIncome").innerHTML = icon("coin", 13) + " What I expect to earn this week";
   document.getElementById("budSuggestBtn").innerHTML = icon("star", 14) + " Suggest a split";
   document.getElementById("hBudgetTeacher").innerHTML = icon("chart", 18) + " Who's budgeting this week";
-  document.getElementById("footerIcon").innerHTML = icon("coin", 14);
 }
 
 async function init() {
