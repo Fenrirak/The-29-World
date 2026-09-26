@@ -111,27 +111,29 @@
         <div class="stat mint">
           <span class="icon" id="iconBcSavings"></span>
           <div class="label">Savings balance</div>
-          <div class="value" id="bcSavingsBalance" style="font-size:1.3rem;">$0.00</div>
+          <div class="value" id="bcSavingsBalance" style="font-size:1.3rem;font-weight:700;">$0.00</div>
         </div>
         <div class="stat sky">
           <span class="icon" id="iconBcRate"></span>
           <div class="label">Interest rate</div>
-          <div class="value" id="bcSavingsRate" style="font-size:1.3rem;">0%</div>
+          <div class="value" id="bcSavingsRate" style="font-size:1.3rem;font-weight:700;">0%</div>
         </div>
       </div>
       <div style="margin-top:14px;">
         <div class="muted-small" style="margin-bottom:6px;">Recent bank activity</div>
-        <div id="bcRecentActivity"></div>
+        <div id="bcRecentActivity" style="max-height:320px;overflow-y:auto;"></div>
         <p class="muted-small hidden" id="bcNoActivity">Nothing in the last 3 days.</p>
       </div>
     </div>
 
     <div class="card">
       <h2 id="hClassmates">My classmates</h2>
+      <div style="max-height:320px;overflow-y:auto;">
       <table>
         <thead><tr><th>Name</th><th>Job</th></tr></thead>
         <tbody id="classmateTable"></tbody>
       </table>
+      </div>
     </div>
   </div>
 
