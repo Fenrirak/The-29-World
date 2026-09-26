@@ -67,6 +67,8 @@ function paintChrome() {
   document.getElementById("hMarket").innerHTML = icon("chart", 18) + " Market snapshot";
   document.getElementById("hActivity").innerHTML = icon("bank", 18) + " My recent activity (last 3 days)";
   document.getElementById("bankLink").innerHTML = icon("piggy", 14) + " Go to Bank";
+  document.getElementById("iconBcSavings").innerHTML = icon("piggy", 26);
+  document.getElementById("iconBcRate").innerHTML = icon("percent", 26);
   document.getElementById("marketLink").innerHTML = icon("chart", 14) + " Go to Stock Market";
   document.getElementById("reportCardBtn").innerHTML = icon("idcard", 14) + " My report card";
 }
@@ -146,6 +148,8 @@ async function render() {
   document.getElementById("greeting").textContent = "Hi, " + me.name + "!";
   document.getElementById("balance").textContent = fmtMoney(me.balance);
   document.getElementById("portfolio").textContent = fmtMoney(await portfolioValue(me.username, me.classCode));
+  document.getElementById("bcSavingsBalance").textContent = fmtMoney(me.savings || 0);
+  document.getElementById("bcSavingsRate").textContent = (cls.interestRate || 0) + "%";
 
   const job = cls.jobs.find(j => j.id === me.jobId);
   const myTier = job ? getStudentTier(job, me) : null;
@@ -267,6 +271,8 @@ async function render() {
   document.getElementById("noTxns").classList.toggle("hidden", my.length > 0);
   const tbody = document.getElementById("txnTable");
   tbody.innerHTML = "";
+  const BANK_PREVIEW_TYPES = new Set(["transfer", "automation", "savings-deposit", "savings-withdraw", "interest", "cash-interest"]);
+  const bankPreview = [];
   const nameCache = {};
   for (const s of allStudents) nameCache[s.username] = s.name;
   const teacher = await getUserCached(cls.teacher);
@@ -303,6 +309,24 @@ async function render() {
     tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${escapeHtml(detail)}</td>
       <td class="${sign === '-' ? 'ticker-down' : 'ticker-up'}">${sign}${fmtMoney(amt)}</td>`;
     tbody.appendChild(tr);
+
+    if (BANK_PREVIEW_TYPES.has(t.type) && bankPreview.length < 3) bankPreview.push({ type: t.type, detail, sign, amt, date: t.date });
+  });
+
+  const bpBox = document.getElementById("bcRecentActivity");
+  bpBox.innerHTML = "";
+  document.getElementById("bcNoActivity").classList.toggle("hidden", bankPreview.length > 0);
+  bankPreview.forEach((t, i) => {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;" + (i < bankPreview.length - 1 ? "border-bottom:1px solid rgba(0,0,0,.08);" : "");
+    row.innerHTML = `
+      <div style="min-width:0;">
+        ${badgeType(t.type)}
+        <div class="muted-small" style="margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.detail)} · ${t.date}</div>
+      </div>
+      <div class="${t.sign === '-' ? 'ticker-down' : 'ticker-up'}" style="white-space:nowrap;font-weight:600;">${t.sign}${fmtMoney(t.amt)}</div>
+    `;
+    bpBox.appendChild(row);
   });
 }
 

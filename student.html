@@ -107,6 +107,23 @@
         <a class="btn small gold" href="bank.html" id="bankLink">Go to Bank</a>
       </div>
       <p>Send money, set up automatic payments, and see your full transaction history.</p>
+      <div class="grid grid-2" style="margin-top:10px;">
+        <div class="stat mint">
+          <span class="icon" id="iconBcSavings"></span>
+          <div class="label">Savings balance</div>
+          <div class="value" id="bcSavingsBalance" style="font-size:1.3rem;">$0.00</div>
+        </div>
+        <div class="stat sky">
+          <span class="icon" id="iconBcRate"></span>
+          <div class="label">Interest rate</div>
+          <div class="value" id="bcSavingsRate" style="font-size:1.3rem;">0%</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <div class="muted-small" style="margin-bottom:6px;">Recent bank activity</div>
+        <div id="bcRecentActivity"></div>
+        <p class="muted-small hidden" id="bcNoActivity">Nothing in the last 3 days.</p>
+      </div>
     </div>
 
     <div class="card">
