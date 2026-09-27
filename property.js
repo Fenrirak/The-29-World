@@ -273,7 +273,7 @@ async function render() {
                    <span class="row-flex" style="gap:6px;align-items:center;">
                      <span class="muted-small">$</span>
                      <input type="number" id="depositAmt-${gid}" min="${minDeposit}" step="0.01" value="${minDeposit}" style="width:90px;" title="Deposit amount in dollars, minimum ${fmtMoney(minDeposit)}">
-                     <button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Finance</button>
+                     <button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Mortgage</button>
                    </span>` : ""}`
               : "")}
       </div>
@@ -1170,7 +1170,7 @@ async function buyFinanced(gid) {
     const id = await pickAvailableUnitId(gid);
     if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
     const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true, depositAmt);
-    document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Financed with a ${fmtMoney(depositAmt)} deposit! Weekly payments will come out automatically.</div>` : `<div class="error-msg">${res.error}</div>`;
+    document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Mortgaged with a ${fmtMoney(depositAmt)} deposit! Weekly payments will come out automatically.</div>` : `<div class="error-msg">${res.error}</div>`;
     await render();
   } finally {
     if (btn) btn.disabled = false;
