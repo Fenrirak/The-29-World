@@ -10790,6 +10790,18 @@ function budgetIncomeEstimateFromData(cls, user, username, weekStartKey) {
 function txnBelongsTo(t, username) {
   if (t.type === "p2p-buy") return t.from === username;
   if (t.type === "p2p-sell") return t.to === username;
+  // BUGFIX: payClassmateRent() logs this as a PAIR of txns (like p2p-buy/
+  // p2p-sell above) — "property-rent-pay" and "property-rent-receive" —
+  // but both entries carry BOTH `to` (owner) and `from` (tenant), since
+  // that's what the note text on each side needs. Without this guard the
+  // generic to/from check below matched both students on both txns, so
+  // classifyTxnForReport (which doesn't re-check direction for these
+  // types) gave the tenant a phantom "Rent received" income entry and the
+  // owner a phantom "Housing" expense entry, on top of their real one —
+  // corrupting reportMonth/reportLifetime for both students on every
+  // classmate rent payment.
+  if (t.type === "property-rent-pay") return t.from === username;
+  if (t.type === "property-rent-receive") return t.to === username;
   return t.to === username || t.from === username;
 }
 
