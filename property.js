@@ -237,6 +237,16 @@ async function render() {
     const chgSign = chg.diff > 0 ? "+" : chg.diff < 0 ? "-" : "";
     const chgBadge = hist.length > 1 ? ` <span class="${chgClass} muted-small">(${chgSign}${Math.abs(chg.pct).toFixed(1)}% today)</span>` : "";
     const listingRange = p.priceRange || cls.propertyPriceRange || { min: 0.5, max: 2 };
+    // Same price the server will actually charge (discount + tax applied),
+    // computed with the exact same shared functions data.js uses server-side
+    // so the minimum deposit shown here never drifts from what buyProperty
+    // enforces. Only meaningful when this listing offers financing.
+    let minDeposit = 0;
+    if (p.mortgageWeeks > 0) {
+      const discounted = applyLifeDiscount(me, "property", p.price);
+      const taxed = applyTaxToExpense(cls, "property", discounted).total;
+      minDeposit = Math.round(taxed * 0.1 * 100) / 100;
+    }
 
     const div = document.createElement("div");
     div.className = "card company-card";
@@ -247,7 +257,7 @@ async function render() {
           <p>${escapeHtml(p.description) || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
           ${lifestylePreviewLine(cls, p)}
-          <p>${priceWithLifeDiscount(me, "property", p.price)}${chgBadge} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""}` : "&middot; cash purchase only"}
+          <p>${priceWithLifeDiscount(me, "property", p.price)}${chgBadge} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""} &middot; min deposit ${fmtMoney(minDeposit)}` : "&middot; cash purchase only"}
             ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
           <p class="muted-small">${units.length > 1 ? `${available.length} of ${units.length} available` : (available.length > 0 ? "Available" : `Owned by ${nameOf(owned[0].owner)}`)}</p>
         </div>
@@ -259,7 +269,12 @@ async function render() {
           ? `<button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button><button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>`
           : (!myUnit && available.length > 0
               ? `<button class="btn small gold" id="buyOutrightBtn-${gid}" onclick="buyOutright('${gid}')">Buy cash</button>
-                 ${p.mortgageWeeks > 0 ? `<button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Finance (10% deposit)</button>` : ""}`
+                 ${p.mortgageWeeks > 0 ? `
+                   <span class="row-flex" style="gap:6px;align-items:center;">
+                     <span class="muted-small">$</span>
+                     <input type="number" id="depositAmt-${gid}" min="${minDeposit}" step="0.01" value="${minDeposit}" style="width:90px;" title="Deposit amount in dollars, minimum ${fmtMoney(minDeposit)}">
+                     <button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Finance</button>
+                   </span>` : ""}`
               : "")}
       </div>
       ${IS_TEACHER ? `
@@ -1129,13 +1144,33 @@ async function buyFinanced(gid) {
   const btn = document.getElementById("buyFinancedBtn-" + gid);
   const btn2 = document.getElementById("buyOutrightBtn-" + gid);
   if (btn && btn.disabled) return;
+  // Student's custom deposit, in dollars. The input's own min= stops most
+  // typing/arrow attempts below the 10% floor, but a pasted or emptied
+  // value can still slip through, so re-validate here before it's sent —
+  // both the 10% minimum (read straight off the input's own min attribute,
+  // so it always matches what was actually shown) and the student's cash
+  // balance. buyProperty in data.js also clamps/checks server-side as the
+  // real line of defense; this just gives a clear message instead of a
+  // silent correction or a generic error.
+  const depositInput = document.getElementById("depositAmt-" + gid);
+  const minDeposit = Number(depositInput && depositInput.min) || 0;
+  let depositAmt = Number(depositInput && depositInput.value);
+  const me = await getUserCached(CURRENT.username);
+  if (!Number.isFinite(depositAmt) || depositAmt < minDeposit) {
+    document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Enter a deposit of at least ${fmtMoney(minDeposit)}.</div>`;
+    return;
+  }
+  if (depositAmt > me.balance) {
+    document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">You don't have enough money for that deposit.</div>`;
+    return;
+  }
   if (btn) btn.disabled = true;
   if (btn2) btn2.disabled = true;
   try {
     const id = await pickAvailableUnitId(gid);
     if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
-    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true);
-    document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Financed! Weekly payments will come out automatically.</div>` : `<div class="error-msg">${res.error}</div>`;
+    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true, depositAmt);
+    document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Financed with a ${fmtMoney(depositAmt)} deposit! Weekly payments will come out automatically.</div>` : `<div class="error-msg">${res.error}</div>`;
     await render();
   } finally {
     if (btn) btn.disabled = false;

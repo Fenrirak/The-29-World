@@ -21,6 +21,15 @@ const MAX_STORED_TXNS = 250; // keep class docs from growing forever
 // budget needs.
 const MAX_AUTOMATIONS_PER_STUDENT = 20;
 
+// Sentinel `toUser` value marking a teacher's automatic payment as "pay
+// every current student the same amount" rather than one specific person.
+// Stored as a single automation record (not one copy per student), so it
+// automatically covers whoever is enrolled on the day it actually runs —
+// including students who join after it was set up. Shared with bank.js,
+// which is the only other file that needs to know this string (to offer it
+// as a "Pay to" option and to label it in the automatic-payments list).
+const AUTOPAY_ALL_STUDENTS = "__ALL__";
+
 // Shared HTML-escaping helper. data.js loads before every other The 29
 // World script on every page, so this is available globally as soon as
 // any page script runs. ALWAYS wrap user-supplied strings (student/teacher
@@ -3064,6 +3073,10 @@ const FREQ_DAYS = { weekly: 7, fortnightly: 14, monthly: 28 };
 
 async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
+  if (toUser === AUTOPAY_ALL_STUDENTS) {
+    const owner = await getUser(studentUser);
+    if (!owner || owner.role !== "teacher") return { ok: false, error: "Only teachers can set up a payment to all students." };
+  }
   const classRef = classesCol().doc(classCode);
   let confirmInfo = null;
   try {
@@ -3202,6 +3215,10 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
 }
 async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
+  if (toUser === AUTOPAY_ALL_STUDENTS) {
+    const owner = await getUser(studentUser);
+    if (!owner || owner.role !== "teacher") return { ok: false, error: "Only teachers can set up a payment to all students." };
+  }
   const classRef = classesCol().doc(classCode);
   let confirmInfo = null;
   try {
@@ -3505,6 +3522,62 @@ async function processAutomations(classCode) {
           amount: a.amount,
           note: (a.note ? a.note + " — " : "") + "Automatic transfer"
         });
+        ran++;
+      }
+      continue;
+    }
+
+    // Teacher "pay all students" automation: one stored record fans out to
+    // every student currently in the class, resolved fresh each time it
+    // runs (not a fixed list from when it was created) so a student who
+    // joins later is included automatically. Handled as its own branch
+    // because it touches N+1 documents instead of 2 — everything else
+    // (day/frequency/lastRun/dedupe checks above) is identical.
+    if (a.toUser === AUTOPAY_ALL_STUDENTS) {
+      let didRun = false, coveredByDuplicate = false, paidTo = [];
+      try {
+        await fdb.runTransaction(async (t) => {
+          const classSnap = await t.get(classRef);
+          if (!classSnap.exists) return;
+          const liveCls = classSnap.data();
+          const liveAuto = (liveCls.automations || []).find(x => x.id === a.id);
+          if (!liveAuto || liveAuto.lastRun === todayKey) return;
+          const alreadyCoveredLive = (liveCls.automations || []).some(x =>
+            x.id !== a.id && x.lastRun === todayKey && _autoDedupeKey(x) === dedupeKey);
+          if (alreadyCoveredLive) {
+            liveAuto.lastRun = todayKey;
+            t.update(classRef, { automations: liveCls.automations });
+            coveredByDuplicate = true;
+            return;
+          }
+          // Roster read fresh from the class doc already in this same
+          // transaction (cls.students is the source of truth getClassStudents
+          // itself reads from) — not the `cls` this loop started with —
+          // so a student added or removed moments ago is reflected exactly.
+          const usernames = liveCls.students || [];
+          const studentRefs = usernames.map(u => usersCol().doc(u));
+          const studentSnaps = await Promise.all(studentRefs.map(r => t.get(r)));
+          // Teacher automations always carry unlimited funds (see the
+          // regular peer-payment branch below) so there's no affordability
+          // check here — every existing student gets paid, every time.
+          studentSnaps.forEach((snap, i) => {
+            if (!snap.exists) return; // stale username, e.g. a removed student — skip, don't fail the whole run
+            const student = snap.data();
+            t.update(studentRefs[i], { balance: Math.round((student.balance + a.amount) * 100) / 100 });
+            paidTo.push(usernames[i]);
+          });
+          liveAuto.lastRun = todayKey;
+          t.update(classRef, { automations: liveCls.automations });
+          didRun = true;
+        });
+      } catch (e) { /* ignore, try next */ }
+
+      if (didRun || coveredByDuplicate) firedKeysToday.add(dedupeKey);
+      if (didRun) {
+        await Promise.all(paidTo.map(username => logTxn(classCode, {
+          type: "automation", from: a.studentUser, to: username, amount: a.amount,
+          note: a.note ? a.note : "Automatic payment"
+        })));
         ran++;
       }
       continue;
@@ -7605,7 +7678,7 @@ async function simulatePropertyMarketDay(classCode) {
   return results;
 }
 
-async function buyProperty(username, classCode, propId, financed) {
+async function buyProperty(username, classCode, propId, financed, depositAmount) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let deposit = 0, weekly = 0, propName = "", cashPaid = 0, taxAmount = 0;
@@ -7631,7 +7704,16 @@ async function buyProperty(username, classCode, propId, financed) {
       // day to day. See propertyGainSinceBought in property.js.
       prop.purchasePrice = Math.round(taxedPrice * 100) / 100;
       if (financed && prop.mortgageWeeks > 0) {
-        deposit = Math.round(taxedPrice * 0.1 * 100) / 100;
+        // Deposit is now student-chosen in dollars, not a fixed 10% — but
+        // 10% of the taxed price is still the floor, and the full price is
+        // the ceiling (can't "deposit" more than the property costs).
+        // Clamped here, not just in the UI, so a missing/bad/too-low value
+        // from the client can never produce a mortgage under the minimum.
+        const minDeposit = Math.round(taxedPrice * 0.1 * 100) / 100;
+        let depositAmt = Number(depositAmount);
+        if (!Number.isFinite(depositAmt)) depositAmt = minDeposit;
+        depositAmt = Math.min(taxedPrice, Math.max(minDeposit, depositAmt));
+        deposit = Math.round(depositAmt * 100) / 100;
         weekly = Math.round(((taxedPrice - deposit) / prop.mortgageWeeks) * 100) / 100;
         if (!isTeacher && user.balance < deposit) throw new Error("BROKE");
         prop.owner = username;
