@@ -1,4 +1,5 @@
 let CURRENT, CLASS_CODE, PROFILE_USER, EDITING_EVENT_ID = null, EDITING_SIDE_HUSTLE_ID = null;
+let LAST_STUDENTS = []; // roster snapshot from the last render(), reused by "pay all" so it doesn't need its own fetch
 
 // "1am" / "12pm" -> 0-23, or null if unrecognized.
 function parseHourLabel(str) {
@@ -343,8 +344,10 @@ async function render() {
   `).join("");
 
   // adjustment select
+  LAST_STUDENTS = students;
   const sel = document.getElementById("adjStudent");
-  sel.innerHTML = students.map(s => `<option value="${escapeHtml(s.username)}">${escapeHtml(s.name)}</option>`).join("");
+  const allOpt = students.length ? `<option value="__ALL__">All students (${students.length})</option>` : "";
+  sel.innerHTML = allOpt + students.map(s => `<option value="${escapeHtml(s.username)}">${escapeHtml(s.name)}</option>`).join("");
 
   // txns — the teacher dashboard shows however many transactions are
   // currently stored (up to MAX_STORED_TXNS), independent of the student
@@ -494,20 +497,64 @@ async function onAssignJob(username, jobId) {
 
 async function giveAdjustment(e) {
   e.preventDefault();
-  const student = document.getElementById("adjStudent").value;
-  const amount = Number(document.getElementById("adjAmount").value);
-  const note = document.getElementById("adjNote").value.trim();
-  const res = await teacherAdjust(CURRENT.username, student, amount, note);
-  const box = document.getElementById("adjMsg");
-  if (res.ok) {
-    box.innerHTML = `<div class="success-msg">Done — ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${student}.</div>`;
-    document.getElementById("adjAmount").value = "";
-    document.getElementById("adjNote").value = "";
-  } else {
-    box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+  // Same double-submit guard used elsewhere for money-moving forms — matters
+  // even more here since "pay all" fires off one write per student in a row.
+  const btn = document.getElementById("applyAdjBtn");
+  if (btn.disabled) return false;
+  btn.disabled = true;
+  try {
+    const student = document.getElementById("adjStudent").value;
+    const amount = parseMoneyInput(document.getElementById("adjAmount").value);
+    const note = document.getElementById("adjNote").value.trim();
+    const box = document.getElementById("adjMsg");
+    if (Number.isNaN(amount) || amount === 0) {
+      box.innerHTML = `<div class="error-msg">Enter an amount.</div>`;
+      return false;
+    }
+
+    if (student === "__ALL__") {
+      const targets = LAST_STUDENTS;
+      if (!targets.length) {
+        box.innerHTML = `<div class="error-msg">There are no students in this class yet.</div>`;
+        return false;
+      }
+      if (!confirm(`${amount >= 0 ? "Give" : "Take"} ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "to" : "from"} all ${targets.length} students?`)) {
+        box.innerHTML = "";
+        return false;
+      }
+      // Sequential on purpose: these all touch the same class document, so
+      // firing them at once risks a lost update (one write clobbering
+      // another's). One at a time is a little slower but never loses money.
+      let okCount = 0;
+      const failedNames = [];
+      for (const s of targets) {
+        const res = await teacherAdjust(CURRENT.username, s.username, amount, note);
+        if (res.ok) okCount++; else failedNames.push(s.name);
+      }
+      if (okCount === targets.length) {
+        box.innerHTML = `<div class="success-msg">Done — ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} all ${okCount} students.</div>`;
+        document.getElementById("adjAmount").value = "";
+        document.getElementById("adjNote").value = "";
+      } else if (okCount > 0) {
+        box.innerHTML = `<div class="error-msg">${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${okCount} of ${targets.length} students. Failed for: ${failedNames.map(escapeHtml).join(", ")}.</div>`;
+      } else {
+        box.innerHTML = `<div class="error-msg">Couldn't apply this to any students — please try again.</div>`;
+      }
+    } else {
+      const res = await teacherAdjust(CURRENT.username, student, amount, note);
+      if (res.ok) {
+        box.innerHTML = `<div class="success-msg">Done — ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${student}.</div>`;
+        document.getElementById("adjAmount").value = "";
+        document.getElementById("adjNote").value = "";
+      } else {
+        box.innerHTML = `<div class="error-msg">${res.error}</div>`;
+      }
+    }
+    await render();
+    return false;
+  } finally {
+    btn.disabled = false;
   }
-  await render();
-  return false;
 }
 
 async function addEventForm(e) {
@@ -819,6 +866,28 @@ async function runPayDay() {
     alert("Everyone with a job has already been paid for today.");
   }
   await render();
+}
+// Ticks "completed this week's job task" for every student who has a job,
+// in one go (same flag as the per-student checkbox on their profile).
+async function markAllJobTasksDone() {
+  const btn = document.getElementById("markAllJobsBtn");
+  if (btn.disabled) return;
+  const cls = await getClassCached(CLASS_CODE);
+  const targets = LAST_STUDENTS.filter(s => s.jobId && !isJobTaskApprovedThisWeek(s, cls));
+  const withJobs = LAST_STUDENTS.filter(s => s.jobId).length;
+  if (!withJobs) { alert("No students have a job assigned yet."); return; }
+  if (!targets.length) { alert("Everyone with a job is already ticked as done for this pay cycle."); return; }
+  if (!confirm(`Mark this week's job task as done for ${targets.length} student${targets.length === 1 ? "" : "s"}?`)) return;
+  btn.disabled = true;
+  try {
+    // Each write hits a different student's own document, so it's safe to run together.
+    const results = await Promise.allSettled(targets.map(s => setJobTaskApproval(CLASS_CODE, s.username, true)));
+    const failed = results.filter(r => r.status === "rejected").length;
+    if (failed) alert(`Marked ${targets.length - failed} of ${targets.length} as done. ${failed} failed — please try again.`);
+    await render();
+  } finally {
+    btn.disabled = false;
+  }
 }
 async function runInterest() {
   const count = await applyInterest(CLASS_CODE);
