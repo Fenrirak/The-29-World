@@ -3443,7 +3443,70 @@ async function dedupeAutomations(classCode, automations) {
 // of a given recurring payment has paid out today, every other copy just
 // gets its own lastRun stamped to match — no money moves twice — and sits
 // there ready for dedupeAutomations() to fold away for good next time.
+// ---- Autopay engine helpers (see processAutomations below) ----
+//
+// ROOT-CAUSE FIX (the "auto-payments run several times a day" bug):
+// processAutomations() used to record the outcome of each payment in
+// variables (`didRun`, `paidTo`, `coveredByDuplicate`) that were assigned
+// INSIDE the fdb.runTransaction() callback and read AFTER it, and then
+// wrote the transaction-log entry in a completely separate transaction.
+// Firestore re-runs a transaction callback whenever it loses a contention
+// race, and those variables were never reset between attempts. Every page
+// of the app runs this job on load, so when a class opens the app together
+// many clients race on the same class doc: a client whose FIRST attempt
+// reached `didRun = true` but got aborted would retry, find that another
+// client had already paid today, return early — yet still see
+// `didRun === true` and go on to log (and add to the student's report
+// totals) a payment that never happened. Same for `paidTo`, which also
+// accumulated duplicate usernames across retries. That is exactly
+// "one automatic payment showing up several times in a day".
+//
+// Fix: (1) the callback now RETURNS what it did, so only the attempt that
+// actually committed counts; (2) the log entry is written in the SAME
+// transaction as the money movement, so payment + log + lastRun are one
+// atomic unit; (3) every entry has a deterministic id
+// (auto-<automationId>-<date>[-<student>]) and is checked for inside the
+// transaction, so a given automation can never pay the same day twice
+// even if `lastRun` were ever overwritten; (4) the transaction re-validates
+// the LIVE automation (active, day, frequency elapsed, same payment)
+// instead of trusting the copy read before it started.
+function _autoIsDue(a, todayName, todayKey) {
+  if (!a || !a.active) return false;
+  if (a.dayOfWeek !== todayName) return false;
+  if (a.lastRun === todayKey) return false;
+  if (a.lastRun) {
+    const daysSince = daysBetweenKeys(a.lastRun, todayKey);
+    const need = FREQ_DAYS[a.frequency] || 7;
+    if (daysSince < need) return false;
+  }
+  return true;
+}
+function _autoTxnId(a, todayKey, suffix) {
+  return "auto-" + a.id + "-" + todayKey + (suffix ? "-" + suffix : "");
+}
+// Appends already-built log entries to a class doc's `txns` (newest first,
+// capped) — same shape logTxn() produces, but done inside the caller's
+// own transaction.
+function _autoAppendTxns(liveCls, entries) {
+  const merged = entries.concat(liveCls.txns || []);
+  if (merged.length > MAX_STORED_TXNS) merged.length = MAX_STORED_TXNS;
+  liveCls.txns = merged;
+}
+// The post-commit half of logTxn(): feed each committed entry into the
+// rolling per-student report totals. Called exactly once per entry, only
+// for entries that really committed.
+async function _autoReportCommitted(entries) {
+  await Promise.all(entries.map(e =>
+    Promise.all([...new Set([e.to, e.from].filter(Boolean))].map(u => recordReportActivity(u, e)))));
+}
+
 async function processAutomations(classCode) {
+  // Most pages call this without having synced the server clock first
+  // (only Bank/Student/Teacher/Property did) — so the "what day is it /
+  // has this run today" decision was made from the device's own clock on
+  // every other page. No-op once already synced this session.
+  try { await syncServerClock(classCode); } catch (e) { /* falls back to device clock */ }
+
   let cls = await getClass(classCode);
   if (!cls || !cls.automations || cls.automations.length === 0 || cls.archived) return 0;
 
@@ -3458,181 +3521,134 @@ async function processAutomations(classCode) {
   const todayKey = nzDateKey();
   let ran = 0;
   const firedKeysToday = new Set();
+  const classRef = classesCol().doc(classCode);
 
   for (const a of cls.automations) {
     if (!a.active) continue;
     if (a.dayOfWeek !== todayName) continue;
     if (a.lastRun === todayKey) { firedKeysToday.add(_autoDedupeKey(a)); continue; }
-    if (a.lastRun) {
-      const daysSince = daysBetweenKeys(a.lastRun, todayKey);
-      const need = FREQ_DAYS[a.frequency] || 7;
-      if (daysSince < need) continue;
-    }
+    if (!_autoIsDue(a, todayName, todayKey)) continue;
     const dedupeKey = _autoDedupeKey(a);
     if (firedKeysToday.has(dedupeKey)) continue; // a duplicate already paid this out today
 
-    const classRef = classesCol().doc(classCode);
+    // Shared by all three branches, run at the top of each transaction
+    // AFTER its reads. Returns a result to bail out with, or null to go on.
+    const guard = (liveCls) => {
+      const liveAuto = (liveCls.automations || []).find(x => x.id === a.id);
+      // Gone, paused, edited to a different payment/day, or already ran.
+      if (!liveAuto || !_autoIsDue(liveAuto, todayName, todayKey) || _autoDedupeKey(liveAuto) !== dedupeKey)
+        return { status: "skip" };
+      // Another copy of this exact payment already paid today, or this
+      // exact ledger entry already exists: stamp and stop, move no money.
+      const covered = (liveCls.automations || []).some(x =>
+        x.id !== a.id && x.lastRun === todayKey && _autoDedupeKey(x) === dedupeKey);
+      const logged = (liveCls.txns || []).some(x => x.id === _autoTxnId(a, todayKey) ||
+        (typeof x.id === "string" && x.id.indexOf(_autoTxnId(a, todayKey) + "-") === 0));
+      if (covered || logged) {
+        liveAuto.lastRun = todayKey;
+        return { status: "covered", liveAuto };
+      }
+      return { status: "go", liveAuto };
+    };
 
-    if (a.type === "savings-transfer") {
-      // Self-to-self: only one user doc involved, so this is handled
-      // separately from the peer-to-peer path below (which reads/writes
-      // two different docs).
-      let didRun = false, coveredByDuplicate = false;
-      try {
-        await fdb.runTransaction(async (t) => {
+    let outcome = { status: "skip" };
+    try {
+      if (a.type === "savings-transfer") {
+        // Self-to-self: only one user doc involved.
+        outcome = await fdb.runTransaction(async (t) => {
           const userRef = usersCol().doc(a.studentUser);
           const classSnap = await t.get(classRef);
           const userSnap = await t.get(userRef);
-          if (!classSnap.exists || !userSnap.exists) return;
+          if (!classSnap.exists || !userSnap.exists) return { status: "skip" };
           const user = userSnap.data();
           const liveCls = classSnap.data();
-          const liveAuto = (liveCls.automations || []).find(x => x.id === a.id);
-          if (!liveAuto || liveAuto.lastRun === todayKey) return;
-          // A duplicate copy of this exact transfer may have already run
-          // today via a different page load — check the freshest data
-          // this transaction can see, not just this call's own progress.
-          const alreadyCoveredLive = (liveCls.automations || []).some(x =>
-            x.id !== a.id && x.lastRun === todayKey && _autoDedupeKey(x) === dedupeKey);
-          if (alreadyCoveredLive) {
-            liveAuto.lastRun = todayKey;
-            t.update(classRef, { automations: liveCls.automations });
-            coveredByDuplicate = true;
-            return;
-          }
-
+          const g = guard(liveCls);
+          if (g.status === "skip") return g;
+          if (g.status === "covered") { t.update(classRef, { automations: liveCls.automations }); return g; }
+          const amt = Number(g.liveAuto.amount);
           const savings = user.savings || 0;
-          const fromCash = a.direction === "toSavings";
+          const fromCash = g.liveAuto.direction === "toSavings";
           const available = fromCash ? user.balance : savings;
-          if (available < a.amount) return; // skip silently if they can't afford it this time
-
-          const newBalance = fromCash ? user.balance - a.amount : user.balance + a.amount;
-          const newSavings = fromCash ? savings + a.amount : savings - a.amount;
+          if (available < amt) return { status: "skip" }; // can't afford it this time
+          const newBalance = fromCash ? user.balance - amt : user.balance + amt;
+          const newSavings = fromCash ? savings + amt : savings - amt;
           t.update(userRef, { balance: Math.round(newBalance * 100) / 100, savings: Math.round(newSavings * 100) / 100 });
-          liveAuto.lastRun = todayKey;
-          t.update(classRef, { automations: liveCls.automations });
-          didRun = true;
+          g.liveAuto.lastRun = todayKey;
+          const entry = Object.assign({ id: _autoTxnId(a, todayKey), date: nowStr(), ts: Date.now() }, {
+            type: fromCash ? "savings-deposit" : "savings-withdraw",
+            [fromCash ? "from" : "to"]: a.studentUser,
+            amount: amt,
+            note: (g.liveAuto.note ? g.liveAuto.note + " — " : "") + "Automatic transfer"
+          });
+          _autoAppendTxns(liveCls, [entry]);
+          t.update(classRef, { automations: liveCls.automations, txns: liveCls.txns });
+          return { status: "ran", entries: [entry] };
         });
-      } catch (e) { /* ignore, try next */ }
-
-      if (didRun || coveredByDuplicate) firedKeysToday.add(dedupeKey);
-      if (didRun) {
-        await logTxn(classCode, {
-          type: a.direction === "toSavings" ? "savings-deposit" : "savings-withdraw",
-          [a.direction === "toSavings" ? "from" : "to"]: a.studentUser,
-          amount: a.amount,
-          note: (a.note ? a.note + " — " : "") + "Automatic transfer"
-        });
-        ran++;
-      }
-      continue;
-    }
-
-    // Teacher "pay all students" automation: one stored record fans out to
-    // every student currently in the class, resolved fresh each time it
-    // runs (not a fixed list from when it was created) so a student who
-    // joins later is included automatically. Handled as its own branch
-    // because it touches N+1 documents instead of 2 — everything else
-    // (day/frequency/lastRun/dedupe checks above) is identical.
-    if (a.toUser === AUTOPAY_ALL_STUDENTS) {
-      let didRun = false, coveredByDuplicate = false, paidTo = [];
-      try {
-        await fdb.runTransaction(async (t) => {
+      } else if (a.toUser === AUTOPAY_ALL_STUDENTS) {
+        // Teacher "pay all students": one record fans out to every student
+        // currently in the class (roster read fresh, in-transaction).
+        outcome = await fdb.runTransaction(async (t) => {
           const classSnap = await t.get(classRef);
-          if (!classSnap.exists) return;
+          if (!classSnap.exists) return { status: "skip" };
           const liveCls = classSnap.data();
-          const liveAuto = (liveCls.automations || []).find(x => x.id === a.id);
-          if (!liveAuto || liveAuto.lastRun === todayKey) return;
-          const alreadyCoveredLive = (liveCls.automations || []).some(x =>
-            x.id !== a.id && x.lastRun === todayKey && _autoDedupeKey(x) === dedupeKey);
-          if (alreadyCoveredLive) {
-            liveAuto.lastRun = todayKey;
-            t.update(classRef, { automations: liveCls.automations });
-            coveredByDuplicate = true;
-            return;
-          }
-          // Roster read fresh from the class doc already in this same
-          // transaction (cls.students is the source of truth getClassStudents
-          // itself reads from) — not the `cls` this loop started with —
-          // so a student added or removed moments ago is reflected exactly.
-          const usernames = liveCls.students || [];
+          const g = guard(liveCls);
+          if (g.status === "skip") return g;
+          if (g.status === "covered") { t.update(classRef, { automations: liveCls.automations }); return g; }
+          const amt = Number(g.liveAuto.amount);
+          const usernames = Array.from(new Set(liveCls.students || [])); // no repeated names
           const studentRefs = usernames.map(u => usersCol().doc(u));
           const studentSnaps = await Promise.all(studentRefs.map(r => t.get(r)));
-          // Teacher automations always carry unlimited funds (see the
-          // regular peer-payment branch below) so there's no affordability
-          // check here — every existing student gets paid, every time.
+          const entries = [];
           studentSnaps.forEach((snap, i) => {
-            if (!snap.exists) return; // stale username, e.g. a removed student — skip, don't fail the whole run
+            if (!snap.exists) return; // stale username, e.g. a removed student
             const student = snap.data();
-            t.update(studentRefs[i], { balance: Math.round((student.balance + a.amount) * 100) / 100 });
-            paidTo.push(usernames[i]);
+            t.update(studentRefs[i], { balance: Math.round((student.balance + amt) * 100) / 100 });
+            entries.push(Object.assign({ id: _autoTxnId(a, todayKey, usernames[i]), date: nowStr(), ts: Date.now() }, {
+              type: "automation", from: a.studentUser, to: usernames[i], amount: amt,
+              note: g.liveAuto.note ? g.liveAuto.note : "Automatic payment"
+            }));
           });
-          liveAuto.lastRun = todayKey;
-          t.update(classRef, { automations: liveCls.automations });
-          didRun = true;
+          g.liveAuto.lastRun = todayKey;
+          _autoAppendTxns(liveCls, entries);
+          t.update(classRef, { automations: liveCls.automations, txns: liveCls.txns });
+          return { status: "ran", entries };
         });
-      } catch (e) { /* ignore, try next */ }
-
-      if (didRun || coveredByDuplicate) firedKeysToday.add(dedupeKey);
-      if (didRun) {
-        await Promise.all(paidTo.map(username => logTxn(classCode, {
-          type: "automation", from: a.studentUser, to: username, amount: a.amount,
-          note: a.note ? a.note : "Automatic payment"
-        })));
-        ran++;
+      } else {
+        // Student/teacher -> one other account.
+        outcome = await fdb.runTransaction(async (t) => {
+          const fromRef = usersCol().doc(a.studentUser);
+          const toRef = usersCol().doc(a.toUser);
+          const classSnap = await t.get(classRef);
+          const fromSnap = await t.get(fromRef);
+          const toSnap = await t.get(toRef);
+          if (!classSnap.exists || !fromSnap.exists || !toSnap.exists) return { status: "skip" };
+          const from = fromSnap.data(), to = toSnap.data();
+          const liveCls = classSnap.data();
+          const g = guard(liveCls);
+          if (g.status === "skip") return g;
+          if (g.status === "covered") { t.update(classRef, { automations: liveCls.automations }); return g; }
+          const amt = Number(g.liveAuto.amount);
+          // Teachers have unlimited funds (same rule as transferMoney()).
+          const fromIsTeacher = from.role === "teacher";
+          if (!fromIsTeacher && from.balance < amt) return { status: "skip" }; // can't afford it
+          if (!fromIsTeacher) t.update(fromRef, { balance: Math.round((from.balance - amt) * 100) / 100 });
+          t.update(toRef, { balance: Math.round((to.balance + amt) * 100) / 100 });
+          g.liveAuto.lastRun = todayKey;
+          const entry = Object.assign({ id: _autoTxnId(a, todayKey), date: nowStr(), ts: Date.now() }, {
+            type: "automation", from: a.studentUser, to: a.toUser, amount: amt,
+            note: g.liveAuto.note ? g.liveAuto.note : "Automatic payment"
+          });
+          _autoAppendTxns(liveCls, [entry]);
+          t.update(classRef, { automations: liveCls.automations, txns: liveCls.txns });
+          return { status: "ran", entries: [entry] };
+        });
       }
-      continue;
-    }
+    } catch (e) { outcome = { status: "skip" }; /* failed to commit — nothing ran; try again next load */ }
 
-    let didRun = false, coveredByDuplicate = false;
-    try {
-      await fdb.runTransaction(async (t) => {
-        const fromRef = usersCol().doc(a.studentUser);
-        const toRef = usersCol().doc(a.toUser);
-        const classSnap = await t.get(classRef);
-        const fromSnap = await t.get(fromRef);
-        const toSnap = await t.get(toRef);
-        if (!classSnap.exists || !fromSnap.exists || !toSnap.exists) return;
-        const from = fromSnap.data(), to = toSnap.data();
-        // Teachers have unlimited funds (same rule as the manual transfer
-        // in transferMoney()) — a teacher-run automation like "Universal
-        // Basic Income" must not be gated on their real balance field,
-        // which normally sits at 0 (or whatever incidental amount
-        // students have paid them) and has nothing to do with the
-        // "Unlimited ∞" shown in the UI. Without this bypass the payment
-        // would either silently do nothing once that field ran out, or
-        // — if it happened to hold enough — actually drain it, neither of
-        // which matches what the teacher sees on screen.
-        const fromIsTeacher = from.role === "teacher";
-        if (!fromIsTeacher && from.balance < a.amount) return; // skip silently if they can't afford it
-
-        const liveCls = classSnap.data();
-        const liveAuto = (liveCls.automations || []).find(x => x.id === a.id);
-        if (!liveAuto || liveAuto.lastRun === todayKey) return; // already ran (race guard)
-        // Same duplicate-safe check as the savings-transfer path above:
-        // if another copy of this exact recurring payment already paid
-        // out today (a different tab/page load got there first), don't
-        // pay it again — just stamp this copy so it stops being retried.
-        const alreadyCoveredLive = (liveCls.automations || []).some(x =>
-          x.id !== a.id && x.lastRun === todayKey && _autoDedupeKey(x) === dedupeKey);
-        if (alreadyCoveredLive) {
-          liveAuto.lastRun = todayKey;
-          t.update(classRef, { automations: liveCls.automations });
-          coveredByDuplicate = true;
-          return;
-        }
-
-        if (!fromIsTeacher) t.update(fromRef, { balance: Math.round((from.balance - a.amount) * 100) / 100 });
-        t.update(toRef, { balance: Math.round((to.balance + a.amount) * 100) / 100 });
-        liveAuto.lastRun = todayKey;
-        t.update(classRef, { automations: liveCls.automations });
-        didRun = true;
-      });
-    } catch (e) { /* ignore, try next */ }
-
-    if (didRun || coveredByDuplicate) firedKeysToday.add(dedupeKey);
-    if (didRun) {
-      await logTxn(classCode, { type: "automation", from: a.studentUser, to: a.toUser, amount: a.amount, note: a.note ? a.note : "Automatic payment" });
+    if (outcome && (outcome.status === "ran" || outcome.status === "covered")) firedKeysToday.add(dedupeKey);
+    if (outcome && outcome.status === "ran") {
       ran++;
+      await _autoReportCommitted(outcome.entries);
     }
   }
   return ran;
@@ -7934,7 +7950,11 @@ function overdueMortgageWeekKey(prop, cls) {
   // Guard against looking back further than the mortgage has existed — if
   // the last due day falls before the property was even bought, there was
   // no payment owed for it.
-  if (weekKeyOrder(lastDueWeekKey) < weekKeyOrder(mortgage.purchaseWeekKey)) return null;
+  // BUGFIX: was `<`. The purchase week itself is free (see above), so a due
+  // day falling IN the purchase week isn't owed either — with `<`, a new
+  // buyer was flagged overdue (and reminded daily) Mon-Thu of the following
+  // week, when they couldn't even pay yet (payMortgage only allows the due day).
+  if (weekKeyOrder(lastDueWeekKey) <= weekKeyOrder(mortgage.purchaseWeekKey)) return null;
   return lastDueWeekKey; // an earlier due day passed without payment and hasn't been caught up since
 }
 
