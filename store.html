@@ -53,7 +53,8 @@
 .rc-grip{height:36px;cursor:grab;touch-action:none;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 #itemList.auto-sorted .rc-btn,#itemList.auto-sorted .rc-grip{display:none}
 #itemList > .store-card{position:relative;transition:box-shadow .2s ease,opacity .2s ease}
-#itemList > .store-card.dragging{z-index:60;transition:none !important;box-shadow:0 16px 38px rgba(0,0,0,.35);outline:2px solid #e3a72f;cursor:grabbing}
+#itemList > .store-card.dragging{z-index:60;box-shadow:0 16px 38px rgba(0,0,0,.35);outline:2px solid #e3a72f;cursor:grabbing}
+#itemList > .store-card.settling{z-index:60}
 #itemList.is-dragging > .store-card:not(.dragging){opacity:.8}
 body.store-dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
 @media (max-width:520px){.sort-row-label{min-width:100%}.sort-chip{padding:7px 12px}}

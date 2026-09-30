@@ -127,7 +127,7 @@ async function render() {
           ${IS_TEACHER ? `<div class="reorder-ctl">
             <span class="rank-badge" title="Position in the store"></span>
             <button type="button" class="rc-btn rc-up" aria-label="Move ${escapeHtml(it.name)} up" title="Move up" onclick="moveItem('${it.id}', -1)">${UP_SVG}</button>
-            <button type="button" class="rc-grip" aria-label="Drag to reorder ${escapeHtml(it.name)}" title="Drag to reorder" onpointerdown="startDrag(event, '${it.id}', this)" onkeydown="gripKey(event, '${it.id}')">${GRIP_SVG}</button>
+            <button type="button" class="rc-grip" aria-label="Drag to reorder ${escapeHtml(it.name)}" title="Drag to reorder" onpointerdown="startDrag(event, '${it.id}', this)" oncontextmenu="return false" onkeydown="gripKey(event, '${it.id}')">${GRIP_SVG}</button>
             <button type="button" class="rc-btn rc-down" aria-label="Move ${escapeHtml(it.name)} down" title="Move down" onclick="moveItem('${it.id}', 1)">${DOWN_SVG}</button>
           </div>` : ""}
           <div class="store-info">
@@ -471,41 +471,60 @@ function gripKey(e, id) {
   }
 }
 
-// Pointer-based drag (works for mouse, touch and pen). The grabbed card
-// follows the pointer; the others shuffle out of the way.
+// Pointer-based drag (mouse, touch, pen). While dragging, NOTHING is moved
+// in the DOM (that would make the browser drop the pointer/touch): the grabbed
+// card follows the pointer via transform, the others slide aside via
+// transform, and the real reorder happens once, on drop.
 function startDrag(e, id, handle) {
-  if (!IS_TEACHER || SORT_MODE !== "manual") return;
+  if (!IS_TEACHER || SORT_MODE !== "manual" || DRAGGING) return;
   if (e.pointerType === "mouse" && e.button !== 0) return;
-  const list = $id("itemList"), card = $id("item-" + id);
-  if (!card) return;
+  const list = $id("itemList");
+  const cards = [...list.children];
+  const card = $id("item-" + id);
+  const k = cards.indexOf(card), n = cards.length;
+  if (k < 0 || n < 2) return;
   e.preventDefault();
   try { handle.setPointerCapture(e.pointerId); } catch (_) {}
-  const startOrder = domIds().join(",");
-  const grab = e.clientY - card.getBoundingClientRect().top;
-  let y = e.clientY, raf = 0, done = false;
+
+  const startOrder = cards.map(c => c.id.slice(5)).join(",");
+  const sy0 = window.scrollY;
+  const rects = cards.map(c => c.getBoundingClientRect());
+  const tops = rects.map(r => r.top + sy0);   // page coordinates
+  const hts = rects.map(r => r.height);
+  const gap = k < n - 1 ? tops[k + 1] - (tops[k] + hts[k]) : tops[k] - (tops[k - 1] + hts[k - 1]);
+  const shift = hts[k] + Math.max(0, gap);
+  const grab = e.clientY + sy0 - tops[k];
+  let y = e.clientY, raf = 0, done = false, target = k;
+
   DRAGGING = true;
   card.classList.add("dragging");
+  card.style.transition = "none";
   list.classList.add("is-dragging");
   document.body.classList.add("store-dragging");
+  cards.forEach(c => { if (c !== card) c.style.transition = "transform .2s cubic-bezier(.2,.8,.2,1)"; });
 
   const update = () => {
-    card.style.transform = "";
-    let before = null;
-    for (const o of list.children) {
-      if (o === card) continue;
-      const r = o.getBoundingClientRect();
-      if (y < r.top + r.height / 2) { before = o; break; }
+    const minTop = tops[0], maxTop = tops[n - 1] + hts[n - 1] - hts[k];
+    const top = Math.max(minTop, Math.min(maxTop, y + window.scrollY - grab));
+    card.style.transform = `translateY(${top - tops[k]}px)`;
+    const center = top + hts[k] / 2;
+    let tg = 0;
+    for (let j = 0; j < n; j++) if (j !== k && tops[j] + hts[j] / 2 < center) tg++;
+    if (tg === target) return;
+    target = tg;
+    for (let j = 0; j < n; j++) {
+      if (j === k) continue;
+      const m = j < k ? j : j - 1;   // index among the other cards
+      const dy = (j < k && m >= target) ? shift : (j > k && m < target) ? -shift : 0;
+      cards[j].style.transform = dy ? `translateY(${dy}px)` : "";
     }
-    if (before !== card.nextElementSibling) flipList(() => list.insertBefore(card, before), card);
-    const natural = card.getBoundingClientRect().top;
-    card.style.transform = `translateY(${y - grab - natural}px)`;
   };
   const tick = () => {
     if (done) return;
     const edge = 90;
     let dy = 0;
-    if (y < edge) dy = -Math.min(24, Math.ceil((edge - y) / 5));
-    else if (y > innerHeight - edge) dy = Math.min(24, Math.ceil((y - (innerHeight - edge)) / 5));
+    if (y < edge) dy = -Math.min(22, Math.ceil((edge - y) / 5));
+    else if (y > innerHeight - edge) dy = Math.min(22, Math.ceil((y - (innerHeight - edge)) / 5));
     if (dy) { window.scrollBy(0, dy); update(); }
     raf = requestAnimationFrame(tick);
   };
@@ -514,21 +533,29 @@ function startDrag(e, id, handle) {
     if (done) return;
     done = true;
     cancelAnimationFrame(raf);
-    handle.removeEventListener("pointermove", onMove);
-    handle.removeEventListener("pointerup", finish);
-    handle.removeEventListener("pointercancel", finish);
-    card.style.transition = "transform .2s cubic-bezier(.2,.8,.2,1)";
-    card.style.transform = "";
-    setTimeout(() => { card.style.transition = ""; card.classList.remove("dragging"); }, 210);
+    ["pointermove", "pointerup", "pointercancel", "lostpointercapture"].forEach(t => handle.removeEventListener(t, t === "pointermove" ? onMove : finish));
+    try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+    const others = cards.filter(c => c !== card);
+    others.splice(target, 0, card);
+    card.classList.remove("dragging");
+    card.classList.add("settling");
+    // One real reorder; FLIP glides every card from where it is now to its slot.
+    flipList(() => {
+      cards.forEach(c => { c.style.transition = "none"; c.style.transform = ""; });
+      others.forEach(c => list.appendChild(c));
+    });
+    setTimeout(() => card.classList.remove("settling"), 340);
     list.classList.remove("is-dragging");
     document.body.classList.remove("store-dragging");
     DRAGGING = false;
     const ids = domIds();
+    refreshRanks();
     if (ids.join(",") !== startOrder) commitOrder(ids);
   };
   handle.addEventListener("pointermove", onMove);
   handle.addEventListener("pointerup", finish);
   handle.addEventListener("pointercancel", finish);
+  handle.addEventListener("lostpointercapture", finish);
   update();
   raf = requestAnimationFrame(tick);
 }
