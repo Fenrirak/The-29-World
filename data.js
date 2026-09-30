@@ -6396,6 +6396,7 @@ function withNewModuleDefaults(cls) {
   cls.reportArchives = cls.reportArchives || [];
   cls.insurancePlans = cls.insurancePlans || [];
   cls.storeItems = cls.storeItems || [];
+  if (cls.storeSortMode === undefined) cls.storeSortMode = "manual";
   cls.storeItems.forEach(it => {
     if (it.stockTotal === undefined) it.stockTotal = it.stock === undefined ? null : it.stock;
     if (it.sold === undefined) it.sold = 0;
@@ -7031,6 +7032,37 @@ async function removeStoreItem(classCode, itemId) {
     item.archived = true;
     t.update(classRef, { storeItems: cls.storeItems });
   });
+}
+// Saves the teacher's chosen display order. The array order of
+// cls.storeItems IS the order students see. Archived items keep their
+// slots; only the live items are rearranged into `orderedIds` order (any
+// live item not listed, e.g. added a moment ago, is kept at the end).
+// Optionally saves the sort mode in the same transaction.
+async function reorderStoreItems(classCode, orderedIds, sortMode) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    const byId = new Map(cls.storeItems.map(i => [i.id, i]));
+    const seen = new Set();
+    const ordered = [];
+    (orderedIds || []).forEach(id => {
+      const it = byId.get(id);
+      if (it && !it.archived && !seen.has(id)) { seen.add(id); ordered.push(it); }
+    });
+    cls.storeItems.forEach(it => { if (!it.archived && !seen.has(it.id)) ordered.push(it); });
+    let k = 0;
+    cls.storeItems = cls.storeItems.map(it => it.archived ? it : ordered[k++]);
+    const upd = { storeItems: cls.storeItems };
+    if (sortMode) upd.storeSortMode = sortMode;
+    t.update(classRef, upd);
+  });
+}
+async function setStoreSortMode(classCode, mode) {
+  const allowed = ["manual", "name-asc", "name-desc", "price-asc", "price-desc", "stars-desc", "stock-asc", "sold-desc"];
+  if (!allowed.includes(mode)) throw new Error("Unknown sort mode");
+  await classesCol().doc(classCode).update({ storeSortMode: mode });
 }
 async function buyStoreItem(username, classCode, itemId, qty) {
   qty = Math.floor(Number(qty)) || 1;

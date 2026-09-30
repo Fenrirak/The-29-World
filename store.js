@@ -1,5 +1,47 @@
 let CURRENT, IS_TEACHER;
 let ITEMS_CACHE = [];
+let MANUAL_ITEMS = [];          // live items in the teacher's saved (custom) order
+let SORT_MODE = "manual";
+let DRAGGING = false;
+let SAVE_CHAIN = Promise.resolve(); // serialises saves so quick taps can't race
+let SORT_STATUS = "";
+
+const SORT_MODES = [
+  { id: "manual", label: "Custom order" },
+  { id: "name-asc", label: "A → Z" },
+  { id: "name-desc", label: "Z → A" },
+  { id: "price-asc", label: "Price: low → high" },
+  { id: "price-desc", label: "Price: high → low" },
+  { id: "stars-desc", label: "Most stars" },
+  { id: "stock-asc", label: "Low stock first" },
+  { id: "sold-desc", label: "Best sellers" }
+];
+const GRIP_SVG = '<svg width="14" height="18" viewBox="0 0 14 18" fill="currentColor" aria-hidden="true"><circle cx="4" cy="3" r="1.6"/><circle cx="10" cy="3" r="1.6"/><circle cx="4" cy="9" r="1.6"/><circle cx="10" cy="9" r="1.6"/><circle cx="4" cy="15" r="1.6"/><circle cx="10" cy="15" r="1.6"/></svg>';
+const UP_SVG = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l4-4 4 4"/></svg>';
+const DOWN_SVG = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5l4 4 4-4"/></svg>';
+const SORT_SVG = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V4M3 7l3-3 3 3M14 4v12M11 13l3 3 3-3"/></svg>';
+
+// Pure sort (stable: ties keep the custom order). Never mutates `items`.
+function sortStoreItems(items, mode) {
+  const arr = items.slice();
+  if (!mode || mode === "manual") return arr;
+  const idx = new Map(arr.map((it, i) => [it.id, i]));
+  const nameCmp = (a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base", numeric: true });
+  // limited stock (soonest to run out) -> unlimited -> sold out
+  const stockRank = it => (it.stock === null || it.stock === undefined) ? 1 : (it.stock <= 0 ? 2 : 0);
+  const cmps = {
+    "name-asc": nameCmp,
+    "name-desc": (a, b) => nameCmp(b, a),
+    "price-asc": (a, b) => (Number(a.price) || 0) - (Number(b.price) || 0),
+    "price-desc": (a, b) => (Number(b.price) || 0) - (Number(a.price) || 0),
+    "stars-desc": (a, b) => (Number(b.stars) || 0) - (Number(a.stars) || 0),
+    "stock-asc": (a, b) => (stockRank(a) - stockRank(b)) || ((a.stock || 0) - (b.stock || 0)),
+    "sold-desc": (a, b) => (Number(b.sold) || 0) - (Number(a.sold) || 0)
+  };
+  const cmp = cmps[mode];
+  if (!cmp) return arr;
+  return arr.sort((a, b) => cmp(a, b) || (idx.get(a.id) - idx.get(b.id)));
+}
 let ME_CACHE = null;
 
 function starsHtml(n) {
@@ -55,12 +97,15 @@ async function init() {
 }
 
 async function render() {
+  if (DRAGGING) return; // don't rebuild the list under a card being dragged
   // getUser and getClass are independent reads — CURRENT.classCode is
   // already known without needing `me` first, so fetch both at once
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
   ME_CACHE = me;
-  const items = (cls.storeItems || []).filter(i => !i.archived);
+  MANUAL_ITEMS = (cls.storeItems || []).filter(i => !i.archived);
+  SORT_MODE = SORT_MODES.some(m => m.id === cls.storeSortMode) ? cls.storeSortMode : "manual";
+  const items = sortStoreItems(MANUAL_ITEMS, SORT_MODE);
 
   const list = document.getElementById("itemList");
   list.innerHTML = "";
@@ -74,16 +119,24 @@ async function render() {
     const maxQty = it.stock !== null ? it.stock : null;
     const owned = ownedCounts[it.id] || 0;
     const div = document.createElement("div");
-    div.className = "card company-card";
+    div.className = "card company-card store-card";
     div.id = "item-" + it.id;
     div.innerHTML = `
       <div class="flex-between" id="view-${it.id}">
-        <div>
+        <div class="store-left">
+          ${IS_TEACHER ? `<div class="reorder-ctl">
+            <span class="rank-badge" title="Position in the store"></span>
+            <button type="button" class="rc-btn rc-up" aria-label="Move ${escapeHtml(it.name)} up" title="Move up" onclick="moveItem('${it.id}', -1)">${UP_SVG}</button>
+            <button type="button" class="rc-grip" aria-label="Drag to reorder ${escapeHtml(it.name)}" title="Drag to reorder" onpointerdown="startDrag(event, '${it.id}', this)" onkeydown="gripKey(event, '${it.id}')">${GRIP_SVG}</button>
+            <button type="button" class="rc-btn rc-down" aria-label="Move ${escapeHtml(it.name)} down" title="Move down" onclick="moveItem('${it.id}', 1)">${DOWN_SVG}</button>
+          </div>` : ""}
+          <div class="store-info">
           <h4>${icon("cart", 20)}${escapeHtml(it.name)} ${owned ? `<span class="badge mint">Owned ×${owned}</span>` : ""}</h4>
           <p>${escapeHtml(it.description) || "No description provided."}</p>
           ${it.effect ? `<p class="muted-small">Does: ${it.effect}</p>` : ""}
           <p>${priceWithLifeDiscount(me, "store", it.price)} ${starsHtml(it.stars)}</p>
-          <p class="muted-small">${it.stock === null ? "Unlimited stock" : `${it.stock} left in stock`}</p>
+          <p class="muted-small">${it.stock === null ? "Unlimited stock" : `${it.stock} left in stock`}${IS_TEACHER ? ` · ${it.sold || 0} sold` : ""}</p>
+          </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
           ${IS_TEACHER
@@ -112,6 +165,9 @@ async function render() {
     list.appendChild(div);
   });
   ITEMS_CACHE = items;
+  list.classList.toggle("auto-sorted", SORT_MODE !== "manual");
+  refreshRanks();
+  paintSortBar(items.length);
   if (!IS_TEACHER) items.forEach(it => { if (!(it.stock !== null && it.stock <= 0)) updateBuyLabel(it.id); });
 }
 
@@ -278,6 +334,203 @@ async function buyItem(id) {
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+/* ===================== Teacher: arranging the store ===================== */
+const $id = id => document.getElementById(id);
+const domIds = () => [...$id("itemList").children].filter(c => c.id.startsWith("item-")).map(c => c.id.slice(5));
+
+function setSortStatus(state) {
+  SORT_STATUS = state;
+  const el = $id("sortStatus");
+  if (!el) return;
+  el.className = "sort-status" + (state === "saved" ? " ok" : state === "error" ? " err" : "");
+  el.textContent = state === "saving" ? "Saving…" : state === "saved" ? "Order saved ✓" : state === "error" ? "Couldn't save — reloaded the saved order" : "";
+  if (state === "saved") setTimeout(() => { if (SORT_STATUS === "saved") setSortStatus(""); }, 2200);
+}
+
+function paintSortBar(count) {
+  const bar = $id("sortBar");
+  if (!bar) return;
+  const show = IS_TEACHER && count > 1;
+  bar.classList.toggle("hidden", !show);
+  if (!show) return;
+  const auto = SORT_MODE !== "manual";
+  const label = (SORT_MODES.find(m => m.id === SORT_MODE) || {}).label;
+  const chip = m => `<button type="button" class="sort-chip ${m.id === SORT_MODE ? "active" : ""}" role="radio" aria-checked="${m.id === SORT_MODE}" onclick="setSortMode('${m.id}')">${m.label}</button>`;
+  bar.innerHTML = `
+    <div class="sort-head"><span class="sort-title">${SORT_SVG} Item order</span><span id="sortStatus" class="sort-status"></span></div>
+    <div class="sort-row" role="radiogroup" aria-label="How the store is ordered">
+      <span class="sort-row-label">Manual</span>${chip(SORT_MODES[0])}
+    </div>
+    <div class="sort-row" role="radiogroup" aria-label="Automatic sorting">
+      <span class="sort-row-label">Auto-sort</span>${SORT_MODES.slice(1).map(chip).join("")}
+    </div>
+    <p class="muted-small sort-hint">${auto
+      ? `Sorted automatically by <b>${label}</b> — new and edited items slot into place by themselves. Want to fine-tune it by hand?`
+      : `Drag the <b>⠿</b> handle (or use the ▲ ▼ buttons) to put items in any order. Students see exactly this order, and it saves automatically.`}</p>
+    ${auto ? `<button type="button" class="btn small gold sort-keep" onclick="saveAutoAsCustom()">Keep this order as my custom order</button>` : ""}`;
+  setSortStatus(SORT_STATUS);
+}
+
+function refreshRanks() {
+  if (!IS_TEACHER) return;
+  const cards = [...$id("itemList").children];
+  cards.forEach((c, i) => {
+    const r = c.querySelector(".rank-badge");
+    if (r) r.textContent = i + 1;
+    const up = c.querySelector(".rc-up"), down = c.querySelector(".rc-down");
+    if (up) up.disabled = i === 0;
+    if (down) down.disabled = i === cards.length - 1;
+  });
+}
+
+// FLIP animation: cards glide to their new spot instead of jumping.
+function flipList(mutate, skip) {
+  const list = $id("itemList");
+  const kids = [...list.children].filter(k => k !== skip);
+  const first = new Map(kids.map(k => [k, k.getBoundingClientRect().top]));
+  mutate();
+  if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  kids.forEach(k => {
+    const dy = first.get(k) - k.getBoundingClientRect().top;
+    if (!dy) return;
+    k.style.transition = "none";
+    k.style.transform = `translateY(${dy}px)`;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      k.style.transition = "transform .28s cubic-bezier(.2,.8,.2,1)";
+      k.style.transform = "";
+      setTimeout(() => { k.style.transition = ""; }, 320);
+    }));
+  });
+}
+
+function queueSave(fn) {
+  setSortStatus("saving");
+  SAVE_CHAIN = SAVE_CHAIN.then(fn).then(() => setSortStatus("saved")).catch(err => {
+    console.error("Saving store order failed", err);
+    setSortStatus("error");
+    return render();
+  });
+}
+
+function commitOrder(ids) {
+  MANUAL_ITEMS = ids.map(id => MANUAL_ITEMS.find(i => i.id === id)).filter(Boolean);
+  ITEMS_CACHE = MANUAL_ITEMS.slice();
+  refreshRanks();
+  queueSave(() => reorderStoreItems(CURRENT.classCode, ids, "manual"));
+}
+
+function setSortMode(mode) {
+  if (!IS_TEACHER || mode === SORT_MODE) return;
+  SORT_MODE = mode;
+  const items = sortStoreItems(MANUAL_ITEMS, mode);
+  const list = $id("itemList");
+  flipList(() => items.forEach(it => { const c = $id("item-" + it.id); if (c) list.appendChild(c); }));
+  ITEMS_CACHE = items;
+  list.classList.toggle("auto-sorted", mode !== "manual");
+  refreshRanks();
+  paintSortBar(items.length);
+  const active = document.querySelector("#sortBar .sort-chip.active");
+  if (active) active.focus({ preventScroll: true });
+  queueSave(() => setStoreSortMode(CURRENT.classCode, mode));
+}
+
+// Turns the current automatic order into the saved custom order.
+function saveAutoAsCustom() {
+  if (SORT_MODE === "manual") return;
+  const ids = ITEMS_CACHE.map(i => i.id);
+  SORT_MODE = "manual";
+  MANUAL_ITEMS = ITEMS_CACHE.slice();
+  $id("itemList").classList.remove("auto-sorted");
+  refreshRanks();
+  paintSortBar(ids.length);
+  queueSave(() => reorderStoreItems(CURRENT.classCode, ids, "manual"));
+}
+
+function moveItem(id, dir) {
+  if (!IS_TEACHER || SORT_MODE !== "manual") return;
+  const list = $id("itemList"), card = $id("item-" + id);
+  if (!card) return;
+  const sib = dir < 0 ? card.previousElementSibling : card.nextElementSibling;
+  if (!sib) return;
+  flipList(() => dir < 0 ? list.insertBefore(card, sib) : list.insertBefore(sib, card));
+  commitOrder(domIds());
+  let btn = card.querySelector(dir < 0 ? ".rc-up" : ".rc-down");
+  if (!btn || btn.disabled) btn = card.querySelector(dir < 0 ? ".rc-down" : ".rc-up");
+  if (btn && !btn.disabled) btn.focus({ preventScroll: true });
+  card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function gripKey(e, id) {
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    e.preventDefault();
+    moveItem(id, e.key === "ArrowUp" ? -1 : 1);
+    const g = $id("item-" + id)?.querySelector(".rc-grip");
+    if (g) g.focus({ preventScroll: true });
+  }
+}
+
+// Pointer-based drag (works for mouse, touch and pen). The grabbed card
+// follows the pointer; the others shuffle out of the way.
+function startDrag(e, id, handle) {
+  if (!IS_TEACHER || SORT_MODE !== "manual") return;
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  const list = $id("itemList"), card = $id("item-" + id);
+  if (!card) return;
+  e.preventDefault();
+  try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+  const startOrder = domIds().join(",");
+  const grab = e.clientY - card.getBoundingClientRect().top;
+  let y = e.clientY, raf = 0, done = false;
+  DRAGGING = true;
+  card.classList.add("dragging");
+  list.classList.add("is-dragging");
+  document.body.classList.add("store-dragging");
+
+  const update = () => {
+    card.style.transform = "";
+    let before = null;
+    for (const o of list.children) {
+      if (o === card) continue;
+      const r = o.getBoundingClientRect();
+      if (y < r.top + r.height / 2) { before = o; break; }
+    }
+    if (before !== card.nextElementSibling) flipList(() => list.insertBefore(card, before), card);
+    const natural = card.getBoundingClientRect().top;
+    card.style.transform = `translateY(${y - grab - natural}px)`;
+  };
+  const tick = () => {
+    if (done) return;
+    const edge = 90;
+    let dy = 0;
+    if (y < edge) dy = -Math.min(24, Math.ceil((edge - y) / 5));
+    else if (y > innerHeight - edge) dy = Math.min(24, Math.ceil((y - (innerHeight - edge)) / 5));
+    if (dy) { window.scrollBy(0, dy); update(); }
+    raf = requestAnimationFrame(tick);
+  };
+  const onMove = ev => { y = ev.clientY; update(); };
+  const finish = () => {
+    if (done) return;
+    done = true;
+    cancelAnimationFrame(raf);
+    handle.removeEventListener("pointermove", onMove);
+    handle.removeEventListener("pointerup", finish);
+    handle.removeEventListener("pointercancel", finish);
+    card.style.transition = "transform .2s cubic-bezier(.2,.8,.2,1)";
+    card.style.transform = "";
+    setTimeout(() => { card.style.transition = ""; card.classList.remove("dragging"); }, 210);
+    list.classList.remove("is-dragging");
+    document.body.classList.remove("store-dragging");
+    DRAGGING = false;
+    const ids = domIds();
+    if (ids.join(",") !== startOrder) commitOrder(ids);
+  };
+  handle.addEventListener("pointermove", onMove);
+  handle.addEventListener("pointerup", finish);
+  handle.addEventListener("pointercancel", finish);
+  update();
+  raf = requestAnimationFrame(tick);
 }
 
 document.addEventListener("DOMContentLoaded", init);

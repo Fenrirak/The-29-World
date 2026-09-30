@@ -27,6 +27,38 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
 <link rel="stylesheet" href="style.css?v=1">
+<style>
+/* ---- Teacher: arrange the store ---- */
+.sort-bar{margin-bottom:18px}
+.sort-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.sort-title{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:1.08rem}
+.sort-status{font-size:.82rem;opacity:.75;min-height:1em}
+.sort-status.ok{color:#2e9d6a;opacity:1}
+.sort-status.err{color:#d8563f;opacity:1}
+.sort-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.sort-row-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.6;min-width:74px}
+.sort-chip{width:auto;margin:0;font:inherit;font-size:.88rem;font-weight:600;color:inherit;background:transparent;border:1.5px solid rgba(128,128,128,.4);border-radius:999px;padding:7px 14px;min-height:38px;cursor:pointer;transition:background .18s,border-color .18s,transform .18s,box-shadow .18s}
+.sort-chip:hover{border-color:#e3a72f;transform:translateY(-1px)}
+.sort-chip.active{background:#e3a72f;border-color:#e3a72f;color:#1f2b44;box-shadow:0 3px 10px rgba(227,167,47,.35)}
+.sort-chip:focus-visible,.rc-btn:focus-visible,.rc-grip:focus-visible{outline:3px solid rgba(227,167,47,.6);outline-offset:2px}
+.sort-hint{margin:12px 0 0;line-height:1.45}
+.sort-keep{margin-top:10px}
+.store-left{display:flex;gap:12px;align-items:flex-start;min-width:0;flex:1}
+.store-info{min-width:0;flex:1}
+.reorder-ctl{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+.rank-badge{font-size:.75rem;font-weight:700;opacity:.65;min-width:22px;text-align:center}
+.rc-btn,.rc-grip{width:36px;height:30px;padding:0;margin:0;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;border:1.5px solid rgba(128,128,128,.35);background:transparent;color:inherit;cursor:pointer;transition:background .15s,border-color .15s}
+.rc-btn:hover:not(:disabled),.rc-grip:hover{border-color:#e3a72f;background:rgba(227,167,47,.14)}
+.rc-btn:disabled{opacity:.28;cursor:default}
+.rc-grip{height:36px;cursor:grab;touch-action:none;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+#itemList.auto-sorted .rc-btn,#itemList.auto-sorted .rc-grip{display:none}
+#itemList > .store-card{position:relative;transition:box-shadow .2s ease,opacity .2s ease}
+#itemList > .store-card.dragging{z-index:60;transition:none !important;box-shadow:0 16px 38px rgba(0,0,0,.35);outline:2px solid #e3a72f;cursor:grabbing}
+#itemList.is-dragging > .store-card:not(.dragging){opacity:.8}
+body.store-dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
+@media (max-width:520px){.sort-row-label{min-width:100%}.sort-chip{padding:7px 12px}}
+@media (prefers-reduced-motion:reduce){.sort-chip,.rc-btn,.rc-grip{transition:none}}
+</style>
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -99,6 +131,8 @@
     </form>
     <div id="addMsg"></div>
   </div>
+
+  <div id="sortBar" class="card sort-bar hidden"></div>
 
   <div id="itemList"></div>
   <p class="muted-small" id="noItems">The store is empty right now.</p>
