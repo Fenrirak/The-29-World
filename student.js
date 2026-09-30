@@ -324,7 +324,7 @@ async function render() {
         ${badgeType(t.type)}
         <div class="muted-small" style="margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.detail)} · ${t.date}</div>
       </div>
-      <div class="${t.sign === '-' ? 'ticker-down' : 'ticker-up'}" style="white-space:nowrap;font-weight:600;">${t.sign}${fmtMoney(t.amt)}</div>
+      <div class="${t.sign === '-' ? 'ticker-down' : 'ticker-up'}" style="white-space:nowrap;">${t.sign}${fmtMoney(t.amt)}</div>
     `;
     bpBox.appendChild(row);
   });
