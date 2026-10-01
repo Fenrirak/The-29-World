@@ -413,7 +413,8 @@ function renderMyJob(me, cls) {
   const tiers    = job.tiers || [];
   const tierIdx  = tiers.indexOf(tier);
   const isTop    = tierIdx === tiers.length - 1;
-  const pctDone  = tiers.length > 1 ? Math.round((tierIdx / (tiers.length - 1)) * 100) : 100;
+  // Dots sit at column centres ((i+0.5)/n), so the fill must end there to touch the current dot
+  const pctDone  = ((tierIdx + 0.5) / tiers.length) * 100;
 
   box.innerHTML = `
     <div class="my-job-card">
