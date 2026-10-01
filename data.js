@@ -4698,7 +4698,12 @@ async function stockAllTimeGain(username, classCode) {
       unrealized: Math.round(coUnrealized * 100) / 100,
       realized: 0, // filled in from txns below
       totalBought: basis ? basis.totalBought : 0,
-      _untracked: coUntracked // stripped before returning
+      _untracked: coUntracked, // stripped before returning
+      // A sale reduces basis.totalCost proportionally but never reduces
+      // totalBought, so totalCost < totalBought means a sale happened for
+      // this company. Only then could an aged-out log entry hide realized
+      // gain — a company never sold can't be affected by log truncation.
+      _hasSold: !!basis && basis.totalBought - basis.totalCost > 0.01
     };
   });
 
@@ -4717,15 +4722,17 @@ async function stockAllTimeGain(username, classCode) {
     const b = perCompany[id];
     b.total = Math.round((b.unrealized + b.realized) * 100) / 100;
     b.pct = b.totalBought > 0 ? Math.round((b.total / b.totalBought) * 1000) / 10 : null;
-    b.complete = !b._untracked && !logMayBeTruncated;
+    b.complete = !b._untracked && !(logMayBeTruncated && b._hasSold);
     delete b._untracked;
+    delete b._hasSold;
   });
+  const allComplete = Object.keys(perCompany).every(id => perCompany[id].complete);
 
   return {
     unrealized: Math.round(unrealized * 100) / 100,
     realized: Math.round(realized * 100) / 100,
     total: Math.round((unrealized + realized) * 100) / 100,
-    complete: !anyUntracked && !logMayBeTruncated,
+    complete: allComplete,
     perCompany
   };
 }
