@@ -4866,9 +4866,25 @@ function classifyTxnForReport(t, username) {
 function buildStudentReportData(student, cls) {
   const username = student.username;
   const monthKey = nzMonthKey();
-  const month = (student.reportMonth && student.reportMonth.monthKey === monthKey)
+  const storedMonth = (student.reportMonth && student.reportMonth.monthKey === monthKey)
     ? student.reportMonth : emptyReportBucket();
-  const lifetime = student.reportLifetime || emptyReportBucket();
+  const storedLifetime = student.reportLifetime || emptyReportBucket();
+  // The rolling totals only count forward from when they shipped, so any
+  // activity from before that (or a recordReportActivity that failed) is
+  // missing from them. cls.txns still holds whatever recent history wasn't
+  // capped off, so rebuild buckets from it too and take the larger figure
+  // per category — both are undercounts of the truth, so the max never
+  // double-counts, and it's a pure read (nothing is written back).
+  const scanMonth = emptyReportBucket(), scanLifetime = emptyReportBucket();
+  (cls.txns || []).forEach(t => {
+    if (!txnBelongsTo(t, username)) return;
+    const c = classifyTxnForReport(t, username);
+    if (!c) return;
+    addClassificationToBucket(scanLifetime, c);
+    if (t.ts && nzMonthKey(new Date(t.ts)) === monthKey) addClassificationToBucket(scanMonth, c);
+  });
+  const month = mergeReportBuckets(storedMonth, scanMonth);
+  const lifetime = mergeReportBuckets(storedLifetime, scanLifetime);
 
   const income = month.income, saved = month.saved, spent = month.spent;
   const incomeTotal = month.incomeTotal, savedTotal = month.savedTotal,
@@ -5023,6 +5039,20 @@ async function deleteReportArchive(classCode, archiveId) {
    added to "lifetime" — there was nowhere recording it before now. */
 function emptyReportBucket() {
   return { income: {}, saved: {}, spent: {}, incomeTotal: 0, savedTotal: 0, spentTotal: 0, borrowedTotal: 0 };
+}
+
+// Per-category max of two buckets, with totals recomputed from the merged
+// categories (see buildStudentReportData for why max rather than sum).
+function mergeReportBuckets(a, b) {
+  const out = emptyReportBucket();
+  ["income", "saved", "spent"].forEach(k => {
+    const keys = new Set([...Object.keys(a[k] || {}), ...Object.keys(b[k] || {})]);
+    keys.forEach(cat => { out[k][cat] = Math.max((a[k] || {})[cat] || 0, (b[k] || {})[cat] || 0); });
+    const sum = Object.values(out[k]).reduce((s, v) => s + v, 0);
+    out[k + "Total"] = Math.round(Math.max(sum, a[k + "Total"] || 0, b[k + "Total"] || 0) * 100) / 100;
+  });
+  out.borrowedTotal = Math.max(a.borrowedTotal || 0, b.borrowedTotal || 0);
+  return out;
 }
 
 function addClassificationToBucket(bucket, c) {
