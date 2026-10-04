@@ -102,7 +102,17 @@ function uid(prefix) {
 
 function fmtMoney(n) {
   const v = Number(n) || 0;
-  return "$" + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Sign goes in front of the "$" ("-$5.00", not "$-5.00").
+  return (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Turns a typed-in amount into a whole number of cents' worth of dollars,
+// or NaN if it isn't a real number. Callers then check `!(amount > 0)`,
+// which also rejects NaN — a plain `amount <= 0` lets NaN straight through
+// (every comparison with NaN is false) and it ends up stored as a balance.
+function cleanAmount(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN;
 }
 
 function nowStr() {
@@ -133,8 +143,25 @@ function nowStr() {
    clock — exactly today's behaviour — rather than blocking the page. */
 let SERVER_CLOCK_OFFSET_MS = 0;
 let SERVER_CLOCK_SYNCED = false;
+// PERF FIX: this app is many separate pages, so "once per session" used to
+// mean once per PAGE LOAD — a write to the shared class doc plus a forced
+// server read every time anyone clicked to another page. Besides the two
+// round trips, that write bumped the class doc under every other student's
+// in-flight transaction (logTxn, buying, selling...), forcing those to
+// retry. The measured offset is now kept for this tab for 10 minutes;
+// short enough that a device clock jumping (sleep/wake) is caught quickly.
+const CLOCK_OFFSET_KEY = "t29_clock_offset";
+const CLOCK_OFFSET_TTL_MS = 10 * 60000;
 async function syncServerClock(classCode) {
   if (SERVER_CLOCK_SYNCED || !classCode) return;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(CLOCK_OFFSET_KEY) || "null");
+    if (saved && Number.isFinite(saved.offset) && Math.abs(Date.now() - saved.at) < CLOCK_OFFSET_TTL_MS) {
+      SERVER_CLOCK_OFFSET_MS = saved.offset;
+      SERVER_CLOCK_SYNCED = true;
+      return;
+    }
+  } catch (e) { /* no storage — measure below */ }
   try {
     const ref = classesCol().doc(classCode);
     const sentAt = Date.now();
@@ -148,6 +175,9 @@ async function syncServerClock(classCode) {
       // endpoint.
       const roundTripMidpoint = sentAt + (receivedAt - sentAt) / 2;
       SERVER_CLOCK_OFFSET_MS = probe.toMillis() - roundTripMidpoint;
+      try {
+        sessionStorage.setItem(CLOCK_OFFSET_KEY, JSON.stringify({ offset: SERVER_CLOCK_OFFSET_MS, at: Date.now() }));
+      } catch (e) { /* storage unavailable — just re-measure next page */ }
     }
   } catch (e) {
     SERVER_CLOCK_OFFSET_MS = 0; // offline, or the write was rejected — fall back to the device clock
@@ -693,6 +723,8 @@ async function requireLogin(opts) {
     window.location.href = "index.html";
     return null;
   }
+  T29_SESSION_ROLE = u.role;
+  T29_SESSION_USERNAME = u.username;
   // Tracked locally rather than as a property on u — u is the shared
   // object cached by getUserCached()/getSessionUser() (same reference
   // returned on every cache hit for ~2s), so writing to it here would
@@ -737,9 +769,32 @@ async function requireLogin(opts) {
   }
   return u;
 }
-function logout() {
+// BUGFIX: logging out used to only forget the username in localStorage —
+// the browser stayed signed in to Firebase as that person, so on a shared
+// classroom computer the next person to sit down still had the previous
+// account's database access. Now signs out of Firebase too (capped at a
+// couple of seconds so a slow connection can't trap anyone on the page).
+async function logout() {
   clearSession();
+  try {
+    await Promise.race([
+      firebase.auth().signOut(),
+      new Promise(resolve => setTimeout(resolve, 2000))
+    ]);
+  } catch (e) { /* still leave the page below */ }
   window.location.href = "index.html";
+}
+
+// Who is signed in on THIS page — set by requireLogin(). Lets the shared
+// background jobs below skip work a student's account isn't allowed to do
+// (writing classmates' docs, claiming teacher-only "already ran" markers).
+// Every such attempt was refused by firestore.rules anyway, but each
+// refusal still cost a full network round trip on every page load.
+let T29_SESSION_ROLE = null;
+let T29_SESSION_USERNAME = null;
+// The signed-in student's username, or null for a teacher / unknown.
+function t29SessionStudent() {
+  return T29_SESSION_ROLE === "student" ? T29_SESSION_USERNAME : null;
 }
 
 /* ---------------- Teacher account + class creation ---------------- */
@@ -1253,16 +1308,11 @@ async function createStudentAccount(name, username, password, classCode) {
    password they just typed, links it via /uidIndex, and deletes the
    legacy plaintext field so it's gone for good.
 
-   Note on the migration window: until a given legacy account logs in
-   once, firestore.rules still allows a single targeted read of that
-   specific account's own /users doc by any signed-in (incl. anonymous)
-   visitor who already knows its exact username — this is what lets the
-   fallback check below run at all without a server component. It does
-   NOT allow listing/enumerating accounts, and it closes automatically,
-   per account, the moment that account logs in. If you'd rather not have
-   that window at all, the alternative is a "hard cutover": clear every
-   legacy password now and have the teacher reset each student's password
-   individually — ask if you want that version instead. */
+   The password check itself happens inside firestore.rules (see
+   t29TryMigrateLegacyLogin below) — the browser never reads the old
+   password, so nobody else can either. Until a legacy account logs in
+   once, its old password is still on its /users doc, which classmates
+   and the teacher can read like any other classmate's doc. */
 async function login(username, password) {
   try {
     await firebase.auth().signInWithEmailAndPassword(t29AuthEmail(username), password);
@@ -1285,7 +1335,16 @@ async function login(username, password) {
     }
   }
 
-  const u = await getUser(username);
+  let u = await getUser(username).catch(() => null);
+  if (!u) {
+    // A legacy migration that got its /uidIndex entry written but never
+    // finished stamping the /users doc can't read its own doc yet — finish
+    // it now (refused for anyone it doesn't belong to) and try once more.
+    const authUser = firebase.auth().currentUser;
+    if (authUser && await _t29FinishLegacyClaim(username, authUser.uid)) {
+      u = await getUser(username).catch(() => null);
+    }
+  }
   if (!u) {
     await firebase.auth().signOut().catch(() => {});
     return { ok: false, error: "Incorrect username or password." };
@@ -1295,59 +1354,56 @@ async function login(username, password) {
 }
 
 // One-time bridge for accounts created before this fix. See the comment
-// on login() above for what this does and its trade-off.
+// on login() above.
+//
+// SECURITY FIX: this used to sign in anonymously and READ the account's
+// old plaintext password to compare it here in the browser — which meant
+// firestore.rules had to let any visitor read any not-yet-migrated
+// account's password just by knowing the username. Now the browser never
+// reads it: the typed password goes along as `legacyProof` on this uid's
+// own /uidIndex entry, and firestore.rules itself compares it with the
+// stored one (see the /uidIndex create rule and isLegacyClaim()). A wrong
+// password is simply refused, and the Auth account made for the attempt
+// is deleted again.
+//
+// Still two separate writes, for the reason the old code gave: the /users
+// half is checked against /uidIndex, and rules only ever see committed
+// data, not another write staged in the same transaction.
 async function t29TryMigrateLegacyLogin(username, password) {
-  let anon;
-  try {
-    anon = await firebase.auth().signInAnonymously();
-  } catch (e) {
-    return { ok: false };
-  }
-
-  let legacyOk = false;
-  try {
-    const snap = await usersCol().doc(username).get();
-    legacyOk = snap.exists && snap.data().password === password && !snap.data().authUid;
-  } catch (e) {
-    legacyOk = false;
-  }
-  await firebase.auth().signOut().catch(() => {});
-  if (!legacyOk) return { ok: false };
-
   let cred;
   try {
     cred = await firebase.auth().createUserWithEmailAndPassword(t29AuthEmail(username), password);
   } catch (e) {
     return { ok: false };
   }
-
-  // BUGFIX: this used to write /uidIndex and update /users in one
-  // fdb.runTransaction(). That always failed: the /users update rule
-  // checks myUsername(), which reads /uidIndex/{newUid} — and Firestore's
-  // security rules only ever see the database's already-COMMITTED state,
-  // never another write staged earlier in the same transaction. So at
-  // the instant the rule checked the update, /uidIndex/{newUid} didn't
-  // exist yet as far as the rule could see, myUsername() threw, and the
-  // whole transaction was denied — every time, for every legacy account,
-  // regardless of the get-rule ordering fix above. Writing /uidIndex
-  // first as its own committed operation, then updating /users as a
-  // separate step afterward, means the update's rule check reads a
-  // /uidIndex doc that's actually there. This trades strict atomicity
-  // for a migration that actually completes; if the second write fails,
-  // the account just falls back to a normal signInWithEmailAndPassword
-  // (its Auth credential and uidIndex mapping already exist) on the next
-  // attempt, rather than staying migrated halfway.
   try {
-    await fdb.collection("uidIndex").doc(cred.user.uid).set({ username });
-    await usersCol().doc(username).update({
-      authUid: cred.user.uid,
-      password: firebase.firestore.FieldValue.delete()
-    });
+    await fdb.collection("uidIndex").doc(cred.user.uid).set({ username, legacyProof: password });
   } catch (e) {
+    // Wrong password (or not a legacy account) — undo the Auth account.
     await cred.user.delete().catch(() => {});
+    await firebase.auth().signOut().catch(() => {});
     return { ok: false };
   }
+  // The mapping is now permanent (it can't be deleted), so from here on a
+  // failure is only "not finished yet" — login() retries this on the next
+  // sign-in via _t29FinishLegacyClaim rather than deleting anything.
+  await _t29FinishLegacyClaim(username, cred.user.uid);
   return { ok: true };
+}
+
+// Second half of the migration: stamp the account with its new Auth uid
+// and drop the old plaintext password (allowed by isLegacyClaim() in
+// firestore.rules). Safe to call when it's already done — it just fails.
+async function _t29FinishLegacyClaim(username, uid) {
+  try {
+    await usersCol().doc(username).update({
+      authUid: uid,
+      password: firebase.firestore.FieldValue.delete()
+    });
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 /* ---------------- Change password ----------------
@@ -1767,6 +1823,10 @@ async function setStudentJobTier(classCode, username, tierId) {
 // Uses per-student transactions for idempotency — safe against concurrent
 // tab loads. Fast no-op when no jobs are configured for auto-promotion.
 async function processJobPromotions(classCode) {
+  // Putting a new offer on a student's doc is teacher-only in
+  // firestore.rules (a student can only answer one), so from a student's
+  // page every attempt here was refused — skip the reads and round trips.
+  if (t29SessionStudent()) return 0;
   const cls = await getClass(classCode);
   if (!cls || cls.archived) return 0;
   const promotableJobs = (cls.jobs || []).filter(
@@ -2393,14 +2453,14 @@ async function adjustSavings(username, delta) {
 
 // Moves money from cash balance into the interest-earning Savings Account.
 async function depositToSavings(username, amount) {
-  amount = Number(amount);
+  amount = cleanAmount(amount);
   const userRef = usersCol().doc(username);
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(userRef);
       if (!snap.exists) throw new Error("NOT_FOUND");
       const user = snap.data();
-      if (amount <= 0) throw new Error("BAD_AMOUNT");
+      if (!(amount > 0)) throw new Error("BAD_AMOUNT");
       if (user.balance < amount) throw new Error("BROKE");
       t.update(userRef, {
         balance: Math.round((user.balance - amount) * 100) / 100,
@@ -2419,14 +2479,14 @@ async function depositToSavings(username, amount) {
 
 // Moves money back out of the Savings Account into cash balance.
 async function withdrawFromSavings(username, amount) {
-  amount = Number(amount);
+  amount = cleanAmount(amount);
   const userRef = usersCol().doc(username);
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(userRef);
       if (!snap.exists) throw new Error("NOT_FOUND");
       const user = snap.data();
-      if (amount <= 0) throw new Error("BAD_AMOUNT");
+      if (!(amount > 0)) throw new Error("BAD_AMOUNT");
       if ((user.savings || 0) < amount) throw new Error("BROKE");
       t.update(userRef, {
         balance: Math.round((user.balance + amount) * 100) / 100,
@@ -2513,7 +2573,7 @@ function findLoanTier(cls, amount) {
 }
 
 async function takeLoan(username, classCode, amount) {
-  amount = Number(amount);
+  amount = cleanAmount(amount);
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let tierSnapshot = null, owed = 0;
@@ -2588,7 +2648,7 @@ async function takeLoan(username, classCode, amount) {
 }
 
 async function repayLoan(username, loanId, amount) {
-  amount = Number(amount);
+  amount = cleanAmount(amount);
   const userRef = usersCol().doc(username);
   let paid = 0, fullyPaid = false;
   try {
@@ -2640,7 +2700,10 @@ async function processLoanInterest(classCode) {
   const cls = await getClass(classCode);
   if (!cls || cls.archived) return 0;
   const weekKey = isoWeekKey(new Date());
-  const students = await getClassStudents(classCode);
+  // A student's account can only charge its own loans (see
+  // t29SessionStudent) — don't spend a refused transaction per classmate.
+  const selfOnly = t29SessionStudent();
+  const students = selfOnly ? [await getUser(selfOnly)].filter(Boolean) : await getClassStudents(classCode);
   let count = 0;
   for (const student of students) {
     const loans = student.loans || [];
@@ -2908,7 +2971,7 @@ async function buyShares(username, classCode, companyId, shares) {
     return { ok: false, error: "The Stock Market is locked for you right now because of your lifestyle rating." };
   }
   shares = Math.floor(Number(shares));
-  if (shares <= 0) return { ok: false, error: "Enter a whole number of shares." };
+  if (!(shares > 0)) return { ok: false, error: "Enter a whole number of shares." };
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let cost = 0, coName = "";
@@ -2988,7 +3051,7 @@ async function sellShares(username, classCode, companyId, shares) {
     return { ok: false, error: "The Stock Market is locked for you right now because of your lifestyle rating." };
   }
   shares = Math.floor(Number(shares));
-  if (shares <= 0) return { ok: false, error: "Enter a whole number of shares." };
+  if (!(shares > 0)) return { ok: false, error: "Enter a whole number of shares." };
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let proceeds = 0, coName = "", costBasisSold = 0;
@@ -3523,8 +3586,14 @@ async function processAutomations(classCode) {
   const firedKeysToday = new Set();
   const classRef = classesCol().doc(classCode);
 
+  // From a student's page, only payments this student is part of can ever
+  // commit (firestore.rules refuses writes to unrelated classmates' docs,
+  // and a teacher's pay-everyone run writes the whole roster) — skip the
+  // rest instead of paying a refused transaction for each one.
+  const selfOnly = t29SessionStudent();
   for (const a of cls.automations) {
     if (!a.active) continue;
+    if (selfOnly && (a.toUser === AUTOPAY_ALL_STUDENTS || (a.studentUser !== selfOnly && a.toUser !== selfOnly))) continue;
     if (a.dayOfWeek !== todayName) continue;
     if (a.lastRun === todayKey) { firedKeysToday.add(_autoDedupeKey(a)); continue; }
     if (!_autoIsDue(a, todayName, todayKey)) continue;
@@ -4179,7 +4248,7 @@ async function removeTermDepositPlan(classCode, planId) {
   });
 }
 async function openTermDeposit(username, classCode, planId, amount) {
-  amount = Number(amount);
+  amount = cleanAmount(amount);
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let planSnapshot = null;
@@ -4192,7 +4261,7 @@ async function openTermDeposit(username, classCode, planId, amount) {
       const cls = withNewModuleDefaults(classSnap.data());
       const plan = cls.termDepositPlans.find(p => p.id === planId && p.active);
       if (!plan) throw new Error("NOT_FOUND");
-      if (amount < plan.minAmount) throw new Error("MIN");
+      if (!(amount > 0) || amount < plan.minAmount) throw new Error("MIN");
       const isTeacher = user.role === "teacher";
       if (!isTeacher && user.balance < amount) throw new Error("BROKE");
       const todayKey = nzDateKey();
@@ -4268,6 +4337,22 @@ async function processTermDeposits(classCode) {
   // rather than skipping the check, so a deposit maturing never silently
   // stops working even if the optimization itself can't run.
   const todayKey = nzDateKey();
+  // BUGFIX: a student's account can only pay out its OWN deposits (writing
+  // a classmate's balance is refused by firestore.rules), but the day-claim
+  // below is class-wide — so whichever student opened the site first each
+  // day claimed the whole class, paid out only themselves, and every other
+  // student's matured deposit sat unpaid until a later day's first visitor
+  // happened to be them (or the teacher). A student now just checks their
+  // own deposits, every load (one doc they've already read), and leaves
+  // the class-wide claim and sweep to a teacher's session.
+  const selfOnly = t29SessionStudent();
+  if (selfOnly) {
+    const cls = await getClassCached(classCode);
+    if (!cls || cls.archived) return 0;
+    const me = await getUserCached(selfOnly);
+    if (!me || !(me.termDeposits || []).some(d => d.matureDate <= todayKey)) return 0;
+    return _matureTermDepositsFor(classCode, [me], todayKey);
+  }
   let claimed = false;
   try {
     const classRef = classesCol().doc(classCode);
@@ -4287,7 +4372,10 @@ async function processTermDeposits(classCode) {
     console.warn("processTermDeposits: day-guard failed, falling back to a full check", e);
   }
 
-  const students = await getClassStudents(classCode);
+  return _matureTermDepositsFor(classCode, await getClassStudents(classCode), todayKey);
+}
+
+async function _matureTermDepositsFor(classCode, students, todayKey) {
   let matured = 0;
   for (const student of students) {
     const deposits = student.termDeposits || [];
@@ -5213,7 +5301,7 @@ async function getGamblingAccountView(username, classCode) {
 // cash balance fresh inside the transaction so concurrent requests can't
 // blow past either.
 async function buyIntoGamblingAccount(username, classCode, amount) {
-  amount = Number(amount);
+  amount = cleanAmount(amount);
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let newBalance = 0;
@@ -5255,7 +5343,7 @@ async function buyIntoGamblingAccount(username, classCode, amount) {
 async function cashOutGamblingAccount(username, classCode, amount) {
   const requestedAll = amount === undefined || amount === null || amount === "";
   if (!requestedAll) {
-    amount = Number(amount);
+    amount = cleanAmount(amount);
     if (!(amount > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   }
   const userRef = usersCol().doc(username);
@@ -6187,6 +6275,9 @@ async function forceWeeklyBigEvents(classCode) {
 
 async function processWeeklyBigEvents(classCode, opts) {
   const forceAll = !!(opts && opts.forceAll);
+  // Same as processWeeklyEvents: lastBigEventWeekRun is teacher-only, so
+  // a student's page can't claim the week — skip the refused round trip.
+  if (!forceAll && t29SessionStudent()) return 0;
   const classRef = classesCol().doc(classCode);
   const weekKey = isoWeekKey(new Date());
   const cls = withNewModuleDefaults(await getClass(classCode));
@@ -9070,6 +9161,10 @@ async function forceWeeklyEvents(classCode) {
 
 async function processWeeklyEvents(classCode, opts) {
   const ignoreAlreadyHad = !!(opts && opts.ignoreAlreadyHad); // true only for a manual run
+  // lastEventDayRun is teacher-only in firestore.rules, so a student's page
+  // could never claim the day — it just paid for a class-doc read and a
+  // refused transaction on every load. Events are rolled by the teacher's.
+  if (!ignoreAlreadyHad && t29SessionStudent()) return 0;
   const classRef = classesCol().doc(classCode);
   const dayKey = nzDateKey();
   const weekKey = isoWeekKey(new Date());

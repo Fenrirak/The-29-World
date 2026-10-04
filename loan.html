@@ -33,6 +33,11 @@
 <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
 <link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
+<link rel="modulepreload" href="firebase-init.js?v=2">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
 </head>
 <body>
 
@@ -173,7 +178,7 @@
 <script type="module" src="firebase-init.js?v=2"></script>
 <script defer src="icons.js?v=1"></script>
 <script defer src="settings-menu.js?v=1"></script>
-<script defer src="data.js?v=1"></script>
+<script defer src="data.js?v=3"></script>
 <script defer src="events-ui.js?v=1"></script>
 <script defer src="quiz-gate.js?v=1"></script>
 <script defer src="notifications.js?v=1"></script>
