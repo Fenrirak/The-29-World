@@ -139,7 +139,8 @@ async function render() {
   document.getElementById("gamblingEnabled").checked = cls.gambling ? cls.gambling.enabled !== false : true;
   document.getElementById("dailyTimeLimit").value = cls.dailyTimeLimitMinutes || "";
 
-  const students = await getClassStudents(CLASS_CODE);
+  // Pass the class doc already in hand, so this doesn't read it again first.
+  const students = await getClassStudents(CLASS_CODE, cls);
   document.getElementById("statStudents").textContent = students.length;
   const total = students.reduce((sum, s) => sum + s.balance, 0);
   document.getElementById("statTotal").textContent = fmtMoney(total);
@@ -348,7 +349,12 @@ async function render() {
   LAST_STUDENTS = students;
   const sel = document.getElementById("adjStudent");
   const allOpt = students.length ? `<option value="__ALL__">All students (${students.length})</option>` : "";
-  sel.innerHTML = allOpt + students.map(s => `<option value="${escapeHtml(s.username)}">${escapeHtml(s.name)}</option>`).join("");
+  // Blank "Choose…" first so nobody (least of all "All students") is picked
+  // by default; a pick already made survives a re-render.
+  const prevPick = sel.value;
+  const choose = students.length ? `<option value="" disabled selected>Choose a student…</option>` : "";
+  sel.innerHTML = choose + allOpt + students.map(s => `<option value="${escapeHtml(s.username)}">${escapeHtml(s.name)}</option>`).join("");
+  if (prevPick && [...sel.options].some(o => o.value === prevPick)) sel.value = prevPick;
 
   // txns — the teacher dashboard shows however many transactions are
   // currently stored (up to MAX_STORED_TXNS), independent of the student
@@ -508,6 +514,10 @@ async function giveAdjustment(e) {
     const amount = parseMoneyInput(document.getElementById("adjAmount").value);
     const note = document.getElementById("adjNote").value.trim();
     const box = document.getElementById("adjMsg");
+    if (!student) {
+      box.innerHTML = `<div class="error-msg">Choose who this is for.</div>`;
+      return false;
+    }
     if (Number.isNaN(amount) || amount === 0) {
       box.innerHTML = `<div class="error-msg">Enter an amount.</div>`;
       return false;
@@ -536,6 +546,7 @@ async function giveAdjustment(e) {
         box.innerHTML = `<div class="success-msg">Done — ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} all ${okCount} students.</div>`;
         document.getElementById("adjAmount").value = "";
         document.getElementById("adjNote").value = "";
+        document.getElementById("adjStudent").value = "";
       } else if (okCount > 0) {
         box.innerHTML = `<div class="error-msg">${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${okCount} of ${targets.length} students. Failed for: ${failedNames.map(escapeHtml).join(", ")}.</div>`;
       } else {
@@ -547,6 +558,7 @@ async function giveAdjustment(e) {
         box.innerHTML = `<div class="success-msg">Done — ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${student}.</div>`;
         document.getElementById("adjAmount").value = "";
         document.getElementById("adjNote").value = "";
+        document.getElementById("adjStudent").value = "";
       } else {
         box.innerHTML = `<div class="error-msg">${res.error}</div>`;
       }

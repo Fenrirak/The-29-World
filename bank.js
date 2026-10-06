@@ -164,7 +164,18 @@ async function render() {
   const optsHtml = recipients.length
     ? recipients.map(r => `<option value="${escapeHtml(r.username)}">${escapeHtml(r.label)}</option>`).join("")
     : `<option value="">No one to pay yet</option>`;
-  document.getElementById("toStudent").innerHTML = optsHtml;
+  // Start on a blank "Choose who to pay" so nobody is picked by default —
+  // it was too easy to send money to whoever happened to be first in the
+  // list. Whatever was already picked survives a re-render (e.g. after a
+  // failed payment); a successful one clears it again below.
+  const choose = recipients.length ? `<option value="" disabled selected>Choose who to pay…</option>` : "";
+  const keepPick = (id, html) => {
+    const sel = document.getElementById(id);
+    const prev = sel.value;
+    sel.innerHTML = html;
+    if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  };
+  keepPick("toStudent", choose + optsHtml);
   // The automatic-payment recipient list gets one extra option teachers can
   // pick: pay every student the same amount on the same schedule. Not added
   // to "Send to" above — that's a one-off, and Quick Transactions on the
@@ -172,7 +183,7 @@ async function render() {
   const autoOptsHtml = (IS_TEACHER && allStudents.length)
     ? `<option value="${AUTOPAY_ALL_STUDENTS}">All students (${allStudents.length})</option>${optsHtml}`
     : optsHtml;
-  document.getElementById("autoTo").innerHTML = autoOptsHtml;
+  keepPick("autoTo", choose + autoOptsHtml);
 
   // automations
   // Same list getStudentAutomations() returns, taken from the class doc
@@ -332,7 +343,7 @@ async function sendMoney(e) {
     const amount = Number(document.getElementById("amount").value);
     const note = document.getElementById("note").value.trim();
     const box = document.getElementById("sendMsg");
-    if (!to) { box.innerHTML = `<div class="error-msg">There's no one to send money to yet.</div>`; return false; }
+    if (!to) { box.innerHTML = `<div class="error-msg">Choose who to send the money to.</div>`; return false; }
     if (Number.isNaN(amount) || amount === 0) { box.innerHTML = `<div class="error-msg">Enter an amount.</div>`; return false; }
     if (!IS_TEACHER && amount < 0) { box.innerHTML = `<div class="error-msg">Enter an amount greater than zero.</div>`; return false; }
 
@@ -351,6 +362,7 @@ async function sendMoney(e) {
         : `<div class="success-msg">Sent ${fmtMoney(amount)}!</div>`;
       document.getElementById("amount").value = "";
       document.getElementById("note").value = "";
+      document.getElementById("toStudent").value = "";
     } else {
       box.innerHTML = `<div class="error-msg">${res.error}</div>`;
     }
@@ -378,7 +390,7 @@ async function addAuto(e) {
     const to = document.getElementById("autoTo").value;
     const note = document.getElementById("autoNote").value.trim();
     const box = document.getElementById("autoMsg");
-    if (!to) { box.innerHTML = `<div class="error-msg">There's no one to pay yet.</div>`; return false; }
+    if (!to) { box.innerHTML = `<div class="error-msg">Choose who to pay.</div>`; return false; }
     let res = EDITING_AUTO_ID
       ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note)
       : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note);
@@ -431,6 +443,7 @@ function cancelEditAuto() {
   EDITING_AUTO_ID = null;
   document.getElementById("autoAmount").value = "";
   document.getElementById("autoNote").value = "";
+  document.getElementById("autoTo").value = "";
   document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Set up an automatic payment";
   document.getElementById("addAutoBtn").innerHTML = icon("plus", 15) + " Create automatic payment";
   document.getElementById("cancelAutoEditBtn").classList.add("hidden");
