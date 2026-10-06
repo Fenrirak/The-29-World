@@ -191,7 +191,9 @@ async function render() {
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
   const props = cls.properties || [];
-  const students = await getClassStudents(me.classCode);
+  // Hand over the class doc already in hand (when it's the same class) so
+  // this doesn't read it a second time before reading the students.
+  const students = await getClassStudents(me.classCode, me.classCode === CURRENT.classCode ? cls : undefined);
   const nameOf = un => (students.find(s => s.username === un) || {}).name || un;
 
   if (IS_TEACHER) {

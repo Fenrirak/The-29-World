@@ -175,7 +175,11 @@ async function render() {
   document.getElementById("autoTo").innerHTML = autoOptsHtml;
 
   // automations
-  const autos = await getStudentAutomations(me.classCode, me.username);
+  // Same list getStudentAutomations() returns, taken from the class doc
+  // already loaded at the top of render() instead of reading it again.
+  const autos = me.classCode === CURRENT.classCode
+    ? (cls.automations || []).filter(a => a.studentUser === me.username)
+    : await getStudentAutomations(me.classCode, me.username);
   document.getElementById("autoCount").textContent = autos.filter(a => a.active).length;
   const listBox = document.getElementById("autoList");
   document.getElementById("noAuto").classList.toggle("hidden", autos.length > 0);
