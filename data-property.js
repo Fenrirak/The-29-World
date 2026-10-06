@@ -263,7 +263,8 @@ function applyPropertyMarketDayMoves(cls) {
     const oldPrice = first.price;
     const listingRange = first.priceRange || range;
     const pct = listingRange.min + Math.random() * (listingRange.max - listingRange.min);
-    const direction = Math.random() < 0.5 ? -1 : 1;
+    // Upward bias: 60% chance of an up day vs 40% down (same as shares).
+    const direction = Math.random() < 0.4 ? -1 : 1;
     const newPrice = Math.max(0.01, Math.round(oldPrice * (1 + (direction * pct) / 100) * 100) / 100);
     units.forEach(u => {
       if (!Array.isArray(u.priceHistory) || u.priceHistory.length === 0) u.priceHistory = [oldPrice];
