@@ -49,7 +49,7 @@
       <!-- Teacher login -->
       <form id="panel-teacher-login" onsubmit="return doLogin(event)">
         <label for="l-username"><span class="icon-slot"></span> Username</label>
-        <input id="l-username" required autocomplete="username" placeholder="Username">
+        <input id="l-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
         <label for="l-password"><span class="icon-slot"></span> Password</label>
         <input id="l-password" type="password" required autocomplete="current-password" placeholder="Password">
         <div class="remember-row">
@@ -67,7 +67,7 @@
         <label for="t-class"><span class="icon-slot"></span> Class name</label>
         <input id="t-class" placeholder="Class name, e.g. Room 12" required>
         <label for="t-username"><span class="icon-slot"></span> Choose a username</label>
-        <input id="t-username" required placeholder="Choose a username">
+        <input id="t-username" required autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
         <label for="t-password"><span class="icon-slot"></span> Choose a password</label>
         <input id="t-password" type="password" required placeholder="Choose a password">
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Create my class</button>
@@ -84,7 +84,7 @@
       <!-- Student login -->
       <form id="panel-student-login" onsubmit="return doLogin(event)">
         <label for="sl-username"><span class="icon-slot"></span> Username</label>
-        <input id="sl-username" required autocomplete="username" placeholder="Username">
+        <input id="sl-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
         <label for="sl-password"><span class="icon-slot"></span> Password</label>
         <input id="sl-password" type="password" required autocomplete="current-password" placeholder="Password">
         <div class="remember-row">
@@ -101,7 +101,7 @@
         <label for="s-name"><span class="icon-slot"></span> Your name</label>
         <input id="s-name" required placeholder="Your name">
         <label for="s-username"><span class="icon-slot"></span> Choose a username</label>
-        <input id="s-username" required placeholder="Choose a username">
+        <input id="s-username" required autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
         <label for="s-password"><span class="icon-slot"></span> Choose a password</label>
         <input id="s-password" type="password" required placeholder="Choose a password">
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Join class</button>
@@ -134,8 +134,8 @@
      DOMContentLoaded — matching how every other page already does it. -->
 <script type="module" src="firebase-init.js?v=9f8488c9"></script>
 <script defer src="icons.js?v=a751849e"></script>
-<script defer src="data-core.js?v=4ae975d1"></script>
-<script defer src="data-money.js?v=ede35439"></script>
+<script defer src="data-core.js?v=b7bf213a"></script>
+<script defer src="data-money.js?v=4595ad1c"></script>
 <script defer src="data-life.js?v=4584feb8"></script>
 <script defer src="data-property.js?v=9812dd26"></script>
 <script defer src="data-markets.js?v=066d2e90"></script>
@@ -251,7 +251,7 @@ async function doLoginInner(e) {
   // "remember" now only prefills the username field, never the password.
   const key = "anw_remember_" + (isTeacherForm ? "teacher" : "student");
   if (remember) {
-    localStorage.setItem(key, JSON.stringify({ username }));
+    localStorage.setItem(key, JSON.stringify({ username: res.user.username || username }));
   } else {
     localStorage.removeItem(key);
   }

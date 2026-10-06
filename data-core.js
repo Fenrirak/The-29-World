@@ -336,6 +336,14 @@ async function getClassStudents(code, precomputedCls) {
   // difference is negligible, and getUser() already coalesces duplicate
   // in-flight requests for the same username.
   const users = await Promise.all(cls.students.map(u => getUser(u)));
+  // PERF FIX: also hand these fresh copies to the short-lived read cache
+  // below (see getUserCached), so code that looks the same students up
+  // again a moment later — e.g. the teacher dashboard's lifestyle column
+  // calling lifestyleRating() once per student right after this — reuses
+  // them instead of reading the whole class a second time. Exactly what
+  // getUserCached() itself stores for a fresh read, so nothing can be any
+  // staler than before (and any write still clears it straight away).
+  users.forEach((u, i) => { if (u) window._rcSet("users", cls.students[i], _cloneDoc(u)); });
   return users.filter(Boolean);
 }
 
@@ -1384,6 +1392,19 @@ async function login(username, password) {
       return { ok: false, error: t29AuthErrorMessage(e) };
     } else {
       return { ok: false, error: "Incorrect username or password." };
+    }
+  }
+
+  // BUGFIX: the sign-in email is lowercased (t29AuthEmail) but usernames
+  // aren't, so "Jason" vs "jason" (e.g. a phone auto-capitalising the first
+  // letter) signed in fine and then found no account. /uidIndex holds the
+  // exact username this login belongs to, so use that when it's there.
+  const signedInUser = firebase.auth().currentUser;
+  if (signedInUser) {
+    const idx = await fdb.collection("uidIndex").doc(signedInUser.uid).get().catch(() => null);
+    const realName = idx && idx.exists ? idx.data().username : null;
+    if (typeof realName === "string" && realName && realName.toLowerCase() === username.toLowerCase()) {
+      username = realName;
     }
   }
 
