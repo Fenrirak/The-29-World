@@ -88,7 +88,7 @@ async function init() {
   enablePasswordToggles();
   // BUGFIX: get a server-trustworthy "now" before any of the day-gated
   // jobs below decide "has this already run today?" — see
-  // syncServerClock in data.js for why a device's own clock isn't good
+  // syncServerClock in data-core.js for why a device's own clock isn't good
   // enough for that check (a teacher's dashboard reload triggers these
   // same class-wide jobs, same as a student's page does). Started here,
   // in parallel with the first paint below, so it doesn't add to the time
@@ -121,6 +121,7 @@ async function init() {
   await checkBigEventPopup(CURRENT.username, CLASS_CODE);
   await checkAdjustmentPopup(CURRENT.username, CLASS_CODE);
   await render();
+  if (typeof t29MaybeStartTour === "function") t29MaybeStartTour("teacher", CURRENT);
 }
 
 async function render() {
@@ -145,7 +146,7 @@ async function render() {
   document.getElementById("statCompanies").textContent = cls.companies.length;
 
   // Time exemption requests (students out of time asking for more — see
-  // requestTimeExemption/decideTimeExemption in data.js). Surfaced as a
+  // requestTimeExemption/decideTimeExemption in data-markets.js). Surfaced as a
   // banner right at the top of the dashboard rather than tucked into
   // settings, since it needs prompt attention.
   const timePending = students.filter(s => timeExemptionState(s) === "pending");
@@ -186,7 +187,7 @@ async function render() {
     // Stacked total across every property the student owns, not just one,
     // plus its living-in bonus stars when they're actually living in it
     // (rather than renting it out) — matching lifestyleBandForStudent in
-    // data.js, so this table's band agrees with what the student sees on
+    // the data-*.js files, so this table's band agrees with what the student sees on
     // their own property page. This total can legitimately exceed 5.
     const ownedProperties = (cls.properties || []).filter(p => p.owner === s.username);
     const ownedVehicles = (cls.vehicles || []).filter(v => (v.owners || []).includes(s.username));
@@ -835,7 +836,7 @@ async function saveLifestyleLockSettings() {
 
 async function saveLifestyle() {
   // loan config lives in this same lifestyleConfig object but is edited
-  // from its own section (see setLoanLifestylePenalty in data.js), so it's
+  // from its own section (see setLoanLifestylePenalty in data-money.js), so it's
   // read back here and carried through untouched — otherwise saving this
   // form would wipe out whatever the teacher set there.
   const cls = await getClassCached(CLASS_CODE);
@@ -1352,6 +1353,14 @@ async function renderProfile(username) {
   rows.push(heldShares.length
     ? heldShares.map(h => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(h.name)}</strong></div><div class="auto-details">${h.qty} share${h.qty === 1 ? "" : "s"}</div></div>`).join("")
     : `<p class="muted-small">No shares owned.</p>`);
+
+  // Read-only — goals are the student's own (see "Savings goals" in data-money.js).
+  const goals = savingsGoalProgress(s);
+  rows.push(`<h4>${icon("trophy", 16)} Savings goals</h4>`);
+  rows.push(goals.length
+    ? goals.map(g => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(g.name)}</strong>${g.reached ? " — reached!" : ""}</div>
+        <div class="auto-details">${fmtMoney(g.saved)} of ${fmtMoney(g.target)}</div></div>`).join("")
+    : `<p class="muted-small">No savings goals set.</p>`);
 
   document.getElementById("profileBody").innerHTML = rows.join("");
 }

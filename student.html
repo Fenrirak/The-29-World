@@ -2,13 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>
 (function(){
   try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}
   window.T29_HAS_SIDEBAR = true;
   function loadIfOn(flagKey, cls, css, js){
-    var on;
-    try { on = localStorage.getItem(flagKey) === '1'; } catch(e) { on = false; }
+    var flag = null;
+    try { flag = localStorage.getItem(flagKey); } catch(e) {}
+    // Phones and small tablets get the slide-out menu unless it was switched off in Settings.
+    var on = flag === '1' || (flag === null && !!window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
     if (!on) return;
     document.documentElement.classList.add(cls);
     var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = css;
@@ -16,17 +19,16 @@
     var s = document.createElement('script'); s.src = js;
     document.head.appendChild(s);
   }
-  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css', 'sidebar-nav.js');
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=173c63c1', 'sidebar-nav.js?v=20c62d37');
 })();
 </script>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Account — The 29 World</title>
 <link rel="icon" type="image/png" href="Favicon.png">
 <link rel="shortcut icon" href="favicon.ico">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=d0294c3c">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -35,7 +37,7 @@
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="firebase-init.js?v=2">
+<link rel="modulepreload" href="firebase-init.js?v=9f8488c9">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
@@ -97,6 +99,31 @@
       <div class="value" id="lifestyleValue">0</div>
       <div class="muted-small" id="lifestyleHint" style="margin-top:2px;">Tap for breakdown</div>
     </div>
+  </div>
+
+  <div class="card" id="goalsCard">
+    <div class="flex-between">
+      <h2 id="hGoals">My savings goals</h2>
+      <button class="btn small gold" type="button" id="addGoalBtn" onclick="toggleGoalForm(true)">Add a goal</button>
+    </div>
+    <p class="muted-small" style="margin-top:0;">Money in your <a href="bank.html">Savings account</a> counts towards your goals — your top goal fills up first.</p>
+    <div id="goalList"></div>
+    <p class="muted-small hidden" id="noGoals">No goals yet. What are you saving up for? A new bike, a phone, a house deposit…</p>
+    <form id="goalForm" class="hidden" onsubmit="return submitGoal(event)">
+      <div class="grid grid-2">
+        <div>
+          <label for="goalName">What are you saving for?</label>
+          <input id="goalName" maxlength="40" placeholder="e.g. New bike" required>
+        </div>
+        <div>
+          <label for="goalTarget">How much does it cost?</label>
+          <input id="goalTarget" type="number" min="0.01" step="0.01" placeholder="e.g. 120" required>
+        </div>
+      </div>
+      <button class="btn" type="submit" id="goalSaveBtn">Save goal</button>
+      <button class="btn secondary small" type="button" onclick="toggleGoalForm(false)">Cancel</button>
+      <div id="goalMsg"></div>
+    </form>
   </div>
 
   <div class="card">
@@ -247,13 +274,18 @@
 </div>
 
 
-<script type="module" src="firebase-init.js?v=2"></script>
-<script defer src="icons.js?v=1"></script>
-<script defer src="settings-menu.js?v=1"></script>
-<script defer src="data.js?v=3"></script>
-<script defer src="events-ui.js?v=1"></script>
-<script defer src="quiz-gate.js?v=1"></script>
-<script defer src="notifications.js?v=1"></script>
-<script defer src="student.js?v=2"></script>
+<script type="module" src="firebase-init.js?v=9f8488c9"></script>
+<script defer src="icons.js?v=a751849e"></script>
+<script defer src="settings-menu.js?v=a0bda1c9"></script>
+<script defer src="data-core.js?v=bd92cac2"></script>
+<script defer src="data-money.js?v=ede35439"></script>
+<script defer src="data-life.js?v=4584feb8"></script>
+<script defer src="data-property.js?v=9812dd26"></script>
+<script defer src="data-markets.js?v=066d2e90"></script>
+<script defer src="tour.js?v=863871dd"></script>
+<script defer src="events-ui.js?v=a9ca5788"></script>
+<script defer src="quiz-gate.js?v=4ed5e0c8"></script>
+<script defer src="notifications.js?v=ca299e12"></script>
+<script defer src="student.js?v=50e222c3"></script>
 </body>
 </html>

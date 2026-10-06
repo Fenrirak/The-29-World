@@ -3,7 +3,7 @@
    quiz builder + class results, the student gets a list of quizzes and the
    flow for actually sitting one.
 
-   All the rules live in data.js (addQuiz / updateQuiz / submitQuizAttempt /
+   All the rules live in data-life.js (addQuiz / updateQuiz / submitQuizAttempt /
    getQuizLockedModulesFromData) — this file is only ever presentation and
    form-wrangling.
 ================================================================================ */

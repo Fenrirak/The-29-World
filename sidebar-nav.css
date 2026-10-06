@@ -38,6 +38,33 @@
    button chrome (a small white/gray box) instead of disappearing. */
 .sb-hamburger{ display: none; }
 
+/* Section headings ("Money", "Life", ...) that sidebar-nav.js puts between
+   groups of links. Only meaningful in the side menu — hidden in the plain
+   top bar, which is also why icons.js's width-fitting never counts them. */
+.sb-group-label{ display: none; }
+html.sidebar-nav .sb-group-label{
+  display: block;
+  margin: 12px 4px 2px;
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(247,241,230,.55);
+}
+/* Teacher-only links (Quizzes, Reports) are hidden for students, so their
+   heading is too — html.role-teacher is set by applyNavRoleVisibility(). */
+html.sidebar-nav:not(.role-teacher) .sb-group-label.sb-group-teacher{ display: none; }
+
+/* Unread-notifications dot on the menu button (see sbSyncUnreadDot). */
+.sb-hamburger{ position: relative; }
+html.sidebar-nav .sb-hamburger.has-unread::after{
+  content: "";
+  position: absolute; top: 4px; right: 4px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--coral);
+  border: 1.5px solid var(--navy-900);
+}
+
 /* --------------------------------------------------------------------
    Desktop / laptop / wide tablet (>=901px): permanent left rail
 -------------------------------------------------------------------- */

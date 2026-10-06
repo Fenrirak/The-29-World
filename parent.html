@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}</script>
+<!-- A family link is private to whoever it was shared with: keep it out of search engines, and don't pass the link on to other sites. -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Family View — The 29 World</title>
+<link rel="icon" type="image/png" href="Favicon.png">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#1f2b44">
+<link rel="stylesheet" href="style.css?v=d0294c3c">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="modulepreload" href="firebase-init.js?v=9f8488c9">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
+</head>
+<body>
+
+<header class="legal-header no-print">
+  <span class="legal-header-brand">The 29 World — Family view</span>
+</header>
+
+<main class="parent-main">
+  <div id="parentLoading" class="card">
+    <p class="muted-small" style="margin:0;"><span class="t29-spinner"></span> Loading the report card…</p>
+  </div>
+
+  <div id="parentError" class="card hidden">
+    <h1 id="parentErrorTitle">This link isn't working</h1>
+    <p id="parentErrorText">It may have been turned off, or only part of it was copied. Ask your child or their teacher for a new family link.</p>
+  </div>
+
+  <div id="parentReport" class="hidden"></div>
+</main>
+
+<footer class="site-footer no-print">
+  <div class="site-footer-brand">The 29 World</div>
+  <nav class="site-footer-links" aria-label="Footer">
+    <a href="mailto:Nathan.liu1211@gmail.com">Contact</a>
+    <a href="privacy.html">Privacy Policy</a>
+  </nav>
+  <div class="site-footer-copy">© 2026 The 29 World. All rights reserved.</div>
+</footer>
+
+<script type="module" src="firebase-init.js?v=9f8488c9"></script>
+<script defer src="icons.js?v=a751849e"></script>
+<script defer src="parent.js?v=aac02bb3"></script>
+</body>
+</html>

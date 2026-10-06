@@ -26,6 +26,7 @@ async function init() {
   }
 
   renderExemptionBox(u);
+  t29PageReady();
 
   // In case the student just leaves this tab open, notice when the day
   // rolls over, the teacher lifts the limit, or a pending request gets

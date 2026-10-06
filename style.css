@@ -2301,3 +2301,167 @@ html.dark-mode .qty-stepper .qty-input{background:var(--card);color:var(--ink);b
   .qty-stepper{align-self:flex-end;}
   .qty-buy-btn{width:100%;justify-content:center;}
 }
+
+/* ===================== Loading & error messages =====================
+   Drawn by the "Loading & error messages" section of data-core.js: the
+   top loading bar, placeholder shimmer over stat numbers while a page is
+   loading, corner messages (toasts), in-page alert boxes, the offline
+   banner and the "can't connect" screen.
+======================================================================== */
+.t29-loadbar{
+  position:fixed;top:0;left:0;height:3px;width:100%;z-index:3000;pointer-events:none;
+  background:linear-gradient(90deg,transparent 0%,var(--gold) 35%,var(--mint) 65%,transparent 100%);
+  background-size:50% 100%;background-repeat:no-repeat;
+  animation:t29LoadSlide 1.1s ease-in-out infinite;
+  transition:opacity .35s ease;
+}
+.t29-loadbar.done{opacity:0;}
+@keyframes t29LoadSlide{0%{background-position:-50% 0;}100%{background-position:150% 0;}}
+
+html.t29-loading .stat .value{
+  color:transparent !important;
+  max-width:8.5em;border-radius:8px;
+  background:linear-gradient(90deg,rgba(255,255,255,.10) 25%,rgba(255,255,255,.28) 50%,rgba(255,255,255,.10) 75%);
+  background-size:200% 100%;
+  animation:t29Shimmer 1.3s linear infinite;
+}
+@keyframes t29Shimmer{0%{background-position:100% 0;}100%{background-position:-100% 0;}}
+
+.t29-toasts{
+  position:fixed;right:16px;bottom:16px;z-index:2500;
+  display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+  max-width:min(380px, calc(100vw - 32px));pointer-events:none;
+}
+.t29-toast{
+  pointer-events:auto;display:flex;align-items:flex-start;gap:10px;
+  background:var(--card);color:var(--ink);
+  border:1.5px solid var(--line);border-left:5px solid var(--sky);
+  border-radius:12px;padding:12px 12px 12px 14px;
+  box-shadow:0 12px 30px rgba(31,43,68,0.22);
+  font-size:.9rem;line-height:1.4;
+  animation:t29ToastIn .2s ease;
+}
+.t29-toast.error{border-left-color:var(--coral);}
+.t29-toast.success{border-left-color:var(--mint);}
+.t29-toast.leaving{opacity:0;transform:translateY(6px);transition:opacity .2s ease, transform .2s ease;}
+.t29-toast-msg{flex:1;min-width:0;}
+.t29-toast-close{
+  background:none;border:none;color:var(--muted);font-size:1.2rem;line-height:1;
+  cursor:pointer;padding:0 2px;min-height:0;
+}
+@keyframes t29ToastIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+.t29-dialog-overlay{
+  position:fixed;inset:0;z-index:2800;background:rgba(14,22,40,0.55);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  animation:t29ToastIn .15s ease;
+}
+.t29-dialog{
+  background:var(--card);color:var(--ink);border-radius:16px;
+  border-top:5px solid var(--gold);
+  box-shadow:0 24px 60px rgba(0,0,0,0.35);
+  width:100%;max-width:420px;max-height:80vh;overflow:auto;padding:22px 22px 18px;
+}
+.t29-dialog-msg{color:var(--ink);white-space:pre-line;margin:0 0 16px;font-size:.98rem;line-height:1.5;}
+.t29-dialog-actions{display:flex;justify-content:flex-end;}
+.t29-dialog-actions .btn{margin-top:0;min-width:96px;justify-content:center;}
+
+.t29-offline-banner{
+  position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:2600;
+  background:var(--coral);color:#fff;font-weight:700;font-size:.85rem;
+  padding:8px 16px;border-radius:999px;box-shadow:0 8px 22px rgba(0,0,0,0.25);
+  max-width:calc(100vw - 24px);text-align:center;
+}
+
+.t29-conn-problem{
+  position:fixed;inset:0;z-index:2700;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.t29-conn-card{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:28px 24px;max-width:420px;width:100%;text-align:center;
+}
+.t29-conn-card .btn{justify-content:center;}
+
+.t29-spinner{
+  display:inline-block;width:14px;height:14px;border-radius:50%;
+  border:2px solid currentColor;border-right-color:transparent;
+  animation:t29Spin .7s linear infinite;vertical-align:-2px;
+}
+@keyframes t29Spin{to{transform:rotate(360deg);}}
+
+@media (max-width:640px){
+  /* The floating cash widget sits bottom-left on phones — keep toasts clear of it. */
+  .t29-toasts{left:16px;right:16px;bottom:84px;align-items:stretch;max-width:none;}
+}
+@media (prefers-reduced-motion: reduce){
+  .t29-loadbar, html.t29-loading .stat .value, .t29-spinner{animation-duration:3s;}
+}
+
+/* ===================== Savings goals (student dashboard) ===================== */
+.goal-row{padding:12px 0;border-bottom:1px solid var(--line);}
+.goal-row:last-child{border-bottom:none;}
+.goal-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px;}
+.goal-name{color:var(--navy-900);font-size:.98rem;}
+.goal-amounts{margin-left:auto;font-weight:800;color:var(--navy-900);font-size:.9rem;white-space:nowrap;}
+.goal-track{height:12px;}
+.goal-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px;}
+.goal-foot .muted-small{margin:0;}
+.goal-actions{display:flex;gap:12px;}
+.link-btn{
+  background:none;border:none;padding:0;min-height:0;margin:0;cursor:pointer;
+  color:var(--navy-700);font-weight:700;font-size:.82rem;text-decoration:underline;
+}
+.link-btn:hover{color:var(--gold-dark);}
+html.dark-mode .goal-name,
+html.dark-mode .goal-amounts{color:var(--heading-text);}
+html.dark-mode .link-btn{color:var(--accent-text);}
+
+/* ===================== Family view (parent.html) ===================== */
+main.parent-main{max-width:900px;}
+.parent-explainer{
+  margin-top:14px;padding:12px 14px;border-radius:10px;
+  background:var(--pastel-navy-bg, #eef3fd);border:1px solid var(--line);
+  color:var(--ink);font-size:.9rem;line-height:1.5;
+}
+.parent-tips{color:var(--muted);line-height:1.7;margin:0;padding-left:1.2em;}
+
+/* ===================== First-time walkthrough (tour.js) ===================== */
+.t29-tour{position:fixed;inset:0;z-index:2400;}
+.t29-tour-shade{position:absolute;inset:0;background:rgba(14,22,40,0.6);}
+.t29-tour-spot{
+  position:fixed;border-radius:12px;pointer-events:none;
+  box-shadow:0 0 0 3px var(--gold), 0 0 0 9999px rgba(14,22,40,0.6);
+  transition:left .2s ease, top .2s ease, width .2s ease, height .2s ease;
+}
+.t29-tour-card{
+  position:fixed;width:min(340px, calc(100vw - 20px));
+  background:var(--card);color:var(--ink);border-radius:14px;
+  border-top:5px solid var(--gold);
+  box-shadow:0 20px 50px rgba(0,0,0,0.35);padding:16px 18px 14px;
+}
+.t29-tour-card.centered{left:50% !important;top:50% !important;transform:translate(-50%,-50%);}
+.t29-tour-card h3{margin:0 0 6px;font-size:1.08rem;}
+.t29-tour-card p{margin:0 0 12px;color:var(--ink);font-size:.92rem;line-height:1.5;}
+.t29-tour-count{font-size:.7rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+.t29-tour-actions{display:flex;align-items:center;gap:8px;}
+.t29-tour-actions .btn{margin-top:0;}
+
+.t29-tour-offer{
+  position:fixed;right:16px;bottom:16px;z-index:2300;
+  width:min(320px, calc(100vw - 32px));
+  background:var(--card);color:var(--ink);border:1.5px solid var(--line);border-left:5px solid var(--gold);
+  border-radius:12px;box-shadow:0 12px 30px rgba(31,43,68,0.22);padding:14px;
+  animation:t29ToastIn .25s ease;
+}
+.t29-tour-offer-text{font-size:.9rem;line-height:1.45;margin-bottom:10px;}
+.t29-tour-offer-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.t29-tour-offer-actions .btn{margin-top:0;}
+html.dark-mode .t29-tour-card h3{color:var(--heading-text);}
+@media (max-width:640px){
+  .t29-tour-offer{left:16px;right:16px;width:auto;bottom:84px;}
+}
+/* Keep corner messages clear of the tour offer when both are showing. */
+body:has(.t29-tour-offer) .t29-toasts{bottom:150px;}
+@media (max-width:640px){ body:has(.t29-tour-offer) .t29-toasts{bottom:220px;} }
+@media print{ .t29-tour, .t29-tour-offer, .t29-toasts, .t29-loadbar{display:none !important;} }

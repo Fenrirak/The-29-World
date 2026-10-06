@@ -27,14 +27,14 @@
    the alternative is a Firestore write every single time a student opens
    the panel.
 
-   Loaded on every page (after data.js). It injects its own bell button
+   Loaded on every page (after the data-*.js files). It injects its own bell button
    into .topbar-actions, so pages don't need any markup for it — and it
    calls fitTopbar() straight after inserting, so the nav re-measures with
    the bell included and the top bar still fits on ONE line.
 ================================================================================ */
 
 const NOTIF_MAX = 60;
-const NOTIF_POLL_MS = 120000; // see the balance widget in data.js for why this is a plain interval
+const NOTIF_POLL_MS = 120000; // see the balance widget in the data-*.js files for why this is a plain interval
 
 /* ---------------- Read-state (per device, per student) ---------------- */
 function notifReadKey(username) { return "t29-notif-read-" + username; }
@@ -61,7 +61,7 @@ function notifTodayStartMs() {
   // BUGFIX: this used to read hour/minute from the trusted, server-
   // corrected clock (nzHourMinute() defaults to trustedNow()) but then
   // anchor the actual subtraction to a fresh, UNCORRECTED `new Date()` —
-  // so on exactly the drifting-device-clock case data.js's own
+  // so on exactly the drifting-device-clock case the data layer's own
   // trustedNow() exists to fix (see the BUGFIX comment above it), this
   // silently produced a "day start" as wrong as that device's clock was,
   // which then fed into every notification's timestamp. Deriving
@@ -269,7 +269,7 @@ function notifEventItems(me, cls) {
 // A job promotion (auto-triggered after enough weeks in a tier, or
 // offered manually by the teacher) sits on the user doc as an unresolved
 // offer until the student explicitly accepts or declines it — see
-// respondToPromotion in data.js. That's exactly a "decision waiting on
+// respondToPromotion in data-life.js. That's exactly a "decision waiting on
 // you", the same category as a big event, but it had no builder here at
 // all: the only place it previously surfaced was a one-off popup on page
 // load (checkPromotionNotification), which is easy to miss or click past
@@ -304,7 +304,7 @@ function notifSideHustleItems(me, cls) {
 
 // A student who already has a side hustle running needs the teacher's
 // sign-off to switch to a different one or a different check-in hour
-// (requestSideHustleChange in data.js) — the exact same "pending, then
+// (requestSideHustleChange in data-life.js) — the exact same "pending, then
 // approved or denied" shape as a marketplace listing or a classmate
 // sublet above, just for the hustle itself. Denial carries a note
 // (sideHustleDenialNote) that otherwise just sits on the user doc with
@@ -322,7 +322,7 @@ function notifSideHustleRequestItems(me, cls) {
       href: "student.html"
     });
   }
-  // No timestamp is stored on the denial itself (data.js only clears it
+  // No timestamp is stored on the denial itself (the data-*.js files only clear it
   // when the student submits a fresh request), so — like the loan/mortgage
   // reminders above — this is stamped with today's start and keeps showing
   // once per day for as long as it sits unaddressed, rather than vanishing
@@ -596,6 +596,9 @@ function notifUpdateBadge() {
   dot.classList.toggle("hidden", n === 0);
   const bell = document.getElementById("notifBell");
   if (bell) bell.setAttribute("aria-label", n ? `Notifications (${n} new)` : "Notifications");
+  // Phone menu button (sidebar-nav.js) shows a dot too, since the bell is
+  // hidden inside the closed menu there.
+  if (typeof sbSyncUnreadDot === "function") sbSyncUnreadDot();
 }
 
 function notifRenderList() {

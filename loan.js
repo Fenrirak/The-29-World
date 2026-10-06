@@ -207,7 +207,7 @@ async function updateLoanPreview() {
   // calculate in advance. Just flag the rate and let them reason about it.
   let msg = `This falls in the ${tier.rate}%/week range. Interest is charged as soon as you borrow, then again every Monday until it's paid off — the longer it takes you to pay it back, the more you'll end up owing.`;
   // maxLoanAmount is a TOTAL cap across every active loan a student is
-  // carrying at once (see takeLoan in data.js), so warn here using what's
+  // carrying at once (see takeLoan in data-money.js), so warn here using what's
   // already borrowed, not just this one amount, to match what the server
   // will actually enforce.
   if (cls.maxLoanAmount > 0) {

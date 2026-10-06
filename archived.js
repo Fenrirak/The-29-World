@@ -22,6 +22,7 @@ async function init() {
     return;
   }
   document.getElementById("pageTitle").textContent = `"${CLASS.name}" has been archived`;
+  t29PageReady();
 
   // Already chose memory lane earlier this session — skip straight in.
   if (isMemoryLaneActive(u.classCode)) {

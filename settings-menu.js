@@ -44,7 +44,7 @@ function dmSetOn(on) {
 }
 
 const SM_BUNDLES = {
-  sb: { css: "sidebar-nav.css", js: "sidebar-nav.js", setter: "sbSetOn" }
+  sb: { css: "sidebar-nav.css?v=173c63c1", js: "sidebar-nav.js?v=20c62d37", setter: "sbSetOn" }
 };
 
 // Loads a feature's CSS+JS the first time it's needed (idempotent — safe to
@@ -72,9 +72,22 @@ function smLoadFeature(name) {
   });
 }
 
+// The sidebar is on by default on phones/small tablets until someone
+// switches it off (see sbIsOn() in sidebar-nav.js and the loader in each
+// page's <head>) — so "is it on" isn't just "is the flag 1" for it.
+function smSidebarIsOn() {
+  try {
+    const flag = localStorage.getItem(SB_STORAGE_KEY);
+    if (flag !== null) return flag === "1";
+  } catch (e) {
+    return document.documentElement.classList.contains("sidebar-nav");
+  }
+  return !!window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
+}
+
 function smWireToggle(cb, name, storageKey) {
   if (!cb) return;
-  cb.checked = smReadFlag(storageKey);
+  cb.checked = name === "sb" ? smSidebarIsOn() : smReadFlag(storageKey);
   cb.addEventListener("change", () => {
     const on = cb.checked;
     smLoadFeature(name).then(() => window[SM_BUNDLES[name].setter](on));
@@ -106,12 +119,20 @@ function smBuildPopover() {
     <div class="settings-popover-row">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Sidebar navigation</div>
-        <div class="settings-popover-desc">Move the menu to a side panel instead of the top bar — a slide-out drawer on phones.</div>
+        <div class="settings-popover-desc">Show the menu as a side panel instead of the top bar — a slide-out menu on phones (on by default there).</div>
       </div>
       <label class="lg-switch">
         <input type="checkbox" id="t29SidebarNavToggle">
         <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
       </label>
+    </div>` : ""}
+    ${typeof t29TourForThisPage === "function" && t29TourForThisPage() ? `
+    <div class="settings-popover-row" id="t29TourRow" style="cursor:pointer;">
+      <div class="settings-popover-text">
+        <div class="settings-popover-title">Show me around</div>
+        <div class="settings-popover-desc">A one-minute tour of this page.</div>
+      </div>
+      <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
     </div>` : ""}
     <div class="settings-popover-row" id="t29ChangePasswordRow" style="cursor:pointer;">
       <div class="settings-popover-text">
@@ -135,9 +156,18 @@ function smBuildPopover() {
 
   if (smHasSidebar()) smWireToggle(pop.querySelector("#t29SidebarNavToggle"), "sb", SB_STORAGE_KEY);
 
-  // openPasswordModal() lives in data.js (loaded on every page) — the
+  // tour.js is only loaded on pages that have a tour (the two dashboards).
+  const tourRow = pop.querySelector("#t29TourRow");
+  if (tourRow) {
+    tourRow.addEventListener("click", () => {
+      smClosePopover();
+      t29StartTour();
+    });
+  }
+
+  // openPasswordModal() lives in data-core.js (loaded on every page) — the
   // typeof guard is defensive only, in case some future page ever loads
-  // this file without data.js.
+  // this file without the data-*.js files.
   const pwRow = pop.querySelector("#t29ChangePasswordRow");
   if (pwRow) {
     if (typeof openPasswordModal === "function") {

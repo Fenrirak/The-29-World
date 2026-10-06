@@ -282,7 +282,7 @@ async function refreshGamblingAccountCard() {
 }
 
 // After a buy-in or cash-out, the class doc's cached read is dropped
-// automatically (see installReadCache in data.js), so this re-fetch always
+// automatically (see installReadCache in data-core.js), so this re-fetch always
 // picks up the entry that write just logged. Kept separate from
 // refreshGamblingAccountCard() (which only reads the lightweight balance/
 // limits view, not the txns array) so a buy-in/cash-out doesn't pay for a
@@ -375,7 +375,7 @@ async function spin() {
     // — see .anw-modal-overlay — sits above it), and the one element that
     // COULD spoil the result early, the floating balance widget, is kept
     // separate on purpose (see _anwOnWriteSettled/_anwShowsChips in
-    // data.js) and untouched by render(). So start it now and let it run
+    // the data-*.js files) and untouched by render(). So start it now and let it run
     // underneath the animation instead of waiting for the animation to
     // finish first — on a slow connection this hides most or all of that
     // fetch behind time already being spent watching the wheel spin.
@@ -392,7 +392,7 @@ async function spin() {
     // The chip balance already changed server-side the instant
     // placeRouletteBet() resolved, well before the wheel finished
     // spinning — the floating widget deliberately doesn't auto-refresh
-    // on that write (see _anwOnWriteSettled/_anwShowsChips in data.js) so
+    // on that write (see _anwOnWriteSettled/_anwShowsChips in data-core.js) so
     // it can't spoil the result early. Now that the animation and result
     // message are both showing, it's safe to bring the widget up to date.
     anwRefreshBalanceWidget();
@@ -737,7 +737,7 @@ async function bjFinalizeRound(round) {
   // settled server-side well before this reveal finished animating, and
   // the floating widget deliberately skipped auto-refreshing on that
   // write so it couldn't spoil the outcome early (see _anwOnWriteSettled/
-  // _anwShowsChips in data.js). The reveal is fully shown now, so bring
+  // _anwShowsChips in data-core.js). The reveal is fully shown now, so bring
   // it up to date.
   anwRefreshBalanceWidget();
   // These two used to run one after another (three network round-trips in
@@ -803,7 +803,7 @@ function bjOutcomeClass(o) {
   if (o === "push") return "push";
   return "lost";
 }
-// Small client-side mirror of data.js's bjCardValue, just for deciding
+// Small client-side mirror of data-markets.js's bjCardValue, just for deciding
 // which action buttons to show — the server independently re-validates
 // every action, so this is only ever a UI convenience.
 function bjCardValueClient(rank) {
@@ -1101,7 +1101,7 @@ function mountBjRotatePrompt() {
 
 function switchMode(mode) {
   MODE = mode;
-  // Tells the floating balance widget (data.js) to switch between showing
+  // Tells the floating balance widget (the data-*.js files) to switch between showing
   // cash (Account tab) and chips (Roulette/Blackjack) — a no-op if the
   // widget isn't mounted (e.g. for a teacher).
   if (typeof anwSetGamblingMode === "function") anwSetGamblingMode(mode);

@@ -71,6 +71,7 @@ function paintChrome() {
   document.getElementById("iconBcRate").innerHTML = icon("percent", 26);
   document.getElementById("marketLink").innerHTML = icon("chart", 14) + " Go to Stock Market";
   document.getElementById("reportCardBtn").innerHTML = icon("idcard", 14) + " My report card";
+  document.getElementById("hGoals").innerHTML = icon("trophy", 18) + " My savings goals";
 }
 
 async function init() {
@@ -89,7 +90,7 @@ async function init() {
   paintChrome();
   // BUGFIX: get a server-trustworthy "now" before any of the day-gated
   // jobs below decide "has this already run today?" — see
-  // syncServerClock in data.js for why a device's own clock isn't good
+  // syncServerClock in data-core.js for why a device's own clock isn't good
   // enough for that check. Started here, in parallel with the first paint
   // below, so it doesn't add to the time before the student first sees
   // their balance; only the jobs themselves wait for it.
@@ -101,7 +102,7 @@ async function init() {
   // chunk of load time, especially on a slow mobile connection. Running
   // them together cuts that to roughly the time of the single slowest one.
   // Note: mortgage payments are NOT auto-deducted here (see payMortgage in
-  // data.js) — students pay their own weekly installment on the due day.
+  // the data-*.js files) — students pay their own weekly installment on the due day.
   await t29FirstPaint(render);
   await T29_CLOCK_SYNC;
   const T29_STARTUP_JOBS = Promise.all([
@@ -121,12 +122,19 @@ async function init() {
   await checkAdjustmentPopup(u.username, u.classCode);
   await checkAndShowPromotionPopup(u.username);
   await render();
+  // Keeps the family link's summary (if this student has made one) up to
+  // date — see "Parent view" in data-money.js. Quiet, and at most every
+  // couple of hours per device.
+  Promise.all([getUserCached(u.username), getClassCached(u.classCode)])
+    .then(([me, cls]) => refreshParentViewIfStale(me, cls))
+    .catch(() => {});
+  if (typeof t29MaybeStartTour === "function") t29MaybeStartTour("student", u);
   // Keeps the side hustle check-in window (and everything else) in sync
   // with the clock even if the student just leaves the tab open. Paused
   // while the tab is hidden — this re-reads the user, the class AND the
   // roster each time, which is real data and battery on a phone that
   // isn't even looking at the page. Same approach as the balance widget
-  // in data.js, and it catches up with one render on the way back.
+  // in the data-*.js files, and it catches up with one render on the way back.
   let refreshTimer = setInterval(render, 30000);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
@@ -156,6 +164,8 @@ async function render() {
   document.getElementById("jobLabel").textContent = job
     ? (myTier ? `${myTier.name} — ${fmtMoney(myTier.wage)}/payday` : `${job.title}/payday`)
     : "No job assigned";
+
+  renderGoals(me);
 
   const lockReasons = await getModuleLockReasons(me.username, me.classCode);
   const lockedModules = Object.keys(lockReasons);
@@ -219,12 +229,12 @@ async function render() {
   mbody.innerHTML = "";
   document.getElementById("noCompanies").classList.toggle("hidden", cls.companies.length > 0);
   // "Since Monday" reuses the same Monday-of-the-current-week key and
-  // price-lookup helpers the weekly stock estimate (data.js) already uses,
+  // price-lookup helpers the weekly stock estimate (the data-*.js files) already uses,
   // so this figure lines up with what students see there.
   const mondayKey = budgetWeekStartKey();
   // All-time $ / % per company: unrealized (current holdings vs. what they
   // cost) plus realized (locked in from past sells/delistings). See the
-  // big comment on stockAllTimeGain() in data.js for exactly what this can
+  // big comment on stockAllTimeGain() in data-money.js for exactly what this can
   // and can't see — a "*" after a row's all-time figures means that row's
   // number might be missing history that's no longer retrievable (a
   // legacy holding bought before this feature existed, or an older sale
@@ -328,6 +338,85 @@ async function render() {
     `;
     bpBox.appendChild(row);
   });
+}
+
+/* ---------------- Savings goals ----------------
+   See "Savings goals" in data-money.js. Progress comes straight from the
+   Savings balance on the user doc render() already read — no extra reads. */
+function renderGoals(me) {
+  const goals = savingsGoalProgress(me);
+  const list = document.getElementById("goalList");
+  document.getElementById("noGoals").classList.toggle("hidden", goals.length > 0);
+  document.getElementById("addGoalBtn").classList.toggle("hidden", goals.length >= MAX_SAVINGS_GOALS);
+  list.innerHTML = goals.map((g, i) => `
+    <div class="goal-row${g.reached ? " reached" : ""}">
+      <div class="goal-head">
+        <strong class="goal-name">${escapeHtml(g.name)}</strong>
+        ${g.reached ? `<span class="badge mint">${icon("star", 12)} Reached!</span>` : ""}
+        <span class="goal-amounts">${fmtMoney(g.saved)} of ${fmtMoney(g.target)}</span>
+      </div>
+      <div class="rpt-bar-track goal-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${g.pct}" aria-label="${escapeHtml(g.name)}: ${g.pct}% saved">
+        <div class="rpt-bar-fill ${g.reached ? "mint" : "gold"}" style="width:${g.pct}%"></div>
+      </div>
+      <div class="goal-foot">
+        <span class="muted-small">${g.reached
+          ? "You've saved enough! Withdraw it from Savings to buy it, or keep it growing."
+          : `${fmtMoney(g.target - g.saved)} to go`}</span>
+        <span class="goal-actions">
+          ${i > 0 ? `<button type="button" class="link-btn" onclick="moveGoalUpClick('${escapeJsAttr(g.id)}')">Move up</button>` : ""}
+          <button type="button" class="link-btn" onclick="removeGoalClick('${escapeJsAttr(g.id)}', '${escapeJsAttr(g.name)}')">Remove</button>
+        </span>
+      </div>
+    </div>
+  `).join("");
+  celebrateNewlyReachedGoals(me.username, goals);
+}
+
+// A little "well done" the first time each goal is reached (remembered per
+// device, so it isn't repeated on every refresh).
+function celebrateNewlyReachedGoals(username, goals) {
+  const key = "t29_goals_reached_" + username;
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) { seen = []; }
+  const reachedIds = goals.filter(g => g.reached).map(g => g.id);
+  goals.filter(g => g.reached && !seen.includes(g.id)).forEach(g => {
+    t29Toast(`🎉 Goal reached: ${g.name}! You've saved ${fmtMoney(g.target)}.`, { type: "success", duration: 6000 });
+  });
+  try { localStorage.setItem(key, JSON.stringify(reachedIds)); } catch (e) { /* ignore */ }
+}
+
+function toggleGoalForm(show) {
+  document.getElementById("goalForm").classList.toggle("hidden", !show);
+  document.getElementById("goalMsg").innerHTML = "";
+  if (show) document.getElementById("goalName").focus();
+}
+
+async function submitGoal(e) {
+  e.preventDefault();
+  const btn = document.getElementById("goalSaveBtn");
+  const msg = document.getElementById("goalMsg");
+  btn.disabled = true;
+  msg.innerHTML = `<p class="muted-small">Saving…</p>`;
+  const res = await addSavingsGoal(CURRENT.username, document.getElementById("goalName").value, document.getElementById("goalTarget").value);
+  btn.disabled = false;
+  if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`; return false; }
+  document.getElementById("goalForm").reset();
+  toggleGoalForm(false);
+  await render();
+  return false;
+}
+
+async function removeGoalClick(goalId, name) {
+  if (!confirm(`Remove your goal "${name}"? Your savings stay exactly where they are.`)) return;
+  const res = await removeSavingsGoal(CURRENT.username, goalId);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
+}
+
+async function moveGoalUpClick(goalId) {
+  const res = await moveSavingsGoalUp(CURRENT.username, goalId);
+  if (!res.ok) { alert(res.error); return; }
+  await render();
 }
 
 /* ---------------- Lifestyle-based module locks ---------------- */
@@ -648,7 +737,7 @@ function closeLifestyleBreakdown() {
 }
 
 // Settings (gear icon), Dark Mode, Sidebar Navigation, and Change password
-// are all handled by the shared settings-menu.js popover + data.js's
+// are all handled by the shared settings-menu.js popover + the data layer's
 // openPasswordModal()/_pwBuildModal(), exactly like every other page.
 // This page used to hardcode its own second copy of all of that — see the
 // changelog / audit notes for why it was removed.

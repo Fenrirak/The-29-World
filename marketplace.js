@@ -2,7 +2,7 @@
    Students trading with each other at prices they set, next to (not
    instead of) the teacher's fixed-price store. Teacher view is settings +
    moderation; student view is sell / my listings / browse / sold prices.
-   Every rule lives in data.js — this file is presentation only.
+   Every rule lives in the data-*.js files — this file is presentation only.
 ================================================================================ */
 let CURRENT, IS_TEACHER;
 let CLS = null, ME = null;

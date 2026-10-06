@@ -1,6 +1,6 @@
 /* ===================== The 29 World — random event popups =====================
    Weekly random events are assigned to every student once per NZ calendar
-   week (see processWeeklyEvents in data.js), but each event gets its own
+   week (see processWeeklyEvents in data-life.js), but each event gets its own
    random "revealAt" moment spread across the following day or so — so a
    student who was given 3 events doesn't see them (or feel their balance
    change) all at once. This file:
@@ -8,7 +8,7 @@
       never a batch — no matter how many are queued up.
    2. For fixed-amount events, doesn't apply the balance change until the
       exact moment it's about to show the popup (via revealFixedEvent in
-      data.js) — so a student's balance can never change silently ahead of
+      the data-*.js files) — so a student's balance can never change silently ahead of
       them actually seeing what happened and why.
    3. For multiple-choice events, shows a forced modal that must be
       answered before the student can continue (unchanged from before).
@@ -35,11 +35,11 @@ async function checkWeeklyEventPopup(username, classCode) {
   if (!username || !classCode) return;
   if (anyModalShowing()) return; // something's already showing
   // PERF FIX: this, checkBigEventPopup and checkAdjustmentPopup (below)
-  // and checkPromotionNotification (data.js) all run back-to-back, in
+  // and checkPromotionNotification (data-life.js) all run back-to-back, in
   // this order, from every page's init() (see the callers list — that's
   // ~17 pages), and each used to call the uncached getClass()/getUser()
   // — the ones the write-path/background-job functions elsewhere in
-  // data.js deliberately use because THEY need guaranteed-fresh state for
+  // the data-*.js files deliberately use because THEY need guaranteed-fresh state for
   // a read-modify-write. These four are pure reads with no such need, so
   // that bought nothing but up to 4 extra sequential Firestore round
   // trips on every single page load, back-to-back, on top of the ~9

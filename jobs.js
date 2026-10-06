@@ -2,7 +2,7 @@ let CURRENT, IS_TEACHER, CLASS_CODE;
 let JOBS_CACHE = [];
 
 /* ── Avatar helpers (also in teacher.js / student.js — duplicated here
-      since jobs.html loads only data.js + jobs.js) ────────────────── */
+      since jobs.html loads only the data-*.js files + jobs.js) ────────────────── */
 const AVATAR_COLORS = ["c1", "c2", "c3", "c4", "c5"];
 function avatarClass(u) {
   let h = 0;

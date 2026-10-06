@@ -15,7 +15,7 @@ function comfortStars(n) {
 }
 
 // Small inline "recent days" price trend chart for a property listing —
-// same look as the Stock Market's own sparkline() (data.js's
+// same look as the Stock Market's own sparkline() (the data layer's
 // applyPropertyMarketDayMoves keeps the two features' price history in
 // the same shape), kept as its own copy here since this page doesn't load
 // market.js. Green when the most recent point is higher than the one
@@ -130,7 +130,7 @@ async function init() {
   // BUGFIX: this page runs the same day-gated jobs (automations, rent,
   // interest, term deposits...) as bank.js/teacher.js/student.js but was
   // missing the server-clock sync those pages already do first — see
-  // syncServerClock in data.js. Without it, a device with a wrong local
+  // syncServerClock in data-core.js. Without it, a device with a wrong local
   // clock decides "today" for every job below off its own drifted clock,
   // which is exactly what makes an automatic payment fire more than once
   // in the same real day. Kicked off here, in parallel with the first
@@ -171,7 +171,7 @@ async function init() {
 }
 
 // Groups the flat list of per-unit property records into listings (all
-// units sharing a groupId — see data.js). Properties saved before this
+// units sharing a groupId — see the data-*.js files). Properties saved before this
 // feature existed have no groupId, so they fall back to being their own
 // group of 1, exactly as before.
 function groupProperties(props) {
@@ -230,7 +230,7 @@ async function render() {
     const available = units.filter(u => !u.owner);
     const myUnit = units.find(u => u.owner === me.username);
 
-    // Daily price movement — see applyPropertyMarketDayMoves in data.js.
+    // Daily price movement — see applyPropertyMarketDayMoves in data-property.js.
     const hist = p.priceHistory && p.priceHistory.length ? p.priceHistory : [p.price];
     const chg = propertyDailyChange(p);
     const chgClass = chg.diff > 0 ? "ticker-up" : chg.diff < 0 ? "ticker-down" : "";
@@ -238,7 +238,7 @@ async function render() {
     const chgBadge = hist.length > 1 ? ` <span class="${chgClass} muted-small">(${chgSign}${Math.abs(chg.pct).toFixed(1)}% today)</span>` : "";
     const listingRange = p.priceRange || cls.propertyPriceRange || { min: 0.5, max: 2 };
     // Same price the server will actually charge (discount + tax applied),
-    // computed with the exact same shared functions data.js uses server-side
+    // computed with the exact same shared functions the data-*.js files use server-side
     // so the minimum deposit shown here never drifts from what buyProperty
     // enforces. Only meaningful when this listing offers financing.
     let minDeposit = 0;
@@ -336,7 +336,7 @@ async function runPropertyMarketDay() {
   await render();
 }
 // id is any unit's id within the listing (see setListingPriceRange in
-// data.js) — the msg box lives at msg-<groupId>, so this looks up the
+// the data-*.js files) — the msg box lives at msg-<groupId>, so this looks up the
 // listing's groupId fresh rather than trying to thread it through the
 // onclick call.
 async function overridePriceClick(id) {
@@ -979,7 +979,7 @@ async function addProp(e) {
 }
 
 // id is any unit's id within the listing — edits apply to the whole
-// group (see updateProperty in data.js). Quantity shown is how many
+// group (see updateProperty in data-property.js). Quantity shown is how many
 // units currently exist in that group.
 async function editProp(id) {
   const cls = await getClassCached(CURRENT.classCode);
@@ -1032,7 +1032,7 @@ async function deleteProp(id) {
    student's own "sell back" button route through here, so the two ways of
    triggering a sale always show the exact same breakdown before it
    actually happens. Built the same way the change-password popup is
-   (see _pwBuildModal in data.js) — plain DOM injection reusing the
+   (see _pwBuildModal in data-core.js) — plain DOM injection reusing the
    .anw-modal-overlay/.anw-modal-card classes already in style.css, so
    there's no extra HTML to keep in sync and no new CSS needed. */
 function _sellBuildModal() {
@@ -1068,7 +1068,7 @@ function closeSellModal() {
 }
 // Looks the property up fresh, works out exactly what selling it right now
 // would pay out — current market price, minus any mortgage payoff and
-// break fee (see sellProperty in data.js, which this mirrors so the
+// break fee (see sellProperty in data-property.js, which this mirrors so the
 // number shown here is never different from what the student/owner
 // actually gets) — shows that in the popup above, and only calls
 // sellProperty if the user actually confirms.
@@ -1149,7 +1149,7 @@ async function buyFinanced(gid) {
   // value can still slip through, so re-validate here before it's sent —
   // both the 10% minimum (read straight off the input's own min attribute,
   // so it always matches what was actually shown) and the student's cash
-  // balance. buyProperty in data.js also clamps/checks server-side as the
+  // balance. buyProperty in data-property.js also clamps/checks server-side as the
   // real line of defense; this just gives a clear message instead of a
   // silent correction or a generic error.
   const depositInput = document.getElementById("depositAmt-" + gid);
@@ -1271,7 +1271,7 @@ async function addNpcProp(e) {
   return false;
 }
 // id is any unit's id within the listing — edits apply to the whole
-// group (see updateNpcProperty in data.js). Quantity shown is how many
+// group (see updateNpcProperty in data-property.js). Quantity shown is how many
 // units currently exist in that group.
 async function editNpcProp(id) {
   const cls = await getClassCached(CURRENT.classCode);

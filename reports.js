@@ -2,11 +2,11 @@
    Teacher side: a live "this month" report for the whole class (net
    worth, savings rate, biggest expense category, loan history per
    student), plus a permanent list of previously saved report cards
-   (see archiveClassReport() in data.js) that survive class resets.
+   (see archiveClassReport() in data-money.js) that survive class resets.
    Student side: the same breakdown, but scoped to just their own numbers,
    with a simple net-worth trend built from their own past saved reports,
    plus an "entire history" breakdown that never resets (see
-   recordReportActivity()/reportLifetime in data.js).
+   recordReportActivity()/reportLifetime in data-money.js).
 ========================================================================== */
 
 let CURRENT, IS_TEACHER, CLASS_CODE;
@@ -75,6 +75,14 @@ async function init() {
   // of the background jobs above, so the copy fetched a moment ago is
   // still current. Only the live report is regenerated.
   await showCurrentPeriod();
+  // Keep family links' summaries up to date (quietly, and only when due).
+  if (IS_TEACHER) {
+    refreshParentViewsForClass(CLASS_CODE);
+  } else {
+    Promise.all([getUserCached(u.username), getClassCached(u.classCode)])
+      .then(([me, cls]) => refreshParentViewIfStale(me, cls))
+      .catch(() => {});
+  }
 }
 
 async function showCurrentPeriod() {
@@ -296,6 +304,145 @@ function studentReportHTML(s) {
     <h4>${icon("handshake", 16)} Loan history</h4>
     ${renderLoanHistory(s.loans)}
   `;
+}
+
+/* ---------------- Family links ----------------
+   A read-only link to one student's report card for their family — see
+   "Parent view" in data-money.js. A student can share their own; a teacher
+   can make one for any student in the class, or for everyone at once. */
+function openFamilyModal(title, bodyHtml) {
+  document.getElementById("familyModalTitle").innerHTML = icon("users", 20) + " " + escapeHtml(title);
+  document.getElementById("familyModalBody").innerHTML = bodyHtml;
+  document.getElementById("familyModal").classList.remove("hidden");
+}
+
+function closeFamilyModal() {
+  document.getElementById("familyModal").classList.add("hidden");
+}
+
+const FAMILY_LINK_EXPLAINER = `<p class="muted-small">Anyone with this link can see this report card — no login needed, and they can't change anything. It updates whenever the student or their teacher uses the site. Only share it with family.</p>`;
+
+function familyLinkBoxHtml(url, username) {
+  return `
+    ${FAMILY_LINK_EXPLAINER}
+    <label for="familyLinkInput">Family link</label>
+    <input id="familyLinkInput" readonly value="${escapeHtml(url)}" onclick="this.select()">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn gold" onclick="copyFamilyLink(this, document.getElementById('familyLinkInput').value)">${icon("send", 15)} Copy link</button>
+      <a class="btn secondary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Preview</a>
+      <button class="btn coral" onclick="turnOffFamilyLinkClick('${escapeJsAttr(username)}')">Turn link off</button>
+    </div>
+    <div id="familyLinkMsg"></div>`;
+}
+
+async function copyFamilyLink(btn, text) {
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    copied = true;
+  } catch (e) {
+    const input = document.getElementById("familyLinkInput");
+    if (input) {
+      input.select();
+      try { copied = document.execCommand("copy"); } catch (e2) { copied = false; }
+    }
+  }
+  t29Toast(copied ? "Link copied — paste it into a message or email." : "Couldn't copy automatically — select the link and copy it.", { type: copied ? "success" : "info" });
+}
+
+async function showFamilyLinkFor(username, name) {
+  openFamilyModal(`Family link — ${name}`, `<p class="muted-small"><span class="t29-spinner"></span> Making the link…</p>`);
+  const res = await createParentLink(username);
+  if (!res.ok) {
+    document.getElementById("familyModalBody").innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`;
+    return;
+  }
+  document.getElementById("familyModalBody").innerHTML = familyLinkBoxHtml(res.url, username);
+}
+
+function showMyFamilyLink() {
+  showFamilyLinkFor(CURRENT.username, "my report card");
+}
+
+function showModalStudentFamilyLink() {
+  if (!MODAL_STUDENT) return;
+  showFamilyLinkFor(MODAL_STUDENT.username, MODAL_STUDENT.name);
+}
+
+async function turnOffFamilyLinkClick(username) {
+  if (!confirm("Turn this link off? Anyone who has it won't be able to open it any more. You can make a new link later.")) return;
+  const res = await turnOffParentLink(username);
+  if (!res.ok) {
+    const msg = document.getElementById("familyLinkMsg");
+    if (msg) msg.innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`;
+    return;
+  }
+  t29Toast("Link turned off.", { type: "success" });
+  if (IS_TEACHER && document.getElementById("familyClassList")) await openClassFamilyLinks();
+  else closeFamilyModal();
+}
+
+// Teacher: every student's link in one place — handy before parent
+// interviews or a newsletter.
+async function openClassFamilyLinks() {
+  openFamilyModal("Family links", `<p class="muted-small"><span class="t29-spinner"></span> Loading…</p>`);
+  const students = (await getClassStudents(CLASS_CODE)).slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (!students.length) {
+    document.getElementById("familyModalBody").innerHTML = `<p class="muted-small">No students in this class yet.</p>`;
+    return;
+  }
+  const withLinks = students.filter(s => s.parentViewToken);
+  document.getElementById("familyModalBody").innerHTML = `
+    ${FAMILY_LINK_EXPLAINER}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      ${withLinks.length < students.length ? `<button class="btn small gold" onclick="makeAllFamilyLinks(this)">Make links for everyone</button>` : ""}
+      ${withLinks.length ? `<button class="btn small secondary" onclick="copyAllFamilyLinks()">Copy all links</button>` : ""}
+    </div>
+    <div id="familyClassList">
+      ${students.map(s => `
+        <div class="auto-row">
+          <div class="auto-details"><strong>${escapeHtml(s.name)}</strong>
+            <div class="muted-small">${s.parentViewToken ? "Link is on" : "No link yet"}</div></div>
+          ${s.parentViewToken
+            ? `<button class="btn small secondary" onclick="copyFamilyLink(this, '${escapeJsAttr(parentViewUrl(s.parentViewToken))}')">Copy</button>
+               <button class="btn small coral" onclick="turnOffFamilyLinkClick('${escapeJsAttr(s.username)}')">Turn off</button>`
+            : `<button class="btn small gold" onclick="makeOneFamilyLink(this, '${escapeJsAttr(s.username)}')">Make link</button>`}
+        </div>`).join("")}
+    </div>
+    <div id="familyLinkMsg"></div>`;
+}
+
+async function makeOneFamilyLink(btn, username) {
+  btn.disabled = true;
+  const res = await createParentLink(username);
+  if (!res.ok) { btn.disabled = false; alert(res.error); return; }
+  await openClassFamilyLinks();
+}
+
+async function makeAllFamilyLinks(btn) {
+  btn.disabled = true;
+  btn.innerHTML = `<span class="t29-spinner"></span> Making links…`;
+  const students = await getClassStudents(CLASS_CODE);
+  let failed = 0;
+  for (const s of students) {
+    if (s.parentViewToken) continue;
+    const res = await createParentLink(s.username);
+    if (!res.ok) failed++;
+  }
+  await openClassFamilyLinks();
+  if (failed) alert(`${failed} link${failed === 1 ? "" : "s"} couldn't be made. Please try again.`);
+}
+
+async function copyAllFamilyLinks() {
+  const students = (await getClassStudents(CLASS_CODE)).filter(s => s.parentViewToken)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const text = students.map(s => `${s.name}: ${parentViewUrl(s.parentViewToken)}`).join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    t29Toast(`Copied ${students.length} link${students.length === 1 ? "" : "s"} — one per line, with each student's name.`, { type: "success" });
+  } catch (e) {
+    alert(text);
+  }
 }
 
 /* ---------------- Export / print ---------------- */

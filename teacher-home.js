@@ -17,7 +17,7 @@ async function init() {
   CURRENT = u;
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintIconSlots();
-  await render();
+  await t29FirstPaint(render);
 }
 
 async function render() {

@@ -4,9 +4,9 @@
    quiz comes to THEM, as a popup, the moment they try to open the module
    it guards. Pass it and the module opens straight away.
 
-   Loaded on every page (after data.js). applyNavModuleLocks() in data.js
+   Loaded on every page (after data-life.js). applyNavModuleLocks() in data-life.js
    calls t29OpenQuizGate() for any nav link locked by a quiz; nothing else
-   has to know this file exists. All the grading lives in data.js
+   has to know this file exists. All the grading lives in the data-*.js files
    (submitQuizAttempt) — this is only the popup around it.
 ========================================================================== */
 

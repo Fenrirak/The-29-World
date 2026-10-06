@@ -60,7 +60,7 @@ async function init() {
   enablePasswordToggles();
   // BUGFIX: get a server-trustworthy "now" before any of the day-gated
   // jobs below decide "has this already run today?" — see
-  // syncServerClock in data.js for why a device's own clock isn't good
+  // syncServerClock in data-core.js for why a device's own clock isn't good
   // enough for that check. Started here, in parallel with the first paint
   // below, so it doesn't add to the time before the page first paints;
   // only the jobs themselves wait for it.
@@ -89,7 +89,7 @@ async function init() {
     // the full class-wide sweep (and act as a safety net for anyone who
     // hasn't opened anything yet). A student session only ever pays
     // their OWN interest — see the big comment above these two functions
-    // in data.js for why a student's login can't safely pay classmates.
+    // in data-core.js for why a student's login can't safely pay classmates.
     safeBgJob(IS_TEACHER ? applyInterestToClassIfDue(u.classCode) : applyMyInterestIfDue(u.username), "autoInterest"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
@@ -163,7 +163,14 @@ async function render() {
     ? recipients.map(r => `<option value="${escapeHtml(r.username)}">${escapeHtml(r.label)}</option>`).join("")
     : `<option value="">No one to pay yet</option>`;
   document.getElementById("toStudent").innerHTML = optsHtml;
-  document.getElementById("autoTo").innerHTML = optsHtml;
+  // The automatic-payment recipient list gets one extra option teachers can
+  // pick: pay every student the same amount on the same schedule. Not added
+  // to "Send to" above — that's a one-off, and Quick Transactions on the
+  // Dashboard already covers a one-off "pay everyone" the same way.
+  const autoOptsHtml = (IS_TEACHER && allStudents.length)
+    ? `<option value="${AUTOPAY_ALL_STUDENTS}">All students (${allStudents.length})</option>${optsHtml}`
+    : optsHtml;
+  document.getElementById("autoTo").innerHTML = autoOptsHtml;
 
   // automations
   const autos = await getStudentAutomations(me.classCode, me.username);
@@ -188,9 +195,15 @@ async function render() {
       listBox.appendChild(row);
       continue;
     }
-    const toUser = await getUserCached(a.toUser);
+    let toLabel;
+    if (a.toUser === AUTOPAY_ALL_STUDENTS) {
+      toLabel = `All students (${allStudents.length})`;
+    } else {
+      const toUser = await getUserCached(a.toUser);
+      toLabel = escapeHtml(toUser ? toUser.name : a.toUser);
+    }
     row.innerHTML = `
-      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${escapeHtml(toUser ? toUser.name : a.toUser)}</strong>
+      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>
         &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
         ${a.note ? `<div class="muted-small">${escapeHtml(a.note)}</div>` : ""}
         ${a.lastRun ? `<div class="muted-small">Last paid: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
@@ -283,7 +296,7 @@ async function render() {
       // weekly events (which always log `to: student` and carry the
       // direction in the sign of `amount`), big events log a windfall as
       // `to: student` and a cost as `from: student`, both with a POSITIVE
-      // amount — see processWeeklyBigEvents/resolveBigEvent in data.js.
+      // amount — see processWeeklyBigEvents/resolveBigEvent in data-life.js.
       // So the direction has to come from to/from, exactly as
       // classifyTxnForReport already does for this type.
       sign = t.to === me.username ? "+" : (t.from === me.username ? "-" : "");
@@ -534,7 +547,7 @@ function cancelEditSavAuto() {
 }
 
 /* ---------------- Budgeting tool ----------------
-   All the arithmetic lives in data.js (buildBudgetView and friends); this
+   All the arithmetic lives in data-money.js (buildBudgetView and friends); this
    is only the rendering and the form handling. BUDGET_VIEW keeps the last
    built view around so the live "you've allocated X of Y" readout can
    recalculate as the student types, without touching the database or

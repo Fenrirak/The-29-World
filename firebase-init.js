@@ -1,6 +1,6 @@
 /* ===================== The 29 World — Firebase init =====================
    Loaded as an ES module (type="module" in the HTML), BEFORE icons.js,
-   settings-menu.js, data.js, and everything else, on every page.
+   settings-menu.js, the data-*.js files, and everything else, on every page.
 
    MIGRATION NOTE (compat -> modular SDK): this file used to load Firebase
    via the three "compat" CDN bundles (firebase-app-compat.js etc.), which
@@ -8,7 +8,7 @@
    the modular SDK — meaning a page paid for both the modular engine AND
    the compat wrapper around it. This file now imports the modular SDK
    directly (smaller download, less to parse on a phone), and builds a
-   small compat-SHAPED shim below so that data.js and every other file in
+   small compat-SHAPED shim below so that the data-*.js files and every other file in
    this app — which were all written against the old `fdb.collection(x)
    .doc(y).get()` / `firebase.auth()` style — keep working completely
    unchanged. Nothing outside this file needed to change for this switch.
@@ -59,7 +59,7 @@ const _auth = getAuth(_app);
        single most common compat/modular gotcha, and every read in this
        app (152 call sites) uses the compat property form.
      - doc refs expose `.get()/.set()/.update()/.delete()` directly,
-       matching every call site in data.js.
+       matching every call site in the data-*.js files.
    Doc refs returned by this shim carry the REAL modular DocumentReference
    internally (as `_ref`) so runTransaction()/batch() below can unwrap it
    and hand the genuine modular ref to the real transaction/batch — those
@@ -92,13 +92,13 @@ function _wrapCollectionRef(name) {
   return {
     doc(id) { return _wrapDocRef(doc(realCol, id)); },
     // Only ever used as classesCol().where("teacher","==",username).get()
-    // (see getTeacherClasses in data.js) — a single equality filter, so
+    // (see getTeacherClasses in data-core.js) — a single equality filter, so
     // this only needs to support one where() clause, not general chaining.
     where(field, op, value) {
       const q = query(realCol, where(field, op, value));
       return {
         // Only ever consumed via .forEach() (see getTeacherClasses in
-        // data.js) — .docs/.empty/.size aren't used anywhere, so this
+        // the data-*.js files) — .docs/.empty/.size aren't used anywhere, so this
         // doesn't bother exposing them.
         async get() {
           const snap = await getDocs(q);
@@ -119,7 +119,7 @@ const fdb = {
           const snap = await transaction.get(docRefShim._ref);
           return _wrapSnap(snap);
         },
-        // Every t.set() call site in data.js passes only (ref, data), so
+        // Every t.set() call site in the data-*.js files passes only (ref, data), so
         // this doesn't bother threading through a third options argument.
         set(docRefShim, data) { return transaction.set(docRefShim._ref, data); },
         update(docRefShim, data) { return transaction.update(docRefShim._ref, data); },
@@ -129,7 +129,7 @@ const fdb = {
     });
   },
   // Only ever used for the merge-set chunked batches in setStudentTimeLimit
-  // (see data.js) — batch.update()/.delete() aren't called anywhere in
+  // (see the data-*.js files) — batch.update()/.delete() aren't called anywhere in
   // this app, so this doesn't bother implementing them.
   batch() {
     const b = writeBatch(_db);
@@ -145,7 +145,7 @@ const fdb = {
 };
 
 /* ---------------- Compat-shaped Auth shim ----------------
-   Wraps the handful of Auth methods data.js actually calls (login/signup/
+   Wraps the handful of Auth methods data-core.js actually calls (login/signup/
    legacy-migration bridge/change-password). A wrapped "user" object below
    adds back the instance methods compat users had (.delete()/
    .reauthenticateWithCredential()/.updatePassword()) as thin calls to the
@@ -193,7 +193,7 @@ authFn.EmailAuthProvider = EmailAuthProvider;
 function firestoreFn() { return fdb; }
 firestoreFn.FieldValue = { serverTimestamp, increment, delete: deleteField };
 
-// Every other file in this app (data.js and beyond) is a plain classic
+// Every other file in this app (the data-*.js files and beyond) is a plain classic
 // <script>, not a module, so it can only see these via window — a
 // module's own top-level consts are NOT automatically global the way a
 // classic script's are.
@@ -206,7 +206,7 @@ window.firebase = { auth: authFn, firestore: firestoreFn };
 // which made every document readable/writable by any visitor, logged in
 // or not. Real per-account identity now comes from Firebase Auth's
 // email/password provider (see t29AuthEmail()/login()/createTeacherAndClass()/
-// createStudentAccount() in data.js), and firestore.rules checks the
+// createStudentAccount() in data-core.js), and firestore.rules checks the
 // SPECIFIC signed-in user against the document's owner, not just "is
 // someone signed in".
 //
@@ -215,7 +215,7 @@ window.firebase = { auth: authFn, firestore: firestoreFn };
 // session already exists (a real logged-in user, or nobody) before the
 // rest of the app makes its first Firestore call — it does NOT create a
 // new session itself. A page that needs someone to actually be logged in
-// still goes through requireLogin() in data.js, same as before.
+// still goes through requireLogin() in data-core.js, same as before.
 window.T29_AUTH_READY = new Promise(resolve => {
   const unsub = authShim.onAuthStateChanged(async (user) => {
     unsub();
@@ -244,7 +244,7 @@ window.T29_AUTH_READY = new Promise(resolve => {
     // Signing out a restored anonymous session here, before anything else
     // in the app runs, forces that visitor through a real login() instead
     // — which is exactly what runs the one-time legacy migration (see
-    // t29TryMigrateLegacyLogin() in data.js) and leaves them with a real,
+    // t29TryMigrateLegacyLogin() in data-core.js) and leaves them with a real,
     // fully-working per-account identity instead of a half-working one.
     // This never interferes with that migration's own brief, self-managed
     // signInAnonymously() call — that one signs itself back out again
@@ -264,7 +264,7 @@ window.T29_AUTH_READY = new Promise(resolve => {
 // BUGFIX: usernames only ever went through Firebase's own email-format
 // check starting with the password-encryption security fix — the
 // post-fix signup flow (createTeacherAndClass()/createStudentAccount() in
-// data.js) calls createUserWithEmailAndPassword() immediately, which
+// the data-*.js files) calls createUserWithEmailAndPassword() immediately, which
 // rejects an invalid email like "nathan liu@t29.local" (a space isn't
 // legal in an email address) right at signup. Before that fix, signup
 // just wrote a plain Firestore doc with no such check, so a legacy
@@ -272,7 +272,7 @@ window.T29_AUTH_READY = new Promise(resolve => {
 // with spaces or other characters that don't survive into a valid email.
 // On login, that invalid email made Firebase's identitytoolkit API
 // reject the request outright (e.g. "auth/invalid-email"), which isn't
-// one of the codes login() in data.js treats as "try the legacy
+// one of the codes login() in data-core.js treats as "try the legacy
 // migration fallback" — so a legacy account with a space in its username
 // was permanently stuck on "Incorrect username or password", regardless
 // of password.
