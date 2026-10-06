@@ -943,6 +943,7 @@ async function createTeacherAndClass(name, username, password, className) {
       t.set(classesCol().doc(code), cls);
     });
   } catch (e) {
+    console.warn("Teacher signup failed:", e && (e.code || e.message), e);
     // Don't leave an orphaned Auth account with no matching app data.
     await cred.user.delete().catch(() => {});
     return { ok: false, error: "Something went wrong creating your account. Please try again." };
@@ -961,6 +962,7 @@ function t29AuthErrorMessage(e) {
     case "auth/invalid-email": return "That username can't be used — try letters and numbers only.";
     case "auth/network-request-failed": return "Can't connect right now — check your internet connection and try again.";
     case "auth/too-many-requests": return "Too many attempts in a row. Wait a minute, then try again.";
+    case "auth/operation-not-allowed": return "New accounts are switched off right now. Ask your teacher (or check Firebase → Authentication → Sign-in method: Email/Password).";
     default: return "Something went wrong. Please try again.";
   }
 }
@@ -1335,6 +1337,7 @@ async function createStudentAccount(name, username, password, classCode) {
       t.update(classRef, { students: cls.students, txns: cls.txns });
     });
   } catch (e) {
+    console.warn("Student signup failed:", e && (e.code || e.message), e);
     await cred.user.delete().catch(() => {}); // don't leave an orphaned Auth account
     if (e.message === "NO_CLASS") return { ok: false, error: "That class code doesn't exist." };
     return { ok: false, error: "Something went wrong. Please try again." };

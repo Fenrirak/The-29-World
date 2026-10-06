@@ -101,31 +101,6 @@
     </div>
   </div>
 
-  <div class="card" id="goalsCard">
-    <div class="flex-between">
-      <h2 id="hGoals">My savings goals</h2>
-      <button class="btn small gold" type="button" id="addGoalBtn" onclick="toggleGoalForm(true)">Add a goal</button>
-    </div>
-    <p class="muted-small" style="margin-top:0;">Money in your <a href="bank.html">Savings account</a> counts towards your goals — your top goal fills up first.</p>
-    <div id="goalList"></div>
-    <p class="muted-small hidden" id="noGoals">No goals yet. What are you saving up for? A new bike, a phone, a house deposit…</p>
-    <form id="goalForm" class="hidden" onsubmit="return submitGoal(event)">
-      <div class="grid grid-2">
-        <div>
-          <label for="goalName">What are you saving for?</label>
-          <input id="goalName" maxlength="40" placeholder="e.g. New bike" required>
-        </div>
-        <div>
-          <label for="goalTarget">How much does it cost?</label>
-          <input id="goalTarget" type="number" min="0.01" step="0.01" placeholder="e.g. 120" required>
-        </div>
-      </div>
-      <button class="btn" type="submit" id="goalSaveBtn">Save goal</button>
-      <button class="btn secondary small" type="button" onclick="toggleGoalForm(false)">Cancel</button>
-      <div id="goalMsg"></div>
-    </form>
-  </div>
-
   <div class="card">
     <h2 id="hLeaderboard">Net worth ranking</h2>
     <p>Cash balance plus the value of everyone's shares, added together.</p>
@@ -167,22 +142,6 @@
       </table>
       </div>
     </div>
-  </div>
-
-  <div class="card">
-    <div class="flex-between">
-      <h2 id="hMarket">Market snapshot</h2>
-      <a class="btn small gold" href="market.html" id="marketLink">Go to Stock Market</a>
-    </div>
-    <div class="table-scroll">
-    <table>
-      <thead><tr><th>Company</th><th>Price</th><th>My shares</th><th>Since Mon ($)</th><th>Since Mon (%)</th><th>All-time ($)</th><th>All-time (%)</th></tr></thead>
-      <tbody id="marketSnapshot"></tbody>
-    </table>
-    </div>
-    <p class="muted-small">All-time = every share you've ever bought/sold in that company, gains and losses combined, compared to what you paid.</p>
-    <p class="muted-small hidden" id="allTimeNote">* means that row's all-time figure may be incomplete — either it includes shares bought before this feature existed (no recorded cost), or a past sale old enough to have aged out of the activity log.</p>
-    <p class="muted-small" id="noCompanies">Your teacher hasn't opened any companies yet.</p>
   </div>
 
   <div class="card" id="sideHustleCard">
@@ -242,6 +201,25 @@
     </div>
   </div>
 
+  <!-- Savings goals — filled in by savings-goals.js (same card as on the Bank page) -->
+  <div class="card" id="goalsCard"></div>
+
+  <div class="card">
+    <div class="flex-between">
+      <h2 id="hMarket">Market snapshot</h2>
+      <a class="btn small gold" href="market.html" id="marketLink">Go to Stock Market</a>
+    </div>
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Company</th><th>Price</th><th>My shares</th><th>Since Mon ($)</th><th>Since Mon (%)</th><th>All-time ($)</th><th>All-time (%)</th></tr></thead>
+      <tbody id="marketSnapshot"></tbody>
+    </table>
+    </div>
+    <p class="muted-small">All-time = every share you've ever bought/sold in that company, gains and losses combined, compared to what you paid.</p>
+    <p class="muted-small hidden" id="allTimeNote">* means that row's all-time figure may be incomplete — either it includes shares bought before this feature existed (no recorded cost), or a past sale old enough to have aged out of the activity log.</p>
+    <p class="muted-small" id="noCompanies">Your teacher hasn't opened any companies yet.</p>
+  </div>
+
   <div class="card">
     <h2 id="hActivity">My recent activity</h2>
     <div class="table-scroll">
@@ -277,15 +255,16 @@
 <script type="module" src="firebase-init.js?v=9f8488c9"></script>
 <script defer src="icons.js?v=a751849e"></script>
 <script defer src="settings-menu.js?v=a0bda1c9"></script>
-<script defer src="data-core.js?v=bd92cac2"></script>
+<script defer src="data-core.js?v=4ae975d1"></script>
 <script defer src="data-money.js?v=ede35439"></script>
 <script defer src="data-life.js?v=4584feb8"></script>
 <script defer src="data-property.js?v=9812dd26"></script>
 <script defer src="data-markets.js?v=066d2e90"></script>
-<script defer src="tour.js?v=863871dd"></script>
+<script defer src="tour.js?v=e6c08365"></script>
 <script defer src="events-ui.js?v=a9ca5788"></script>
 <script defer src="quiz-gate.js?v=4ed5e0c8"></script>
 <script defer src="notifications.js?v=ca299e12"></script>
-<script defer src="student.js?v=50e222c3"></script>
+<script defer src="savings-goals.js?v=ed3340bf"></script>
+<script defer src="student.js?v=ba6f5eaa"></script>
 </body>
 </html>

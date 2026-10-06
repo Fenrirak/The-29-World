@@ -137,12 +137,14 @@ async function render() {
 
   document.getElementById("savingsCard").classList.toggle("hidden", IS_TEACHER);
   document.getElementById("budgetCard").classList.toggle("hidden", IS_TEACHER);
+  document.getElementById("goalsCard").classList.toggle("hidden", IS_TEACHER);
   document.getElementById("budgetTeacherCard").classList.toggle("hidden", !IS_TEACHER);
   if (!IS_TEACHER) {
     document.getElementById("savingsBalance").textContent = fmtMoney(me.savings || 0);
     document.getElementById("savingsRateValue").textContent = (cls.interestRate || 0) + "%";
     document.getElementById("savingsRateNote").textContent =
       "Money in here earns interest at the rate below — it doesn't earn anything sitting in your cash balance unless your teacher has set a cash rate too. " + interestScheduleLabel(cls);
+    renderGoals(me); // see savings-goals.js
   }
 
   // Fetch the class roster once and reuse it for both the recipients
