@@ -38,32 +38,6 @@ function sbIsOn() {
   }
 }
 
-// Section headings shown between groups of links in the side menu (never
-// in the normal top bar — sidebar-nav.css hides them there). Each heading
-// goes just before the first link of its group that's on the page.
-const SB_NAV_GROUPS = [
-  { label: "Money", hrefs: ["bank.html", "termdeposit.html", "loan.html", "market.html"] },
-  { label: "Buy & sell", hrefs: ["store.html", "marketplace.html"] },
-  { label: "Life", hrefs: ["jobs.html", "transport.html", "property.html", "insurance.html", "tax.html", "bigevents.html", "life.html"] },
-  { label: "Games", hrefs: ["gambling.html"] },
-  { label: "Teacher tools", hrefs: ["quizzes.html", "reports.html"], teacherOnly: true }
-];
-
-function sbAddGroupLabels() {
-  const nav = document.querySelector(".topbar nav");
-  if (!nav || nav.querySelector(".sb-group-label")) return;
-  SB_NAV_GROUPS.forEach(group => {
-    const first = [...nav.querySelectorAll("a[href]")]
-      .find(a => group.hrefs.includes((a.getAttribute("href") || "").split("/").pop()));
-    if (!first) return;
-    const label = document.createElement("div");
-    label.className = "sb-group-label" + (group.teacherOnly ? " sb-group-teacher" : "");
-    label.setAttribute("aria-hidden", "true");
-    label.textContent = group.label;
-    nav.insertBefore(label, first);
-  });
-}
-
 // Mirrors the notification bell's unread badge onto the menu button, since
 // on a phone the bell itself is tucked away inside the closed menu.
 function sbSyncUnreadDot() {
@@ -100,7 +74,6 @@ function sbBuildScaffold() {
   sbBackdropEl.addEventListener("click", () => sbSetDrawerOpen(false));
   document.body.appendChild(sbBackdropEl);
 
-  sbAddGroupLabels();
   sbSyncUnreadDot();
 }
 

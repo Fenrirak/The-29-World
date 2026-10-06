@@ -2465,3 +2465,42 @@ html.dark-mode .t29-tour-card h3{color:var(--heading-text);}
 body:has(.t29-tour-offer) .t29-toasts{bottom:150px;}
 @media (max-width:640px){ body:has(.t29-tour-offer) .t29-toasts{bottom:220px;} }
 @media print{ .t29-tour, .t29-tour-offer, .t29-toasts, .t29-loadbar{display:none !important;} }
+
+/* ---------------- Phone top bar dropdowns ----------------
+   icons.js wraps each group of nav links in a .nav-group. Outside phone
+   top-bar view the wrapper vanishes from layout (display:contents) and
+   its button is hidden, so nothing changes there. */
+.nav-group{display:contents;}
+.nav-group-btn{display:none;}
+.nav-group-menu{display:contents;}
+
+@media (max-width: 900px){
+  html:not(.sidebar-nav) .topbar nav{flex-wrap:wrap;row-gap:6px;max-width:100%;}
+  html:not(.sidebar-nav) .nav-group{display:block;position:static;}
+  html:not(.sidebar-nav) .nav-group-btn{
+    display:inline-flex;align-items:center;gap:6px;
+    background:none;border:none;cursor:pointer;
+    color:#cfd8ea;font:inherit;font-weight:700;font-size:.85rem;
+    padding:9px 10px;border-radius:8px;min-height:38px;white-space:nowrap;
+  }
+  html:not(.sidebar-nav) .nav-group-btn:hover,
+  html:not(.sidebar-nav) .nav-group.open .nav-group-btn{background:rgba(255,255,255,0.1);color:#fff;}
+  html:not(.sidebar-nav) .nav-group.has-active .nav-group-btn{color:var(--gold);}
+  html:not(.sidebar-nav) .nav-group-caret{
+    width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+    transform:translateY(-2px) rotate(45deg);transition:transform .15s ease;
+  }
+  html:not(.sidebar-nav) .nav-group.open .nav-group-caret{transform:translateY(1px) rotate(-135deg);}
+  html:not(.sidebar-nav) .nav-group-menu{
+    display:none;position:fixed;left:12px;right:12px;z-index:60;
+    background:var(--navy-900);border-radius:12px;padding:6px;
+    box-shadow:0 12px 30px rgba(0,0,0,0.3);
+    max-height:70vh;overflow-y:auto;
+  }
+  html:not(.sidebar-nav) .nav-group.open .nav-group-menu{display:flex;flex-direction:column;gap:2px;}
+  html:not(.sidebar-nav) .nav-group-menu a{
+    justify-content:flex-start;padding:12px;min-height:44px;font-size:.95rem;
+  }
+  html:not(.sidebar-nav) .topbar .nav-group-menu a .nav-label{display:inline;}
+  html:not(.sidebar-nav) .nav-group-menu a .icon{width:18px;height:18px;}
+}

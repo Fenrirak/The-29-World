@@ -178,3 +178,84 @@ function debounce(fn, wait) {
 window.addEventListener("resize", debounce(fitTopbar, 100));
 window.addEventListener("orientationchange", () => setTimeout(fitTopbar, 50));
 window.addEventListener("load", fitTopbar);
+
+/* ===================== Phone top bar: grouped dropdowns =====================
+   On phones using the top bar (side menu switched off), the 15+ icons are
+   replaced by a few group buttons — Money, Buy & sell, Life... — each
+   opening a dropdown of its pages. The real links are wrapped in a
+   .nav-group so everything that looks them up (module locks, labels)
+   still finds them. Everywhere else the wrapper uses display:contents and
+   its button is hidden, so the normal top bar and side menu look and
+   behave exactly as before (see "Phone top bar dropdowns" in style.css).
+============================================================================ */
+const T29_NAV_GROUPS = [
+  { label: "Money", hrefs: ["bank.html", "termdeposit.html", "loan.html", "market.html"] },
+  { label: "Buy & sell", hrefs: ["store.html", "marketplace.html"] },
+  { label: "Life", hrefs: ["jobs.html", "transport.html", "property.html", "insurance.html", "tax.html", "bigevents.html", "life.html"] },
+  { label: "Games", hrefs: ["gambling.html"] },
+  { label: "Teacher", hrefs: ["quizzes.html", "reports.html"] }
+];
+
+function closeNavGroups(except) {
+  document.querySelectorAll(".topbar .nav-group.open").forEach(g => {
+    if (g === except) return;
+    g.classList.remove("open");
+    const b = g.querySelector(".nav-group-btn");
+    if (b) b.setAttribute("aria-expanded", "false");
+  });
+}
+
+function buildNavGroups() {
+  const topbar = document.querySelector(".topbar");
+  const nav = topbar ? topbar.querySelector("nav") : null;
+  if (!nav || nav.querySelector(".nav-group")) return;
+  const fileOf = a => (a.getAttribute("href") || "").split("/").pop().split("?")[0];
+
+  T29_NAV_GROUPS.forEach(group => {
+    const links = [...nav.querySelectorAll(":scope > a[href]")].filter(a => group.hrefs.includes(fileOf(a)));
+    if (!links.length) return;
+    const wrap = document.createElement("div");
+    wrap.className = "nav-group";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "nav-group-btn";
+    btn.setAttribute("aria-expanded", "false");
+    btn.innerHTML = `<span>${group.label}</span><span class="nav-group-caret" aria-hidden="true"></span>`;
+    const menu = document.createElement("div");
+    menu.className = "nav-group-menu";
+    nav.insertBefore(wrap, links[0]);
+    wrap.appendChild(btn);
+    wrap.appendChild(menu);
+    links.forEach(a => menu.appendChild(a));
+    if (links.some(a => a.classList.contains("active"))) wrap.classList.add("has-active");
+
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const opening = !wrap.classList.contains("open");
+      closeNavGroups(wrap);
+      if (opening) {
+        // The menu is position:fixed (so the top bar's overflow can't clip
+        // it), so place it just under the bar each time it opens.
+        menu.style.top = Math.round(topbar.getBoundingClientRect().bottom + 4) + "px";
+      }
+      wrap.classList.toggle("open", opening);
+      btn.setAttribute("aria-expanded", String(opening));
+    });
+  });
+
+  document.addEventListener("click", e => {
+    if (!e.target.closest || !e.target.closest(".nav-group")) closeNavGroups();
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeNavGroups(); });
+  // Phones fire resize/scroll just from the address bar sliding, so keep
+  // an open menu pinned under the bar rather than closing it.
+  const repin = () => {
+    const open = nav.querySelector(".nav-group.open .nav-group-menu");
+    if (open) open.style.top = Math.round(topbar.getBoundingClientRect().bottom + 4) + "px";
+  };
+  window.addEventListener("resize", repin);
+  window.addEventListener("scroll", repin, { passive: true });
+}
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", buildNavGroups);
+else buildNavGroups();
