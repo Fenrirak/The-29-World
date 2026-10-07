@@ -28,7 +28,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=697e4909">
+<link rel="stylesheet" href="style.css?v=7accee1e">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -78,10 +78,34 @@
   <div id="teacherPanel" class="card hidden">
     <h2 id="hAdd">Add an insurance plan</h2>
     <form onsubmit="return addPlan(event)">
+      <label for="pCoverage" id="labCoverage">What's covered</label>
+      <select id="pCoverage" onchange="updatePlanFormForCoverage()">
+        <option value="jobs">Jobs / Income</option>
+        <option value="general" selected>General (covers bad random events)</option>
+        <option value="property">Property (sold by an insurance company)</option>
+        <option value="transport">Transport (sold by an insurance company)</option>
+      </select>
+      <div id="pCompanyWrap" class="hidden">
+        <div class="grid grid-3">
+          <div>
+            <label for="pCompany" id="labCompany">Company</label>
+            <select id="pCompany" onchange="updateCompanyNameField()"></select>
+          </div>
+          <div id="pCompanyNameWrap" class="hidden">
+            <label for="pCompanyName" id="labCompanyName">New company name</label>
+            <input id="pCompanyName" maxlength="60" placeholder="e.g. AA Car Insurance">
+          </div>
+          <div id="pInsTypeWrap">
+            <label for="pInsType" id="labInsType">Type of cover</label>
+            <select id="pInsType"></select>
+          </div>
+        </div>
+        <p class="muted-small">Students open a company to see all of its plans and pick the one they want. Each big or weekly event can choose which types it covers and how much each one pays out.</p>
+      </div>
       <div class="grid grid-3">
         <div>
           <label for="pName" id="labName">Plan name</label>
-          <input id="pName" placeholder="e.g. Basic Cover" required>
+          <input id="pName" placeholder="e.g. Basic Cover">
         </div>
         <div>
           <label for="pPrice" id="labPrice">Price</label>
@@ -97,23 +121,13 @@
           <label for="pSignupFee" id="labSignupFee">Sign-up fee (one-off, optional)</label>
           <input id="pSignupFee" type="number" min="0" step="0.01" value="0">
         </div>
-      </div>
-      <label for="pCoverage" id="labCoverage">What's covered</label>
-      <select id="pCoverage" onchange="updatePlanTypeSelect()">
-        <option value="jobs">Jobs / Income</option>
-        <option value="general" selected>General (covers bad random events)</option>
-        <option value="property">Property</option>
-        <option value="transport">Transport</option>
-      </select>
-      <div id="pInsTypeWrap" class="hidden">
-        <label for="pInsType" id="labInsType">Type of cover</label>
-        <select id="pInsType"></select>
-        <p class="muted-small">Each big or weekly event can choose which types it covers and how much each one pays out.</p>
+        <div>
+          <label for="pStars" id="labStars">Lifestyle stars (0-5, optional)</label>
+          <input id="pStars" type="number" min="0" max="5" step="1" value="0">
+        </div>
       </div>
       <label for="pDesc" id="labDesc">Description</label>
       <input id="pDesc" placeholder="Shown to students">
-      <label for="pStars" id="labStars">Lifestyle stars (0-5, optional)</label>
-      <input id="pStars" type="number" min="0" max="5" step="1" value="0">
       <button class="btn gold" type="submit" id="addBtn">Add plan</button>
       <button class="btn small secondary hidden" type="button" id="cancelEditBtn" onclick="cancelEditPlan()">Cancel edit</button>
     </form>
@@ -158,13 +172,13 @@
 <script defer src="icons.js?v=ece0bfd2"></script>
 <script defer src="settings-menu.js?v=fde34c7c"></script>
 <script defer src="data-core.js?v=b7bf213a"></script>
-<script defer src="data-money.js?v=4595ad1c"></script>
-<script defer src="data-life.js?v=4e22c4bd"></script>
+<script defer src="data-money.js?v=b92b45de"></script>
+<script defer src="data-life.js?v=c6497c2b"></script>
 <script defer src="data-property.js?v=03d9335e"></script>
 <script defer src="data-markets.js?v=69cf7dca"></script>
-<script defer src="events-ui.js?v=8cf5324f"></script>
+<script defer src="events-ui.js?v=618154d1"></script>
 <script defer src="quiz-gate.js?v=4ed5e0c8"></script>
 <script defer src="notifications.js?v=ca299e12"></script>
-<script defer src="insurance.js?v=5e59a888"></script>
+<script defer src="insurance.js?v=2d9b6822"></script>
 </body>
 </html>

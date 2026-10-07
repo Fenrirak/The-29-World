@@ -746,6 +746,47 @@ function cleanInsuranceType(coverage, type) {
   return insuranceTypeLabel(coverage, type) ? type : null;
 }
 
+// Property and transport plans belong to an insurance company (e.g. "AA Car
+// Insurance") that students open to pick a plan from. Each plan carries its
+// company's id and name (companyId / company) - a company is simply every
+// plan sharing a companyId, so there's no separate list to keep in sync.
+// Each company is either property or transport, never both. Plans made
+// before companies existed (and all Jobs / General plans) have no company
+// and show on their own, exactly as before.
+function insurancePlanName(p) {
+  if (!p) return "";
+  return p.company ? `${p.company} — ${p.name}` : p.name;
+}
+
+// [{ id, name, coverage, plans: [...] }], in the order first seen.
+function insuranceCompaniesOf(cls) {
+  const map = new Map();
+  (cls.insurancePlans || []).forEach(p => {
+    if (!p.companyId || !INSURANCE_TYPES[p.coverage]) return;
+    if (!map.has(p.companyId)) map.set(p.companyId, { id: p.companyId, name: p.company || "Insurance company", coverage: p.coverage, plans: [] });
+    map.get(p.companyId).plans.push(p);
+  });
+  return [...map.values()];
+}
+
+// The company a property/transport plan is saved under: an existing
+// company of the same coverage (by id), or a brand-new one when companyId
+// is "new" and a name is given. Any other plan never has one.
+function planCompanyFields(cls, coverage, companyId, companyName) {
+  if (!INSURANCE_TYPES[coverage]) return { companyId: null, company: null };
+  const existing = insuranceCompaniesOf(cls).find(c => c.id === companyId && c.coverage === coverage);
+  if (existing) return { companyId: existing.id, company: existing.name };
+  const name = String(companyName || "").trim().slice(0, 60);
+  if (companyId === "new" && name) return { companyId: uid("insco"), company: name };
+  return { companyId: null, company: null };
+}
+
+// A plan's own name. Company plans can leave it blank, which names it after
+// its type (e.g. "Comprehensive Insurance").
+function cleanPlanName(name, coverage, insType) {
+  return String(name || "").trim() || insuranceTypeLabel(coverage, insType) || "Insurance plan";
+}
+
 // An event's list of covered types for saving: only real types for that
 // coverage, each listed once, with a payout that's never negative.
 function cleanInsuranceCover(coverage, cover) {
@@ -807,10 +848,12 @@ async function addInsurancePlan(classCode, plan) {
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const coverage = plan.coverage || "general";
+    const insType = cleanInsuranceType(coverage, plan.insType);
     cls.insurancePlans.push({
-      id: uid("ins"), name: plan.name, price: Number(plan.price),
+      id: uid("ins"), name: cleanPlanName(plan.name, coverage, insType), price: Number(plan.price),
       excess: Number(plan.excess), coverage,
-      insType: cleanInsuranceType(coverage, plan.insType),
+      insType,
+      ...planCompanyFields(cls, coverage, plan.companyId, plan.companyName),
       description: plan.description || "", stars: Math.max(0, Math.min(5, Number(plan.stars) || 0)),
       signupFee: Math.max(0, Number(plan.signupFee) || 0),
       active: true
@@ -838,14 +881,41 @@ async function editInsurancePlan(classCode, planId, plan) {
     if (idx === -1) return;
     const existing = cls.insurancePlans[idx];
     const coverage = plan.coverage || "general";
+    const insType = cleanInsuranceType(coverage, plan.insType);
     cls.insurancePlans[idx] = {
       ...existing,
-      name: plan.name, price: Number(plan.price),
+      name: cleanPlanName(plan.name, coverage, insType), price: Number(plan.price),
       excess: Number(plan.excess), coverage,
-      insType: cleanInsuranceType(coverage, plan.insType),
+      insType,
+      ...planCompanyFields(cls, coverage, plan.companyId, plan.companyName),
       description: plan.description || "", stars: Math.max(0, Math.min(5, Number(plan.stars) || 0)),
       signupFee: Math.max(0, Number(plan.signupFee) || 0)
     };
+    t.update(classRef, { insurancePlans: cls.insurancePlans });
+  });
+}
+// Renames a company - every plan under it carries the name, so all of
+// them are updated together.
+async function renameInsuranceCompany(classCode, companyId, name) {
+  const clean = String(name || "").trim().slice(0, 60);
+  if (!clean) return;
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.insurancePlans.forEach(p => { if (p.companyId === companyId) p.company = clean; });
+    t.update(classRef, { insurancePlans: cls.insurancePlans });
+  });
+}
+// Removes a company and every plan under it (same as removing each plan).
+async function removeInsuranceCompany(classCode, companyId) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.insurancePlans = cls.insurancePlans.filter(p => p.companyId !== companyId);
     t.update(classRef, { insurancePlans: cls.insurancePlans });
   });
 }
@@ -1041,7 +1111,7 @@ async function buyInsurance(username, classCode, planId) {
       if (!plan) throw new Error("NOT_FOUND");
       user.insurance = user.insurance || [];
       if (user.insurance.includes(planId)) throw new Error("ALREADY");
-      planName = plan.name;
+      planName = insurancePlanName(plan);
       fee = Math.max(0, Number(plan.signupFee) || 0);
       fee = applyLifeDiscount(user, "insurance", fee);
       const isTeacher = user.role === "teacher";
@@ -1768,7 +1838,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         if (!isTeacher && cash < toPay) throw new Error("BROKE_EXCESS");
         entry.status = "claimed";
         amount = toPay;
-        outcomeNote = `Claimed insurance (${option.plan.name}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess`
+        outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess`
           + (option.uncovered > 0 ? ` + ${fmtMoney(option.uncovered)} not covered` : "");
         if (!isTeacher && toPay > 0) t.update(userRef, { balance: Math.round((cash - toPay) * 100) / 100 });
         t.update(classRef, { bigEventLog: cls.bigEventLog });
@@ -2037,7 +2107,7 @@ async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
       const option = weeklyEventClaimOptions(cls, user, entry).find(o => o.plan.id === planId);
       if (!option) throw new Error("NO_PLAN");
       payout = option.payout;
-      planName = option.plan.name;
+      planName = insurancePlanName(option.plan);
       eventName = entry.name || "";
       entry.claimed = true;
       t.update(userRef, { balance: Math.round(((user.balance || 0) + payout) * 100) / 100 });
@@ -2502,7 +2572,7 @@ async function lifestyleRatingBreakdown(username, classCode) {
       if (plan) {
         const pts = (plan.stars || 0) * (cfg.insurance.weight || 0);
         score += pts;
-        items.push({ type: "gain", label: plan.name, detail: `${plan.stars || 0}★ &times; ${cfg.insurance.weight || 0} pts/star`, points: pts });
+        items.push({ type: "gain", label: insurancePlanName(plan), detail: `${plan.stars || 0}★ &times; ${cfg.insurance.weight || 0} pts/star`, points: pts });
       }
     });
   }

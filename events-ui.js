@@ -99,9 +99,9 @@ async function checkWeeklyEventPopup(username, classCode) {
     amount: entry.amount || 0, severity: entry.severity || "neutral", claimed: !!entry.claimed,
     claimable: !!best && best.payout > 0,
     claimPlanId: best ? best.plan.id : null,
-    claimLabel: best ? `Claim on ${best.plan.name} — get ${fmtMoney(best.payout)} back` : "",
+    claimLabel: best ? `Claim on ${insurancePlanName(best.plan)} — get ${fmtMoney(best.payout)} back` : "",
     // Holds a matching plan, but its excess eats the whole payout.
-    claimNote: best && best.payout <= 0 ? `Your ${best.plan.name} excess (${fmtMoney(best.excess)}) is more than insurance would pay for this, so there's nothing to claim.` : ""
+    claimNote: best && best.payout <= 0 ? `Your ${insurancePlanName(best.plan)} excess (${fmtMoney(best.excess)}) is more than insurance would pay for this, so there's nothing to claim.` : ""
   }];
 
   showEventPopup(withDetails, username, classCode);
@@ -395,9 +395,11 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
     : "";
   const claimButtons = claims.length
     ? claims.map((o, i) => {
+        // The type is only added when the plan's own name doesn't already say it.
         const typeLabel = insuranceTypeLabel(coverage, o.plan.insType);
-        return `<button class="btn secondary" id="bigClaimBtn${i}" data-plan="${escapeHtml(o.plan.id)}" ${o.ok ? "" : "disabled"}>
-          Claim on ${escapeHtml(o.plan.name)}${typeLabel ? ` (${escapeHtml(typeLabel)})` : ""} — you pay ${fmtMoney(o.studentPays)}
+        const showType = typeLabel && o.plan.name !== typeLabel;
+        return `<button class="btn secondary" id="bigClaimBtn${i}" ${o.ok ? "" : "disabled"}>
+          Claim on ${escapeHtml(insurancePlanName(o.plan))}${showType ? ` (${escapeHtml(typeLabel)})` : ""} — you pay ${fmtMoney(o.studentPays)}
           (${fmtMoney(o.excess)} excess${o.uncovered > 0 ? ` + ${fmtMoney(o.uncovered)} not covered` : ""})${o.ok ? "" : ` — you only have ${fmtMoney(cash)}`}
         </button>`;
       }).join("")

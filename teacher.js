@@ -1367,7 +1367,7 @@ async function renderProfile(username) {
 
   rows.push(`<h4>${icon("shield", 16)} Insurance</h4>`);
   rows.push(poss.insurance.length
-    ? poss.insurance.map(p => `<div class="auto-row"><div class="auto-details">${escapeHtml(p.name)} — ${fmtMoney(p.price)}/week</div>
+    ? poss.insurance.map(p => `<div class="auto-row"><div class="auto-details">${escapeHtml(insurancePlanName(p))} — ${fmtMoney(p.price)}/week</div>
         <button class="btn small coral" onclick="profileRemoveInsurance('${escapeJsAttr(username)}','${p.id}')">Cancel</button></div>`).join("")
     : `<p class="muted-small">No insurance plans.</p>`);
 

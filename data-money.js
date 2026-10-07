@@ -82,6 +82,34 @@ function computeWageCredit(cls, student) {
   return { net, taxAmount, tierLabel };
 }
 
+// PERF FIX: quick checks on the student doc the caller ALREADY read, used
+// to skip opening a transaction that could only end in "nothing to do".
+// Each transaction costs two round trips to the database (read, then
+// commit) and the class-wide sweeps below run them one student at a
+// time — so a class of 25 where nobody has, say, a daily allowance spent
+// ~50 round trips (several seconds) on EVERY teacher page load doing
+// nothing at all, because "nothing to pay" is deliberately left
+// unstamped and so was re-checked forever.
+//
+// These mirror the "return without writing" checks inside the matching
+// transactions exactly, so a skipped student gets the same outcome as
+// before. The transactions themselves still re-check everything against
+// fresh data before paying anyone, so these can never cause a double
+// payment; at worst a change made in the last split second (say, a job
+// assigned while this page was loading) is picked up on the next page
+// load instead of this one — exactly how the "already paid today" skips
+// next to them already behave.
+function _hasRecognisedJob(cls, student) {
+  return !!(student.jobId && (cls.jobs || []).some(j => j.id === student.jobId));
+}
+function _wageMightBePayable(cls, student) {
+  return _hasRecognisedJob(cls, student) && isJobTaskApprovedThisWeek(student, cls);
+}
+function _interestMightBePayable(cls, student) {
+  const credit = computeInterestCredit(cls, student);
+  return credit.savingsNet > 0 || credit.cashNet > 0;
+}
+
 // Credits ONE student's wage in a single transaction on their own doc.
 // Returns { credited: {net, taxAmount, tierLabel} } if paid,
 // { skippedUnapproved: true } if they have a job but this week's task
@@ -191,11 +219,11 @@ async function payMyWageIfDue(username) {
   if (!cls || !cls.payDay || cls.archived) return 0;
   if (nzDayName() !== cls.payDay) return 0;
   let count = 0;
-  if (user.lastWagePaid !== todayKey) {
+  if (user.lastWagePaid !== todayKey && _wageMightBePayable(cls, user)) {
     const r = await _payStudentWage(user.classCode, username, todayKey, { cls });
     if (r && r.credited) count++;
   }
-  if (user.lastLifeAllowanceWeeklyPaid !== todayKey) {
+  if (user.lastLifeAllowanceWeeklyPaid !== todayKey && getLifeAllowanceByFrequency(user, "weekly")) {
     const credited = await _payStudentWeeklyLifeAllowance(user.classCode, username, todayKey, { cls });
     if (credited) count++;
   }
@@ -209,6 +237,7 @@ async function payMyDailyLifeAllowanceIfDue(username) {
   const user = await getUser(username);
   if (!user || user.role !== "student") return 0;
   if (user.lastLifeAllowanceDailyPaid === todayKey) return 0;
+  if (!getLifeAllowanceByFrequency(user, "daily")) return 0; // no daily allowance — see _wageMightBePayable
   const credited = await _payStudentDailyLifeAllowance(user.classCode, username, todayKey);
   return credited ? 1 : 0;
 }
@@ -246,6 +275,13 @@ async function _runPayDayForClass(classCode, dateKey, { force = false, cls: prec
   for (const student of students) {
     if (student.jobId && (cls.jobs || []).find(j => j.id === student.jobId)) hasJobs = true;
     if (student.lastWagePaid === dateKey) { paidCount++; continue; } // already covered — cheap in-memory skip before opening a transaction
+    if (!_wageMightBePayable(cls, student)) {
+      // Same answer _payStudentWage's transaction would give, without the
+      // two round trips: no job means nothing to pay, and a job whose task
+      // isn't ticked yet is reported as unapproved.
+      if (_hasRecognisedJob(cls, student) && !cls.archived) unapprovedCount++;
+      continue;
+    }
     const r = await _payStudentWage(classCode, student.username, dateKey, { force, cls });
     if (r && r.credited) { newlyPaid++; paidCount++; }
     else if (r && r.skippedUnapproved) { unapprovedCount++; }
@@ -254,6 +290,7 @@ async function _runPayDayForClass(classCode, dateKey, { force = false, cls: prec
   // runs for every student, not just the ones the loop above touched.
   for (const student of students) {
     if (student.lastLifeAllowanceWeeklyPaid === dateKey) continue;
+    if (!getLifeAllowanceByFrequency(student, "weekly")) continue; // no weekly allowance — nothing to pay
     await _payStudentWeeklyLifeAllowance(classCode, student.username, dateKey, { cls });
   }
   return { paidCount, newlyPaid, hasJobs, unapprovedCount };
@@ -271,6 +308,7 @@ async function dailyLifeAllowanceForClassIfDue(classCode) {
   let newlyPaid = 0;
   for (const student of students) {
     if (student.lastLifeAllowanceDailyPaid === todayKey) continue; // cheap in-memory skip
+    if (!getLifeAllowanceByFrequency(student, "daily")) continue; // no daily allowance — nothing to pay
     const credited = await _payStudentDailyLifeAllowance(classCode, student.username, todayKey);
     if (credited) newlyPaid++;
   }
@@ -1615,6 +1653,7 @@ async function applyMyInterestIfDue(username) {
   // transaction. The REAL guard — the one that actually prevents a
   // double payment — is the fresh re-check inside _creditStudentInterest.
   if (!isInterestDueForUser(cls, user, todayKey)) return 0;
+  if (!_interestMightBePayable(cls, user)) return 0;
   const credited = await _creditStudentInterest(user.classCode, username, todayKey, { cls });
   return credited ? 1 : 0;
 }
@@ -1631,6 +1670,7 @@ async function applyInterestToClassIfDue(classCode) {
     // today (whether by their own visit or an earlier pass of this same
     // loop) are the common case, and this check is free.
     if (!isInterestDueForUser(cls, student, todayKey)) continue;
+    if (!_interestMightBePayable(cls, student)) continue; // e.g. nothing in savings — nothing to pay
     const credited = await _creditStudentInterest(classCode, student.username, todayKey, { cls });
     if (credited) count++;
   }
@@ -2816,7 +2856,7 @@ function buildBudgetView(cls, user, username) {
     const plan2 = (cls.insurancePlans || []).find(p => p.id === id);
     if (!plan2 || !(plan2.price > 0)) return;
     premiums += applyTaxToExpense(cls, "insurance", plan2.price).total;
-    premiumNames.push(plan2.name);
+    premiumNames.push(typeof insurancePlanName === "function" ? insurancePlanName(plan2) : plan2.name);
   });
   premiums = Math.round(premiums * 100) / 100;
   if (premiums > 0) {
