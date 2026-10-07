@@ -2551,3 +2551,12 @@ html.dark-mode .ins-section-title .icon{color:var(--gold);}
 .ins-plan-covers{display:flex;align-items:flex-start;gap:6px;font-size:.82rem;color:var(--navy-700);}
 .ins-plan-covers .icon{flex-shrink:0;margin-top:2px;}
 html.dark-mode .ins-plan-covers{color:var(--muted);}
+
+/* ===== Transport events: tick several "what happened" ===== */
+.ins-incident-grid{display:flex;flex-wrap:wrap;gap:8px;}
+.ins-incident-opt{display:flex;align-items:center;gap:8px;margin:0;padding:8px 12px;border:1.5px solid var(--line);border-radius:999px;font-weight:600;font-size:.88rem;cursor:pointer;}
+.ins-incident-opt input{width:18px;height:18px;min-height:auto;flex-shrink:0;accent-color:var(--navy-900);}
+.ins-incident-opt:has(input:checked){border-color:var(--navy-900);background:#e7ebf5;}
+html.dark-mode .ins-incident-opt{border-color:rgba(255,255,255,.12);}
+html.dark-mode .ins-incident-opt input{accent-color:var(--gold);}
+html.dark-mode .ins-incident-opt:has(input:checked){border-color:var(--gold);background:rgba(232,184,75,.12);}

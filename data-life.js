@@ -787,17 +787,45 @@ function insuranceIncidentInfo(coverage, incident) {
   return (INSURANCE_INCIDENTS[coverage] || []).find(x => x.key === incident) || null;
 }
 
-// An event's incident, kept only when it's a real one for that coverage.
-function cleanIncident(coverage, incident) {
-  return insuranceIncidentInfo(coverage, incident) ? incident : null;
+// An event's incident(s) as a list. A transport event can have several
+// (e.g. an accident that also damaged someone else's car) and saves them as
+// a list; a property event has one, saved as a plain value (its "house and
+// contents" choice already covers both). Older events have none, and
+// transport events made before several were allowed saved a plain value —
+// both read fine through this.
+function incidentList(incident) {
+  if (Array.isArray(incident)) return incident;
+  return incident ? [incident] : [];
 }
 
-// Does this type cover this kind of event? Events with no incident (made
-// before incidents existed) are covered by every type, same as before.
-function typeCoversIncident(coverage, type, incident) {
-  if (!incident) return true;
+// An event's incident(s), kept only when real for that coverage: a list for
+// transport (in the usual order, no repeats), one value for property.
+// null when there are none.
+function cleanIncident(coverage, incident) {
+  const valid = incidentList(incident).filter(k => insuranceIncidentInfo(coverage, k));
+  if (coverage === "transport") {
+    const keys = INSURANCE_INCIDENTS.transport.map(i => i.key).filter(k => valid.includes(k));
+    return keys.length ? keys : null;
+  }
+  return valid[0] || null;
+}
+
+// The incident(s) in words — `field` is "label" (teacher) or "you" (student).
+function incidentLabels(coverage, incident, field) {
+  return incidentList(incident).map(k => insuranceIncidentInfo(coverage, k)).filter(Boolean).map(i => i[field]);
+}
+
+// Does this type cover what happened? When several things happened,
+// needAll decides whether it has to cover every one of them (to pay the
+// whole cost) or just one (to pay the teacher's set amount for its part).
+// Events with no incident (made before incidents existed) are covered by
+// every type, same as before.
+function typeCoversIncident(coverage, type, incident, needAll) {
+  const list = incidentList(incident);
+  if (!list.length) return true;
   const t = insuranceTypeInfo(coverage, type);
-  return !!t && t.covers.includes(incident);
+  if (!t) return false;
+  return needAll ? list.every(k => t.covers.includes(k)) : list.some(k => t.covers.includes(k));
 }
 
 // Truck Insurance only covers trucks; the other transport types only cover
@@ -812,7 +840,8 @@ function typeFitsVehicle(coverage, type, vehicleType) {
 // house) when the house itself was damaged.
 function isHouseWriteOff(coverage, type, incident) {
   const t = insuranceTypeInfo(coverage, type);
-  return !!(t && t.writeOff && (incident === "house" || incident === "both"));
+  const list = incidentList(incident);
+  return !!(t && t.writeOff && (list.includes("house") || list.includes("both")));
 }
 
 // A plan's type, kept only when it's a real type for that plan's coverage.
@@ -1011,7 +1040,10 @@ function insuranceClaimOptions(cls, user, coverage, cover, cost, entry) {
     .map(plan => {
       const row = typed ? cover.find(c => c.type === plan.insType) : null;
       if (typed && !row) return null;
-      if (plan.insType && !typeCoversIncident(coverage, plan.insType, incident)) return null;
+      // A ticked type pays the teacher's amount for its part, so covering
+      // one of the things that happened is enough; with nothing ticked a
+      // plan pays the whole cost, so it has to cover all of them.
+      if (plan.insType && !typeCoversIncident(coverage, plan.insType, incident, !typed)) return null;
       if (coverage === "transport" && plan.insType && !typeFitsVehicle(coverage, plan.insType, asset.vehicleType)) return null;
       const excess = Math.max(0, Number(plan.excess) || 0);
       if (typed && isHouseWriteOff(coverage, plan.insType, incident)) {

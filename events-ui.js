@@ -224,11 +224,11 @@ function showEventPopup(events, username, classCode) {
 // What an event hit, in plain words, e.g. "Fire · your Ford Ranger (truck)".
 function eventImpactText(entry, coverage) {
   if (!entry) return "";
-  const incident = insuranceIncidentInfo(coverage, entry.incident);
+  const happened = incidentLabels(coverage, entry.incident, "you").join(" + ");
   const kind = { car: "car", truck: "truck", bike: "bike/scooter" }[entry.assetType] || "";
   const asset = entry.assetName ? `${entry.assetName}${kind ? ` (${kind})` : ""}`
     : entry.assetType === "rented-home" ? "your rented home" : "";
-  return [incident ? incident.you : "", asset].filter(Boolean).join(" · ");
+  return [happened, asset].filter(Boolean).join(" · ");
 }
 
 // Short button text for an Indemnity write-off (the full breakdown is in
@@ -543,30 +543,50 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
    (bigevents.html): first what happened (fire, theft, house damage...),
    then one row per property/transport insurance type, each with a tick box
    and how much that type pays out. Types that don't cover what happened
-   can't be ticked — each type only covers what its description says. */
+   can't be ticked — each type only covers what its description says.
+   Transport events can tick several things that happened (e.g. an accident
+   that also damaged someone else's car); property events pick one, since
+   "the house and its contents" already covers both. */
+
+// What's currently picked under "What happened?": a list for transport,
+// one value (or "") for property.
+function pickerIncident(box) {
+  const opts = box.querySelectorAll("[data-ins-incident-opt]");
+  if (opts.length) return [...opts].filter(cb => cb.checked).map(cb => cb.value);
+  const sel = box.querySelector("[data-ins-incident]");
+  return sel ? sel.value : "";
+}
+
 function renderInsuranceCoverPicker(boxId, coverage, cover, incident) {
   const box = document.getElementById(boxId);
   if (!box) return;
   const types = INSURANCE_TYPES[coverage] || [];
   box.dataset.coverage = types.length ? coverage : "";
   if (!types.length) { box.innerHTML = ""; box.classList.add("hidden"); return; }
+  const multi = coverage === "transport";
   const inc = cleanIncident(coverage, incident);
-  const incInfo = insuranceIncidentInfo(coverage, inc);
+  const picked = incidentList(inc);
   const byType = {};
   (cover || []).forEach(c => { byType[c.type] = c; });
   box.classList.remove("hidden");
   const rowHtml = t => {
     const row = byType[t.key];
-    const fits = !!inc && t.covers.includes(inc);
+    const fits = picked.length > 0 && typeCoversIncident(coverage, t.key, inc, false);
+    const coveredHere = picked.filter(k => t.covers.includes(k));
     const writeOff = fits && isHouseWriteOff(coverage, t.key, inc);
     const checked = fits && !!row;
     const subs = [];
     if (t.vehicles === "trucks") subs.push("Trucks only.");
     if (t.vehicles === "cars") subs.push("Cars and bikes only.");
     if (writeOff) subs.push("The student gets the house's market price and the insurer takes the house.");
+    // Several things happened but this type only covers some of them —
+    // its amount should be for its part.
+    if (fits && coveredHere.length < picked.length) {
+      subs.push(`Only covers ${incidentLabels(coverage, coveredHere, "short").join(" and ")} here, so set the amount for that part.`);
+    }
     let pay;
-    if (!inc) pay = `<span class="muted-small">Choose what happened first</span>`;
-    else if (!fits) pay = `<span class="muted-small">Doesn't cover ${escapeHtml(incInfo.short)}</span>`;
+    if (!picked.length) pay = `<span class="muted-small">${multi ? "Tick what happened first" : "Choose what happened first"}</span>`;
+    else if (!fits) pay = `<span class="muted-small">Doesn't cover ${picked.length > 1 ? "any of these" : escapeHtml(incidentLabels(coverage, inc, "short")[0])}</span>`;
     else if (writeOff && inc === "house") pay = `<span class="muted-small ins-cover-pay">pays the house's market price</span>`;
     else pay = `<span class="ins-cover-pay"><span class="muted-small">${writeOff ? "market price + contents $" : "pays $"}</span>
         <input type="number" min="0" step="0.01" data-ins-payout="${t.key}" aria-label="${escapeHtml(t.label)} payout" placeholder="0" value="${row ? row.payout : ""}" ${checked ? "" : "disabled"}></span>`;
@@ -577,14 +597,21 @@ function renderInsuranceCoverPicker(boxId, coverage, cover, incident) {
         ${pay}
       </div>`;
   };
+  const incidentHtml = multi
+    ? `<label style="margin-top:12px;">What happened? <span class="muted-small" style="font-weight:400;">Tick everything that applies.</span></label>
+      <div class="ins-incident-grid">
+        ${INSURANCE_INCIDENTS[coverage].map(i => `
+          <label class="ins-incident-opt"><input type="checkbox" data-ins-incident-opt value="${i.key}" ${picked.includes(i.key) ? "checked" : ""}> ${escapeHtml(i.label)}</label>`).join("")}
+      </div>`
+    : `<label for="${boxId}-incident" style="margin-top:12px;">What was damaged?</label>
+      <select id="${boxId}-incident" data-ins-incident>
+        <option value="" disabled ${inc ? "" : "selected"}>Choose…</option>
+        ${INSURANCE_INCIDENTS[coverage].map(i => `<option value="${i.key}" ${i.key === inc ? "selected" : ""}>${escapeHtml(i.label)}</option>`).join("")}
+      </select>`;
   box.innerHTML = `
-    <label for="${boxId}-incident" style="margin-top:12px;">${coverage === "property" ? "What was damaged?" : "What happened?"}</label>
-    <select id="${boxId}-incident" data-ins-incident>
-      <option value="" disabled ${inc ? "" : "selected"}>Choose…</option>
-      ${INSURANCE_INCIDENTS[coverage].map(i => `<option value="${i.key}" ${i.key === inc ? "selected" : ""}>${escapeHtml(i.label)}</option>`).join("")}
-    </select>
+    ${incidentHtml}
     <label style="margin-top:12px;">Which ${coverage} insurance covers this?</label>
-    <p class="muted-small" style="margin-top:0;">Tick each type that can claim and how much it pays out. Students pay their plan's excess plus anything the payout doesn't cover. Tick none and any ${coverage} plan that covers this pays the full cost (the student just pays the excess).</p>
+    <p class="muted-small" style="margin-top:0;">Tick each type that can claim and how much it pays out.${multi ? " If a type only covers part of what happened, set the amount for its part." : ""} Students pay their plan's excess plus anything the payout doesn't cover. Tick none and any ${coverage} plan that covers ${multi ? "everything that happened" : "this"} pays the full cost (the student just pays the excess).</p>
     ${types.map(rowHtml).join("")}
   `;
   box.querySelectorAll("[data-ins-type]").forEach(cb => cb.addEventListener("change", () => {
@@ -594,29 +621,31 @@ function renderInsuranceCoverPicker(boxId, coverage, cover, incident) {
     if (cb.checked) amt.focus();
   }));
   // Changing what happened redraws the rows, keeping whatever's still ticked.
-  box.querySelector("[data-ins-incident]").addEventListener("change", e => {
+  const redraw = () => {
     const kept = [];
     box.querySelectorAll("[data-ins-type]").forEach(cb => {
       if (!cb.checked) return;
       const amt = box.querySelector(`[data-ins-payout="${cb.dataset.insType}"]`);
       kept.push({ type: cb.dataset.insType, payout: amt ? amt.value : "" });
     });
-    renderInsuranceCoverPicker(boxId, coverage, kept, e.target.value);
-  });
+    renderInsuranceCoverPicker(boxId, coverage, kept, pickerIncident(box));
+  };
+  box.querySelectorAll("[data-ins-incident], [data-ins-incident-opt]").forEach(el => el.addEventListener("change", redraw));
 }
 
 // Reads the picker back as { incident, cover: [{ type, payout }] } — empty
-// when it's hidden. Returns null, after telling the teacher why, if what
-// happened isn't chosen or a ticked type has no valid payout.
+// when it's hidden. incident is a list for transport, one value for
+// property. Returns null, after telling the teacher why, if nothing is
+// picked for what happened or a ticked type has no valid payout.
 function readInsuranceCoverPicker(boxId) {
   const box = document.getElementById(boxId);
   if (!box || box.classList.contains("hidden")) return { incident: null, cover: [] };
   const coverage = box.dataset.coverage;
-  const sel = box.querySelector("[data-ins-incident]");
-  const incident = sel ? sel.value : "";
+  const incident = cleanIncident(coverage, pickerIncident(box));
   if (!incident) {
-    alert(coverage === "property" ? "Choose what was damaged." : "Choose what happened.");
-    if (sel) sel.focus();
+    alert(coverage === "property" ? "Choose what was damaged." : "Tick at least one thing that happened.");
+    const first = box.querySelector("[data-ins-incident], [data-ins-incident-opt]");
+    if (first) first.focus();
     return null;
   }
   const out = [];

@@ -576,8 +576,8 @@ function weeklyEventInsuranceText(ev) {
   const coverage = ["property", "transport"].includes(ev.coverage) ? ev.coverage : "general";
   if (coverage === "general") return "Claimable on General insurance";
   const label = coverage === "property" ? "Property" : "Transport";
-  const incident = insuranceIncidentInfo(coverage, ev.incident);
-  return (incident ? `${escapeHtml(incident.label)} &middot; ` : "")
+  const happened = incidentLabels(coverage, ev.incident, "label").join(" + ");
+  return (happened ? `${escapeHtml(happened)} &middot; ` : "")
     + ((ev.insuranceCover || []).length
       ? `${label} insurance: ${escapeHtml(insuranceCoverSummary(coverage, ev.insuranceCover, ev.incident))} (plus the plan's excess)`
       : `Any ${coverage} insurance plan that covers this pays the full cost (minus the excess)`);

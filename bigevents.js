@@ -113,9 +113,9 @@ async function render() {
       const isGeneral = d.module === "general";
       const takesAsset = d.takesAsset !== false;
       const coverage = MODULE_TO_COVERAGE[d.module];
-      const incident = !isGood ? insuranceIncidentInfo(coverage, d.incident) : null;
+      const happened = !isGood ? incidentLabels(coverage, d.incident, "label").join(" + ") : "";
       const insLine = !isGood && INSURANCE_TYPES[coverage]
-        ? (incident ? `What happened: ${escapeHtml(incident.label)} &middot; ` : "")
+        ? (happened ? `What happened: ${escapeHtml(happened)} &middot; ` : "")
           + ((d.insuranceCover || []).length
             ? `Insurance: ${escapeHtml(insuranceCoverSummary(coverage, d.insuranceCover, d.incident))} (plus the plan's excess)`
             : `Insurance: any ${coverage} plan that covers this pays the full cost (the student pays the excess)`)
