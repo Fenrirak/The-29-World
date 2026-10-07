@@ -91,14 +91,17 @@ async function checkWeeklyEventPopup(username, classCode) {
     entry = revealed;
   }
 
-  const hasGeneralPlan = (user.insurance || [])
-    .map(id => cls.insurancePlans.find(p => p.id === id))
-    .some(p => p && p.coverage === "general");
+  // The plan that pays this student the most back for this event, if any.
+  const best = weeklyEventClaimOptions(cls, user, entry)[0] || null;
 
   const withDetails = [{
     id: entry.id, name: entry.name || "Random event", description: entry.description || "",
     amount: entry.amount || 0, severity: entry.severity || "neutral", claimed: !!entry.claimed,
-    claimable: entry.severity === "bad" && !entry.claimed && hasGeneralPlan
+    claimable: !!best && best.payout > 0,
+    claimPlanId: best ? best.plan.id : null,
+    claimLabel: best ? `Claim on ${best.plan.name} — get ${fmtMoney(best.payout)} back` : "",
+    // Holds a matching plan, but its excess eats the whole payout.
+    claimNote: best && best.payout <= 0 ? `Your ${best.plan.name} excess (${fmtMoney(best.excess)}) is more than insurance would pay for this, so there's nothing to claim.` : ""
   }];
 
   showEventPopup(withDetails, username, classCode);
@@ -186,7 +189,8 @@ function showEventPopup(events, username, classCode) {
       <div style="flex:1;">
         <div class="anw-event-name">${escapeHtml(e.name)}</div>
         ${e.description ? `<div class="muted-small">${escapeHtml(e.description)}</div>` : ""}
-        ${e.claimable ? `<button class="btn small secondary" style="margin-top:6px;" onclick="claimFromPopup('${e.id}', '${escapeJsAttr(username)}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
+        ${e.claimable ? `<button class="btn small secondary" style="margin-top:6px;" onclick="claimFromPopup('${e.id}', '${escapeJsAttr(username)}', '${classCode}', this, '${e.claimPlanId}')">${icon("shield", 13)} ${escapeHtml(e.claimLabel)}</button>` : ""}
+        ${e.claimNote ? `<div class="muted-small">${escapeHtml(e.claimNote)}</div>` : ""}
         ${e.claimed ? `<div class="muted-small ticker-up">Claimed on insurance</div>` : ""}
       </div>
       <div class="${e.amount < 0 ? 'ticker-down' : 'ticker-up'}" style="font-weight:900;">
@@ -208,14 +212,22 @@ function showEventPopup(events, username, classCode) {
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
-async function claimFromPopup(eventLogId, username, classCode, btn) {
+// planId is optional — without one (the multiple-choice outcome, where
+// the loss is only known after the student picks), the plan paying the
+// most back is looked up fresh here.
+async function claimFromPopup(eventLogId, username, classCode, btn, planId) {
   btn.disabled = true;
   btn.textContent = "Claiming...";
-  const cls = await getClass(classCode);
-  const user = await getUser(username);
-  const plan = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).find(p => p && p.coverage === "general");
-  if (!plan) { btn.textContent = "No General plan"; return; }
-  const res = await claimInsuranceForEvent(username, classCode, eventLogId, plan.id);
+  if (!planId) {
+    const cls = withNewModuleDefaults(await getClass(classCode));
+    const user = await getUser(username);
+    const entry = (cls.eventLog || []).find(e => e.id === eventLogId);
+    const best = weeklyEventClaimOptions(cls, user, entry)[0];
+    if (!best) { btn.textContent = "No insurance plan covers this"; return; }
+    if (best.payout <= 0) { btn.textContent = `Your excess (${fmtMoney(best.excess)}) is more than this — nothing to claim`; return; }
+    planId = best.plan.id;
+  }
+  const res = await claimInsuranceForEvent(username, classCode, eventLogId, planId);
   if (res.ok) {
     btn.outerHTML = `<div class="muted-small ticker-up">Claimed — ${fmtMoney(res.payout)} paid out</div>`;
   } else {
@@ -304,8 +316,8 @@ async function checkBigEventPopup(username, classCode) {
   if (pending) {
     const user = await getUserCached(username);
     const coverage = BIG_EVENT_COVERAGE[pending.module];
-    const plan = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).find(p => p && p.coverage === coverage);
-    showBigEventPopup(pending, plan, username, classCode, user);
+    const claimOptions = coverage ? insuranceClaimOptions(cls, user, coverage, pending.insuranceCover, pending.cost) : [];
+    showBigEventPopup(pending, claimOptions, username, classCode, user);
     return;
   }
 
@@ -342,7 +354,9 @@ function showGoodBigEventPopup(entry) {
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
-function showBigEventPopup(entry, plan, username, classCode, user) {
+// claimOptions: the student's plans that can claim this event, from
+// insuranceClaimOptions — each gets its own button showing what it costs.
+function showBigEventPopup(entry, claimOptions, username, classCode, user) {
   const overlay = document.createElement("div");
   overlay.id = "anwBigEventModal";
   overlay.className = "anw-modal-overlay";
@@ -369,12 +383,35 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
   const savingsOk = isTeacher || savings >= entry.cost;
   const cashWouldGoNegative = !isTeacher && cash < entry.cost;
 
+  // Insurance: one button per matching plan. A claim is paid from cash and
+  // (unlike paying the event outright) can't take the balance negative —
+  // see resolveBigEvent — so a claim the student can't afford is greyed
+  // out with the reason; "Pay from cash" always stays available.
+  const coverage = BIG_EVENT_COVERAGE[entry.module];
+  const cover = entry.insuranceCover || [];
+  const claims = (claimOptions || []).map(o => ({ ...o, ok: isTeacher || cash >= o.studentPays }));
+  const coverLine = cover.length
+    ? `<p class="muted-small">Insurance that covers this: ${escapeHtml(insuranceCoverSummary(coverage, cover))}. You'd also pay your plan's excess.</p>`
+    : "";
+  const claimButtons = claims.length
+    ? claims.map((o, i) => {
+        const typeLabel = insuranceTypeLabel(coverage, o.plan.insType);
+        return `<button class="btn secondary" id="bigClaimBtn${i}" data-plan="${escapeHtml(o.plan.id)}" ${o.ok ? "" : "disabled"}>
+          Claim on ${escapeHtml(o.plan.name)}${typeLabel ? ` (${escapeHtml(typeLabel)})` : ""} — you pay ${fmtMoney(o.studentPays)}
+          (${fmtMoney(o.excess)} excess${o.uncovered > 0 ? ` + ${fmtMoney(o.uncovered)} not covered` : ""})${o.ok ? "" : ` — you only have ${fmtMoney(cash)}`}
+        </button>`;
+      }).join("")
+    : `<button class="btn secondary" disabled>${cover.length
+        ? `Claim insurance — needs ${escapeHtml(cover.map(c => insuranceTypeLabel(coverage, c.type)).join(" or "))}`
+        : "Claim insurance (no matching plan)"}</button>`;
+
   overlay.innerHTML = `
     <div class="anw-modal-card">
       <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${escapeHtml(entry.name)}</h2>
       <p>${escapeHtml(entry.description) || ""}</p>
       <p><strong>${BIG_EVENT_MODULE_LABEL[entry.module]}</strong> &middot; costs <strong>${fmtMoney(entry.cost)}</strong> to resolve</p>
       <p class="muted-small">${canForfeit ? "You need to choose how to handle this before you can continue." : `This doesn't put ${assetLabel} at risk — you just need to cover the cost, or claim insurance if you have it.`}</p>
+      ${coverLine}
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
         ${canForfeit ? `<button class="btn coral" id="bigForfeitBtn">Don't pay — lose ${assetLabel}</button>` : ""}
         <button class="btn gold" id="bigPayCashBtn">
@@ -383,9 +420,7 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
         <button class="btn gold" id="bigPaySavingsBtn" ${savingsOk ? "" : "disabled"}>
           Pay ${fmtMoney(entry.cost)} from savings${savingsOk ? "" : ` (only ${fmtMoney(savings)} available)`}
         </button>
-        <button class="btn secondary" id="bigClaimBtn" ${plan ? "" : "disabled"}>
-          ${plan ? `Claim insurance (${escapeHtml(plan.name)}) — pay ${fmtMoney(plan.excess)} excess` : "Claim insurance (no matching plan)"}
-        </button>
+        ${claimButtons}
       </div>
       <div id="bigEventMsg"></div>
     </div>
@@ -401,14 +436,14 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
   const eligibleIds = ["bigPayCashBtn"];
   if (canForfeit) eligibleIds.push("bigForfeitBtn");
   if (savingsOk) eligibleIds.push("bigPaySavingsBtn");
-  if (plan) eligibleIds.push("bigClaimBtn");
+  claims.forEach((o, i) => { if (o.ok) eligibleIds.push("bigClaimBtn" + i); });
   const setBusy = (busy) => {
     eligibleIds.forEach(id => { document.getElementById(id).disabled = busy; });
   };
 
-  const resolve = async (choice, paySource) => {
+  const resolve = async (choice, paySource, planId) => {
     setBusy(true);
-    const res = await resolveBigEvent(username, classCode, entry.id, choice, paySource);
+    const res = await resolveBigEvent(username, classCode, entry.id, choice, paySource, planId);
     if (res.ok) {
       overlay.remove();
       if (typeof render === "function") render();
@@ -421,5 +456,64 @@ function showBigEventPopup(entry, plan, username, classCode, user) {
   if (canForfeit) document.getElementById("bigForfeitBtn").addEventListener("click", () => resolve("forfeit"));
   document.getElementById("bigPayCashBtn").addEventListener("click", () => resolve("pay", "cash"));
   document.getElementById("bigPaySavingsBtn").addEventListener("click", () => resolve("pay", "savings"));
-  document.getElementById("bigClaimBtn").addEventListener("click", () => resolve("claim"));
+  claims.forEach((o, i) => {
+    document.getElementById("bigClaimBtn" + i).addEventListener("click", () => resolve("claim", null, o.plan.id));
+  });
+}
+
+/* ===================== Insurance types picker (teacher) =====================
+   Shared by the weekly events form (teacher.html) and the big events form
+   (bigevents.html): one row per property/transport insurance type, each
+   with a tick box and how much that type pays out for the event. */
+function renderInsuranceCoverPicker(boxId, coverage, cover) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  const types = INSURANCE_TYPES[coverage] || [];
+  box.dataset.coverage = types.length ? coverage : "";
+  if (!types.length) { box.innerHTML = ""; box.classList.add("hidden"); return; }
+  const byType = {};
+  (cover || []).forEach(c => { byType[c.type] = c; });
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <label style="margin-top:12px;">Which ${coverage} insurance covers this?</label>
+    <p class="muted-small" style="margin-top:0;">Tick each type that can claim and how much it pays out. Students pay their plan's excess plus anything the payout doesn't cover. Tick none and any ${coverage} plan covers the full cost (the student just pays the excess).</p>
+    ${types.map(t => {
+      const row = byType[t.key];
+      return `
+      <div class="ins-cover-row">
+        <input type="checkbox" id="${boxId}-${t.key}" data-ins-type="${t.key}" ${row ? "checked" : ""}>
+        <label for="${boxId}-${t.key}">${escapeHtml(t.label)}</label>
+        <span class="ins-cover-pay">
+          <span class="muted-small">pays $</span>
+          <input type="number" min="0" step="0.01" data-ins-payout="${t.key}" aria-label="${escapeHtml(t.label)} payout" placeholder="0" value="${row ? row.payout : ""}" ${row ? "" : "disabled"}>
+        </span>
+      </div>`;
+    }).join("")}
+  `;
+  box.querySelectorAll("[data-ins-type]").forEach(cb => cb.addEventListener("change", () => {
+    const amt = box.querySelector(`[data-ins-payout="${cb.dataset.insType}"]`);
+    amt.disabled = !cb.checked;
+    if (cb.checked) amt.focus();
+  }));
+}
+
+// Reads the picker back as [{ type, payout }] ([] when it's hidden). Returns
+// null, after telling the teacher why, if a ticked type has no valid payout.
+function readInsuranceCoverPicker(boxId) {
+  const box = document.getElementById(boxId);
+  if (!box || box.classList.contains("hidden")) return [];
+  const coverage = box.dataset.coverage;
+  const out = [];
+  for (const cb of box.querySelectorAll("[data-ins-type]")) {
+    if (!cb.checked) continue;
+    const type = cb.dataset.insType;
+    const raw = box.querySelector(`[data-ins-payout="${type}"]`).value.trim();
+    const amount = Number(raw);
+    if (raw === "" || !Number.isFinite(amount) || amount < 0) {
+      alert(`Enter how much ${insuranceTypeLabel(coverage, type)} pays out (0 or more), or untick it.`);
+      return null;
+    }
+    out.push({ type, payout: amount });
+  }
+  return out;
 }

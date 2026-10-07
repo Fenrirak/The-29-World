@@ -18,6 +18,22 @@ function updateCostLabel() {
   generalOpt.classList.toggle("hidden", kind !== "good");
   generalOpt.disabled = kind !== "good";
   if (kind !== "good" && moduleSelect.value === "general") moduleSelect.value = "income";
+  updateCoverBox();
+}
+
+// Shows the insurance-types picker for bad property/transport events.
+// Pass `cover` to load an event's saved types (when editing); without it
+// the picker is only rebuilt when the coverage actually changes, so
+// switching back and forth (e.g. to Good and back) doesn't wipe what the
+// teacher has ticked. A hidden picker reads back as nothing ticked.
+function updateCoverBox(cover) {
+  const bad = document.getElementById("beKind").value === "bad";
+  const coverage = MODULE_TO_COVERAGE[document.getElementById("beModule").value] || "";
+  const box = document.getElementById("beCoverBox");
+  if (cover !== undefined || (box.dataset.coverage || "") !== (INSURANCE_TYPES[coverage] ? coverage : "")) {
+    renderInsuranceCoverPicker("beCoverBox", coverage, cover || []);
+  }
+  box.classList.toggle("hidden", !bad || !INSURANCE_TYPES[coverage]);
 }
 
 function paintChrome() {
@@ -95,12 +111,19 @@ async function render() {
       const isGood = d.kind === "good";
       const isGeneral = d.module === "general";
       const takesAsset = d.takesAsset !== false;
+      const coverage = MODULE_TO_COVERAGE[d.module];
+      const insLine = !isGood && INSURANCE_TYPES[coverage]
+        ? ((d.insuranceCover || []).length
+            ? `Insurance: ${escapeHtml(insuranceCoverSummary(coverage, d.insuranceCover))} (plus the plan's excess)`
+            : `Insurance: any ${coverage} plan covers the full cost (the student pays the excess)`)
+        : "";
       div.innerHTML = `
         <div class="flex-between">
           <div>
             <h4>${icon("star", 20)}${escapeHtml(d.name)} <span class="badge navy">${MODULE_LABEL[d.module]}</span> <span class="badge ${isGood ? "gold" : "coral"}">${isGood ? "Good" : "Bad"}</span></h4>
             <p>${escapeHtml(d.description) || "No description provided."}</p>
-            <p><strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay or claim's excess"}</p>
+            <p><strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay"}</p>
+            ${insLine ? `<p class="muted-small">${insLine}</p>` : ""}
             ${!isGood ? `<p class="muted-small">${takesAsset ? "Not paying costs the student the related job/property/vehicle." : "Cost only — the student can't lose the asset over this."}</p>` : ""}
             ${isGood && isGeneral ? `<p class="muted-small">Open to everyone — not tied to any job, property, or vehicle.</p>` : ""}
           </div>
@@ -137,7 +160,10 @@ async function render() {
 
 async function addEvent(e) {
   e.preventDefault();
+  const insuranceCover = readInsuranceCoverPicker("beCoverBox");
+  if (insuranceCover === null) return false;
   const ev = {
+    insuranceCover,
     name: document.getElementById("beName").value.trim(),
     module: document.getElementById("beModule").value,
     kind: document.getElementById("beKind").value,
@@ -164,6 +190,7 @@ function resetEventForm() {
   document.getElementById("beKind").value = "bad";
   document.getElementById("beModule").value = "income";
   updateCostLabel();
+  updateCoverBox([]);
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add event";
   const cancelBtn = document.getElementById("cancelEditBtn");
   if (cancelBtn) cancelBtn.remove();
@@ -181,6 +208,7 @@ function startEditEvent(id) {
     document.getElementById("beDesc").value = d.description || "";
     document.getElementById("beTakesAsset").checked = d.takesAsset !== false;
     updateCostLabel();
+    updateCoverBox(d.insuranceCover || []);
     document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
     if (!document.getElementById("cancelEditBtn")) {
       const cancelBtn = document.createElement("button");

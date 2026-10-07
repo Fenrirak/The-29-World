@@ -24,6 +24,26 @@ function stars(n) {
 
 const COVERAGE_LABEL = { jobs: "Jobs / Income", general: "General (bad random events)", property: "Property", transport: "Transport" };
 
+// Fills the "Type of cover" list for the chosen coverage (property and
+// transport only — the list is hidden for the others). `selected` picks a
+// type (when editing); without it the current pick is kept if still valid.
+function updatePlanTypeSelect(selected) {
+  const coverage = document.getElementById("pCoverage").value;
+  const types = INSURANCE_TYPES[coverage] || [];
+  const sel = document.getElementById("pInsType");
+  const keep = selected !== undefined ? selected : sel.value;
+  sel.innerHTML = `<option value="" disabled>Choose a type…</option>`
+    + types.map(t => `<option value="${t.key}">${escapeHtml(t.label)}</option>`).join("");
+  sel.value = types.some(t => t.key === keep) ? keep : "";
+  document.getElementById("pInsTypeWrap").classList.toggle("hidden", !types.length);
+}
+
+// "Transport — Comprehensive Insurance", or just "Transport" with no type.
+function coverageText(p) {
+  const typeLabel = insuranceTypeLabel(p.coverage, p.insType);
+  return (COVERAGE_LABEL[p.coverage] || "—") + (typeLabel ? ` — ${typeLabel}` : "");
+}
+
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("shield", 26) + " Insurance";
@@ -104,7 +124,8 @@ async function render() {
         <div>
           <h4>${icon("shield", 20)}${escapeHtml(p.name)} ${owned ? '<span class="badge mint">You have this</span>' : ""}</h4>
           <p>${escapeHtml(p.description) || "No description provided."}</p>
-          <p class="muted-small">Covers: ${COVERAGE_LABEL[p.coverage] || "—"}</p>
+          <p class="muted-small">Covers: ${escapeHtml(coverageText(p))}
+            ${IS_TEACHER && INSURANCE_TYPES[p.coverage] && !insuranceTypeLabel(p.coverage, p.insType) ? `<span class="badge coral">Type not set — click Edit to choose one</span>` : ""}</p>
           <p><strong>${fmtMoney(p.price)}</strong>/week &middot; ${fmtMoney(p.excess)} excess ${p.signupFee ? `&middot; ${priceWithLifeDiscount(me, "insurance", p.signupFee)} sign-up fee` : ""} ${p.stars ? `&middot; <span class="ticker-up">${stars(p.stars)}</span>` : ""}</p>
         </div>
         <div>
@@ -136,7 +157,8 @@ async function render() {
           ? `<span class="badge gold">Payment due today</span>`
           : `Next payment: ${payInfo.dateStr} (in ${payInfo.daysUntil} day${payInfo.daysUntil === 1 ? "" : "s"})`;
       }
-      row.innerHTML = `<div class="auto-details">${icon("shield", 14)} <strong>${escapeHtml(p.name)}</strong> &middot; ${fmtMoney(p.price)}/week &middot; ${fmtMoney(p.excess)} excess &middot; ${payText}</div>`;
+      const typeLabel = insuranceTypeLabel(p.coverage, p.insType);
+      row.innerHTML = `<div class="auto-details">${icon("shield", 14)} <strong>${escapeHtml(p.name)}</strong>${typeLabel ? ` (${escapeHtml(typeLabel)})` : ""} &middot; ${fmtMoney(p.price)}/week &middot; ${fmtMoney(p.excess)} excess &middot; ${payText}</div>`;
       box.appendChild(row);
     });
   }
@@ -149,10 +171,16 @@ async function addPlan(e) {
     price: document.getElementById("pPrice").value,
     excess: document.getElementById("pExcess").value,
     coverage: document.getElementById("pCoverage").value,
+    insType: document.getElementById("pInsType").value,
     description: document.getElementById("pDesc").value.trim(),
     stars: document.getElementById("pStars").value,
     signupFee: document.getElementById("pSignupFee").value
   };
+  if (INSURANCE_TYPES[plan.coverage] && !insuranceTypeLabel(plan.coverage, plan.insType)) {
+    document.getElementById("addMsg").innerHTML = `<div class="error-msg">Choose which type of ${plan.coverage} insurance this is.</div>`;
+    document.getElementById("pInsType").focus();
+    return false;
+  }
   if (EDITING_PLAN_ID) {
     await editInsurancePlan(CURRENT.classCode, EDITING_PLAN_ID, plan);
     document.getElementById("addMsg").innerHTML = `<div class="success-msg">Plan updated!</div>`;
@@ -163,6 +191,7 @@ async function addPlan(e) {
     ["pName","pPrice","pExcess","pDesc"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("pStars").value = 0;
     document.getElementById("pSignupFee").value = 0;
+    updatePlanTypeSelect("");
   }
   await render();
   return false;
@@ -174,6 +203,7 @@ function startEditPlan(p) {
   document.getElementById("pPrice").value = p.price || 0;
   document.getElementById("pExcess").value = p.excess || 0;
   document.getElementById("pCoverage").value = p.coverage || "general";
+  updatePlanTypeSelect(p.insType || "");
   document.getElementById("pDesc").value = p.description || "";
   document.getElementById("pStars").value = p.stars || 0;
   document.getElementById("pSignupFee").value = p.signupFee || 0;
@@ -190,6 +220,7 @@ function cancelEditPlan() {
   document.getElementById("pStars").value = 0;
   document.getElementById("pSignupFee").value = 0;
   document.getElementById("pCoverage").value = "general";
+  updatePlanTypeSelect("");
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add an insurance plan";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add plan";
   document.getElementById("cancelEditBtn").classList.add("hidden");

@@ -718,15 +718,99 @@ async function resolveTransportOverdue(classCode, username) {
 }
 
 /* ===================== Insurance ===================== */
+// The kinds of property and transport insurance a plan can be. Each plan of
+// that coverage is one of these types, and an event (big or weekly) can
+// list which types cover it and how much each one pays out — see
+// insuranceClaimOptions below. Jobs and General plans have no types.
+const INSURANCE_TYPES = {
+  transport: [
+    { key: "comprehensive", label: "Comprehensive Insurance" },
+    { key: "third-party", label: "Third-Party Only" },
+    { key: "tpft", label: "Third-Party, Fire, and Theft" },
+    { key: "truck", label: "Truck Insurance" }
+  ],
+  property: [
+    { key: "contents", label: "Contents Insurance" },
+    { key: "indemnity", label: "Indemnity Cover (Present Value)" },
+    { key: "sum-insured", label: "Sum Insured Cover" }
+  ]
+};
+
+function insuranceTypeLabel(coverage, type) {
+  const t = (INSURANCE_TYPES[coverage] || []).find(x => x.key === type);
+  return t ? t.label : "";
+}
+
+// A plan's type, kept only when it's a real type for that plan's coverage.
+function cleanInsuranceType(coverage, type) {
+  return insuranceTypeLabel(coverage, type) ? type : null;
+}
+
+// An event's list of covered types for saving: only real types for that
+// coverage, each listed once, with a payout that's never negative.
+function cleanInsuranceCover(coverage, cover) {
+  const seen = new Set();
+  return (Array.isArray(cover) ? cover : [])
+    .filter(c => {
+      if (!c || !insuranceTypeLabel(coverage, c.type) || seen.has(c.type)) return false;
+      seen.add(c.type);
+      return true;
+    })
+    .map(c => ({ type: c.type, payout: Math.max(0, Math.round((Number(c.payout) || 0) * 100) / 100) }));
+}
+
+// Plain-text summary of an event's covered types, e.g.
+// "Comprehensive Insurance pays $1,000.00 · Third-Party Only pays $200.00".
+function insuranceCoverSummary(coverage, cover) {
+  return (cover || []).map(c => `${insuranceTypeLabel(coverage, c.type)} pays ${fmtMoney(c.payout)}`).join(" · ");
+}
+
+// Every plan the student holds that can be claimed against an event, with
+// what the claim works out to — cheapest for the student first.
+//   coverage — which plans count: "general", "jobs", "property" or "transport"
+//   cover    — the event's [{ type, payout }] list. Empty (every event made
+//              before types existed, or one with no types ticked) means any
+//              plan of that coverage counts and covers the whole cost,
+//              exactly how claims always worked.
+//   cost     — the event's loss, as a positive amount
+// Each option has:
+//   studentPays — big events: what the student pays to claim (the plan's
+//                 excess plus whatever the payout doesn't cover)
+//   payout      — weekly events (already charged): what the insurer pays
+//                 back (the covered amount minus the excess, never below 0)
+function insuranceClaimOptions(cls, user, coverage, cover, cost) {
+  const r2 = n => Math.round(n * 100) / 100;
+  const loss = Math.max(0, Number(cost) || 0);
+  const typed = Array.isArray(cover) && cover.length > 0;
+  return (user.insurance || [])
+    .map(id => (cls.insurancePlans || []).find(p => p.id === id))
+    .filter(p => p && p.coverage === coverage)
+    .map(plan => {
+      let covered = loss;
+      if (typed) {
+        const row = cover.find(c => c.type === plan.insType);
+        if (!row) return null;
+        covered = Math.min(loss, Math.max(0, Number(row.payout) || 0));
+      }
+      const excess = Math.max(0, Number(plan.excess) || 0);
+      const uncovered = r2(loss - covered);
+      return { plan, covered: r2(covered), excess, uncovered, studentPays: r2(excess + uncovered), payout: r2(Math.max(0, covered - excess)) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.studentPays - b.studentPays);
+}
+
 async function addInsurancePlan(classCode, plan) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    const coverage = plan.coverage || "general";
     cls.insurancePlans.push({
       id: uid("ins"), name: plan.name, price: Number(plan.price),
-      excess: Number(plan.excess), coverage: plan.coverage || "general",
+      excess: Number(plan.excess), coverage,
+      insType: cleanInsuranceType(coverage, plan.insType),
       description: plan.description || "", stars: Math.max(0, Math.min(5, Number(plan.stars) || 0)),
       signupFee: Math.max(0, Number(plan.signupFee) || 0),
       active: true
@@ -753,10 +837,12 @@ async function editInsurancePlan(classCode, planId, plan) {
     const idx = cls.insurancePlans.findIndex(p => p.id === planId);
     if (idx === -1) return;
     const existing = cls.insurancePlans[idx];
+    const coverage = plan.coverage || "general";
     cls.insurancePlans[idx] = {
       ...existing,
       name: plan.name, price: Number(plan.price),
-      excess: Number(plan.excess), coverage: plan.coverage || "general",
+      excess: Number(plan.excess), coverage,
+      insType: cleanInsuranceType(coverage, plan.insType),
       description: plan.description || "", stars: Math.max(0, Math.min(5, Number(plan.stars) || 0)),
       signupFee: Math.max(0, Number(plan.signupFee) || 0)
     };
@@ -1455,10 +1541,15 @@ async function addBigEventDef(classCode, ev) {
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const kind = ev.kind === "good" ? "good" : "bad";
+    const module = resolveBigEventModule(ev.module, kind);
     cls.bigEventDefs.push({
       id: uid("big"), name: ev.name,
-      module: resolveBigEventModule(ev.module, kind),
+      module,
       kind,
+      // Which property/transport insurance types cover this event and how
+      // much each pays out (see insuranceClaimOptions). Empty = any plan of
+      // the matching coverage covers the whole cost, same as before.
+      insuranceCover: kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[module], ev.insuranceCover) : [],
       cost: Math.max(0, Number(ev.cost) || 0), description: ev.description || "", active: true,
       // Whether NOT paying this event costs the student the related
       // job/property/vehicle. Defaults true so existing "bad" events keep
@@ -1494,6 +1585,7 @@ async function updateBigEventDef(classCode, defId, ev) {
     existing.name = ev.name;
     existing.kind = kind;
     existing.module = resolveBigEventModule(ev.module, kind);
+    existing.insuranceCover = kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[existing.module], ev.insuranceCover) : [];
     existing.cost = Math.max(0, Number(ev.cost) || 0);
     existing.description = ev.description || "";
     existing.takesAsset = ev.takesAsset === false ? false : true;
@@ -1568,6 +1660,7 @@ async function processWeeklyBigEvents(classCode, opts) {
       // Locked in at generation time so editing the def later never changes
       // how an already-issued event resolves.
       takesAsset: def.takesAsset === false ? false : true,
+      insuranceCover: def.insuranceCover || [],
       // Good events need no choice from the student — they're paid out
       // immediately and just get an acknowledgment popup. Bad events stay
       // "pending" until the student picks pay / forfeit / claim (or just
@@ -1601,7 +1694,9 @@ async function processWeeklyBigEvents(classCode, opts) {
 // student cover a big event out of their Savings Account instead of their
 // everyday cash balance. Defaults to 'cash' so any existing caller that
 // doesn't pass this keeps behaving exactly as before.
-async function resolveBigEvent(username, classCode, logId, choice, paySource) {
+// planId (only used when choice === 'claim'): which of the student's plans
+// to claim on — optional, see the claim branch below.
+async function resolveBigEvent(username, classCode, logId, choice, paySource, planId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let outcomeNote = "", amount = 0;
@@ -1659,15 +1754,23 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource) {
         }
         t.update(classRef, { bigEventLog: cls.bigEventLog });
       } else if (choice === "claim") {
+        // The student pays the plan's excess plus whatever that plan's
+        // type doesn't pay out for this event (nothing extra for events
+        // with no insurance types set — those cover the whole cost).
+        // planId picks which of the student's matching plans to claim on;
+        // without one, the cheapest for the student is used.
         const coverage = MODULE_TO_COVERAGE[entry.module];
-        const plan = (user.insurance || []).map(id => cls.insurancePlans.find(p => p.id === id)).find(p => p && p.coverage === coverage);
-        if (!plan) throw new Error("NO_PLAN");
-        const excess = Math.max(0, plan.excess);
-        if (!isTeacher && user.balance < excess) throw new Error("BROKE_EXCESS");
+        const options = coverage ? insuranceClaimOptions(cls, user, coverage, entry.insuranceCover, entry.cost) : [];
+        const option = planId ? options.find(o => o.plan.id === planId) : options[0];
+        if (!option) throw new Error("NO_PLAN");
+        const toPay = option.studentPays;
+        const cash = user.balance || 0;
+        if (!isTeacher && cash < toPay) throw new Error("BROKE_EXCESS");
         entry.status = "claimed";
-        amount = excess;
-        outcomeNote = `Claimed insurance (${plan.name}) for "${entry.name}" — paid ${fmtMoney(excess)} excess`;
-        if (!isTeacher && excess > 0) t.update(userRef, { balance: Math.round((user.balance - excess) * 100) / 100 });
+        amount = toPay;
+        outcomeNote = `Claimed insurance (${option.plan.name}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess`
+          + (option.uncovered > 0 ? ` + ${fmtMoney(option.uncovered)} not covered` : "");
+        if (!isTeacher && toPay > 0) t.update(userRef, { balance: Math.round((cash - toPay) * 100) / 100 });
         t.update(classRef, { bigEventLog: cls.bigEventLog });
       } else {
         throw new Error("BAD_CHOICE");
@@ -1676,8 +1779,8 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource) {
   } catch (e) {
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash to pay that." };
     if (e.message === "BROKE_SAVINGS") return { ok: false, error: "You don't have enough in savings to pay that." };
-    if (e.message === "BROKE_EXCESS") return { ok: false, error: "You don't have enough money to pay the excess." };
-    if (e.message === "NO_PLAN") return { ok: false, error: "You don't have a matching insurance plan for this." };
+    if (e.message === "BROKE_EXCESS") return { ok: false, error: "You don't have enough cash to pay for this claim." };
+    if (e.message === "NO_PLAN") return { ok: false, error: "You don't have an insurance plan that covers this." };
     if (e.message === "NO_FORFEIT") return { ok: false, error: "This event doesn't allow losing the asset — you need to pay or claim insurance." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That event is no longer pending." };
     return { ok: false, error: "Something went wrong. Please try again." };
@@ -1687,6 +1790,29 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource) {
 }
 
 /* ===================== Random events ===================== */
+// Which insurance a bad weekly event can be claimed on: "general" (the
+// default, and what every event made before this existed uses), or
+// "property"/"transport" — those can also list which insurance types
+// cover it and what each pays out (see insuranceClaimOptions).
+function weeklyEventInsurance(ev) {
+  const coverage = ev.severity === "bad" && ["property", "transport"].includes(ev.coverage) ? ev.coverage : "general";
+  return { coverage, insuranceCover: cleanInsuranceCover(coverage, ev.insuranceCover) };
+}
+
+// A bad event tied to property or transport only goes to students who
+// have one — a home they own or rent, or a vehicle — so nobody gets a
+// "your car broke down" event without a car. Everything else (all events
+// made before this existed included) can go to anyone, same as always.
+function weeklyEventFitsStudent(cls, username, ev) {
+  if (ev.severity !== "bad") return true;
+  if (ev.coverage === "property") {
+    return (cls.properties || []).some(p => p.owner === username || (p.sublet && p.sublet.tenant === username))
+      || (cls.npcProperties || []).some(p => p.tenant === username);
+  }
+  if (ev.coverage === "transport") return (cls.vehicles || []).some(v => (v.owners || []).includes(username));
+  return true;
+}
+
 async function addEventDef(classCode, ev) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
@@ -1698,6 +1824,7 @@ async function addEventDef(classCode, ev) {
       id: uid("ev"), name: ev.name, amount: Number(ev.amount) || 0,
       description: ev.description || "", repeatable: !!ev.repeatable,
       severity: ev.severity === "bad" ? "bad" : "neutral", active: true,
+      ...weeklyEventInsurance(ev),
       type: isChoice ? "choice" : "fixed",
       options: isChoice ? (ev.options || []).map(o => ({ id: uid("opt"), label: o.label || "", amount: Number(o.amount) || 0, outcome: o.outcome || "" })) : []
     });
@@ -1728,6 +1855,7 @@ async function updateEventDef(classCode, evId, ev) {
     existing.description = ev.description || "";
     existing.repeatable = !!ev.repeatable;
     existing.severity = ev.severity === "bad" ? "bad" : "neutral";
+    Object.assign(existing, weeklyEventInsurance(ev));
     existing.type = isChoice ? "choice" : "fixed";
     existing.options = isChoice ? (ev.options || []).map(o => ({ id: uid("opt"), label: o.label || "", amount: Number(o.amount) || 0, outcome: o.outcome || "" })) : [];
     t.update(classRef, { eventDefs: cls.eventDefs });
@@ -1809,17 +1937,21 @@ async function processWeeklyEvents(classCode, opts) {
     // whose only eligible event was their last one) would silently get
     // nothing at all, even on an explicit "override" run.
     const lastEventId = studentEntries.length ? studentEntries[studentEntries.length - 1].eventId : null;
-    const pool = activeDefs.filter(e => ignoreAlreadyHad || (e.id !== lastEventId && (e.repeatable || !already.has(e.id))));
+    const pool = activeDefs.filter(e => (ignoreAlreadyHad || (e.id !== lastEventId && (e.repeatable || !already.has(e.id))))
+      && weeklyEventFitsStudent(cls, student.username, e));
     if (pool.length === 0) continue;
     const ev = pool[Math.floor(Math.random() * pool.length)];
     const revealAt = Date.now() + Math.floor(Math.random() * FIRST_EVENT_MAX_DELAY_MS);
+    // Locked in now, same as big events, so editing the event later never
+    // changes how an already-issued one can be claimed.
+    const insurance = weeklyEventInsurance(ev);
     if (ev.type === "choice") {
       // Multiple-choice events don't apply a balance change yet — the
       // student must pick one of the options first (see resolveChoiceEvent).
       newLogEntries.push({
         id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
         name: ev.name, amount: null, description: ev.description || "", severity: ev.severity || "neutral",
-        claimed: false, type: "choice", options: ev.options || [], status: "pending"
+        claimed: false, type: "choice", options: ev.options || [], status: "pending", ...insurance
       });
     } else {
       // Fixed-amount events used to apply the balance change and log a
@@ -1832,7 +1964,7 @@ async function processWeeklyEvents(classCode, opts) {
       newLogEntries.push({
         id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
         name: ev.name, amount: ev.amount, description: ev.description || "", severity: ev.severity || "neutral",
-        claimed: false, type: "fixed", status: "scheduled"
+        claimed: false, type: "fixed", status: "scheduled", ...insurance
       });
     }
   }
@@ -1875,13 +2007,23 @@ async function revealFixedEvent(classCode, eventLogId) {
   return entry;
 }
 
-// Claim General-coverage insurance against a bad weekly event. Pays out the
-// loss minus the plan's excess (never below zero), and marks the event as
+// The ways a student can claim insurance on a bad weekly event they've
+// already been charged for (see insuranceClaimOptions) — best payout
+// first. Old log entries have no coverage saved, so they're General.
+function weeklyEventClaimOptions(cls, user, entry) {
+  if (!entry || entry.severity !== "bad" || entry.claimed) return [];
+  const loss = Math.abs(Math.min(0, Number(entry.amount) || 0));
+  return insuranceClaimOptions(cls, user, entry.coverage || "general", entry.insuranceCover, loss)
+    .sort((a, b) => b.payout - a.payout);
+}
+
+// Claim insurance against a bad weekly event. Pays back what that plan
+// covers minus its excess (never below zero), and marks the event as
 // claimed so it can't be claimed twice.
 async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let payout = 0;
+  let payout = 0, planName = "", eventName = "";
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1889,22 +2031,24 @@ async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
       if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
       const user = userSnap.data();
       const cls = withNewModuleDefaults(classSnap.data());
-      const plan = cls.insurancePlans.find(p => p.id === planId && p.coverage === "general");
-      if (!plan || !(user.insurance || []).includes(planId)) throw new Error("NO_PLAN");
       const entry = (cls.eventLog || []).find(e => e.id === eventLogId && e.studentUser === username);
-      if (!entry || entry.severity !== "bad" || entry.claimed) throw new Error("NOT_CLAIMABLE");
-      const loss = Math.abs(Math.min(0, entry.amount));
-      payout = Math.max(0, Math.round((loss - plan.excess) * 100) / 100);
+      // "scheduled"/"pending" = not charged yet, so nothing to claim back.
+      if (!entry || entry.severity !== "bad" || entry.claimed || entry.status === "scheduled" || entry.status === "pending") throw new Error("NOT_CLAIMABLE");
+      const option = weeklyEventClaimOptions(cls, user, entry).find(o => o.plan.id === planId);
+      if (!option) throw new Error("NO_PLAN");
+      payout = option.payout;
+      planName = option.plan.name;
+      eventName = entry.name || "";
       entry.claimed = true;
-      t.update(userRef, { balance: Math.round((user.balance + payout) * 100) / 100 });
+      t.update(userRef, { balance: Math.round(((user.balance || 0) + payout) * 100) / 100 });
       t.update(classRef, { eventLog: cls.eventLog });
     });
   } catch (e) {
-    if (e.message === "NO_PLAN") return { ok: false, error: "You don't have a General insurance plan for this." };
+    if (e.message === "NO_PLAN") return { ok: false, error: "You don't have an insurance plan that covers this." };
     if (e.message === "NOT_CLAIMABLE") return { ok: false, error: "That event can't be claimed." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "insurance-claim", to: username, amount: payout, note: "Insurance claim (General cover)" });
+  await logTxn(classCode, { type: "insurance-claim", to: username, amount: payout, note: `Insurance claim (${planName})` + (eventName ? ` for "${eventName}"` : "") });
   return { ok: true, payout };
 }
 

@@ -2504,3 +2504,13 @@ body:has(.t29-tour-offer) .t29-toasts{bottom:150px;}
   html:not(.sidebar-nav) .topbar .nav-group-menu a .nav-label{display:inline;}
   html:not(.sidebar-nav) .nav-group-menu a .icon{width:18px;height:18px;}
 }
+
+/* ===== Insurance types picker (weekly + big event forms) ===== */
+.ins-cover-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;margin-top:6px;border:1.5px solid var(--line);border-radius:8px;}
+.ins-cover-row input[type="checkbox"]{width:20px;height:20px;min-height:auto;flex-shrink:0;accent-color:var(--navy-900);}
+.ins-cover-row label{flex:1 1 180px;margin:0;font-weight:600;}
+.ins-cover-pay{display:flex;align-items:center;gap:6px;margin-left:auto;}
+.ins-cover-row input[type="number"]{width:120px;flex-shrink:0;min-height:40px;padding:8px 10px;}
+.ins-cover-row input[type="number"]:disabled{opacity:.45;}
+html.dark-mode .ins-cover-row{border-color:rgba(255,255,255,.12);}
+html.dark-mode .ins-cover-row input[type="checkbox"]{accent-color:var(--gold);}
