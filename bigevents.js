@@ -22,16 +22,17 @@ function updateCostLabel() {
 }
 
 // Shows the insurance-types picker for bad property/transport events.
-// Pass `cover` to load an event's saved types (when editing); without it
-// the picker is only rebuilt when the coverage actually changes, so
-// switching back and forth (e.g. to Good and back) doesn't wipe what the
-// teacher has ticked. A hidden picker reads back as nothing ticked.
-function updateCoverBox(cover) {
+// Pass `cover` (and `incident`) to load an event's saved setup (when
+// editing); without it the picker is only rebuilt when the coverage
+// actually changes, so switching back and forth (e.g. to Good and back)
+// doesn't wipe what the teacher has ticked. A hidden picker reads back as
+// nothing ticked.
+function updateCoverBox(cover, incident) {
   const bad = document.getElementById("beKind").value === "bad";
   const coverage = MODULE_TO_COVERAGE[document.getElementById("beModule").value] || "";
   const box = document.getElementById("beCoverBox");
   if (cover !== undefined || (box.dataset.coverage || "") !== (INSURANCE_TYPES[coverage] ? coverage : "")) {
-    renderInsuranceCoverPicker("beCoverBox", coverage, cover || []);
+    renderInsuranceCoverPicker("beCoverBox", coverage, cover || [], incident || null);
   }
   box.classList.toggle("hidden", !bad || !INSURANCE_TYPES[coverage]);
 }
@@ -112,10 +113,12 @@ async function render() {
       const isGeneral = d.module === "general";
       const takesAsset = d.takesAsset !== false;
       const coverage = MODULE_TO_COVERAGE[d.module];
+      const incident = !isGood ? insuranceIncidentInfo(coverage, d.incident) : null;
       const insLine = !isGood && INSURANCE_TYPES[coverage]
-        ? ((d.insuranceCover || []).length
-            ? `Insurance: ${escapeHtml(insuranceCoverSummary(coverage, d.insuranceCover))} (plus the plan's excess)`
-            : `Insurance: any ${coverage} plan covers the full cost (the student pays the excess)`)
+        ? (incident ? `What happened: ${escapeHtml(incident.label)} &middot; ` : "")
+          + ((d.insuranceCover || []).length
+            ? `Insurance: ${escapeHtml(insuranceCoverSummary(coverage, d.insuranceCover, d.incident))} (plus the plan's excess)`
+            : `Insurance: any ${coverage} plan that covers this pays the full cost (the student pays the excess)`)
         : "";
       div.innerHTML = `
         <div class="flex-between">
@@ -160,10 +163,11 @@ async function render() {
 
 async function addEvent(e) {
   e.preventDefault();
-  const insuranceCover = readInsuranceCoverPicker("beCoverBox");
-  if (insuranceCover === null) return false;
+  const picked = readInsuranceCoverPicker("beCoverBox");
+  if (picked === null) return false;
   const ev = {
-    insuranceCover,
+    insuranceCover: picked.cover,
+    incident: picked.incident,
     name: document.getElementById("beName").value.trim(),
     module: document.getElementById("beModule").value,
     kind: document.getElementById("beKind").value,
@@ -208,7 +212,7 @@ function startEditEvent(id) {
     document.getElementById("beDesc").value = d.description || "";
     document.getElementById("beTakesAsset").checked = d.takesAsset !== false;
     updateCostLabel();
-    updateCoverBox(d.insuranceCover || []);
+    updateCoverBox(d.insuranceCover || [], d.incident || null);
     document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
     if (!document.getElementById("cancelEditBtn")) {
       const cancelBtn = document.createElement("button");

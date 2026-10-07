@@ -133,6 +133,7 @@ function companyPlanRowHtml(p, me, owned) {
           ${IS_TEACHER && !typeLabel ? `<span class="badge coral">Type not set — click Edit</span>` : ""}
         </div>
         ${p.description ? `<div class="muted-small">${escapeHtml(p.description)}</div>` : ""}
+        ${insuranceTypeCoversText(p.coverage, p.insType) ? `<div class="ins-plan-covers">${icon("shield", 12)} ${escapeHtml(insuranceTypeCoversText(p.coverage, p.insType))}</div>` : ""}
         <div class="ins-plan-price">${planPriceHtml(p, me)}</div>
       </div>
       <div class="ins-plan-actions">${planButtonsHtml(p, me, owned)}</div>

@@ -2543,3 +2543,11 @@ html.dark-mode .ins-co-icon{background:rgba(255,255,255,.08);color:var(--gold);}
 html.dark-mode .ins-co-name,
 html.dark-mode .ins-plan-name strong{color:inherit;}
 html.dark-mode .ins-section-title .icon{color:var(--gold);}
+
+/* ===== Insurance picker: what happened + types that don't cover it ===== */
+.ins-cover-row label{flex-direction:column;align-items:flex-start;gap:2px;}
+.ins-cover-sub{display:block;font-weight:400;font-size:.78rem;color:var(--muted);}
+.ins-cover-row.off{opacity:.55;}
+.ins-plan-covers{display:flex;align-items:flex-start;gap:6px;font-size:.82rem;color:var(--navy-700);}
+.ins-plan-covers .icon{flex-shrink:0;margin-top:2px;}
+html.dark-mode .ins-plan-covers{color:var(--muted);}

@@ -576,9 +576,11 @@ function weeklyEventInsuranceText(ev) {
   const coverage = ["property", "transport"].includes(ev.coverage) ? ev.coverage : "general";
   if (coverage === "general") return "Claimable on General insurance";
   const label = coverage === "property" ? "Property" : "Transport";
-  return (ev.insuranceCover || []).length
-    ? `${label} insurance: ${escapeHtml(insuranceCoverSummary(coverage, ev.insuranceCover))} (plus the plan's excess)`
-    : `Any ${coverage} insurance plan covers the full cost (minus the excess)`;
+  const incident = insuranceIncidentInfo(coverage, ev.incident);
+  return (incident ? `${escapeHtml(incident.label)} &middot; ` : "")
+    + ((ev.insuranceCover || []).length
+      ? `${label} insurance: ${escapeHtml(insuranceCoverSummary(coverage, ev.insuranceCover, ev.incident))} (plus the plan's excess)`
+      : `Any ${coverage} insurance plan that covers this pays the full cost (minus the excess)`);
 }
 
 // Shows "which insurance can claim it" only for bad events, plus the
@@ -586,28 +588,29 @@ function weeklyEventInsuranceText(ev) {
 // to load an event's saved types (when editing); without it the picker is
 // only rebuilt when the coverage actually changes, so it keeps the ticks
 // (including while it's hidden by switching to Neutral and back).
-function updateEventCoverBox(cover) {
+function updateEventCoverBox(cover, incident) {
   const bad = document.getElementById("evSeverity").value === "bad";
   document.getElementById("evCoverWrap").classList.toggle("hidden", !bad);
   const coverage = document.getElementById("evCoverage").value;
   const box = document.getElementById("evCoverBox");
   if (cover === undefined && (box.dataset.coverage || "") === (INSURANCE_TYPES[coverage] ? coverage : "")) return;
-  renderInsuranceCoverPicker("evCoverBox", coverage, cover || []);
+  renderInsuranceCoverPicker("evCoverBox", coverage, cover || [], incident || null);
 }
 
 async function addEventForm(e) {
   e.preventDefault();
   const type = document.getElementById("evType").value;
   const severity = document.getElementById("evSeverity").value;
-  const insuranceCover = severity === "bad" ? readInsuranceCoverPicker("evCoverBox") : [];
-  if (insuranceCover === null) return false;
+  const picked = severity === "bad" ? readInsuranceCoverPicker("evCoverBox") : { incident: null, cover: [] };
+  if (picked === null) return false;
   const ev = {
     name: document.getElementById("evName").value.trim(),
     type,
     repeatable: document.getElementById("evRepeat").checked,
     severity,
     coverage: severity === "bad" ? document.getElementById("evCoverage").value : "general",
-    insuranceCover,
+    insuranceCover: picked.cover,
+    incident: picked.incident,
     description: document.getElementById("evDesc").value.trim()
   };
   if (type === "choice") {
@@ -680,7 +683,7 @@ function startEditEvent(id) {
     document.getElementById("evName").value = ev.name;
     document.getElementById("evSeverity").value = ev.severity || "neutral";
     document.getElementById("evCoverage").value = ["property", "transport"].includes(ev.coverage) ? ev.coverage : "general";
-    updateEventCoverBox(ev.insuranceCover || []);
+    updateEventCoverBox(ev.insuranceCover || [], ev.incident || null);
     document.getElementById("evRepeat").checked = !!ev.repeatable;
     document.getElementById("evDesc").value = ev.description || "";
     if (ev.type === "choice") {

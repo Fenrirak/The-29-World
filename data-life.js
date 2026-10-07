@@ -718,27 +718,101 @@ async function resolveTransportOverdue(classCode, username) {
 }
 
 /* ===================== Insurance ===================== */
+// What can happen in a property or transport event. Every event made after
+// this existed says which one it is ("incident"), and each insurance type
+// below only covers the ones its description says. Events from before this
+// have no incident and work exactly as they always did. `label` is what the
+// teacher picks from, `you` is how it's put to the student.
+const INSURANCE_INCIDENTS = {
+  transport: [
+    { key: "third-party", label: "Someone else's property was damaged", short: "damage to someone else's property", you: "You damaged someone else's property" },
+    { key: "fire", label: "Fire", short: "fire", you: "Fire" },
+    { key: "theft", label: "Theft", short: "theft", you: "Theft" },
+    { key: "accident", label: "Accident (damage to their own vehicle)", short: "accidents", you: "Accident (damage to your own vehicle)" },
+    { key: "vandalism", label: "Vandalism", short: "vandalism", you: "Vandalism" },
+    { key: "storm", label: "Storm or flood", short: "storms and floods", you: "Storm or flood" }
+  ],
+  property: [
+    { key: "contents", label: "Contents only (the things inside the home)", short: "contents only", you: "The things inside your home were damaged" },
+    { key: "house", label: "The house only", short: "the house itself", you: "Your house was damaged" },
+    { key: "both", label: "The house and its contents", short: "the house and contents", you: "Your house and everything in it were damaged" }
+  ]
+};
+const ALL_TRANSPORT_INCIDENTS = INSURANCE_INCIDENTS.transport.map(i => i.key);
+
 // The kinds of property and transport insurance a plan can be. Each plan of
 // that coverage is one of these types, and an event (big or weekly) can
 // list which types cover it and how much each one pays out — see
 // insuranceClaimOptions below. Jobs and General plans have no types.
+//   covers   — the incidents this type can be claimed for
+//   vehicles — "cars": cars and bikes only; "trucks": trucks only
+//   writeOff — Indemnity: when the house itself is damaged it pays the
+//              house's full market price and the insurer takes the house
 const INSURANCE_TYPES = {
   transport: [
-    { key: "comprehensive", label: "Comprehensive Insurance" },
-    { key: "third-party", label: "Third-Party Only" },
-    { key: "tpft", label: "Third-Party, Fire, and Theft" },
-    { key: "truck", label: "Truck Insurance" }
+    { key: "comprehensive", label: "Comprehensive Insurance", covers: ALL_TRANSPORT_INCIDENTS, vehicles: "cars",
+      coversText: "Covers accidents, fire, theft, vandalism, storms, floods and damage to other people's property. Cars and bikes only." },
+    { key: "third-party", label: "Third-Party Only", covers: ["third-party"], vehicles: "cars",
+      coversText: "Covers damage you cause to other people's property only. Cars and bikes only." },
+    { key: "tpft", label: "Third-Party, Fire, and Theft", covers: ["third-party", "fire", "theft"], vehicles: "cars",
+      coversText: "Covers damage to other people's property, plus fire and theft. Cars and bikes only." },
+    { key: "truck", label: "Truck Insurance", covers: ALL_TRANSPORT_INCIDENTS, vehicles: "trucks",
+      coversText: "Covers anything that happens to your truck. Trucks only." }
   ],
   property: [
-    { key: "contents", label: "Contents Insurance" },
-    { key: "indemnity", label: "Indemnity Cover (Present Value)" },
-    { key: "sum-insured", label: "Sum Insured Cover" }
+    { key: "contents", label: "Contents Insurance", covers: ["contents", "both"],
+      coversText: "Covers the things inside your home, not the house itself." },
+    { key: "indemnity", label: "Indemnity Cover (Present Value)", covers: ["contents", "house", "both"], writeOff: true,
+      coversText: "Covers your contents (a set amount) and your house (its full market price, then the insurer takes the house)." },
+    { key: "sum-insured", label: "Sum Insured Cover", covers: ["contents", "house", "both"],
+      coversText: "Covers your contents and your house with a set amount. You keep your house." }
   ]
 };
 
+function insuranceTypeInfo(coverage, type) {
+  return (INSURANCE_TYPES[coverage] || []).find(x => x.key === type) || null;
+}
+
 function insuranceTypeLabel(coverage, type) {
-  const t = (INSURANCE_TYPES[coverage] || []).find(x => x.key === type);
+  const t = insuranceTypeInfo(coverage, type);
   return t ? t.label : "";
+}
+
+function insuranceTypeCoversText(coverage, type) {
+  const t = insuranceTypeInfo(coverage, type);
+  return t ? t.coversText : "";
+}
+
+function insuranceIncidentInfo(coverage, incident) {
+  return (INSURANCE_INCIDENTS[coverage] || []).find(x => x.key === incident) || null;
+}
+
+// An event's incident, kept only when it's a real one for that coverage.
+function cleanIncident(coverage, incident) {
+  return insuranceIncidentInfo(coverage, incident) ? incident : null;
+}
+
+// Does this type cover this kind of event? Events with no incident (made
+// before incidents existed) are covered by every type, same as before.
+function typeCoversIncident(coverage, type, incident) {
+  if (!incident) return true;
+  const t = insuranceTypeInfo(coverage, type);
+  return !!t && t.covers.includes(incident);
+}
+
+// Truck Insurance only covers trucks; the other transport types only cover
+// cars and bikes. Unknown vehicle (or no type) = no restriction.
+function typeFitsVehicle(coverage, type, vehicleType) {
+  const t = insuranceTypeInfo(coverage, type);
+  if (!t || !t.vehicles || !vehicleType) return true;
+  return t.vehicles === "trucks" ? vehicleType === "truck" : vehicleType !== "truck";
+}
+
+// Indemnity pays the house's market price (and the insurer takes the
+// house) when the house itself was damaged.
+function isHouseWriteOff(coverage, type, incident) {
+  const t = insuranceTypeInfo(coverage, type);
+  return !!(t && t.writeOff && (incident === "house" || incident === "both"));
 }
 
 // A plan's type, kept only when it's a real type for that plan's coverage.
@@ -788,22 +862,116 @@ function cleanPlanName(name, coverage, insType) {
 }
 
 // An event's list of covered types for saving: only real types for that
-// coverage, each listed once, with a payout that's never negative.
-function cleanInsuranceCover(coverage, cover) {
+// coverage that cover what happened, each listed once, with a payout that's
+// never negative. Indemnity on a house-only event needs no amount (it pays
+// the house's market price), so that's stored as 0.
+function cleanInsuranceCover(coverage, cover, incident) {
   const seen = new Set();
   return (Array.isArray(cover) ? cover : [])
     .filter(c => {
       if (!c || !insuranceTypeLabel(coverage, c.type) || seen.has(c.type)) return false;
+      if (!typeCoversIncident(coverage, c.type, incident)) return false;
       seen.add(c.type);
       return true;
     })
-    .map(c => ({ type: c.type, payout: Math.max(0, Math.round((Number(c.payout) || 0) * 100) / 100) }));
+    .map(c => ({
+      type: c.type,
+      payout: isHouseWriteOff(coverage, c.type, incident) && incident === "house"
+        ? 0 : Math.max(0, Math.round((Number(c.payout) || 0) * 100) / 100)
+    }));
 }
 
 // Plain-text summary of an event's covered types, e.g.
 // "Comprehensive Insurance pays $1,000.00 · Third-Party Only pays $200.00".
-function insuranceCoverSummary(coverage, cover) {
-  return (cover || []).map(c => `${insuranceTypeLabel(coverage, c.type)} pays ${fmtMoney(c.payout)}`).join(" · ");
+function insuranceCoverSummary(coverage, cover, incident) {
+  return (cover || []).map(c => {
+    const label = insuranceTypeLabel(coverage, c.type);
+    if (isHouseWriteOff(coverage, c.type, incident)) {
+      return incident === "both"
+        ? `${label} pays the house's market price + ${fmtMoney(c.payout)} for contents (the insurer takes the house)`
+        : `${label} pays the house's market price (the insurer takes the house)`;
+    }
+    return `${label} pays ${fmtMoney(c.payout)}`;
+  }).join(" · ");
+}
+
+// Which of the student's things an event hits: one of their vehicles for a
+// transport event, one of their properties for a property event. Picked at
+// random when the event is handed out and saved on it (assetId, assetName,
+// assetType), so claims and losing the asset apply to that exact thing.
+// Returns null when the student has nothing the event could hit.
+//   allowRenters — a weekly contents-only (or older, no-incident) property
+//                  event can also go to a student who rents their home;
+//                  there's no house of theirs to record.
+function pickEventAsset(cls, username, coverage, incident, allowRenters) {
+  const pick = list => list[Math.floor(Math.random() * list.length)];
+  if (coverage === "transport") {
+    const mine = (cls.vehicles || []).filter(v => (v.owners || []).includes(username));
+    if (!mine.length) return null;
+    const v = pick(mine);
+    return { assetId: v.id, assetName: v.name || "", assetType: normalizeVehicleType(v.type) };
+  }
+  if (coverage === "property") {
+    const owned = (cls.properties || []).filter(p => p.owner === username);
+    if (owned.length) {
+      const p = pick(owned);
+      return { assetId: p.id, assetName: p.name || "", assetType: "property" };
+    }
+    const houseHit = incident === "house" || incident === "both";
+    const rents = (cls.properties || []).some(p => p.sublet && p.sublet.tenant === username)
+      || (cls.npcProperties || []).some(p => p.tenant === username);
+    return allowRenters && !houseHit && rents ? { assetId: null, assetName: "", assetType: "rented-home" } : null;
+  }
+  return {};
+}
+
+// The vehicle/property an event hit, looked up as it is right now (null if
+// the student no longer owns it). Events from before this was recorded use
+// the student's first one — the same one losing the asset always took.
+function eventAssetNow(cls, username, coverage, entry) {
+  const e = entry || {};
+  if (coverage === "transport") {
+    const mine = (cls.vehicles || []).filter(v => (v.owners || []).includes(username));
+    const vehicle = e.assetId ? (mine.find(v => v.id === e.assetId) || null) : (mine[0] || null);
+    return { vehicle, vehicleType: vehicle ? normalizeVehicleType(vehicle.type) : (e.assetType || null) };
+  }
+  if (coverage === "property") {
+    const mine = (cls.properties || []).filter(p => p.owner === username);
+    const property = e.assetId ? (mine.find(p => p.id === e.assetId) || null)
+      : (e.assetType === "rented-home" ? null : (mine[0] || null));
+    return { property };
+  }
+  return {};
+}
+
+// Hands a property back to the market, clearing the same fields selling it
+// does (see sellProperty) — including any classmate renting it, since
+// there's no owner left for them to rent from.
+function releasePropertyFields(prop) {
+  prop.owner = null;
+  prop.mortgage = null;
+  prop.occupancy = null;
+  prop.rentLastWeekPaid = null;
+  prop.purchasePrice = null;
+  prop.sublet = null;
+}
+
+// What an Indemnity write-off of this property works out to — the same
+// way selling it does: its market price, minus any mortgage still owed
+// and the break fee for ending that mortgage early.
+function propertyWriteOffAmounts(cls, prop) {
+  let mortgagePayoff = 0, breakFee = 0;
+  if (prop.mortgage) {
+    mortgagePayoff = typeof mortgageWeekAmount === "function"
+      ? mortgageWeekAmount(prop.mortgage).balanceBefore
+      : (Number(prop.mortgage.principalRemaining) || 0);
+    breakFee = Math.max(0, Number(cls.propertyBreakFee) || 0);
+  }
+  return {
+    market: Math.max(0, Math.round((Number(prop.price) || 0) * 100) / 100),
+    mortgagePayoff: Math.round((Number(mortgagePayoff) || 0) * 100) / 100,
+    breakFee
+  };
 }
 
 // Every plan the student holds that can be claimed against an event, with
@@ -814,31 +982,70 @@ function insuranceCoverSummary(coverage, cover) {
 //              plan of that coverage counts and covers the whole cost,
 //              exactly how claims always worked.
 //   cost     — the event's loss, as a positive amount
+//   entry    — the event itself (optional): its incident decides which types
+//              cover it, and the vehicle/property it hit decides whether
+//              Truck Insurance or the car types apply and what an Indemnity
+//              write-off is worth (see eventAssetNow).
 // Each option has:
 //   studentPays — big events: what the student pays to claim (the plan's
 //                 excess plus whatever the payout doesn't cover)
 //   payout      — weekly events (already charged): what the insurer pays
 //                 back (the covered amount minus the excess, never below 0)
-function insuranceClaimOptions(cls, user, coverage, cover, cost) {
+// An Indemnity claim on house damage is a write-off instead (writeOff:
+// true): the insurer pays the house's full market price (plus the set
+// amount for contents if they were damaged too), any mortgage still owed
+// and its break fee come out of that first, then the excess — and the
+// house goes to the insurer. `net` is what the student ends up with (it
+// can be negative, same as selling a house with a big mortgage); for a
+// write-off both studentPays and payout reflect it.
+function insuranceClaimOptions(cls, user, coverage, cover, cost, entry) {
   const r2 = n => Math.round(n * 100) / 100;
   const loss = Math.max(0, Number(cost) || 0);
   const typed = Array.isArray(cover) && cover.length > 0;
+  const incident = entry && entry.incident ? entry.incident : null;
+  const username = (entry && entry.studentUser) || user.username;
+  const asset = eventAssetNow(cls, username, coverage, entry);
   return (user.insurance || [])
     .map(id => (cls.insurancePlans || []).find(p => p.id === id))
     .filter(p => p && p.coverage === coverage)
     .map(plan => {
-      let covered = loss;
-      if (typed) {
-        const row = cover.find(c => c.type === plan.insType);
-        if (!row) return null;
-        covered = Math.min(loss, Math.max(0, Number(row.payout) || 0));
-      }
+      const row = typed ? cover.find(c => c.type === plan.insType) : null;
+      if (typed && !row) return null;
+      if (plan.insType && !typeCoversIncident(coverage, plan.insType, incident)) return null;
+      if (coverage === "transport" && plan.insType && !typeFitsVehicle(coverage, plan.insType, asset.vehicleType)) return null;
       const excess = Math.max(0, Number(plan.excess) || 0);
+      if (typed && isHouseWriteOff(coverage, plan.insType, incident)) {
+        const property = asset.property;
+        if (!property) return null; // no house of theirs to write off (sold it, or they rent)
+        const w = propertyWriteOffAmounts(cls, property);
+        const contents = incident === "both" ? Math.max(0, Number(row.payout) || 0) : 0;
+        const net = r2(w.market + contents - w.mortgagePayoff - w.breakFee - excess);
+        return { plan, writeOff: true, property, houseValue: w.market, contents, mortgagePayoff: w.mortgagePayoff,
+          breakFee: w.breakFee, excess, net, covered: loss, uncovered: 0, studentPays: r2(-net), payout: net };
+      }
+      let covered = loss;
+      if (typed) covered = Math.min(loss, Math.max(0, Number(row.payout) || 0));
       const uncovered = r2(loss - covered);
       return { plan, covered: r2(covered), excess, uncovered, studentPays: r2(excess + uncovered), payout: r2(Math.max(0, covered - excess)) };
     })
     .filter(Boolean)
     .sort((a, b) => a.studentPays - b.studentPays);
+}
+
+// Plain-text breakdown of a write-off option, e.g. "The insurer pays
+// $300,000.00 for 12 Smith St, minus $250,000.00 mortgage and $50.00
+// excess: you get $49,950.00 and the house goes to the insurer."
+function writeOffText(o) {
+  const name = (o.property && o.property.name) || "your house";
+  const minus = [];
+  if (o.mortgagePayoff > 0) minus.push(`${fmtMoney(o.mortgagePayoff)} left on the mortgage`);
+  if (o.breakFee > 0) minus.push(`${fmtMoney(o.breakFee)} mortgage break fee`);
+  if (o.excess > 0) minus.push(`${fmtMoney(o.excess)} excess`);
+  return `The insurer pays ${fmtMoney(o.houseValue)} (today's market price) for ${name}`
+    + (o.contents > 0 ? ` + ${fmtMoney(o.contents)} for contents` : "")
+    + (minus.length ? `, minus ${minus.length > 1 ? minus.slice(0, -1).join(", ") + " and " + minus[minus.length - 1] : minus[0]}` : "")
+    + (o.net >= 0 ? `: you get ${fmtMoney(o.net)}` : `: you still owe ${fmtMoney(-o.net)}`)
+    + ` and ${name} goes to the insurer.`;
 }
 
 async function addInsurancePlan(classCode, plan) {
@@ -1616,10 +1823,14 @@ async function addBigEventDef(classCode, ev) {
       id: uid("big"), name: ev.name,
       module,
       kind,
+      // What happened (fire, theft, house damage...) — decides which
+      // insurance types can cover it. Only for bad property/transport events.
+      incident: kind === "bad" ? cleanIncident(MODULE_TO_COVERAGE[module], ev.incident) : null,
       // Which property/transport insurance types cover this event and how
       // much each pays out (see insuranceClaimOptions). Empty = any plan of
       // the matching coverage covers the whole cost, same as before.
-      insuranceCover: kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[module], ev.insuranceCover) : [],
+      insuranceCover: kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[module],
+        ev.insuranceCover, cleanIncident(MODULE_TO_COVERAGE[module], ev.incident)) : [],
       cost: Math.max(0, Number(ev.cost) || 0), description: ev.description || "", active: true,
       // Whether NOT paying this event costs the student the related
       // job/property/vehicle. Defaults true so existing "bad" events keep
@@ -1655,7 +1866,8 @@ async function updateBigEventDef(classCode, defId, ev) {
     existing.name = ev.name;
     existing.kind = kind;
     existing.module = resolveBigEventModule(ev.module, kind);
-    existing.insuranceCover = kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[existing.module], ev.insuranceCover) : [];
+    existing.incident = kind === "bad" ? cleanIncident(MODULE_TO_COVERAGE[existing.module], ev.incident) : null;
+    existing.insuranceCover = kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[existing.module], ev.insuranceCover, existing.incident) : [];
     existing.cost = Math.max(0, Number(ev.cost) || 0);
     existing.description = ev.description || "";
     existing.takesAsset = ev.takesAsset === false ? false : true;
@@ -1724,7 +1936,13 @@ async function processWeeklyBigEvents(classCode, opts) {
     });
     if (eligibleDefs.length === 0) continue;
     const def = eligibleDefs[Math.floor(Math.random() * eligibleDefs.length)];
+    // Which of their properties/vehicles this hits (see pickEventAsset).
+    const coverage = def.kind !== "good" ? MODULE_TO_COVERAGE[def.module] : null;
+    const asset = coverage === "property" || coverage === "transport"
+      ? pickEventAsset(cls, student.username, coverage, def.incident, false) : null;
     newEntries.push({
+      ...(asset || {}),
+      incident: def.incident || null,
       id: uid("bigevlog"), studentUser: student.username, defId: def.id, week: weekKey, date: nowStr(),
       name: def.name, module: def.module, kind: def.kind || "bad", cost: def.cost, description: def.description || "",
       // Locked in at generation time so editing the def later never changes
@@ -1769,7 +1987,7 @@ async function processWeeklyBigEvents(classCode, opts) {
 async function resolveBigEvent(username, classCode, logId, choice, paySource, planId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let outcomeNote = "", amount = 0;
+  let outcomeNote = "", amount = 0, writeOffNet = null;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1791,11 +2009,12 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         if (entry.module === "income") {
           t.update(userRef, { jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null });
         } else if (entry.module === "property") {
-          const prop = cls.properties.find(p => p.owner === username);
-          if (prop) { prop.owner = null; prop.mortgage = null; prop.occupancy = null; prop.rentLastWeekPaid = null; }
+          // The property this event hit (older events: their first one).
+          const prop = eventAssetNow(cls, username, "property", entry).property;
+          if (prop) releasePropertyFields(prop);
           t.update(classRef, { properties: cls.properties, bigEventLog: cls.bigEventLog });
         } else if (entry.module === "transport") {
-          const veh = cls.vehicles.find(v => (v.owners || []).includes(username));
+          const veh = eventAssetNow(cls, username, "transport", entry).vehicle;
           if (veh) veh.owners = veh.owners.filter(o => o !== username);
           t.update(classRef, { vehicles: cls.vehicles, bigEventLog: cls.bigEventLog });
         }
@@ -1830,11 +2049,26 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         // planId picks which of the student's matching plans to claim on;
         // without one, the cheapest for the student is used.
         const coverage = MODULE_TO_COVERAGE[entry.module];
-        const options = coverage ? insuranceClaimOptions(cls, user, coverage, entry.insuranceCover, entry.cost) : [];
-        const option = planId ? options.find(o => o.plan.id === planId) : options[0];
+        const options = coverage ? insuranceClaimOptions(cls, user, coverage, entry.insuranceCover, entry.cost, entry) : [];
+        // Without a planId, never pick a write-off for the student — that
+        // gives their house away, so it must always be chosen on purpose.
+        const option = planId ? options.find(o => o.plan.id === planId) : options.find(o => !o.writeOff);
         if (!option) throw new Error("NO_PLAN");
-        const toPay = option.studentPays;
         const cash = user.balance || 0;
+        if (option.writeOff) {
+          // Indemnity on house damage: the insurer pays the market price
+          // and takes the house (see insuranceClaimOptions).
+          if (!isTeacher && option.net < 0 && cash < -option.net) throw new Error("BROKE_EXCESS");
+          releasePropertyFields(option.property);
+          entry.status = "claimed";
+          entry.writtenOff = true;
+          writeOffNet = option.net;
+          outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — ${writeOffText(option)}`;
+          if (!isTeacher && option.net !== 0) t.update(userRef, { balance: Math.round((cash + option.net) * 100) / 100 });
+          t.update(classRef, { properties: cls.properties, bigEventLog: cls.bigEventLog });
+          return;
+        }
+        const toPay = option.studentPays;
         if (!isTeacher && cash < toPay) throw new Error("BROKE_EXCESS");
         entry.status = "claimed";
         amount = toPay;
@@ -1855,6 +2089,14 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
     if (e.message === "NOT_FOUND") return { ok: false, error: "That event is no longer pending." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
+  if (writeOffNet !== null) {
+    // Money came IN from the insurer (or, with a big mortgage, went out —
+    // logged the same way a sale that went negative is).
+    await logTxn(classCode, writeOffNet >= 0
+      ? { type: "insurance-claim", to: username, amount: writeOffNet, note: outcomeNote }
+      : { type: "property-sell", to: username, amount: writeOffNet, note: outcomeNote });
+    return { ok: true };
+  }
   await logTxn(classCode, { type: "big-event", from: username, amount, note: outcomeNote });
   return { ok: true };
 }
@@ -1866,20 +2108,21 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
 // cover it and what each pays out (see insuranceClaimOptions).
 function weeklyEventInsurance(ev) {
   const coverage = ev.severity === "bad" && ["property", "transport"].includes(ev.coverage) ? ev.coverage : "general";
-  return { coverage, insuranceCover: cleanInsuranceCover(coverage, ev.insuranceCover) };
+  const incident = cleanIncident(coverage, ev.incident);
+  return { coverage, incident, insuranceCover: cleanInsuranceCover(coverage, ev.insuranceCover, incident) };
 }
 
 // A bad event tied to property or transport only goes to students who
 // have one — a home they own or rent, or a vehicle — so nobody gets a
-// "your car broke down" event without a car. Everything else (all events
-// made before this existed included) can go to anyone, same as always.
+// "your car broke down" event without a car. Damage to the house itself
+// only goes to students who own a house (see pickEventAsset). Everything
+// else (all events made before this existed included) can go to anyone,
+// same as always.
 function weeklyEventFitsStudent(cls, username, ev) {
   if (ev.severity !== "bad") return true;
-  if (ev.coverage === "property") {
-    return (cls.properties || []).some(p => p.owner === username || (p.sublet && p.sublet.tenant === username))
-      || (cls.npcProperties || []).some(p => p.tenant === username);
+  if (ev.coverage === "property" || ev.coverage === "transport") {
+    return pickEventAsset(cls, username, ev.coverage, cleanIncident(ev.coverage, ev.incident), true) !== null;
   }
-  if (ev.coverage === "transport") return (cls.vehicles || []).some(v => (v.owners || []).includes(username));
   return true;
 }
 
@@ -2015,13 +2258,16 @@ async function processWeeklyEvents(classCode, opts) {
     // Locked in now, same as big events, so editing the event later never
     // changes how an already-issued one can be claimed.
     const insurance = weeklyEventInsurance(ev);
+    // Which of their properties/vehicles this hits (see pickEventAsset).
+    const asset = insurance.coverage !== "general"
+      ? pickEventAsset(cls, student.username, insurance.coverage, insurance.incident, true) : null;
     if (ev.type === "choice") {
       // Multiple-choice events don't apply a balance change yet — the
       // student must pick one of the options first (see resolveChoiceEvent).
       newLogEntries.push({
         id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
         name: ev.name, amount: null, description: ev.description || "", severity: ev.severity || "neutral",
-        claimed: false, type: "choice", options: ev.options || [], status: "pending", ...insurance
+        claimed: false, type: "choice", options: ev.options || [], status: "pending", ...insurance, ...(asset || {})
       });
     } else {
       // Fixed-amount events used to apply the balance change and log a
@@ -2034,7 +2280,7 @@ async function processWeeklyEvents(classCode, opts) {
       newLogEntries.push({
         id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
         name: ev.name, amount: ev.amount, description: ev.description || "", severity: ev.severity || "neutral",
-        claimed: false, type: "fixed", status: "scheduled", ...insurance
+        claimed: false, type: "fixed", status: "scheduled", ...insurance, ...(asset || {})
       });
     }
   }
@@ -2080,10 +2326,12 @@ async function revealFixedEvent(classCode, eventLogId) {
 // The ways a student can claim insurance on a bad weekly event they've
 // already been charged for (see insuranceClaimOptions) — best payout
 // first. Old log entries have no coverage saved, so they're General.
+// Indemnity write-offs (writeOff: true) are in here too; the popups always
+// show those separately, since claiming one gives the house away.
 function weeklyEventClaimOptions(cls, user, entry) {
   if (!entry || entry.severity !== "bad" || entry.claimed) return [];
   const loss = Math.abs(Math.min(0, Number(entry.amount) || 0));
-  return insuranceClaimOptions(cls, user, entry.coverage || "general", entry.insuranceCover, loss)
+  return insuranceClaimOptions(cls, user, entry.coverage || "general", entry.insuranceCover, loss, entry)
     .sort((a, b) => b.payout - a.payout);
 }
 
@@ -2093,9 +2341,10 @@ function weeklyEventClaimOptions(cls, user, entry) {
 async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let payout = 0, planName = "", eventName = "";
+  let payout = 0, planName = "", eventName = "", writeOffNote = "";
   try {
     await fdb.runTransaction(async (t) => {
+      writeOffNote = "";
       const userSnap = await t.get(userRef);
       const classSnap = await t.get(classRef);
       if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
@@ -2109,17 +2358,35 @@ async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
       payout = option.payout;
       planName = insurancePlanName(option.plan);
       eventName = entry.name || "";
+      const cash = user.balance || 0;
       entry.claimed = true;
-      t.update(userRef, { balance: Math.round(((user.balance || 0) + payout) * 100) / 100 });
+      if (option.writeOff) {
+        // Indemnity on house damage: the insurer pays the market price and
+        // takes the house (see insuranceClaimOptions).
+        if (option.net < 0 && cash < -option.net) throw new Error("BROKE");
+        releasePropertyFields(option.property);
+        entry.writtenOff = true;
+        writeOffNote = writeOffText(option);
+        t.update(userRef, { balance: Math.round((cash + payout) * 100) / 100 });
+        t.update(classRef, { properties: cls.properties, eventLog: cls.eventLog });
+        return;
+      }
+      t.update(userRef, { balance: Math.round((cash + payout) * 100) / 100 });
       t.update(classRef, { eventLog: cls.eventLog });
     });
   } catch (e) {
     if (e.message === "NO_PLAN") return { ok: false, error: "You don't have an insurance plan that covers this." };
     if (e.message === "NOT_CLAIMABLE") return { ok: false, error: "That event can't be claimed." };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash to cover what's still owed on the mortgage." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "insurance-claim", to: username, amount: payout, note: `Insurance claim (${planName})` + (eventName ? ` for "${eventName}"` : "") });
-  return { ok: true, payout };
+  const note = `Insurance claim (${planName})` + (eventName ? ` for "${eventName}"` : "") + (writeOffNote ? ` — ${writeOffNote}` : "");
+  // A write-off with a big mortgage can leave the student owing money —
+  // logged the same way a sale that went negative is.
+  await logTxn(classCode, payout >= 0
+    ? { type: "insurance-claim", to: username, amount: payout, note }
+    : { type: "property-sell", to: username, amount: payout, note });
+  return { ok: true, payout, writeOff: !!writeOffNote };
 }
 
 // Resolves a pending multiple-choice weekly event: applies the balance

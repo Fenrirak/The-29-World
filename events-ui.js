@@ -91,12 +91,19 @@ async function checkWeeklyEventPopup(username, classCode) {
     entry = revealed;
   }
 
-  // The plan that pays this student the most back for this event, if any.
-  const best = weeklyEventClaimOptions(cls, user, entry)[0] || null;
+  // The plan that pays this student the most back for this event, if any —
+  // plus, kept separate because claiming it gives their house away, an
+  // Indemnity write-off when the house itself was damaged.
+  const options = weeklyEventClaimOptions(cls, user, entry);
+  const best = options.find(o => !o.writeOff) || null;
+  const writeOff = options.find(o => o.writeOff) || null;
 
   const withDetails = [{
     id: entry.id, name: entry.name || "Random event", description: entry.description || "",
     amount: entry.amount || 0, severity: entry.severity || "neutral", claimed: !!entry.claimed,
+    impact: eventImpactText(entry, entry.coverage),
+    writeOffPlanId: writeOff ? writeOff.plan.id : null,
+    writeOffLabel: writeOff ? writeOffButtonLabel(writeOff) : "",
     claimable: !!best && best.payout > 0,
     claimPlanId: best ? best.plan.id : null,
     claimLabel: best ? `Claim on ${insurancePlanName(best.plan)} — get ${fmtMoney(best.payout)} back` : "",
@@ -169,7 +176,7 @@ function showChoiceOutcome(overlay, entry, amount, outcome, username, classCode)
     <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${escapeHtml(entry.name)}</h2>
     ${outcome ? `<p>${escapeHtml(outcome)}</p>` : ""}
     <p class="${amount < 0 ? 'ticker-down' : 'ticker-up'}" style="font-weight:900;font-size:1.2em;">${amount >= 0 ? "+" : "-"}${fmtMoney(Math.abs(amount))}</p>
-    ${claimable ? `<button class="btn small secondary" onclick="claimFromPopup('${entry.id}', '${escapeJsAttr(username)}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
+    ${claimable ? `<button class="btn small secondary" data-claim-btn onclick="claimFromPopup('${entry.id}', '${escapeJsAttr(username)}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
     <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwChoiceOutcomeCloseBtn">Nice, got it</button>
   `;
   document.getElementById("anwChoiceOutcomeCloseBtn").addEventListener("click", () => overlay.remove());
@@ -189,8 +196,10 @@ function showEventPopup(events, username, classCode) {
       <div style="flex:1;">
         <div class="anw-event-name">${escapeHtml(e.name)}</div>
         ${e.description ? `<div class="muted-small">${escapeHtml(e.description)}</div>` : ""}
-        ${e.claimable ? `<button class="btn small secondary" style="margin-top:6px;" onclick="claimFromPopup('${e.id}', '${escapeJsAttr(username)}', '${classCode}', this, '${e.claimPlanId}')">${icon("shield", 13)} ${escapeHtml(e.claimLabel)}</button>` : ""}
-        ${e.claimNote ? `<div class="muted-small">${escapeHtml(e.claimNote)}</div>` : ""}
+        ${e.impact ? `<div class="muted-small">${escapeHtml(e.impact)}</div>` : ""}
+        ${e.claimable ? `<button class="btn small secondary" data-claim-btn style="margin-top:6px;" onclick="claimFromPopup('${e.id}', '${escapeJsAttr(username)}', '${classCode}', this, '${e.claimPlanId}')">${icon("shield", 13)} ${escapeHtml(e.claimLabel)}</button>` : ""}
+        ${e.writeOffPlanId ? `<button class="btn small coral" data-claim-btn style="margin-top:6px;" onclick="claimWriteOffFromPopup('${e.id}', '${escapeJsAttr(username)}', '${classCode}', this, '${e.writeOffPlanId}')">${icon("house", 13)} ${escapeHtml(e.writeOffLabel)}</button>` : ""}
+        ${e.claimNote && !e.writeOffPlanId ? `<div class="muted-small">${escapeHtml(e.claimNote)}</div>` : ""}
         ${e.claimed ? `<div class="muted-small ticker-up">Claimed on insurance</div>` : ""}
       </div>
       <div class="${e.amount < 0 ? 'ticker-down' : 'ticker-up'}" style="font-weight:900;">
@@ -212,27 +221,77 @@ function showEventPopup(events, username, classCode) {
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
+// What an event hit, in plain words, e.g. "Fire · your Ford Ranger (truck)".
+function eventImpactText(entry, coverage) {
+  if (!entry) return "";
+  const incident = insuranceIncidentInfo(coverage, entry.incident);
+  const kind = { car: "car", truck: "truck", bike: "bike/scooter" }[entry.assetType] || "";
+  const asset = entry.assetName ? `${entry.assetName}${kind ? ` (${kind})` : ""}`
+    : entry.assetType === "rented-home" ? "your rented home" : "";
+  return [incident ? incident.you : "", asset].filter(Boolean).join(" · ");
+}
+
+// Short button text for an Indemnity write-off (the full breakdown is in
+// the confirm box — see writeOffText).
+function writeOffButtonLabel(o) {
+  const name = (o.property && o.property.name) || "your house";
+  return `Claim on ${insurancePlanName(o.plan)} — ${o.net >= 0 ? `get ${fmtMoney(o.net)}` : `owe ${fmtMoney(-o.net)}`}, and ${name} goes to the insurer`;
+}
+
+function confirmWriteOff(o) {
+  return confirm(`${writeOffText(o)}\n\nYou won't own it any more. Claim anyway?`);
+}
+
+// Indemnity write-off from a weekly event popup: re-checks the numbers
+// fresh and asks the student to confirm before giving the house away.
+async function claimWriteOffFromPopup(eventLogId, username, classCode, btn, planId) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const user = await getUser(username);
+  const entry = (cls.eventLog || []).find(e => e.id === eventLogId);
+  const o = weeklyEventClaimOptions(cls, user, entry).find(x => x.writeOff && x.plan.id === planId);
+  if (!o) { btn.disabled = true; btn.textContent = "This claim isn't available any more"; return; }
+  if (!confirmWriteOff(o)) return;
+  return claimFromPopup(eventLogId, username, classCode, btn, planId);
+}
+
 // planId is optional — without one (the multiple-choice outcome, where
 // the loss is only known after the student picks), the plan paying the
-// most back is looked up fresh here.
+// most back is looked up fresh here. A write-off is only ever used when
+// it's the sole option AND the student confirms it.
 async function claimFromPopup(eventLogId, username, classCode, btn, planId) {
+  const label = btn.innerHTML;
   btn.disabled = true;
   btn.textContent = "Claiming...";
   if (!planId) {
     const cls = withNewModuleDefaults(await getClass(classCode));
     const user = await getUser(username);
     const entry = (cls.eventLog || []).find(e => e.id === eventLogId);
-    const best = weeklyEventClaimOptions(cls, user, entry)[0];
-    if (!best) { btn.textContent = "No insurance plan covers this"; return; }
-    if (best.payout <= 0) { btn.textContent = `Your excess (${fmtMoney(best.excess)}) is more than this — nothing to claim`; return; }
-    planId = best.plan.id;
+    const options = weeklyEventClaimOptions(cls, user, entry);
+    const best = options.find(o => !o.writeOff);
+    const writeOff = options.find(o => o.writeOff);
+    if (best && best.payout > 0) {
+      planId = best.plan.id;
+    } else if (writeOff) {
+      if (!confirmWriteOff(writeOff)) { btn.disabled = false; btn.innerHTML = label; return; }
+      planId = writeOff.plan.id;
+    } else if (best) {
+      btn.textContent = `Your excess (${fmtMoney(best.excess)}) is more than this — nothing to claim`; return;
+    } else {
+      btn.textContent = "No insurance plan covers this"; return;
+    }
   }
   const res = await claimInsuranceForEvent(username, classCode, eventLogId, planId);
   if (res.ok) {
-    btn.outerHTML = `<div class="muted-small ticker-up">Claimed — ${fmtMoney(res.payout)} paid out</div>`;
+    // One claim per event — take away the other claim button, if any.
+    const row = btn.closest(".anw-event-row, .anw-modal-card");
+    if (row) row.querySelectorAll("[data-claim-btn]").forEach(b => { if (b !== btn) b.remove(); });
+    btn.outerHTML = res.writeOff
+      ? `<div class="muted-small">Claimed — ${res.payout >= 0 ? `${fmtMoney(res.payout)} paid out` : `${fmtMoney(-res.payout)} still owed`}, and the house now belongs to the insurer</div>`
+      : `<div class="muted-small ticker-up">Claimed — ${fmtMoney(res.payout)} paid out</div>`;
+    if (res.writeOff && typeof render === "function") render();
   } else {
     btn.disabled = false;
-    btn.textContent = "Try again";
+    btn.textContent = res.error || "Try again";
   }
 }
 
@@ -316,7 +375,7 @@ async function checkBigEventPopup(username, classCode) {
   if (pending) {
     const user = await getUserCached(username);
     const coverage = BIG_EVENT_COVERAGE[pending.module];
-    const claimOptions = coverage ? insuranceClaimOptions(cls, user, coverage, pending.insuranceCover, pending.cost) : [];
+    const claimOptions = coverage ? insuranceClaimOptions(cls, user, coverage, pending.insuranceCover, pending.cost, pending) : [];
     showBigEventPopup(pending, claimOptions, username, classCode, user);
     return;
   }
@@ -389,12 +448,23 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
   // out with the reason; "Pay from cash" always stays available.
   const coverage = BIG_EVENT_COVERAGE[entry.module];
   const cover = entry.insuranceCover || [];
-  const claims = (claimOptions || []).map(o => ({ ...o, ok: isTeacher || cash >= o.studentPays }));
-  const coverLine = cover.length
-    ? `<p class="muted-small">Insurance that covers this: ${escapeHtml(insuranceCoverSummary(coverage, cover))}. You'd also pay your plan's excess.</p>`
-    : "";
+  const claims = (claimOptions || []).map(o => ({ ...o, ok: isTeacher || o.studentPays <= 0 || cash >= o.studentPays }));
+  const impact = eventImpactText(entry, coverage);
+  const coverLine = (impact ? `<p class="muted-small">${escapeHtml(impact)}</p>` : "")
+    + (cover.length
+      ? `<p class="muted-small">Insurance that covers this: ${escapeHtml(insuranceCoverSummary(coverage, cover, entry.incident))}. You'd also pay your plan's excess.</p>`
+      : "");
+  // Types listed on the event that could cover THIS vehicle (Truck
+  // Insurance only covers trucks, the other types only cars and bikes).
+  const fittingTypes = cover.filter(c => typeFitsVehicle(coverage, c.type, entry.assetType));
   const claimButtons = claims.length
     ? claims.map((o, i) => {
+        if (o.writeOff) {
+          // Gives the house away — red, and confirmed before it's sent.
+          return `<button class="btn coral" id="bigClaimBtn${i}" ${o.ok ? "" : "disabled"}>
+            ${escapeHtml(writeOffButtonLabel(o))}${o.ok ? "" : ` — you only have ${fmtMoney(cash)}`}
+          </button>`;
+        }
         // The type is only added when the plan's own name doesn't already say it.
         const typeLabel = insuranceTypeLabel(coverage, o.plan.insType);
         const showType = typeLabel && o.plan.name !== typeLabel;
@@ -404,7 +474,9 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
         </button>`;
       }).join("")
     : `<button class="btn secondary" disabled>${cover.length
-        ? `Claim insurance — needs ${escapeHtml(cover.map(c => insuranceTypeLabel(coverage, c.type)).join(" or "))}`
+        ? (fittingTypes.length
+          ? `Claim insurance — needs ${escapeHtml(fittingTypes.map(c => insuranceTypeLabel(coverage, c.type)).join(" or "))}`
+          : `Claim insurance — none of the insurance for this covers your ${entry.assetType === "truck" ? "truck" : "vehicle"}`)
         : "Claim insurance (no matching plan)"}</button>`;
 
   overlay.innerHTML = `
@@ -459,63 +531,109 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
   document.getElementById("bigPayCashBtn").addEventListener("click", () => resolve("pay", "cash"));
   document.getElementById("bigPaySavingsBtn").addEventListener("click", () => resolve("pay", "savings"));
   claims.forEach((o, i) => {
-    document.getElementById("bigClaimBtn" + i).addEventListener("click", () => resolve("claim", null, o.plan.id));
+    document.getElementById("bigClaimBtn" + i).addEventListener("click", () => {
+      if (o.writeOff && !confirmWriteOff(o)) return;
+      resolve("claim", null, o.plan.id);
+    });
   });
 }
 
 /* ===================== Insurance types picker (teacher) =====================
    Shared by the weekly events form (teacher.html) and the big events form
-   (bigevents.html): one row per property/transport insurance type, each
-   with a tick box and how much that type pays out for the event. */
-function renderInsuranceCoverPicker(boxId, coverage, cover) {
+   (bigevents.html): first what happened (fire, theft, house damage...),
+   then one row per property/transport insurance type, each with a tick box
+   and how much that type pays out. Types that don't cover what happened
+   can't be ticked — each type only covers what its description says. */
+function renderInsuranceCoverPicker(boxId, coverage, cover, incident) {
   const box = document.getElementById(boxId);
   if (!box) return;
   const types = INSURANCE_TYPES[coverage] || [];
   box.dataset.coverage = types.length ? coverage : "";
   if (!types.length) { box.innerHTML = ""; box.classList.add("hidden"); return; }
+  const inc = cleanIncident(coverage, incident);
+  const incInfo = insuranceIncidentInfo(coverage, inc);
   const byType = {};
   (cover || []).forEach(c => { byType[c.type] = c; });
   box.classList.remove("hidden");
-  box.innerHTML = `
-    <label style="margin-top:12px;">Which ${coverage} insurance covers this?</label>
-    <p class="muted-small" style="margin-top:0;">Tick each type that can claim and how much it pays out. Students pay their plan's excess plus anything the payout doesn't cover. Tick none and any ${coverage} plan covers the full cost (the student just pays the excess).</p>
-    ${types.map(t => {
-      const row = byType[t.key];
-      return `
-      <div class="ins-cover-row">
-        <input type="checkbox" id="${boxId}-${t.key}" data-ins-type="${t.key}" ${row ? "checked" : ""}>
-        <label for="${boxId}-${t.key}">${escapeHtml(t.label)}</label>
-        <span class="ins-cover-pay">
-          <span class="muted-small">pays $</span>
-          <input type="number" min="0" step="0.01" data-ins-payout="${t.key}" aria-label="${escapeHtml(t.label)} payout" placeholder="0" value="${row ? row.payout : ""}" ${row ? "" : "disabled"}>
-        </span>
+  const rowHtml = t => {
+    const row = byType[t.key];
+    const fits = !!inc && t.covers.includes(inc);
+    const writeOff = fits && isHouseWriteOff(coverage, t.key, inc);
+    const checked = fits && !!row;
+    const subs = [];
+    if (t.vehicles === "trucks") subs.push("Trucks only.");
+    if (t.vehicles === "cars") subs.push("Cars and bikes only.");
+    if (writeOff) subs.push("The student gets the house's market price and the insurer takes the house.");
+    let pay;
+    if (!inc) pay = `<span class="muted-small">Choose what happened first</span>`;
+    else if (!fits) pay = `<span class="muted-small">Doesn't cover ${escapeHtml(incInfo.short)}</span>`;
+    else if (writeOff && inc === "house") pay = `<span class="muted-small ins-cover-pay">pays the house's market price</span>`;
+    else pay = `<span class="ins-cover-pay"><span class="muted-small">${writeOff ? "market price + contents $" : "pays $"}</span>
+        <input type="number" min="0" step="0.01" data-ins-payout="${t.key}" aria-label="${escapeHtml(t.label)} payout" placeholder="0" value="${row ? row.payout : ""}" ${checked ? "" : "disabled"}></span>`;
+    return `
+      <div class="ins-cover-row${fits ? "" : " off"}">
+        <input type="checkbox" id="${boxId}-${t.key}" data-ins-type="${t.key}" ${checked ? "checked" : ""} ${fits ? "" : "disabled"}>
+        <label for="${boxId}-${t.key}"><span>${escapeHtml(t.label)}</span>${subs.length ? `<span class="ins-cover-sub">${escapeHtml(subs.join(" "))}</span>` : ""}</label>
+        ${pay}
       </div>`;
-    }).join("")}
+  };
+  box.innerHTML = `
+    <label for="${boxId}-incident" style="margin-top:12px;">${coverage === "property" ? "What was damaged?" : "What happened?"}</label>
+    <select id="${boxId}-incident" data-ins-incident>
+      <option value="" disabled ${inc ? "" : "selected"}>Choose…</option>
+      ${INSURANCE_INCIDENTS[coverage].map(i => `<option value="${i.key}" ${i.key === inc ? "selected" : ""}>${escapeHtml(i.label)}</option>`).join("")}
+    </select>
+    <label style="margin-top:12px;">Which ${coverage} insurance covers this?</label>
+    <p class="muted-small" style="margin-top:0;">Tick each type that can claim and how much it pays out. Students pay their plan's excess plus anything the payout doesn't cover. Tick none and any ${coverage} plan that covers this pays the full cost (the student just pays the excess).</p>
+    ${types.map(rowHtml).join("")}
   `;
   box.querySelectorAll("[data-ins-type]").forEach(cb => cb.addEventListener("change", () => {
     const amt = box.querySelector(`[data-ins-payout="${cb.dataset.insType}"]`);
+    if (!amt) return;
     amt.disabled = !cb.checked;
     if (cb.checked) amt.focus();
   }));
+  // Changing what happened redraws the rows, keeping whatever's still ticked.
+  box.querySelector("[data-ins-incident]").addEventListener("change", e => {
+    const kept = [];
+    box.querySelectorAll("[data-ins-type]").forEach(cb => {
+      if (!cb.checked) return;
+      const amt = box.querySelector(`[data-ins-payout="${cb.dataset.insType}"]`);
+      kept.push({ type: cb.dataset.insType, payout: amt ? amt.value : "" });
+    });
+    renderInsuranceCoverPicker(boxId, coverage, kept, e.target.value);
+  });
 }
 
-// Reads the picker back as [{ type, payout }] ([] when it's hidden). Returns
-// null, after telling the teacher why, if a ticked type has no valid payout.
+// Reads the picker back as { incident, cover: [{ type, payout }] } — empty
+// when it's hidden. Returns null, after telling the teacher why, if what
+// happened isn't chosen or a ticked type has no valid payout.
 function readInsuranceCoverPicker(boxId) {
   const box = document.getElementById(boxId);
-  if (!box || box.classList.contains("hidden")) return [];
+  if (!box || box.classList.contains("hidden")) return { incident: null, cover: [] };
   const coverage = box.dataset.coverage;
+  const sel = box.querySelector("[data-ins-incident]");
+  const incident = sel ? sel.value : "";
+  if (!incident) {
+    alert(coverage === "property" ? "Choose what was damaged." : "Choose what happened.");
+    if (sel) sel.focus();
+    return null;
+  }
   const out = [];
   for (const cb of box.querySelectorAll("[data-ins-type]")) {
-    if (!cb.checked) continue;
+    if (!cb.checked || cb.disabled) continue;
     const type = cb.dataset.insType;
-    const raw = box.querySelector(`[data-ins-payout="${type}"]`).value.trim();
+    const input = box.querySelector(`[data-ins-payout="${type}"]`);
+    if (!input) { out.push({ type, payout: 0 }); continue; } // Indemnity on the house: market price, no amount
+    const raw = input.value.trim();
     const amount = Number(raw);
     if (raw === "" || !Number.isFinite(amount) || amount < 0) {
-      alert(`Enter how much ${insuranceTypeLabel(coverage, type)} pays out (0 or more), or untick it.`);
+      alert(isHouseWriteOff(coverage, type, incident)
+        ? `Enter how much ${insuranceTypeLabel(coverage, type)} pays for the contents (0 or more), or untick it.`
+        : `Enter how much ${insuranceTypeLabel(coverage, type)} pays out (0 or more), or untick it.`);
       return null;
     }
     out.push({ type, payout: amount });
   }
-  return out;
+  return { incident, cover: out };
 }
