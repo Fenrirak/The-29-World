@@ -325,9 +325,10 @@ async function simulatePropertyMarketDay(classCode) {
 async function buyProperty(username, classCode, propId, financed, depositAmount) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let deposit = 0, weekly = 0, propName = "", cashPaid = 0, taxAmount = 0;
+  let deposit = 0, weekly = 0, propName = "", cashPaid = 0, taxAmount = 0, mortgaged = false;
   try {
     await fdb.runTransaction(async (t) => {
+      deposit = 0; cashPaid = 0; mortgaged = false; // reset every attempt — this callback can be retried
       const userSnap = await t.get(userRef);
       const classSnap = await t.get(classRef);
       if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
@@ -376,12 +377,15 @@ async function buyProperty(username, classCode, propId, financed, depositAmount)
           principalRemaining: Math.round((taxedPrice - deposit) * 100) / 100
         };
         prop.occupancy = null; prop.rentLastWeekPaid = null;
+        prop.sublet = null; // a new owner never inherits someone else's tenant or rental listing
+        mortgaged = true;
         if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - deposit) * 100) / 100 });
       } else {
         if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
         prop.owner = username;
         prop.mortgage = null;
         prop.occupancy = null; prop.rentLastWeekPaid = null;
+        prop.sublet = null; // a new owner never inherits someone else's tenant or rental listing
         cashPaid = taxedPrice;
         if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - taxedPrice) * 100) / 100 });
       }
@@ -392,7 +396,9 @@ async function buyProperty(username, classCode, propId, financed, depositAmount)
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "property-buy", from: username, amount: financed ? deposit : cashPaid, note: (financed ? `Bought (mortgaged): ${propName} — ${fmtMoney(deposit)} deposit` : `Bought outright: ${propName}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
+  // `mortgaged`, not `financed`: asking for a mortgage on a listing that
+  // doesn't offer one buys it outright, and is logged as that.
+  await logTxn(classCode, { type: "property-buy", from: username, amount: mortgaged ? deposit : cashPaid, note: (mortgaged ? `Bought (mortgaged): ${propName} — ${fmtMoney(deposit)} deposit` : `Bought outright: ${propName}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
 }
 // Sells a property back to the class. The owner is paid whatever the
@@ -413,13 +419,17 @@ async function buyProperty(username, classCode, propId, financed, depositAmount)
 // itself, but this is the one place that actually charges anyone.
 async function sellProperty(classCode, propId) {
   const classRef = classesCol().doc(classCode);
-  let owner = null, propName = "", marketPrice = 0, mortgagePayoff = 0, breakFee = 0, payout = 0;
+  let owner = null, propName = "", marketPrice = 0, mortgagePayoff = 0, breakFee = 0, payout = 0, blocked = false;
   await fdb.runTransaction(async (t) => {
+    owner = null; blocked = false;
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const prop = cls.properties.find(p => p.id === propId);
     if (!prop || !prop.owner) return;
+    // A teacher repossessing it is never blocked — only the student
+    // selling their own while a big event has it at risk.
+    if (t29SessionStudent() === prop.owner && pendingBigEventFor(cls, prop.owner, "property", prop.id)) { blocked = true; return; }
     owner = prop.owner;
     propName = prop.name;
     marketPrice = prop.price;
@@ -438,6 +448,7 @@ async function sellProperty(classCode, propId) {
     prop.sublet = null;
     t.update(classRef, { properties: cls.properties });
   });
+  if (blocked) return { ok: false, error: BIG_EVENT_BLOCK_MESSAGE };
   if (!owner) return { ok: false };
   await adjustBalance(owner, payout);
   const breakdown = mortgagePayoff > 0
@@ -1159,11 +1170,16 @@ function overdueSubletRentWeekKey(prop, cls) {
   if (!prop || !prop.sublet || !prop.sublet.tenant) return null;
   const sublet = prop.sublet;
   const weekKey = isoWeekKey(new Date());
+  // The move-in week is free (payTenantRent refuses it), so a tenant who
+  // moved in after this week's due day doesn't owe it — same as school rentals.
+  if (sublet.leaseStartWeekKey === weekKey) return null;
   if (sublet.rentLastWeekPaid === weekKey) return null; // already paid this week
   const lastDueWeekKey = lastDueWeekKeyForDay(prop.rentDay || "Fri");
   if (lastDueWeekKey === weekKey) return weekKey;
   if (sublet.rentLastWeekPaid === lastDueWeekKey) return null;
-  if (weekKeyOrder(lastDueWeekKey) < weekKeyOrder(sublet.leaseStartWeekKey)) return null;
+  // `<=` for the same reason as overdueMortgageWeekKey: a due day that fell
+  // in the (free) move-in week was never owed.
+  if (weekKeyOrder(lastDueWeekKey) <= weekKeyOrder(sublet.leaseStartWeekKey)) return null;
   return lastDueWeekKey;
 }
 
@@ -1491,7 +1507,9 @@ function overdueNpcRentWeekKey(unit) {
   const lastDueWeekKey = lastDueWeekKeyForDay(unit.rentDay || "Fri");
   if (lastDueWeekKey === weekKey) return weekKey;
   if (unit.rentLastWeekPaid === lastDueWeekKey) return null;
-  if (weekKeyOrder(lastDueWeekKey) < weekKeyOrder(unit.leaseStartWeekKey)) return null;
+  // `<=`: a due day in the (free) move-in week was never owed — see
+  // overdueMortgageWeekKey.
+  if (weekKeyOrder(lastDueWeekKey) <= weekKeyOrder(unit.leaseStartWeekKey)) return null;
   return lastDueWeekKey;
 }
 // Whether a tenant currently has a missed weekly rent payment — powers the

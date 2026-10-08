@@ -64,6 +64,7 @@ async function init() {
   // render() below still run after the jobs, exactly as they did before.
   await t29FirstPaint(render);
   await T29_STARTUP_JOBS;
+  await checkBigEventPopup(u.username, u.classCode);
 
   // Names are only needed for "listed by X" — one roster fetch per page
   // load, not per render, since a roster read costs one Firestore read per
@@ -337,9 +338,15 @@ async function buyIt(id) {
   if (!confirm(`Buy "${l.name}" from ${nameOf(l.seller)} for ${fmtMoney(l.price)}?`)) return;
   const res = await buyListing(CURRENT.username, CURRENT.classCode, id);
   await render();
+  if (res.ok) {
+    // The listing's card is gone once it's sold, so the message goes in
+    // the box at the top of the list instead.
+    flashMsg(document.getElementById("browseMsg"), `<div class="success-msg">Bought ${esc(l.name)}! It's yours now.</div>`);
+    return;
+  }
   const box = document.getElementById("msg-" + id);
-  if (box) box.innerHTML = res.ok ? `<div class="success-msg">Bought!</div>` : `<div class="error-msg">${esc(res.error)}</div>`;
-  else if (!res.ok) alert(res.error);
+  if (box) box.innerHTML = `<div class="error-msg">${esc(res.error)}</div>`;
+  else alert(res.error);
 }
 
 async function sendOffer(id) {

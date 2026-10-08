@@ -108,6 +108,18 @@ function sanitizeUserText(s, maxLen) {
     .slice(0, maxLen || 60);
 }
 
+// Puts a message in a box and clears it again after about 3 seconds. For
+// messages shown straight after a render() (which rebuilds the box), so
+// they don't vanish the instant they appear. A newer message put in the
+// same box in the meantime is left alone.
+function flashMsg(el, html, ms) {
+  if (!el) return;
+  const token = String(Date.now()) + Math.random();
+  el.innerHTML = html;
+  el.dataset.flash = token;
+  setTimeout(() => { if (el.dataset.flash === token) el.innerHTML = ""; }, ms || 3000);
+}
+
 function usersCol() { installReadCache(); return fdb.collection("users"); }
 function classesCol() { installReadCache(); return fdb.collection("classes"); }
 
@@ -888,7 +900,7 @@ function defaultClassData(code, className, teacherUsername) {
       winLimitMessage: "You've hit your winning limit for today \u2014 nice work! Come back and play again tomorrow.",
       payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 }
     },
-    taxRates: { store: 0, insurance: 0, property: 0, transport: 0, interest: 0, gambling: 0 },
+    taxRates: { property: 0, transport: 0, interest: 0, gambling: 0 },
     wageTaxBrackets: [],
     bigEventDefs: [], bigEventLog: [], lastBigEventWeekRun: null,
     lifestyleConfig: {
@@ -1034,10 +1046,15 @@ async function createClassForTeacher(teacherUsername, className) {
 // state rather than configuration, so those are reset to their starting
 // values instead of copied as-is.
 // Builds the class-doc data for "new class from a template", shared by
-// same-account templating (createClassFromTemplate) and cross-account
-// sharing (importSharedTemplate) below — the copy/reset rules are
-// identical either way, only who ends up owning the result differs.
-function _classDataFromTemplate(code, className, teacherUsername, template) {
+// same-account templating (createClassFromTemplate), cross-account
+// sharing (importSharedTemplate) and "Restart class" (resetClass) — the
+// copy/reset rules are identical in each, only who ends up owning the
+// result differs.
+//   opts.keepPrices — leave property and share prices where they are now
+//                     (Restart class) instead of going back to the oldest
+//                     recorded price (a new class).
+function _classDataFromTemplate(code, className, teacherUsername, template, opts) {
+  const keepPrices = !!(opts && opts.keepPrices);
   const cls = defaultClassData(code, className, teacherUsername);
 
   cls.jobs = _cloneDoc(template.jobs || []);
@@ -1050,17 +1067,27 @@ function _classDataFromTemplate(code, className, teacherUsername, template) {
   });
   cls.properties = (template.properties || []).map(p => {
     const prop = _cloneDoc(p);
+    // Nobody owns, lives in, rents or owes anything on it yet — the same
+    // fields selling a house clears (see sellProperty).
     prop.owner = null; prop.occupancy = null; prop.rentLastWeekPaid = null;
-    prop.purchasePrice = null;
+    prop.purchasePrice = null; prop.mortgage = null; prop.sublet = null;
     // Reset to the listing's original starting price rather than wherever
     // its daily drift had wandered to in the template class — same idea as
     // the company reset just below, and the same reason: a fresh class
     // shouldn't inherit another class's accumulated price history.
-    const startPrice = (prop.priceHistory && prop.priceHistory.length) ? prop.priceHistory[0] : prop.price;
+    const startPrice = keepPrices ? prop.price
+      : (prop.priceHistory && prop.priceHistory.length) ? prop.priceHistory[0] : prop.price;
     prop.price = startPrice;
     prop.priceHistory = [startPrice];
     prop.priceHistoryDates = [nzDateKey()];
     return prop;
+  });
+  // School rentals: the listings are setup, the tenants aren't.
+  cls.npcProperties = (template.npcProperties || []).map(u => {
+    const unit = _cloneDoc(u);
+    unit.tenant = null; unit.leaseStartTs = null; unit.leaseStartWeekKey = null;
+    unit.rentLastWeekPaid = null; unit.rentLastPaidDate = null;
+    return unit;
   });
   cls.vehicles = (template.vehicles || []).map(v => {
     const veh = _cloneDoc(v);
@@ -1069,10 +1096,11 @@ function _classDataFromTemplate(code, className, teacherUsername, template) {
   });
   cls.companies = (template.companies || []).map(co => {
     const c = _cloneDoc(co);
-    const startPrice = (c.history && c.history.length) ? c.history[0] : c.price;
+    const startPrice = keepPrices ? c.price : (c.history && c.history.length) ? c.history[0] : c.price;
     c.price = startPrice;
     c.availableShares = c.totalShares;
     c.holders = {};
+    c.costBasis = {};
     c.history = [startPrice];
     c.historyDates = [nzDateKey()];
     return c;
@@ -1113,8 +1141,28 @@ function _classDataFromTemplate(code, className, teacherUsername, template) {
   cls.payDay = template.payDay || "Fri";
   cls.mortgageDay = template.mortgageDay || "Fri";
   cls.insuranceDay = template.insuranceDay || "Fri";
+  // Transport and renting settings. Fee overrides are keyed by life-event
+  // id, and the life events above keep their ids, so they still match.
+  cls.transportDay = template.transportDay || "Fri";
+  cls.publicTransportFee = _cloneDoc(template.publicTransportFee || cls.publicTransportFee);
+  cls.publicTransportFeeOverrides = _cloneDoc(template.publicTransportFeeOverrides || {});
+  cls.propertyBreakFee = Number(template.propertyBreakFee) || 0;
+  cls.movingCost = Number(template.movingCost) || 0;
+  cls.propertyRentals = _cloneDoc(template.propertyRentals || {});
+  cls.storeSortMode = template.storeSortMode || "manual";
 
   return cls;
+}
+
+// The setup part of a class (everything _classDataFromTemplate copies),
+// saved inside a share link so another teacher can import it without
+// needing permission to read the class itself. No people, money or
+// history goes in it — only what a brand-new class would start with.
+function _templateSnapshot(cls) {
+  const t = _classDataFromTemplate("", cls.name || "", cls.teacher || "", withNewModuleDefaults(_cloneDoc(cls)));
+  ["code", "name", "teacher", "students", "txns", "createdAt", "reportArchives", "archived", "archivedAt",
+    "templateShareToken", "automations", "jobApplications", "eventLog", "bigEventLog"].forEach(k => { delete t[k]; });
+  return _cloneDoc(t);
 }
 
 async function createClassFromTemplate(teacherUsername, className, templateCode) {
@@ -1154,26 +1202,31 @@ function genShareToken() {
   return out;
 }
 
-// "Share Template" button — mints a link the first time, then just keeps
-// returning the same one so repeat clicks don't invalidate a link a
-// teacher already handed out.
+// "Share Template" button — mints a link the first time, then keeps the
+// same link so repeat clicks don't invalidate one a teacher already
+// handed out. The link carries a copy of the class's setup (see
+// _templateSnapshot): the teacher importing it isn't allowed to read
+// someone else's class, so it can't be fetched from the class itself.
+// Each click refreshes that copy with the class's setup as it is now.
 async function getOrCreateTemplateShare(classCode, teacherUsername) {
   const cls = await getClass(classCode);
   if (!cls) return { ok: false, error: "Class not found." };
   if (cls.teacher !== teacherUsername) return { ok: false, error: "You don't have permission to share this class." };
+  const teacher = await getUser(teacherUsername);
 
+  const token = cls.templateShareToken || genShareToken();
   if (cls.templateShareToken) {
-    const existing = await templateSharesCol().doc(cls.templateShareToken).get();
-    if (existing.exists) return { ok: true, token: cls.templateShareToken };
-    // The class still points at a token whose share record is gone
-    // (shouldn't normally happen) — fall through and mint a fresh one.
+    // Share records can't be edited (firestore.rules), only replaced, so
+    // the old copy is removed and a fresh one saved under the same token.
+    const existing = await templateSharesCol().doc(token).get();
+    if (existing.exists) await templateSharesCol().doc(token).delete();
   }
-
-  const token = genShareToken();
   await templateSharesCol().doc(token).set({
-    token, classCode, teacher: teacherUsername, createdAt: Date.now()
+    token, classCode, teacher: teacherUsername, createdAt: Date.now(),
+    className: cls.name || "", teacherName: (teacher && teacher.name) || "",
+    template: _templateSnapshot(cls)
   });
-  await classesCol().doc(classCode).update({ templateShareToken: token });
+  if (cls.templateShareToken !== token) await classesCol().doc(classCode).update({ templateShareToken: token });
   return { ok: true, token };
 }
 
@@ -1193,15 +1246,25 @@ async function revokeTemplateShare(classCode, teacherUsername) {
 // What import-template.html shows before the receiving teacher commits —
 // deliberately requires no permission on the source class, since the
 // whole point of a share link is letting a different teacher use it.
+// needsRefresh: the link was made before links carried the class's setup
+// (and the class belongs to someone else, so it can't be read directly) —
+// the teacher who shared it has to click Share Template again.
 async function getTemplateShareInfo(token) {
   if (!token) return null;
   await T29_AUTH_READY; // firestore.rules requires request.auth != null
   const snap = await templateSharesCol().doc(token).get();
   if (!snap.exists) return null;
   const share = snap.data();
-  const [cls, teacher] = await Promise.all([getClass(share.classCode), getUser(share.teacher)]);
-  if (!cls) return null; // source class was deleted after sharing
-  return { token, className: cls.name, teacherName: teacher ? teacher.name : "another teacher" };
+  if (share.template) {
+    return { token, className: share.className || "a class", teacherName: share.teacherName || "another teacher", needsRefresh: false };
+  }
+  const [cls, teacher] = await Promise.all([
+    getClass(share.classCode).catch(() => undefined),
+    getUser(share.teacher).catch(() => null)
+  ]);
+  if (cls === null) return null; // source class was deleted after sharing
+  if (!cls) return { token, className: "a class", teacherName: "the teacher who sent it", needsRefresh: true };
+  return { token, className: cls.name, teacherName: teacher ? teacher.name : "another teacher", needsRefresh: false };
 }
 
 // Creates a brand new class in the IMPORTING teacher's account from a
@@ -1215,8 +1278,11 @@ async function importSharedTemplate(importingTeacherUsername, token, className) 
   const shareSnap = await templateSharesCol().doc(token).get();
   if (!shareSnap.exists) return { ok: false, error: "This share link is invalid or has been revoked." };
   const share = shareSnap.data();
-  const template = await getClass(share.classCode);
-  if (!template) return { ok: false, error: "The shared class no longer exists." };
+  // Older links don't carry the setup — those only work for the teacher
+  // who made them (nobody else may read their class).
+  const template = share.template || await getClass(share.classCode).catch(() => undefined);
+  if (template === null) return { ok: false, error: "The shared class no longer exists." };
+  if (!template) return { ok: false, error: "This link needs refreshing — ask the teacher who sent it to click Share Template on that class again, then use the link again." };
 
   let code;
   do { code = genCode(5); } while ((await getClass(code)));
@@ -1257,21 +1323,32 @@ async function deleteClassPermanently(teacherUsername, classCode) {
   if (!cls) return { ok: false, error: "Class not found." };
   if (cls.teacher !== teacherUsername) return { ok: false, error: "You don't have permission to delete this class." };
 
-  // Family links first, while the student docs that name them still exist.
-  await Promise.all((cls.students || []).map(u => _deleteParentViewFor(u)));
-  // Individual doc deletes (not a batch) so each one still goes through
-  // the wrapped docRef.delete() in installReadCache(), which is what
-  // keeps the read cache correct — a raw WriteBatch would bypass that.
-  await Promise.all((cls.students || []).map(u => usersCol().doc(u).delete()));
-  if (cls.templateShareToken) {
-    await templateSharesCol().doc(cls.templateShareToken).delete();
-  }
-  await classesCol().doc(classCode).delete();
-
+  // firestore.rules only lets a teacher delete student accounts (and
+  // family links) in the class they currently have OPEN, so open this
+  // class first, then go back to whichever class was open before.
   const teacher = await getUser(teacherUsername);
-  if (teacher && teacher.classCode === classCode) {
-    await usersCol().doc(teacherUsername).update({ classCode: null });
+  const previousOpen = teacher ? (teacher.classCode || null) : null;
+  const backTo = previousOpen && previousOpen !== classCode ? previousOpen : null;
+  if (previousOpen !== classCode) await usersCol().doc(teacherUsername).update({ classCode });
+
+  try {
+    // Family links first, while the student docs that name them still exist.
+    await Promise.all((cls.students || []).map(u => _deleteParentViewFor(u)));
+    // Individual doc deletes (not a batch) so each one still goes through
+    // the wrapped docRef.delete() in installReadCache(), which is what
+    // keeps the read cache correct — a raw WriteBatch would bypass that.
+    await Promise.all((cls.students || []).map(u => usersCol().doc(u).delete()));
+    if (cls.templateShareToken) {
+      await templateSharesCol().doc(cls.templateShareToken).delete();
+    }
+    await classesCol().doc(classCode).delete();
+  } catch (e) {
+    console.warn("deleteClassPermanently failed:", e);
+    if (previousOpen !== classCode) await usersCol().doc(teacherUsername).update({ classCode: previousOpen }).catch(() => {});
+    return { ok: false, error: "Something went wrong deleting the class — some of it may not have been deleted. Please try again." };
   }
+
+  await usersCol().doc(teacherUsername).update({ classCode: backTo });
   return { ok: true };
 }
 
@@ -1707,7 +1784,9 @@ async function teacherAdjust(teacherUser, studentUser, amount, note, kind) {
   amount = Math.round((Number(amount) || 0) * 100) / 100;
   const student = await getUser(studentUser);
   if (!student) return { ok: false, error: "Student not found." };
-  await adjustBalance(studentUser, amount);
+  // Nothing is logged (or announced to the student) unless the money
+  // actually moved.
+  if (!(await adjustBalance(studentUser, amount))) return { ok: false, error: "Something went wrong. Please try again." };
   await logTxn(student.classCode, {
     type: kind || (amount >= 0 ? "bonus" : "fine"),
     from: teacherUser, to: studentUser, amount: Math.abs(amount), note: note || "",
@@ -1758,7 +1837,25 @@ async function removeStudent(classCode, studentUser) {
     cls.students = cls.students.filter(s => s !== studentUser);
     cls.automations = (cls.automations || []).filter(a => a.studentUser !== studentUser);
     cls.jobApplications = (cls.jobApplications || []).filter(a => a.studentUser !== studentUser);
-    (cls.properties || []).forEach(p => { if (p.owner === studentUser) { p.owner = null; p.mortgage = null; p.occupancy = null; p.rentLastWeekPaid = null; } });
+    (cls.properties || []).forEach(p => {
+      // Their own homes go back on the market — including ending any
+      // classmate's tenancy in them, since there's no owner left to rent
+      // from (same fields selling a house clears, see sellProperty).
+      if (p.owner === studentUser) {
+        p.owner = null; p.mortgage = null; p.occupancy = null; p.rentLastWeekPaid = null;
+        p.purchasePrice = null; p.sublet = null;
+      // A classmate's home they were renting is free again — same as the
+      // tenant moving out (see tenantMoveOut).
+      } else if (p.sublet && p.sublet.tenant === studentUser) {
+        p.occupancy = null; p.sublet = null; p.rentLastWeekPaid = null;
+      }
+    });
+    // A school rental they were renting is free again (see teacherEndNpcTenancy).
+    (cls.npcProperties || []).forEach(u => {
+      if (u.tenant !== studentUser) return;
+      u.tenant = null; u.leaseStartTs = null; u.leaseStartWeekKey = null;
+      u.rentLastWeekPaid = null; u.rentLastPaidDate = null;
+    });
     (cls.vehicles || []).forEach(v => { v.owners = (v.owners || []).filter(o => o !== studentUser); });
     // BUGFIX: a departing student's still-open Trade Centre listings used
     // to be left behind entirely untouched. The purchase path already
@@ -1777,13 +1874,20 @@ async function removeStudent(classCode, studentUser) {
         ...l, status: "rejected", rejectReason: "Seller left the class",
         offers: (l.offers || []).map(o => o.status === "open" ? { ...o, status: "declined" } : o)
       };
+    }).map(l => {
+      // Offers they made on classmates' listings can't be accepted any
+      // more (there's nobody to pay), so they're withdrawn.
+      if (!(l.offers || []).some(o => o.buyer === studentUser && o.status === "open")) return l;
+      return { ...l, offers: l.offers.map(o => o.buyer === studentUser && o.status === "open" ? { ...o, status: "withdrawn" } : o) };
     });
-    t.update(classRef, {
+    const update = {
       companies: cls.companies, students: cls.students,
       automations: cls.automations, jobApplications: cls.jobApplications,
       properties: cls.properties || [], vehicles: cls.vehicles || [],
       listings: cls.listings
-    });
+    };
+    if (cls.npcProperties) update.npcProperties = cls.npcProperties;
+    t.update(classRef, update);
     // BUGFIX: this used to be a separate `await usersCol().doc(studentUser)
     // .delete()` call made AFTER this transaction committed. If the app
     // (or the network) died in between, the class doc would already show
@@ -2315,7 +2419,7 @@ function withNewModuleDefaults(cls) {
   if (cls.blackjack.enabled === undefined) cls.blackjack.enabled = true;
   if (cls.blackjack.minBet === undefined) cls.blackjack.minBet = 1;
   if (cls.blackjack.maxBet === undefined) cls.blackjack.maxBet = 20;
-  cls.taxRates = cls.taxRates || { store: 0, insurance: 0, property: 0, transport: 0, interest: 0, gambling: 0 };
+  cls.taxRates = cls.taxRates || { property: 0, transport: 0, interest: 0, gambling: 0 };
   // Migrate old flat wage rate (if present) into a single bracket the first
   // time a class with legacy data is loaded, so existing tax settings aren't
   // silently lost when brackets are introduced.
@@ -2324,6 +2428,10 @@ function withNewModuleDefaults(cls) {
     cls.wageTaxBrackets = legacyWageRate ? [{ upTo: null, rate: Number(legacyWageRate) || 0 }] : [];
   }
   delete cls.taxRates.wage;
+  // Store and insurance tax were removed — older classes may still have a
+  // rate saved for them, which nothing uses any more.
+  delete cls.taxRates.store;
+  delete cls.taxRates.insurance;
   /* ---- Financial-literacy quizzes (see the Quizzes section below) ----
      cls.quizzes holds the teacher's quiz definitions; cls.quizGate.enabled
      is the single master switch that decides whether failing/not having

@@ -259,7 +259,7 @@ function notifEventItems(me, cls) {
     out.push({
       id: "bigev-" + e.id, ts: dayStart, icon: "star", tone: "coral",
       title: "Big event needs a decision",
-      body: `${e.name} — ${fmtMoney(e.cost)}. Pay it, claim on insurance, or lose the asset.`,
+      body: `${e.name} — ${fmtMoney(e.cost)}. ${e.takesAsset === false ? "Pay it or claim on insurance." : "Pay it, claim on insurance, or lose the asset."}`,
       href: "bigevents.html", action: true
     });
   });
@@ -297,7 +297,8 @@ function notifSideHustleItems(me, cls) {
   return [{
     id: "sh-" + today, ts: notifTodayStartMs(), icon: "briefcase", tone: "mint",
     title: "Side hustle check-in is open right now",
-    body: `${hustle.name} — you have until ${hourLabel(sh.checkinHour)}:15 to check in and get paid ${fmtMoney(Number(hustle.payouts[sh.checkinHour]) || 0)}.`,
+    // e.g. "until 4:15pm" (hourLabel gives "4pm", so the minutes go in the middle)
+    body: `${hustle.name} — you have until ${(sh.checkinHour % 12) || 12}:15${sh.checkinHour < 12 ? "am" : "pm"} to check in and get paid ${fmtMoney(Number(hustle.payouts[sh.checkinHour]) || 0)}.`,
     href: "student.html", action: true
   }];
 }
@@ -344,13 +345,16 @@ function notifQuizItems(me, cls) {
   const labelOf = key => (LIFESTYLE_LOCKABLE_MODULES.find(m => m.key === key) || {}).label || key;
   return (cls.quizzes || []).filter(q => {
     if (!q.active || !q.moduleKey) return false;
+    if (!LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === q.moduleKey)) return false;
     const r = quizResultFor(me, q.id);
     return !r || !r.passed;
   }).slice(0, 5).map(q => ({
     id: "quiz-" + q.id + "-" + nzDateKey(), ts: dayStart, icon: "idcard", tone: "gold",
     title: `Quiz to pass: ${q.title}`,
     body: `Passing this unlocks ${labelOf(q.moduleKey)}. You need ${q.passMark}% or better.`,
-    href: "quizzes.html", action: true
+    // Students can't open the Quizzes page (it sends them home), so this
+    // opens the quiz popup right here instead (see quiz-gate.js).
+    onClick: `t29OpenQuizForModule('${q.moduleKey}')`, action: true
   }));
 }
 
@@ -665,6 +669,11 @@ async function notifRefresh(username, classCode) {
   // thing loaded absolutely everywhere that already has `cls` and `me`.
   if (me.role === "student" && typeof applyNavModuleLocks === "function") {
     applyNavModuleLocks(getModuleLockReasonsFromData(cls, Object.assign({ username }, me), username));
+  }
+  // A big event handed out while this page was already open still has to
+  // be answered before anything else (see checkBigEventPopup).
+  if (me.role === "student" && typeof checkBigEventPopup === "function") {
+    checkBigEventPopup(username, classCode, true).catch(() => {});
   }
 }
 

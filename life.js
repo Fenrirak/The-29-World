@@ -173,8 +173,15 @@ async function saveLifeItemForm(e) {
   };
   if (!item.name) return false;
   if (EDITING_ID) {
-    await updateLifeItem(CURRENT.classCode, EDITING_ID, item);
-    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Family event updated — everyone who already has it was updated too!</div>`;
+    const res = await updateLifeItem(CURRENT.classCode, EDITING_ID, item);
+    const box = document.getElementById("addMsg");
+    if (!res.ok) {
+      box.innerHTML = `<div class="error-msg">That family event no longer exists.</div>`;
+    } else if (res.failed.length) {
+      box.innerHTML = `<div class="error-msg">Family event updated, but these students still have the old version: ${res.failed.map(escapeHtml).join(", ")}. Save it again to retry.</div>`;
+    } else {
+      box.innerHTML = `<div class="success-msg">Family event updated${res.updated ? ` — and for the ${res.updated} student${res.updated === 1 ? " who has" : "s who have"} it` : ""}!</div>`;
+    }
   } else {
     await addLifeItem(CURRENT.classCode, item);
     document.getElementById("addMsg").innerHTML = `<div class="success-msg">Family event added!</div>`;
@@ -239,8 +246,11 @@ async function giveLifeItem(templateId) {
   const box = document.getElementById(`giveMsg-${templateId}`);
   if (!sel || !sel.value) return;
   const res = await grantLifeItem(CURRENT.classCode, sel.value, templateId, CURRENT.username);
-  box.innerHTML = res.ok ? `<div class="success-msg">Given!</div>` : `<div class="error-msg">${res.error}</div>`;
+  if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
   await render();
+  // render() rebuilds this event's card (and its message box), so the
+  // message goes in afterwards.
+  flashMsg(document.getElementById(`giveMsg-${templateId}`), `<div class="success-msg">Given!</div>`);
 }
 
 async function revokeLifeItemFor(username, grantId) {

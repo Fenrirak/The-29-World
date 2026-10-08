@@ -93,6 +93,7 @@ async function init() {
   await t29FirstPaint(render);
   await T29_STARTUP_JOBS;
   await checkWeeklyEventPopup(u.username, u.classCode);
+  await checkBigEventPopup(u.username, u.classCode);
   await render();
 }
 
@@ -303,10 +304,11 @@ async function deleteItem(id) {
 async function sellItem(id) {
   if (!confirm("Sell this item back to the store for an 80% refund?")) return;
   const res = await sellStoreItem(CURRENT.username, CURRENT.classCode, id);
-  document.getElementById("msg-" + id).innerHTML = res.ok
-    ? `<div class="success-msg">Sold back for ${fmtMoney(res.payout)}!</div>`
-    : `<div class="error-msg">${res.error}</div>`;
+  if (!res.ok) { document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
   await render();
+  // render() rebuilds the item's card (and its message box), so the
+  // message goes in afterwards.
+  flashMsg(document.getElementById("msg-" + id), `<div class="success-msg">Sold back for ${fmtMoney(res.payout)}!</div>`);
 }
 
 async function buyItem(id) {
@@ -327,10 +329,10 @@ async function buyItem(id) {
       if (max !== null && max !== "" && qty > Number(max)) qty = Number(max);
     }
     const res = await buyStoreItem(CURRENT.username, CURRENT.classCode, id, qty);
-    document.getElementById("msg-" + id).innerHTML = res.ok
-      ? `<div class="success-msg">Purchased ${res.qty > 1 ? `×${res.qty}` : ""}!</div>`
-      : `<div class="error-msg">${res.error}</div>`;
+    if (!res.ok) { document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
+    // Same as sellItem: render() rebuilds the message box.
+    flashMsg(document.getElementById("msg-" + id), `<div class="success-msg">Purchased${res.qty > 1 ? ` ×${res.qty}` : ""}!</div>`);
   } finally {
     if (btn) btn.disabled = false;
   }

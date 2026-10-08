@@ -195,7 +195,9 @@ async function render() {
     const stats = {
       netWorth: row ? row.net : 0,
       propertyComfort: ownedProperties.reduce((sum, p) => sum + (p.comfort || 0) + (p.occupancy === "living" ? (Number(p.livingBonusStars) || 0) : 0), 0),
-      transportComfort: ownedVehicles.reduce((sum, v) => sum + (v.comfort || 0), 0)
+      // Best single vehicle, not a total — transport stars don't stack
+      // (same as lifestyleBandForStudent, so both views show one band).
+      transportComfort: ownedVehicles.reduce((best, v) => Math.max(best, v.comfort || 0), 0)
     };
     lifestyleBandByUser[s.username] = lifestyleLabelFor(lifestyleByUser[s.username], cls.lifestyleThresholds || [], stats);
   });
@@ -556,7 +558,8 @@ async function giveAdjustment(e) {
     } else {
       const res = await teacherAdjust(CURRENT.username, student, amount, note);
       if (res.ok) {
-        box.innerHTML = `<div class="success-msg">Done — ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${student}.</div>`;
+        const who = (LAST_STUDENTS.find(x => x.username === student) || {}).name || student;
+        box.innerHTML = `<div class="success-msg">Done — ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${escapeHtml(who)}.</div>`;
         document.getElementById("adjAmount").value = "";
         document.getElementById("adjNote").value = "";
         document.getElementById("adjStudent").value = "";
@@ -835,7 +838,7 @@ function thresholdRowHtml(t) {
       <div class="grid grid-3">
         <div><label>Min net worth</label><input class="th-min-networth" type="number" min="0" step="1" value="${t.minNetWorth || 0}"></div>
         <div><label>Min property comfort (base comfort + living-in bonus stars)</label><input class="th-min-property" type="number" min="0" step="1" value="${t.minPropertyComfort || 0}"></div>
-        <div><label>Min transport comfort (total stars across owned vehicles)</label><input class="th-min-transport" type="number" min="0" step="1" value="${t.minTransportComfort || 0}"></div>
+        <div><label>Min transport comfort (stars of their comfiest vehicle)</label><input class="th-min-transport" type="number" min="0" max="5" step="1" value="${t.minTransportComfort || 0}"></div>
       </div>
     </div>
   `;
@@ -1254,7 +1257,7 @@ async function renderProfile(username) {
           : p.occupancy === "sublet" && p.sublet
             ? (p.sublet.status === "pending" ? `Waiting for approval to rent to a classmate at ${fmtMoney(p.sublet.price)}/week`
               : p.sublet.status === "rejected" ? `Rental listing declined${p.sublet.rejectReason ? `: ${p.sublet.rejectReason}` : ""}`
-              : p.sublet.tenant ? `Rented to a classmate (@${p.sublet.tenant}) at ${fmtMoney(p.sublet.price)}/week`
+              : p.sublet.tenant ? `Rented to a classmate (@${escapeHtml(p.sublet.tenant)}) at ${fmtMoney(p.sublet.price)}/week`
               : `Listed for rent to classmates at ${fmtMoney(p.sublet.price)}/week — no tenant yet`)
             : "Hasn't chosen to live in it, rent it out, or rent it to a classmate yet";
         return `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(p.name)}</strong> — ${fmtMoney(p.price)}
@@ -1274,7 +1277,7 @@ async function renderProfile(username) {
     rows.push(`
       <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;"' : ""}>
         <div class="auto-details">
-          <strong>Renting from a classmate:</strong> ${escapeHtml(rh.name)} — ${fmtMoney(rh.sublet.price)}/week from @${rh.owner}
+          <strong>Renting from a classmate:</strong> ${escapeHtml(rh.name)} — ${fmtMoney(rh.sublet.price)}/week from @${escapeHtml(rh.owner)}
           <div class="muted-small">${overdue ? "This week's rent hasn't been paid yet. " : ""}Minimum lease: ${rh.sublet.minWeeks} week${rh.sublet.minWeeks === 1 ? "" : "s"}.</div>
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
@@ -1618,15 +1621,21 @@ async function reopenThisClass() {
 async function restartClass() {
   const cls = await getClassCached(CLASS_CODE);
   const typed = prompt(
-    `This will reset every student's balance to $0, remove job assignments, delist all companies, and clear the activity log for "${escapeHtml(cls.name)}".\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`
+    `This will start "${cls.name}" again as if it were a brand-new class: every student goes back to the $20 welcome grant, and everything they own or have done is wiped (jobs, houses, vehicles, shares, insurance, loans, savings, store items, events, activity and so on). Your settings — jobs, store, properties, companies, events, tax and everything else — stay exactly as they are.\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`
   );
   if (typed === null) return;
   if (typed.trim() !== cls.name) {
     alert("That didn't match the class name, so nothing was changed.");
     return;
   }
-  await resetClass(CLASS_CODE, CURRENT.username);
-  alert("Class restarted — everyone is back to $0. This term's report cards were saved to the Reports page.");
+  const res = await resetClass(CLASS_CODE, CURRENT.username);
+  if (!res.ok) {
+    alert("Something went wrong — the class couldn't be restarted. Please try again.");
+  } else if (res.failed.length) {
+    alert(`Class restarted, but these students' accounts couldn't be reset: ${res.failed.join(", ")}. Run Restart class again to finish them.`);
+  } else {
+    alert("Class restarted — everyone is back to the $20 welcome grant, with all your settings kept. This term's report cards were saved to the Reports page.");
+  }
   await render();
 }
 
@@ -1638,8 +1647,8 @@ async function recoverStockCostHistory() {
   try {
     const result = await backfillCostBasisFromTxns(CLASS_CODE);
     msg.textContent = result.filled > 0
-      ? `Done — recovered cost history for ${result.filled} company holding${result.filled === 1 ? "" : "s"} across your students. Anything not found was either already tracked, or its purchase has aged out of the shared activity log (the log holds the class's most recent 200 transactions total, not 200 per student, so older stock purchases can already be gone).`
-      : "Nothing new to recover — either everything's already tracked, or the relevant purchases have aged out of the shared activity log (it holds the class's most recent 200 transactions total, not 200 per student).";
+      ? `Done — recovered cost history for ${result.filled} company holding${result.filled === 1 ? "" : "s"} across your students. Anything not found was either already tracked, or its purchase has aged out of the shared activity log (the log holds the class's most recent ${MAX_STORED_TXNS} transactions total, not ${MAX_STORED_TXNS} per student, so older stock purchases can already be gone).`
+      : `Nothing new to recover — either everything's already tracked, or the relevant purchases have aged out of the shared activity log (it holds the class's most recent ${MAX_STORED_TXNS} transactions total, not ${MAX_STORED_TXNS} per student).`;
   } catch (e) {
     msg.textContent = "Something went wrong — please try again.";
   } finally {

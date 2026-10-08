@@ -181,10 +181,11 @@ async function openDeposit(id) {
   try {
     const amt = document.getElementById("amt-" + id).value;
     const res = await openTermDeposit(CURRENT.username, CURRENT.classCode, id, amt);
-    document.getElementById("msg-" + id).innerHTML = res.ok
-      ? `<div class="success-msg">Locked in!</div>`
-      : `<div class="error-msg">${res.error}</div>`;
+    if (!res.ok) { document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
+    // render() rebuilds the plan's card (and its message box), so the
+    // message goes in afterwards.
+    flashMsg(document.getElementById("msg-" + id), `<div class="success-msg">Locked in!</div>`);
   } finally {
     if (btn) btn.disabled = false;
   }

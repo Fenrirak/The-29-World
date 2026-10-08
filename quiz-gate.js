@@ -92,6 +92,21 @@ async function t29OpenQuizGate(moduleKey, opts) {
   document.body.appendChild(overlay);
 }
 
+// Opens the quiz for a module from anywhere (e.g. a notification), and
+// goes to that module's page once it's passed.
+async function t29OpenQuizForModule(moduleKey) {
+  const session = await getSessionUser();
+  if (!session || session.role !== "student") return;
+  const link = document.querySelector(`nav a[data-module="${moduleKey}"]`);
+  const reasons = await getModuleLockReasons(session.username, session.classCode);
+  if (reasons[moduleKey] !== "quiz" && reasons[moduleKey] !== "both") {
+    // Already passed (the notification was from before) — just go there.
+    if (link) window.location.href = link.getAttribute("href");
+    return;
+  }
+  t29OpenQuizGate(moduleKey, { href: link ? link.getAttribute("href") : "", alsoLifestyleLocked: reasons[moduleKey] === "both" });
+}
+
 function qgQuestionsHtml(quiz) {
   return quiz.questions.map((q, i) => `
     <div class="quiz-question" id="qg-q-${q.id}">
@@ -204,3 +219,60 @@ async function qgSubmit() {
   document.getElementById("qgContinue").style.display = res.passed ? "" : "none";
   document.getElementById("qgResult").scrollIntoView({ behavior: "smooth", block: "center" });
 }
+
+/* ---------------- Locked module pages ----------------
+   applyNavModuleLocks only stops the menu link. A locked page can still be
+   reached another way — a button on the dashboard, a notification, or
+   typing its address — so each module page checks for itself as well and
+   covers the page while it's locked (with the quiz on top, when a quiz is
+   what locks it). Stock Market and Gambling already lock their own page
+   with a banner, so they're left to that. */
+const QG_PAGES_WITH_OWN_LOCK = ["market", "gambling"];
+
+// Which module this page is, from its own menu link (every module page's
+// menu has a link to itself with a data-module key).
+function qgCurrentModuleKey() {
+  const here = (window.location.pathname.split("/").pop() || "").toLowerCase();
+  if (!here) return null;
+  const link = [...document.querySelectorAll("nav a[data-module]")]
+    .find(a => ((a.getAttribute("href") || "").split("/").pop() || "").toLowerCase() === here);
+  return link ? link.getAttribute("data-module") : null;
+}
+
+async function qgGuardModulePage() {
+  const moduleKey = qgCurrentModuleKey();
+  if (!moduleKey || QG_PAGES_WITH_OWN_LOCK.includes(moduleKey)) return;
+  const session = await getSessionUser();
+  if (!session || session.role !== "student" || !session.classCode) return;
+  const raw = await getClassCached(session.classCode);
+  if (!raw) return;
+  const cls = withNewModuleDefaults(raw);
+  if (!_classHasAnyModuleLock(cls)) return;
+  const me = Object.assign({ username: session.username }, await getUserCached(session.username));
+  const reason = getModuleLockReasonsFromData(cls, me, session.username)[moduleKey];
+  if (reason) qgShowPageLock(moduleKey, reason);
+}
+
+function qgShowPageLock(moduleKey, reason) {
+  if (document.getElementById("t29PageLock")) return;
+  const canQuiz = reason === "quiz" || reason === "both";
+  const quizOpts = `{ alsoLifestyleLocked: ${reason === "both"} }`;
+  const overlay = document.createElement("div");
+  overlay.id = "t29PageLock";
+  overlay.className = "anw-modal-overlay";
+  overlay.innerHTML = qgOverlayHtml(`
+    <p class="qg-kicker">${icon("lock", 12)} ${qgEsc(qgModuleLabel(moduleKey))} is locked</p>
+    <p>${qgEsc(MODULE_LOCK_MESSAGE[reason] || MODULE_LOCK_MESSAGE.lifestyle)}</p>
+    <div class="qg-actions">
+      ${canQuiz ? `<button class="btn gold" type="button" onclick="t29OpenQuizGate('${moduleKey}', ${quizOpts})">Take the quiz</button>` : ""}
+      <a class="btn secondary" href="student.html">Back to my account</a>
+    </div>`);
+  document.body.appendChild(overlay);
+  // Passing reloads the page (no href given — see qgContinue), which runs
+  // this check again and finds it unlocked.
+  if (canQuiz) t29OpenQuizGate(moduleKey, { alsoLifestyleLocked: reason === "both" });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  qgGuardModulePage().catch(e => console.warn("Module page lock check failed:", e));
+});

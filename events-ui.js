@@ -343,7 +343,12 @@ function showAdjustmentPopup(txn) {
 /* ===================== Big event popup =====================
    Unlike small weekly events, big events must be resolved — the modal has
    no close button and clicking outside doesn't dismiss it. It reappears on
-   every page load until the student picks pay / forfeit / claim. */
+   every page load until the student picks pay / forfeit / claim, covering
+   the page so nothing else can be done until then: it's shown as soon as
+   the page loads (see the listener at the end of this section), on top of
+   any other popup, and — via the notification poll — on a page that was
+   already open when the event arrived. The data-*.js files back this up
+   by refusing to sell the thing it puts at risk (see pendingBigEventFor). */
 const BIG_EVENT_MODULE_LABEL = { income: "Income", property: "Property", transport: "Transport", general: "General" };
 const BIG_EVENT_COVERAGE = { income: "jobs", property: "property", transport: "transport" };
 
@@ -362,23 +367,28 @@ function saveShownBigEventState(username, state) {
   try { localStorage.setItem(bigEventsShownKey(username), JSON.stringify(state)); } catch (e) { /* ignore */ }
 }
 
-async function checkBigEventPopup(username, classCode) {
+// onlyPending: just the must-answer popup (the early and polled checks),
+// leaving the one-time "good event" heads-up to the page's own check.
+async function checkBigEventPopup(username, classCode, onlyPending) {
   if (!username || !classCode) return;
-  if (anyModalShowing()) return; // something's already showing
+  if (document.getElementById("anwBigEventModal")) return; // already showing
   // PERF FIX: see the comment on checkWeeklyEventPopup above.
   const cls = await getClassCached(classCode);
   if (!cls) return;
 
   // Bad events (job/property/vehicle at risk) take priority — forced
   // modal, must be resolved via pay / forfeit / claim before continuing.
+  // Shown even over another popup: nothing else can happen until it's
+  // answered, and that popup is still there underneath afterwards.
   const pending = (cls.bigEventLog || []).find(e => e.studentUser === username && e.status === "pending");
   if (pending) {
     const user = await getUserCached(username);
-    const coverage = BIG_EVENT_COVERAGE[pending.module];
-    const claimOptions = coverage ? insuranceClaimOptions(cls, user, coverage, pending.insuranceCover, pending.cost, pending) : [];
+    if (document.getElementById("anwBigEventModal")) return; // another check got there while we waited
+    const claimOptions = bigEventClaimOptions(cls, user, pending);
     showBigEventPopup(pending, claimOptions, username, classCode, user);
     return;
   }
+  if (onlyPending || anyModalShowing()) return;
 
   // Good (windfall) events are already paid out the moment they're
   // generated — this just shows a friendly, dismissible heads-up the
@@ -457,12 +467,19 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
   // Types listed on the event that could cover THIS vehicle (Truck
   // Insurance only covers trucks, the other types only cars and bikes).
   const fittingTypes = cover.filter(c => typeFitsVehicle(coverage, c.type, entry.assetType));
+  const vehicleName = entry.assetName || "your vehicle";
   const claimButtons = claims.length
     ? claims.map((o, i) => {
         if (o.writeOff) {
           // Gives the house away — red, and confirmed before it's sent.
           return `<button class="btn coral" id="bigClaimBtn${i}" ${o.ok ? "" : "disabled"}>
             ${escapeHtml(writeOffButtonLabel(o))}${o.ok ? "" : ` — you only have ${fmtMoney(cash)}`}
+          </button>`;
+        }
+        if (o.losesVehicle) {
+          // Still costs them the vehicle — red, and confirmed before it's sent.
+          return `<button class="btn coral" id="bigClaimBtn${i}" ${o.ok ? "" : "disabled"}>
+            Claim on ${escapeHtml(insurancePlanName(o.plan))} — you pay ${fmtMoney(o.excess)} excess, but still lose ${escapeHtml(vehicleName)}${o.ok ? "" : ` — you only have ${fmtMoney(cash)}`}
           </button>`;
         }
         // The type is only added when the plan's own name doesn't already say it.
@@ -533,10 +550,21 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
   claims.forEach((o, i) => {
     document.getElementById("bigClaimBtn" + i).addEventListener("click", () => {
       if (o.writeOff && !confirmWriteOff(o)) return;
+      if (o.losesVehicle && !confirm(`${insurancePlanName(o.plan)} pays for the damage to someone else's property, but it doesn't cover your own vehicle — so you'll lose ${vehicleName}. You pay your ${fmtMoney(o.excess)} excess.\n\nClaim anyway?`)) return;
       resolve("claim", null, o.plan.id);
     });
   });
 }
+
+// Shows a waiting big event the moment a student's page loads, rather
+// than only once the page's start-up jobs have finished (that can take a
+// few seconds on pay day — time enough to sell the thing at risk).
+document.addEventListener("DOMContentLoaded", () => {
+  (async () => {
+    const s = await getSessionUser();
+    if (s && s.role === "student" && s.classCode) await checkBigEventPopup(s.username, s.classCode, true);
+  })().catch(() => { /* the page's own check still runs after its start-up jobs */ });
+});
 
 /* ===================== Insurance types picker (teacher) =====================
    Shared by the weekly events form (teacher.html) and the big events form

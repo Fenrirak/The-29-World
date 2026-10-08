@@ -686,6 +686,7 @@ async function processLoanInterest(classCode) {
     let charged = [];
     try {
       await fdb.runTransaction(async (t) => {
+        charged = []; // reset every attempt — a retried callback would otherwise log the interest twice
         const snap = await t.get(userRef);
         if (!snap.exists) return;
         const user = snap.data();
@@ -1519,6 +1520,7 @@ async function _matureTermDepositsFor(classCode, students, todayKey) {
     let notes = [];
     try {
       await fdb.runTransaction(async (t) => {
+        notes = []; // reset every attempt — a retried callback would otherwise log each payout twice
         const snap = await t.get(userRef);
         if (!snap.exists) return;
         const user = snap.data();
@@ -1746,28 +1748,79 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
   return rows;
 }
 
+// The parts of a student's account that aren't about the class's game —
+// who they are, their login, their daily time limit and their family link
+// — and so survive "Restart class". Everything else on the account is
+// wiped back to how a brand-new student starts (see createStudentAccount).
+const RESTART_KEEP_USER_FIELDS = [
+  "username", "authUid", "role", "name", "classCode", "sessionVersion", "password",
+  "dailyLimitMinutes", "timeSpentTodaySec", "timeSpentDate",
+  "timeExemptionStatus", "timeExemptionDate", "timeExemptionRequestedAt",
+  "extraMinutesToday", "extraMinutesDate", "parentViewToken"
+];
+const NEW_STUDENT_WELCOME = 20; // same welcome grant as createStudentAccount
+
+// "Restart class": the class goes back to how a brand-new class with these
+// same settings would start. Every setting stays (jobs, store, properties,
+// companies, events, tax, quizzes...) and so does every student, but
+// everything they did or own is wiped — the same reset a new class made
+// from this one as a template gets (see _classDataFromTemplate), except
+// prices stay where they are now. Each student goes back to a new
+// student's starting point: the welcome grant and nothing else.
+// Returns { ok, failed } — failed names students whose account couldn't
+// be reset (running Restart again finishes them off).
 async function resetClass(classCode, teacherUsername) {
   // Save a permanent report-card snapshot of exactly what's about to be
-  // wiped — txns get cleared below and balances zeroed, so without this a
+  // wiped — txns get cleared below and balances reset, so without this a
   // reset would silently erase the only record of the term that just
   // finished. Best-effort: a failed archive (e.g. offline) never blocks
   // the reset itself, since teachers may still need to restart the class.
   try { await archiveClassReport(classCode, teacherUsername); } catch (e) { /* proceed with reset regardless */ }
-  const students = await getClassStudents(classCode);
-  await Promise.all(students.map(s => usersCol().doc(s.username).update({
-    balance: 0, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, insurance: [], storeItems: [], termDeposits: [], savings: 0, loans: [], truckLicence: false, truckCheckins: {}
-  })));
   const cls = await getClass(classCode);
-  const properties = (cls.properties || []).map(p => ({ ...p, owner: null, mortgage: null, occupancy: null, rentLastWeekPaid: null }));
-  const vehicles = (cls.vehicles || []).map(v => ({ ...v, owners: [] }));
-  await classesCol().doc(classCode).update({
-    companies: [], txns: [], automations: [], jobApplications: [],
-    properties, vehicles, eventLog: [],
-    // A fresh createdAt marks where the new term's report-card period
-    // should start counting from, same as when the class was first made.
-    createdAt: Date.now()
-  });
-  return true;
+  if (!cls) return { ok: false, failed: [] };
+  const students = await getClassStudents(classCode, cls);
+
+  const fresh = _classDataFromTemplate(classCode, cls.name, cls.teacher, cls, { keepPrices: true });
+  // The class's own identity, roster and saved report cards stay, and so
+  // do today's market-day stamps (otherwise prices would move twice today).
+  ["code", "name", "teacher", "students", "archived", "archivedAt", "templateShareToken", "reportArchives",
+    "lastPropertyMarketDayRun"].forEach(k => { delete fresh[k]; });
+  fresh.listings = [];
+  fresh.lastTermDepositCheckDay = null;
+  // A fresh createdAt marks where the new term's report-card period
+  // should start counting from, same as when the class was first made.
+  fresh.createdAt = Date.now();
+  fresh.txns = students.map(s => ({
+    id: uid("t"), type: "welcome", to: s.username, amount: NEW_STUDENT_WELCOME,
+    note: "Welcome grant (class restarted)", date: nowStr(), ts: Date.now()
+  }));
+  await classesCol().doc(classCode).update(fresh);
+
+  const failed = [];
+  await Promise.all(students.map(async s => {
+    try {
+      const reportMonth = Object.assign(emptyReportBucket(), { monthKey: nzMonthKey() });
+      const reportLifetime = emptyReportBucket();
+      addClassificationToBucket(reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: NEW_STUDENT_WELCOME });
+      addClassificationToBucket(reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: NEW_STUDENT_WELCOME });
+      const update = {
+        balance: NEW_STUDENT_WELCOME, savings: 0, loans: [],
+        jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null,
+        reportMonth, reportLifetime
+      };
+      // Everything else they had (insurance, store items, deposits, side
+      // hustle, gambling chips, life events, quiz results, savings goals...)
+      // is removed outright — a new student simply doesn't have it yet.
+      Object.keys(s).forEach(k => {
+        if (!(k in update) && !RESTART_KEEP_USER_FIELDS.includes(k)) update[k] = firebase.firestore.FieldValue.delete();
+      });
+      await usersCol().doc(s.username).update(update);
+    } catch (e) {
+      console.warn("resetClass: couldn't reset " + s.username, e);
+      failed.push(s.name || s.username);
+    }
+  }));
+  return { ok: true, failed };
 }
 
 async function portfolioValue(username, classCode) {
@@ -1813,6 +1866,7 @@ async function backfillCostBasisFromTxns(classCode) {
   const classRef = classesCol().doc(classCode);
   let filled = 0, alreadyTracked = 0;
   await fdb.runTransaction(async (t) => {
+    filled = 0; alreadyTracked = 0; // reset every attempt — this callback can be retried
     const classSnap = await t.get(classRef);
     if (!classSnap.exists) throw new Error("NOT_FOUND");
     const cls = classSnap.data();
@@ -2030,6 +2084,10 @@ const REPORT_SPENT_TYPES = {
 function classifyTxnForReport(t, username) {
   const amt = Math.round(Math.abs(Number(t.amount) || 0) * 100) / 100;
   if (!amt) return null; // $0 txns (store-gift, unclaimed insurance signup, etc.)
+  // A sale (or an insurance write-off) that left the student owing — the
+  // mortgage still to pay off was more than the house fetched — is money
+  // out, not income.
+  if (t.type === "property-sell" && Number(t.amount) < 0) return { bucket: "spent", category: "Housing", amount: amt };
 
   if (REPORT_INCOME_TYPES[t.type]) return { bucket: "income", category: REPORT_INCOME_TYPES[t.type], amount: amt };
   if (REPORT_SAVED_TYPES[t.type]) return { bucket: "saved", category: REPORT_SAVED_TYPES[t.type], amount: amt };
@@ -2248,10 +2306,10 @@ async function deleteReportArchive(classCode, archiveId) {
                          timeExemptionDate/extraMinutesDate elsewhere in
                          this file) — nothing proactively resets it at
                          midnight, and nothing ever auto-saves it.
-     - reportLifetime — every month, forever. Never reset by anything,
-                         including a class reset (resetClass only updates
-                         specific fields on each student doc and doesn't
-                         touch this one, so it survives automatically).
+     - reportLifetime — every month since the student joined, or since
+                         the class was last restarted (resetClass starts
+                         everyone again like a new student — the term
+                         that's ending is saved as a report card first).
    Both reuse the exact same categorisation as classifyTxnForReport/
    txnBelongsTo above, so a txn is counted here if and only if the old
    scan would have counted it too. This is purely additive: cls.txns,
@@ -2855,7 +2913,7 @@ function buildBudgetView(cls, user, username) {
   (user.insurance || []).forEach(id => {
     const plan2 = (cls.insurancePlans || []).find(p => p.id === id);
     if (!plan2 || !(plan2.price > 0)) return;
-    premiums += applyTaxToExpense(cls, "insurance", plan2.price).total;
+    premiums += Number(plan2.price) || 0; // premiums have no separate tax
     premiumNames.push(typeof insurancePlanName === "function" ? insurancePlanName(plan2) : plan2.name);
   });
   premiums = Math.round(premiums * 100) / 100;

@@ -1,4 +1,7 @@
 let CURRENT, IS_TEACHER, EDITING_AUTO_ID = null, EDITING_SAV_AUTO_ID = null;
+// Students in the class as of the last render() — what a teacher's "All
+// students" payment goes to.
+let ALL_STUDENTS = [];
 
 const FREQ_LABEL = { weekly: "every week", fortnightly: "every 2 weeks", monthly: "every 4 weeks" };
 const DAY_LABEL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
@@ -175,15 +178,15 @@ async function render() {
     sel.innerHTML = html;
     if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
   };
-  keepPick("toStudent", choose + optsHtml);
-  // The automatic-payment recipient list gets one extra option teachers can
-  // pick: pay every student the same amount on the same schedule. Not added
-  // to "Send to" above — that's a one-off, and Quick Transactions on the
-  // Dashboard already covers a one-off "pay everyone" the same way.
-  const autoOptsHtml = (IS_TEACHER && allStudents.length)
+  // Teachers get one extra option in both lists: everyone in the class at
+  // once — the same amount to each student, as a one-off ("Send to") or
+  // on a schedule (automatic payments).
+  ALL_STUDENTS = allStudents;
+  const allOptsHtml = (IS_TEACHER && allStudents.length)
     ? `<option value="${AUTOPAY_ALL_STUDENTS}">All students (${allStudents.length})</option>${optsHtml}`
     : optsHtml;
-  keepPick("autoTo", choose + autoOptsHtml);
+  keepPick("toStudent", choose + allOptsHtml);
+  keepPick("autoTo", choose + allOptsHtml);
 
   // automations
   // Same list getStudentAutomations() returns, taken from the class doc
@@ -299,6 +302,9 @@ async function render() {
     else if (t.type === "life-grant") { sign = amt < 0 ? "-" : (amt > 0 ? "+" : ""); amt = Math.abs(amt); }
     else if (t.type === "life-allowance") { sign = "+"; }
     else if (t.type === "life-revoke") { sign = ""; }
+    // A sale (or an insurance write-off) can go negative when the mortgage
+    // left to pay off is more than the house fetched — that's money out.
+    if (sign === "+" && amt < 0) { sign = "-"; amt = Math.abs(amt); }
 
     let amtDisplay;
     if (t.type === "event") {
@@ -352,9 +358,39 @@ async function sendMoney(e) {
     // teacher's side (their balance is unlimited), so this goes through the
     // same balance-adjustment path as the "Give a bonus or fine" tool
     // instead of the peer-to-peer transfer path.
-    const res = (IS_TEACHER && amount < 0)
-      ? await teacherAdjust(CURRENT.username, to, amount, note)
-      : await transferMoney(CURRENT.username, to, amount, note);
+    const sendOne = username => (IS_TEACHER && amount < 0)
+      ? teacherAdjust(CURRENT.username, username, amount, note)
+      : transferMoney(CURRENT.username, username, amount, note);
+
+    if (IS_TEACHER && to === AUTOPAY_ALL_STUDENTS) {
+      const targets = ALL_STUDENTS.slice();
+      if (!targets.length) { box.innerHTML = `<div class="error-msg">There are no students in this class yet.</div>`; return false; }
+      if (!confirm(`${amount >= 0 ? "Send" : "Take"} ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "to" : "from"} each of your ${targets.length} students?`)) return false;
+      // One at a time on purpose (same as Quick Transactions on the
+      // Dashboard): every payment also writes to the class's activity log,
+      // and firing them all at once risks one write clobbering another.
+      let okCount = 0;
+      const failedNames = [];
+      for (const s of targets) {
+        const r = await sendOne(s.username);
+        if (r.ok) okCount++; else failedNames.push(s.name || s.username);
+      }
+      const verb = amount >= 0 ? "Sent" : "Deducted";
+      if (okCount === targets.length) {
+        box.innerHTML = `<div class="success-msg">${verb} ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "to" : "from"} all ${okCount} students!</div>`;
+        document.getElementById("amount").value = "";
+        document.getElementById("note").value = "";
+        document.getElementById("toStudent").value = "";
+      } else if (okCount > 0) {
+        box.innerHTML = `<div class="error-msg">${verb} ${fmtMoney(Math.abs(amount))} for ${okCount} of ${targets.length} students. It didn't go through for: ${failedNames.map(escapeHtml).join(", ")}.</div>`;
+      } else {
+        box.innerHTML = `<div class="error-msg">That didn't go through for any students — please try again.</div>`;
+      }
+      await render();
+      return false;
+    }
+
+    const res = await sendOne(to);
 
     if (res.ok) {
       box.innerHTML = amount < 0

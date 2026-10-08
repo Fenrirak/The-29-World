@@ -188,7 +188,7 @@ function syncBuilderFromDom() {
       return el ? el.value : "";
     });
     const checked = document.querySelector(`input[name="qb-ans-${i}"]:checked`);
-    row.answer = checked ? Number(checked.value) : 0;
+    row.answer = checked ? Number(checked.value) : -1;
   });
 }
 
@@ -202,7 +202,11 @@ function removeOptionFrom(idx, optIdx) {
   const row = BUILDER_ROWS[idx];
   if (row.options.length <= 2) return;
   row.options.splice(optIdx, 1);
-  if (row.answer >= row.options.length) row.answer = 0;
+  // Keep the tick on the same option: options below the removed one move
+  // up a place. Removing the ticked option itself leaves nothing ticked,
+  // so the teacher has to pick again (saveQuiz checks).
+  if (optIdx < row.answer) row.answer -= 1;
+  else if (optIdx === row.answer) row.answer = -1;
   paintBuilder();
 }
 function addQuestionRowSynced() {
@@ -258,6 +262,12 @@ async function saveQuiz() {
   const quiz = collectQuizFromForm();
   const msg = document.getElementById("builderMsg");
   if (!quiz.title) { msg.innerHTML = `<div class="error-msg">Give the quiz a title first.</div>`; return; }
+  // Every question that will be saved needs its correct answer ticked, on
+  // an option that isn't blank.
+  const unticked = quiz.questions.findIndex(q => String(q.text || "").trim()
+    && q.options.filter(o => String(o || "").trim()).length >= 2
+    && !String(q.options[q.answer] || "").trim());
+  if (unticked !== -1) { msg.innerHTML = `<div class="error-msg">Question ${unticked + 1}: tick the correct answer.</div>`; return; }
   const res = EDITING_QUIZ_ID
     ? await updateQuiz(CURRENT.classCode, EDITING_QUIZ_ID, quiz)
     : await addQuiz(CURRENT.classCode, quiz);

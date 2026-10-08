@@ -5,7 +5,8 @@
    (see archiveClassReport() in data-money.js) that survive class resets.
    Student side: the same breakdown, but scoped to just their own numbers,
    with a simple net-worth trend built from their own past saved reports,
-   plus an "entire history" breakdown that never resets (see
+   plus an "entire history" breakdown that only starts again when the
+   class is restarted (see
    recordReportActivity()/reportLifetime in data-money.js).
 ========================================================================== */
 

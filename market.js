@@ -64,13 +64,21 @@ async function init() {
     // at a time — 8 separate sequential network round-trips — was a big
     // chunk of load time, especially on a slow mobile connection. Running
     // them together cuts that to roughly the time of the single slowest one.
+    // Same split as every other page: the class-wide sweeps are teacher
+    // jobs, and a student's visit only pays their own wage/allowance/interest.
     const T29_STARTUP_JOBS = Promise.all([
-      safeBgJob(payDayForClassIfDue(CLASS_CODE), "payDayForClassIfDue"),
-      safeBgJob(dailyLifeAllowanceForClassIfDue(CLASS_CODE), "dailyLifeAllowanceForClassIfDue"),
+      IS_TEACHER
+        ? safeBgJob(payDayForClassIfDue(CLASS_CODE), "payDayForClassIfDue")
+        : safeBgJob(payMyWageIfDue(u.username), "payMyWageIfDue"),
+      IS_TEACHER
+        ? safeBgJob(dailyLifeAllowanceForClassIfDue(CLASS_CODE), "dailyLifeAllowanceForClassIfDue")
+        : safeBgJob(payMyDailyLifeAllowanceIfDue(u.username), "payMyDailyLifeAllowanceIfDue"),
       safeBgJob(processAutomations(CLASS_CODE), "processAutomations"),
       safeBgJob(processLoanInterest(CLASS_CODE), "processLoanInterest"),
       safeBgJob(processTermDeposits(CLASS_CODE), "processTermDeposits"),
-      safeBgJob(applyInterestToClassIfDue(CLASS_CODE), "applyInterestToClassIfDue"),
+      IS_TEACHER
+        ? safeBgJob(applyInterestToClassIfDue(CLASS_CODE), "applyInterestToClassIfDue")
+        : safeBgJob(applyMyInterestIfDue(u.username), "applyMyInterestIfDue"),
       safeBgJob(processInsurancePayments(CLASS_CODE), "processInsurancePayments"),
       safeBgJob(processWeeklyEvents(CLASS_CODE), "processWeeklyEvents"),
       safeBgJob(processWeeklyBigEvents(CLASS_CODE), "processWeeklyBigEvents")

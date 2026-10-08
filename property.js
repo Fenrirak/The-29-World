@@ -1098,7 +1098,8 @@ async function openSellModal(id, isTeacherSelling) {
   const confirmBtn = document.getElementById("sellModalConfirmBtn");
   confirmBtn.onclick = async () => {
     closeSellModal();
-    await sellProperty(CURRENT.classCode, id);
+    const res = await sellProperty(CURRENT.classCode, id);
+    if (res && !res.ok && res.error) { alert(res.error); return; }
     await render();
   };
   overlay.classList.remove("hidden");
@@ -1117,6 +1118,11 @@ async function pickAvailableUnitId(gid) {
   const unit = (cls.properties || []).find(p => (p.groupId || p.id) === gid && !p.owner);
   return unit ? unit.id : null;
 }
+// Shows a message in a listing's box for about 3 seconds. Called after
+// render(), which rebuilds the box.
+function flashListingMsg(gid, html) {
+  flashMsg(document.getElementById("msg-" + gid), html);
+}
 async function buyOutright(gid) {
   // Double-tap guard (same reasoning as buy() in market.js) — matters
   // more here than most: pickAvailableUnitId() below can hand out a
@@ -1132,8 +1138,11 @@ async function buyOutright(gid) {
     const id = await pickAvailableUnitId(gid);
     if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
     const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, false);
-    document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Congratulations, it's yours!</div>` : `<div class="error-msg">${res.error}</div>`;
+    if (!res.ok) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
+    // render() rebuilds this listing's card (and its message box), so the
+    // success message goes in afterwards — same pattern as transport.js.
+    flashListingMsg(gid, `<div class="success-msg">Congratulations, it's yours!</div>`);
   } finally {
     if (btn) btn.disabled = false;
     if (btn2) btn2.disabled = false;
@@ -1172,8 +1181,12 @@ async function buyFinanced(gid) {
     const id = await pickAvailableUnitId(gid);
     if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
     const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true, depositAmt);
-    document.getElementById("msg-" + gid).innerHTML = res.ok ? `<div class="success-msg">Mortgaged with a ${fmtMoney(depositAmt)} deposit! Weekly payments will come out automatically.</div>` : `<div class="error-msg">${res.error}</div>`;
+    if (!res.ok) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
+    // Mortgage payments are never taken automatically — the student pays
+    // each one themselves on the class's mortgage day (see payMortgage).
+    const cls = await getClassCached(CURRENT.classCode);
+    flashListingMsg(gid, `<div class="success-msg">Mortgaged with a ${fmtMoney(depositAmt)} deposit! Payments aren't taken automatically — come back every ${DAY_FULL[cls.mortgageDay || "Fri"]} to pay them yourself (the week you bought is free).</div>`);
   } finally {
     if (btn) btn.disabled = false;
     if (btn2) btn2.disabled = false;

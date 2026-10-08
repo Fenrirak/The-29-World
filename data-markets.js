@@ -203,6 +203,7 @@ async function closeCompany(classCode, companyId) {
   const classRef = classesCol().doc(classCode);
   let payouts = [];
   await fdb.runTransaction(async (t) => {
+    payouts = []; // reset every attempt — a retried callback would otherwise pay everyone twice
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
@@ -559,6 +560,7 @@ async function createListing(username, classCode, { assetType, assetId, price, d
       const sellable = getSellableAssets(cls, user)
         .find(a => a.assetType === assetType && a.assetId === assetId && !a.blocked);
       if (!sellable) throw new Error("NOT_OWNED");
+      if (assetType !== "store" && pendingBigEventFor(cls, username, assetType, assetId)) throw new Error("BIG_EVENT");
 
       const openMine = (cls.listings || []).filter(l => l.seller === username && listingIsOpen(l));
       if (mp.maxActiveListings > 0 && openMine.length >= mp.maxActiveListings) throw new Error("TOO_MANY");
@@ -593,6 +595,7 @@ async function createListing(username, classCode, { assetType, assetId, price, d
     if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };
     if (e.message === "TYPE_OFF") return { ok: false, error: "Your teacher doesn't allow that kind of thing to be traded." };
     if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that (or it's already listed)." };
+    if (e.message === "BIG_EVENT") return { ok: false, error: BIG_EVENT_BLOCK_MESSAGE };
     if (e.message === "TOO_MANY") return { ok: false, error: "You already have the maximum number of listings up at once." };
     if (e.message === "BAD_PRICE") return { ok: false, error: "Enter a price greater than zero." };
     if (e.message === "UNDER_MIN") return { ok: false, error: "That price is below the minimum your teacher allows for this item." };
@@ -697,6 +700,9 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
       if (listing.seller !== seller.username) throw new Error("NOT_FOUND");
       if (listing.seller === buyerUsername) throw new Error("OWN_LISTING");
       if (!_marketplaceStillOwns(cls, seller, listing)) throw new Error("GONE");
+      // The seller has a big event waiting that puts this very thing at
+      // risk — it can't change hands until they've answered it.
+      if (listing.assetType !== "store" && pendingBigEventFor(cls, seller.username, listing.assetType, listing.assetId)) throw new Error("SELLER_BIG_EVENT");
 
       const price = Math.round(Number(agreedPrice) * 100) / 100;
       if (!(price > 0)) throw new Error("BAD_PRICE");
@@ -786,6 +792,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
     if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };
     if (e.message === "CLOSED") return { ok: false, error: "Someone got there first — that listing is no longer for sale." };
     if (e.message === "GONE") return { ok: false, error: "The seller doesn't own that any more, so the listing has expired." };
+    if (e.message === "SELLER_BIG_EVENT") return { ok: false, error: buyerUsername === t29SessionStudent() ? "The seller can't sell this right now — try again later." : BIG_EVENT_BLOCK_MESSAGE };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     if (e.message === "OWN_LISTING") return { ok: false, error: "You can't buy your own listing." };
     if (e.message === "ALREADY_OWN") return { ok: false, error: "You already own that vehicle." };
@@ -1778,6 +1785,9 @@ async function bjSettle(username, classCode, round) {
     const playerBJ = bjIsNaturalBlackjack(h.cards) && !h.isSplitAces;
     let outcome;
     if (playerBJ && !dealerBJ) outcome = "blackjack";
+    // Only a blackjack ties a dealer blackjack — a 21 made with three or
+    // more cards still loses to it.
+    else if (dealerBJ) outcome = playerBJ ? "push" : "lost";
     else if (dealerBust || playerVal > dealerVal) outcome = "won";
     else if (playerVal === dealerVal) outcome = "push";
     else outcome = "lost";
@@ -1790,6 +1800,18 @@ async function bjSettle(username, classCode, round) {
       taxTotal += taxAmount;
     }
     results.push({ hand: h, outcome });
+  }
+
+  // Original-bet-only protection: a dealer blackjack (only seen now when
+  // its face-up card was a 10, J, Q or K) never takes more than the
+  // student's original bet. Anything extra they put in by doubling or
+  // splitting comes back — except on a hand they busted themselves.
+  let protectedRefund = 0;
+  if (dealerBJ) {
+    const lostToDealer = results.filter(r => r.outcome === "lost" && r.hand.status !== "bust" && r.hand.status !== "lost-to-dealer-blackjack")
+      .reduce((sum, r) => sum + r.hand.bet, 0);
+    protectedRefund = Math.max(0, Math.round((lostToDealer - round.betAmount) * 100) / 100);
+    totalCredit += protectedRefund;
   }
 
   if (totalCredit > 0) await adjustGamblingAccount(username, totalCredit, cls.gambling.dailyWinLimit);
@@ -1852,7 +1874,7 @@ async function bjSettle(username, classCode, round) {
       // it's no longer summed anywhere for a daily cap (that's now enforced
       // at buy-in time — see startBlackjackRound/buyIntoGamblingAccount).
       type: "gambling", from: username, amount: Math.abs(netForTxn), bet: round.betAmount,
-      note: `Blackjack: ${handsDesc}; ${dealerDesc} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
+      note: `Blackjack: ${handsDesc}; ${dealerDesc} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${protectedRefund > 0 ? ` ${fmtMoney(protectedRefund)} of doubled/split bets returned (dealer blackjack).` : ""}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
     }),
     usersCol().doc(username).update({ blackjackRound: null })
   ]);

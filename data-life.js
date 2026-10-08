@@ -377,10 +377,13 @@ async function buyVehicle(username, classCode, vehId) {
   await logTxn(classCode, { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
 }
+// Returns { ok } (ok: false with an error when a student's own sale is
+// blocked by a waiting big event — see pendingBigEventFor).
 async function sellVehicle(classCode, vehId, username, rate) {
   const classRef = classesCol().doc(classCode);
-  let owner = null, payout = 0, vehName = "";
+  let owner = null, payout = 0, vehName = "", blocked = false;
   await fdb.runTransaction(async (t) => {
+    owner = null; blocked = false;
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
@@ -388,6 +391,9 @@ async function sellVehicle(classCode, vehId, username, rate) {
     if (!veh) return;
     veh.owners = veh.owners || [];
     if (!veh.owners.includes(username)) return;
+    // A teacher repossessing it is never blocked — only the student
+    // selling their own while a big event has it at risk.
+    if (t29SessionStudent() === username && pendingBigEventFor(cls, username, "vehicle", vehId)) { blocked = true; return; }
     owner = username;
     vehName = veh.name;
     // An explicit rate (e.g. the teacher's flat 90% forced-repossession
@@ -398,11 +404,12 @@ async function sellVehicle(classCode, vehId, username, rate) {
     veh.owners = veh.owners.filter(o => o !== username);
     t.update(classRef, { vehicles: cls.vehicles });
   });
+  if (blocked) return { ok: false, error: BIG_EVENT_BLOCK_MESSAGE };
   if (owner) {
     await adjustBalance(owner, payout);
     await logTxn(classCode, { type: "vehicle-sell", to: owner, amount: payout, note: `Sold back: ${vehName}` });
   }
-  return true;
+  return { ok: true };
 }
 
 // Teacher-set price/description for the class-wide truck licence. Students
@@ -574,11 +581,14 @@ async function setPublicTransportFeeOverrides(classCode, overrides) {
 // including for a user with no lifeItems at all (e.g. a teacher).
 function currentLifeTransportFee(cls, user) {
   const overrides = cls.publicTransportFeeOverrides || {};
+  // grantedAt is only a date, so two granted on the same day are told
+  // apart by their place in the list (grantLifeItem adds to the end).
   const eligible = ((user && user.lifeItems) || [])
-    .filter(it => it.templateId && overrides[it.templateId] !== undefined)
-    .sort((a, b) => (b.grantedAt || "").localeCompare(a.grantedAt || ""));
+    .map((it, i) => ({ it, i }))
+    .filter(x => x.it.templateId && overrides[x.it.templateId] !== undefined)
+    .sort((a, b) => (b.it.grantedAt || "").localeCompare(a.it.grantedAt || "") || b.i - a.i);
   if (!eligible.length) return null;
-  const chosen = eligible[0];
+  const chosen = eligible[0].it;
   return { amount: Math.max(0, Number(overrides[chosen.templateId]) || 0), name: chosen.name };
 }
 // Class-wide day transport expenses are payable on (like payDay/mortgageDay).
@@ -633,6 +643,10 @@ function lastTransportDueWeekKey(cls) {
 function overdueTransportWeekKey(user, cls) {
   const weekKey = isoWeekKey(new Date());
   if ((user.transportLastWeekPaid || null) === weekKey) return null; // already paid this week
+  // Nothing to pay (no fee set, or it's fully offset by their vehicle)
+  // means nothing can be overdue — a $0 week is only left unmarked because
+  // the student didn't open Transport on the due day to settle it.
+  if (transportWeeklyAmount(cls, user).total <= 0) return null;
   const lastDueWeekKey = lastTransportDueWeekKey(cls);
   if (lastDueWeekKey === weekKey) return weekKey; // this week's due day already passed
   if ((user.transportLastWeekPaid || null) === lastDueWeekKey) return null; // that earlier cycle was paid
@@ -703,7 +717,7 @@ async function resolveTransportOverdue(classCode, username) {
       const userSnap = await t.get(userRef);
       const classSnap = await t.get(classRef);
       if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
-      const user = userSnap.data();
+      const user = Object.assign({ username }, userSnap.data());
       const cls = withNewModuleDefaults(classSnap.data());
       const overdueWeekKey = overdueTransportWeekKey(user, cls);
       if (!overdueWeekKey) throw new Error("NOT_OVERDUE");
@@ -753,9 +767,9 @@ const INSURANCE_TYPES = {
     { key: "comprehensive", label: "Comprehensive Insurance", covers: ALL_TRANSPORT_INCIDENTS, vehicles: "cars",
       coversText: "Covers accidents, fire, theft, vandalism, storms, floods and damage to other people's property. Cars and bikes only." },
     { key: "third-party", label: "Third-Party Only", covers: ["third-party"], vehicles: "cars",
-      coversText: "Covers damage you cause to other people's property only. Cars and bikes only." },
+      coversText: "Covers damage you cause to other people's property only — not your own vehicle, so if a big event damages yours too, you still lose it. Cars and bikes only." },
     { key: "tpft", label: "Third-Party, Fire, and Theft", covers: ["third-party", "fire", "theft"], vehicles: "cars",
-      coversText: "Covers damage to other people's property, plus fire and theft. Cars and bikes only." },
+      coversText: "Covers damage to other people's property, plus fire and theft. Not accidents, vandalism or storms — if a big event damages your own vehicle one of those ways, you still lose it. Cars and bikes only." },
     { key: "truck", label: "Truck Insurance", covers: ALL_TRANSPORT_INCIDENTS, vehicles: "trucks",
       coversText: "Covers anything that happens to your truck. Trucks only." }
   ],
@@ -1064,6 +1078,29 @@ function insuranceClaimOptions(cls, user, coverage, cover, cost, entry) {
     .sort((a, b) => a.studentPays - b.studentPays);
 }
 
+// A big event's claim options (insuranceClaimOptions), plus one rule for
+// transport events that can cost the student their vehicle: a plan that
+// only covers damage to someone ELSE's property (e.g. Third-Party Only
+// after an accident) doesn't fix the student's own vehicle, so claiming
+// on it still loses the vehicle (losesVehicle: true). The insurer pays for
+// the other person's damage and the student pays just their excess — the
+// rest isn't charged, since losing the vehicle stands in for their own
+// damage. Events that never take the vehicle, events that only damaged
+// someone else's property, and plans with no type all work as before.
+function bigEventClaimOptions(cls, user, entry) {
+  const coverage = MODULE_TO_COVERAGE[entry.module];
+  if (!coverage) return [];
+  const options = insuranceClaimOptions(cls, user, coverage, entry.insuranceCover, entry.cost, entry);
+  if (coverage !== "transport" || entry.takesAsset === false) return options;
+  const ownDamage = incidentList(entry.incident).filter(k => k !== "third-party");
+  if (!ownDamage.length) return options;
+  return options.map(o => {
+    const t = insuranceTypeInfo("transport", o.plan.insType);
+    if (!t || t.covers.some(k => ownDamage.includes(k))) return o;
+    return Object.assign({}, o, { losesVehicle: true, uncovered: 0, studentPays: o.excess });
+  }).sort((a, b) => a.studentPays - b.studentPays);
+}
+
 // Plain-text breakdown of a write-off option, e.g. "The insurer pays
 // $300,000.00 for 12 Smith St, minus $250,000.00 mortgage and $50.00
 // excess: you get $49,950.00 and the house goes to the insurer."
@@ -1348,6 +1385,9 @@ async function buyInsurance(username, classCode, planId) {
       const cls = withNewModuleDefaults(classSnap.data());
       const plan = cls.insurancePlans.find(p => p.id === planId && p.active);
       if (!plan) throw new Error("NOT_FOUND");
+      // Insurance taken out after a big event happened can't be used to
+      // cover it — the event has to be answered first.
+      if (user.role !== "teacher" && hasPendingBigEvent(cls, username)) throw new Error("BIG_EVENT");
       user.insurance = user.insurance || [];
       if (user.insurance.includes(planId)) throw new Error("ALREADY");
       planName = insurancePlanName(plan);
@@ -1362,6 +1402,7 @@ async function buyInsurance(username, classCode, planId) {
     });
   } catch (e) {
     if (e.message === "ALREADY") return { ok: false, error: "You already have this plan." };
+    if (e.message === "BIG_EVENT") return { ok: false, error: BIG_EVENT_BLOCK_MESSAGE };
     if (e.message === "BROKE") return { ok: false, error: `You don't have enough money to pay the ${fmtMoney(fee)} sign-up fee.` };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -1483,7 +1524,7 @@ async function buyStoreItem(username, classCode, itemId, qty) {
   if (qty < 1) qty = 1;
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let itemName = "", taxAmount = 0, cashPaid = 0;
+  let itemName = "", cashPaid = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1494,9 +1535,9 @@ async function buyStoreItem(username, classCode, itemId, qty) {
       const item = cls.storeItems.find(i => i.id === itemId);
       if (!item || item.archived) throw new Error("NOT_FOUND");
       if (item.stock !== null && item.stock < qty) throw new Error("OUT");
+      // No store tax — the price shown is what's paid.
       const discountedPrice = applyLifeDiscount(user, "store", item.price);
-      const { total, taxAmount: tax } = applyTaxToExpense(cls, "store", discountedPrice * qty);
-      taxAmount = tax;
+      const total = Math.round(discountedPrice * qty * 100) / 100;
       cashPaid = total;
       const isTeacher = user.role === "teacher";
       if (!isTeacher && user.balance < total) throw new Error("BROKE");
@@ -1514,7 +1555,7 @@ async function buyStoreItem(username, classCode, itemId, qty) {
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "store-buy", from: username, amount: cashPaid, note: `Bought from store: ${itemName}${qty > 1 ? ` ×${qty}` : ""}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
+  await logTxn(classCode, { type: "store-buy", from: username, amount: cashPaid, note: `Bought from store: ${itemName}${qty > 1 ? ` ×${qty}` : ""}` });
   return { ok: true, qty };
 }
 
@@ -1739,20 +1780,66 @@ async function addLifeItem(classCode, item) {
     t.update(classRef, { lifeItems: cls.lifeItems });
   });
 }
+// Edits the template AND every student's copy of it, so students who
+// already have it get the new benefits from now on. Their one-time cash
+// was paid when it was given, so editing it is never paid (or taken back)
+// again — their copy keeps the amount they actually got.
+// Returns { ok, updated, failed } — failed lists students whose copy
+// couldn't be saved (they keep the old version until it's edited again).
 async function updateLifeItem(classCode, itemId, item) {
   const classRef = classesCol().doc(classCode);
+  const name = (item.name || "").trim() || "Untitled life event";
+  const description = (item.description || "").trim();
+  const benefits = sanitizeLifeBenefits(item.benefits);
+  const frequency = normalizeLifeFrequency(item.frequency);
+  let found = false;
   await fdb.runTransaction(async (t) => {
+    found = false;
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const existing = cls.lifeItems.find(i => i.id === itemId);
     if (!existing) return;
-    existing.name = (item.name || "").trim() || "Untitled life event";
-    existing.description = (item.description || "").trim();
-    existing.benefits = sanitizeLifeBenefits(item.benefits);
-    existing.frequency = normalizeLifeFrequency(item.frequency);
+    found = true;
+    existing.name = name;
+    existing.description = description;
+    existing.benefits = benefits;
+    existing.frequency = frequency;
     t.update(classRef, { lifeItems: cls.lifeItems });
   });
+  if (!found) return { ok: false, updated: 0, failed: [] };
+
+  let updated = 0;
+  const failed = [];
+  const students = await getClassStudents(classCode);
+  for (const s of students) {
+    if (!(s.lifeItems || []).some(it => it.templateId === itemId)) continue;
+    const userRef = usersCol().doc(s.username);
+    try {
+      let changed = false;
+      await fdb.runTransaction(async (t) => {
+        changed = false;
+        const snap = await t.get(userRef);
+        if (!snap.exists) return;
+        const items = snap.data().lifeItems || [];
+        items.forEach(it => {
+          if (it.templateId !== itemId) return;
+          const paidCash = Number((it.benefits || {}).cashOnce) || 0;
+          it.name = name;
+          it.description = description;
+          it.benefits = Object.assign({}, benefits, { cashOnce: paidCash });
+          it.frequency = frequency;
+          changed = true;
+        });
+        if (changed) t.update(userRef, { lifeItems: items });
+      });
+      if (changed) updated++;
+    } catch (e) {
+      console.warn("updateLifeItem: couldn't update " + s.username + "'s copy", e);
+      failed.push(s.name || s.username);
+    }
+  }
+  return { ok: true, updated, failed };
 }
 // Removing a template only stops it being handed out again — students who
 // already have it keep their snapshot of its benefits untouched.
@@ -1831,6 +1918,24 @@ const BIG_EVENT_MODULES = ["income", "property", "transport", "general"];
 // job/property/vehicle to attach the loss/insurance-claim to.
 const BIG_EVENT_ASSET_MODULES = ["income", "property", "transport"];
 const MODULE_TO_COVERAGE = { income: "jobs", property: "property", transport: "transport" };
+
+// A student with a bad big event still waiting for an answer has to deal
+// with it before doing anything else: the popup can't be closed, and the
+// job, property or vehicle it puts at risk can't be got rid of first
+// (sold, or sold on in the Trade Centre) — otherwise not paying would
+// cost them nothing. kind is "property" or "vehicle". Older events that
+// didn't record which one they hit block every one of that kind (losing
+// it took their first). Returns the event blocking it, or null.
+function pendingBigEventFor(cls, username, kind, assetId) {
+  const module = kind === "vehicle" ? "transport" : kind;
+  return (cls.bigEventLog || []).find(e => e.studentUser === username && e.status === "pending"
+    && e.takesAsset !== false && e.module === module && (!e.assetId || e.assetId === assetId)) || null;
+}
+// Whether the student has any bad big event still waiting for an answer.
+function hasPendingBigEvent(cls, username) {
+  return (cls.bigEventLog || []).some(e => e.studentUser === username && e.status === "pending");
+}
+const BIG_EVENT_BLOCK_MESSAGE = "Answer your big event first — you can't do that while it's waiting for you.";
 
 // "general" is only a legal module for "good" events — a "bad" event
 // always needs a real asset to threaten/insure, so it silently falls back
@@ -2080,11 +2185,11 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         // with no insurance types set — those cover the whole cost).
         // planId picks which of the student's matching plans to claim on;
         // without one, the cheapest for the student is used.
-        const coverage = MODULE_TO_COVERAGE[entry.module];
-        const options = coverage ? insuranceClaimOptions(cls, user, coverage, entry.insuranceCover, entry.cost, entry) : [];
-        // Without a planId, never pick a write-off for the student — that
-        // gives their house away, so it must always be chosen on purpose.
-        const option = planId ? options.find(o => o.plan.id === planId) : options.find(o => !o.writeOff);
+        const options = bigEventClaimOptions(cls, user, entry);
+        // Without a planId, never pick a write-off or a claim that loses
+        // the vehicle for the student — those give something away, so
+        // they must always be chosen on purpose.
+        const option = planId ? options.find(o => o.plan.id === planId) : options.find(o => !o.writeOff && !o.losesVehicle);
         if (!option) throw new Error("NO_PLAN");
         const cash = user.balance || 0;
         if (option.writeOff) {
@@ -2104,6 +2209,18 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         if (!isTeacher && cash < toPay) throw new Error("BROKE_EXCESS");
         entry.status = "claimed";
         amount = toPay;
+        if (option.losesVehicle) {
+          // The insurer pays the other person; their own vehicle isn't
+          // covered, so it's lost (see bigEventClaimOptions).
+          const veh = eventAssetNow(cls, username, "transport", entry).vehicle;
+          if (veh) veh.owners = veh.owners.filter(o => o !== username);
+          entry.lostVehicle = true;
+          outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess; `
+            + `the insurer covered the damage to someone else's property, but not their own vehicle${veh && veh.name ? ` (${veh.name})` : ""}, so they lost it`;
+          if (!isTeacher && toPay > 0) t.update(userRef, { balance: Math.round((cash - toPay) * 100) / 100 });
+          t.update(classRef, { vehicles: cls.vehicles, bigEventLog: cls.bigEventLog });
+          return;
+        }
         outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess`
           + (option.uncovered > 0 ? ` + ${fmtMoney(option.uncovered)} not covered` : "");
         if (!isTeacher && toPay > 0) t.update(userRef, { balance: Math.round((cash - toPay) * 100) / 100 });
@@ -2812,11 +2929,11 @@ async function lifestyleRatingBreakdown(username, classCode) {
     owned.forEach(p => {
       const pts = (p.comfort || 0) * (cfg.property.weight || 0);
       score += pts;
-      items.push({ type: "gain", label: p.name || "Property", detail: `${p.comfort || 0} comfort &times; ${cfg.property.weight || 0} pts/star`, points: pts });
+      items.push({ type: "gain", label: p.name || "Property", detail: `${p.comfort || 0} comfort × ${cfg.property.weight || 0} pts/star`, points: pts });
       if (p.occupancy === "living") {
         const bonus = propertyLivingBonusPoints(cfg, p);
         score += bonus;
-        items.push({ type: "gain", label: `Living in ${p.name || "your property"}`, detail: `${p.livingBonusStars || 0} bonus star${(p.livingBonusStars || 0) === 1 ? "" : "s"} &times; ${cfg.property.weight || 0} pts/star for living in it instead of renting it out`, points: bonus });
+        items.push({ type: "gain", label: `Living in ${p.name || "your property"}`, detail: `${p.livingBonusStars || 0} bonus star${(p.livingBonusStars || 0) === 1 ? "" : "s"} × ${cfg.property.weight || 0} pts/star for living in it instead of renting it out`, points: bonus });
       }
     });
     const tenantHome = cls.properties.find(p => p.sublet && p.sublet.tenant === username);
@@ -2847,7 +2964,7 @@ async function lifestyleRatingBreakdown(username, classCode) {
         type: "gain",
         label: v.name || "Vehicle",
         detail: isBest
-          ? `${v.comfort || 0} comfort &times; ${cfg.transport.weight || 0} pts/star (your comfiest vehicle)`
+          ? `${v.comfort || 0} comfort × ${cfg.transport.weight || 0} pts/star (your comfiest vehicle)`
           : `${v.comfort || 0} comfort — not counted, since only your comfiest vehicle scores points`,
         points: pts
       });
@@ -2860,7 +2977,7 @@ async function lifestyleRatingBreakdown(username, classCode) {
       if (item) {
         const pts = (item.stars || 0) * (cfg.store.weight || 0);
         score += pts;
-        items.push({ type: "gain", label: item.name, detail: `${item.stars || 0}★ &times; ${cfg.store.weight || 0} pts/star`, points: pts });
+        items.push({ type: "gain", label: item.name, detail: `${item.stars || 0}★ × ${cfg.store.weight || 0} pts/star`, points: pts });
       }
     });
   }
@@ -2871,7 +2988,7 @@ async function lifestyleRatingBreakdown(username, classCode) {
       if (plan) {
         const pts = (plan.stars || 0) * (cfg.insurance.weight || 0);
         score += pts;
-        items.push({ type: "gain", label: insurancePlanName(plan), detail: `${plan.stars || 0}★ &times; ${cfg.insurance.weight || 0} pts/star`, points: pts });
+        items.push({ type: "gain", label: insurancePlanName(plan), detail: `${plan.stars || 0}★ × ${cfg.insurance.weight || 0} pts/star`, points: pts });
       }
     });
   }
@@ -2882,7 +2999,7 @@ async function lifestyleRatingBreakdown(username, classCode) {
     const penalty = Math.floor(owedTotal / cfg.loan.perAmount) * cfg.loan.points;
     if (penalty > 0) {
       score -= penalty;
-      items.push({ type: "loss", label: "Outstanding loans", detail: `${fmtMoney(owedTotal)} owed &middot; ${cfg.loan.points} pt${cfg.loan.points === 1 ? "" : "s"} per ${fmtMoney(cfg.loan.perAmount)} owed`, points: penalty });
+      items.push({ type: "loss", label: "Outstanding loans", detail: `${fmtMoney(owedTotal)} owed · ${cfg.loan.points} pt${cfg.loan.points === 1 ? "" : "s"} per ${fmtMoney(cfg.loan.perAmount)} owed`, points: penalty });
     }
   }
   (user.lifeItems || []).forEach(it => {
@@ -3135,13 +3252,24 @@ const QUIZ_MAX_QUESTIONS = 20;
 // Accepts the loose shape the teacher UI collects and returns a clean,
 // fully-populated quiz object. Questions with no text, or fewer than 2
 // options, are dropped rather than saved half-formed.
+function quizPassMarkOrDefault(v) {
+  if (v === null || v === undefined || String(v).trim() === "") return QUIZ_DEFAULT_PASS_MARK;
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? n : QUIZ_DEFAULT_PASS_MARK;
+}
+
 function normalizeQuiz(q, existing) {
   const questions = (q.questions || []).slice(0, QUIZ_MAX_QUESTIONS).map(raw => {
-    const options = (raw.options || []).map(o => String(o || "").trim()).filter(o => o !== "");
+    const typed = (raw.options || []).map(o => String(o || "").trim());
+    const options = typed.filter(o => o !== "");
     const text = String(raw.text || "").trim();
     if (!text || options.length < 2) return null;
+    // The tick follows its option when blank options above it are dropped
+    // (otherwise it would land on a different option).
     let answer = Math.floor(Number(raw.answer));
-    if (!(answer >= 0 && answer < options.length)) answer = 0;
+    answer = answer >= 0 && answer < typed.length && typed[answer] !== ""
+      ? typed.slice(0, answer).filter(o => o !== "").length
+      : 0;
     return {
       id: raw.id || uid("qq"),
       text, options, answer,
@@ -3154,7 +3282,9 @@ function normalizeQuiz(q, existing) {
     title: String(q.title || "Untitled quiz").trim(),
     description: String(q.description || "").trim(),
     moduleKey: LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === q.moduleKey) ? q.moduleKey : "",
-    passMark: Math.max(0, Math.min(100, Math.round(Number(q.passMark)) || QUIZ_DEFAULT_PASS_MARK)),
+    // A pass mark of 0 is allowed (anyone who finishes passes) — only a
+    // missing one falls back to the default.
+    passMark: Math.max(0, Math.min(100, quizPassMarkOrDefault(q.passMark))),
     reward: Math.max(0, Math.round((Number(q.reward) || 0) * 100) / 100),
     active: q.active === undefined ? true : !!q.active,
     questions
@@ -3236,6 +3366,7 @@ async function submitQuizAttempt(username, classCode, quizId, answers) {
   let outcome = null, rewardPaid = 0, quizTitle = "";
   try {
     await fdb.runTransaction(async (t) => {
+      rewardPaid = 0; // reset every attempt — this callback can be retried
       const userSnap = await t.get(userRef);
       const classSnap = await t.get(classRef);
       if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");

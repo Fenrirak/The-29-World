@@ -374,7 +374,8 @@ async function sellMine(id) {
   const rate = rates[type] !== undefined ? rates[type] : 0.85;
   const pct = Math.round(rate * 100);
   if (confirm(`Sell your vehicle back for ${pct}% of its price?`)) {
-    await sellVehicle(CURRENT.classCode, id, CURRENT.username);
+    const res = await sellVehicle(CURRENT.classCode, id, CURRENT.username);
+    if (res && !res.ok) { alert(res.error); return; }
     await render();
   }
 }
@@ -410,14 +411,19 @@ async function buyVeh(id) {
 // used elsewhere in this file, just for a call render() triggers itself
 // rather than a click.
 let TRANSPORT_AUTO_SETTLING = false;
+// Only tried once per page load: the render() at the end calls straight
+// back into this while the week is still unmarked, so a write that keeps
+// failing (e.g. offline) would otherwise loop forever.
+let TRANSPORT_AUTO_SETTLE_TRIED = false;
 // A student with $0 net transport expense (fee fully offset by a vehicle,
 // or no fee set) still needs transportLastWeekPaid marked so they don't
 // show as overdue next render — but there's nothing to actually charge,
 // so this settles it the same way payTransportExpenses always has,
 // without making the student click a "Pay now — $0.00" button first.
 async function autoSettleZeroTransport() {
-  if (TRANSPORT_AUTO_SETTLING) return;
+  if (TRANSPORT_AUTO_SETTLING || TRANSPORT_AUTO_SETTLE_TRIED) return;
   TRANSPORT_AUTO_SETTLING = true;
+  TRANSPORT_AUTO_SETTLE_TRIED = true;
   try {
     await payTransportExpenses(CURRENT.username, CURRENT.classCode);
   } finally {

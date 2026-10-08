@@ -193,7 +193,7 @@
       <label for="adjStudent" id="labAdjStudent">Student</label>
       <select id="adjStudent" required></select>
       <label for="adjAmount" id="labAdjAmount">Amount (use a negative number for a fine)</label>
-      <input id="adjAmount" type="number" step="0.5" placeholder="e.g. 5 or -5" required>
+      <input id="adjAmount" type="number" step="0.01" placeholder="e.g. 5 or -5" required>
       <label for="adjNote" id="labAdjNote">Reason</label>
       <input id="adjNote" placeholder="e.g. Great teamwork" required>
       <button class="btn" type="submit" id="applyAdjBtn">Apply</button>
@@ -284,7 +284,7 @@
 
     <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
       <h2 id="hDanger" style="color:var(--coral);">Danger zone</h2>
-      <p>Reset every student's balance to $0, remove all jobs assignments, delist every company, and clear the activity log. Student logins and the class code stay the same — this just gives everyone a fresh start.</p>
+      <p>Start the class again as if it were brand new: every student goes back to the $20 welcome grant and everything they own or have done is wiped. All your settings stay as they are, and so do student logins and the class code.</p>
       <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>
     </div>
   </div>
@@ -336,7 +336,7 @@
         </div>
         <div id="evAmountWrap">
           <label for="evAmount" id="labEvAmount">Amount (negative for a cost)</label>
-          <input id="evAmount" type="number" step="0.5">
+          <input id="evAmount" type="number" step="0.01">
         </div>
         <div>
           <label for="evSeverity" id="labEvSeverity">Severity</label>
@@ -408,15 +408,15 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script type="module" src="firebase-init.js?v=9f8488c9"></script>
 <script defer src="icons.js?v=ece0bfd2"></script>
 <script defer src="settings-menu.js?v=fde34c7c"></script>
-<script defer src="data-core.js?v=b7bf213a"></script>
-<script defer src="data-money.js?v=b92b45de"></script>
-<script defer src="data-life.js?v=f6ff0138"></script>
-<script defer src="data-property.js?v=03d9335e"></script>
-<script defer src="data-markets.js?v=69cf7dca"></script>
+<script defer src="data-core.js?v=99476bd4"></script>
+<script defer src="data-money.js?v=59d042a1"></script>
+<script defer src="data-life.js?v=86a285a7"></script>
+<script defer src="data-property.js?v=6abfe689"></script>
+<script defer src="data-markets.js?v=d1c1af78"></script>
 <script defer src="tour.js?v=e6c08365"></script>
-<script defer src="events-ui.js?v=1af7521f"></script>
-<script defer src="quiz-gate.js?v=4ed5e0c8"></script>
-<script defer src="notifications.js?v=ca299e12"></script>
-<script defer src="teacher.js?v=245b4195"></script>
+<script defer src="events-ui.js?v=c31d5f8e"></script>
+<script defer src="quiz-gate.js?v=f23c49f4"></script>
+<script defer src="notifications.js?v=27799225"></script>
+<script defer src="teacher.js?v=1203bf0d"></script>
 </body>
 </html>

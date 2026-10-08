@@ -1,8 +1,8 @@
 let CURRENT, IS_TEACHER;
 
+// No store or insurance tax: store prices and insurance premiums are what
+// the student pays, tax included — the same way prices are shown in NZ.
 const TAX_CATEGORIES = [
-  { key: "store", label: "Class store purchases", kind: "expense" },
-  { key: "insurance", label: "Insurance premiums", kind: "expense" },
   { key: "property", label: "Property purchases", kind: "expense" },
   { key: "transport", label: "Transport purchases", kind: "expense" },
   { key: "interest", label: "Savings interest (income tax)", kind: "income" },

@@ -46,6 +46,11 @@ async function init() {
     document.getElementById("errorMsg").textContent = "This share link is invalid or has been revoked — ask for a fresh one.";
     return;
   }
+  if (info.needsRefresh) {
+    showState("stateError");
+    document.getElementById("errorMsg").textContent = "This link was made with an older version of The 29 World. Ask the teacher who sent it to click Share Template on that class again — then this same link will work.";
+    return;
+  }
   SHARE = info;
   showState("stateReady");
   document.getElementById("shareIntro").textContent =

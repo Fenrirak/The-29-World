@@ -313,6 +313,9 @@ async function render() {
     // property out, moving out, ending a lease) are just status notes with
     // nothing to sign.
     else if (t.type === "property-occupancy") { sign = amt > 0 ? (t.from === me.username ? "-" : "+") : ""; }
+    // A sale (or an insurance write-off) can go negative when the mortgage
+    // left to pay off is more than the house fetched — that's money out.
+    if (sign === "+" && amt < 0) { sign = "-"; amt = Math.abs(amt); }
 
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${escapeHtml(detail)}</td>

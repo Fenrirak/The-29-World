@@ -154,7 +154,7 @@ async function render() {
         <div class="auto-details"><strong>${escapeHtml(e.name)}</strong> (${MODULE_LABEL[e.module]}) — <span class="${isGood ? "ticker-up" : ""}">${isGood ? "+" : ""}${fmtMoney(e.cost)}</span>
           <div class="muted-small">${e.date}</div>
         </div>
-        <span class="${STATUS_CLASS[e.status]}">${STATUS_LABEL[e.status]}</span>
+        <span class="${e.lostVehicle ? "status-declined" : STATUS_CLASS[e.status]}">${STATUS_LABEL[e.status]}${e.lostVehicle ? " — lost the vehicle" : ""}</span>
       `;
       box.appendChild(row);
     });
