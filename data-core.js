@@ -2081,6 +2081,31 @@ function t29PageReady() {
   }
 }
 
+// Buttons all over the site switch themselves off for a moment after a
+// click (so a double-tap can't do something twice) and back on when the
+// work is saved. Switched-off buttons are greyed out (style.css), so mark a
+// just-clicked one .t29-busy while that's happening — it keeps its normal
+// look instead of flashing grey. Only buttons that really can't be used
+// right now go grey.
+if (typeof document !== "undefined" && document.addEventListener && typeof MutationObserver !== "undefined") {
+  document.addEventListener("click", e => {
+    const btn = e.target && e.target.closest ? e.target.closest(".btn") : null;
+    if (!btn || btn.disabled || btn.classList.contains("t29-busy")) return;
+    btn.classList.add("t29-busy");
+    let wasOff = false;
+    const obs = new MutationObserver(() => {
+      if (btn.disabled) wasOff = true;
+      else if (wasOff) done();
+    });
+    function done() { obs.disconnect(); btn.classList.remove("t29-busy"); }
+    obs.observe(btn, { attributes: true, attributeFilter: ["disabled"] });
+    // Not switched off straight after the click: nothing to hide.
+    setTimeout(() => { if (!btn.disabled) done(); }, 1500);
+    // Still off long after: it's genuinely unavailable now, so grey it.
+    setTimeout(done, 20000);
+  }, true);
+}
+
 // Small message in the bottom corner. type: "info" | "success" | "error".
 // The same message isn't stacked twice while it's still showing.
 function t29Toast(message, opts) {

@@ -662,8 +662,9 @@ function renderBudgetStudent(me, cls) {
     tile("left" + (v.left < 0 ? " neg" : ""), "piggy", "Left after bills", fmtSigned(v.left),
       v.left < 0 ? "Your bills are more than you're earning" : "To save and spend");
 
-  document.getElementById("budVerdict").innerHTML =
-    `<div class="bud-verdict ${v.verdict.tone}">${icon(v.verdict.icon, 19)}<span>${budEsc(v.verdict.text)}</span></div>`;
+  // Only things that need doing are shown — no "you're on track" boxes.
+  document.getElementById("budVerdict").innerHTML = v.verdict.tone === "good" ? ""
+    : `<div class="bud-verdict ${v.verdict.tone}"><span>${budEsc(v.verdict.text)}</span></div>`;
 
   /* ---- The plan ---- */
   const input = document.getElementById("budSave");
@@ -784,8 +785,8 @@ function renderBudgetStudent(me, cls) {
   }
 
   // Warnings and tips sit at the top, straight under the main verdict.
-  document.getElementById("budNotes").innerHTML = v.notes.map(n =>
-    `<div class="bud-note ${n.tone}">${icon(n.icon, 16)}<span>${budEsc(n.text)}</span></div>`).join("");
+  document.getElementById("budNotes").innerHTML = v.notes.filter(n => n.tone !== "good").map(n =>
+    `<div class="bud-note ${n.tone}"><span>${budEsc(n.text)}</span></div>`).join("");
 
   budgetRecalc();
 }

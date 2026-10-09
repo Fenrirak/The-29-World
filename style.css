@@ -443,7 +443,7 @@ tr:last-child td{border-bottom:none;}
   max-width:420px;
   position:relative;
   z-index:1;
-  border-top:5px solid var(--gold);
+  /* no coloured top bar */
 }
 .auth-logo{
   display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px;
@@ -724,7 +724,7 @@ label .icon-slot{color:var(--navy-700);}
 }
 .anw-modal-card{
   background:#fff;border-radius:18px;padding:26px;max-width:420px;width:100%;
-  box-shadow:0 24px 60px rgba(0,0,0,0.35);border-top:5px solid var(--gold);
+  box-shadow:0 24px 60px rgba(0,0,0,0.35);
   max-height:85vh;overflow-y:auto;
 }
 .anw-event-row{
@@ -1014,7 +1014,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .quiz-option.wrong{border-color:var(--coral);background:#fdeeeb;}
 .quiz-explain{
   margin:10px 0 0;padding:10px 12px;border-radius:9px;
-  background:#f2f5fb;border-left:3px solid var(--navy-500);
+  background:#f2f5fb;border:1.5px solid var(--line);
   font-size:.83rem;color:var(--navy-900);line-height:1.5;
 }
 .quiz-score{
@@ -1078,7 +1078,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
    standard .anw-modal-overlay used by the event popups, so a gated module
    feels like the rest of the app rather than a separate page. Wider and
    taller than an event popup because it has to hold a whole quiz. */
-.qg-card{max-width:600px;border-top-color:var(--navy-700);}
+.qg-card{max-width:600px;}
 .qg-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:6px;}
 .qg-kicker{
   display:flex;align-items:center;gap:6px;margin:0 0 4px;
@@ -1194,6 +1194,8 @@ a.notif-row.unread:hover{background:#f7f3e6;}
    heading so they're the first thing a student reads. */
 .bud-alerts{margin-top:14px;}
 #budNotes:empty{display:none;}
+#budVerdict:empty + #budNotes > .bud-note:first-child{margin-top:0;}
+.bud-alerts:has(> #budVerdict:empty + #budNotes:empty){display:none;}
 .bud-verdict{
   display:flex;align-items:flex-start;gap:11px;
   border-radius:11px;padding:13px 15px;
@@ -1462,19 +1464,15 @@ html.dark-mode{
   --warn-banner-grad-start:var(--coral-dim);
   --warn-banner-grad-end:var(--gold-dim);
   --warn-banner-text:var(--heading-text);
-
   --pastel-mint-bg: rgba(63,191,143,0.16);
   --pastel-mint-border: rgba(63,191,143,0.4);
   --pastel-mint-text: #7be3b8;
-
   --pastel-coral-bg: rgba(232,115,95,0.16);
   --pastel-coral-border: rgba(232,115,95,0.45);
   --pastel-coral-text: #ff9d87;
-
   --pastel-gold-bg: rgba(232,184,75,0.18);
   --pastel-gold-border: rgba(232,184,75,0.45);
   --pastel-gold-text: #f6cf7e;
-
   --pastel-navy-bg: rgba(143,180,255,0.14);
   --pastel-lilac-bg: rgba(138,127,214,0.22);
   --pastel-lilac-text: #cabdf7;
@@ -1556,7 +1554,6 @@ html.dark-mode .bud-days-summary .icon,
 html.dark-mode .bud-row-icon{
   color:var(--accent-text);
 }
-html.dark-mode .qg-card{border-top-color:var(--accent-text);}
 html.dark-mode .quiz-option:hover{border-color:var(--accent-text);}
 html.dark-mode .mkt-filter:hover{border-color:var(--accent-text);}
 
@@ -2224,7 +2221,6 @@ html.dark-mode .notif-dot{
   width: 100%;
   text-align: center;
   box-shadow: 0 32px 80px rgba(0,0,0,.4);
-  border-top: 5px solid var(--gold);
   animation: promoPop .35s cubic-bezier(.34,1.56,.64,1) both;
 }
 @keyframes promoPop {
@@ -2386,14 +2382,16 @@ html.t29-loading .stat .value{
 .t29-toast{
   pointer-events:auto;display:flex;align-items:flex-start;gap:10px;
   background:var(--card);color:var(--ink);
-  border:1.5px solid var(--line);border-left:5px solid var(--sky);
+  border:1.5px solid var(--line);
   border-radius:12px;padding:12px 12px 12px 14px;
   box-shadow:0 12px 30px rgba(31,43,68,0.22);
   font-size:.9rem;line-height:1.4;
   animation:t29ToastIn .2s ease;
 }
-.t29-toast.error{border-left-color:var(--coral);}
-.t29-toast.success{border-left-color:var(--mint);}
+.t29-toast.error{border-color:var(--coral);background:#fdf2f0;color:#a8371f;}
+.t29-toast.success{border-color:var(--mint);background:#f0fbf6;color:#1c6b4e;}
+html.dark-mode .t29-toast.error{border-color:var(--pastel-coral-border);background:linear-gradient(var(--pastel-coral-bg),var(--pastel-coral-bg)),var(--card);color:var(--pastel-coral-text);}
+html.dark-mode .t29-toast.success{border-color:var(--pastel-mint-border);background:linear-gradient(var(--pastel-mint-bg),var(--pastel-mint-bg)),var(--card);color:var(--pastel-mint-text);}
 .t29-toast.leaving{opacity:0;transform:translateY(6px);transition:opacity .2s ease, transform .2s ease;}
 .t29-toast-msg{flex:1;min-width:0;}
 .t29-toast-close{
@@ -2409,7 +2407,6 @@ html.t29-loading .stat .value{
 }
 .t29-dialog{
   background:var(--card);color:var(--ink);border-radius:16px;
-  border-top:5px solid var(--gold);
   box-shadow:0 24px 60px rgba(0,0,0,0.35);
   width:100%;max-width:420px;max-height:80vh;overflow:auto;padding:22px 22px 18px;
 }
@@ -2511,10 +2508,7 @@ main.parent-main{max-width:1040px;padding-top:34px;}
 
 /* This month. */
 .pv-month-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
-.pv-sum{border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;background:#fbfcff;box-shadow:inset 0 4px 0 var(--line);}
-.pv-sum.gold{box-shadow:inset 0 4px 0 var(--gold);}
-.pv-sum.mint{box-shadow:inset 0 4px 0 var(--mint);}
-.pv-sum.coral{box-shadow:inset 0 4px 0 var(--coral);}
+.pv-sum{border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;background:#fbfcff;}
 .pv-sum-label{font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
 .pv-sum-value{font-size:1.35rem;font-weight:900;color:var(--navy-900);margin-top:6px;overflow-wrap:anywhere;}
 .pv-section{margin-top:28px;}
@@ -2574,10 +2568,7 @@ main.parent-main{max-width:1040px;padding-top:34px;}
   .pv-tile-value{font-size:1.3rem;margin-top:8px;}
   .pv-tile-sub{font-size:.74rem;}
   .pv-month-sum{grid-template-columns:1fr;gap:10px;}
-  .pv-sum{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:12px 14px;box-shadow:inset 4px 0 0 var(--line);}
-  .pv-sum.gold{box-shadow:inset 4px 0 0 var(--gold);}
-  .pv-sum.mint{box-shadow:inset 4px 0 0 var(--mint);}
-  .pv-sum.coral{box-shadow:inset 4px 0 0 var(--coral);}
+  .pv-sum{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:12px 14px;}
   .pv-sum-value{margin-top:0;font-size:1.15rem;}
   .pv-section{margin-top:24px;}
   /* Label and amount on one line, the bar full width underneath. */
@@ -2629,7 +2620,6 @@ html.dark-mode .pv-bar-fill.coral{background:linear-gradient(90deg,var(--coral-d
 .t29-tour-card{
   position:fixed;width:min(340px, calc(100vw - 20px));
   background:var(--card);color:var(--ink);border-radius:14px;
-  border-top:5px solid var(--gold);
   box-shadow:0 20px 50px rgba(0,0,0,0.35);padding:16px 18px 14px;
 }
 .t29-tour-card.centered{left:50% !important;top:50% !important;transform:translate(-50%,-50%);}
@@ -2642,7 +2632,7 @@ html.dark-mode .pv-bar-fill.coral{background:linear-gradient(90deg,var(--coral-d
 .t29-tour-offer{
   position:fixed;right:16px;bottom:16px;z-index:2300;
   width:min(320px, calc(100vw - 32px));
-  background:var(--card);color:var(--ink);border:1.5px solid var(--line);border-left:5px solid var(--gold);
+  background:var(--card);color:var(--ink);border:1.5px solid var(--line);
   border-radius:12px;box-shadow:0 12px 30px rgba(31,43,68,0.22);padding:14px;
   animation:t29ToastIn .25s ease;
 }
@@ -2752,13 +2742,16 @@ html.dark-mode .ins-incident-opt{border-color:rgba(255,255,255,.12);}
 html.dark-mode .ins-incident-opt input{accent-color:var(--gold);}
 html.dark-mode .ins-incident-opt:has(input:checked){border-color:var(--gold);background:rgba(232,184,75,.12);}
 
-/* Property: the "Pay this week's rent" button, greyed out on days rent
-   can't be paid (not rent day, already paid, or the free move-in week). */
-.btn.rent-pay-btn:disabled,
-.btn.rent-pay-btn:disabled:hover{
-  background:#e3e7ef;color:#8a94a8;box-shadow:none;transform:none;cursor:not-allowed;
+/* Any button that can't be used right now (e.g. "Pay this week's rent"
+   on a day rent can't be paid) is greyed out, so it doesn't look like it
+   should work. A button that's only switched off for a moment while the
+   click it just got is being saved is marked .t29-busy (data-core.js) and
+   keeps its normal look. Kept last so it wins over each colour's styles. */
+.btn:disabled:not(.t29-busy),
+.btn:disabled:not(.t29-busy):hover{
+  background:#e3e7ef;color:#8a94a8;border-color:#d5dbe6;box-shadow:none;transform:none;cursor:not-allowed;
 }
-html.dark-mode .btn.rent-pay-btn:disabled,
-html.dark-mode .btn.rent-pay-btn:disabled:hover{
-  background:var(--surface-2);color:var(--muted);box-shadow:none;
+html.dark-mode .btn:disabled:not(.t29-busy),
+html.dark-mode .btn:disabled:not(.t29-busy):hover{
+  background:var(--surface-2);color:var(--muted);border-color:var(--line);box-shadow:none;
 }
