@@ -28,7 +28,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=87728638">
+<link rel="stylesheet" href="style.css?v=bf6182a4">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -50,6 +50,7 @@
     <a href="student.html" class="active"><span class="icon-slot" data-icon="bank"></span><span class="nav-label">My account</span></a>
     <a href="bank.html" data-module="bank"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
     <a href="termdeposit.html" data-module="termdeposit"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
+    <a href="kiwisaver.html" data-module="kiwisaver"><span class="icon-slot" data-icon="sprout"></span><span class="nav-label">KiwiSaver</span></a>
     <a href="loan.html" data-module="loan"><span class="icon-slot" data-icon="handshake"></span><span class="nav-label">Loans</span></a>
     <a href="market.html" data-module="market"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
     <a href="store.html" data-module="store"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
@@ -77,6 +78,15 @@
   </div>
   <div class="card hidden" id="lifestyleLockBanner" style="border-color:var(--coral);"></div>
 
+  <!-- To do today — filled in by renderTodo() in student.js -->
+  <div class="card todo-card" id="todoCard">
+    <div class="todo-head">
+      <h2 id="hTodo">To do today</h2>
+      <span class="todo-count" id="todoCount"></span>
+    </div>
+    <div id="todoList"></div>
+  </div>
+
   <div class="grid grid-4">
     <div class="stat gold">
       <span class="icon" id="iconBalance"></span>
@@ -103,7 +113,7 @@
 
   <div class="card">
     <h2 id="hLeaderboard">Net worth ranking</h2>
-    <p>Cash balance plus the value of everyone's shares, added together.</p>
+    <p>Everything each person owns (cash, savings, shares, property, KiwiSaver and more), minus what they owe.</p>
     <div id="leaderboardList"></div>
   </div>
 
@@ -210,7 +220,7 @@
       <a class="btn small gold" href="market.html" id="marketLink">Go to Stock Market</a>
     </div>
     <div class="table-scroll">
-    <table>
+    <table class="stack-table">
       <thead><tr><th>Company</th><th>Price</th><th>My shares</th><th>Since Mon ($)</th><th>Since Mon (%)</th><th>All-time ($)</th><th>All-time (%)</th></tr></thead>
       <tbody id="marketSnapshot"></tbody>
     </table>
@@ -223,7 +233,7 @@
   <div class="card">
     <h2 id="hActivity">My recent activity</h2>
     <div class="table-scroll">
-    <table>
+    <table class="txn-table">
       <thead><tr><th>When</th><th>Type</th><th>Details</th><th>Amount</th></tr></thead>
       <tbody id="txnTable"></tbody>
     </table>
@@ -253,18 +263,18 @@
 
 
 <script type="module" src="firebase-init.js?v=9f8488c9"></script>
-<script defer src="icons.js?v=ece0bfd2"></script>
+<script defer src="icons.js?v=43726d63"></script>
 <script defer src="settings-menu.js?v=fde34c7c"></script>
-<script defer src="data-core.js?v=dcc34282"></script>
-<script defer src="data-money.js?v=efadbb37"></script>
-<script defer src="data-life.js?v=8e12078e"></script>
-<script defer src="data-property.js?v=6abfe689"></script>
+<script defer src="data-core.js?v=86f18e5d"></script>
+<script defer src="data-money.js?v=56ab176c"></script>
+<script defer src="data-life.js?v=139dfd1e"></script>
+<script defer src="data-property.js?v=7508dcf0"></script>
 <script defer src="data-markets.js?v=fffa8d75"></script>
 <script defer src="tour.js?v=e6c08365"></script>
 <script defer src="events-ui.js?v=6708879f"></script>
 <script defer src="quiz-gate.js?v=f23c49f4"></script>
-<script defer src="notifications.js?v=ada89b07"></script>
+<script defer src="notifications.js?v=68dcf064"></script>
 <script defer src="savings-goals.js?v=ed3340bf"></script>
-<script defer src="student.js?v=3887e561"></script>
+<script defer src="student.js?v=f95c2c05"></script>
 </body>
 </html>

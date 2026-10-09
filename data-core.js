@@ -1166,6 +1166,8 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
   cls.movingCost = Number(template.movingCost) || 0;
   cls.propertyRentals = _cloneDoc(template.propertyRentals || {});
   cls.storeSortMode = template.storeSortMode || "manual";
+  // KiwiSaver settings carry over; a retired class's copy starts un-retired.
+  if (template.kiwiSaver) cls.kiwiSaver = Object.assign(_cloneDoc(template.kiwiSaver), { retired: false, retiredAt: null });
 
   return cls;
 }
@@ -2108,6 +2110,47 @@ if (typeof document !== "undefined" && document.addEventListener && typeof Mutat
 
 // Small message in the bottom corner. type: "info" | "success" | "error".
 // The same message isn't stacked twice while it's still showing.
+// On a phone, tables marked .stack-table show each row as a small card
+// with every value labelled (see "Tables on phones" in style.css). The
+// labels come from the table's own column headings, copied onto each cell
+// as data-label whenever rows are drawn. Only adds an attribute, never
+// nodes, so it can't set itself off again.
+if (typeof document !== "undefined" && typeof MutationObserver !== "undefined") {
+  const labelStackTables = () => {
+    document.querySelectorAll("table.stack-table").forEach(table => {
+      const heads = [...table.querySelectorAll("thead th")].map(th => th.textContent.trim());
+      if (!heads.length) return;
+      table.querySelectorAll("tbody tr").forEach(tr => {
+        [...tr.children].forEach((td, i) => {
+          if (td.tagName === "TD" && !td.hasAttribute("data-label")) td.setAttribute("data-label", heads[i] || "");
+        });
+      });
+    });
+  };
+  let labelQueued = false;
+  const queueLabels = () => {
+    if (labelQueued) return;
+    labelQueued = true;
+    requestAnimationFrame(() => { labelQueued = false; labelStackTables(); });
+  };
+  const startLabelling = () => {
+    labelStackTables();
+    new MutationObserver(queueLabels).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", startLabelling);
+  else if (document.body) startLabelling();
+}
+
+// Scrolls smoothly to an element (the next step on an "empty" message),
+// leaving room for the top bar when it stays on screen.
+function t29Jump(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const bar = document.querySelector(".topbar");
+  const barH = bar && getComputedStyle(bar).position !== "static" ? bar.getBoundingClientRect().height : 0;
+  window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - barH - 12), behavior: "smooth" });
+}
+
 function t29Toast(message, opts) {
   opts = opts || {};
   if (typeof document === "undefined" || !document.body) return;
@@ -2595,6 +2638,19 @@ async function anwGlobalBootstrap() {
   applyNavRoleVisibility(u.role);
   if (u.role === "student") {
     mountBalanceWidget(u.username);
+    showKiwiSaverNavIfOn(u).catch(() => {});
+  }
+}
+
+// The KiwiSaver menu link stays hidden from students (style.css) until
+// their teacher switches KiwiSaver on — or they already have one.
+async function showKiwiSaverNavIfOn(u) {
+  if (!u.classCode || typeof kiwiSaverSettings !== "function") return;
+  const [cls, me] = await Promise.all([getClassCached(u.classCode), getUserCached(u.username)]);
+  if (!cls) return;
+  if (kiwiSaverSettings(cls).enabled || kiwiSaverOf(me)) {
+    document.documentElement.classList.add("ks-on");
+    if (typeof fitTopbar === "function") fitTopbar();
   }
 }
 

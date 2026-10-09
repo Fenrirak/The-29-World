@@ -135,7 +135,7 @@ async function renderTeacher() {
   document.getElementById("noResults").classList.toggle("hidden", show);
   if (!show) { wrap.innerHTML = ""; return; }
   wrap.innerHTML = `
-    <table>
+    <table class="stack-table">
       <thead><tr><th>Student</th>${quizzes.map(q => `<th>${esc(q.title)}</th>`).join("")}</tr></thead>
       <tbody>
         ${STUDENTS.map(s => `<tr>

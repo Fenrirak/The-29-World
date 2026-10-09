@@ -155,6 +155,9 @@ p{color:var(--muted);line-height:1.5;}
 .topbar nav a[href="reports.html"]{display:none;}
 html.role-teacher .topbar nav a[href="quizzes.html"],
 html.role-teacher .topbar nav a[href="reports.html"]{display:inline-flex;}
+/* KiwiSaver is hidden from students until their teacher switches it on
+   (data-core.js adds html.ks-on). Teachers always see it. */
+html:not(.role-teacher):not(.ks-on) .topbar nav a[href="kiwisaver.html"]:not(.active){display:none;}
 
 /* Student profile modal */
 #profileModal .card{max-width:680px;max-height:88vh;overflow:auto;}
@@ -838,8 +841,13 @@ label .icon-slot{color:var(--navy-700);}
 }
 .anw-balance-widget .anw-bw-value{font-size:1.7rem;font-weight:900;margin-top:4px;line-height:1.1;}
 @media (max-width:640px){
-  .anw-balance-widget{left:10px;top:auto;bottom:14px;padding:10px 14px;min-width:130px;}
-  .anw-balance-widget .anw-bw-value{font-size:1.4rem;}
+  /* Phones: a small pill in the bottom corner, so it covers as little of
+     the page as possible, and room at the bottom of the page so the last
+     thing on it can always scroll clear of the pill. */
+  .anw-balance-widget{left:10px;top:auto;bottom:12px;padding:7px 13px;min-width:0;border-radius:999px;display:flex;align-items:center;gap:8px;}
+  .anw-balance-widget .anw-bw-label{font-size:.62rem;}
+  .anw-balance-widget .anw-bw-value{font-size:1.05rem;margin-top:0;}
+  body:has(.anw-balance-widget){padding-bottom:60px;}
 }
 
 /* ===================== Reports (report cards) ===================== */
@@ -1326,6 +1334,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .bud-row.in .bud-row-amt{color:#217a5a;}
 .bud-row.out .bud-row-amt{color:#b8402c;}
 .bud-row.crossed .bud-row-amt{text-decoration:line-through;color:var(--muted);}
+.bud-row.pending .bud-row-amt{color:var(--muted);}
 .bud-chip-status{
   font-size:.64rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;
   border-radius:999px;padding:2px 8px;background:#eef1f7;color:var(--muted);
@@ -2741,6 +2750,283 @@ html.dark-mode .ins-plan-covers{color:var(--muted);}
 html.dark-mode .ins-incident-opt{border-color:rgba(255,255,255,.12);}
 html.dark-mode .ins-incident-opt input{accent-color:var(--gold);}
 html.dark-mode .ins-incident-opt:has(input:checked){border-color:var(--gold);background:rgba(232,184,75,.12);}
+
+/* ===== Money colours (used site-wide) =====
+   Money coming in is green, money going out is red, and money that hasn't
+   moved yet (pending, planned) is grey — the same on every page. */
+.money-in{color:#217a5a;font-weight:800;}
+.money-out{color:#b8402c;font-weight:800;}
+.money-pending{color:var(--muted);font-weight:700;}
+html.dark-mode .money-in{color:var(--pastel-mint-text);}
+html.dark-mode .money-out{color:var(--pastel-coral-text);}
+html.dark-mode .bud-row.pending .bud-row-amt{color:var(--muted);}
+
+/* ===== Tables on phones =====
+   Small tables (three columns or fewer) just fit the screen. Lists of
+   transactions (.txn-table) become one tidy row each: type and amount on
+   top, details and date underneath. Wider tables (.stack-table) become a
+   small card per row with every value labelled (data-core.js copies the
+   column names onto the cells). Nothing scrolls sideways. */
+.table-scroll table:not(:has(tr > :nth-child(4))){min-width:0;}
+@media (max-width:600px){
+  .table-scroll:has(> table.txn-table),
+  .table-scroll:has(> table.stack-table){overflow-x:visible;}
+  table.txn-table,table.stack-table{min-width:0 !important;}
+  table.txn-table thead,table.stack-table thead{display:none;}
+
+  table.txn-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);}
+  table.txn-table tr:last-child{border-bottom:0;}
+  table.txn-table td{display:block;padding:0;border:0;min-width:0;}
+  table.txn-table td:nth-child(2){grid-column:1;order:1;}
+  table.txn-table td:nth-child(4){grid-column:2;order:2;text-align:right;white-space:nowrap;font-weight:800;}
+  table.txn-table td:nth-child(3){grid-column:1 / -1;order:3;overflow-wrap:anywhere;}
+  table.txn-table td:nth-child(1){grid-column:1 / -1;order:4;font-size:.75rem;}
+
+  table.stack-table tbody{display:block;}
+  table.stack-table tr{display:block;border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;margin-bottom:10px;background:var(--card);}
+  table.stack-table td{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:5px 0;border:0;text-align:right;min-width:0;overflow-wrap:anywhere;}
+  table.stack-table td::before{content:attr(data-label);flex-shrink:0;max-width:55%;text-align:left;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
+  table.stack-table td:first-child{font-weight:800;font-size:1rem;text-align:left;padding-bottom:7px;margin-bottom:3px;border-bottom:1px solid var(--line);}
+  table.stack-table td:first-child::before{content:none;}
+  table.stack-table tbody th{display:block;text-align:left;font-size:1rem;font-weight:800;text-transform:none;letter-spacing:0;color:var(--navy-900);padding:0 0 7px;margin-bottom:3px;border-bottom:1px solid var(--line);}
+  table.stack-table td input,table.stack-table td select{max-width:130px;margin:0;}
+  table.stack-table td[data-label=""]::before{content:none;}
+  table.stack-table td[data-label=""]{justify-content:flex-start;}
+  table.stack-table td:empty{display:none;}
+}
+@media (max-width:600px){
+  html.dark-mode table.stack-table tr{background:var(--surface-2);}
+  html.dark-mode table.stack-table tbody th{color:var(--heading-text);}
+}
+
+/* ===== "Nothing here yet" messages =====
+   The same everywhere: a short friendly line and, where there's an obvious
+   next step, one button to it. No icons and no coloured edges. */
+.empty-state{border:1.5px dashed var(--line);border-radius:12px;padding:18px 16px;text-align:center;margin-top:10px;}
+.empty-state p{margin:0 auto;color:var(--muted);max-width:60ch;line-height:1.5;}
+.empty-state .btn{margin-top:12px;}
+html.dark-mode .empty-state{border-color:rgba(255,255,255,.14);}
+
+/* ===== To do today (student home) =====
+   Plain list — no coloured edge bars and no icons, by request. Anything
+   due today gets a small "Today" tag and a gold button. */
+.todo-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.todo-head h2{margin:0;}
+.todo-count{font-size:.85rem;font-weight:800;color:var(--muted);}
+.todo-list{list-style:none;margin:12px 0 0;padding:0;}
+.todo-item{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-top:1px solid var(--line);}
+.todo-item:first-child{border-top:0;padding-top:4px;}
+.todo-text{min-width:0;flex:1 1 auto;}
+.todo-title{font-weight:800;color:var(--navy-900);line-height:1.35;}
+.todo-body{font-size:.86rem;color:var(--muted);line-height:1.45;margin-top:2px;}
+.todo-tag{display:inline-block;margin-right:8px;padding:1px 8px;border-radius:999px;background:#fbe9e5;color:#a8371f;font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;vertical-align:2px;}
+.todo-item .btn{margin-top:0;flex-shrink:0;white-space:nowrap;}
+.todo-empty{margin:10px 0 0;color:var(--muted);}
+@media (max-width:480px){
+  .todo-item{flex-direction:column;align-items:stretch;gap:8px;}
+  .todo-item .btn{align-self:flex-start;}
+}
+html.dark-mode .todo-title{color:var(--heading-text);}
+html.dark-mode .todo-tag{background:var(--pastel-coral-bg);color:var(--pastel-coral-text);}
+
+/* ===== Payslips (Jobs page) ===== */
+.ps-next{margin:0 0 14px;line-height:1.5;}
+.payslip{border:1.5px solid var(--line);border-radius:14px;background:#fbfcff;padding:16px 18px;max-width:640px;}
+.ps-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1.5px dashed var(--line);}
+.ps-kicker{font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.ps-job{font-weight:900;color:var(--navy-900);font-size:1.05rem;margin-top:2px;}
+.ps-date{font-weight:700;color:var(--navy-700);font-size:.9rem;}
+.ps-section{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px;}
+.ps-line{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0;}
+.ps-line > span:last-child{white-space:nowrap;font-weight:700;}
+.ps-line.sub{padding-left:16px;font-size:.86rem;color:var(--muted);}
+.ps-line.sub > span:last-child{font-weight:600;}
+.ps-line.total{margin-top:8px;padding-top:10px;border-top:1.5px solid var(--line);font-weight:900;color:var(--navy-900);}
+.ps-line.total > span:last-child{font-size:1.15rem;font-weight:900;}
+.ps-kiwi{margin-top:14px;padding-top:4px;border-top:1.5px dashed var(--line);}
+.ps-older{margin-top:18px;max-width:640px;}
+.ps-older-head{font-weight:800;color:var(--navy-900);margin-bottom:6px;}
+.ps-older-item{border-top:1px solid var(--line);}
+.ps-older-item summary{display:flex;justify-content:space-between;gap:12px;padding:11px 2px;cursor:pointer;font-weight:700;list-style:none;}
+.ps-older-item summary::-webkit-details-marker{display:none;}
+.ps-older-item[open] summary{color:var(--navy-700);}
+.ps-older-item .payslip{margin-bottom:12px;}
+.ps-older-amt{white-space:nowrap;}
+@media (max-width:480px){
+  .payslip{padding:14px;}
+  .ps-line{font-size:.92rem;}
+  .ps-line.sub{padding-left:10px;font-size:.82rem;}
+}
+html.dark-mode .payslip{background:var(--surface-2);}
+html.dark-mode .ps-job,
+html.dark-mode .ps-line.total,
+html.dark-mode .ps-older-head{color:var(--heading-text);}
+html.dark-mode .ps-date,
+html.dark-mode .ps-older-item[open] summary{color:var(--accent-text);}
+
+/* ===== KiwiSaver page ===== */
+.ks-use{display:inline-flex;align-items:center;gap:8px;margin:0;font-weight:700;font-size:.86rem;color:var(--navy-900);flex-basis:100%;}
+.ks-use input{width:18px;height:18px;min-height:auto;margin:0;accent-color:var(--navy-900);}
+html.dark-mode .ks-use{color:var(--heading-text);}
+html.dark-mode .ks-use input{accent-color:var(--gold);}
+.ks-lead{max-width:72ch;}
+.ks-note-line{margin:0 0 12px;line-height:1.55;}
+.ks-tight{margin:4px 0 0;}
+.ks-sub-h{margin:22px 0 4px;font-size:1rem;color:var(--navy-900);}
+.ks-list{margin:0 0 10px;padding-left:20px;line-height:1.6;}
+
+.ks-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+.ks-hero-main{min-width:0;flex:1 1 260px;}
+.ks-hero-label{font-size:.78rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+.ks-hero-value{font-size:2.6rem;font-weight:900;color:var(--navy-900);line-height:1.1;margin-top:4px;overflow-wrap:anywhere;}
+.ks-hero-sub{color:var(--muted);font-size:.9rem;line-height:1.5;margin-top:6px;max-width:62ch;}
+.ks-hero-status{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+.ks-pill{display:inline-block;padding:6px 12px;border-radius:999px;font-weight:800;font-size:.85rem;background:#e7ebf5;color:var(--navy-900);white-space:nowrap;}
+.ks-pill.warn{background:#fbf1dd;color:#7a5510;}
+.ks-pill.muted{background:#eef1f6;color:var(--muted);}
+.ks-pill-sub{font-size:.8rem;color:var(--muted);font-weight:700;}
+
+.ks-mix{margin-top:18px;}
+.ks-mix-bar{display:flex;height:14px;border-radius:999px;overflow:hidden;background:#eef1f6;}
+.ks-mix-bar span{height:100%;min-width:3px;}
+.ks-seg-you{background:var(--navy-500);}
+.ks-seg-emp{background:var(--sky);}
+.ks-seg-gov{background:var(--gold);}
+.ks-seg-grow{background:var(--mint);}
+.ks-mix-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:9px;font-size:.8rem;font-weight:700;color:var(--muted);}
+.ks-mix-legend span{display:inline-flex;align-items:center;gap:6px;}
+.ks-dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+
+.ks-tiles,.ks-class-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px;}
+@media (max-width:900px){.ks-tiles,.ks-class-sum{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.ks-class-sum{margin:0 0 16px;}
+.ks-tile{border:1.5px solid var(--line);border-radius:12px;padding:13px 15px;background:#fbfcff;min-width:0;}
+.ks-tile-label{font-size:.75rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+.ks-tile-value{font-size:1.35rem;font-weight:900;color:var(--navy-900);margin-top:5px;overflow-wrap:anywhere;}
+.ks-tile-value.money-in{color:#217a5a;}
+.ks-tile-value.money-out{color:#b8402c;}
+.ks-tile-sub{font-size:.78rem;color:var(--muted);margin-top:3px;line-height:1.4;}
+
+.ks-pay-rows{border:1.5px solid var(--line);border-radius:12px;overflow:hidden;}
+.ks-pay-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid var(--line);}
+.ks-pay-row:first-child{border-top:0;}
+.ks-pay-row span{min-width:0;}
+.ks-pay-row strong{white-space:nowrap;}
+.ks-pay-row.sub{padding-left:28px;font-size:.9rem;color:var(--muted);}
+.ks-pay-row.total{background:#f4f6fb;font-weight:800;}
+.ks-pay-row.total strong{font-size:1.1rem;}
+.ks-pay-explain{padding:0 14px 11px 28px;font-size:.84rem;color:var(--muted);line-height:1.5;}
+.ks-why{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--line);background:var(--card);color:var(--navy-700);font-weight:800;font-size:.72rem;line-height:1;cursor:pointer;padding:0;margin-left:4px;vertical-align:1px;}
+.ks-callout{margin:14px 0 0;padding:12px 14px;border-radius:12px;background:#f4f6fb;border:1.5px solid var(--line);line-height:1.5;}
+.ks-govt{margin-top:16px;}
+.ks-govt-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:.9rem;font-weight:700;}
+.ks-progress{height:10px;border-radius:999px;background:#eef1f6;overflow:hidden;margin-top:8px;}
+.ks-progress span{display:block;height:100%;background:var(--gold);border-radius:999px;}
+
+.ks-chart-wrap{position:relative;padding-bottom:22px;}
+.ks-chart{display:block;width:100%;height:200px;}
+.ks-chart-area{fill:rgba(63,191,143,.14);}
+.ks-chart-line{fill:none;stroke:var(--mint-dark,#2f9a72);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round;}
+.ks-pt{fill:var(--card);stroke:var(--mint-dark,#2f9a72);stroke-width:2;}
+.ks-pt-down{fill:var(--coral);stroke:var(--card);stroke-width:1.5;}
+.ks-chart-x{position:absolute;left:0;right:0;bottom:0;height:18px;}
+.ks-chart-x span{position:absolute;transform:translateX(-50%);font-size:.72rem;color:var(--muted);white-space:nowrap;}
+.ks-chart-x span:first-child{transform:none;}
+.ks-chart-x span:last-child{transform:translateX(-100%);}
+
+.ks-fund-table th,.ks-fund-table td{white-space:nowrap;text-align:right;font-size:.86rem;}
+.ks-fund-table th:first-child{text-align:left;}
+.ks-fund-table tr.ks-mine{background:#f4f6fb;}
+.ks-you-tag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--navy-900);color:#fff;font-size:.66rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;vertical-align:2px;}
+
+.ks-choice-block{padding:16px 0;border-top:1px solid var(--line);}
+.ks-choice-block:first-of-type{border-top:0;padding-top:4px;}
+.ks-choice-label{font-weight:800;color:var(--navy-900);margin-bottom:8px;}
+.ks-seg{display:flex;flex-wrap:wrap;gap:8px;}
+.ks-seg-btn{min-width:62px;min-height:44px;padding:8px 14px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);color:var(--navy-900);font-weight:800;font-size:.95rem;cursor:pointer;}
+.ks-seg-btn:hover{border-color:var(--navy-500);}
+.ks-seg-btn.on{background:var(--navy-900);border-color:var(--navy-900);color:#fff;}
+.ks-funds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.ks-fund{display:flex;flex-direction:column;gap:6px;text-align:left;padding:14px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font:inherit;min-width:0;}
+.ks-fund:hover{border-color:var(--navy-500);}
+.ks-fund.on{border-color:var(--navy-900);box-shadow:0 0 0 1.5px var(--navy-900) inset;background:#f7f9fd;}
+.ks-fund-name{font-weight:900;color:var(--navy-900);font-size:1.02rem;}
+.ks-fund-about{font-size:.84rem;color:var(--muted);line-height:1.45;}
+.ks-fund-stats{display:flex;flex-direction:column;gap:2px;font-size:.8rem;font-weight:700;color:var(--navy-700);margin-top:auto;padding-top:6px;}
+.ks-inline-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;}
+.ks-inline-form .btn{margin-top:0;}
+.ks-money-field{position:relative;flex:1 1 140px;max-width:220px;}
+.ks-money-field .ks-currency{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:800;color:var(--muted);pointer-events:none;}
+.ks-money-field input{padding-left:28px;margin:0;min-height:44px;font-weight:800;}
+.ks-join-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px;}
+.ks-join-grid label{margin-top:0;}
+
+.ks-rules summary{cursor:pointer;font-weight:800;color:var(--navy-900);font-size:1.05rem;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.ks-rules summary::-webkit-details-marker{display:none;}
+.ks-rules summary::after{content:"";width:9px;height:9px;border-right:2.5px solid var(--muted);border-bottom:2.5px solid var(--muted);transform:rotate(45deg);transition:transform .2s;flex-shrink:0;margin-right:4px;}
+.ks-rules[open] summary::after{transform:rotate(-135deg);}
+.ks-rules-body{margin-top:12px;line-height:1.6;}
+.ks-rules-body ul{padding-left:20px;margin:8px 0 12px;}
+.ks-rules-body li{margin-bottom:8px;}
+
+.ks-switch-row{display:flex;align-items:flex-start;gap:12px;margin:0 0 14px;font-weight:400;cursor:pointer;}
+.ks-switch-row input{width:22px;height:22px;min-height:auto;flex-shrink:0;margin-top:2px;accent-color:var(--navy-900);}
+.ks-set-table input{max-width:110px;margin:0;}
+.ks-set-table td,.ks-set-table th{vertical-align:middle;}
+.ks-range{white-space:nowrap;font-weight:700;color:var(--navy-700);}
+.ks-class-table td,.ks-class-table th{white-space:nowrap;}
+.ks-class-table .btn{margin-top:0;}
+.ks-modal h3{margin-top:0;}
+.ks-modal-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:16px;}
+.ks-modal-actions .btn{margin-top:0;}
+
+@media (max-width:700px){
+  .ks-funds{grid-template-columns:1fr;}
+  .ks-hero-status{align-items:flex-start;flex-direction:row;flex-wrap:wrap;align-items:center;}
+  .ks-hero-value{font-size:2.1rem;}
+}
+@media (max-width:480px){
+  .ks-join-grid{grid-template-columns:1fr;}
+  .ks-tiles,.ks-class-sum{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .ks-tile{padding:11px 12px;}
+  .ks-tile-value{font-size:1.12rem;}
+  .ks-seg-btn{flex:1 1 calc(33% - 8px);min-width:0;}
+  .ks-pay-row{padding:10px 12px;}
+  .ks-pay-row.sub{padding-left:20px;}
+  .ks-money-field{max-width:none;}
+}
+
+html.dark-mode .ks-hero-value,
+html.dark-mode .ks-tile-value,
+html.dark-mode .ks-fund-name,
+html.dark-mode .ks-choice-label,
+html.dark-mode .ks-sub-h,
+html.dark-mode .ks-rules summary{color:var(--heading-text);}
+html.dark-mode .ks-tile-value.money-in{color:var(--pastel-mint-text);}
+html.dark-mode .ks-tile-value.money-out{color:var(--pastel-coral-text);}
+html.dark-mode .ks-tile,
+html.dark-mode .ks-callout,
+html.dark-mode .ks-pay-row.total,
+html.dark-mode .ks-fund-table tr.ks-mine,
+html.dark-mode .ks-fund.on{background:var(--surface-2);}
+html.dark-mode .ks-pill{background:var(--surface-2);color:var(--heading-text);}
+html.dark-mode .ks-pill.warn{background:var(--pastel-gold-bg,rgba(232,184,75,.16));color:var(--pastel-gold-text,#f1cf7f);}
+html.dark-mode .ks-pill.muted{background:var(--surface-2);color:var(--muted);}
+html.dark-mode .ks-mix-bar,
+html.dark-mode .ks-progress{background:var(--surface-2);}
+html.dark-mode .ks-seg-you{background:#d6dcea;}
+html.dark-mode .ks-seg-btn,
+html.dark-mode .ks-fund{background:var(--card);color:var(--ink);border-color:var(--line);}
+html.dark-mode .ks-seg-btn.on{background:var(--gold-dim);border-color:var(--gold);color:var(--heading-text);}
+html.dark-mode .ks-fund.on{border-color:var(--gold);box-shadow:0 0 0 1.5px var(--gold) inset;}
+html.dark-mode .ks-fund-stats,
+html.dark-mode .ks-range{color:var(--accent-text);}
+html.dark-mode .ks-you-tag{background:var(--gold-dim);color:var(--heading-text);}
+html.dark-mode .ks-why{color:var(--accent-text);}
+html.dark-mode .ks-switch-row input{accent-color:var(--gold);}
+html.dark-mode .ks-chart-area{fill:rgba(63,191,143,.18);}
+html.dark-mode .ks-chart-line{stroke:#7be3b8;}
+html.dark-mode .ks-pt{stroke:#7be3b8;}
 
 /* Any button that can't be used right now (e.g. "Pay this week's rent"
    on a day rent can't be paid) is greyed out, so it doesn't look like it

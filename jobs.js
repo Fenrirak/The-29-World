@@ -96,7 +96,7 @@ function renderJobsGrid(cls, students) {
   grid.innerHTML = "";
 
   if (!cls.jobs || cls.jobs.length === 0) {
-    grid.innerHTML = `<p class="muted-small" style="grid-column:1/-1;">No jobs yet — create one below.</p>`;
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>No jobs yet. Students need a job to get paid.</p><button type="button" class="btn small secondary" onclick="t29Jump('addJobCard')">Create a job</button></div>`;
     return;
   }
 
@@ -391,6 +391,7 @@ async function declineApp(appId) {
 ══════════════════════════════════════════════════════════════════════ */
 async function renderStudentView(me, cls) {
   renderMyJob(me, cls);
+  renderPayslips(me, cls);
   renderJobBoard(me, cls);
   renderMyApplications(me, cls);
 }
@@ -403,9 +404,9 @@ function renderMyJob(me, cls) {
 
   if (!job || !tier) {
     box.innerHTML = `
-      <div class="my-job-empty">
-        ${icon("briefcase", 28)}
-        <p>You don't have a job yet. Apply for one below!</p>
+      <div class="empty-state">
+        <p>You don't have a job yet, so nothing comes in on pay day.</p>
+        <button type="button" class="btn small secondary" onclick="t29Jump('jobBoardGrid')">See the job board</button>
       </div>`;
     return;
   }
@@ -447,6 +448,90 @@ function renderMyJob(me, cls) {
       ` : ""}
     </div>
   `;
+}
+
+/* ── Payslips ───────────────────────────────────────────────────────
+   Each pay day saves a payslip with exactly what was paid (see
+   buildPayslip in data-money.js), so these are records, not estimates —
+   a later change to the wage or tax brackets doesn't change an old one. */
+function payslipDateLabel(dateKey) {
+  return new Date(dateKeyToUTC(dateKey) + 12 * 3600000).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+}
+const psPct = n => (Math.round(Number(n) * 100) / 100).toString() + "%";
+function payslipHtml(p) {
+  const line = (label, amount, opts = {}) => `
+    <div class="ps-line${opts.cls ? " " + opts.cls : ""}">
+      <span>${label}</span>
+      <span class="${opts.money || ""}">${amount}</span>
+    </div>`;
+  const bands = (p.taxBands || []).filter(b => b.amount > 0);
+  const bandLines = bands.length > 1 || (bands.length === 1 && bands[0].rate > 0)
+    ? bands.map((b, i) => line(`${psPct(b.rate)} on the ${i === 0 ? "first" : "next"} ${fmtMoney(b.amount)}`, fmtMoney(b.tax), { cls: "sub" })).join("")
+    : "";
+  const k = p.kiwi;
+  const rows = [
+    `<div class="ps-section">Earnings</div>`,
+    line("Pay before tax", fmtMoney(p.gross)),
+    `<div class="ps-section">Taken off</div>`,
+    line("Tax (PAYE)", p.tax > 0 ? "−" + fmtMoney(p.tax) : fmtMoney(0), { money: p.tax > 0 ? "money-out" : "" }),
+    bandLines,
+    p.taxRefund > 0 ? line("Tax cut (life event)", "+" + fmtMoney(p.taxRefund), { money: "money-in" }) : "",
+    p.boost ? line(p.boost > 0 ? "Pay boost (life event)" : "Pay cut (life event)", (p.boost > 0 ? "+" : "−") + fmtMoney(Math.abs(p.boost)), { money: p.boost > 0 ? "money-in" : "money-out" }) : "",
+    k && !k.paused ? line(`KiwiSaver (${psPct(k.rate)} of your pay)`, "−" + fmtMoney(k.you), { money: "money-out" }) : "",
+    k && k.paused ? line("KiwiSaver (paused)", fmtMoney(0)) : "",
+    line("Take-home pay", fmtMoney(p.net), { cls: "total" })
+  ];
+  const kiwiBox = k && !k.paused ? `
+    <div class="ps-kiwi">
+      <div class="ps-section">Into your KiwiSaver this pay day <span class="muted-small">(not in your cash)</span></div>
+      ${line("You", fmtMoney(k.you))}
+      ${line(`Your employer (${psPct(k.employerRate)} of your pay)`, fmtMoney(k.employerGross))}
+      ${line(`minus ESCT tax at ${psPct(k.esctRate)}`, "−" + fmtMoney(k.esct), { cls: "sub", money: "money-out" })}
+      ${line("The government (25c per $1 you put in)", fmtMoney(k.govt))}
+      ${line("Total into KiwiSaver", fmtMoney(Math.round((k.you + k.employerNet + k.govt) * 100) / 100), { cls: "total" })}
+    </div>` : "";
+  return `
+    <div class="payslip">
+      <div class="ps-head">
+        <div>
+          <div class="ps-kicker">Payslip</div>
+          <div class="ps-job">${escapeHtml(p.tier || p.job || "")}${p.job && p.tier && p.job !== p.tier ? ` <span class="muted-small">· ${escapeHtml(p.job)}</span>` : ""}</div>
+        </div>
+        <div class="ps-date">${payslipDateLabel(p.dateKey)}</div>
+      </div>
+      <div class="ps-lines">${rows.join("")}</div>
+      ${kiwiBox}
+    </div>`;
+}
+function renderPayslips(me, cls) {
+  const box = document.getElementById("payslipBox");
+  const slips = Array.isArray(me.payslips) ? me.payslips : [];
+  // What the next pay day should bring, worked out the same way pay day
+  // does it (so tax, life events and KiwiSaver are all included).
+  let next = "";
+  const job = me.jobId ? (cls.jobs || []).find(j => j.id === me.jobId) : null;
+  if (job && cls.payDay) {
+    const est = wageCreditEstimate(cls, me);
+    const approved = isJobTaskApprovedThisWeek(me, cls);
+    const paidToday = me.lastWagePaid === nzDateKey();
+    if (est.gross > 0 && !paidToday) {
+      next = `<p class="ps-next">Next pay day (${DAY_FULL[cls.payDay] || cls.payDay}): <strong>${fmtMoney(est.net)}</strong> take-home from ${fmtMoney(est.gross)} before tax${approved ? "." : ", once your teacher ticks off this week's job task."}</p>`;
+    }
+  }
+  if (!slips.length) {
+    box.innerHTML = next + `<p class="muted-small">${job ? "Your payslips will show up here after your first pay day. Each one shows your pay, the tax taken off, KiwiSaver, and what you take home." : "Once you have a job, a payslip shows up here every pay day."}</p>`;
+    return;
+  }
+  const [latest, ...older] = slips;
+  box.innerHTML = next + payslipHtml(latest) + (older.length ? `
+    <div class="ps-older">
+      <div class="ps-older-head">Earlier payslips</div>
+      ${older.map(p => `
+        <details class="ps-older-item">
+          <summary><span>${payslipDateLabel(p.dateKey)}</span><span class="ps-older-amt">${fmtMoney(p.net)} <span class="muted-small">take-home</span></span></summary>
+          ${payslipHtml(p)}
+        </details>`).join("")}
+    </div>` : "");
 }
 
 /* ── Job board ──────────────────────────────────────────────────────── */
@@ -560,7 +645,7 @@ async function applyForJob_data(classCode, jobId, studentUser, letter) {
 function renderMyApplications(me, cls) {
   const myApps = (cls.jobApplications || []).filter(a => a.studentUser === me.username);
   const box    = document.getElementById("myApplicationsBox");
-  if (!myApps.length) { box.innerHTML = `<p class="muted-small">No applications yet.</p>`; return; }
+  if (!myApps.length) { box.innerHTML = `<p class="muted-small">${me.jobId ? "No applications." : "You haven't applied for any jobs yet. Pick one on the job board above."}</p>`; return; }
   box.innerHTML = "";
   [...myApps].reverse().forEach(a => {
     const j   = (cls.jobs || []).find(jj => jj.id === a.jobId);

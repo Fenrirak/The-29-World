@@ -3201,6 +3201,7 @@ async function clearLifestyleOverride(username) {
 const LIFESTYLE_LOCKABLE_MODULES = [
   { key: "bank", label: "Bank" },
   { key: "termdeposit", label: "Term Deposit" },
+  { key: "kiwisaver", label: "KiwiSaver" },
   { key: "loan", label: "Loans" },
   { key: "market", label: "Stock Market" },
   { key: "store", label: "Store" },

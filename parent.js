@@ -87,7 +87,7 @@ function pvRender(doc) {
     : `<p class="pv-empty">${pvEscape(first)} hasn't set any savings goals yet.</p>`;
 
   const owns = [
-    ["Cash", v.balance], ["Savings account", v.savings], ["Term deposits", v.termDeposits],
+    ["Cash", v.balance], ["Savings account", v.savings], ["Term deposits", v.termDeposits], ["KiwiSaver", v.kiwiSaver],
     ["Shares", v.invested], ["Property", v.propertyValue], ["Vehicles", v.vehicleValue], ["Store items", v.storeValue]
   ].filter(([, amt]) => Number(amt));
   const rate = Number.isFinite(Number(v.savingsRate)) && v.savingsRate !== null ? Number(v.savingsRate) + "%" : "—";

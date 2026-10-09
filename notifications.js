@@ -116,11 +116,20 @@ function notifMortgageItems(me, cls) {
   (cls.properties || []).forEach(p => {
     if (p.owner !== me.username || !p.mortgage || p.mortgage.weeksLeft <= 0) return;
     if (!isMortgagePaymentOverdue(p, cls)) return;
-    out.push({
+    // It can only be paid on the mortgage day (or a week the teacher made
+    // it due) — after that it's a missed payment to know about, not
+    // something they can still do.
+    const payable = (cls.mortgageDay || "Fri") === nzDayName() || cls.mortgageForceDueWeek === isoWeekKey(new Date());
+    out.push(payable ? {
       id: "mortgage-" + p.id + "-" + nzDateKey(), ts: dayStart, icon: "house", tone: "coral",
-      title: "Mortgage payment due: " + p.name,
+      title: "Mortgage payment due today: " + p.name,
       body: `${fmtMoney(mortgageWeekAmount(p.mortgage).total)} this week, ${p.mortgage.weeksLeft} ${p.mortgage.weeksLeft === 1 ? "week" : "weeks"} left to run.`,
       href: "property.html", action: true
+    } : {
+      id: "mortgage-missed-" + p.id + "-" + nzDateKey(), ts: dayStart, icon: "house", tone: "coral",
+      title: "Missed mortgage payment: " + p.name,
+      body: `It could only be paid on ${DAY_FULL[cls.mortgageDay || "Fri"]}. Your teacher can see it was missed.`,
+      href: "property.html"
     });
   });
   return out;
@@ -136,11 +145,18 @@ function notifPropertyRentalItems(me, cls) {
   (cls.properties || []).forEach(p => {
     if (p.sublet && p.sublet.tenant === me.username) {
       if (isSubletRentOverdue(p, cls)) {
-        out.push({
+        // Rent can only be paid on its day (see payTenantRent).
+        const payable = (p.rentDay || "Fri") === nzDayName();
+        out.push(payable ? {
           id: "rent-" + p.id + "-" + nzDateKey(), ts: dayStart, icon: "house", tone: "coral",
-          title: "Rent due: " + p.name,
+          title: "Rent due today: " + p.name,
           body: `${fmtMoney(p.sublet.price)} this week, renting from a classmate.`,
           href: "property.html", action: true
+        } : {
+          id: "rent-missed-" + p.id + "-" + nzDateKey(), ts: dayStart, icon: "house", tone: "coral",
+          title: "Missed rent: " + p.name,
+          body: `It could only be paid on ${DAY_FULL[p.rentDay || "Fri"]}.`,
+          href: "property.html"
         });
       }
     }
@@ -178,11 +194,18 @@ function notifNpcRentalItems(me, cls) {
   (cls.npcProperties || []).forEach(p => {
     if (p.tenant !== me.username) return;
     if (!isNpcRentOverdue(p)) return;
-    out.push({
+    // Rent can only be paid on its day (see payNpcRent).
+    const payable = (p.rentDay || "Fri") === nzDayName();
+    out.push(payable ? {
       id: "npc-rent-" + p.id + "-" + nzDateKey(), ts: dayStart, icon: "building", tone: "coral",
-      title: "Rent due: " + p.name,
+      title: "Rent due today: " + p.name,
       body: `${fmtMoney(p.rentPerWeek)} this week, renting from the school.`,
       href: "property.html", action: true
+    } : {
+      id: "npc-rent-missed-" + p.id + "-" + nzDateKey(), ts: dayStart, icon: "building", tone: "coral",
+      title: "Missed rent: " + p.name,
+      body: `It could only be paid on ${DAY_FULL[p.rentDay || "Fri"]}.`,
+      href: "property.html"
     });
   });
   return out;
@@ -246,6 +269,22 @@ function notifMarketItems(me, cls) {
     }
   }
   return out;
+}
+
+// This week's transport expenses can only be paid on the class's transport
+// day (see payTransportExpenses), so on that day, until it's paid, it's a
+// job for today.
+function notifTransportItems(me, cls) {
+  if ((cls.transportDay || "Fri") !== nzDayName()) return [];
+  if ((me.transportLastWeekPaid || null) === isoWeekKey(new Date())) return [];
+  const amount = transportWeeklyAmount(cls, me).total;
+  if (!(amount > 0)) return [];
+  return [{
+    id: "transport-" + nzDateKey(), ts: notifTodayStartMs(), icon: "car", tone: "coral",
+    title: "Transport payment due today",
+    body: `${fmtMoney(amount)} for this week. It can only be paid today.`,
+    href: "transport.html", action: true
+  }];
 }
 
 // Only surfaces the (separate, rarer) big-events feature — notifications
@@ -405,6 +444,7 @@ function buildNotifications(me, cls) {
     notifMortgageItems(me, cls),
     notifPropertyRentalItems(me, cls),
     notifNpcRentalItems(me, cls),
+    notifTransportItems(me, cls),
     notifTermDepositItems(me),
     notifMarketItems(me, cls),
     notifEventItems(me, cls),
@@ -610,7 +650,7 @@ function notifRenderList() {
   if (!list) return;
   const lastRead = notifGetLastRead(NOTIF_USER);
   if (!NOTIF_ITEMS.length) {
-    list.innerHTML = `<div class="notif-empty">${notifIconFor("bell", 26)}<p>You're all caught up.</p><p class="muted-small">Anything due, any decision waiting on you, and how your shares moved will show up here.</p></div>`;
+    list.innerHTML = `<div class="notif-empty"><p>You're all caught up.</p><p class="muted-small">Anything due, any decision waiting on you, and how your shares moved will show up here.</p></div>`;
     return;
   }
   const showCount = NOTIF_EXPANDED ? NOTIF_ITEMS.length : Math.min(NOTIF_INITIAL_SHOW, NOTIF_ITEMS.length);

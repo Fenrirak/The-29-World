@@ -311,7 +311,9 @@
    miss next to the page title. */
 @media (max-width: 480px) {
   .mode-switch { display: flex; width: 100%; }
-  .mode-btn { flex: 1; }
+  /* Three options (Account, Roulette, Blackjack) have to share a phone's
+     width, so they lose the roomy side padding and can shrink. */
+  .mode-btn { flex: 1; min-width: 0; padding: 9px 6px; gap: 5px; font-size: 13px; }
 }
 
 /* ===================== Blackjack: landscape-only ===================== */

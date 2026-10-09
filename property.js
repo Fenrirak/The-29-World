@@ -213,6 +213,10 @@ async function render() {
   document.getElementById("noProps").classList.toggle("hidden", props.length > 0);
 
   const groups = groupProperties(props);
+  // First-home KiwiSaver: when a student can put it towards a purchase,
+  // each listing they can buy gets a "Use my KiwiSaver" tick box.
+  const ksHome = !IS_TEACHER && typeof kiwiSaverFirstHomeInfo === "function"
+    ? kiwiSaverFirstHomeInfo(cls, me, me.username) : { eligible: false };
   // Students see their own home(s) first — everything else keeps its
   // original (teacher-set) order after that. Array.sort is stable, so this
   // only ever moves "owned by me" groups up, never reshuffles the rest.
@@ -270,7 +274,8 @@ async function render() {
         ${IS_TEACHER
           ? `<button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button><button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>`
           : (!myUnit && available.length > 0
-              ? `<button class="btn small gold" id="buyOutrightBtn-${gid}" onclick="buyOutright('${gid}')">Buy cash</button>
+              ? `${ksHome.eligible ? `<label class="ks-use" for="useKs-${gid}"><input type="checkbox" id="useKs-${gid}"> Use my KiwiSaver (up to ${fmtMoney(ksHome.available)})</label>` : ""}
+                 <button class="btn small gold" id="buyOutrightBtn-${gid}" onclick="buyOutright('${gid}')">Buy cash</button>
                  ${p.mortgageWeeks > 0 ? `
                    <span class="row-flex" style="gap:6px;align-items:center;">
                      <span class="muted-small">$</span>
@@ -1123,6 +1128,10 @@ async function pickAvailableUnitId(gid) {
 function flashListingMsg(gid, html) {
   flashMsg(document.getElementById("msg-" + gid), html);
 }
+function ksTicked(gid) {
+  const box = document.getElementById("useKs-" + gid);
+  return !!(box && box.checked);
+}
 async function buyOutright(gid) {
   // Double-tap guard (same reasoning as buy() in market.js) — matters
   // more here than most: pickAvailableUnitId() below can hand out a
@@ -1137,12 +1146,12 @@ async function buyOutright(gid) {
   try {
     const id = await pickAvailableUnitId(gid);
     if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
-    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, false);
+    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, false, undefined, { useKiwiSaver: ksTicked(gid) });
     if (!res.ok) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
     // render() rebuilds this listing's card (and its message box), so the
     // success message goes in afterwards — same pattern as transport.js.
-    flashListingMsg(gid, `<div class="success-msg">Congratulations, it's yours!</div>`);
+    flashListingMsg(gid, `<div class="success-msg">Congratulations, it's yours!${res.fromKiwi > 0 ? ` ${fmtMoney(res.fromKiwi)} came from your KiwiSaver.` : ""}</div>`);
   } finally {
     if (btn) btn.disabled = false;
     if (btn2) btn2.disabled = false;
@@ -1171,8 +1180,12 @@ async function buyFinanced(gid) {
     document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Enter a deposit of at least ${fmtMoney(minDeposit)}.</div>`;
     return;
   }
-  if (depositAmt > me.balance) {
-    document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">You don't have enough money for that deposit.</div>`;
+  // KiwiSaver (first home) can pay part of the deposit.
+  const useKs = ksTicked(gid);
+  const cls0 = useKs ? await getClassCached(CURRENT.classCode) : null;
+  const ksAvail = useKs ? kiwiSaverFirstHomeInfo(cls0, me, CURRENT.username).available || 0 : 0;
+  if (depositAmt > me.balance + ksAvail) {
+    document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">You don't have enough money for that deposit${useKs ? ", even with your KiwiSaver" : ""}.</div>`;
     return;
   }
   if (btn) btn.disabled = true;
@@ -1180,13 +1193,13 @@ async function buyFinanced(gid) {
   try {
     const id = await pickAvailableUnitId(gid);
     if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
-    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true, depositAmt);
+    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true, depositAmt, { useKiwiSaver: useKs });
     if (!res.ok) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
     // Mortgage payments are never taken automatically — the student pays
     // each one themselves on the class's mortgage day (see payMortgage).
     const cls = await getClassCached(CURRENT.classCode);
-    flashListingMsg(gid, `<div class="success-msg">Mortgaged with a ${fmtMoney(depositAmt)} deposit! Payments aren't taken automatically — come back every ${DAY_FULL[cls.mortgageDay || "Fri"]} to pay them yourself (the week you bought is free).</div>`);
+    flashListingMsg(gid, `<div class="success-msg">Mortgaged with a ${fmtMoney(depositAmt)} deposit${res.fromKiwi > 0 ? ` (${fmtMoney(res.fromKiwi)} of it from your KiwiSaver)` : ""}! Payments aren't taken automatically — come back every ${DAY_FULL[cls.mortgageDay || "Fri"]} to pay them yourself (the week you bought is free).</div>`);
   } finally {
     if (btn) btn.disabled = false;
     if (btn2) btn2.disabled = false;

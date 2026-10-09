@@ -66,27 +66,45 @@ function computeWageCredit(cls, student) {
   if (!isJobTaskApprovedThisWeek(student, cls)) return null;
   return wageCreditEstimate(cls, student);
 }
-// What this student's wage comes to after tax and life-event benefits,
-// whether or not this week's job task has been approved yet — the budget
-// uses it to show what pay day will bring. Assumes they have a job.
+// What this student's wage comes to after tax, life-event benefits and
+// KiwiSaver, whether or not this week's job task has been approved yet —
+// the budget uses it to show what pay day will bring, and pay day itself
+// pays exactly this. Assumes they have a job.
+//
+// Returns the take-home pay (`net`), the tax after any life-event tax cut
+// (`taxAmount`), and every line of the payslip: `gross`, `bracketTax`
+// (the normal bracket tax), `taxRefund` (the life-event tax cut), `boost`
+// (the life-event pay change, can be negative) and `kiwi` (KiwiSaver, or
+// null). net = gross - bracketTax + boost + taxRefund - kiwi.you, exactly.
 function wageCreditEstimate(cls, student) {
   const job = (cls.jobs || []).find(j => j.id === student.jobId) || {};
   const tier = getStudentTier(job, student);
-  const wage = tier ? tier.wage : 0;
+  const wage = tier ? Number(tier.wage) || 0 : 0;
   let { net, taxAmount } = applyWageTax(cls, wage);
+  const bracketTax = taxAmount;
   // Life items can boost/cut take-home wage (incomePercent) and knock a
   // percentage off the tax bill just withheld (taxCutPercent) — applied
   // here, after the normal bracket tax, so they layer on top instead of
   // interacting with the bracket math itself.
   const life = getLifeBenefitTotals(student);
-  if (life.incomePercent) net = Math.round(net * (1 + life.incomePercent / 100) * 100) / 100;
-  if (life.taxCutPercent && taxAmount > 0) {
-    const refund = Math.round(taxAmount * (life.taxCutPercent / 100) * 100) / 100;
-    net = Math.round((net + refund) * 100) / 100;
-    taxAmount = Math.round((taxAmount - refund) * 100) / 100;
+  let boost = 0, taxRefund = 0;
+  if (life.incomePercent) {
+    const before = net;
+    net = Math.round(net * (1 + life.incomePercent / 100) * 100) / 100;
+    boost = Math.round((net - before) * 100) / 100;
   }
+  if (life.taxCutPercent && taxAmount > 0) {
+    taxRefund = Math.round(taxAmount * (life.taxCutPercent / 100) * 100) / 100;
+    net = Math.round((net + taxRefund) * 100) / 100;
+    taxAmount = Math.round((taxAmount - taxRefund) * 100) / 100;
+  }
+  // KiwiSaver comes out last, as a percentage of the GROSS wage (that's
+  // how it works in real life — it's worked out before tax, but taken
+  // from the pay that's left after tax).
+  const kiwi = kiwiSaverPayBreakdown(cls, student, wage, net, nzDateKey());
+  if (kiwi && kiwi.you > 0) net = Math.round((net - kiwi.you) * 100) / 100;
   const tierLabel = tier ? tier.name : job.title;
-  return { net, taxAmount, tierLabel };
+  return { net, taxAmount, tierLabel, jobTitle: job.title || "", gross: Math.round(wage * 100) / 100, bracketTax, taxRefund, boost, kiwi };
 }
 
 // PERF FIX: quick checks on the student doc the caller ALREADY read, used
@@ -123,11 +141,28 @@ function _interestMightBePayable(cls, student) {
 // isn't ticked yet, or null (nothing to do / already paid today / no
 // job / error). `force` skips the day-of-week check (manual button); it
 // never skips the "already paid today" check.
-async function _payStudentWage(classCode, username, dateKey, { force = false, cls: precomputedCls } = {}) {
+//
+// Each pay also saves a payslip on the student's doc (user.payslips, the
+// latest PAYSLIPS_MAX) and, for a KiwiSaver member, moves their
+// contributions into user.kiwiSaver — all in the same transaction as the
+// money, so the payslip always matches what was really paid.
+//
+// `logSink`: when given (the teacher's class-wide sweep), the log entry is
+// pushed onto it instead of being written straight away, so the sweep can
+// write every student's entry in one go (see _flushTxnSink).
+async function _payStudentWage(classCode, username, dateKey, { force = false, cls: precomputedCls, logSink = null } = {}) {
   const userRef = usersCol().doc(username);
   let result = null;
-  try {
+  // "full" saves the payslip and KiwiSaver too. Those are newer fields, and
+  // a student can only write fields the database rules list for them — if
+  // the rules haven't been published since they were added, the write is
+  // refused, so try again the old way (money only). A KiwiSaver member is
+  // left for the teacher's next visit instead: paying them without their
+  // KiwiSaver would give them money that belongs in KiwiSaver.
+  const attempt = async (mode) => {
+    result = null;
     await fdb.runTransaction(async (t) => {
+      result = null; // this callback can be retried
       const snap = await t.get(userRef);
       if (!snap.exists) return;
       const user = snap.data();
@@ -148,22 +183,38 @@ async function _payStudentWage(classCode, username, dateKey, { force = false, cl
       }
       const credit = computeWageCredit(cls, user);
       if (!credit) return;
+      if (mode === "legacy" && credit.kiwi) return;
       const newBalance = Math.round(((user.balance || 0) + credit.net) * 100) / 100;
-      t.update(userRef, { balance: newBalance, lastWagePaid: dateKey });
+      const update = { balance: newBalance, lastWagePaid: dateKey };
+      if (mode === "full") {
+        update.payslips = [buildPayslip(cls, credit, dateKey)].concat(Array.isArray(user.payslips) ? user.payslips : []).slice(0, PAYSLIPS_MAX);
+        if (credit.kiwi) update.kiwiSaver = kiwiSaverAfterPay(user, credit.kiwi, dateKey, cls);
+      }
+      t.update(userRef, update);
       result = { credited: credit };
     });
+  };
+  try {
+    await attempt("full");
   } catch (e) {
-    return null;
+    if (!(e && e.code === "permission-denied")) return null;
+    try { await attempt("legacy"); } catch (e2) { return null; }
   }
   if (result && result.credited) {
-    await logTxn(classCode, { type: "wage", to: username, amount: result.credited.net, note: "Pay day: " + result.credited.tierLabel + (result.credited.taxAmount > 0 ? ` (${fmtMoney(result.credited.taxAmount)} tax withheld)` : "") });
+    const c = result.credited;
+    const extras = [];
+    if (c.taxAmount > 0) extras.push(`${fmtMoney(c.taxAmount)} tax withheld`);
+    if (c.kiwi && c.kiwi.you > 0) extras.push(`${fmtMoney(c.kiwi.you)} to KiwiSaver`);
+    const entry = { type: "wage", to: username, amount: c.net, note: "Pay day: " + c.tierLabel + (extras.length ? ` (${extras.join(", ")})` : "") };
+    if (logSink) logSink.push(entry);
+    else await logTxn(classCode, entry);
   }
   return result;
 }
 
 // Credits ONE student's WEEKLY life-item allowance (paid alongside wages,
 // on the class's pay day) in a single transaction on their own doc.
-async function _payStudentWeeklyLifeAllowance(classCode, username, dateKey, { cls: precomputedCls } = {}) {
+async function _payStudentWeeklyLifeAllowance(classCode, username, dateKey, { cls: precomputedCls, logSink = null } = {}) {
   const userRef = usersCol().doc(username);
   let credited = null;
   try {
@@ -183,14 +234,16 @@ async function _payStudentWeeklyLifeAllowance(classCode, username, dateKey, { cl
     return null;
   }
   if (credited) {
-    await logTxn(classCode, { type: "life-allowance", to: username, amount: credited, note: "Life event allowance (weekly)" });
+    const entry = { type: "life-allowance", to: username, amount: credited, note: "Life event allowance (weekly)" };
+    if (logSink) logSink.push(entry);
+    else await logTxn(classCode, entry);
   }
   return credited;
 }
 
 // Credits ONE student's DAILY life-item allowance (its own schedule,
 // every calendar day, independent of pay day) in a single transaction.
-async function _payStudentDailyLifeAllowance(classCode, username, dateKey) {
+async function _payStudentDailyLifeAllowance(classCode, username, dateKey, { logSink = null } = {}) {
   const userRef = usersCol().doc(username);
   let credited = null;
   try {
@@ -210,7 +263,9 @@ async function _payStudentDailyLifeAllowance(classCode, username, dateKey) {
     return null;
   }
   if (credited) {
-    await logTxn(classCode, { type: "life-allowance", to: username, amount: credited, note: "Life event allowance (daily)" });
+    const entry = { type: "life-allowance", to: username, amount: credited, note: "Life event allowance (daily)" };
+    if (logSink) logSink.push(entry);
+    else await logTxn(classCode, entry);
   }
   return credited;
 }
@@ -271,6 +326,57 @@ async function payDay(classCode) {
   return await _runPayDayForClass(classCode, nzDateKey(), { force: true });
 }
 
+/* ---------------- Class-wide sweeps: several students at once ----------------
+   PERF FIX: the teacher's sweeps used to pay one student at a time, and
+   each payment then wrote its own line into the class's transaction list
+   — roughly six trips to the database per student, one after another, so
+   a pay day for a class of 25 took a long time. Now:
+     - up to SWEEP_PARALLEL students are paid at the same time. Each
+       payment is still its own transaction on that ONE student's doc, so
+       they can't get in each other's way, and the "already paid today"
+       stamp still stops anyone being paid twice;
+     - the transaction-list lines are collected (logSink) and written to
+       the class doc in ONE go at the end (_flushTxnSink) — the class doc
+       is the one thing every payment shares, so writing it 25 times at
+       once would only make them queue and retry. */
+const SWEEP_PARALLEL = 6;
+async function t29RunLimited(items, limit, fn) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+// Writes collected transaction-list lines to the class doc in one
+// transaction (same shape logTxn writes), then updates each student's
+// report totals. Tried twice — the money has already moved by now, so a
+// busy moment shouldn't lose the record of it.
+async function _flushTxnSink(classCode, sink) {
+  if (!sink.length) return;
+  const now = Date.now();
+  const entries = sink.map((txn, i) => Object.assign({ id: uid("t"), date: nowStr(), ts: now + i }, txn)).reverse();
+  const classRef = classesCol().doc(classCode);
+  let committed = false;
+  for (let tries = 0; tries < 2 && !committed; tries++) {
+    try {
+      committed = await fdb.runTransaction(async (t) => {
+        const snap = await t.get(classRef);
+        if (!snap.exists) return false;
+        const live = snap.data();
+        _autoAppendTxns(live, entries);
+        t.update(classRef, { txns: live.txns });
+        return true;
+      });
+    } catch (e) {
+      if (tries === 1) console.warn("Couldn't record pay day in the transaction list (the money was still paid):", e);
+    }
+  }
+  if (committed) await _autoReportCommitted(entries);
+}
+
 async function _runPayDayForClass(classCode, dateKey, { force = false, cls: precomputedCls } = {}) {
   const cls = precomputedCls || await getClass(classCode);
   if (!cls) return { paidCount: 0, newlyPaid: 0, hasJobs: false, unapprovedCount: 0 };
@@ -279,6 +385,7 @@ async function _runPayDayForClass(classCode, dateKey, { force = false, cls: prec
   let paidCount = 0;
   let newlyPaid = 0;
   let unapprovedCount = 0;
+  const toPay = [];
   for (const student of students) {
     if (student.jobId && (cls.jobs || []).find(j => j.id === student.jobId)) hasJobs = true;
     if (student.lastWagePaid === dateKey) { paidCount++; continue; } // already covered — cheap in-memory skip before opening a transaction
@@ -289,17 +396,21 @@ async function _runPayDayForClass(classCode, dateKey, { force = false, cls: prec
       if (_hasRecognisedJob(cls, student) && !cls.archived) unapprovedCount++;
       continue;
     }
-    const r = await _payStudentWage(classCode, student.username, dateKey, { force, cls });
+    toPay.push(student);
+  }
+  const sink = [];
+  await t29RunLimited(toPay, SWEEP_PARALLEL, async student => {
+    const r = await _payStudentWage(classCode, student.username, dateKey, { force, cls, logSink: sink });
     if (r && r.credited) { newlyPaid++; paidCount++; }
     else if (r && r.skippedUnapproved) { unapprovedCount++; }
-  }
+  });
   // Life-item recurring allowances: independent of having a job, so this
   // runs for every student, not just the ones the loop above touched.
-  for (const student of students) {
-    if (student.lastLifeAllowanceWeeklyPaid === dateKey) continue;
-    if (!getLifeAllowanceByFrequency(student, "weekly")) continue; // no weekly allowance — nothing to pay
-    await _payStudentWeeklyLifeAllowance(classCode, student.username, dateKey, { cls });
-  }
+  const allowanceDue = students.filter(student =>
+    student.lastLifeAllowanceWeeklyPaid !== dateKey && getLifeAllowanceByFrequency(student, "weekly"));
+  await t29RunLimited(allowanceDue, SWEEP_PARALLEL, student =>
+    _payStudentWeeklyLifeAllowance(classCode, student.username, dateKey, { cls, logSink: sink }));
+  await _flushTxnSink(classCode, sink);
   return { paidCount, newlyPaid, hasJobs, unapprovedCount };
 }
 
@@ -313,13 +424,629 @@ async function dailyLifeAllowanceForClassIfDue(classCode) {
   const todayKey = nzDateKey();
   const students = await getClassStudents(classCode, cls);
   let newlyPaid = 0;
-  for (const student of students) {
-    if (student.lastLifeAllowanceDailyPaid === todayKey) continue; // cheap in-memory skip
-    if (!getLifeAllowanceByFrequency(student, "daily")) continue; // no daily allowance — nothing to pay
-    const credited = await _payStudentDailyLifeAllowance(classCode, student.username, todayKey);
+  // Same "several at once, one log write" approach as pay day above.
+  const due = students.filter(student =>
+    student.lastLifeAllowanceDailyPaid !== todayKey // cheap in-memory skip
+    && getLifeAllowanceByFrequency(student, "daily")); // no daily allowance — nothing to pay
+  const sink = [];
+  await t29RunLimited(due, SWEEP_PARALLEL, async student => {
+    const credited = await _payStudentDailyLifeAllowance(classCode, student.username, todayKey, { logSink: sink });
     if (credited) newlyPaid++;
-  }
+  });
+  await _flushTxnSink(classCode, sink);
   return newlyPaid;
+}
+
+/* ===================== Payslips =====================
+   Every pay day saves a payslip on the student's own doc (user.payslips,
+   newest first, the latest PAYSLIPS_MAX), written in the SAME transaction
+   that pays them — so a payslip is a record of exactly what was paid, not
+   a recalculation that could drift if the teacher later changes the tax
+   brackets or the wage. The Jobs page shows them.
+     { id, dateKey, ts, job, tier,
+       gross,                      // the wage before anything comes off
+       tax, taxBands: [{ from, upTo, rate, amount, tax }],
+       taxRefund,                  // life-event tax cut
+       boost,                      // life-event pay change (+ or -)
+       kiwi: null | { rate, paused, you, employerRate, employerGross,
+                      esctRate, esct, employerNet, govt },
+       net }                       // what landed in their cash
+   net = gross - tax + taxRefund + boost - kiwi.you, to the cent. */
+const PAYSLIPS_MAX = 12;
+
+// The wage tax bracket by bracket, for the payslip: how much of the wage
+// fell in each bracket and the tax on that slice. Same maths as
+// applyWageTax(); the slices add up to exactly its total (a rounding cent,
+// if any, goes on the last slice).
+function wageTaxBands(cls, wage) {
+  const brackets = (cls.wageTaxBrackets || []).slice().sort((a, b) =>
+    (a.upTo == null ? Infinity : a.upTo) - (b.upTo == null ? Infinity : b.upTo));
+  const out = [];
+  if (!brackets.length || !(wage > 0)) return out;
+  let floor = 0;
+  for (const b of brackets) {
+    const top = b.upTo == null ? Infinity : Number(b.upTo);
+    const slice = Math.max(0, Math.min(wage, top) - floor);
+    const rate = Number(b.rate) || 0;
+    if (slice > 0) {
+      out.push({ from: Math.round(floor * 100) / 100, upTo: top === Infinity ? null : top, rate,
+        amount: Math.round(slice * 100) / 100, tax: Math.round(slice * rate) / 100 });
+    }
+    floor = top;
+    if (wage <= top) break;
+  }
+  const total = applyWageTax(cls, wage).taxAmount;
+  const sum = Math.round(out.reduce((s, b) => s + b.tax, 0) * 100) / 100;
+  if (out.length && sum !== total) {
+    const last = out[out.length - 1];
+    last.tax = Math.round((last.tax + total - sum) * 100) / 100;
+  }
+  return out;
+}
+
+function buildPayslip(cls, credit, dateKey) {
+  const k = credit.kiwi;
+  return {
+    id: uid("ps"), dateKey, ts: Date.now(),
+    job: credit.jobTitle || "", tier: credit.tierLabel || "",
+    gross: credit.gross, tax: credit.bracketTax, taxBands: wageTaxBands(cls, credit.gross),
+    taxRefund: credit.taxRefund || 0, boost: credit.boost || 0,
+    kiwi: k ? {
+      rate: k.rate, paused: !!k.paused, you: k.you, employerRate: k.employerRate || 0,
+      employerGross: k.employerGross, esctRate: k.esctRate, esct: k.esct,
+      employerNet: k.employerNet, govt: k.govt
+    } : null,
+    net: credit.net
+  };
+}
+
+/* ===================== KiwiSaver =====================
+   New Zealand's work-based retirement savings scheme, following the real
+   rules as they stand from 1 April 2026:
+
+     - Starting a job signs you up automatically (when the teacher has
+       switched KiwiSaver on). You can opt out only between week 2 and
+       week 8 (we allow the first 8 weeks) and get back what you put in.
+       After that you stay a member, but can pause ("savings suspension").
+     - YOU put in 3.5% of your pay before tax (the default since 1 April
+       2026), or 4%, 6%, 8% or 10% if you choose — or 3% as a temporary
+       lower rate. It's taken out of your pay every pay day.
+     - YOUR EMPLOYER adds 3.5% of your pay on top (3% if you've dropped to
+       3%). Their contribution is taxed first — Employer Superannuation
+       Contribution Tax (ESCT) — at a rate set by what you earn in a year.
+     - THE GOVERNMENT adds 25c for every $1 you put in, up to $260.72 a
+       KiwiSaver year (1 July – 30 June). Nothing if you earn over $180,000
+       a year. (In real life it's paid once a year; here it's added each
+       pay day so students see it happen.)
+     - The money is invested in a fund. Conservative / Balanced / Growth
+       go up (and sometimes down) by different amounts — new members start
+       in Balanced, the real default fund.
+     - It's locked until you retire (65). The exceptions here are the real
+       ones: buying your FIRST home (after enough time as a member, leaving
+       $1,000 in), significant financial hardship (teacher-approved; not
+       the government's contributions), and the teacher's "Retire the
+       class", after which everyone can take out what they like.
+
+   The game runs faster than real life (class savings interest is set per
+   WEEK), so fund returns are per week too, with a teacher-set average and
+   swing for each fund. A fund's result for a week is the same for every
+   student in the class who's in it — worked out from the class code and
+   the week (kiwiSaverFundReturn), so any page can show it without storing
+   anything, and nobody's luck differs from a classmate's.
+
+   Shapes:
+     cls.kiwiSaver = { enabled, govt, funds: { conservative: {avg, swing}, ... },
+                       firstHomeWeeks, firstHomeKeep, retired, retiredAt }
+     user.kiwiSaver = { status: "member" | "optedOut", rate, fund, paused,
+                        joinedKey, optOutUntil, balance,
+                        you, employer, govt, growth, withdrawn,   // running totals
+                        govtYear, govtThisYear, lastReturnWeek,
+                        history: [{ w, fund, pct, gain, v }], firstHomeUsed }
+     user.retiredJob = the job "Retire the class" took away, so Undo can
+                       give it back (teacher-written only).
+
+   Same "pay yourself safely" design as wages: everything a student's own
+   visit does is a transaction on their OWN doc, and the teacher's visit
+   sweeps the class for anyone who hasn't been round yet.
+====================================================================== */
+const KS_RATES = [3, 3.5, 4, 6, 8, 10];
+const KS_DEFAULT_RATE = 3.5;
+const KS_EMPLOYER_RATE = 3.5;
+const KS_GOVT_PER_DOLLAR = 0.25;
+const KS_GOVT_YEAR_MAX = 260.72;
+const KS_GOVT_FULL_AT = 1042.86; // what you need to put in during a year to get the full $260.72
+const KS_GOVT_INCOME_LIMIT = 180000;
+// ESCT bands from 1 April 2025 (unchanged for 2026/27): a year's pay plus
+// the employer's contributions -> tax rate on those contributions.
+const KS_ESCT_BANDS = [
+  { upTo: 18720, rate: 10.5 }, { upTo: 64200, rate: 17.5 }, { upTo: 93720, rate: 30 },
+  { upTo: 216000, rate: 33 }, { upTo: Infinity, rate: 39 }
+];
+const KS_OPT_OUT_DAYS = 56;
+const KS_FUNDS = {
+  conservative: { name: "Conservative", avg: 1, swing: 1, about: "Mostly cash and bonds. Small, steady growth that hardly ever goes down." },
+  balanced: { name: "Balanced", avg: 2, swing: 3, about: "About half shares, half cash and bonds. Grows more, with some ups and downs." },
+  growth: { name: "Growth", avg: 3, swing: 6, about: "Mostly shares. Grows the most over time, but some weeks it goes down." }
+};
+const KS_FUND_ORDER = ["conservative", "balanced", "growth"];
+const KS_DEFAULT_FUND = "balanced";
+const KS_HISTORY_MAX = 26;
+const KS_CATCH_UP_WEEKS = 26; // a student away for longer than this only catches up the last 26 weeks
+function ksRound(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+// The class's KiwiSaver settings, with defaults filled in.
+function kiwiSaverSettings(cls) {
+  const raw = (cls && cls.kiwiSaver) || {};
+  const funds = {};
+  KS_FUND_ORDER.forEach(k => {
+    const f = (raw.funds && raw.funds[k]) || {};
+    const avg = Number(f.avg), swing = Number(f.swing);
+    funds[k] = {
+      avg: f.avg !== undefined && f.avg !== null && Number.isFinite(avg) ? avg : KS_FUNDS[k].avg,
+      swing: f.swing !== undefined && f.swing !== null && Number.isFinite(swing) && swing >= 0 ? swing : KS_FUNDS[k].swing
+    };
+  });
+  const weeks = Number(raw.firstHomeWeeks), keep = Number(raw.firstHomeKeep);
+  return {
+    enabled: !!raw.enabled,
+    govt: raw.govt !== false,
+    funds,
+    firstHomeWeeks: raw.firstHomeWeeks !== undefined && Number.isFinite(weeks) && weeks >= 0 ? Math.floor(weeks) : 3,
+    firstHomeKeep: raw.firstHomeKeep !== undefined && Number.isFinite(keep) && keep >= 0 ? ksRound(keep) : 1000,
+    retired: !!raw.retired,
+    retiredAt: raw.retiredAt || null
+  };
+}
+
+// A clean copy of a student's KiwiSaver, or null if they've never had one.
+function kiwiSaverOf(user) {
+  const raw = user && user.kiwiSaver;
+  if (!raw || typeof raw !== "object") return null;
+  const num = v => ksRound(v);
+  return {
+    status: raw.status === "optedOut" ? "optedOut" : "member",
+    rate: KS_RATES.includes(Number(raw.rate)) ? Number(raw.rate) : KS_DEFAULT_RATE,
+    fund: KS_FUNDS[raw.fund] ? raw.fund : KS_DEFAULT_FUND,
+    paused: !!raw.paused,
+    joinedKey: raw.joinedKey || nzDateKey(),
+    optOutUntil: raw.optOutUntil || null,
+    balance: num(raw.balance), you: num(raw.you), employer: num(raw.employer), govt: num(raw.govt),
+    growth: num(raw.growth), withdrawn: num(raw.withdrawn),
+    govtYear: raw.govtYear || null, govtThisYear: num(raw.govtThisYear),
+    lastReturnWeek: raw.lastReturnWeek || null,
+    history: Array.isArray(raw.history) ? raw.history.slice(-KS_HISTORY_MAX) : [],
+    firstHomeUsed: !!raw.firstHomeUsed
+  };
+}
+
+// A brand-new member. `auto` = signed up automatically by starting a job,
+// which is the only way in that comes with an opt-out window.
+function ksNewMember(todayKey, auto) {
+  return {
+    status: "member", rate: KS_DEFAULT_RATE, fund: KS_DEFAULT_FUND, paused: false,
+    joinedKey: todayKey, optOutUntil: auto ? dateKeyPlusDays(todayKey, KS_OPT_OUT_DAYS) : null,
+    balance: 0, you: 0, employer: 0, govt: 0, growth: 0, withdrawn: 0,
+    govtYear: null, govtThisYear: 0,
+    // Last week counts as done, so the first fund result is for the week
+    // they joined (applied the Monday after).
+    lastReturnWeek: dateKeyPlusDays(budgetWeekStartKey(), -7),
+    history: [], firstHomeUsed: false
+  };
+}
+
+// KiwiSaver years run 1 July – 30 June. "2026" = 1 Jul 2026 – 30 Jun 2027.
+function ksYearOf(dateKey) {
+  const y = Number(dateKey.slice(0, 4)), m = Number(dateKey.slice(5, 7));
+  return String(m >= 7 ? y : y - 1);
+}
+function ksYearLabel(year) {
+  const y = Number(year);
+  return `1 July ${y} – 30 June ${y + 1}`;
+}
+function ksEsctRate(yearlyPayPlusEmployer) {
+  for (const b of KS_ESCT_BANDS) if (yearlyPayPlusEmployer <= b.upTo) return b.rate;
+  return 39;
+}
+// How much the government adds for `contributed` of the student's own
+// money, given what it has already added this KiwiSaver year.
+function ksGovtMatch(ks, contributed, yearlyIncome, todayKey) {
+  if (!(contributed > 0) || yearlyIncome > KS_GOVT_INCOME_LIMIT) return 0;
+  const used = ks && ks.govtYear === ksYearOf(todayKey) ? ks.govtThisYear : 0;
+  return ksRound(Math.max(0, Math.min(contributed * KS_GOVT_PER_DOLLAR, KS_GOVT_YEAR_MAX - used)));
+}
+function ksAddGovt(ks, amount, todayKey) {
+  const year = ksYearOf(todayKey);
+  if (ks.govtYear !== year) { ks.govtYear = year; ks.govtThisYear = 0; }
+  ks.govtThisYear = ksRound(ks.govtThisYear + amount);
+}
+// What the student's job pays in a year (their wage x 52), for the
+// government's $180,000 limit and ESCT. 0 with no job.
+function ksYearlyPay(cls, user) {
+  const job = user && user.jobId ? (cls.jobs || []).find(j => j.id === user.jobId) : null;
+  const tier = job ? getStudentTier(job, user) : null;
+  return tier ? (Number(tier.wage) || 0) * 52 : 0;
+}
+
+// Pure: what KiwiSaver does to one pay of `gross`, where `takeHome` is what
+// would be left after tax (the most their own contribution can take).
+// null = KiwiSaver isn't part of this pay at all (switched off, class
+// retired, or they opted out). `enrolling` = this pay signs them up.
+function kiwiSaverPayBreakdown(cls, user, gross, takeHome, todayKey) {
+  const s = kiwiSaverSettings(cls);
+  if (!s.enabled || s.retired || !(gross > 0)) return null;
+  const existing = kiwiSaverOf(user);
+  if (existing && existing.status !== "member") return null;
+  const ks = existing || ksNewMember(todayKey, true);
+  const base = { enrolling: !existing, paused: false, rate: ks.rate, employerRate: 0, you: 0, employerGross: 0, esctRate: 0, esct: 0, employerNet: 0, govt: 0 };
+  if (ks.paused) return Object.assign(base, { paused: true });
+  const you = ksRound(Math.min(gross * ks.rate / 100, Math.max(0, takeHome)));
+  const employerRate = ks.rate < KS_EMPLOYER_RATE ? ks.rate : KS_EMPLOYER_RATE;
+  const employerGross = ksRound(gross * employerRate / 100);
+  const esctRate = ksEsctRate((gross + employerGross) * 52);
+  const esct = ksRound(employerGross * esctRate / 100);
+  const employerNet = ksRound(employerGross - esct);
+  const govt = s.govt ? ksGovtMatch(ks, you, gross * 52, todayKey) : 0;
+  return Object.assign(base, { you, employerRate, employerGross, esctRate, esct, employerNet, govt });
+}
+
+/* ---- Weekly fund results ---- */
+// A number in [0, 1) that's always the same for the same text.
+function ksHash01(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h ^= h >>> 15; h = Math.imul(h, 2246822507);
+  h ^= h >>> 13; h = Math.imul(h, 3266489909);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+// The fund's result (percent) for the week starting on Monday `mondayKey`:
+// somewhere between avg - swing and avg + swing, every value equally likely.
+function kiwiSaverFundReturn(cls, fund, mondayKey) {
+  const f = kiwiSaverSettings(cls).funds[fund] || kiwiSaverSettings(cls).funds[KS_DEFAULT_FUND];
+  const u = ksHash01(String((cls && cls.code) || "") + "|" + mondayKey + "|" + fund);
+  return Math.round((f.avg + f.swing * (2 * u - 1)) * 100) / 100;
+}
+// Mondays of finished weeks whose result this member hasn't had yet.
+function kiwiSaverPendingWeeks(ks, thisMonday) {
+  if (!ks) return [];
+  const lastWeek = dateKeyPlusDays(thisMonday, -7);
+  let w = ks.lastReturnWeek ? dateKeyPlusDays(ks.lastReturnWeek, 7) : null;
+  if (!w || w > lastWeek) return [];
+  const earliest = dateKeyPlusDays(thisMonday, -7 * KS_CATCH_UP_WEEKS);
+  if (w < earliest) w = earliest;
+  const out = [];
+  while (w <= lastWeek) { out.push(w); w = dateKeyPlusDays(w, 7); }
+  return out;
+}
+// Brings a member's balance up to date with every finished week's fund
+// result (mutates and returns ks). A $0 balance just moves the marker on.
+function ksCatchUp(cls, ks, thisMonday) {
+  const weeks = kiwiSaverPendingWeeks(ks, thisMonday || budgetWeekStartKey());
+  if (!weeks.length) {
+    if (!ks.lastReturnWeek) ks.lastReturnWeek = dateKeyPlusDays(thisMonday || budgetWeekStartKey(), -7);
+    return ks;
+  }
+  if (kiwiSaverSettings(cls).enabled) {
+    weeks.forEach(w => {
+      if (!(ks.balance > 0)) return;
+      const pct = kiwiSaverFundReturn(cls, ks.fund, w);
+      const gain = ksRound(ks.balance * pct / 100);
+      ks.balance = ksRound(ks.balance + gain);
+      ks.growth = ksRound(ks.growth + gain);
+      ks.history.push({ w, fund: ks.fund, pct, gain, v: ks.balance });
+    });
+    ks.history = ks.history.slice(-KS_HISTORY_MAX);
+  }
+  ks.lastReturnWeek = weeks[weeks.length - 1];
+  return ks;
+}
+function kiwiSaverReturnsDue(cls, user) {
+  const ks = kiwiSaverOf(user);
+  if (!ks || !kiwiSaverSettings(cls).enabled) return false;
+  return kiwiSaverPendingWeeks(ks, budgetWeekStartKey()).length > 0 && ks.balance > 0;
+}
+
+// The member's KiwiSaver after a pay day's contributions (signing them up
+// first if this pay is what enrols them).
+function kiwiSaverAfterPay(user, kiwi, todayKey, cls) {
+  let ks = kiwiSaverOf(user) || ksNewMember(todayKey, true);
+  if (cls) ks = ksCatchUp(cls, ks);
+  if (!kiwi || kiwi.paused) return ks;
+  ks.you = ksRound(ks.you + kiwi.you);
+  ks.employer = ksRound(ks.employer + kiwi.employerNet);
+  ks.govt = ksRound(ks.govt + kiwi.govt);
+  ks.balance = ksRound(ks.balance + kiwi.you + kiwi.employerNet + kiwi.govt);
+  if (kiwi.govt > 0) ksAddGovt(ks, kiwi.govt, todayKey);
+  return ks;
+}
+
+// One student's catch-up, as a transaction on their own doc.
+async function _ksApplyReturns(classCode, username, precomputedCls) {
+  const userRef = usersCol().doc(username);
+  let applied = false;
+  try {
+    await fdb.runTransaction(async (t) => {
+      applied = false;
+      const snap = await t.get(userRef);
+      if (!snap.exists) return;
+      const user = snap.data();
+      if (user.role !== "student") return;
+      const cls = precomputedCls || await getClass(classCode);
+      if (!cls || cls.archived || !kiwiSaverReturnsDue(cls, user)) return;
+      const ks = ksCatchUp(cls, kiwiSaverOf(user));
+      t.update(userRef, { kiwiSaver: ks });
+      applied = true;
+    });
+  } catch (e) {
+    return false;
+  }
+  return applied;
+}
+// Student's own visit.
+async function applyMyKiwiSaverReturnsIfDue(username) {
+  const user = await getUser(username);
+  if (!user || user.role !== "student") return 0;
+  const cls = await getClass(user.classCode);
+  if (!cls || cls.archived || !kiwiSaverReturnsDue(cls, user)) return 0;
+  return (await _ksApplyReturns(user.classCode, username, cls)) ? 1 : 0;
+}
+// Teacher's visit: everyone who hasn't been round yet.
+async function kiwiSaverReturnsForClassIfDue(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls || cls.archived || !kiwiSaverSettings(cls).enabled) return 0;
+  const students = await getClassStudents(classCode, cls);
+  let count = 0;
+  await t29RunLimited(students.filter(s => kiwiSaverReturnsDue(cls, s)), SWEEP_PARALLEL, async s => {
+    if (await _ksApplyReturns(classCode, s.username, cls)) count++;
+  });
+  return count;
+}
+
+/* ---- What a student can do ---- */
+// Runs `change(user, cls, ks, todayKey)` on the student's own doc in one
+// transaction. `change` returns the fields to write (plus an optional
+// `_log` entry and `_result`) or throws Error("CODE").
+const KS_ERRORS = {
+  OFF: "KiwiSaver isn't switched on for your class.",
+  NOT_MEMBER: "You're not in KiwiSaver.",
+  BAD_RATE: "Pick one of the contribution rates.",
+  BAD_FUND: "Pick one of the funds.",
+  BAD_AMOUNT: "Enter an amount greater than zero.",
+  BROKE: "You don't have enough cash for that.",
+  TOO_MUCH: "That's more than you can take out.",
+  OPT_OUT_CLOSED: "You can only opt out in your first 8 weeks after being signed up. You can pause your contributions instead.",
+  LOCKED: "Your KiwiSaver is locked until you retire.",
+  RETIRED: "Your class has retired, so no more money goes into KiwiSaver."
+};
+async function _ksStudentAction(username, change) {
+  const userRef = usersCol().doc(username);
+  let log = null, result = null, classCode = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      log = null; result = null;
+      const snap = await t.get(userRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const user = snap.data();
+      classCode = user.classCode;
+      const cls = await getClass(user.classCode);
+      if (!cls) throw new Error("NOT_FOUND");
+      const todayKey = nzDateKey();
+      const existing = kiwiSaverOf(user);
+      const ks = existing ? ksCatchUp(cls, existing) : null;
+      const out = change(user, cls, ks, todayKey);
+      log = out._log || null; result = out._result || null;
+      delete out._log; delete out._result;
+      t.update(userRef, out);
+    });
+  } catch (e) {
+    return { ok: false, error: KS_ERRORS[e.message] || "Something went wrong. Please try again." };
+  }
+  if (log) await logTxn(classCode, log);
+  return { ok: true, result };
+}
+
+// Joining, or changing rate / fund / pause. Any of the three can be left
+// out. Someone with a job who's never been in is being signed up the
+// automatic way (with an opt-out window); anyone else is joining by choice.
+async function kiwiSaverSaveChoices(username, { rate, fund, paused } = {}) {
+  return _ksStudentAction(username, (user, cls, ks, todayKey) => {
+    const s = kiwiSaverSettings(cls);
+    if (!s.enabled) throw new Error("OFF");
+    if (rate !== undefined && !KS_RATES.includes(Number(rate))) throw new Error("BAD_RATE");
+    if (fund !== undefined && !KS_FUNDS[fund]) throw new Error("BAD_FUND");
+    let next = ks;
+    if (!next) next = ksNewMember(todayKey, !!user.jobId);
+    else if (next.status !== "member") {
+      // Rejoining after opting out — by choice, so no opt-out window.
+      next = Object.assign(next, { status: "member", joinedKey: todayKey, optOutUntil: null, paused: false,
+        lastReturnWeek: dateKeyPlusDays(budgetWeekStartKey(), -7) });
+    }
+    if (rate !== undefined) next.rate = Number(rate);
+    if (fund !== undefined) next.fund = fund;
+    if (paused !== undefined) next.paused = !!paused;
+    return { kiwiSaver: next };
+  });
+}
+
+// Opting out (first 8 weeks only): what they put in comes back as cash;
+// the employer's and government's money goes back to them.
+async function kiwiSaverOptOut(username) {
+  return _ksStudentAction(username, (user, cls, ks, todayKey) => {
+    if (!ks || ks.status !== "member") throw new Error("NOT_MEMBER");
+    if (!ks.optOutUntil || todayKey > ks.optOutUntil) throw new Error("OPT_OUT_CLOSED");
+    const refund = ksRound(Math.max(0, ks.you - ks.withdrawn));
+    const next = Object.assign(ksNewMember(todayKey, false), { status: "optedOut", joinedKey: ks.joinedKey, optOutUntil: null });
+    const out = { kiwiSaver: next, balance: ksRound((user.balance || 0) + refund) };
+    if (refund > 0) out._log = { type: "kiwisaver-refund", to: username, amount: refund, note: "Opted out of KiwiSaver — your contributions refunded" };
+    out._result = { refund };
+    return out;
+  });
+}
+
+// Putting extra money in from cash (a "voluntary contribution"). Counts
+// towards the government's 25c-per-$1, like real life.
+async function kiwiSaverContribute(username, amount) {
+  amount = cleanAmount(amount);
+  return _ksStudentAction(username, (user, cls, ks, todayKey) => {
+    const s = kiwiSaverSettings(cls);
+    if (!s.enabled) throw new Error("OFF");
+    if (s.retired) throw new Error("RETIRED");
+    if (!(amount > 0)) throw new Error("BAD_AMOUNT");
+    if ((user.balance || 0) < amount) throw new Error("BROKE");
+    let next = ks && ks.status === "member" ? ks : null;
+    if (!next) throw new Error("NOT_MEMBER");
+    const govt = s.govt ? ksGovtMatch(next, amount, ksYearlyPay(cls, user), todayKey) : 0;
+    next.you = ksRound(next.you + amount);
+    next.govt = ksRound(next.govt + govt);
+    next.balance = ksRound(next.balance + amount + govt);
+    if (govt > 0) ksAddGovt(next, govt, todayKey);
+    return {
+      kiwiSaver: next, balance: ksRound(user.balance - amount),
+      _log: { type: "kiwisaver-in", from: username, amount, note: "Extra KiwiSaver contribution" + (govt > 0 ? ` (+${fmtMoney(govt)} from the government)` : "") },
+      _result: { govt }
+    };
+  });
+}
+
+// Taking money out once the class has retired.
+async function kiwiSaverWithdraw(username, amount) {
+  amount = cleanAmount(amount);
+  return _ksStudentAction(username, (user, cls, ks) => {
+    const s = kiwiSaverSettings(cls);
+    if (!s.retired) throw new Error("LOCKED");
+    if (!ks) throw new Error("NOT_MEMBER");
+    if (!(amount > 0)) throw new Error("BAD_AMOUNT");
+    if (amount > ks.balance + 0.001) throw new Error("TOO_MUCH");
+    ks.balance = ksRound(ks.balance - amount);
+    ks.withdrawn = ksRound(ks.withdrawn + amount);
+    return {
+      kiwiSaver: ks, balance: ksRound((user.balance || 0) + amount),
+      _log: { type: "kiwisaver-out", to: username, amount, note: "KiwiSaver withdrawal (retired)" }
+    };
+  });
+}
+
+// Can this student put KiwiSaver towards buying a property right now?
+// { eligible, available, reason } — `reason` says why not, in plain words.
+function kiwiSaverFirstHomeInfo(cls, user, username) {
+  const s = kiwiSaverSettings(cls);
+  const ks = kiwiSaverOf(user);
+  const no = reason => ({ eligible: false, available: 0, reason });
+  if (!s.enabled || !ks || !(ks.balance > 0)) return no("");
+  const ownsHome = (cls.properties || []).some(p => p.owner === username);
+  if (s.retired) {
+    if (ownsHome) return no("");
+    return { eligible: true, available: ks.balance, reason: "" };
+  }
+  if (ks.firstHomeUsed) return no("You've already used your KiwiSaver for your first home.");
+  if (ownsHome) return no("KiwiSaver can only go towards your first home, and you already own a property.");
+  const weeksIn = Math.floor(daysBetweenKeys(ks.joinedKey, nzDateKey()) / 7);
+  if (weeksIn < s.firstHomeWeeks) {
+    return no(`You can use KiwiSaver for your first home once you've been in it for ${s.firstHomeWeeks} week${s.firstHomeWeeks === 1 ? "" : "s"} (you've been in for ${weeksIn}).`);
+  }
+  const available = ksRound(Math.max(0, ks.balance - s.firstHomeKeep));
+  if (!(available > 0)) return no(`${fmtMoney(s.firstHomeKeep)} has to stay in your KiwiSaver, so there's nothing to take out for a home yet.`);
+  return { eligible: true, available, reason: "" };
+}
+
+/* ---- Teacher ---- */
+async function saveKiwiSaverSettings(classCode, settings) {
+  const cls = await getClass(classCode);
+  if (!cls) return { ok: false, error: "Class not found." };
+  const cur = kiwiSaverSettings(cls);
+  const funds = {};
+  for (const k of KS_FUND_ORDER) {
+    const f = (settings.funds && settings.funds[k]) || cur.funds[k];
+    const avg = Number(f.avg), swing = Number(f.swing);
+    if (!Number.isFinite(avg) || avg < -50 || avg > 50) return { ok: false, error: `Enter an average for ${KS_FUNDS[k].name} between -50% and 50%.` };
+    if (!Number.isFinite(swing) || swing < 0 || swing > 50) return { ok: false, error: `Enter ups and downs for ${KS_FUNDS[k].name} between 0% and 50%.` };
+    funds[k] = { avg: Math.round(avg * 100) / 100, swing: Math.round(swing * 100) / 100 };
+  }
+  const weeks = settings.firstHomeWeeks === undefined ? cur.firstHomeWeeks : Number(settings.firstHomeWeeks);
+  const keep = settings.firstHomeKeep === undefined ? cur.firstHomeKeep : Number(settings.firstHomeKeep);
+  if (!Number.isFinite(weeks) || weeks < 0 || weeks > 520) return { ok: false, error: "Enter the number of weeks before a first-home withdrawal (0 or more)." };
+  if (!Number.isFinite(keep) || keep < 0) return { ok: false, error: "Enter how much has to stay in KiwiSaver (0 or more)." };
+  const next = {
+    enabled: settings.enabled === undefined ? cur.enabled : !!settings.enabled,
+    govt: settings.govt === undefined ? cur.govt : !!settings.govt,
+    funds, firstHomeWeeks: Math.floor(weeks), firstHomeKeep: ksRound(keep),
+    retired: cur.retired, retiredAt: cur.retiredAt
+  };
+  await classesCol().doc(classCode).update({ kiwiSaver: next });
+  return { ok: true };
+}
+
+// Significant financial hardship: the teacher releases some of a
+// student's KiwiSaver to them as cash. Like real life, the government's
+// contributions can't come out this way.
+function kiwiSaverHardshipMax(ks) {
+  return ks ? ksRound(Math.max(0, ks.balance - ks.govt)) : 0;
+}
+async function kiwiSaverHardshipRelease(classCode, username, amount, reason) {
+  amount = cleanAmount(amount);
+  if (!(amount > 0)) return { ok: false, error: KS_ERRORS.BAD_AMOUNT };
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const user = snap.data();
+      const cls = await getClass(classCode);
+      const existing = kiwiSaverOf(user);
+      if (!existing) throw new Error("NOT_MEMBER");
+      const ks = ksCatchUp(cls, existing);
+      if (amount > kiwiSaverHardshipMax(ks) + 0.001) throw new Error("TOO_MUCH");
+      ks.balance = ksRound(ks.balance - amount);
+      ks.withdrawn = ksRound(ks.withdrawn + amount);
+      t.update(userRef, { kiwiSaver: ks, balance: ksRound((user.balance || 0) + amount) });
+    });
+  } catch (e) {
+    if (e.message === "TOO_MUCH") return { ok: false, error: "That's more than can be released. The government's contributions have to stay in." };
+    return { ok: false, error: KS_ERRORS[e.message] || "Something went wrong. Please try again." };
+  }
+  const why = sanitizeUserText(reason || "", 120);
+  await logTxn(classCode, { type: "kiwisaver-out", to: username, amount, note: "KiwiSaver hardship withdrawal" + (why ? " — " + why : "") });
+  return { ok: true };
+}
+
+// "Retire the class": everyone reaches 65. Every job is taken away (kept
+// in user.retiredJob so Undo can give it back), nothing more goes into
+// KiwiSaver, and everyone can take out as much as they like.
+async function retireClass(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls) return { ok: false, error: "Class not found." };
+  const s = kiwiSaverSettings(cls);
+  const students = await getClassStudents(classCode, cls);
+  const failed = [];
+  await t29RunLimited(students, SWEEP_PARALLEL, async st => {
+    if (!st.jobId && !st.pendingPromotion) return;
+    try {
+      await usersCol().doc(st.username).update({
+        retiredJob: { jobId: st.jobId || null, jobTierId: st.jobTierId || null, jobTierSince: st.jobTierSince || null },
+        jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null
+      });
+    } catch (e) { failed.push(st.name || st.username); }
+  });
+  await classesCol().doc(classCode).update({ kiwiSaver: Object.assign({}, s, { retired: true, retiredAt: Date.now() }) });
+  return { ok: true, failed };
+}
+async function undoRetireClass(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls) return { ok: false, error: "Class not found." };
+  const s = kiwiSaverSettings(cls);
+  const students = await getClassStudents(classCode, cls);
+  const failed = [];
+  await t29RunLimited(students, SWEEP_PARALLEL, async st => {
+    if (!st.retiredJob) return;
+    const r = st.retiredJob;
+    const jobStillThere = r.jobId && (cls.jobs || []).some(j => j.id === r.jobId);
+    const update = { retiredJob: firebase.firestore.FieldValue.delete() };
+    // Only give the old job back if they haven't been given a new one since.
+    if (!st.jobId && jobStillThere) Object.assign(update, { jobId: r.jobId, jobTierId: r.jobTierId || null, jobTierSince: r.jobTierSince || null });
+    try { await usersCol().doc(st.username).update(update); } catch (e) { failed.push(st.name || st.username); }
+  });
+  await classesCol().doc(classCode).update({ kiwiSaver: Object.assign({}, s, { retired: false, retiredAt: null }) });
+  return { ok: true, failed };
 }
 
 // Plain-English description of when interest is next applied, for
@@ -365,7 +1092,7 @@ function computeInterestCredit(cls, student) {
 // skips the schedule/day check (used by the teacher's manual button);
 // it never skips the "already paid today" check — that one is not
 // optional, or a teacher clicking the button twice would double-pay.
-async function _creditStudentInterest(classCode, username, dateKey, { force = false, cls: precomputedCls } = {}) {
+async function _creditStudentInterest(classCode, username, dateKey, { force = false, cls: precomputedCls, logSink = null } = {}) {
   const userRef = usersCol().doc(username);
   let credited = null;
   try {
@@ -387,11 +1114,12 @@ async function _creditStudentInterest(classCode, username, dateKey, { force = fa
     return null;
   }
   if (!credited) return null;
+  const log = async entry => { if (logSink) logSink.push(entry); else await logTxn(classCode, entry); };
   if (credited.savingsNet > 0) {
-    await logTxn(classCode, { type: "interest", to: username, amount: credited.savingsNet, note: "Savings account interest" + (credited.savingsTaxAmount > 0 ? ` (${fmtMoney(credited.savingsTaxAmount)} tax withheld)` : "") });
+    await log({ type: "interest", to: username, amount: credited.savingsNet, note: "Savings account interest" + (credited.savingsTaxAmount > 0 ? ` (${fmtMoney(credited.savingsTaxAmount)} tax withheld)` : "") });
   }
   if (credited.cashNet > 0) {
-    await logTxn(classCode, { type: "cash-interest", to: username, amount: credited.cashNet, note: "Cash balance interest" + (credited.cashTaxAmount > 0 ? ` (${fmtMoney(credited.cashTaxAmount)} tax withheld)` : "") });
+    await log({ type: "cash-interest", to: username, amount: credited.cashNet, note: "Cash balance interest" + (credited.cashTaxAmount > 0 ? ` (${fmtMoney(credited.cashTaxAmount)} tax withheld)` : "") });
   }
   return credited;
 }
@@ -409,10 +1137,12 @@ async function applyInterest(classCode) {
   const todayKey = nzDateKey();
   const students = await getClassStudents(classCode, cls);
   let count = 0;
-  for (const student of students) {
-    const credited = await _creditStudentInterest(classCode, student.username, todayKey, { force: true, cls });
+  const sink = [];
+  await t29RunLimited(students, SWEEP_PARALLEL, async student => {
+    const credited = await _creditStudentInterest(classCode, student.username, todayKey, { force: true, cls, logSink: sink });
     if (credited) count++;
-  }
+  });
+  await _flushTxnSink(classCode, sink);
   return count;
 }
 
@@ -1673,16 +2403,20 @@ async function applyInterestToClassIfDue(classCode) {
   const todayKey = nzDateKey();
   const students = await getClassStudents(classCode, cls);
   let count = 0;
-  for (const student of students) {
-    // Cheap in-memory skip before opening a transaction, same reasoning
-    // as applyMyInterestIfDue above — students who already got paid
-    // today (whether by their own visit or an earlier pass of this same
-    // loop) are the common case, and this check is free.
-    if (!isInterestDueForUser(cls, student, todayKey)) continue;
-    if (!_interestMightBePayable(cls, student)) continue; // e.g. nothing in savings — nothing to pay
-    const credited = await _creditStudentInterest(classCode, student.username, todayKey, { cls });
+  // Cheap in-memory skip before opening a transaction, same reasoning
+  // as applyMyInterestIfDue above — students who already got paid
+  // today (whether by their own visit or an earlier pass of this same
+  // loop) are the common case, and this check is free. The rest are paid
+  // several at a time, like pay day (see t29RunLimited).
+  const due = students.filter(student =>
+    isInterestDueForUser(cls, student, todayKey)
+    && _interestMightBePayable(cls, student)); // e.g. nothing in savings — nothing to pay
+  const sink = [];
+  await t29RunLimited(due, SWEEP_PARALLEL, async student => {
+    const credited = await _creditStudentInterest(classCode, student.username, todayKey, { cls, logSink: sink });
     if (credited) count++;
-  }
+  });
+  await _flushTxnSink(classCode, sink);
   return count;
 }
 
@@ -1742,10 +2476,14 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
     // breakdown shown on the leaderboard/report — it's folded silently
     // into `net` via gamblingBalance below.
     const gamblingBalance = gamblingAccountToday(s).balance;
+    // KiwiSaver is locked away, but it's still the student's money — real
+    // net worth counts retirement savings too.
+    const ks = kiwiSaverOf(s);
+    const kiwiSaver = ks ? ks.balance : 0;
     return {
       username: s.username, name: s.name,
-      balance: s.balance, invested, storeValue, propertyValue, vehicleValue, savings, owed, termDeposits,
-      net: Math.round((s.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits + gamblingBalance - owed) * 100) / 100
+      balance: s.balance, invested, storeValue, propertyValue, vehicleValue, savings, owed, termDeposits, kiwiSaver,
+      net: Math.round((s.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits + kiwiSaver + gamblingBalance - owed) * 100) / 100
     };
   });
   // Loan/mortgage debt ("owed") is shown for every student on the
@@ -2073,7 +2811,8 @@ const REPORT_INCOME_TYPES = {
   welcome: "Welcome bonus"
 };
 const REPORT_SAVED_TYPES = {
-  "savings-deposit": "Savings account", "stock-buy": "Stocks", "term-deposit-open": "Term deposits"
+  "savings-deposit": "Savings account", "stock-buy": "Stocks", "term-deposit-open": "Term deposits",
+  "kiwisaver-in": "KiwiSaver"
 };
 const REPORT_SPENT_TYPES = {
   "store-buy": "Store purchases", "p2p-buy": "Bought from classmates",
@@ -2212,14 +2951,16 @@ function buildStudentReportData(student, cls) {
   // Gambling account balance counts toward net worth (same as
   // classLeaderboard()) but isn't broken out as its own field below.
   const gamblingBalance = gamblingAccountToday(student).balance;
-  const netWorth = Math.round((student.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits + gamblingBalance - owed) * 100) / 100;
+  const ksNow = kiwiSaverOf(student);
+  const kiwiSaver = ksNow ? ksNow.balance : 0;
+  const netWorth = Math.round((student.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits + kiwiSaver + gamblingBalance - owed) * 100) / 100;
 
   return {
     username, name: student.name,
     netWorth, balance: Math.round(student.balance * 100) / 100, savings: Math.round(savings * 100) / 100,
     invested: Math.round(invested * 100) / 100, storeValue: Math.round(storeValue * 100) / 100,
     propertyValue: Math.round(propertyValue * 100) / 100, vehicleValue: Math.round(vehicleValue * 100) / 100,
-    termDeposits: Math.round(termDeposits * 100) / 100, owed,
+    termDeposits: Math.round(termDeposits * 100) / 100, kiwiSaver, owed,
     incomeTotal: Math.round(incomeTotal * 100) / 100,
     savedTotal: Math.round(savedTotal * 100) / 100,
     spentTotal: Math.round(spentTotal * 100) / 100,
@@ -2559,7 +3300,9 @@ function budgetWeekItems(cls, user, username) {
         note: status === "done" ? "Paid"
           : status === "missed" ? "Not paid this week — your job task wasn't approved by pay day"
           : (approved ? "Pay day" : "Pay day — only once your teacher approves this week's job task")
-            + (credit.taxAmount > 0 ? ` (${fmtMoney(credit.taxAmount)} tax already taken off)` : "")
+            + ((credit.taxAmount > 0 || (credit.kiwi && credit.kiwi.you > 0))
+              ? ` (${[credit.taxAmount > 0 ? `${fmtMoney(credit.taxAmount)} tax` : "", credit.kiwi && credit.kiwi.you > 0 ? `${fmtMoney(credit.kiwi.you)} KiwiSaver` : ""].filter(Boolean).join(" and ")} already taken off)`
+              : "")
       });
     }
   }
@@ -2988,6 +3731,43 @@ function txnBelongsTo(t, username) {
   return t.to === username || t.from === username;
 }
 
+/* ---------------- Which way a transaction moved money ----------------
+   One answer for every page that lists transactions (My account, Bank,
+   the teacher's activity log), so money coming in is always shown green
+   with a "+", money going out red with a "−", and anything that only
+   moved a student's own money around without a cash change (or a $0
+   note) is left plain. Returns { sign: "+" | "-" | "", amount } from
+   `username`'s point of view, with amount always positive. */
+const TXN_MONEY_IN = new Set([
+  "stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell",
+  "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "truck-drive", "property-rent",
+  "property-rent-receive", "quiz-reward", "p2p-sell", "gambling-cashout", "life-allowance", "savings-withdraw", "loan-taken",
+  "kiwisaver-out", "kiwisaver-refund"
+]);
+const TXN_MONEY_OUT = new Set([
+  "fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "property-rent-pay", "vehicle-buy", "transport-expense",
+  "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "loan-interest",
+  "p2p-buy", "truck-licence-buy", "gambling-buyin", "stock-buy", "kiwisaver-in"
+]);
+function txnDirection(t, username) {
+  const raw = Number(t.amount) || 0;
+  let amount = Math.abs(raw);
+  let sign = "";
+  if (t.type === "transfer" || t.type === "automation") sign = t.from === username ? "-" : t.to === username ? "+" : "";
+  else if (t.type === "event" || t.type === "life-grant") sign = raw < 0 ? "-" : raw > 0 ? "+" : "";
+  else if (t.type === "gambling") sign = (t.note || "").includes("WON") ? "+" : "-";
+  else if (t.type === "big-event") sign = t.to === username ? "+" : t.from === username ? "-" : "";
+  // Only the "moved in and paid a moving cost" entries carry an amount.
+  else if (t.type === "property-occupancy") sign = raw > 0 ? (t.from === username ? "-" : "+") : "";
+  else if (TXN_MONEY_IN.has(t.type)) sign = raw < 0 ? "-" : "+"; // a sale can go negative when the mortgage left was more than the house fetched
+  else if (TXN_MONEY_OUT.has(t.type)) sign = "-";
+  if (!amount) sign = "";
+  return { sign, amount };
+}
+// CSS class for a sign from txnDirection (see "Money colours" in style.css).
+function moneyClass(sign) { return sign === "+" ? "money-in" : sign === "-" ? "money-out" : ""; }
+function fmtSignedMoney(sign, amount) { return (sign === "-" ? "−" : sign) + fmtMoney(amount); }
+
 /* ===================== Savings goals =====================
    A student can set up to MAX_SAVINGS_GOALS things they're saving for
    ("New bike — $120"). Goals live on the student's own doc as
@@ -3109,7 +3889,7 @@ function _buildParentView(student, cls, teacherName) {
     monthLabel,
     job: job ? (tier ? tier.name : job.title) : null,
     netWorth: r.netWorth, balance: r.balance, savings: r.savings,
-    termDeposits: r.termDeposits, invested: r.invested,
+    termDeposits: r.termDeposits, kiwiSaver: r.kiwiSaver || 0, invested: r.invested,
     propertyValue: r.propertyValue, vehicleValue: r.vehicleValue, storeValue: r.storeValue,
     owed: r.owed,
     incomeTotal: r.incomeTotal, savedTotal: r.savedTotal, spentTotal: r.spentTotal,

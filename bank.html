@@ -28,7 +28,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=87728638">
+<link rel="stylesheet" href="style.css?v=bf6182a4">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -49,6 +49,7 @@
     <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
     <a href="bank.html" data-module="bank" class="active"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
     <a href="termdeposit.html" data-module="termdeposit"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
+    <a href="kiwisaver.html" data-module="kiwisaver"><span class="icon-slot" data-icon="sprout"></span><span class="nav-label">KiwiSaver</span></a>
     <a href="loan.html" data-module="loan"><span class="icon-slot" data-icon="handshake"></span><span class="nav-label">Loans</span></a>
     <a href="market.html" data-module="market"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
     <a href="store.html" data-module="store"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
@@ -220,7 +221,7 @@
     <p class="bud-intro">Each student's week, worked out from their job, bills and spending: what's coming in, what their bills come to, and how they're doing against the savings plan they chose.</p>
     <div class="grid grid-3" id="budTeacherStats"></div>
     <div class="table-scroll">
-      <table class="bud-teacher-table">
+      <table class="bud-teacher-table stack-table">
         <thead><tr><th>Student</th><th>Coming in</th><th>Bills</th><th>Left after bills</th><th>Plans to save</th><th>Saved so far</th><th>Spent</th><th>How it's going</th></tr></thead>
         <tbody id="budTeacherTable"></tbody>
       </table>
@@ -285,7 +286,7 @@
   <div class="card">
     <h2 id="hAutoList">My automatic payments</h2>
     <div id="autoList"></div>
-    <p class="muted-small" id="noAuto">You don't have any automatic payments set up yet.</p>
+    <div class="empty-state" id="noAuto"><p>You don't have any automatic payments yet. They pay a bill or move money into savings for you, on the same day each week.</p><button type="button" class="btn small secondary" onclick="t29Jump('hNewAuto')">Set one up</button></div>
   </div>
 
   <!-- ---------------- Savings goals (student) — filled in by savings-goals.js ---------------- -->
@@ -294,7 +295,7 @@
   <div class="card">
     <h2 id="hActivity">My recent activity</h2>
     <div class="table-scroll">
-    <table>
+    <table class="txn-table">
       <thead><tr><th>When</th><th>Type</th><th>Details</th><th>Amount</th></tr></thead>
       <tbody id="txnTable"></tbody>
     </table>
@@ -313,17 +314,17 @@
 </footer>
 
 <script type="module" src="firebase-init.js?v=9f8488c9"></script>
-<script defer src="icons.js?v=ece0bfd2"></script>
+<script defer src="icons.js?v=43726d63"></script>
 <script defer src="settings-menu.js?v=fde34c7c"></script>
-<script defer src="data-core.js?v=dcc34282"></script>
-<script defer src="data-money.js?v=efadbb37"></script>
-<script defer src="data-life.js?v=8e12078e"></script>
-<script defer src="data-property.js?v=6abfe689"></script>
+<script defer src="data-core.js?v=86f18e5d"></script>
+<script defer src="data-money.js?v=56ab176c"></script>
+<script defer src="data-life.js?v=139dfd1e"></script>
+<script defer src="data-property.js?v=7508dcf0"></script>
 <script defer src="data-markets.js?v=fffa8d75"></script>
 <script defer src="events-ui.js?v=6708879f"></script>
 <script defer src="quiz-gate.js?v=f23c49f4"></script>
-<script defer src="notifications.js?v=ada89b07"></script>
+<script defer src="notifications.js?v=68dcf064"></script>
 <script defer src="savings-goals.js?v=ed3340bf"></script>
-<script defer src="bank.js?v=7f8e8c16"></script>
+<script defer src="bank.js?v=8cc4cf39"></script>
 </body>
 </html>

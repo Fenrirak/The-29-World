@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function(){
+  try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}
+  window.T29_HAS_SIDEBAR = true;
+  function loadIfOn(flagKey, cls, css, js){
+    var flag = null;
+    try { flag = localStorage.getItem(flagKey); } catch(e) {}
+    // Phones and small tablets get the slide-out menu unless it was switched off in Settings.
+    var on = flag === '1' || (flag === null && !!window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+    if (!on) return;
+    document.documentElement.classList.add(cls);
+    var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = css;
+    document.head.appendChild(l);
+    var s = document.createElement('script'); s.src = js;
+    document.head.appendChild(s);
+  }
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=173c63c1', 'sidebar-nav.js?v=8d951bc5');
+})();
+</script>
+<title>KiwiSaver — The 29 World</title>
+<link rel="icon" type="image/png" href="Favicon.png">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#1f2b44">
+<link rel="stylesheet" href="style.css?v=bf6182a4">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
+<link rel="modulepreload" href="firebase-init.js?v=9f8488c9">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="kiwisaver.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
+    <a href="bank.html" data-module="bank"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="termdeposit.html" data-module="termdeposit"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
+    <a href="kiwisaver.html" data-module="kiwisaver" class="active"><span class="icon-slot" data-icon="sprout"></span><span class="nav-label">KiwiSaver</span></a>
+    <a href="loan.html" data-module="loan"><span class="icon-slot" data-icon="handshake"></span><span class="nav-label">Loans</span></a>
+    <a href="market.html" data-module="market"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="store.html" data-module="store"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
+    <a href="marketplace.html" data-module="marketplace"><span class="icon-slot" data-icon="users"></span><span class="nav-label">Trade Centre</span></a>
+    <a href="jobs.html" data-module="jobs"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <a href="transport.html" data-module="transport"><span class="icon-slot" data-icon="car"></span><span class="nav-label">Transport</span></a>
+    <a href="property.html" data-module="property"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
+    <a href="insurance.html" data-module="insurance"><span class="icon-slot" data-icon="shield"></span><span class="nav-label">Insurance</span></a>
+    <a href="tax.html" data-module="tax"><span class="icon-slot" data-icon="percent"></span><span class="nav-label">Tax</span></a>
+    <a href="bigevents.html" data-module="bigevents"><span class="icon-slot" data-icon="star"></span><span class="nav-label">Big Events</span></a>
+    <a href="life.html" data-module="life"><span class="icon-slot" data-icon="trophy"></span><span class="nav-label">Life</span></a>
+    <a href="gambling.html" data-module="gambling"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
+    <a href="quizzes.html"><span class="icon-slot" data-icon="key"></span><span class="nav-label">Quizzes</span></a>
+    <a href="reports.html"><span class="icon-slot" data-icon="idcard"></span><span class="nav-label">Reports</span></a>
+    <span class="who" id="whoami"></span>
+    <div class="topbar-actions">
+      <button class="btn-icon-topbar" id="settingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Settings" title="Settings"><span class="icon-slot" data-icon="settings"></span></button>
+      <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+    </div>
+  </nav>
+</div>
+
+<main>
+  <h1 id="pageTitle">KiwiSaver</h1>
+  <p class="ks-lead">Saving for when you retire. Every pay day, money goes in from you, your employer and the government, and it's invested so it can grow.</p>
+
+  <!-- ══════════════════════════ STUDENT VIEW ══════════════════════════ -->
+  <div id="studentView" class="hidden">
+    <!-- Not in KiwiSaver yet / switched off / opted out -->
+    <div class="card hidden" id="ksJoinCard"></div>
+
+    <!-- Retired: the money is unlocked -->
+    <div class="card ks-retired-card hidden" id="ksRetiredCard"></div>
+
+    <!-- Member: the balance and where it came from -->
+    <div class="card hidden" id="ksBalanceCard">
+      <div class="ks-hero">
+        <div class="ks-hero-main">
+          <div class="ks-hero-label">My KiwiSaver</div>
+          <div class="ks-hero-value" id="ksBalance">$0.00</div>
+          <div class="ks-hero-sub" id="ksHeroSub"></div>
+        </div>
+        <div class="ks-hero-status" id="ksStatusPill"></div>
+      </div>
+      <div class="ks-mix" id="ksMix"></div>
+      <div class="ks-tiles" id="ksTiles"></div>
+    </div>
+
+    <!-- What each pay day puts in -->
+    <div class="card hidden" id="ksPayCard">
+      <h2 id="hPay">Every pay day</h2>
+      <div id="ksPayBody"></div>
+    </div>
+
+    <!-- Growth chart + fund results -->
+    <div class="card hidden" id="ksGrowthCard">
+      <h2 id="hGrowth">How it's grown</h2>
+      <div id="ksChart"></div>
+      <h3 class="ks-sub-h">Fund results, week by week</h3>
+      <p class="muted-small ks-tight">Everyone in the same fund gets the same result each week. Yours is highlighted.</p>
+      <div class="table-scroll"><table class="ks-fund-table stack-table" id="ksFundTable"></table></div>
+    </div>
+
+    <!-- Choices -->
+    <div class="card hidden" id="ksChoicesCard">
+      <h2 id="hChoices">My choices</h2>
+      <div class="ks-choice-block">
+        <div class="ks-choice-label">How much of my pay goes in</div>
+        <div class="ks-seg" id="ksRateSeg" role="radiogroup" aria-label="Contribution rate"></div>
+        <p class="muted-small ks-tight" id="ksRateNote"></p>
+      </div>
+      <div class="ks-choice-block">
+        <div class="ks-choice-label">Which fund my money is invested in</div>
+        <div class="ks-funds" id="ksFundPick" role="radiogroup" aria-label="Fund"></div>
+      </div>
+      <div class="ks-choice-block" id="ksPauseBlock"></div>
+      <div class="ks-choice-block" id="ksExtraBlock">
+        <div class="ks-choice-label">Put in extra money</div>
+        <p class="muted-small ks-tight" id="ksExtraNote"></p>
+        <form class="ks-inline-form" onsubmit="return ksContribute(event)">
+          <div class="ks-money-field"><span class="ks-currency">$</span><input id="ksExtraAmt" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" aria-label="Extra amount"></div>
+          <button class="btn gold" type="submit" id="ksExtraBtn">Put it in</button>
+        </form>
+      </div>
+      <div id="ksChoiceMsg" aria-live="polite"></div>
+      <div class="ks-choice-block hidden" id="ksOptOutBlock"></div>
+    </div>
+
+    <!-- First home -->
+    <div class="card hidden" id="ksHomeCard">
+      <h2 id="hHome">Buying my first home</h2>
+      <div id="ksHomeBody"></div>
+    </div>
+
+    <!-- The real rules -->
+    <div class="card" id="ksRulesCard">
+      <details class="ks-rules">
+        <summary><span id="hRules">How KiwiSaver works in real life</span></summary>
+        <div class="ks-rules-body">
+          <p>KiwiSaver is New Zealand's savings scheme for retirement. These are the real rules from 1 April 2026, and this game follows them.</p>
+          <ul>
+            <li><strong>Joining.</strong> Starting a new job signs you up automatically. You can opt out between your 2nd and 8th week, and you get back what you put in. After that you stay a member, but you can take a break, called a "savings suspension".</li>
+            <li><strong>You.</strong> 3.5% of your pay before tax goes in every pay day, unless you choose 4%, 6%, 8% or 10%. If 3.5% is too much, you can ask to drop to 3% for a while.</li>
+            <li><strong>Your employer.</strong> They add 3.5% of your pay on top, or 3% if you're on 3%. That money is taxed first. This is called ESCT (Employer Superannuation Contribution Tax), and the rate depends on how much you earn in a year: 10.5% up to $18,720, 17.5% up to $64,200, 30% up to $93,720, 33% up to $216,000, and 39% above that.</li>
+            <li><strong>The government.</strong> They add 25 cents for every $1 you put in, up to $260.72 a year (1 July to 30 June). To get the full amount, you need to put in $1,042.86 in a year. If you earn over $180,000, you get nothing. In real life it's paid once a year. In this game it's added every pay day.</li>
+            <li><strong>Funds.</strong> Your money is invested. Conservative funds are steady, and growth funds go up more over time but drop more often. New members start in a Balanced fund. Funds also charge small fees, which this game leaves out.</li>
+            <li><strong>Getting it out.</strong> The money is locked until you're 65. You can get it out early to buy your first home (after 3 years, leaving $1,000 in), in significant financial hardship (not the government's money), if you're seriously ill, or if you move overseas for good (not to Australia).</li>
+          </ul>
+          <p class="muted-small">Sources: Inland Revenue (ird.govt.nz/kiwisaver) and the KiwiSaver changes from Budget 2025.</p>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════ TEACHER VIEW ══════════════════════════ -->
+  <div id="teacherView" class="hidden">
+    <div class="card">
+      <h2 id="hSettings">KiwiSaver settings</h2>
+      <form onsubmit="return ksSaveSettings(event)">
+        <label class="ks-switch-row" for="ksOn">
+          <input type="checkbox" id="ksOn">
+          <span><strong>Switch KiwiSaver on for this class</strong><br><span class="muted-small">Everyone with a job is signed up on their next pay day at 3.5%, in the Balanced fund. They can change that, pause it, or opt out in their first 8 weeks.</span></span>
+        </label>
+        <label class="ks-switch-row" for="ksGovt">
+          <input type="checkbox" id="ksGovt">
+          <span><strong>Government contribution</strong><br><span class="muted-small">25c for every $1 a student puts in, up to $260.72 a year, the same as real life.</span></span>
+        </label>
+
+        <h3 class="ks-sub-h">Fund returns, per week</h3>
+        <p class="muted-small ks-tight">Each week a fund lands somewhere between its average minus the ups and downs, and its average plus them. This game runs faster than real life, so these are weekly numbers. Class savings interest is <span id="ksSavingsRate">2%</span> a week.</p>
+        <div class="table-scroll">
+          <table class="ks-set-table stack-table">
+            <thead><tr><th>Fund</th><th>Average a week (%)</th><th>Ups and downs (±%)</th><th>Range</th></tr></thead>
+            <tbody id="ksFundRows"></tbody>
+          </table>
+        </div>
+
+        <h3 class="ks-sub-h">First-home withdrawals</h3>
+        <div class="grid grid-2">
+          <div>
+            <label for="ksHomeWeeks">Weeks in KiwiSaver before it can be used</label>
+            <input id="ksHomeWeeks" type="number" min="0" step="1">
+            <p class="muted-small ks-tight">Real life: 3 years.</p>
+          </div>
+          <div>
+            <label for="ksHomeKeep">Amount that has to stay in ($)</label>
+            <input id="ksHomeKeep" type="number" min="0" step="0.01">
+            <p class="muted-small ks-tight">Real life: $1,000.</p>
+          </div>
+        </div>
+        <button class="btn gold" type="submit" id="ksSaveBtn">Save settings</button>
+        <div id="ksSaveMsg" aria-live="polite"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2 id="hClass">Class KiwiSaver</h2>
+      <div class="ks-class-sum" id="ksClassSum"></div>
+      <div class="table-scroll">
+        <table class="ks-class-table stack-table">
+          <thead><tr><th>Student</th><th>Status</th><th>Rate</th><th>Fund</th><th>Balance</th><th>Put in by them</th><th>Employer</th><th>Government</th><th>Growth</th><th></th></tr></thead>
+          <tbody id="ksClassRows"></tbody>
+        </table>
+      </div>
+      <p class="muted-small" id="ksClassEmpty"></p>
+    </div>
+
+    <div class="card" id="ksRetireCard">
+      <h2 id="hRetire">Retirement</h2>
+      <div id="ksRetireBody"></div>
+      <div id="ksRetireMsg" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- Hardship release (teacher) -->
+  <div class="anw-modal-overlay hidden" id="ksHardshipModal" role="dialog" aria-modal="true" aria-labelledby="ksHardshipTitle">
+    <div class="anw-modal-card ks-modal">
+      <h3 id="ksHardshipTitle">Hardship withdrawal</h3>
+      <p class="muted-small" id="ksHardshipInfo"></p>
+      <label for="ksHardshipAmt">Amount ($)</label>
+      <input id="ksHardshipAmt" type="number" min="0.01" step="0.01">
+      <label for="ksHardshipWhy">Reason (the student sees this)</label>
+      <input id="ksHardshipWhy" maxlength="120" placeholder="e.g. Can't afford food this week">
+      <div id="ksHardshipMsg" aria-live="polite"></div>
+      <div class="ks-modal-actions">
+        <button class="btn secondary" type="button" onclick="ksCloseHardship()">Cancel</button>
+        <button class="btn gold" type="button" id="ksHardshipBtn" onclick="ksDoHardship()">Release money</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-brand">The 29 World</div>
+  <nav class="site-footer-links" aria-label="Footer">
+    <a href="mailto:Nathan.liu1211@gmail.com">Contact</a>
+    <a href="privacy.html">Privacy Policy</a>
+  </nav>
+  <div class="site-footer-copy">© 2026 The 29 World. All rights reserved.</div>
+</footer>
+
+<script type="module" src="firebase-init.js?v=9f8488c9"></script>
+<script defer src="icons.js?v=43726d63"></script>
+<script defer src="settings-menu.js?v=fde34c7c"></script>
+<script defer src="data-core.js?v=86f18e5d"></script>
+<script defer src="data-money.js?v=56ab176c"></script>
+<script defer src="data-life.js?v=139dfd1e"></script>
+<script defer src="data-property.js?v=7508dcf0"></script>
+<script defer src="data-markets.js?v=fffa8d75"></script>
+<script defer src="events-ui.js?v=6708879f"></script>
+<script defer src="quiz-gate.js?v=f23c49f4"></script>
+<script defer src="notifications.js?v=68dcf064"></script>
+<script defer src="kiwisaver.js?v=0e8de3e5"></script>
+</body>
+</html>

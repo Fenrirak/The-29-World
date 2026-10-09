@@ -261,7 +261,7 @@ function renderBars(map, colorClass) {
 
 function renderLoanHistory(loans) {
   if (!loans || !loans.length) return `<p class="muted-small">No loans taken.</p>`;
-  return `<div class="table-scroll"><table><thead><tr><th>Taken</th><th>Amount</th><th>Rate</th><th>Term</th><th>Due</th><th>Status</th></tr></thead><tbody>
+  return `<div class="table-scroll"><table class="stack-table"><thead><tr><th>Taken</th><th>Amount</th><th>Rate</th><th>Term</th><th>Due</th><th>Status</th></tr></thead><tbody>
     ${loans.map(l => `<tr>
       <td>${l.takenDate || "—"}</td><td>${fmtMoney(l.principal)}</td><td>${l.rate}%/wk</td><td>${l.termWeeks} wk</td><td>${l.dueDate || "—"}</td>
       <td>${l.status === "active"
@@ -285,6 +285,7 @@ function studentReportHTML(s) {
       <tr><td>Cash balance</td><td>${fmtMoney(s.balance)}</td></tr>
       <tr><td>Savings account</td><td>${fmtMoney(s.savings)}</td></tr>
       <tr><td>Term deposits</td><td>${fmtMoney(s.termDeposits)}</td></tr>
+      ${s.kiwiSaver ? `<tr><td>KiwiSaver</td><td>${fmtMoney(s.kiwiSaver)}</td></tr>` : ""}
       <tr><td>Stock portfolio</td><td>${fmtMoney(s.invested)}</td></tr>
       <tr><td>Property</td><td>${fmtMoney(s.propertyValue)}</td></tr>
       <tr><td>Vehicles</td><td>${fmtMoney(s.vehicleValue)}</td></tr>
@@ -494,11 +495,11 @@ async function downloadReportPDF() {
 }
 
 function reportToRows(report) {
-  const rows = [["Name", "Username", "Net worth", "Cash", "Savings", "Term deposits", "Invested", "Property", "Vehicles", "Store items",
+  const rows = [["Name", "Username", "Net worth", "Cash", "Savings", "Term deposits", "KiwiSaver", "Invested", "Property", "Vehicles", "Store items",
     "Owed", "Income (this month)", "Saved/invested (this month)", "Spent (this month)", "Borrowed (this month)", "Savings rate %", "Top expense category", "Top expense amount",
     "Income (all-time)", "Saved/invested (all-time)", "Spent (all-time)", "Borrowed (all-time)"]];
   (report.students || []).forEach(s => rows.push([
-    s.name, s.username, s.netWorth, s.balance, s.savings, s.termDeposits, s.invested, s.propertyValue, s.vehicleValue, s.storeValue,
+    s.name, s.username, s.netWorth, s.balance, s.savings, s.termDeposits, s.kiwiSaver || 0, s.invested, s.propertyValue, s.vehicleValue, s.storeValue,
     s.owed, s.incomeTotal, s.savedTotal, s.spentTotal, s.borrowedTotal, s.savingsRate === null ? "" : s.savingsRate,
     s.topExpenseCategory ? s.topExpenseCategory.category : "", s.topExpenseCategory ? s.topExpenseCategory.amount : "",
     s.lifetimeIncomeTotal, s.lifetimeSavedTotal, s.lifetimeSpentTotal, s.lifetimeBorrowedTotal

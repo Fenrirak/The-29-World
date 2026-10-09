@@ -315,6 +315,7 @@ function pdfStudentReport(doc, s, report, history) {
   doc.row("Cash balance", fmtMoney(s.balance), { rule: true });
   doc.row("Savings account", fmtMoney(s.savings), { rule: true });
   doc.row("Term deposits", fmtMoney(s.termDeposits), { rule: true });
+  if (s.kiwiSaver) doc.row("KiwiSaver", fmtMoney(s.kiwiSaver), { rule: true });
   doc.row("Stock portfolio", fmtMoney(s.invested), { rule: true });
   doc.row("Property", fmtMoney(s.propertyValue), { rule: true });
   doc.row("Vehicles", fmtMoney(s.vehicleValue), { rule: true });

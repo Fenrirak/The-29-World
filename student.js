@@ -43,7 +43,9 @@ function badgeType(type) {
     "loan-interest": ["coral", "handshake", "Loan interest"],
     "gambling-buyin": ["gold", "dice", "Gambling buy-in"], "gambling-cashout": ["mint", "dice", "Gambling cash-out"],
     "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
-    "life-allowance": ["mint", "trophy", "Life allowance"]
+    "life-allowance": ["mint", "trophy", "Life allowance"],
+    "kiwisaver-in": ["navy", "sprout", "KiwiSaver"], "kiwisaver-out": ["mint", "sprout", "KiwiSaver withdrawal"],
+    "kiwisaver-refund": ["gold", "sprout", "KiwiSaver refund"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -110,6 +112,7 @@ async function init() {
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
     safeBgJob(applyMyInterestIfDue(u.username), "applyMyInterestIfDue"),
+    safeBgJob(applyMyKiwiSaverReturnsIfDue(u.username), "applyMyKiwiSaverReturnsIfDue"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents"),
@@ -165,6 +168,7 @@ async function render() {
     : "No job assigned";
 
   renderGoals(me);
+  try { renderTodo(Object.assign({ username: CURRENT.username }, me), cls); } catch (e) { console.warn("To-do list failed:", e); }
 
   const lockReasons = await getModuleLockReasons(me.username, me.classCode);
   const lockedModules = Object.keys(lockReasons);
@@ -204,7 +208,7 @@ async function render() {
       <span class="student-avatar ${avatarClass(row.username)}">${initials(row.name)}</span>
       <div style="flex:1;">
         <div class="leaderboard-name">${escapeHtml(row.name)}${row.username === me.username ? " (you)" : ""}</div>
-        <div class="leaderboard-sub">${fmtMoney(row.balance)} cash + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.savings ? ` + ${fmtMoney(row.savings)} savings` : ""}${row.owed ? ` - ${fmtMoney(row.owed)} owed` : ""}</div>
+        <div class="leaderboard-sub">${fmtMoney(row.balance)} cash + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.savings ? ` + ${fmtMoney(row.savings)} savings` : ""}${row.kiwiSaver ? ` + ${fmtMoney(row.kiwiSaver)} KiwiSaver` : ""}${row.owed ? ` - ${fmtMoney(row.owed)} owed` : ""}</div>
       </div>
       <div class="leaderboard-net">${fmtMoney(row.net)}</div>
     `;
@@ -289,37 +293,18 @@ async function render() {
   const nameOf = u => nameCache[u] || u;
   my.forEach(t => {
     let detail = t.note || "";
-    let amt = t.amount;
-    let sign = "";
     if (t.type === "transfer" || t.type === "automation") {
-      if (t.from === me.username) { detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "-"; }
-      else { detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : "")); sign = "+"; }
-    } else if (t.type === "stock-buy") { sign = "-"; }
-    else if (["stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell", "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "store-gift", "quiz-reward", "p2p-sell", "property-rent", "property-rent-receive", "truck-drive", "gambling-cashout"].includes(t.type)) { sign = "+"; }
-    else if (["fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "property-rent-pay", "vehicle-buy", "transport-expense", "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "p2p-buy", "loan-interest", "truck-licence-buy", "gambling-buyin"].includes(t.type)) { sign = "-"; }
-    else if (["savings-withdraw", "loan-taken"].includes(t.type)) { sign = "+"; }
-    else if (t.type === "event") { sign = amt < 0 ? "-" : "+"; amt = Math.abs(amt); }
-    else if (t.type === "gambling") { sign = t.note.includes("WON") ? "+" : "-"; }
-    // BUGFIX: see the matching note in bank.js — a big event logs a
-    // windfall as `to: student` and a cost as `from: student`, both with
-    // a positive amount, so the old `amt > 0 ? "-" : ""` showed every
-    // windfall as a deduction. Direction comes from to/from.
-    else if (t.type === "big-event") { sign = t.to === me.username ? "+" : (t.from === me.username ? "-" : ""); amt = Math.abs(amt); }
-    else if (t.type === "life-grant") { sign = amt < 0 ? "-" : (amt > 0 ? "+" : ""); amt = Math.abs(amt); }
-    else if (t.type === "life-allowance") { sign = "+"; }
-    else if (t.type === "life-revoke") { sign = ""; }
-    // Only the "moved in and paid a moving cost" entries of this type ever
-    // carry a nonzero amount (see chargeMoveOrThrow) — the rest (renting a
-    // property out, moving out, ending a lease) are just status notes with
-    // nothing to sign.
-    else if (t.type === "property-occupancy") { sign = amt > 0 ? (t.from === me.username ? "-" : "+") : ""; }
-    // A sale (or an insurance write-off) can go negative when the mortgage
-    // left to pay off is more than the house fetched — that's money out.
-    if (sign === "+" && amt < 0) { sign = "-"; amt = Math.abs(amt); }
+      if (t.from === me.username) detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : ""));
+      else detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : ""));
+    }
+    // Which way the money went — one shared answer for every page (see
+    // txnDirection in data-money.js): green "+" in, red "−" out, plain when
+    // it only moved between the student's own pockets.
+    const { sign, amount: amt } = txnDirection(t, me.username);
 
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${escapeHtml(detail)}</td>
-      <td class="${sign === '-' ? 'ticker-down' : 'ticker-up'}">${sign}${fmtMoney(amt)}</td>`;
+      <td class="${moneyClass(sign)}">${fmtSignedMoney(sign, amt)}</td>`;
     tbody.appendChild(tr);
 
     if (BANK_PREVIEW_TYPES.has(t.type) && bankPreview.length < 3) bankPreview.push({ type: t.type, detail, sign, amt, date: t.date });
@@ -336,10 +321,83 @@ async function render() {
         ${badgeType(t.type)}
         <div class="muted-small" style="margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.detail)} · ${t.date}</div>
       </div>
-      <div class="${t.sign === '-' ? 'ticker-down' : 'ticker-up'}" style="white-space:nowrap;">${t.sign}${fmtMoney(t.amt)}</div>
+      <div class="${moneyClass(t.sign)}" style="white-space:nowrap;">${fmtSignedMoney(t.sign, t.amt)}</div>
     `;
     bpBox.appendChild(row);
   });
+}
+
+/* ---------------- To do today ----------------
+   Everything that needs the student to DO something, in one list at the
+   top of their account. Most of it comes straight from the notification
+   bell's own builders (notifications.js — loans, mortgage, rent,
+   transport, big events, promotion offers, side hustle check-in, quizzes,
+   offers on their listings), so the box and the bell always agree. Added
+   here: a money-for-bills warning from the budget, a weekly event waiting
+   for a choice, KiwiSaver once it's unlocked, and finding a job. */
+const TODO_CTA = {
+  "loan.html": "Repay", "property.html": "Go to Property", "transport.html": "Pay transport", "bigevents.html": "Decide",
+  "marketplace.html": "See offers", "bank.html": "Open my budget", "jobs.html": "Find a job", "kiwisaver.html": "Open KiwiSaver"
+};
+function renderTodo(me, cls) {
+  const items = [];
+  if (typeof buildNotifications === "function") {
+    if (typeof NOTIF_USER !== "undefined" && !NOTIF_USER) NOTIF_USER = me.username;
+    buildNotifications(me, cls).filter(n => n.action).forEach(n => {
+      const item = { title: n.title, body: n.body, urgent: n.tone === "coral", href: n.href, onClick: n.onClick };
+      // On this page, these two are handled right here rather than by a link.
+      if (/^promo-/.test(n.id)) { item.onClick = "checkAndShowPromotionPopup(CURRENT.username)"; item.cta = "Answer"; item.href = null; }
+      if (/^sh-\d/.test(n.id)) { item.onClick = "document.getElementById('sideHustleCard').scrollIntoView({ behavior: 'smooth' })"; item.cta = "Check in"; item.href = null; }
+      if (n.onClick && /QuizForModule/.test(n.onClick)) item.cta = "Take the quiz";
+      items.push(item);
+    });
+  }
+  // A weekly event waiting for the student to choose what to do.
+  const weekKey = isoWeekKey(new Date());
+  const now = trustedNow().getTime();
+  (cls.eventLog || []).filter(l => l.studentUser === me.username && l.week === weekKey && l.type === "choice" && l.status === "pending" && (l.revealAt === undefined || l.revealAt <= now))
+    .forEach(l => items.push({ title: "Choose what to do: " + (l.name || "this week's event"), body: "An event this week is waiting for your choice.", urgent: true,
+      onClick: "checkWeeklyEventPopup(CURRENT.username, CURRENT.classCode)", cta: "Choose" }));
+  // Money for bills (the budget's own warning, which already counts savings).
+  try {
+    const v = buildBudgetView(cls, me, me.username);
+    if (v && v.verdict && (v.verdict.tone === "bad" || v.verdict.tone === "warn") && v.shortfall) {
+      items.push({ title: v.verdict.tone === "bad" ? "Not enough money for this week's bills" : "Move money from savings for bills",
+        body: v.verdict.text, urgent: v.verdict.tone === "bad", href: "bank.html#budgetCard", cta: "Open my budget" });
+    }
+  } catch (e) { /* budget is a bonus here — never let it stop the list */ }
+  // KiwiSaver unlocked after the class retired.
+  const ks = typeof kiwiSaverOf === "function" ? kiwiSaverOf(me) : null;
+  if (ks && ks.balance > 0 && kiwiSaverSettings(cls).retired) {
+    items.push({ title: "Your KiwiSaver is unlocked", body: `You've retired, so you can take out your ${fmtMoney(ks.balance)} whenever you like.`, href: "kiwisaver.html" });
+  }
+  // No job yet, and there are jobs to apply for.
+  const hasJobs = (cls.jobs || []).some(j => j.tiers && j.tiers.length);
+  const applied = (cls.jobApplications || []).some(a => a.studentUser === me.username && (!a.status || a.status === "pending"));
+  if (!me.jobId && hasJobs && !applied && !(kiwiSaverSettings(cls).retired)) {
+    items.push({ title: "Get a job", body: "You don't have a job yet, so nothing comes in on pay day. Apply for one on the Jobs page.", href: "jobs.html" });
+  }
+
+  items.sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
+  const list = document.getElementById("todoList");
+  document.getElementById("todoCount").textContent = items.length ? `${items.length} thing${items.length === 1 ? "" : "s"}` : "";
+  if (!items.length) {
+    list.innerHTML = `<p class="todo-empty">You're all caught up. Nothing needs doing today.</p>`;
+    return;
+  }
+  list.innerHTML = `<ul class="todo-list">${items.map(it => {
+    const cta = it.cta || TODO_CTA[(it.href || "").split("#")[0]] || "Open";
+    const btn = it.onClick
+      ? `<button type="button" class="btn small ${it.urgent ? "gold" : "secondary"}" onclick="${escapeHtml(it.onClick)}">${escapeHtml(cta)}</button>`
+      : it.href ? `<a class="btn small ${it.urgent ? "gold" : "secondary"}" href="${escapeHtml(it.href)}">${escapeHtml(cta)}</a>` : "";
+    return `<li class="todo-item">
+      <div class="todo-text">
+        <div class="todo-title">${it.urgent ? `<span class="todo-tag">Today</span>` : ""}${escapeHtml(it.title)}</div>
+        ${it.body ? `<div class="todo-body">${escapeHtml(it.body)}</div>` : ""}
+      </div>
+      ${btn}
+    </li>`;
+  }).join("")}</ul>`;
 }
 
 /* Savings goals: see savings-goals.js (shared with the Bank page). */

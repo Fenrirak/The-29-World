@@ -110,6 +110,7 @@ async function init() {
     safeBgJob(processAutomations(CLASS_CODE), "processAutomations"),
     safeBgJob(processTermDeposits(CLASS_CODE), "processTermDeposits"),
     safeBgJob(applyInterestToClassIfDue(CLASS_CODE), "applyInterestToClassIfDue"),
+    safeBgJob(kiwiSaverReturnsForClassIfDue(CLASS_CODE), "kiwiSaverReturnsForClassIfDue"),
     safeBgJob(processInsurancePayments(CLASS_CODE), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(CLASS_CODE), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(CLASS_CODE), "processWeeklyBigEvents"),
@@ -373,9 +374,14 @@ async function render() {
   const nameOf = u => nameCache[u] || u;
   const recentTxns = (cls.txns || []).filter(t => t.type !== "gambling").slice(0, MAX_STORED_TXNS);
   document.getElementById("hActivity").innerHTML = icon("chart", 18) + ` Recent activity (last ${MAX_STORED_TXNS} transactions)`;
+  // Coloured from the student's side (green = money in to them, red =
+  // out of them). Money passed between two students is left plain.
+  const BETWEEN_STUDENTS = ["transfer", "automation", "p2p-buy", "p2p-sell", "property-rent-pay", "property-rent-receive"];
   recentTxns.forEach(t => {
+    const who = t.to && t.to !== cls.teacher ? t.to : t.from;
+    const dir = BETWEEN_STUDENTS.includes(t.type) ? { sign: "", amount: Math.abs(Number(t.amount) || 0) } : txnDirection(t, who);
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badge(t.type)}</td><td>${describeTxn(t, nameOf)}</td><td>${fmtMoney(t.amount)}</td>`;
+    tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badge(t.type)}</td><td>${describeTxn(t, nameOf)}</td><td class="${moneyClass(dir.sign)}">${fmtSignedMoney(dir.sign, dir.amount)}</td>`;
     txbody.appendChild(tr);
   });
 }
@@ -440,6 +446,8 @@ function describeTxn(t, nameOf) {
     case "life-grant": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "life-revoke": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "life-allowance": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "kiwisaver-in": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "kiwisaver-out": case "kiwisaver-refund": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     default: return escapeHtml(t.note || "");
   }
 }
@@ -488,7 +496,9 @@ function badge(type) {
     "p2p-sell": ["gold", "users", "Sold to a classmate"],
     "truck-licence-buy": ["navy", "car", "Truck licence"],
     "insurance-signup-fee": ["lilac", "shield", "Insurance sign-up"],
-    "property-occupancy": ["navy", "house", "Occupancy change"]
+    "property-occupancy": ["navy", "house", "Occupancy change"],
+    "kiwisaver-in": ["navy", "sprout", "KiwiSaver"], "kiwisaver-out": ["mint", "sprout", "KiwiSaver withdrawal"],
+    "kiwisaver-refund": ["gold", "sprout", "KiwiSaver refund"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;

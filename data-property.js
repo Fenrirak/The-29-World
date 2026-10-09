@@ -322,13 +322,18 @@ async function simulatePropertyMarketDay(classCode) {
   return results;
 }
 
-async function buyProperty(username, classCode, propId, financed, depositAmount) {
+// opts.useKiwiSaver: put the student's KiwiSaver towards it (first home
+// only — see kiwiSaverFirstHomeInfo in data-money.js). It pays as much of
+// the deposit (or the whole price, buying outright) as it can, and their
+// cash pays the rest.
+async function buyProperty(username, classCode, propId, financed, depositAmount, opts) {
+  const useKiwiSaver = !!(opts && opts.useKiwiSaver);
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let deposit = 0, weekly = 0, propName = "", cashPaid = 0, taxAmount = 0, mortgaged = false;
+  let deposit = 0, weekly = 0, propName = "", cashPaid = 0, taxAmount = 0, mortgaged = false, fromKiwi = 0;
   try {
     await fdb.runTransaction(async (t) => {
-      deposit = 0; cashPaid = 0; mortgaged = false; // reset every attempt — this callback can be retried
+      deposit = 0; cashPaid = 0; mortgaged = false; fromKiwi = 0; // reset every attempt — this callback can be retried
       const userSnap = await t.get(userRef);
       const classSnap = await t.get(classRef);
       if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
@@ -342,6 +347,23 @@ async function buyProperty(username, classCode, propId, financed, depositAmount)
       const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "property", discountedPropPrice);
       taxAmount = tax;
       const isTeacher = user.role === "teacher";
+      // How much KiwiSaver can put in, and the student's KiwiSaver after it
+      // has (written below, in this same transaction, only if it's used).
+      let kiwiAvailable = 0, ksAfter = null;
+      if (useKiwiSaver && !isTeacher) {
+        const info = kiwiSaverFirstHomeInfo(cls, user, username);
+        if (!info.eligible) throw new Error("NO_KIWI");
+        ksAfter = ksCatchUp(cls, kiwiSaverOf(user));
+        kiwiAvailable = Math.min(info.available, ksAfter.balance);
+      }
+      const takeFromKiwi = (amount) => {
+        fromKiwi = Math.round(Math.min(kiwiAvailable, amount) * 100) / 100;
+        if (!(fromKiwi > 0)) return {};
+        ksAfter.balance = Math.round((ksAfter.balance - fromKiwi) * 100) / 100;
+        ksAfter.withdrawn = Math.round((ksAfter.withdrawn + fromKiwi) * 100) / 100;
+        ksAfter.firstHomeUsed = true;
+        return { kiwiSaver: ksAfter };
+      };
       // Snapshot what was actually paid (post-discount, post-tax, and the
       // same whether bought outright or financed — a mortgage just spreads
       // this same total out) as the baseline students see their "since you
@@ -360,7 +382,8 @@ async function buyProperty(username, classCode, propId, financed, depositAmount)
         depositAmt = Math.min(taxedPrice, Math.max(minDeposit, depositAmt));
         deposit = Math.round(depositAmt * 100) / 100;
         weekly = Math.round(((taxedPrice - deposit) / prop.mortgageWeeks) * 100) / 100;
-        if (!isTeacher && user.balance < deposit) throw new Error("BROKE");
+        const kiwiUpdate = takeFromKiwi(deposit);
+        if (!isTeacher && user.balance < deposit - fromKiwi) throw new Error("BROKE");
         prop.owner = username;
         // purchaseWeekKey marks the ISO week the mortgage was taken out —
         // payMortgage blocks payment during the mortgage's own purchase
@@ -379,27 +402,31 @@ async function buyProperty(username, classCode, propId, financed, depositAmount)
         prop.occupancy = null; prop.rentLastWeekPaid = null;
         prop.sublet = null; // a new owner never inherits someone else's tenant or rental listing
         mortgaged = true;
-        if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - deposit) * 100) / 100 });
+        if (!isTeacher) t.update(userRef, Object.assign({ balance: Math.round((user.balance - (deposit - fromKiwi)) * 100) / 100 }, kiwiUpdate));
       } else {
-        if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
+        const kiwiUpdate = takeFromKiwi(taxedPrice);
+        if (!isTeacher && user.balance < taxedPrice - fromKiwi) throw new Error("BROKE");
         prop.owner = username;
         prop.mortgage = null;
         prop.occupancy = null; prop.rentLastWeekPaid = null;
         prop.sublet = null; // a new owner never inherits someone else's tenant or rental listing
-        cashPaid = taxedPrice;
-        if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - taxedPrice) * 100) / 100 });
+        cashPaid = Math.round((taxedPrice - fromKiwi) * 100) / 100;
+        if (!isTeacher) t.update(userRef, Object.assign({ balance: Math.round((user.balance - cashPaid) * 100) / 100 }, kiwiUpdate));
       }
       t.update(classRef, { properties: cls.properties });
     });
   } catch (e) {
     if (e.message === "TAKEN") return { ok: false, error: "Someone already bought that property." };
-    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    if (e.message === "BROKE") return { ok: false, error: useKiwiSaver ? "You don't have enough money for that, even with your KiwiSaver." : "You don't have enough money for that." };
+    if (e.message === "NO_KIWI") return { ok: false, error: "You can't use your KiwiSaver for this property." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   // `mortgaged`, not `financed`: asking for a mortgage on a listing that
-  // doesn't offer one buys it outright, and is logged as that.
-  await logTxn(classCode, { type: "property-buy", from: username, amount: mortgaged ? deposit : cashPaid, note: (mortgaged ? `Bought (mortgaged): ${propName} — ${fmtMoney(deposit)} deposit` : `Bought outright: ${propName}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
-  return { ok: true };
+  // doesn't offer one buys it outright, and is logged as that. The amount
+  // is the CASH that left their account; KiwiSaver's part is in the note.
+  const kiwiNote = fromKiwi > 0 ? ` (${fmtMoney(fromKiwi)} from KiwiSaver)` : "";
+  await logTxn(classCode, { type: "property-buy", from: username, amount: mortgaged ? Math.round((deposit - fromKiwi) * 100) / 100 : cashPaid, note: (mortgaged ? `Bought (mortgaged): ${propName} — ${fmtMoney(deposit)} deposit${kiwiNote}` : `Bought outright: ${propName}${kiwiNote}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
+  return { ok: true, fromKiwi };
 }
 // Sells a property back to the class. The owner is paid whatever the
 // property's current market price is (prop.price — already reflects daily
