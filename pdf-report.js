@@ -115,13 +115,47 @@ function pdfDoc() {
       this.text(str, PDF_MARGIN, this.y, 12.5, { bold: true, color: PDF_COLORS.navy });
       this.y -= 16;
     },
+    // A paragraph, wrapped to the page width.
     para(str, opts) {
       opts = opts || {};
       const size = opts.size || 9.5;
-      this.need(size + 6);
-      this.y -= size + 2;
-      this.text(str, PDF_MARGIN, this.y, size, { color: opts.color || PDF_COLORS.muted });
-      this.y -= 3;
+      const lines = [];
+      let line = "";
+      String(str).split(/\s+/).forEach(word => {
+        const next = line ? line + " " + word : word;
+        if (line && pdfTextWidth(next, size) > PDF_CONTENT_W) { lines.push(line); line = word; }
+        else line = next;
+      });
+      if (line) lines.push(line);
+      lines.forEach(l => {
+        this.need(size + 6);
+        this.y -= size + 2;
+        this.text(l, PDF_MARGIN, this.y, size, { color: opts.color || PDF_COLORS.muted });
+        this.y -= 2;
+      });
+      this.y -= 1;
+    },
+    // Net worth over time — the same line as on the student's own report
+    // page: green where it went up, red where it went down.
+    trend(values) {
+      const h = 70, w = 300;
+      this.need(h + 18);
+      this.y -= h + 6;
+      const x0 = PDF_MARGIN, base = this.y;
+      const max = Math.max(...values), min = Math.min(...values), range = (max - min) || 1;
+      const pts = values.map((v, i) => [x0 + (i / (values.length - 1)) * w, base + 5 + ((v - min) / range) * (h - 10)]);
+      this.rect(x0, base, w, 0.6, PDF_COLORS.line);
+      for (let i = 1; i < pts.length; i++) {
+        const c = pts[i][1] >= pts[i - 1][1] ? PDF_COLORS.mint : PDF_COLORS.coral;
+        this.stream += `q ${this.color(c)} RG 2 w 1 J ${pts[i - 1][0].toFixed(2)} ${pts[i - 1][1].toFixed(2)} m ${pts[i][0].toFixed(2)} ${pts[i][1].toFixed(2)} l S Q\n`;
+      }
+      pts.forEach(p => this.rect(p[0] - 2.2, p[1] - 2.2, 4.4, 4.4, PDF_COLORS.navy));
+      const tx = x0 + w + 24;
+      this.text("Started at", tx, base + h - 12, 8.5, { color: PDF_COLORS.muted });
+      this.text(fmtMoney(values[0]), tx, base + h - 25, 11, { bold: true, color: PDF_COLORS.navy });
+      this.text("Now", tx, base + h - 44, 8.5, { color: PDF_COLORS.muted });
+      this.text(fmtMoney(values[values.length - 1]), tx, base + h - 57, 11, { bold: true, color: PDF_COLORS.navy });
+      this.y -= 4;
     },
     // A label/value row with the value hard right — used for every table
     // in the report, which keeps the whole document on one grid.
@@ -242,19 +276,37 @@ function pdfSafeName(str) {
 }
 
 /* ---------------- Report layouts ---------------- */
-function pdfBarsSection(doc, title, entries, colorName, total) {
-  doc.heading(`${title}  ${fmtMoney(total)}`);
-  const list = entries || [];
-  if (!list.length) { doc.para("Nothing recorded for this period."); return; }
+// A report keeps each breakdown as { category: amount }. The bars want a
+// list, biggest first — passing the object straight in used to leave every
+// bar section of the PDF empty.
+function pdfEntries(map) {
+  if (Array.isArray(map)) return map;
+  return Object.entries(map && typeof map === "object" ? map : {})
+    .map(([category, amount]) => ({ category, amount: Number(amount) || 0 }))
+    .filter(e => e.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+}
+function pdfBarsSection(doc, title, map, colorName, total) {
+  doc.heading(`${title}  ${fmtMoney(total || 0)}`);
+  const list = pdfEntries(map);
+  if (!list.length) { doc.para("Nothing here yet."); return; }
   const max = Math.max(...list.map(e => e.amount));
   list.forEach(e => doc.bar(e.category, e.amount, max, colorName));
 }
 
-function pdfStudentReport(doc, s, report) {
+// The same sections, in the same order, as the printed report card
+// (studentReportHTML in reports.js). history: the student's net worth on
+// each saved report and now — only their own report shows the trend.
+function pdfStudentReport(doc, s, report, history) {
+  if (history) {
+    doc.heading("Net worth over time");
+    if (history.length < 2) doc.para("Not enough saved reports yet to show a trend - ask your teacher to save a report card each week to start building one.");
+    else doc.trend(history);
+  }
   doc.chips([
     { label: "Net worth", value: fmtMoney(s.netWorth), color: "navy" },
     { label: "Savings rate", value: s.savingsRate === null ? "-" : s.savingsRate + "%", color: "mint" },
-    { label: "Income this period", value: fmtMoney(s.incomeTotal), color: "gold" },
+    { label: "Income this month", value: fmtMoney(s.incomeTotal), color: "gold" },
     { label: "Biggest expense", value: s.topExpenseCategory ? s.topExpenseCategory.category : "-",
       sub: s.topExpenseCategory ? fmtMoney(s.topExpenseCategory.amount) : "", color: "coral" }
   ]);
@@ -270,12 +322,21 @@ function pdfStudentReport(doc, s, report) {
   doc.row("Owed (loans + mortgage)", "-" + fmtMoney(s.owed), { rule: true, color: PDF_COLORS.coral });
   doc.row("Net worth", fmtMoney(s.netWorth), { bold: true });
 
-  pdfBarsSection(doc, "Income this period", s.income, "gold", s.incomeTotal);
-  pdfBarsSection(doc, "Saved & invested this period", s.saved, "mint", s.savedTotal);
+  pdfBarsSection(doc, "Income this month", s.income, "gold", s.incomeTotal);
+  pdfBarsSection(doc, "Saved & invested this month", s.saved, "mint", s.savedTotal);
   if (s.borrowedTotal) {
-    doc.para(`Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this period (not counted as income).`);
+    doc.para(`Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this month (not counted as income).`);
   }
-  pdfBarsSection(doc, "Spent this period", s.spent, "coral", s.spentTotal);
+  pdfBarsSection(doc, "Spent this month", s.spent, "coral", s.spentTotal);
+
+  doc.heading("Entire history");
+  doc.para(typeof REPORT_LIFETIME_NOTE === "string" ? REPORT_LIFETIME_NOTE : "Everything since the account was made, or since the class was last restarted.");
+  pdfBarsSection(doc, "All-time income", s.lifetimeIncome, "gold", s.lifetimeIncomeTotal);
+  pdfBarsSection(doc, "All-time saved & invested", s.lifetimeSaved, "mint", s.lifetimeSavedTotal);
+  if (s.lifetimeBorrowedTotal) {
+    doc.para(`Also borrowed ${fmtMoney(s.lifetimeBorrowedTotal)} in loans in total (not counted as income).`);
+  }
+  pdfBarsSection(doc, "All-time spent", s.lifetimeSpent, "coral", s.lifetimeSpentTotal);
 
   doc.heading("Loan history");
   if (!s.loans || !s.loans.length) {
@@ -292,14 +353,14 @@ function pdfStudentReport(doc, s, report) {
   }
 }
 
-function downloadStudentReportPDF(s, report, who) {
+function downloadStudentReportPDF(s, report, history) {
   const doc = pdfDoc();
   doc.titleBlock(
-    (who && who.name) || s.name || "Report card",
+    s.name || "Report card",
     `Report card - covers ${fmtRange(report.periodStart, report.periodEnd)}`,
     "Generated " + nowStr()
   );
-  pdfStudentReport(doc, s, report);
+  pdfStudentReport(doc, s, report, history);
   pdfSave(doc, `report-card-${pdfSafeName(s.name)}.pdf`);
 }
 

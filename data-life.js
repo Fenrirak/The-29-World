@@ -2011,14 +2011,89 @@ async function updateBigEventDef(classCode, defId, ev) {
     t.update(classRef, { bigEventDefs: cls.bigEventDefs });
   });
 }
-// Once per NZ calendar week, each student has a 1-in-4 chance of being hit
-// with one random active big event, left "pending" until they respond.
-// Bypasses the once-per-week guard and generates this week's big events
-// right now — same idea as forceWeeklyEvents. Also skips the normal 25%
-// per-student chance, so every eligible student gets one on a manual run
-// instead of being left out by the dice roll.
+/* ---------------- When in the week events happen ----------------
+   Weekly events and big events land on school days (Monday to Friday), at
+   a random moment between 8:30am and 3pm NZ time — when students are most
+   likely to be on the site — instead of all at once the moment the week's
+   events are handed out. A student who isn't on the site then sees it the
+   next time they are. */
+const EVENT_WINDOW_START_MIN = 8 * 60 + 30; // 8:30am
+const EVENT_WINDOW_END_MIN = 15 * 60;       // 3:00pm
+const EVENT_SCHOOL_DAYS = 5;                // Monday to Friday
+
+// The school days still to come this NZ week — today too, while there's
+// still time left in its window — each as { dayKey, from, to }: the span of
+// real time an event on that day can happen in.
+function eventDaysLeftThisWeek() {
+  const now = trustedNow().getTime();
+  const todayKey = nzDateKey();
+  const todayIdx = (DAY_NAMES.indexOf(nzDayName()) + 6) % 7; // Mon = 0 ... Sun = 6
+  const days = [];
+  for (let i = todayIdx; i < EVENT_SCHOOL_DAYS; i++) {
+    const dayKey = dateKeyPlusDays(todayKey, i - todayIdx);
+    const from = Math.max(now, nzTimeToMs(dayKey, EVENT_WINDOW_START_MIN));
+    const to = nzTimeToMs(dayKey, EVENT_WINDOW_END_MIN);
+    if (to > from) days.push({ dayKey, from, to });
+  }
+  return days;
+}
+function eventMomentIn(day) {
+  return day.from + Math.floor(Math.random() * (day.to - day.from));
+}
+function eventShuffled(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Each NZ week, every student has a 30% chance of a big event. Whether they
+// get one is decided the first time a teacher's page loads that week, but it
+// happens at a random moment on a random school day (see
+// eventDaysLeftThisWeek), not as soon as the week starts: until then it's
+// "scheduled", and the student's own page brings it to life when its moment
+// comes (revealBigEvent, called from checkBigEventPopup).
+const BIG_EVENT_WEEKLY_CHANCE = 0.3;
+
+// Whether a big event can go to this student right now: "good" events go to
+// anyone; a bad one needs the job, property or vehicle it puts at risk.
+function bigEventFitsStudent(cls, student, d) {
+  if (d.kind === "good") return true;
+  if (d.module === "income") return !!student.jobId;
+  if (d.module === "property") return (cls.properties || []).some(p => p.owner === student.username);
+  if (d.module === "transport") return (cls.vehicles || []).some(v => (v.owners || []).includes(student.username));
+  return true;
+}
+function pickBigEventDef(cls, student, defs) {
+  const fits = defs.filter(d => bigEventFitsStudent(cls, student, d));
+  return fits.length ? fits[Math.floor(Math.random() * fits.length)] : null;
+}
+// A big event log entry for one student, from the event as it is now.
+function bigEventEntry(cls, username, def, weekKey, revealAt) {
+  // Which of their properties/vehicles this hits (see pickEventAsset).
+  const coverage = def.kind !== "good" ? MODULE_TO_COVERAGE[def.module] : null;
+  const asset = coverage === "property" || coverage === "transport"
+    ? pickEventAsset(cls, username, coverage, def.incident, false) : null;
+  return {
+    ...(asset || {}),
+    incident: def.incident || null,
+    id: uid("bigevlog"), studentUser: username, defId: def.id, week: weekKey, date: nowStr(), revealAt,
+    name: def.name, module: def.module, kind: def.kind || "bad", cost: def.cost, description: def.description || "",
+    // Locked in once it happens, so editing the event afterwards never
+    // changes how an already-issued one resolves.
+    takesAsset: def.takesAsset === false ? false : true,
+    insuranceCover: def.insuranceCover || [],
+    status: "scheduled"
+  };
+}
+
+// "Run this week's big events now": every eligible student gets one right
+// away, skipping the 30% chance. Anyone whose big event for this week is
+// still waiting for its day gets it now instead; anyone who's already had
+// this week's is left alone (so clicking twice can't stack them up).
 async function forceWeeklyBigEvents(classCode) {
-  await classesCol().doc(classCode).update({ lastBigEventWeekRun: null });
   return await processWeeklyBigEvents(classCode, { forceAll: true });
 }
 
@@ -2030,88 +2105,115 @@ async function processWeeklyBigEvents(classCode, opts) {
   const classRef = classesCol().doc(classCode);
   const weekKey = isoWeekKey(new Date());
   const cls = withNewModuleDefaults(await getClass(classCode));
-  if (!cls || cls.lastBigEventWeekRun === weekKey) return 0;
-  if (cls.archived && !forceAll) return 0;
+  if (!cls) return 0;
+  if (!forceAll && (cls.archived || cls.lastBigEventWeekRun === weekKey)) return 0;
+  // Nothing set up yet: leave the week unclaimed, so events the teacher
+  // adds later this week still get their chance.
   const activeDefs = (cls.bigEventDefs || []).filter(e => e.active);
-  if (activeDefs.length === 0) {
-    await classRef.update({ lastBigEventWeekRun: weekKey }).catch(() => {});
-    return 0;
-  }
+  if (activeDefs.length === 0) return 0;
 
   let claimedRun = false;
   await fdb.runTransaction(async (t) => {
+    claimedRun = false;
     const snap = await t.get(classRef);
     if (!snap.exists) return;
-    const liveCls = withNewModuleDefaults(snap.data());
-    if (liveCls.lastBigEventWeekRun === weekKey) return;
+    if (!forceAll && snap.data().lastBigEventWeekRun === weekKey) return;
     t.update(classRef, { lastBigEventWeekRun: weekKey });
     claimedRun = true;
   });
   if (!claimedRun) return 0;
 
-  const students = await getClassStudents(classCode);
+  const students = await getClassStudents(classCode, cls);
+  const days = eventDaysLeftThisWeek();
+  const now = trustedNow().getTime();
+  // Never more than one big event a week: anyone who already has this
+  // week's — on its way or already happened — is skipped.
+  const thisWeek = (cls.bigEventLog || []).filter(e => e.week === weekKey && e.status !== "skipped");
   const newEntries = [];
-  // Same guard as processWeeklyEvents: never give a student a second big
-  // event for a week they already have one queued for, even on a forced
-  // run — otherwise clicking "Run this week's big events now" more than
-  // once (double-click, slow-connection retry, etc.) stacks duplicates.
-  const alreadyThisWeek = new Set((cls.bigEventLog || []).filter(e => e.week === weekKey).map(e => e.studentUser));
+  const bringForward = new Set();
   for (const student of students) {
-    if (alreadyThisWeek.has(student.username)) continue;
-    if (!forceAll && Math.random() >= 0.25) continue; // 25% chance per student per week (unless a manual run forces it)
-    // Only consider events for modules where the student actually has
-    // something at stake (a job, a property, or a vehicle) — no point
-    // hitting someone with a "lost your job" event if they have no job.
-    const eligibleDefs = activeDefs.filter(d => {
-      // Good events are windfalls that don't require owning anything —
-      // everyone's eligible for a bonus/refund/etc regardless of module.
-      if (d.kind === "good") return true;
-      if (d.module === "income") return !!student.jobId;
-      if (d.module === "property") return cls.properties.some(p => p.owner === student.username);
-      if (d.module === "transport") return cls.vehicles.some(v => (v.owners || []).includes(student.username));
-      return true;
-    });
-    if (eligibleDefs.length === 0) continue;
-    const def = eligibleDefs[Math.floor(Math.random() * eligibleDefs.length)];
-    // Which of their properties/vehicles this hits (see pickEventAsset).
-    const coverage = def.kind !== "good" ? MODULE_TO_COVERAGE[def.module] : null;
-    const asset = coverage === "property" || coverage === "transport"
-      ? pickEventAsset(cls, student.username, coverage, def.incident, false) : null;
-    newEntries.push({
-      ...(asset || {}),
-      incident: def.incident || null,
-      id: uid("bigevlog"), studentUser: student.username, defId: def.id, week: weekKey, date: nowStr(),
-      name: def.name, module: def.module, kind: def.kind || "bad", cost: def.cost, description: def.description || "",
-      // Locked in at generation time so editing the def later never changes
-      // how an already-issued event resolves.
-      takesAsset: def.takesAsset === false ? false : true,
-      insuranceCover: def.insuranceCover || [],
-      // Good events need no choice from the student — they're paid out
-      // immediately and just get an acknowledgment popup. Bad events stay
-      // "pending" until the student picks pay / forfeit / claim (or just
-      // pay / claim, if this event doesn't put the asset at risk).
-      status: def.kind === "good" ? "received" : "pending"
-    });
+    const had = thisWeek.filter(e => e.studentUser === student.username);
+    if (had.length) {
+      if (forceAll) had.filter(e => e.status === "scheduled").forEach(e => bringForward.add(e.id));
+      continue;
+    }
+    let revealAt = now;
+    if (!forceAll) {
+      if (Math.random() >= BIG_EVENT_WEEKLY_CHANCE) continue;
+      if (!days.length) continue; // no school days left this week
+      revealAt = eventMomentIn(days[Math.floor(Math.random() * days.length)]);
+    }
+    // Only events the student has something at stake for (a job, a
+    // property, or a vehicle) — no "lost your job" event without a job.
+    const def = pickBigEventDef(cls, student, activeDefs);
+    if (!def) continue;
+    newEntries.push(bigEventEntry(cls, student.username, def, weekKey, revealAt));
   }
-  if (newEntries.length === 0) return 0;
+  if (newEntries.length === 0 && bringForward.size === 0) return 0;
 
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const liveCls = withNewModuleDefaults(snap.data());
-    liveCls.bigEventLog = (liveCls.bigEventLog || []).concat(newEntries);
-    if (liveCls.bigEventLog.length > 300) liveCls.bigEventLog = liveCls.bigEventLog.slice(-300);
+    let log = liveCls.bigEventLog || [];
+    log.forEach(e => { if (bringForward.has(e.id) && e.status === "scheduled") e.revealAt = now; });
+    log = log.concat(newEntries);
+    if (log.length > 300) log = log.slice(-300);
+    t.update(classRef, { bigEventLog: log });
+  });
+  return newEntries.length + bringForward.size;
+}
+
+// Brings a scheduled big event to life once its moment has come (see
+// checkBigEventPopup). It was planned days earlier, so it's checked against
+// the student as they are now: an event that's been removed or switched
+// off, or that no longer fits them (no job any more, no vehicle...), is
+// swapped for another that does fit — or dropped ("skipped") if none does —
+// and one that hit a vehicle or property they've since got rid of moves to
+// another of theirs. A bad event becomes "pending" (it has to be
+// answered); a good one is paid out here and marked "received". Safe to
+// call twice (two tabs): only the call that moves it on from "scheduled"
+// does anything. Returns the entry as it now is, or null.
+async function revealBigEvent(classCode, logId) {
+  const classRef = classesCol().doc(classCode);
+  let entry = null;
+  await fdb.runTransaction(async (t) => {
+    entry = null;
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const liveCls = withNewModuleDefaults(snap.data());
+    const found = (liveCls.bigEventLog || []).find(e => e.id === logId);
+    if (!found || found.status !== "scheduled") return;
+    const userSnap = await t.get(usersCol().doc(found.studentUser));
+    const student = Object.assign({}, userSnap.exists ? userSnap.data() : {}, { username: found.studentUser });
+    const activeDefs = (liveCls.bigEventDefs || []).filter(d => d.active);
+    let def = activeDefs.find(d => d.id === found.defId);
+    if (!def || !bigEventFitsStudent(liveCls, student, def)) def = pickBigEventDef(liveCls, student, activeDefs);
+    if (!def) {
+      found.status = "skipped";
+      t.update(classRef, { bigEventLog: liveCls.bigEventLog });
+      return;
+    }
+    const fresh = bigEventEntry(liveCls, found.studentUser, def, found.week, found.revealAt);
+    // Keep the vehicle/property it was planned to hit while it's still theirs.
+    const coverage = def.kind !== "good" ? MODULE_TO_COVERAGE[def.module] : null;
+    const planned = (coverage === "property" || coverage === "transport") && def.id === found.defId && found.assetId
+      ? eventAssetNow(liveCls, found.studentUser, coverage, found)[coverage === "transport" ? "vehicle" : "property"] : null;
+    const asset = planned ? { assetId: found.assetId, assetName: found.assetName, assetType: found.assetType } : {};
+    Object.assign(found, { assetId: null, assetName: null, assetType: null }, fresh, asset, {
+      id: found.id, date: nowStr(),
+      status: def.kind === "good" ? "received" : "pending"
+    });
+    entry = Object.assign({}, found);
     t.update(classRef, { bigEventLog: liveCls.bigEventLog });
   });
-
-  // Pay out any good (windfall) events right away — no choice needed.
-  const goodEntries = newEntries.filter(e => e.kind === "good");
-  for (const e of goodEntries) {
-    await adjustBalance(e.studentUser, e.cost);
-    await logTxn(classCode, { type: "big-event", to: e.studentUser, amount: e.cost, note: `Big event windfall: "${e.name}"` + (e.description ? " — " + e.description : "") });
+  // A good event's money arrives the moment it happens — the popup
+  // telling the student why is shown straight after (checkBigEventPopup).
+  if (entry && entry.kind === "good") {
+    await adjustBalance(entry.studentUser, entry.cost);
+    await logTxn(classCode, { type: "big-event", to: entry.studentUser, amount: entry.cost, note: `Big event windfall: "${entry.name}"` + (entry.description ? " — " + entry.description : "") });
   }
-
-  return newEntries.length;
+  return entry;
 }
 
 // choice: 'forfeit' | 'pay' | 'claim'
@@ -2323,116 +2425,115 @@ async function updateEventDef(classCode, evId, ev) {
     t.update(classRef, { eventDefs: cls.eventDefs });
   });
 }
-// Bypasses the once-per-week guard and generates this week's events right
-// now — useful if the weekly run already fired earlier (e.g. before any
-// event definitions existed, or before a timing fix), so the teacher isn't
-// stuck waiting until next Monday for it to try again naturally.
+// Every NZ week, each student gets 2 to 5 of the class's active events, each
+// on a different school day (see eventDaysLeftThisWeek) — never two on the
+// same day. The whole week is planned the first time a teacher's page loads
+// that week (lastEventWeekRun is teacher-only in firestore.rules, so a
+// student's page can't do it), and each event then happens when its moment
+// comes round, the next time the student is on the site (revealWeeklyEvent,
+// called from checkWeeklyEventPopup).
+const WEEKLY_EVENTS_MIN = 2;
+const WEEKLY_EVENTS_MAX = 5;
+const MANUAL_EVENT_MAX_DELAY_MS = 20 * 60000;
+
+// Manual "Run this week's events now": one extra event for every student,
+// popping up within the next 20 minutes, on top of whatever the week
+// already has planned. Ignores the "can't repeat" rules too, so a class
+// with only a few events still gets one each.
 async function forceWeeklyEvents(classCode) {
-  // Manual "Run this week's events now" — overrides both the once-a-day
-  // auto-run guard and each student's daily/weekly caps below.
   return await processWeeklyEvents(classCode, { ignoreAlreadyHad: true });
 }
 
+// One planned weekly event for a student. Its details come from the event
+// as it is now, and are refreshed from the teacher's live list when it
+// happens (revealWeeklyEvent) — so editing or removing an event still
+// counts for ones planned earlier in the week.
+function weeklyEventEntry(cls, username, ev, weekKey, dayKey, revealAt, manual) {
+  const insurance = weeklyEventInsurance(ev);
+  // Which of their properties/vehicles this hits (see pickEventAsset).
+  const asset = insurance.coverage !== "general"
+    ? pickEventAsset(cls, username, insurance.coverage, insurance.incident, true) : null;
+  const isChoice = ev.type === "choice";
+  const entry = {
+    id: uid("evlog"), studentUser: username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
+    name: ev.name, amount: isChoice ? null : ev.amount, description: ev.description || "", severity: ev.severity || "neutral",
+    claimed: false, type: isChoice ? "choice" : "fixed", status: "planned", ...insurance, ...(asset || {})
+  };
+  if (isChoice) entry.options = ev.options || [];
+  if (manual) entry.manual = true;
+  return entry;
+}
+
 async function processWeeklyEvents(classCode, opts) {
-  const ignoreAlreadyHad = !!(opts && opts.ignoreAlreadyHad); // true only for a manual run
-  // lastEventDayRun is teacher-only in firestore.rules, so a student's page
-  // could never claim the day — it just paid for a class-doc read and a
-  // refused transaction on every load. Events are rolled by the teacher's.
-  if (!ignoreAlreadyHad && t29SessionStudent()) return 0;
+  const manual = !!(opts && opts.ignoreAlreadyHad); // true only for "Run this week's events now"
+  if (!manual && t29SessionStudent()) return 0;
   const classRef = classesCol().doc(classCode);
-  const dayKey = nzDateKey();
   const weekKey = isoWeekKey(new Date());
   const cls = withNewModuleDefaults(await getClass(classCode));
   if (!cls) return 0;
-  if (cls.archived && ignoreAlreadyHad === false) return 0;
+  if (cls.archived && !manual) return 0;
+  if (!manual && cls.lastEventWeekRun === weekKey) return 0;
+  // Nothing set up yet: leave the week unclaimed, so events the teacher
+  // adds later this week still get handed out.
+  const activeDefs = (cls.eventDefs || []).filter(e => e.active);
+  if (activeDefs.length === 0) return 0;
 
-  // The auto-trigger (page load) only ever runs once per NZ calendar day —  // that's what makes "max 1 event a day" hold without any extra bookkeeping.
-  // A manual run skips this guard entirely, which is what lets it override
-  // the caps below.
-  if (!ignoreAlreadyHad && cls.lastEventDayRun === dayKey) return 0;
-  if (!cls.eventDefs || cls.eventDefs.filter(e => e.active).length === 0) {
-    if (!ignoreAlreadyHad) await classRef.update({ lastEventDayRun: dayKey }).catch(() => {});
-    return 0;
-  }
-
-  let claimed = true;
-  if (!ignoreAlreadyHad) {
-    claimed = false;
+  if (!manual) {
+    let claimed = false;
     await fdb.runTransaction(async (t) => {
+      claimed = false;
       const snap = await t.get(classRef);
       if (!snap.exists) return;
-      const liveCls = withNewModuleDefaults(snap.data());
-      if (liveCls.lastEventDayRun === dayKey) return;
-      t.update(classRef, { lastEventDayRun: dayKey });
+      if (snap.data().lastEventWeekRun === weekKey) return;
+      t.update(classRef, { lastEventWeekRun: weekKey });
       claimed = true;
     });
     if (!claimed) return 0;
   }
 
-  const students = await getClassStudents(classCode);
-  const activeDefs = cls.eventDefs.filter(e => e.active);
+  const students = await getClassStudents(classCode, cls);
   const eventLog = cls.eventLog || [];
+  const days = manual ? [] : eventDaysLeftThisWeek();
+  const now = trustedNow().getTime();
+  const todayKey = nzDateKey();
   const newLogEntries = [];
 
-  // Each qualifying student gets exactly 1 event per run, revealed within
-  // ~20 minutes.
-  const FIRST_EVENT_MAX_DELAY_MS = 20 * 60000;      // first ever event: within 20 min
-
   for (const student of students) {
-    const studentEntries = eventLog.filter(l => l.studentUser === student.username);
-
-    if (!ignoreAlreadyHad) {
-      // Max 1 event per day...
-      const hadToday = studentEntries.some(l => l.day === dayKey);
-      if (hadToday) continue;
-      // ...and max 3 events per week.
-      const weekCount = studentEntries.filter(l => l.week === weekKey).length;
-      if (weekCount >= 3) continue;
+    const mine = eventLog.filter(l => l.studentUser === student.username);
+    let slots;
+    if (manual) {
+      slots = [{ dayKey: todayKey, revealAt: now + Math.floor(Math.random() * MANUAL_EVENT_MAX_DELAY_MS) }];
+    } else {
+      // Events this student already has this week (e.g. from earlier in
+      // the week, before this was set up) count towards the 2-5, and the
+      // days they fell on aren't used again.
+      const thisWeek = mine.filter(l => l.week === weekKey && !l.manual && l.status !== "skipped");
+      const usedDays = new Set(thisWeek.map(l => l.day));
+      const want = WEEKLY_EVENTS_MIN + Math.floor(Math.random() * (WEEKLY_EVENTS_MAX - WEEKLY_EVENTS_MIN + 1));
+      slots = eventShuffled(days.filter(d => !usedDays.has(d.dayKey)))
+        .slice(0, Math.max(0, want - thisWeek.length))
+        .map(d => ({ dayKey: d.dayKey, revealAt: eventMomentIn(d) }))
+        .sort((a, b) => a.revealAt - b.revealAt);
     }
 
-    const already = new Set(studentEntries.map(l => l.eventId));
-    // Whatever event this student was assigned most recently (regardless
-    // of week) is excluded from this draw even if it's marked "repeatable"
-    // — repeatable just means it can come back around later, not that the
-    // same event can land twice in a row. A manual/forced run overrides
-    // this too, otherwise a class with only one active event (or a student
-    // whose only eligible event was their last one) would silently get
-    // nothing at all, even on an explicit "override" run.
-    const lastEventId = studentEntries.length ? studentEntries[studentEntries.length - 1].eventId : null;
-    const pool = activeDefs.filter(e => (ignoreAlreadyHad || (e.id !== lastEventId && (e.repeatable || !already.has(e.id))))
-      && weeklyEventFitsStudent(cls, student.username, e));
-    if (pool.length === 0) continue;
-    const ev = pool[Math.floor(Math.random() * pool.length)];
-    const revealAt = Date.now() + Math.floor(Math.random() * FIRST_EVENT_MAX_DELAY_MS);
-    // Locked in now, same as big events, so editing the event later never
-    // changes how an already-issued one can be claimed.
-    const insurance = weeklyEventInsurance(ev);
-    // Which of their properties/vehicles this hits (see pickEventAsset).
-    const asset = insurance.coverage !== "general"
-      ? pickEventAsset(cls, student.username, insurance.coverage, insurance.incident, true) : null;
-    if (ev.type === "choice") {
-      // Multiple-choice events don't apply a balance change yet — the
-      // student must pick one of the options first (see resolveChoiceEvent).
-      newLogEntries.push({
-        id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
-        name: ev.name, amount: null, description: ev.description || "", severity: ev.severity || "neutral",
-        claimed: false, type: "choice", options: ev.options || [], status: "pending", ...insurance, ...(asset || {})
-      });
-    } else {
-      // Fixed-amount events used to apply the balance change and log a
-      // txn right here, at generation time — long before the student
-      // ever saw a popup explaining why. That meant balances could
-      // silently jump by several events' worth all at once. Now this
-      // just schedules it; the actual balance change + txn only happens
-      // in revealFixedEvent(), which is called the moment the popup is
-      // about to be shown to the student (see checkWeeklyEventPopup).
-      newLogEntries.push({
-        id: uid("evlog"), studentUser: student.username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
-        name: ev.name, amount: ev.amount, description: ev.description || "", severity: ev.severity || "neutral",
-        claimed: false, type: "fixed", status: "scheduled", ...insurance, ...(asset || {})
-      });
+    const already = new Set(mine.map(l => l.eventId));
+    // The event a student was given most recently is never given again
+    // straight after, even if it's "repeatable" — repeatable just means it
+    // can come back round later. A manual run overrides this (and the
+    // "can't repeat" rule), otherwise a class with only one active event
+    // would get nothing at all on an explicit "run now".
+    let lastEventId = mine.length ? mine[mine.length - 1].eventId : null;
+    for (const slot of slots) {
+      const pool = activeDefs.filter(e => (manual || (e.id !== lastEventId && (e.repeatable || !already.has(e.id))))
+        && weeklyEventFitsStudent(cls, student.username, e));
+      if (pool.length === 0) break;
+      const ev = pool[Math.floor(Math.random() * pool.length)];
+      already.add(ev.id);
+      lastEventId = ev.id;
+      newLogEntries.push(weeklyEventEntry(cls, student.username, ev, weekKey, slot.dayKey, slot.revealAt, manual));
     }
   }
+  if (newLogEntries.length === 0) return 0;
 
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
@@ -2446,29 +2547,84 @@ async function processWeeklyEvents(classCode, opts) {
   return newLogEntries.length;
 }
 
-// Applies a scheduled fixed-amount event's balance change and logs its txn
-// — called the moment its popup is about to be shown to the student (see
-// checkWeeklyEventPopup in events-ui.js), never before. This is what makes
-// sure a student's balance can't change "silently" ahead of them actually
-// seeing what happened and why. Safe to call more than once (e.g. two tabs
-// racing) — the transaction only acts on it while status is still
-// "scheduled", so a second call is a no-op.
-async function revealFixedEvent(classCode, eventLogId) {
+// Whether the vehicle/home a planned weekly event was going to hit is still
+// the student's (see pickEventAsset for what each kind of event can hit).
+function weeklyEventAssetStillFits(cls, username, coverage, incident, entry) {
+  if (coverage === "transport") {
+    return !!entry.assetId && (cls.vehicles || []).some(v => v.id === entry.assetId && (v.owners || []).includes(username));
+  }
+  if (coverage === "property") {
+    if (entry.assetType === "rented-home") {
+      // A renter only gets events that don't damage the house itself — and
+      // once they own a home, events hit that instead.
+      if (incident === "house" || incident === "both") return false;
+      if ((cls.properties || []).some(p => p.owner === username)) return false;
+      return (cls.properties || []).some(p => p.sublet && p.sublet.tenant === username)
+        || (cls.npcProperties || []).some(p => p.tenant === username);
+    }
+    return !!entry.assetId && (cls.properties || []).some(p => p.id === entry.assetId && p.owner === username);
+  }
+  return true;
+}
+
+// Brings one planned weekly event to life the moment it's about to be shown
+// (see checkWeeklyEventPopup in events-ui.js) — never before, so a
+// student's balance can't change before they see what happened and why.
+// It was planned days earlier, so it's checked against the teacher's live
+// list first: a removed or switched-off event is dropped ("skipped"), an
+// edited one uses its new details, and one about a vehicle or home the
+// student no longer has moves to another they do have — or is dropped if
+// they have none. A fixed-amount event is charged here; a multiple-choice
+// one becomes "pending" and waits for the student's answer
+// (resolveChoiceEvent). Also handles "scheduled" fixed events from before
+// weeks were planned ahead. Safe to call twice (e.g. two tabs): only the
+// call that moves it on does anything. Returns the entry as it now is, or
+// null if there's nothing to show.
+async function revealWeeklyEvent(classCode, eventLogId) {
   const classRef = classesCol().doc(classCode);
   let entry = null;
   await fdb.runTransaction(async (t) => {
+    entry = null;
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const liveCls = withNewModuleDefaults(snap.data());
     const found = (liveCls.eventLog || []).find(l => l.id === eventLogId);
-    if (!found || found.type !== "fixed" || found.status !== "scheduled") return;
-    found.status = "resolved";
-    entry = { ...found };
+    if (!found) return;
+    const planned = found.status === "planned";
+    const legacy = found.status === "scheduled" && found.type === "fixed";
+    if (!planned && !legacy) return;
+    if (planned) {
+      const ev = (liveCls.eventDefs || []).find(d => d.id === found.eventId && d.active);
+      const insurance = ev ? weeklyEventInsurance(ev) : null;
+      let asset = { assetId: null, assetName: null, assetType: null };
+      if (ev && insurance.coverage !== "general") {
+        asset = weeklyEventAssetStillFits(liveCls, found.studentUser, insurance.coverage, insurance.incident, found)
+          ? { assetId: found.assetId, assetName: found.assetName, assetType: found.assetType }
+          : pickEventAsset(liveCls, found.studentUser, insurance.coverage, insurance.incident, true);
+      }
+      if (!ev || !asset) {
+        found.status = "skipped";
+        t.update(classRef, { eventLog: liveCls.eventLog });
+        return;
+      }
+      const isChoice = ev.type === "choice";
+      Object.assign(found, insurance, asset, {
+        name: ev.name, description: ev.description || "", severity: ev.severity || "neutral",
+        type: isChoice ? "choice" : "fixed", amount: isChoice ? null : ev.amount, date: nowStr()
+      });
+      if (isChoice) found.options = ev.options || [];
+      else delete found.options;
+    }
+    found.revealedDay = nzDateKey();
+    found.status = found.type === "choice" ? "pending" : "resolved";
+    entry = Object.assign({}, found);
     t.update(classRef, { eventLog: liveCls.eventLog });
   });
   if (!entry) return null;
-  await adjustBalance(entry.studentUser, entry.amount);
-  await logTxn(classCode, { type: "event", to: entry.studentUser, amount: entry.amount, note: entry.name + (entry.description ? " — " + entry.description : "") });
+  if (entry.type === "fixed") {
+    await adjustBalance(entry.studentUser, entry.amount);
+    await logTxn(classCode, { type: "event", to: entry.studentUser, amount: entry.amount, note: entry.name + (entry.description ? " — " + entry.description : "") });
+  }
   return entry;
 }
 
@@ -2500,8 +2656,8 @@ async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
       const user = userSnap.data();
       const cls = withNewModuleDefaults(classSnap.data());
       const entry = (cls.eventLog || []).find(e => e.id === eventLogId && e.studentUser === username);
-      // "scheduled"/"pending" = not charged yet, so nothing to claim back.
-      if (!entry || entry.severity !== "bad" || entry.claimed || entry.status === "scheduled" || entry.status === "pending") throw new Error("NOT_CLAIMABLE");
+      // Not charged yet (or never happened), so nothing to claim back.
+      if (!entry || entry.severity !== "bad" || entry.claimed || ["planned", "scheduled", "pending", "skipped"].includes(entry.status)) throw new Error("NOT_CLAIMABLE");
       const option = weeklyEventClaimOptions(cls, user, entry).find(o => o.plan.id === planId);
       if (!option) throw new Error("NO_PLAN");
       payout = option.payout;
@@ -2574,6 +2730,7 @@ async function resolveChoiceEvent(username, classCode, logId, optionId) {
       amount = option.amount;
       outcome = option.outcome || "";
       entry.status = "resolved";
+      entry.revealedDay = entry.revealedDay || nzDateKey();
       entry.chosenOptionId = optionId;
       entry.amount = amount;
       entry.outcome = outcome;

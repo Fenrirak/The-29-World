@@ -257,6 +257,22 @@ function nzHourMinute(d) {
   fmt.formatToParts(d || trustedNow()).forEach(p => { map[p.type] = p.value; });
   return { hour: Number(map.hour), minute: Number(map.minute) };
 }
+// The real moment (ms since 1970) that an NZ wall-clock time happens on an
+// NZ date, e.g. 8:30am (510 minutes) on "2026-10-12". NZ is UTC+12 in
+// winter and UTC+13 in summer, so this starts from +12 and corrects by
+// however far the NZ clock actually reads off — done twice in case the
+// first guess lands on the other side of a daylight saving change.
+function nzTimeToMs(dateKey, minutesOfDay) {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const target = Date.UTC(y, m - 1, d, 0, minutesOfDay);
+  let ms = target - 12 * 3600000;
+  for (let i = 0; i < 2; i++) {
+    const at = new Date(ms);
+    const p = nzParts(at), hm = nzHourMinute(at);
+    ms += target - Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), hm.hour, hm.minute);
+  }
+  return ms;
+}
 // "12am", "1am", ... "12pm", "1pm", ... "11pm" for hour 0-23.
 function hourLabel(h) {
   const period = h < 12 ? "am" : "pm";

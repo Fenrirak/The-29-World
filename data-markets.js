@@ -412,10 +412,19 @@ async function sellShares(username, classCode, companyId, shares) {
      cls.listings = [{
        id, seller, assetType: "store"|"vehicle"|"property", assetId,
        name, description, price, refPrice,
+       quantity,   // copies still for sale — store items only, otherwise 1
        status: "pending"|"active"|"sold"|"cancelled"|"rejected",
        createdKey, ts, soldTo, soldTs, soldPrice, fee, rejectReason,
+       parentId,   // on a sale split off a listing of several copies
        offers: [{ id, buyer, amount, note, status, ts }]
      }]
+
+   A store item a student owns several of can go up as one listing of
+   several copies, each at the listed price. Buyers take one copy at a
+   time: each sale is recorded as its own "sold" entry (parentId pointing
+   back at the listing) and the listing stays up with one fewer, until the
+   last copy goes — so the sold-prices history, earnings and reports see
+   every sale exactly as they would a single-copy listing.
 ====================================================================== */
 const MARKETPLACE_ASSET_LABEL = { store: "Store item", vehicle: "Vehicle", property: "Property" };
 const MAX_STORED_LISTINGS = 120;
@@ -443,6 +452,41 @@ async function saveMarketplaceSettings(classCode, settings) {
 }
 
 function listingIsOpen(l) { return l.status === "active" || l.status === "pending"; }
+// How many copies a listing still has for sale (listings from before
+// quantities existed are one copy).
+function listingQuantity(l) { return Math.max(1, Math.floor(Number(l && l.quantity) || 1)); }
+
+// Keeps the class doc from growing forever — same idea as MAX_STORED_TXNS.
+// Only ever trims FINISHED listings, oldest first, so nothing still for
+// sale can be dropped out from under anyone.
+function _trimStoredListings(cls) {
+  if (cls.listings.length <= MAX_STORED_LISTINGS) return;
+  const closed = cls.listings.filter(l => !listingIsOpen(l)).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  const dropIds = new Set(closed.slice(0, cls.listings.length - MAX_STORED_LISTINGS).map(l => l.id));
+  cls.listings = cls.listings.filter(l => !dropIds.has(l.id));
+}
+
+// After a sale leaves a seller with fewer copies of a store item, makes
+// sure their open listings of it don't offer more copies than they still
+// own: the oldest listings keep theirs first, and one left with none is
+// taken down.
+function _trimStoreListingsToOwned(cls, seller, assetId) {
+  let owned = (seller.storeItems || []).filter(id => id === assetId).length;
+  cls.listings
+    .filter(l => l.seller === seller.username && l.assetType === "store" && l.assetId === assetId && listingIsOpen(l))
+    .sort((a, b) => (a.ts || 0) - (b.ts || 0))
+    .forEach(l => {
+      const qty = listingQuantity(l);
+      const keep = Math.min(qty, owned);
+      owned -= keep;
+      if (keep <= 0) {
+        l.status = "cancelled";
+        (l.offers || []).forEach(o => { if (o.status === "open") o.status = "declined"; });
+      } else if (keep < qty) {
+        l.quantity = keep;
+      }
+    });
+}
 
 // The allowed price window for an asset, given the teacher's percentage
 // band. A max of 0 means "no upper limit".
@@ -469,7 +513,8 @@ function getSellableAssets(cls, user) {
     Object.keys(ownedCounts).forEach(itemId => {
       const item = (cls.storeItems || []).find(i => i.id === itemId);
       if (!item) return;
-      const listedCount = open.filter(l => l.assetType === "store" && l.assetId === itemId).length;
+      const listedCount = open.filter(l => l.assetType === "store" && l.assetId === itemId)
+        .reduce((n, l) => n + listingQuantity(l), 0);
       const available = ownedCounts[itemId] - listedCount;
       if (available > 0) {
         out.push({
@@ -540,10 +585,12 @@ function _marketplaceStillOwns(cls, user, listing) {
   return false;
 }
 
-async function createListing(username, classCode, { assetType, assetId, price, description }) {
+// quantity: how many copies to put up in this one listing — store items
+// only (a vehicle or property is always one).
+async function createListing(username, classCode, { assetType, assetId, price, description, quantity }) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let created = null;
+  let created = null, availableCount = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -560,6 +607,10 @@ async function createListing(username, classCode, { assetType, assetId, price, d
       const sellable = getSellableAssets(cls, user)
         .find(a => a.assetType === assetType && a.assetId === assetId && !a.blocked);
       if (!sellable) throw new Error("NOT_OWNED");
+      const qtyRaw = quantity === undefined || quantity === null || quantity === "" ? 1 : Number(quantity);
+      if (!Number.isInteger(qtyRaw) || qtyRaw < 1) throw new Error("BAD_QTY");
+      if (assetType !== "store" && qtyRaw !== 1) throw new Error("BAD_QTY");
+      if (qtyRaw > (sellable.count || 1)) { availableCount = sellable.count || 1; throw new Error("TOO_FEW"); }
       if (assetType !== "store" && pendingBigEventFor(cls, username, assetType, assetId)) throw new Error("BIG_EVENT");
 
       const openMine = (cls.listings || []).filter(l => l.seller === username && listingIsOpen(l));
@@ -575,26 +626,21 @@ async function createListing(username, classCode, { assetType, assetId, price, d
         id: uid("lst"), seller: username, assetType, assetId,
         name: sellable.name, refPrice: sellable.refPrice,
         description: String(description || "").trim().slice(0, 240),
-        price: amount,
+        price: amount, quantity: qtyRaw,
         status: mp.requireApproval ? "pending" : "active",
         createdKey: nzDateKey(), ts: Date.now(),
         soldTo: null, soldTs: null, soldPrice: null, fee: 0, offers: []
       };
       cls.listings.push(created);
-      // Keeps the class doc from growing forever — same idea as
-      // MAX_STORED_TXNS. Only ever trims FINISHED listings, oldest first,
-      // so nothing still for sale can be dropped out from under anyone.
-      if (cls.listings.length > MAX_STORED_LISTINGS) {
-        const closed = cls.listings.filter(l => !listingIsOpen(l)).sort((a, b) => (a.ts || 0) - (b.ts || 0));
-        const dropIds = new Set(closed.slice(0, cls.listings.length - MAX_STORED_LISTINGS).map(l => l.id));
-        cls.listings = cls.listings.filter(l => !dropIds.has(l.id));
-      }
+      _trimStoredListings(cls);
       t.update(classRef, { listings: cls.listings });
     });
   } catch (e) {
     if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };
     if (e.message === "TYPE_OFF") return { ok: false, error: "Your teacher doesn't allow that kind of thing to be traded." };
     if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that (or it's already listed)." };
+    if (e.message === "BAD_QTY") return { ok: false, error: "Enter how many you want to sell — a whole number, 1 or more." };
+    if (e.message === "TOO_FEW") return { ok: false, error: `You only have ${availableCount} of those that aren't already listed.` };
     if (e.message === "BIG_EVENT") return { ok: false, error: BIG_EVENT_BLOCK_MESSAGE };
     if (e.message === "TOO_MANY") return { ok: false, error: "You already have the maximum number of listings up at once." };
     if (e.message === "BAD_PRICE") return { ok: false, error: "Enter a price greater than zero." };
@@ -753,23 +799,40 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
       const fee = Math.round(price * ((mp.feePct || 0) / 100) * 100) / 100;
       const proceeds = Math.round((price - fee) * 100) / 100;
 
-      listing.status = "sold";
-      listing.soldTo = buyerUsername;
-      listing.soldTs = Date.now();
-      listing.soldPrice = price;
-      listing.fee = fee;
-      (listing.offers || []).forEach(o => { if (o.status === "open") o.status = "declined"; });
-      // Any OTHER open listing of this exact asset by this seller is now
-      // stale — they no longer own it — so close those too rather than
-      // leaving a phantom listing that would only fail at checkout.
-      cls.listings.forEach(other => {
-        if (other.id === listing.id || !listingIsOpen(other)) return;
-        if (other.seller !== seller.username) return;
-        if (other.assetType !== listing.assetType || other.assetId !== listing.assetId) return;
-        // ...unless it's a store item they still own another copy of.
-        if (listing.assetType === "store" && (seller.storeItems || []).includes(listing.assetId)) return;
-        other.status = "cancelled";
-      });
+      // One copy of a listing of several: the sale gets its own "sold"
+      // record and the listing stays up with one fewer. The last (or only)
+      // copy closes the listing itself, as it always has.
+      const qty = listingQuantity(listing);
+      let sale = listing;
+      if (qty > 1) {
+        sale = Object.assign({}, listing, { id: uid("lst"), quantity: 1, offers: [], parentId: listing.id });
+        listing.quantity = qty - 1;
+        cls.listings.push(sale);
+        // The buyer's own offer on it (if any) is done with.
+        (listing.offers || []).forEach(o => { if (o.status === "open" && o.buyer === buyerUsername) o.status = "withdrawn"; });
+      } else {
+        (listing.offers || []).forEach(o => { if (o.status === "open") o.status = "declined"; });
+      }
+      sale.status = "sold";
+      sale.soldTo = buyerUsername;
+      sale.soldTs = Date.now();
+      sale.soldPrice = price;
+      sale.fee = fee;
+      if (listing.assetType === "store") {
+        // Never more copies up for sale than the seller still has.
+        _trimStoreListingsToOwned(cls, seller, listing.assetId);
+      } else {
+        // Any OTHER open listing of this vehicle/property by this seller is
+        // now stale — they no longer own it — so close those too rather
+        // than leaving a phantom listing that would only fail at checkout.
+        cls.listings.forEach(other => {
+          if (other.id === listing.id || !listingIsOpen(other)) return;
+          if (other.seller !== seller.username) return;
+          if (other.assetType !== listing.assetType || other.assetId !== listing.assetId) return;
+          other.status = "cancelled";
+        });
+      }
+      _trimStoredListings(cls);
 
       const buyerUpdate = {};
       if (!buyerIsTeacher) buyerUpdate.balance = Math.round((buyer.balance - price) * 100) / 100;
@@ -786,7 +849,8 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
         properties: cls.properties
       });
 
-      receipt = { price, fee, proceeds, name: listing.name, seller: seller.username, assetType: listing.assetType };
+      receipt = { price, fee, proceeds, name: listing.name, seller: seller.username, assetType: listing.assetType,
+        left: listing.status === "active" ? listingQuantity(listing) : 0 };
     });
   } catch (e) {
     if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };

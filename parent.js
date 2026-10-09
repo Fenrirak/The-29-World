@@ -38,17 +38,19 @@ function pvTimeAgo(ts) {
   return "on " + new Date(ts).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" });
 }
 
+// One horizontal bar per category, biggest first, each scaled against the
+// biggest — the same chart the student sees on their Reports page.
 function pvBars(map, colorClass, emptyText) {
   const entries = Object.entries(map && typeof map === "object" ? map : {})
     .map(([label, amt]) => [label, Number(amt) || 0]).filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]);
-  if (!entries.length) return `<p class="muted-small">${emptyText}</p>`;
+  if (!entries.length) return `<p class="pv-empty">${emptyText}</p>`;
   const max = Math.max(...entries.map(e => e[1]));
-  return entries.map(([label, amt]) => `
-    <div class="rpt-bar-row">
-      <div class="rpt-bar-label">${pvEscape(label)}</div>
-      <div class="rpt-bar-track"><div class="rpt-bar-fill ${colorClass}" style="width:${max ? Math.round((amt / max) * 100) : 0}%"></div></div>
-      <div class="rpt-bar-amount">${pvMoney(amt)}</div>
-    </div>`).join("");
+  return `<div class="pv-bars">${entries.map(([label, amt]) => `
+    <div class="pv-bar">
+      <div class="pv-bar-label">${pvEscape(label)}</div>
+      <div class="pv-bar-track"><div class="pv-bar-fill ${colorClass}" style="width:${max ? Math.max(2, Math.round((amt / max) * 100)) : 0}%"></div></div>
+      <div class="pv-bar-amount">${pvMoney(amt)}</div>
+    </div>`).join("")}</div>`;
 }
 
 function pvShowError(title, text) {
@@ -72,93 +74,115 @@ function pvRender(doc) {
         const target = Number(g.target) || 0, saved = Number(g.saved) || 0;
         const pct = target > 0 ? Math.max(0, Math.min(100, Math.round((saved / target) * 100))) : 0;
         return `
-          <div class="goal-row">
-            <div class="goal-head">
-              <strong class="goal-name">${pvEscape(g.name)}</strong>
+          <div class="pv-goal">
+            <div class="pv-goal-head">
+              <strong class="pv-goal-name">${pvEscape(g.name)}</strong>
               ${g.reached ? `<span class="badge mint">${pvIcon("star", 12)} Reached!</span>` : ""}
-              <span class="goal-amounts">${pvMoney(saved)} of ${pvMoney(target)}</span>
+              <span class="pv-goal-amounts">${pvMoney(saved)} <span>of ${pvMoney(target)}</span></span>
             </div>
-            <div class="rpt-bar-track goal-track"><div class="rpt-bar-fill ${g.reached ? "mint" : "gold"}" style="width:${pct}%"></div></div>
+            <div class="pv-bar-track pv-goal-track"><div class="pv-bar-fill ${g.reached ? "mint" : "gold"}" style="width:${pct}%"></div></div>
+            <div class="pv-goal-pct">${pct}% of the way there</div>
           </div>`;
       }).join("")
-    : `<p class="muted-small">${pvEscape(first)} hasn't set any savings goals yet.</p>`;
+    : `<p class="pv-empty">${pvEscape(first)} hasn't set any savings goals yet.</p>`;
 
   const owns = [
     ["Cash", v.balance], ["Savings account", v.savings], ["Term deposits", v.termDeposits],
     ["Shares", v.invested], ["Property", v.propertyValue], ["Vehicles", v.vehicleValue], ["Store items", v.storeValue]
   ].filter(([, amt]) => Number(amt));
+  const rate = Number.isFinite(Number(v.savingsRate)) && v.savingsRate !== null ? Number(v.savingsRate) + "%" : "—";
+  const meta = [
+    v.className ? `${pvIcon("users", 13)} ${pvEscape(v.className)}` : "",
+    v.teacherName ? `${pvIcon("idcard", 13)} Teacher: ${pvEscape(v.teacherName)}` : "",
+    v.job ? `${pvIcon("briefcase", 13)} Job: ${pvEscape(v.job)}` : ""
+  ].filter(Boolean);
+  const tile = (tone, ic, label, value, sub) => `
+    <div class="pv-tile ${tone}">
+      <div class="pv-tile-label">${pvIcon(ic, 16)}<span>${label}</span></div>
+      <div class="pv-tile-value">${value}</div>
+      ${sub ? `<div class="pv-tile-sub">${sub}</div>` : ""}
+    </div>`;
+  const tableRow = (label, amt, cls) => `<tr${cls ? ` class="${cls}"` : ""}><td>${label}</td><td>${amt}</td></tr>`;
 
   document.getElementById("parentReport").innerHTML = `
-    <div class="card parent-hero">
-      <div class="flex-between" style="align-items:flex-start;">
-        <div>
-          <h1 style="margin-bottom:4px;">${pvEscape(v.name)}'s report card</h1>
-          <p class="muted-small" style="margin:0;">
-            ${v.className ? pvEscape(v.className) : ""}${v.teacherName ? ` · Teacher: ${pvEscape(v.teacherName)}` : ""}${v.job ? ` · Job: ${pvEscape(v.job)}` : ""}
-          </p>
-          <p class="muted-small" style="margin:4px 0 0;">Last updated ${pvTimeAgo(doc.updatedAt)}.</p>
+    <section class="card pv-hero">
+      <div class="pv-hero-top">
+        <div class="pv-hero-text">
+          <div class="pv-eyebrow">Report card</div>
+          <h1>${pvEscape(v.name)}</h1>
+          ${meta.length ? `<div class="pv-meta">${meta.map(m => `<span>${m}</span>`).join("")}</div>` : ""}
+          <p class="pv-updated">Last updated ${pvTimeAgo(doc.updatedAt)}</p>
         </div>
-        <button class="btn small secondary no-print" style="margin-top:0;" onclick="window.print()">Print</button>
+        <button class="btn secondary no-print pv-print" onclick="window.print()">Print</button>
       </div>
-      <div class="parent-explainer">
-        <strong>What is this?</strong> The 29 World is a classroom money game. Students earn, save, spend and invest
-        <em>pretend</em> money to practise real money skills. None of the amounts here are real money.
+      <div class="pv-explainer">
+        <span class="pv-explainer-icon">${pvIcon("star", 18)}</span>
+        <p><strong>What is this?</strong> The 29 World is a classroom money game. Students earn, save, spend and invest
+        <em>pretend</em> money to practise real money skills. None of the amounts here are real money.</p>
       </div>
-    </div>
+    </section>
 
-    <div class="grid grid-4">
-      <div class="stat gold"><span class="icon">${pvIcon("medal", 30)}</span><div class="label">Net worth</div><div class="value">${pvMoney(v.netWorth)}</div></div>
-      <div class="stat mint"><span class="icon">${pvIcon("piggy", 30)}</span><div class="label">Savings account</div><div class="value">${pvMoney(v.savings)}</div></div>
-      <div class="stat lilac"><span class="icon">${pvIcon("coin", 30)}</span><div class="label">Cash</div><div class="value">${pvMoney(v.balance)}</div></div>
-      <div class="stat sky"><span class="icon">${pvIcon("percent", 30)}</span><div class="label">Savings rate</div><div class="value">${Number.isFinite(Number(v.savingsRate)) && v.savingsRate !== null ? Number(v.savingsRate) + "%" : "—"}</div><div class="muted-small" style="color:inherit;opacity:.85;margin-top:2px;">of this month's income</div></div>
-    </div>
+    <section class="pv-tiles">
+      ${tile("navy", "medal", "Net worth", pvMoney(v.netWorth), "Everything they have, minus what they owe")}
+      ${tile("mint", "piggy", "Savings account", pvMoney(v.savings), "")}
+      ${tile("gold", "coin", "Cash", pvMoney(v.balance), "Ready to spend")}
+      ${tile("sky", "percent", "Savings rate", rate, "Of this month's income")}
+    </section>
 
-    <div class="card">
-      <h2>${pvIcon("trophy", 18)} Savings goals</h2>
-      ${goalsHtml}
-    </div>
+    <section class="card pv-card">
+      <h2>${pvIcon("trophy", 20)} Savings goals</h2>
+      <div class="pv-goals">${goalsHtml}</div>
+    </section>
 
-    <div class="card">
-      <h2>${pvIcon("calendar", 18)} ${pvEscape(v.monthLabel || "This month")}</h2>
-      <div class="profile-summary">
-        <div class="profile-chip"><div class="label">Earned</div><div class="value">${pvMoney(v.incomeTotal)}</div></div>
-        <div class="profile-chip"><div class="label">Saved &amp; invested</div><div class="value">${pvMoney(v.savedTotal)}</div></div>
-        <div class="profile-chip"><div class="label">Spent</div><div class="value">${pvMoney(v.spentTotal)}</div></div>
+    <section class="card pv-card">
+      <h2>${pvIcon("calendar", 20)} ${pvEscape(v.monthLabel || "This month")}</h2>
+      <div class="pv-month-sum">
+        <div class="pv-sum gold"><div class="pv-sum-label">Earned</div><div class="pv-sum-value">${pvMoney(v.incomeTotal)}</div></div>
+        <div class="pv-sum mint"><div class="pv-sum-label">Saved &amp; invested</div><div class="pv-sum-value">${pvMoney(v.savedTotal)}</div></div>
+        <div class="pv-sum coral"><div class="pv-sum-label">Spent</div><div class="pv-sum-value">${pvMoney(v.spentTotal)}</div></div>
       </div>
-      <h4>Where the money came from</h4>
-      ${pvBars(v.income, "gold", "Nothing earned yet this month.")}
-      <h4>Saved &amp; invested</h4>
-      ${pvBars(v.saved, "mint", "Nothing set aside yet this month.")}
-      <h4>Spent on</h4>
-      ${pvBars(v.spent, "coral", "Nothing spent yet this month.")}
-    </div>
-
-    <div class="grid grid-2">
-      <div class="card">
-        <h2>${pvIcon("bank", 18)} What ${pvEscape(first)} has</h2>
-        ${owns.length ? `<table><tbody>${owns.map(([label, amt]) => `<tr><td>${label}</td><td>${pvMoney(amt)}</td></tr>`).join("")}
-          ${Number(v.owed) ? `<tr><td>Owes (loans and mortgage)</td><td>-${pvMoney(v.owed)}</td></tr>` : ""}
-        </tbody></table>` : `<p class="muted-small">Nothing yet.</p>`}
-        ${loanCount ? `<p class="muted-small">${loanCount} loan${loanCount === 1 ? "" : "s"} still being paid off.</p>` : ""}
+      <div class="pv-section">
+        <h3>${pvIcon("coin", 16)} Where the money came from</h3>
+        ${pvBars(v.income, "gold", "Nothing earned yet this month.")}
       </div>
-      <div class="card">
-        <h2>${pvIcon("star", 18)} Since joining</h2>
-        <table><tbody>
-          <tr><td>Earned in total</td><td>${pvMoney(v.lifetimeIncomeTotal)}</td></tr>
-          <tr><td>Saved &amp; invested in total</td><td>${pvMoney(v.lifetimeSavedTotal)}</td></tr>
-          <tr><td>Spent in total</td><td>${pvMoney(v.lifetimeSpentTotal)}</td></tr>
+      <div class="pv-section">
+        <h3>${pvIcon("piggy", 16)} Saved &amp; invested</h3>
+        ${pvBars(v.saved, "mint", "Nothing set aside yet this month.")}
+      </div>
+      <div class="pv-section">
+        <h3>${pvIcon("cart", 16)} Spent on</h3>
+        ${pvBars(v.spent, "coral", "Nothing spent yet this month.")}
+      </div>
+    </section>
+
+    <div class="pv-two">
+      <section class="card pv-card">
+        <h2>${pvIcon("bank", 20)} What ${pvEscape(first)} has</h2>
+        ${owns.length || Number(v.owed) ? `<table class="pv-table"><tbody>
+          ${owns.map(([label, amt]) => tableRow(label, pvMoney(amt))).join("")}
+          ${Number(v.owed) ? tableRow("Owes (loans and mortgage)", "-" + pvMoney(v.owed), "pv-owed") : ""}
+          ${tableRow("Net worth", pvMoney(v.netWorth), "pv-total")}
+        </tbody></table>` : `<p class="pv-empty">Nothing yet.</p>`}
+        ${loanCount ? `<p class="pv-note">${loanCount} loan${loanCount === 1 ? "" : "s"} still being paid off.</p>` : ""}
+      </section>
+      <section class="card pv-card">
+        <h2>${pvIcon("star", 20)} Since joining</h2>
+        <table class="pv-table"><tbody>
+          ${tableRow("Earned in total", pvMoney(v.lifetimeIncomeTotal))}
+          ${tableRow("Saved &amp; invested in total", pvMoney(v.lifetimeSavedTotal))}
+          ${tableRow("Spent in total", pvMoney(v.lifetimeSpentTotal))}
         </tbody></table>
-      </div>
+      </section>
     </div>
 
-    <div class="card no-print">
-      <h2>${pvIcon("users", 18)} Things to talk about</h2>
-      <ul class="parent-tips">
+    <section class="card pv-card no-print">
+      <h2>${pvIcon("users", 20)} Things to talk about</h2>
+      <ul class="pv-tips">
         <li>What are you saving up for, and how long will it take to get there?</li>
         <li>What did you spend the most on this month? Was it worth it?</li>
         <li>Have you tried the bank's savings account or the stock market yet? What happened?</li>
       </ul>
-    </div>
+    </section>
   `;
   document.getElementById("parentLoading").classList.add("hidden");
   document.getElementById("parentReport").classList.remove("hidden");

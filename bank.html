@@ -28,7 +28,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=0e9ba51e">
+<link rel="stylesheet" href="style.css?v=689af5a6">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -89,20 +89,70 @@
   </div>
 
   <!-- ---------------- Budgeting overview (teacher) ---------------- -->
-  <div class="card hidden" id="budgetTeacherCard">
-    <div class="flex-between">
-      <h2 id="hBudgetTeacher">Who's budgeting this week</h2>
+  <div class="card budget-card hidden" id="budgetTeacherCard">
+    <div class="flex-between bud-head">
+      <h2 id="hBudgetTeacher">Students' budgets this week</h2>
       <span class="bud-week" id="budWeekTeacher"></span>
     </div>
-    <p>Every student can plan their week on this page. This is who has, and whether their plan actually covers what they owe.</p>
+    <p class="bud-intro">Each student's week, worked out from their job, bills and spending: what's coming in, what their bills come to, and how they're doing against the savings plan they chose.</p>
     <div class="grid grid-3" id="budTeacherStats"></div>
     <div class="table-scroll">
-      <table>
-        <thead><tr><th>Student</th><th>Planned income</th><th>Fixed costs</th><th>Set aside for needs</th><th>Saving</th><th>Spent so far</th></tr></thead>
+      <table class="bud-teacher-table">
+        <thead><tr><th>Student</th><th>Coming in</th><th>Bills</th><th>Left after bills</th><th>Plans to save</th><th>Saved so far</th><th>Spent</th><th>How it's going</th></tr></thead>
         <tbody id="budTeacherTable"></tbody>
       </table>
     </div>
     <p class="muted-small" id="noBudTeacher">No students in this class yet.</p>
+  </div>
+
+  <!-- ---------------- My budget (student) — the sums are in data-money.js ---------------- -->
+  <div class="card budget-card hidden" id="budgetCard">
+    <div class="flex-between bud-head">
+      <h2 id="hBudget">My budget</h2>
+      <span class="bud-week" id="budWeek"></span>
+    </div>
+    <p class="bud-intro">This week's money (Monday to Sunday), worked out for you: what's coming in, your bills, and what's left. All you choose is how much to save — the rest is your spending money.</p>
+
+    <div class="bud-sum" id="budSummary"></div>
+    <div id="budVerdict"></div>
+
+    <div class="bud-layout">
+      <form class="bud-panel bud-plan" onsubmit="return saveBudgetPlan(event)">
+        <h3 id="hBudPlan">My plan</h3>
+        <label for="budSave" id="labBudSave">How much will I save each week?</label>
+        <div class="bud-save-row">
+          <div class="bud-money-field">
+            <span class="bud-currency">$</span>
+            <input id="budSave" type="number" min="0" step="0.01" inputmode="decimal" oninput="budgetRecalc()">
+          </div>
+          <div class="bud-chips" id="budChips" role="group" aria-label="Quick amounts"></div>
+        </div>
+        <div class="bud-result" id="budResult" aria-live="polite"></div>
+        <div class="bud-split-wrap" id="budSplitWrap">
+          <div class="bud-split-bar" id="budSplitBar" role="img"></div>
+          <div class="bud-split-legend" id="budSplitLegend"></div>
+          <p class="muted-small bud-guide">A common guide is <strong>50/30/20</strong>: about half your money on needs (your bills), 30% on wants, and 20% saved.</p>
+        </div>
+        <div class="bud-actions">
+          <button class="btn gold" type="submit" id="budSaveBtn">Save my plan</button>
+          <button class="btn small secondary hidden" type="button" id="budClearBtn" onclick="budgetClear()">Clear my plan</button>
+        </div>
+        <div id="budMsg"></div>
+      </form>
+
+      <div class="bud-panel bud-track">
+        <h3 id="hBudTrack">How this week is going</h3>
+        <div id="budTrackRows"></div>
+        <div class="bud-safe" id="budSafe"></div>
+      </div>
+    </div>
+
+    <div class="bud-days-wrap">
+      <h3 id="hBudDays">Day by day</h3>
+      <p class="muted-small">Everything that regularly comes in or goes out this week. Bills you pay yourself only go through if you pay them on their day.</p>
+      <div class="bud-days" id="budDays"></div>
+    </div>
+    <div id="budNotes"></div>
   </div>
 
   <div class="card" id="savingsCard">
@@ -237,58 +287,6 @@
   <!-- ---------------- Savings goals (student) — filled in by savings-goals.js ---------------- -->
   <div class="card hidden" id="goalsCard"></div>
 
-  <!-- ---------------- Budgeting tool (student) ---------------- -->
-  <div class="card budget-card hidden" id="budgetCard">
-    <div class="flex-between">
-      <h2 id="hBudget">This week's plan</h2>
-      <span class="bud-week" id="budWeek"></span>
-    </div>
-    <p id="budgetIntro">Decide where your money is going <em>before</em> it goes there. Split what you expect to earn across the three groups below and save — your plan then keeps applying every week automatically, using the same numbers, until you come back and change them.</p>
-
-    <div id="budVerdict"></div>
-    <div id="budNotes"></div>
-
-    <div class="bud-layout">
-      <form class="bud-plan" onsubmit="return saveBudgetPlan(event)">
-        <label for="budIncome" id="labBudIncome">What I expect to earn this week</label>
-        <div class="bud-money-field">
-          <span class="bud-currency">$</span>
-          <input id="budIncome" type="number" min="0" step="0.01" required inputmode="decimal" oninput="budgetRecalc()">
-        </div>
-        <p class="muted-small" id="budIncomeHint"></p>
-
-        <div id="budRows"></div>
-
-        <div class="bud-total" id="budTotals"></div>
-        <div class="bud-split-wrap hidden" id="budSplitWrap">
-          <div class="bud-split-bar" id="budSplitBar" role="img" aria-label="Budget split"></div>
-          <div class="bud-split-legend" id="budSplitLegend"></div>
-        </div>
-
-        <div class="bud-actions">
-          <button class="btn gold" type="submit" id="budSaveBtn">Save my plan</button>
-          <button class="btn small secondary" type="button" id="budSuggestBtn" onclick="budgetSuggest()">Suggest a split</button>
-          <button class="btn small secondary hidden" type="button" id="budClearBtn" onclick="budgetClear()">Start again</button>
-        </div>
-        <div id="budMsg"></div>
-      </form>
-
-      <div class="bud-fixed">
-        <h3 id="hBudFixed">Already committed</h3>
-        <p class="muted-small">Money that's leaving your account this week whether you plan for it or not.</p>
-        <div id="budFixedList"></div>
-        <p class="muted-small" id="noBudFixed">Nothing is locked in this week — no mortgage, no loan falling due, no automatic payments.</p>
-        <div class="bud-fixed-total" id="budFixedTotal"></div>
-      </div>
-    </div>
-
-    <div class="bud-track" id="budTrack">
-      <h3 id="hBudTrack">How this week is actually going</h3>
-      <div id="budTrackRows"></div>
-      <p class="muted-small" id="budTrackNote"></p>
-    </div>
-  </div>
-
   <div class="card">
     <h2 id="hActivity">My recent activity</h2>
     <div class="table-scroll">
@@ -313,15 +311,15 @@
 <script type="module" src="firebase-init.js?v=9f8488c9"></script>
 <script defer src="icons.js?v=ece0bfd2"></script>
 <script defer src="settings-menu.js?v=fde34c7c"></script>
-<script defer src="data-core.js?v=99476bd4"></script>
-<script defer src="data-money.js?v=59d042a1"></script>
-<script defer src="data-life.js?v=86a285a7"></script>
+<script defer src="data-core.js?v=dff7e395"></script>
+<script defer src="data-money.js?v=8b45e3ea"></script>
+<script defer src="data-life.js?v=8e12078e"></script>
 <script defer src="data-property.js?v=6abfe689"></script>
-<script defer src="data-markets.js?v=d1c1af78"></script>
-<script defer src="events-ui.js?v=c31d5f8e"></script>
+<script defer src="data-markets.js?v=fffa8d75"></script>
+<script defer src="events-ui.js?v=6708879f"></script>
 <script defer src="quiz-gate.js?v=f23c49f4"></script>
-<script defer src="notifications.js?v=27799225"></script>
+<script defer src="notifications.js?v=ada89b07"></script>
 <script defer src="savings-goals.js?v=ed3340bf"></script>
-<script defer src="bank.js?v=53700285"></script>
+<script defer src="bank.js?v=af939e96"></script>
 </body>
 </html>

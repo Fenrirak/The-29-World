@@ -379,7 +379,7 @@ function notifMarketplaceItems(me, cls) {
     if (l.seller === me.username && l.status === "pending") {
       out.push({
         id: "pending-" + l.id, ts: l.ts || dayStart, icon: "cart", tone: "navy",
-        title: `${l.name} is waiting for teacher approval`,
+        title: `${l.name}${listingQuantity(l) > 1 ? " ×" + listingQuantity(l) : ""} ${listingQuantity(l) > 1 ? "are" : "is"} waiting for teacher approval`,
         body: `Listed at ${fmtMoney(l.price)}. It goes live once your teacher approves it.`,
         href: "marketplace.html"
       });

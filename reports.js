@@ -183,7 +183,11 @@ function openStudentReport(username) {
     `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${escapeHtml(s.name)}`;
   document.getElementById("reportModalSubtitle").textContent =
     `@${s.username} — ${VIEWING === "current" ? "this month" : "saved " + VIEWED_REPORT.archivedDate}, covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
-  document.getElementById("reportModalBody").innerHTML = studentReportHTML(s);
+  // The modal's own heading isn't printed (it sits with the buttons), so
+  // the printout gets the name and dates here instead.
+  document.getElementById("reportModalBody").innerHTML =
+    `<div class="print-only rpt-print-head"><h2>${escapeHtml(s.name)}</h2><p>${escapeHtml(document.getElementById("reportModalSubtitle").textContent)}</p></div>` +
+    studentReportHTML(s);
   document.getElementById("reportModal").classList.remove("hidden");
 }
 
@@ -201,16 +205,24 @@ function renderStudent() {
     body.innerHTML = `<p class="muted-small">No data yet — get started with a job, some savings, or a purchase and check back here.</p>`;
     return;
   }
-  const history = ARCHIVES.filter(a => (a.students || []).some(x => x.username === CURRENT.username))
-    .map(a => (a.students.find(x => x.username === CURRENT.username) || {}).netWorth)
-    .filter(v => typeof v === "number");
-  history.push(s.netWorth);
+  const history = myNetWorthHistory(s);
 
   body.innerHTML = `
+    <p class="print-only rpt-print-head"><strong>${escapeHtml(s.name)}</strong></p>
     <h3>${icon("chart", 16)} Net worth over time</h3>
     ${netWorthSparkline(history)}
     ${studentReportHTML(s)}
   `;
+}
+
+// This student's net worth on each saved report card, then now — the
+// trend line on their own report (and its PDF).
+function myNetWorthHistory(s) {
+  const history = ARCHIVES.filter(a => (a.students || []).some(x => x.username === CURRENT.username))
+    .map(a => (a.students.find(x => x.username === CURRENT.username) || {}).netWorth)
+    .filter(v => typeof v === "number");
+  history.push(s.netWorth);
+  return history;
 }
 
 function netWorthSparkline(history) {
@@ -233,6 +245,7 @@ function netWorthSparkline(history) {
 }
 
 /* ---------------- Shared per-student breakdown ---------------- */
+const REPORT_LIFETIME_NOTE = "Everything since the account was made, or since the class was last restarted — it doesn't reset when the month rolls over.";
 function renderBars(map, colorClass) {
   const entries = Object.entries(map || {}).sort((a, b) => b[1] - a[1]);
   if (!entries.length) return `<p class="muted-small">Nothing here yet.</p>`;
@@ -290,7 +303,7 @@ function studentReportHTML(s) {
     ${renderBars(s.spent, "coral")}
 
     <h3 style="margin-top:26px;">${icon("vault", 17)} Entire history</h3>
-    <p class="muted-small">Everything on this account since it was created — never resets, including when the month rolls over or the class is reset.</p>
+    <p class="muted-small">${REPORT_LIFETIME_NOTE}</p>
 
     <h4>${icon("piggy", 16)} All-time income ${fmtMoney(s.lifetimeIncomeTotal)}</h4>
     ${renderBars(s.lifetimeIncome, "gold")}
@@ -477,7 +490,7 @@ async function downloadReportPDF() {
   }
   const me = (VIEWED_REPORT.students || []).find(x => x.username === CURRENT.username);
   if (!me) { alert("There's no report data to download yet."); return; }
-  downloadStudentReportPDF(me, VIEWED_REPORT);
+  downloadStudentReportPDF(me, VIEWED_REPORT, myNetWorthHistory(me));
 }
 
 function reportToRows(report) {

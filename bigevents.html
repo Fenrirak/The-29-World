@@ -28,7 +28,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=0e9ba51e">
+<link rel="stylesheet" href="style.css?v=689af5a6">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -73,7 +73,7 @@
 
 <main>
   <h1 id="pageTitle">Big Events</h1>
-  <p>Rare, high-stakes random events. Each week every student has a small chance of being hit with one — when it happens they must choose to pay the cost, lose the associated thing, or claim matching insurance.</p>
+  <p>Rare, high-stakes random events. Each week every student has a 30% chance of being hit with one, on a random school day (Monday to Friday) — when it happens they must choose to pay the cost, lose the associated thing, or claim matching insurance.</p>
 
   <div id="teacherPanel" class="card hidden">
     <h2 id="hAdd">Add a big event</h2>
@@ -120,7 +120,7 @@
 
     <div style="margin-top:20px;padding-top:16px;border-top:1.5px solid var(--line);">
       <button class="btn secondary" onclick="runBigEventsNow()" id="runBigEventsBtn">Run this week's big events now</button>
-      <p class="muted-small">Normally each eligible student only has a 25% chance of getting one per week — this forces it onto every eligible student right now (someone with a job/property/vehicle depending on the event), bypassing that chance and the once-per-week limit.</p>
+      <p class="muted-small">Normally each eligible student has a 30% chance of getting one per week, on a random school day — this gives one to every eligible student right now (someone with a job/property/vehicle depending on the event), skipping that chance. Anyone whose big event for this week is still waiting for its day gets it now instead; anyone who's already had this week's is skipped.</p>
       <div id="runBigEventsMsg"></div>
     </div>
   </div>
@@ -149,14 +149,14 @@
 <script type="module" src="firebase-init.js?v=9f8488c9"></script>
 <script defer src="icons.js?v=ece0bfd2"></script>
 <script defer src="settings-menu.js?v=fde34c7c"></script>
-<script defer src="data-core.js?v=99476bd4"></script>
-<script defer src="data-money.js?v=59d042a1"></script>
-<script defer src="data-life.js?v=86a285a7"></script>
+<script defer src="data-core.js?v=dff7e395"></script>
+<script defer src="data-money.js?v=8b45e3ea"></script>
+<script defer src="data-life.js?v=8e12078e"></script>
 <script defer src="data-property.js?v=6abfe689"></script>
-<script defer src="data-markets.js?v=d1c1af78"></script>
-<script defer src="events-ui.js?v=c31d5f8e"></script>
+<script defer src="data-markets.js?v=fffa8d75"></script>
+<script defer src="events-ui.js?v=6708879f"></script>
 <script defer src="quiz-gate.js?v=f23c49f4"></script>
-<script defer src="notifications.js?v=27799225"></script>
-<script defer src="bigevents.js?v=dfcab049"></script>
+<script defer src="notifications.js?v=ada89b07"></script>
+<script defer src="bigevents.js?v=085cd634"></script>
 </body>
 </html>

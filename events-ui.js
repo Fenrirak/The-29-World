@@ -1,13 +1,11 @@
 /* ===================== The 29 World — random event popups =====================
-   Weekly random events are assigned to every student once per NZ calendar
-   week (see processWeeklyEvents in data-life.js), but each event gets its own
-   random "revealAt" moment spread across the following day or so — so a
-   student who was given 3 events doesn't see them (or feel their balance
-   change) all at once. This file:
+   Each NZ week every student gets 2-5 random events, each planned for its
+   own school day (see processWeeklyEvents in data-life.js) — so a student
+   never sees them (or feels their balance change) all at once. This file:
    1. Only surfaces ONE event per check, the earliest one that's come due —
       never a batch — no matter how many are queued up.
    2. For fixed-amount events, doesn't apply the balance change until the
-      exact moment it's about to show the popup (via revealFixedEvent in
+      exact moment it's about to show the popup (via revealWeeklyEvent in
       the data-*.js files) — so a student's balance can never change silently ahead of
       them actually seeing what happened and why.
    3. For multiple-choice events, shows a forced modal that must be
@@ -48,17 +46,19 @@ async function checkWeeklyEventPopup(username, classCode) {
   // uses for exactly this "read the same doc again a moment later"
   // situation — means only the first of these four calls actually hits
   // the network; the rest reuse that cached copy (still safe: any write
-  // in between, e.g. revealFixedEvent() below, invalidates the cache the
+  // in between, e.g. revealWeeklyEvent() below, invalidates the cache the
   // instant it resolves, so a later check in this same sequence still
   // never sees stale data).
   let cls = await getClassCached(classCode);
   const user = await getUserCached(username);
   if (!cls || !user) return;
   const weekKey = isoWeekKey(new Date());
-  const now = Date.now();
+  const now = trustedNow().getTime();
+  const todayKey = nzDateKey();
+  const mine = (cls.eventLog || []).filter(l => l.studentUser === username && l.week === weekKey);
   // revealAt is missing on legacy log entries (from before this field
   // existed) — treat those as already due so nothing old gets stuck.
-  const due = (cls.eventLog || []).filter(l => l.studentUser === username && l.week === weekKey && (l.revealAt === undefined || l.revealAt <= now));
+  const due = mine.filter(l => l.status !== "skipped" && (l.revealAt === undefined || l.revealAt <= now));
   if (due.length === 0) return;
 
   // Multiple-choice events take priority — forced modal, must be answered.
@@ -72,23 +72,32 @@ async function checkWeeklyEventPopup(username, classCode) {
   // yet — this includes fixed events still waiting to be revealed
   // ("scheduled") as well as anything already resolved but unshown (a
   // legacy fallback from before "scheduled" existed).
+  // One new weekly event a day at most: a student who wasn't on the site
+  // on an event's day gets it on their next visit, but never more than one
+  // new one a day, so a week's events can't all land at once. Ones the
+  // teacher handed out with "Run this week's events now" don't count.
+  const revealedToday = mine.some(l => l.revealedDay === todayKey && !l.manual);
   let state = getShownEventState(username);
   if (state.week !== weekKey) state = { week: weekKey, ids: [] };
   const shown = new Set(state.ids);
   const candidates = due
-    .filter(l => l.type === "fixed" && (l.status === "scheduled" || l.status === "resolved") && !shown.has(l.id))
+    .filter(l => (l.status === "planned" && (l.manual || !revealedToday))
+      || (l.type === "fixed" && (l.status === "scheduled" || l.status === "resolved") && !shown.has(l.id)))
     .sort((a, b) => (a.revealAt || 0) - (b.revealAt || 0));
-  if (candidates.length === 0) return;
-  let entry = candidates[0];
-
-  if (entry.status === "scheduled") {
-    // This is the moment the balance change + txn actually happens — not
-    // a moment before. If it's already been revealed by another tab/page
-    // load in the meantime, revealFixedEvent just returns the resolved
-    // entry instead of double-applying anything.
-    const revealed = await revealFixedEvent(classCode, entry.id);
-    if (!revealed) return; // someone else's page load already handled it
-    entry = revealed;
+  let entry = null;
+  for (const c of candidates) {
+    if (c.status !== "planned" && c.status !== "scheduled") { entry = c; break; }
+    // This is the moment the event actually happens (and a fixed one's
+    // balance change + txn) — not a moment before. If another tab already
+    // did it, or it no longer applies, this returns null and the next one
+    // is tried.
+    const revealed = await revealWeeklyEvent(classCode, c.id);
+    if (revealed) { entry = revealed; break; }
+  }
+  if (!entry) return;
+  if (entry.type === "choice") {
+    showChoiceEventPopup(entry, username, classCode);
+    return;
   }
 
   // The plan that pays this student the most back for this event, if any —
@@ -373,8 +382,25 @@ async function checkBigEventPopup(username, classCode, onlyPending) {
   if (!username || !classCode) return;
   if (document.getElementById("anwBigEventModal")) return; // already showing
   // PERF FIX: see the comment on checkWeeklyEventPopup above.
-  const cls = await getClassCached(classCode);
+  let cls = await getClassCached(classCode);
   if (!cls) return;
+
+  // A scheduled big event whose moment has come happens now (see
+  // revealBigEvent). A bad one is always brought on, even over another
+  // popup; a good one only when its popup can be shown straight away, so
+  // the money never arrives without the student seeing why.
+  const nowMs = trustedNow().getTime();
+  const dueNow = (cls.bigEventLog || [])
+    .filter(e => e.studentUser === username && e.status === "scheduled" && (e.revealAt || 0) <= nowMs)
+    .sort((a, b) => (a.revealAt || 0) - (b.revealAt || 0));
+  const toReveal = dueNow.find(e => e.kind !== "good")
+    || (!onlyPending && !anyModalShowing() ? dueNow.find(e => e.kind === "good") : null);
+  if (toReveal) {
+    await revealBigEvent(classCode, toReveal.id);
+    cls = await getClassCached(classCode); // the reveal cleared the cache — read it fresh
+    if (!cls) return;
+    if (document.getElementById("anwBigEventModal")) return; // another check got there while we waited
+  }
 
   // Bad events (job/property/vehicle at risk) take priority — forced
   // modal, must be resolved via pay / forfeit / claim before continuing.
@@ -390,8 +416,8 @@ async function checkBigEventPopup(username, classCode, onlyPending) {
   }
   if (onlyPending || anyModalShowing()) return;
 
-  // Good (windfall) events are already paid out the moment they're
-  // generated — this just shows a friendly, dismissible heads-up the
+  // Good (windfall) events are already paid out the moment they happen
+  // (revealBigEvent) — this just shows a friendly, dismissible heads-up the
   // first time the student sees it, same one-time-shown pattern as the
   // regular weekly events.
   const state = getShownBigEventState(username);

@@ -142,7 +142,9 @@ async function render() {
 
   if (!IS_TEACHER) {
     const me = await getUserCached(CURRENT.username);
-    const mine = (cls.bigEventLog || []).filter(e => e.studentUser === me.username).slice().reverse();
+    // Only ones that have actually happened — not one still waiting for its day.
+    const mine = (cls.bigEventLog || []).filter(e => e.studentUser === me.username
+      && e.status !== "scheduled" && e.status !== "skipped").slice().reverse();
     document.getElementById("noHistory").classList.toggle("hidden", mine.length > 0);
     const box = document.getElementById("historyList");
     box.innerHTML = "";

@@ -114,8 +114,8 @@ function renderTeacher() {
   document.getElementById("approvalList").innerHTML = pending.map(l => `
     <div class="mkt-sell-row">
       <div class="grow">
-        <div class="mkt-sell-name">${icon(ASSET_ICON[l.assetType] || "cart", 15)} ${esc(l.name)}</div>
-        <div class="muted-small">Listed by ${esc(nameOf(l.seller))} at <strong>${fmtMoney(l.price)}</strong> — originally ${fmtMoney(l.refPrice)}${l.description ? ` · "${esc(l.description)}"` : ""}</div>
+        <div class="mkt-sell-name">${icon(ASSET_ICON[l.assetType] || "cart", 15)} ${esc(l.name)}${listingQuantity(l) > 1 ? ` <span class="badge navy">×${listingQuantity(l)}</span>` : ""}</div>
+        <div class="muted-small">Listed by ${esc(nameOf(l.seller))} at <strong>${fmtMoney(l.price)}</strong>${listingQuantity(l) > 1 ? " each" : ""} — originally ${fmtMoney(l.refPrice)}${l.description ? ` · "${esc(l.description)}"` : ""}</div>
       </div>
       <button class="btn small mint" onclick="approve('${l.id}', true)">${icon("plus", 13)} Approve</button>
       <button class="btn small coral" onclick="approve('${l.id}', false)">Reject</button>
@@ -223,7 +223,8 @@ function renderSellList() {
     `Set your own price, within ${mp.minPricePct}%${mp.maxPricePct > 0 ? `–${mp.maxPricePct}%` : "+"} of what the thing originally cost.` +
     (mp.maxActiveListings > 0 ? ` You can have ${mp.maxActiveListings} listing${mp.maxActiveListings === 1 ? "" : "s"} open at a time (${openMine} used).` : "") +
     (mp.feePct > 0 ? ` A ${mp.feePct}% market fee comes off whatever you sell for.` : "") +
-    (mp.requireApproval ? " Your teacher approves each listing before it goes live." : "");
+    (mp.requireApproval ? " Your teacher approves each listing before it goes live." : "") +
+    (mp.allowStore ? " Got several of the same store item? Put them all up in one listing — buyers take one at a time." : "");
 
   empty.classList.toggle("hidden", assets.length > 0);
   box.innerHTML = assets.map(a => {
@@ -237,14 +238,19 @@ function renderSellList() {
       </div>`;
     }
     const b = marketplacePriceBounds(CLS, a.refPrice);
+    const several = a.assetType === "store" && a.count > 1;
     return `<div class="mkt-sell-row">
       <div class="grow">
-        <div class="mkt-sell-name">${icon(ASSET_ICON[a.assetType], 15)} ${esc(a.name)}${a.count > 1 ? ` <span class="badge navy">×${a.count}</span>` : ""}</div>
+        <div class="mkt-sell-name">${icon(ASSET_ICON[a.assetType], 15)} ${esc(a.name)}${a.count > 1 ? ` <span class="badge navy">You have ${a.count}</span>` : ""}</div>
         <div class="muted-small">Originally ${fmtMoney(a.refPrice)}${a.note ? ` · ${esc(a.note)}` : ""}</div>
         <div class="mkt-band">Allowed price: ${bandText(a.refPrice)}</div>
       </div>
-      <input type="number" id="price-${key}" min="0" step="0.5" value="${b.min > 0 ? b.min : Math.round(a.refPrice * 0.9 * 100) / 100}" style="max-width:120px;" aria-label="Your price for ${esc(a.name)}">
-      <input type="text" id="desc-${key}" placeholder="Say something about it (optional)" style="max-width:230px;" aria-label="Description">
+      <label class="mkt-field"><span>${several ? "Price each" : "Price"}</span>
+        <input type="number" id="price-${key}" min="0" step="0.01" value="${b.min > 0 ? b.min : Math.round(a.refPrice * 0.9 * 100) / 100}" aria-label="Your price for ${esc(a.name)}"></label>
+      ${several ? `<label class="mkt-field mkt-field-qty"><span>How many</span>
+        <input type="number" id="qty-${key}" min="1" max="${a.count}" step="1" value="1" aria-label="How many ${esc(a.name)} to list"></label>` : ""}
+      <label class="mkt-field mkt-field-desc"><span>Note (optional)</span>
+        <input type="text" id="desc-${key}" placeholder="Say something about it" aria-label="Description"></label>
       <button class="btn small gold" onclick="listIt('${a.assetType}','${esc(a.assetId)}')" ${atCap ? "disabled" : ""}>${icon("cart", 13)} ${atCap ? "Listing limit reached" : "List it"}</button>
     </div>`;
   }).join("");
@@ -252,13 +258,17 @@ function renderSellList() {
 
 async function listIt(assetType, assetId) {
   const key = assetType + "-" + assetId;
+  const qtyEl = document.getElementById("qty-" + key);
   const res = await createListing(CURRENT.username, CURRENT.classCode, {
     assetType, assetId,
     price: document.getElementById("price-" + key).value,
-    description: document.getElementById("desc-" + key).value
+    description: document.getElementById("desc-" + key).value,
+    quantity: qtyEl ? qtyEl.value.trim() : 1
   });
+  const qty = res.ok ? listingQuantity(res.listing) : 1;
+  const what = res.ok && qty > 1 ? `${qty} × ${esc(res.listing.name)}` : "It";
   document.getElementById("sellMsg").innerHTML = res.ok
-    ? `<div class="success-msg">Listed${CLS.marketplace.requireApproval ? " — waiting for your teacher to approve it." : "! It's live in the Trade Centre now."}</div>`
+    ? `<div class="success-msg">Listed${CLS.marketplace.requireApproval ? ` — ${qty > 1 ? `${what} are` : "it's"} waiting for your teacher to approve.` : `! ${what} ${qty > 1 ? "are" : "is"} live in the Trade Centre now.`}</div>`
     : `<div class="error-msg">${esc(res.error)}</div>`;
   await render();
 }
@@ -270,6 +280,7 @@ function listingCardHtml(l, opts) {
   const openOffers = (l.offers || []).filter(o => o.status === "open");
   const myOffer = openOffers.find(o => o.buyer === (ME && ME.username));
   const diffPct = l.refPrice ? Math.round(((l.price - l.refPrice) / l.refPrice) * 100) : 0;
+  const qty = listingQuantity(l);
 
   let actions = "";
   if (teacher) {
@@ -277,7 +288,7 @@ function listingCardHtml(l, opts) {
   } else if (mine) {
     actions = `<button class="btn small secondary" onclick="cancelMine('${l.id}')">${icon("trash", 13)} Cancel listing</button>`;
   } else if (CLS.marketplace.enabled) {
-    actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${icon("cart", 13)} Buy for ${fmtMoney(l.price)}</button>`;
+    actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${icon("cart", 13)} ${qty > 1 ? "Buy 1" : "Buy"} for ${fmtMoney(l.price)}</button>`;
     if (CLS.marketplace.allowOffers) {
       actions += myOffer
         ? `<button class="btn small secondary" onclick="withdraw('${l.id}','${myOffer.id}')">Withdraw my ${fmtMoney(myOffer.amount)} offer</button>`
@@ -287,7 +298,7 @@ function listingCardHtml(l, opts) {
 
   const offerForm = (!mine && !teacher && OFFERING === l.id) ? `
     <div class="mkt-offer-list">
-      <label for="offer-${l.id}">Your offer (allowed: ${bandText(l.refPrice)})</label>
+      <label for="offer-${l.id}">Your offer${qty > 1 ? " for one" : ""} (allowed: ${bandText(l.refPrice)})</label>
       <input id="offer-${l.id}" type="number" min="0" step="0.5" value="${Math.round(l.price * 0.8 * 100) / 100}">
       <input id="offernote-${l.id}" type="text" placeholder="Why should they take it? (optional)">
       <div class="row-flex" style="gap:8px;margin-top:10px;">
@@ -312,15 +323,16 @@ function listingCardHtml(l, opts) {
 
   return `
     <div class="mkt-listing${mine ? " mine" : ""}" id="lst-${l.id}">
-      <h4>${icon(ASSET_ICON[l.assetType] || "cart", 19)}${esc(l.name)}</h4>
+      <h4>${icon(ASSET_ICON[l.assetType] || "cart", 19)}${esc(l.name)}${qty > 1 ? ` <span class="badge navy">×${qty}</span>` : ""}</h4>
       ${l.description ? `<p class="mkt-desc">${esc(l.description)}</p>` : ""}
       <div class="mkt-price">
-        <span class="now">${fmtMoney(l.price)}</span>
+        <span class="now">${fmtMoney(l.price)}${qty > 1 ? `<span class="mkt-each"> each</span>` : ""}</span>
         <span class="ref">store price ${fmtMoney(l.refPrice)} · <span class="${diffPct > 0 ? "ticker-down" : "ticker-up"}">${diffPct > 0 ? "+" : ""}${diffPct}%</span></span>
       </div>
       <div class="mkt-seller">
-        ${mine ? `<span class="mkt-status ${l.status}">${l.status === "pending" ? "Awaiting approval" : "Live"}</span>`
+        ${mine ? `<span class="mkt-status ${l.status}">${l.status === "pending" ? "Awaiting approval" : "Live"}</span>${qty > 1 ? ` <span class="muted-small">· ${qty} left</span>` : ""}`
                : `${icon("users", 13)} ${esc(nameOf(l.seller))}`}
+        ${!mine && qty > 1 ? `<span class="muted-small">· ${qty} available</span>` : ""}
         ${!mine && openOffers.length ? `<span class="muted-small">· ${openOffers.length} offer${openOffers.length === 1 ? "" : "s"} in</span>` : ""}
         ${teacher ? `<span class="muted-small">· ${esc(nameOf(l.seller))}</span>` : ""}
       </div>
@@ -335,13 +347,14 @@ function toggleOffer(id) { OFFERING = (OFFERING === id) ? null : id; renderStude
 async function buyIt(id) {
   const l = (CLS.listings || []).find(x => x.id === id);
   if (!l) return;
-  if (!confirm(`Buy "${l.name}" from ${nameOf(l.seller)} for ${fmtMoney(l.price)}?`)) return;
+  const several = listingQuantity(l) > 1;
+  if (!confirm(`Buy ${several ? "one" : `"${l.name}"`}${several ? ` "${l.name}"` : ""} from ${nameOf(l.seller)} for ${fmtMoney(l.price)}?`)) return;
   const res = await buyListing(CURRENT.username, CURRENT.classCode, id);
   await render();
   if (res.ok) {
-    // The listing's card is gone once it's sold, so the message goes in
-    // the box at the top of the list instead.
-    flashMsg(document.getElementById("browseMsg"), `<div class="success-msg">Bought ${esc(l.name)}! It's yours now.</div>`);
+    // The listing's card may be gone once it's sold, so the message goes
+    // in the box at the top of the list instead.
+    flashMsg(document.getElementById("browseMsg"), `<div class="success-msg">Bought ${esc(l.name)}! It's yours now.${res.left > 0 ? ` ${res.left} more still for sale.` : ""}</div>`);
     return;
   }
   const box = document.getElementById("msg-" + id);
@@ -369,13 +382,15 @@ async function decline(listingId, offerId) {
   await render();
 }
 async function accept(listingId, offerId) {
-  if (!confirm("Accept this offer and hand the item over?")) return;
+  const l = (CLS.listings || []).find(x => x.id === listingId);
+  if (!confirm(l && listingQuantity(l) > 1 ? "Accept this offer and hand one of them over?" : "Accept this offer and hand the item over?")) return;
   const res = await acceptOffer(CURRENT.username, CURRENT.classCode, listingId, offerId);
   await render();
   if (!res.ok) alert(res.error);
 }
 async function cancelMine(id) {
-  if (!confirm("Take this listing down?")) return;
+  const l = (CLS.listings || []).find(x => x.id === id);
+  if (!confirm(l && listingQuantity(l) > 1 ? `Take this listing down? All ${listingQuantity(l)} still for sale come off the market.` : "Take this listing down?")) return;
   await cancelListing(CURRENT.username, CURRENT.classCode, id);
   await render();
 }
