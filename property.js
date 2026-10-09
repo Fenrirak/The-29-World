@@ -626,9 +626,9 @@ function tenantRentStatusLine(leaseStartWeekKey, rentLastWeekPaid, rentDay, pric
   const moveInWeek = leaseStartWeekKey === weekKey;
   const alreadyPaid = rentLastWeekPaid === weekKey;
   const isDueToday = (rentDay || "Fri") === nzDayName();
-  if (moveInWeek) return { status: `Your first payment isn't due yet — the week you moved in is free. It'll be ${fmtMoney(price)}, due ${DAY_FULL[rentDay || "Fri"]}.`, canPay: false };
-  if (alreadyPaid) return { status: `This week's rent of ${fmtMoney(price)} is already sorted.`, canPay: false };
-  if (!isDueToday) return { status: `Rent is due every ${DAY_FULL[rentDay || "Fri"]}. This week's will be ${fmtMoney(price)} — come back then to pay it yourself.`, canPay: false };
+  if (moveInWeek) return { status: `Your first payment isn't due yet — the week you moved in is free. It'll be ${fmtMoney(price)}, due ${DAY_FULL[rentDay || "Fri"]}.`, canPay: false, why: "The week you moved in is free" };
+  if (alreadyPaid) return { status: `This week's rent of ${fmtMoney(price)} is already sorted.`, canPay: false, why: "Already paid this week" };
+  if (!isDueToday) return { status: `Rent is due every ${DAY_FULL[rentDay || "Fri"]}. This week's will be ${fmtMoney(price)} — come back then to pay it yourself.`, canPay: false, why: `Rent can only be paid on ${DAY_FULL[rentDay || "Fri"]}s` };
   return { status: `${overdue ? "This week's rent is overdue. " : "Rent is due today. "}<strong>${fmtMoney(price)}</strong>.`, canPay: true };
 }
 
@@ -647,14 +647,14 @@ function renderMyRentedHome(cls, me, nameOf) {
 function renderMyClassmateRentedHome(box, prop, cls, nameOf) {
   const s = prop.sublet;
   const overdue = isSubletRentOverdue(prop, cls);
-  const { status, canPay } = tenantRentStatusLine(s.leaseStartWeekKey, s.rentLastWeekPaid, prop.rentDay, s.price, overdue);
+  const { status, canPay, why } = tenantRentStatusLine(s.leaseStartWeekKey, s.rentLastWeekPaid, prop.rentDay, s.price, overdue);
   const canMoveOut = leaseMinWeeksElapsed(s);
   box.innerHTML = `
     <div class="card">
       <h2>${icon("house", 18)} Your rented home</h2>
       <p><strong>${escapeHtml(prop.name)}</strong> — renting from ${nameOf(prop.owner)} at ${fmtMoney(s.price)}/week.</p>
       <p class="muted-small">${status}</p>
-      <button class="btn small gold" id="payTenantRentBtn-${prop.id}" ${canPay ? "" : "disabled"} onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>
+      <button class="btn small gold rent-pay-btn" id="payTenantRentBtn-${prop.id}" ${canPay ? "" : `disabled title="${why}"`} onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>
       <div id="tenantRentMsg-${prop.id}"></div>
       <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${s.minWeeks}-week lease, so you can't move out just yet.`}</p>
       ${canMoveOut ? `<button class="btn small secondary" onclick="tenantMoveOutClick('${prop.id}')">Move out</button>` : ""}
@@ -718,7 +718,7 @@ async function claimSubletClick(id) {
 /* ---------------- Student: NPC (school) rentals ---------------- */
 function renderMyNpcRentedHome(box, unit) {
   const overdue = isNpcRentOverdue(unit);
-  const { status, canPay } = tenantRentStatusLine(unit.leaseStartWeekKey, unit.rentLastWeekPaid, unit.rentDay, unit.rentPerWeek, overdue);
+  const { status, canPay, why } = tenantRentStatusLine(unit.leaseStartWeekKey, unit.rentLastWeekPaid, unit.rentDay, unit.rentPerWeek, overdue);
   const canMoveOut = leaseMinWeeksElapsed(unit);
   box.innerHTML = `
     <div class="card">
@@ -727,7 +727,7 @@ function renderMyNpcRentedHome(box, unit) {
       renting from the school at ${fmtMoney(unit.rentPerWeek)}/week.</p>
       ${unit.description ? `<p class="muted-small">${escapeHtml(unit.description)}</p>` : ""}
       <p class="muted-small">${status}</p>
-      <button class="btn small gold" id="payNpcRentBtn-${unit.id}" ${canPay ? "" : "disabled"} onclick="payNpcRentClick('${unit.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(unit.rentPerWeek)}</button>
+      <button class="btn small gold rent-pay-btn" id="payNpcRentBtn-${unit.id}" ${canPay ? "" : `disabled title="${why}"`} onclick="payNpcRentClick('${unit.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(unit.rentPerWeek)}</button>
       <div id="npcRentMsg-${unit.id}"></div>
       <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${unit.minWeeks}-week lease, so you can't move out just yet.`}</p>
       ${canMoveOut ? `<button class="btn small secondary" onclick="npcMoveOutClick('${unit.id}')">Move out</button>` : ""}

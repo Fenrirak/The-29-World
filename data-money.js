@@ -2808,10 +2808,17 @@ function buildBudgetView(cls, user, username) {
      wages are paid as soon as anyone opens the site on pay day, before a
      student can pay anything). Leaves out spending, which is up to them.
      The lowest point is how much they could spend right now and still pay
-     every bill on its day. */
+     every bill on its day. If it dips below $0, their Savings account can
+     make up the gap — they just have to move the money into cash first,
+     since bills only come out of cash. */
   const cash = budgetRound(user.balance);
+  // Savings that can cover a gap — less anything an automatic transfer
+  // already moves back into cash this week (that's counted as money in).
+  const savings = budgetRound(Math.max(0, Number(user.savings) || 0));
+  const unsaving = sum(items.filter(i => i.dir === "unsave" && ["today", "upcoming", "overdue"].includes(i.status)));
+  const savingsSpare = budgetRound(Math.max(0, savings - unsaving));
   const todayIdx = budgetDayIndex(nzDayName());
-  let running = cash, lowest = cash, lowestDay = null, shortfall = null;
+  let running = cash, lowest = cash, lowestDay = null, firstShort = null;
   for (let d = todayIdx; d < 7; d++) {
     const dayKey = dateKeyPlusDays(weekStartKey, d);
     let dayIn = 0, dayBills = 0, daySave = 0;
@@ -2826,23 +2833,42 @@ function buildBudgetView(cls, user, username) {
       else dayBills += i.amount;
     });
     const before = budgetRound(running + dayIn);
-    if (!shortfall && dayBills > before + 0.005) shortfall = { dayKey, need: budgetRound(dayBills), have: before };
+    if (!firstShort && dayBills > before + 0.005) firstShort = { dayKey, need: budgetRound(dayBills), have: before };
     running = budgetRound(before - dayBills);
     // An automatic transfer to savings only happens if there's the cash for it.
     if (daySave > 0 && running >= daySave) running = budgetRound(running - daySave);
     if (running < lowest) { lowest = running; lowestDay = dayKey; }
   }
-  const safeCash = budgetRound(Math.max(0, lowest));
+  // Not enough cash for a bill: how much has to come out of savings, and
+  // whether savings can cover all of it.
+  let shortfall = null;
+  if (firstShort) {
+    const gap = budgetRound(-lowest);
+    const uncovered = budgetRound(Math.max(0, gap - savingsSpare));
+    shortfall = Object.assign(firstShort, {
+      gap, fromSavings: budgetRound(Math.min(gap, savingsSpare)), uncovered, covered: uncovered <= 0.005
+    });
+  }
+  // Cash they could spend now and still pay every bill, using savings to
+  // top up later if needed. Never more than the cash they actually have.
+  const safeCash = budgetRound(Math.max(0, Math.min(cash, lowest + savingsSpare)));
   // With a plan, never more than the spending money it leaves.
   const safeNow = plan.hasPlan ? budgetRound(Math.max(0, Math.min(safeCash, spendLeft))) : safeCash;
   const safeReason = plan.hasPlan && spendLeft < safeCash ? "plan"
     : lowestDay ? "bills" : "cash";
+  // Of the bills still to come, how much savings would have to cover if
+  // they spent the whole safe amount now.
+  const safeFromSavings = budgetRound(Math.max(0, safeNow - lowest));
 
   /* ---- The one-line verdict ---- */
   const dayWord = budgetDayWord;
   let verdict;
   if (shortfall) {
-    verdict = { tone: "bad", icon: "shield", text: `Heads up: ${shortfall.dayKey === todayKey ? "today" : "on " + dayWord(shortfall.dayKey)} you'll need ${fmtMoney(shortfall.need)} for bills, but you'll only have about ${fmtMoney(Math.max(0, shortfall.have))}. Spend less before then, or move some money out of savings.` };
+    const when = shortfall.dayKey === todayKey ? "today" : "on " + dayWord(shortfall.dayKey);
+    const start = `${when === "today" ? "Today" : "On " + dayWord(shortfall.dayKey)} you'll need ${fmtMoney(shortfall.need)} for bills, but you'll only have about ${fmtMoney(Math.max(0, shortfall.have))} in cash.`;
+    verdict = shortfall.covered
+      ? { tone: "warn", icon: "piggy", text: `${start} Move ${fmtMoney(shortfall.gap)} from your savings into cash ${when === "today" ? "now" : "before then"} to cover this week's bills (you have ${fmtMoney(savings)} saved).` }
+      : { tone: "bad", icon: "shield", text: `Heads up: ${start} ${savingsSpare > 0 ? `Even with the ${fmtMoney(savingsSpare)} in your savings, you'll be` : "You have nothing in savings to cover it, so you'll be"} ${fmtMoney(shortfall.uncovered)} short this week. Spend as little as you can, and look for ways to earn extra.` };
   } else if (billsTotal > inTotal + 0.005) {
     verdict = { tone: "bad", icon: "shield", text: `This week's bills (${fmtMoney(billsTotal)}) are more than the money coming in (${fmtMoney(inTotal)}). The other ${fmtMoney(budgetRound(billsTotal - inTotal))} has to come from cash you already have or your savings.` };
   } else if (plan.hasPlan && spendLeft < -0.005) {
@@ -2905,7 +2931,7 @@ function buildBudgetView(cls, user, username) {
     ...sched, actual, plan,
     inItems, outItems, scheduledIn, inTotal, billsTotal, billsPaid, billsLeft, left,
     saveTarget, autoSave, spendAllowed, spent, spendLeft,
-    cash, safeNow, safeCash, safeReason, lowestDay, shortfall, verdict, notes
+    cash, savings, savingsSpare, safeNow, safeCash, safeReason, safeFromSavings, lowestDay, shortfall, verdict, notes
   };
 }
 
@@ -2915,7 +2941,8 @@ function classBudgetOverviewFromData(cls, students) {
   return students.map(s => {
     const v = buildBudgetView(cls, s, s.username);
     let status;
-    if (v.shortfall) status = "bounce";
+    if (v.shortfall && !v.shortfall.covered) status = "bounce";
+    else if (v.shortfall) status = "move";
     else if (v.billsTotal > v.inTotal + 0.005) status = "short";
     else if (v.plan.hasPlan && v.spendLeft < -0.005) status = "over";
     else if (!v.plan.hasPlan) status = "none";
@@ -2929,7 +2956,7 @@ function classBudgetOverviewFromData(cls, students) {
   }).sort((a, b) => BUDGET_STATUS_ORDER[a.status] - BUDGET_STATUS_ORDER[b.status] || a.name.localeCompare(b.name));
 }
 // Who the teacher should look at first.
-const BUDGET_STATUS_ORDER = { bounce: 0, short: 1, over: 2, none: 3, ok: 4 };
+const BUDGET_STATUS_ORDER = { bounce: 0, move: 1, short: 2, over: 3, none: 4, ok: 5 };
 
 // Whether a transaction belongs in a particular student's own activity
 // feed. Most types have exactly one participant on each side, so matching

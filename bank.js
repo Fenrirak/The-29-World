@@ -707,16 +707,25 @@ function renderBudgetStudent(me, cls) {
   }
   document.getElementById("budTrackRows").innerHTML = rows.join("");
 
-  // How much can be spent right now without a bill bouncing.
-  const keep = Math.round((v.cash - v.safeCash) * 100) / 100;
-  const safeWhy = v.cash < 0 ? "Your cash is below $0, so there's nothing safe to spend."
-    : v.safeReason === "plan" ? "That's what's left of your plan's spending money this week."
-    : v.safeReason === "bills" && keep > 0 ? `Keep at least ${fmtMoney(keep)} in cash for bills later this week${v.lowestDay ? ` (by ${budDateLabel(v.lowestDay, { day: undefined, month: undefined })})` : ""}.`
-    : "No more bills this week.";
+  // How much can be spent right now without a bill bouncing — counting
+  // savings as able to cover bills, once moved into cash.
+  const keep = Math.round((v.cash - v.safeNow) * 100) / 100;
+  const byDay = !v.lowestDay ? "" : v.lowestDay === v.todayKey ? " today" : ` by ${budDateLabel(v.lowestDay, { day: undefined, month: undefined })}`;
+  const fromSav = v.safeFromSavings > 0.005 ? `move ${fmtMoney(v.safeFromSavings)} from savings into cash${byDay}` : "";
+  let safeWhy;
+  if (v.cash < 0) safeWhy = "Your cash is below $0, so there's nothing safe to spend.";
+  else if (v.shortfall && !v.shortfall.covered) safeWhy = "This week's bills are more than your cash and savings put together, so there's nothing safe to spend.";
+  else if (v.safeReason === "plan") safeWhy = "That's what's left of your plan's spending money this week." + (fromSav ? ` Your bills will still need you to ${fromSav}.` : "");
+  else if (v.safeReason === "bills" && (keep > 0.005 || fromSav)) {
+    safeWhy = keep > 0.005
+      ? `Keep ${fmtMoney(keep)} in cash for bills later this week${fromSav ? `, and ${fromSav}` : byDay}.`
+      : `Your bills later this week will need you to ${fromSav}.`;
+  } else safeWhy = v.billsLeft > 0 ? "The money coming in covers the rest of this week's bills." : "No more bills this week.";
   document.getElementById("budSafe").innerHTML = `
     <div class="bud-safe-label">${icon("shield", 14)} Safe to spend right now</div>
     <div class="bud-safe-value">${fmtMoney(v.safeNow)}</div>
-    <div class="bud-safe-why">${budEsc(safeWhy)} You have ${fmtSigned(v.cash)} in cash.</div>`;
+    <div class="bud-safe-why">${budEsc(safeWhy)}</div>
+    <div class="bud-safe-have"><span>Cash <strong>${fmtSigned(v.cash)}</strong></span><span>Savings <strong>${fmtMoney(v.savings)}</strong></span></div>`;
 
   /* ---- Day by day ---- */
   const itemRow = i => {
@@ -763,11 +772,28 @@ function renderBudgetStudent(me, cls) {
   }
   document.getElementById("budDays").innerHTML = blocks.length ? blocks.join("")
     : `<p class="muted-small bud-empty">Nothing regular comes in or goes out this week yet.</p>`;
+  const toCome = v.items.filter(i => i.status === "today" || i.status === "upcoming" || i.status === "overdue").length;
+  document.getElementById("budDaysCount").textContent = v.items.length
+    ? `${v.items.length} item${v.items.length === 1 ? "" : "s"}${toCome ? ` · ${toCome} still to come` : ""}` : "";
+  const daysWrap = document.getElementById("budDaysWrap");
+  if (!daysWrap.dataset.ready) {
+    daysWrap.dataset.ready = "1";
+    let open = false;
+    try { open = localStorage.getItem("t29_bud_days_open") === "1"; } catch (e) {}
+    daysWrap.open = open;
+  }
 
+  // Warnings and tips sit at the top, straight under the main verdict.
   document.getElementById("budNotes").innerHTML = v.notes.map(n =>
     `<div class="bud-note ${n.tone}">${icon(n.icon, 16)}<span>${budEsc(n.text)}</span></div>`).join("");
 
   budgetRecalc();
+}
+
+// Remembers whether this student likes the day-by-day list open.
+function budgetDaysToggled(el) {
+  if (!el.dataset.ready) return;
+  try { localStorage.setItem("t29_bud_days_open", el.open ? "1" : "0"); } catch (e) {}
 }
 
 // The plan part, redrawn on every keystroke — only reads the input, never
@@ -860,7 +886,7 @@ function renderBudgetTeacher(cls, students) {
 
   const planned = rows.filter(r => r.planned);
   const onTrack = rows.filter(r => r.status === "ok");
-  const needHelp = rows.filter(r => r.status === "bounce" || r.status === "short" || r.status === "over");
+  const needHelp = rows.filter(r => r.status === "bounce" || r.status === "move" || r.status === "short" || r.status === "over");
   const stat = (tone, ic, label, value, of) => `
     <div class="stat ${tone}"><span class="icon">${icon(ic, 26)}</span>
       <div class="label">${label}</div>
@@ -872,6 +898,7 @@ function renderBudgetTeacher(cls, students) {
 
   const FLAG = {
     bounce: `<span class="bud-flag short">A bill could bounce</span>`,
+    move: `<span class="bud-flag warn">Needs money from savings</span>`,
     short: `<span class="bud-flag short">Bills more than money in</span>`,
     over: `<span class="bud-flag short">Over their plan</span>`,
     none: `<span class="bud-flag none">No plan yet</span>`,

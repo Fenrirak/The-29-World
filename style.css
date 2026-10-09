@@ -1158,14 +1158,9 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .mkt-status.cancelled,.mkt-status.rejected{background:#fceae7;color:#b8402c;}
 
 /* ---------------- Budgeting tool (bank.js) ----------------
-   The one card on the Bank page a student is meant to stop and think at,
-   so it sits at the top with a coral-gold-mint spine along its top edge.
-   Everything else here uses the same tokens as the rest of the app. */
-.budget-card{position:relative;overflow:hidden;border-color:#dfe5f1;}
-.budget-card::before{
-  content:"";position:absolute;left:0;right:0;top:0;height:4px;
-  background:linear-gradient(90deg,var(--coral),var(--gold) 45%,var(--mint));
-}
+   Plain boxes (no coloured edge bars) using the same tokens as the rest
+   of the app; colour is kept for the bars and the warning boxes. */
+.budget-card{border-color:#dfe5f1;}
 .bud-head{gap:10px;flex-wrap:wrap;}
 .bud-head h2{margin:0;}
 .bud-week{
@@ -1182,13 +1177,10 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 
 /* The three numbers: coming in, bills, left after bills. */
 .bud-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px;}
-.bud-tile{
-  border:1.5px solid var(--line);border-radius:12px;padding:14px 16px 13px;background:#fbfcff;min-width:0;
-  box-shadow:inset 0 4px 0 var(--line);
-}
-.bud-tile.in{box-shadow:inset 0 4px 0 var(--mint);}
-.bud-tile.out{box-shadow:inset 0 4px 0 var(--coral);}
-.bud-tile.left{box-shadow:inset 0 4px 0 var(--gold);}
+.bud-tile{border:1.5px solid var(--line);border-radius:12px;padding:14px 16px 13px;background:#fbfcff;min-width:0;}
+.bud-tile.in .bud-tile-label .icon{color:#217a5a;}
+.bud-tile.out .bud-tile-label .icon{color:#b8402c;}
+.bud-tile.left .bud-tile-label .icon{color:var(--gold-dark);}
 .bud-tile-label{
   display:flex;align-items:center;gap:6px;
   font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
@@ -1198,10 +1190,13 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .bud-tile.left.neg .bud-tile-value{color:#b8402c;}
 .bud-tile-sub{font-size:.78rem;color:var(--muted);margin-top:4px;line-height:1.4;}
 
-/* The one line a student reads if they read nothing else. */
+/* Warnings first: the main verdict, then any tips, straight under the
+   heading so they're the first thing a student reads. */
+.bud-alerts{margin-top:14px;}
+#budNotes:empty{display:none;}
 .bud-verdict{
   display:flex;align-items:flex-start;gap:11px;
-  border-radius:11px;padding:13px 15px;margin-top:14px;
+  border-radius:11px;padding:13px 15px;
   font-size:.9rem;font-weight:700;line-height:1.5;border:1.5px solid transparent;
 }
 .bud-verdict .icon{width:19px;height:19px;flex-shrink:0;margin-top:1px;}
@@ -1212,8 +1207,8 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 /* Plan on the left, how the week is going on the right. */
 .bud-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px;align-items:start;}
 .bud-panel{border:1.5px solid var(--line);border-radius:12px;padding:16px 18px 18px;background:#fbfcff;min-width:0;}
-.bud-panel h3,.bud-days-wrap h3{margin:0 0 12px;font-size:1rem;display:flex;align-items:center;gap:8px;}
-.bud-panel h3 .icon,.bud-days-wrap h3 .icon{color:var(--navy-700);flex-shrink:0;}
+.bud-panel h3{margin:0 0 12px;font-size:1rem;display:flex;align-items:center;gap:8px;}
+.bud-panel h3 .icon{color:var(--navy-700);flex-shrink:0;}
 .bud-plan label{margin-top:0;}
 
 .bud-save-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:6px;}
@@ -1286,10 +1281,25 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .bud-safe-label .icon{width:14px;height:14px;}
 .bud-safe-value{font-size:1.55rem;font-weight:900;margin-top:4px;line-height:1.15;}
 .bud-safe-why{font-size:.8rem;line-height:1.45;margin-top:4px;}
+.bud-safe-have{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(28,107,78,.18);font-size:.8rem;}
+.bud-safe-have strong{font-weight:800;}
 
-/* Day by day. */
-.bud-days-wrap{margin-top:22px;}
-.bud-days-wrap > .muted-small{margin:-4px 0 12px;}
+/* Day by day — folded away until a student opens it. */
+.bud-days-wrap{margin-top:18px;border:1.5px solid var(--line);border-radius:12px;background:#fbfcff;}
+.bud-days-summary{
+  display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;padding:13px 16px;cursor:pointer;
+  font-weight:800;font-size:1rem;color:var(--navy-900);list-style:none;border-radius:12px;
+}
+.bud-days-summary::-webkit-details-marker{display:none;}
+.bud-days-summary::after{content:"";width:8px;height:8px;margin-left:auto;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .15s ease;}
+.bud-days-wrap[open] > .bud-days-summary::after{transform:rotate(-135deg);}
+.bud-days-summary > span:first-child{display:inline-flex;align-items:center;gap:8px;}
+.bud-days-summary .icon{color:var(--navy-700);flex-shrink:0;}
+.bud-days-summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.bud-days-count{font-size:.78rem;font-weight:700;color:var(--muted);}
+.bud-days-wrap > .muted-small{margin:0 16px 12px;}
+.bud-days-wrap > .bud-days{padding:0 16px 16px;}
+.bud-days-wrap .bud-day{background:var(--card,#fff);}
 .bud-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;}
 .bud-day{border:1.5px solid var(--line);border-radius:12px;padding:6px 14px 4px;background:#fbfcff;min-width:0;}
 .bud-day.today{border-color:var(--gold);box-shadow:0 0 0 3px rgba(232,184,75,.18);}
@@ -1323,17 +1333,16 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .bud-chip-status.missed{background:#fceae7;color:#b8402c;}
 .bud-empty{margin:0;}
 
-/* Short tips under everything else. */
-#budNotes{margin-top:16px;}
+/* Short tips, under the verdict at the top. */
 .bud-note{
   display:flex;align-items:flex-start;gap:10px;
-  padding:11px 13px;border-radius:10px;margin-top:10px;
-  font-size:.85rem;line-height:1.55;border-left:4px solid var(--line);background:#f7f9fd;
+  padding:11px 14px;border-radius:10px;margin-top:8px;
+  font-size:.85rem;line-height:1.55;border:1.5px solid var(--line);background:#f7f9fd;
 }
 .bud-note .icon{width:16px;height:16px;flex-shrink:0;margin-top:2px;}
-.bud-note.good{border-left-color:var(--mint);background:#f0fbf6;color:#1c6b4e;}
-.bud-note.warn{border-left-color:var(--gold);background:#fdf8ee;color:#7a5510;}
-.bud-note.bad{border-left-color:var(--coral);background:#fdf2f0;color:#a8371f;}
+.bud-note.good{border-color:#b9e8d5;background:#f0fbf6;color:#1c6b4e;}
+.bud-note.warn{border-color:#eddbb4;background:#fdf8ee;color:#7a5510;}
+.bud-note.bad{border-color:#f0c4bc;background:#fdf2f0;color:#a8371f;}
 
 /* Teacher overview. */
 .bud-teacher-table td{vertical-align:middle;}
@@ -1345,21 +1354,22 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .bud-flag.ok{background:#e3f8f0;color:#217a5a;}
 .bud-flag.short{background:#fceae7;color:#b8402c;}
 .bud-flag.none{background:#eef1f7;color:var(--muted);}
+.bud-flag.warn{background:#fbf1dd;color:#8a6112;}
 
 @media(max-width:900px){
   .bud-layout{grid-template-columns:1fr;}
 }
 @media(max-width:600px){
   .bud-sum{grid-template-columns:1fr;gap:8px;}
-  .bud-tile{display:flex;align-items:center;flex-wrap:wrap;gap:2px 12px;padding:12px 14px;box-shadow:inset 4px 0 0 var(--line);}
-  .bud-tile.in{box-shadow:inset 4px 0 0 var(--mint);}
-  .bud-tile.out{box-shadow:inset 4px 0 0 var(--coral);}
-  .bud-tile.left{box-shadow:inset 4px 0 0 var(--gold);}
+  .bud-tile{display:flex;align-items:center;flex-wrap:wrap;gap:2px 12px;padding:12px 14px;}
   .bud-tile-label{flex:1 1 auto;}
   .bud-tile-value{margin-top:0;font-size:1.25rem;}
   .bud-tile-sub{flex-basis:100%;margin-top:0;}
   .bud-panel{padding:14px;}
   .bud-days{grid-template-columns:1fr;}
+  .bud-days-summary{padding:12px 14px;}
+  .bud-days-wrap > .muted-small{margin:0 14px 10px;}
+  .bud-days-wrap > .bud-days{padding:0 12px 12px;}
   .bud-save-row .bud-money-field{max-width:none;flex-basis:100%;}
 }
 
@@ -1511,6 +1521,7 @@ html.dark-mode .bud-tile-value,
 html.dark-mode .bud-row-label,
 html.dark-mode .bud-row-amt,
 html.dark-mode .bud-day-head,
+html.dark-mode .bud-days-summary,
 html.dark-mode .bud-result-line,
 html.dark-mode .bud-chip,
 html.dark-mode .bud-track-name,
@@ -1541,7 +1552,7 @@ html.dark-mode .qg-meta,
 html.dark-mode .mkt-filter,
 html.dark-mode .mkt-listing h4 .icon,
 html.dark-mode .bud-panel h3 .icon,
-html.dark-mode .bud-days-wrap h3 .icon,
+html.dark-mode .bud-days-summary .icon,
 html.dark-mode .bud-row-icon{
   color:var(--accent-text);
 }
@@ -1612,8 +1623,11 @@ html.dark-mode .quiz-option.right{
 }
 html.dark-mode .quiz-pill.mint{background:var(--pastel-mint-bg);border-color:var(--pastel-mint-border);color:var(--pastel-mint-text);}
 html.dark-mode .bud-verdict.good,
+html.dark-mode .bud-note.good,
 html.dark-mode .bud-safe,
 html.dark-mode .bud-chip.on{border-color:var(--pastel-mint-border);}
+html.dark-mode .bud-safe-have{border-top-color:var(--pastel-mint-border);}
+html.dark-mode .bud-tile.in .bud-tile-label .icon{color:var(--pastel-mint-text);}
 html.dark-mode .ticker-up,
 html.dark-mode .status-approved,
 html.dark-mode .bud-good,
@@ -1635,7 +1649,9 @@ html.dark-mode .quiz-option.wrong{
   background:var(--pastel-coral-bg);color:var(--pastel-coral-text);
 }
 html.dark-mode .quiz-pill.coral{background:var(--pastel-coral-bg);border-color:var(--pastel-coral-border);color:var(--pastel-coral-text);}
-html.dark-mode .bud-verdict.bad{border-color:var(--pastel-coral-border);}
+html.dark-mode .bud-verdict.bad,
+html.dark-mode .bud-note.bad{border-color:var(--pastel-coral-border);}
+html.dark-mode .bud-tile.out .bud-tile-label .icon{color:var(--pastel-coral-text);}
 html.dark-mode .bud-split-bar.over{border-color:var(--pastel-coral-border);}
 html.dark-mode .ticker-down,
 html.dark-mode .status-declined,
@@ -1653,11 +1669,14 @@ html.dark-mode .mkt-status.pending,
 html.dark-mode .bud-chip-status.today,
 html.dark-mode .bud-verdict.warn,
 html.dark-mode .leaderboard-row.me,
-html.dark-mode .bud-note.warn{
+html.dark-mode .bud-note.warn,
+html.dark-mode .bud-flag.warn{
   background:var(--pastel-gold-bg);color:var(--pastel-gold-text);
 }
 html.dark-mode .quiz-pill.gold{background:var(--pastel-gold-bg);border-color:var(--pastel-gold-border);color:var(--pastel-gold-text);}
-html.dark-mode .bud-verdict.warn{border-color:var(--pastel-gold-border);}
+html.dark-mode .bud-verdict.warn,
+html.dark-mode .bud-note.warn{border-color:var(--pastel-gold-border);}
+html.dark-mode .bud-tile.left .bud-tile-label .icon{color:var(--pastel-gold-text);}
 html.dark-mode .mkt-listing.mine{border-color:var(--pastel-gold-border);}
 
 /* ---------------- Lilac pastel family ---------------- */
@@ -1675,6 +1694,7 @@ html.dark-mode .mkt-status.sold{
 
 /* ---------------- Misc borders & one-off tints ---------------- */
 html.dark-mode .budget-card{border-color:var(--line);}
+html.dark-mode .bud-days-wrap{background:var(--card);border-color:var(--line);}
 html.dark-mode .quiz-card.passed{
   border-color:var(--pastel-mint-border);
   background:linear-gradient(180deg,var(--pastel-mint-bg),var(--card) 60%);
@@ -2731,3 +2751,14 @@ html.dark-mode .ins-plan-covers{color:var(--muted);}
 html.dark-mode .ins-incident-opt{border-color:rgba(255,255,255,.12);}
 html.dark-mode .ins-incident-opt input{accent-color:var(--gold);}
 html.dark-mode .ins-incident-opt:has(input:checked){border-color:var(--gold);background:rgba(232,184,75,.12);}
+
+/* Property: the "Pay this week's rent" button, greyed out on days rent
+   can't be paid (not rent day, already paid, or the free move-in week). */
+.btn.rent-pay-btn:disabled,
+.btn.rent-pay-btn:disabled:hover{
+  background:#e3e7ef;color:#8a94a8;box-shadow:none;transform:none;cursor:not-allowed;
+}
+html.dark-mode .btn.rent-pay-btn:disabled,
+html.dark-mode .btn.rent-pay-btn:disabled:hover{
+  background:var(--surface-2);color:var(--muted);box-shadow:none;
+}
