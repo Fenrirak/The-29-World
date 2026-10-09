@@ -671,7 +671,17 @@ function renderBudgetStudent(me, cls) {
   } else {
     rows.push(row("Spending", `<strong>${fmtMoney(v.spent)}</strong> so far`, null, "", spendSub));
     rows.push(row("Saved", `<strong>${fmtSigned(v.actual.saved)}</strong> so far`, null, "",
-      v.actual.saved < 0 ? "You took more out of savings than you put in this week" : "Savings, term deposits and shares, minus anything taken back out"));
+      v.actual.saved < 0 ? "You took more out of savings than you put in this week" : "Savings, term deposits, shares and extra KiwiSaver, minus anything taken back out"));
+  }
+  // KiwiSaver comes off their pay before it reaches them, so it's shown
+  // on its own rather than counted in the money above.
+  if (v.kiwi) {
+    const k = v.kiwi;
+    const when = k.status === "done" ? "Came off your pay before it reached you" : "Comes off your pay before it reaches you";
+    rows.push(k.paused
+      ? row("KiwiSaver", "On a break", null, "", "Nothing comes off your pay, and your employer and the government aren't adding anything either.")
+      : row("KiwiSaver", `<strong>${fmtMoney(k.you)}</strong> from your pay`, null, "",
+          `${when}, so it isn't in the money above. Your employer adds ${fmtMoney(k.employerNet)}${k.govt > 0 ? ` and the government adds ${fmtMoney(k.govt)}` : ""}.`));
   }
   document.getElementById("budTrackRows").innerHTML = rows.join("");
 

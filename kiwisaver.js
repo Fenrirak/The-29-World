@@ -106,7 +106,7 @@ function renderJoinCard(me, cls, s, ks) {
   if (!s.enabled) {
     html = ks
       ? `<p class="ks-note-line">Your teacher has switched KiwiSaver off for now. Your money is still yours and still counts in your net worth, but nothing new goes in and it isn't growing.</p>`
-      : `<h2>${icon("sprout", 18)} Not switched on yet</h2><p class="ks-note-line">Your teacher hasn't switched KiwiSaver on for your class yet.</p>`;
+      : `<h2>${icon("sprout", 18)} KiwiSaver is switched off</h2><p class="ks-note-line">Your teacher has switched KiwiSaver off for your class.</p>`;
   } else if (s.retired) {
     html = ks ? "" : `<h2>${icon("star", 18)} Your class has retired</h2><p class="ks-note-line">You weren't in KiwiSaver, so there's nothing to take out.</p>`;
   } else if (!ks) {
@@ -475,7 +475,9 @@ async function renderTeacher(cls) {
     </tr>`;
   }).join("");
   document.getElementById("ksClassEmpty").textContent = !rows.length ? "No students in this class yet."
-    : !s.enabled && !rows.some(r => r.ks) ? "Switch KiwiSaver on above and students with a job are signed up on their next pay day." : "";
+    : rows.some(r => r.ks) ? ""
+    : s.enabled ? "Nobody is in KiwiSaver yet. Students with a job are signed up on their next pay day."
+    : "KiwiSaver is switched off. Tick \"KiwiSaver on\" above and students with a job are signed up on their next pay day.";
   KS_TEACHER_ROWS = rows;
   renderRetireCard(s);
 }

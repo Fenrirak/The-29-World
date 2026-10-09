@@ -504,8 +504,8 @@ function buildPayslip(cls, credit, dateKey) {
    New Zealand's work-based retirement savings scheme, following the real
    rules as they stand from 1 April 2026:
 
-     - Starting a job signs you up automatically (when the teacher has
-       switched KiwiSaver on). You can opt out only between week 2 and
+     - Starting a job signs you up automatically (KiwiSaver is on for
+       every class unless the teacher switches it off). You can opt out only between week 2 and
        week 8 (we allow the first 8 weeks) and get back what you put in.
        After that you stay a member, but can pause ("savings suspension").
      - YOU put in 3.5% of your pay before tax (the default since 1 April
@@ -588,7 +588,8 @@ function kiwiSaverSettings(cls) {
   });
   const weeks = Number(raw.firstHomeWeeks), keep = Number(raw.firstHomeKeep);
   return {
-    enabled: !!raw.enabled,
+    // On unless the teacher has switched it off.
+    enabled: raw.enabled !== false,
     govt: raw.govt !== false,
     funds,
     firstHomeWeeks: raw.firstHomeWeeks !== undefined && Number.isFinite(weeks) && weeks >= 0 ? Math.floor(weeks) : 3,
@@ -3292,17 +3293,30 @@ function budgetWeekItems(cls, user, username) {
   if (job && cls.payDay) {
     const credit = wageCreditEstimate(cls, user);
     const dayKey = dayOf(cls.payDay);
-    const status = budgetStatus(dayKey, todayKey, inWeek(user.lastWagePaid));
+    const paid = inWeek(user.lastWagePaid);
+    const status = budgetStatus(dayKey, todayKey, paid);
     const approved = isJobTaskApprovedThisWeek(user, cls);
-    if (credit.net > 0) {
+    // Once this week's pay has gone in, use its payslip — exactly what was
+    // paid — rather than a fresh estimate (they may have changed their
+    // KiwiSaver rate, or been promoted, since).
+    const slip = paid ? (user.payslips || []).find(p => p && inWeek(p.dateKey)) : null;
+    const pay = slip
+      ? { net: slip.net, tax: budgetRound((slip.tax || 0) - (slip.taxRefund || 0)), tier: slip.tier || credit.tierLabel, kiwi: slip.kiwi }
+      : { net: credit.net, tax: credit.taxAmount, tier: credit.tierLabel, kiwi: credit.kiwi };
+    const k = pay.kiwi;
+    const off = [pay.tax > 0 ? `${fmtMoney(pay.tax)} tax` : "", k && k.you > 0 ? `${fmtMoney(k.you)} KiwiSaver` : ""].filter(Boolean).join(" and ");
+    const ksLine = (kk, gross) => kk ? { rate: kk.rate, paused: !!kk.paused, you: kk.you || 0, employerNet: kk.employerNet || 0, govt: kk.govt || 0, gross: Number(gross) || 0 } : null;
+    if (pay.net > 0) {
       items.push({
-        key: "wage", dir: "in", icon: "briefcase", label: "Wages — " + credit.tierLabel, amount: credit.net, dayKey, status,
-        note: status === "done" ? "Paid"
+        key: "wage", dir: "in", icon: "briefcase", label: "Wages — " + pay.tier, amount: pay.net, dayKey, status,
+        // KiwiSaver from this week's pay (already left out of `amount`), and
+        // from their next pay with the choices they have now.
+        kiwi: ksLine(k, slip ? slip.gross : credit.gross),
+        kiwiNext: ksLine(credit.kiwi, credit.gross),
+        note: status === "done" ? "Paid" + (off ? ` (${off} taken off)` : "")
           : status === "missed" ? "Not paid this week — your job task wasn't approved by pay day"
           : (approved ? "Pay day" : "Pay day — only once your teacher approves this week's job task")
-            + ((credit.taxAmount > 0 || (credit.kiwi && credit.kiwi.you > 0))
-              ? ` (${[credit.taxAmount > 0 ? `${fmtMoney(credit.taxAmount)} tax` : "", credit.kiwi && credit.kiwi.you > 0 ? `${fmtMoney(credit.kiwi.you)} KiwiSaver` : ""].filter(Boolean).join(" and ")} already taken off)`
-              : "")
+            + (off ? ` (${off} already taken off)` : "")
       });
     }
   }
@@ -3422,7 +3436,8 @@ function budgetWeekItems(cls, user, username) {
      purchases — spending the student chose (store, trades, vehicles,
                  property deposits, sending money, gambling buy-ins...)
      surprises — costs they didn't choose (fines, random events, big events)
-     saved     — put into savings, term deposits or shares, minus anything
+     saved     — put into savings, term deposits, shares or KiwiSaver (extra
+                 money, on top of what comes off their pay), minus anything
                  taken back out (so moving money in and out again isn't
                  "saving")
    Scheduled things (wages, rent, bills, automatic payments) are left out
@@ -3431,7 +3446,8 @@ const BUDGET_EXTRA_LABELS = {
   "side-hustle": "Side hustle", "truck-drive": "Truck driving", bonus: "Bonuses", "quiz-reward": "Quiz rewards",
   "insurance-claim": "Insurance claims", "cash-interest": "Interest", welcome: "Welcome grant",
   "store-sell": "Things you sold", "vehicle-sell": "Things you sold", "p2p-sell": "Things you sold", "property-sell": "Things you sold",
-  transfer: "Money from others", event: "Random events", "big-event": "Big events", "life-grant": "Life events"
+  transfer: "Money from others", event: "Random events", "big-event": "Big events", "life-grant": "Life events",
+  "kiwisaver-out": "From KiwiSaver", "kiwisaver-refund": "From KiwiSaver"
 };
 function budgetWeekActuals(cls, username, weekStartKey) {
   const extra = {}, purchases = {}, surprises = {};
@@ -3474,8 +3490,12 @@ function budgetWeekActuals(cls, username, weekStartKey) {
       // what went in and what came back out.
       case "gambling-buyin": gambleIn += amt; break;
       case "gambling-cashout": gambleOut += amt; break;
-      case "savings-deposit": case "term-deposit-open": case "stock-buy": saved += amt; break;
+      case "savings-deposit": case "term-deposit-open": case "stock-buy": case "kiwisaver-in": saved += amt; break;
       case "savings-withdraw": case "term-deposit-early": case "stock-sell": case "stock-close": saved -= amt; break;
+      // KiwiSaver paid out to them (retired, hardship, or an opt-out
+      // refund). What comes off their pay each week never reached their
+      // cash, so money coming back out of it is new money for this week.
+      case "kiwisaver-out": case "kiwisaver-refund": add(extra, BUDGET_EXTRA_LABELS[t.type], amt); break;
       default: count--; // scheduled (wages, rent, bills...) or not money at all
     }
   });
@@ -3664,6 +3684,17 @@ function buildBudgetView(cls, user, username) {
   if (loanGrowth > 0) {
     notes.push({ tone: "warn", icon: "handshake", text: `Your loans grow by about ${fmtMoney(loanGrowth)} in interest every Monday until you pay them off.` });
   }
+  // KiwiSaver from this week's pay (already left out of the wage above).
+  // When the week's money doesn't stretch, point out the real-life options.
+  const wageItem = items.find(i => i.key === "wage" && i.status !== "missed");
+  const kiwi = wageItem && wageItem.kiwi ? Object.assign({ status: wageItem.status }, wageItem.kiwi) : null;
+  const next = wageItem && wageItem.kiwiNext;
+  const tight = (shortfall && !shortfall.covered) || billsTotal > inTotal + 0.005;
+  if (tight && next && !next.paused && next.you > 0) {
+    const at3 = budgetRound(Math.min(next.you, next.gross * 3 / 100));
+    const lower = next.rate > 3 ? budgetRound(next.you - at3) : 0;
+    notes.push({ tone: "warn", icon: "sprout", text: `KiwiSaver takes ${fmtMoney(next.you)} from your pay each week. If money stays tight, on the KiwiSaver page you can ${lower > 0 ? `drop to 3% (${fmtMoney(lower)} more in your pay) or ` : ""}take a break from it. While you're on a break, your employer and the government stop adding money too.` });
+  }
   const maturing = (user.termDeposits || []).filter(d => d.matureDate >= todayKey && d.matureDate <= sched.weekEndKey);
   if (maturing.length) {
     const total = budgetRound(maturing.reduce((s, d) => s + d.amount, 0));
@@ -3674,7 +3705,7 @@ function buildBudgetView(cls, user, username) {
     ...sched, actual, plan,
     inItems, outItems, scheduledIn, inTotal, billsTotal, billsPaid, billsLeft, left,
     saveTarget, autoSave, spendAllowed, spent, spendLeft,
-    cash, savings, savingsSpare, safeNow, safeCash, safeReason, safeFromSavings, lowestDay, shortfall, verdict, notes
+    cash, savings, savingsSpare, safeNow, safeCash, safeReason, safeFromSavings, lowestDay, shortfall, verdict, notes, kiwi
   };
 }
 

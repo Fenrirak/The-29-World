@@ -155,8 +155,9 @@ p{color:var(--muted);line-height:1.5;}
 .topbar nav a[href="reports.html"]{display:none;}
 html.role-teacher .topbar nav a[href="quizzes.html"],
 html.role-teacher .topbar nav a[href="reports.html"]{display:inline-flex;}
-/* KiwiSaver is hidden from students until their teacher switches it on
-   (data-core.js adds html.ks-on). Teachers always see it. */
+/* KiwiSaver is on by default. It's hidden from students only if their
+   teacher switches it off (data-core.js adds html.ks-on when it's on).
+   Teachers always see it. */
 html:not(.role-teacher):not(.ks-on) .topbar nav a[href="kiwisaver.html"]:not(.active){display:none;}
 
 /* Student profile modal */

@@ -2642,8 +2642,8 @@ async function anwGlobalBootstrap() {
   }
 }
 
-// The KiwiSaver menu link stays hidden from students (style.css) until
-// their teacher switches KiwiSaver on — or they already have one.
+// The KiwiSaver menu link stays hidden from students (style.css) if
+// their teacher has switched KiwiSaver off — unless they already have one.
 async function showKiwiSaverNavIfOn(u) {
   if (!u.classCode || typeof kiwiSaverSettings !== "function") return;
   const [cls, me] = await Promise.all([getClassCached(u.classCode), getUserCached(u.username)]);
