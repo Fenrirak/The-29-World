@@ -1,4 +1,6 @@
 let CURRENT, IS_TEACHER, CLS, MODE = "roulette";
+let USER_PICKED_MODE = false;  // true once the user taps a tab, so init() never yanks them back
+let BJ_DEAL_PENDING = false;   // true from Deal click until the server round is stored locally
 
 /* ===================== Roulette state/logic ===================== */
 let selection = [];
@@ -549,6 +551,11 @@ function bjClearTableDisplay(round) {
   renderBlackjackRound(bjBuildDisplayRound());
 }
 
+function bjResetDealBtn() {
+  const b = document.getElementById("bjDealBtn");
+  if (b) { b.disabled = false; b.innerHTML = "Deal"; }
+}
+
 async function bjDeal() {
   const box = document.getElementById("bjBetMsg");
   const btn = document.getElementById("bjDealBtn");
@@ -563,14 +570,23 @@ async function bjDeal() {
   try {
     const amount = document.getElementById("bjBetAmount").value;
     if (box) box.innerHTML = "";
+    BJ_DEAL_PENDING = true;
     if (btn) { btn.disabled = true; btn.textContent = "Dealing..."; }
 
     const res = await startBlackjackRound(CURRENT.username, CURRENT.classCode, amount);
     if (!res.ok) {
+      BJ_DEAL_PENDING = false;
+      bjResetDealBtn();
       if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`;
       return;
     }
     CURRENT_ROUND = res.round;
+    BJ_DEAL_PENDING = false;
+    // The button only needs to say "Dealing..." while waiting on the server; the
+    // bet form is hidden from here on. Also clear any action buttons left
+    // disabled by an earlier round that never finished cleanly.
+    bjResetDealBtn();
+    bjSetButtonsDisabled(BJ_ACTION_BTN_IDS, false);
     document.getElementById("bjBetForm").classList.add("hidden");
     // Blank the table BEFORE it's unhidden, and before kicking off the
     // account refresh below — bjTableArea's HTML still holds the finished,
@@ -614,11 +630,14 @@ async function bjDeal() {
     // lives inside #bjBetForm, which bjResetTable() un-hides, so it's the
     // one place a message here will actually stay visible.
     console.error("bjDeal failed:", e);
+    BJ_DEAL_PENDING = false;
+    bjResetDealBtn(); // before the awaited reset below, which does a network render()
     const betMsgBox = document.getElementById("bjBetMsg");
     if (betMsgBox) betMsgBox.innerHTML = `<div class="error-msg">Something went wrong dealing that round. If your balance looks off, refresh the page — any escrowed bet is automatically refunded on failure.</div>`;
     await bjResetTable();
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = "Deal"; }
+    BJ_DEAL_PENDING = false;
+    bjResetDealBtn();
   }
 }
 
@@ -701,11 +720,14 @@ async function bjDoAction(action) {
       // Still your turn (e.g. another card, or a fresh split hand to play).
       renderBlackjackRound(bjBuildDisplayRound());
       bjUpdateActionButtons();
+      bjSetButtonsDisabled(BJ_ACTION_BTN_IDS, false); // clickable again immediately
     } else {
       document.getElementById("bjActionArea")?.classList.add("hidden");
       await bjRunRemainingSeats(CURRENT_ROUND, CURRENT_ROUND.humanSeat + 1, token);
     }
-    await refreshGamblingAccountCard();
+    // Not awaited: it only repaints the Account-tab card and catches its own
+    // errors, so a slow read must not keep Hit/Stand disabled.
+    refreshGamblingAccountCard();
   } catch (e) {
     document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong with that action. Please refresh the page — any stake taken for it is automatically refunded on failure.</div>`;
   } finally {
@@ -757,6 +779,9 @@ async function bjFinalizeRound(round) {
 async function bjResetTable() {
   DEAL_TOKEN++; // invalidate any in-flight animation loop
   CURRENT_ROUND = null;
+  BJ_DEAL_PENDING = false;
+  bjResetDealBtn();
+  bjSetButtonsDisabled(BJ_ACTION_BTN_IDS, false);
   document.getElementById("bjBetAmount").value = "";
   document.getElementById("bjBetForm").classList.remove("hidden");
   document.getElementById("bjTableArea").classList.add("hidden");
@@ -1099,7 +1124,8 @@ function mountBjRotatePrompt() {
   container.insertBefore(prompt, container.firstChild);
 }
 
-function switchMode(mode) {
+function switchMode(mode, auto) {
+  if (!auto) USER_PICKED_MODE = true;
   MODE = mode;
   // Tells the floating balance widget (the data-*.js files) to switch between showing
   // cash (Account tab) and chips (Roulette/Blackjack) — a no-op if the
@@ -1184,7 +1210,7 @@ async function init() {
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
   await render();
-  switchMode("account");
+  if (!USER_PICKED_MODE) switchMode("account", true);
 }
 
 async function render() {
@@ -1269,7 +1295,11 @@ async function render() {
     // mid-hand — the bet is already escrowed server-side, so this just
     // re-shows it (statically, no reveal animation) instead of losing it.
     // (Fetched together with lockReasons above, not here.)
-    if (resumedRound) {
+    // A late/stale render() (e.g. init's second pass) must never hide the table or
+    // re-show the bet form while a deal is in flight or a round is live locally.
+    if (BJ_DEAL_PENDING || CURRENT_ROUND) {
+      // local state is authoritative — leave the table alone
+    } else if (resumedRound) {
       document.getElementById("bjBetForm").classList.add("hidden");
       document.getElementById("bjTableArea").classList.remove("hidden");
       CURRENT_ROUND = resumedRound;
