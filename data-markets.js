@@ -1629,15 +1629,12 @@ async function startBlackjackRound(username, classCode, betAmount) {
     return { ok: false, error: "Something went wrong dealing that round. Please try again." };
   }
 
-  // Best-effort — remembering the seat is only used to keep future seat
-  // draws fair, it's not part of the actual round/money, so a failure here
-  // shouldn't stop the round from being dealt. It's also unrelated to the
-  // money movement below, so the two run together instead of one after the
-  // other — that was an extra sequential round-trip on every single Deal.
-  const [, debitResult] = await Promise.all([
-    usersCol().doc(username).update({ lastBjSeat: round.humanSeat }).catch(() => {}),
-    adjustGamblingAccount(username, -betAmount, cls.gambling.dailyWinLimit)
-  ]);
+  // The debit is a transaction on this user's doc. This used to run in
+  // parallel with a plain update of lastBjSeat on that SAME doc, which could
+  // land between the transaction's read and its commit and force Firestore to
+  // abort and retry it (extra round-trips on every Deal). lastBjSeat is now
+  // saved by the blackjackRound write below / in bjSettle instead.
+  const debitResult = await adjustGamblingAccount(username, -betAmount, cls.gambling.dailyWinLimit);
   // adjustGamblingAccount re-validates the balance atomically and can
   // fail here (e.g. a concurrent bet spent the funds between the stale
   // check above and now) — the round was only ever built in memory, so
@@ -1652,7 +1649,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
     if (round.hands[0].status === "blackjack" && !round.insurance.offered) {
       return await bjAdvance(username, classCode, round);
     }
-    await usersCol().doc(username).update({ blackjackRound: round });
+    await usersCol().doc(username).update({ blackjackRound: round, lastBjSeat: round.humanSeat });
     return { ok: true, round: bjClientView(round) };
   } catch (e) {
     await adjustGamblingAccount(username, betAmount, cls.gambling.dailyWinLimit);
@@ -1818,6 +1815,9 @@ async function blackjackAction(username, classCode, action) {
 // Dealer plays out (stands on all 17s, hard or soft), then every human
 // hand is settled against it and the round is closed out with a single
 // transaction log entry.
+let _bjLedgerPending = Promise.resolve();
+function bjLedgerSettled() { return _bjLedgerPending; }
+
 async function bjSettle(username, classCode, round) {
   // getClassCached: cls here only feeds tax rates and the win-limit
   // message/threshold, all teacher-configured and never changed by a
@@ -1929,9 +1929,11 @@ async function bjSettle(username, classCode, round) {
   // finished hand (Stand, a bust, a split resolving) paid for 3 sequential
   // round-trips here on top of everything before it. Firing them together
   // cuts that to the time of whichever one is slowest.
-  const [finalUser] = await Promise.all([
-    getUser(username),
-    logTxn(classCode, {
+  // The ledger entry is a transaction on the class doc (shared by every
+  // student, so it can retry under contention) and nothing below needs it, so
+  // it runs in the background instead of holding up the Stand/bust result.
+  // bjLedgerSettled() lets the page wait for it before re-reading recent bets.
+  _bjLedgerPending = logTxn(classCode, {
       // `bet` here is the original stake for the round (round.betAmount) —
       // not the total actually risked, which can be higher once doubling
       // down or splitting adds more on top. Kept for the teacher's ledger;
@@ -1939,8 +1941,10 @@ async function bjSettle(username, classCode, round) {
       // at buy-in time — see startBlackjackRound/buyIntoGamblingAccount).
       type: "gambling", from: username, amount: Math.abs(netForTxn), bet: round.betAmount,
       note: `Blackjack: ${handsDesc}; ${dealerDesc} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${protectedRefund > 0 ? ` ${fmtMoney(protectedRefund)} of doubled/split bets returned (dealer blackjack).` : ""}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
-    }),
-    usersCol().doc(username).update({ blackjackRound: null })
+  }).catch(e => { console.error("Blackjack ledger entry failed:", e); });
+  const [finalUser] = await Promise.all([
+    getUser(username),
+    usersCol().doc(username).update(Object.assign({ blackjackRound: null }, round.humanSeat ? { lastBjSeat: round.humanSeat } : {}))
   ]);
   const hitWinLimit = finalUser ? gamblingAccountToday(finalUser).winLimitHit : false;
 

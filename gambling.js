@@ -1,5 +1,6 @@
 let CURRENT, IS_TEACHER, CLS, MODE = "roulette";
 let USER_PICKED_MODE = false;  // true once the user taps a tab, so init() never yanks them back
+let BJ_DEAL_SEQ = 0;           // identifies the latest bjDeal() call so a stale one can't reset a newer deal's state
 let BJ_DEAL_PENDING = false;   // true from Deal click until the server round is stored locally
 
 /* ===================== Roulette state/logic ===================== */
@@ -557,6 +558,7 @@ function bjResetDealBtn() {
 }
 
 async function bjDeal() {
+  const dealSeq = ++BJ_DEAL_SEQ;
   const box = document.getElementById("bjBetMsg");
   const btn = document.getElementById("bjDealBtn");
 
@@ -636,8 +638,10 @@ async function bjDeal() {
     if (betMsgBox) betMsgBox.innerHTML = `<div class="error-msg">Something went wrong dealing that round. If your balance looks off, refresh the page — any escrowed bet is automatically refunded on failure.</div>`;
     await bjResetTable();
   } finally {
-    BJ_DEAL_PENDING = false;
-    bjResetDealBtn();
+    // Only the newest deal may reset shared state — an older bjDeal() can still be
+    // finishing up (waiting on network after its round ended) when New round and
+    // a second Deal have already started.
+    if (dealSeq === BJ_DEAL_SEQ) { BJ_DEAL_PENDING = false; bjResetDealBtn(); }
   }
 }
 
@@ -771,7 +775,9 @@ async function bjFinalizeRound(round) {
   // too, so the combined Account-tab list picks up this hand immediately
   // instead of waiting for the next full render() (e.g. "New round").
   await Promise.all([
-    getClassCached(CURRENT.classCode).then(cls => { CLS = cls; renderRecentBlackjack(cls); renderGamblingAccountRecent(cls); }),
+    (typeof bjLedgerSettled === "function" ? bjLedgerSettled() : Promise.resolve())
+      .then(() => getClassCached(CURRENT.classCode))
+      .then(cls => { CLS = cls; renderRecentBlackjack(cls); renderGamblingAccountRecent(cls); }),
     refreshGamblingAccountCard()
   ]);
 }
