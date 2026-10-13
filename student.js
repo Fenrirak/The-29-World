@@ -736,22 +736,22 @@ async function checkAndShowPromotionPopup(username) {
 }
 
 function showPromotionPopup(promo) {
-  const existing = document.getElementById("t29PromoOverlay");
+  const existing = document.getElementById("t29LevelupOverlay");
   if (existing) existing.remove();
   const overlay = document.createElement("div");
-  overlay.id = "t29PromoOverlay";
+  overlay.id = "t29LevelupOverlay";
   overlay.style.cssText = "position:fixed;inset:0;background:rgba(14,27,55,0.72);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);";
   overlay.innerHTML = `
-    <div class="promo-popup-card">
-      <div class="promo-popup-stars">✦ ✦ ✦</div>
-      <div class="promo-popup-emoji">🎉</div>
-      <h2 class="promo-popup-title">You've been offered a promotion!</h2>
-      <p class="promo-popup-sub">Move up to</p>
-      <div class="promo-popup-tier">
-        <div class="promo-popup-tier-name">${promo.tierName}</div>
-        <div class="promo-popup-tier-meta">${promo.jobTitle} &middot; ${typeof fmtMoney === "function" ? fmtMoney(promo.wage) : "$" + promo.wage}/pay day</div>
+    <div class="levelup-card-card">
+      <div class="levelup-card-stars">✦ ✦ ✦</div>
+      <div class="levelup-card-emoji">🎉</div>
+      <h2 class="levelup-card-title">You've been offered a promotion!</h2>
+      <p class="levelup-card-sub">Move up to</p>
+      <div class="levelup-card-tier">
+        <div class="levelup-card-tier-name">${promo.tierName}</div>
+        <div class="levelup-card-tier-meta">${promo.jobTitle} &middot; ${typeof fmtMoney === "function" ? fmtMoney(promo.wage) : "$" + promo.wage}/pay day</div>
       </div>
-      <div class="promo-popup-actions">
+      <div class="levelup-card-actions">
         <button class="btn secondary" onclick="respondPromotionPopup(false)">Not right now</button>
         <button class="btn gold" onclick="respondPromotionPopup(true)">🎉 Accept</button>
       </div>
@@ -761,7 +761,7 @@ function showPromotionPopup(promo) {
 }
 
 async function respondPromotionPopup(accept) {
-  const overlay = document.getElementById("t29PromoOverlay");
+  const overlay = document.getElementById("t29LevelupOverlay");
   if (overlay) overlay.querySelectorAll("button").forEach(b => b.disabled = true);
   try {
     await respondToPromotion(CURRENT.username, accept);

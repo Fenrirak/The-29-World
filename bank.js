@@ -685,25 +685,22 @@ function renderBudgetStudent(me, cls) {
   }
   document.getElementById("budTrackRows").innerHTML = rows.join("");
 
-  // How much can be spent right now without a bill bouncing — counting
-  // savings as able to cover bills, once moved into cash.
-  const keep = Math.round((v.cash - v.safeNow) * 100) / 100;
-  const byDay = !v.lowestDay ? "" : v.lowestDay === v.todayKey ? " today" : ` by ${budDateLabel(v.lowestDay, { day: undefined, month: undefined })}`;
-  const fromSav = v.safeFromSavings > 0.005 ? `move ${fmtMoney(v.safeFromSavings)} from savings into cash${byDay}` : "";
+  // Safe to spend = cash + savings + rest of this week's income − rest of
+  // this week's bills (worked out in buildBudgetView).
+  const cashNow = Math.max(0, v.cash);
   let safeWhy;
-  if (v.cash < 0) safeWhy = "Your cash is below $0, so there's nothing safe to spend.";
-  else if (v.shortfall && !v.shortfall.covered) safeWhy = "This week's bills are more than your cash and savings put together, so there's nothing safe to spend.";
-  else if (v.safeReason === "plan") safeWhy = "That's what's left of your plan's spending money this week." + (fromSav ? ` Your bills will still need you to ${fromSav}.` : "");
-  else if (v.safeReason === "bills" && (keep > 0.005 || fromSav)) {
-    safeWhy = keep > 0.005
-      ? `Keep ${fmtMoney(keep)} in cash for bills later this week${fromSav ? `, and ${fromSav}` : byDay}.`
-      : `Your bills later this week will need you to ${fromSav}.`;
-  } else safeWhy = v.billsLeft > 0 ? "The money coming in covers the rest of this week's bills." : "No more bills this week.";
+  if (v.safeTotal <= 0.005) safeWhy = "Your cash and savings, plus the money still to come, don't cover the rest of this week's bills, so there's nothing safe to spend.";
+  else {
+    safeWhy = "Your cash and savings, plus the money still to come this week, minus the bills still to pay.";
+    if (v.safeTimed < v.safeNow - 0.005) safeWhy += ` Some of that money hasn't arrived yet, so only ${fmtMoney(v.safeTimed)} is safe until it does.`;
+    if (v.safeTimed > cashNow + 0.005) safeWhy += ` Only ${fmtMoney(cashNow)} of it is cash — spending more means moving savings into cash first.`;
+    if (v.plan.hasPlan && v.spendLeft < v.safeNow - 0.005) safeWhy += v.spendLeft > 0.005 ? ` Your plan only has ${fmtMoney(v.spendLeft)} of spending money left.` : " You've already used all of your plan's spending money.";
+  }
   document.getElementById("budSafe").innerHTML = `
     <div class="bud-safe-label">${icon("shield", 14)} Safe to spend right now</div>
     <div class="bud-safe-value">${fmtMoney(v.safeNow)}</div>
     <div class="bud-safe-why">${budEsc(safeWhy)}</div>
-    <div class="bud-safe-have"><span>Cash <strong>${fmtSigned(v.cash)}</strong></span><span>Savings <strong>${fmtMoney(v.savings)}</strong></span></div>`;
+    <div class="bud-safe-have"><span>Cash <strong>${fmtSigned(v.cash)}</strong></span><span>Savings <strong>${fmtMoney(v.savings)}</strong></span><span>Still coming in <strong>+${fmtMoney(v.restIn)}</strong></span><span>Bills to pay <strong>−${fmtMoney(v.restBills)}</strong></span></div>`;
 
   /* ---- Day by day ---- */
   const itemRow = i => {

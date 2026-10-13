@@ -3582,18 +3582,22 @@ function buildBudgetView(cls, user, username) {
   const savingsSpare = budgetRound(Math.max(0, savings - unsaving));
   const todayIdx = budgetDayIndex(nzDayName());
   let running = cash, lowest = cash, lowestDay = null, firstShort = null;
+  // Totals for the rest of the week, for "safe to spend": money still to come in
+  // (not savings coming back, which is already counted in Savings) and bills still to pay.
+  let restIn = 0, restBills = 0;
   for (let d = todayIdx; d < 7; d++) {
     const dayKey = dateKeyPlusDays(weekStartKey, d);
     let dayIn = 0, dayBills = 0, daySave = 0;
     items.forEach(i => {
       if (i.status === "daily") {
-        if (dayKey > todayKey || user.lastLifeAllowanceDailyPaid !== todayKey) dayIn += i.perDay;
+        if (dayKey > todayKey || user.lastLifeAllowanceDailyPaid !== todayKey) { dayIn += i.perDay; restIn += i.perDay; }
         return;
       }
       if (i.dayKey !== dayKey || !["today", "upcoming", "overdue"].includes(i.status)) return;
-      if (i.dir === "in" || i.dir === "unsave") dayIn += i.amount;
+      if (i.dir === "in") { dayIn += i.amount; restIn += i.amount; }
+      else if (i.dir === "unsave") dayIn += i.amount;
       else if (i.dir === "save") daySave += i.amount;
-      else dayBills += i.amount;
+      else { dayBills += i.amount; restBills += i.amount; }
     });
     const before = budgetRound(running + dayIn);
     if (!firstShort && dayBills > before + 0.005) firstShort = { dayKey, need: budgetRound(dayBills), have: before };
@@ -3609,30 +3613,33 @@ function buildBudgetView(cls, user, username) {
     const gap = budgetRound(-lowest);
     const uncovered = budgetRound(Math.max(0, gap - savingsSpare));
     shortfall = Object.assign(firstShort, {
-      gap, fromSavings: budgetRound(Math.min(gap, savingsSpare)), uncovered, covered: uncovered <= 0.005
+      gap, fromSavings: budgetRound(Math.min(gap, savingsSpare)), uncovered, covered: uncovered <= 0.005,
+      // The "move money from savings" reminder only appears the day before the
+      // bill (or on the day), not all week.
+      moveDue: firstShort.dayKey <= dateKeyPlusDays(todayKey, 1)
     });
   }
-  // Cash they could spend now and still pay every bill, using savings to
-  // top up later if needed. Never more than the cash they actually have.
-  const safeCash = budgetRound(Math.max(0, Math.min(cash, lowest + savingsSpare)));
-  // With a plan, never more than the spending money it leaves.
-  const safeNow = plan.hasPlan ? budgetRound(Math.max(0, Math.min(safeCash, spendLeft))) : safeCash;
-  const safeReason = plan.hasPlan && spendLeft < safeCash ? "plan"
-    : lowestDay ? "bills" : "cash";
-  // Of the bills still to come, how much savings would have to cover if
-  // they spent the whole safe amount now.
-  const safeFromSavings = budgetRound(Math.max(0, safeNow - lowest));
+  // Safe to spend right now = cash + savings + the rest of this week's income
+  // − the rest of this week's bills. (Automatic transfers into or out of
+  // savings don't change cash + savings, so they aren't in the sum.)
+  restIn = budgetRound(restIn); restBills = budgetRound(restBills);
+  const safeTotal = budgetRound(cash + savings + restIn - restBills);
+  const safeNow = Math.max(0, safeTotal);
+  // How much of that is safe until the rest of the week's money arrives:
+  // the lowest point cash + savings reaches on any day (bills can land
+  // before the pay does).
+  const safeTimed = budgetRound(Math.max(0, Math.min(safeNow, lowest + savingsSpare)));
 
   /* ---- The one-line verdict ---- */
   const dayWord = budgetDayWord;
   let verdict;
-  if (shortfall) {
+  if (shortfall && (!shortfall.covered || shortfall.moveDue)) {
     const when = shortfall.dayKey === todayKey ? "today" : "on " + dayWord(shortfall.dayKey);
     const start = `${when === "today" ? "Today" : "On " + dayWord(shortfall.dayKey)} you'll need ${fmtMoney(shortfall.need)} for bills, but you'll only have about ${fmtMoney(Math.max(0, shortfall.have))} in cash.`;
     verdict = shortfall.covered
       ? { tone: "warn", icon: "piggy", text: `${start} Move ${fmtMoney(shortfall.gap)} from your savings into cash ${when === "today" ? "now" : "before then"} to cover this week's bills (you have ${fmtMoney(savings)} saved).` }
       : { tone: "bad", icon: "shield", text: `Heads up: ${start} ${savingsSpare > 0 ? `Even with the ${fmtMoney(savingsSpare)} in your savings, you'll be` : "You have nothing in savings to cover it, so you'll be"} ${fmtMoney(shortfall.uncovered)} short this week. Spend as little as you can, and look for ways to earn extra.` };
-  } else if (billsTotal > inTotal + 0.005) {
+  } else if (billsTotal > inTotal + 0.005 && !shortfall) {
     verdict = { tone: "bad", icon: "shield", text: `This week's bills (${fmtMoney(billsTotal)}) are more than the money coming in (${fmtMoney(inTotal)}). The other ${fmtMoney(budgetRound(billsTotal - inTotal))} has to come from cash you already have or your savings.` };
   } else if (plan.hasPlan && spendLeft < -0.005) {
     verdict = { tone: "bad", icon: "cart", text: `You've spent ${fmtMoney(-spendLeft)} more than your plan's spending money this week.` };
@@ -3705,7 +3712,7 @@ function buildBudgetView(cls, user, username) {
     ...sched, actual, plan,
     inItems, outItems, scheduledIn, inTotal, billsTotal, billsPaid, billsLeft, left,
     saveTarget, autoSave, spendAllowed, spent, spendLeft,
-    cash, savings, savingsSpare, safeNow, safeCash, safeReason, safeFromSavings, lowestDay, shortfall, verdict, notes, kiwi
+    cash, savings, savingsSpare, restIn, restBills, safeTotal, safeNow, safeTimed, lowestDay, shortfall, verdict, notes, kiwi
   };
 }
 
