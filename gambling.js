@@ -931,9 +931,27 @@ async function bjAnimateBotTurn(round, seat, token) {
   if (!DISPLAY_BOTS[seat]) DISPLAY_BOTS[seat] = { name: finalBot.name, hands: [{ cards: [], total: null, bust: false, doubled: false }] };
   renderBlackjackRound(bjBuildDisplayRound());
 
+  // If the bot split, the pair already on the table (c1, c2) has to turn
+  // into two separate hands [c1] and [c2] *before* any new cards are
+  // revealed. Without this, hand 1 kept showing the old pair and the
+  // second hand's cards were appended on top of the wrong cards.
+  if (finalBot.hands.length > 1 && DISPLAY_BOTS[seat].hands.length < 2) {
+    await sleep(BJ_CARD_DELAY);
+    if (token !== DEAL_TOKEN) return;
+    _bjAnimatedCardKeys.delete(`seat${seat}-b0-1`); // slot now gets a new card, so let it fade in
+    DISPLAY_BOTS[seat] = {
+      name: finalBot.name,
+      hands: [
+        { cards: [finalBot.hands[0].cards[0]], total: null, bust: false, doubled: false },
+        { cards: [finalBot.hands[1].cards[0]], total: null, bust: false, doubled: false }
+      ]
+    };
+    renderBlackjackRound(bjBuildDisplayRound());
+  }
+
   const steps = [];
   finalBot.hands.forEach((h, hi) => {
-    const startIdx = hi === 0 ? (DISPLAY_BOTS[seat].hands[0].cards.length || 0) : 0;
+    const startIdx = (DISPLAY_BOTS[seat].hands[hi] && DISPLAY_BOTS[seat].hands[hi].cards.length) || 0;
     for (let ci = startIdx; ci < h.cards.length; ci++) steps.push({ hi, ci });
   });
 
