@@ -153,8 +153,8 @@ async function render() {
       row.className = "auto-row";
       const isGood = e.kind === "good";
       row.innerHTML = `
-        <div class="auto-details"><strong>${escapeHtml(e.name)}</strong> (${MODULE_LABEL[e.module]}) — <span class="${isGood ? "ticker-up" : ""}">${isGood ? "+" : ""}${fmtMoney(e.cost)}</span>
-          <div class="muted-small">${e.date}</div>
+        <div class="auto-details"><strong>${escapeHtml(e.name)}</strong> (${MODULE_LABEL[e.module]}) — <span class="${isGood ? "ticker-up" : ""}">${isGood ? "+" : ""}${e.autoClaimed ? fmtMoney(e.insurancePaid) : fmtMoney(e.cost)}</span>${e.autoClaimed ? ` <span class="muted-small">(cost ${fmtMoney(e.originalCost != null ? e.originalCost : e.cost)})</span>` : ""}
+          <div class="muted-small">${e.date}${e.autoClaimed && e.insuranceNote ? " — " + escapeHtml(e.insuranceNote) : ""}</div>
         </div>
         <span class="${e.lostVehicle ? "status-declined" : STATUS_CLASS[e.status]}">${STATUS_LABEL[e.status]}${e.lostVehicle ? " — lost the vehicle" : ""}</span>
       `;
