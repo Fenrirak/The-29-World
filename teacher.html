@@ -344,8 +344,19 @@
           <input id="evName" placeholder="e.g. Found money on the ground" required>
         </div>
         <div id="evAmountWrap">
-          <label for="evAmount" id="labEvAmount">Amount (negative for a cost)</label>
-          <input id="evAmount" type="number" step="0.01">
+          <label for="evAmountMode" id="labEvAmountMode">Amount is</label>
+          <select id="evAmountMode" onchange="toggleEventType()">
+            <option value="fixed">A set amount</option>
+            <option value="percent">A % of an item's present cost</option>
+          </select>
+          <div id="evFixedWrap">
+            <label for="evAmount" id="labEvAmount">Amount (negative for a cost)</label>
+            <input id="evAmount" type="number" step="0.01">
+          </div>
+          <div id="evPercentWrap" class="hidden">
+            <label for="evPercent" id="labEvPercent">Percentage (negative for a cost)</label>
+            <input id="evPercent" type="number" step="0.01" min="-1000" max="1000" placeholder="e.g. -20">
+          </div>
         </div>
         <div>
           <label for="evSeverity" id="labEvSeverity">Severity</label>
@@ -354,6 +365,17 @@
             <option value="bad">Bad (can be claimed on insurance)</option>
           </select>
         </div>
+      </div>
+      <div id="evBaseBox" class="hidden">
+        <div id="evBaseSelectWrap">
+          <label for="evBase" id="labEvBase">The percentage is of</label>
+          <select id="evBase">
+            <option value="income">The student's weekly wage (before tax)</option>
+            <option value="property">The present market price of one of their properties</option>
+            <option value="transport">The present price of one of their vehicles</option>
+          </select>
+        </div>
+        <p class="muted-small" id="evBaseHint"></p>
       </div>
       <div id="evCoverWrap" class="hidden">
         <label for="evCoverage" id="labEvCoverage">Which insurance can claim it?</label>

@@ -237,7 +237,7 @@ function eventImpactText(entry, coverage) {
   const kind = { car: "car", truck: "truck", bike: "bike/scooter" }[entry.assetType] || "";
   const asset = entry.assetName ? `${entry.assetName}${kind ? ` (${kind})` : ""}`
     : entry.assetType === "rented-home" ? "your rented home" : "";
-  return [happened, asset].filter(Boolean).join(" · ");
+  return [happened, asset, entry.basisNote].filter(Boolean).join(" · ");
 }
 
 // Short button text for an Indemnity write-off (the full breakdown is in
@@ -441,6 +441,7 @@ function showGoodBigEventPopup(entry) {
       <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${escapeHtml(entry.name)}</h2>
       <p>${escapeHtml(entry.description) || ""}</p>
       <p class="ticker-up" style="font-weight:900;font-size:1.2em;">+${fmtMoney(entry.cost)}</p>
+      ${entry.basisNote ? `<p class="muted-small">${escapeHtml(entry.basisNote)}</p>` : ""}
       <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwGoodBigEventCloseBtn">Nice, got it</button>
     </div>
   `;
@@ -527,6 +528,7 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
       <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${escapeHtml(entry.name)}</h2>
       <p>${escapeHtml(entry.description) || ""}</p>
       <p><strong>${BIG_EVENT_MODULE_LABEL[entry.module]}</strong> &middot; costs <strong>${fmtMoney(entry.cost)}</strong> to resolve</p>
+      ${entry.basisNote ? `<p class="muted-small">${escapeHtml(entry.basisNote)}</p>` : ""}
       <p class="muted-small">${canForfeit ? "You need to choose how to handle this before you can continue." : `This doesn't put ${assetLabel} at risk — you just need to cover the cost, or claim insurance if you have it.`}</p>
       ${coverLine}
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">

@@ -58,9 +58,12 @@ function paintChrome() {
   document.getElementById("hEvents").innerHTML = icon("dice", 18) + " Random weekly events";
   document.getElementById("runEventsNowBtn").innerHTML = icon("repeat", 14) + " Run this week's events now";
   document.getElementById("labEvType").innerHTML = icon("dice", 13) + " Event type";
-  document.getElementById("labEvOptions").innerHTML = icon("star", 13) + " Choices — one per line, as \"Label | amount | what happened (optional)\"";
+  document.getElementById("labEvOptions").innerHTML = icon("star", 13) + " Choices — one per line, as \"Label | amount | what happened (optional)\" — the amount can also be a percentage, like -20%";
   document.getElementById("labEvName").innerHTML = icon("star", 13) + " Event name";
   document.getElementById("labEvAmount").innerHTML = icon("coin", 13) + " Amount (negative for a cost)";
+  document.getElementById("labEvAmountMode").innerHTML = icon("coin", 13) + " Amount is";
+  document.getElementById("labEvPercent").innerHTML = icon("coin", 13) + " Percentage (negative for a cost)";
+  document.getElementById("labEvBase").innerHTML = icon("coin", 13) + " The percentage is of";
   document.getElementById("labEvDesc").innerHTML = icon("idcard", 13) + " Description (shown in the activity feed)";
   document.getElementById("labEvSeverity").innerHTML = icon("star", 13) + " Severity";
   document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Add event";
@@ -252,8 +255,8 @@ async function render() {
     const row = document.createElement("div");
     row.className = "auto-row";
     const middle = ev.type === "choice"
-      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${escapeHtml(o.label)} (${o.amount >= 0 ? "+" : ""}${fmtMoney(o.amount)})${o.outcome ? ` — ${escapeHtml(o.outcome)}` : ""}`).join(", ")}`
-      : `&middot; ${ev.amount >= 0 ? "+" : ""}${fmtMoney(ev.amount)}`;
+      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${escapeHtml(o.label)} (${eventAmountText(o.amount, o.percent, ev.amountBase)})${o.outcome ? ` — ${escapeHtml(o.outcome)}` : ""}`).join(", ")}`
+      : `&middot; ${eventAmountText(ev.amount, ev.amountMode === "percent" ? ev.amountPercent : 0, ev.amountBase)}`;
     row.innerHTML = `
       <div class="auto-details">${icon("dice", 14)} <strong>${escapeHtml(ev.name)}</strong>
         ${middle}
@@ -584,6 +587,19 @@ async function giveAdjustment(e) {
   }
 }
 
+// What a weekly event's percentage is of (matches EVENT_PERCENT_BASES in data-life.js).
+const EVENT_BASE_TEXT = {
+  income: "the student's weekly wage",
+  property: "a property's present market price",
+  transport: "a vehicle's present price"
+};
+// An event amount for the list: "+$5.00" / "-$10.00", or "-20% of a vehicle's present price".
+function eventAmountText(amount, percent, base) {
+  const p = Number(percent) || 0;
+  if (!p) return `${amount >= 0 ? "+" : ""}${fmtMoney(amount)}`;
+  return `${p > 0 ? "+" : "-"}${Math.abs(p)}% of ${EVENT_BASE_TEXT[base] || "the item's present cost"}`;
+}
+
 // Event list line saying which insurance can claim a bad weekly event.
 function weeklyEventInsuranceText(ev) {
   const coverage = ["property", "transport"].includes(ev.coverage) ? ev.coverage : "general";
@@ -602,6 +618,7 @@ function weeklyEventInsuranceText(ev) {
 // only rebuilt when the coverage actually changes, so it keeps the ticks
 // (including while it's hidden by switching to Neutral and back).
 function updateEventCoverBox(cover, incident) {
+  updateEventBaseBox();
   const bad = document.getElementById("evSeverity").value === "bad";
   document.getElementById("evCoverWrap").classList.toggle("hidden", !bad);
   const coverage = document.getElementById("evCoverage").value;
@@ -632,6 +649,17 @@ async function addEventForm(e) {
     for (const line of lines) {
       const [label, amt, outcome] = line.split("|");
       if (!(label || "").trim()) continue;
+      // "-20%" = a percentage of the item's present cost (worked out when the event happens).
+      const amtText = String(amt === undefined ? "" : amt).trim().replace(/[\u2212\u2013]/g, "-");
+      if (amtText.endsWith("%")) {
+        const pct = parseMoneyInput(amtText.slice(0, -1));
+        if (!Number.isFinite(pct) || pct === 0 || Math.abs(pct) > 1000) {
+          alert(`Couldn't read the percentage for "${(label || "").trim()}" — enter something like -20% or 15% (between -1000% and 1000%, not 0).`);
+          return false;
+        }
+        options.push({ label: label.trim(), amount: 0, percent: pct, outcome: (outcome || "").trim() });
+        continue;
+      }
       const parsed = parseMoneyInput(amt);
       if (Number.isNaN(parsed)) {
         alert(`Couldn't read the amount for "${(label || "").trim()}" — enter a plain number like -10 or 5 (no currency symbols needed).`);
@@ -644,6 +672,18 @@ async function addEventForm(e) {
       return false;
     }
     ev.options = options;
+    ev.amount = 0;
+    if (options.some(o => o.percent)) ev.amountBase = document.getElementById("evBase").value;
+  } else if (document.getElementById("evAmountMode").value === "percent") {
+    const rawPct = document.getElementById("evPercent").value.trim();
+    const pct = Number(rawPct);
+    if (rawPct === "" || !Number.isFinite(pct) || pct === 0 || Math.abs(pct) > 1000) {
+      alert("Enter a percentage between -1000 and 1000 (not 0) — negative for a cost, like -20.");
+      return false;
+    }
+    ev.amountMode = "percent";
+    ev.amountPercent = pct;
+    ev.amountBase = document.getElementById("evBase").value;
     ev.amount = 0;
   } else {
     const rawAmt = document.getElementById("evAmount").value;
@@ -673,6 +713,9 @@ function resetEventForm() {
   EDITING_EVENT_ID = null;
   document.getElementById("evName").value = "";
   document.getElementById("evAmount").value = "";
+  document.getElementById("evPercent").value = "";
+  document.getElementById("evAmountMode").value = "fixed";
+  document.getElementById("evBase").selectedIndex = 0;
   document.getElementById("evOptionsArea").value = "";
   document.getElementById("evDesc").value = "";
   document.getElementById("evRepeat").checked = false;
@@ -711,10 +754,14 @@ function startEditEvent(id) {
       // render time (where the label is dropped into innerHTML), never on
       // the way into a form field.
       document.getElementById("evOptionsArea").value = (ev.options || [])
-        .map(o => `${o.label} | ${o.amount}${o.outcome ? " | " + o.outcome : ""}`).join("\n");
+        .map(o => `${o.label} | ${o.percent ? o.percent + "%" : o.amount}${o.outcome ? " | " + o.outcome : ""}`).join("\n");
     } else {
-      document.getElementById("evAmount").value = ev.amount;
+      document.getElementById("evAmount").value = ev.amountMode === "percent" ? "" : ev.amount;
     }
+    document.getElementById("evAmountMode").value = ev.type !== "choice" && ev.amountMode === "percent" ? "percent" : "fixed";
+    document.getElementById("evPercent").value = ev.amountMode === "percent" && ev.amountPercent ? ev.amountPercent : "";
+    if (ev.amountBase) document.getElementById("evBase").value = ev.amountBase;
+    toggleEventType();
     document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Save changes";
     if (!document.getElementById("cancelEditEventBtn")) {
       const cancelBtn = document.createElement("button");
@@ -731,9 +778,31 @@ function startEditEvent(id) {
 }
 
 function toggleEventType() {
-  const type = document.getElementById("evType").value;
-  document.getElementById("evAmountWrap").classList.toggle("hidden", type === "choice");
-  document.getElementById("evOptionsWrap").classList.toggle("hidden", type !== "choice");
+  const choice = document.getElementById("evType").value === "choice";
+  const percent = !choice && document.getElementById("evAmountMode").value === "percent";
+  document.getElementById("evAmountWrap").classList.toggle("hidden", choice);
+  document.getElementById("evFixedWrap").classList.toggle("hidden", percent);
+  document.getElementById("evPercentWrap").classList.toggle("hidden", !percent);
+  document.getElementById("evOptionsWrap").classList.toggle("hidden", !choice);
+  updateEventBaseBox();
+}
+
+// "The percentage is of…" — shown for a percentage amount, and for multiple
+// choice events (whose choices can be written as percentages). An event tied
+// to property or transport insurance always takes it from that same
+// property/vehicle, so the picker is hidden then.
+function updateEventBaseBox() {
+  const choice = document.getElementById("evType").value === "choice";
+  const percent = !choice && document.getElementById("evAmountMode").value === "percent";
+  const bad = document.getElementById("evSeverity").value === "bad";
+  const coverage = bad ? document.getElementById("evCoverage").value : "general";
+  const linked = coverage === "property" || coverage === "transport";
+  document.getElementById("evBaseBox").classList.toggle("hidden", !(choice || percent));
+  document.getElementById("evBaseSelectWrap").classList.toggle("hidden", linked);
+  document.getElementById("evBaseHint").textContent =
+    (linked ? `It's taken from the present ${coverage === "property" ? "market price of the property" : "price of the vehicle"} the event hits (see the insurance choice below). ` : "")
+    + (choice ? "Only used for choices written as a percentage, like -20%. " : "")
+    + "It's worked out when the event happens, from what that is worth at that moment, so only students who have one can get this event.";
 }
 
 async function removeEvent(id) {

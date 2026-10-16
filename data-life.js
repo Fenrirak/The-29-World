@@ -946,16 +946,18 @@ function insuranceCoverSummary(coverage, cover, incident) {
 //   allowRenters — a weekly contents-only (or older, no-incident) property
 //                  event can also go to a student who rents their home;
 //                  there's no house of theirs to record.
-function pickEventAsset(cls, username, coverage, incident, allowRenters) {
+//   pricedOnly   — only count vehicles/properties that have a price (what a
+//                  percentage-of-price event needs to be worked out).
+function pickEventAsset(cls, username, coverage, incident, allowRenters, pricedOnly) {
   const pick = list => list[Math.floor(Math.random() * list.length)];
   if (coverage === "transport") {
-    const mine = (cls.vehicles || []).filter(v => (v.owners || []).includes(username));
+    const mine = (cls.vehicles || []).filter(v => (v.owners || []).includes(username) && (!pricedOnly || Number(v.price) > 0));
     if (!mine.length) return null;
     const v = pick(mine);
     return { assetId: v.id, assetName: v.name || "", assetType: normalizeVehicleType(v.type) };
   }
   if (coverage === "property") {
-    const owned = (cls.properties || []).filter(p => p.owner === username);
+    const owned = (cls.properties || []).filter(p => p.owner === username && (!pricedOnly || Number(p.price) > 0));
     if (owned.length) {
       const p = pick(owned);
       return { assetId: p.id, assetName: p.name || "", assetType: "property" };
@@ -1948,6 +1950,83 @@ function resolveBigEventModule(module, kind) {
   return isGood ? "general" : "income";
 }
 
+/* ---------------- A set amount, or a % of the item's present cost ----------------
+   Any big or weekly event can cost / pay either a set amount or a percentage
+   of what the thing it's about is worth RIGHT NOW (EVENT_PERCENT_BASES):
+     income    — the student's weekly wage (their job tier's wage, before tax)
+     property  — the market price of the property the event hits
+     transport — the price of the vehicle the event hits
+   The percentage is turned into a plain dollar amount at the moment the event
+   actually happens (revealBigEvent / revealWeeklyEvent), once the property or
+   vehicle it hits has been settled, and saved on the log entry. Everything
+   after that (paying, insurance claims, popups, history) just sees an
+   ordinary amount, and a price that moves later never changes an event that
+   has already been issued. */
+const EVENT_PERCENT_BASES = ["income", "property", "transport"];
+const EVENT_PERCENT_MAX = 1000;
+
+// A percentage for saving: a number between -1000 and 1000 to two decimals, or 0 if it isn't one.
+function cleanEventPercent(p) {
+  const n = Number(p);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(-EVENT_PERCENT_MAX, Math.min(EVENT_PERCENT_MAX, Math.round(n * 100) / 100));
+}
+// value × percent%, to the cent (rounding half away from zero, so -x% mirrors +x%).
+function eventPercentOf(value, percent) {
+  const cents = Number(value) * Number(percent);
+  return (Math.sign(cents) * Math.round(Math.abs(cents))) / 100 + 0;
+}
+function eventPercentText(percent) { return `${Math.abs(Number(percent) || 0)}%`; }
+
+// What a percentage is taken from, as it is right now: { value, label } —
+// label reads after "of", e.g. "your Honda Civic's present price ($12,000.00)" —
+// or null when the student has no such item (or it has no price). For
+// property/transport, `assetEntry` says which of their things it is
+// ({ assetId, ... }); without one it's their first (see eventAssetNow).
+function eventBaseValue(cls, student, base, assetEntry) {
+  if (!student) return null;
+  if (base === "income") {
+    if (!student.jobId) return null;
+    const job = (cls.jobs || []).find(j => j.id === student.jobId);
+    const tier = job ? getStudentTier(job, student) : null;
+    const wage = tier ? Number(tier.wage) || 0 : 0;
+    return wage > 0 ? { value: wage, label: `your weekly wage (${fmtMoney(wage)})` } : null;
+  }
+  if (base === "transport") {
+    const v = eventAssetNow(cls, student.username, "transport", assetEntry).vehicle;
+    const price = v ? Number(v.price) || 0 : 0;
+    return price > 0 ? { value: price, label: `${v.name ? v.name + "'s" : "your vehicle's"} present price (${fmtMoney(price)})` } : null;
+  }
+  if (base === "property") {
+    const p = eventAssetNow(cls, student.username, "property", assetEntry).property;
+    const price = p ? Number(p.price) || 0 : 0;
+    return price > 0 ? { value: price, label: `${p.name ? p.name + "'s" : "your property's"} present market price (${fmtMoney(price)})` } : null;
+  }
+  return null;
+}
+// Whether the student has anything a percentage of that kind could be taken from.
+function eventBaseAvailable(cls, student, base) {
+  if (!student) return false;
+  if (base === "income") return !!eventBaseValue(cls, student, "income", null);
+  if (base === "transport") return (cls.vehicles || []).some(v => (v.owners || []).includes(student.username) && Number(v.price) > 0);
+  if (base === "property") return (cls.properties || []).some(p => p.owner === student.username && Number(p.price) > 0);
+  return false;
+}
+
+// A big event's cost fields for saving. Percentages only make sense with
+// something to take a percentage of, so "general" events are always a set
+// amount. A percentage event keeps cost at 0 — the real amount is worked
+// out when it happens.
+function cleanBigEventCost(ev, module) {
+  const percent = EVENT_PERCENT_BASES.includes(module) && ev.costMode === "percent"
+    ? Math.abs(cleanEventPercent(ev.costPercent)) : 0;
+  if (percent > 0) return { costMode: "percent", costPercent: percent, cost: 0 };
+  return { costMode: "fixed", costPercent: null, cost: Math.max(0, Number(ev.cost) || 0) };
+}
+function bigEventIsPercent(def) {
+  return def.costMode === "percent" && Number(def.costPercent) > 0 && EVENT_PERCENT_BASES.includes(def.module);
+}
+
 async function addBigEventDef(classCode, ev) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
@@ -1968,7 +2047,7 @@ async function addBigEventDef(classCode, ev) {
       // the matching coverage covers the whole cost, same as before.
       insuranceCover: kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[module],
         ev.insuranceCover, cleanIncident(MODULE_TO_COVERAGE[module], ev.incident)) : [],
-      cost: Math.max(0, Number(ev.cost) || 0), description: ev.description || "", active: true,
+      ...cleanBigEventCost(ev, module), description: ev.description || "", active: true,
       // Whether NOT paying this event costs the student the related
       // job/property/vehicle. Defaults true so existing "bad" events keep
       // behaving exactly as before. When false, the event is still tied to
@@ -2005,7 +2084,7 @@ async function updateBigEventDef(classCode, defId, ev) {
     existing.module = resolveBigEventModule(ev.module, kind);
     existing.incident = kind === "bad" ? cleanIncident(MODULE_TO_COVERAGE[existing.module], ev.incident) : null;
     existing.insuranceCover = kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[existing.module], ev.insuranceCover, existing.incident) : [];
-    existing.cost = Math.max(0, Number(ev.cost) || 0);
+    Object.assign(existing, cleanBigEventCost(ev, existing.module));
     existing.description = ev.description || "";
     existing.takesAsset = ev.takesAsset === false ? false : true;
     t.update(classRef, { bigEventDefs: cls.bigEventDefs });
@@ -2060,6 +2139,8 @@ const BIG_EVENT_WEEKLY_CHANCE = 0.3;
 // Whether a big event can go to this student right now: "good" events go to
 // anyone; a bad one needs the job, property or vehicle it puts at risk.
 function bigEventFitsStudent(cls, student, d) {
+  // A percentage event needs something to take the percentage of.
+  if (bigEventIsPercent(d) && !eventBaseAvailable(cls, student, d.module)) return false;
   if (d.kind === "good") return true;
   if (d.module === "income") return !!student.jobId;
   if (d.module === "property") return (cls.properties || []).some(p => p.owner === student.username);
@@ -2072,15 +2153,22 @@ function pickBigEventDef(cls, student, defs) {
 }
 // A big event log entry for one student, from the event as it is now.
 function bigEventEntry(cls, username, def, weekKey, revealAt) {
-  // Which of their properties/vehicles this hits (see pickEventAsset).
+  const percent = bigEventIsPercent(def);
+  // Which of their properties/vehicles this hits (see pickEventAsset). A
+  // good event has nothing to hit — unless its payout is a percentage of a
+  // house's or vehicle's price, then it's that one (and it has to have a price).
   const coverage = def.kind !== "good" ? MODULE_TO_COVERAGE[def.module] : null;
-  const asset = coverage === "property" || coverage === "transport"
-    ? pickEventAsset(cls, username, coverage, def.incident, false) : null;
+  const assetKind = coverage === "property" || coverage === "transport" ? coverage
+    : (percent && (def.module === "property" || def.module === "transport") ? def.module : null);
+  const asset = assetKind
+    ? pickEventAsset(cls, username, assetKind, def.kind === "good" ? null : def.incident, false, percent) : null;
   return {
     ...(asset || {}),
     incident: def.incident || null,
     id: uid("bigevlog"), studentUser: username, defId: def.id, week: weekKey, date: nowStr(), revealAt,
-    name: def.name, module: def.module, kind: def.kind || "bad", cost: def.cost, description: def.description || "",
+    name: def.name, module: def.module, kind: def.kind || "bad", description: def.description || "",
+    // A percentage event's dollar cost is worked out when it happens (revealBigEvent).
+    cost: percent ? 0 : def.cost, costMode: percent ? "percent" : "fixed", costPercent: percent ? def.costPercent : null,
     // Locked in once it happens, so editing the event afterwards never
     // changes how an already-issued one resolves.
     takesAsset: def.takesAsset === false ? false : true,
@@ -2204,6 +2292,19 @@ async function revealBigEvent(classCode, logId) {
       id: found.id, date: nowStr(),
       status: def.kind === "good" ? "received" : "pending"
     });
+    // A percentage event is worked out now, from what the property/vehicle/
+    // wage is worth at this moment, and saved as a plain dollar cost.
+    if (bigEventIsPercent(def)) {
+      const priced = eventBaseValue(liveCls, student, def.module, found);
+      if (!priced) {
+        found.status = "skipped";
+        t.update(classRef, { bigEventLog: liveCls.bigEventLog });
+        return;
+      }
+      found.cost = eventPercentOf(priced.value, def.costPercent);
+      found.basisValue = priced.value;
+      found.basisNote = `${eventPercentText(def.costPercent)} of ${priced.label}`;
+    }
     entry = Object.assign({}, found);
     t.update(classRef, { bigEventLog: liveCls.bigEventLog });
   });
@@ -2211,7 +2312,7 @@ async function revealBigEvent(classCode, logId) {
   // telling the student why is shown straight after (checkBigEventPopup).
   if (entry && entry.kind === "good") {
     await adjustBalance(entry.studentUser, entry.cost);
-    await logTxn(classCode, { type: "big-event", to: entry.studentUser, amount: entry.cost, note: `Big event windfall: "${entry.name}"` + (entry.description ? " — " + entry.description : "") });
+    await logTxn(classCode, { type: "big-event", to: entry.studentUser, amount: entry.cost, note: `Big event windfall: "${entry.name}"` + (entry.description ? " — " + entry.description : "") + (entry.basisNote ? ` (${entry.basisNote})` : "") });
   }
   return entry;
 }
@@ -2369,12 +2470,56 @@ function weeklyEventInsurance(ev) {
 // only goes to students who own a house (see pickEventAsset). Everything
 // else (all events made before this existed included) can go to anyone,
 // same as always.
-function weeklyEventFitsStudent(cls, username, ev) {
+function weeklyEventFitsStudent(cls, username, ev, student) {
+  // A percentage event needs something to take the percentage of.
+  const base = weeklyEventBase(ev);
+  if (base && !eventBaseAvailable(cls, student || { username }, base)) return false;
   if (ev.severity !== "bad") return true;
   if (ev.coverage === "property" || ev.coverage === "transport") {
-    return pickEventAsset(cls, username, ev.coverage, cleanIncident(ev.coverage, ev.incident), true) !== null;
+    return pickEventAsset(cls, username, ev.coverage, cleanIncident(ev.coverage, ev.incident), !base, !!base) !== null;
   }
   return true;
+}
+
+// What a weekly event's percentage is of ("income" | "property" | "transport"),
+// or null when it has no percentage (set amounts, and every event made before
+// this existed). A fixed event has one percentage; a multiple-choice event
+// has one per choice written as a percentage — all of the same thing.
+function weeklyEventBase(ev) {
+  const pct = Number(ev.amountPercent);
+  const usesPercent = ev.type === "choice"
+    ? (ev.options || []).some(o => Number(o.percent))
+    : ev.amountMode === "percent" && Number.isFinite(pct) && pct !== 0;
+  return usesPercent && EVENT_PERCENT_BASES.includes(ev.amountBase) ? ev.amountBase : null;
+}
+// The property/vehicle a weekly event is tied to: the one its insurance is
+// about, or — for a percentage of a house/vehicle price on an event with
+// general insurance — that house/vehicle. null when it's tied to none.
+function weeklyEventAssetCoverage(insurance, base) {
+  if (insurance.coverage !== "general") return insurance.coverage;
+  return base === "property" || base === "transport" ? base : null;
+}
+// A weekly event's amount fields for saving. An event tied to property or
+// transport insurance takes its percentage from that same property/vehicle.
+function weeklyEventAmountFields(ev) {
+  const isChoice = ev.type === "choice";
+  const pct = !isChoice && ev.amountMode === "percent" ? cleanEventPercent(ev.amountPercent) : 0;
+  const anyOptionPct = isChoice && (ev.options || []).some(o => cleanEventPercent(o.percent) !== 0);
+  if (!pct && !anyOptionPct) return { amountMode: "fixed", amountPercent: null, amountBase: null };
+  const coverage = weeklyEventInsurance(ev).coverage;
+  const base = coverage !== "general" ? coverage
+    : (EVENT_PERCENT_BASES.includes(ev.amountBase) ? ev.amountBase : "income");
+  return { amountMode: pct ? "percent" : "fixed", amountPercent: pct || null, amountBase: base };
+}
+// A multiple-choice event's choices for saving (a choice is either a set
+// amount or a percentage — percentage ones keep amount 0 until it happens).
+function cleanEventOptions(options) {
+  return (options || []).map(o => {
+    const percent = cleanEventPercent(o.percent);
+    return Object.assign(
+      { id: uid("opt"), label: o.label || "", amount: percent ? 0 : Number(o.amount) || 0, outcome: o.outcome || "" },
+      percent ? { percent } : {});
+  });
 }
 
 async function addEventDef(classCode, ev) {
@@ -2384,13 +2529,15 @@ async function addEventDef(classCode, ev) {
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const isChoice = ev.type === "choice";
+    const amt = weeklyEventAmountFields(ev);
     cls.eventDefs.push({
-      id: uid("ev"), name: ev.name, amount: Number(ev.amount) || 0,
+      id: uid("ev"), name: ev.name, amount: amt.amountMode === "percent" ? 0 : Number(ev.amount) || 0,
       description: ev.description || "", repeatable: !!ev.repeatable,
       severity: ev.severity === "bad" ? "bad" : "neutral", active: true,
       ...weeklyEventInsurance(ev),
+      ...amt,
       type: isChoice ? "choice" : "fixed",
-      options: isChoice ? (ev.options || []).map(o => ({ id: uid("opt"), label: o.label || "", amount: Number(o.amount) || 0, outcome: o.outcome || "" })) : []
+      options: isChoice ? cleanEventOptions(ev.options) : []
     });
     t.update(classRef, { eventDefs: cls.eventDefs });
   });
@@ -2415,13 +2562,14 @@ async function updateEventDef(classCode, evId, ev) {
     if (!existing) return;
     const isChoice = ev.type === "choice";
     existing.name = ev.name;
-    existing.amount = Number(ev.amount) || 0;
+    const amt = weeklyEventAmountFields(ev);
+    existing.amount = amt.amountMode === "percent" ? 0 : Number(ev.amount) || 0;
     existing.description = ev.description || "";
     existing.repeatable = !!ev.repeatable;
     existing.severity = ev.severity === "bad" ? "bad" : "neutral";
-    Object.assign(existing, weeklyEventInsurance(ev));
+    Object.assign(existing, weeklyEventInsurance(ev), amt);
     existing.type = isChoice ? "choice" : "fixed";
-    existing.options = isChoice ? (ev.options || []).map(o => ({ id: uid("opt"), label: o.label || "", amount: Number(o.amount) || 0, outcome: o.outcome || "" })) : [];
+    existing.options = isChoice ? cleanEventOptions(ev.options) : [];
     t.update(classRef, { eventDefs: cls.eventDefs });
   });
 }
@@ -2450,9 +2598,12 @@ async function forceWeeklyEvents(classCode) {
 // counts for ones planned earlier in the week.
 function weeklyEventEntry(cls, username, ev, weekKey, dayKey, revealAt, manual) {
   const insurance = weeklyEventInsurance(ev);
-  // Which of their properties/vehicles this hits (see pickEventAsset).
-  const asset = insurance.coverage !== "general"
-    ? pickEventAsset(cls, username, insurance.coverage, insurance.incident, true) : null;
+  // Which of their properties/vehicles this hits (see pickEventAsset) — a
+  // percentage of a price needs one that's theirs and has a price (no renters).
+  const base = weeklyEventBase(ev);
+  const assetCoverage = weeklyEventAssetCoverage(insurance, base);
+  const asset = assetCoverage
+    ? pickEventAsset(cls, username, assetCoverage, assetCoverage === insurance.coverage ? insurance.incident : null, !base, !!base) : null;
   const isChoice = ev.type === "choice";
   const entry = {
     id: uid("evlog"), studentUser: username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
@@ -2525,7 +2676,7 @@ async function processWeeklyEvents(classCode, opts) {
     let lastEventId = mine.length ? mine[mine.length - 1].eventId : null;
     for (const slot of slots) {
       const pool = activeDefs.filter(e => (manual || (e.id !== lastEventId && (e.repeatable || !already.has(e.id))))
-        && weeklyEventFitsStudent(cls, student.username, e));
+        && weeklyEventFitsStudent(cls, student.username, e, student));
       if (pool.length === 0) break;
       const ev = pool[Math.floor(Math.random() * pool.length)];
       already.add(ev.id);
@@ -2549,12 +2700,13 @@ async function processWeeklyEvents(classCode, opts) {
 
 // Whether the vehicle/home a planned weekly event was going to hit is still
 // the student's (see pickEventAsset for what each kind of event can hit).
-function weeklyEventAssetStillFits(cls, username, coverage, incident, entry) {
+function weeklyEventAssetStillFits(cls, username, coverage, incident, entry, allowRenters = true) {
   if (coverage === "transport") {
     return !!entry.assetId && (cls.vehicles || []).some(v => v.id === entry.assetId && (v.owners || []).includes(username));
   }
   if (coverage === "property") {
     if (entry.assetType === "rented-home") {
+      if (!allowRenters) return false; // a percentage of a price needs a home of their own
       // A renter only gets events that don't damage the house itself — and
       // once they own a home, events hit that instead.
       if (incident === "house" || incident === "both") return false;
@@ -2596,24 +2748,48 @@ async function revealWeeklyEvent(classCode, eventLogId) {
     if (planned) {
       const ev = (liveCls.eventDefs || []).find(d => d.id === found.eventId && d.active);
       const insurance = ev ? weeklyEventInsurance(ev) : null;
+      // A percentage event is worked out from what the student has right
+      // now (see eventBaseValue) — read them first, before anything is written.
+      const base = ev ? weeklyEventBase(ev) : null;
+      const assetCoverage = ev ? weeklyEventAssetCoverage(insurance, base) : null;
+      const sSnap = base ? await t.get(usersCol().doc(found.studentUser)) : null;
       let asset = { assetId: null, assetName: null, assetType: null };
-      if (ev && insurance.coverage !== "general") {
-        asset = weeklyEventAssetStillFits(liveCls, found.studentUser, insurance.coverage, insurance.incident, found)
+      if (ev && assetCoverage) {
+        const assetIncident = assetCoverage === insurance.coverage ? insurance.incident : null;
+        asset = weeklyEventAssetStillFits(liveCls, found.studentUser, assetCoverage, assetIncident, found, !base)
           ? { assetId: found.assetId, assetName: found.assetName, assetType: found.assetType }
-          : pickEventAsset(liveCls, found.studentUser, insurance.coverage, insurance.incident, true);
+          : pickEventAsset(liveCls, found.studentUser, assetCoverage, assetIncident, !base, !!base);
       }
-      if (!ev || !asset) {
+      let priced = null;
+      if (ev && base && asset) {
+        const student = Object.assign({}, sSnap && sSnap.exists ? sSnap.data() : {}, { username: found.studentUser });
+        priced = eventBaseValue(liveCls, student, base, asset);
+      }
+      if (!ev || !asset || (base && !priced)) {
         found.status = "skipped";
         t.update(classRef, { eventLog: liveCls.eventLog });
         return;
       }
       const isChoice = ev.type === "choice";
+      let amount = isChoice ? null : ev.amount;
+      let options = isChoice ? (ev.options || []) : null;
+      if (priced) {
+        if (isChoice) options = options.map(o => Number(o.percent) ? Object.assign({}, o, { amount: eventPercentOf(priced.value, o.percent) }) : o);
+        else amount = eventPercentOf(priced.value, ev.amountPercent);
+      }
       Object.assign(found, insurance, asset, {
         name: ev.name, description: ev.description || "", severity: ev.severity || "neutral",
-        type: isChoice ? "choice" : "fixed", amount: isChoice ? null : ev.amount, date: nowStr()
+        type: isChoice ? "choice" : "fixed", amount, date: nowStr()
       });
-      if (isChoice) found.options = ev.options || [];
+      if (isChoice) found.options = options;
       else delete found.options;
+      // What the percentage was taken from, kept with the event so it can be shown.
+      delete found.basisNote;
+      delete found.basisLabel;
+      if (priced) {
+        found.basisLabel = priced.label;
+        if (!isChoice) found.basisNote = `${eventPercentText(ev.amountPercent)} of ${priced.label}`;
+      }
     }
     found.revealedDay = nzDateKey();
     found.status = found.type === "choice" ? "pending" : "resolved";
@@ -2649,7 +2825,7 @@ async function revealWeeklyEvent(classCode, eventLogId) {
   if (!entry) return null;
   if (entry.type === "fixed") {
     await adjustBalance(entry.studentUser, entry.amount);
-    await logTxn(classCode, { type: "event", to: entry.studentUser, amount: entry.amount, note: entry.name + (entry.description ? " — " + entry.description : "") + (entry.insuranceNote ? " " + entry.insuranceNote : "") });
+    await logTxn(classCode, { type: "event", to: entry.studentUser, amount: entry.amount, note: entry.name + (entry.description ? " — " + entry.description : "") + (entry.basisNote ? " (" + entry.basisNote + ")" : "") + (entry.insuranceNote ? " " + entry.insuranceNote : "") });
   }
   return entry;
 }
@@ -2750,7 +2926,8 @@ async function resolveChoiceEvent(username, classCode, logId, optionId) {
       if (liveDef && liveDef.options) {
         const liveOption = liveDef.options.find(o => o.id === option.id)
           || liveDef.options.find(o => o.label.trim().toLowerCase() === option.label.trim().toLowerCase());
-        if (liveOption) option = liveOption;
+        // A percentage choice keeps the dollar amount worked out when the event happened.
+        if (liveOption && !liveOption.percent && !option.percent) option = liveOption;
       }
 
       amount = option.amount;
@@ -2760,7 +2937,8 @@ async function resolveChoiceEvent(username, classCode, logId, optionId) {
       entry.chosenOptionId = optionId;
       entry.amount = amount;
       entry.outcome = outcome;
-      note = `${entry.name} — chose "${option.label}"` + (option.outcome ? `: ${option.outcome}` : "");
+      note = `${entry.name} — chose "${option.label}"` + (option.outcome ? `: ${option.outcome}` : "")
+        + (option.percent && entry.basisLabel ? ` (${eventPercentText(option.percent)} of ${entry.basisLabel})` : "");
       const isTeacher = user.role === "teacher";
       if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + amount) * 100) / 100 });
       t.update(classRef, { eventLog: cls.eventLog });

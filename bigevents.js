@@ -3,21 +3,49 @@ let CURRENT, IS_TEACHER, EDITING_ID = null;
 const MODULE_LABEL = { income: "Income", property: "Property", transport: "Transport", general: "General" };
 const STATUS_LABEL = { pending: "Awaiting response", paid: "Paid", lost: "Lost the asset", claimed: "Claimed on insurance", received: "Received" };
 const STATUS_CLASS = { pending: "status-pending", paid: "status-approved", lost: "status-declined", claimed: "status-approved", received: "status-approved" };
+// What a percentage cost/payout is a percentage of, for each thing an event can be about.
+const PERCENT_BASE_TEXT = {
+  income: "the student's weekly wage",
+  property: "the present market price of the house it hits",
+  transport: "the present price of the vehicle it hits"
+};
 
 function updateCostLabel() {
   const kind = document.getElementById("beKind").value;
-  document.getElementById("labCost").textContent = kind === "good" ? "Amount paid to the student" : "Cost to fix / avoid";
+  const isGood = kind === "good";
   // Losing the asset is only ever a possibility for "bad" events — good
   // events are windfalls with nothing to forfeit.
-  document.getElementById("takesAssetRow").classList.toggle("hidden", kind === "good");
-  document.getElementById("takesAssetHint").classList.toggle("hidden", kind === "good");
+  document.getElementById("takesAssetRow").classList.toggle("hidden", isGood);
+  document.getElementById("takesAssetHint").classList.toggle("hidden", isGood);
   // "General" (not tied to any job/property/vehicle) only makes sense for
   // good events — a bad event needs a real asset to threaten or insure.
   const generalOpt = document.getElementById("beModuleGeneral");
   const moduleSelect = document.getElementById("beModule");
-  generalOpt.classList.toggle("hidden", kind !== "good");
-  generalOpt.disabled = kind !== "good";
-  if (kind !== "good" && moduleSelect.value === "general") moduleSelect.value = "income";
+  generalOpt.classList.toggle("hidden", !isGood);
+  generalOpt.disabled = !isGood;
+  if (!isGood && moduleSelect.value === "general") moduleSelect.value = "income";
+  // A percentage needs something to take it from, so "general" events can
+  // only be a set amount.
+  const module = moduleSelect.value;
+  const canPercent = module !== "general";
+  const modeSelect = document.getElementById("beCostMode");
+  const percentOpt = document.getElementById("beCostModePercent");
+  percentOpt.classList.toggle("hidden", !canPercent);
+  percentOpt.disabled = !canPercent;
+  if (!canPercent && modeSelect.value === "percent") modeSelect.value = "fixed";
+  const percent = modeSelect.value === "percent";
+  document.getElementById("beFixedWrap").classList.toggle("hidden", percent);
+  document.getElementById("bePercentWrap").classList.toggle("hidden", !percent);
+  // Only the visible box is required (a hidden required box would block saving).
+  document.getElementById("beCost").required = !percent;
+  document.getElementById("beCostPercent").required = percent;
+  document.getElementById("labCost").textContent = isGood ? "Amount paid to the student" : "Cost to fix / avoid";
+  document.getElementById("labCostPercent").textContent = isGood ? "Payout (% of the item's present cost)" : "Cost (% of the item's present cost)";
+  const hint = document.getElementById("bePercentHint");
+  hint.classList.toggle("hidden", !percent);
+  if (percent) {
+    hint.textContent = `A percentage of ${PERCENT_BASE_TEXT[module]}. It's worked out when the event happens, from what that is worth at that moment, so only students who have one can get this event.`;
+  }
   updateCoverBox();
 }
 
@@ -35,6 +63,9 @@ function updateCoverBox(cover, incident) {
     renderInsuranceCoverPicker("beCoverBox", coverage, cover || [], incident || null);
   }
   box.classList.toggle("hidden", !bad || !INSURANCE_TYPES[coverage]);
+  // With a percentage cost the amounts each insurance type pays are still dollar caps — say so.
+  const percent = document.getElementById("beCostMode").value === "percent";
+  document.getElementById("bePercentInsNote").classList.toggle("hidden", !(bad && percent && INSURANCE_TYPES[coverage]));
 }
 
 function paintChrome() {
@@ -125,7 +156,9 @@ async function render() {
           <div>
             <h4>${icon("star", 20)}${escapeHtml(d.name)} <span class="badge navy">${MODULE_LABEL[d.module]}</span> <span class="badge ${isGood ? "gold" : "coral"}">${isGood ? "Good" : "Bad"}</span></h4>
             <p>${escapeHtml(d.description) || "No description provided."}</p>
-            <p><strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay"}</p>
+            <p>${d.costMode === "percent"
+              ? `<strong>${isGood ? "+" : ""}${Number(d.costPercent)}%</strong> of ${PERCENT_BASE_TEXT[d.module] || "the item's present cost"}, ${isGood ? "paid to the student" : "to pay"}`
+              : `<strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay"}`}</p>
             ${insLine ? `<p class="muted-small">${insLine}</p>` : ""}
             ${!isGood ? `<p class="muted-small">${takesAsset ? "Not paying costs the student the related job/property/vehicle." : "Cost only — the student can't lose the asset over this."}</p>` : ""}
             ${isGood && isGeneral ? `<p class="muted-small">Open to everyone — not tied to any job, property, or vehicle.</p>` : ""}
@@ -154,7 +187,7 @@ async function render() {
       const isGood = e.kind === "good";
       row.innerHTML = `
         <div class="auto-details"><strong>${escapeHtml(e.name)}</strong> (${MODULE_LABEL[e.module]}) — <span class="${isGood ? "ticker-up" : ""}">${isGood ? "+" : ""}${e.autoClaimed ? fmtMoney(e.insurancePaid) : fmtMoney(e.cost)}</span>${e.autoClaimed ? ` <span class="muted-small">(cost ${fmtMoney(e.originalCost != null ? e.originalCost : e.cost)})</span>` : ""}
-          <div class="muted-small">${e.date}${e.autoClaimed && e.insuranceNote ? " — " + escapeHtml(e.insuranceNote) : ""}</div>
+          <div class="muted-small">${e.date}${e.basisNote ? " — " + escapeHtml(e.basisNote) : ""}${e.autoClaimed && e.insuranceNote ? " — " + escapeHtml(e.insuranceNote) : ""}</div>
         </div>
         <span class="${e.lostVehicle ? "status-declined" : STATUS_CLASS[e.status]}">${STATUS_LABEL[e.status]}${e.lostVehicle ? " — lost the vehicle" : ""}</span>
       `;
@@ -167,13 +200,21 @@ async function addEvent(e) {
   e.preventDefault();
   const picked = readInsuranceCoverPicker("beCoverBox");
   if (picked === null) return false;
+  const costMode = document.getElementById("beCostMode").value === "percent" ? "percent" : "fixed";
+  const costPercent = Number(document.getElementById("beCostPercent").value);
+  if (costMode === "percent" && (!Number.isFinite(costPercent) || costPercent <= 0 || costPercent > 1000)) {
+    alert("Enter a percentage between 0.01 and 1000.");
+    return false;
+  }
   const ev = {
     insuranceCover: picked.cover,
     incident: picked.incident,
     name: document.getElementById("beName").value.trim(),
     module: document.getElementById("beModule").value,
     kind: document.getElementById("beKind").value,
-    cost: document.getElementById("beCost").value,
+    costMode,
+    costPercent: costMode === "percent" ? costPercent : null,
+    cost: costMode === "percent" ? 0 : document.getElementById("beCost").value,
     description: document.getElementById("beDesc").value.trim(),
     takesAsset: document.getElementById("beTakesAsset").checked
   };
@@ -191,8 +232,9 @@ async function addEvent(e) {
 
 function resetEventForm() {
   EDITING_ID = null;
-  ["beName","beCost","beDesc"].forEach(id => document.getElementById(id).value = "");
+  ["beName","beCost","beCostPercent","beDesc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("beTakesAsset").checked = true;
+  document.getElementById("beCostMode").value = "fixed";
   document.getElementById("beKind").value = "bad";
   document.getElementById("beModule").value = "income";
   updateCostLabel();
@@ -210,7 +252,10 @@ function startEditEvent(id) {
     document.getElementById("beName").value = d.name;
     document.getElementById("beModule").value = d.module;
     document.getElementById("beKind").value = d.kind || "bad";
-    document.getElementById("beCost").value = d.cost;
+    const isPct = d.costMode === "percent";
+    document.getElementById("beCostMode").value = isPct ? "percent" : "fixed";
+    document.getElementById("beCostPercent").value = isPct ? d.costPercent : "";
+    document.getElementById("beCost").value = isPct ? "" : d.cost;
     document.getElementById("beDesc").value = d.description || "";
     document.getElementById("beTakesAsset").checked = d.takesAsset !== false;
     updateCostLabel();

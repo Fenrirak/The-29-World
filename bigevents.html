@@ -93,7 +93,7 @@
         </div>
         <div>
           <label for="beModule" id="labModule">What it affects</label>
-          <select id="beModule" onchange="updateCoverBox()">
+          <select id="beModule" onchange="updateCostLabel()">
             <option value="income">Income (job)</option>
             <option value="property">Property (house)</option>
             <option value="transport">Transport (vehicle)</option>
@@ -102,12 +102,25 @@
         </div>
       </div>
       <div id="beCoverBox" class="hidden"></div>
+      <p class="muted-small hidden" id="bePercentInsNote">Because the cost is a percentage, it changes from student to student, so each insurance type you tick pays up to the dollar amount you enter for it (never more than the cost). Leave every type unticked and any matching plan that covers what happened pays the whole cost (the student still pays the plan's excess).</p>
       <div class="grid grid-3">
         <div>
+          <label for="beCostMode" id="labCostMode">How is the amount set?</label>
+          <select id="beCostMode" onchange="updateCostLabel()">
+            <option value="fixed">A set amount</option>
+            <option value="percent" id="beCostModePercent">A percentage of the item's present cost</option>
+          </select>
+        </div>
+        <div id="beFixedWrap">
           <label for="beCost" id="labCost">Cost to fix / avoid</label>
-          <input id="beCost" type="number" min="0" step="0.01" required>
+          <input id="beCost" type="number" min="0" step="0.01">
+        </div>
+        <div id="bePercentWrap" class="hidden">
+          <label for="beCostPercent" id="labCostPercent">Cost (% of the item's present cost)</label>
+          <input id="beCostPercent" type="number" min="0.01" max="1000" step="0.01" placeholder="e.g. 20">
         </div>
       </div>
+      <p class="muted-small hidden" id="bePercentHint"></p>
       <label for="beDesc" id="labDesc">Description (shown to students)</label>
       <input id="beDesc" placeholder="e.g. Your workplace had to let you go">
       <div id="takesAssetRow" class="flex-row" style="align-items:center;gap:8px;margin-top:10px;">
