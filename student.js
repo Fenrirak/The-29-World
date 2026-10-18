@@ -28,6 +28,9 @@ function badgeType(type) {
     "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
     "insurance-signup-fee": ["lilac", "shield", "Insurance sign-up"],
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
+    "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
+    "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"],
+    "card-cashback": ["mint", "cards", "Cashback"], "card-statement": ["gold", "cards", "Statement"],
     "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"],
     "side-hustle": ["mint", "briefcase", "Side hustle"],
     "store-gift": ["mint", "cart", "Free item"],
@@ -111,6 +114,7 @@ async function init() {
     safeBgJob(payMyDailyLifeAllowanceIfDue(u.username), "payMyDailyLifeAllowanceIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
+    safeBgJob(processCreditCards(u.classCode), "processCreditCards"),
     safeBgJob(applyMyInterestIfDue(u.username), "applyMyInterestIfDue"),
     safeBgJob(applyMyKiwiSaverReturnsIfDue(u.username), "applyMyKiwiSaverReturnsIfDue"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
@@ -337,7 +341,7 @@ async function render() {
    for a choice, KiwiSaver once it's unlocked, and finding a job. */
 const TODO_CTA = {
   "loan.html": "Repay", "property.html": "Go to Property", "transport.html": "Pay transport", "bigevents.html": "Decide",
-  "marketplace.html": "See offers", "bank.html": "Open my budget", "jobs.html": "Find a job", "kiwisaver.html": "Open KiwiSaver"
+  "marketplace.html": "See offers", "budget.html": "Open my budget", "jobs.html": "Find a job", "kiwisaver.html": "Open KiwiSaver"
 };
 function renderTodo(me, cls) {
   const items = [];
@@ -363,7 +367,7 @@ function renderTodo(me, cls) {
     const v = buildBudgetView(cls, me, me.username);
     if (v && v.verdict && (v.verdict.tone === "bad" || v.verdict.tone === "warn") && v.shortfall) {
       items.push({ title: v.verdict.tone === "bad" ? "Not enough money for this week's bills" : "Move money from savings for bills",
-        body: v.verdict.text, urgent: v.verdict.tone === "bad", href: "bank.html#budgetCard", cta: "Open my budget" });
+        body: v.verdict.text, urgent: v.verdict.tone === "bad", href: "budget.html#budgetCard", cta: "Open my budget" });
     }
   } catch (e) { /* budget is a bonus here — never let it stop the list */ }
   // KiwiSaver unlocked after the class retired.

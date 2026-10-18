@@ -1,5 +1,6 @@
 let CURRENT, IS_TEACHER;
 let ITEMS_CACHE = [];
+let CLS_CACHE = null;           // the class doc — needed to price card discounts/vouchers
 let MANUAL_ITEMS = [];          // live items in the teacher's saved (custom) order
 let SORT_MODE = "manual";
 let DRAGGING = false;
@@ -77,6 +78,7 @@ async function init() {
       : safeBgJob(payMyDailyLifeAllowanceIfDue(u.username), "payMyDailyLifeAllowanceIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
+    safeBgJob(processCreditCards(u.classCode), "processCreditCards"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
     IS_TEACHER
       ? safeBgJob(applyInterestToClassIfDue(u.classCode), "applyInterestToClassIfDue")
@@ -104,6 +106,8 @@ async function render() {
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
   ME_CACHE = me;
+  CLS_CACHE = cls;
+  ccStoreBarRender(me, cls); // "Pay with: Cash / Credit card" bar (creditcard.js)
   MANUAL_ITEMS = (cls.storeItems || []).filter(i => !i.archived);
   SORT_MODE = SORT_MODES.some(m => m.id === cls.storeSortMode) ? cls.storeSortMode : "manual";
   const items = sortStoreItems(MANUAL_ITEMS, SORT_MODE);
@@ -212,10 +216,13 @@ function updateBuyLabel(id) {
   let qty = parseInt(input.value, 10);
   if (!qty || qty < 1) qty = 1;
   if (max !== null && max !== "" && qty > Number(max)) qty = Number(max);
-  const unitPrice = applyLifeDiscount(ME_CACHE, "store", it.price);
-  const total = Math.round(unitPrice * qty * 100) / 100;
-  label.textContent = qty > 1 ? `Buy ×${qty} — ${fmtMoney(total)}` : `Buy — ${fmtMoney(total)}`;
+  // Same pricing function the checkout uses, so the button always matches the charge.
+  // The card discount needs the whole bill on the card, so a split is priced like cash (same as the checkout).
+  const pr = cardStorePricing(ME_CACHE, CLS_CACHE, it.price, qty, CC_STORE_PAY.useCard && !CC_STORE_PAY.split, CC_STORE_PAY.voucherId, nzDateKey());
+  const how = CC_STORE_PAY.useCard && cardIsActive(ME_CACHE) ? (CC_STORE_PAY.split ? " (card + cash)" : " on card") : "";
+  label.textContent = (qty > 1 ? `Buy ×${qty}` : "Buy") + ` — ${fmtMoney(pr.total)}${how}`;
 }
+function updateAllBuyLabels() { ITEMS_CACHE.forEach(it => updateBuyLabel(it.id)); }
 
 async function addItem(e) {
   e.preventDefault();
@@ -328,7 +335,7 @@ async function buyItem(id) {
       const max = input.getAttribute("max");
       if (max !== null && max !== "" && qty > Number(max)) qty = Number(max);
     }
-    const res = await buyStoreItem(CURRENT.username, CURRENT.classCode, id, qty);
+    const res = await buyStoreItem(CURRENT.username, CURRENT.classCode, id, qty, { useCard: CC_STORE_PAY.useCard, voucherId: CC_STORE_PAY.voucherId, split: CC_STORE_PAY.useCard && CC_STORE_PAY.split, cardMax: CC_STORE_PAY.cardMax === "" ? null : Number(CC_STORE_PAY.cardMax) });
     if (!res.ok) { document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
     // Same as sellItem: render() rebuilds the message box.

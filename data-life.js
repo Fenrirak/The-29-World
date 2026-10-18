@@ -330,10 +330,10 @@ async function updateVehicle(classCode, vehId, updates) {
     t.update(classRef, { vehicles: cls.vehicles });
   });
 }
-async function buyVehicle(username, classCode, vehId) {
+async function buyVehicle(username, classCode, vehId, opts) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let vehName = "", cashPaid = 0, taxAmount = 0;
+  let vehName = "", cashPaid = 0, taxAmount = 0, payRes = null;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -359,14 +359,16 @@ async function buyVehicle(username, classCode, vehId) {
       const discountedVehPrice = applyLifeDiscount(user, "transport", veh.price);
       const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "transport", discountedVehPrice);
       taxAmount = tax;
-      if (!isTeacher && user.balance < taxedPrice) throw new Error("BROKE");
+      payRes = { card: 0, cash: taxedPrice };
+      if (!isTeacher) payRes = cardPayInTxn(user, cls, taxedPrice, opts); // throws BROKE / LIMIT / NOCARD / NO_SPLIT
       veh.owners.push(username);
       vehName = veh.name;
       cashPaid = taxedPrice;
-      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - taxedPrice) * 100) / 100 });
+      if (!isTeacher) t.update(userRef, Object.assign({ balance: Math.round((user.balance - payRes.cash) * 100) / 100 }, payRes.card > 0 ? { creditCard: user.creditCard } : {}));
       t.update(classRef, { vehicles: cls.vehicles });
     });
   } catch (e) {
+    { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "ALREADY_OWN") return { ok: false, error: "You already own this vehicle." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     if (e.message === "SOLD_OUT") return { ok: false, error: "This vehicle is sold out." };
@@ -374,7 +376,7 @@ async function buyVehicle(username, classCode, vehId) {
     if (e.message === "TRUCK_LIMIT") return { ok: false, error: "You can only own one truck at a time." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
+  await logPurchaseTxn(classCode, username, payRes, "Transport", { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true };
 }
 // Returns { ok } (ok: false with an error when a student's own sale is
@@ -420,10 +422,10 @@ async function setTruckLicenceConfig(classCode, price, description) {
   await classesCol().doc(classCode).update({ truckLicence: clean });
   return clean;
 }
-async function buyTruckLicence(username, classCode) {
+async function buyTruckLicence(username, classCode, opts) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let price = 0;
+  let price = 0, payRes = null;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -434,17 +436,22 @@ async function buyTruckLicence(username, classCode) {
       if (user.truckLicence) throw new Error("ALREADY");
       price = cls.truckLicence.price || 0;
       const isTeacher = user.role === "teacher";
-      if (!isTeacher && user.balance < price) throw new Error("BROKE");
+      payRes = { card: 0, cash: price };
+      if (!isTeacher) payRes = cardPayInTxn(user, cls, price, opts);
       const update = { truckLicence: true };
-      if (!isTeacher) update.balance = Math.round((user.balance - price) * 100) / 100;
+      if (!isTeacher) {
+        update.balance = Math.round((user.balance - payRes.cash) * 100) / 100;
+        if (payRes.card > 0) update.creditCard = user.creditCard;
+      }
       t.update(userRef, update);
     });
   } catch (e) {
+    { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "ALREADY") return { ok: false, error: "You already have a truck licence." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "truck-licence-buy", from: username, amount: price, note: "Bought truck licence" });
+  await logPurchaseTxn(classCode, username, payRes, "Transport", { type: "truck-licence-buy", from: username, amount: price, note: "Bought truck licence" });
   return { ok: true };
 }
 // Teacher control to revoke a student's truck licence (e.g. from the
@@ -668,10 +675,10 @@ function isTransportPaymentOverdue(user, cls) {
 // overdueTransportWeekKey) and flagged for the teacher, rather than being
 // charged retroactively — the teacher can only waive it, never force-collect
 // it, matching how mortgage overdue works.
-async function payTransportExpenses(username, classCode) {
+async function payTransportExpenses(username, classCode, opts) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let breakdown = null;
+  let breakdown = null, payRes = null;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -684,12 +691,17 @@ async function payTransportExpenses(username, classCode) {
       if ((user.transportLastWeekPaid || null) === weekKey) throw new Error("ALREADY_PAID");
       breakdown = transportWeeklyAmount(cls, Object.assign({ username }, user));
       const amt = breakdown.total;
-      if (amt > 0 && user.balance < amt) throw new Error("BROKE");
+      payRes = { card: 0, cash: amt };
+      if (amt > 0) payRes = cardPayInTxn(user, cls, amt, opts);
       const update = { transportLastWeekPaid: weekKey };
-      if (amt > 0) update.balance = Math.round((user.balance - amt) * 100) / 100;
+      if (amt > 0) {
+        update.balance = Math.round((user.balance - payRes.cash) * 100) / 100;
+        if (payRes.card > 0) update.creditCard = user.creditCard;
+      }
       t.update(userRef, update);
     });
   } catch (e) {
+    { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "WRONG_DAY") return { ok: false, error: "Transport expenses can only be paid on their due day." };
     if (e.message === "ALREADY_PAID") return { ok: false, error: "You've already paid this week." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's transport expenses." };
@@ -699,7 +711,7 @@ async function payTransportExpenses(username, classCode) {
     const parts = [];
     if (breakdown.vehicleExpense > 0) parts.push(`${fmtMoney(breakdown.vehicleExpense)} vehicle upkeep`);
     if (breakdown.publicFeeDue > 0) parts.push(`${fmtMoney(breakdown.publicFeeDue)} public transport`);
-    await logTxn(classCode, { type: "transport-expense", from: username, amount: breakdown.total, note: `Weekly transport expenses (${parts.join(" + ") || "none"})` });
+    await logPurchaseTxn(classCode, username, payRes, "Transport", { type: "transport-expense", from: username, amount: breakdown.total, note: `Weekly transport expenses (${parts.join(" + ") || "none"})` });
   }
   return { ok: true, amount: breakdown.total, breakdown };
 }
@@ -1373,11 +1385,11 @@ async function checkinSideHustle(username, classCode) {
   return { ok: true, amount, streak };
 }
 
-async function buyInsurance(username, classCode, planId) {
+async function buyInsurance(username, classCode, planId, opts) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let planName = "";
-  let fee = 0;
+  let fee = 0, payRes = null;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1396,20 +1408,25 @@ async function buyInsurance(username, classCode, planId) {
       fee = Math.max(0, Number(plan.signupFee) || 0);
       fee = applyLifeDiscount(user, "insurance", fee);
       const isTeacher = user.role === "teacher";
-      if (!isTeacher && fee > 0 && user.balance < fee) throw new Error("BROKE");
+      payRes = { card: 0, cash: fee };
+      if (!isTeacher && fee > 0) payRes = cardPayInTxn(user, cls, fee, opts);
       user.insurance.push(planId);
       const update = { insurance: user.insurance };
-      if (!isTeacher && fee > 0) update.balance = Math.round((user.balance - fee) * 100) / 100;
+      if (!isTeacher && fee > 0) {
+        update.balance = Math.round((user.balance - payRes.cash) * 100) / 100;
+        if (payRes.card > 0) update.creditCard = user.creditCard;
+      }
       t.update(userRef, update);
     });
   } catch (e) {
+    { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "ALREADY") return { ok: false, error: "You already have this plan." };
     if (e.message === "BIG_EVENT") return { ok: false, error: BIG_EVENT_BLOCK_MESSAGE };
     if (e.message === "BROKE") return { ok: false, error: `You don't have enough money to pay the ${fmtMoney(fee)} sign-up fee.` };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   if (fee > 0) {
-    await logTxn(classCode, { type: "insurance-signup-fee", from: username, amount: fee, note: `Sign-up fee for insurance: ${planName}` });
+    await logPurchaseTxn(classCode, username, payRes, "Insurance", { type: "insurance-signup-fee", from: username, amount: fee, note: `Sign-up fee for insurance: ${planName}` });
   }
   await logTxn(classCode, { type: "insurance-buy", from: username, amount: 0, note: `Signed up for insurance: ${planName} — premiums due weekly` });
   return { ok: true };
@@ -1521,12 +1538,14 @@ async function setStoreSortMode(classCode, mode) {
   if (!allowed.includes(mode)) throw new Error("Unknown sort mode");
   await classesCol().doc(classCode).update({ storeSortMode: mode });
 }
-async function buyStoreItem(username, classCode, itemId, qty) {
+// opts = { useCard, voucherId } — pay with the credit card and/or use a card voucher.
+async function buyStoreItem(username, classCode, itemId, qty, opts) {
+  opts = opts || {};
   qty = Math.floor(Number(qty)) || 1;
   if (qty < 1) qty = 1;
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let itemName = "", cashPaid = 0;
+  let itemName = "", cashPaid = 0, usedCard = false, voucherNote = "", payRes = null;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1534,30 +1553,44 @@ async function buyStoreItem(username, classCode, itemId, qty) {
       if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
       const user = userSnap.data();
       const cls = withNewModuleDefaults(classSnap.data());
+      voucherNote = ""; // reset every attempt — a retried callback would otherwise stack notes
       const item = cls.storeItems.find(i => i.id === itemId);
       if (!item || item.archived) throw new Error("NOT_FOUND");
       if (item.stock !== null && item.stock < qty) throw new Error("OUT");
       // No store tax — the price shown is what's paid.
-      const discountedPrice = applyLifeDiscount(user, "store", item.price);
-      const total = Math.round(discountedPrice * qty * 100) / 100;
-      cashPaid = total;
       const isTeacher = user.role === "teacher";
-      if (!isTeacher && user.balance < total) throw new Error("BROKE");
+      usedCard = !!opts.useCard && !isTeacher;
+      // The class-store card discount needs the WHOLE bill on the card; a split gets cashback only.
+      const pr = cardStorePricing(user, cls, item.price, qty, usedCard && !opts.split, isTeacher ? "" : opts.voucherId, nzDateKey());
+      if (opts.voucherId && !isTeacher && !pr.voucher) throw new Error("VOUCHER");
+      const total = pr.total;
+      cashPaid = total;
+      payRes = { card: 0, cash: total };
+      if (!isTeacher) payRes = cardPayInTxn(user, cls, total, { useCard: usedCard, split: !!opts.split, cardMax: opts.cardMax });
+      if (pr.voucher) { cardConsumeVoucher(user.creditCard, pr.voucher); voucherNote = ` (${pr.voucher.label} voucher saved ${fmtMoney(pr.voucher.saves)})`; }
       itemName = item.name;
       if (item.stock !== null) item.stock -= qty;
       item.sold = (item.sold || 0) + qty;
       user.storeItems = user.storeItems || [];
       for (let i = 0; i < qty; i++) user.storeItems.push(itemId);
-      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance - total) * 100) / 100, storeItems: user.storeItems });
+      if (!isTeacher) {
+        const patch = { balance: Math.round((user.balance - payRes.cash) * 100) / 100, storeItems: user.storeItems };
+        if (payRes.card > 0 || pr.voucher) patch.creditCard = user.creditCard;
+        t.update(userRef, patch);
+      }
       else t.update(userRef, { storeItems: user.storeItems });
       t.update(classRef, { storeItems: cls.storeItems });
     });
   } catch (e) {
+    { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "OUT") return { ok: false, error: "Not enough stock left for that quantity." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    if (e.message === "LIMIT") return { ok: false, error: "That would go over your credit card limit." };
+    if (e.message === "NOCARD") return { ok: false, error: "Your credit card isn't available. Pay with cash instead." };
+    if (e.message === "VOUCHER") return { ok: false, error: "That voucher isn't valid any more. Pick another or none." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "store-buy", from: username, amount: cashPaid, note: `Bought from store: ${itemName}${qty > 1 ? ` ×${qty}` : ""}` });
+  await logPurchaseTxn(classCode, username, payRes, null, { type: "store-buy", note: `Bought from store: ${itemName}${qty > 1 ? ` ×${qty}` : ""}${voucherNote}` });
   return { ok: true, qty };
 }
 
@@ -2327,7 +2360,7 @@ async function revealBigEvent(classCode, logId) {
 async function resolveBigEvent(username, classCode, logId, choice, paySource, planId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let outcomeNote = "", amount = 0, writeOffNet = null;
+  let outcomeNote = "", amount = 0, writeOffNet = null, bigCard = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -2360,7 +2393,8 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         }
         if (entry.module === "income") t.update(classRef, { bigEventLog: cls.bigEventLog });
       } else if (choice === "pay") {
-        const source = paySource === "savings" ? "savings" : "cash";
+        bigCard = 0;
+        const source = paySource === "savings" ? "savings" : "cash"; // "card" is paid the same way as cash, via the credit card below
         const cash = user.balance || 0;
         const savings = user.savings || 0;
         const available = source === "savings" ? savings : cash;
@@ -2377,6 +2411,13 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         if (!isTeacher) {
           if (source === "savings") {
             t.update(userRef, { savings: Math.round((savings - entry.cost) * 100) / 100 });
+          } else if (paySource === "card") {
+            // As much as the card has room for goes on it; the rest comes out
+            // of cash (which may go negative here, like paying from cash does).
+            const cp = cardTakeEventCost(user, cls, entry.cost, true);
+            if (!(cp.card > 0)) throw new Error("LIMIT");
+            bigCard = cp.card;
+            t.update(userRef, { balance: Math.round((cash - cp.cash) * 100) / 100, creditCard: user.creditCard });
           } else {
             t.update(userRef, { balance: Math.round((cash - entry.cost) * 100) / 100 });
           }
@@ -2408,10 +2449,19 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
           t.update(classRef, { properties: cls.properties, bigEventLog: cls.bigEventLog });
           return;
         }
-        const toPay = option.studentPays;
+        // The excess (and anything the plan doesn't cover) can go on the card
+        // too; whatever the card has no room for must still come from cash.
+        bigCard = 0;
+        let cp = { card: 0, cash: option.studentPays };
+        if (paySource === "card" && !isTeacher && option.studentPays > 0) {
+          cp = cardTakeEventCost(user, cls, option.studentPays, true);
+          if (!(cp.card > 0)) throw new Error("LIMIT");
+          bigCard = cp.card;
+        }
+        const toPay = cp.cash;
         if (!isTeacher && cash < toPay) throw new Error("BROKE_EXCESS");
         entry.status = "claimed";
-        amount = toPay;
+        amount = option.studentPays;
         if (option.losesVehicle) {
           // The insurer pays the other person; their own vehicle isn't
           // covered, so it's lost (see bigEventClaimOptions).
@@ -2420,19 +2470,20 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
           entry.lostVehicle = true;
           outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess; `
             + `the insurer covered the damage to someone else's property, but not their own vehicle${veh && veh.name ? ` (${veh.name})` : ""}, so they lost it`;
-          if (!isTeacher && toPay > 0) t.update(userRef, { balance: Math.round((cash - toPay) * 100) / 100 });
+          if (!isTeacher && (toPay > 0 || bigCard > 0)) t.update(userRef, Object.assign({ balance: Math.round((cash - toPay) * 100) / 100 }, bigCard > 0 ? { creditCard: user.creditCard } : {}));
           t.update(classRef, { vehicles: cls.vehicles, bigEventLog: cls.bigEventLog });
           return;
         }
         outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess`
           + (option.uncovered > 0 ? ` + ${fmtMoney(option.uncovered)} not covered` : "");
-        if (!isTeacher && toPay > 0) t.update(userRef, { balance: Math.round((cash - toPay) * 100) / 100 });
+        if (!isTeacher && (toPay > 0 || bigCard > 0)) t.update(userRef, Object.assign({ balance: Math.round((cash - toPay) * 100) / 100 }, bigCard > 0 ? { creditCard: user.creditCard } : {}));
         t.update(classRef, { bigEventLog: cls.bigEventLog });
       } else {
         throw new Error("BAD_CHOICE");
       }
     });
   } catch (e) {
+    { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash to pay that." };
     if (e.message === "BROKE_SAVINGS") return { ok: false, error: "You don't have enough in savings to pay that." };
     if (e.message === "BROKE_EXCESS") return { ok: false, error: "You don't have enough cash to pay for this claim." };
@@ -2449,7 +2500,8 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
       : { type: "property-sell", to: username, amount: writeOffNet, note: outcomeNote });
     return { ok: true };
   }
-  await logTxn(classCode, { type: "big-event", from: username, amount, note: outcomeNote });
+  if (bigCard > 0) await logPurchaseTxn(classCode, username, { card: bigCard, cash: Math.round((amount - bigCard) * 100) / 100 }, "Big events", { type: "big-event", surprise: true, note: outcomeNote });
+  else await logTxn(classCode, { type: "big-event", from: username, amount, note: outcomeNote });
   return { ok: true };
 }
 
@@ -2807,7 +2859,7 @@ async function revealWeeklyEvent(classCode, eventLogId) {
         const loss = Math.abs(Number(found.amount));
         const cash = u.balance || 0;
         const opt = weeklyEventClaimOptions(liveCls, u, found)
-          .filter(o => !o.writeOff && o.studentPays < loss && cash >= o.studentPays)
+          .filter(o => !o.writeOff && o.studentPays < loss && (cash >= o.studentPays || cardEventRoom(u, liveCls) >= o.studentPays))
           .sort((a, b) => a.studentPays - b.studentPays)[0];
         if (opt) {
           found.claimed = true;
@@ -2824,8 +2876,16 @@ async function revealWeeklyEvent(classCode, eventLogId) {
   });
   if (!entry) return null;
   if (entry.type === "fixed") {
-    await adjustBalance(entry.studentUser, entry.amount);
-    await logTxn(classCode, { type: "event", to: entry.studentUser, amount: entry.amount, note: entry.name + (entry.description ? " — " + entry.description : "") + (entry.basisNote ? " (" + entry.basisNote + ")" : "") + (entry.insuranceNote ? " " + entry.insuranceNote : "") });
+    // A cost goes on the student's card first if they switched that on (see cardTakeEventCost).
+    let evCard = 0;
+    if (entry.amount < 0) evCard = (await takeEventCost(entry.studentUser, classCode, -entry.amount)).card;
+    else await adjustBalance(entry.studentUser, entry.amount);
+    const evNote = entry.name + (entry.description ? " — " + entry.description : "") + (entry.basisNote ? " (" + entry.basisNote + ")" : "") + (entry.insuranceNote ? " " + entry.insuranceNote : "");
+    if (evCard > 0) {
+      const cashPart = Math.round((entry.amount + evCard) * 100) / 100; // still negative, or 0 if it all went on the card
+      if (cashPart < 0) await logTxn(classCode, { type: "event", to: entry.studentUser, amount: cashPart, note: evNote + ` (${fmtMoney(evCard)} went on the credit card)` });
+      await logTxn(classCode, { type: "card-purchase", cat: "Random events", surprise: true, from: entry.studentUser, amount: evCard, note: evNote + " (credit card)" });
+    } else await logTxn(classCode, { type: "event", to: entry.studentUser, amount: entry.amount, note: entry.name + (entry.description ? " — " + entry.description : "") + (entry.basisNote ? " (" + entry.basisNote + ")" : "") + (entry.insuranceNote ? " " + entry.insuranceNote : "") });
   }
   return entry;
 }
@@ -2902,7 +2962,7 @@ async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
 async function resolveChoiceEvent(username, classCode, logId, optionId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let amount = 0, note = "", outcome = "";
+  let amount = 0, note = "", outcome = "", evCard = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -2940,13 +3000,25 @@ async function resolveChoiceEvent(username, classCode, logId, optionId) {
       note = `${entry.name} — chose "${option.label}"` + (option.outcome ? `: ${option.outcome}` : "")
         + (option.percent && entry.basisLabel ? ` (${eventPercentText(option.percent)} of ${entry.basisLabel})` : "");
       const isTeacher = user.role === "teacher";
-      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + amount) * 100) / 100 });
+      evCard = 0;
+      if (!isTeacher) {
+        if (amount < 0 && cardEventsOn(user)) {
+          // The student chose to put unexpected costs on their card first.
+          const cp = cardTakeEventCost(user, cls, -amount);
+          evCard = cp.card;
+          t.update(userRef, { balance: Math.round((user.balance - cp.cash) * 100) / 100, creditCard: user.creditCard });
+        } else t.update(userRef, { balance: Math.round((user.balance + amount) * 100) / 100 });
+      }
       t.update(classRef, { eventLog: cls.eventLog });
     });
   } catch (e) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "event", to: username, amount, note });
+  if (evCard > 0) {
+    const cashPart = Math.round((amount + evCard) * 100) / 100; // still negative, or 0 if it all went on the card
+    if (cashPart < 0) await logTxn(classCode, { type: "event", to: username, amount: cashPart, note: note + ` (${fmtMoney(evCard)} went on the credit card)` });
+    await logTxn(classCode, { type: "card-purchase", cat: "Random events", surprise: true, from: username, amount: evCard, note: note + " (credit card)" });
+  } else await logTxn(classCode, { type: "event", to: username, amount, note });
   return { ok: true, amount, outcome };
 }
 
@@ -3249,6 +3321,9 @@ function lifestyleRatingFromData(cls, user, username) {
       .reduce((sum, l) => sum + l.owed, 0);
     score -= Math.floor(owedTotal / cfg.loan.perAmount) * cfg.loan.points;
   }
+  if (cfg.creditCard && cfg.creditCard.enabled && cfg.creditCard.perAmount > 0 && cfg.creditCard.points > 0) {
+    score -= Math.floor(cardOwedForPenalty(user) / cfg.creditCard.perAmount) * cfg.creditCard.points;
+  }
   score += getLifeBenefitTotals(user).lifestylePoints;
   // A student with nowhere to live — not living in a property they own,
   // not renting from a classmate, not renting a school listing — has their
@@ -3363,6 +3438,14 @@ async function lifestyleRatingBreakdown(username, classCode) {
       items.push({ type: "loss", label: "Outstanding loans", detail: `${fmtMoney(owedTotal)} owed · ${cfg.loan.points} pt${cfg.loan.points === 1 ? "" : "s"} per ${fmtMoney(cfg.loan.perAmount)} owed`, points: penalty });
     }
   }
+  if (cfg.creditCard && cfg.creditCard.enabled && cfg.creditCard.perAmount > 0 && cfg.creditCard.points > 0) {
+    const cardOwed = cardOwedForPenalty(user);
+    const cardPenalty = Math.floor(cardOwed / cfg.creditCard.perAmount) * cfg.creditCard.points;
+    if (cardPenalty > 0) {
+      score -= cardPenalty;
+      items.push({ type: "loss", label: "Unpaid credit card statement", detail: `${fmtMoney(cardOwed)} still unpaid · ${cfg.creditCard.points} pt${cfg.creditCard.points === 1 ? "" : "s"} per ${fmtMoney(cfg.creditCard.perAmount)} owed`, points: cardPenalty });
+    }
+  }
   (user.lifeItems || []).forEach(it => {
     const pts = Number(it.benefits && it.benefits.lifestylePoints) || 0;
     if (pts) {
@@ -3404,6 +3487,7 @@ async function clearLifestyleOverride(username) {
 // match what each module's own page passes to isModuleLockedForStudent.
 const LIFESTYLE_LOCKABLE_MODULES = [
   { key: "bank", label: "Bank" },
+  { key: "budget", label: "My budget" },
   { key: "termdeposit", label: "Term Deposit" },
   { key: "kiwisaver", label: "KiwiSaver" },
   { key: "loan", label: "Loans" },

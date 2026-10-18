@@ -190,7 +190,7 @@ window.addEventListener("load", fitTopbar);
    behave exactly as before (see "Phone top bar dropdowns" in style.css).
 ============================================================================ */
 const T29_NAV_GROUPS = [
-  { label: "Money", hrefs: ["bank.html", "termdeposit.html", "kiwisaver.html", "loan.html", "market.html"] },
+  { label: "Money", hrefs: ["bank.html", "budget.html", "termdeposit.html", "kiwisaver.html", "loan.html", "market.html"] },
   { label: "Buy & sell", hrefs: ["store.html", "marketplace.html"] },
   { label: "Life", hrefs: ["jobs.html", "transport.html", "property.html", "insurance.html", "tax.html", "bigevents.html", "life.html"] },
   { label: "Games", hrefs: ["gambling.html"] },

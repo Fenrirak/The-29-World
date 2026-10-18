@@ -349,7 +349,10 @@ async function buyIt(id) {
   if (!l) return;
   const several = listingQuantity(l) > 1;
   if (!confirm(`Buy ${several ? "one" : `"${l.name}"`}${several ? ` "${l.name}"` : ""} from ${nameOf(l.seller)} for ${fmtMoney(l.price)}?`)) return;
-  const res = await buyListing(CURRENT.username, CURRENT.classCode, id);
+  // A house is settled by bank transfer in real life, so only things (store items, vehicles) can go on a card.
+  const pay = l.assetType === "property" ? {} : await cardAskPay(l.price, l.name);
+  if (!pay) return; // backed out
+  const res = await buyListing(CURRENT.username, CURRENT.classCode, id, pay);
   await render();
   if (res.ok) {
     // The listing's card may be gone once it's sold, so the message goes

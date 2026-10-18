@@ -448,7 +448,9 @@ async function buyPlan(id, fee) {
   if (btn && btn.disabled) return;
   if (btn) btn.disabled = true;
   try {
-    const res = await buyInsurance(CURRENT.username, CURRENT.classCode, id);
+    const pay = fee > 0 ? await cardAskPay(fee, "Insurance sign-up fee") : {};
+    if (!pay) return; // backed out
+    const res = await buyInsurance(CURRENT.username, CURRENT.classCode, id, pay);
     // render() rebuilds the whole list, so the message goes in afterwards —
     // written before it, it was wiped straight away and never seen.
     await render();

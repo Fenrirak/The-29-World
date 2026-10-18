@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function(){
+  try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}
+  window.T29_HAS_SIDEBAR = true;
+  function loadIfOn(flagKey, cls, css, js){
+    var flag = null;
+    try { flag = localStorage.getItem(flagKey); } catch(e) {}
+    // Phones and small tablets get the slide-out menu unless it was switched off in Settings.
+    var on = flag === '1' || (flag === null && !!window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+    if (!on) return;
+    document.documentElement.classList.add(cls);
+    var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = css;
+    document.head.appendChild(l);
+    var s = document.createElement('script'); s.src = js;
+    document.head.appendChild(s);
+  }
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=173c63c1', 'sidebar-nav.js?v=8d951bc5');
+})();
+</script>
+<title>My budget — The 29 World</title>
+<link rel="icon" type="image/png" href="Favicon.png">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#1f2b44">
+<link rel="stylesheet" href="style.css?v=85134cb4">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
+<link rel="modulepreload" href="firebase-init.js?v=9f8488c9">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="budget.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
+  <nav>
+    <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="bank"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
+    <a href="bank.html" data-module="bank"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
+    <a href="budget.html" data-module="budget" class="active"><span class="icon-slot" data-icon="calendar"></span><span class="nav-label">My budget</span></a>
+    <a href="termdeposit.html" data-module="termdeposit"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
+    <a href="kiwisaver.html" data-module="kiwisaver"><span class="icon-slot" data-icon="sprout"></span><span class="nav-label">KiwiSaver</span></a>
+    <a href="loan.html" data-module="loan"><span class="icon-slot" data-icon="handshake"></span><span class="nav-label">Loans</span></a>
+    <a href="market.html" data-module="market"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
+    <a href="store.html" data-module="store"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
+    <a href="marketplace.html" data-module="marketplace"><span class="icon-slot" data-icon="users"></span><span class="nav-label">Trade Centre</span></a>
+    <a href="jobs.html" data-module="jobs"><span class="icon-slot" data-icon="briefcase"></span><span class="nav-label">Jobs</span></a>
+    <a href="transport.html" data-module="transport"><span class="icon-slot" data-icon="car"></span><span class="nav-label">Transport</span></a>
+    <a href="property.html" data-module="property"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
+    <a href="insurance.html" data-module="insurance"><span class="icon-slot" data-icon="shield"></span><span class="nav-label">Insurance</span></a>
+    <a href="tax.html" data-module="tax"><span class="icon-slot" data-icon="percent"></span><span class="nav-label">Tax</span></a>
+    <a href="bigevents.html" data-module="bigevents"><span class="icon-slot" data-icon="star"></span><span class="nav-label">Big Events</span></a>
+    <a href="life.html" data-module="life"><span class="icon-slot" data-icon="trophy"></span><span class="nav-label">Life</span></a>
+    <a href="gambling.html" data-module="gambling"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
+    <a href="quizzes.html"><span class="icon-slot" data-icon="key"></span><span class="nav-label">Quizzes</span></a>
+    <a href="reports.html"><span class="icon-slot" data-icon="idcard"></span><span class="nav-label">Reports</span></a>
+    <span class="who" id="whoami"></span>
+    <div class="topbar-actions">
+      <button class="btn-icon-topbar" id="settingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Settings" title="Settings"><span class="icon-slot" data-icon="settings"></span></button>
+      <button class="btn-logout" onclick="logout()"><span class="icon-slot" data-icon="logout"></span><span class="nav-label">Log out</span></button>
+    </div>
+  </nav>
+</div>
+
+<main>
+  <h1 id="pageTitle">My budget</h1>
+
+  <!-- ---------------- Budgeting overview (teacher) ---------------- -->
+  <div class="card budget-card hidden" id="budgetTeacherCard">
+    <div class="flex-between bud-head">
+      <h2 id="hBudgetTeacher">Students' budgets this week</h2>
+      <span class="bud-week" id="budWeekTeacher"></span>
+    </div>
+    <p class="bud-intro">Each student's week, worked out from their job, bills and spending: what's coming in, what their bills come to, and how they're doing against the savings plan they chose.</p>
+    <div class="grid grid-3" id="budTeacherStats"></div>
+    <div class="table-scroll">
+      <table class="bud-teacher-table stack-table">
+        <thead><tr><th>Student</th><th>Coming in</th><th>Bills</th><th>Left after bills</th><th>Plans to save</th><th>Saved so far</th><th>Spent</th><th>How it's going</th></tr></thead>
+        <tbody id="budTeacherTable"></tbody>
+      </table>
+    </div>
+    <p class="muted-small" id="noBudTeacher">No students in this class yet.</p>
+  </div>
+
+  <!-- ---------------- My budget (student) — the sums are in data-money.js ---------------- -->
+  <div class="card budget-card hidden" id="budgetCard">
+    <div class="flex-between bud-head">
+      <h2 id="hBudget">My budget</h2>
+      <span class="bud-week" id="budWeek"></span>
+    </div>
+    <p class="bud-intro">This week's money (Monday to Sunday), worked out for you. All you choose is how much to save — the rest is your spending money.</p>
+
+    <!-- Anything that needs doing comes first. -->
+    <div class="bud-alerts" id="budAlerts" aria-live="polite">
+      <div id="budVerdict"></div>
+      <div id="budNotes"></div>
+    </div>
+
+    <div class="bud-sum" id="budSummary"></div>
+
+    <div class="bud-layout">
+      <form class="bud-panel bud-plan" onsubmit="return saveBudgetPlan(event)">
+        <h3 id="hBudPlan">My plan</h3>
+        <label for="budSave" id="labBudSave">How much will I save each week?</label>
+        <div class="bud-save-row">
+          <div class="bud-money-field">
+            <span class="bud-currency">$</span>
+            <input id="budSave" type="number" min="0" step="0.01" inputmode="decimal" oninput="budgetRecalc()">
+          </div>
+          <div class="bud-chips" id="budChips" role="group" aria-label="Quick amounts"></div>
+        </div>
+        <div class="bud-result" id="budResult" aria-live="polite"></div>
+        <div class="bud-split-wrap" id="budSplitWrap">
+          <div class="bud-split-bar" id="budSplitBar" role="img"></div>
+          <div class="bud-split-legend" id="budSplitLegend"></div>
+          <p class="muted-small bud-guide">A common guide is <strong>50/30/20</strong>: about half on needs (bills), 30% on wants, 20% saved.</p>
+        </div>
+        <div class="bud-actions">
+          <button class="btn gold" type="submit" id="budSaveBtn">Save my plan</button>
+          <button class="btn small secondary hidden" type="button" id="budClearBtn" onclick="budgetClear()">Clear my plan</button>
+        </div>
+        <div id="budMsg"></div>
+      </form>
+
+      <div class="bud-panel bud-track">
+        <h3 id="hBudTrack">How this week is going</h3>
+        <div id="budTrackRows"></div>
+        <div class="bud-safe" id="budSafe"></div>
+      </div>
+    </div>
+
+    <details class="bud-days-wrap" id="budDaysWrap" ontoggle="budgetDaysToggled(this)">
+      <summary class="bud-days-summary"><span id="hBudDays">Day by day</span><span class="bud-days-count" id="budDaysCount"></span></summary>
+      <p class="muted-small">Everything that regularly comes in or goes out this week. Bills you pay yourself only go through if you pay them on their day.</p>
+      <div class="bud-days" id="budDays"></div>
+    </details>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-brand">The 29 World</div>
+  <nav class="site-footer-links" aria-label="Footer">
+    <a href="mailto:Nathan.liu1211@gmail.com">Contact</a>
+    <a href="privacy.html">Privacy Policy</a>
+  </nav>
+  <div class="site-footer-copy">© 2026 The 29 World. All rights reserved.</div>
+</footer>
+
+<script type="module" src="firebase-init.js?v=9f8488c9"></script>
+<script defer src="icons.js?v=e2d401f3"></script>
+<script defer src="settings-menu.js?v=fde34c7c"></script>
+<script defer src="data-core.js?v=493d2ccd"></script>
+<script defer src="data-money.js?v=2df2ec68"></script>
+<script defer src="data-life.js?v=88c2d92e"></script>
+<script defer src="data-property.js?v=7508dcf0"></script>
+<script defer src="data-markets.js?v=72017f94"></script>
+<script defer src="events-ui.js?v=c1df53aa"></script>
+<script defer src="quiz-gate.js?v=f23c49f4"></script>
+<script defer src="notifications.js?v=7ac3a256"></script>
+<script defer src="budget.js?v=85397ada"></script>
+</body>
+</html>

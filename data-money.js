@@ -2470,7 +2470,7 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
     vehicleValue = Math.round(vehicleValue * 100) / 100;
 
     const savings = s.savings || 0;
-    const owed = (s.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0) + mortgageOwed;
+    const owed = (s.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0) + mortgageOwed + cardOwed(s);
     const termDeposits = (s.termDeposits || []).reduce((sum, d) => sum + d.amount, 0);
     // Gambling account balance counts toward net worth like any other
     // place a student can hold value, but it isn't a line in the
@@ -2825,7 +2825,10 @@ const REPORT_SPENT_TYPES = {
   "transport-expense": "Transport",
   "property-buy": "Housing", "mortgage": "Housing", "property-rent-pay": "Housing", "insurance-buy": "Insurance",
   "insurance-signup-fee": "Insurance", "loan-repayment": "Loan repayments",
-  "loan-interest": "Loan interest", fine: "Fines"
+  "loan-interest": "Loan interest", fine: "Fines",
+  // Card spending counts when it is spent (not when the bill is paid), so
+  // "card-payment" is left out on purpose — it would count the same money twice.
+  "card-purchase": "Store purchases", "card-interest": "Card interest & fees", "card-fee": "Card interest & fees"
 };
 
 function classifyTxnForReport(t, username) {
@@ -2836,6 +2839,7 @@ function classifyTxnForReport(t, username) {
   // out, not income.
   if (t.type === "property-sell" && Number(t.amount) < 0) return { bucket: "spent", category: "Housing", amount: amt };
 
+  if (t.type === "card-purchase" && t.cat) return { bucket: "spent", category: t.cat, amount: amt };
   if (REPORT_INCOME_TYPES[t.type]) return { bucket: "income", category: REPORT_INCOME_TYPES[t.type], amount: amt };
   if (REPORT_SAVED_TYPES[t.type]) return { bucket: "saved", category: REPORT_SAVED_TYPES[t.type], amount: amt };
   if (REPORT_SPENT_TYPES[t.type]) return { bucket: "spent", category: REPORT_SPENT_TYPES[t.type], amount: amt };
@@ -2948,7 +2952,7 @@ function buildStudentReportData(student, cls) {
   const savings = student.savings || 0;
   const termDeposits = (student.termDeposits || []).reduce((s, d) => s + d.amount, 0);
   const activeLoanOwed = loans.filter(l => l.status === "active").reduce((s, l) => s + l.owed, 0);
-  const owed = Math.round((activeLoanOwed + mortgageOwed) * 100) / 100;
+  const owed = Math.round((activeLoanOwed + mortgageOwed + cardOwed(student)) * 100) / 100;
   // Gambling account balance counts toward net worth (same as
   // classLeaderboard()) but isn't broken out as its own field below.
   const gamblingBalance = gamblingAccountToday(student).balance;
@@ -3404,6 +3408,18 @@ function budgetWeekItems(cls, user, username) {
       dayKey: overdue ? todayKey : l.dueDate, status: overdue ? "overdue" : budgetStatus(l.dueDate, todayKey, false), where: "Loans",
       note: overdue ? "Overdue — repay it on the Loans page" : "Due " + (l.dueDate === todayKey ? "today" : dayWord(l.dueDate)) + " — repay it on the Loans page" });
   });
+  // Credit card: the last statement's closing balance is a bill on its due
+  // date (still showing, as overdue, until it's paid).
+  if (cardIsActive(user)) {
+    const cs = user.creditCard.stmt, owe = cardStmtRemaining(user.creditCard);
+    if (cs && owe > 0 && cs.dueKey <= weekEndKey) {
+      const overdue = cs.dueKey < todayKey;
+      items.push({ key: "card-stmt", dir: "out", icon: "cards", label: "Credit card statement", amount: owe,
+        dayKey: overdue ? todayKey : cs.dueKey, status: overdue ? "overdue" : budgetStatus(cs.dueKey, todayKey, false), where: "Bank",
+        note: (overdue ? "Overdue — pay it on the Bank page" : "Due " + (cs.dueKey === todayKey ? "today" : dayWord(cs.dueKey)) + " — pay it on the Bank page")
+          + " (pay it all by the due date to avoid interest)" });
+    }
+  }
   (cls.automations || []).forEach(a => {
     if (a.studentUser !== username || a.type === "savings-transfer") return;
     const when = budgetAutoThisWeek(a, weekStartKey);
@@ -3481,6 +3497,8 @@ function budgetWeekActuals(cls, username, weekStartKey) {
         break;
       case "fine": add(surprises, "Fines", amt); break;
       case "store-buy": add(purchases, "Store", amt); break;
+      case "card-purchase": add(t.surprise ? surprises : purchases, (t.cat || "Store") + " (card)", amt); break;
+      case "card-interest": case "card-fee": add(surprises, "Card interest & fees", amt); break;
       case "p2p-buy": add(purchases, "Trade Centre", amt); break;
       case "vehicle-buy": case "truck-licence-buy": add(purchases, "Transport", amt); break;
       case "property-buy": add(purchases, "Housing", amt); break;
@@ -3691,6 +3709,16 @@ function buildBudgetView(cls, user, username) {
   if (loanGrowth > 0) {
     notes.push({ tone: "warn", icon: "handshake", text: `Your loans grow by about ${fmtMoney(loanGrowth)} in interest every Monday until you pay them off.` });
   }
+  const cardInfo = cardBudgetInfo(cls, user);
+  if (cardInfo) {
+    const wk0 = budgetWeekStartKey(), wk1 = dateKeyPlusDays(wk0, 6);
+    if (cardInfo.stmtRemaining > 0 && cardInfo.dueKey > wk1) {
+      notes.push({ tone: "warn", icon: "cards", text: `Your credit card statement (${fmtMoney(cardInfo.stmtRemaining)}) is due ${cardDateLabel(cardInfo.dueKey)}. Pay all of it by then and there's no interest.` });
+    }
+    if (cardInfo.unbilled > 0 && cardInfo.nextCloseKey >= wk0 && cardInfo.nextCloseKey <= wk1) {
+      notes.push({ tone: "warn", icon: "cards", text: `Your card statement closes ${cardDateLabel(cardInfo.nextCloseKey)}. The ${fmtMoney(cardInfo.unbilled)} on your card so far becomes the closing balance you'll need to pay.` });
+    }
+  }
   // KiwiSaver from this week's pay (already left out of the wage above).
   // When the week's money doesn't stretch, point out the real-life options.
   const wageItem = items.find(i => i.key === "wage" && i.status !== "missed");
@@ -3712,7 +3740,8 @@ function buildBudgetView(cls, user, username) {
     ...sched, actual, plan,
     inItems, outItems, scheduledIn, inTotal, billsTotal, billsPaid, billsLeft, left,
     saveTarget, autoSave, spendAllowed, spent, spendLeft,
-    cash, savings, savingsSpare, restIn, restBills, safeTotal, safeNow, safeTimed, lowestDay, shortfall, verdict, notes, kiwi
+    cash, savings, savingsSpare, restIn, restBills, safeTotal, safeNow, safeTimed, lowestDay, shortfall, verdict, notes, kiwi,
+    card: cardInfo
   };
 }
 
@@ -3785,7 +3814,7 @@ const TXN_MONEY_IN = new Set([
 const TXN_MONEY_OUT = new Set([
   "fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "property-rent-pay", "vehicle-buy", "transport-expense",
   "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "loan-interest",
-  "p2p-buy", "truck-licence-buy", "gambling-buyin", "stock-buy", "kiwisaver-in"
+  "p2p-buy", "truck-licence-buy", "gambling-buyin", "stock-buy", "kiwisaver-in", "card-payment"
 ]);
 function txnDirection(t, username) {
   const raw = Number(t.amount) || 0;
@@ -4041,4 +4070,535 @@ async function _deleteParentViewFor(username) {
     const student = await getUser(username);
     if (student && student.parentViewToken) await parentViewsCol().doc(student.parentViewToken).delete();
   } catch (e) { /* the link just keeps showing its last summary */ }
+}
+
+
+/* ===================== Credit cards =====================
+   Modelled on how a New Zealand credit card works:
+
+   - The teacher sets up PLANS (credit limit, interest rate, monthly fee,
+     interest-free days, minimum lifestyle rating, benefits) and decides
+     whether a student gets a card instantly or needs approval.
+   - Spending goes on the card, up to the plan's limit, and nothing leaves
+     the student's cash until they pay the card.
+   - Every 2 weeks, on the teacher's chosen weekday, the student's
+     STATEMENT closes. That freezes the CLOSING BALANCE (everything owed at
+     that moment) and starts the plan's interest-free days to pay it.
+   - Pay the closing balance IN FULL by the due date and no interest is
+     charged. If not, interest (a % per 2 weeks) is added to what is owed
+     at the next statement. Missing the minimum payment also costs a late fee.
+   - The monthly fee is charged every 4 weeks (every second statement).
+   - Benefits: cashback on spending (credited at each statement), a store
+     discount when the card is used at the class store, and vouchers (a
+     fixed $ credit or a % off) issued each statement.
+   - Teacher can dock lifestyle points for the closing balance still unpaid
+     from the last statement (see cardOwedForPenalty / lifestyleRatingFromData).
+
+   Everything lives on the student's own doc as `creditCard`, the plans and
+   settings on the class doc as `cardPlans` / `cardSettings`. A student's
+   session only ever closes THEIR OWN statement (same rule as loan
+   interest — see t29SessionStudent), so the teacher's session is the
+   class-wide safety net. Statements catch up if nobody opened the site. */
+const CARD_CYCLE_DAYS = 14;
+const CARD_MAX_FREE_DAYS = 13; // must end before the next statement closes
+const CARD_DEFAULT_SETTINGS = { enabled: false, approval: "teacher", statementDay: "Fri", splitMin: 100 }; // splitMin: smallest purchase that may be split between card and cash
+
+function cardRound(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+function cardSettings(cls) { return Object.assign({}, CARD_DEFAULT_SETTINGS, (cls && cls.cardSettings) || {}); }
+function cardPlansOf(cls) { return ((cls && cls.cardPlans) || []).filter(p => !p.archived); }
+function cardPlanById(cls, id) { return ((cls && cls.cardPlans) || []).find(p => p.id === id) || null; }
+function cardIsActive(user) { return !!(user && user.creditCard && user.creditCard.status === "active"); }
+// What is still unpaid of the last statement's closing balance.
+function cardStmtRemaining(card) {
+  if (!card || !card.stmt) return 0;
+  return cardRound(Math.max(0, (card.stmt.amount || 0) - (card.stmt.paid || 0)));
+}
+// The amount that costs lifestyle points: last period's closing balance
+// that is still unpaid — counted from the day it closes, free days included.
+function cardOwedForPenalty(user) { return cardIsActive(user) ? cardStmtRemaining(user.creditCard) : 0; }
+function cardAvailable(card, plan) { return cardRound(Math.max(0, (plan ? plan.limit : 0) - ((card && card.balance) || 0))); }
+function cardLast4(username) {
+  let h = 7;
+  for (const ch of String(username || "")) h = (h * 31 + ch.charCodeAt(0)) % 10000;
+  return String(h).padStart(4, "0");
+}
+function cardWeekdayOfKey(key) { return DAY_NAMES[new Date(dateKeyToUTC(key)).getUTCDay()]; }
+// First statement closes on the teacher's chosen weekday, 7–13 days after
+// the card starts; after that every 14 days.
+function cardFirstCloseKey(startKey, dayName) {
+  for (let i = 7; i <= 13; i++) {
+    const k = dateKeyPlusDays(startKey, i);
+    if (cardWeekdayOfKey(k) === dayName) return k;
+  }
+  return dateKeyPlusDays(startKey, 14);
+}
+function cardIssueVouchers(plan, expiryKey) {
+  return (plan.vouchers || []).map(v => ({
+    id: uid("cv"), kind: v.kind, value: v.value, left: v.kind === "credit" ? v.value : null,
+    expiryKey, planName: plan.name
+  }));
+}
+function cardMakeActive(plan, cls, todayKey) {
+  const nextCloseKey = cardFirstCloseKey(todayKey, cardSettings(cls).statementDay);
+  return {
+    status: "active", planId: plan.id, appliedTs: Date.now(), startKey: todayKey,
+    balance: 0, periodSpend: 0, cycles: 0, nextCloseKey, stmt: null,
+    vouchers: cardIssueVouchers(plan, nextCloseKey),
+    lifetime: { cashback: 0, interest: 0, fees: 0 }
+  };
+}
+function cardCleanPlan(p) {
+  const num = (v, min, max, dflt) => { let n = Number(v); if (!isFinite(n)) n = dflt; return Math.min(max, Math.max(min, n)); };
+  const vouchers = (p.vouchers || [])
+    .filter(v => (v.kind === "credit" || v.kind === "percent") && Number(v.value) > 0).slice(0, 3)
+    .map(v => ({ kind: v.kind, value: v.kind === "percent" ? cardRound(num(v.value, 1, 100, 10)) : cardRound(num(v.value, 0.01, 100000, 5)) }));
+  return {
+    id: p.id || uid("cp"),
+    name: String(p.name || "").trim().slice(0, 40) || "Credit card",
+    limit: cardRound(num(p.limit, 1, 1000000, 500)),
+    rate: cardRound(num(p.rate, 0, 100, 0)),
+    monthlyFee: cardRound(num(p.monthlyFee, 0, 10000, 0)),
+    freeDays: Math.floor(num(p.freeDays, 0, CARD_MAX_FREE_DAYS, 7)),
+    minLifestyle: Math.floor(num(p.minLifestyle, 0, 100000, 0)),
+    minPct: cardRound(num(p.minPct, 0, 100, 5)),
+    lateFee: cardRound(num(p.lateFee, 0, 10000, 5)),
+    cashbackPct: cardRound(num(p.cashbackPct, 0, 100, 0)),
+    storeDiscountPct: cardRound(num(p.storeDiscountPct, 0, 100, 0)),
+    vouchers, archived: !!p.archived
+  };
+}
+
+/* ---------------- Teacher: settings, plans, penalty ---------------- */
+async function saveCardSettings(classCode, s) {
+  const clean = {
+    enabled: !!s.enabled,
+    approval: s.approval === "instant" ? "instant" : "teacher",
+    statementDay: DAY_NAMES.includes(s.statementDay) ? s.statementDay : "Fri",
+    splitMin: s.splitMin === undefined || s.splitMin === "" ? CARD_DEFAULT_SETTINGS.splitMin : Math.max(0, cardRound(s.splitMin))
+  };
+  await classesCol().doc(classCode).update({ cardSettings: clean });
+  return clean;
+}
+async function saveCardPlan(classCode, raw) {
+  const classRef = classesCol().doc(classCode);
+  const clean = cardCleanPlan(raw);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) throw new Error("NO_CLASS");
+    const plans = (snap.data().cardPlans || []).slice();
+    const i = plans.findIndex(p => p.id === clean.id);
+    if (i >= 0) plans[i] = clean; else plans.push(clean);
+    t.update(classRef, { cardPlans: plans });
+  });
+  return clean;
+}
+// A plan someone still holds is hidden from new applicants (archived)
+// instead of deleted, so existing cards keep working.
+async function removeCardPlan(classCode, planId, archiveOnly) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) throw new Error("NO_CLASS");
+    let plans = (snap.data().cardPlans || []).slice();
+    plans = archiveOnly ? plans.map(p => p.id === planId ? Object.assign({}, p, { archived: true }) : p) : plans.filter(p => p.id !== planId);
+    t.update(classRef, { cardPlans: plans });
+  });
+}
+async function setCardLifestylePenalty(classCode, { enabled, perAmount, points }) {
+  const clean = { enabled: !!enabled, perAmount: Math.max(0, Number(perAmount) || 0), points: Math.max(0, Number(points) || 0) };
+  await classesCol().doc(classCode).update({ "lifestyleConfig.creditCard": clean });
+  return clean;
+}
+
+/* ---------------- Applying, approving, closing ---------------- */
+async function applyForCreditCard(username, classCode, planId) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let status = "pending";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef), cs = await t.get(classRef);
+      if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
+      const user = us.data(), cls = withNewModuleDefaults(cs.data());
+      if (user.role === "teacher") throw new Error("TEACHER");
+      const st = cardSettings(cls);
+      if (!st.enabled) throw new Error("OFF");
+      const plan = cardPlanById(cls, planId);
+      if (!plan || plan.archived) throw new Error("NOT_FOUND");
+      const cur = user.creditCard;
+      if (cur && (cur.status === "active" || cur.status === "pending")) throw new Error("HAS_CARD");
+      if (lifestyleRatingFromData(cls, user, username) < plan.minLifestyle) throw new Error("LIFESTYLE");
+      if (st.approval === "instant") { status = "active"; t.update(userRef, { creditCard: cardMakeActive(plan, cls, nzDateKey()) }); }
+      else { status = "pending"; t.update(userRef, { creditCard: { status: "pending", planId, appliedTs: Date.now() } }); }
+    });
+  } catch (e) {
+    const m = { OFF: "Credit cards aren't switched on for this class.", HAS_CARD: "You already have a credit card.",
+      LIFESTYLE: "Your lifestyle rating isn't high enough for that card yet.", NOT_FOUND: "That card isn't available any more." };
+    return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
+  }
+  return { ok: true, status };
+}
+async function approveCreditCard(classCode, username) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef), cs = await t.get(classRef);
+      if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
+      const user = us.data(), cls = withNewModuleDefaults(cs.data());
+      if (!user.creditCard || user.creditCard.status !== "pending") throw new Error("NOT_PENDING");
+      const plan = cardPlanById(cls, user.creditCard.planId);
+      if (!plan) throw new Error("NOT_FOUND");
+      t.update(userRef, { creditCard: cardMakeActive(plan, cls, nzDateKey()) });
+    });
+  } catch (e) { return { ok: false, error: "Couldn't approve that card — it may have changed. Refresh and try again." }; }
+  return { ok: true };
+}
+async function declineCreditCard(classCode, username) {
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef);
+      if (!us.exists) throw new Error("NOT_FOUND");
+      const c = us.data().creditCard;
+      if (!c || c.status !== "pending") throw new Error("NOT_PENDING");
+      t.update(userRef, { creditCard: { status: "denied", planId: c.planId, deniedTs: Date.now() } });
+    });
+  } catch (e) { return { ok: false, error: "Couldn't decline that — it may have changed. Refresh and try again." }; }
+  return { ok: true };
+}
+async function cancelCreditCard(username, classCode) {
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef);
+      if (!us.exists) throw new Error("NOT_FOUND");
+      const c = us.data().creditCard;
+      if (!c) return;
+      if (c.status === "active" && (c.balance || 0) > 0.004) throw new Error("OWING");
+      t.update(userRef, { creditCard: null });
+    });
+  } catch (e) {
+    return { ok: false, error: e.message === "OWING" ? "Pay off everything you owe on the card before closing it." : "Something went wrong. Please try again." };
+  }
+  return { ok: true };
+}
+
+/* ---------------- Paying the card ---------------- */
+async function payCreditCard(username, classCode, amount) {
+  amount = cardRound(amount);
+  if (!(amount > 0)) return { ok: false, error: "Enter an amount greater than zero." };
+  const userRef = usersCol().doc(username);
+  let owingAfter = 0, clearedStmt = false;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef);
+      if (!us.exists) throw new Error("NOT_FOUND");
+      const user = us.data(), card = user.creditCard;
+      if (!cardIsActive(user)) throw new Error("NOCARD");
+      if (amount > (card.balance || 0) + 0.004) throw new Error("TOO_MUCH");
+      if ((user.balance || 0) < amount) throw new Error("BROKE");
+      const today = nzDateKey(), rem = cardStmtRemaining(card);
+      if (card.stmt && rem > 0) {
+        const toStmt = Math.min(amount, rem);
+        card.stmt.paid = cardRound((card.stmt.paid || 0) + toStmt);
+        // Only money in by the due date counts as "on time" — it's what
+        // decides interest and the late fee at the next statement.
+        if (today <= card.stmt.dueKey) card.stmt.paidOnTime = cardRound((card.stmt.paidOnTime || 0) + toStmt);
+        clearedStmt = cardStmtRemaining(card) <= 0.004;
+      }
+      card.balance = cardRound(Math.max(0, card.balance - amount));
+      owingAfter = card.balance;
+      t.update(userRef, { balance: cardRound(user.balance - amount), creditCard: card });
+    });
+  } catch (e) {
+    const m = { NOCARD: "You don't have an active credit card.", TOO_MUCH: "That's more than you owe on the card.", BROKE: "You don't have enough cash for that payment." };
+    return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "card-payment", from: username, amount,
+    note: owingAfter <= 0.004 ? "Credit card paid off" : `Credit card payment — ${fmtMoney(owingAfter)} still owing` });
+  return { ok: true, owingAfter, clearedStmt };
+}
+
+/* ---------------- Spending on the card ---------------- */
+// Runs INSIDE the caller's transaction (see buyStoreItem). Mutates and
+// returns user.creditCard; the caller writes it back.
+function cardChargeInTxn(user, cls, amount) {
+  if (!cardIsActive(user)) throw new Error("NOCARD");
+  const card = user.creditCard, plan = cardPlanById(cls, card.planId);
+  if (!plan) throw new Error("NOCARD");
+  if ((card.balance || 0) + amount > plan.limit + 0.004) throw new Error("LIMIT");
+  card.balance = cardRound((card.balance || 0) + amount);
+  card.periodSpend = cardRound((card.periodSpend || 0) + amount);
+  return card;
+}
+/* ---------------- Paying with the card: whole, split, or events ----------------
+   Every student purchase that a real card could pay for goes through
+   cardPayInTxn(). It decides how much lands on the card and how much comes
+   out of cash. A purchase can be SPLIT ("card covers up to $X, cash pays
+   the rest") when it is a big one (at least the teacher's splitMin) or when
+   the card can't cover it all by itself. Perks that need the whole bill on
+   the card (the class-store discount) don't apply to a split; cashback still
+   comes from whatever landed on the card (periodSpend). */
+function cardSplitAllowed(user, cls, total) {
+  if (!cardIsActive(user)) return false;
+  const plan = cardPlanById(cls, user.creditCard.planId);
+  if (!plan) return false;
+  const avail = cardAvailable(user.creditCard, plan);
+  return avail > 0.004 && (total >= cardSettings(cls).splitMin - 0.004 || total > avail + 0.004);
+}
+// Runs INSIDE the caller's transaction. Mutates user.creditCard (the caller
+// writes it back when card > 0) and returns { card, cash }; the caller
+// takes `cash` off user.balance. opts: { useCard, split, cardMax }.
+function cardPayInTxn(user, cls, total, opts) {
+  total = cardRound(total);
+  opts = opts || {};
+  if (!opts.useCard) {
+    if ((user.balance || 0) < total) throw new Error("BROKE");
+    return { card: 0, cash: total };
+  }
+  if (!cardIsActive(user)) throw new Error("NOCARD");
+  const plan = cardPlanById(cls, user.creditCard.planId);
+  if (!plan) throw new Error("NOCARD");
+  const avail = cardAvailable(user.creditCard, plan);
+  let card = total;
+  if (opts.split) {
+    if (!cardSplitAllowed(user, cls, total)) throw new Error("NO_SPLIT");
+    const want = opts.cardMax === undefined || opts.cardMax === null || opts.cardMax === "" ? total : Math.max(0, cardRound(opts.cardMax));
+    card = cardRound(Math.min(total, want, avail));
+  } else if (total > avail + 0.004) throw new Error("LIMIT");
+  const cash = cardRound(total - card);
+  if ((user.balance || 0) < cash) throw new Error("BROKE");
+  if (card > 0) cardChargeInTxn(user, cls, card);
+  return { card, cash };
+}
+// Messages for the errors only the card can raise (BROKE keeps each caller's own wording).
+function cardPayError(e) {
+  const m = { LIMIT: "That would go over your credit card limit.", NOCARD: "Your credit card isn't available. Pay with cash instead.",
+    NO_SPLIT: "Part-payments only work on bigger purchases (or when your card can't cover it all). Pay it all by card or all by cash.", NOCARD_ITEM: "That can't be paid for with a credit card." };
+  return (e && m[e.message]) || null;
+}
+// Unexpected costs (bad random events). If the student switched on "put
+// unexpected costs on my card", as much as fits goes on the card; the rest
+// comes out of cash, which may go negative like any event. Mutates
+// user.creditCard. Returns { card, cash }.
+function cardEventsOn(user) { return cardIsActive(user) && !!user.creditCard.eventsOnCard; }
+function cardRoomNow(user, cls) {
+  if (!cardIsActive(user)) return 0;
+  const plan = cardPlanById(cls, user.creditCard.planId);
+  return plan ? cardAvailable(user.creditCard, plan) : 0;
+}
+function cardEventRoom(user, cls) {
+  if (!cardEventsOn(user)) return 0;
+  const plan = cardPlanById(cls, user.creditCard.planId);
+  return plan ? cardAvailable(user.creditCard, plan) : 0;
+}
+function cardTakeEventCost(user, cls, loss, force) {
+  loss = cardRound(loss);
+  const room = force ? cardRoomNow(user, cls) : cardEventRoom(user, cls); // force: the student picked the card for this one
+  const card = cardRound(Math.min(loss, room));
+  if (!(card > 0)) return { card: 0, cash: loss };
+  cardChargeInTxn(user, cls, card);
+  return { card, cash: cardRound(loss - card) };
+}
+// What the student still owes on the card — counts against net worth like a loan.
+function cardOwed(user) { return cardIsActive(user) ? cardRound(user.creditCard.balance || 0) : 0; }
+// Charges a bad random event's cost (see revealWeeklyEvent). Teachers pay nothing.
+async function takeEventCost(username, classCode, loss) {
+  loss = cardRound(loss);
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let res = { card: 0, cash: loss };
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef), cs = await t.get(classRef);
+      if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
+      const user = us.data();
+      if (user.role === "teacher") { res = { card: 0, cash: 0 }; return; }
+      res = cardTakeEventCost(user, withNewModuleDefaults(cs.data()), loss);
+      const upd = { balance: cardRound((user.balance || 0) - res.cash) };
+      if (res.card > 0) upd.creditCard = user.creditCard;
+      t.update(userRef, upd);
+    });
+  } catch (e) { return { card: 0, cash: 0, failed: true }; }
+  return res;
+}
+// The student's own switch (Bank page): put unexpected costs on the card first.
+async function setCardEventsPref(username, on) {
+  await usersCol().doc(username).update({ "creditCard.eventsOnCard": !!on });
+  return { ok: true };
+}
+// Logs a purchase that may be part or all on the card. The cash part keeps
+// its normal type (so cash-flow views stay right); the card part is a
+// "card-purchase" tagged with its category (cat) so budgets and reports
+// still file it under Transport, Insurance, etc.
+async function logPurchaseTxn(classCode, username, pay, cat, txn) {
+  const card = (pay && pay.card) || 0, cash = pay ? pay.cash : (Number(txn.amount) || 0);
+  if (!(card > 0.004)) { await logTxn(classCode, Object.assign({ from: username }, txn, { amount: cash })); return; }
+  const split = cash > 0.004;
+  if (split) await logTxn(classCode, Object.assign({ from: username }, txn, { amount: cash, note: `${txn.note} (cash part — ${fmtMoney(card)} went on the credit card)` }));
+  await logTxn(classCode, { type: "card-purchase", cat, surprise: !!txn.surprise, from: username, amount: card,
+    note: `${txn.note} (credit card${split ? `, ${fmtMoney(cash)} paid in cash` : ""})` });
+}
+function cardUsableVouchers(user, todayKey) {
+  if (!cardIsActive(user)) return [];
+  return (user.creditCard.vouchers || []).filter(v => v.expiryKey >= todayKey && (v.kind === "percent" || (v.left || 0) > 0.004));
+}
+function cardVoucherLabel(v) { return v.kind === "percent" ? `${v.value}% off` : `${fmtMoney(v.left !== null && v.left !== undefined ? v.left : v.value)} credit`; }
+// One place that works out a class-store price, used by the checkout and
+// by the price shown on the Buy button so the two can never disagree.
+function cardStorePricing(user, cls, basePrice, qty, useCard, voucherId, todayKey) {
+  let unit = applyLifeDiscount(user, "store", basePrice), cardPct = 0;
+  if (useCard && cardIsActive(user)) {
+    const plan = cardPlanById(cls, user.creditCard.planId);
+    if (plan) cardPct = plan.storeDiscountPct || 0;
+  }
+  if (cardPct > 0) unit = unit * (1 - cardPct / 100);
+  let total = cardRound(unit * qty);
+  const beforeVoucher = total;
+  let voucher = null;
+  if (voucherId) {
+    const v = cardUsableVouchers(user, todayKey).find(x => x.id === voucherId);
+    if (v) {
+      const saves = v.kind === "percent" ? cardRound(total * v.value / 100) : cardRound(Math.min(v.left, total));
+      if (saves > 0) { voucher = { id: v.id, kind: v.kind, saves, label: cardVoucherLabel(v) }; total = cardRound(total - saves); }
+    }
+  }
+  return { unit: cardRound(unit), total, beforeVoucher, cardPct, voucher };
+}
+function cardConsumeVoucher(card, voucher) {
+  if (!card || !voucher) return;
+  const i = (card.vouchers || []).findIndex(v => v.id === voucher.id);
+  if (i < 0) return;
+  const v = card.vouchers[i];
+  if (v.kind === "credit") { v.left = cardRound((v.left || 0) - voucher.saves); if (v.left <= 0.004) card.vouchers.splice(i, 1); }
+  else card.vouchers.splice(i, 1);
+}
+
+/* ---------------- Statements, interest, fees, cashback ---------------- */
+// Late fee: once a statement's due date has passed, the minimum payment had
+// to be made by then. `asOfKey` is the day we're checking from.
+function cardLateCheck(card, plan, asOfKey, logs) {
+  const s = card.stmt;
+  if (!s || s.lateChecked || !(asOfKey > s.dueKey)) return false;
+  s.lateChecked = true;
+  if ((s.paidOnTime || 0) < (s.minDue || 0) - 0.004 && plan.lateFee > 0) {
+    card.balance = cardRound(card.balance + plan.lateFee);
+    card.lifetime.fees = cardRound((card.lifetime.fees || 0) + plan.lateFee);
+    s.lateFee = plan.lateFee;
+    logs.push({ type: "card-fee", amount: plan.lateFee, note: `Late payment fee — the ${fmtMoney(s.minDue)} minimum wasn't paid by ${cardDateLabel(s.dueKey)}` });
+  }
+  return true;
+}
+function cardCloseStatement(user, card, plan, closeKey, logs) {
+  card.lifetime = card.lifetime || { cashback: 0, interest: 0, fees: 0 };
+  const prev = card.stmt;
+  const notPaidInFull = !!prev && prev.amount > 0.004 && (prev.amount - (prev.paidOnTime || 0)) > 0.004;
+  // Interest: only if the last closing balance wasn't paid in full by its
+  // due date — then the whole balance owed accrues interest, like a real card.
+  let interest = 0;
+  if (notPaidInFull && plan.rate > 0 && card.balance > 0) {
+    interest = cardRound(card.balance * plan.rate / 100);
+    card.balance = cardRound(card.balance + interest);
+    card.lifetime.interest = cardRound(card.lifetime.interest + interest);
+    logs.push({ type: "card-interest", amount: interest, note: `Interest on unpaid statement — ${plan.rate}% for 2 weeks` });
+  }
+  card.cycles = (card.cycles || 0) + 1;
+  let fee = 0;
+  if (plan.monthlyFee > 0 && card.cycles % 2 === 1) {
+    fee = plan.monthlyFee;
+    card.balance = cardRound(card.balance + fee);
+    card.lifetime.fees = cardRound(card.lifetime.fees + fee);
+    logs.push({ type: "card-fee", amount: fee, note: `Monthly card fee — ${plan.name}` });
+  }
+  let cashback = 0, cashLeft = 0;
+  if (plan.cashbackPct > 0 && (card.periodSpend || 0) > 0) {
+    cashback = cardRound(card.periodSpend * plan.cashbackPct / 100);
+    const applied = Math.min(cashback, card.balance);
+    cashLeft = cardRound(cashback - applied);
+    card.balance = cardRound(card.balance - applied);
+    card.lifetime.cashback = cardRound(card.lifetime.cashback + cashback);
+    if (cashback > 0) logs.push({ type: "card-cashback", amount: cashback, note: `Cashback — ${plan.cashbackPct}% of ${fmtMoney(card.periodSpend)} spent` });
+  }
+  const nextClose = dateKeyPlusDays(closeKey, CARD_CYCLE_DAYS);
+  card.vouchers = (card.vouchers || []).filter(v => v.expiryKey > closeKey).concat(cardIssueVouchers(plan, nextClose));
+  const amount = cardRound(card.balance);
+  card.stmt = {
+    closeKey, closeTs: Date.now(), dueKey: dateKeyPlusDays(closeKey, plan.freeDays), amount, paid: 0, paidOnTime: 0,
+    minDue: cardRound(amount * plan.minPct / 100), lateChecked: amount <= 0.004,
+    interest, fee, cashback, spend: cardRound(card.periodSpend || 0), rate: plan.rate
+  };
+  logs.push({ type: "card-statement", amount,
+    note: amount > 0.004 ? `Statement closed — pay ${fmtMoney(amount)} by ${cardDateLabel(card.stmt.dueKey)} to avoid interest` : "Statement closed — nothing to pay" });
+  card.periodSpend = 0;
+  card.nextCloseKey = nextClose;
+  user.balance = cardRound((user.balance || 0) + cashLeft);
+  return cashLeft;
+}
+// Brings one student's card up to date: closes every statement that's due
+// (catching up if nobody opened the site) and applies a late fee when due.
+function cardRunCycle(user, cls, today, logs) {
+  const card = user.creditCard;
+  if (!card || card.status !== "active") return false;
+  const plan = cardPlanById(cls, card.planId);
+  if (!plan) return false;
+  card.lifetime = card.lifetime || { cashback: 0, interest: 0, fees: 0 };
+  let changed = false, guard = 0;
+  while (card.nextCloseKey && today >= card.nextCloseKey && guard++ < 8) {
+    cardLateCheck(card, plan, card.nextCloseKey, logs);
+    cardCloseStatement(user, card, plan, card.nextCloseKey, logs);
+    changed = true;
+  }
+  if (cardLateCheck(card, plan, today, logs)) changed = true;
+  return changed;
+}
+async function processCreditCards(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls || cls.archived || !cardSettings(cls).enabled && !(cls.cardPlans || []).length) return 0;
+  const selfOnly = t29SessionStudent();
+  const students = selfOnly ? [await getUser(selfOnly)].filter(Boolean) : await getClassStudents(classCode, cls);
+  const today = nzDateKey();
+  let count = 0;
+  for (const s of students) {
+    const c = s.creditCard;
+    if (!c || c.status !== "active") continue;
+    const dueClose = c.nextCloseKey && today >= c.nextCloseKey;
+    const dueLate = c.stmt && !c.stmt.lateChecked && today > c.stmt.dueKey;
+    if (!dueClose && !dueLate) continue;
+    const ref = usersCol().doc(s.username);
+    let logs = [];
+    try {
+      await fdb.runTransaction(async (t) => {
+        logs = []; // reset every attempt — a retried callback would log everything twice
+        const snap = await t.get(ref);
+        if (!snap.exists) return;
+        const user = snap.data();
+        if (cardRunCycle(user, cls, today, logs)) t.update(ref, { creditCard: user.creditCard, balance: user.balance });
+        else logs = [];
+      });
+    } catch (e) { continue; }
+    for (const l of logs) {
+      const entry = (l.type === "card-cashback" || l.type === "card-statement") ? { to: s.username } : { from: s.username };
+      await logTxn(classCode, Object.assign({}, l, entry));
+      count++;
+    }
+  }
+  return count;
+}
+
+// What the budget needs to know about a student's card (null = no card).
+function cardBudgetInfo(cls, user) {
+  if (!cardIsActive(user)) return null;
+  const c = user.creditCard, plan = cardPlanById(cls, c.planId);
+  if (!plan) return null;
+  const stmtRemaining = cardStmtRemaining(c);
+  return {
+    plan, limit: plan.limit, balance: cardRound(c.balance || 0), available: cardAvailable(c, plan),
+    stmtRemaining, unbilled: cardRound(Math.max(0, (c.balance || 0) - stmtRemaining)),
+    dueKey: c.stmt ? c.stmt.dueKey : null, nextCloseKey: c.nextCloseKey, periodSpend: cardRound(c.periodSpend || 0)
+  };
+}
+
+const CARD_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function cardDateLabel(key) {
+  if (!key) return "";
+  const d = new Date(dateKeyToUTC(key));
+  return `${DAY_NAMES[d.getUTCDay()]} ${d.getUTCDate()} ${CARD_MONTHS[d.getUTCMonth()]}`;
 }

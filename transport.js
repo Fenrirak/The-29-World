@@ -327,7 +327,10 @@ async function buyLicence() {
   if (btn && btn.disabled) return;
   if (btn) btn.disabled = true;
   try {
-    const res = await buyTruckLicence(CURRENT.username, CURRENT.classCode);
+    const licCls = await getClassCached(CURRENT.classCode);
+    const pay = await cardAskPay((licCls && licCls.truckLicence && licCls.truckLicence.price) || 0, "Truck licence");
+    if (!pay) return; // backed out
+    const res = await buyTruckLicence(CURRENT.username, CURRENT.classCode, pay);
     const msgEl = document.getElementById("licenceMsg");
     if (!res.ok) {
       if (msgEl) msgEl.innerHTML = `<div class="error-msg">${res.error}</div>`;
@@ -385,7 +388,13 @@ async function buyVeh(id) {
   if (btn && btn.disabled) return;
   if (btn) btn.disabled = true;
   try {
-    const res = await buyVehicle(CURRENT.username, CURRENT.classCode, id);
+    // Same price the checkout works out: life discount, then tax.
+    const [vMe, vCls0] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+    const vCls = withNewModuleDefaults(vCls0), vVeh = (vCls.vehicles || []).find(v => v.id === id);
+    const vTotal = vVeh ? applyTaxToExpense(vCls, "transport", applyLifeDiscount(vMe, "transport", vVeh.price)).total : 0;
+    const pay = await cardAskPay(vTotal, vVeh ? vVeh.name : "Vehicle");
+    if (!pay) return; // backed out
+    const res = await buyVehicle(CURRENT.username, CURRENT.classCode, id, pay);
     if (!res.ok) {
       document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`;
       await render();
@@ -488,7 +497,11 @@ async function payTransport() {
   if (btn && btn.disabled) return;
   if (btn) btn.disabled = true;
   try {
-    const res = await payTransportExpenses(CURRENT.username, CURRENT.classCode);
+    const [tMe, tCls0] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+    const tAmt = transportWeeklyAmount(withNewModuleDefaults(tCls0), Object.assign({ username: CURRENT.username }, tMe)).total;
+    const pay = await cardAskPay(tAmt, "This week's transport expenses");
+    if (!pay) return; // backed out
+    const res = await payTransportExpenses(CURRENT.username, CURRENT.classCode, pay);
     const msgEl = document.getElementById("transportPayMsg");
     if (!res.ok) {
       if (msgEl) msgEl.innerHTML = `<div class="error-msg">${res.error}</div>`;

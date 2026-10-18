@@ -452,7 +452,16 @@ function showGoodBigEventPopup(entry) {
 
 // claimOptions: the student's plans that can claim this event, from
 // insuranceClaimOptions — each gets its own button showing what it costs.
-function showBigEventPopup(entry, claimOptions, username, classCode, user) {
+async function showBigEventPopup(entry, claimOptions, username, classCode, user) {
+  // Room left on the student's credit card (if they have one) for the "pay on card" options.
+  let hasCard = false, cardRoom = 0;
+  try {
+    if (user && user.role !== "teacher" && cardIsActive(user)) {
+      const cardCls = await getClassCached(classCode);
+      const cardPlan = cardCls && cardPlanById(cardCls, user.creditCard.planId);
+      if (cardPlan) { hasCard = true; cardRoom = cardAvailable(user.creditCard, cardPlan); }
+    }
+  } catch (e) { /* no card options if it can't be read */ }
   const overlay = document.createElement("div");
   overlay.id = "anwBigEventModal";
   overlay.className = "anw-modal-overlay";
@@ -485,7 +494,7 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
   // out with the reason; "Pay from cash" always stays available.
   const coverage = BIG_EVENT_COVERAGE[entry.module];
   const cover = entry.insuranceCover || [];
-  const claims = (claimOptions || []).map(o => ({ ...o, ok: isTeacher || o.studentPays <= 0 || cash >= o.studentPays }));
+  const claims = (claimOptions || []).map(o => ({ ...o, ok: isTeacher || o.studentPays <= 0 || cash >= o.studentPays || cardRoom >= o.studentPays }));
   const impact = eventImpactText(entry, coverage);
   const coverLine = (impact ? `<p class="muted-small">${escapeHtml(impact)}</p>` : "")
     + (cover.length
@@ -536,9 +545,13 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
         <button class="btn gold" id="bigPayCashBtn">
           Pay ${fmtMoney(entry.cost)} from cash${cashWouldGoNegative ? ` (will take your balance negative — you have ${fmtMoney(cash)})` : ""}
         </button>
+        ${hasCard ? `<button class="btn gold" id="bigPayCardBtn" ${cardRoom > 0 ? "" : "disabled"}>
+          Pay ${fmtMoney(entry.cost)} on credit card${cardRoom <= 0 ? " (no credit available)" : cardRoom >= entry.cost ? ` (${fmtMoney(cardRoom)} available)` : ` (card covers ${fmtMoney(cardRoom)}, the other ${fmtMoney(entry.cost - cardRoom)} from cash)`}
+        </button>` : ""}
         <button class="btn gold" id="bigPaySavingsBtn" ${savingsOk ? "" : "disabled"}>
           Pay ${fmtMoney(entry.cost)} from savings${savingsOk ? "" : ` (only ${fmtMoney(savings)} available)`}
         </button>
+        ${hasCard && claims.length && cardRoom > 0 ? `<label class="muted-small" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="bigClaimOnCard"> Pay the claim's excess on my credit card (${fmtMoney(cardRoom)} available)</label>` : ""}
         ${claimButtons}
       </div>
       <div id="bigEventMsg"></div>
@@ -555,6 +568,7 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
   const eligibleIds = ["bigPayCashBtn"];
   if (canForfeit) eligibleIds.push("bigForfeitBtn");
   if (savingsOk) eligibleIds.push("bigPaySavingsBtn");
+  if (hasCard && cardRoom > 0) eligibleIds.push("bigPayCardBtn");
   claims.forEach((o, i) => { if (o.ok) eligibleIds.push("bigClaimBtn" + i); });
   const setBusy = (busy) => {
     eligibleIds.forEach(id => { document.getElementById(id).disabled = busy; });
@@ -575,12 +589,72 @@ function showBigEventPopup(entry, claimOptions, username, classCode, user) {
   if (canForfeit) document.getElementById("bigForfeitBtn").addEventListener("click", () => resolve("forfeit"));
   document.getElementById("bigPayCashBtn").addEventListener("click", () => resolve("pay", "cash"));
   document.getElementById("bigPaySavingsBtn").addEventListener("click", () => resolve("pay", "savings"));
+  if (hasCard) document.getElementById("bigPayCardBtn").addEventListener("click", () => resolve("pay", "card"));
   claims.forEach((o, i) => {
     document.getElementById("bigClaimBtn" + i).addEventListener("click", () => {
       if (o.writeOff && !confirmWriteOff(o)) return;
       if (o.losesVehicle && !confirm(`${insurancePlanName(o.plan)} pays for the damage to someone else's property, but it doesn't cover your own vehicle — so you'll lose ${vehicleName}. You pay your ${fmtMoney(o.excess)} excess.\n\nClaim anyway?`)) return;
-      resolve("claim", null, o.plan.id);
+      const cb = document.getElementById("bigClaimOnCard");
+      // If cash can't cover the excess but the card can, use the card without making them tick the box.
+      resolve("claim", (cb && cb.checked) || (!isTeacher && cash < o.studentPays && cardRoom >= o.studentPays) ? "card" : null, o.plan.id);
     });
+  });
+}
+
+/* ===================== Pay with: cash, credit card, or both =====================
+   Used by every purchase a real card could pay for (vehicles, licence,
+   weekly transport, insurance sign-up, Trade Centre). A student with no
+   active card never sees it: it resolves straight away with {} (= cash).
+   Resolves with null if they back out. Otherwise the options go straight
+   into the purchase function: { useCard, split, cardMax }. Splitting is
+   only offered on big purchases (the teacher's setting) or when the card
+   can't cover the whole thing — see cardSplitAllowed(). */
+async function cardAskPay(total, what) {
+  total = Math.round((Number(total) || 0) * 100) / 100;
+  const s = await getSessionUser();
+  if (!s || s.role !== "student" || !(total > 0)) return {};
+  const [me, cls] = await Promise.all([getUserCached(s.username), getClassCached(s.classCode)]);
+  if (!me || !cls || !cardIsActive(me)) return {};
+  const plan = cardPlanById(cls, me.creditCard.planId);
+  if (!plan) return {};
+  const avail = cardAvailable(me.creditCard, plan), cash = me.balance || 0;
+  const canCard = avail >= total - 0.004, canSplit = cardSplitAllowed(me, cls, total);
+  const maxCard = Math.min(avail, total);
+  const startCard = total > avail ? maxCard : Math.round(total / 2 * 100) / 100;
+  return new Promise(resolve => {
+    const overlay = document.createElement("div");
+    overlay.className = "anw-modal-overlay";
+    overlay.innerHTML = `
+      <div class="anw-modal-card">
+        <h2 style="display:flex;align-items:center;gap:9px;">${icon("cards", 24)} How do you want to pay?</h2>
+        <p><strong>${escapeHtml(what || "This purchase")}</strong> &middot; ${fmtMoney(total)}</p>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+          <button class="btn gold" data-mode="cash">Pay from cash <small>(${fmtMoney(cash)} available)</small></button>
+          <button class="btn gold" data-mode="card" ${canCard ? "" : "disabled"}>Put it on my credit card <small>(${canCard ? `${fmtMoney(avail)} available` : `only ${fmtMoney(avail)} available`})</small></button>
+          ${canSplit ? `<div style="border:1px solid var(--line, #ddd);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;">
+            <label for="cardSplitAmt" style="font-weight:700;">Part card, part cash</label>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Card covers $<input id="cardSplitAmt" type="number" min="0.01" max="${maxCard}" step="0.01" value="${startCard}" style="width:110px;">
+              <span class="muted-small" id="cardSplitCash"></span></div>
+            <button class="btn secondary" data-mode="split">Split the payment</button></div>` : ""}
+          <button class="btn" data-mode="cancel">Cancel</button>
+        </div>
+        <div id="cardAskMsg"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const done = (v) => { overlay.remove(); resolve(v); };
+    const amtEl = overlay.querySelector("#cardSplitAmt");
+    const upd = () => { if (!amtEl) return; const c = Math.min(maxCard, Math.max(0, Number(amtEl.value) || 0)); overlay.querySelector("#cardSplitCash").textContent = `Cash covers ${fmtMoney(Math.max(0, Math.round((total - c) * 100) / 100))}`; };
+    if (amtEl) { amtEl.addEventListener("input", upd); upd(); }
+    overlay.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => {
+      const m = b.getAttribute("data-mode");
+      if (m === "cancel") return done(null);
+      if (m === "cash") return done({});
+      if (m === "card") return done({ useCard: true });
+      const c = Math.round((Number(amtEl.value) || 0) * 100) / 100;
+      if (!(c > 0) || c > maxCard + 0.004) { overlay.querySelector("#cardAskMsg").innerHTML = `<div class="error-msg">Enter an amount between $0.01 and ${fmtMoney(maxCard)}.</div>`; return; }
+      done({ useCard: true, split: true, cardMax: c });
+    }));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) done(null); });
   });
 }
 

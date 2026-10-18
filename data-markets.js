@@ -707,9 +707,9 @@ async function teacherRemoveListing(classCode, listingId, reason) {
    (at the listed price) and "Accept offer" (at the haggled price) route
    through here, so the money movement, the ownership transfer and the
    guards can never drift apart between the two paths. */
-async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) {
+async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, pay) {
   const classRef = classesCol().doc(classCode);
-  let receipt = null;
+  let receipt = null, buyPay = null;
 
   // The seller's username lives on the listing, which we can only read
   // inside the transaction — but a transaction's reads must all happen
@@ -753,7 +753,13 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
       const price = Math.round(Number(agreedPrice) * 100) / 100;
       if (!(price > 0)) throw new Error("BAD_PRICE");
       const buyerIsTeacher = buyer.role === "teacher";
-      if (!buyerIsTeacher && buyer.balance < price) throw new Error("BROKE");
+      // Paying by credit card works for things (store items, vehicles) — not for a
+      // house, which in real life is settled by bank transfer. A part-payment is
+      // allowed like anywhere else (see cardPayInTxn). Offers the seller accepts later
+      // are settled in cash, since the buyer isn't there to choose.
+      if (pay && pay.useCard && listing.assetType === "property") throw new Error("NOCARD_ITEM");
+      buyPay = { card: 0, cash: price };
+      if (!buyerIsTeacher) buyPay = cardPayInTxn(buyer, cls, price, pay);
 
       // Asset-type-specific transfer + eligibility. Anything the normal
       // teacher-run store would refuse a buyer (no truck licence, already
@@ -835,7 +841,10 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
       _trimStoredListings(cls);
 
       const buyerUpdate = {};
-      if (!buyerIsTeacher) buyerUpdate.balance = Math.round((buyer.balance - price) * 100) / 100;
+      if (!buyerIsTeacher) {
+        buyerUpdate.balance = Math.round((buyer.balance - buyPay.cash) * 100) / 100;
+        if (buyPay.card > 0) buyerUpdate.creditCard = buyer.creditCard;
+      }
       if (listing.assetType === "store") buyerUpdate.storeItems = buyer.storeItems;
       t.update(buyerRef, buyerUpdate);
 
@@ -853,6 +862,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
         left: listing.status === "active" ? listingQuantity(listing) : 0 };
     });
   } catch (e) {
+    { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };
     if (e.message === "CLOSED") return { ok: false, error: "Someone got there first — that listing is no longer for sale." };
     if (e.message === "GONE") return { ok: false, error: "The seller doesn't own that any more, so the listing has expired." };
@@ -868,7 +878,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
   }
 
   const label = MARKETPLACE_ASSET_LABEL[receipt.assetType] || "Item";
-  await logTxn(classCode, {
+  await logPurchaseTxn(classCode, buyerUsername, buyPay, "Trade Centre", {
     type: "p2p-buy", from: buyerUsername, to: receipt.seller, amount: receipt.price,
     note: `Bought from a classmate: ${receipt.name} (${label})`
   });
@@ -879,11 +889,11 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice) 
   return Object.assign({ ok: true }, receipt);
 }
 
-async function buyListing(username, classCode, listingId) {
+async function buyListing(username, classCode, listingId, pay) {
   const cls = withNewModuleDefaults(await getClassCached(classCode));
   const listing = (cls.listings || []).find(l => l.id === listingId);
   if (!listing) return { ok: false, error: "That listing couldn't be found." };
-  return await _settleListing(classCode, listingId, username, listing.price);
+  return await _settleListing(classCode, listingId, username, listing.price, pay);
 }
 
 async function makeOffer(username, classCode, listingId, amount, note) {
