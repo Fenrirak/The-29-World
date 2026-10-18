@@ -49,25 +49,86 @@ const CC_THEMES = [
   { id: "slate",    name: "Slate Grey",     c: ["#2f3a4a", "#8795a8"] },
   { id: "plum",     name: "Plum",           c: ["#4a1f5e", "#a455c4"] }
 ];
+const CC_STRIPES = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0,rgba(255,255,255,.07) 6px,rgba(255,255,255,0) 6px,rgba(255,255,255,0) 14px)";
+function ccThemeBg(t) { return `${CC_STRIPES},linear-gradient(135deg,${t.c[0]},${t.c[1]})`; }
 function ccThemeStyle(plan) {
   const t = CC_THEMES.find(x => x.id === (plan && plan.theme));
-  return t ? `background:linear-gradient(135deg,${t.c[0]},${t.c[1]});` : "";
+  // !important so it wins over the tier colours in style.css
+  return t ? `background:${ccThemeBg(t)} !important;` : "";
 }
-function ccThemePickerHtml(cur) {
-  const sw = (id, label, bg) => `<button type="button" class="cc-swatch ${cur === id ? "on" : ""}" data-theme="${id}" title="${label}" aria-label="${label}" onclick="ccPickTheme('${id}')" style="background:${bg};width:44px;height:30px;border-radius:8px;border:2.5px solid ${cur === id ? "#1f2b44" : "transparent"};cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.25);"></button>`;
+function ccInjectThemeCss() {
+  if (document.getElementById("ccThemeCss")) return;
+  const st = document.createElement("style");
+  st.id = "ccThemeCss";
+  st.textContent = `
+.cc-themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px;margin-top:6px}
+.cc-theme{appearance:none;background:none;border:0;padding:0;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.cc-mini{position:relative;height:82px;border-radius:10px;padding:8px 9px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;
+  box-shadow:0 2px 6px rgba(0,0,0,.25);outline:3px solid transparent;outline-offset:2px;transition:transform .12s,outline-color .12s}
+.cc-theme:hover .cc-mini,.cc-theme:focus-visible .cc-mini{transform:translateY(-2px)}
+.cc-theme.on .cc-mini{outline-color:#f0b429}
+.cc-mini-top{display:flex;justify-content:space-between;font-size:7px;letter-spacing:.14em;font-weight:800;opacity:.92}
+.cc-mini-chip{width:19px;height:14px;border-radius:3px;background:linear-gradient(135deg,#f3dc95,#c9a24a)}
+.cc-mini-bot{display:flex;justify-content:space-between;align-items:flex-end;gap:6px;font-size:8px;font-weight:800;text-transform:uppercase;line-height:1.1}
+.cc-mini-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cc-mini-limit{white-space:nowrap}
+.cc-mini-tick{position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:#f0b429;color:#1f2b44;font-size:12px;font-weight:900;
+  display:none;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.cc-theme.on .cc-mini-tick{display:flex}
+.cc-theme-label{display:block;font-size:12px;font-weight:700;margin-top:7px}
+.cc-theme.auto .cc-mini{background:repeating-linear-gradient(45deg,#cfd6e2 0,#cfd6e2 6px,#e9edf4 6px,#e9edf4 12px);color:#1f2b44}
+`;
+  document.head.appendChild(st);
+}
+function ccMiniCard(bgStyle, name, limit) {
+  return `<span class="cc-mini" style="${bgStyle}"><span class="cc-mini-tick" aria-hidden="true">✓</span>
+    <span class="cc-mini-top"><span>THE 29 WORLD</span><span>)))</span></span>
+    <span class="cc-mini-chip"></span>
+    <span class="cc-mini-bot"><span class="cc-mini-name">${ccEsc(name)}</span><span class="cc-mini-limit">${ccEsc(limit)}</span></span></span>`;
+}
+function ccThemePickerHtml(p) {
+  ccInjectThemeCss();
+  const cur = (CC_THEMES.some(t => t.id === p.theme) ? p.theme : "");
+  const name = p.name || "Card name", limit = fmtMoney(Number(p.limit) || 0);
+  const tile = (id, label, bg, extra) => `<button type="button" role="radio" aria-checked="${cur === id}" class="cc-theme ${extra || ""} ${cur === id ? "on" : ""}" data-theme="${id}" onclick="ccPickTheme('${id}')">${ccMiniCard(bg, name, limit)}<span class="cc-theme-label">${label}</span></button>`;
   return `<div class="wide"><label>Card colour</label>
-    <div id="ccThemePicker" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
-      ${sw("", "Automatic (by tier)", "repeating-linear-gradient(45deg,#e3e8f0,#e3e8f0 5px,#fff 5px,#fff 10px)")}
-      ${CC_THEMES.map(t => sw(t.id, t.name, `linear-gradient(135deg,${t.c[0]},${t.c[1]})`)).join("")}
+    <div class="cc-themes" id="ccThemePicker" role="radiogroup" aria-label="Card colour">
+      ${tile("", "Automatic", "", "auto")}
+      ${CC_THEMES.map(t => tile(t.id, t.name, `background:${ccThemeBg(t)};`)).join("")}
     </div>
-    <input type="hidden" id="ccp-theme" value="${ccEsc(cur || "")}">
-    <div class="muted-small" id="ccThemeName">${ccEsc((CC_THEMES.find(t => t.id === cur) || { name: "Automatic (by tier)" }).name)}</div></div>`;
+    <input type="hidden" id="ccp-theme" value="${cur}">
+    <div class="muted-small">Automatic uses the standard colour for the card's position in the range.</div></div>`;
 }
 function ccPickTheme(id) {
   document.getElementById("ccp-theme").value = id;
-  const t = CC_THEMES.find(x => x.id === id);
-  document.getElementById("ccThemeName").textContent = t ? t.name : "Automatic (by tier)";
-  document.querySelectorAll("#ccThemePicker .cc-swatch").forEach(b => { b.style.borderColor = b.dataset.theme === id ? "#1f2b44" : "transparent"; });
+  document.querySelectorAll("#ccThemePicker .cc-theme").forEach(b => {
+    const on = b.dataset.theme === id;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", on ? "true" : "false");
+  });
+}
+// Keep the previews showing the plan's real name and limit as the teacher types
+function ccThemeLive() {
+  const n = document.getElementById("ccp-name"), l = document.getElementById("ccp-limit");
+  document.querySelectorAll("#ccThemePicker .cc-mini-name").forEach(el => { el.textContent = (n && n.value.trim()) || "Card name"; });
+  document.querySelectorAll("#ccThemePicker .cc-mini-limit").forEach(el => { el.textContent = fmtMoney(Number(l && l.value) || 0); });
+}
+// Fill the "Automatic" preview with whatever colour the stylesheet really gives this tier
+function ccThemeInit(planId) {
+  ["ccp-name", "ccp-limit"].forEach(i => { const el = document.getElementById(i); if (el) el.addEventListener("input", ccThemeLive); });
+  const auto = document.querySelector("#ccThemePicker .cc-theme.auto .cc-mini");
+  if (!auto) return;
+  const probe = document.createElement("div");
+  probe.className = "cc-visual cc-t" + (planId ? ccTier(CC_CLS, planId) : 0);
+  probe.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;";
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe);
+  if (cs.backgroundImage && cs.backgroundImage !== "none") {
+    auto.style.background = `${cs.backgroundImage}`;
+    auto.style.backgroundColor = cs.backgroundColor;
+    auto.style.color = "#fff";
+  }
+  probe.remove();
 }
 
 /* ---------------- Little building blocks ---------------- */
@@ -411,7 +472,7 @@ function ccPlanFormHtml(p) {
     <h3>${p.id ? "Edit plan" : "New plan"}</h3>
     <div class="cc-form-grid">
       <div class="wide"><label for="ccp-name">Plan name</label><input id="ccp-name" maxlength="40" value="${ccEsc(p.name)}" placeholder="e.g. Everyday Classic" required></div>
-      ${ccThemePickerHtml(p.theme)}
+      ${ccThemePickerHtml(p)}
       ${fld("limit", "Spending limit ($)", p.limit, "1")}
       ${fld("rate", "Interest (% every 2 weeks)", p.rate, "0.01", "On what's owed if the last statement wasn't paid in full")}
       ${fld("fee", "Monthly fee ($)", p.monthlyFee, "0.01", "Charged every 4 weeks")}
@@ -433,6 +494,7 @@ function ccEditPlan(id) {
   const f = document.getElementById("ccPlanForm");
   f.innerHTML = ccPlanFormHtml(p);
   f.classList.remove("hidden");
+  ccThemeInit(id);
   document.getElementById("ccNewBtn").classList.add("hidden");
   f.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -446,12 +508,19 @@ async function ccSavePlan(e) {
   const vouchers = [0, 1].map(i => ({ kind: g("vk" + i), value: g("vv" + i) })).filter(v => v.kind && Number(v.value) > 0);
   const id = g("id");
   const old = id ? (CC_CLS.cardPlans || []).find(p => p.id === id) : null;
+  const g0name = g("name");
+  const theme = CC_THEMES.some(t => t.id === g("theme")) ? g("theme") : "";
   await saveCardPlan(CURRENT.classCode, {
     id: id || undefined, name: g("name"), limit: g("limit"), rate: g("rate"), monthlyFee: g("fee"), freeDays: g("free"),
     minLifestyle: g("minls"), minPct: g("minpct"), lateFee: g("late"), cashbackPct: g("cash"), storeDiscountPct: g("disc"),
-    vouchers, theme: g("theme"), archived: old ? !!old.archived : false
+    vouchers, theme, archived: old ? !!old.archived : false
   });
   await render();
+  const saved = (CC_CLS.cardPlans || []).slice().reverse().find(p => id ? p.id === id : p.name === g0name);
+  if (theme && saved && saved.theme !== theme) {
+    ccMsg("ccTMsg", `<div class="error-msg">Plan saved, but the card colour wasn't kept — saveCardPlan() in data-money.js needs to store the <code>theme</code> field.</div>`);
+    return false;
+  }
   ccMsg("ccTMsg", `<div class="success-msg">Plan saved. Changes apply to existing cards at their next statement and in the store straight away.</div>`);
   return false;
 }
