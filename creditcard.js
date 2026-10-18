@@ -76,7 +76,7 @@ function ccInjectThemeCss() {
   display:none;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .cc-theme.on .cc-mini-tick{display:flex}
 .cc-theme-label{display:block;font-size:12px;font-weight:700;margin-top:7px}
-.cc-theme.auto .cc-mini{background:repeating-linear-gradient(45deg,#cfd6e2 0,#cfd6e2 6px,#e9edf4 6px,#e9edf4 12px);color:#1f2b44}
+.cc-theme.random .cc-mini{background:repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0,rgba(255,255,255,.07) 6px,rgba(255,255,255,0) 6px,rgba(255,255,255,0) 14px),linear-gradient(135deg,#4a7ae0,#9a86e6 25%,#e0586a 50%,#f2a65a 75%,#4fb8b0)}
 `;
   document.head.appendChild(st);
 }
@@ -88,16 +88,16 @@ function ccMiniCard(bgStyle, name, limit) {
 }
 function ccThemePickerHtml(p) {
   ccInjectThemeCss();
-  const cur = (CC_THEMES.some(t => t.id === p.theme) ? p.theme : "");
+  const cur = (CC_THEMES.some(t => t.id === p.theme) ? p.theme : "random");
   const name = p.name || "Card name", limit = fmtMoney(Number(p.limit) || 0);
   const tile = (id, label, bg, extra) => `<button type="button" role="radio" aria-checked="${cur === id}" class="cc-theme ${extra || ""} ${cur === id ? "on" : ""}" data-theme="${id}" onclick="ccPickTheme('${id}')">${ccMiniCard(bg, name, limit)}<span class="cc-theme-label">${label}</span></button>`;
   return `<div class="wide"><label>Card colour</label>
     <div class="cc-themes" id="ccThemePicker" role="radiogroup" aria-label="Card colour">
-      ${tile("", "Automatic", "", "auto")}
+      ${tile("random", "Random", "", "random")}
       ${CC_THEMES.map(t => tile(t.id, t.name, `background:${ccThemeBg(t)};`)).join("")}
     </div>
     <input type="hidden" id="ccp-theme" value="${cur}">
-    <div class="muted-small">Automatic uses the standard colour for the card's position in the range.</div></div>`;
+    <div class="muted-small">Random picks a colour no other card is using yet (any colour if they're all taken) when you save, then keeps it.</div></div>`;
 }
 function ccPickTheme(id) {
   document.getElementById("ccp-theme").value = id;
@@ -113,22 +113,18 @@ function ccThemeLive() {
   document.querySelectorAll("#ccThemePicker .cc-mini-name").forEach(el => { el.textContent = (n && n.value.trim()) || "Card name"; });
   document.querySelectorAll("#ccThemePicker .cc-mini-limit").forEach(el => { el.textContent = fmtMoney(Number(l && l.value) || 0); });
 }
-// Fill the "Automatic" preview with whatever colour the stylesheet really gives this tier
-function ccThemeInit(planId) {
+function ccThemeInit() {
   ["ccp-name", "ccp-limit"].forEach(i => { const el = document.getElementById(i); if (el) el.addEventListener("input", ccThemeLive); });
-  const auto = document.querySelector("#ccThemePicker .cc-theme.auto .cc-mini");
-  if (!auto) return;
-  const probe = document.createElement("div");
-  probe.className = "cc-visual cc-t" + (planId ? ccTier(CC_CLS, planId) : 0);
-  probe.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;";
-  document.body.appendChild(probe);
-  const cs = getComputedStyle(probe);
-  if (cs.backgroundImage && cs.backgroundImage !== "none") {
-    auto.style.background = `${cs.backgroundImage}`;
-    auto.style.backgroundColor = cs.backgroundColor;
-    auto.style.color = "#fff";
-  }
-  probe.remove();
+}
+// Random: prefer a colour no other live card uses; if none left, any colour. Never repeat this card's own colour when re-rolling.
+function ccRandomTheme(planId) {
+  const all = CC_CLS.cardPlans || [];
+  const used = new Set(all.filter(p => !p.archived && p.id !== planId).map(p => p.theme));
+  let pool = CC_THEMES.filter(t => !used.has(t.id));
+  if (!pool.length) pool = CC_THEMES.slice();
+  const own = planId ? ((all.find(p => p.id === planId) || {}).theme) : "";
+  if (pool.length > 1) pool = pool.filter(t => t.id !== own);
+  return pool[Math.floor(Math.random() * pool.length)].id;
 }
 
 /* ---------------- Little building blocks ---------------- */
@@ -494,7 +490,7 @@ function ccEditPlan(id) {
   const f = document.getElementById("ccPlanForm");
   f.innerHTML = ccPlanFormHtml(p);
   f.classList.remove("hidden");
-  ccThemeInit(id);
+  ccThemeInit();
   document.getElementById("ccNewBtn").classList.add("hidden");
   f.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -509,7 +505,7 @@ async function ccSavePlan(e) {
   const id = g("id");
   const old = id ? (CC_CLS.cardPlans || []).find(p => p.id === id) : null;
   const g0name = g("name");
-  const theme = CC_THEMES.some(t => t.id === g("theme")) ? g("theme") : "";
+  const theme = CC_THEMES.some(t => t.id === g("theme")) ? g("theme") : ccRandomTheme(id);
   await saveCardPlan(CURRENT.classCode, {
     id: id || undefined, name: g("name"), limit: g("limit"), rate: g("rate"), monthlyFee: g("fee"), freeDays: g("free"),
     minLifestyle: g("minls"), minPct: g("minpct"), lateFee: g("late"), cashbackPct: g("cash"), storeDiscountPct: g("disc"),
