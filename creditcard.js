@@ -192,7 +192,7 @@ function ccActiveHtml(me, cls) {
         <div class="cc-limit-bar"><div class="cc-limit-fill ${usedPct > 85 ? "hot" : ""}" style="width:${usedPct.toFixed(1)}%"></div></div>
         <div class="cc-limit-sub">${unbilled > 0 ? `${fmtMoney(unbilled)} spent since your last statement · it closes ${ccEsc(cardDateLabel(c.nextCloseKey))}` : `Next statement closes ${ccEsc(cardDateLabel(c.nextCloseKey))}`}</div>
       </div>
-      <label class="cc-check" style="margin:6px 0;"><input type="checkbox" ${c.eventsOnCard ? "checked" : ""} onchange="ccSetEventsPref(this.checked)"> Put unexpected costs (random events) on this card first</label>
+      <label class="cc-check cc-check-tile"><input type="checkbox" ${c.eventsOnCard ? "checked" : ""} onchange="ccSetEventsPref(this.checked)"> Put unexpected costs (random events) on this card first</label>
       <div class="muted-small" style="margin-bottom:8px;">Big events ask you how to pay each time. Random events can't ask first, so this is their default (cash covers anything over your limit).</div>
       <div class="cc-pay">
         <label for="ccPayAmt">Make a payment <span class="muted-small">from your cash (${fmtMoney(me.balance)})</span></label>
@@ -285,7 +285,7 @@ function ccRenderTeacher(cls, students) {
   }).join("") : `<div class="empty-state"><p>No plans yet. Add your first one below — try a basic card with a low limit, then a premium one with better perks.</p></div>`;
 
   const pendRows = pending.length ? `<h3 class="cc-sub">${icon("calendar", 16)} Waiting for approval (${pending.length})</h3>
-    <div class="table-scroll"><table><thead><tr><th>Student</th><th>Card</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(s => {
+    <div class="table-scroll cc-tablewrap"><table><thead><tr><th>Student</th><th>Card</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(s => {
       const p = cardPlanById(cls, s.creditCard.planId); if (!p) return "";
       const sc = lifestyleRatingFromData(cls, s, s.username), ok = sc >= p.minLifestyle;
       return `<tr><td>${ccEsc(s.name)}</td><td>${ccEsc(p.name)} · ${fmtMoney(p.limit)}</td>
@@ -295,7 +295,7 @@ function ccRenderTeacher(cls, students) {
     }).join("")}</tbody></table></div>` : "";
 
   const cardRows = active.length ? `<h3 class="cc-sub">${icon("users", 16)} Cards in use (${active.length})</h3>
-    <div class="table-scroll"><table><thead><tr><th>Student</th><th>Card</th><th>Owing</th><th>Unpaid statement</th><th>Due</th><th>Status</th></tr></thead><tbody>${active.map(s => {
+    <div class="table-scroll cc-tablewrap"><table><thead><tr><th>Student</th><th>Card</th><th>Owing</th><th>Unpaid statement</th><th>Due</th><th>Status</th></tr></thead><tbody>${active.map(s => {
       const c = s.creditCard, p = cardPlanById(cls, c.planId), rem = cardStmtRemaining(c);
       let status = `<span class="badge mint">Clear</span>`, due = "—";
       if (c.stmt && rem > 0.004) {
@@ -305,20 +305,38 @@ function ccRenderTeacher(cls, students) {
       return `<tr><td>${ccEsc(s.name)}</td><td>${p ? ccEsc(p.name) : "—"}</td><td>${fmtMoney(c.balance || 0)}</td><td>${rem > 0.004 ? fmtMoney(rem) : "—"}</td><td>${due}</td><td>${status}</td></tr>`;
     }).join("")}</tbody></table></div>` : "";
 
+  const overdueN = active.filter(s => { const c = s.creditCard; return c.stmt && cardStmtRemaining(c) > 0.004 && daysBetweenKeys(today, c.stmt.dueKey) < 0; }).length;
+  const penNum = (id, val, ph) => `<input id="${id}" type="number" min="0" step="1" value="${val}" ${ph ? `placeholder="${ph}"` : ""} onchange="ccSaveSettings()">`;
+
   el.innerHTML = `
     <div class="flex-between cc-head"><h2 id="hCardT">${icon("cards", 20)} Credit cards</h2>
       <label class="cc-switch"><input type="checkbox" id="ccsEnabled" ${st.enabled ? "checked" : ""} onchange="ccSaveSettings()"><span class="cc-switch-track"></span><span>${st.enabled ? "On for students" : "Off"}</span></label></div>
     <p class="cc-intro">Students spend now and pay later, like a real New Zealand card. Statements close every 2 weeks; pay the closing balance by the due date to avoid interest.</p>
-    <div class="cc-tsettings">
-      <div><label for="ccsApproval">New cards</label>
-        <select id="ccsApproval" onchange="ccSaveSettings()"><option value="teacher" ${st.approval === "teacher" ? "selected" : ""}>You approve each one</option><option value="instant" ${st.approval === "instant" ? "selected" : ""}>Instant for eligible students</option></select></div>
-      <div><label for="ccsDay">Statement closes on</label><select id="ccsDay" onchange="ccSaveSettings()">${dayOpts}</select></div>
-      <div><label for="ccsSplit">Part-payments from ($)</label><input id="ccsSplit" type="number" min="0" step="1" value="${st.splitMin}" onchange="ccSaveSettings()">
-        <div class="muted-small">Smallest purchase a student may split between card and cash. A purchase the card can't cover can always be split.</div></div>
-      <div class="cc-pen-box"><label class="cc-check"><input type="checkbox" id="ccsPenOn" ${pen.enabled ? "checked" : ""} onchange="ccSaveSettings()"> Lifestyle penalty for unpaid balance</label>
-        <div class="cc-pen-row"><span>−</span><input id="ccsPenPts" type="number" min="0" step="1" value="${pen.points || 1}" onchange="ccSaveSettings()"><span>pt per</span><span>$</span><input id="ccsPenAmt" type="number" min="0" step="1" value="${pen.perAmount || ""}" placeholder="50" onchange="ccSaveSettings()"><span>unpaid</span></div>
-        <div class="muted-small">Counts last statement's unpaid closing balance, starting the day it closes (free days included).</div></div>
+    <div class="cc-tstats">
+      <div class="cc-tstat"><span>Cards in use</span><strong>${active.length}</strong></div>
+      <div class="cc-tstat ${pending.length ? "alert" : ""}"><span>Waiting for approval</span><strong>${pending.length}</strong></div>
+      <div class="cc-tstat ${overdueN ? "bad" : ""}"><span>Overdue</span><strong>${overdueN}</strong></div>
+      <div class="cc-tstat"><span>Plans on offer</span><strong>${live.length}</strong></div>
     </div>
+    <section class="cc-panel">
+      <div class="cc-panel-head"><h3>${icon("settings", 16)} Settings</h3><span class="muted-small">Changes save as soon as you make them</span></div>
+      <div class="cc-settings">
+        <div class="cc-set"><label for="ccsApproval">New cards</label><p>Who decides when a student applies.</p>
+          <select id="ccsApproval" onchange="ccSaveSettings()"><option value="teacher" ${st.approval === "teacher" ? "selected" : ""}>You approve each one</option><option value="instant" ${st.approval === "instant" ? "selected" : ""}>Instant for eligible students</option></select></div>
+        <div class="cc-set"><label for="ccsDay">Statement closes on</label><p>Statements then close every 2 weeks.</p>
+          <select id="ccsDay" onchange="ccSaveSettings()">${dayOpts}</select></div>
+        <div class="cc-set"><label for="ccsSplit">Part-payments from</label><p>Smallest purchase a student may split between card and cash. A purchase the card can't cover can always be split.</p>
+          <div class="cc-num money"><i>$</i><input id="ccsSplit" type="number" min="0" step="1" value="${st.splitMin}" onchange="ccSaveSettings()"></div></div>
+        <div class="cc-set cc-set-pen ${pen.enabled ? "" : "is-off"}">
+          <div class="cc-set-text"><label for="ccsPenOn">Lifestyle penalty for unpaid balance</label>
+            <p>Counts last statement's unpaid closing balance, starting the day it closes (free days included).</p></div>
+          <div class="cc-set-ctl">
+            <label class="cc-switch"><input type="checkbox" id="ccsPenOn" ${pen.enabled ? "checked" : ""} onchange="ccSaveSettings()"><span class="cc-switch-track"></span><span>${pen.enabled ? "On" : "Off"}</span></label>
+            <div class="cc-sentence"><span>−</span><div class="cc-num">${penNum("ccsPenPts", pen.points || 1)}</div><span>pt per</span><div class="cc-num money"><i>$</i>${penNum("ccsPenAmt", pen.perAmount || "", "50")}</div><span>unpaid</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
     <div id="ccTMsg"></div>
     <h3 class="cc-sub">${icon("cards", 16)} Plans</h3>
     <div class="cc-tplans">${planRows}</div>

@@ -3611,6 +3611,9 @@ const MODULE_LOCK_MESSAGE = {
 const NAV_TEACHER_ONLY = ["reports.html", "quizzes.html"];
 function applyNavRoleVisibility(role) {
   if (role === "teacher") {
+    // The budget tab is "My budget" for students but a class-wide overview
+    // for teachers, so it reads "Budgeting" in their nav.
+    document.querySelectorAll('nav a[data-module="budget"] .nav-label').forEach(l => { l.textContent = "Budgeting"; });
     // BUGFIX: style.css hides the Quizzes/Reports links until <html> has
     // this class (so a student never sees them flash up while the page is
     // still working out who's logged in) — but nothing ever added it, so

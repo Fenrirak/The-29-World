@@ -2,7 +2,7 @@ let CURRENT, IS_TEACHER;
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("calendar", 26) + " My budget";
+  document.getElementById("pageTitle").innerHTML = icon("calendar", 26) + (IS_TEACHER ? " Budgeting" : " My budget");
   document.getElementById("hBudget").innerHTML = icon("calendar", 18) + " My budget";
   document.getElementById("hBudPlan").innerHTML = icon("piggy", 15) + " My plan";
   document.getElementById("hBudTrack").innerHTML = icon("chart", 15) + " How this week is going";
