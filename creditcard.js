@@ -16,6 +16,22 @@ function ccTier(cls, planId) {
   const i = plans.findIndex(p => p.id === planId);
   return (i < 0 ? 0 : i) % 5;
 }
+// Plans still store the tier's starting rating in `minLifestyle` (that is what
+// the server-side check compares against); these helpers show/pick it by tier name.
+function ccTierForRating(cls, rating) {
+  return ((cls && cls.lifestyleThresholds) || []).find(t => Number(t.min) === Number(rating)) || null;
+}
+function ccTierNeedText(cls, rating) {
+  const tier = ccTierForRating(cls, rating);
+  return tier ? `the <strong>${ccEsc(tier.label)}</strong> lifestyle tier (rating ${rating}+)` : `a lifestyle rating of <strong>${rating}</strong>`;
+}
+function ccTierSelectHtml(cls, rating) {
+  const th = (cls && cls.lifestyleThresholds) || [];
+  const cur = Number(rating) || 0;
+  const opts = th.map(x => `<option value="${x.min}" ${Number(x.min) === cur ? "selected" : ""}>${ccEsc(x.label)} (rating ${x.min}+)</option>`);
+  if (!th.some(x => Number(x.min) === cur)) opts.unshift(`<option value="${cur}" selected>${cur > 0 ? "Custom — rating " + cur + "+" : "No minimum"}</option>`);
+  return `<select id="ccp-minls">${opts.join("")}</select>`;
+}
 function ccPlural(n, w) { return `${n} ${w}${n === 1 ? "" : "s"}`; }
 
 /* ---------------- Little building blocks ---------------- */
@@ -108,7 +124,7 @@ function ccPlanTile(me, cls, p, score) {
       ${ccFacts(p)}
       <div class="cc-perks">${ccPerks(p)}</div>
       ${locked
-        ? `<div class="cc-lock">${icon("lock", 14)}<span>Needs a lifestyle rating of <strong>${p.minLifestyle}</strong> — yours is ${Math.floor(score * 10) / 10}</span></div>`
+        ? `<div class="cc-lock">${icon("lock", 14)}<span>Needs ${ccTierNeedText(cls, p.minLifestyle)} — yours is ${Math.floor(score * 10) / 10}</span></div>`
         : `<button class="btn gold" onclick="ccApply('${ccEsc(p.id)}')">${cardSettings(cls).approval === "instant" ? "Get this card" : "Apply for this card"}</button>`}
     </div>
   </div>`;
@@ -278,7 +294,7 @@ function ccRenderTeacher(cls, students) {
         <div class="cc-tplan-top"><strong>${ccEsc(p.name)}</strong><span class="badge navy">${ccPlural(n, "holder")}</span></div>
         ${ccFacts(p)}
         <div class="cc-perks">${ccPerks(p)}</div>
-        <div class="muted-small">Needs lifestyle rating ${p.minLifestyle}+</div>
+        <div class="muted-small">${ccTierForRating(cls, p.minLifestyle) ? "Needs the " + ccEsc(ccTierForRating(cls, p.minLifestyle).label) + " tier or higher" : "Needs lifestyle rating " + p.minLifestyle + "+"}</div>
         <div class="cc-tplan-actions"><button class="btn small" onclick="ccEditPlan('${ccEsc(p.id)}')">Edit</button>
           <button class="btn small coral" onclick="ccRemovePlan('${ccEsc(p.id)}')">${n > 0 ? "Retire" : "Delete"}</button></div>
       </div></div>`;
@@ -289,7 +305,7 @@ function ccRenderTeacher(cls, students) {
       const p = cardPlanById(cls, s.creditCard.planId); if (!p) return "";
       const sc = lifestyleRatingFromData(cls, s, s.username), ok = sc >= p.minLifestyle;
       return `<tr><td>${ccEsc(s.name)}</td><td>${ccEsc(p.name)} · ${fmtMoney(p.limit)}</td>
-        <td><span class="badge ${ok ? "mint" : "coral"}">${Math.floor(sc * 10) / 10} / ${p.minLifestyle} needed</span></td>
+        <td><span class="badge ${ok ? "mint" : "coral"}">${Math.floor(sc * 10) / 10} / ${p.minLifestyle} needed${ccTierForRating(cls, p.minLifestyle) ? " (" + ccEsc(ccTierForRating(cls, p.minLifestyle).label) + ")" : ""}</span></td>
         <td class="cc-row-actions"><button class="btn small mint" onclick="ccApprove('${ccEsc(s.username)}', ${ok})">Approve</button>
           <button class="btn small coral" onclick="ccDecline('${ccEsc(s.username)}')">Decline</button></td></tr>`;
     }).join("")}</tbody></table></div>` : "";
@@ -363,8 +379,8 @@ function ccPlanFormHtml(p) {
       ${fld("rate", "Interest (% every 2 weeks)", p.rate, "0.01", "On what's owed if the last statement wasn't paid in full")}
       ${fld("fee", "Monthly fee ($)", p.monthlyFee, "0.01", "Charged every 4 weeks")}
       ${fld("free", "Interest-free days to pay", p.freeDays, "1", "0–" + CARD_MAX_FREE_DAYS + " days after the statement closes")}
-      ${fld("minls", "Minimum lifestyle rating", p.minLifestyle, "1")}
-      ${fld("minpct", "Minimum payment (%)", p.minPct, "0.1", "% of the closing balance")}
+      <div><label for="ccp-minls">Minimum lifestyle tier</label>${ccTierSelectHtml(CC_CLS, p.minLifestyle)}<div class="muted-small">Students need at least this tier to get the card</div></div>
+      ${fld("minpct", "Minimum payment (%)", p.minPct, "0.1", "Smallest repayment due by the due date, as a % of the closing balance")}
       ${fld("late", "Late fee ($)", p.lateFee, "0.01", "If the minimum isn't paid by the due date")}
       ${fld("cash", "Cashback (%)", p.cashbackPct, "0.1", "Of card spending, credited each statement")}
       ${fld("disc", "Class store discount (%)", p.storeDiscountPct, "0.1", "When paying with this card")}
