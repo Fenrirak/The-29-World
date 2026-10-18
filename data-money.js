@@ -4147,6 +4147,8 @@ function cardMakeActive(plan, cls, todayKey) {
     lifetime: { cashback: 0, interest: 0, fees: 0 }
   };
 }
+// Card colour themes a teacher can pick (the colours themselves live in creditcard.js)
+const CARD_THEME_IDS = ["ocean", "violet", "midnight", "emerald", "ruby", "sunset", "gold", "rose", "forest", "teal", "slate", "plum"];
 function cardCleanPlan(p) {
   const num = (v, min, max, dflt) => { let n = Number(v); if (!isFinite(n)) n = dflt; return Math.min(max, Math.max(min, n)); };
   const vouchers = (p.vouchers || [])
@@ -4164,7 +4166,8 @@ function cardCleanPlan(p) {
     lateFee: cardRound(num(p.lateFee, 0, 10000, 5)),
     cashbackPct: cardRound(num(p.cashbackPct, 0, 100, 0)),
     storeDiscountPct: cardRound(num(p.storeDiscountPct, 0, 100, 0)),
-    vouchers, archived: !!p.archived
+    vouchers, archived: !!p.archived,
+    theme: CARD_THEME_IDS.includes(p.theme) ? p.theme : ""
   };
 }
 
