@@ -710,6 +710,9 @@ async function teacherRemoveListing(classCode, listingId, reason) {
 async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, pay) {
   const classRef = classesCol().doc(classCode);
   let receipt = null, buyPay = null;
+  // pay.fromDefault = an accepted offer: the buyer isn't here to choose, so the
+  // sale comes out of the account they picked as their Trade Centre default.
+  const fromDefault = !!(pay && pay.fromDefault);
 
   // The seller's username lives on the listing, which we can only read
   // inside the transaction — but a transaction's reads must all happen
@@ -756,7 +759,11 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
       // Paying by credit card works for things (store items, vehicles) — not for a
       // house, which in real life is settled by bank transfer. A part-payment is
       // allowed like anywhere else (see cardPayInTxn). Offers the seller accepts later
-      // are settled in cash, since the buyer isn't there to choose.
+      // come out of the buyer's chosen default account (mpPayDefault).
+      if (fromDefault) {
+        // Houses can't go on a card, so a card default pays for those in cash.
+        pay = (!buyerIsTeacher && buyer.mpPayDefault === "card" && listing.assetType !== "property") ? { useCard: true } : {};
+      }
       if (pay && pay.useCard && listing.assetType === "property") throw new Error("NOCARD_ITEM");
       buyPay = { card: 0, cash: price };
       if (!buyerIsTeacher) buyPay = cardPayInTxn(buyer, cls, price, pay);
@@ -862,6 +869,9 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
         left: listing.status === "active" ? listingQuantity(listing) : 0 };
     });
   } catch (e) {
+    if (fromDefault && (e.message === "LIMIT" || e.message === "NOCARD" || e.message === "BROKE")) {
+      return { ok: false, error: "The buyer's chosen payment account can't cover this offer right now, so it couldn't be accepted." };
+    }
     { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };
     if (e.message === "CLOSED") return { ok: false, error: "Someone got there first — that listing is no longer for sale." };
@@ -887,6 +897,12 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
     note: `Sold to a classmate: ${receipt.name}` + (receipt.fee > 0 ? ` (${fmtMoney(receipt.fee)} market fee deducted)` : "")
   });
   return Object.assign({ ok: true }, receipt);
+}
+
+// The account a student's accepted offers are paid from ("cash" or "card").
+async function setMarketplacePayDefault(username, useCard) {
+  await usersCol().doc(username).update({ mpPayDefault: useCard ? "card" : "cash" });
+  return { ok: true };
 }
 
 async function buyListing(username, classCode, listingId, pay) {
@@ -956,7 +972,7 @@ async function acceptOffer(username, classCode, listingId, offerId) {
   // The sale itself re-validates everything (funds, ownership, the lot).
   // Marking the offer "accepted" only means anything once the sale has
   // actually gone through, so that write happens after it, never before.
-  const res = await _settleListing(classCode, listingId, o.buyer, o.amount);
+  const res = await _settleListing(classCode, listingId, o.buyer, o.amount, { fromDefault: true });
   if (!res.ok) return res;
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {

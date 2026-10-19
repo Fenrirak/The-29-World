@@ -158,6 +158,7 @@ async function pullListing(id) {
 /* ================= Student ================= */
 function renderStudent() {
   const mp = CLS.marketplace;
+  mktPayBarRender();
   const banner = document.getElementById("closedBanner");
   if (!mp.enabled) {
     banner.classList.remove("hidden");
@@ -289,7 +290,6 @@ function listingCardHtml(l, opts) {
     actions = `<button class="btn small secondary" onclick="cancelMine('${l.id}')">${icon("trash", 13)} Cancel listing</button>`;
   } else if (CLS.marketplace.enabled) {
     actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${icon("cart", 13)} ${qty > 1 ? "Buy 1" : "Buy"} for ${fmtMoney(l.price)}</button>`;
-    if (mktCanUseCard(l)) actions += `<span class="badge lilac" style="align-self:center;">Credit card accepted</span>`;
     if (CLS.marketplace.allowOffers) {
       actions += myOffer
         ? `<button class="btn small secondary" onclick="withdraw('${l.id}','${myOffer.id}')">Withdraw my ${fmtMoney(myOffer.amount)} offer</button>`
@@ -345,54 +345,79 @@ function listingCardHtml(l, opts) {
 
 function toggleOffer(id) { OFFERING = (OFFERING === id) ? null : id; renderStudent(); }
 
-/* ---------------- Buying: choose credit card or cash ----------------
-   Students with an active card see a Cash / Credit card box (the card option is
-   greyed out if the price is more than what's available). Houses are cash only.
-   Everyone else just gets a normal confirm. Returns {} for cash,
-   { useCard: true } for the card, or null if the student backs out. */
-function mktCanUseCard(l) {
-  if (!ME || !CLS || l.assetType === "property" || !cardIsActive(ME)) return false;
-  return !!cardPlanById(CLS, ME.creditCard.planId);
+/* ---------------- "Pay with" bar: cash or credit card ----------------
+   What's picked here is used for Buy now, and is saved as the student's default
+   account — the one accepted offers are taken from. Houses are always cash. */
+let MP_PAY = { useCard: false, split: false, cardMax: "", init: false };
+function mktHasCard() { return !!(ME && CLS && cardIsActive(ME) && cardPlanById(CLS, ME.creditCard.planId)); }
+function mktInjectCss() {
+  if (document.getElementById("mktPayCss")) return;
+  const st = document.createElement("style");
+  st.id = "mktPayCss";
+  st.textContent = `
+  .mkt-paybar{display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px;padding:14px 16px;margin:0 0 14px;border:1.5px solid var(--line,#dfe3ee);border-radius:16px;background:rgba(127,127,127,.07)}
+  .mkt-paybar.hidden{display:none}
+  .mkt-pb-seg{display:inline-flex;gap:4px;padding:4px;border-radius:14px;background:rgba(127,127,127,.15)}
+  .mkt-pb-seg button{border:0;background:transparent;color:inherit;border-radius:10px;padding:8px 18px;cursor:pointer;font:inherit;font-weight:700;display:flex;flex-direction:column;align-items:center;line-height:1.15;opacity:.7}
+  .mkt-pb-seg button small{font-size:.72em;font-weight:600}
+  .mkt-pb-seg button.on{background:var(--card-bg,#fff);color:var(--ink,#1f2b44);opacity:1;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  .mkt-pb-chips{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+  .mkt-chip{font-size:.8em;font-weight:700;padding:4px 12px;border-radius:999px;border:1px solid rgba(127,127,127,.35)}
+  .mkt-chip.mint{background:rgba(46,184,120,.15);border-color:rgba(46,184,120,.45)}
+  .mkt-pb-split{flex:1;min-width:220px}
+  .mkt-pb-note{flex-basis:100%;margin:0}`;
+  document.head.appendChild(st);
 }
-function mktAskPay(l) {
-  const several = listingQuantity(l) > 1;
-  const what = `${several ? "one " : ""}"${l.name}" from ${nameOf(l.seller)}`;
-  if (!mktCanUseCard(l)) {
-    return Promise.resolve(confirm(`Buy ${what} for ${fmtMoney(l.price)}?`) ? {} : null);
-  }
-  const avail = cardAvailable(ME.creditCard, cardPlanById(CLS, ME.creditCard.planId));
-  const fits = l.price <= avail + 0.004;
-  return new Promise(resolve => {
-    const wrap = document.createElement("div");
-    wrap.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;";
-    wrap.innerHTML = `<div class="card" style="max-width:380px;width:100%;margin:0;">
-      <h3 style="margin-top:0;">Buy ${esc(what)}</h3>
-      <p>Price: <strong>${fmtMoney(l.price)}</strong>. How do you want to pay?</p>
-      <button class="btn gold" id="mktPayCash" style="width:100%;margin-bottom:8px;" ${(ME.balance || 0) + 0.004 >= l.price ? "" : "disabled"}>Cash (${fmtMoney(ME.balance || 0)})</button>
-      <button class="btn" id="mktPayCard" style="width:100%;margin-bottom:8px;" ${fits ? "" : "disabled"}>Credit card (${fmtMoney(avail)} available)</button>
-      ${fits ? "" : `<div class="muted-small" style="margin-bottom:8px;">That's more than your card has available.</div>`}
-      <button class="btn secondary" id="mktPayNo" style="width:100%;">Cancel</button></div>`;
-    const done = v => { wrap.remove(); resolve(v); };
-    wrap.querySelector("#mktPayCash").onclick = () => done({});
-    wrap.querySelector("#mktPayCard").onclick = () => done({ useCard: true });
-    wrap.querySelector("#mktPayNo").onclick = () => done(null);
-    document.body.appendChild(wrap);
-  });
+function mktPayBarRender() {
+  const el = document.getElementById("mktPayBar");
+  if (!el) return;
+  if (!mktHasCard()) { el.classList.add("hidden"); MP_PAY.useCard = false; MP_PAY.split = false; return; }
+  mktInjectCss();
+  if (!MP_PAY.init) { MP_PAY.useCard = ME.mpPayDefault === "card"; MP_PAY.init = true; }
+  const plan = cardPlanById(CLS, ME.creditCard.planId);
+  const avail = cardAvailable(ME.creditCard, plan);
+  const useCard = MP_PAY.useCard;
+  el.classList.remove("hidden");
+  el.innerHTML = `
+    <strong>Pay with</strong>
+    <div class="mkt-pb-seg" role="group" aria-label="Payment method">
+      <button type="button" class="${useCard ? "" : "on"}" onclick="mktSetPay(false)">Cash<small>${fmtMoney(ME.balance || 0)}</small></button>
+      <button type="button" class="${useCard ? "on" : ""}" onclick="mktSetPay(true)">Credit card<small>${fmtMoney(avail)} available</small></button>
+    </div>
+    <div class="mkt-pb-chips">${useCard
+      ? (plan.cashbackPct > 0 ? `<span class="mkt-chip mint">${plan.cashbackPct}% cashback</span>` : "") + `<span class="mkt-chip">Billed on your next statement</span>`
+      : `<span class="mkt-chip">Switch to card for cashback</span>`}</div>
+    ${useCard ? `<div class="mkt-pb-split">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:700;"><input type="checkbox" style="width:20px;height:20px;min-height:auto;" ${MP_PAY.split ? "checked" : ""} onchange="mktSetSplit(this.checked)"> Part card, part cash</label>
+      ${MP_PAY.split ? `<div style="margin-top:6px;">Card covers up to $<input id="mktCardMax" type="number" min="0.01" step="0.01" style="width:100px" value="${esc(MP_PAY.cardMax)}" placeholder="all it can" onchange="mktSetCardMax(this.value)"></div>` : ""}
+      <div class="muted-small">Splitting works on purchases of ${fmtMoney(cardSettings(CLS).splitMin)} or more, or whenever the card can't cover it all.</div></div>` : ""}
+    <p class="muted-small mkt-pb-note">This is also your default account: when a classmate accepts one of your offers, it comes out of ${useCard ? "your credit card" : "your cash"}. Houses are always paid in cash.</p>`;
 }
+async function mktSetPay(useCard) {
+  MP_PAY.useCard = !!useCard;
+  if (!useCard) MP_PAY.split = false;
+  if (ME) ME.mpPayDefault = useCard ? "card" : "cash";
+  mktPayBarRender();
+  try { await setMarketplacePayDefault(CURRENT.username, !!useCard); } catch (e) { console.error("save default account", e); }
+}
+function mktSetSplit(on) { MP_PAY.split = !!on; mktPayBarRender(); }
+function mktSetCardMax(v) { MP_PAY.cardMax = v === "" ? "" : String(Math.max(0, Number(v) || 0)); }
 
 async function buyIt(id) {
   const l = (CLS.listings || []).find(x => x.id === id);
   if (!l) return;
-  // Fresh copy of the student, so a card approved a moment ago is picked up.
-  try { const fresh = await getUser(CURRENT.username); if (fresh) ME = Object.assign({ username: CURRENT.username }, fresh); } catch (e) {}
-  const pay = await mktAskPay(l);
-  if (!pay) return; // backed out
+  const several = listingQuantity(l) > 1;
+  const isHouse = l.assetType === "property";
+  const card = mktHasCard() && MP_PAY.useCard && !isHouse;
+  const how = card ? (MP_PAY.split ? "part on your credit card, the rest in cash" : "on your credit card") : "in cash";
+  if (!confirm(`Buy ${several ? "one " : ""}"${l.name}" from ${nameOf(l.seller)} for ${fmtMoney(l.price)}, paid ${how}?${isHouse && mktHasCard() && MP_PAY.useCard ? " (Houses are always paid in cash.)" : ""}`)) return;
+  const pay = card ? { useCard: true, split: MP_PAY.split, cardMax: MP_PAY.cardMax } : {};
   const res = await buyListing(CURRENT.username, CURRENT.classCode, id, pay);
   await render();
   if (res.ok) {
     // The listing's card may be gone once it's sold, so the message goes
     // in the box at the top of the list instead.
-    flashMsg(document.getElementById("browseMsg"), `<div class="success-msg">Bought ${esc(l.name)}${pay.useCard ? " on your credit card" : ""}! It's yours now.${res.left > 0 ? ` ${res.left} more still for sale.` : ""}</div>`);
+    flashMsg(document.getElementById("browseMsg"), `<div class="success-msg">Bought ${esc(l.name)}${card ? " with your credit card" : ""}! It's yours now.${res.left > 0 ? ` ${res.left} more still for sale.` : ""}</div>`);
     return;
   }
   const box = document.getElementById("msg-" + id);
