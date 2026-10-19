@@ -4414,6 +4414,11 @@ function cardSplitAllowed(user, cls, total) {
   const avail = cardAvailable(user.creditCard, plan);
   return avail > 0.004 && (total >= cardSettings(cls).splitMin - 0.004 || total > avail + 0.004);
 }
+// The account the Store pre-selects for a student ("cash" or "card").
+async function setStorePayDefault(username, useCard) {
+  await usersCol().doc(username).update({ storePayDefault: useCard ? "card" : "cash" });
+  return { ok: true };
+}
 // Runs INSIDE the caller's transaction. Mutates user.creditCard (the caller
 // writes it back when card > 0) and returns { card, cash }; the caller
 // takes `cash` off user.balance. opts: { useCard, split, cardMax }.

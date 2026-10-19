@@ -371,7 +371,7 @@ function mktInjectCss() {
 function mktPayBarRender() {
   const el = document.getElementById("mktPayBar");
   if (!el) return;
-  if (!mktHasCard()) { el.classList.add("hidden"); MP_PAY.useCard = false; MP_PAY.split = false; return; }
+  if (!mktHasCard()) { el.classList.add("hidden"); MP_PAY.useCard = false; MP_PAY.split = false; MP_PAY.init = false; return; }
   mktInjectCss();
   if (!MP_PAY.init) { MP_PAY.useCard = ME.mpPayDefault === "card"; MP_PAY.init = true; }
   const plan = cardPlanById(CLS, ME.creditCard.planId);

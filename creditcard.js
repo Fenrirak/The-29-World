@@ -653,6 +653,7 @@ function ccStoreBarRender(me, cls) {
   if (!plan) { el.classList.add("hidden"); CC_STORE_PAY = { useCard: false, voucherId: "", split: false, cardMax: "" }; return; }
   const vs = cardUsableVouchers(me, nzDateKey());
   if (!vs.some(v => v.id === CC_STORE_PAY.voucherId)) CC_STORE_PAY.voucherId = "";
+  if (!CC_STORE_PAY.init) { CC_STORE_PAY.useCard = me.storePayDefault === "card"; CC_STORE_PAY.init = true; }
   const useCard = CC_STORE_PAY.useCard;
   const avail = cardAvailable(me.creditCard, plan);
   el.classList.remove("hidden");
@@ -675,7 +676,13 @@ function ccStoreBarRender(me, cls) {
     ${vs.length ? `<div class="cc-pb-voucher"><label for="ccStoreVoucher">${icon("trophy", 14)} Voucher</label>
       <select id="ccStoreVoucher" onchange="ccStoreSetVoucher(this.value)"><option value="">None</option>${vs.map(v => `<option value="${ccEsc(v.id)}" ${CC_STORE_PAY.voucherId === v.id ? "selected" : ""}>${ccEsc(cardVoucherLabel(v))} · by ${ccEsc(cardDateLabel(v.expiryKey))}</option>`).join("")}</select></div>` : ""}`;
 }
-function ccStoreSetPay(useCard) { CC_STORE_PAY.useCard = !!useCard; ccStoreRefresh(); }
+async function ccStoreSetPay(useCard) {
+  CC_STORE_PAY.useCard = !!useCard;
+  if (!useCard) CC_STORE_PAY.split = false;
+  if (typeof ME_CACHE !== "undefined" && ME_CACHE) ME_CACHE.storePayDefault = useCard ? "card" : "cash";
+  ccStoreRefresh();
+  try { await setStorePayDefault(CURRENT.username, !!useCard); } catch (e) { console.error("save store default account", e); }
+}
 function ccStoreSetSplit(on) { CC_STORE_PAY.split = !!on; ccStoreRefresh(); }
 function ccStoreSetCardMax(v) { CC_STORE_PAY.cardMax = v === "" ? "" : String(Math.max(0, Number(v) || 0)); ccStoreRefresh(); }
 function ccStoreSetVoucher(id) { CC_STORE_PAY.voucherId = id || ""; ccStoreRefresh(); }
