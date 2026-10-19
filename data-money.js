@@ -1521,9 +1521,11 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
         );
         if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
       }
+      // A credit card can pay the teacher (and earns cashback) but never a classmate.
+      if (useCard && toUser !== cls.teacher) throw new Error("CARD_STUDENT");
       cls.automations.push({
         id: uid("auto"), studentUser, dayOfWeek, frequency,
-        amount: Number(amount), toUser, note: noteTrimmed, lastRun: null, active: true, useCard: !!useCard && toUser !== AUTOPAY_ALL_STUDENTS
+        amount: Number(amount), toUser, note: noteTrimmed, lastRun: null, active: true, useCard: !!useCard && toUser === cls.teacher
       });
       t.update(classRef, { automations: cls.automations });
     });
@@ -1531,6 +1533,7 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
     if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
     if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day and reference message)." };
     if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic payment set up with the same amount, recipient and day." };
+    if (e.message === "CARD_STUDENT") return { ok: false, error: "A credit card can only pay your teacher. Payments to classmates have to come from your cash." };
     return { ok: false, error: "Class not found." };
   }
   return { ok: true };
@@ -1639,14 +1642,16 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
         );
         if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
       }
+      if (useCard && toUser !== cls.teacher) throw new Error("CARD_STUDENT");
       cls.automations[idx] = {
-        ...existing, dayOfWeek, frequency, amount: Number(amount), toUser, note: noteTrimmed, useCard: !!useCard && toUser !== AUTOPAY_ALL_STUDENTS
+        ...existing, dayOfWeek, frequency, amount: Number(amount), toUser, note: noteTrimmed, useCard: !!useCard && toUser === cls.teacher
       };
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
     if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day and reference message)." };
     if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic payment set up with the same amount, recipient and day." };
+    if (e.message === "CARD_STUDENT") return { ok: false, error: "A credit card can only pay your teacher. Payments to classmates have to come from your cash." };
     return { ok: false, error: e.message === "NOT_FOUND" ? "Automatic payment not found." : "Class not found." };
   }
   return { ok: true };
@@ -2021,11 +2026,15 @@ async function processAutomations(classCode) {
           // Teachers have unlimited funds (same rule as transferMoney()).
           const fromIsTeacher = from.role === "teacher";
           let paidByCard = false;
+          // A card only ever pays the teacher. An older automation to a classmate that
+          // still has the card ticked is paid from cash instead (and the tick is cleared).
+          // The same goes if the card has since been cancelled — it would otherwise never pay.
+          if (g.liveAuto.useCard && (to.role !== "teacher" || !cardIsActive(from))) g.liveAuto.useCard = false;
           if (!fromIsTeacher && g.liveAuto.useCard) {
             // Charged to the student's credit card instead of cash. Throws
             // (LIMIT / NOCARD) if the card can't take it — caught below, so
             // nothing moves and it tries again next load, like "can't afford".
-            cardPayInTxn(from, liveCls, amt, { useCard: true });
+            cardPayInTxn(from, liveCls, amt, { useCard: true }); // paying the teacher counts as card spending, so it earns cashback
             t.update(fromRef, { creditCard: from.creditCard });
             paidByCard = true;
           } else {
@@ -3424,10 +3433,22 @@ function budgetWeekItems(cls, user, username) {
     const cs = user.creditCard.stmt, owe = cardStmtRemaining(user.creditCard);
     if (cs && owe > 0 && cs.dueKey <= weekEndKey) {
       const overdue = cs.dueKey < todayKey;
-      items.push({ key: "card-stmt", dir: "out", icon: "cards", label: "Credit card statement", amount: owe,
+      items.push({ key: "card-stmt", dir: "out", settle: true, icon: "cards", label: "Credit card statement", amount: owe,
         dayKey: overdue ? todayKey : cs.dueKey, status: overdue ? "overdue" : budgetStatus(cs.dueKey, todayKey, false), where: "Bank",
         note: (overdue ? "Overdue — pay it on the Bank page" : "Due " + (cs.dueKey === todayKey ? "today" : dayWord(cs.dueKey)) + " — pay it on the Bank page")
           + " (pay it all by the due date to avoid interest)" });
+    }
+    // A statement that closes this week AND falls due this week (few or no interest-free
+    // days): what's on the card now becomes a bill before the week is out.
+    const nx = cardBudgetInfo(cls, user);
+    if (nx && nx.unbilled > 0.004 && nx.nextCloseKey >= weekStartKey && nx.nextCloseKey <= weekEndKey) {
+      const dueKey = dateKeyPlusDays(nx.nextCloseKey, nx.plan.freeDays || 0);
+      const est = budgetRound(Math.max(0, nx.unbilled - nx.cashback));
+      if (dueKey <= weekEndKey && est > 0) {
+        items.push({ key: "card-stmt-next", dir: "out", settle: true, estimate: true, icon: "cards", label: "Credit card statement (closing)", amount: est,
+          dayKey: dueKey, status: budgetStatus(dueKey, todayKey, false), where: "Bank",
+          note: `About ${fmtMoney(est)} — what's on your card now, after cashback, once the statement closes ${cardDateLabel(nx.nextCloseKey)}. Pay it on the Bank page.` });
+      }
     }
   }
   (cls.automations || []).forEach(a => {
@@ -3435,9 +3456,15 @@ function budgetWeekItems(cls, user, username) {
     const when = budgetAutoThisWeek(a, weekStartKey);
     if (!when || !(Number(a.amount) > 0)) return;
     const status = budgetStatus(when.dayKey, todayKey, when.done);
-    items.push({ key: "auto-" + a.id, dir: "out", icon: "repeat", label: a.note || "Automatic payment", amount: budgetRound(a.amount), dayKey: when.dayKey, status,
-      note: status === "done" ? "Paid" : status === "missed" ? "Didn't go out — not enough cash on the day"
-        : "Goes out by itself" + (a.toUser === cls.teacher ? ", to your teacher" : "") });
+    // On the credit card (only ever to the teacher): no cash leaves, it goes onto the card,
+    // so it isn't part of the cash this week needs. It still counts as a bill.
+    const onCard = !!a.useCard && a.toUser === cls.teacher && cardIsActive(user);
+    items.push({ key: "auto-" + a.id, dir: "out", card: onCard, icon: "repeat", label: a.note || "Automatic payment", amount: budgetRound(a.amount), dayKey: when.dayKey, status,
+      note: onCard
+        ? (status === "done" ? "Paid on your credit card" : status === "missed" ? "Didn't go out — your credit card didn't have room on the day"
+          : "Goes out by itself on your credit card, to your teacher")
+        : (status === "done" ? "Paid" : status === "missed" ? "Didn't go out — not enough cash on the day"
+          : "Goes out by itself" + (a.toUser === cls.teacher ? ", to your teacher" : "")) });
   });
 
   /* ---- Automatic saving (not bills: it's their own money, moved) ---- */
@@ -3507,7 +3534,11 @@ function budgetWeekActuals(cls, username, weekStartKey) {
         break;
       case "fine": add(surprises, "Fines", amt); break;
       case "store-buy": add(purchases, "Store", amt); break;
-      case "card-purchase": add(t.surprise ? surprises : purchases, (t.cat || "Store") + " (card)", amt); break;
+      case "card-purchase":
+        // The weekly transport bill is already in the schedule, so the part of it that
+        // went on the card must not be counted again here as spending.
+        if (t.forType === "transport-expense" || (t.cat === "Transport" && /^Weekly transport expenses/.test(t.note || ""))) { count--; break; }
+        add(t.surprise ? surprises : purchases, (t.cat || "Store") + " (card)", amt); break;
       case "card-interest": case "card-fee": add(surprises, "Card interest & fees", amt); break;
       case "card-cashback": add(extra, "Card cashback", amt); break;
       case "p2p-buy": add(purchases, "Trade Centre", amt); break;
@@ -3583,8 +3614,14 @@ function buildBudgetView(cls, user, username) {
   const outItems = items.filter(i => i.dir === "out");
   const scheduledIn = sum(inItems.filter(counted));
   const inTotal = budgetRound(scheduledIn + actual.extraTotal);
-  const billsTotal = sum(outItems.filter(counted));
-  const billsPaid = sum(outItems.filter(i => i.status === "done"));
+  // Paying off a card statement is not a new cost: everything on it was already counted when
+  // it was bought (as a bill or as spending), so it stays out of the bills — otherwise the
+  // same money would be counted twice. It does still need cash, which the cash-by-day
+  // working below takes into account.
+  const billItems = outItems.filter(i => !i.settle);
+  const billsTotal = sum(billItems.filter(counted));
+  const billsPaid = sum(billItems.filter(i => i.status === "done"));
+  const billsOnCard = sum(billItems.filter(i => counted(i) && i.card));
   const billsLeft = budgetRound(billsTotal - billsPaid);
   const left = budgetRound(inTotal - billsTotal);
   const autoSave = sum(items.filter(i => i.dir === "save" && counted(i)));
@@ -3626,7 +3663,7 @@ function buildBudgetView(cls, user, username) {
       if (i.dir === "in") { dayIn += i.amount; restIn += i.amount; }
       else if (i.dir === "unsave") dayIn += i.amount;
       else if (i.dir === "save") daySave += i.amount;
-      else { dayBills += i.amount; restBills += i.amount; }
+      else if (!i.card) { dayBills += i.amount; restBills += i.amount; } // bills on the card don't use cash
     });
     const before = budgetRound(running + dayIn);
     if (!firstShort && dayBills > before + 0.005) firstShort = { dayKey, need: budgetRound(dayBills), have: before };
@@ -3669,7 +3706,7 @@ function buildBudgetView(cls, user, username) {
       ? { tone: "warn", icon: "piggy", text: `${start} Move ${fmtMoney(shortfall.gap)} from your savings into cash ${when === "today" ? "now" : "before then"} to cover this week's bills (you have ${fmtMoney(savings)} saved).` }
       : { tone: "bad", icon: "shield", text: `Heads up: ${start} ${savingsSpare > 0 ? `Even with the ${fmtMoney(savingsSpare)} in your savings, you'll be` : "You have nothing in savings to cover it, so you'll be"} ${fmtMoney(shortfall.uncovered)} short this week. Spend as little as you can, and look for ways to earn extra.` };
   } else if (billsTotal > inTotal + 0.005 && !shortfall) {
-    verdict = { tone: "bad", icon: "shield", text: `This week's bills (${fmtMoney(billsTotal)}) are more than the money coming in (${fmtMoney(inTotal)}). The other ${fmtMoney(budgetRound(billsTotal - inTotal))} has to come from cash you already have or your savings.` };
+    verdict = { tone: "bad", icon: "shield", text: `This week's bills (${fmtMoney(billsTotal)}) are more than the money coming in (${fmtMoney(inTotal)}). The other ${fmtMoney(budgetRound(billsTotal - inTotal))} has to come from cash you already have${billsOnCard > 0 ? ", your savings or your credit card (which you'll then have to pay off)" : " or your savings"}.` };
   } else if (plan.hasPlan && spendLeft < -0.005) {
     verdict = { tone: "bad", icon: "cart", text: `You've spent ${fmtMoney(-spendLeft)} more than your plan's spending money this week.` };
   } else if (!plan.hasPlan) {
@@ -3720,27 +3757,16 @@ function buildBudgetView(cls, user, username) {
   if (loanGrowth > 0) {
     notes.push({ tone: "warn", icon: "handshake", text: `Your loans grow by about ${fmtMoney(loanGrowth)} in interest every Monday until you pay them off.` });
   }
+  // The card statement is paid by hand, so it gets a reminder on the day it's due (it's also in
+  // the day-by-day list all week). Cash is needed for it, so the "move money from savings" check
+  // above already covers it.
   const cardInfo = cardBudgetInfo(cls, user);
-  if (cardInfo) {
-    const wk0 = budgetWeekStartKey(), wk1 = dateKeyPlusDays(wk0, 6);
-    if (cardInfo.stmtRemaining > 0 && cardInfo.dueKey > wk1) {
-      notes.push({ tone: "warn", icon: "cards", text: `Your credit card statement (${fmtMoney(cardInfo.stmtRemaining)}) is due ${cardDateLabel(cardInfo.dueKey)}. Pay all of it by then and there's no interest.` });
-    }
-    if (cardInfo.unbilled > 0 && cardInfo.nextCloseKey >= wk0 && cardInfo.nextCloseKey <= wk1) {
-      notes.push({ tone: "warn", icon: "cards", text: `Your card statement closes ${cardDateLabel(cardInfo.nextCloseKey)}. The ${fmtMoney(cardInfo.unbilled)} on your card so far becomes the closing balance you'll need to pay.` });
-    }
+  if (cardInfo && cardInfo.stmtRemaining > 0.004 && cardInfo.dueKey === todayKey) {
+    notes.push({ tone: "warn", icon: "cards", text: `Pay your credit card statement today: ${fmtMoney(cardInfo.stmtRemaining)}. Pay all of it and there's no interest.` });
   }
-  // KiwiSaver from this week's pay (already left out of the wage above).
-  // When the week's money doesn't stretch, point out the real-life options.
+  // KiwiSaver from this week's pay (already left out of the wage above) is shown as its own row.
   const wageItem = items.find(i => i.key === "wage" && i.status !== "missed");
   const kiwi = wageItem && wageItem.kiwi ? Object.assign({ status: wageItem.status }, wageItem.kiwi) : null;
-  const next = wageItem && wageItem.kiwiNext;
-  const tight = (shortfall && !shortfall.covered) || billsTotal > inTotal + 0.005;
-  if (tight && next && !next.paused && next.you > 0) {
-    const at3 = budgetRound(Math.min(next.you, next.gross * 3 / 100));
-    const lower = next.rate > 3 ? budgetRound(next.you - at3) : 0;
-    notes.push({ tone: "warn", icon: "sprout", text: `KiwiSaver takes ${fmtMoney(next.you)} from your pay each week. If money stays tight, on the KiwiSaver page you can ${lower > 0 ? `drop to 3% (${fmtMoney(lower)} more in your pay) or ` : ""}take a break from it. While you're on a break, your employer and the government stop adding money too.` });
-  }
   const maturing = (user.termDeposits || []).filter(d => d.matureDate >= todayKey && d.matureDate <= sched.weekEndKey);
   if (maturing.length) {
     const total = budgetRound(maturing.reduce((s, d) => s + d.amount, 0));
@@ -3749,7 +3775,7 @@ function buildBudgetView(cls, user, username) {
 
   return {
     ...sched, actual, plan,
-    inItems, outItems, scheduledIn, inTotal, billsTotal, billsPaid, billsLeft, left,
+    inItems, outItems, scheduledIn, inTotal, billsTotal, billsPaid, billsLeft, billsOnCard, left,
     saveTarget, autoSave, spendAllowed, spent, spendLeft,
     cash, savings, savingsSpare, restIn, restBills, safeTotal, safeNow, safeTimed, lowestDay, shortfall, verdict, notes, kiwi,
     card: cardInfo
@@ -4099,7 +4125,9 @@ async function _deleteParentViewFor(username) {
      charged. If not, interest (a % per 2 weeks) is added to what is owed
      at the next statement. Missing the minimum payment also costs a late fee.
    - The monthly fee is charged every 4 weeks (every second statement).
-   - Benefits: cashback on spending (credited at each statement), a store
+   - Benefits: cashback on spending (a % of what's spent, credited at each
+     statement), an optional spend-and-earn reward ("$X back for every $Y
+     spent", also credited at each statement), a store
      discount when the card is used at the class store, and vouchers (a
      fixed $ credit or a % off) issued each statement.
    - Teacher can dock lifestyle points for the closing balance still unpaid
@@ -4128,6 +4156,26 @@ function cardStmtRemaining(card) {
 // that is still unpaid — counted from the day it closes, free days included.
 function cardOwedForPenalty(user) { return cardIsActive(user) ? cardStmtRemaining(user.creditCard) : 0; }
 function cardAvailable(card, plan) { return cardRound(Math.max(0, (plan ? plan.limit : 0) - ((card && card.balance) || 0))); }
+// What a statement period's spending earns on this plan. Spend-and-earn is
+// paid in WHOLE steps ($5 per $100: $199 earns $5, $200 earns $10) and counted
+// in cents so $33.33-style steps never drift. Total can't exceed the spend.
+function cardRewardOf(plan, spend) {
+  spend = cardRound(spend);
+  const pct = plan && plan.cashbackPct > 0 ? cardRound(spend * plan.cashbackPct / 100) : 0;
+  const everyC = Math.round(((plan && plan.rewardEvery) || 0) * 100), back = (plan && plan.rewardBack) || 0;
+  const steps = everyC > 0 && back > 0 ? Math.floor(Math.round(spend * 100) / everyC) : 0;
+  const fixed = cardRound(steps * back);
+  const total = cardRound(Math.min(spend, pct + fixed));
+  return { pct, steps, fixed, total, every: everyC / 100, back };
+}
+// For the progress bar: how far into the NEXT reward step the student is.
+function cardRewardProgress(plan, spend) {
+  const r = cardRewardOf(plan, spend);
+  if (!(r.every > 0 && r.back > 0)) return null;
+  const into = cardRound(cardRound(spend) - r.steps * r.every);
+  return { steps: r.steps, earned: r.fixed, into, toNext: cardRound(Math.max(0, r.every - into)), pct: Math.max(0, Math.min(100, into / r.every * 100)) };
+}
+function cardHasRewards(plan) { return !!plan && (plan.cashbackPct > 0 || (plan.rewardEvery > 0 && plan.rewardBack > 0)); }
 function cardLast4(username) { return "0029"; } // every card ends in 0029
 function cardWeekdayOfKey(key) { return DAY_NAMES[new Date(dateKeyToUTC(key)).getUTCDay()]; }
 // First statement closes on the teacher's chosen weekday, 7–13 days after
@@ -4156,6 +4204,12 @@ function cardMakeActive(plan, cls, todayKey) {
 }
 // Card colour themes a teacher can pick (the colours themselves live in creditcard.js)
 const CARD_THEME_IDS = ["ocean", "violet", "midnight", "emerald", "ruby", "sunset", "gold", "rose", "forest", "teal", "slate", "plum"];
+function cardCleanReward(p) {
+  const every = cardRound(Math.min(1000000, Math.max(0, Number(p.rewardEvery) || 0)));
+  let back = cardRound(Math.min(1000000, Math.max(0, Number(p.rewardBack) || 0)));
+  if (!(every >= 0.01) || !(back >= 0.01)) return { every: 0, back: 0 };
+  return { every, back: Math.min(back, every) };
+}
 function cardCleanPlan(p) {
   const num = (v, min, max, dflt) => { let n = Number(v); if (!isFinite(n)) n = dflt; return Math.min(max, Math.max(min, n)); };
   const vouchers = (p.vouchers || [])
@@ -4172,6 +4226,9 @@ function cardCleanPlan(p) {
     minPct: cardRound(num(p.minPct, 0, 100, 5)),
     lateFee: cardRound(num(p.lateFee, 0, 10000, 5)),
     cashbackPct: cardRound(num(p.cashbackPct, 0, 100, 0)),
+    // Spend-and-earn reward: $rewardBack back for every $rewardEvery spent (both or neither).
+    // The reward can never be bigger than the spend that earns it.
+    rewardEvery: cardCleanReward(p).every, rewardBack: cardCleanReward(p).back,
     storeDiscountPct: cardRound(num(p.storeDiscountPct, 0, 100, 0)),
     vouchers, archived: !!p.archived,
     theme: CARD_THEME_IDS.includes(p.theme) ? p.theme : ""
@@ -4334,13 +4391,14 @@ async function payCreditCard(username, classCode, amount) {
 /* ---------------- Spending on the card ---------------- */
 // Runs INSIDE the caller's transaction (see buyStoreItem). Mutates and
 // returns user.creditCard; the caller writes it back.
-function cardChargeInTxn(user, cls, amount) {
+function cardChargeInTxn(user, cls, amount, noReward) {
   if (!cardIsActive(user)) throw new Error("NOCARD");
   const card = user.creditCard, plan = cardPlanById(cls, card.planId);
   if (!plan) throw new Error("NOCARD");
   if ((card.balance || 0) + amount > plan.limit + 0.004) throw new Error("LIMIT");
   card.balance = cardRound((card.balance || 0) + amount);
-  card.periodSpend = cardRound((card.periodSpend || 0) + amount);
+  // noReward: spending that shouldn't earn cashback (nothing passes it now — a card can't pay a classmate, and paying the teacher or shopping both earn).
+  if (!noReward) card.periodSpend = cardRound((card.periodSpend || 0) + amount);
   return card;
 }
 /* ---------------- Paying with the card: whole, split, or events ----------------
@@ -4380,7 +4438,7 @@ function cardPayInTxn(user, cls, total, opts) {
   } else if (total > avail + 0.004) throw new Error("LIMIT");
   const cash = cardRound(total - card);
   if ((user.balance || 0) < cash) throw new Error("BROKE");
-  if (card > 0) cardChargeInTxn(user, cls, card);
+  if (card > 0) cardChargeInTxn(user, cls, card, !!opts.noReward);
   return { card, cash };
 }
 // Messages for the errors only the card can raise (BROKE keeps each caller's own wording).
@@ -4396,7 +4454,8 @@ function cardPayToggleOn(id) { const el = document.getElementById("ccPay-" + id)
 
 function cardPayError(e) {
   const m = { LIMIT: "That would go over your credit card limit.", NOCARD: "Your credit card isn't available. Pay with cash instead.",
-    NO_SPLIT: "Part-payments only work on bigger purchases (or when your card can't cover it all). Pay it all by card or all by cash.", NOCARD_ITEM: "That can't be paid for with a credit card." };
+    NO_SPLIT: "Part-payments only work on bigger purchases (or when your card can't cover it all). Pay it all by card or all by cash.", NOCARD_ITEM: "That can't be paid for with a credit card.",
+    CARD_STUDENT: "A credit card can't be used to pay a classmate (the Trade Centre is the one exception). Pay this from your cash." };
   return (e && m[e.message]) || null;
 }
 // Unexpected costs (bad random events). If the student switched on "put
@@ -4457,7 +4516,7 @@ async function logPurchaseTxn(classCode, username, pay, cat, txn) {
   if (!(card > 0.004)) { await logTxn(classCode, Object.assign({ from: username }, txn, { amount: cash })); return; }
   const split = cash > 0.004;
   if (split) await logTxn(classCode, Object.assign({ from: username }, txn, { amount: cash, note: `${txn.note} (cash part — ${fmtMoney(card)} went on the credit card)` }));
-  await logTxn(classCode, { type: "card-purchase", cat, surprise: !!txn.surprise, from: username, amount: card,
+  await logTxn(classCode, { type: "card-purchase", cat, forType: txn.type || "", surprise: !!txn.surprise, from: username, amount: card,
     note: `${txn.note} (credit card${split ? `, ${fmtMoney(cash)} paid in cash` : ""})` });
 }
 function cardUsableVouchers(user, todayKey) {
@@ -4531,14 +4590,21 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     card.lifetime.fees = cardRound(card.lifetime.fees + fee);
     logs.push({ type: "card-fee", amount: fee, note: `Monthly card fee — ${plan.name}` });
   }
+  // Cashback + spend-and-earn reward for the period just ended. It is a
+  // STATEMENT CREDIT: it comes straight off the closing balance below. Only
+  // if the student owes less than they earned does the rest land in cash.
   let cashback = 0, cashLeft = 0;
-  if (plan.cashbackPct > 0 && (card.periodSpend || 0) > 0) {
-    cashback = cardRound(card.periodSpend * plan.cashbackPct / 100);
+  const rw = cardRewardOf(plan, card.periodSpend || 0);
+  if (rw.total > 0) {
+    cashback = rw.total;
     const applied = Math.min(cashback, card.balance);
     cashLeft = cardRound(cashback - applied);
     card.balance = cardRound(card.balance - applied);
     card.lifetime.cashback = cardRound(card.lifetime.cashback + cashback);
-    if (cashback > 0) logs.push({ type: "card-cashback", amount: cashback, note: `Cashback — ${plan.cashbackPct}% of ${fmtMoney(card.periodSpend)} spent` });
+    const parts = [];
+    if (rw.pct > 0) parts.push(`${plan.cashbackPct}% cashback ${fmtMoney(rw.pct)}`);
+    if (rw.fixed > 0) parts.push(`${fmtMoney(rw.back)} back for every ${fmtMoney(rw.every)} spent × ${rw.steps} = ${fmtMoney(rw.fixed)}`);
+    logs.push({ type: "card-cashback", amount: cashback, note: `Cashback ${fmtMoney(cashback)} on ${fmtMoney(card.periodSpend)} spent — ${parts.join(" + ")}` });
   }
   const nextClose = dateKeyPlusDays(closeKey, CARD_CYCLE_DAYS);
   card.vouchers = (card.vouchers || []).filter(v => v.expiryKey > closeKey).concat(cardIssueVouchers(plan, nextClose));
@@ -4546,7 +4612,8 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
   card.stmt = {
     closeKey, closeTs: Date.now(), dueKey: dateKeyPlusDays(closeKey, plan.freeDays), amount, paid: 0, paidOnTime: 0,
     minDue: cardRound(amount * plan.minPct / 100), lateChecked: amount <= 0.004,
-    interest, fee, cashback, spend: cardRound(card.periodSpend || 0), rate: plan.rate
+    interest, fee, cashback, cashbackPct: rw.pct, rewardFixed: rw.fixed, rewardSteps: rw.steps, rewardBack: rw.back, rewardEvery: rw.every,
+    spend: cardRound(card.periodSpend || 0), rate: plan.rate
   };
   logs.push({ type: "card-statement", amount,
     note: amount > 0.004 ? `Statement closed — pay ${fmtMoney(amount)} by ${cardDateLabel(card.stmt.dueKey)} to avoid interest` : "Statement closed — nothing to pay" });
@@ -4615,7 +4682,9 @@ function cardBudgetInfo(cls, user) {
   return {
     plan, limit: plan.limit, balance: cardRound(c.balance || 0), available: cardAvailable(c, plan),
     stmtRemaining, unbilled: cardRound(Math.max(0, (c.balance || 0) - stmtRemaining)),
-    dueKey: c.stmt ? c.stmt.dueKey : null, nextCloseKey: c.nextCloseKey, periodSpend: cardRound(c.periodSpend || 0)
+    dueKey: c.stmt ? c.stmt.dueKey : null, nextCloseKey: c.nextCloseKey, periodSpend: cardRound(c.periodSpend || 0),
+    // Cashback and spend rewards earned on this statement so far (taken off the closing balance when it closes).
+    cashback: cardRewardOf(plan, c.periodSpend || 0).total
   };
 }
 

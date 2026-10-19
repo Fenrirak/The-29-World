@@ -190,8 +190,10 @@ function renderBudgetStudent(me, cls) {
   // Credit card: what's owing against the limit, and what's coming.
   if (v.card) {
     const cd = v.card;
-    rows.push(row("Credit card", `<strong>${fmtMoney(cd.balance)}</strong> of ${fmtMoney(cd.limit)}`,
-      cd.limit > 0 ? (cd.balance / cd.limit) * 100 : 0, "card",
+    // Cashback earned on this statement so far sits right next to what's owing.
+    const cb = cardHasRewards(cd.plan) ? ` · <span class="bud-cb">+${fmtMoney(cd.cashback)} cashback</span>` : "";
+    rows.push(row("Credit card", `<strong>${fmtMoney(cd.balance)}</strong> of ${fmtMoney(cd.limit)}${cb}`,
+      cd.limit > 0 ? (cd.balance / cd.limit) * 100 : 0, "creditcard",
       (cd.stmtRemaining > 0 ? `${fmtMoney(cd.stmtRemaining)} closing balance due ${budEsc(cardDateLabel(cd.dueKey))} · ` : "")
         + (cd.unbilled > 0 ? `${fmtMoney(cd.unbilled)} spent since the last statement, closing ${budEsc(cardDateLabel(cd.nextCloseKey))}` : `Next statement closes ${budEsc(cardDateLabel(cd.nextCloseKey))}`)));
   }

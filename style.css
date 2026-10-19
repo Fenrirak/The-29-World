@@ -3302,7 +3302,14 @@ html.dark-mode .cc-timeline{background:rgba(255,255,255,.12);}
 @media(max-width:620px){.cc-pb-voucher{margin-left:0;width:100%;}.cc-pb-voucher select{flex:1;min-width:0;}}
 
 /* ---- Budget: card row ---- */
-.bud-track-fill.card{background:linear-gradient(90deg,var(--lilac),#6a5fc0);}
+/* Was ".card", which also picked up the page's big white .card panel look (padding, border, shadow) and made this bar fat. */
+.bud-track-fill.creditcard{background:linear-gradient(90deg,var(--lilac),#6a5fc0);}
+.bud-track-nums .bud-cb{color:#1c6b4e;font-weight:800;white-space:nowrap;}
+html.dark-mode .bud-track-fill.creditcard{background:linear-gradient(90deg,var(--lilac-dim),var(--lilac-dark-dim));}
+html.dark-mode .bud-track-nums .bud-cb{color:var(--pastel-mint-text);}
+.cc-limit-cb{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:.82rem;font-weight:700;color:var(--cc-mint-ink);line-height:1.35;}
+.cc-limit-cb .icon{flex-shrink:0;}
+.cc-limit-cb span{color:var(--muted);font-weight:600;}
 @media (prefers-reduced-motion:reduce){.cc-limit-fill,.cc-timeline-fill,.cc-plan,.cc-voucher,.cc-switch-track,.cc-switch-track::after{transition:none;}}
 
 /* ---- Student: intro hero, steps, "not open yet" ---- */
@@ -3322,3 +3329,54 @@ html.dark-mode .cc-timeline{background:rgba(255,255,255,.12);}
 .cc-paytoggle{display:flex;align-items:center;gap:8px;margin:10px 0 8px;font-size:.88rem;font-weight:700;cursor:pointer;color:var(--ink);}
 .cc-paytoggle input{width:18px;height:18px;margin:0;accent-color:var(--lilac);}
 .cc-paytoggle.hidden{display:none;}
+
+/* ---- Credit card: rewards panel (student) + spend-and-earn editor (teacher) ---- */
+.cc-rw{margin:14px 0;padding:16px 18px;border-radius:18px;border:1.5px solid var(--cc-mint-line);background:linear-gradient(160deg,var(--cc-mint-bg),var(--cc-surface) 70%);}
+.cc-rw-top{display:flex;align-items:center;gap:12px;}
+.cc-rw-badge{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;color:#fff;background:linear-gradient(135deg,#2fae80,#5ad1b0);box-shadow:0 4px 10px rgba(47,174,128,.28);}
+.cc-rw-badge .icon{width:18px;height:18px;}
+.cc-rw-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+.cc-rw-title strong{font-size:.98rem;color:var(--ink);}
+.cc-rw-title span{font-size:.78rem;font-weight:700;color:var(--muted);}
+.cc-rw-est{text-align:right;line-height:1.1;}
+.cc-rw-est small{display:block;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+.cc-rw-est strong{font-size:1.4rem;color:var(--cc-mint-ink);font-variant-numeric:tabular-nums;}
+.cc-rw:not(.has-earned) .cc-rw-est strong{color:var(--muted);}
+.cc-rw-row{margin-top:14px;padding-top:14px;border-top:1.5px dashed var(--cc-mint-line);}
+.cc-rw-pct{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.cc-rw-pct b{font-size:1.02rem;color:var(--cc-mint-ink);font-variant-numeric:tabular-nums;}
+.cc-rw-line{display:flex;flex-direction:column;gap:2px;}
+.cc-rw-line strong{font-size:.9rem;color:var(--ink);}
+.cc-rw-line span{font-size:.78rem;font-weight:700;color:var(--muted);}
+.cc-rw-bar{height:14px;border-radius:99px;background:var(--cc-track);margin:11px 0 6px;overflow:hidden;}
+.cc-rw-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#2fae80,#5ad1b0);transition:width .5s ease;}
+.cc-rw-scale{display:flex;justify-content:space-between;gap:10px;font-size:.74rem;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums;}
+.cc-rw-scale span:last-child{color:var(--cc-mint-ink);}
+.cc-rw-coins{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:10px;}
+.cc-rw-coins i{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--cc-gold-bg);border:1.5px solid var(--cc-gold-line);color:var(--cc-gold-ink);}
+.cc-rw-coins i .icon{width:13px;height:13px;}
+.cc-rw-coins b{font-size:.76rem;font-weight:800;color:var(--cc-gold-ink);}
+.cc-rw-foot{display:flex;gap:8px;align-items:flex-start;margin-top:14px;padding:10px 12px;border-radius:12px;background:var(--cc-surface);border:1.5px solid var(--line);font-size:.76rem;line-height:1.4;font-weight:600;color:var(--muted);}
+.cc-rw-foot .icon{flex:none;margin-top:1px;}
+.cc-rw-foot strong{color:var(--ink);}
+
+.cc-rwedit{margin:6px 0 14px;padding:14px 16px;border-radius:16px;border:1.5px dashed var(--cc-mint-line);background:linear-gradient(160deg,var(--cc-mint-bg),var(--cc-surface) 75%);}
+.cc-rwedit-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.cc-rwedit-text{flex:1 1 240px;min-width:0;}
+.cc-rwedit-text strong{display:block;color:var(--ink);}
+.cc-rwedit-text p{margin:2px 0 0;font-size:.78rem;line-height:1.35;color:var(--muted);font-weight:600;}
+.cc-rwedit-body{margin-top:14px;transition:opacity .2s;}
+.cc-rwedit.is-off .cc-rwedit-body{opacity:.5;}
+.cc-rwsentence{font-size:1rem;}
+.cc-rwsentence .cc-num{width:112px;}
+.cc-rwedit .cc-num input{min-height:44px;padding:8px 12px;font-weight:800;margin:0;}
+.cc-rwedit .cc-num.money input{padding-left:28px;}
+.cc-rwex-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;}
+.cc-rwex{background:var(--cc-surface);border:1.5px solid var(--cc-mint-line);border-radius:12px;padding:9px 12px;}
+.cc-rwex small{display:block;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.cc-rwex strong{font-size:1.1rem;color:var(--cc-mint-ink);font-variant-numeric:tabular-nums;}
+.cc-rwnote{margin-top:10px;font-size:.78rem;line-height:1.4;font-weight:600;color:var(--muted);}
+.cc-rwnote strong{color:var(--cc-mint-ink);}
+.cc-rwnote.warn{color:var(--cc-gold-ink);background:var(--cc-gold-bg);border:1.5px solid var(--cc-gold-line);border-radius:10px;padding:8px 10px;}
+@media(max-width:520px){.cc-rwex-row{grid-template-columns:1fr;}.cc-rwsentence .cc-num{width:100px;}.cc-rw-top{flex-wrap:wrap;}}
+@media(prefers-reduced-motion:reduce){.cc-rw-fill,.cc-rwedit-body{transition:none;}}

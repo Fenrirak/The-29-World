@@ -385,8 +385,8 @@ function mktPayBarRender() {
       <button type="button" class="${useCard ? "on" : ""}" onclick="mktSetPay(true)">Credit card<small>${fmtMoney(avail)} available</small></button>
     </div>
     <div class="mkt-pb-chips">${useCard
-      ? (plan.cashbackPct > 0 ? `<span class="mkt-chip mint">${plan.cashbackPct}% cashback</span>` : "") + `<span class="mkt-chip">Billed on your next statement</span>`
-      : `<span class="mkt-chip">Switch to card for cashback</span>`}</div>
+      ? (plan.cashbackPct > 0 ? `<span class="mkt-chip mint">${plan.cashbackPct}% cashback</span>` : "") + (plan.rewardEvery > 0 && plan.rewardBack > 0 ? `<span class="mkt-chip mint">${fmtMoney(plan.rewardBack)} back per ${fmtMoney(plan.rewardEvery)}</span>` : "") + `<span class="mkt-chip">Billed on your next statement</span>`
+      : `<span class="mkt-chip">Switch to card for cashback &amp; rewards</span>`}</div>
     ${useCard ? `<div class="mkt-pb-split">
       <label style="display:flex;align-items:center;gap:8px;font-weight:700;"><input type="checkbox" style="width:20px;height:20px;min-height:auto;" ${MP_PAY.split ? "checked" : ""} onchange="mktSetSplit(this.checked)"> Part card, part cash</label>
       ${MP_PAY.split ? `<div style="margin-top:6px;">Card covers up to $<input id="mktCardMax" type="number" min="0.01" step="0.01" style="width:100px" value="${esc(MP_PAY.cardMax)}" placeholder="all it can" onchange="mktSetCardMax(this.value)"></div>` : ""}
