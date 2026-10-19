@@ -4101,7 +4101,7 @@ async function _deleteParentViewFor(username) {
    class-wide safety net. Statements catch up if nobody opened the site. */
 const CARD_CYCLE_DAYS = 14;
 const CARD_MAX_FREE_DAYS = 13; // must end before the next statement closes
-const CARD_DEFAULT_SETTINGS = { enabled: false, approval: "teacher", statementDay: "Fri", splitMin: 100 }; // splitMin: smallest purchase that may be split between card and cash
+const CARD_DEFAULT_SETTINGS = { enabled: true, approval: "teacher", statementDay: "Fri", splitMin: 100 }; // splitMin: smallest purchase that may be split between card and cash
 
 function cardRound(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function cardSettings(cls) { return Object.assign({}, CARD_DEFAULT_SETTINGS, (cls && cls.cardSettings) || {}); }

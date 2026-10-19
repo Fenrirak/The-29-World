@@ -44,7 +44,6 @@ function paintChrome() {
   document.getElementById("labSavAutoAmount").innerHTML = icon("coin", 13) + " Amount";
   document.getElementById("labSavAutoNote").innerHTML = icon("star", 13) + " Note (optional)";
   document.getElementById("addSavAutoBtn").innerHTML = icon("plus", 15) + " Create automatic transfer";
-  document.getElementById("budgetLinkText").textContent = IS_TEACHER ? "Open Budgeting" : "Open My budget";
 }
 
 async function init() {

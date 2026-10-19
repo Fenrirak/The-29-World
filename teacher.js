@@ -118,6 +118,7 @@ async function init() {
     safeBgJob(processWeeklyEvents(CLASS_CODE), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(CLASS_CODE), "processWeeklyBigEvents"),
     safeBgJob(processLoanInterest(CLASS_CODE), "processLoanInterest"),
+    safeBgJob(processCreditCards(CLASS_CODE), "processCreditCards"),
     safeBgJob(processJobPromotions(CLASS_CODE), "processJobPromotions")
   ]);
   await T29_STARTUP_JOBS;
@@ -434,6 +435,8 @@ function describeTxn(t, nameOf) {
     case "loan-taken": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "loan-repayment": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "loan-interest": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "card-purchase": case "card-payment": case "card-interest": case "card-fee": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "card-cashback": case "card-statement": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "side-hustle": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "truck-drive": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "store-gift": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
@@ -485,6 +488,9 @@ function badge(type) {
     "cash-interest": ["gold", "coin", "Cash interest"],
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
     "loan-taken": ["navy", "handshake", "Loan"], "loan-repayment": ["mint", "handshake", "Loan repayment"],
+    "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
+    "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"],
+    "card-cashback": ["mint", "cards", "Cashback"], "card-statement": ["gold", "cards", "Statement"],
     "loan-interest": ["coral", "handshake", "Loan interest"],
     "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
     "life-allowance": ["mint", "trophy", "Life allowance"],
@@ -972,12 +978,15 @@ async function saveLifestyle() {
   // form would wipe out whatever the teacher set there.
   const cls = await getClassCached(CLASS_CODE);
   const existingLoanCfg = (cls.lifestyleConfig && cls.lifestyleConfig.loan) || { enabled: false, perAmount: 0, points: 0 };
+  // Same for the credit card penalty (edited in the Bank page's card section).
+  const existingCardCfg = (cls.lifestyleConfig && cls.lifestyleConfig.creditCard) || { enabled: false, perAmount: 0, points: 1 };
   const config = {
     property: { enabled: document.getElementById("ls-property-on").checked, weight: Number(document.getElementById("ls-property-weight").value) || 0 },
     transport: { enabled: document.getElementById("ls-transport-on").checked, weight: Number(document.getElementById("ls-transport-weight").value) || 0 },
     store: { enabled: document.getElementById("ls-store-on").checked, weight: Number(document.getElementById("ls-store-weight").value) || 0 },
     insurance: { enabled: document.getElementById("ls-insurance-on").checked, weight: Number(document.getElementById("ls-insurance-weight").value) || 0 },
-    loan: existingLoanCfg
+    loan: existingLoanCfg,
+    creditCard: existingCardCfg
   };
   await saveLifestyleConfig(CLASS_CODE, config);
   document.getElementById("lifestyleMsg").innerHTML = `<div class="success-msg">Saved!</div>`;

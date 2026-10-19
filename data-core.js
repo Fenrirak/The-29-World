@@ -2575,6 +2575,9 @@ function withNewModuleDefaults(cls) {
   };
   if (!cls.lifestyleConfig.transport) cls.lifestyleConfig.transport = { enabled: true, weight: 3 };
   if (!cls.lifestyleConfig.loan) cls.lifestyleConfig.loan = { enabled: false, perAmount: 0, points: 0 };
+  if (!cls.lifestyleConfig.creditCard) cls.lifestyleConfig.creditCard = { enabled: false, perAmount: 0, points: 1 };
+  cls.cardPlans = cls.cardPlans || [];
+  cls.cardSettings = cls.cardSettings || { enabled: true, approval: "teacher", statementDay: "Fri" };
   cls.lifestyleThresholds = cls.lifestyleThresholds && cls.lifestyleThresholds.length ? cls.lifestyleThresholds : [
     { min: 0, max: 10, label: "Poor", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
     { min: 10, max: 20, label: "Modest", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },

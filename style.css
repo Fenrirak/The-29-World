@@ -3304,3 +3304,16 @@ html.dark-mode .cc-timeline{background:rgba(255,255,255,.12);}
 /* ---- Budget: card row ---- */
 .bud-track-fill.card{background:linear-gradient(90deg,var(--lilac),#6a5fc0);}
 @media (prefers-reduced-motion:reduce){.cc-limit-fill,.cc-timeline-fill,.cc-plan,.cc-voucher,.cc-switch-track,.cc-switch-track::after{transition:none;}}
+
+/* ---- Student: intro hero, steps, "not open yet" ---- */
+.cc-hero{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:20px;align-items:center;margin:14px 0 18px;padding:20px 22px;border-radius:18px;
+  background:linear-gradient(135deg,var(--cc-surface),var(--cc-gold-bg));border:1.5px solid var(--line);}
+.cc-hero-text h3{margin:0 0 6px;font-size:1.35rem;}
+.cc-hero-text p{margin:0;color:var(--muted);line-height:1.5;}
+.cc-steps{display:flex;flex-direction:column;gap:10px;}
+.cc-step{display:flex;align-items:center;gap:12px;background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:10px 14px;}
+.cc-step-n{flex:0 0 30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:900;color:#fff;background:linear-gradient(135deg,var(--lilac),#6a5fc0);}
+.cc-step div{display:flex;flex-direction:column;min-width:0;} .cc-step strong{font-size:.92rem;} .cc-step span{font-size:.8rem;color:var(--muted);line-height:1.35;}
+.cc-off{display:flex;align-items:center;gap:12px;padding:14px 16px;margin:0 0 16px;border-radius:14px;background:var(--cc-surface);border:1.5px dashed var(--line);color:var(--muted);}
+.cc-off .icon{flex-shrink:0;color:var(--lilac);} .cc-off div{display:flex;flex-direction:column;} .cc-off strong{color:var(--ink);}
+@media(max-width:820px){.cc-hero{grid-template-columns:1fr;padding:16px;}}

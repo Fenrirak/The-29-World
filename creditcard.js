@@ -176,19 +176,24 @@ function renderCreditCard(me, cls, students) {
 }
 
 /* ================= Student ================= */
+function ccHowItWorks() {
+  const step = (n, t, d) => `<div class="cc-step"><span class="cc-step-n">${n}</span><div><strong>${t}</strong><span>${d}</span></div></div>`;
+  return `<div class="cc-steps">
+    ${step(1, "Spend now", "Use the card at the store, on events and more — up to your limit.")}
+    ${step(2, "Statement every 2 weeks", "Your spending is added up into one closing balance.")}
+    ${step(3, "Pay it in full", "Pay by the due date and you never pay a cent of interest.")}
+  </div>`;
+}
 function ccRenderStudent(me, cls) {
   const el = document.getElementById("cardCard");
-  const st = cardSettings(cls), plans = cardPlansOf(cls), card = me.creditCard;
+  const st = cardSettings(cls), plans = cardPlansOf(cls).slice().sort((a, b) => a.limit - b.limit), card = me.creditCard;
   const active = cardIsActive(me);
-  // Nothing to show until the teacher turns cards on (unless they still hold one).
-  if (!st.enabled && !active) { el.classList.add("hidden"); return; }
-  el.classList.remove("hidden");
-  const head = `<div class="flex-between cc-head"><h2 id="hCard">${icon("cards", 20)} Credit card</h2>
-    <span class="cc-head-note">${st.approval === "instant" ? "Instant approval" : "Teacher approval needed"}</span></div>`;
-  if (active) { el.innerHTML = head + ccActiveHtml(me, cls) + `<div id="ccMsg"></div>`; return; }
+  el.classList.remove("hidden"); // always visible to students in the Bank tab
+  const head = (note) => `<div class="flex-between cc-head"><h2 id="hCard">${icon("cards", 20)} Credit card</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
+  if (active) { el.innerHTML = head(st.approval === "instant" ? "Instant approval" : "Teacher approval needed") + ccActiveHtml(me, cls) + `<div id="ccMsg"></div>`; return; }
   if (card && card.status === "pending") {
     const plan = cardPlanById(cls, card.planId);
-    el.innerHTML = head + (plan ? `<div class="cc-pending">
+    el.innerHTML = head("Application sent") + (plan ? `<div class="cc-pending">
         <div class="cc-pending-card">${ccVisual(cls, plan, me.name, cardLast4(me.username), { pending: true })}</div>
         <div class="cc-pending-text">
           <span class="badge gold">${icon("calendar", 12)} Waiting for approval</span>
@@ -201,24 +206,34 @@ function ccRenderStudent(me, cls) {
   }
   const denied = card && card.status === "denied";
   const score = lifestyleRatingFromData(cls, me, me.username);
-  el.innerHTML = head
+  const off = !st.enabled;
+  const tiles = plans.map(p => ccPlanTile(me, cls, p, score, off)).join("");
+  let body;
+  if (!plans.length) {
+    body = `<div class="cc-off">${icon("lock", 22)}<div><strong>${off ? "Credit cards aren't open yet" : "No cards on offer yet"}</strong><span>${off ? "Your teacher hasn't switched credit cards on for the class." : "Your teacher hasn't set up any cards yet."} Check back soon.</span></div></div>`;
+  } else {
+    body = (off ? `<div class="cc-off">${icon("lock", 22)}<div><strong>Applications aren't open yet</strong><span>Have a look at the cards below — your teacher will open applications soon.</span></div></div>` : "")
+      + `<div class="cc-plans">${tiles}</div>`;
+  }
+  el.innerHTML = head(off ? "Not open yet" : (st.approval === "instant" ? "Instant approval" : "Teacher approval needed"))
+    + `<div class="cc-hero"><div class="cc-hero-text"><h3>Spend now, pay later</h3><p>A credit card lets you buy things before you have the cash — as long as you pay it back on time. Your lifestyle rating is <strong>${Math.floor(score * 10) / 10}</strong>${plans.length ? ", which decides which cards you can get." : "."}</p></div>${ccHowItWorks()}</div>`
     + (denied ? `<div class="cc-note bad">${icon("bell", 16)}<span>Your last application wasn't approved. You can pick another card below.</span></div>` : "")
-    + (plans.length ? `
-      <p class="cc-intro">Spend now, pay later. Pay your whole closing balance by the due date and you'll never pay interest. Pick a card:</p>
-      <div class="cc-plans">${plans.slice().sort((a, b) => a.limit - b.limit).map(p => ccPlanTile(me, cls, p, score)).join("")}</div>`
-      : `<div class="empty-state"><p>Your teacher hasn't set up any credit cards yet. Check back soon.</p></div>`)
+    + body
     + `<div id="ccMsg"></div>`;
 }
-function ccPlanTile(me, cls, p, score) {
+function ccPlanTile(me, cls, p, score, off) {
   const locked = score < p.minLifestyle;
-  return `<div class="cc-plan ${locked ? "locked" : ""}">
+  const instant = cardSettings(cls).approval === "instant";
+  return `<div class="cc-plan ${locked || off ? "locked" : ""}">
     ${ccVisual(cls, p, me.name, "", { small: true })}
     <div class="cc-plan-body">
       ${ccFacts(p)}
       <div class="cc-perks">${ccPerks(p)}</div>
-      ${locked
+      ${off
+        ? `<div class="cc-lock">${icon("lock", 14)}<span>Applications aren't open yet</span></div>`
+        : locked
         ? `<div class="cc-lock">${icon("lock", 14)}<span>Needs ${ccTierNeedText(cls, p.minLifestyle)} — yours is ${Math.floor(score * 10) / 10}</span></div>`
-        : `<button class="btn gold" onclick="ccApply('${ccEsc(p.id)}')">${cardSettings(cls).approval === "instant" ? "Get this card" : "Apply for this card"}</button>`}
+        : `<button class="btn gold" onclick="ccApply('${ccEsc(p.id)}')">${icon("cards", 15)} ${instant ? "Get this card" : "Apply for this card"}</button>`}
     </div>
   </div>`;
 }

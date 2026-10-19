@@ -110,6 +110,29 @@ function notifLoanItems(me) {
   return out;
 }
 
+// The credit card statement: from the day it closes until it's paid in full.
+// `action: true` puts it above the informational stock moves.
+function notifCardItems(me, cls) {
+  if (!cardIsActive(me) || !me.creditCard.stmt) return [];
+  const s = me.creditCard.stmt, owe = cardStmtRemaining(me.creditCard);
+  if (owe <= 0) return [];
+  const today = nzDateKey();
+  const days = daysBetweenKeys(today, s.dueKey);
+  const pen = cls && cls.lifestyleConfig && cls.lifestyleConfig.creditCard;
+  const penNote = pen && pen.enabled && pen.perAmount > 0 && pen.points > 0 ? " Until it's paid it costs you lifestyle points." : "";
+  let title, tone, body, id, ts;
+  if (days < 0) {
+    tone = "coral"; id = `card-stmt-${s.closeKey}-late`; ts = notifTodayStartMs();
+    title = `Credit card overdue by ${Math.abs(days)} ${Math.abs(days) === 1 ? "day" : "days"}`;
+    body = `${fmtMoney(owe)} is still unpaid, so interest will be added at your next statement.${penNote}`;
+  } else {
+    tone = days <= 2 ? "coral" : "gold"; id = `card-stmt-${s.closeKey}`; ts = s.closeTs || notifTodayStartMs();
+    title = days === 0 ? "Credit card payment due today" : `Credit card statement closed: ${fmtMoney(s.amount)}`;
+    body = `Pay ${fmtMoney(owe)} by ${cardDateLabel(s.dueKey)} (${days} ${days === 1 ? "day" : "days"} left) to avoid interest.${penNote}`;
+  }
+  return [{ id, ts, icon: "cards", tone, title, body, href: "bank.html#cardCard", action: true }];
+}
+
 function notifMortgageItems(me, cls) {
   const dayStart = notifTodayStartMs();
   const out = [];
@@ -441,6 +464,7 @@ function notifMarketplaceItems(me, cls) {
 function buildNotifications(me, cls) {
   const items = [].concat(
     notifLoanItems(me),
+    notifCardItems(me, cls),
     notifMortgageItems(me, cls),
     notifPropertyRentalItems(me, cls),
     notifNpcRentalItems(me, cls),
