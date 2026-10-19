@@ -289,6 +289,7 @@ function listingCardHtml(l, opts) {
     actions = `<button class="btn small secondary" onclick="cancelMine('${l.id}')">${icon("trash", 13)} Cancel listing</button>`;
   } else if (CLS.marketplace.enabled) {
     actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${icon("cart", 13)} ${qty > 1 ? "Buy 1" : "Buy"} for ${fmtMoney(l.price)}</button>`;
+    if (mktCanUseCard(l)) actions += `<span class="badge lilac" style="align-self:center;">Credit card accepted</span>`;
     if (CLS.marketplace.allowOffers) {
       actions += myOffer
         ? `<button class="btn small secondary" onclick="withdraw('${l.id}','${myOffer.id}')">Withdraw my ${fmtMoney(myOffer.amount)} offer</button>`
@@ -344,24 +345,30 @@ function listingCardHtml(l, opts) {
 
 function toggleOffer(id) { OFFERING = (OFFERING === id) ? null : id; renderStudent(); }
 
-/* ---------------- Choosing how to pay (credit card or cash) ----------------
-   Uses the shared cardAskPay() if another script provides one; otherwise this
-   small built-in chooser. Returns {} for cash, { useCard: true } for the card,
-   or null if the student backs out. */
-function mktAskPay(price, name) {
-  if (typeof cardAskPay === "function") return cardAskPay(price, name);
-  if (!ME || !cardIsActive(ME)) return Promise.resolve({});
-  const plan = cardPlanById(CLS, ME.creditCard.planId);
-  if (!plan) return Promise.resolve({});
-  const avail = cardAvailable(ME.creditCard, plan);
+/* ---------------- Buying: choose credit card or cash ----------------
+   Students with an active card see a Cash / Credit card box (the card option is
+   greyed out if the price is more than what's available). Houses are cash only.
+   Everyone else just gets a normal confirm. Returns {} for cash,
+   { useCard: true } for the card, or null if the student backs out. */
+function mktCanUseCard(l) {
+  if (!ME || !CLS || l.assetType === "property" || !cardIsActive(ME)) return false;
+  return !!cardPlanById(CLS, ME.creditCard.planId);
+}
+function mktAskPay(l) {
+  const several = listingQuantity(l) > 1;
+  const what = `${several ? "one " : ""}"${l.name}" from ${nameOf(l.seller)}`;
+  if (!mktCanUseCard(l)) {
+    return Promise.resolve(confirm(`Buy ${what} for ${fmtMoney(l.price)}?`) ? {} : null);
+  }
+  const avail = cardAvailable(ME.creditCard, cardPlanById(CLS, ME.creditCard.planId));
+  const fits = l.price <= avail + 0.004;
   return new Promise(resolve => {
     const wrap = document.createElement("div");
     wrap.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;";
-    const fits = price <= avail + 0.004;
     wrap.innerHTML = `<div class="card" style="max-width:380px;width:100%;margin:0;">
-      <h3 style="margin-top:0;">How do you want to pay?</h3>
-      <p>${esc(name)} — ${fmtMoney(price)}</p>
-      <button class="btn gold" id="mktPayCash" style="width:100%;margin-bottom:8px;">Cash (${fmtMoney(ME.balance || 0)})</button>
+      <h3 style="margin-top:0;">Buy ${esc(what)}</h3>
+      <p>Price: <strong>${fmtMoney(l.price)}</strong>. How do you want to pay?</p>
+      <button class="btn gold" id="mktPayCash" style="width:100%;margin-bottom:8px;" ${(ME.balance || 0) + 0.004 >= l.price ? "" : "disabled"}>Cash (${fmtMoney(ME.balance || 0)})</button>
       <button class="btn" id="mktPayCard" style="width:100%;margin-bottom:8px;" ${fits ? "" : "disabled"}>Credit card (${fmtMoney(avail)} available)</button>
       ${fits ? "" : `<div class="muted-small" style="margin-bottom:8px;">That's more than your card has available.</div>`}
       <button class="btn secondary" id="mktPayNo" style="width:100%;">Cancel</button></div>`;
@@ -376,17 +383,16 @@ function mktAskPay(price, name) {
 async function buyIt(id) {
   const l = (CLS.listings || []).find(x => x.id === id);
   if (!l) return;
-  const several = listingQuantity(l) > 1;
-  if (!confirm(`Buy ${several ? "one" : `"${l.name}"`}${several ? ` "${l.name}"` : ""} from ${nameOf(l.seller)} for ${fmtMoney(l.price)}?`)) return;
-  // A house is settled by bank transfer in real life, so only things (store items, vehicles) can go on a card.
-  const pay = l.assetType === "property" ? {} : await mktAskPay(l.price, l.name);
+  // Fresh copy of the student, so a card approved a moment ago is picked up.
+  try { const fresh = await getUser(CURRENT.username); if (fresh) ME = Object.assign({ username: CURRENT.username }, fresh); } catch (e) {}
+  const pay = await mktAskPay(l);
   if (!pay) return; // backed out
   const res = await buyListing(CURRENT.username, CURRENT.classCode, id, pay);
   await render();
   if (res.ok) {
     // The listing's card may be gone once it's sold, so the message goes
     // in the box at the top of the list instead.
-    flashMsg(document.getElementById("browseMsg"), `<div class="success-msg">Bought ${esc(l.name)}! It's yours now.${res.left > 0 ? ` ${res.left} more still for sale.` : ""}</div>`);
+    flashMsg(document.getElementById("browseMsg"), `<div class="success-msg">Bought ${esc(l.name)}${pay.useCard ? " on your credit card" : ""}! It's yours now.${res.left > 0 ? ` ${res.left} more still for sale.` : ""}</div>`);
     return;
   }
   const box = document.getElementById("msg-" + id);
