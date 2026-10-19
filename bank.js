@@ -11,7 +11,6 @@ function paintChrome() {
   document.getElementById("pageTitle").innerHTML = icon("piggy", 26) + " Bank Account";
   document.getElementById("iconBalance").innerHTML = icon("piggy", 30);
   document.getElementById("iconAuto").innerHTML = icon("repeat", 30);
-  document.getElementById("iconCardStat").innerHTML = icon("cards", 30);
   document.getElementById("hSend").innerHTML = icon("send", 18) + " Send money";
   document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Set up an automatic payment";
   document.getElementById("hAutoList").innerHTML = icon("repeat", 18) + " My automatic payments";
@@ -225,7 +224,7 @@ async function render() {
       toLabel = escapeHtml(toUser ? toUser.name : a.toUser);
     }
     row.innerHTML = `
-      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>${a.useCard ? ` <span class="badge lilac">${icon("cards", 11)} Credit card</span>` : ""}
+      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>${a.useCard ? ` <span class="badge lilac">Credit card</span>` : ""}
         &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
         ${a.note ? `<div class="muted-small">${escapeHtml(a.note)}</div>` : ""}
         ${a.lastRun ? `<div class="muted-small">Last paid: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
@@ -287,7 +286,7 @@ async function render() {
       "kiwisaver-refund": ["gold", "sprout", "KiwiSaver refund"]
     };
     const [c, ic, label] = map[type] || ["navy", "coin", type];
-    return `<span class="badge ${c}">${icon(ic, 12)}${label}</span>`;
+    return `<span class="badge ${c}">${ic === "cards" ? "" : icon(ic, 12)}${label}</span>`;
   };
   my.forEach(t => {
     let detail = escapeHtml(t.note || "");

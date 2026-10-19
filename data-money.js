@@ -2819,7 +2819,7 @@ const REPORT_INCOME_TYPES = {
   "quiz-reward": "Bonuses",
   "term-deposit-mature": "Term deposit returns", "term-deposit-early": "Term deposit returns",
   "life-allowance": "Life allowance",
-  welcome: "Welcome bonus"
+  welcome: "Welcome bonus", "card-cashback": "Card cashback"
 };
 const REPORT_SAVED_TYPES = {
   "savings-deposit": "Savings account", "stock-buy": "Stocks", "term-deposit-open": "Term deposits",
@@ -3509,6 +3509,7 @@ function budgetWeekActuals(cls, username, weekStartKey) {
       case "store-buy": add(purchases, "Store", amt); break;
       case "card-purchase": add(t.surprise ? surprises : purchases, (t.cat || "Store") + " (card)", amt); break;
       case "card-interest": case "card-fee": add(surprises, "Card interest & fees", amt); break;
+      case "card-cashback": add(extra, "Card cashback", amt); break;
       case "p2p-buy": add(purchases, "Trade Centre", amt); break;
       case "vehicle-buy": case "truck-licence-buy": add(purchases, "Transport", amt); break;
       case "property-buy": add(purchases, "Housing", amt); break;
@@ -4127,11 +4128,7 @@ function cardStmtRemaining(card) {
 // that is still unpaid — counted from the day it closes, free days included.
 function cardOwedForPenalty(user) { return cardIsActive(user) ? cardStmtRemaining(user.creditCard) : 0; }
 function cardAvailable(card, plan) { return cardRound(Math.max(0, (plan ? plan.limit : 0) - ((card && card.balance) || 0))); }
-function cardLast4(username) {
-  let h = 7;
-  for (const ch of String(username || "")) h = (h * 31 + ch.charCodeAt(0)) % 10000;
-  return String(h).padStart(4, "0");
-}
+function cardLast4(username) { return "0029"; } // every card ends in 0029
 function cardWeekdayOfKey(key) { return DAY_NAMES[new Date(dateKeyToUTC(key)).getUTCDay()]; }
 // First statement closes on the teacher's chosen weekday, 7–13 days after
 // the card starts; after that every 14 days.
@@ -4290,7 +4287,7 @@ async function cancelCreditCard(username, classCode) {
       t.update(userRef, { creditCard: null });
     });
   } catch (e) {
-    return { ok: false, error: e.message === "OWING" ? "Pay off everything you owe on the card before closing it." : "Something went wrong. Please try again." };
+    return { ok: false, error: e.message === "OWING" ? "You can only close your card once you owe nothing. Pay your closing balance, then close it after your next statement if you've spent more since." : "Something went wrong. Please try again." };
   }
   return { ok: true };
 }
@@ -4307,9 +4304,12 @@ async function payCreditCard(username, classCode, amount) {
       if (!us.exists) throw new Error("NOT_FOUND");
       const user = us.data(), card = user.creditCard;
       if (!cardIsActive(user)) throw new Error("NOCARD");
-      if (amount > (card.balance || 0) + 0.004) throw new Error("TOO_MUCH");
-      if ((user.balance || 0) < amount) throw new Error("BROKE");
+      // Payments only go towards a CLOSED statement — nothing can be paid
+      // on spending that hasn't been billed yet.
       const today = nzDateKey(), rem = cardStmtRemaining(card);
+      if (rem <= 0.004) throw new Error("NOSTMT");
+      if (amount > rem + 0.004) throw new Error("OVER_STMT");
+      if ((user.balance || 0) < amount) throw new Error("BROKE");
       if (card.stmt && rem > 0) {
         const toStmt = Math.min(amount, rem);
         card.stmt.paid = cardRound((card.stmt.paid || 0) + toStmt);
@@ -4323,7 +4323,7 @@ async function payCreditCard(username, classCode, amount) {
       t.update(userRef, { balance: cardRound(user.balance - amount), creditCard: card });
     });
   } catch (e) {
-    const m = { NOCARD: "You don't have an active credit card.", TOO_MUCH: "That's more than you owe on the card.", BROKE: "You don't have enough cash for that payment." };
+    const m = { NOCARD: "You don't have an active credit card.", NOSTMT: "You can only start paying once your statement closes. Nothing is due yet.", OVER_STMT: "You can only pay up to your closing balance. Spending since the statement closed can be paid after the next one closes.", BROKE: "You don't have enough cash for that payment." };
     return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "card-payment", from: username, amount,

@@ -344,13 +344,42 @@ function listingCardHtml(l, opts) {
 
 function toggleOffer(id) { OFFERING = (OFFERING === id) ? null : id; renderStudent(); }
 
+/* ---------------- Choosing how to pay (credit card or cash) ----------------
+   Uses the shared cardAskPay() if another script provides one; otherwise this
+   small built-in chooser. Returns {} for cash, { useCard: true } for the card,
+   or null if the student backs out. */
+function mktAskPay(price, name) {
+  if (typeof cardAskPay === "function") return cardAskPay(price, name);
+  if (!ME || !cardIsActive(ME)) return Promise.resolve({});
+  const plan = cardPlanById(CLS, ME.creditCard.planId);
+  if (!plan) return Promise.resolve({});
+  const avail = cardAvailable(ME.creditCard, plan);
+  return new Promise(resolve => {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;";
+    const fits = price <= avail + 0.004;
+    wrap.innerHTML = `<div class="card" style="max-width:380px;width:100%;margin:0;">
+      <h3 style="margin-top:0;">How do you want to pay?</h3>
+      <p>${esc(name)} — ${fmtMoney(price)}</p>
+      <button class="btn gold" id="mktPayCash" style="width:100%;margin-bottom:8px;">Cash (${fmtMoney(ME.balance || 0)})</button>
+      <button class="btn" id="mktPayCard" style="width:100%;margin-bottom:8px;" ${fits ? "" : "disabled"}>Credit card (${fmtMoney(avail)} available)</button>
+      ${fits ? "" : `<div class="muted-small" style="margin-bottom:8px;">That's more than your card has available.</div>`}
+      <button class="btn secondary" id="mktPayNo" style="width:100%;">Cancel</button></div>`;
+    const done = v => { wrap.remove(); resolve(v); };
+    wrap.querySelector("#mktPayCash").onclick = () => done({});
+    wrap.querySelector("#mktPayCard").onclick = () => done({ useCard: true });
+    wrap.querySelector("#mktPayNo").onclick = () => done(null);
+    document.body.appendChild(wrap);
+  });
+}
+
 async function buyIt(id) {
   const l = (CLS.listings || []).find(x => x.id === id);
   if (!l) return;
   const several = listingQuantity(l) > 1;
   if (!confirm(`Buy ${several ? "one" : `"${l.name}"`}${several ? ` "${l.name}"` : ""} from ${nameOf(l.seller)} for ${fmtMoney(l.price)}?`)) return;
   // A house is settled by bank transfer in real life, so only things (store items, vehicles) can go on a card.
-  const pay = l.assetType === "property" ? {} : await cardAskPay(l.price, l.name);
+  const pay = l.assetType === "property" ? {} : await mktAskPay(l.price, l.name);
   if (!pay) return; // backed out
   const res = await buyListing(CURRENT.username, CURRENT.classCode, id, pay);
   await render();

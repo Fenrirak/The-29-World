@@ -181,7 +181,7 @@ function ccRenderStudent(me, cls) {
   const st = cardSettings(cls), plans = cardPlansOf(cls).slice().sort((a, b) => a.limit - b.limit), card = me.creditCard;
   const active = cardIsActive(me);
   el.classList.remove("hidden"); // always visible to students in the Bank tab
-  const head = (note) => `<div class="flex-between cc-head"><h2 id="hCard">${icon("cards", 20)} Credit card</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
+  const head = (note) => `<div class="flex-between cc-head"><h2 id="hCard">Credit card</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
   if (active) { el.innerHTML = head(st.approval === "instant" ? "Instant approval" : "Teacher approval needed") + ccActiveHtml(me, cls) + `<div id="ccMsg"></div>`; return; }
   if (card && card.status === "pending") {
     const plan = cardPlanById(cls, card.planId);
@@ -224,7 +224,7 @@ function ccPlanTile(me, cls, p, score, off) {
         ? `<div class="cc-lock">${icon("lock", 14)}<span>Applications aren't open yet</span></div>`
         : locked
         ? `<div class="cc-lock">${icon("lock", 14)}<span>Needs ${ccTierNeedText(cls, p.minLifestyle)} — yours is ${Math.floor(score * 10) / 10}</span></div>`
-        : `<button class="btn gold" onclick="ccApply('${ccEsc(p.id)}')">${icon("cards", 15)} ${instant ? "Get this card" : "Apply for this card"}</button>`}
+        : `<button class="btn gold" onclick="ccApply('${ccEsc(p.id)}')">${instant ? "Get this card" : "Apply for this card"}</button>`}
     </div>
   </div>`;
 }
@@ -234,6 +234,7 @@ function ccActiveHtml(me, cls) {
   const today = nzDateKey(), s = c.stmt, rem = cardStmtRemaining(c);
   const owing = cardRound(c.balance || 0), avail = cardAvailable(c, plan);
   const unbilled = cardRound(Math.max(0, owing - rem));
+  const canPay = rem > 0.004;
   const usedPct = plan.limit > 0 ? Math.min(100, owing / plan.limit * 100) : 0;
   const pen = cls.lifestyleConfig && cls.lifestyleConfig.creditCard;
   const penPts = pen && pen.enabled && pen.perAmount > 0 && pen.points > 0 ? Math.floor(rem / pen.perAmount) * pen.points : 0;
@@ -311,14 +312,14 @@ function ccActiveHtml(me, cls) {
       <div class="muted-small" style="margin-bottom:8px;">Big events ask you how to pay each time. Random events can't ask first, so this is their default (cash covers anything over your limit).</div>
       <div class="cc-pay">
         <label for="ccPayAmt">Make a payment <span class="muted-small">from your cash (${fmtMoney(me.balance)})</span></label>
+        ${canPay ? "" : `<div class="muted-small" style="margin-bottom:6px;">You can start paying once your statement closes on ${ccEsc(cardDateLabel(c.nextCloseKey))}.</div>`}
         <div class="cc-pay-row">
-          <div class="cc-pay-input"><span>$</span><input id="ccPayAmt" type="number" min="0.01" step="0.01" placeholder="0.00" ${owing <= 0.004 ? "disabled" : ""}></div>
-          <button class="btn mint" onclick="ccPay()" ${owing <= 0.004 ? "disabled" : ""}>Pay</button>
+          <div class="cc-pay-input"><span>$</span><input id="ccPayAmt" type="number" min="0.01" max="${rem}" step="0.01" placeholder="0.00" ${canPay ? "" : "disabled"}></div>
+          <button class="btn mint" onclick="ccPay()" ${canPay ? "" : "disabled"}>Pay</button>
         </div>
         <div class="cc-quick">
-          ${rem > 0.004 ? `<button type="button" onclick="ccFill(${rem})">Closing balance · ${fmtMoney(rem)}</button>` : ""}
-          ${s && rem > 0.004 && (s.minDue - (s.paid || 0)) > 0.004 ? `<button type="button" onclick="ccFill(${cardRound(s.minDue - (s.paid || 0))})">Minimum · ${fmtMoney(s.minDue - (s.paid || 0))}</button>` : ""}
-          ${owing > 0.004 && owing - rem > 0.004 ? `<button type="button" onclick="ccFill(${owing})">Everything · ${fmtMoney(owing)}</button>` : ""}
+          ${canPay ? `<button type="button" onclick="ccFill(${rem})">Closing balance · ${fmtMoney(rem)}</button>` : ""}
+          ${canPay && s && (s.minDue - (s.paid || 0)) > 0.004 ? `<button type="button" onclick="ccFill(${cardRound(Math.min(rem, s.minDue - (s.paid || 0)))})">Minimum · ${fmtMoney(Math.min(rem, s.minDue - (s.paid || 0)))}</button>` : ""}
         </div>
       </div>
     </div>
@@ -337,8 +338,11 @@ function ccActiveHtml(me, cls) {
       <li>Use it wherever a real card works: the <a href="store.html">Store</a> (card perks apply there), Transport, insurance sign-up fees, the Trade Centre (not houses), and big or random events. It can't pay loans, savings, shares, gambling, rent or a mortgage.</li>
       <li>On a big purchase (or one your card can't cover) you can split the payment between card and cash.</li>
     </ul>
-    ${owing <= 0.004 ? `<button class="btn small ghost-danger" onclick="ccCancel()">Close this card</button>` : ""}
-  </details>`;
+  </details>
+  <div class="cc-close" style="margin-top:14px;">
+    <button class="btn small ghost-danger" onclick="ccCancel()">Cancel this card</button>
+    <div class="muted-small" style="margin-top:6px;">${owing <= 0.004 ? "Closes your card. Any unused vouchers will be lost." : "You can cancel once you owe nothing on the card."}</div>
+  </div>`;
 }
 
 /* ---- Student actions ---- */
@@ -366,7 +370,7 @@ async function ccSetEventsPref(on) {
 }
 async function ccCancel() {
   const c = CC_ME && CC_ME.creditCard;
-  const msg = c && c.status === "pending" ? "Withdraw your card application?" : "Close your credit card? Any unused vouchers will be lost.";
+  const msg = c && c.status === "pending" ? "Withdraw your card application?" : "Cancel your credit card? Any unused vouchers will be lost.";
   if (!confirm(msg)) return;
   const res = await cancelCreditCard(CURRENT.username, CURRENT.classCode);
   if (!res.ok) { ccMsg("ccMsg", `<div class="error-msg">${ccEsc(res.error)}</div>`); return; }
@@ -424,7 +428,7 @@ function ccRenderTeacher(cls, students) {
   const penNum = (id, val, ph) => `<input id="${id}" type="number" min="0" step="1" value="${val}" ${ph ? `placeholder="${ph}"` : ""} onchange="ccSaveSettings()">`;
 
   el.innerHTML = `
-    <div class="flex-between cc-head"><h2 id="hCardT">${icon("cards", 20)} Credit cards</h2>
+    <div class="flex-between cc-head"><h2 id="hCardT">Credit cards</h2>
       <label class="cc-switch"><input type="checkbox" id="ccsEnabled" ${st.enabled ? "checked" : ""} onchange="ccSaveSettings()"><span class="cc-switch-track"></span><span>${st.enabled ? "On for students" : "Off"}</span></label></div>
     <p class="cc-intro">Students spend now and pay later, like a real New Zealand card. Statements close every 2 weeks; pay the closing balance by the due date to avoid interest.</p>
     <div class="cc-tstats">
@@ -453,7 +457,7 @@ function ccRenderTeacher(cls, students) {
       </div>
     </section>
     <div id="ccTMsg"></div>
-    <h3 class="cc-sub">${icon("cards", 16)} Plans</h3>
+    <h3 class="cc-sub">Plans</h3>
     <div class="cc-tplans">${planRows}</div>
     ${archived.length ? `<p class="muted-small cc-archived">Retired: ${archived.map(p => `${ccEsc(p.name)} <a href="#" onclick="ccRestorePlan('${ccEsc(p.id)}');return false;">restore</a>`).join(" · ")}</p>` : ""}
     <div class="cc-form-wrap"><button class="btn gold small" onclick="ccEditPlan('')" id="ccNewBtn">+ Add a plan</button>
@@ -571,7 +575,7 @@ function ccStoreBarRender(me, cls) {
   const avail = cardAvailable(me.creditCard, plan);
   el.classList.remove("hidden");
   el.innerHTML = `
-    <div class="cc-pb-title">${icon("cards", 16)}<strong>Pay with</strong></div>
+    <div class="cc-pb-title"><strong>Pay with</strong></div>
     <div class="cc-pb-seg" role="group" aria-label="Payment method">
       <button type="button" class="${useCard ? "" : "on"}" onclick="ccStoreSetPay(false)">Cash<small>${fmtMoney(me.balance)}</small></button>
       <button type="button" class="${useCard ? "on" : ""}" onclick="ccStoreSetPay(true)">Credit card<small>${fmtMoney(avail)} available</small></button>
