@@ -711,7 +711,7 @@ async function payTransportExpenses(username, classCode, opts) {
     const parts = [];
     if (breakdown.vehicleExpense > 0) parts.push(`${fmtMoney(breakdown.vehicleExpense)} vehicle upkeep`);
     if (breakdown.publicFeeDue > 0) parts.push(`${fmtMoney(breakdown.publicFeeDue)} public transport`);
-    await logPurchaseTxn(classCode, username, payRes, "Transport", { type: "transport-expense", from: username, amount: breakdown.total, note: `Weekly transport expenses (${parts.join(" + ") || "none"})` });
+    await logPurchaseTxn(classCode, username, payRes, "Transport", { type: "transport-expense", scheduled: true, from: username, amount: breakdown.total, note: `Weekly transport expenses (${parts.join(" + ") || "none"})` });
   }
   return { ok: true, amount: breakdown.total, breakdown };
 }

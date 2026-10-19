@@ -180,7 +180,7 @@ function ccRewardsHtml(plan, c, today) {
         <div class="cc-rw-est"><small>Earned so far</small><strong>+${fmtMoney(r.total)}</strong></div>
       </div>
       ${step}${pct}
-      <div class="cc-rw-foot">${icon("calendar", 13)}<span>It's added when your statement closes and comes <strong>off your closing balance</strong>, so you pay less. Automatic payments to your teacher earn rewards too. Classmates can't be paid by card, except for Trade Centre purchases.</span></div>
+      <div class="cc-rw-foot">${icon("calendar", 13)}<span>It's added when your statement closes and comes <strong>off your closing balance</strong>, so you pay less. Payments to other students don't earn rewards.</span></div>
     </section>`;
 }
 function ccFacts(plan) {
@@ -267,7 +267,6 @@ function ccActiveHtml(me, cls) {
   const unbilled = cardRound(Math.max(0, owing - rem));
   const canPay = rem > 0.004;
   const usedPct = plan.limit > 0 ? Math.min(100, owing / plan.limit * 100) : 0;
-  const cbEarned = cardHasRewards(plan) ? cardRewardOf(plan, c.periodSpend || 0).total : 0;
   const pen = cls.lifestyleConfig && cls.lifestyleConfig.creditCard;
   const penPts = pen && pen.enabled && pen.perAmount > 0 && pen.points > 0 ? Math.floor(rem / pen.perAmount) * pen.points : 0;
 
@@ -340,10 +339,8 @@ function ccActiveHtml(me, cls) {
       <div class="cc-limit">
         <div class="cc-limit-head"><span>Owing <strong>${fmtMoney(owing)}</strong> of ${fmtMoney(plan.limit)}</span><span class="cc-avail">${fmtMoney(avail)} available</span></div>
         <div class="cc-limit-bar"><div class="cc-limit-fill ${usedPct > 85 ? "hot" : ""}" style="width:${usedPct.toFixed(1)}%"></div></div>
+        ${cardHasRewards(plan) ? (() => { const e = cardRewardOf(plan, c.periodSpend || 0).total; return `<div class="cc-limit-earn ${e > 0 ? "has" : ""}">${icon("coin", 14)}<span>Cashback earned so far</span><strong>+${fmtMoney(e)}</strong></div>`; })() : ""}
         <div class="cc-limit-sub">${unbilled > 0 ? `${fmtMoney(unbilled)} spent since your last statement · it closes ${ccEsc(cardDateLabel(c.nextCloseKey))}` : `Next statement closes ${ccEsc(cardDateLabel(c.nextCloseKey))}`}</div>
-        ${cardHasRewards(plan) ? (cbEarned > 0.004
-          ? `<div class="cc-limit-cb">${icon("coin", 14)}<strong>+${fmtMoney(cbEarned)}</strong> cashback earned so far <span>· comes off your closing balance</span></div>`
-          : `<div class="cc-limit-cb">${icon("coin", 14)}No cashback earned yet this statement</div>`) : ""}
       </div>
       ${ccRewardsHtml(plan, c, today)}
       <label class="cc-check cc-check-tile"><input type="checkbox" ${c.eventsOnCard ? "checked" : ""} onchange="ccSetEventsPref(this.checked)"> Put unexpected costs (random events) on this card first</label>
@@ -373,7 +370,7 @@ function ccActiveHtml(me, cls) {
       <li>Your statement closes every 2 weeks (on a ${ccEsc(DAY_FULL[cardSettings(cls).statementDay] || "Friday")}). Whatever you owe then becomes the <strong>closing balance</strong>.</li>
       <li>Pay it <strong>in full</strong> by the due date and there's no interest. If you don't, interest is added at the next statement.</li>
       <li>The monthly fee is charged every 4 weeks. Cashback and spend rewards are added up when each statement closes and taken <strong>off your closing balance</strong> (so your bill is smaller). They aren't paid into your cash, unless you owe less than you earned.</li>
-      <li>Use it wherever a real card works: the <a href="store.html">Store</a> (card perks apply there), Transport, insurance sign-up fees, rent (not to a classmate) and mortgage payments, the Trade Centre (not houses), automatic payments to your teacher, and big or random events. It can't pay loans, savings, shares, gambling or classmates — Trade Centre purchases are the one exception.</li>
+      <li>Use it wherever a real card works: the <a href="store.html">Store</a> (card perks apply there), Transport, insurance sign-up fees, the Trade Centre (not houses), school rentals, mortgages, and big or random events. Automatic payments can go on it too, but only to your teacher. It can't pay another student (except for Trade Centre purchases), loans, savings, shares or gambling.</li>
       <li>On a big purchase (or one your card can't cover) you can split the payment between card and cash.</li>
     </ul>
   </details>

@@ -660,7 +660,6 @@ function renderMyClassmateRentedHome(box, prop, cls, nameOf) {
       <h2>${icon("house", 18)} Your rented home</h2>
       <p><strong>${escapeHtml(prop.name)}</strong> — renting from ${nameOf(prop.owner)} at ${fmtMoney(s.price)}/week.</p>
       <p class="muted-small">${status}</p>
-      ${canPay && prop.owner === cls.teacher ? cardPayToggleHtml("t-" + prop.id, window.T29_ME, cls) : ""}
       <button class="btn small gold rent-pay-btn" id="payTenantRentBtn-${prop.id}" ${canPay ? "" : `disabled title="${why}"`} onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>
       <div id="tenantRentMsg-${prop.id}"></div>
       <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${s.minWeeks}-week lease, so you can't move out just yet.`}</p>
@@ -673,7 +672,7 @@ async function payTenantRentClick(id) {
   if (btn && btn.disabled) return;
   if (btn) btn.disabled = true;
   try {
-    const res = await payTenantRent(CURRENT.username, CURRENT.classCode, id, cardPayToggleOn("t-" + id));
+    const res = await payTenantRent(CURRENT.username, CURRENT.classCode, id, false);
     const box = document.getElementById(`tenantRentMsg-${id}`);
     if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();

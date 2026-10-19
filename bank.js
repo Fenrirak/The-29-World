@@ -159,13 +159,14 @@ async function render() {
   if (showCardStat) {
     const cp = cardPlanById(cls, me.creditCard.planId);
     document.getElementById("cardOwing").textContent = fmtMoney(me.creditCard.balance || 0);
-    document.getElementById("cardStatNote").textContent = cp ? `${fmtMoney(cardAvailable(me.creditCard, cp))} available of ${fmtMoney(cp.limit)}` : "";
-    // Cashback earned on this statement so far, right under what's owing.
-    document.getElementById("cardStatCashback").textContent = cp && cardHasRewards(cp) ? `+${fmtMoney(cardRewardOf(cp, me.creditCard.periodSpend || 0).total)} cashback earned so far` : "";
+    {
+      const earned = cp ? cardRewardOf(cp, me.creditCard.periodSpend || 0).total : 0;
+      document.getElementById("cardStatNote").textContent = cp
+        ? `${fmtMoney(cardAvailable(me.creditCard, cp))} available of ${fmtMoney(cp.limit)}` + (earned > 0 ? ` · ${fmtMoney(earned)} cashback earned so far` : "") : "";
+    }
   }
   renderCreditCard(me, cls, allStudents);
-  AUTO_CARD_OK = !IS_TEACHER && cardIsActive(me);
-  AUTO_TEACHER = cls.teacher;
+  AUTO_CARD_CTX = { me, cls };
 
   const recipients = await payableRecipients(allStudents);
   const optsHtml = recipients.length
@@ -191,7 +192,7 @@ async function render() {
     : optsHtml;
   keepPick("toStudent", choose + allOptsHtml);
   keepPick("autoTo", choose + allOptsHtml);
-  autoCardRowUpdate();
+  autoSyncCardRow();
 
   // automations
   // Same list getStudentAutomations() returns, taken from the class doc
@@ -228,7 +229,7 @@ async function render() {
       toLabel = escapeHtml(toUser ? toUser.name : a.toUser);
     }
     row.innerHTML = `
-      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>${a.useCard && a.toUser === cls.teacher ? ` <span class="badge lilac">Credit card</span>` : ""}
+      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>${a.useCard ? ` <span class="badge lilac">Credit card</span>` : ""}
         &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
         ${a.note ? `<div class="muted-small">${escapeHtml(a.note)}</div>` : ""}
         ${a.lastRun ? `<div class="muted-small">Last paid: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
@@ -399,7 +400,8 @@ async function addAuto(e) {
     const amount = document.getElementById("autoAmount").value;
     const to = document.getElementById("autoTo").value;
     const note = document.getElementById("autoNote").value.trim();
-    const useCard = !!(document.getElementById("autoUseCard") && document.getElementById("autoUseCard").checked);
+    // A credit card can only pay the teacher, never another student.
+    const useCard = !!(document.getElementById("autoUseCard") && document.getElementById("autoUseCard").checked) && !!AUTO_CARD_CTX && to === AUTO_CARD_CTX.cls.teacher;
     const box = document.getElementById("autoMsg");
     if (!to) { box.innerHTML = `<div class="error-msg">Choose who to pay.</div>`; return false; }
     let res = EDITING_AUTO_ID
@@ -436,17 +438,6 @@ async function addAuto(e) {
   }
 }
 
-// The card tick box only shows when the payment is going to the teacher — a credit card can't pay a classmate.
-let AUTO_CARD_OK = false, AUTO_TEACHER = "";
-function autoCardRowUpdate() {
-  const row = document.getElementById("autoCardRow"), sel = document.getElementById("autoTo");
-  if (!row || !sel) return;
-  const ok = AUTO_CARD_OK && !!sel.value && sel.value === AUTO_TEACHER;
-  row.classList.toggle("hidden", !ok);
-  const c = document.getElementById("autoUseCard");
-  if (c && !ok) c.checked = false;
-}
-
 function startEditAuto(a) {
   EDITING_AUTO_ID = a.id;
   document.getElementById("autoDay").value = a.dayOfWeek;
@@ -454,8 +445,8 @@ function startEditAuto(a) {
   document.getElementById("autoAmount").value = a.amount;
   document.getElementById("autoTo").value = a.toUser;
   document.getElementById("autoNote").value = a.note || "";
-  autoCardRowUpdate();
-  { const c = document.getElementById("autoUseCard"); if (c && !document.getElementById("autoCardRow").classList.contains("hidden")) c.checked = !!a.useCard; }
+  { const c = document.getElementById("autoUseCard"); if (c) c.checked = !!a.useCard; }
+  autoSyncCardRow();
   document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Edit automatic payment";
   document.getElementById("addAutoBtn").innerHTML = "Save changes";
   document.getElementById("cancelAutoEditBtn").classList.remove("hidden");
@@ -469,7 +460,7 @@ function cancelEditAuto() {
   document.getElementById("autoNote").value = "";
   document.getElementById("autoTo").value = "";
   { const c = document.getElementById("autoUseCard"); if (c) c.checked = false; }
-  autoCardRowUpdate();
+  autoSyncCardRow();
   document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Set up an automatic payment";
   document.getElementById("addAutoBtn").innerHTML = icon("plus", 15) + " Create automatic payment";
   document.getElementById("cancelAutoEditBtn").classList.add("hidden");
@@ -592,3 +583,15 @@ function cancelEditSavAuto() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+// The "pay with my credit card" box on the automatic payment form only shows for
+// payments to the teacher; a card can never pay another student.
+var AUTO_CARD_CTX = null;
+function autoSyncCardRow() {
+  const row = document.getElementById("autoCardRow"), sel = document.getElementById("autoTo");
+  if (!row || !AUTO_CARD_CTX) return;
+  const { me, cls } = AUTO_CARD_CTX;
+  const ok = !IS_TEACHER && cardIsActive(me) && !!sel && sel.value === cls.teacher;
+  row.classList.toggle("hidden", !ok);
+  if (!ok) { const c = document.getElementById("autoUseCard"); if (c) c.checked = false; }
+}

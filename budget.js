@@ -190,12 +190,13 @@ function renderBudgetStudent(me, cls) {
   // Credit card: what's owing against the limit, and what's coming.
   if (v.card) {
     const cd = v.card;
-    // Cashback earned on this statement so far sits right next to what's owing.
-    const cb = cardHasRewards(cd.plan) ? ` · <span class="bud-cb">+${fmtMoney(cd.cashback)} cashback</span>` : "";
-    rows.push(row("Credit card", `<strong>${fmtMoney(cd.balance)}</strong> of ${fmtMoney(cd.limit)}${cb}`,
-      cd.limit > 0 ? (cd.balance / cd.limit) * 100 : 0, "creditcard",
+    const hot = cd.limit > 0 && cd.balance / cd.limit >= 0.85;
+    const earn = cd.cashbackSoFar > 0 ? `<span class="bud-cashback" title="Comes off your closing balance when the statement closes">+${fmtMoney(cd.cashbackSoFar)} cashback</span>` : "";
+    rows.push(row("Credit card", `<strong>${fmtMoney(cd.balance)}</strong> of ${fmtMoney(cd.limit)}${earn}`,
+      cd.limit > 0 ? (cd.balance / cd.limit) * 100 : 0, hot ? "cardhot" : "cardbal",
       (cd.stmtRemaining > 0 ? `${fmtMoney(cd.stmtRemaining)} closing balance due ${budEsc(cardDateLabel(cd.dueKey))} · ` : "")
-        + (cd.unbilled > 0 ? `${fmtMoney(cd.unbilled)} spent since the last statement, closing ${budEsc(cardDateLabel(cd.nextCloseKey))}` : `Next statement closes ${budEsc(cardDateLabel(cd.nextCloseKey))}`)));
+        + (cd.unbilled > 0 ? `${fmtMoney(cd.unbilled)} spent since the last statement, closing ${budEsc(cardDateLabel(cd.nextCloseKey))}` : `Next statement closes ${budEsc(cardDateLabel(cd.nextCloseKey))}`)
+        + (cd.cashbackSoFar > 0 ? ` · ${fmtMoney(cd.cashbackSoFar)} cashback earned so far comes off your closing balance` : "")));
   }
   // KiwiSaver comes off their pay before it reaches them, so it's shown
   // on its own rather than counted in the money above.

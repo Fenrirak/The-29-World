@@ -3302,14 +3302,14 @@ html.dark-mode .cc-timeline{background:rgba(255,255,255,.12);}
 @media(max-width:620px){.cc-pb-voucher{margin-left:0;width:100%;}.cc-pb-voucher select{flex:1;min-width:0;}}
 
 /* ---- Budget: card row ---- */
-/* Was ".card", which also picked up the page's big white .card panel look (padding, border, shadow) and made this bar fat. */
-.bud-track-fill.creditcard{background:linear-gradient(90deg,var(--lilac),#6a5fc0);}
-.bud-track-nums .bud-cb{color:#1c6b4e;font-weight:800;white-space:nowrap;}
-html.dark-mode .bud-track-fill.creditcard{background:linear-gradient(90deg,var(--lilac-dim),var(--lilac-dark-dim));}
-html.dark-mode .bud-track-nums .bud-cb{color:var(--pastel-mint-text);}
-.cc-limit-cb{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:.82rem;font-weight:700;color:var(--cc-mint-ink);line-height:1.35;}
-.cc-limit-cb .icon{flex-shrink:0;}
-.cc-limit-cb span{color:var(--muted);font-weight:600;}
+.bud-track-fill.cardbal{background:linear-gradient(90deg,var(--lilac),#6a5fc0);}
+.bud-track-fill.cardhot{background:linear-gradient(90deg,var(--coral),#c9503a);}
+html.dark-mode .bud-track-fill.cardbal{background:linear-gradient(90deg,var(--lilac-dim),#4a4390);}
+html.dark-mode .bud-track-fill.cardhot{background:linear-gradient(90deg,var(--coral-dim),var(--coral-dark-dim));}
+.bud-cashback{display:inline-block;margin-left:8px;padding:2px 9px;border-radius:999px;font-size:.74rem;font-weight:800;background:var(--cc-mint-bg);color:var(--cc-mint-ink);border:1.5px solid var(--cc-mint-line);}
+.cc-limit-earn{display:flex;align-items:center;gap:7px;margin:2px 0 8px;font-size:.8rem;font-weight:700;color:var(--muted);}
+.cc-limit-earn strong{margin-left:auto;font-size:.95rem;color:var(--muted);font-variant-numeric:tabular-nums;}
+.cc-limit-earn.has strong,.cc-limit-earn.has .icon{color:var(--cc-mint-ink);}
 @media (prefers-reduced-motion:reduce){.cc-limit-fill,.cc-timeline-fill,.cc-plan,.cc-voucher,.cc-switch-track,.cc-switch-track::after{transition:none;}}
 
 /* ---- Student: intro hero, steps, "not open yet" ---- */

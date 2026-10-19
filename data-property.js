@@ -1229,6 +1229,8 @@ function isSubletRentOverdue(prop, cls) {
 // returns false instead of throwing, this can't silently no-op while the
 // week still gets marked paid and logged as a success.
 async function payTenantRent(username, classCode, propId, useCard) {
+  // The landlord here is another student, and a credit card can't pay a student.
+  if (useCard) return { ok: false, error: "A credit card can't pay rent to a classmate. Pay it from your cash." };
   const classRef = classesCol().doc(classCode);
   const tenantRef = usersCol().doc(username);
   let amt = 0, propName = "", ownerUsername = "", ownerRef = null, payRes = { card: 0, cash: 0 };
@@ -1246,6 +1248,7 @@ async function payTenantRent(username, classCode, propId, useCard) {
       if (prop.sublet.leaseStartWeekKey === weekKey) throw new Error("MOVE_IN_WEEK");
       if (prop.sublet.rentLastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
       amt = prop.sublet.price;
+      payRes = cardPayInTxn(tenant, cls, amt, { useCard: !!useCard }); // throws BROKE / LIMIT / NOCARD
       ownerUsername = prop.owner;
       propName = prop.name;
       // Read the owner inside the same transaction (Firestore transactions
@@ -1256,9 +1259,6 @@ async function payTenantRent(username, classCode, propId, useCard) {
       const ownerSnap = await t.get(ownerRef);
       if (!ownerSnap.exists) throw new Error("OWNER_NOT_FOUND");
       const owner = ownerSnap.data();
-      // A credit card can't pay a classmate. (Only a teacher-owned home could be paid by card.)
-      if (useCard && owner.role !== "teacher") throw new Error("CARD_STUDENT");
-      payRes = cardPayInTxn(tenant, cls, amt, { useCard: !!useCard }); // throws BROKE / LIMIT / NOCARD
       t.update(tenantRef, Object.assign({ balance: Math.round((tenant.balance - payRes.cash) * 100) / 100 }, payRes.card > 0 ? { creditCard: tenant.creditCard } : {}));
       if (!(owner.role === "teacher")) {
         // Teachers have unlimited funds and don't track a real balance,
