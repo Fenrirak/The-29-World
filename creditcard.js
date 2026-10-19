@@ -176,14 +176,6 @@ function renderCreditCard(me, cls, students) {
 }
 
 /* ================= Student ================= */
-function ccHowItWorks() {
-  const step = (n, t, d) => `<div class="cc-step"><span class="cc-step-n">${n}</span><div><strong>${t}</strong><span>${d}</span></div></div>`;
-  return `<div class="cc-steps">
-    ${step(1, "Spend now", "Use the card at the store, on events and more — up to your limit.")}
-    ${step(2, "Statement every 2 weeks", "Your spending is added up into one closing balance.")}
-    ${step(3, "Pay it in full", "Pay by the due date and you never pay a cent of interest.")}
-  </div>`;
-}
 function ccRenderStudent(me, cls) {
   const el = document.getElementById("cardCard");
   const st = cardSettings(cls), plans = cardPlansOf(cls).slice().sort((a, b) => a.limit - b.limit), card = me.creditCard;
@@ -216,7 +208,6 @@ function ccRenderStudent(me, cls) {
       + `<div class="cc-plans">${tiles}</div>`;
   }
   el.innerHTML = head(off ? "Not open yet" : (st.approval === "instant" ? "Instant approval" : "Teacher approval needed"))
-    + `<div class="cc-hero"><div class="cc-hero-text"><h3>Spend now, pay later</h3><p>A credit card lets you buy things before you have the cash — as long as you pay it back on time. Your lifestyle rating is <strong>${Math.floor(score * 10) / 10}</strong>${plans.length ? ", which decides which cards you can get." : "."}</p></div>${ccHowItWorks()}</div>`
     + (denied ? `<div class="cc-note bad">${icon("bell", 16)}<span>Your last application wasn't approved. You can pick another card below.</span></div>` : "")
     + body
     + `<div id="ccMsg"></div>`;
