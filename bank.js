@@ -163,6 +163,7 @@ async function render() {
     document.getElementById("cardStatNote").textContent = cp ? `${fmtMoney(cardAvailable(me.creditCard, cp))} available of ${fmtMoney(cp.limit)}` : "";
   }
   renderCreditCard(me, cls, allStudents);
+  { const row = document.getElementById("autoCardRow"); if (row) row.classList.toggle("hidden", IS_TEACHER || !cardIsActive(me)); }
 
   const recipients = await payableRecipients(allStudents);
   const optsHtml = recipients.length
@@ -224,7 +225,7 @@ async function render() {
       toLabel = escapeHtml(toUser ? toUser.name : a.toUser);
     }
     row.innerHTML = `
-      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>
+      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>${a.useCard ? ` <span class="badge lilac">${icon("cards", 11)} Credit card</span>` : ""}
         &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
         ${a.note ? `<div class="muted-small">${escapeHtml(a.note)}</div>` : ""}
         ${a.lastRun ? `<div class="muted-small">Last paid: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
@@ -395,11 +396,12 @@ async function addAuto(e) {
     const amount = document.getElementById("autoAmount").value;
     const to = document.getElementById("autoTo").value;
     const note = document.getElementById("autoNote").value.trim();
+    const useCard = !!(document.getElementById("autoUseCard") && document.getElementById("autoUseCard").checked);
     const box = document.getElementById("autoMsg");
     if (!to) { box.innerHTML = `<div class="error-msg">Choose who to pay.</div>`; return false; }
     let res = EDITING_AUTO_ID
-      ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note)
-      : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note);
+      ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, false, useCard)
+      : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note, false, useCard);
     if (!res.ok && res.needsConfirm) {
       // Same amount/recipient/day/frequency already exists, but with a
       // different reference note — not a hard block, just a "are you sure"
@@ -410,8 +412,8 @@ async function addAuto(e) {
       const goAhead = confirm(`You already have an automatic payment set up for the same amount, recipient and day.${already}\n\nSet up this one too?`);
       if (goAhead) {
         res = EDITING_AUTO_ID
-          ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, true)
-          : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note, true);
+          ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, true, useCard)
+          : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note, true, useCard);
       } else {
         box.innerHTML = "";
         await render();
@@ -438,6 +440,7 @@ function startEditAuto(a) {
   document.getElementById("autoAmount").value = a.amount;
   document.getElementById("autoTo").value = a.toUser;
   document.getElementById("autoNote").value = a.note || "";
+  { const c = document.getElementById("autoUseCard"); if (c) c.checked = !!a.useCard; }
   document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Edit automatic payment";
   document.getElementById("addAutoBtn").innerHTML = "Save changes";
   document.getElementById("cancelAutoEditBtn").classList.remove("hidden");
@@ -450,6 +453,7 @@ function cancelEditAuto() {
   document.getElementById("autoAmount").value = "";
   document.getElementById("autoNote").value = "";
   document.getElementById("autoTo").value = "";
+  { const c = document.getElementById("autoUseCard"); if (c) c.checked = false; }
   document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Set up an automatic payment";
   document.getElementById("addAutoBtn").innerHTML = icon("plus", 15) + " Create automatic payment";
   document.getElementById("cancelAutoEditBtn").classList.add("hidden");

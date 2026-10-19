@@ -1455,7 +1455,7 @@ async function processLoanInterest(classCode) {
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FREQ_DAYS = { weekly: 7, fortnightly: 14, monthly: 28 };
 
-async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false) {
+async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false, useCard = false) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   if (toUser === AUTOPAY_ALL_STUDENTS) {
     const owner = await getUser(studentUser);
@@ -1523,7 +1523,7 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       }
       cls.automations.push({
         id: uid("auto"), studentUser, dayOfWeek, frequency,
-        amount: Number(amount), toUser, note: noteTrimmed, lastRun: null, active: true
+        amount: Number(amount), toUser, note: noteTrimmed, lastRun: null, active: true, useCard: !!useCard && toUser !== AUTOPAY_ALL_STUDENTS
       });
       t.update(classRef, { automations: cls.automations });
     });
@@ -1597,7 +1597,7 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
   }
   return { ok: true };
 }
-async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false) {
+async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false, useCard = false) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   if (toUser === AUTOPAY_ALL_STUDENTS) {
     const owner = await getUser(studentUser);
@@ -1640,7 +1640,7 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
         if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
       }
       cls.automations[idx] = {
-        ...existing, dayOfWeek, frequency, amount: Number(amount), toUser, note: noteTrimmed
+        ...existing, dayOfWeek, frequency, amount: Number(amount), toUser, note: noteTrimmed, useCard: !!useCard && toUser !== AUTOPAY_ALL_STUDENTS
       };
       t.update(classRef, { automations: cls.automations });
     });
@@ -2020,13 +2020,23 @@ async function processAutomations(classCode) {
           const amt = Number(g.liveAuto.amount);
           // Teachers have unlimited funds (same rule as transferMoney()).
           const fromIsTeacher = from.role === "teacher";
-          if (!fromIsTeacher && from.balance < amt) return { status: "skip" }; // can't afford it
-          if (!fromIsTeacher) t.update(fromRef, { balance: Math.round((from.balance - amt) * 100) / 100 });
+          let paidByCard = false;
+          if (!fromIsTeacher && g.liveAuto.useCard) {
+            // Charged to the student's credit card instead of cash. Throws
+            // (LIMIT / NOCARD) if the card can't take it — caught below, so
+            // nothing moves and it tries again next load, like "can't afford".
+            cardPayInTxn(from, liveCls, amt, { useCard: true });
+            t.update(fromRef, { creditCard: from.creditCard });
+            paidByCard = true;
+          } else {
+            if (!fromIsTeacher && from.balance < amt) return { status: "skip" }; // can't afford it
+            if (!fromIsTeacher) t.update(fromRef, { balance: Math.round((from.balance - amt) * 100) / 100 });
+          }
           t.update(toRef, { balance: Math.round((to.balance + amt) * 100) / 100 });
           g.liveAuto.lastRun = todayKey;
           const entry = Object.assign({ id: _autoTxnId(a, todayKey), date: nowStr(), ts: Date.now() }, {
             type: "automation", from: a.studentUser, to: a.toUser, amount: amt,
-            note: g.liveAuto.note ? g.liveAuto.note : "Automatic payment"
+            note: (g.liveAuto.note ? g.liveAuto.note : "Automatic payment") + (paidByCard ? " (credit card)" : "")
           });
           _autoAppendTxns(liveCls, [entry]);
           t.update(classRef, { automations: liveCls.automations, txns: liveCls.txns });
@@ -4374,6 +4384,16 @@ function cardPayInTxn(user, cls, total, opts) {
   return { card, cash };
 }
 // Messages for the errors only the card can raise (BROKE keeps each caller's own wording).
+// Small "Pay with credit card" tick box shown next to a pay button when the
+// signed-in student has an active card. `id` just has to be unique per button.
+function cardPayToggleHtml(id, me, cls) {
+  if (!cardIsActive(me)) return "";
+  const plan = cardPlanById(cls, me.creditCard.planId);
+  if (!plan) return "";
+  return `<label class="cc-paytoggle"><input type="checkbox" id="ccPay-${id}"> Pay with credit card <span class="muted-small">(${fmtMoney(cardAvailable(me.creditCard, plan))} available)</span></label>`;
+}
+function cardPayToggleOn(id) { const el = document.getElementById("ccPay-" + id); return !!(el && el.checked); }
+
 function cardPayError(e) {
   const m = { LIMIT: "That would go over your credit card limit.", NOCARD: "Your credit card isn't available. Pay with cash instead.",
     NO_SPLIT: "Part-payments only work on bigger purchases (or when your card can't cover it all). Pay it all by card or all by cash.", NOCARD_ITEM: "That can't be paid for with a credit card." };

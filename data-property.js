@@ -514,10 +514,10 @@ function mortgageWeekAmount(mortgage) {
   return { balanceBefore: Math.round(principalBefore * 100) / 100, interest, principal, total: Math.round((principal + interest) * 100) / 100 };
 }
 
-async function payMortgage(username, classCode, propId) {
+async function payMortgage(username, classCode, propId, useCard) {
   const classRef = classesCol().doc(classCode);
   const userRef = usersCol().doc(username);
-  let amt = 0, remainingAfter = 0, propName = "";
+  let amt = 0, remainingAfter = 0, propName = "", payRes = { card: 0, cash: 0 };
   try {
     await fdb.runTransaction(async (t) => {
       const classSnap = await t.get(classRef);
@@ -540,8 +540,8 @@ async function payMortgage(username, classCode, propId) {
       // Interest is charged on the principal still remaining.
       const weekAmt = mortgageWeekAmount(prop.mortgage);
       amt = weekAmt.total;
-      if (user.balance < amt) throw new Error("BROKE");
-      t.update(userRef, { balance: Math.round((user.balance - amt) * 100) / 100 });
+      payRes = cardPayInTxn(user, cls, amt, { useCard: !!useCard }); // throws BROKE / LIMIT / NOCARD
+      t.update(userRef, Object.assign({ balance: Math.round((user.balance - payRes.cash) * 100) / 100 }, payRes.card > 0 ? { creditCard: user.creditCard } : {}));
       prop.mortgage.principalRemaining = Math.max(0, Math.round((weekAmt.balanceBefore - prop.mortgage.weeklyPayment) * 100) / 100);
       prop.mortgage.weeksLeft -= 1;
       prop.mortgage.lastWeekPaid = weekKey;
@@ -553,11 +553,12 @@ async function payMortgage(username, classCode, propId) {
     if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay your mortgage on its due day." };
     if (e.message === "PURCHASE_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you bought is free." };
     if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's payment has already gone through." };
+    { const ce = cardPayError(e); if (ce) return { ok: false, error: ce }; }
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's payment." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That mortgage couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "mortgage", from: username, amount: amt, note: `Mortgage payment: ${propName}` + (remainingAfter <= 0 ? " — paid off!" : "") });
+  await logTxn(classCode, { type: "mortgage", from: username, amount: amt, note: `Mortgage payment: ${propName}` + (payRes.card > 0 ? " (credit card)" : "") + (remainingAfter <= 0 ? " — paid off!" : "") });
   return { ok: true, amount: amt, fullyPaid: remainingAfter <= 0 };
 }
 
@@ -1227,10 +1228,10 @@ function isSubletRentOverdue(prop, cls) {
 // adjustBalance() call afterwards, which swallows its own errors and
 // returns false instead of throwing, this can't silently no-op while the
 // week still gets marked paid and logged as a success.
-async function payTenantRent(username, classCode, propId) {
+async function payTenantRent(username, classCode, propId, useCard) {
   const classRef = classesCol().doc(classCode);
   const tenantRef = usersCol().doc(username);
-  let amt = 0, propName = "", ownerUsername = "", ownerRef = null;
+  let amt = 0, propName = "", ownerUsername = "", ownerRef = null, payRes = { card: 0, cash: 0 };
   try {
     await fdb.runTransaction(async (t) => {
       const classSnap = await t.get(classRef);
@@ -1245,7 +1246,7 @@ async function payTenantRent(username, classCode, propId) {
       if (prop.sublet.leaseStartWeekKey === weekKey) throw new Error("MOVE_IN_WEEK");
       if (prop.sublet.rentLastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
       amt = prop.sublet.price;
-      if (tenant.balance < amt) throw new Error("BROKE");
+      payRes = cardPayInTxn(tenant, cls, amt, { useCard: !!useCard }); // throws BROKE / LIMIT / NOCARD
       ownerUsername = prop.owner;
       propName = prop.name;
       // Read the owner inside the same transaction (Firestore transactions
@@ -1256,7 +1257,7 @@ async function payTenantRent(username, classCode, propId) {
       const ownerSnap = await t.get(ownerRef);
       if (!ownerSnap.exists) throw new Error("OWNER_NOT_FOUND");
       const owner = ownerSnap.data();
-      t.update(tenantRef, { balance: Math.round((tenant.balance - amt) * 100) / 100 });
+      t.update(tenantRef, Object.assign({ balance: Math.round((tenant.balance - payRes.cash) * 100) / 100 }, payRes.card > 0 ? { creditCard: tenant.creditCard } : {}));
       if (!(owner.role === "teacher")) {
         // Teachers have unlimited funds and don't track a real balance,
         // same convention adjustBalance uses.
@@ -1269,12 +1270,13 @@ async function payTenantRent(username, classCode, propId) {
     if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay rent on its due day." };
     if (e.message === "MOVE_IN_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you moved in is free." };
     if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's rent has already been paid." };
+    { const ce = cardPayError(e); if (ce) return { ok: false, error: ce }; }
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's rent." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
     if (e.message === "OWNER_NOT_FOUND") return { ok: false, error: "The property owner's account couldn't be found. Ask your teacher for help." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "property-rent-pay", from: username, to: ownerUsername, amount: amt, note: `Paid weekly rent: ${propName}` });
+  await logTxn(classCode, { type: "property-rent-pay", from: username, to: ownerUsername, amount: amt, note: `Paid weekly rent: ${propName}` + (payRes.card > 0 ? " (credit card)" : "") });
   await logTxn(classCode, { type: "property-rent-receive", to: ownerUsername, from: username, amount: amt, note: `Weekly rent received from a classmate: ${propName}` });
   return { ok: true, amount: amt };
 }
@@ -1488,7 +1490,7 @@ async function moveOutNpcProperty(username, classCode, unitId) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "property-occupancy", from: username, note: `Moved out: ${propName} (school rental)` });
+  await logTxn(classCode, { type: "property-occupancy", from: username, note: `Moved out: ${propName} (school rental)` + (payRes.card > 0 ? " (credit card)" : "") });
   return { ok: true };
 }
 
@@ -1550,10 +1552,10 @@ function isNpcRentOverdue(unit) {
 // pays it themselves, on the unit's own rentDay, exactly like payTenantRent
 // — except the money simply leaves circulation instead of crediting an
 // owner, since the landlord here isn't a student.
-async function payNpcRent(username, classCode, unitId) {
+async function payNpcRent(username, classCode, unitId, useCard) {
   const classRef = classesCol().doc(classCode);
   const tenantRef = usersCol().doc(username);
-  let amt = 0, propName = "";
+  let amt = 0, propName = "", payRes = { card: 0, cash: 0 };
   try {
     await fdb.runTransaction(async (t) => {
       const classSnap = await t.get(classRef);
@@ -1568,9 +1570,9 @@ async function payNpcRent(username, classCode, unitId) {
       if (unit.leaseStartWeekKey === weekKey) throw new Error("MOVE_IN_WEEK");
       if (unit.rentLastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
       amt = unit.rentPerWeek;
-      if (tenant.balance < amt) throw new Error("BROKE");
+      payRes = cardPayInTxn(tenant, cls, amt, { useCard: !!useCard }); // throws BROKE / LIMIT / NOCARD
       propName = unit.name;
-      t.update(tenantRef, { balance: Math.round((tenant.balance - amt) * 100) / 100 });
+      t.update(tenantRef, Object.assign({ balance: Math.round((tenant.balance - payRes.cash) * 100) / 100 }, payRes.card > 0 ? { creditCard: tenant.creditCard } : {}));
       unit.rentLastWeekPaid = weekKey;
       unit.rentLastPaidDate = nzDateKey();
       t.update(classRef, { npcProperties: cls.npcProperties });
@@ -1579,6 +1581,7 @@ async function payNpcRent(username, classCode, unitId) {
     if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay rent on its due day." };
     if (e.message === "MOVE_IN_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you moved in is free." };
     if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's rent has already been paid." };
+    { const ce = cardPayError(e); if (ce) return { ok: false, error: ce }; }
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's rent." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };

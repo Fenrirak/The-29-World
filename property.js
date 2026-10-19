@@ -190,6 +190,7 @@ async function render() {
   // already known without needing `me` first, so fetch both at once
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+  window.T29_ME = me; // used by the "pay with credit card" tick boxes
   const props = cls.properties || [];
   // Hand over the class doc already in hand (when it's the same class) so
   // this doesn't read it a second time before reading the students.
@@ -659,6 +660,7 @@ function renderMyClassmateRentedHome(box, prop, cls, nameOf) {
       <h2>${icon("house", 18)} Your rented home</h2>
       <p><strong>${escapeHtml(prop.name)}</strong> — renting from ${nameOf(prop.owner)} at ${fmtMoney(s.price)}/week.</p>
       <p class="muted-small">${status}</p>
+      ${canPay ? cardPayToggleHtml("t-" + prop.id, window.T29_ME, cls) : ""}
       <button class="btn small gold rent-pay-btn" id="payTenantRentBtn-${prop.id}" ${canPay ? "" : `disabled title="${why}"`} onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>
       <div id="tenantRentMsg-${prop.id}"></div>
       <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${s.minWeeks}-week lease, so you can't move out just yet.`}</p>
@@ -671,7 +673,7 @@ async function payTenantRentClick(id) {
   if (btn && btn.disabled) return;
   if (btn) btn.disabled = true;
   try {
-    const res = await payTenantRent(CURRENT.username, CURRENT.classCode, id);
+    const res = await payTenantRent(CURRENT.username, CURRENT.classCode, id, cardPayToggleOn("t-" + id));
     const box = document.getElementById(`tenantRentMsg-${id}`);
     if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
@@ -732,6 +734,7 @@ function renderMyNpcRentedHome(box, unit) {
       renting from the school at ${fmtMoney(unit.rentPerWeek)}/week.</p>
       ${unit.description ? `<p class="muted-small">${escapeHtml(unit.description)}</p>` : ""}
       <p class="muted-small">${status}</p>
+      ${canPay ? cardPayToggleHtml("n-" + unit.id, window.T29_ME, cls) : ""}
       <button class="btn small gold rent-pay-btn" id="payNpcRentBtn-${unit.id}" ${canPay ? "" : `disabled title="${why}"`} onclick="payNpcRentClick('${unit.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(unit.rentPerWeek)}</button>
       <div id="npcRentMsg-${unit.id}"></div>
       <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${unit.minWeeks}-week lease, so you can't move out just yet.`}</p>
@@ -744,7 +747,7 @@ async function payNpcRentClick(id) {
   if (btn && btn.disabled) return;
   if (btn) btn.disabled = true;
   try {
-    const res = await payNpcRent(CURRENT.username, CURRENT.classCode, id);
+    const res = await payNpcRent(CURRENT.username, CURRENT.classCode, id, cardPayToggleOn("n-" + id));
     const box = document.getElementById(`npcRentMsg-${id}`);
     if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
@@ -848,6 +851,7 @@ function mortgagePayBlock(p, cls) {
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
       <p class="muted-small">${status}</p>
+      ${canPay ? cardPayToggleHtml("m-" + p.id, window.T29_ME, cls) : ""}
       ${canPay ? `<button class="btn small gold" id="payMortgageBtn-${p.id}" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay this week's mortgage — ${fmtMoney(amt.total)}</button>` : ""}
       <div id="mortgageMsg-${p.id}"></div>
     </div>`;
@@ -859,7 +863,7 @@ async function payMortgageClick(id) {
   if (btn && btn.disabled) return;
   if (btn) btn.disabled = true;
   try {
-    const res = await payMortgage(CURRENT.username, CURRENT.classCode, id);
+    const res = await payMortgage(CURRENT.username, CURRENT.classCode, id, cardPayToggleOn("m-" + id));
     if (!res.ok) {
       const box = document.getElementById(`mortgageMsg-${id}`);
       if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`;
