@@ -357,7 +357,7 @@ function renderTodo(me, cls) {
     });
   }
   // A weekly event waiting for the student to choose what to do.
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   const now = trustedNow().getTime();
   (cls.eventLog || []).filter(l => l.studentUser === me.username && l.week === weekKey && l.type === "choice" && l.status === "pending" && (l.revealAt === undefined || l.revealAt <= now))
     .forEach(l => items.push({ title: "Choose what to do: " + (l.name || "this week's event"), body: "An event this week is waiting for your choice.", urgent: true,

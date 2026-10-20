@@ -444,7 +444,7 @@ async function autoSettleZeroTransport() {
 function renderTransportExpenses(me, cls) {
   const amt = transportWeeklyAmount(cls, me);
   const dueDay = cls.transportDay || "Fri";
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   const paidThisWeek = me.transportLastWeekPaid === weekKey;
   const overdue = isTransportPaymentOverdue(me, cls);
   const isDueToday = nzDayName() === dueDay;

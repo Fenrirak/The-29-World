@@ -28,9 +28,9 @@ async function addJob(classCode, title, tiers, autoPromoteWeeks) {
       id: uid("j"), title: sanitizeUserText(title, 60),
       tiers: (tiers || []).map(tier => ({
         id: uid("t"), name: sanitizeUserText(tier.name, 60) || "Tier 1",
-        wage: Number(tier.wage) || 0, description: sanitizeUserText(tier.description, 200)
+        wage: Math.max(0, Number(tier.wage) || 0), description: sanitizeUserText(tier.description, 200)
       })),
-      autoPromoteWeeks: Number(autoPromoteWeeks) || 0
+      autoPromoteWeeks: Math.max(0, Number(autoPromoteWeeks) || 0)
     });
     t.update(classRef, { jobs: cls.jobs });
   });
@@ -49,10 +49,10 @@ async function updateJob(classCode, jobId, updates) {
     if (updates.tiers) {
       job.tiers = updates.tiers.map(tier => ({
         id: tier.id || uid("t"), name: sanitizeUserText(tier.name, 60) || "Tier 1",
-        wage: Number(tier.wage) || 0, description: sanitizeUserText(tier.description, 200)
+        wage: Math.max(0, Number(tier.wage) || 0), description: sanitizeUserText(tier.description, 200)
       }));
     }
-    job.autoPromoteWeeks = Number(updates.autoPromoteWeeks) || 0;
+    job.autoPromoteWeeks = Math.max(0, Number(updates.autoPromoteWeeks) || 0);
     t.update(classRef, { jobs: cls.jobs });
   });
 }
@@ -281,7 +281,7 @@ async function addVehicle(classCode, v) {
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     cls.vehicles.push({
-      id: uid("veh"), name: v.name, price: Number(v.price),
+      id: uid("veh"), name: v.name, price: Math.max(0, Number(v.price) || 0),
       comfort: Math.max(1, Math.min(5, Number(v.comfort) || 1)),
       description: v.description || "", owners: [],
       type: normalizeVehicleType(v.type),
@@ -319,7 +319,7 @@ async function updateVehicle(classCode, vehId, updates) {
     const veh = cls.vehicles.find(v => v.id === vehId);
     if (!veh) return;
     veh.name = updates.name;
-    veh.price = Number(updates.price);
+    veh.price = Math.max(0, Number(updates.price) || 0);
     veh.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
     veh.description = updates.description || "";
     veh.type = normalizeVehicleType(updates.type);
@@ -648,7 +648,7 @@ function lastTransportDueWeekKey(cls) {
 // the public transport fee applies to every student from the moment the
 // teacher sets one, whether or not they own a vehicle.
 function overdueTransportWeekKey(user, cls) {
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   if ((user.transportLastWeekPaid || null) === weekKey) return null; // already paid this week
   // Nothing to pay (no fee set, or it's fully offset by their vehicle)
   // means nothing can be overdue — a $0 week is only left unmarked because
@@ -686,7 +686,7 @@ async function payTransportExpenses(username, classCode, opts) {
       if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
       const user = userSnap.data();
       const cls = withNewModuleDefaults(classSnap.data());
-      const weekKey = isoWeekKey(new Date());
+      const weekKey = isoWeekKey();
       if ((cls.transportDay || "Fri") !== nzDayName()) throw new Error("WRONG_DAY");
       if ((user.transportLastWeekPaid || null) === weekKey) throw new Error("ALREADY_PAID");
       breakdown = transportWeeklyAmount(cls, Object.assign({ username }, user));
@@ -1140,8 +1140,8 @@ async function addInsurancePlan(classCode, plan) {
     const coverage = plan.coverage || "general";
     const insType = cleanInsuranceType(coverage, plan.insType);
     cls.insurancePlans.push({
-      id: uid("ins"), name: cleanPlanName(plan.name, coverage, insType), price: Number(plan.price),
-      excess: Number(plan.excess), coverage,
+      id: uid("ins"), name: cleanPlanName(plan.name, coverage, insType), price: Math.max(0, Number(plan.price) || 0),
+      excess: Math.max(0, Number(plan.excess) || 0), coverage,
       insType,
       ...planCompanyFields(cls, coverage, plan.companyId, plan.companyName),
       description: plan.description || "", stars: Math.max(0, Math.min(5, Number(plan.stars) || 0)),
@@ -1174,8 +1174,8 @@ async function editInsurancePlan(classCode, planId, plan) {
     const insType = cleanInsuranceType(coverage, plan.insType);
     cls.insurancePlans[idx] = {
       ...existing,
-      name: cleanPlanName(plan.name, coverage, insType), price: Number(plan.price),
-      excess: Number(plan.excess), coverage,
+      name: cleanPlanName(plan.name, coverage, insType), price: Math.max(0, Number(plan.price) || 0),
+      excess: Math.max(0, Number(plan.excess) || 0), coverage,
       insType,
       ...planCompanyFields(cls, coverage, plan.companyId, plan.companyName),
       description: plan.description || "", stars: Math.max(0, Math.min(5, Number(plan.stars) || 0)),
@@ -1215,6 +1215,16 @@ async function removeInsuranceCompany(classCode, companyId) {
    per possible check-in hour (0-23, NZ time). A student picks one hustle
    and one hour of the day as their standing check-in time, then must
    check in every day within 15 minutes after that hour to get paid. */
+// Side-hustle pay-outs can't be negative (a negative one would take money
+// from a student for checking in).
+function cleanHustlePayouts(p) {
+  const out = {};
+  Object.keys(p || {}).forEach(k => {
+    const n = Number(p[k]);
+    out[k] = (Number.isFinite(n) && n < 0) ? 0 : p[k];
+  });
+  return out;
+}
 async function addSideHustle(classCode, hustle) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
@@ -1223,7 +1233,7 @@ async function addSideHustle(classCode, hustle) {
     const cls = withNewModuleDefaults(snap.data());
     cls.sideHustles.push({
       id: uid("sh"), name: hustle.name, description: hustle.description || "",
-      payouts: hustle.payouts || {}
+      payouts: cleanHustlePayouts(hustle.payouts)
     });
     t.update(classRef, { sideHustles: cls.sideHustles });
   });
@@ -1238,7 +1248,7 @@ async function editSideHustle(classCode, hustleId, hustle) {
     if (idx === -1) return;
     cls.sideHustles[idx] = {
       ...cls.sideHustles[idx],
-      name: hustle.name, description: hustle.description || "", payouts: hustle.payouts || {}
+      name: hustle.name, description: hustle.description || "", payouts: cleanHustlePayouts(hustle.payouts)
     };
     t.update(classRef, { sideHustles: cls.sideHustles });
   });
@@ -1363,7 +1373,7 @@ async function checkinSideHustle(username, classCode) {
       const todayKey = nzDateKey();
       if (sh.lastCheckin === todayKey) throw new Error("ALREADY");
 
-      amount = Number(hustle.payouts[sh.checkinHour]) || 0;
+      amount = Math.max(0, Number(hustle.payouts[sh.checkinHour]) || 0);
       const life = getLifeBenefitTotals(user);
       if (life.incomePercent) amount = Math.round(amount * (1 + life.incomePercent / 100) * 100) / 100;
       hustleName = hustle.name;
@@ -1454,9 +1464,9 @@ async function addStoreItem(classCode, item) {
     // that a later change to stockTotal (see updateStoreItem) can be
     // applied as "bank total minus what's already gone out the door"
     // instead of blindly overwriting the remaining count.
-    const stockTotal = item.stock === "" || item.stock === undefined ? null : Number(item.stock);
+    const stockTotal = item.stock === "" || item.stock === undefined ? null : Math.max(0, Number(item.stock) || 0);
     cls.storeItems.push({
-      id: uid("item"), name: item.name, price: Number(item.price),
+      id: uid("item"), name: item.name, price: Math.max(0, Number(item.price) || 0),
       description: item.description || "", effect: item.effect || "",
       stock: stockTotal, stockTotal, sold: 0,
       stars: Math.max(0, Math.min(5, Number(item.stars) || 0)),
@@ -1475,10 +1485,10 @@ async function updateStoreItem(classCode, itemId, item) {
     const existing = cls.storeItems.find(i => i.id === itemId);
     if (!existing) return;
     existing.name = item.name;
-    existing.price = Number(item.price);
+    existing.price = Math.max(0, Number(item.price) || 0);
     existing.description = item.description || "";
     existing.effect = item.effect || "";
-    const newStockTotal = item.stock === "" || item.stock === undefined ? null : Number(item.stock);
+    const newStockTotal = item.stock === "" || item.stock === undefined ? null : Math.max(0, Number(item.stock) || 0);
     const sold = existing.sold || 0;
     existing.stockTotal = newStockTotal;
     // Re-derive what's left from the new bank total minus units already
@@ -1543,9 +1553,10 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
   opts = opts || {};
   qty = Math.floor(Number(qty)) || 1;
   if (qty < 1) qty = 1;
+  qty = Math.min(qty, 999); // each unit is pushed onto the user's doc, so an absurd qty could hang the tab or blow Firestore's 1 MB doc limit
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let itemName = "", cashPaid = 0, usedCard = false, voucherNote = "", payRes = null;
+  let itemName = "", usedCard = false, voucherNote = "", payRes = null;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1564,7 +1575,6 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
       const pr = cardStorePricing(user, cls, item.price, qty, usedCard && !opts.split, isTeacher ? "" : opts.voucherId, nzDateKey());
       if (opts.voucherId && !isTeacher && !pr.voucher) throw new Error("VOUCHER");
       const total = pr.total;
-      cashPaid = total;
       payRes = { card: 0, cash: total };
       if (!isTeacher) payRes = cardPayInTxn(user, cls, total, { useCard: usedCard, split: !!opts.split, cardMax: opts.cardMax });
       if (pr.voucher) { cardConsumeVoucher(user.creditCard, pr.voucher); voucherNote = ` (${pr.voucher.label} voucher saved ${fmtMoney(pr.voucher.saves)})`; }
@@ -2293,7 +2303,7 @@ async function processWeeklyBigEvents(classCode, opts) {
   // a student's page can't claim the week — skip the refused round trip.
   if (!forceAll && t29SessionStudent()) return 0;
   const classRef = classesCol().doc(classCode);
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   const cls = withNewModuleDefaults(await getClass(classCode));
   if (!cls) return 0;
   if (!forceAll && (cls.archived || cls.lastBigEventWeekRun === weekKey)) return 0;
@@ -2740,7 +2750,7 @@ async function processWeeklyEvents(classCode, opts) {
   const manual = !!(opts && opts.ignoreAlreadyHad); // true only for "Run this week's events now"
   if (!manual && t29SessionStudent()) return 0;
   const classRef = classesCol().doc(classCode);
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   const cls = withNewModuleDefaults(await getClass(classCode));
   if (!cls) return 0;
   if (cls.archived && !manual) return 0;

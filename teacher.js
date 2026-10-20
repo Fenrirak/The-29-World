@@ -1407,7 +1407,7 @@ async function renderProfile(username) {
   const transportAmt = transportWeeklyAmount(cls, s);
   rows.push(`<p class="muted-small">Weekly transport expenses: ${fmtMoney(transportAmt.total)}
     (${transportAmt.vehicleExpense > 0 ? `${fmtMoney(transportAmt.vehicleExpense)} vehicle upkeep + ` : ""}${fmtMoney(transportAmt.publicFeeDue)} public transport${transportAmt.lifeFeeName ? ` — ${escapeHtml(transportAmt.lifeFeeName)} rate` : ""}),
-    due ${DAY_FULL[cls.transportDay || "Fri"]} &middot; ${(s.transportLastWeekPaid === isoWeekKey(new Date())) ? "paid this week" : "not yet paid this week"}</p>`);
+    due ${DAY_FULL[cls.transportDay || "Fri"]} &middot; ${(s.transportLastWeekPaid === isoWeekKey()) ? "paid this week" : "not yet paid this week"}</p>`);
   rows.push(poss.vehicles && poss.vehicles.length
     ? poss.vehicles.map(v => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(v.name)}</strong> — ${fmtMoney(v.price)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span>
         ${(v.weeklyExpense > 0 || v.publicTransportOffsetPct > 0) ? `<div class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffsetPct > 0 ? " &middot; " : ""}${v.publicTransportOffsetPct > 0 ? `knocks ${v.publicTransportOffsetPct}% off public transport` : ""}</div>` : ""}</div>

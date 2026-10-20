@@ -8,7 +8,6 @@
 
 let CC_CLS = null, CC_ME = null, CC_STUDENTS = [];
 let CC_STORE_PAY = { useCard: false, voucherId: "", split: false, cardMax: "" };
-let CC_EDITING = null; // plan id being edited in the teacher form ("" = new)
 
 function ccEsc(s) { return escapeHtml(s === undefined || s === null ? "" : String(s)); }
 function ccTier(cls, planId) {
@@ -279,7 +278,7 @@ function ccActiveHtml(me, cls) {
       <div class="cc-timeline"><div class="cc-timeline-fill" style="width:${late ? 100 : pct.toFixed(1)}%"></div></div>
       <div class="cc-timeline-labels"><span>Statement closed</span><span>${late ? "Interest applies" : "Interest-free until due date"}</span></div>
       <div class="cc-stmt-hint">${late
-        ? `Interest will be added at your next statement${s.minDue > (s.paidOnTime || 0) + 0.004 ? ", and a late fee was added because the minimum wasn't paid on time" : ""}.`
+        ? `Interest will be added at your next statement, on the part of this one you still owe${s.minDue > (s.paidOnTime || 0) + 0.004 ? ", and a late fee was added because the minimum wasn't paid on time" : ""}.`
         : `Pay the full ${fmtMoney(rem)} by the due date and you pay <strong>no interest</strong>. Minimum payment: ${fmtMoney(s.minDue)}.`}</div>
       ${penPts > 0 ? `<div class="cc-pen">${icon("bell", 14)}<span>Unpaid, this is costing you <strong>${penPts} lifestyle point${penPts === 1 ? "" : "s"}</strong>.</span></div>` : ""}
     </div>`;
@@ -357,7 +356,7 @@ function ccActiveHtml(me, cls) {
     </div>
     <ul class="cc-rules">
       <li>Your statement closes every 2 weeks (on a ${ccEsc(DAY_FULL[cardSettings(cls).statementDay] || "Friday")}). Whatever you owe then becomes the <strong>closing balance</strong>.</li>
-      <li>Pay it <strong>in full</strong> by the due date and there's no interest. If you don't, interest is added at the next statement.</li>
+      <li>Pay it <strong>in full</strong> by the due date and there's no interest. If you don't, interest is added at the next statement — only on the part you still owe from this one, never on new spending.</li>
       <li>The monthly fee is charged every 4 weeks. Cashback is added up when each statement closes, and spend-and-earn rewards are earned one purchase at a time. Both are taken <strong>off your closing balance</strong> (so your bill is smaller). They aren't paid into your cash, unless you owe less than you earned.</li>
       <li>Use it wherever a real card works: the <a href="store.html">Store</a> (card perks apply there), Transport, insurance sign-up fees, the Trade Centre (not houses), school rentals, mortgages, and big or random events. Automatic payments can go on it too, but only to your teacher. It can't pay another student (except for Trade Centre purchases), loans, savings, shares or gambling.</li>
       <li>On a big purchase (or one your card can't cover) you can split the payment between card and cash.</li>
@@ -519,7 +518,7 @@ function ccPlanFormHtml(p) {
       <div class="wide"><label for="ccp-name">Plan name</label><input id="ccp-name" maxlength="40" value="${ccEsc(p.name)}" placeholder="e.g. Everyday Classic" required></div>
       ${ccThemePickerHtml(p)}
       ${fld("limit", "Spending limit ($)", p.limit, "1")}
-      ${fld("rate", "Interest (% every 2 weeks)", p.rate, "0.01", "On what's owed if the last statement wasn't paid in full")}
+      ${fld("rate", "Interest (% every 2 weeks)", p.rate, "0.01", "Charged on what's still unpaid from the last statement (not on new spending)")}
       ${fld("fee", "Monthly fee ($)", p.monthlyFee, "0.01", "Charged every 4 weeks")}
       ${fld("free", "Interest-free days to pay", p.freeDays, "1", "0–" + CARD_MAX_FREE_DAYS + " days after the statement closes")}
       <div><label for="ccp-minls">Minimum lifestyle tier</label>${ccTierSelectHtml(CC_CLS, p.minLifestyle)}<div class="muted-small">Students need at least this tier to get the card</div></div>

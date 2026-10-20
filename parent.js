@@ -18,7 +18,7 @@ function pvEscape(s) {
 // Same format as fmtMoney() in data-core.js.
 function pvMoney(n) {
   const v = Number(n) || 0;
-  return (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function pvIcon(name, size) {

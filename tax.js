@@ -50,7 +50,10 @@ function addBracket() {
   // New bracket starts above the current top; if the previous "last" bracket
   // had no cap, give it one now so there's still exactly one open-ended row.
   if (wageBrackets.length && wageBrackets[wageBrackets.length - 1].upTo === null) {
-    wageBrackets[wageBrackets.length - 1].upTo = 100;
+    // Cap it above every existing cap, so brackets stay in ascending order
+    // (a hard-coded 100 would sit below an earlier cap such as 14000).
+    const caps = wageBrackets.map(b => b.upTo).filter(v => v !== null && Number.isFinite(Number(v))).map(Number);
+    wageBrackets[wageBrackets.length - 1].upTo = (caps.length ? Math.max(...caps) : 0) + 1000;
   }
   wageBrackets.push({ upTo: null, rate: 0 });
   renderWageBracketRows();

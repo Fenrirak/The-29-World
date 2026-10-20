@@ -999,12 +999,12 @@ async function saveGamblingSettings(classCode, settings) {
       dailyWinLimit: (settings.dailyWinLimit === "" || settings.dailyWinLimit === undefined || settings.dailyWinLimit === null) ? null : Math.max(0, Number(settings.dailyWinLimit) || 0),
       winLimitMessage: (settings.winLimitMessage || "").trim() || "You've hit your winning limit for today \u2014 nice work! Come back and play again tomorrow.",
       payouts: {
-        straightUp: Number(settings.straightUp) || 0,
-        split: Number(settings.split) || 0,
-        street: Number(settings.street) || 0,
-        corner: Number(settings.corner) || 0,
-        sixLine: Number(settings.sixLine) || 0,
-        oddEven: Number(settings.oddEven) || 0
+        straightUp: Math.max(0, Number(settings.straightUp) || 0),
+        split: Math.max(0, Number(settings.split) || 0),
+        street: Math.max(0, Number(settings.street) || 0),
+        corner: Math.max(0, Number(settings.corner) || 0),
+        sixLine: Math.max(0, Number(settings.sixLine) || 0),
+        oddEven: Math.max(0, Number(settings.oddEven) || 0)
       }
     }
   });
@@ -1223,7 +1223,7 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   // frequency click in the app. Nothing downstream trusts this copy for
   // money: adjustGamblingAccount below re-checks the real balance fresh,
   // inside its own transaction, regardless of what this read shows.
-  betAmount = Number(betAmount);
+  betAmount = cleanAmount(betAmount); // whole cents
   const [clsRaw, user] = await Promise.all([getClassCached(classCode), getUser(username)]);
   const cls = withNewModuleDefaults(clsRaw);
   if (!cls) return { ok: false, error: "Class not found." };
@@ -1235,12 +1235,12 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   if (!(betAmount > 0)) return { ok: false, error: "Enter a bet amount greater than zero." };
   if (betAmount < g.minBet || betAmount > g.maxBet) return { ok: false, error: `Bets must be between ${fmtMoney(g.minBet)} and ${fmtMoney(g.maxBet)}.` };
 
-  let valid = false, count = 0;
-  if (betType === "straightUp") { valid = selection.length === 1 && selection[0] >= 0 && selection[0] <= 36; count = 1; }
-  else if (betType === "split") { valid = selection.length === 2 && isValidSplit(selection[0], selection[1]); count = 2; }
-  else if (betType === "street") { valid = isValidStreet(selection); count = 3; }
-  else if (betType === "corner") { valid = isValidCorner(selection); count = 4; }
-  else if (betType === "sixLine") { valid = isValidSixLine(selection); count = 6; }
+  let valid = false;
+  if (betType === "straightUp") { valid = selection.length === 1 && selection[0] >= 0 && selection[0] <= 36; }
+  else if (betType === "split") { valid = selection.length === 2 && isValidSplit(selection[0], selection[1]); }
+  else if (betType === "street") { valid = isValidStreet(selection); }
+  else if (betType === "corner") { valid = isValidCorner(selection); }
+  else if (betType === "sixLine") { valid = isValidSixLine(selection); }
   else if (betType === "oddEven") { valid = selection[0] === "odd" || selection[0] === "even"; }
   else return { ok: false, error: "Unknown bet type." };
   if (!valid) return { ok: false, error: "That's not a valid bet for this type." };
@@ -1479,7 +1479,6 @@ function bjIsBust(cards) { return bjHandValue(cards).total > 21; }
 // "Blackjack" = a natural 21 on the first two cards. A 21 reached via a
 // split Ace (one card only, per the rules) never counts as blackjack.
 function bjIsNaturalBlackjack(cards) { return cards.length === 2 && bjHandValue(cards).total === 21; }
-function bjCardLabel(c) { return c.r + c.s; }
 
 /* ---- Basic strategy for the two bot players (cosmetic, no real money) ---- */
 function bjBotDecision(cards, dealerUpRank, canDouble, canSplit) {
@@ -1560,8 +1559,6 @@ function bjPlayBot(shoe, initialCards, dealerUpRank) {
 }
 function bjPlayBot_isFirstBust(h) { return bjIsBust(h.cards); }
 
-function bjSeatOrder() { return [1, 2, 3]; }
-
 // Deals a fresh round: builds+shuffles a brand-new 4-deck shoe (a real
 // table also reshuffles between rounds), seats the human in a random seat
 // (1, 2 or 3) with the other two seats filled by bots, deals in strict
@@ -1582,7 +1579,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
   // from under a single Deal click — so a Deal button no longer pays for a
   // guaranteed-fresh fetch of a doc that, on a gambling-heavy class, is
   // also the single busiest document in the whole app.
-  betAmount = Number(betAmount);
+  betAmount = cleanAmount(betAmount); // whole cents
   const [clsRaw, user] = await Promise.all([getClassCached(classCode), getUser(username)]);
   const cls = withNewModuleDefaults(clsRaw);
   if (!cls) return { ok: false, error: "Class not found." };
@@ -1904,7 +1901,19 @@ async function bjSettle(username, classCode, round) {
     totalCredit += protectedRefund;
   }
 
-  if (totalCredit > 0) await adjustGamblingAccount(username, totalCredit, cls.gambling.dailyWinLimit);
+  // adjustGamblingAccount reports failure (busy document, dropped connection)
+  // instead of throwing, and a credit can never fail for lack of funds - so a
+  // failure here is always transient. Retry a few times rather than let a
+  // paid-out win vanish while the round is still recorded as settled.
+  if (totalCredit > 0) {
+    let credited = false;
+    for (let attempt = 0; attempt < 3 && !credited; attempt++) {
+      const r = await adjustGamblingAccount(username, totalCredit, cls.gambling.dailyWinLimit);
+      credited = !!(r && r.ok);
+      if (!credited) await new Promise(res => setTimeout(res, 400 * (attempt + 1)));
+    }
+    if (!credited) console.error("Blackjack: couldn't credit " + totalCredit + " to " + username + " after 3 tries");
+  }
 
   // BUGFIX: insurance is settled directly against the gambling account
   // back in blackjackInsurance() (stake debited when taken; stake back +

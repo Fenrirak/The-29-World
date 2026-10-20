@@ -130,14 +130,20 @@ function genCode(len) {
   return out;
 }
 
+// Unique within a page (a counter, so ids made in the same millisecond - e.g.
+// inside a .map() - can never match) and very unlikely to match one made on
+// another device (random part). Fixed-width tail, so ids can't run together.
+let _uidSeq = 0;
 function uid(prefix) {
-  return prefix + "_" + Date.now().toString(36) + Math.floor(Math.random() * 1000);
+  _uidSeq = (_uidSeq + 1) % 1296;
+  const rnd = Math.floor(Math.random() * 1296);
+  return prefix + "_" + Date.now().toString(36) + _uidSeq.toString(36).padStart(2, "0") + rnd.toString(36).padStart(2, "0");
 }
 
 function fmtMoney(n) {
-  const v = Number(n) || 0;
+  const v = Math.round((Number(n) || 0) * 100) / 100; // round first, so -0.004 shows "$0.00", not "-$0.00"
   // Sign goes in front of the "$" ("-$5.00", not "$-5.00").
-  return (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); // fixed locale, so every device shows 1,234.50
 }
 
 // Turns a typed-in amount into a whole number of cents' worth of dollars,
@@ -1162,8 +1168,8 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
   cls.transportDay = template.transportDay || "Fri";
   cls.publicTransportFee = _cloneDoc(template.publicTransportFee || cls.publicTransportFee);
   cls.publicTransportFeeOverrides = _cloneDoc(template.publicTransportFeeOverrides || {});
-  cls.propertyBreakFee = Number(template.propertyBreakFee) || 0;
-  cls.movingCost = Number(template.movingCost) || 0;
+  cls.propertyBreakFee = Math.max(0, Number(template.propertyBreakFee) || 0);
+  cls.movingCost = Math.max(0, Number(template.movingCost) || 0);
   cls.propertyRentals = _cloneDoc(template.propertyRentals || {});
   cls.storeSortMode = template.storeSortMode || "manual";
   // KiwiSaver settings carry over; a retired class's copy starts un-retired.
@@ -1939,7 +1945,7 @@ async function setMortgageDay(classCode, day) {
 // the normal due day (see payMortgage's comment for why mortgages are
 // manual-only).
 async function setMortgageDueOverride(classCode, active) {
-  await classesCol().doc(classCode).update({ mortgageForceDueWeek: active ? isoWeekKey(new Date()) : null });
+  await classesCol().doc(classCode).update({ mortgageForceDueWeek: active ? isoWeekKey() : null });
 }
 
 // Identifies the current "pay cycle" by the date of its next upcoming (or

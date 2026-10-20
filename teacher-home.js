@@ -18,6 +18,25 @@ async function init() {
   document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
   paintIconSlots();
   await t29FirstPaint(render);
+  loanInterestForMyClasses(); // background - never holds up the page
+}
+
+// Loan interest is charged on Mondays, and it is normally triggered by whoever
+// opens a page that day. A teacher who only opens this landing page (and never
+// a class page) would otherwise start nothing, so on a Monday charge it here for
+// every student in each of the teacher's active classes. It can't double up: each
+// loan is stamped with the week it was last charged, and that stamp is checked
+// inside the database transaction, so a repeat run (or a student's own page
+// load) finds the week already done and charges nothing.
+async function loanInterestForMyClasses() {
+  try {
+    if (nzDayName() !== "Mon") return;
+    const classes = ALL_CLASSES.length ? ALL_CLASSES : await getTeacherClasses(CURRENT.username);
+    for (const c of classes) {
+      if (c.archived) continue;
+      await safeBgJob(processLoanInterest(c.code), "processLoanInterest");
+    }
+  } catch (e) { console.error("Loan interest (teacher home) failed:", e); }
 }
 
 async function render() {

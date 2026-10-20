@@ -5,14 +5,14 @@ const DAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 function nextPaymentInfo(dayAbbr) {
   const targetIdx = DAY_INDEX[dayAbbr];
   if (targetIdx === undefined) return null;
-  const now = new Date();
-  const todayIdx = now.getDay();
+  // Payments run on the NZ calendar, so work out "today" in NZ time (using
+  // the server-corrected clock), not the visiting device's own timezone.
+  const todayIdx = DAY_INDEX[nzDayName()];
   const daysUntil = (targetIdx - todayIdx + 7) % 7;
-  const next = new Date(now);
-  next.setDate(now.getDate() + daysUntil);
+  const next = new Date(trustedNow().getTime() + daysUntil * 86400000);
   return {
     daysUntil,
-    dateStr: next.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }),
+    dateStr: next.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", timeZone: "Pacific/Auckland" }),
     isToday: daysUntil === 0
   };
 }

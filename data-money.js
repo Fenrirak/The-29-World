@@ -1147,17 +1147,6 @@ async function applyInterest(classCode) {
   return count;
 }
 
-async function adjustSavings(username, delta) {
-  const userRef = usersCol().doc(username);
-  await fdb.runTransaction(async (t) => {
-    const snap = await t.get(userRef);
-    if (!snap.exists) return;
-    const user = snap.data();
-    const newSavings = Math.round(((user.savings || 0) + delta) * 100) / 100;
-    t.update(userRef, { savings: newSavings });
-  });
-}
-
 // Moves money from cash balance into the interest-earning Savings Account.
 async function depositToSavings(username, amount) {
   amount = cleanAmount(amount);
@@ -1327,7 +1316,7 @@ async function takeLoan(username, classCode, amount) {
         // Which ISO week this loan last had interest charged for — set to
         // the taking week so the very next Monday job doesn't double-charge
         // a loan taken earlier that same week (or on the Monday itself).
-        lastInterestWeek: isoWeekKey(new Date()), status: "active",
+        lastInterestWeek: isoWeekKey(), status: "active",
         // Marks this loan as taken out under the weekly-compounding model
         // (added after the original "one interest charge at take-out only"
         // version). Loans taken before that change don't have this flag,
@@ -1406,7 +1395,7 @@ async function processLoanInterest(classCode) {
   if (nzDayName() !== "Mon") return 0;
   const cls = await getClass(classCode);
   if (!cls || cls.archived) return 0;
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   // A student's account can only charge its own loans (see
   // t29SessionStudent) — don't spend a refused transaction per classmate.
   const selfOnly = t29SessionStudent();
@@ -2072,9 +2061,9 @@ async function addTermDepositPlan(classCode, plan) {
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     cls.termDepositPlans.push({
-      id: uid("td"), name: plan.name, minAmount: Number(plan.minAmount) || 0,
-      days: Math.max(1, Number(plan.days) || 1), rate: Number(plan.rate) || 0,
-      earlyFeePct: Math.max(0, Number(plan.earlyFeePct) || 0), active: true
+      id: uid("td"), name: plan.name, minAmount: Math.max(0, Number(plan.minAmount) || 0),
+      days: Math.max(1, Number(plan.days) || 1), rate: Math.max(0, Number(plan.rate) || 0),
+      earlyFeePct: Math.min(100, Math.max(0, Number(plan.earlyFeePct) || 0)), active: true
     });
     t.update(classRef, { termDepositPlans: cls.termDepositPlans });
   });
@@ -2089,10 +2078,10 @@ async function editTermDepositPlan(classCode, planId, plan) {
     const existing = cls.termDepositPlans.find(p => p.id === planId);
     if (!existing) return;
     existing.name = plan.name;
-    existing.minAmount = Number(plan.minAmount) || 0;
+    existing.minAmount = Math.max(0, Number(plan.minAmount) || 0);
     existing.days = Math.max(1, Number(plan.days) || 1);
-    existing.rate = Number(plan.rate) || 0;
-    existing.earlyFeePct = Math.max(0, Number(plan.earlyFeePct) || 0);
+    existing.rate = Math.max(0, Number(plan.rate) || 0);
+    existing.earlyFeePct = Math.min(100, Math.max(0, Number(plan.earlyFeePct) || 0));
     updatedPlan = existing;
     t.update(classRef, { termDepositPlans: cls.termDepositPlans });
   });
@@ -2190,10 +2179,11 @@ async function withdrawTermDepositEarly(username, depositId) {
       const dep = user.termDeposits.find(d => d.id === depositId);
       if (!dep) throw new Error("NOT_FOUND");
       name = dep.plan.name;
-      const fee = Math.round(dep.amount * (dep.plan.earlyFeePct / 100) * 100) / 100;
+      const feePct = Math.min(100, Math.max(0, Number(dep.plan.earlyFeePct) || 0));
+      const fee = Math.round(dep.amount * (feePct / 100) * 100) / 100;
       payout = Math.round((dep.amount - fee) * 100) / 100;
       user.termDeposits = user.termDeposits.filter(d => d.id !== depositId);
-      t.update(userRef, { balance: Math.round((user.balance + payout) * 100) / 100, termDeposits: user.termDeposits });
+      t.update(userRef, { balance: Math.round(((Number(user.balance) || 0) + payout) * 100) / 100, termDeposits: user.termDeposits });
     });
   } catch (e) {
     return { ok: false, error: "Something went wrong. Please try again." };
@@ -2280,7 +2270,7 @@ async function _matureTermDepositsFor(classCode, students, todayKey) {
         const liveDeposits = user.termDeposits || [];
         const liveDue = liveDeposits.filter(d => d.matureDate <= todayKey);
         if (liveDue.length === 0) return;
-        let bal = user.balance;
+        let bal = Number(user.balance) || 0;
         liveDue.forEach(d => {
           // Deposits opened under the weekly-compounding model (flagged at
           // open time — see openTermDeposit) use d.plan.rate as a WEEKLY
@@ -2293,7 +2283,11 @@ async function _matureTermDepositsFor(classCode, students, todayKey) {
           // compounded per week.
           let payout;
           if (d.weeklyCompounding) {
-            const weeks = d.plan.days / 7;
+            // Use the term the deposit actually ran (open date to maturity date), not
+            // d.plan.days: editing a plan refreshes the snapshot's days for display
+            // only (matureDate stays put), so plan.days can no longer match the real term.
+            const termDays = (d.startDate && d.matureDate) ? daysBetweenKeys(d.startDate, d.matureDate) : d.plan.days;
+            const weeks = (termDays > 0 ? termDays : d.plan.days) / 7;
             payout = Math.round(d.amount * Math.pow(1 + (d.plan.rate / 100), weeks) * 100) / 100;
           } else {
             payout = Math.round(d.amount * (1 + (d.plan.rate / 100)) * 100) / 100;
@@ -2317,8 +2311,8 @@ async function _matureTermDepositsFor(classCode, students, todayKey) {
 /* ===================== Auto interest ===================== */
 async function saveInterestSettings(classCode, settings) {
   await classesCol().doc(classCode).update({
-    interestRate: Number(settings.rate) || 0,
-    cashInterestRate: Number(settings.cashRate) || 0,
+    interestRate: Math.max(0, Number(settings.rate) || 0),
+    cashInterestRate: Math.max(0, Number(settings.cashRate) || 0),
     interestAuto: !!settings.auto,
     interestFrequency: settings.frequency || "weekly",
     interestDay: settings.day || "Fri"
@@ -2437,14 +2431,6 @@ async function applyInterestToClassIfDue(classCode) {
 }
 
 /* ---------------- Leaderboard ---------------- */
-// Every transaction from the last `days` days (default 10.5 = 1.5 weeks).
-// Txns logged before the ts field existed have no timestamp to check, so
-// they're included rather than silently hidden.
-function getRecentTxns(cls, days) {
-  const cutoff = Date.now() - (days || 10.5) * 86400000;
-  return (cls.txns || []).filter(t => t.ts === undefined || t.ts >= cutoff);
-}
-
 async function classLeaderboard(classCode, viewerUsername, precomputedStudents) {
   const cls = await getClassCached(classCode);
   if (!cls) return [];
@@ -2707,7 +2693,6 @@ async function stockAllTimeGain(username, classCode) {
   const perCompany = {}; // companyId -> { unrealized, realized, total, totalBought, pct, complete }
 
   let unrealized = 0;
-  let anyUntracked = false;
   cls.companies.forEach(co => {
     const shares = co.holders[username] || 0;
     const basis = (co.costBasis && co.costBasis[username]) || null;
@@ -2731,7 +2716,6 @@ async function stockAllTimeGain(username, classCode) {
       }
     }
     unrealized += coUnrealized;
-    if (coUntracked) anyUntracked = true;
 
     perCompany[co.id] = {
       unrealized: Math.round(coUnrealized * 100) / 100,
@@ -3158,7 +3142,7 @@ async function classesColUpdateInsuranceDay(classCode, day) {
 
 async function saveTaxRates(classCode, rates) {
   const clean = {};
-  Object.keys(rates).forEach(k => { clean[k] = Math.max(0, Number(rates[k]) || 0); });
+  Object.keys(rates).forEach(k => { clean[k] = Math.min(100, Math.max(0, Number(rates[k]) || 0)); });
   await classesCol().doc(classCode).update({ taxRates: clean });
 }
 // For purchases: student pays base cost + tax on top.
@@ -3204,7 +3188,7 @@ async function saveWageTaxBrackets(classCode, brackets) {
   const clean = (brackets || [])
     .map(b => ({
       upTo: (b.upTo === null || b.upTo === "" || b.upTo === undefined) ? null : Math.max(0, Number(b.upTo) || 0),
-      rate: Math.max(0, Number(b.rate) || 0)
+      rate: Math.min(100, Math.max(0, Number(b.rate) || 0))
     }))
     .sort((a, b) => (a.upTo == null ? Infinity : a.upTo) - (b.upTo == null ? Infinity : b.upTo));
   await classesCol().doc(classCode).update({ wageTaxBrackets: clean });
@@ -3295,7 +3279,7 @@ const BUDGET_COUNTED = ["done", "today", "upcoming", "overdue", "daily"];
    pay or charge each thing, so the amounts here are what really happens. */
 function budgetWeekItems(cls, user, username) {
   const items = [];
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   const weekStartKey = budgetWeekStartKey();
   const weekEndKey = dateKeyPlusDays(weekStartKey, 6);
   const todayKey = nzDateKey();
@@ -3572,7 +3556,7 @@ async function saveBudget(username, saveAmount) {
   if (raw === "" || !Number.isFinite(Number(raw)) || Number(raw) < 0) return { ok: false, error: "Enter how much you'll save each week — 0 or more." };
   if (save > MAX_BUDGET_SAVE) return { ok: false, error: `That's more than ${fmtMoney(MAX_BUDGET_SAVE)} — try a smaller amount.` };
   await usersCol().doc(username).update({
-    budget: { saveAmount: save, weekKey: isoWeekKey(new Date()), updatedAt: Date.now() }
+    budget: { saveAmount: save, weekKey: isoWeekKey(), updatedAt: Date.now() }
   });
   return { ok: true };
 }
@@ -4598,15 +4582,19 @@ function cardLateCheck(card, plan, asOfKey, logs) {
 function cardCloseStatement(user, card, plan, closeKey, logs) {
   card.lifetime = card.lifetime || { cashback: 0, interest: 0, fees: 0 };
   const prev = card.stmt;
-  const notPaidInFull = !!prev && prev.amount > 0.004 && (prev.amount - (prev.paidOnTime || 0)) > 0.004;
-  // Interest: only if the last closing balance wasn't paid in full by its
-  // due date — then the whole balance owed accrues interest, like a real card.
-  let interest = 0;
-  if (notPaidInFull && plan.rate > 0 && card.balance > 0) {
-    interest = cardRound(card.balance * plan.rate / 100);
+  // Interest: charged ONLY on the part of the last statement that is still
+  // unpaid right now (its closing balance minus everything paid towards it,
+  // which already includes anything unpaid from earlier statements, as that
+  // rolled into it). Spending made since the statement closed is never charged
+  // interest, and neither is anything already paid off.
+  const unpaidFromLast = prev ? cardStmtRemaining(card) : 0;
+  let interest = 0, interestBase = 0;
+  if (unpaidFromLast > 0.004 && plan.rate > 0 && card.balance > 0) {
+    interestBase = Math.min(unpaidFromLast, card.balance);
+    interest = cardRound(interestBase * plan.rate / 100);
     card.balance = cardRound(card.balance + interest);
     card.lifetime.interest = cardRound(card.lifetime.interest + interest);
-    logs.push({ type: "card-interest", amount: interest, note: `Interest on unpaid statement — ${plan.rate}% for 2 weeks` });
+    logs.push({ type: "card-interest", amount: interest, note: `Interest on unpaid statement (${fmtMoney(interestBase)} still owing) — ${plan.rate}% for 2 weeks` });
   }
   card.cycles = (card.cycles || 0) + 1;
   let fee = 0;

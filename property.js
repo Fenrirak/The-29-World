@@ -628,7 +628,7 @@ async function rejectSubletClick(id) {
 // caller's object (prop.sublet.* vs unit.* directly), so callers pass the
 // individual fields in rather than the whole record.
 function tenantRentStatusLine(leaseStartWeekKey, rentLastWeekPaid, rentDay, price, overdue) {
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   const moveInWeek = leaseStartWeekKey === weekKey;
   const alreadyPaid = rentLastWeekPaid === weekKey;
   const isDueToday = (rentDay || "Fri") === nzDayName();
@@ -647,7 +647,7 @@ function renderMyRentedHome(cls, me, nameOf) {
   const prop = (cls.properties || []).find(p => p.sublet && p.sublet.tenant === me.username);
   if (prop) { renderMyClassmateRentedHome(box, prop, cls, nameOf); return; }
   const unit = (cls.npcProperties || []).find(p => p.tenant === me.username);
-  if (unit) { renderMyNpcRentedHome(box, unit); return; }
+  if (unit) { renderMyNpcRentedHome(box, unit, cls); return; }
   box.innerHTML = "";
 }
 function renderMyClassmateRentedHome(box, prop, cls, nameOf) {
@@ -722,7 +722,7 @@ async function claimSubletClick(id) {
 }
 
 /* ---------------- Student: NPC (school) rentals ---------------- */
-function renderMyNpcRentedHome(box, unit) {
+function renderMyNpcRentedHome(box, unit, cls) {
   const overdue = isNpcRentOverdue(unit);
   const { status, canPay, why } = tenantRentStatusLine(unit.leaseStartWeekKey, unit.rentLastWeekPaid, unit.rentDay, unit.rentPerWeek, overdue);
   const canMoveOut = leaseMinWeeksElapsed(unit);
@@ -819,7 +819,7 @@ async function rentNpcClick(gid) {
 // it's the same number payMortgage() itself will use.
 function mortgagePayBlock(p, cls) {
   const mortgageDayName = DAY_FULL[cls.mortgageDay || "Fri"];
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   const purchaseWeek = p.mortgage.purchaseWeekKey === weekKey;
   const alreadyPaid = p.mortgage.lastWeekPaid === weekKey;
   // Payable either on the class's normal mortgage day, or — for this ISO
@@ -879,7 +879,7 @@ async function payMortgageClick(id) {
 // before it's actually saved (see previewMortgageForceDue).
 function mortgageStatusBadges(cls, previewForceDue) {
   const day = cls.mortgageDay || "Fri";
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   const storedForceDue = cls.mortgageForceDueWeek === weekKey;
   const forceDue = previewForceDue === undefined ? storedForceDue : previewForceDue;
   const dueToday = day === nzDayName();
@@ -894,7 +894,7 @@ function mortgageStatusBadges(cls, previewForceDue) {
 function populateMortgageSettings(cls) {
   MORTGAGE_SETTINGS_CLS = cls;
   document.getElementById("mortgageDaySelect").value = cls.mortgageDay || "Fri";
-  document.getElementById("mortgageForceDue").checked = cls.mortgageForceDueWeek === isoWeekKey(new Date());
+  document.getElementById("mortgageForceDue").checked = cls.mortgageForceDueWeek === isoWeekKey();
   document.getElementById("mortgageStatusRow").innerHTML = mortgageStatusBadges(cls);
   document.getElementById("movingCostInput").value = cls.movingCost || 0;
   document.getElementById("mortgageBreakFeeInput").value = cls.propertyBreakFee || 0;

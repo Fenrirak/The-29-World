@@ -142,7 +142,7 @@ function notifMortgageItems(me, cls) {
     // It can only be paid on the mortgage day (or a week the teacher made
     // it due) — after that it's a missed payment to know about, not
     // something they can still do.
-    const payable = (cls.mortgageDay || "Fri") === nzDayName() || cls.mortgageForceDueWeek === isoWeekKey(new Date());
+    const payable = (cls.mortgageDay || "Fri") === nzDayName() || cls.mortgageForceDueWeek === isoWeekKey();
     out.push(payable ? {
       id: "mortgage-" + p.id + "-" + nzDateKey(), ts: dayStart, icon: "house", tone: "coral",
       title: "Mortgage payment due today: " + p.name,
@@ -299,7 +299,7 @@ function notifMarketItems(me, cls) {
 // job for today.
 function notifTransportItems(me, cls) {
   if ((cls.transportDay || "Fri") !== nzDayName()) return [];
-  if ((me.transportLastWeekPaid || null) === isoWeekKey(new Date())) return [];
+  if ((me.transportLastWeekPaid || null) === isoWeekKey()) return [];
   const amount = transportWeeklyAmount(cls, me).total;
   if (!(amount > 0)) return [];
   return [{

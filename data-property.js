@@ -28,9 +28,9 @@ async function addProperty(classCode, prop) {
     const cls = withNewModuleDefaults(snap.data());
     for (let i = 0; i < qty; i++) {
       cls.properties.push({
-        id: uid("prop"), groupId, name: prop.name, price: Number(prop.price),
+        id: uid("prop"), groupId, name: prop.name, price: Math.max(0, Number(prop.price) || 0),
         comfort: Math.max(1, Math.min(5, Number(prop.comfort) || 1)),
-        mortgageWeeks: Number(prop.mortgageWeeks) || 0,
+        mortgageWeeks: Math.max(0, Number(prop.mortgageWeeks) || 0),
         // Weekly interest rate charged on the outstanding mortgage
         // principal (percent per week, e.g. 2 = 2%/week). Defaults to 0 —
         // an interest-free installment plan — unless the teacher sets one.
@@ -52,7 +52,7 @@ async function addProperty(classCode, prop) {
         // below). priceRange is per-listing and null by default, meaning
         // "use the class-wide cls.propertyPriceRange" — set via
         // setListingPriceRange to override just this listing.
-        priceHistory: [Number(prop.price)], priceHistoryDates: [nzDateKey()],
+        priceHistory: [Math.max(0, Number(prop.price) || 0)], priceHistoryDates: [nzDateKey()],
         priceRange: null, purchasePrice: null
       });
     }
@@ -106,9 +106,9 @@ async function updateProperty(classCode, propId, updates) {
     units.forEach(prop => {
       prop.groupId = gid;
       prop.name = updates.name;
-      prop.price = Number(updates.price);
+      prop.price = Math.max(0, Number(updates.price) || 0);
       prop.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
-      prop.mortgageWeeks = Number(updates.mortgageWeeks) || 0;
+      prop.mortgageWeeks = Math.max(0, Number(updates.mortgageWeeks) || 0);
       prop.mortgageInterestRate = Math.max(0, Number(updates.mortgageInterestRate) || 0);
       prop.description = updates.description || "";
       prop.rentPerWeek = Math.max(0, Number(updates.rentPerWeek) || 0);
@@ -395,7 +395,7 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
         // weeklyPayment installment, same schedule as weeksLeft.
         prop.mortgage = {
           weeksLeft: prop.mortgageWeeks, weeklyPayment: weekly,
-          purchaseWeekKey: isoWeekKey(new Date()), lastWeekPaid: null,
+          purchaseWeekKey: isoWeekKey(), lastWeekPaid: null,
           interestRate: prop.mortgageInterestRate || 0,
           principalRemaining: Math.round((taxedPrice - deposit) * 100) / 100
         };
@@ -510,7 +510,11 @@ function mortgageWeekAmount(mortgage) {
     ? mortgage.principalRemaining
     : mortgage.weeklyPayment * mortgage.weeksLeft; // pre-existing mortgages without the field
   const interest = Math.round(principalBefore * ((mortgage.interestRate || 0) / 100) * 100) / 100;
-  const principal = Math.round(mortgage.weeklyPayment * 100) / 100;
+  // The final payment clears whatever principal is left, so the cents lost to
+  // rounding the weekly amount never leave a mortgage slightly under/overpaid.
+  const principal = mortgage.weeksLeft === 1
+    ? Math.max(0, Math.round(principalBefore * 100) / 100)
+    : Math.round(mortgage.weeklyPayment * 100) / 100;
   return { balanceBefore: Math.round(principalBefore * 100) / 100, interest, principal, total: Math.round((principal + interest) * 100) / 100 };
 }
 
@@ -527,7 +531,7 @@ async function payMortgage(username, classCode, propId, useCard) {
       const user = userSnap.data();
       const prop = cls.properties.find(p => p.id === propId);
       if (!prop || prop.owner !== username || !prop.mortgage || prop.mortgage.weeksLeft <= 0) throw new Error("NOT_FOUND");
-      const weekKey = isoWeekKey(new Date());
+      const weekKey = isoWeekKey();
       // Payable either on the class's normal mortgage day, or — for this
       // ISO week only — if the teacher has manually forced it due (see
       // setMortgageDueOverride).
@@ -605,7 +609,7 @@ function lastMortgageDueWeekKey(cls) {
 function overdueMortgageWeekKey(prop, cls) {
   if (!prop || !prop.mortgage || prop.mortgage.weeksLeft <= 0) return null;
   const mortgage = prop.mortgage;
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   if (mortgage.purchaseWeekKey === weekKey) return null; // first week is always free
   if (mortgage.lastWeekPaid === weekKey) return null; // already paid this week
   // A teacher-forced due week (see setMortgageDueOverride) counts as
@@ -770,7 +774,7 @@ async function processPropertyRent(classCode) {
   const cls = withNewModuleDefaults(await getClass(classCode));
   if (!cls || cls.archived) return 0;
   const todayName = nzDayName();
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   const todayKey = nzDateKey();
   let ran = 0;
   for (const prop of cls.properties) {
@@ -1077,7 +1081,7 @@ async function claimSublet(username, classCode, propId) {
       ownerUsername = prop.owner;
       prop.sublet.tenant = username;
       prop.sublet.leaseStartTs = Date.now();
-      prop.sublet.leaseStartWeekKey = isoWeekKey(new Date());
+      prop.sublet.leaseStartWeekKey = isoWeekKey();
       prop.sublet.rentLastWeekPaid = null;
       t.update(classRef, { properties: cls.properties });
     });
@@ -1197,7 +1201,7 @@ function lastDueWeekKeyForDay(dayName) {
 function overdueSubletRentWeekKey(prop, cls) {
   if (!prop || !prop.sublet || !prop.sublet.tenant) return null;
   const sublet = prop.sublet;
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   // The move-in week is free (payTenantRent refuses it), so a tenant who
   // moved in after this week's due day doesn't owe it — same as school rentals.
   if (sublet.leaseStartWeekKey === weekKey) return null;
@@ -1243,7 +1247,7 @@ async function payTenantRent(username, classCode, propId, useCard) {
       const tenant = tenantSnap.data();
       const prop = cls.properties.find(p => p.id === propId);
       if (!prop || !prop.sublet || prop.sublet.tenant !== username) throw new Error("NOT_FOUND");
-      const weekKey = isoWeekKey(new Date());
+      const weekKey = isoWeekKey();
       if ((prop.rentDay || "Fri") !== nzDayName()) throw new Error("WRONG_DAY");
       if (prop.sublet.leaseStartWeekKey === weekKey) throw new Error("MOVE_IN_WEEK");
       if (prop.sublet.rentLastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
@@ -1446,7 +1450,7 @@ async function rentNpcProperty(username, classCode, unitId) {
       propName = unit.name;
       unit.tenant = username;
       unit.leaseStartTs = Date.now();
-      unit.leaseStartWeekKey = isoWeekKey(new Date());
+      unit.leaseStartWeekKey = isoWeekKey();
       unit.rentLastWeekPaid = null;
       unit.rentLastPaidDate = null;
       t.update(classRef, { npcProperties: cls.npcProperties });
@@ -1492,7 +1496,7 @@ async function moveOutNpcProperty(username, classCode, unitId) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "property-occupancy", from: username, note: `Moved out: ${propName} (school rental)` + (payRes.card > 0 ? " (credit card)" : "") });
+  await logTxn(classCode, { type: "property-occupancy", from: username, note: `Moved out: ${propName} (school rental)` });
   return { ok: true };
 }
 
@@ -1532,7 +1536,7 @@ async function teacherEndNpcTenancy(classCode, unitId) {
 // unit instead of a nested .sublet object.
 function overdueNpcRentWeekKey(unit) {
   if (!unit || !unit.tenant) return null;
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   if (unit.leaseStartWeekKey === weekKey) return null; // move-in week is free
   if (unit.rentLastWeekPaid === weekKey) return null; // already paid this week
   const lastDueWeekKey = lastDueWeekKeyForDay(unit.rentDay || "Fri");
@@ -1567,7 +1571,7 @@ async function payNpcRent(username, classCode, unitId, useCard) {
       const tenant = tenantSnap.data();
       const unit = cls.npcProperties.find(p => p.id === unitId);
       if (!unit || unit.tenant !== username) throw new Error("NOT_FOUND");
-      const weekKey = isoWeekKey(new Date());
+      const weekKey = isoWeekKey();
       if ((unit.rentDay || "Fri") !== nzDayName()) throw new Error("WRONG_DAY");
       if (unit.leaseStartWeekKey === weekKey) throw new Error("MOVE_IN_WEEK");
       if (unit.rentLastWeekPaid === weekKey) throw new Error("ALREADY_PAID");

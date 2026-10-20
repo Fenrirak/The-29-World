@@ -13,7 +13,6 @@ let ME = null;
 let STUDENTS = [];
 let EDITING_QUIZ_ID = null;   // set while the teacher is editing an existing quiz
 let BUILDER_ROWS = [];        // [{ id, text, options: [str], answer: idx, explain }]
-let TAKING = null;            // the quiz the student currently has open
 
 function esc(s) {
   return String(s === undefined || s === null ? "" : s)

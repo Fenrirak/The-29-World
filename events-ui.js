@@ -52,7 +52,7 @@ async function checkWeeklyEventPopup(username, classCode) {
   let cls = await getClassCached(classCode);
   const user = await getUserCached(username);
   if (!cls || !user) return;
-  const weekKey = isoWeekKey(new Date());
+  const weekKey = isoWeekKey();
   const now = trustedNow().getTime();
   const todayKey = nzDateKey();
   const mine = (cls.eventLog || []).filter(l => l.studentUser === username && l.week === weekKey);
