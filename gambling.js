@@ -1337,3 +1337,21 @@ async function render() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+// Enter key shortcuts: pressing Enter in an amount box clicks its matching
+// button. Delegated on document so it works even if the inputs get re-rendered.
+const ENTER_KEY_MAP = {
+  betAmount: "spinBtn",
+  bjBetAmount: "bjDealBtn",
+  gAcctBuyInAmount: "gAcctBuyInBtn",
+  gAcctCashOutAmount: "gAcctCashOutBtn"
+};
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.isComposing) return;
+  const btnId = ENTER_KEY_MAP[e.target && e.target.id];
+  if (!btnId) return;
+  const btn = document.getElementById(btnId);
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  btn.click();
+});
