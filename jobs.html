@@ -28,7 +28,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=1ea541ea">
+<link rel="stylesheet" href="style.css?v=906a2d0b">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -96,11 +96,11 @@
       <p class="muted-small">Set up a job with as many tiers as you like. Each tier has its own name, pay, and description.</p>
 
       <label for="addJobTitle">Job name</label>
-      <input id="addJobTitle" placeholder="e.g. Librarian" style="max-width:360px;">
+      <input id="addJobTitle" data-enter="addJobBtn" placeholder="e.g. Librarian" style="max-width:360px;">
 
       <label for="addJobAutoWeeks" style="margin-top:14px;">
         Auto-promote every
-        <input id="addJobAutoWeeks" type="number" min="0" step="1" value="0"
+        <input id="addJobAutoWeeks" data-enter="addJobBtn" type="number" min="0" step="1" value="0"
           style="width:70px;display:inline-block;margin:0 6px;vertical-align:middle;">
         weeks &nbsp;<span class="muted-small">(0 = disabled — teacher promotes manually)</span>
       </label>
@@ -165,11 +165,11 @@
     </div>
 
     <label for="editJobTitle" style="margin-top:16px;">Job name</label>
-    <input id="editJobTitle" placeholder="e.g. Librarian" style="max-width:360px;">
+    <input id="editJobTitle" data-enter="saveEditBtn" placeholder="e.g. Librarian" style="max-width:360px;">
 
     <label for="editJobAutoWeeks" style="margin-top:14px;">
       Auto-promote every
-      <input id="editJobAutoWeeks" type="number" min="0" step="1" value="0"
+      <input id="editJobAutoWeeks" data-enter="saveEditBtn" type="number" min="0" step="1" value="0"
         style="width:70px;display:inline-block;margin:0 6px;vertical-align:middle;">
       weeks &nbsp;<span class="muted-small">(0 = off)</span>
     </label>
@@ -213,7 +213,8 @@
 
 <script type="module" src="firebase-init.js?v=9f8488c9"></script>
 <script defer src="icons.js?v=e2d401f3"></script>
-<script defer src="settings-menu.js?v=fde34c7c"></script>
+<script defer src="settings-menu.js?v=437e4fec"></script>
+<script defer src="shortcuts.js?v=2acdd144"></script>
 <script defer src="data-core.js?v=414fa856"></script>
 <script defer src="data-money.js?v=a633e223"></script>
 <script defer src="data-life.js?v=6e1a8214"></script>

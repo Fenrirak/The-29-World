@@ -127,21 +127,29 @@ function smBuildPopover() {
       </label>
     </div>` : ""}
     ${typeof t29TourForThisPage === "function" && t29TourForThisPage() ? `
-    <div class="settings-popover-row" id="t29TourRow" style="cursor:pointer;">
+    <div class="settings-popover-row" id="t29TourRow" role="button" tabindex="0" style="cursor:pointer;">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Show me around</div>
         <div class="settings-popover-desc">A one-minute tour of this page.</div>
       </div>
       <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
     </div>` : ""}
-    <div class="settings-popover-row" id="t29ChangePasswordRow" style="cursor:pointer;">
+    ${typeof t29ShowShortcuts === "function" && typeof t29HasKeyboard === "function" && t29HasKeyboard() ? `
+    <div class="settings-popover-row" id="t29KeysRow" role="button" tabindex="0" style="cursor:pointer;">
+      <div class="settings-popover-text">
+        <div class="settings-popover-title">Keyboard shortcuts</div>
+        <div class="settings-popover-desc">Jump around with your keyboard — press <kbd class="t29-kbd">?</kbd> any time to see them all.</div>
+      </div>
+      <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
+    </div>` : ""}
+    <div class="settings-popover-row" id="t29ChangePasswordRow" role="button" tabindex="0" style="cursor:pointer;">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Change password</div>
         <div class="settings-popover-desc">You'll stay signed in here — any other device you're logged in on will need to sign back in.</div>
       </div>
       <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
     </div>
-    <div style="border-top:1px solid rgba(0,0,0,.08);margin-top:10px;padding-top:10px;">
+    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">
       <a href="https://buymeacoffee.com/29world" target="_blank" rel="noopener" id="t29SupportCreatorRow" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 14px;border-radius:10px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);font-weight:800;text-decoration:none;">☕ Support the Creator</a>
     </div>
   `;
@@ -162,6 +170,14 @@ function smBuildPopover() {
     tourRow.addEventListener("click", () => {
       smClosePopover();
       t29StartTour();
+    });
+  }
+
+  const keysRow = pop.querySelector("#t29KeysRow");
+  if (keysRow) {
+    keysRow.addEventListener("click", () => {
+      smClosePopover();
+      t29ShowShortcuts();
     });
   }
 
@@ -211,6 +227,12 @@ function smClosePopover() {
 
 function smOpenPopover(btn) {
   const pop = smBuildPopover();
+  // The switches can be stale if something else changed the setting since
+  // this popover was built (e.g. the T shortcut for dark mode).
+  const dm = pop.querySelector("#t29DarkModeToggle");
+  if (dm) dm.checked = document.documentElement.classList.contains("dark-mode");
+  const sbCb = pop.querySelector("#t29SidebarNavToggle");
+  if (sbCb) sbCb.checked = smSidebarIsOn();
   smPositionPopover(pop, btn);
   btn.setAttribute("aria-expanded", "true");
 }

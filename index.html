@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=1ea541ea">
+<link rel="stylesheet" href="style.css?v=906a2d0b">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -63,13 +63,13 @@
       <form id="panel-teacher-new" class="hidden" onsubmit="return doTeacherSignup(event)">
         <p class="muted-small" style="margin-top:0;">Set up your classroom — you'll get a unique class code straight away so students can join.</p>
         <label for="t-name"><span class="icon-slot"></span> Your name</label>
-        <input id="t-name" required placeholder="Your name">
+        <input id="t-name" required autocomplete="name" placeholder="Your name">
         <label for="t-class"><span class="icon-slot"></span> Class name</label>
-        <input id="t-class" placeholder="Class name, e.g. Room 12" required>
+        <input id="t-class" placeholder="Class name, e.g. Room 12" autocomplete="off" required>
         <label for="t-username"><span class="icon-slot"></span> Choose a username</label>
-        <input id="t-username" required autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
+        <input id="t-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
         <label for="t-password"><span class="icon-slot"></span> Choose a password</label>
-        <input id="t-password" type="password" required placeholder="Choose a password">
+        <input id="t-password" type="password" required autocomplete="new-password" placeholder="Choose a password">
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Create my class</button>
       </form>
     </div>
@@ -97,13 +97,13 @@
       <!-- Student joins a class -->
       <form id="panel-student-new" class="hidden" onsubmit="return doStudentSignup(event)">
         <label for="s-code"><span class="icon-slot"></span> Class code</label>
-        <input id="s-code" placeholder="Class code, e.g. F7K2M" required style="text-transform:uppercase;">
+        <input id="s-code" placeholder="Class code, e.g. F7K2M" required autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" style="text-transform:uppercase;">
         <label for="s-name"><span class="icon-slot"></span> Your name</label>
-        <input id="s-name" required placeholder="Your name">
+        <input id="s-name" required autocomplete="name" placeholder="Your name">
         <label for="s-username"><span class="icon-slot"></span> Choose a username</label>
-        <input id="s-username" required autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
+        <input id="s-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
         <label for="s-password"><span class="icon-slot"></span> Choose a password</label>
-        <input id="s-password" type="password" required placeholder="Choose a password">
+        <input id="s-password" type="password" required autocomplete="new-password" placeholder="Choose a password">
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Join class</button>
         <p class="muted-small" style="text-align:center;margin-top:10px;">Each class holds up to 8 students. Ask your teacher for the class code.</p>
       </form>
@@ -169,12 +169,22 @@ function paintIcons() {
   logo.innerHTML = icon("coin", 26);
 }
 
+// After switching tabs, put the cursor in the first box so typing can start
+// straight away. Computers only — on a phone the keyboard popping up would
+// cover the form.
+function focusFirstField(panelId) {
+  if (!window.matchMedia || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+  const first = document.querySelector("#" + panelId + " input:not([type=checkbox])");
+  if (first) first.focus({ preventScroll: true });
+}
+
 function showRole(which) {
   document.getElementById("role-panel-teacher").classList.toggle("hidden", which !== "teacher");
   document.getElementById("role-panel-student").classList.toggle("hidden", which !== "student");
   document.getElementById("role-teacher").classList.toggle("active", which === "teacher");
   document.getElementById("role-student").classList.toggle("active", which === "student");
   document.getElementById("msg").innerHTML = "";
+  focusFirstField(which === "teacher" ? "panel-teacher-login" : "panel-student-login");
 }
 
 function showPanel(which) {
@@ -184,6 +194,7 @@ function showPanel(which) {
     document.getElementById("tab-" + p).classList.toggle("active", p === which);
   });
   document.getElementById("msg").innerHTML = "";
+  focusFirstField("panel-" + which);
 }
 
 function showMsg(text, ok) {

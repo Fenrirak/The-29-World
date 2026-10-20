@@ -499,7 +499,7 @@ label .icon-slot{color:var(--navy-700);}
 .class-card-grid{display:flex;flex-direction:column;gap:14px;}
 .class-card{
   border:1.5px solid var(--line);border-radius:14px;padding:26px 24px;
-  background:#fff;cursor:pointer;transition:box-shadow .15s,transform .15s;
+  background:var(--card);cursor:pointer;transition:box-shadow .15s,transform .15s;
   display:flex;align-items:center;justify-content:space-between;
   gap:18px;flex-wrap:wrap;position:relative;
 }
@@ -517,7 +517,7 @@ label .icon-slot{color:var(--navy-700);}
   gap:14px;flex-wrap:wrap;text-align:center;color:var(--muted);
   background:rgba(0,0,0,0.045);transition:box-shadow .15s,transform .15s;
 }
-.new-class-card:hover{box-shadow:0 10px 24px rgba(31,43,68,0.1);color:var(--navy-900);}
+.new-class-card:hover{box-shadow:0 10px 24px rgba(31,43,68,0.1);color:var(--accent-text,var(--navy-900));}
 .flex-between{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 .student-avatar{
   width:38px;height:38px;border-radius:50%;
@@ -3380,3 +3380,60 @@ html.dark-mode .bud-track-fill.cardhot{background:linear-gradient(90deg,var(--co
 .cc-rwnote.warn{color:var(--cc-gold-ink);background:var(--cc-gold-bg);border:1.5px solid var(--cc-gold-line);border-radius:10px;padding:8px 10px;}
 @media(max-width:520px){.cc-rwex-row{grid-template-columns:1fr;}.cc-rwsentence .cc-num{width:100px;}.cc-rw-top{flex-wrap:wrap;}}
 @media(prefers-reduced-motion:reduce){.cc-rw-fill,.cc-rwedit-body{transition:none;}}
+
+/* ===================== Keyboard shortcuts, focus rings, small polish =====================
+   Pairs with shortcuts.js. Focus rings only show for keyboard focus
+   (:focus-visible), so mouse and touch users see no change. */
+a:focus-visible,button:focus-visible,summary:focus-visible,
+[role="button"]:focus-visible,[role="link"]:focus-visible,[tabindex="0"]:focus-visible{
+  outline:2px solid var(--sky);outline-offset:2px;
+}
+.topbar a:focus-visible,.topbar button:focus-visible{outline-offset:-2px;}
+html.dark-mode a:focus-visible,html.dark-mode button:focus-visible,html.dark-mode summary:focus-visible,
+html.dark-mode [role="button"]:focus-visible,html.dark-mode [role="link"]:focus-visible,
+html.dark-mode [tabindex="0"]:focus-visible{outline-color:var(--accent-text);}
+main:focus{outline:none;}
+
+.t29-skip{
+  position:fixed;left:12px;top:-64px;z-index:3000;padding:10px 16px;border-radius:10px;
+  background:var(--navy-900);color:var(--warm-white);font-weight:700;text-decoration:none;
+  box-shadow:0 8px 22px rgba(0,0,0,0.3);transition:top .12s;
+}
+.t29-skip:focus{top:12px;outline:2px solid var(--gold);outline-offset:2px;}
+
+.t29-kbd{
+  display:inline-block;min-width:24px;padding:1px 7px 2px;border:1.5px solid var(--line);border-bottom-width:3px;
+  border-radius:7px;background:var(--bg);color:var(--ink);text-align:center;white-space:nowrap;
+  font:700 .76rem/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+
+/* "G then ..." cheat-sheet that appears after pressing G */
+.t29-gohint{
+  position:fixed;left:0;right:0;margin:0 auto;bottom:22px;z-index:2500;
+  width:max-content;max-width:min(94vw,680px);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;
+  background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 14px 40px rgba(0,0,0,0.28);padding:12px 16px;font-size:.84rem;animation:t29ToastIn .15s ease;
+}
+.t29-gohint-title{flex:0 0 100%;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+.t29-gohint-item{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
+
+/* Shortcut list pop-up (reuses .t29-dialog) */
+.t29-dialog.t29-keys-card{max-width:680px;padding:20px 22px 16px;}
+.t29-keys-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.t29-keys-head h2{margin:0;font-size:1.2rem;}
+.t29-keys-close{
+  width:34px;height:34px;min-height:0;border:none;border-radius:50%;background:transparent;color:var(--muted);
+  font-size:1.5rem;line-height:1;cursor:pointer;
+}
+.t29-keys-close:hover{background:var(--bg);color:var(--ink);}
+.t29-keys-cols{display:grid;grid-template-columns:1fr 1fr;gap:4px 28px;}
+.t29-keys-sec{margin-bottom:14px;}
+.t29-keys-sec h3{margin:0 0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+.t29-keys-row{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:.9rem;}
+.t29-keys-row:last-child{border-bottom:none;}
+.t29-keys-keys{flex:0 0 auto;min-width:78px;display:inline-flex;gap:4px;}
+.t29-keys-label{min-width:0;}
+.t29-keys-foot{margin:4px 0 0;}
+@media(max-width:620px){.t29-keys-cols{grid-template-columns:1fr;}}
+.settings-popover-desc .t29-kbd{font-size:.7rem;padding:0 5px 1px;}
+@media(prefers-reduced-motion:reduce){.t29-skip{transition:none;}.t29-gohint{animation:none;}}

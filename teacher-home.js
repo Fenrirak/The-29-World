@@ -66,7 +66,6 @@ async function render() {
         <button class="btn small coral" type="button" data-delete="${cls.code}">${icon("trash", 12)} Delete</button>
       </div>
     `;
-    card.querySelector("h3").addEventListener("click", () => openClass(cls.code));
     card.addEventListener("click", () => openClass(cls.code));
     card.querySelector("[data-open]").addEventListener("click", (e) => { e.stopPropagation(); openClass(cls.code); });
     card.querySelector("[data-share]").addEventListener("click", (e) => { e.stopPropagation(); openShareModal(cls.code, cls.name); });

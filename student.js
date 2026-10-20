@@ -319,7 +319,7 @@ async function render() {
   document.getElementById("bcNoActivity").classList.toggle("hidden", bankPreview.length > 0);
   bankPreview.forEach((t, i) => {
     const row = document.createElement("div");
-    row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;" + (i < bankPreview.length - 1 ? "border-bottom:1px solid rgba(0,0,0,.08);" : "");
+    row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;" + (i < bankPreview.length - 1 ? "border-bottom:1px solid var(--line);" : "");
     row.innerHTML = `
       <div style="min-width:0;">
         ${badgeType(t.type)}

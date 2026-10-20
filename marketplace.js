@@ -360,7 +360,7 @@ function mktInjectCss() {
   .mkt-pb-seg{display:inline-flex;gap:4px;padding:4px;border-radius:14px;background:rgba(127,127,127,.15)}
   .mkt-pb-seg button{border:0;background:transparent;color:inherit;border-radius:10px;padding:8px 18px;cursor:pointer;font:inherit;font-weight:700;display:flex;flex-direction:column;align-items:center;line-height:1.15;opacity:.7}
   .mkt-pb-seg button small{font-size:.72em;font-weight:600}
-  .mkt-pb-seg button.on{background:var(--card-bg,#fff);color:var(--ink,#1f2b44);opacity:1;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  .mkt-pb-seg button.on{background:var(--card);color:var(--ink,#1f2b44);opacity:1;box-shadow:0 2px 8px rgba(0,0,0,.15)}
   .mkt-pb-chips{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
   .mkt-chip{font-size:.8em;font-weight:700;padding:4px 12px;border-radius:999px;border:1px solid rgba(127,127,127,.35)}
   .mkt-chip.mint{background:rgba(46,184,120,.15);border-color:rgba(46,184,120,.45)}
@@ -373,7 +373,11 @@ function mktPayBarRender() {
   if (!el) return;
   if (!mktHasCard()) { el.classList.add("hidden"); MP_PAY.useCard = false; MP_PAY.split = false; MP_PAY.init = false; return; }
   mktInjectCss();
-  if (!MP_PAY.init) { MP_PAY.useCard = ME.mpPayDefault === "card"; MP_PAY.init = true; }
+  if (!MP_PAY.init) {
+    let d = ME.mpPayDefault;
+    try { d = localStorage.getItem("anw_mpPay_" + CURRENT.username) || d; } catch (e) { /* ignore */ }
+    MP_PAY.useCard = d === "card"; MP_PAY.init = true;
+  }
   const plan = cardPlanById(CLS, ME.creditCard.planId);
   const avail = cardAvailable(ME.creditCard, plan);
   const useCard = MP_PAY.useCard;
@@ -397,8 +401,10 @@ async function mktSetPay(useCard) {
   MP_PAY.useCard = !!useCard;
   if (!useCard) MP_PAY.split = false;
   if (ME) ME.mpPayDefault = useCard ? "card" : "cash";
+  try { localStorage.setItem("anw_mpPay_" + CURRENT.username, useCard ? "card" : "cash"); } catch (e) { /* ignore */ }
   mktPayBarRender();
-  try { await setMarketplacePayDefault(CURRENT.username, !!useCard); } catch (e) { console.error("save default account", e); }
+  try { await setMarketplacePayDefault(CURRENT.username, !!useCard); }
+  catch (e) { console.error("Couldn't save default account to the server (accepted offers will use the old one). Check Firestore rules allow mpPayDefault:", e); }
 }
 function mktSetSplit(on) { MP_PAY.split = !!on; mktPayBarRender(); }
 function mktSetCardMax(v) { MP_PAY.cardMax = v === "" ? "" : String(Math.max(0, Number(v) || 0)); }
