@@ -4173,6 +4173,24 @@ function cardRewardProgress(plan, spend) {
   const into = cardRound(cardRound(spend) - r.steps * r.every);
   return { steps: r.steps, earned: r.fixed, into, toNext: cardRound(Math.max(0, r.every - into)), pct: Math.max(0, Math.min(100, into / r.every * 100)) };
 }
+// Spend-and-earn is judged ONE PURCHASE AT A TIME: a single charge must reach
+// $rewardEvery to earn, each whole step earns $rewardBack, and the leftover
+// never rolls into the next purchase. Called once per charge (cardChargeInTxn).
+function cardPurchaseReward(plan, amount) {
+  const everyC = Math.round(((plan && plan.rewardEvery) || 0) * 100), back = (plan && plan.rewardBack) || 0;
+  const steps = everyC > 0 && back > 0 ? Math.floor(Math.round(cardRound(amount) * 100) / everyC) : 0;
+  return { steps, fixed: cardRound(Math.min(cardRound(amount), steps * back)) };
+}
+// What this statement period has earned so far: % cashback on all spend, plus
+// the per-purchase spend-and-earn total banked on the card (periodFixed). A
+// card with no periodFixed yet (opened before this rule) keeps the old maths
+// for that one period; its first new charge converts it.
+function cardPeriodReward(plan, card) {
+  const spend = cardRound((card && card.periodSpend) || 0), base = cardRewardOf(plan, spend);
+  if (!card || card.periodFixed === undefined || !(base.every > 0 && base.back > 0)) return base;
+  const fixed = cardRound(card.periodFixed);
+  return Object.assign({}, base, { steps: card.periodSteps || 0, fixed, total: cardRound(Math.min(spend, base.pct + fixed)) });
+}
 function cardHasRewards(plan) { return !!plan && (plan.cashbackPct > 0 || (plan.rewardEvery > 0 && plan.rewardBack > 0)); }
 function cardLast4(username) { return "0029"; } // every card ends in 0029
 function cardWeekdayOfKey(key) { return DAY_NAMES[new Date(dateKeyToUTC(key)).getUTCDay()]; }
@@ -4195,7 +4213,7 @@ function cardMakeActive(plan, cls, todayKey) {
   const nextCloseKey = cardFirstCloseKey(todayKey, cardSettings(cls).statementDay);
   return {
     status: "active", planId: plan.id, appliedTs: Date.now(), startKey: todayKey,
-    balance: 0, periodSpend: 0, cycles: 0, nextCloseKey, stmt: null,
+    balance: 0, periodSpend: 0, periodFixed: 0, periodSteps: 0, cycles: 0, nextCloseKey, stmt: null,
     vouchers: cardIssueVouchers(plan, nextCloseKey),
     lifetime: { cashback: 0, interest: 0, fees: 0 }
   };
@@ -4396,7 +4414,13 @@ function cardChargeInTxn(user, cls, amount, noReward) {
   if ((card.balance || 0) + amount > plan.limit + 0.004) throw new Error("LIMIT");
   card.balance = cardRound((card.balance || 0) + amount);
   // noReward: moving money to another student isn't shopping, so it can't earn cashback.
-  if (!noReward) card.periodSpend = cardRound((card.periodSpend || 0) + amount);
+  if (!noReward) {
+    if (card.periodFixed === undefined) { const old = cardRewardOf(plan, card.periodSpend || 0); card.periodFixed = old.fixed; card.periodSteps = old.steps; } // keep what a pre-rule period already earned
+    const r = cardPurchaseReward(plan, amount); // this one charge only; nothing carries over
+    card.periodFixed = cardRound((card.periodFixed || 0) + r.fixed);
+    card.periodSteps = (card.periodSteps || 0) + r.steps;
+    card.periodSpend = cardRound((card.periodSpend || 0) + amount);
+  }
   return card;
 }
 /* ---------------- Paying with the card: whole, split, or events ----------------
@@ -4596,7 +4620,7 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
   // STATEMENT CREDIT: it comes straight off the closing balance below. Only
   // if the student owes less than they earned does the rest land in cash.
   let cashback = 0, cashLeft = 0;
-  const rw = cardRewardOf(plan, card.periodSpend || 0);
+  const rw = cardPeriodReward(plan, card);
   if (rw.total > 0) {
     cashback = rw.total;
     const applied = Math.min(cashback, card.balance);
@@ -4605,7 +4629,7 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     card.lifetime.cashback = cardRound(card.lifetime.cashback + cashback);
     const parts = [];
     if (rw.pct > 0) parts.push(`${plan.cashbackPct}% cashback ${fmtMoney(rw.pct)}`);
-    if (rw.fixed > 0) parts.push(`${fmtMoney(rw.back)} back for every ${fmtMoney(rw.every)} spent × ${rw.steps} = ${fmtMoney(rw.fixed)}`);
+    if (rw.fixed > 0) parts.push(`${fmtMoney(rw.back)} back for every ${fmtMoney(rw.every)} in a single purchase × ${rw.steps} = ${fmtMoney(rw.fixed)}`);
     logs.push({ type: "card-cashback", amount: cashback, note: `Cashback ${fmtMoney(cashback)} on ${fmtMoney(card.periodSpend)} spent — ${parts.join(" + ")}` });
   }
   const nextClose = dateKeyPlusDays(closeKey, CARD_CYCLE_DAYS);
@@ -4619,7 +4643,7 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
   };
   logs.push({ type: "card-statement", amount,
     note: amount > 0.004 ? `Statement closed — pay ${fmtMoney(amount)} by ${cardDateLabel(card.stmt.dueKey)} to avoid interest` : "Statement closed — nothing to pay" });
-  card.periodSpend = 0;
+  card.periodSpend = 0; card.periodFixed = 0; card.periodSteps = 0;
   card.nextCloseKey = nextClose;
   user.balance = cardRound((user.balance || 0) + cashLeft);
   return cashLeft;
@@ -4685,7 +4709,7 @@ function cardBudgetInfo(cls, user) {
     plan, limit: plan.limit, balance: cardRound(c.balance || 0), available: cardAvailable(c, plan),
     stmtRemaining, unbilled: cardRound(Math.max(0, (c.balance || 0) - stmtRemaining)),
     dueKey: c.stmt ? c.stmt.dueKey : null, nextCloseKey: c.nextCloseKey, periodSpend: cardRound(c.periodSpend || 0),
-    cashbackSoFar: cardRewardOf(plan, c.periodSpend || 0).total, cashbackLifetime: cardRound((c.lifetime && c.lifetime.cashback) || 0)
+    cashbackSoFar: cardPeriodReward(plan, c).total, cashbackLifetime: cardRound((c.lifetime && c.lifetime.cashback) || 0)
   };
 }
 

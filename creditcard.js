@@ -148,39 +148,28 @@ function ccVisual(cls, plan, name, last4, opts) {
 function ccPerks(plan) {
   const out = [];
   if (plan.cashbackPct > 0) out.push(`<span class="cc-chip mint">${icon("coin", 12)}${plan.cashbackPct}% cashback</span>`);
-  if (plan.rewardEvery > 0 && plan.rewardBack > 0) out.push(`<span class="cc-chip mint">${icon("star", 12)}${fmtMoney(plan.rewardBack)} back per ${fmtMoney(plan.rewardEvery)} spent</span>`);
+  if (plan.rewardEvery > 0 && plan.rewardBack > 0) out.push(`<span class="cc-chip mint">${fmtMoney(plan.rewardBack)} back per ${fmtMoney(plan.rewardEvery)} in one purchase</span>`);
   if (plan.storeDiscountPct > 0) out.push(`<span class="cc-chip gold">${icon("cart", 12)}${plan.storeDiscountPct}% off the class store</span>`);
   (plan.vouchers || []).forEach(v => out.push(`<span class="cc-chip lilac">${icon("trophy", 12)}${v.kind === "percent" ? `${v.value}% off voucher` : `${fmtMoney(v.value)} store voucher`}</span>`));
   return out.length ? out.join("") : `<span class="cc-chip plain">No extra perks</span>`;
 }
-// "Rewards this statement": what the student has earned so far, how close the
-// next spend-and-earn step is, and exactly when it is paid.
+// Rewards panel: spend-and-earn counts ONE purchase at a time (nothing adds up or rolls over); % cashback is per statement.
 function ccRewardsHtml(plan, c, today) {
   if (!cardHasRewards(plan)) return "";
-  const spend = cardRound(c.periodSpend || 0), r = cardRewardOf(plan, spend), pr = cardRewardProgress(plan, spend);
+  const spend = cardRound(c.periodSpend || 0), r = cardRewardOf(plan, spend);
   const days = Math.max(0, daysBetweenKeys(today, c.nextCloseKey));
   const when = days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
-  const coins = pr && pr.steps > 0
-    ? `<div class="cc-rw-coins" aria-hidden="true">${Array.from({ length: Math.min(pr.steps, 8) }, () => `<i>${icon("coin", 14)}</i>`).join("")}${pr.steps > 8 ? `<b>+${pr.steps - 8}</b>` : ""}</div>` : "";
-  const step = pr ? `
-    <div class="cc-rw-row">
-      <div class="cc-rw-line"><strong>${spend <= 0.004 ? `Spend ${fmtMoney(plan.rewardEvery)} to earn ${fmtMoney(plan.rewardBack)} back` : `Spend ${fmtMoney(pr.toNext)} more to earn ${pr.steps > 0 ? "another" : "your first"} ${fmtMoney(plan.rewardBack)}`}</strong>
-        <span>${pr.steps > 0 ? `${ccPlural(pr.steps, "reward")} earned · ${fmtMoney(pr.earned)}` : `${fmtMoney(plan.rewardBack)} back for every ${fmtMoney(plan.rewardEvery)} spent`}</span></div>
-      <div class="cc-rw-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${plan.rewardEvery}" aria-valuenow="${pr.into}"><div class="cc-rw-fill" style="width:${Math.max(pr.pct, pr.into > 0 ? 4 : 0).toFixed(1)}%"></div></div>
-      <div class="cc-rw-scale"><span>${fmtMoney(pr.into)}</span><span>${fmtMoney(plan.rewardEvery)} = +${fmtMoney(plan.rewardBack)}</span></div>
-      ${coins}
-    </div>` : "";
+  const fixed = plan.rewardEvery > 0 && plan.rewardBack > 0;
+  const step = fixed ? `
+    <div class="cc-rw-row"><div class="cc-rw-line"><strong>Spend ${fmtMoney(plan.rewardEvery)} or more in one purchase to earn ${fmtMoney(plan.rewardBack)} back</strong>
+      <span>Every ${fmtMoney(plan.rewardEvery)} in a single purchase earns ${fmtMoney(plan.rewardBack)}. Each purchase counts on its own, so smaller ones don't add up and nothing rolls over to the next.</span></div></div>` : "";
   const pct = plan.cashbackPct > 0 ? `
     <div class="cc-rw-row cc-rw-pct"><div class="cc-rw-line"><strong>${plan.cashbackPct}% cashback</strong><span>on ${fmtMoney(spend)} spent this statement</span></div><b>+${fmtMoney(r.pct)}</b></div>` : "";
   return `
-    <section class="cc-rw ${r.total > 0 ? "has-earned" : ""}" aria-label="Rewards this statement">
-      <div class="cc-rw-top">
-        <span class="cc-rw-badge">${icon("star", 18)}</span>
-        <div class="cc-rw-title"><strong>Rewards this statement</strong><span>Paid out ${when} · ${ccEsc(cardDateLabel(c.nextCloseKey))}</span></div>
-        <div class="cc-rw-est"><small>Earned so far</small><strong>+${fmtMoney(r.total)}</strong></div>
-      </div>
+    <section class="cc-rw" aria-label="Rewards">
+      <div class="cc-rw-top"><div class="cc-rw-title"><strong>Rewards</strong><span>Paid out ${when} · ${ccEsc(cardDateLabel(c.nextCloseKey))}</span></div></div>
       ${step}${pct}
-      <div class="cc-rw-foot">${icon("calendar", 13)}<span>It's added when your statement closes and comes <strong>off your closing balance</strong>, so you pay less. Payments to other students don't earn rewards.</span></div>
+      <div class="cc-rw-foot"><span>Rewards are added when your statement closes and come <strong>off your closing balance</strong>, so you pay less. Payments to other students don't earn rewards.</span></div>
     </section>`;
 }
 function ccFacts(plan) {
@@ -339,7 +328,7 @@ function ccActiveHtml(me, cls) {
       <div class="cc-limit">
         <div class="cc-limit-head"><span>Owing <strong>${fmtMoney(owing)}</strong> of ${fmtMoney(plan.limit)}</span><span class="cc-avail">${fmtMoney(avail)} available</span></div>
         <div class="cc-limit-bar"><div class="cc-limit-fill ${usedPct > 85 ? "hot" : ""}" style="width:${usedPct.toFixed(1)}%"></div></div>
-        ${cardHasRewards(plan) ? (() => { const e = cardRewardOf(plan, c.periodSpend || 0).total; return `<div class="cc-limit-earn ${e > 0 ? "has" : ""}">${icon("coin", 14)}<span>Cashback earned so far</span><strong>+${fmtMoney(e)}</strong></div>`; })() : ""}
+        ${plan.cashbackPct > 0 ? (() => { const e = cardRewardOf(plan, c.periodSpend || 0).pct; return `<div class="cc-limit-earn ${e > 0 ? "has" : ""}">${icon("coin", 14)}<span>Cashback earned so far</span><strong>+${fmtMoney(e)}</strong></div>`; })() : ""}
         <div class="cc-limit-sub">${unbilled > 0 ? `${fmtMoney(unbilled)} spent since your last statement · it closes ${ccEsc(cardDateLabel(c.nextCloseKey))}` : `Next statement closes ${ccEsc(cardDateLabel(c.nextCloseKey))}`}</div>
       </div>
       ${ccRewardsHtml(plan, c, today)}
@@ -369,7 +358,7 @@ function ccActiveHtml(me, cls) {
     <ul class="cc-rules">
       <li>Your statement closes every 2 weeks (on a ${ccEsc(DAY_FULL[cardSettings(cls).statementDay] || "Friday")}). Whatever you owe then becomes the <strong>closing balance</strong>.</li>
       <li>Pay it <strong>in full</strong> by the due date and there's no interest. If you don't, interest is added at the next statement.</li>
-      <li>The monthly fee is charged every 4 weeks. Cashback and spend rewards are added up when each statement closes and taken <strong>off your closing balance</strong> (so your bill is smaller). They aren't paid into your cash, unless you owe less than you earned.</li>
+      <li>The monthly fee is charged every 4 weeks. Cashback is added up when each statement closes, and spend-and-earn rewards are earned one purchase at a time. Both are taken <strong>off your closing balance</strong> (so your bill is smaller). They aren't paid into your cash, unless you owe less than you earned.</li>
       <li>Use it wherever a real card works: the <a href="store.html">Store</a> (card perks apply there), Transport, insurance sign-up fees, the Trade Centre (not houses), school rentals, mortgages, and big or random events. Automatic payments can go on it too, but only to your teacher. It can't pay another student (except for Trade Centre purchases), loans, savings, shares or gambling.</li>
       <li>On a big purchase (or one your card can't cover) you can split the payment between card and cash.</li>
     </ul>
@@ -502,43 +491,18 @@ function ccRenderTeacher(cls, students) {
 
 function ccRewardEditHtml(p) {
   const on = p.rewardEvery > 0 && p.rewardBack > 0;
-  return `
-    <div class="wide cc-rwedit ${on ? "" : "is-off"}" id="ccp-rwbox">
-      <div class="cc-rwedit-head">
-        <span class="cc-rw-badge">${icon("star", 18)}</span>
-        <div class="cc-rwedit-text"><strong>Spend-and-earn reward</strong><p>Students get a set amount back for every chunk they spend on this card. It stacks with the % cashback above.</p></div>
-        <label class="cc-switch"><input type="checkbox" id="ccp-rwon" ${on ? "checked" : ""} onchange="ccRewardPreview()"><span class="cc-switch-track"></span><span id="ccp-rwstate">${on ? "On" : "Off"}</span></label>
-      </div>
-      <div class="cc-rwedit-body">
-        <div class="cc-sentence cc-rwsentence">
-          <span>Give back</span>
-          <div class="cc-num money"><i>$</i><input id="ccp-rwback" type="number" min="0.01" step="0.01" value="${on ? p.rewardBack : 5}" oninput="ccRewardPreview()" aria-label="Dollars given back"></div>
-          <span>for every</span>
-          <div class="cc-num money"><i>$</i><input id="ccp-rwevery" type="number" min="0.01" step="0.01" value="${on ? p.rewardEvery : 100}" oninput="ccRewardPreview()" aria-label="Dollars spent per reward"></div>
-          <span>spent</span>
-        </div>
-        <div class="cc-rwprev" id="ccp-rwprev" aria-live="polite"></div>
-      </div>
-    </div>`;
+  const fld = (id, label, val, hint) => `<div><label for="ccp-${id}">${label}</label><input id="ccp-${id}" type="number" min="0" step="0.01" value="${val}" oninput="ccRewardPreview()"><div class="muted-small">${hint}</div></div>`;
+  return `${fld("rwback", "Spend-and-earn reward ($ back)", on ? p.rewardBack : "", "Leave both spend-and-earn boxes blank for none")}
+    ${fld("rwevery", "Earned per ($) in one purchase", on ? p.rewardEvery : "", "Only a single purchase counts toward this")}
+    <div class="wide muted-small" id="ccp-rwprev" aria-live="polite"></div>`;
 }
-// Live preview under the sentence — shows the teacher exactly what students will earn.
 function ccRewardPreview() {
-  const box = document.getElementById("ccp-rwbox"); if (!box) return;
-  const on = document.getElementById("ccp-rwon").checked;
+  const out = document.getElementById("ccp-rwprev"); if (!out) return;
   const back = Number(document.getElementById("ccp-rwback").value) || 0, every = Number(document.getElementById("ccp-rwevery").value) || 0;
-  box.classList.toggle("is-off", !on);
-  document.getElementById("ccp-rwstate").textContent = on ? "On" : "Off";
-  ["ccp-rwback", "ccp-rwevery"].forEach(id => { document.getElementById(id).disabled = !on; });
-  const out = document.getElementById("ccp-rwprev");
-  if (!on) { out.innerHTML = `<span class="cc-rwnote">Switched off — students only get the % cashback (if you set one).</span>`; return; }
-  if (!(back > 0) || !(every > 0)) { out.innerHTML = `<span class="cc-rwnote warn">Enter both amounts to turn this on.</span>`; return; }
-  const eff = Math.min(back, every), pct = eff / every * 100;
-  const plan = { rewardBack: eff, rewardEvery: every, cashbackPct: 0 };
-  const ex = [1, 2.5, 10].map(m => { const sp = cardRound(every * m); return `<div class="cc-rwex"><small>Spend ${fmtMoney(sp)}</small><strong>+${fmtMoney(cardRewardOf(plan, sp).total)}</strong></div>`; }).join("");
-  out.innerHTML = `
-    <div class="cc-rwex-row">${ex}</div>
-    <div class="cc-rwnote">That's <strong>${pct >= 10 ? pct.toFixed(0) : pct.toFixed(1).replace(/\.0$/, "")}% back</strong> on spending. It's paid in whole steps, so ${fmtMoney(cardRound(every * 2 - 0.01))} earns ${fmtMoney(eff)}, the same as ${fmtMoney(every)}. Counted per statement, then paid when it closes.</div>
-    ${back > every ? `<div class="cc-rwnote warn">Rewards can't be more than the spending that earns them, so this will be capped at ${fmtMoney(every)} per ${fmtMoney(every)}.</div>` : ""}`;
+  if (!back && !every) { out.textContent = "No spend-and-earn reward. Students only get the % cashback (if you set one)."; return; }
+  if (!(back > 0 && every > 0)) { out.textContent = "Fill in both amounts to turn the spend-and-earn reward on."; return; }
+  const eff = Math.min(back, every);
+  out.textContent = `One purchase of ${fmtMoney(every)} or more earns ${fmtMoney(eff)} back (${fmtMoney(every * 2)} earns ${fmtMoney(eff * 2)}); ${fmtMoney(Math.max(0, every - 0.01))} earns nothing. Purchases don't add together and nothing rolls over.${back > every ? ` The reward is capped at ${fmtMoney(every)} per ${fmtMoney(every)}.` : ""}`;
 }
 function ccPlanFormHtml(p) {
   const v = p.vouchers || [];
@@ -592,9 +556,9 @@ async function ccSavePlan(e) {
   const id = g("id");
   const old = id ? (CC_CLS.cardPlans || []).find(p => p.id === id) : null;
   const g0name = g("name");
-  const rwOn = document.getElementById("ccp-rwon").checked;
-  if (rwOn && !(Number(g("rwback")) > 0 && Number(g("rwevery")) > 0)) {
-    ccMsg("ccTMsg", `<div class="error-msg">Fill in both amounts for the spend-and-earn reward, or switch it off.</div>`);
+  const rb = Number(g("rwback")) || 0, re = Number(g("rwevery")) || 0, rwOn = rb > 0 && re > 0;
+  if ((rb > 0) !== (re > 0)) {
+    ccMsg("ccTMsg", `<div class="error-msg">Fill in both spend-and-earn amounts, or leave both blank.</div>`);
     return false;
   }
   const theme = CC_THEMES.some(t => t.id === g("theme")) ? g("theme") : ccRandomTheme(id);
@@ -653,7 +617,11 @@ function ccStoreBarRender(me, cls) {
   if (!plan) { el.classList.add("hidden"); CC_STORE_PAY = { useCard: false, voucherId: "", split: false, cardMax: "" }; return; }
   const vs = cardUsableVouchers(me, nzDateKey());
   if (!vs.some(v => v.id === CC_STORE_PAY.voucherId)) CC_STORE_PAY.voucherId = "";
-  if (!CC_STORE_PAY.init) { CC_STORE_PAY.useCard = me.storePayDefault === "card"; CC_STORE_PAY.init = true; }
+  if (!CC_STORE_PAY.init) {
+    let d = me.storePayDefault;
+    try { d = localStorage.getItem("anw_storePay_" + CURRENT.username) || d; } catch (e) { /* ignore */ }
+    CC_STORE_PAY.useCard = d === "card"; CC_STORE_PAY.init = true;
+  }
   const useCard = CC_STORE_PAY.useCard;
   const avail = cardAvailable(me.creditCard, plan);
   el.classList.remove("hidden");
@@ -666,7 +634,7 @@ function ccStoreBarRender(me, cls) {
     <div class="cc-pb-perks">${useCard
       ? (plan.storeDiscountPct > 0 ? `<span class="cc-chip gold">${plan.storeDiscountPct}% card discount applied</span>` : "")
         + (plan.cashbackPct > 0 ? `<span class="cc-chip mint">${plan.cashbackPct}% cashback</span>` : "")
-        + (plan.rewardEvery > 0 && plan.rewardBack > 0 ? `<span class="cc-chip mint">${fmtMoney(plan.rewardBack)} back per ${fmtMoney(plan.rewardEvery)}</span>` : "")
+        + (plan.rewardEvery > 0 && plan.rewardBack > 0 ? `<span class="cc-chip mint">${fmtMoney(plan.rewardBack)} back per ${fmtMoney(plan.rewardEvery)} in one purchase</span>` : "")
         + `<span class="cc-chip plain">Billed on your next statement</span>`
       : `<span class="cc-chip plain">Switch to card for discount &amp; cashback</span>`}</div>
     ${useCard ? `<div class="cc-pb-split">
@@ -680,8 +648,10 @@ async function ccStoreSetPay(useCard) {
   CC_STORE_PAY.useCard = !!useCard;
   if (!useCard) CC_STORE_PAY.split = false;
   if (typeof ME_CACHE !== "undefined" && ME_CACHE) ME_CACHE.storePayDefault = useCard ? "card" : "cash";
+  try { localStorage.setItem("anw_storePay_" + CURRENT.username, useCard ? "card" : "cash"); } catch (e) { /* ignore */ }
   ccStoreRefresh();
-  try { await setStorePayDefault(CURRENT.username, !!useCard); } catch (e) { console.error("save store default account", e); }
+  try { await setStorePayDefault(CURRENT.username, !!useCard); }
+  catch (e) { console.error("Couldn't save store default to the server. Check Firestore rules allow storePayDefault:", e); }
 }
 function ccStoreSetSplit(on) { CC_STORE_PAY.split = !!on; ccStoreRefresh(); }
 function ccStoreSetCardMax(v) { CC_STORE_PAY.cardMax = v === "" ? "" : String(Math.max(0, Number(v) || 0)); ccStoreRefresh(); }

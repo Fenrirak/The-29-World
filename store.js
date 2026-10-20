@@ -67,6 +67,7 @@ async function init() {
   document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   paintChrome();
+  if (!IS_TEACHER) { cartLoad(); cartBuildDom(); }
   // Same fix as the other pages: run the independent background jobs
   // together instead of one sequential network round-trip each.
   const T29_STARTUP_JOBS = Promise.all([
@@ -136,7 +137,7 @@ async function render() {
             <button type="button" class="rc-btn rc-down" aria-label="Move ${escapeHtml(it.name)} down" title="Move down" onclick="moveItem('${it.id}', 1)">${DOWN_SVG}</button>
           </div>` : ""}
           <div class="store-info">
-          <h4>${icon("cart", 20)}${escapeHtml(it.name)} ${owned ? `<span class="badge mint">Owned ×${owned}</span>` : ""}</h4>
+          <h4>${icon("cart", 20)}${escapeHtml(it.name)} ${owned ? `<span class="badge mint">Owned ×${owned}</span>` : ""} ${IS_TEACHER ? "" : `<span class="badge gold ${CART[it.id] ? "" : "hidden"}" id="inCart-${it.id}">In cart ×${CART[it.id] || 0}</span>`}</h4>
           <p>${escapeHtml(it.description) || "No description provided."}</p>
           ${it.effect ? `<p class="muted-small">Does: ${it.effect}</p>` : ""}
           <p>${priceWithLifeDiscount(me, "store", it.price)} ${starsHtml(it.stars)}</p>
@@ -159,7 +160,7 @@ async function render() {
                        onkeydown="if(event.key==='Enter'){qtyNormalize('${it.id}');event.preventDefault();}">
                      <button type="button" class="qty-btn" aria-label="Increase quantity" onclick="qtyStep('${it.id}', 1)">+</button>
                    </div>
-                   <button class="btn small gold qty-buy-btn" id="buyBtn-${it.id}" onclick="buyItem('${it.id}')">${icon("cart", 13)} <span id="buyLabel-${it.id}">Buy</span></button>
+                   <button class="btn small gold qty-buy-btn" id="buyBtn-${it.id}" onclick="addToCart('${it.id}')">${icon("cart", 13)} <span id="buyLabel-${it.id}">Add to cart</span></button>
                  </div>`}
           ${(!IS_TEACHER && owned) ? `<button class="btn small secondary" onclick="sellItem('${it.id}')">${icon("trash", 13)} Sell back (80%)</button>` : ""}
         </div>
@@ -173,7 +174,11 @@ async function render() {
   list.classList.toggle("auto-sorted", SORT_MODE !== "manual");
   refreshRanks();
   paintSortBar(items.length);
-  if (!IS_TEACHER) items.forEach(it => { if (!(it.stock !== null && it.stock <= 0)) updateBuyLabel(it.id); });
+  if (!IS_TEACHER) {
+    cartClean();
+    items.forEach(it => { if (!(it.stock !== null && it.stock <= 0)) { updateBuyLabel(it.id); updateCartBadge(it.id); } });
+    renderCart();
+  }
 }
 
 function qtyStep(id, delta) {
@@ -220,9 +225,9 @@ function updateBuyLabel(id) {
   // The card discount needs the whole bill on the card, so a split is priced like cash (same as the checkout).
   const pr = cardStorePricing(ME_CACHE, CLS_CACHE, it.price, qty, CC_STORE_PAY.useCard && !CC_STORE_PAY.split, CC_STORE_PAY.voucherId, nzDateKey());
   const how = CC_STORE_PAY.useCard && cardIsActive(ME_CACHE) ? (CC_STORE_PAY.split ? " (card + cash)" : " on card") : "";
-  label.textContent = (qty > 1 ? `Buy ×${qty}` : "Buy") + ` — ${fmtMoney(pr.total)}${how}`;
+  label.textContent = (qty > 1 ? `Add ×${qty}` : "Add to cart") + ` — ${fmtMoney(pr.total)}${how}`;
 }
-function updateAllBuyLabels() { ITEMS_CACHE.forEach(it => updateBuyLabel(it.id)); }
+function updateAllBuyLabels() { ITEMS_CACHE.forEach(it => updateBuyLabel(it.id)); renderCart(); }
 
 async function addItem(e) {
   e.preventDefault();
@@ -318,31 +323,260 @@ async function sellItem(id) {
   flashMsg(document.getElementById("msg-" + id), `<div class="success-msg">Sold back for ${fmtMoney(res.payout)}!</div>`);
 }
 
-async function buyItem(id) {
-  // Same double-tap guard as buy() in market.js — unlike deleteItem/
-  // sellItem just above, this has no confirm() dialog to naturally
-  // absorb an eager double-click, so without this a slow connection
-  // could fire two purchases before the first's result shows up.
-  const btn = document.getElementById("buyBtn-" + id);
-  if (btn && btn.disabled) return;
-  if (btn) btn.disabled = true;
+/* ===================== Student: shopping cart ===================== */
+// Students add items to a cart, then pay for everything in one checkout.
+// Checkout calls buyStoreCart() (data-money.js) when it exists, so the whole cart is ONE transaction.
+// Until that function exists it falls back to buying line by line (see checkoutCart).
+let CART = {}, CART_BUSY = false, CART_DONE = null, CART_MSG = "", CART_OPEN = false;
+const cartApi = () => typeof buyStoreCart === "function";
+const cartKey = () => "anw_cart_" + CURRENT.username + "_" + CURRENT.classCode;
+function cartLoad() { try { const o = JSON.parse(localStorage.getItem(cartKey()) || "{}"); CART = o && typeof o === "object" ? o : {}; } catch (e) { CART = {}; } }
+function cartSave() { try { localStorage.setItem(cartKey(), JSON.stringify(CART)); } catch (e) { /* ignore */ } }
+const cartCount = () => Object.values(CART).reduce((a, b) => a + b, 0);
+const cartLines = () => ITEMS_CACHE.filter(it => CART[it.id] > 0).map(it => ({ it, qty: CART[it.id] }));
+const cartStockMax = it => (it.stock === null || it.stock === undefined) ? Infinity : Math.max(0, it.stock);
+
+// Drop sold-out / removed items and cap quantities to the stock that's left.
+function cartClean() {
+  let changed = false;
+  Object.keys(CART).forEach(id => {
+    const it = ITEMS_CACHE.find(i => i.id === id);
+    let q = Math.floor(Number(CART[id])) || 0;
+    if (it) q = Math.min(q, cartStockMax(it));
+    if (!it || q < 1) { delete CART[id]; changed = true; }
+    else if (q !== CART[id]) { CART[id] = q; changed = true; }
+  });
+  if (changed) cartSave();
+}
+
+// ---- pricing: always the same function the checkout uses ----
+const cartUsesCardPrice = () => CC_STORE_PAY.useCard && !CC_STORE_PAY.split;
+const cartPrice = (price, qty, voucherId) => cardStorePricing(ME_CACHE, CLS_CACHE, price, qty, cartUsesCardPrice(), voucherId || "", nzDateKey()).total;
+const cartPayOpts = () => ({ useCard: CC_STORE_PAY.useCard, voucherId: CC_STORE_PAY.voucherId, split: CC_STORE_PAY.useCard && CC_STORE_PAY.split, cardMax: CC_STORE_PAY.cardMax === "" ? null : Number(CC_STORE_PAY.cardMax) });
+// Dearest line first: in line-by-line mode the voucher goes on that one.
+const cartOrdered = lines => lines.slice().sort((a, b) => cartPrice(b.it.price, b.qty, "") - cartPrice(a.it.price, a.qty, ""));
+function cartTotals(lines) {
+  const vid = CC_STORE_PAY.voucherId;
+  const sub = cardRound(lines.reduce((s, l) => s + cartPrice(l.it.price, l.qty, ""), 0));
+  let total = 0;
+  if (lines.length && cartApi()) total = cartPrice(lines.reduce((s, l) => s + Number(l.it.price) * l.qty, 0), 1, vid);
+  else if (lines.length) { const o = cartOrdered(lines); total = cardRound(o.reduce((s, l, i) => s + cartPrice(l.it.price, l.qty, i === 0 ? vid : ""), 0)); }
+  return { sub, total, saved: Math.max(0, cardRound(sub - total)) };
+}
+
+// ---- cart actions ----
+function addToCart(id) {
+  const it = ITEMS_CACHE.find(i => i.id === id); if (!it) return;
+  const input = $id("qty-" + id), msg = $id("msg-" + id);
+  const want = Math.max(1, parseInt(input && input.value, 10) || 1);
+  const have = CART[id] || 0, max = cartStockMax(it), room = max - have;
+  if (room < 1) { if (msg) msg.innerHTML = `<div class="error-msg">You already have all ${max} in your cart.</div>`; return; }
+  const add = Math.min(want, room);
+  CART[id] = have + add; cartSave(); CART_DONE = null; CART_MSG = "";
+  if (input) input.value = 1;
+  updateBuyLabel(id); updateCartBadge(id); renderCart();
+  const fab = $id("cartFab"); if (fab) { fab.classList.remove("bump"); void fab.offsetWidth; fab.classList.add("bump"); }
+  if (msg) flashMsg(msg, `<div class="success-msg">Added${add > 1 ? ` ×${add}` : ""} to your cart${add < want ? ` (only ${max} in stock)` : ""}.</div>`);
+}
+function updateCartBadge(id) {
+  const b = $id("inCart-" + id); if (!b) return;
+  const q = CART[id] || 0;
+  b.classList.toggle("hidden", !q); b.textContent = `In cart ×${q}`;
+}
+function cartSet(id, qty) {
+  const it = ITEMS_CACHE.find(i => i.id === id); if (!it) return;
+  qty = Math.min(Math.floor(qty), cartStockMax(it));
+  if (qty < 1) delete CART[id]; else CART[id] = qty;
+  cartSave(); CART_MSG = ""; updateCartBadge(id); renderCart();
+}
+const cartStep = (id, d) => cartSet(id, (CART[id] || 0) + d);
+const cartRemove = id => cartSet(id, 0);
+function cartClear() { if (!cartCount() || !confirm("Remove everything from your cart?")) return; Object.keys(CART).forEach(id => { delete CART[id]; updateCartBadge(id); }); cartSave(); CART_MSG = ""; renderCart(); }
+
+async function checkoutCart() {
+  if (CART_BUSY) return;
+  const lines = cartLines(); if (!lines.length) return;
+  CART_BUSY = true; CART_MSG = ""; renderCart();
+  const opts = cartPayOpts(), snap = cartTotals(lines), done = [];
+  let err = "";
   try {
-    const input = document.getElementById("qty-" + id);
-    let qty = 1;
-    if (input) {
-      qty = parseInt(input.value, 10) || 1;
-      if (qty < 1) qty = 1;
-      const max = input.getAttribute("max");
-      if (max !== null && max !== "" && qty > Number(max)) qty = Number(max);
+    if (cartApi()) {
+      // One transaction for the whole cart (all-or-nothing, one voucher, one receipt).
+      const res = await buyStoreCart(CURRENT.username, CURRENT.classCode, lines.map(l => ({ id: l.it.id, qty: l.qty })), opts);
+      if (res && res.ok) done.push(...lines); else err = (res && res.error) || "The purchase didn't go through.";
+    } else if (opts.split && opts.cardMax !== null) {
+      err = "A card limit on a part-card payment needs the single-transaction checkout. Clear the limit box, or pay fully by card or cash.";
+    } else {
+      // Fallback until buyStoreCart() exists: one purchase per line, voucher on the dearest line only.
+      let vid = opts.voucherId;
+      for (const l of cartOrdered(lines)) {
+        const r = await buyStoreItem(CURRENT.username, CURRENT.classCode, l.it.id, l.qty, Object.assign({}, opts, { voucherId: vid }));
+        if (!r.ok) { err = `${l.it.name}: ${r.error}`; break; }
+        done.push(l); vid = "";
+      }
     }
-    const res = await buyStoreItem(CURRENT.username, CURRENT.classCode, id, qty, { useCard: CC_STORE_PAY.useCard, voucherId: CC_STORE_PAY.voucherId, split: CC_STORE_PAY.useCard && CC_STORE_PAY.split, cardMax: CC_STORE_PAY.cardMax === "" ? null : Number(CC_STORE_PAY.cardMax) });
-    if (!res.ok) { document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
-    await render();
-    // Same as sellItem: render() rebuilds the message box.
-    flashMsg(document.getElementById("msg-" + id), `<div class="success-msg">Purchased${res.qty > 1 ? ` ×${res.qty}` : ""}!</div>`);
-  } finally {
-    if (btn) btn.disabled = false;
+  } catch (e) { console.error("Checkout failed", e); err = "Something went wrong. Please try again."; }
+  done.forEach(l => delete CART[l.it.id]); cartSave();
+  if (done.length) CART_DONE = { lines: done.map(l => ({ name: l.it.name, qty: l.qty })), total: err ? null : snap.total };
+  if (err) CART_MSG = `<div class="error-msg">${done.length ? `Bought ${done.length} of ${lines.length} items. ` : ""}${escapeHtml(err)}</div>`;
+  CART_BUSY = false;
+  await render();
+  renderCart();
+}
+
+// ---- drawer ----
+function cartOpen() {
+  CART_OPEN = true; renderCart();
+  $id("cartOverlay").classList.add("open"); $id("cartDrawer").classList.add("open");
+  document.body.classList.add("cart-lock");
+  setTimeout(() => { const c = $id("cartClose"); if (c) c.focus({ preventScroll: true }); }, 60);
+}
+function cartCloseDrawer() {
+  CART_OPEN = false; CART_DONE = null; CART_MSG = "";
+  $id("cartOverlay").classList.remove("open"); $id("cartDrawer").classList.remove("open");
+  document.body.classList.remove("cart-lock");
+  renderCart();
+  const f = $id("cartFab"); if (f) f.focus({ preventScroll: true });
+}
+function cartContinue() { cartCloseDrawer(); }
+
+function cartInjectCss() {
+  const st = document.createElement("style");
+  st.textContent = `
+.cart-fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:2000;display:inline-flex;align-items:center;gap:10px;width:auto;margin:0;padding:12px 18px;border:0;border-radius:999px;background:#e3a72f;color:#1f2b44;font:inherit;font-weight:800;cursor:pointer;box-shadow:0 8px 24px rgba(31,43,68,.35);transition:transform .15s,box-shadow .15s}
+.cart-fab:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(31,43,68,.4)}
+.cart-fab:focus-visible,.cart-x:focus-visible{outline:3px solid rgba(227,167,47,.6);outline-offset:2px}
+.cart-fab.bump{animation:cartBump .45s}
+@keyframes cartBump{30%{transform:scale(1.12)}60%{transform:scale(.97)}}
+.cf-count{min-width:24px;height:24px;padding:0 7px;border-radius:12px;background:#1f2b44;color:#fff;font-size:.8rem;display:inline-flex;align-items:center;justify-content:center}
+.cart-overlay{position:fixed;inset:0;z-index:2001;background:rgba(15,20,32,.5);opacity:0;pointer-events:none;transition:opacity .22s}
+.cart-overlay.open{opacity:1;pointer-events:auto}
+.cart-drawer{position:fixed;top:0;right:0;bottom:0;z-index:2002;width:min(430px,100vw);display:flex;flex-direction:column;background:#fff;color:#1f2b44;box-shadow:-12px 0 40px rgba(0,0,0,.28);transform:translateX(102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);visibility:hidden}
+.cart-drawer.open{transform:none;visibility:visible}
+html.dark-mode .cart-drawer{background:#1c2433;color:#eef1f7}
+body.cart-lock{overflow:hidden}
+.cart-head{display:flex;align-items:center;gap:10px;padding:16px 18px;padding-top:calc(16px + env(safe-area-inset-top,0px));border-bottom:1px solid rgba(128,128,128,.25)}
+.cart-head h3{margin:0;flex:1;display:flex;align-items:center;gap:8px;font-size:1.15rem}
+.cart-clear{width:auto;margin:0;background:none;border:0;font:inherit;font-size:.82rem;color:inherit;opacity:.65;text-decoration:underline;cursor:pointer}
+.cart-clear:hover{opacity:1}
+.cart-x{width:36px;height:36px;margin:0;padding:0;border-radius:50%;border:1.5px solid rgba(128,128,128,.4);background:transparent;color:inherit;font-size:1.3rem;line-height:1;cursor:pointer}
+.cart-x:hover{border-color:#e3a72f;background:rgba(227,167,47,.14)}
+.cart-body{flex:1;overflow-y:auto;padding:4px 18px 16px;overscroll-behavior:contain}
+.cart-line{display:grid;grid-template-columns:1fr auto;gap:8px 12px;padding:14px 0;border-bottom:1px solid rgba(128,128,128,.2)}
+.cl-name{font-weight:700;line-height:1.25;word-break:break-word}
+.cl-unit{display:block;font-size:.8rem;font-weight:400;opacity:.65;margin-top:2px}
+.cl-price{font-weight:800;text-align:right;white-space:nowrap}
+.cl-ctl{display:inline-flex;align-items:center;gap:4px;border:1.5px solid rgba(128,128,128,.35);border-radius:999px;padding:2px}
+.cl-step{width:30px;height:30px;margin:0;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;font-size:1.1rem;font-weight:700;cursor:pointer}
+.cl-step:hover:not(:disabled){background:rgba(227,167,47,.25)}
+.cl-step:disabled{opacity:.3;cursor:default}
+.cl-q{min-width:26px;text-align:center;font-weight:700}
+.cl-rm{width:auto;margin:0;justify-self:end;align-self:center;background:none;border:0;padding:4px 2px;font:inherit;font-size:.82rem;color:#d8563f;cursor:pointer}
+.cl-rm:hover{text-decoration:underline}
+.cl-note{grid-column:1/-1;font-size:.78rem;opacity:.7}
+.cart-pay{margin-top:16px}
+.cart-pay .cc-paybar{margin:0}
+.cart-empty,.cart-done{text-align:center;padding:48px 10px 20px}
+.cart-empty svg{opacity:.35}
+.cart-empty h4,.cart-done h4{margin:12px 0 4px;font-size:1.1rem}
+.cart-empty p,.cart-done p{margin:0 0 16px;opacity:.7;font-size:.92rem}
+.cd-check{width:64px;height:64px;margin:0 auto;border-radius:50%;background:#2e9d6a;color:#fff;font-size:2rem;font-weight:800;display:flex;align-items:center;justify-content:center;animation:cartPop .4s cubic-bezier(.2,1.4,.4,1)}
+@keyframes cartPop{from{transform:scale(.3);opacity:0}}
+.cd-list{list-style:none;margin:0 0 18px;padding:0;text-align:left;font-size:.92rem}
+.cd-list li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(128,128,128,.18)}
+.cart-foot{padding:14px 18px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid rgba(128,128,128,.25);background:inherit}
+.cs-row{display:flex;justify-content:space-between;gap:10px;font-size:.92rem;padding:2px 0}
+.cs-row.save{color:#2e9d6a;font-weight:600}
+.cs-total{font-size:1.2rem;font-weight:800;padding-top:8px;margin-top:6px;border-top:1px dashed rgba(128,128,128,.4)}
+.cs-sub{font-size:.8rem;opacity:.7;margin:4px 0 10px}
+.cs-earn{font-size:.82rem;color:#2e9d6a;font-weight:600;margin:0 0 8px}
+.cart-checkout{width:100%;margin:6px 0 0;min-height:48px;font-size:1.02rem}
+.cart-checkout:disabled{opacity:.5;cursor:not-allowed}
+.cart-foot .error-msg,.cart-foot .success-msg{margin:8px 0 0}
+@media (max-width:520px){.cart-fab{right:12px}}
+@media (prefers-reduced-motion:reduce){.cart-drawer,.cart-overlay,.cart-fab,.cd-check{transition:none;animation:none}}`;
+  document.head.appendChild(st);
+}
+
+function cartBuildDom() {
+  cartInjectCss();
+  const fab = document.createElement("button");
+  fab.type = "button"; fab.id = "cartFab"; fab.className = "cart-fab"; fab.setAttribute("aria-label", "Open cart"); fab.onclick = cartOpen;
+  fab.innerHTML = `${icon("cart", 20)}<span>Cart</span><span class="cf-count" id="cartFabCount">0</span><span id="cartFabTotal"></span>`;
+  const ov = document.createElement("div"); ov.id = "cartOverlay"; ov.className = "cart-overlay"; ov.onclick = cartCloseDrawer;
+  const dr = document.createElement("aside"); dr.id = "cartDrawer"; dr.className = "cart-drawer"; dr.setAttribute("role", "dialog"); dr.setAttribute("aria-modal", "true"); dr.setAttribute("aria-label", "Your cart");
+  dr.innerHTML = `
+    <div class="cart-head"><h3>${icon("cart", 20)} Your cart</h3><button type="button" class="cart-clear" id="cartClearBtn" onclick="cartClear()">Clear</button><button type="button" class="cart-x" id="cartClose" aria-label="Close cart" onclick="cartCloseDrawer()">×</button></div>
+    <div class="cart-body"><div id="cartLines"></div><div class="cart-pay" id="cartPay"></div></div>
+    <div class="cart-foot" id="cartFoot"></div>`;
+  document.body.append(fab, ov, dr);
+  const pay = $id("storePayBar"); if (pay) $id("cartPay").appendChild(pay); // "Pay with" now lives in the cart
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && CART_OPEN) cartCloseDrawer(); });
+}
+
+function renderCart() {
+  if (IS_TEACHER || !ME_CACHE || !CLS_CACHE || !$id("cartDrawer")) return;
+  const lines = cartLines(), n = cartCount(), t = cartTotals(lines);
+  $id("cartFabCount").textContent = n;
+  $id("cartFabTotal").textContent = n ? fmtMoney(t.total) : "";
+  $id("cartFab").setAttribute("aria-label", `Open cart, ${n} item${n === 1 ? "" : "s"}`);
+  $id("cartClearBtn").classList.toggle("hidden", !n);
+  const body = $id("cartLines"), foot = $id("cartFoot"), pay = $id("cartPay");
+
+  if (CART_DONE && !n) {
+    pay.classList.add("hidden");
+    body.innerHTML = `<div class="cart-done"><div class="cd-check" aria-hidden="true">✓</div><h4>${CART_MSG ? "Part of your order went through" : "Purchase complete"}</h4>
+      <p>${CART_DONE.total !== null ? `${fmtMoney(CART_DONE.total)} paid in one checkout.` : "These items are now yours."}</p>
+      <ul class="cd-list">${CART_DONE.lines.map(l => `<li><span>${escapeHtml(l.name)}</span><strong>×${l.qty}</strong></li>`).join("")}</ul></div>`;
+    foot.innerHTML = `${CART_MSG}<button type="button" class="btn gold cart-checkout" onclick="cartContinue()">Continue shopping</button>`;
+    return;
   }
+  pay.classList.remove("hidden");
+  if (!n) {
+    pay.classList.add("hidden");
+    body.innerHTML = `<div class="cart-empty">${icon("cart", 48)}<h4>Your cart is empty</h4><p>Add items from the store and check out them all at once.</p></div>`;
+    foot.innerHTML = `${CART_MSG}<button type="button" class="btn secondary cart-checkout" onclick="cartContinue()">Browse the store</button>`;
+    return;
+  }
+  body.innerHTML = lines.map(l => {
+    const it = l.it, max = cartStockMax(it), unit = cartPrice(it.price, 1, "");
+    return `<div class="cart-line">
+      <div class="cl-name">${escapeHtml(it.name)}<span class="cl-unit">${fmtMoney(unit)} each</span></div>
+      <div class="cl-price">${fmtMoney(cartPrice(it.price, l.qty, ""))}</div>
+      <div class="cl-ctl" role="group" aria-label="Quantity of ${escapeHtml(it.name)}">
+        <button type="button" class="cl-step" aria-label="Decrease quantity" ${l.qty <= 1 ? "disabled" : ""} onclick="cartStep('${it.id}', -1)">−</button>
+        <span class="cl-q">${l.qty}</span>
+        <button type="button" class="cl-step" aria-label="Increase quantity" ${l.qty >= max ? "disabled" : ""} onclick="cartStep('${it.id}', 1)">+</button>
+      </div>
+      <button type="button" class="cl-rm" onclick="cartRemove('${it.id}')">Remove</button>
+      ${l.qty >= max && max !== Infinity ? `<div class="cl-note">That's all ${max} we have in stock.</div>` : ""}
+    </div>`;
+  }).join("");
+
+  // ---- footer: totals, can-I-afford-it check, checkout ----
+  const card = cardIsActive(ME_CACHE) && CC_STORE_PAY.useCard, split = card && CC_STORE_PAY.split;
+  const cash = Number(ME_CACHE.balance) || 0, plan = card ? cardPlanById(CLS_CACHE, ME_CACHE.creditCard.planId) : null;
+  const cardAvail = plan ? cardAvailable(ME_CACHE.creditCard, plan) : 0;
+  const cap = !card ? cash : split ? cardAvail + cash : cardAvail;
+  const short = cardRound(t.total - cap), blocked = short > 0.004;
+  const how = !card ? `Paying with cash · ${fmtMoney(cash)} available` : split ? "Paying part card, part cash" : `Paying by credit card · ${fmtMoney(cardAvail)} available`;
+  let warn = "";
+  if (blocked) warn = !card ? `You're ${fmtMoney(short)} short on cash. Remove something to check out.`
+    : split ? `You're ${fmtMoney(short)} over your card and cash combined.` : `Your card can only cover ${fmtMoney(cardAvail)}. Turn on "Part card, part cash" or remove something.`;
+  let earn = "";
+  if (cartApi() && card && !split && plan && plan.rewardEvery > 0 && plan.rewardBack > 0) {
+    const steps = Math.floor(t.total / plan.rewardEvery + 1e-9);
+    earn = steps > 0 ? `You'll earn ${fmtMoney(steps * Math.min(plan.rewardBack, plan.rewardEvery))} back on this purchase.`
+      : `Spend ${fmtMoney(cardRound(plan.rewardEvery - t.total))} more in this one purchase to earn ${fmtMoney(plan.rewardBack)} back.`;
+  }
+  foot.innerHTML = `
+    <div class="cs-row"><span>${n} item${n === 1 ? "" : "s"}</span><span>${fmtMoney(t.sub)}</span></div>
+    ${t.saved > 0.004 ? `<div class="cs-row save"><span>Voucher</span><span>−${fmtMoney(t.saved)}</span></div>` : ""}
+    <div class="cs-row cs-total"><span>Total</span><span>${fmtMoney(t.total)}</span></div>
+    <div class="cs-sub">${how}</div>
+    ${earn ? `<div class="cs-earn">${earn}</div>` : ""}
+    ${warn ? `<div class="error-msg">${warn}</div>` : ""}${CART_MSG}
+    <button type="button" class="btn gold cart-checkout" onclick="checkoutCart()" ${blocked || CART_BUSY ? "disabled" : ""}>${CART_BUSY ? "Processing…" : `Check out · ${fmtMoney(t.total)}`}</button>`;
 }
 
 /* ===================== Teacher: arranging the store ===================== */

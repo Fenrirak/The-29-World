@@ -1594,6 +1594,75 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
   return { ok: true, qty };
 }
 
+// Checks out a whole cart as ONE transaction (all-or-nothing): one price, one
+// voucher, one card charge (so spend-and-earn judges the cart total as a single
+// purchase), one receipt. lines = [{ id, qty }]; opts as for buyStoreItem.
+async function buyStoreCart(username, classCode, lines, opts) {
+  opts = opts || {};
+  const want = new Map();
+  (lines || []).forEach(l => {
+    const q = Math.floor(Number(l && l.qty)) || 0;
+    if (l && l.id && q > 0) want.set(l.id, (want.get(l.id) || 0) + q);
+  });
+  if (!want.size) return { ok: false, error: "Your cart is empty." };
+  const userRef = usersCol().doc(username);
+  const classRef = classesCol().doc(classCode);
+  let names = [], payRes = null, voucherNote = "", failName = "", totalQty = 0, paid = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef);
+      const classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
+      const user = userSnap.data();
+      const cls = withNewModuleDefaults(classSnap.data());
+      // Reset every attempt: a retried callback would otherwise stack these up.
+      voucherNote = ""; failName = ""; names = []; totalQty = 0;
+      let base = 0;
+      const picked = [];
+      for (const [id, qty] of want) {
+        const item = cls.storeItems.find(i => i.id === id);
+        if (!item || item.archived) throw new Error("NOT_FOUND");
+        if (item.stock !== null && item.stock < qty) { failName = item.name; throw new Error("OUT"); }
+        picked.push({ item, qty });
+        base += Number(item.price) * qty;
+        names.push(`${item.name}${qty > 1 ? ` ×${qty}` : ""}`);
+        totalQty += qty;
+      }
+      const isTeacher = user.role === "teacher";
+      const usedCard = !!opts.useCard && !isTeacher;
+      // Same pricing as a single purchase, applied to the whole basket (one voucher, one card discount).
+      const pr = cardStorePricing(user, cls, base, 1, usedCard && !opts.split, isTeacher ? "" : opts.voucherId, nzDateKey());
+      if (opts.voucherId && !isTeacher && !pr.voucher) throw new Error("VOUCHER");
+      const total = pr.total;
+      payRes = { card: 0, cash: total };
+      if (!isTeacher) payRes = cardPayInTxn(user, cls, total, { useCard: usedCard, split: !!opts.split, cardMax: opts.cardMax });
+      if (pr.voucher) { cardConsumeVoucher(user.creditCard, pr.voucher); voucherNote = ` (${pr.voucher.label} voucher saved ${fmtMoney(pr.voucher.saves)})`; }
+      user.storeItems = user.storeItems || [];
+      picked.forEach(({ item, qty }) => {
+        if (item.stock !== null) item.stock -= qty;
+        item.sold = (item.sold || 0) + qty;
+        for (let i = 0; i < qty; i++) user.storeItems.push(item.id);
+      });
+      paid = total;
+      if (!isTeacher) {
+        const patch = { balance: Math.round((user.balance - payRes.cash) * 100) / 100, storeItems: user.storeItems };
+        if (payRes.card > 0 || pr.voucher) patch.creditCard = user.creditCard;
+        t.update(userRef, patch);
+      } else t.update(userRef, { storeItems: user.storeItems });
+      t.update(classRef, { storeItems: cls.storeItems });
+    });
+  } catch (e) {
+    { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
+    if (e.message === "OUT") return { ok: false, error: `Not enough stock left for ${failName || "one of the items"}. Nothing was bought.` };
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "One of those items isn't in the store any more. Nothing was bought." };
+    if (e.message === "VOUCHER") return { ok: false, error: "That voucher isn't valid any more. Pick another or none." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logPurchaseTxn(classCode, username, payRes, null, { type: "store-buy", note: `Bought from store: ${names.join(", ")}${voucherNote}` });
+  return { ok: true, qty: totalQty, total: paid };
+}
+
 // Sell back one unit of an owned store item for 80% of its base price.
 // Removes it from the student's owned items (which also reduces their
 // lifestyle rating automatically, since that's computed live from
