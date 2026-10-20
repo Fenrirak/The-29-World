@@ -138,7 +138,7 @@ function smBuildPopover() {
     <div class="settings-popover-row" id="t29KeysRow" role="button" tabindex="0" style="cursor:pointer;">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Keyboard shortcuts</div>
-        <div class="settings-popover-desc">Jump around with your keyboard — press <kbd class="t29-kbd">?</kbd> any time to see them all.</div>
+        <div class="settings-popover-desc">Jump around with your keyboard — press <kbd class="t29-kbd">?</kbd> or <kbd class="t29-kbd">/</kbd> any time to see them all.</div>
       </div>
       <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
     </div>` : ""}
@@ -228,7 +228,7 @@ function smClosePopover() {
 function smOpenPopover(btn) {
   const pop = smBuildPopover();
   // The switches can be stale if something else changed the setting since
-  // this popover was built (e.g. the T shortcut for dark mode).
+  // this popover was built (e.g. the D shortcut for dark mode).
   const dm = pop.querySelector("#t29DarkModeToggle");
   if (dm) dm.checked = document.documentElement.classList.contains("dark-mode");
   const sbCb = pop.querySelector("#t29SidebarNavToggle");

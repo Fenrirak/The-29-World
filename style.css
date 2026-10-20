@@ -3407,15 +3407,26 @@ main:focus{outline:none;}
   font:700 .76rem/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 
-/* "G then ..." cheat-sheet that appears after pressing G */
-.t29-gohint{
+/* "Tap Shift, then type a module name" box (grey text = the predicted rest of the word) */
+.t29-finder{
   position:fixed;left:0;right:0;margin:0 auto;bottom:22px;z-index:2500;
-  width:max-content;max-width:min(94vw,680px);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;
+  width:min(92vw,360px);display:flex;flex-direction:column;gap:6px;
   background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:14px;
-  box-shadow:0 14px 40px rgba(0,0,0,0.28);padding:12px 16px;font-size:.84rem;animation:t29ToastIn .15s ease;
+  box-shadow:0 14px 40px rgba(0,0,0,0.28);padding:12px 16px 10px;font-size:.84rem;animation:t29ToastIn .15s ease;
 }
-.t29-gohint-title{flex:0 0 100%;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
-.t29-gohint-item{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
+.t29-finder-title{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;}
+.t29-finder-field{position:relative;background:var(--bg);border-radius:10px;}
+.t29-finder .t29-finder-input,.t29-finder-ghost{
+  display:block;width:100%;box-sizing:border-box;margin:0;padding:8px 10px;border:1.5px solid transparent;border-radius:10px;
+  font-family:inherit;font-size:1.05rem;font-weight:600;line-height:1.4;letter-spacing:normal;min-height:0;height:auto;
+}
+.t29-finder .t29-finder-input{position:relative;background:transparent;color:var(--ink);border-color:var(--line);box-shadow:none;outline:none;}
+.t29-finder .t29-finder-input:focus{border-color:var(--sky);}
+html.dark-mode .t29-finder .t29-finder-input:focus{border-color:var(--accent-text);}
+.t29-finder-ghost{position:absolute;inset:0;white-space:pre;overflow:hidden;pointer-events:none;}
+.t29-finder-typed{color:transparent;}
+.t29-finder-rest{color:var(--muted);opacity:.8;}
+.t29-finder-note{font-size:.78rem;color:var(--muted);min-height:1.2em;}
 
 /* Shortcut list pop-up (reuses .t29-dialog) */
 .t29-dialog.t29-keys-card{max-width:680px;padding:20px 22px 16px;}
@@ -3431,9 +3442,11 @@ main:focus{outline:none;}
 .t29-keys-sec h3{margin:0 0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
 .t29-keys-row{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:.9rem;}
 .t29-keys-row:last-child{border-bottom:none;}
-.t29-keys-keys{flex:0 0 auto;min-width:78px;display:inline-flex;gap:4px;}
+.t29-keys-keys{flex:0 0 auto;min-width:78px;display:inline-flex;align-items:center;gap:4px;}
+.t29-keys-or{font-size:.78rem;color:var(--muted);}
+.t29-keys-intro{margin:0 0 8px;font-size:.84rem;color:var(--muted);}
 .t29-keys-label{min-width:0;}
 .t29-keys-foot{margin:4px 0 0;}
 @media(max-width:620px){.t29-keys-cols{grid-template-columns:1fr;}}
 .settings-popover-desc .t29-kbd{font-size:.7rem;padding:0 5px 1px;}
-@media(prefers-reduced-motion:reduce){.t29-skip{transition:none;}.t29-gohint{animation:none;}}
+@media(prefers-reduced-motion:reduce){.t29-skip{transition:none;}.t29-finder{animation:none;}}
