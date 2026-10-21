@@ -25,6 +25,8 @@
                     matches ("bnk" = Bank, "kiwsaver" = KiwiSaver). A correctly
                     typed start of a name is never treated as a typo.
                   - It runs actions too: dark, settings, notifications, help.
+     Space Space  double-tap Space quickly: the same Jump box as tapping Shift (only
+                  when nothing is focused that Space would already press)
      Ctrl/Cmd + K the same Jump box as tapping Shift (not while typing in a box)
      Left/Right   go to the previous / next module in the menu, from the one
                   you're on (locked modules are skipped)
@@ -539,6 +541,16 @@
 
   // A "tap" of Shift = pressed and let go on its own, quickly, with no other key or click in between.
   var shiftSolo = false, shiftAt = 0;
+
+  // Double-tap Space = the same as tapping Shift. Only counts when Space isn't already doing
+  // something (typing in a box, pressing a focused button/link, a pop-up waiting for an answer).
+  var spaceAt = 0, spaceX = 0, spaceY = 0;
+  function spaceTapOK(el) {
+    if (finderEl || helpEl || isTyping(el) || blockingPopupOpen()) return false;
+    if (el && el.tagName && /^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY|VIDEO|AUDIO)$/.test(el.tagName)) return false;
+    if (el && el.getAttribute && /^(button|link|checkbox|switch|tab|menuitem|option)$/.test(el.getAttribute("role") || "")) return false;
+    return true;
+  }
   function onKeyUp(e) {
     if (e.key !== "Shift") return;
     var solo = shiftSolo && Date.now() - shiftAt < 700;
@@ -573,6 +585,7 @@
     var general = [
       row(kbd("/") + ' <span class="t29-keys-or">or</span> ' + kbd("?"), "Show this list"),
       row(kbd("Shift"), "Tap it, then type a module name or an action (see right)"),
+      row(kbd("Space") + " " + kbd("Space"), "Double-tap quickly: same as tapping Shift"),
       row(kbd("Ctrl") + " " + kbd("K"), "Same as tapping Shift (\u2318 K on a Mac)"),
       row(kbd("\u2190") + " " + kbd("\u2192"), "Go to the previous / next module"),
       row(kbd("Esc"), "Close a pop-up, menu or this list"),
@@ -735,6 +748,21 @@
     if (onEnter(e)) return;
     if (!keysOn) return; // shortcuts switched off in Settings
 
+    // Double-tap Space (within 0.35s, no key held) opens the Jump box, like tapping Shift.
+    // The first tap scrolls the page as usual; the second puts it back where it was.
+    if (e.key === " " && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      if (e.repeat || !spaceTapOK(e.target)) { spaceAt = 0; return; }
+      var nowT = Date.now();
+      if (spaceAt && nowT - spaceAt < 350) {
+        e.preventDefault();
+        spaceAt = 0;
+        window.scrollTo(spaceX, spaceY);
+        openFinder();
+      } else { spaceAt = nowT; spaceX = window.scrollX; spaceY = window.scrollY; }
+      return;
+    }
+    spaceAt = 0;
+
     // Ctrl/Cmd + K = the same Jump box as tapping Shift.
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === "k" || e.key === "K")) {
       if (finderEl || helpEl || isTyping(e.target) || blockingPopupOpen()) return;
@@ -852,13 +880,13 @@
 
   document.addEventListener("keydown", onKey);
   document.addEventListener("keyup", onKeyUp);
-  document.addEventListener("mousedown", function () { shiftSolo = false; }, true);
+  document.addEventListener("mousedown", function () { shiftSolo = false; spaceAt = 0; }, true);
   // Scrolling the page while a number box has focus used to nudge its value.
   document.addEventListener("wheel", function (e) {
     var a = document.activeElement;
     if (a && a.tagName === "INPUT" && a.type === "number" && a === e.target) a.blur();
   }, { passive: true });
-  window.addEventListener("blur", function () { shiftSolo = false; });
+  window.addEventListener("blur", function () { shiftSolo = false; spaceAt = 0; });
 
   window.T29Keys = { showHelp: showHelp, hideHelp: hideHelp, openFinder: openFinder };
   window.t29ShowShortcuts = showHelp;
