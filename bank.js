@@ -52,7 +52,7 @@ async function init() {
   IS_TEACHER = u.role === "teacher";
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
-  document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
+  document.getElementById("navHomeLabel").textContent = "Dashboard";
   paintChrome();
   enablePasswordToggles();
   // BUGFIX: get a server-trustworthy "now" before any of the day-gated
@@ -141,6 +141,8 @@ async function render() {
     document.getElementById("savingsRateValue").textContent = (cls.interestRate || 0) + "%";
     document.getElementById("savingsRateNote").textContent =
       "Money in here earns interest at the rate below — it doesn't earn anything sitting in your cash balance unless your teacher has set a cash rate too. " + interestScheduleLabel(cls);
+    const intTax = t29TaxRate(cls, "interest");
+    document.getElementById("savingsTaxNote").innerHTML = t29TaxNoteHtml(intTax ? `Interest is taxed at <strong>${t29TaxPct(intTax)}</strong> before it is paid to you.` : "");
     renderGoals(me); // see savings-goals.js
   }
 
@@ -287,8 +289,8 @@ async function render() {
       "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
       "life-allowance": ["mint", "trophy", "Life allowance"],
       "p2p-buy": ["navy", "users", "Bought from a classmate"], "p2p-sell": ["gold", "users", "Sold to a classmate"],
-      "kiwisaver-in": ["navy", "sprout", "KiwiSaver"], "kiwisaver-out": ["mint", "sprout", "KiwiSaver withdrawal"],
-      "kiwisaver-refund": ["gold", "sprout", "KiwiSaver refund"]
+      "kiwisaver-in": ["navy", "kiwi", "KiwiSaver"], "kiwisaver-out": ["mint", "kiwi", "KiwiSaver withdrawal"],
+      "kiwisaver-refund": ["gold", "kiwi", "KiwiSaver refund"]
     };
     const [c, ic, label] = map[type] || ["navy", "coin", type];
     return `<span class="badge ${c}">${ic === "cards" ? "" : icon(ic, 12)}${label}</span>`;

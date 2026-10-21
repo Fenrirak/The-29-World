@@ -29,7 +29,7 @@ async function init() {
   IS_TEACHER = u.role === "teacher";
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href       = IS_TEACHER ? "teacher.html" : "student.html";
-  document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
+  document.getElementById("navHomeLabel").textContent = "Dashboard";
   paintChrome();
 
   const T29_STARTUP_JOBS = Promise.all([
@@ -391,9 +391,27 @@ async function declineApp(appId) {
 ══════════════════════════════════════════════════════════════════════ */
 async function renderStudentView(me, cls) {
   renderMyJob(me, cls);
+  renderWageTax(cls);
   renderPayslips(me, cls);
   renderJobBoard(me, cls);
   renderMyApplications(me, cls);
+}
+
+/* ── Tax on my pay (the wage tax bands; hidden when no pay is taxed) ─────── */
+function renderWageTax(cls) {
+  const card = document.getElementById("wageTaxCard"), box = document.getElementById("wageTaxBox");
+  if (!card || !box) return;
+  const bands = t29WageTaxBands(cls);
+  card.classList.toggle("hidden", !bands.length);
+  if (!bands.length) { box.innerHTML = ""; return; }
+  const h = document.getElementById("hWageTax"); if (h) h.innerHTML = icon("percent", 18) + " Tax on my pay";
+  const m = n => "$" + Number(n).toLocaleString("en-NZ", { maximumFractionDigits: 2 });
+  box.innerHTML = bands.map((b, i) => {
+    const range = i === 0 ? (b.upTo == null ? "All of your pay" : `Up to ${m(b.upTo)}`)
+      : b.upTo == null ? `Over ${m(b.from)}`
+      : Number.isInteger(b.from) ? `${m(b.from + 1)} – ${m(b.upTo)}` : `Over ${m(b.from)}, up to ${m(b.upTo)}`;
+    return `<div class="auto-row"><div class="auto-details">${range}</div><strong>${b.rate > 0 ? t29TaxPct(b.rate) : "Tax-free"}</strong></div>`;
+  }).join("");
 }
 
 /* ── My current job ────────────────────────────────────────────────── */
@@ -466,7 +484,7 @@ function payslipHtml(p) {
     </div>`;
   const bands = (p.taxBands || []).filter(b => b.amount > 0);
   const bandLines = bands.length > 1 || (bands.length === 1 && bands[0].rate > 0)
-    ? bands.map((b, i) => line(`${psPct(b.rate)} on the ${i === 0 ? "first" : "next"} ${fmtMoney(b.amount)}`, fmtMoney(b.tax), { cls: "sub" })).join("")
+    ? bands.map((b, i) => line(b.rate > 0 ? `${psPct(b.rate)} on the ${i === 0 ? "first" : "next"} ${fmtMoney(b.amount)}` : `Tax-free ${i === 0 ? "first" : "next"} ${fmtMoney(b.amount)}`, fmtMoney(b.tax), { cls: "sub" })).join("")
     : "";
   const k = p.kiwi;
   const rows = [

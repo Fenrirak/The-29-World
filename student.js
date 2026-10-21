@@ -47,8 +47,8 @@ function badgeType(type) {
     "gambling-buyin": ["gold", "dice", "Gambling buy-in"], "gambling-cashout": ["mint", "dice", "Gambling cash-out"],
     "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
     "life-allowance": ["mint", "trophy", "Life allowance"],
-    "kiwisaver-in": ["navy", "sprout", "KiwiSaver"], "kiwisaver-out": ["mint", "sprout", "KiwiSaver withdrawal"],
-    "kiwisaver-refund": ["gold", "sprout", "KiwiSaver refund"]
+    "kiwisaver-in": ["navy", "kiwi", "KiwiSaver"], "kiwisaver-out": ["mint", "kiwi", "KiwiSaver withdrawal"],
+    "kiwisaver-refund": ["gold", "kiwi", "KiwiSaver refund"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
@@ -341,7 +341,7 @@ async function render() {
    for a choice, KiwiSaver once it's unlocked, and finding a job. */
 const TODO_CTA = {
   "loan.html": "Repay", "property.html": "Go to Property", "transport.html": "Pay transport", "bigevents.html": "Decide",
-  "marketplace.html": "See offers", "budget.html": "Open my budget", "jobs.html": "Find a job", "kiwisaver.html": "Open KiwiSaver"
+  "marketplace.html": "See offers", "budget.html": "Open budget", "jobs.html": "Find a job", "kiwisaver.html": "Open KiwiSaver"
 };
 function renderTodo(me, cls) {
   const items = [];
@@ -367,7 +367,7 @@ function renderTodo(me, cls) {
     const v = buildBudgetView(cls, me, me.username);
     if (v && v.verdict && (v.verdict.tone === "bad" || v.verdict.tone === "warn") && v.shortfall) {
       items.push({ title: v.verdict.tone === "bad" ? "Not enough money for this week's bills" : "Move money from savings for bills",
-        body: v.verdict.text, urgent: v.verdict.tone === "bad", href: "budget.html#budgetCard", cta: "Open my budget" });
+        body: v.verdict.text, urgent: v.verdict.tone === "bad", href: "budget.html#budgetCard", cta: "Open budget" });
     }
   } catch (e) { /* budget is a bonus here — never let it stop the list */ }
   // KiwiSaver unlocked after the class retired.

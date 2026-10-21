@@ -2,8 +2,8 @@ let CURRENT, IS_TEACHER;
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("calendar", 26) + (IS_TEACHER ? " Budgeting" : " My budget");
-  document.getElementById("hBudget").innerHTML = icon("calendar", 18) + " My budget";
+  document.getElementById("pageTitle").innerHTML = icon("calendar", 26) + (IS_TEACHER ? " Budgeting" : " Budget");
+  document.getElementById("hBudget").innerHTML = icon("calendar", 18) + " Budget";
   document.getElementById("hBudPlan").innerHTML = icon("piggy", 15) + " My plan";
   document.getElementById("hBudTrack").innerHTML = icon("chart", 15) + " How this week is going";
   document.getElementById("hBudDays").innerHTML = icon("calendar", 15) + " Day by day";
@@ -18,7 +18,7 @@ async function init() {
   IS_TEACHER = u.role === "teacher";
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
-  document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
+  document.getElementById("navHomeLabel").textContent = "Dashboard";
   paintChrome();
   // BUGFIX: get a server-trustworthy "now" before any of the day-gated
   // jobs below decide "has this already run today?" — see

@@ -11,7 +11,7 @@ let KS_HARDSHIP_FOR = null;
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("sprout", 26) + " KiwiSaver";
+  document.getElementById("pageTitle").innerHTML = icon("kiwi", 26) + " KiwiSaver";
   const heads = { hPay: ["calendar", "Every pay day"], hGrowth: ["chart", "How it's grown"], hChoices: ["settings", "My choices"],
     hHome: ["house", "Buying my first home"], hSettings: ["settings", "KiwiSaver settings"], hClass: ["users", "Class KiwiSaver"],
     hRetire: ["star", "Retirement"] };
@@ -28,7 +28,7 @@ async function init() {
   IS_TEACHER = u.role === "teacher";
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
-  document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
+  document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherView").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
@@ -106,20 +106,20 @@ function renderJoinCard(me, cls, s, ks) {
   if (!s.enabled) {
     html = ks
       ? `<p class="ks-note-line">Your teacher has switched KiwiSaver off for now. Your money is still yours and still counts in your net worth, but nothing new goes in and it isn't growing.</p>`
-      : `<h2>${icon("sprout", 18)} KiwiSaver is switched off</h2><p class="ks-note-line">Your teacher has switched KiwiSaver off for your class.</p>`;
+      : `<h2>${icon("kiwi", 18)} KiwiSaver is switched off</h2><p class="ks-note-line">Your teacher has switched KiwiSaver off for your class.</p>`;
   } else if (s.retired) {
     html = ks ? "" : `<h2>${icon("star", 18)} Your class has retired</h2><p class="ks-note-line">You weren't in KiwiSaver, so there's nothing to take out.</p>`;
   } else if (!ks) {
     const job = me.jobId && (cls.jobs || []).some(j => j.id === me.jobId);
     html = `
-      <h2>${icon("sprout", 18)} ${job ? "You're about to be signed up" : "Join KiwiSaver"}</h2>
+      <h2>${icon("kiwi", 18)} ${job ? "You're about to be signed up" : "Join KiwiSaver"}</h2>
       <p class="ks-note-line">${job
         ? `You have a job, so on your next pay day you'll be signed up automatically, like in real life. ${KS_DEFAULT_RATE}% of your pay will go in, and your employer and the government will add more. You'll start in the Balanced fund.`
         : `You'll be signed up automatically when you get a job. You can also join now and put in extra money yourself. The government adds 25c for every $1.`}</p>
       ${ksJoinChoicesHtml(job)}`;
   } else if (ks.status === "optedOut") {
     html = `
-      <h2>${icon("sprout", 18)} You've opted out</h2>
+      <h2>${icon("kiwi", 18)} You've opted out</h2>
       <p class="ks-note-line">You're not in KiwiSaver, so nothing comes out of your pay. You're also missing out on what your employer and the government would add. You can join again whenever you like.</p>
       ${ksJoinChoicesHtml(false, true)}`;
   }

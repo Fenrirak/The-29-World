@@ -94,6 +94,12 @@ function smWireToggle(cb, name, storageKey) {
   });
 }
 
+function smKeysDesc() {
+  const off = typeof t29ShortcutsOn === "function" && !t29ShortcutsOn();
+  return off ? "See every key. Shortcuts are switched off right now."
+    : 'See every key — or press <kbd class="t29-kbd">?</kbd> or <kbd class="t29-kbd">/</kbd> any time.';
+}
+
 function smBuildPopover() {
   if (document.getElementById("t29SettingsPopover")) return document.getElementById("t29SettingsPopover");
 
@@ -138,9 +144,19 @@ function smBuildPopover() {
     <div class="settings-popover-row" id="t29KeysRow" role="button" tabindex="0" style="cursor:pointer;">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Keyboard shortcuts</div>
-        <div class="settings-popover-desc">Jump around with your keyboard — press <kbd class="t29-kbd">?</kbd> or <kbd class="t29-kbd">/</kbd> any time to see them all.</div>
+        <div class="settings-popover-desc" id="t29KeysDesc">${smKeysDesc()}</div>
       </div>
       <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
+    </div>
+    <div class="settings-popover-row">
+      <div class="settings-popover-text">
+        <div class="settings-popover-title">Use keyboard shortcuts</div>
+        <div class="settings-popover-desc">Turn off if keys like S, D or the arrow keys get in your way.</div>
+      </div>
+      <label class="lg-switch">
+        <input type="checkbox" id="t29KeysToggle" aria-label="Use keyboard shortcuts">
+        <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
+      </label>
     </div>` : ""}
     <div class="settings-popover-row" id="t29ChangePasswordRow" role="button" tabindex="0" style="cursor:pointer;">
       <div class="settings-popover-text">
@@ -178,6 +194,17 @@ function smBuildPopover() {
     keysRow.addEventListener("click", () => {
       smClosePopover();
       t29ShowShortcuts();
+    });
+  }
+
+  const keysToggle = pop.querySelector("#t29KeysToggle");
+  if (keysToggle) {
+    keysToggle.checked = typeof t29ShortcutsOn === "function" ? t29ShortcutsOn() : true;
+    keysToggle.addEventListener("change", () => {
+      if (typeof t29SetShortcuts === "function") t29SetShortcuts(keysToggle.checked);
+      const d = pop.querySelector("#t29KeysDesc");
+      if (d) d.innerHTML = smKeysDesc();
+      if (typeof t29Toast === "function") t29Toast(keysToggle.checked ? "Keyboard shortcuts on" : "Keyboard shortcuts off", { duration: 1600 });
     });
   }
 

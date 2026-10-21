@@ -265,7 +265,7 @@ function qgShowPageLock(moduleKey, reason) {
     <p>${qgEsc(MODULE_LOCK_MESSAGE[reason] || MODULE_LOCK_MESSAGE.lifestyle)}</p>
     <div class="qg-actions">
       ${canQuiz ? `<button class="btn gold" type="button" onclick="t29OpenQuizGate('${moduleKey}', ${quizOpts})">Take the quiz</button>` : ""}
-      <a class="btn secondary" href="student.html">Back to my account</a>
+      <a class="btn secondary" href="student.html">Back to my dashboard</a>
     </div>`);
   document.body.appendChild(overlay);
   // Passing reloads the page (no href given — see qgContinue), which runs

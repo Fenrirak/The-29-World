@@ -3184,6 +3184,34 @@ function applyWageTax(cls, wage) {
   const effectiveRate = wage > 0 ? Math.round((taxAmount / wage) * 10000) / 100 : 0;
   return { net: Math.round((wage - taxAmount) * 100) / 100, taxAmount, rate: effectiveRate };
 }
+/* ----- Showing tax to students, in the module it applies to -----
+   Students have no Tax page. Each rate is shown where it is used (wages on
+   Jobs, property / transport on those pages, interest on Bank, winnings on
+   Gambling), and only when it is actually applied: a rate of 0% is never
+   shown. */
+function t29TaxRate(cls, key) {
+  const r = Number(cls && cls.taxRates && cls.taxRates[key]) || 0;
+  return r > 0 ? r : 0;
+}
+function t29TaxPct(n) { return (Math.round(Number(n) * 100) / 100).toString() + "%"; }
+function t29TaxNoteHtml(html) {
+  return html ? `<div class="tax-note">${icon("percent", 15)}<span>${html}</span></div>` : "";
+}
+// Small "+5% tax" chip for a price line. Empty when there is no tax.
+function t29TaxChip(cls, key) {
+  const r = t29TaxRate(cls, key);
+  return r ? ` <span class="badge navy" title="Tax is added to the price at checkout">+${t29TaxPct(r)} tax</span>` : "";
+}
+// Wage tax bands, lowest first, ready to show. Empty unless at least one
+// band really taxes something (so a class with no wage tax shows nothing).
+function t29WageTaxBands(cls) {
+  const bands = (cls.wageTaxBrackets || [])
+    .map(b => ({ upTo: (b.upTo == null || b.upTo === "") ? null : Number(b.upTo), rate: Number(b.rate) || 0 }))
+    .sort((a, b) => (a.upTo == null ? Infinity : a.upTo) - (b.upTo == null ? Infinity : b.upTo));
+  if (!bands.some(b => b.rate > 0)) return [];
+  let prev = 0;
+  return bands.map(b => { const row = { from: prev, upTo: b.upTo, rate: b.rate }; if (b.upTo != null) prev = b.upTo; return row; });
+}
 async function saveWageTaxBrackets(classCode, brackets) {
   const clean = (brackets || [])
     .map(b => ({

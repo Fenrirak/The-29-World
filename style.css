@@ -152,9 +152,11 @@ p{color:var(--muted);line-height:1.5;}
    user is a teacher, it never removes it, so students get no trace of
    these tabs at any point in the page load. */
 .topbar nav a[href="quizzes.html"],
-.topbar nav a[href="reports.html"]{display:none;}
+.topbar nav a[href="reports.html"],
+.topbar nav a[href="tax.html"]{display:none;}
 html.role-teacher .topbar nav a[href="quizzes.html"],
-html.role-teacher .topbar nav a[href="reports.html"]{display:inline-flex;}
+html.role-teacher .topbar nav a[href="reports.html"],
+html.role-teacher .topbar nav a[href="tax.html"]{display:inline-flex;}
 /* KiwiSaver is on by default. It's hidden from students only if their
    teacher switches it off (data-core.js adds html.ks-on when it's on).
    Teachers always see it. */
@@ -3394,13 +3396,6 @@ html.dark-mode [role="button"]:focus-visible,html.dark-mode [role="link"]:focus-
 html.dark-mode [tabindex="0"]:focus-visible{outline-color:var(--accent-text);}
 main:focus{outline:none;}
 
-.t29-skip{
-  position:fixed;left:12px;top:-64px;z-index:3000;padding:10px 16px;border-radius:10px;
-  background:var(--navy-900);color:var(--warm-white);font-weight:700;text-decoration:none;
-  box-shadow:0 8px 22px rgba(0,0,0,0.3);transition:top .12s;
-}
-.t29-skip:focus{top:12px;outline:2px solid var(--gold);outline-offset:2px;}
-
 .t29-kbd{
   display:inline-block;min-width:24px;padding:1px 7px 2px;border:1.5px solid var(--line);border-bottom-width:3px;
   border-radius:7px;background:var(--bg);color:var(--ink);text-align:center;white-space:nowrap;
@@ -3443,10 +3438,21 @@ html.dark-mode .t29-finder .t29-finder-input:focus{border-color:var(--accent-tex
 .t29-keys-row{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:.9rem;}
 .t29-keys-row:last-child{border-bottom:none;}
 .t29-keys-keys{flex:0 0 auto;min-width:78px;display:inline-flex;align-items:center;gap:4px;}
+.t29-keys-mods .t29-keys-keys{min-width:104px;}
 .t29-keys-or{font-size:.78rem;color:var(--muted);}
 .t29-keys-intro{margin:0 0 8px;font-size:.84rem;color:var(--muted);}
 .t29-keys-label{min-width:0;}
 .t29-keys-foot{margin:4px 0 0;}
 @media(max-width:620px){.t29-keys-cols{grid-template-columns:1fr;}}
 .settings-popover-desc .t29-kbd{font-size:.7rem;padding:0 5px 1px;}
-@media(prefers-reduced-motion:reduce){.t29-skip{transition:none;}.t29-finder{animation:none;}}
+@media(prefers-reduced-motion:reduce){.t29-finder{animation:none;}}
+
+/* A tax rate shown where it applies (never shown at 0%). */
+.tax-note{display:flex;gap:8px;align-items:flex-start;margin:10px 0 14px;padding:9px 12px;border-radius:10px;background:rgba(120,140,190,.12);border:1px solid rgba(120,140,190,.3);font-size:.92rem;line-height:1.4;}
+.tax-note .icon-svg,.tax-note svg{flex:none;width:16px;height:16px;margin-top:2px;}
+
+/* Shift box: module numbers shown on the menu itself while the box is open */
+.t29-badged{position:relative;}
+.t29-numbadge{position:absolute;top:2px;left:2px;min-width:15px;height:15px;padding:0 3px;box-sizing:border-box;border-radius:8px;background:var(--navy-900);color:#fff;font:700 10px/15px system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center;pointer-events:none;z-index:3;box-shadow:0 0 0 1.5px rgba(255,255,255,.85);}
+html.dark-mode .t29-numbadge{background:var(--gold);color:var(--navy-900);box-shadow:0 0 0 1.5px rgba(0,0,0,.35);}
+.t29-nav-pick{outline:2px solid var(--gold);outline-offset:-2px;border-radius:8px;}

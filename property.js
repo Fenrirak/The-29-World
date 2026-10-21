@@ -119,7 +119,7 @@ async function init() {
   IS_TEACHER = u.role === "teacher";
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
-  document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
+  document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("mortgagePanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("propertyMarketPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -191,6 +191,8 @@ async function render() {
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
   window.T29_ME = me; // used by the "pay with credit card" tick boxes
+  const propTaxEl = document.getElementById("propTaxNote");
+  if (propTaxEl) { const r = IS_TEACHER ? 0 : t29TaxRate(cls, "property"); propTaxEl.innerHTML = t29TaxNoteHtml(r ? `Buying a property adds <strong>${t29TaxPct(r)}</strong> tax on top of the price.` : ""); }
   const props = cls.properties || [];
   // Hand over the class doc already in hand (when it's the same class) so
   // this doesn't read it a second time before reading the students.
@@ -264,7 +266,7 @@ async function render() {
           <p>${escapeHtml(p.description) || "No description provided."}</p>
           <p>${comfortStars(p.comfort)} comfort</p>
           ${lifestylePreviewLine(cls, p)}
-          <p>${priceWithLifeDiscount(me, "property", p.price)}${chgBadge} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""} &middot; min deposit ${fmtMoney(minDeposit)}` : "&middot; cash purchase only"}
+          <p>${priceWithLifeDiscount(me, "property", p.price)}${IS_TEACHER ? "" : t29TaxChip(cls, "property")}${chgBadge} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""} &middot; min deposit ${fmtMoney(minDeposit)}` : "&middot; cash purchase only"}
             ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
           <p class="muted-small">${units.length > 1 ? `${available.length} of ${units.length} available` : (available.length > 0 ? "Available" : `Owned by ${nameOf(owned[0].owner)}`)}</p>
         </div>

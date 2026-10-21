@@ -8,7 +8,21 @@
      Shift        tap it, then start typing a module name: a small box appears
                   and predicts the rest of the word as you type. Enter opens
                   the predicted module (Bank, Store, Jobs ...). Up/Down switch
-                  between other matches, Esc cancels.
+                  between other matches, Esc cancels. Matches the start of the
+                  name first ("ba" = Bank), then the start of any later word
+                  ("deposit" = Term Deposit). A number works too: 1 is the first
+                  module in the menu, 2 the second ... The numbers appear on the
+                  menu itself while the box is open.
+                  - It learns: when a few letters fit several modules, the one
+                    you open most comes first ("s" = Store if that's your habit),
+                    and Shift then Enter on an empty box goes back to the module
+                    you were on before this one.
+                  - It forgives typos, as a last resort when nothing else
+                    matches ("bnk" = Bank, "kiwsaver" = KiwiSaver). A correctly
+                    typed start of a name is never treated as a typo.
+                  - It runs actions too: dark, settings, notifications, help.
+     Left/Right   go to the previous / next module in the menu, from the one
+                  you're on (locked modules are skipped)
      N            open / close notifications
      S            open / close settings
      D            switch dark / light mode
@@ -16,11 +30,13 @@
      Enter        in an amount/field that isn't inside a <form>, press the
                   button that goes with it (Ctrl/Cmd + Enter does the same
                   from a multi-line box, e.g. the job application letter)
-     page keys    Store: C = cart.  Blackjack: H hit, S stand, D double,
-                  P split, Enter = new round. During a hand S and D belong
-                  to blackjack; the rest of the time they are settings / dark mode.
+     page keys    Store: C = cart.  Blackjack: Enter = new round.
 
-   Also here: Tab-key "skip to content" link, Enter/Space on role="button"
+   All of the above can be switched off in Settings ("Use keyboard shortcuts").
+   Esc, Enter-for-the-matching-button and the accessibility extras below are
+   not "shortcuts" and stay on.
+
+   Also here: Enter/Space on role="button"
    elements, focus moving into a pop-up when it opens (and back when it
    closes), and the mouse wheel no longer nudging a focused number box.
 
@@ -44,6 +60,18 @@
   var FINE_POINTER = !!(window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches);
   var IS_MAC = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || "");
   var MOD = IS_MAC ? "\u2318" : "Ctrl";
+
+  // ---------- on / off (Settings -> "Use keyboard shortcuts") ----------
+  var PREF_KEY = "t29-shortcuts-off";
+  function readPref() { try { return localStorage.getItem(PREF_KEY) !== "1"; } catch (err) { return true; } }
+  var keysOn = readPref();
+  function applyPref() { if (!keysOn) { closeFinder(true); hideHelp(); } hintNavLinks(); }
+  function setKeysOn(on) {
+    keysOn = !!on;
+    try { if (keysOn) localStorage.removeItem(PREF_KEY); else localStorage.setItem(PREF_KEY, "1"); } catch (err) { /* ignore */ }
+    applyPref();
+  }
+  window.addEventListener("storage", function (e) { if (e.key === PREF_KEY) { keysOn = readPref(); applyPref(); } });
 
   // ---------- small helpers ----------
   function pageFile() { return (location.pathname.split("/").pop() || "index.html").toLowerCase(); }
@@ -92,21 +120,97 @@
     return null;
   }
 
-  // ---------- "tap Shift, then type a module name" ----------
+  // ---------- "tap Shift, then type a name" ----------
+  // The box finds modules (Bank, Store ...) and a few actions (dark, settings,
+  // notifications, help). Matching goes, in order:
+  //   0 the whole name   1 the start of the name   2 the start of a later word
+  //   3 another name people use (an "alias", e.g. the old "account")
+  //   4 a typo, ONLY when nothing in 0-3 matches ("bnk" = Bank)
+  // so a correctly typed word is never mistaken for a typo of something else.
+  // Inside a tier, modules the person opens most come first.
   function stripSp(s) { return String(s).replace(/\s+/g, "").toLowerCase(); }
   function linkLabel(a) {
     var l = a.querySelector(".nav-label");
-    return ((l ? l.textContent : a.textContent) || "").replace(/\s+/g, " ").trim();
+    if (l) return (l.textContent || "").replace(/\s+/g, " ").trim();
+    var c = a.cloneNode(true), b = c.querySelector(".t29-numbadge");
+    if (b) b.remove();
+    return (c.textContent || "").replace(/\s+/g, " ").trim();
   }
+  // Other names for a module, tried only after its real name.
+  var ALIASES = { "student.html": ["account", "home"], "budget.html": ["budgeting"] };
+
+  // Menu links this person doesn't get (Tax is teacher-only; KiwiSaver can be switched off).
+  function hiddenByRole(f) {
+    var root = document.documentElement, teacher = root.classList.contains("role-teacher");
+    if (f === pageFile() || teacher) return false;
+    if (f === "tax.html") return true;
+    if (f === "kiwisaver.html") return !root.classList.contains("ks-on");
+    return false;
+  }
+
+  // ----- what this person opens most (kept per person on this device) -----
+  var USE_KEY = "t29-nav-use";
+  function useUser() { try { return (typeof T29_SESSION_USERNAME !== "undefined" && T29_SESSION_USERNAME) || ""; } catch (err) { return ""; } }
+  function readUseAll() { try { var a = JSON.parse(localStorage.getItem(USE_KEY) || "{}"); return a && typeof a === "object" ? a : {}; } catch (err) { return {}; } }
+  function useOf(all, u) {
+    var m = all[u];
+    if (!m || typeof m !== "object") m = all[u] = {};
+    if (!m.n || typeof m.n !== "object") m.n = {};
+    if (!m.t || typeof m.t !== "object") m.t = {};
+    return m;
+  }
+  function myUse() { return useOf(readUseAll(), useUser() || "_"); }
+  var visitSaved = false;
+  function recordVisit() {
+    if (visitSaved) return true;
+    var u = useUser(), f = pageFile();
+    if (!u) return false;
+    visitSaved = true;
+    if (MODULE_FILES.indexOf(f) < 0) return true;
+    try {
+      var nav = window.performance && performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+      var all = readUseAll(), m = useOf(all, u);
+      if (m.cur !== f) {                       // a reload of the same page changes nothing
+        if (m.cur) m.prev = m.cur;
+        m.cur = f;
+        if (!(nav && nav.type === "reload")) { m.n[f] = (m.n[f] || 0) + 1; m.t[f] = Date.now(); }
+        localStorage.setItem(USE_KEY, JSON.stringify(all));
+      }
+    } catch (err) { /* storage full / blocked: nothing is learned, nothing breaks */ }
+    return true;
+  }
+  function waitForUserThenRecord(tries) {
+    if (recordVisit() || tries <= 0) return;
+    setTimeout(function () { waitForUserThenRecord(tries - 1); }, 300);
+  }
+
   function moduleItems() {
     var out = [], seen = {}, cur = pageFile();
     var links = document.querySelectorAll(".topbar a[href]");
     for (var i = 0; i < links.length; i++) {
       var f = fileOf(links[i]);
-      if (MODULE_FILES.indexOf(f) < 0 || seen[f]) continue;
+      if (MODULE_FILES.indexOf(f) < 0 || seen[f] || hiddenByRole(f)) continue;
       seen[f] = 1;
-      out.push({ file: f, label: linkLabel(links[i]), link: links[i], here: f === cur });
+      out.push({ kind: "module", file: f, label: linkLabel(links[i]), link: links[i], here: f === cur, num: out.length + 1 });
     }
+    return out;
+  }
+  // Things the box can do, as well as go to.
+  var ACTIONS = [
+    { id: "dark", label: "Dark mode", words: ["light"], does: "switches dark / light mode",
+      ok: function () { return true; }, run: function () { toggleTheme(); } },
+    { id: "settings", label: "Settings", words: ["preferences"], does: "opens settings",
+      ok: function () { return !!byId("settingsBtn"); }, run: function () { togglePanel("settingsBtn"); } },
+    { id: "notifications", label: "Notifications", words: ["alerts"], does: "opens notifications",
+      ok: function () { return !!byId("notifBell"); }, run: function () { togglePanel("notifBell"); } },
+    { id: "help", label: "Help", words: ["shortcuts", "keys"], does: "shows the shortcut list",
+      ok: function () { return true; }, run: function () { showHelp(); } }
+  ];
+  function finderEntries() {
+    var mods = moduleItems(), out = mods.slice();
+    ACTIONS.forEach(function (a) {
+      if (a.ok()) out.push({ kind: "action", id: a.id, label: a.label, words: a.words, does: a.does, run: a.run, here: false, num: 0 });
+    });
     return out;
   }
   // Shortest start of the name that points at just this module ("Ba" = Bank).
@@ -121,24 +225,188 @@
     for (; cut < lab.length && seen < n; cut++) if (!/\s/.test(lab[cut])) seen++;
     return lab.slice(0, cut);
   }
-  function findMatches(items, typed) {
-    var q = stripSp(typed);
-    if (!q) return [];
-    return items.filter(function (it) { return stripSp(it.label).indexOf(q) === 0; });
-  }
-  // The part of the name the person hasn't typed yet (the grey prediction).
-  function restOf(label, typed) {
-    var n = stripSp(typed).length, seen = 0, i = 0;
-    for (; i < label.length && seen < n; i++) if (!/\s/.test(label[i])) seen++;
-    var rest = label.slice(i);
-    return /\s$/.test(typed) ? rest.replace(/^\s/, "") : rest;
+  function isNumberQuery(typed) { return /^\s*\d+\s*$/.test(typed); }
+  // The module used in examples: Bank if it's in this menu, else the first other one.
+  function sampleItem(items) {
+    var pick = null;
+    items.forEach(function (it) { if (it.kind === "module" && !it.here && (!pick || /^bank$/i.test(it.label))) pick = it; });
+    return pick;
   }
 
-  var finderEl = null, finderReturnFocus = null;
+  // ----- typo matching -----
+  var KEY_POS = {};
+  ["qwertyuiop", "asdfghjkl", "zxcvbnm"].forEach(function (row, y) {
+    for (var x = 0; x < row.length; x++) KEY_POS[row[x]] = [x + [0, 0.25, 0.75][y], y];
+  });
+  function nearKeys(a, b) {
+    var p = KEY_POS[a], q = KEY_POS[b];
+    if (!p || !q) return false;
+    var dx = p[0] - q[0], dy = p[1] - q[1];
+    return Math.sqrt(dx * dx + dy * dy) <= 1.3;
+  }
+  // Edit distance where the usual slips are cheap: a neighbouring key (0.55),
+  // two letters swapped (0.7), a doubled letter added or dropped (0.6).
+  // Everything else (a missing, extra or different letter) costs 1.
+  function typoCost(a, b) {
+    var m = a.length, n = b.length, d = [], i, j;
+    for (i = 0; i <= m; i++) { d[i] = []; for (j = 0; j <= n; j++) d[i][j] = 0; }
+    for (i = 1; i <= m; i++) d[i][0] = i;
+    for (j = 1; j <= n; j++) d[0][j] = j;
+    for (i = 1; i <= m; i++) for (j = 1; j <= n; j++) {
+      var sub = a[i - 1] === b[j - 1] ? 0 : (nearKeys(a[i - 1], b[j - 1]) ? 0.55 : 1);
+      var del = (i > 1 && a[i - 1] === a[i - 2]) ? 0.6 : 1;   // typed a letter twice
+      var ins = (j > 1 && b[j - 1] === b[j - 2]) ? 0.6 : 1;   // forgot one of a double letter
+      var v = Math.min(d[i - 1][j - 1] + sub, d[i - 1][j] + del, d[i][j - 1] + ins);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, d[i - 2][j - 2] + 0.7);
+      d[i][j] = v;
+    }
+    return d[m][n];
+  }
+  // How many "slips" a typed word of this length may contain: none for one or
+  // two letters (too little to go on), about one for short words, more for long ones.
+  function typoAllowance(len) { return len < 3 ? 0 : len === 3 ? 1.0 : len === 4 ? 1.05 : len <= 6 ? 1.7 : len <= 9 ? 2.1 : 2.6; }
+  // Best cost of q against one target word, treating q as possibly still being typed
+  // (so it is compared with the start of the target as well as the whole word).
+  function targetCost(q, c) {
+    var L = q.length, best = Infinity, tried = {}, lens = [c.length];
+    if (L >= 3) lens.push(L, L + 1);
+    if (L >= 4) lens.push(L + 2);
+    if (L >= 5) lens.push(L - 1);
+    for (var i = 0; i < lens.length; i++) {
+      var len = lens[i];
+      if (len < 2 || len > c.length || tried[len]) continue;
+      tried[len] = 1;
+      var cost = typoCost(q, c.slice(0, len));
+      // Three letters is too little to guess from: held against the start of a longer
+      // name it must be only a neighbouring key / swapped letters, never a plain wrong letter.
+      if (L === 3 && len === L && c.length > L && cost >= 1) continue;
+      if (L === 3 && len === c.length && c.length > 5) continue; // ...and not held against a long whole name
+      // Mixing up the first letter is rare, so it counts extra (unless the first two are just swapped).
+      if (q[0] !== c[0] && !(q[1] === c[0] && q[0] === c[1])) cost += 0.8;
+      if (cost < best) best = cost;
+    }
+    return best;
+  }
+  function targetsOf(it) {
+    var lab = it.label, out = [{ s: stripSp(lab), pen: 0 }], re = /\s+/g, w;
+    lab.split(/\s+/).forEach(function (word, i) { if (i === 0 && lab.indexOf(" ") > 0) out.push({ s: stripSp(word), pen: 0 }); });
+    while ((w = re.exec(lab))) out.push({ s: stripSp(lab.slice(w.index + w[0].length)), pen: 0.15 });
+    var extra = it.words || ALIASES[it.file] || [];
+    extra.forEach(function (x) { out.push({ s: stripSp(x), pen: 0.15 }); });
+    return out;
+  }
+  function typoMatches(items, q, use) {
+    var allow = typoAllowance(q.length);
+    if (!allow) return [];
+    var found = [];
+    items.forEach(function (it, idx) {
+      var best = Infinity;
+      targetsOf(it).forEach(function (t) { var c = targetCost(q, t.s) + t.pen; if (c < best) best = c; });
+      if (best <= allow) found.push({ it: it, cost: best, idx: idx });
+    });
+    if (!found.length) return [];
+    var top = Infinity;
+    found.forEach(function (f) { if (f.cost < top) top = f.cost; });
+    // Keep only real contenders, so a clear typo gets one clear answer.
+    found = found.filter(function (f) { return f.cost <= top + 0.5; });
+    found.sort(function (a, b) {
+      return (a.cost - b.cost) || rankTie(a.it, b.it, use) || (a.idx - b.idx);
+    });
+    return found.map(function (f) { var m = withAt(f.it, 0); m.tier = 4; return m; });
+  }
+
+  // Same-quality matches: the page you're not already on, then the one you open most.
+  function rankTie(a, b, use) {
+    var ah = a.here ? 1 : 0, bh = b.here ? 1 : 0;
+    if (ah !== bh) return ah - bh;
+    var an = a.kind === "module" ? (use.n[a.file] || 0) : 0, bn = b.kind === "module" ? (use.n[b.file] || 0) : 0;
+    if (an !== bn) return bn - an;
+    var at = a.kind === "module" ? (use.t[a.file] || 0) : 0, bt = b.kind === "module" ? (use.t[b.file] || 0) : 0;
+    if (at !== bt) return bt - at;
+    return (a.kind === b.kind ? 0 : (a.kind === "module" ? -1 : 1));
+  }
+  function withAt(it, at) {
+    var o = {}; for (var k in it) o[k] = it[k];
+    o.at = at; o.tier = 1; o.via = "";
+    return o;
+  }
+  function findMatches(items, typed, use) {
+    var q = stripSp(typed);
+    if (!q) return [];
+    if (isNumberQuery(typed)) { // 1 = first module in the menu, 2 = second ...
+      var raw = typed.trim();
+      return items.filter(function (it) { return it.kind === "module" && String(it.num).indexOf(raw) === 0; })
+        .map(function (it) { return withAt(it, 0); })
+        .sort(function (a, b) { return (String(a.num) === raw ? 0 : 1) - (String(b.num) === raw ? 0 : 1) || a.num - b.num; });
+    }
+    var hits = [];
+    items.forEach(function (it, idx) {
+      var lab = it.label, m = null, whole = stripSp(lab);
+      if (whole === q) { m = withAt(it, 0); m.tier = 0; }
+      else if (whole.indexOf(q) === 0) { m = withAt(it, 0); m.tier = 1; }
+      else {
+        var re = /\s+/g, w;
+        while ((w = re.exec(lab))) {
+          var at = w.index + w[0].length;
+          if (stripSp(lab.slice(at)).indexOf(q) === 0) { m = withAt(it, at); m.tier = 2; break; }
+        }
+        if (!m && q.length >= 3) { // other names need 3+ letters, so one or two letters stay about real names
+          var al = it.words || ALIASES[it.file] || [];
+          for (var i = 0; i < al.length; i++) {
+            if (stripSp(al[i]).indexOf(q) === 0) { m = withAt(it, 0); m.tier = 3; m.via = al[i]; break; }
+          }
+        }
+      }
+      if (m) { m.idx = idx; hits.push(m); }
+    });
+    if (!hits.length) return typoMatches(items, q, use); // last resort
+    hits.sort(function (a, b) {
+      var ta = a.tier === 0 ? 0 : a.tier, tb = b.tier === 0 ? 0 : b.tier;
+      if (ta !== tb) return ta - tb;
+      // The whole name typed out always wins; otherwise most-used first.
+      return (a.tier === 0 ? 0 : rankTie(a, b, use)) || (a.idx - b.idx);
+    });
+    return hits;
+  }
+  // The grey prediction: the rest of the name (or, for a later-word match,
+  // the rest of that word followed by the whole name).
+  function restOf(m, typed) {
+    if (isNumberQuery(typed)) { // "2" -> " (Bank)"
+      var more = String(m.num).slice(typed.trim().length) + " (" + m.label + ")";
+      return /\s$/.test(typed) ? more.replace(/^\s/, "") : more;
+    }
+    if (m.tier === 4) return " \u2192 " + m.label;                       // a typo: show where it points
+    var label = m.label, n = stripSp(typed).length, seen = 0, i = m.at;
+    if (m.tier === 3) { var via = stripSp(m.via).slice(n); return (via ? via : "") + " \u2192 " + label; }
+    for (; i < label.length && seen < n; i++) if (!/\s/.test(label[i])) seen++;
+    var rest = label.slice(i);
+    if (/\s$/.test(typed)) rest = rest.replace(/^\s/, "");
+    return m.at ? rest + " \u2192 " + label : rest;
+  }
+
+  var finderEl = null, finderReturnFocus = null, badged = [];
+  // Numbers on the menu itself while the box is open, so nobody has to open the list to learn them.
+  function showBadges(items) {
+    items.forEach(function (it) {
+      var a = it.link;
+      if (it.kind !== "module" || !a || a.querySelector(".t29-numbadge")) return;
+      var b = document.createElement("span");
+      b.className = "t29-numbadge"; b.setAttribute("aria-hidden", "true"); b.textContent = String(it.num);
+      a.classList.add("t29-badged"); a.appendChild(b); badged.push(a);
+    });
+  }
+  function hideBadges() {
+    badged.forEach(function (a) {
+      var b = a.querySelector(".t29-numbadge"); if (b) b.remove();
+      a.classList.remove("t29-badged", "t29-nav-pick");
+    });
+    badged = [];
+  }
   function closeFinder(noRestore) {
     if (!finderEl) return;
     var el = finderEl, back = finderReturnFocus;
     finderEl = null; finderReturnFocus = null;
+    hideBadges();
     el.remove();
     if (!noRestore && back && document.contains(back) && typeof back.focus === "function") {
       try { back.focus({ preventScroll: true }); } catch (err) { /* ignore */ }
@@ -146,48 +414,64 @@
   }
   function openFinder() {
     if (finderEl) return;
-    var items = moduleItems();
-    if (!items.length) return;
+    var entries = finderEntries(), items = entries.filter(function (e) { return e.kind === "module"; });
+    if (!entries.length) return;
     finderReturnFocus = document.activeElement;
     finderEl = document.createElement("div");
     finderEl.className = "t29-finder";
     finderEl.setAttribute("role", "dialog");
-    finderEl.setAttribute("aria-label", "Jump to a module");
+    finderEl.setAttribute("aria-label", "Jump to a module or run an action");
     finderEl.innerHTML =
       '<label class="t29-finder-title" for="t29FinderInput">Go to&hellip;</label>' +
       '<div class="t29-finder-field"><span class="t29-finder-ghost" aria-hidden="true"><span class="t29-finder-typed"></span><span class="t29-finder-rest"></span></span>' +
       '<input id="t29FinderInput" class="t29-finder-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-autocomplete="inline" aria-describedby="t29FinderNote"></div>' +
       '<div id="t29FinderNote" class="t29-finder-note" role="status" aria-live="polite"></div>';
     document.body.appendChild(finderEl);
+    showBadges(items);
 
     var input = finderEl.querySelector("input"), typedEl = finderEl.querySelector(".t29-finder-typed"),
         restEl = finderEl.querySelector(".t29-finder-rest"), note = finderEl.querySelector(".t29-finder-note");
     var matches = [], pick = 0;
-    var sample = null;
-    for (var i = 0; i < items.length; i++) if (!items[i].here) { sample = items[i]; break; }
+    var sample = sampleItem(items);
+    var use = myUse();
+    // Shift, Enter with nothing typed = back to the module visited before this one.
+    var back = null;
+    items.forEach(function (it) { if (it.file === use.prev && !it.here) back = it; });
 
+    function mark(m) {
+      badged.forEach(function (a) { a.classList.remove("t29-nav-pick"); });
+      if (m && m.kind === "module" && m.link) m.link.classList.add("t29-nav-pick");
+    }
     function update() {
-      matches = findMatches(items, input.value);
+      matches = findMatches(entries, input.value, use);
       if (pick >= matches.length) pick = 0;
       var m = matches[pick], txt;
       typedEl.textContent = input.value;
-      restEl.textContent = m ? restOf(m.label, input.value) : "";
+      restEl.textContent = m ? restOf(m, input.value) : (!input.value.trim() && back ? "\u21A9 " + back.label : "");
       if (!input.value.trim()) {
-        txt = sample ? "Type the start of a name, e.g. \u201C" + shortestPrefix(sample, items).toLowerCase() + "\u201D for " + sample.label : "";
+        txt = (back ? "Enter goes back to " + back.label + " \u00B7 or type" : "Type") +
+          (sample ? " the start of a name or a number, e.g. \u201C" + shortestPrefix(sample, items).toLowerCase() + "\u201D or \u201C" + sample.num + "\u201D" : " a name") +
+          " \u00B7 actions: dark, settings, notifications, help";
       } else if (!m) {
-        txt = "No module starts with \u201C" + input.value.trim() + "\u201D";
+        txt = isNumberQuery(input.value) ? "No module is numbered " + input.value.trim() : "Nothing matches \u201C" + input.value.trim() + "\u201D";
       } else {
-        txt = (m.here ? "You\u2019re already on " + m.label : "Enter opens " + m.label) +
-          (matches.length > 1 ? " \u00B7 \u2191\u2193 for the other " + (matches.length - 1) : "");
+        var what = m.kind === "action" ? (m.tier === 4 ? "Did you mean " + m.label + "? " : "") + "Enter " + m.does
+          : m.here ? "You\u2019re already on " + m.label
+          : m.tier === 4 ? "Did you mean " + m.label + "? Enter opens it"
+          : "Enter opens " + m.label;
+        txt = what + (matches.length > 1 ? " \u00B7 \u2191\u2193 for the other " + (matches.length - 1) : "");
       }
       note.textContent = txt;
+      mark(m);
     }
     function go() {
       var m = matches[pick];
+      if (!input.value.trim()) m = back; // nothing typed: back to the last module
       if (!m) return;
-      var link = m.link, here = m.here;
+      var link = m.link, here = m.here, run = m.run, isAction = m.kind === "action";
       closeFinder();
-      if (!here) link.click();
+      if (isAction) { if (run) run(); }
+      else if (!here && link) link.click();
     }
     input.addEventListener("input", function () { pick = 0; update(); });
     input.addEventListener("keydown", function (e) {
@@ -215,7 +499,7 @@
     if (e.key !== "Shift") return;
     var solo = shiftSolo && Date.now() - shiftAt < 700;
     shiftSolo = false;
-    if (!solo || finderEl || helpEl) return;
+    if (!keysOn || !solo || finderEl || helpEl) return;
     if (isTyping(e.target) || blockingPopupOpen()) return;
     openFinder();
   }
@@ -237,18 +521,15 @@
       run: function () {
         if (typeof CART_OPEN !== "undefined" && CART_OPEN && typeof window.cartCloseDrawer === "function") window.cartCloseDrawer();
         else window.cartOpen();
-      } },
-    { file: "gambling.html", key: "h", label: "Blackjack: hit", btn: "bjHitBtn" },
-    { file: "gambling.html", key: "s", label: "Blackjack: stand", btn: "bjStandBtn" },
-    { file: "gambling.html", key: "d", label: "Blackjack: double down", btn: "bjDoubleBtn" },
-    { file: "gambling.html", key: "p", label: "Blackjack: split", btn: "bjSplitBtn" }
+      } }
   ];
   function pageKeys() { var f = pageFile(); return PAGE_KEYS.filter(function (p) { return p.file === f; }); }
 
   function buildHelp() {
     var general = [
       row(kbd("/") + ' <span class="t29-keys-or">or</span> ' + kbd("?"), "Show this list"),
-      row(kbd("Shift"), "Tap it to jump to a module (see right)"),
+      row(kbd("Shift"), "Tap it, then type a module name or an action (see right)"),
+      row(kbd("\u2190") + " " + kbd("\u2192"), "Go to the previous / next module"),
       row(kbd("Esc"), "Close a pop-up, menu or this list"),
       row(kbd("N"), "Open or close notifications"),
       row(kbd("S"), "Open or close settings"),
@@ -259,16 +540,20 @@
     ];
     var page = pageKeys().map(function (p) { return row(kbd(p.key.toUpperCase()), p.label); });
     if (pageFile() === "gambling.html") page.push(row(kbd("Enter"), "Blackjack: start a new round"));
-    var items = moduleItems();
-    var go = items.filter(function (it) { return !it.here; }).map(function (it) { return row(kbd(shortestPrefix(it, items)), it.label); });
-    var goIntro = go.length ? '<p class="t29-keys-intro">Tap ' + kbd("Shift") + ", type the first letters, then press " + kbd("Enter") + ".</p>" : "";
-    var bjNote = pageFile() === "gambling.html"
-      ? '<p class="t29-keys-intro">During a blackjack hand, S and D play the hand. At any other time they open settings and switch dark / light mode.</p>' : "";
+    var items = moduleItems(), sample = sampleItem(items);
+    var go = items.map(function (it) {
+      return row(kbd(String(it.num)) + " " + kbd(shortestPrefix(it, items)), it.label + (it.here ? " \u2014 you\u2019re here" : ""));
+    });
+    var goIntro = go.length ? '<p class="t29-keys-intro">Tap ' + kbd("Shift") + ", type the start of any part of the name, then press " + kbd("Enter") + "." +
+      (sample ? "<br>Example: type " + kbd(shortestPrefix(sample, items).toLowerCase()) + " or " + kbd(String(sample.num)) + " for " + esc(sample.label) + "." : "") +
+      "<br>The numbers show on the menu while the box is open. It learns the modules you open most, forgives small typos (" + kbd("bnk") + " finds Bank), and " + kbd("Shift") + " then " + kbd("Enter") + " on an empty box goes back to the last module you were on." +
+      "<br>It also runs actions: " + kbd("dark") + " " + kbd("settings") + " " + kbd("notifications") + " " + kbd("help") + ".</p>" : "";
+    var offNote = keysOn ? "" : '<p class="t29-keys-intro"><strong>Shortcuts are switched off.</strong> Turn them back on in Settings.</p>';
     return '<div class="t29-dialog t29-keys-card" role="dialog" aria-modal="true" aria-labelledby="t29KeysTitle">' +
       '<div class="t29-keys-head"><h2 id="t29KeysTitle">Keyboard shortcuts</h2>' +
-      '<button type="button" class="t29-keys-close" aria-label="Close">&times;</button></div>' +
-      '<div class="t29-keys-cols"><div>' + section("General", general) + section("Typing", forms) + section("This page", page) + bjNote +
-      "</div><div>" + (go.length ? section("Jump to a module", go).replace("</h3>", "</h3>" + goIntro) : "") + "</div></div>" +
+      '<button type="button" class="t29-keys-close" aria-label="Close">&times;</button></div>' + offNote +
+      '<div class="t29-keys-cols"><div>' + section("General", general) + section("Typing", forms) + section("This page", page) +
+      "</div><div>" + (go.length ? section("Jump to a module", go).replace("</h3>", "</h3>" + goIntro).replace('t29-keys-sec"', 't29-keys-sec t29-keys-mods"') : "") + "</div></div>" +
       '<p class="t29-keys-foot muted-small">Shortcuts pause while you\u2019re typing in a box.</p></div>';
   }
   function showHelp() {
@@ -359,11 +644,31 @@
     if (typeof t29Toast === "function") t29Toast(on ? "Dark mode on" : "Dark mode off", { duration: 1600 });
   }
 
+  // Arrow keys already mean something in sliders, radio buttons, tabs, menus, etc.
+  function arrowOwned(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (/^(INPUT|SELECT|TEXTAREA|AUDIO|VIDEO)$/.test(el.tagName)) return true;
+    return !!el.closest('[role="tab"],[role="tablist"],[role="slider"],[role="radio"],[role="radiogroup"],[role="menu"],[role="menuitem"],[role="listbox"],[role="option"],[role="spinbutton"],[role="tree"],[role="grid"],[role="scrollbar"],[contenteditable="true"]');
+  }
+  // Left / Right: the previous / next module in the menu, from this page. Returns false if this page isn't in the menu.
+  function stepModule(dir) {
+    var items = moduleItems(), cur = -1;
+    for (var i = 0; i < items.length; i++) if (items[i].here) { cur = i; break; }
+    if (cur < 0) return false;
+    for (var j = cur + dir; j >= 0 && j < items.length; j += dir) {
+      if (items[j].link.classList.contains("nav-locked")) continue; // locked: skip over it
+      items[j].link.click();
+      return true;
+    }
+    if (typeof t29Toast === "function") t29Toast(dir < 0 ? "That\u2019s the first module" : "That\u2019s the last module", { duration: 1400 });
+    return true;
+  }
+
   function onKey(e) {
     if (!e.key || e.isComposing) return;
 
     // Shift on its own is the "jump to a module" key — any other key cancels the tap.
-    if (e.key === "Shift") { if (!e.repeat) { shiftSolo = !(e.ctrlKey || e.metaKey || e.altKey); shiftAt = Date.now(); } return; }
+    if (e.key === "Shift") { if (!e.repeat) { shiftSolo = keysOn && !(e.ctrlKey || e.metaKey || e.altKey); shiftAt = Date.now(); } return; }
     shiftSolo = false;
 
     if (e.key === "Escape") {
@@ -386,6 +691,7 @@
     }
 
     if (onEnter(e)) return;
+    if (!keysOn) return; // shortcuts switched off in Settings
 
     if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
     var k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -405,7 +711,13 @@
     if (k === "?" || k === "/") { e.preventDefault(); showHelp(); return; }
     if (blockingPopupOpen()) return;
 
-    // Page keys first: during a blackjack hand S and D belong to the game.
+    if (k === "ArrowLeft" || k === "ArrowRight") {
+      if (arrowOwned(e.target) || document.querySelector(".t29-tour")) return;
+      if (stepModule(k === "ArrowLeft" ? -1 : 1)) e.preventDefault();
+      return;
+    }
+
+    // Keys that only exist on one page (Store: C = cart).
     var pk = pageKeys();
     for (var i = 0; i < pk.length; i++) {
       if (pk[i].key !== k) continue;
@@ -419,31 +731,17 @@
   }
 
   // ---------- init-time extras ----------
-  function addSkipLink() {
-    var main = document.querySelector("main");
-    if (!main || byId("t29SkipLink")) return;
-    if (!main.id) main.id = "t29Main";
-    main.setAttribute("tabindex", "-1");
-    var a = document.createElement("a");
-    a.id = "t29SkipLink";
-    a.className = "t29-skip";
-    a.href = "#" + main.id;
-    a.textContent = "Skip to main content";
-    a.addEventListener("click", function (e) {
-      e.preventDefault();
-      main.focus({ preventScroll: true });
-      if (typeof t29Jump === "function") t29Jump(main.id);
-      else main.scrollIntoView();
-    });
-    document.body.insertBefore(a, document.body.firstChild);
-  }
-
   function hintNavLinks() {
-    if (!FINE_POINTER) return;
     var items = moduleItems();
     items.forEach(function (it) {
-      if (it.here || it.link.title) return;
-      it.link.title = it.label + " \u2014 tap Shift, then type \u201C" + shortestPrefix(it, items) + "\u201D";
+      var a = it.link, mine = a.getAttribute("data-t29-hint") === "1";
+      if (!keysOn || !FINE_POINTER || it.here) {
+        if (mine) { a.removeAttribute("title"); a.removeAttribute("data-t29-hint"); }
+        return;
+      }
+      if (a.title && !mine) return; // the page set its own tooltip
+      a.title = it.label + " \u2014 tap Shift, then type \u201C" + shortestPrefix(it, items) + "\u201D or \u201C" + it.num + "\u201D";
+      a.setAttribute("data-t29-hint", "1");
     });
   }
 
@@ -475,7 +773,7 @@
   }
 
   function init() {
-    addSkipLink();
+    waitForUserThenRecord(40); // learn which modules this person opens (see recordVisit)
     hintNavLinks();
     watchModals();
     // Nav groups/sidebar can rebuild the nav a moment after load.
@@ -495,6 +793,8 @@
   window.T29Keys = { showHelp: showHelp, hideHelp: hideHelp, openFinder: openFinder };
   window.t29ShowShortcuts = showHelp;
   window.t29HasKeyboard = function () { return FINE_POINTER; };
+  window.t29ShortcutsOn = function () { return keysOn; };
+  window.t29SetShortcuts = setKeysOn;
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();

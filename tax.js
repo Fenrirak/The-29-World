@@ -70,7 +70,6 @@ function paintChrome() {
   document.getElementById("hRates").innerHTML = icon("percent", 18) + " Tax rates";
   document.getElementById("saveBtn").innerHTML = icon("bank", 15) + " Save tax rates";
   document.getElementById("hWageBrackets").innerHTML = icon("percent", 18) + " Wage tax brackets";
-  document.getElementById("hCurrent").innerHTML = icon("percent", 18) + " Current tax rates";
 }
 
 async function init() {
@@ -78,11 +77,15 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
+  // Students no longer have a Tax page: each rate is shown where it applies
+  // (wage tax on Jobs, property / transport tax on those pages, savings
+  // interest tax on Bank, winnings tax on Gambling). This page is where the
+  // teacher sets the rates.
+  if (!IS_TEACHER) { location.replace("student.html"); return; }
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
-  document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
+  document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
-  document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
   // These 8 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
@@ -124,7 +127,7 @@ async function render() {
   const rates = cls.taxRates || {};
   wageBrackets = (cls.wageTaxBrackets || []).map(b => ({ upTo: b.upTo, rate: b.rate }));
 
-  if (IS_TEACHER) {
+  {
     const grid = document.getElementById("taxGrid");
     grid.innerHTML = TAX_CATEGORIES.map(c => `
       <div>
@@ -133,34 +136,6 @@ async function render() {
       </div>
     `).join("");
     renderWageBracketRows();
-  } else {
-    const box = document.getElementById("studentTaxList");
-    box.innerHTML = TAX_CATEGORIES.map(c => `
-      <div class="auto-row">
-        <div class="auto-details">${c.label}</div>
-        <strong>${rates[c.key] || 0}%</strong>
-      </div>
-    `).join("");
-
-    const wageBox = document.getElementById("studentWageBrackets");
-    if (!wageBrackets.length) {
-      wageBox.innerHTML = `<div class="auto-row"><div class="auto-details">Wages (income tax)</div><strong>0%</strong></div>`;
-    } else {
-      const sorted = wageBrackets.slice().sort((a, b) => {
-        const aTop = a.upTo == null ? Infinity : a.upTo;
-        const bTop = b.upTo == null ? Infinity : b.upTo;
-        return aTop - bTop;
-      });
-      wageBox.innerHTML = sorted.map((b, i) => {
-        const floor = i === 0 ? 0 : Number(sorted[i - 1].upTo) + 1;
-        const rangeLabel = b.upTo == null ? `$${floor} and up` : `$${floor} – $${b.upTo} (inclusive)`;
-        return `
-        <div class="auto-row">
-          <div class="auto-details">Wages: ${rangeLabel}</div>
-          <strong>${b.rate}%</strong>
-        </div>`;
-      }).join("");
-    }
   }
 }
 

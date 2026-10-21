@@ -40,7 +40,9 @@ const T29_TOURS = {
     { target: ["#reportCardBtn"], title: "Your report card",
       text: "See where your money went this month — and share it with your family if you like." },
     { target: ["#settingsBtn", ".sb-hamburger"], title: "Settings",
-      text: "Dark mode, change your password, and this tour again any time you want it. On a phone, Settings is at the bottom of the menu." },
+      text: "Dark mode, keyboard shortcuts, change your password, and this tour again any time you want it. On a phone, Settings is at the bottom of the menu." },
+    { keyboard: true, title: "Keyboard shortcuts ⌨️",
+      text: "Using a computer? Press the ? key (or /) any time to see every keyboard shortcut. Tap Shift and start typing to jump to any page, or use the ← → keys to move along the menu. You can turn them off in Settings." },
     { title: "You're all set!",
       text: "A good first step: visit the Bank and put some money into Savings to start on a goal. Have fun!" }
   ],
@@ -64,7 +66,9 @@ const T29_TOURS = {
     { target: ['.topbar nav a[href="reports.html"]', ".sb-hamburger"], title: "Reports",
       text: "Report cards for every student, CSV and PDF export, and family links so parents can see how their child is doing." },
     { target: ["#settingsBtn", ".sb-hamburger"], title: "Settings",
-      text: "Dark mode, change your password, and this tour again any time. On a phone, Settings is at the bottom of the menu." },
+      text: "Dark mode, keyboard shortcuts, change your password, and this tour again any time. On a phone, Settings is at the bottom of the menu." },
+    { keyboard: true, title: "Keyboard shortcuts ⌨️",
+      text: "Press the ? key (or /) any time to see every keyboard shortcut. Tap Shift and start typing to jump to any page, or use the ← → keys to move along the menu. You can turn them off in Settings." },
     { title: "You're ready to go!",
       text: "Suggested first steps: add a few jobs, set your pay day, then share your class code with your students." }
   ]
@@ -129,8 +133,10 @@ function _t29OfferTour(tourId) {
 
 function t29StartTour(tourId) {
   tourId = tourId || t29TourForThisPage();
-  const steps = T29_TOURS[tourId];
-  if (!steps) return;
+  const allSteps = T29_TOURS[tourId];
+  if (!allSteps) return;
+  // Steps marked keyboard:true only make sense on a computer with a keyboard.
+  const steps = allSteps.filter(st => !st.keyboard || (typeof t29HasKeyboard === "function" && t29HasKeyboard()));
   t29EndTour(false);
   const offer = document.getElementById("t29TourOffer");
   if (offer) offer.remove();

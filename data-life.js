@@ -3566,7 +3566,7 @@ async function clearLifestyleOverride(username) {
 // match what each module's own page passes to isModuleLockedForStudent.
 const LIFESTYLE_LOCKABLE_MODULES = [
   { key: "bank", label: "Bank" },
-  { key: "budget", label: "My budget" },
+  { key: "budget", label: "Budget" },
   { key: "termdeposit", label: "Term Deposit" },
   { key: "kiwisaver", label: "KiwiSaver" },
   { key: "loan", label: "Loans" },
@@ -3576,7 +3576,6 @@ const LIFESTYLE_LOCKABLE_MODULES = [
   { key: "transport", label: "Transport" },
   { key: "property", label: "Property" },
   { key: "insurance", label: "Insurance" },
-  { key: "tax", label: "Tax" },
   { key: "bigevents", label: "Big Events" },
   { key: "life", label: "Life" },
   { key: "gambling", label: "Gambling" },
@@ -3687,10 +3686,10 @@ const MODULE_LOCK_MESSAGE = {
    them as a popup the moment they open a module that needs one — so
    neither earns a permanent tab in a nav bar that is already full.
    Removed rather than hidden so fitTopbar() measures the real row. */
-const NAV_TEACHER_ONLY = ["reports.html", "quizzes.html"];
+const NAV_TEACHER_ONLY = ["reports.html", "quizzes.html", "tax.html"];
 function applyNavRoleVisibility(role) {
   if (role === "teacher") {
-    // The budget tab is "My budget" for students but a class-wide overview
+    // The budget tab is "Budget" for students but a class-wide overview
     // for teachers, so it reads "Budgeting" in their nav.
     document.querySelectorAll('nav a[data-module="budget"] .nav-label').forEach(l => { l.textContent = "Budgeting"; });
     // BUGFIX: style.css hides the Quizzes/Reports links until <html> has

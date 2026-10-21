@@ -506,8 +506,8 @@ function badge(type) {
     "truck-licence-buy": ["navy", "car", "Truck licence"],
     "insurance-signup-fee": ["lilac", "shield", "Insurance sign-up"],
     "property-occupancy": ["navy", "house", "Occupancy change"],
-    "kiwisaver-in": ["navy", "sprout", "KiwiSaver"], "kiwisaver-out": ["mint", "sprout", "KiwiSaver withdrawal"],
-    "kiwisaver-refund": ["gold", "sprout", "KiwiSaver refund"]
+    "kiwisaver-in": ["navy", "kiwi", "KiwiSaver"], "kiwisaver-out": ["mint", "kiwi", "KiwiSaver withdrawal"],
+    "kiwisaver-refund": ["gold", "kiwi", "KiwiSaver refund"]
   };
   const [cls, ic, label] = map[type] || ["navy", "coin", type];
   return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;

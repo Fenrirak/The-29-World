@@ -32,7 +32,7 @@ async function init() {
   IS_TEACHER = u.role === "teacher";
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
-  document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
+  document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("licenceSettingsPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("sellBackPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -85,6 +85,8 @@ async function render() {
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
   const vehicles = cls.vehicles || [];
+  const vehTaxEl = document.getElementById("vehTaxNote");
+  if (vehTaxEl) { const r = IS_TEACHER ? 0 : t29TaxRate(cls, "transport"); vehTaxEl.innerHTML = t29TaxNoteHtml(r ? `Buying a vehicle adds <strong>${t29TaxPct(r)}</strong> tax on top of the price.` : ""); }
   // Hand over the class doc already in hand (when it's the same class) so
   // this doesn't read it a second time before reading the students.
   const students = await getClassStudents(me.classCode, me.classCode === CURRENT.classCode ? cls : undefined);
@@ -202,7 +204,7 @@ async function render() {
           <h4>${icon("car", 20)}${escapeHtml(v.name)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span> ${isMine ? '<span class="badge mint">Yours</span>' : ""}</h4>
           <p>${escapeHtml(v.description) || "No description provided."}</p>
           <p>${comfortStars(v.comfort)} comfort</p>
-          <p>${priceWithLifeDiscount(me, "transport", v.price)} &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
+          <p>${priceWithLifeDiscount(me, "transport", v.price)}${IS_TEACHER ? "" : t29TaxChip(cls, "transport")} &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
           <p class="muted-small">${ownedLabel}</p>
           ${(v.weeklyExpense > 0 || v.publicTransportOffsetPct > 0) ? `<p class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffsetPct > 0 ? " &middot; " : ""}${v.publicTransportOffsetPct > 0 ? `knocks ${v.publicTransportOffsetPct}% off public transport` : ""}</p>` : ""}
           ${needsLicence ? `<p class="muted-small">Requires a truck licence — see above.</p>` : ""}

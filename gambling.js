@@ -1197,7 +1197,7 @@ async function init() {
   IS_TEACHER = u.role === "teacher";
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
-  document.getElementById("navHomeLabel").textContent = IS_TEACHER ? "Dashboard" : "My account";
+  document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
@@ -1287,6 +1287,7 @@ async function render() {
   }
   lockedBanner.classList.add("hidden");
   document.getElementById("studentView").classList.remove("hidden");
+  { const r = t29TaxRate(CLS, "gambling"); document.getElementById("gamblingTaxNote").innerHTML = t29TaxNoteHtml(r ? `Gambling winnings are taxed at <strong>${t29TaxPct(r)}</strong> before they are paid to you.` : ""); }
 
   /* ---- Shared gambling account tab (Account) ---- */
   // Deliberately not gated on g.enabled — even when the whole module is
