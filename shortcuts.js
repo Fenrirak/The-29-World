@@ -186,10 +186,10 @@
 
   function moduleItems() {
     var out = [], seen = {}, cur = pageFile();
-    var links = document.querySelectorAll(".topbar a[href]");
+    var links = document.querySelectorAll(".topbar nav a[href]"); // the menu only, not the "The 29 World" brand link
     for (var i = 0; i < links.length; i++) {
       var f = fileOf(links[i]);
-      if (MODULE_FILES.indexOf(f) < 0 || seen[f] || hiddenByRole(f)) continue;
+      if (links[i].classList.contains("brand") || MODULE_FILES.indexOf(f) < 0 || seen[f] || hiddenByRole(f)) continue;
       seen[f] = 1;
       out.push({ kind: "module", file: f, label: linkLabel(links[i]), link: links[i], here: f === cur, num: out.length + 1 });
     }
