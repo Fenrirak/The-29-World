@@ -540,14 +540,11 @@
     ];
     var page = pageKeys().map(function (p) { return row(kbd(p.key.toUpperCase()), p.label); });
     if (pageFile() === "gambling.html") page.push(row(kbd("Enter"), "Blackjack: start a new round"));
-    var items = moduleItems(), sample = sampleItem(items);
+    var items = moduleItems();
     var go = items.map(function (it) {
       return row(kbd(String(it.num)) + " " + kbd(shortestPrefix(it, items)), it.label + (it.here ? " \u2014 you\u2019re here" : ""));
     });
-    var goIntro = go.length ? '<p class="t29-keys-intro">Tap ' + kbd("Shift") + ", type the start of any part of the name, then press " + kbd("Enter") + "." +
-      (sample ? "<br>Example: type " + kbd(shortestPrefix(sample, items).toLowerCase()) + " or " + kbd(String(sample.num)) + " for " + esc(sample.label) + "." : "") +
-      "<br>The numbers show on the menu while the box is open. It learns the modules you open most, forgives small typos (" + kbd("bnk") + " finds Bank), and " + kbd("Shift") + " then " + kbd("Enter") + " on an empty box goes back to the last module you were on." +
-      "<br>It also runs actions: " + kbd("dark") + " " + kbd("settings") + " " + kbd("notifications") + " " + kbd("help") + ".</p>" : "";
+    var goIntro = go.length ? '<p class="t29-keys-intro">Tap ' + kbd("Shift") + ", type part of a name or its number, then press " + kbd("Enter") + ".<br>Forgives typos, learns your favourites, and runs actions: " + kbd("dark") + " " + kbd("settings") + " " + kbd("notifications") + " " + kbd("help") + ".<br>" + kbd("Shift") + " then " + kbd("Enter") + " returns to your last module.</p>" : "";
     var offNote = keysOn ? "" : '<p class="t29-keys-intro"><strong>Shortcuts are switched off.</strong> Turn them back on in Settings.</p>';
     return '<div class="t29-dialog t29-keys-card" role="dialog" aria-modal="true" aria-labelledby="t29KeysTitle">' +
       '<div class="t29-keys-head"><h2 id="t29KeysTitle">Keyboard shortcuts</h2>' +
