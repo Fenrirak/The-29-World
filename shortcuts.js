@@ -16,11 +16,16 @@
                   - It learns: when a few letters fit several modules, the one
                     you open most comes first ("s" = Store if that's your habit),
                     and Shift then Enter on an empty box goes back to the module
-                    you were on before this one.
+                    you were on before this one. With the box empty, Up/Down
+                    also offers your most-used module. Only visits where you
+                    moved from another module count (so landing on the Dashboard
+                    at login doesn't), and it needs 5+ such visits, a clear lead,
+                    and one in the last 30 days.
                   - It forgives typos, as a last resort when nothing else
                     matches ("bnk" = Bank, "kiwsaver" = KiwiSaver). A correctly
                     typed start of a name is never treated as a typo.
                   - It runs actions too: dark, settings, notifications, help.
+     Ctrl/Cmd + K the same Jump box as tapping Shift (not while typing in a box)
      Left/Right   go to the previous / next module in the menu, from the one
                   you're on (locked modules are skipped)
      N            open / close notifications
@@ -157,9 +162,22 @@
     if (!m || typeof m !== "object") m = all[u] = {};
     if (!m.n || typeof m.n !== "object") m.n = {};
     if (!m.t || typeof m.t !== "object") m.t = {};
+    if (!m.d || typeof m.d !== "object") m.d = {};
     return m;
   }
   function myUse() { return useOf(readUseAll(), useUser() || "_"); }
+  // A visit is "by choice" only when this person moved here from another module in the menu (not a
+  // login landing, bookmark, reload or Back/Forward). That keeps the Dashboard, which everyone lands
+  // on, from looking like a favourite just because it is the front door.
+  function cameFromModule() {
+    try {
+      if (!document.referrer) return false;
+      var r = new URL(document.referrer);
+      if (r.origin !== location.origin) return false;
+      var f = (r.pathname.split("/").pop() || "").toLowerCase();
+      return MODULE_FILES.indexOf(f) >= 0 && f !== pageFile();
+    } catch (err) { return false; }
+  }
   var visitSaved = false;
   function recordVisit() {
     if (visitSaved) return true;
@@ -174,6 +192,7 @@
         if (m.cur) m.prev = m.cur;
         m.cur = f;
         if (!(nav && nav.type === "reload")) { m.n[f] = (m.n[f] || 0) + 1; m.t[f] = Date.now(); }
+        if (nav && nav.type === "navigate" && cameFromModule()) m.d[f] = (m.d[f] || 0) + 1;
         localStorage.setItem(USE_KEY, JSON.stringify(all));
       }
     } catch (err) { /* storage full / blocked: nothing is learned, nothing breaks */ }
@@ -182,6 +201,21 @@
   function waitForUserThenRecord(tries) {
     if (recordVisit() || tries <= 0) return;
     setTimeout(function () { waitForUserThenRecord(tries - 1); }, 300);
+  }
+
+  // The module opened most by choice, or null when there is no clear favourite: it needs 5+ chosen
+  // visits, at least a quarter of all of them, a strict lead over the next module, and a visit in the
+  // last 30 days. If the favourite is the page you are on, nothing is suggested.
+  function favouriteModule(items, use) {
+    var d = use.d || {}, total = 0, best = null, bestN = 0, second = 0;
+    items.forEach(function (it) { total += d[it.file] || 0; });
+    items.forEach(function (it) {
+      var n = d[it.file] || 0;
+      if (n > bestN) { second = bestN; bestN = n; best = it; } else if (n > second) second = n;
+    });
+    if (!best || best.here || bestN < 5 || bestN <= second || bestN / total < 0.25) return null;
+    if (Date.now() - (use.t[best.file] || 0) > 30 * 86400000) return null;
+    return best;
   }
 
   function moduleItems() {
@@ -437,6 +471,10 @@
     // Shift, Enter with nothing typed = back to the module visited before this one.
     var back = null;
     items.forEach(function (it) { if (it.file === use.prev && !it.here) back = it; });
+    // With nothing typed: Enter takes the first option; Up/Down switches to the next.
+    var fav = favouriteModule(items, use), opts = [], eo = 0;
+    if (back) opts.push({ m: back, ghost: "\u21A9 " + back.label, says: "Enter goes back to " + back.label + (fav && fav.file === back.file ? " (also your most-used)" : "") });
+    if (fav && !(back && back.file === fav.file)) opts.push({ m: fav, ghost: "\u2605 " + fav.label, says: "Enter opens " + fav.label + ", your most-used" });
 
     function mark(m) {
       badged.forEach(function (a) { a.classList.remove("t29-nav-pick"); });
@@ -447,9 +485,9 @@
       if (pick >= matches.length) pick = 0;
       var m = matches[pick], txt;
       typedEl.textContent = input.value;
-      restEl.textContent = m ? restOf(m, input.value) : (!input.value.trim() && back ? "\u21A9 " + back.label : "");
+      restEl.textContent = m ? restOf(m, input.value) : (!input.value.trim() && opts.length ? opts[eo].ghost : "");
       if (!input.value.trim()) {
-        txt = (back ? "Enter goes back to " + back.label + " \u00B7 or type" : "Type") +
+        txt = (opts.length ? opts[eo].says + (opts.length > 1 ? " \u00B7 \u2191\u2193 to switch" : "") + " \u00B7 or type" : "Type") +
           (sample ? " the start of a name or a number, e.g. \u201C" + shortestPrefix(sample, items).toLowerCase() + "\u201D or \u201C" + sample.num + "\u201D" : " a name") +
           " \u00B7 actions: dark, settings, notifications, help";
       } else if (!m) {
@@ -462,11 +500,11 @@
         txt = what + (matches.length > 1 ? " \u00B7 \u2191\u2193 for the other " + (matches.length - 1) : "");
       }
       note.textContent = txt;
-      mark(m);
+      mark(m || (!input.value.trim() && opts.length ? opts[eo].m : null));
     }
     function go() {
       var m = matches[pick];
-      if (!input.value.trim()) m = back; // nothing typed: back to the last module
+      if (!input.value.trim()) m = opts.length ? opts[eo].m : null; // nothing typed: the shown choice
       if (!m) return;
       var link = m.link, here = m.here, run = m.run, isAction = m.kind === "action";
       closeFinder();
@@ -478,6 +516,12 @@
       e.stopPropagation(); // keep the page's own Enter / letter shortcuts out of this box
       if (e.isComposing) return;
       if (e.key === "Escape") { e.preventDefault(); closeFinder(); }
+      else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) { e.preventDefault(); closeFinder(); }
+      else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !input.value.trim() && opts.length > 1) {
+        e.preventDefault();
+        eo = (eo + 1) % opts.length;
+        update();
+      }
       else if (e.key === "Enter") { e.preventDefault(); go(); }
       else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && matches.length > 1) {
         e.preventDefault();
@@ -529,6 +573,7 @@
     var general = [
       row(kbd("/") + ' <span class="t29-keys-or">or</span> ' + kbd("?"), "Show this list"),
       row(kbd("Shift"), "Tap it, then type a module name or an action (see right)"),
+      row(kbd("Ctrl") + " " + kbd("K"), "Same as tapping Shift (\u2318 K on a Mac)"),
       row(kbd("\u2190") + " " + kbd("\u2192"), "Go to the previous / next module"),
       row(kbd("Esc"), "Close a pop-up, menu or this list"),
       row(kbd("N"), "Open or close notifications"),
@@ -690,6 +735,12 @@
     if (onEnter(e)) return;
     if (!keysOn) return; // shortcuts switched off in Settings
 
+    // Ctrl/Cmd + K = the same Jump box as tapping Shift.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === "k" || e.key === "K")) {
+      if (finderEl || helpEl || isTyping(e.target) || blockingPopupOpen()) return;
+      e.preventDefault(); openFinder(); return;
+    }
+
     if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
     var k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (e.shiftKey && k !== "?" && k !== "/") return;
@@ -739,6 +790,28 @@
       if (a.title && !mine) return; // the page set its own tooltip
       a.title = it.label + " \u2014 tap Shift, then type \u201C" + shortestPrefix(it, items) + "\u201D or \u201C" + it.num + "\u201D";
       a.setAttribute("data-t29-hint", "1");
+    });
+    hintButtons();
+  }
+  // Hover tips that show the key: "Notifications (N)", "Settings (S)".
+  var KEY_TIPS = [ { id: "notifBell", key: "N", fallback: "Notifications" }, { id: "settingsBtn", key: "S", fallback: "Settings" } ];
+  function hintButtons() {
+    KEY_TIPS.forEach(function (t) {
+      var b = byId(t.id); if (!b) return;
+      var mine = b.hasAttribute("data-t29-tip");
+      if (!keysOn || !FINE_POINTER) {
+        if (mine) {
+          var was = b.getAttribute("data-t29-tip");
+          if (was) b.title = was; else b.removeAttribute("title");
+          b.removeAttribute("data-t29-tip");
+        }
+        return;
+      }
+      if (mine) return;
+      var base = b.getAttribute("title") || b.getAttribute("aria-label") || t.fallback;
+      if (/\(\s*[A-Za-z]\s*\)\s*$/.test(base)) return; // already shows its key
+      b.setAttribute("data-t29-tip", b.getAttribute("title") || "");
+      b.title = base + " (" + t.key + ")";
     });
   }
 
