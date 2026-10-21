@@ -542,7 +542,7 @@
     if (pageFile() === "gambling.html") page.push(row(kbd("Enter"), "Blackjack: start a new round"));
     var items = moduleItems();
     var go = items.map(function (it) {
-      return row(kbd(String(it.num)) + " " + kbd(shortestPrefix(it, items)), it.label + (it.here ? " \u2014 you\u2019re here" : ""));
+      return '<div class="t29-keys-row"><span class="t29-keys-label">' + esc(it.label + (it.here ? " \u2014 you\u2019re here" : "")) + "</span></div>";
     });
     var goIntro = go.length ? '<p class="t29-keys-intro">Tap ' + kbd("Shift") + ", type part of a name or its number, then press " + kbd("Enter") + ".<br>Forgives typos, learns your favourites, and runs actions: " + kbd("dark") + " " + kbd("settings") + " " + kbd("notifications") + " " + kbd("help") + ".<br>" + kbd("Shift") + " then " + kbd("Enter") + " returns to your last module.</p>" : "";
     var offNote = keysOn ? "" : '<p class="t29-keys-intro"><strong>Shortcuts are switched off.</strong> Turn them back on in Settings.</p>';
