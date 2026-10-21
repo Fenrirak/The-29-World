@@ -183,7 +183,8 @@ async function render() {
     const myShares = co.holders[CURRENT.username] || 0;
     const first = co.history[0], last = co.history[co.history.length - 1];
     const change = last - first;
-    const changePct = first ? ((change / first) * 100).toFixed(1) : "0.0";
+    const changeNum = first ? (change / first) * 100 : 0;
+    const changePct = (Math.round(changeNum * 10) === 0 ? 0 : changeNum).toFixed(1);
 
     const div = document.createElement("div");
     div.className = "card company-card";
@@ -191,7 +192,7 @@ async function render() {
       <div class="flex-between">
         <div>
           <h4>${icon("building", 20)}${escapeHtml(co.name)}</h4>
-          <div class="${change >= 0 ? 'ticker-up' : 'ticker-down'}">${fmtMoney(co.price)} <span class="muted-small">(${change >= 0 ? '+' : ''}${changePct}% today)</span></div>
+          <div class="${change > 0 ? 'ticker-up' : change < 0 ? 'ticker-down' : ''}">${fmtMoney(co.price)} <span class="muted-small">(${change > 0 ? '+' : ''}${changePct}% today)</span></div>
         </div>
         ${sparkline(co.history)}
       </div>

@@ -45,7 +45,7 @@
 html.sidebar-nav .sb-group-label{
   display: block;
   margin: 12px 4px 2px;
-  font-size: .68rem;
+  font-size: .7rem;
   font-weight: 800;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -104,7 +104,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
   }
   html.sidebar-nav .topbar nav a{
     width: 100%;
-    font-size: .95rem;
+    font-size: .92rem;
     padding: 11px 12px;
     min-height: 0;
     gap: 10px;
@@ -140,12 +140,12 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
      both already carry an aria-label for assistive tech regardless. */
   html.sidebar-nav #settingsBtn::after{
     content: "Settings";
-    font-size: .9rem;
+    font-size: .92rem;
     font-weight: 700;
   }
   html.sidebar-nav #notifBell::after{
     content: "Notifications";
-    font-size: .9rem;
+    font-size: .92rem;
     font-weight: 700;
   }
   /* In the rail the unread badge sits inline after the label rather than
@@ -179,7 +179,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
     min-width: 120px;
     padding: 11px 14px;
   }
-  html.sidebar-nav .anw-balance-widget .anw-bw-label{ font-size: .66rem; }
+  html.sidebar-nav .anw-balance-widget .anw-bw-label{ font-size: .7rem; }
   html.sidebar-nav .anw-balance-widget .anw-bw-value{ font-size: 1.35rem; }
 }
 
@@ -340,4 +340,9 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
 
   html.sidebar-nav.sidebar-open,
   html.sidebar-nav.sidebar-open body{ overflow: hidden; }
+}
+
+/* Touch screens: the hamburger keeps its look but gets a 44px hit area. */
+@media (pointer:coarse){
+  html.sidebar-nav .sb-hamburger::before{content:"";position:absolute;inset:-5px;}
 }

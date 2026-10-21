@@ -1656,11 +1656,11 @@ function _pwBuildModal() {
         <h2 style="margin:0 0 2px;">Change password</h2>
         <button class="btn small secondary" type="button" id="t29PwCloseBtn">Close</button>
       </div>
-      <label style="display:block;margin:14px 0 4px;font-size:.9rem;" for="t29PwCurrent">Current password</label>
+      <label style="display:block;margin:14px 0 4px;font-size:.92rem;" for="t29PwCurrent">Current password</label>
       <input type="password" id="t29PwCurrent" autocomplete="current-password" style="width:100%;">
-      <label style="display:block;margin:12px 0 4px;font-size:.9rem;" for="t29PwNew">New password</label>
+      <label style="display:block;margin:12px 0 4px;font-size:.92rem;" for="t29PwNew">New password</label>
       <input type="password" id="t29PwNew" autocomplete="new-password" style="width:100%;">
-      <label style="display:block;margin:12px 0 4px;font-size:.9rem;" for="t29PwConfirm">Confirm new password</label>
+      <label style="display:block;margin:12px 0 4px;font-size:.92rem;" for="t29PwConfirm">Confirm new password</label>
       <input type="password" id="t29PwConfirm" autocomplete="new-password" style="width:100%;">
       <p class="muted-small" id="t29PwMsg" style="min-height:1.2em;margin-top:10px;"></p>
       <button class="btn gold" type="button" id="t29PwSubmitBtn">Update password</button>

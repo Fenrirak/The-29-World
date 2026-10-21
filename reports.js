@@ -145,7 +145,7 @@ function renderTeacher() {
   document.getElementById("noStudentsMsg").style.display = students.length ? "none" : "";
   rows.innerHTML = students.map(s => `
     <tr>
-      <td><span class="student-avatar ${avatarClass(s.username)}" style="width:26px;height:26px;font-size:.68rem;display:inline-flex;vertical-align:middle;margin-right:8px;">${initials(s.name)}</span>${escapeHtml(s.name)}</td>
+      <td><span class="student-avatar ${avatarClass(s.username)}" style="width:26px;height:26px;font-size:.7rem;display:inline-flex;vertical-align:middle;margin-right:8px;">${initials(s.name)}</span>${escapeHtml(s.name)}</td>
       <td>${fmtMoney(s.netWorth)}</td>
       <td>${s.savingsRate === null ? "—" : s.savingsRate + "%"}</td>
       <td>${s.topExpenseCategory ? `${s.topExpenseCategory.category} (${fmtMoney(s.topExpenseCategory.amount)})` : "—"}</td>

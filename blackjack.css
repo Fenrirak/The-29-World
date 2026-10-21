@@ -219,7 +219,7 @@
   gap: 10px;
   margin: 16px 0;
   color: var(--muted, #7a8299);
-  font-size: .72rem;
+  font-size: .7rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .1em;
@@ -253,10 +253,10 @@
 .progress-bar > div.mint { background: linear-gradient(90deg, var(--mint, #3fbf8f), var(--mint-dark, #2e9873)); }
 .progress-bar > div.coral { background: linear-gradient(90deg, var(--coral, #e8735f), #c9503a); }
 
-@media (max-width: 760px) {
+@media (max-width: 800px) {
   .ga-hero-grid { grid-template-columns: 1fr; }
 }
-@media (max-width: 560px) {
+@media (max-width: 520px) {
   .ga-buyin-row { flex-direction: column; align-items: stretch; }
   .ga-buyin-row .btn { width: 100%; }
 }
@@ -309,7 +309,7 @@
 /* On narrow screens the track fills the width and both options share it
    evenly, rather than staying a small hugged-content pill that's easy to
    miss next to the page title. */
-@media (max-width: 480px) {
+@media (max-width: 520px) {
   .mode-switch { display: flex; width: 100%; }
   /* Three options (Account, Roulette, Blackjack) have to share a phone's
      width, so they lose the roomy side padding and can shrink. */

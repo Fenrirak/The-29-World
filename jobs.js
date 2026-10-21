@@ -405,7 +405,8 @@ function renderWageTax(cls) {
   card.classList.toggle("hidden", !bands.length);
   if (!bands.length) { box.innerHTML = ""; return; }
   const h = document.getElementById("hWageTax"); if (h) h.innerHTML = icon("percent", 18) + " Tax on my pay";
-  const m = n => "$" + Number(n).toLocaleString("en-NZ", { maximumFractionDigits: 2 });
+  // Whole dollars stay compact ("$1,000"); anything with cents is shown as "$12.50".
+  const m = n => Number.isInteger(Number(n)) ? "$" + Number(n).toLocaleString("en-NZ") : fmtMoney(n);
   box.innerHTML = bands.map((b, i) => {
     const range = i === 0 ? (b.upTo == null ? "All of your pay" : `Up to ${m(b.upTo)}`)
       : b.upTo == null ? `Over ${m(b.from)}`
@@ -694,7 +695,7 @@ function showPromotionPopup(promo) {
   if (existing) existing.remove();
   const overlay = document.createElement("div");
   overlay.id = "t29LevelupOverlay";
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(14,27,55,0.78);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px);";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(14,27,55,0.78);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;";
   overlay.innerHTML = `
     <div class="levelup-card-card">
       <div class="levelup-card-stars">✦ ✦ ✦</div>
