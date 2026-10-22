@@ -394,7 +394,7 @@ async function ccSetEventsPref(on) {
 async function ccCancel() {
   const c = CC_ME && CC_ME.creditCard;
   const msg = c && c.status === "pending" ? "Withdraw your card application?" : "Cancel your credit card? Any unused vouchers will be lost.";
-  if (!confirm(msg)) return;
+  if (!await t29Confirm(msg)) return;
   const res = await cancelCreditCard(CURRENT.username, CURRENT.classCode);
   if (!res.ok) { ccMsg("ccMsg", `<div class="error-msg">${ccEsc(res.error)}</div>`); return; }
   await render();
@@ -577,7 +577,7 @@ async function ccSavePlan(e) {
 }
 async function ccRemovePlan(id) {
   const n = CC_STUDENTS.filter(s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending") && s.creditCard.planId === id).length;
-  const ok = confirm(n > 0 ? `${ccPlural(n, "student")} hold or applied for this card. It will be retired: hidden from new applicants, but existing cards keep working. Continue?` : "Delete this plan?");
+  const ok = await t29Confirm(n > 0 ? `${ccPlural(n, "student")} hold or applied for this card. It will be retired: hidden from new applicants, but existing cards keep working. Continue?` : "Delete this plan?");
   if (!ok) return;
   await removeCardPlan(CURRENT.classCode, id, n > 0);
   await render();
@@ -595,7 +595,7 @@ async function ccSaveSettings() {
   ccMsg("ccTMsg", `<div class="success-msg">Saved.</div>`);
 }
 async function ccApprove(username, eligible) {
-  if (!eligible && !confirm("This student is below the lifestyle rating for that card. Approve anyway?")) return;
+  if (!eligible && !await t29Confirm("This student is below the lifestyle rating for that card. Approve anyway?")) return;
   const res = await approveCreditCard(CURRENT.classCode, username);
   if (!res.ok) ccMsg("ccTMsg", `<div class="error-msg">${ccEsc(res.error)}</div>`);
   await render();

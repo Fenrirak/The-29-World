@@ -315,13 +315,13 @@ async function toggleQuizActive(id, active) {
 }
 
 async function deleteQuiz(id) {
-  if (!confirm("Remove this quiz? Students' results for it are left alone, but it won't lock anything any more.")) return;
+  if (!await t29Confirm("Remove this quiz? Students' results for it are left alone, but it won't lock anything any more.")) return;
   await removeQuiz(CURRENT.classCode, id);
   await render();
 }
 
 async function resetResult(username, quizId) {
-  if (!confirm("Clear this student's result so they sit the quiz again?")) return;
+  if (!await t29Confirm("Clear this student's result so they sit the quiz again?")) return;
   await resetQuizResult(username, quizId);
   await render();
 }

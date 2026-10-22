@@ -336,7 +336,7 @@ async function ksContribute(e) {
   return false;
 }
 async function ksOptOut() {
-  if (!confirm("Opt out of KiwiSaver? You'll get back what you put in, but lose what your employer and the government added.")) return;
+  if (!await t29Confirm("Opt out of KiwiSaver? You'll get back what you put in, but lose what your employer and the government added.")) return;
   const btn = document.getElementById("ksOptOutBtn");
   btn.disabled = true;
   try {
@@ -466,7 +466,7 @@ function renderRetireCard(s) {
   }
 }
 async function ksRetire() {
-  if (!confirm("Retire the whole class? Everyone loses their job and their KiwiSaver unlocks. You can undo this afterwards.")) return;
+  if (!await t29Confirm("Retire the whole class? Everyone loses their job and their KiwiSaver unlocks. You can undo this afterwards.")) return;
   const btn = document.getElementById("ksRetireBtn");
   btn.disabled = true;
   try {
@@ -479,7 +479,7 @@ async function ksRetire() {
   } finally { btn.disabled = false; }
 }
 async function ksUndoRetire() {
-  if (!confirm("Undo retirement? Students get their jobs back and KiwiSaver locks again.")) return;
+  if (!await t29Confirm("Undo retirement? Students get their jobs back and KiwiSaver locks again.")) return;
   const btn = document.getElementById("ksUndoBtn");
   btn.disabled = true;
   try {

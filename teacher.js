@@ -552,7 +552,7 @@ async function giveAdjustment(e) {
         box.innerHTML = `<div class="error-msg">There are no students in this class yet.</div>`;
         return false;
       }
-      if (!confirm(`${amount >= 0 ? "Give" : "Take"} ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "to" : "from"} all ${targets.length} students?`)) {
+      if (!await t29Confirm(`${amount >= 0 ? "Give" : "Take"} ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "to" : "from"} all ${targets.length} students?`)) {
         box.innerHTML = "";
         return false;
       }
@@ -813,7 +813,7 @@ function updateEventBaseBox() {
 }
 
 async function removeEvent(id) {
-  if (confirm("Remove this event? It will no longer be handed out.")) {
+  if (await t29Confirm("Remove this event? It will no longer be handed out.")) {
     if (id === EDITING_EVENT_ID) resetEventForm();
     await removeEventDef(CLASS_CODE, id);
     await render();
@@ -827,7 +827,7 @@ async function approveSideHustleRequest(username) {
 }
 
 async function denySideHustleRequest(username) {
-  const reason = prompt("Optional reason to show the student (leave blank to skip):", "") || "";
+  const reason = await t29Prompt("Optional reason to show the student (leave blank to skip):", "", { confirmText: "Send", placeholder: "Reason (optional)" }) || "";
   await denySideHustleChange(username, reason);
   await render();
 }
@@ -903,7 +903,7 @@ function startEditSideHustle(id) {
 }
 
 async function removeSideHustleClick(id) {
-  if (confirm("Remove this side hustle? Students currently using it will lose their check-in until they pick a new one.")) {
+  if (await t29Confirm("Remove this side hustle? Students currently using it will lose their check-in until they pick a new one.")) {
     if (id === EDITING_SIDE_HUSTLE_ID) resetSideHustleForm();
     await removeSideHustle(CLASS_CODE, id);
     await render();
@@ -1019,7 +1019,7 @@ async function markAllJobTasksDone() {
   const withJobs = LAST_STUDENTS.filter(s => s.jobId).length;
   if (!withJobs) { alert("No students have a job assigned yet."); return; }
   if (!targets.length) { alert("Everyone with a job is already ticked as done for this pay cycle."); return; }
-  if (!confirm(`Mark this week's job task as done for ${targets.length} student${targets.length === 1 ? "" : "s"}?`)) return;
+  if (!await t29Confirm(`Mark this week's job task as done for ${targets.length} student${targets.length === 1 ? "" : "s"}?`)) return;
   btn.disabled = true;
   try {
     // Each write hits a different student's own document, so it's safe to run together.
@@ -1081,7 +1081,7 @@ async function savePayDay() {
   await render();
 }
 async function approveTimeExemptionRequest(username) {
-  const raw = prompt("How many extra minutes should they get today?", "10");
+  const raw = await t29Prompt("How many extra minutes should they get today?", "10", { type: "number", min: 1, step: 1, confirmText: "Approve" });
   if (raw === null) return; // cancelled
   const minutes = Math.round(Number(raw));
   if (!Number.isFinite(minutes) || minutes <= 0) { alert("Enter a whole number of minutes greater than 0."); return; }
@@ -1090,7 +1090,7 @@ async function approveTimeExemptionRequest(username) {
   await render();
 }
 async function declineTimeExemptionRequest(username) {
-  if (!confirm("Decline this request? They won't be able to ask again until tomorrow.")) return;
+  if (!await t29Confirm("Decline this request? They won't be able to ask again until tomorrow.")) return;
   const res = await decideTimeExemption(username, false);
   if (!res.ok) alert(res.error || "Couldn't decline that request.");
   await render();
@@ -1550,7 +1550,7 @@ async function applyProfileLifestyleOverride(username) {
   await renderProfile(username);
 }
 async function removeProfileLifestyleOverride(username) {
-  if (!confirm("Remove the lifestyle override? The student's rating will go back to being calculated automatically.")) return;
+  if (!await t29Confirm("Remove the lifestyle override? The student's rating will go back to being calculated automatically.")) return;
   await clearLifestyleOverride(username);
   await render();
   await renderProfile(username);
@@ -1561,11 +1561,11 @@ async function removeProfileLifestyleOverride(username) {
 // if yes, lets the teacher type the exact percentage. Returns a rate
 // (0-1) to hand to the underlying sell/cancel function, or null if the
 // teacher backed out at any point (removal should NOT proceed).
-function confirmRefundRate(removeQuestion, defaultPct) {
-  if (!confirm(removeQuestion)) return null;
-  const wantsRefund = confirm("Give the student a refund for this?\n\nOK = yes, refund some money\nCancel = no refund");
+async function confirmRefundRate(removeQuestion, defaultPct) {
+  if (!await t29Confirm(removeQuestion)) return null;
+  const wantsRefund = await t29Confirm("Give the student a refund for this?", { confirmText: "Give a refund", cancelText: "No refund", danger: false });
   if (!wantsRefund) return 0;
-  const input = prompt("What percentage of the price should be refunded? (0-100)", String(defaultPct));
+  const input = await t29Prompt("What percentage of the price should be refunded? (0-100)", String(defaultPct), { type: "number", min: 0, max: 100, confirmText: "Refund" });
   if (input === null) return null;
   let pct = Number(input);
   if (isNaN(pct)) pct = defaultPct;
@@ -1586,7 +1586,7 @@ function confirmRefundRate(removeQuestion, defaultPct) {
 // confirmRefundRate. This now asks a question that matches what actually
 // happens, and reports the real numbers afterwards.
 async function profileRemoveProperty(propId) {
-  if (!confirm(
+  if (!await t29Confirm(
     "Repossess this property?\n\n" +
     "It goes back on the market and the student is paid its CURRENT market price " +
     "(property prices move on every market day, so this won't necessarily match what they paid). " +
@@ -1603,49 +1603,49 @@ async function profileRemoveProperty(propId) {
   await renderProfile(PROFILE_USER);
 }
 async function profileEndRental(propId) {
-  if (!confirm("Stop this rental and kick out the tenants? The student keeps the property, but stops earning rent immediately and will be asked to choose living-in-it or renting-out again next time they visit Property.")) return;
+  if (!await t29Confirm("Stop this rental and kick out the tenants? The student keeps the property, but stops earning rent immediately and will be asked to choose living-in-it or renting-out again next time they visit Property.")) return;
   const res = await teacherEndRental(CLASS_CODE, propId);
   if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);
 }
 async function profileEndSublet(propId) {
-  if (!confirm("End this classmate rental? If someone's living there, they'll be kicked out immediately, and the minimum lease length is ignored.")) return;
+  if (!await t29Confirm("End this classmate rental? If someone's living there, they'll be kicked out immediately, and the minimum lease length is ignored.")) return;
   const res = await teacherEndSublet(CLASS_CODE, propId);
   if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);
 }
 async function profileResolveSubletOverdue(propId) {
-  if (!confirm("Mark this week's rent as resolved? It'll count as paid, but no money will be taken from the tenant.")) return;
+  if (!await t29Confirm("Mark this week's rent as resolved? It'll count as paid, but no money will be taken from the tenant.")) return;
   const res = await resolveSubletRentOverdue(CLASS_CODE, propId);
   if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);
 }
 async function profileEndNpcTenancy(unitId) {
-  if (!confirm("End this student's school rental tenancy right now? They'll be moved out immediately, regardless of their minimum lease.")) return;
+  if (!await t29Confirm("End this student's school rental tenancy right now? They'll be moved out immediately, regardless of their minimum lease.")) return;
   const res = await teacherEndNpcTenancy(CLASS_CODE, unitId);
   if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);
 }
 async function profileResolveNpcOverdue(unitId) {
-  if (!confirm("Mark this week's rent as resolved? It'll count as paid, but no money will be taken from the tenant.")) return;
+  if (!await t29Confirm("Mark this week's rent as resolved? It'll count as paid, but no money will be taken from the tenant.")) return;
   const res = await resolveNpcRentOverdue(CLASS_CODE, unitId);
   if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);
 }
 async function profileResolveMortgageOverdue(propId) {
-  if (!confirm("Mark this week's mortgage payment as resolved? It'll count as paid — the payment schedule moves on as normal — but no money will be taken from the student.")) return;
+  if (!await t29Confirm("Mark this week's mortgage payment as resolved? It'll count as paid — the payment schedule moves on as normal — but no money will be taken from the student.")) return;
   const res = await resolveMortgageOverdue(CLASS_CODE, propId);
   if (!res.ok) { alert(res.error); return; }
   await render();
   await renderProfile(PROFILE_USER);
 }
 async function profileResolveTransportOverdue(username) {
-  if (!confirm("Mark this week's transport expenses as resolved? It'll count as paid, but no money will be taken from the student.")) return;
+  if (!await t29Confirm("Mark this week's transport expenses as resolved? It'll count as paid, but no money will be taken from the student.")) return;
   const res = await resolveTransportOverdue(CLASS_CODE, username);
   if (!res.ok) { alert(res.error); return; }
   await render();
@@ -1655,14 +1655,14 @@ function vehicleTypeLabel(type) {
   return type === "truck" ? "Truck" : type === "bike" ? "Bike/Scooter" : "Car";
 }
 async function profileRemoveVehicle(vehId, username) {
-  const rate = confirmRefundRate("Repossess this vehicle?", 90);
+  const rate = await confirmRefundRate("Repossess this vehicle?", 90);
   if (rate === null) return;
   await sellVehicle(CLASS_CODE, vehId, username, rate);
   await render();
   await renderProfile(PROFILE_USER);
 }
 async function profileRevokeTruckLicence(username) {
-  if (!confirm("Revoke this student's truck licence? They won't be refunded and will need to buy it again before purchasing a truck.")) return;
+  if (!await t29Confirm("Revoke this student's truck licence? They won't be refunded and will need to buy it again before purchasing a truck.")) return;
   await revokeTruckLicence(username);
   await render();
   await renderProfile(PROFILE_USER);
@@ -1676,7 +1676,7 @@ async function profileGiveStoreItem(username) {
 }
 
 async function profileRemoveStoreItem(username, itemId) {
-  const rate = confirmRefundRate("Remove this item from the student?", 80);
+  const rate = await confirmRefundRate("Remove this item from the student?", 80);
   if (rate === null) return;
   await sellStoreItem(username, CLASS_CODE, itemId, rate);
   await render();
@@ -1706,7 +1706,7 @@ async function profileRemoveStoreItemBulk(username, itemId, maxQty) {
   let qty = input ? parseInt(input.value, 10) : 1;
   if (isNaN(qty) || qty < 1) qty = 1;
   qty = Math.min(qty, maxQty);
-  const rate = confirmRefundRate(
+  const rate = await confirmRefundRate(
     qty === 1 ? "Remove this item from the student?" : `Remove ${qty} of this item from the student?`,
     80
   );
@@ -1717,14 +1717,14 @@ async function profileRemoveStoreItemBulk(username, itemId, maxQty) {
   await renderProfile(username);
 }
 async function profileRemoveInsurance(username, planId) {
-  if (!confirm("Cancel this student's insurance plan?")) return;
+  if (!await t29Confirm("Cancel this student's insurance plan?")) return;
   await cancelInsurance(username, planId);
   await render();
   await renderProfile(username);
 }
 
 async function removeStudentClick(username, name) {
-  if (confirm(`Remove ${name} from the class? Their account and balance will be permanently deleted. This cannot be undone.`)) {
+  if (await t29Confirm(`Remove ${name} from the class? Their account and balance will be permanently deleted. This cannot be undone.`)) {
     await removeStudent(CLASS_CODE, username);
     await render();
   }
@@ -1740,8 +1740,8 @@ async function reopenThisClass() {
 
 async function restartClass() {
   const cls = await getClassCached(CLASS_CODE);
-  const typed = prompt(
-    `This will start "${cls.name}" again as if it were a brand-new class: every student goes back to the $20 welcome grant, and everything they own or have done is wiped (jobs, houses, vehicles, shares, insurance, loans, savings, store items, events, activity and so on). Your settings — jobs, store, properties, companies, events, tax and everything else — stay exactly as they are.\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`
+  const typed = await t29Prompt(
+    `This will start "${cls.name}" again as if it were a brand-new class: every student goes back to the $20 welcome grant, and everything they own or have done is wiped (jobs, houses, vehicles, shares, insurance, loans, savings, store items, events, activity and so on). Your settings — jobs, store, properties, companies, events, tax and everything else — stay exactly as they are.\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`, "", { placeholder: "Class name", confirmText: "Restart class", danger: true }
   );
   if (typed === null) return;
   if (typed.trim() !== cls.name) {

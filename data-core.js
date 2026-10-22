@@ -2293,44 +2293,119 @@ function t29Toast(message, opts) {
   setTimeout(remove, opts.duration || 5000);
 }
 
-// In-page replacement for the browser's alert() box. Messages queue up
-// and show one at a time, like real alerts would.
-const _t29AlertQueue = [];
-function t29Alert(message) {
+// In-page replacements for the browser's alert(), confirm() and prompt()
+// boxes. All three share one queue, so only one shows at a time (like the
+// real ones) and a quick double-tap can never stack two of the same box.
+// t29Confirm() resolves true/false; t29Prompt() resolves the typed text, or
+// null if cancelled — so call sites read like the native versions, with
+// `await` in front.
+const _t29DialogQueue = [];
+function _t29Enqueue(kind, message, opts) {
   return new Promise(resolve => {
-    _t29AlertQueue.push({ message: String(message === undefined || message === null ? "" : message), resolve });
-    if (_t29AlertQueue.length === 1) _t29ShowNextAlert();
+    _t29DialogQueue.push({ kind, message: String(message === undefined || message === null ? "" : message), opts: opts || {}, resolve });
+    if (_t29DialogQueue.length === 1) _t29ShowNextDialog();
   });
 }
-function _t29ShowNextAlert() {
-  const item = _t29AlertQueue[0];
+function t29Alert(message) { return _t29Enqueue("alert", message); }
+// opts: { confirmText, cancelText, danger } — all optional; sensible labels are
+// worked out from the question itself ("Remove this…?" -> a red "Remove" button).
+function t29Confirm(message, opts) { return _t29Enqueue("confirm", message, opts); }
+// opts: { type: "text"|"number", min, max, step, placeholder, confirmText, cancelText, danger }
+function t29Prompt(message, defaultValue, opts) {
+  return _t29Enqueue("prompt", message, Object.assign({}, opts, { defaultValue: defaultValue === undefined || defaultValue === null ? "" : String(defaultValue) }));
+}
+
+const _T29_DANGER_WORDS = /^(remove|delete|clear|delist|revoke|decline|repossess|end|cancel|stop|turn|opt|restart)$/;
+const _T29_LABELS = {
+  remove: "Remove", delete: "Delete", clear: "Clear", delist: "Delist", revoke: "Revoke", decline: "Decline",
+  repossess: "Repossess", end: "End it", cancel: "Yes, cancel it", stop: "Yes, stop", turn: "Turn off", opt: "Opt out",
+  retire: "Retire", undo: "Undo", reopen: "Reopen", archive: "Archive", withdraw: "Withdraw", sell: "Sell", buy: "Buy",
+  send: "Send", take: "Take", give: "Give", accept: "Accept", move: "Move out", save: "Save", mark: "Yes, mark it"
+};
+function _t29DialogLabels(message, o) {
+  const text = String(message).trim();
+  const first = ((text.match(/^[A-Za-z]+/) || [""])[0]).toLowerCase();
+  const lastLine = (text.split(/\n+/).filter(Boolean).pop() || "").trim();
+  let ok = "";
+  let m;
+  if ((m = lastLine.match(/(?:^|\. )([A-Z][a-z]+) anyway\?$/))) ok = m[1] + " anyway";
+  else if (/(?:^|\. )Continue\?$/.test(lastLine)) ok = "Continue";
+  else if (/^Set up this one too\?$/.test(lastLine)) ok = "Set up";
+  else ok = _T29_LABELS[first] || "Yes";
+  return {
+    ok: o.confirmText || ok,
+    cancel: o.cancelText || (first === "cancel" ? "Go back" : "Cancel"),
+    danger: o.danger !== undefined ? !!o.danger : _T29_DANGER_WORDS.test(first)
+  };
+}
+
+function _t29ShowNextDialog() {
+  const item = _t29DialogQueue[0];
   if (!item) return;
-  if (!document.body) { document.addEventListener("DOMContentLoaded", _t29ShowNextAlert, { once: true }); return; }
+  if (!document.body) { document.addEventListener("DOMContentLoaded", _t29ShowNextDialog, { once: true }); return; }
+  const kind = item.kind, o = item.opts;
   const returnFocus = document.activeElement;
+  const asking = kind !== "alert";
+  const lb = asking ? _t29DialogLabels(item.message, o) : { ok: "OK", cancel: "", danger: false };
   const overlay = document.createElement("div");
   overlay.className = "t29-dialog-overlay";
   overlay.innerHTML = `
-    <div class="t29-dialog" role="alertdialog" aria-modal="true" aria-describedby="t29DialogMsg">
+    <div class="t29-dialog${asking ? " t29-dialog-ask" : ""}" role="${asking ? "dialog" : "alertdialog"}" aria-modal="true" aria-labelledby="t29DialogMsg">
       <p class="t29-dialog-msg" id="t29DialogMsg"></p>
-      <div class="t29-dialog-actions"><button type="button" class="btn gold">OK</button></div>
+      ${kind === "prompt" ? `<input class="t29-dialog-input" autocomplete="off" aria-labelledby="t29DialogMsg">` : ""}
+      <div class="t29-dialog-actions">
+        ${asking ? `<button type="button" class="btn secondary" data-t29="cancel"></button>` : ""}
+        <button type="button" class="btn ${lb.danger ? "coral" : "gold"}" data-t29="ok"></button>
+      </div>
     </div>`;
   overlay.querySelector(".t29-dialog-msg").textContent = item.message;
-  const okBtn = overlay.querySelector("button");
-  const close = () => {
+  const okBtn = overlay.querySelector('[data-t29="ok"]');
+  const cancelBtn = overlay.querySelector('[data-t29="cancel"]');
+  const input = overlay.querySelector("input");
+  okBtn.textContent = lb.ok;
+  if (cancelBtn) cancelBtn.textContent = lb.cancel;
+  if (input) {
+    input.type = o.type === "number" ? "number" : "text";
+    if (o.type === "number") {
+      ["min", "max"].forEach(k => { if (o[k] !== undefined) input.setAttribute(k, o[k]); });
+      input.setAttribute("step", o.step !== undefined ? o.step : "any");
+      input.inputMode = "decimal";
+    }
+    if (o.placeholder) input.placeholder = o.placeholder;
+    input.value = o.defaultValue;
+  }
+  const onKey = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); return; }
+    if (e.key === "Tab") {
+      const f = Array.from(overlay.querySelectorAll("input, button")), a = document.activeElement;
+      const i = f.indexOf(a);
+      if (i === -1) { e.preventDefault(); f[0].focus(); }
+      else if (e.shiftKey && i === 0) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+      e.stopPropagation();
+      return;
+    }
+    if (e.key !== "Enter" || e.isComposing) return;
+    // Holding Enter down on the button that opened this box must not answer it.
+    if (e.repeat) { e.preventDefault(); e.stopPropagation(); return; }
+    if (e.target === cancelBtn) return; // Enter on Cancel presses Cancel
+    e.preventDefault(); e.stopPropagation(); finish(true);
+  };
+  function finish(accepted) {
     document.removeEventListener("keydown", onKey, true);
     overlay.remove();
-    _t29AlertQueue.shift();
-    item.resolve();
-    if (_t29AlertQueue.length) _t29ShowNextAlert();
+    _t29DialogQueue.shift();
+    if (kind === "alert") item.resolve();
+    else if (kind === "confirm") item.resolve(!!accepted);
+    else item.resolve(accepted ? input.value : null);
+    if (_t29DialogQueue.length) _t29ShowNextDialog();
     else if (returnFocus && typeof returnFocus.focus === "function") { try { returnFocus.focus(); } catch (e) { /* ignore */ } }
-  };
-  const onKey = (e) => {
-    if (e.key === "Escape" || e.key === "Enter") { e.preventDefault(); e.stopPropagation(); close(); }
-  };
-  okBtn.addEventListener("click", close);
+  }
+  okBtn.addEventListener("click", () => finish(true));
+  if (cancelBtn) cancelBtn.addEventListener("click", () => finish(false));
   document.addEventListener("keydown", onKey, true);
   document.body.appendChild(overlay);
-  okBtn.focus();
+  if (input) { input.focus(); input.select(); } else okBtn.focus();
 }
 if (typeof window !== "undefined") window.alert = function (message) { t29Alert(message); };
 

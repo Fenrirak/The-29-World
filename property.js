@@ -563,7 +563,7 @@ async function cancelSubletClick(id) {
   await render();
 }
 async function teacherEndSubletClick(id) {
-  if (!confirm("End this classmate rental? If someone's living there, they'll be kicked out immediately.")) return;
+  if (!await t29Confirm("End this classmate rental? If someone's living there, they'll be kicked out immediately.")) return;
   const res = await teacherEndSublet(CURRENT.classCode, id);
   if (!res.ok) { alert(res.error); return; }
   await render();
@@ -617,7 +617,7 @@ async function approveSubletClick(id) {
   await render();
 }
 async function rejectSubletClick(id) {
-  const reason = prompt("Optional reason to show the student (leave blank for none):", "");
+  const reason = await t29Prompt("Optional reason to show the student (leave blank for none):", "", { confirmText: "Decline", danger: true, placeholder: "Reason (optional)" });
   if (reason === null) return;
   await decideSublet(CURRENT.classCode, id, false, reason);
   await render();
@@ -683,7 +683,7 @@ async function payTenantRentClick(id) {
   }
 }
 async function tenantMoveOutClick(id) {
-  if (!confirm("Move out of this rental? You'll stop paying rent, but you'll also lose the lifestyle bonus for living here.")) return;
+  if (!await t29Confirm("Move out of this rental? You'll stop paying rent, but you'll also lose the lifestyle bonus for living here.")) return;
   const res = await tenantMoveOut(CURRENT.username, CURRENT.classCode, id);
   if (!res.ok) { alert(res.error); return; }
   await render();
@@ -757,7 +757,7 @@ async function payNpcRentClick(id) {
   }
 }
 async function npcMoveOutClick(id) {
-  if (!confirm("Move out of this rental? You'll stop paying rent, but you'll also lose the lifestyle bonus for living here.")) return;
+  if (!await t29Confirm("Move out of this rental? You'll stop paying rent, but you'll also lose the lifestyle bonus for living here.")) return;
   const res = await moveOutNpcProperty(CURRENT.username, CURRENT.classCode, id);
   if (!res.ok) { alert(res.error); return; }
   await render();
@@ -950,7 +950,7 @@ async function chooseOccupancy(id, choice) {
   const msg = choice === "living"
     ? `Live in this property?\n\nYou'll get a +${bonus} bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time, for free.${movingNote}`
     : `Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +${bonus} lifestyle bonus for living in it — only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.`;
-  if (!confirm(msg)) return;
+  if (!await t29Confirm(msg)) return;
   const res = await setPropertyOccupancy(CURRENT.username, CURRENT.classCode, id, choice);
   if (!res.ok) { alert(res.error); return; }
   await render();
@@ -1034,7 +1034,7 @@ function cancelEditProp() {
 }
 
 async function deleteProp(id) {
-  if (confirm("Remove this property listing (all units of it)? Any owners will not be refunded automatically.")) {
+  if (await t29Confirm("Remove this property listing (all units of it)? Any owners will not be refunded automatically.")) {
     await removeProperty(CURRENT.classCode, id);
     await render();
   }
@@ -1266,7 +1266,7 @@ async function resolveNpcOverdueClick(id) {
   await render();
 }
 async function teacherEndNpcTenancyClick(id) {
-  if (!confirm("End this student's tenancy right now? They'll be moved out immediately, regardless of their minimum lease.")) return;
+  if (!await t29Confirm("End this student's tenancy right now? They'll be moved out immediately, regardless of their minimum lease.")) return;
   const res = await teacherEndNpcTenancy(CURRENT.classCode, id);
   if (!res.ok) { alert(res.error); return; }
   await render();
@@ -1335,7 +1335,7 @@ function cancelEditNpcProp() {
   document.getElementById("cancelEditNpcBtn").classList.add("hidden");
 }
 async function deleteNpcProp(id) {
-  if (confirm("Remove this NPC property listing (all units of it)? Any current tenants will be moved out immediately.")) {
+  if (await t29Confirm("Remove this NPC property listing (all units of it)? Any current tenants will be moved out immediately.")) {
     await removeNpcProperty(CURRENT.classCode, id);
     await render();
   }

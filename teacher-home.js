@@ -96,14 +96,14 @@ async function toggleArchive(code, currentlyArchived, name) {
   const question = currentlyArchived
     ? `Reopen "${name}"? Students will be able to use it again right away.`
     : `Archive "${name}"? Students won't be able to do anything in this class until it's reopened — they'll be able to view it read-only if you let them, but nothing will be lost. You can reopen it any time.`;
-  if (!confirm(question)) return;
+  if (!await t29Confirm(question)) return;
   await setClassArchived(code, !currentlyArchived);
   await render();
 }
 
 async function deleteClassClick(code, name) {
-  const typed = prompt(
-    `This will PERMANENTLY delete "${name}" — every student account in it, all balances, and all activity history. This cannot be undone.\n\nIf you just want to pause the class instead, use Archive.\n\nType the class name exactly to confirm deletion:`
+  const typed = await t29Prompt(
+    `This will PERMANENTLY delete "${name}" — every student account in it, all balances, and all activity history. This cannot be undone.\n\nIf you just want to pause the class instead, use Archive.\n\nType the class name exactly to confirm deletion:`, "", { placeholder: "Class name", confirmText: "Delete class", danger: true }
   );
   if (typed === null) return;
   if (typed.trim() !== name) {
@@ -164,7 +164,7 @@ async function copyShareLink() {
 
 async function stopSharing() {
   if (!SHARE_CODE) return;
-  if (!confirm("Stop sharing this class? The current link will stop working — you can share it again anytime, which creates a brand new link.")) return;
+  if (!await t29Confirm("Stop sharing this class? The current link will stop working — you can share it again anytime, which creates a brand new link.")) return;
   await revokeTemplateShare(SHARE_CODE, CURRENT.username);
   closeShareModal();
 }

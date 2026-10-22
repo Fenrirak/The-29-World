@@ -338,7 +338,7 @@ function showEditMsg(msg, type) {
 async function deleteJobClick(jobId) {
   const j = JOBS_CACHE.find(jj => jj.id === jobId);
   if (!j) return;
-  if (!confirm(`Remove the job "${j.title}"? Students currently in this role will be unassigned.`)) return;
+  if (!await t29Confirm(`Remove the job "${j.title}"? Students currently in this role will be unassigned.`)) return;
   await removeJob(CLASS_CODE, jobId);
   await render();
 }

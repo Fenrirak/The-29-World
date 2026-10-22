@@ -276,7 +276,7 @@ function startEditEvent(id) {
 }
 
 async function deleteEvent(id) {
-  if (confirm("Remove this big event? It won't be handed out anymore.")) {
+  if (await t29Confirm("Remove this big event? It won't be handed out anymore.")) {
     if (id === EDITING_ID) resetEventForm();
     await removeBigEventDef(CURRENT.classCode, id);
     await render();

@@ -28,7 +28,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=75951883">
+<link rel="stylesheet" href="style.css?v=c9a80a37">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -293,6 +293,14 @@
     </div>
 
     <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
+      <h2 id="hExport">Export this class</h2>
+      <p>Download everything in this class as one file: every setting, price and price history (with the chance of each going up or down), every wage, every student's full account, net worths, lifestyle ratings and the whole transaction log. Only you can see this. Login and sharing links are left out.</p>
+      <button class="btn export-class-btn" onclick="exportClassClick('pdf')">Download as PDF</button>
+      <button class="btn secondary export-class-btn" onclick="exportClassClick('md')">Download as Markdown</button>
+      <div id="exportClassMsg"></div>
+    </div>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
       <h2 id="hDanger" style="color:var(--coral);">Danger zone</h2>
       <p>Start the class again as if it were brand new: every student goes back to the $20 welcome grant and everything they own or have done is wiped. All your settings stay as they are, and so do student logins and the class code.</p>
       <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>
@@ -445,17 +453,19 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script type="module" src="firebase-init.js?v=9f8488c9"></script>
 <script defer src="icons.js?v=c9829d04"></script>
 <script defer src="settings-menu.js?v=70d4360c"></script>
-<script defer src="shortcuts.js?v=2d491d9d"></script>
-<script defer src="data-core.js?v=95b376b1"></script>
+<script defer src="shortcuts.js?v=287cb4e1"></script>
+<script defer src="data-core.js?v=089189f1"></script>
 <script defer src="data-money.js?v=e93d35cd"></script>
 <script defer src="data-life.js?v=f66819c9"></script>
 <script defer src="data-property.js?v=3135b3b8"></script>
 <script defer src="data-markets.js?v=b7503dec"></script>
 <script defer src="tour.js?v=777683bc"></script>
-<script defer src="events-ui.js?v=3a3f0fd3"></script>
-<script defer src="quiz-gate.js?v=fecc655a"></script>
+<script defer src="events-ui.js?v=ab311b0b"></script>
+<script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="avatar.js?v=348f1b31"></script>
 <script defer src="notifications.js?v=7b2c20a0"></script>
-<script defer src="teacher.js?v=9670d6f8"></script>
+<script defer src="pdf-report.js?v=12982e44"></script>
+<script defer src="class-export.js?v=92f31bf5"></script>
+<script defer src="teacher.js?v=b63aa43e"></script>
 </body>
 </html>

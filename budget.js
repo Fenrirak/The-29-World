@@ -373,7 +373,7 @@ async function saveBudgetPlan(e) {
 }
 
 async function budgetClear() {
-  if (!confirm("Clear your budget plan?")) return;
+  if (!await t29Confirm("Clear your budget plan?")) return;
   await clearBudget(CURRENT.username);
   document.getElementById("budSave").value = "";
   document.getElementById("budMsg").innerHTML = "";

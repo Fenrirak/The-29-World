@@ -166,7 +166,7 @@ async function saveEditPlan(e) {
 }
 
 async function deletePlan(id) {
-  if (confirm("Remove this term deposit plan? Existing deposits under it are unaffected.")) {
+  if (await t29Confirm("Remove this term deposit plan? Existing deposits under it are unaffected.")) {
     await removeTermDepositPlan(CURRENT.classCode, id);
     await render();
   }
@@ -192,7 +192,7 @@ async function openDeposit(id) {
 }
 
 async function withdrawEarly(depositId) {
-  if (confirm("Withdraw early? You'll pay the early withdrawal fee and forfeit interest.")) {
+  if (await t29Confirm("Withdraw early? You'll pay the early withdrawal fee and forfeit interest.")) {
     await withdrawTermDepositEarly(CURRENT.username, depositId);
     await render();
   }

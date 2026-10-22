@@ -348,11 +348,11 @@ async function buyLicence() {
 // confirms the removal itself, then asks yes/no on a refund, and if yes,
 // lets the teacher type the exact percentage. Returns a rate (0-1) to hand
 // to the underlying sell function, or null if the teacher backed out.
-function confirmRefundRate(removeQuestion, defaultPct) {
-  if (!confirm(removeQuestion)) return null;
-  const wantsRefund = confirm("Give the student a refund for this?\n\nOK = yes, refund some money\nCancel = no refund");
+async function confirmRefundRate(removeQuestion, defaultPct) {
+  if (!await t29Confirm(removeQuestion)) return null;
+  const wantsRefund = await t29Confirm("Give the student a refund for this?", { confirmText: "Give a refund", cancelText: "No refund", danger: false });
   if (!wantsRefund) return 0;
-  const input = prompt("What percentage of the price should be refunded? (0-100)", String(defaultPct));
+  const input = await t29Prompt("What percentage of the price should be refunded? (0-100)", String(defaultPct), { type: "number", min: 0, max: 100, confirmText: "Refund" });
   if (input === null) return null;
   let pct = Number(input);
   if (isNaN(pct)) pct = defaultPct;
@@ -360,13 +360,13 @@ function confirmRefundRate(removeQuestion, defaultPct) {
   return pct / 100;
 }
 async function deleteVeh(id) {
-  if (confirm("Remove this vehicle? Any owners will not be refunded automatically.")) {
+  if (await t29Confirm("Remove this vehicle? Any owners will not be refunded automatically.")) {
     await removeVehicle(CURRENT.classCode, id);
     await render();
   }
 }
 async function forceSell(id, username) {
-  const rate = confirmRefundRate("Sell this student's vehicle back to the class?", 90);
+  const rate = await confirmRefundRate("Sell this student's vehicle back to the class?", 90);
   if (rate === null) return;
   await sellVehicle(CURRENT.classCode, id, username, rate);
   await render();
@@ -378,7 +378,7 @@ async function sellMine(id) {
   const type = (veh && veh.type) || "car";
   const rate = rates[type] !== undefined ? rates[type] : 0.85;
   const pct = Math.round(rate * 100);
-  if (confirm(`Sell your vehicle back for ${pct}% of its price?`)) {
+  if (await t29Confirm(`Sell your vehicle back for ${pct}% of its price?`)) {
     const res = await sellVehicle(CURRENT.classCode, id, CURRENT.username);
     if (res && !res.ok) { alert(res.error); return; }
     await render();

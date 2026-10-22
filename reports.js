@@ -105,14 +105,14 @@ function showArchive(id) {
 }
 
 async function saveSnapshot() {
-  if (!confirm("Save a report card for right now? This locks in everyone's numbers so far as a permanent record — it never gets deleted by a class reset.")) return;
+  if (!await t29Confirm("Save a report card for right now? This locks in everyone's numbers so far as a permanent record — it never gets deleted by a class reset.")) return;
   await archiveClassReport(CLASS_CODE, CURRENT.username);
   ARCHIVES = await getReportArchives(CLASS_CODE);
   await showCurrentPeriod();
 }
 
 async function deleteArchiveClick(id, dateLabel) {
-  if (!confirm(`Delete the report card saved on ${dateLabel}? This can't be undone.`)) return;
+  if (!await t29Confirm(`Delete the report card saved on ${dateLabel}? This can't be undone.`)) return;
   await deleteReportArchive(CLASS_CODE, id);
   ARCHIVES = await getReportArchives(CLASS_CODE);
   if (VIEWING === id) await showCurrentPeriod();
@@ -385,7 +385,7 @@ function showModalStudentFamilyLink() {
 }
 
 async function turnOffFamilyLinkClick(username) {
-  if (!confirm("Turn this link off? Anyone who has it won't be able to open it any more. You can make a new link later.")) return;
+  if (!await t29Confirm("Turn this link off? Anyone who has it won't be able to open it any more. You can make a new link later.")) return;
   const res = await turnOffParentLink(username);
   if (!res.ok) {
     const msg = document.getElementById("familyLinkMsg");

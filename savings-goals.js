@@ -117,7 +117,7 @@ async function submitGoal(e) {
 }
 
 async function removeGoalClick(goalId, name) {
-  if (!confirm(`Remove your goal "${name}"? Your savings stay exactly where they are.`)) return;
+  if (!await t29Confirm(`Remove your goal "${name}"? Your savings stay exactly where they are.`)) return;
   const res = await removeSavingsGoal(CURRENT.username, goalId);
   if (!res.ok) { alert(res.error); return; }
   await render();

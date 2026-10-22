@@ -247,8 +247,8 @@ function writeOffButtonLabel(o) {
   return `Claim on ${insurancePlanName(o.plan)} — ${o.net >= 0 ? `get ${fmtMoney(o.net)}` : `owe ${fmtMoney(-o.net)}`}, and ${name} goes to the insurer`;
 }
 
-function confirmWriteOff(o) {
-  return confirm(`${writeOffText(o)}\n\nYou won't own it any more. Claim anyway?`);
+async function confirmWriteOff(o) {
+  return await t29Confirm(`${writeOffText(o)}\n\nYou won't own it any more. Claim anyway?`);
 }
 
 // Indemnity write-off from a weekly event popup: re-checks the numbers
@@ -259,7 +259,7 @@ async function claimWriteOffFromPopup(eventLogId, username, classCode, btn, plan
   const entry = (cls.eventLog || []).find(e => e.id === eventLogId);
   const o = weeklyEventClaimOptions(cls, user, entry).find(x => x.writeOff && x.plan.id === planId);
   if (!o) { btn.disabled = true; btn.textContent = "This claim isn't available any more"; return; }
-  if (!confirmWriteOff(o)) return;
+  if (!await confirmWriteOff(o)) return;
   return claimFromPopup(eventLogId, username, classCode, btn, planId);
 }
 
@@ -281,7 +281,7 @@ async function claimFromPopup(eventLogId, username, classCode, btn, planId) {
     if (best && best.payout > 0) {
       planId = best.plan.id;
     } else if (writeOff) {
-      if (!confirmWriteOff(writeOff)) { btn.disabled = false; btn.innerHTML = label; return; }
+      if (!await confirmWriteOff(writeOff)) { btn.disabled = false; btn.innerHTML = label; return; }
       planId = writeOff.plan.id;
     } else if (best) {
       btn.textContent = `Your excess (${fmtMoney(best.excess)}) is more than this — nothing to claim`; return;
@@ -591,9 +591,9 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
   document.getElementById("bigPaySavingsBtn").addEventListener("click", () => resolve("pay", "savings"));
   if (hasCard) document.getElementById("bigPayCardBtn").addEventListener("click", () => resolve("pay", "card"));
   claims.forEach((o, i) => {
-    document.getElementById("bigClaimBtn" + i).addEventListener("click", () => {
-      if (o.writeOff && !confirmWriteOff(o)) return;
-      if (o.losesVehicle && !confirm(`${insurancePlanName(o.plan)} pays for the damage to someone else's property, but it doesn't cover your own vehicle — so you'll lose ${vehicleName}. You pay your ${fmtMoney(o.excess)} excess.\n\nClaim anyway?`)) return;
+    document.getElementById("bigClaimBtn" + i).addEventListener("click", async () => {
+      if (o.writeOff && !await confirmWriteOff(o)) return;
+      if (o.losesVehicle && !await t29Confirm(`${insurancePlanName(o.plan)} pays for the damage to someone else's property, but it doesn't cover your own vehicle — so you'll lose ${vehicleName}. You pay your ${fmtMoney(o.excess)} excess.\n\nClaim anyway?`)) return;
       const cb = document.getElementById("bigClaimOnCard");
       // If cash can't cover the excess but the card can, use the card without making them tick the box.
       resolve("claim", (cb && cb.checked) || (!isTeacher && cash < o.studentPays && cardRoom >= o.studentPays) ? "card" : null, o.plan.id);

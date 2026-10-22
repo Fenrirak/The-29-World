@@ -289,7 +289,7 @@ async function setCoRange(id) {
   await render();
 }
 async function closeCo(id) {
-  if (confirm("Delist this company? All shareholders will be cashed out at the current price.")) {
+  if (await t29Confirm("Delist this company? All shareholders will be cashed out at the current price.")) {
     await closeCompany(CLASS_CODE, id);
     await render();
   }

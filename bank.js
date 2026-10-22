@@ -342,7 +342,7 @@ async function sendMoney(e) {
     if (IS_TEACHER && to === AUTOPAY_ALL_STUDENTS) {
       const targets = ALL_STUDENTS.slice();
       if (!targets.length) { box.innerHTML = `<div class="error-msg">There are no students in this class yet.</div>`; return false; }
-      if (!confirm(`${amount >= 0 ? "Send" : "Take"} ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "to" : "from"} each of your ${targets.length} students?`)) return false;
+      if (!await t29Confirm(`${amount >= 0 ? "Send" : "Take"} ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "to" : "from"} each of your ${targets.length} students?`)) return false;
       // One at a time on purpose (same as Quick Transactions on the
       // Dashboard): every payment also writes to the class's activity log,
       // and firing them all at once risks one write clobbering another.
@@ -416,7 +416,7 @@ async function addAuto(e) {
       const already = res.existingNote
         ? ` It's labelled "${res.existingNote}".`
         : " It doesn't have a reference message.";
-      const goAhead = confirm(`You already have an automatic payment set up for the same amount, recipient and day.${already}\n\nSet up this one too?`);
+      const goAhead = await t29Confirm(`You already have an automatic payment set up for the same amount, recipient and day.${already}\n\nSet up this one too?`);
       if (goAhead) {
         res = EDITING_AUTO_ID
           ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, true, useCard)
@@ -469,7 +469,7 @@ function cancelEditAuto() {
 }
 
 async function removeAuto(id) {
-  if (confirm("Remove this automatic payment?")) {
+  if (await t29Confirm("Remove this automatic payment?")) {
     await removeAutomation(CURRENT.classCode, id);
     if (EDITING_AUTO_ID === id) cancelEditAuto();
     if (EDITING_SAV_AUTO_ID === id) cancelEditSavAuto();
@@ -537,7 +537,7 @@ async function addSavingsAuto(e) {
       const already = res.existingNote
         ? ` It's labelled "${res.existingNote}".`
         : " It doesn't have a note.";
-      const goAhead = confirm(`You already have an automatic transfer set up for the same amount, direction and day.${already}\n\nSet up this one too?`);
+      const goAhead = await t29Confirm(`You already have an automatic transfer set up for the same amount, direction and day.${already}\n\nSet up this one too?`);
       if (goAhead) {
         res = EDITING_SAV_AUTO_ID
           ? await editSavingsAutomation(CURRENT.classCode, EDITING_SAV_AUTO_ID, CURRENT.username, day, freq, amount, direction, note, true)

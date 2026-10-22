@@ -26,7 +26,8 @@
                     typed start of a name is never treated as a typo.
                   - It runs actions too: dark, settings, notifications, help.
      Space Space  double-tap Space quickly: the same Jump box as tapping Shift (only
-                  when nothing is focused that Space would already press)
+                  when nothing is focused that Space would already press — it also
+                  works inside number/date/time boxes, which never need a space)
      Ctrl/Cmd + K the same Jump box as tapping Shift (not while typing in a box)
      Left/Right   go to the previous / next module in the menu, from the one
                   you're on (locked modules are skipped)
@@ -545,8 +546,20 @@
   // Double-tap Space = the same as tapping Shift. Only counts when Space isn't already doing
   // something (typing in a box, pressing a focused button/link, a pop-up waiting for an answer).
   var spaceAt = 0, spaceX = 0, spaceY = 0;
+  // Boxes where Space never types anything useful (number, date, time, e-mail, web address,
+  // read-only...) — a double-tap there still opens the Jump box. Text boxes, passwords, phone
+  // numbers, search and multi-line boxes keep their spaces, so Space Space is left alone there.
+  function spaceFree(el) {
+    if (!el || el.tagName !== "INPUT") return false;
+    var t = (el.type || "text").toLowerCase();
+    if (/^(number|date|datetime-local|month|time|week|email|url|range)$/.test(t)) return true;
+    if (el.readOnly && !/^(checkbox|radio|button|submit|reset|file|color|image)$/.test(t)) return true;
+    return t === "text" && /^(numeric|decimal)$/i.test(el.getAttribute("inputmode") || "");
+  }
   function spaceTapOK(el) {
-    if (finderEl || helpEl || isTyping(el) || blockingPopupOpen()) return false;
+    if (finderEl || helpEl || blockingPopupOpen()) return false;
+    if (spaceFree(el)) return true;
+    if (isTyping(el)) return false;
     if (el && el.tagName && /^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY|VIDEO|AUDIO)$/.test(el.tagName)) return false;
     if (el && el.getAttribute && /^(button|link|checkbox|switch|tab|menuitem|option)$/.test(el.getAttribute("role") || "")) return false;
     return true;
@@ -609,7 +622,7 @@
       '<button type="button" class="t29-keys-close" aria-label="Close">&times;</button></div>' + offNote +
       '<div class="t29-keys-cols"><div>' + section("General", general) + section("Typing", forms) + section("This page", page) +
       "</div><div>" + (go.length ? section("Jump to a module", go).replace("</h3>", "</h3>" + goIntro).replace('t29-keys-sec"', 't29-keys-sec t29-keys-mods"') : "") + "</div></div>" +
-      '<p class="t29-keys-foot muted-small">Shortcuts pause while you\u2019re typing in a box.</p></div>';
+      '<p class="t29-keys-foot muted-small">Shortcuts pause while you\u2019re typing in a box (Space Space still works in number boxes).</p></div>';
   }
   function showHelp() {
     if (helpEl) return;
@@ -752,6 +765,7 @@
     // The first tap scrolls the page as usual; the second puts it back where it was.
     if (e.key === " " && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
       if (e.repeat || !spaceTapOK(e.target)) { spaceAt = 0; return; }
+      if (spaceFree(e.target)) e.preventDefault(); // nothing to type there, so Space does nothing else
       var nowT = Date.now();
       if (spaceAt && nowT - spaceAt < 350) {
         e.preventDefault();

@@ -415,7 +415,7 @@ function startAddToCompany(id) {
 async function renameCompany(id) {
   const co = COMPANIES.find(c => c.id === id);
   if (!co) return;
-  const name = prompt("New name for this company:", co.name);
+  const name = await t29Prompt("New name for this company:", co.name, { confirmText: "Rename", placeholder: "Company name" });
   if (name === null || !name.trim() || name.trim() === co.name) return;
   await renameInsuranceCompany(CURRENT.classCode, id, name);
   await render();
@@ -425,7 +425,7 @@ async function deleteCompany(id) {
   const co = COMPANIES.find(c => c.id === id);
   if (!co) return;
   const n = co.plans.length;
-  if (!confirm(`Remove ${co.name} and its ${n === 1 ? "plan" : n + " plans"}? Students who have one of these plans will lose that cover.`)) return;
+  if (!await t29Confirm(`Remove ${co.name} and its ${n === 1 ? "plan" : n + " plans"}? Students who have one of these plans will lose that cover.`)) return;
   if (EDITING_PLAN_ID && co.plans.some(p => p.id === EDITING_PLAN_ID)) cancelEditPlan();
   await removeInsuranceCompany(CURRENT.classCode, id);
   OPEN_COMPANIES.delete(id);
@@ -433,7 +433,7 @@ async function deleteCompany(id) {
 }
 
 async function deletePlan(id) {
-  if (confirm("Remove this insurance plan?")) {
+  if (await t29Confirm("Remove this insurance plan?")) {
     if (id === EDITING_PLAN_ID) cancelEditPlan();
     await removeInsurancePlan(CURRENT.classCode, id);
     await render();
@@ -441,7 +441,7 @@ async function deletePlan(id) {
 }
 
 async function buyPlan(id, fee) {
-  if (fee > 0 && !confirm(`This plan has a one-off sign-up fee of ${fmtMoney(fee)}, charged immediately. Continue?`)) return;
+  if (fee > 0 && !await t29Confirm(`This plan has a one-off sign-up fee of ${fmtMoney(fee)}, charged immediately. Continue?`)) return;
   // A free plan (fee === 0) skips the confirm() above, so — same as
   // buy() in market.js — nothing else blocks a fast double-tap here.
   const btn = document.getElementById("buyBtn-" + id);

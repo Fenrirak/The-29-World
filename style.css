@@ -375,6 +375,7 @@ main.legal-main{max-width:760px;}
 .stat.sky{background:linear-gradient(135deg,var(--sky-fill),var(--sky-fill-dark));box-shadow:0 8px 22px rgba(91,141,239,0.3);}
 .stat.lilac{background:linear-gradient(135deg,var(--lilac-fill),var(--lilac-fill-dark));box-shadow:0 8px 22px rgba(138,127,214,0.3);}
 .stat.mint .label,.stat.sky .label,.stat.lilac .label{color:#fff;}
+.stat.mint .muted-small,.stat.sky .muted-small,.stat.lilac .muted-small{color:#fff;}
 html.dark-mode .stat.mint .label,
 html.dark-mode .stat.sky .label,
 html.dark-mode .stat.lilac .label{color:rgba(255,255,255,.88);}
@@ -1810,7 +1811,7 @@ html.dark-mode .bud-track-fill.save{background:linear-gradient(90deg,var(--mint-
 html.dark-mode .stat.gold .muted-small{color:rgba(244,247,255,0.8);}
 html.dark-mode .stat.mint .muted-small,
 html.dark-mode .stat.sky .muted-small,
-html.dark-mode .stat.lilac .muted-small{color:rgba(244,247,255,0.8);}
+html.dark-mode .stat.lilac .muted-small{color:#fff;}
 
 /* ---------------- Remove the remaining glow/shine effects (colored
    drop-shadows, colored box-shadows, radial "shine" circles) so nothing
@@ -2467,7 +2468,13 @@ html.dark-mode .t29-toast.success{border-color:var(--pastel-mint-border);backgro
   width:100%;max-width:420px;max-height:80vh;overflow:auto;padding:22px 22px 18px;
 }
 .t29-dialog-msg{color:var(--ink);white-space:pre-line;margin:0 0 16px;font-size:1rem;line-height:1.5;}
-.t29-dialog-actions{display:flex;justify-content:flex-end;}
+.t29-dialog-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
+.t29-dialog-input{display:block;width:100%;margin:0 0 16px;}
+.t29-dialog-ask .t29-dialog-actions .btn{flex:0 1 auto;}
+@media (max-width:480px){
+  .t29-dialog-ask .t29-dialog-actions{flex-direction:column-reverse;}
+  .t29-dialog-ask .t29-dialog-actions .btn{width:100%;}
+}
 .t29-dialog-actions .btn{margin-top:0;min-width:96px;justify-content:center;}
 
 .t29-offline-banner{

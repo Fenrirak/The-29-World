@@ -307,14 +307,14 @@ async function saveItemEdit(id) {
 }
 
 async function deleteItem(id) {
-  if (confirm("Remove this item from the store?")) {
+  if (await t29Confirm("Remove this item from the store?")) {
     await removeStoreItem(CURRENT.classCode, id);
     await render();
   }
 }
 
 async function sellItem(id) {
-  if (!confirm("Sell this item back to the store for an 80% refund?")) return;
+  if (!await t29Confirm("Sell this item back to the store for an 80% refund?")) return;
   const res = await sellStoreItem(CURRENT.username, CURRENT.classCode, id);
   if (!res.ok) { document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
   await render();
@@ -391,7 +391,7 @@ function cartSet(id, qty) {
 }
 const cartStep = (id, d) => cartSet(id, (CART[id] || 0) + d);
 const cartRemove = id => cartSet(id, 0);
-function cartClear() { if (!cartCount() || !confirm("Remove everything from your cart?")) return; Object.keys(CART).forEach(id => { delete CART[id]; updateCartBadge(id); }); cartSave(); CART_MSG = ""; renderCart(); }
+async function cartClear() { if (!cartCount() || !await t29Confirm("Remove everything from your cart?")) return; Object.keys(CART).forEach(id => { delete CART[id]; updateCartBadge(id); }); cartSave(); CART_MSG = ""; renderCart(); }
 
 async function checkoutCart() {
   if (CART_BUSY) return;

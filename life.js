@@ -234,7 +234,7 @@ function startEditLifeItem(id) {
 }
 
 async function deleteLifeItem(id) {
-  if (confirm("Remove this family event? Students who already have it keep their benefits — this only stops it being given out again.")) {
+  if (await t29Confirm("Remove this family event? Students who already have it keep their benefits — this only stops it being given out again.")) {
     if (id === EDITING_ID) resetLifeForm();
     await removeLifeItem(CURRENT.classCode, id);
     await render();
@@ -254,7 +254,7 @@ async function giveLifeItem(templateId) {
 }
 
 async function revokeLifeItemFor(username, grantId) {
-  if (!confirm("Remove this family event from this student? Their benefits from it will stop immediately.")) return;
+  if (!await t29Confirm("Remove this family event from this student? Their benefits from it will stop immediately.")) return;
   await revokeLifeItem(CURRENT.classCode, username, grantId);
   await render();
 }

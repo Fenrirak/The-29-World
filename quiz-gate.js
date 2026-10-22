@@ -167,7 +167,7 @@ async function qgSubmit() {
     if (checked) answers[q.id] = Number(checked.value);
     else unanswered++;
   });
-  if (unanswered > 0 && !confirm(`${unanswered} ${unanswered === 1 ? "question is" : "questions are"} still blank — they'll be marked wrong. Submit anyway?`)) return;
+  if (unanswered > 0 && !await t29Confirm(`${unanswered} ${unanswered === 1 ? "question is" : "questions are"} still blank — they'll be marked wrong. Submit anyway?`)) return;
 
   QG_SUBMITTING = true;
   const btn = document.getElementById("qgSubmit");

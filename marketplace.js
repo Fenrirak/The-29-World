@@ -144,13 +144,13 @@ async function saveSettings() {
 }
 
 async function approve(id, yes) {
-  const reason = yes ? "" : (prompt("Tell the student why (optional):") || "");
+  const reason = yes ? "" : (await t29Prompt("Tell the student why (optional):", "", { confirmText: "Send", placeholder: "Reason (optional)" }) || "");
   await decideListing(CURRENT.classCode, id, yes, reason);
   await render();
 }
 
 async function pullListing(id) {
-  const reason = prompt("Why are you taking this listing down? (shown to the student)") || "Removed by your teacher";
+  const reason = await t29Prompt("Why are you taking this listing down? (shown to the student)", "", { confirmText: "Take it down", danger: true, placeholder: "Reason" }) || "Removed by your teacher";
   await teacherRemoveListing(CURRENT.classCode, id, reason);
   await render();
 }
@@ -416,7 +416,7 @@ async function buyIt(id) {
   const isHouse = l.assetType === "property";
   const card = mktHasCard() && MP_PAY.useCard && !isHouse;
   const how = card ? (MP_PAY.split ? "part on your credit card, the rest in cash" : "on your credit card") : "in cash";
-  if (!confirm(`Buy ${several ? "one " : ""}"${l.name}" from ${nameOf(l.seller)} for ${fmtMoney(l.price)}, paid ${how}?${isHouse && mktHasCard() && MP_PAY.useCard ? " (Houses are always paid in cash.)" : ""}`)) return;
+  if (!await t29Confirm(`Buy ${several ? "one " : ""}"${l.name}" from ${nameOf(l.seller)} for ${fmtMoney(l.price)}, paid ${how}?${isHouse && mktHasCard() && MP_PAY.useCard ? " (Houses are always paid in cash.)" : ""}`)) return;
   const pay = card ? { useCard: true, split: MP_PAY.split, cardMax: MP_PAY.cardMax } : {};
   const res = await buyListing(CURRENT.username, CURRENT.classCode, id, pay);
   await render();
@@ -452,14 +452,14 @@ async function decline(listingId, offerId) {
 }
 async function accept(listingId, offerId) {
   const l = (CLS.listings || []).find(x => x.id === listingId);
-  if (!confirm(l && listingQuantity(l) > 1 ? "Accept this offer and hand one of them over?" : "Accept this offer and hand the item over?")) return;
+  if (!await t29Confirm(l && listingQuantity(l) > 1 ? "Accept this offer and hand one of them over?" : "Accept this offer and hand the item over?")) return;
   const res = await acceptOffer(CURRENT.username, CURRENT.classCode, listingId, offerId);
   await render();
   if (!res.ok) alert(res.error);
 }
 async function cancelMine(id) {
   const l = (CLS.listings || []).find(x => x.id === id);
-  if (!confirm(l && listingQuantity(l) > 1 ? `Take this listing down? All ${listingQuantity(l)} still for sale come off the market.` : "Take this listing down?")) return;
+  if (!await t29Confirm(l && listingQuantity(l) > 1 ? `Take this listing down? All ${listingQuantity(l)} still for sale come off the market.` : "Take this listing down?")) return;
   await cancelListing(CURRENT.username, CURRENT.classCode, id);
   await render();
 }

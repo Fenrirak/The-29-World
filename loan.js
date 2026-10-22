@@ -261,7 +261,7 @@ async function editTier(id) {
 }
 
 async function removeTier(id) {
-  if (confirm("Remove this loan range?")) {
+  if (await t29Confirm("Remove this loan range?")) {
     await removeLoanTier(CURRENT.classCode, id);
     await render();
   }
