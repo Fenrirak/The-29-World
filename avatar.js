@@ -66,7 +66,7 @@
     { id: "black", name: "Black", v: "#2b2118", r: 0 }, { id: "dkbrown", name: "Dark brown", v: "#4a2f1b", r: 0 },
     { id: "brown", name: "Brown", v: "#7a4a2a", r: 0 }, { id: "blonde", name: "Blonde", v: "#e2b857", r: 0 },
     { id: "ginger", name: "Ginger", v: "#c4552b", r: 0 }, { id: "grey", name: "Silver grey", v: "#b9bcc4", r: 0 },
-    { id: "white", name: "Snow white", v: "#f1f1f4", r: 1 }, { id: "red", name: "Cherry red", v: "#d62839", r: 1 },
+    { id: "red", name: "Cherry red", v: "#d62839", r: 1 },
     { id: "pink", name: "Bubblegum pink", v: "#ff7eb6", r: 2 }, { id: "blue", name: "Electric blue", v: "#3a8dff", r: 2 },
     { id: "purple", name: "Royal purple", v: "#8f5cff", r: 2 }, { id: "green", name: "Lime green", v: "#3ecf8e", r: 2 },
     { id: "rainbow", name: "Rainbow", v: "rainbow", r: 4 }
@@ -175,14 +175,13 @@
     mustache: h => `<path d="M42 54.4 C43.6 50.6 47.6 51.2 50 53.2 C52.4 51.2 56.4 50.6 58 54.4 C55.4 53.6 52.6 54.8 50 56.2 C47.4 54.8 44.6 53.6 42 54.4Z" fill="${h}"/>`,
     goatee: h => `<path d="M44.6 60.4 C46.4 58.8 53.6 58.8 55.4 60.4 C56.4 63.8 54.6 67 50 67 C45.4 67 43.6 63.8 44.6 60.4Z" fill="${h}"/>`,
     beard: h => `<path fill-rule="evenodd" d="M30.8 49 C31 58 36 70 50 70 C64 70 69 58 69.2 49 C66 53.4 62.5 54 58.5 53.2 C55.4 52 52.8 52.4 50 53.2 C47.2 52.4 44.6 52 41.5 53.2 C37.5 54 34 53.4 30.8 49Z M42 55.2 Q50 51.8 58 55.2 Q57.6 63.6 50 64.2 Q42.4 63.6 42 55.2Z" fill="${h}"/>`,
-    whiskers: (h, x) => x.head(`<path d="M31.6 52 L40 53.6 M31.4 56.2 L39.8 56.2 M68.4 52 L60 53.6 M68.6 56.2 L60.2 56.2" stroke="${INK}" stroke-width=".9" stroke-linecap="round" opacity=".55"/>`),
     stripes: (h, x) => x.head(`<path d="M30 49.6 L38.4 51.8 M30 54.6 L38 56.2 M70 49.6 L61.6 51.8 M70 54.6 L62 56.2" stroke="#3a8dff" stroke-width="2.4" stroke-linecap="round"/>`),
     paintstars: () => star5(36.6, 53, 3.6, "#ff5d8f") + star5(63.4, 53, 3.6, "#3a8dff"),
     glitter: () => ["35,50,1.2", "38,55,.9", "63,50,1.2", "61,55,.9", "50,37,1", "46,38.4,.8"].map(s => { const [x, y, r] = s.split(","); return `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff6a8" stroke="#f5b82e" stroke-width=".4"/>`; }).join(""),
     scar: () => `<path d="M35.4 48.6 L40 58.4" stroke="#c4523f" stroke-width="1.5" stroke-linecap="round"/><path d="M35.2 52.3 l3.3 -1.5 M36.6 55.3 l3.3 -1.5 M37.6 57.6 l3 -1.4" stroke="#8f3322" stroke-width=".9" stroke-linecap="round"/>`,
     mask: (h, x) => x.head(`<path d="M28 50 C35 54 43 57 50 57 C57 57 65 54 72 50 V70 H28Z" fill="#cfe9ff" stroke="#8fb8d8" stroke-width="1"/><path d="M36 60 Q50 63.4 64 60 M37.4 64 Q50 67 62.6 64" stroke="#9fc4e0" stroke-width=".9" fill="none" stroke-linecap="round"/>`) + `<path d="M31.2 51.6 L29.2 49.8 M68.8 51.6 L70.8 49.8" stroke="#8fb8d8" stroke-width="1.2" stroke-linecap="round"/>`
   };
-  const FACE_LIST = [["none", "Nothing", 0], ["freckles", "Freckles", 1], ["blush", "Blush", 1], ["whiskers", "Whiskers", 1], ["mustache", "Moustache", 1], ["goatee", "Goatee", 1], ["mask", "Face mask", 1],
+  const FACE_LIST = [["none", "Nothing", 0], ["freckles", "Freckles", 1], ["blush", "Blush", 1], ["mustache", "Moustache", 1], ["goatee", "Goatee", 1], ["mask", "Face mask", 1],
     ["beard", "Beard", 2], ["stripes", "Warpaint", 2], ["glitter", "Glitter", 2], ["scar", "Scar", 2], ["paintstars", "Star paint", 3]];
 
   /* ------------------------------ glasses ------------------------------- */
@@ -255,9 +254,11 @@
   const TOPS = {
     tee: (c, d, l, x) => ({ body: topShape(c, "", x), over: `<path d="M39 76 Q50 88 61 76" fill="none" stroke="${d}" stroke-width="3"/>` }),
     hoodie: (c, d, l, x) => ({
-      back: `<path d="M30 67 C27 76 32 81 39 80 L61 80 C68 81 73 76 70 67 C64 72 36 72 30 67Z" fill="${d}"/>`,
+      back: `<path d="M25 63 C21 74 25 83 38 85 L62 85 C75 83 79 74 75 63 C69 69 31 69 25 63Z" fill="${d}"/><path d="M32 68 C40 72 60 72 68 68 L69.5 77.4 C60 82 40 82 30.5 77.4Z" fill="${shade(d, -.22)}"/>`,
       body: topShape(c, "", x),
-      over: `<path d="M36 78 Q50 92 64 78" fill="none" stroke="${d}" stroke-width="3"/><path d="M44.4 88 v7.4 M55.6 88 v7.4" stroke="${l}" stroke-width="2" stroke-linecap="round"/>` + x.body(`<path d="M30 100 V93 Q50 86.4 70 93 V100Z" fill="${d}" opacity=".35"/>`)
+      over: `<path d="M32.4 76.6 Q50 95.4 67.6 76.6" fill="none" stroke="${d}" stroke-width="6.4" stroke-linecap="round"/><path d="M32.8 75.6 Q50 93.4 67.2 75.6" fill="none" stroke="${c}" stroke-width="3.4" stroke-linecap="round"/><path d="M36 78 Q50 91 64 78" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="1.2" stroke-linecap="round"/>` +
+        `<path d="M44.4 88.6 v7.4 M55.6 88.6 v7.4" stroke="${l}" stroke-width="1.8" stroke-linecap="round"/><rect x="43.4" y="95" width="2" height="3" rx="1" fill="${d}"/><rect x="54.6" y="95" width="2" height="3" rx="1" fill="${d}"/>` +
+        x.body(`<path d="M28 100 V94.4 Q50 88.6 72 94.4 V100Z" fill="${d}" opacity=".3"/><path d="M28 94.4 Q50 88.6 72 94.4" fill="none" stroke="${d}" stroke-width="1.2" opacity=".6"/>`)
     }),
     polo: (c, d) => ({ body: topShape(c, "", { body: s => s }), over: `<path d="M38.5 76.4 L45 86.4 L50 80 L55 86.4 L61.5 76.4 L56 73.6 L50 79 L44 73.6Z" fill="${d}" stroke="${d}" stroke-width=".6" stroke-linejoin="round"/><path d="M50 80 V94" stroke="${d}" stroke-width="1.6"/><circle cx="50" cy="86" r="1" fill="#fff"/><circle cx="50" cy="91" r="1" fill="#fff"/>` }),
     overalls: (c, d, l, x) => ({ body: topShape("#f1f1f6", "", x), over: `<path d="M30 100 V90 L36 90 L38.2 76.4 L44.2 75.8 L40.4 92 H59.6 L55.8 75.8 L61.8 76.4 L64 90 L70 90 V100Z" fill="${c}"/><rect x="42" y="90" width="16" height="10" fill="${d}" opacity=".45"/><circle cx="41.2" cy="79" r="1.6" fill="#f5c542"/><circle cx="58.8" cy="79" r="1.6" fill="#f5c542"/>` }),
@@ -269,7 +270,6 @@
     puffer: (c, d, l, x) => ({ body: topShape(c, [82, 89, 96].map(y => `<path d="M8 ${y} Q50 ${y - 5} 92 ${y}" stroke="${d}" stroke-width="1.6" fill="none"/>`).join(""), x), over: `<path d="M36.4 76.2 Q50 84 63.6 76.2 L63.6 82.4 Q50 90 36.4 82.4Z" fill="${d}" stroke="${d}" stroke-width=".6" stroke-linejoin="round"/><path d="M50 84.6 V100" stroke="${d}" stroke-width="1.6"/>` }),
     rugby: (c, d, l, x) => ({ body: topShape("#26262e", `<path d="M8 94 H92 M8 98.4 H92" stroke="#fff" stroke-width="1.6" opacity=".7"/>`, x), over: `<path d="M38.5 76.4 L50 86 L61.5 76.4 L56 72.6 L50 78 L44 72.6Z" fill="#fff" stroke="#fff" stroke-width=".6" stroke-linejoin="round"/><path d="M50 86 V94" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>` }),
     kiwi: (c, d, l, x) => ({ body: topShape("#2f9a5d", "", x), over: `<path d="M39 76 Q50 88 61 76" fill="none" stroke="#1f7240" stroke-width="3"/><ellipse cx="46" cy="93.4" rx="8.6" ry="6" fill="#7a5a3a"/><circle cx="55.4" cy="88.4" r="3.6" fill="#7a5a3a"/><path d="M58 89.4 Q63.6 90.6 67 94.4" stroke="#d9b87c" stroke-width="1.4" fill="none" stroke-linecap="round"/><circle cx="55.8" cy="87.6" r="1.1" fill="#fff"/><circle cx="56" cy="87.7" r=".5" fill="#222"/><path d="M43 99 v-2.6 M49 99 v-2.6" stroke="#d9b87c" stroke-width="1.3" stroke-linecap="round"/>` }),
-    tiedye: (c, d, l, x) => { const id = x.id("td"); x.defs += `<radialGradient id="${id}" cx=".5" cy=".4" r=".8"><stop offset="0" stop-color="#ffe14d"/><stop offset=".3" stop-color="#ff6b8a"/><stop offset=".6" stop-color="#8b5cf6"/><stop offset="1" stop-color="#2fb7ff"/></radialGradient>`; return { body: topShape(`url(#${id})`, "", x), over: `<path d="M39 76 Q50 88 61 76" fill="none" stroke="#6b3fd6" stroke-width="3"/>` }; },
     disco: (c, d, l, x) => {
       const id = x.id("ds"); x.defs += `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d6d9e6"/><stop offset=".5" stop-color="#fff"/><stop offset="1" stop-color="#aeb4c8"/></linearGradient>`;
       const dots = []; for (let y = 80; y < 100; y += 5) for (let xx = 18 + ((y / 5) % 2) * 3; xx < 84; xx += 6) dots.push(`<rect x="${xx}" y="${y}" width="3.6" height="3.6" fill="#fff" opacity=".9" stroke="#9aa3b5" stroke-width=".3"/>`);
@@ -278,7 +278,7 @@
   };
   const TOP_LIST = [["tee", "T-shirt", 0], ["hoodie", "Hoodie", 0], ["polo", "Polo", 1], ["overalls", "Overalls", 1], ["flannel", "Flannel shirt", 1],
     ["jersey", "Team jersey \u201829\u2019", 2], ["varsity", "Varsity jacket", 2], ["suit", "Suit & tie", 2], ["lab", "Lab coat", 2], ["puffer", "Puffer jacket", 2],
-    ["rugby", "Rugby top", 2], ["kiwi", "Kiwi tee", 2], ["tiedye", "Tie-dye tee", 3], ["disco", "Disco jacket", 4]];
+    ["rugby", "Rugby top", 2], ["kiwi", "Kiwi tee", 2], ["disco", "Disco jacket", 4]];
 
   /* ------------------------------ backgrounds --------------------------- */
   const stars = (pts, col) => pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="${p[2]}" fill="${col || "#fff"}"/>`).join("");
@@ -309,6 +309,22 @@
         `<path d="M8.5 74 L12.4 62 L16.3 74Z M6.4 79 L12.4 66 L18.4 79Z M21 77 L24 68 L27 77Z" fill="#1b2050"/><path d="M12.4 79 V82 M24 77 V80" stroke="#1b2050" stroke-width="1.6"/>` +
         `<rect y="68" width="100" height="9" fill="#f6d8c4" opacity=".1"/>`;
     },
+    castleday: (ctx) => {
+      const g = ctx.id("cd"); ctx.defs += `<linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6fb8ff"/><stop offset="1" stop-color="#dff2ff"/></linearGradient>`;
+      const teeth = (x0, x1, y, w, gap, h, col) => { let s = ""; for (let x = x0; x + w <= x1 + .01; x += w + gap) s += `<rect x="${x.toFixed(1)}" y="${y}" width="${w}" height="${h}" fill="${col}"/>`; return s; };
+      const win = (x, y) => `<path d="M${x} ${y + 3.6} V${y + 1.2} Q${x + 1.1} ${y - .6} ${x + 2.2} ${y + 1.2} V${y + 3.6}Z" fill="#4a4570"/>`;
+      return `<rect width="100" height="100" fill="url(#${g})"/>` +
+        `<circle cx="20" cy="20" r="11" fill="#fff6c2" opacity=".35"/><circle cx="20" cy="20" r="6.4" fill="#ffe27a"/>` +
+        `<g fill="#fff"><ellipse cx="60" cy="14" rx="9" ry="3.4" opacity=".95"/><ellipse cx="66" cy="11.6" rx="6" ry="3.4" opacity=".95"/><ellipse cx="86" cy="26" rx="7" ry="2.6" opacity=".9"/><ellipse cx="90" cy="24" rx="4.4" ry="2.6" opacity=".9"/><ellipse cx="10" cy="44" rx="6" ry="2.2" opacity=".8"/></g>` +
+        `<path d="M0 66 L14 54 L28 63 L44 49 L58 63 L72 52 L86 62 L100 52 V100 H0Z" fill="#a7b9e0" opacity=".65"/>` +
+        `<path d="M44 80 Q70 62 100 66 V100 H44Z" fill="#6cbf6a"/>` +
+        `<rect x="64" y="58" width="36" height="12" fill="#d9d3e8"/>` + teeth(64, 100, 55.4, 3, 2.6, 2.7, "#d9d3e8") +
+        `<rect x="73" y="35" width="11" height="33" fill="#e6e1f1"/><rect x="73" y="35" width="3.6" height="33" fill="#cfc8e2"/><rect x="71.6" y="32" width="13.8" height="3.4" fill="#e6e1f1"/>` + teeth(71.6, 85.4, 29.6, 3.2, 1.9, 2.5, "#e6e1f1") +
+        `<rect x="86" y="42" width="8" height="26" fill="#dcd6ec"/><path d="M84.6 42.4 L90 29 L95.4 42.4Z" fill="#d9534f"/><path d="M90 29 V22.4" stroke="#8a7f9c" stroke-width=".9"/><path d="M90 22.4 L85 24 L90 25.6Z" fill="#e5484d"/>` +
+        win(77, 41) + win(77, 51) + win(89, 48) + `<path d="M66.4 70 V64.6 Q69 61.8 71.6 64.6 V70Z" fill="#6a5f86"/>` +
+        `<path d="M0 74 Q20 64 42 77 V100 H0Z" fill="#59ad5c"/>` +
+        `<path d="M8.5 76 L12.4 64 L16.3 76Z M6.4 81 L12.4 68 L18.4 81Z M21 79 L24 70 L27 79Z" fill="#2f8a4a"/><path d="M12.4 81 V84 M24 79 V82" stroke="#6b4a2a" stroke-width="1.6"/>`;
+    },
     beach: () => `<rect width="100" height="100" fill="#bfe6ff"/><circle cx="80" cy="20" r="10" fill="#ffd23f"/><rect y="58" width="100" height="18" fill="#3fb6e8"/><path d="M0 74 Q12 68 25 74 T50 74 T75 74 T100 74 V80 H0Z" fill="#fff" opacity=".5"/><rect y="78" width="100" height="22" fill="#f4d9a0"/>`,
     rainbow: () => `<rect width="100" height="100" fill="#e9f5ff"/>${["#ff5d5d", "#ffa94d", "#ffe066", "#69db7c", "#4dabf7", "#9775fa"].map((c, i) => `<circle cx="50" cy="104" r="${92 - i * 8}" fill="none" stroke="${c}" stroke-width="8"/>`).join("")}`,
     disco: (ctx) => { const i = ctx.id("dc"); ctx.defs += `<radialGradient id="${i}" cx=".5" cy=".5" r=".7"><stop offset="0" stop-color="#ff8ad8"/><stop offset="1" stop-color="#5b2fc9"/></radialGradient>`; let d = ""; for (let k = 0; k < 14; k++) { const a = k * 2.4, r = 14 + (k % 4) * 11; d += `<circle cx="${50 + Math.cos(a) * r}" cy="${50 + Math.sin(a) * r}" r="${2 + k % 3}" fill="${["#fff", "#ffe14d", "#4dffea", "#ff7aa8"][k % 4]}" opacity=".7"/>`; } return `<rect width="100" height="100" fill="url(#${i})"/>${d}`; },
@@ -321,7 +337,7 @@
   };
   const BG_LIST = [["sky", "Sky blue", 0], ["mint", "Mint", 0], ["blush", "Blush", 0], ["lemon", "Lemon", 0], ["candy", "Candy stripes", 1], ["checker", "Pink checks", 1], ["snow", "Snowy", 1],
     ["forest", "Forest", 1], ["beach", "Beach day", 2], ["ocean", "Deep sea", 2], ["sunset", "Sunset", 2], ["rainbow", "Rainbow", 2], ["night", "Starry night", 3], ["city", "City dusk", 3],
-    ["castle", "Castle at dusk", 3], ["lava", "Lava", 3], ["disco", "Disco", 3], ["galaxy", "Galaxy", 4], ["synth", "Synthwave", 4]];
+    ["castleday", "Castle by day", 3], ["castle", "Castle at dusk", 3], ["lava", "Lava", 3], ["disco", "Disco", 3], ["galaxy", "Galaxy", 4], ["synth", "Synthwave", 4]];
 
   /* ------------------------------ effects ------------------------------- */
   const FX = {
@@ -333,7 +349,15 @@
     bubbles: () => [[14, 20, 5], [84, 14, 3.6], [90, 58, 5.4], [10, 70, 3.4], [28, 90, 2.6]].map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="${p[2]}" fill="#fff" fill-opacity=".25" stroke="#fff" stroke-width="1"/><circle cx="${p[0] - p[2] * .3}" cy="${p[1] - p[2] * .3}" r="${p[2] * .22}" fill="#fff"/>`).join(""),
     confetti: () => [[12, 16, "#ff5d8f", 20], [28, 8, "#ffd23f", -30], [74, 10, "#3a8dff", 40], [88, 26, "#3ecf8e", -10], [8, 48, "#8b5cf6", 60], [92, 62, "#ff5d8f", 10], [20, 80, "#ffd23f", -40], [82, 86, "#3a8dff", 30], [50, 4, "#3ecf8e", 15]].map(p => `<rect x="${p[0]}" y="${p[1]}" width="5" height="2.4" fill="${p[2]}" transform="rotate(${p[3]} ${p[0]} ${p[1]})"/>`).join(""),
     lightning: () => `<path d="M14 10 L6 30 L13 30 L9 46 L22 24 L14 24 L20 10Z" fill="#ffe14d" stroke="#e0a800" stroke-width="1" stroke-linejoin="round"/><path d="M86 52 L79 70 L85 70 L82 84 L93 64 L87 64 L92 52Z" fill="#ffe14d" stroke="#e0a800" stroke-width="1" stroke-linejoin="round"/>`,
-    flames: () => `<path d="M0 100 L0 86 Q6 76 10 86 Q14 70 20 84 Q26 64 32 84 Q38 72 42 86 Q50 66 58 86 Q62 72 68 84 Q74 64 80 84 Q86 70 90 86 Q96 76 100 86 L100 100Z" fill="#ff7a1a" opacity=".92"/><path d="M0 100 L0 92 Q8 84 14 92 Q22 80 30 92 Q38 82 46 92 Q54 80 62 92 Q70 82 78 92 Q86 80 94 92 L100 92 L100 100Z" fill="#ffd23f"/>`,
+    flames: () => {
+      const tongue = (cx, w, h, lean) => `M${cx - w} 101 C${cx - w} ${101 - h * .38} ${cx - w * .25 + lean * .3} ${101 - h * .6} ${cx + lean} ${101 - h} C${cx + w * .05 + lean * .5} ${101 - h * .55} ${cx + w} ${101 - h * .34} ${cx + w} 101Z`;
+      const row = (list, fill, op) => list.map(t => `<path d="${tongue(t[0], t[1], t[2], t[3])}" fill="${fill}"${op ? ` opacity="${op}"` : ""}/>`).join("");
+      return row([[6, 9, 24, 3], [22, 10, 32, -4], [38, 10, 26, 4], [54, 11, 36, -3], [70, 10, 28, 4], [86, 11, 34, -4], [98, 8, 22, -2]], "#e5361b") +
+        row([[14, 9, 22, -3], [30, 9, 26, 3], [46, 10, 30, -3], [62, 10, 25, 4], [78, 9, 28, -3], [92, 8, 20, 3]], "#ff7a1a") +
+        row([[6, 6, 14, 2], [22, 7, 21, -3], [38, 7, 16, 3], [54, 8, 24, -2], [70, 7, 17, 3], [86, 8, 22, -3]], "#ffb62e") +
+        row([[22, 3.6, 11, -2], [54, 4, 13, -1], [86, 4, 12, -2], [38, 3.4, 8, 2], [70, 3.4, 9, 2]], "#fff1a8") +
+        `<circle cx="14" cy="64" r="1.1" fill="#ffb62e"/><circle cx="31" cy="58" r=".9" fill="#ff7a1a"/><circle cx="47" cy="63" r="1" fill="#ffd54a"/><circle cx="66" cy="57" r="1.1" fill="#ffb62e"/><circle cx="84" cy="62" r=".9" fill="#ff7a1a"/><circle cx="93" cy="55" r=".8" fill="#ffd54a"/>`;
+    },
     glow: (ctx) => { const i = ctx.id("gl"); ctx.defs += `<radialGradient id="${i}" cx=".5" cy=".5" r=".5"><stop offset=".7" stop-color="#ffe27a" stop-opacity="0"/><stop offset="1" stop-color="#ffd23f" stop-opacity=".85"/></radialGradient>`; return `<circle cx="50" cy="50" r="50" fill="url(#${i})"/>`; }
   };
   const FX_LIST = [["none", "None", 0], ["sparkles", "Sparkles", 1], ["hearts", "Floating hearts", 1], ["bubbles", "Bubbles", 1], ["snowfall", "Snowfall", 1], ["notes", "Music notes", 2], ["confetti", "Confetti", 2],
@@ -351,15 +375,18 @@
         `<path d="M71 31.4 C76.6 29.6 82.4 31.6 84.6 37 C81 35.2 78 35.6 75.6 37.4 C78.6 40.2 79.8 43.8 79.4 47.4 C76.6 43.8 74.4 41.6 71 40.2Z" fill="#e5484d"/>`
     }),
     wizard: (x) => {
-      const crown = "M33 31 C34 20 42 11 55 7 C63 4.4 71 7.4 74 15.6 C70 11.8 64.6 12.4 62.4 18 C60.6 23 63.6 27.6 67.6 31 Q50 36 33 31Z";
-      const robe = topShape("#37449a", [[24, 91, 2.6], [71, 93, 2.2], [35, 84, 1.8], [78, 85, 1.6], [59, 97, 1.6]].map(p => star5(p[0], p[1], p[2], "#ffd23f")).join(""), x);
+      const hoodOut = "M50 5 C60 9 72 14 77 28 C81 38 80 50 77 59 C75 66 71 72 66 77 C60 82 55 84 50 84 C45 84 40 82 34 77 C29 72 25 66 23 59 C20 50 19 38 23 28 C28 14 40 9 50 5Z";
+      const hole = "M31 44.6 a19 20.6 0 1 0 38 0 a19 20.6 0 1 0 -38 0Z";
+      const robe = topShape("#3a2f8f", "", x);
+      const runes = [[27, 40, 1.2], [26.4, 48, .9], [73, 40, 1.2], [73.6, 48, .9], [29, 56, 1], [71, 56, 1]].map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="${p[2]}" fill="#5ee6ff" opacity=".9"/>`).join("");
       return {
         hide: { hat: 1, top: 1 }, clipHair: 1, body: robe,
-        over: `<path d="M40 76.2 Q50 97 60 76.2Z" fill="#e6e0ff"/><path d="M37.6 76.4 Q50 100 62.4 76.4" fill="none" stroke="#f5c542" stroke-width="2.2" stroke-linecap="round"/>` + x.body(`<path d="M12 99 H88" stroke="#f5c542" stroke-width="2.4"/>`) + `<circle cx="50" cy="90.4" r="2.8" fill="#f5c542" stroke="#c9961a" stroke-width=".8"/><circle cx="50" cy="90.4" r="1.2" fill="#e5484d"/>`,
-        front: `<ellipse cx="50" cy="30.6" rx="31" ry="6.2" fill="#2b3680"/><ellipse cx="50" cy="29.6" rx="31" ry="5.6" fill="#35429c"/>` +
-          `<path d="${crown}" fill="#3b4fd6"/>` +
-          x.clip(crown, `<path d="M30 26.4 Q50 33.6 72 26.4 V32 Q50 38 30 32Z" fill="#f5c542"/><path d="M62 9 Q60 18 66.6 28" stroke="#2b3680" stroke-width="2" fill="none" opacity=".5"/>${star5(47, 17.4, 3.4, "#ffd23f")}${star5(56.4, 13, 2, "#fff")}${star5(42.6, 24, 1.8, "#fff")}`) +
-          `<rect x="47.4" y="26.8" width="5.2" height="4.8" rx="1" fill="#fff6c9" stroke="#c9961a" stroke-width="1"/><rect x="49" y="28.2" width="2" height="2" fill="#f5c542"/>`
+        over: x.body(`<path d="M10 100 C10 86 26 77.4 50 77.4 C74 77.4 90 86 90 100Z" fill="#4b3aa8"/><path d="M10 100 C10 86 26 77.4 50 77.4 C74 77.4 90 86 90 100" fill="none" stroke="#f5c542" stroke-width="2.2"/><path d="M50 82 V100" stroke="#2c2372" stroke-width="1.4"/>`) +
+          `<circle cx="50" cy="86.6" r="3.6" fill="#f5c542" stroke="#c9961a" stroke-width=".9"/><circle cx="50" cy="86.6" r="1.7" fill="#5ee6ff"/>`,
+        front: `<path fill-rule="evenodd" d="${hoodOut} ${hole}" fill="#2f2a7a"/>` +
+          x.clip(hoodOut, `<path d="M26 30 C22 48 26 66 36 78" stroke="#4b3aa8" stroke-width="2.2" fill="none" opacity=".6" stroke-linecap="round"/>`) +
+          `<ellipse cx="50" cy="44.6" rx="19.4" ry="21" fill="none" stroke="#6a4fd0" stroke-width="2.4"/><ellipse cx="50" cy="44.6" rx="20.6" ry="22.2" fill="none" stroke="#f5c542" stroke-width="1.1"/>` +
+          runes + `<path d="M50 20.6 L52.2 24.4 L50 28.2 L47.8 24.4Z" fill="#5ee6ff" stroke="#f5c542" stroke-width=".9" stroke-linejoin="round"/>`
       };
     },
     shark: (x) => ({
@@ -484,7 +511,7 @@
   const { CATS, DEFAULT_LOOK, RARITY, renderSvg, cleanLook } = C;
   const DT = { money: { 1: 5, 2: 15, 3: 40, 4: 100 }, comets: { 1: 1, 2: 3, 3: 8, 4: 20 } };
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
-  const COMET = `<svg class="av-comet" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8.4 C10.4 8.2 5 12.2 1.4 22.6 C7.6 19.4 13 16.6 17.8 12.6Z" fill="#7fb0ff" opacity=".75"/><path d="M15.8 9.4 C11.2 9.8 7 13 3.8 20 C8.4 17.4 12.4 15 16.4 12Z" fill="#a9c9ff" opacity=".85"/><path d="M15.4 10.2 C12 11 8.8 13.4 6.6 17.2 C9.6 15.6 12.4 14 15.6 11.8Z" fill="#e6f0ff"/><circle cx="16.8" cy="8" r="5.2" fill="#ffc93c" stroke="#d99a00" stroke-width="1.2"/><circle cx="15.2" cy="6.4" r="1.9" fill="#fff6c8"/><path d="M6 3 L6.7 4.8 L8.5 5.5 L6.7 6.2 L6 8 L5.3 6.2 L3.5 5.5 L5.3 4.8Z" fill="#ffe27a"/><path d="M20.4 16.6 L20.9 17.8 L22.1 18.3 L20.9 18.8 L20.4 20 L19.9 18.8 L18.7 18.3 L19.9 17.8Z" fill="#cfe0ff"/></svg>`;
+  const COMET = `<svg class="av-comet" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.73 4.79 L5 8.6 L15.67 2.41Z" fill="#8fb8ff" opacity=".85"/><path d="M21.73 8.84 L13 21.6 L19.47 7.56Z" fill="#8fb8ff" opacity=".85"/><path d="M20.26 7.41 L2 22.4 L16.54 3.79Z" fill="#6fa4ff"/><path d="M19.26 6.44 L5 19.6 L17.54 4.76Z" fill="#cfe0ff"/><circle cx="18.4" cy="5.6" r="4.6" fill="#fff2a8" opacity=".5"/><circle cx="18.4" cy="5.6" r="3" fill="#ffc93c"/><circle cx="18.4" cy="5.6" r="1.5" fill="#fff"/></svg>`;
   let ME = null;
 
   /* ---------------- class settings ---------------- */
