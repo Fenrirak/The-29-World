@@ -201,6 +201,7 @@ async function render() {
     document.getElementById("lifestyleValue").textContent =
       score + (label ? " — " + label : "") + (isOverride ? " (set by teacher)" : "");
   }
+  const avById = {}; allStudents.forEach(s => { avById[s.username] = s; });
   const medalClass = i => (i === 0 ? "gold" : i === 1 ? "silver" : i === 2 ? "bronze" : "");
   const lbBox = document.getElementById("leaderboardList");
   lbBox.innerHTML = "";
@@ -209,7 +210,7 @@ async function render() {
     div.className = "leaderboard-row" + (row.username === me.username ? " me" : "");
     div.innerHTML = `
       <span class="rank-pill ${medalClass(i)}">${i + 1}</span>
-      <span class="student-avatar ${avatarClass(row.username)}">${initials(row.name)}</span>
+      ${avatarBadge(avById[row.username] || row)}
       <div style="flex:1;">
         <div class="leaderboard-name">${escapeHtml(row.name)}${row.username === me.username ? " (you)" : ""}</div>
         <div class="leaderboard-sub">${fmtMoney(row.balance)} cash + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.savings ? ` + ${fmtMoney(row.savings)} savings` : ""}${row.kiwiSaver ? ` + ${fmtMoney(row.kiwiSaver)} KiwiSaver` : ""}${row.owed ? ` - ${fmtMoney(row.owed)} owed` : ""}</div>
@@ -227,7 +228,7 @@ async function render() {
     const j = cls.jobs.find(jj => jj.id === s.jobId);
     const sTier = j ? getStudentTier(j, s) : null;
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${escapeHtml(s.name)}</td><td>${sTier ? escapeHtml(sTier.name) : (j ? escapeHtml(j.title) : "—")}</td>`;
+    tr.innerHTML = `<td>${avatarBadge(s)}${escapeHtml(s.name)}</td><td>${sTier ? escapeHtml(sTier.name) : (j ? escapeHtml(j.title) : "—")}</td>`;
     ctbl.appendChild(tr);
   });
 

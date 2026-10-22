@@ -105,7 +105,7 @@ function renderJoinCard(me, cls, s, ks) {
   let html = "";
   if (!s.enabled) {
     html = ks
-      ? `<p class="ks-note-line">Your teacher has switched KiwiSaver off for now. Your money is still yours and still counts in your net worth, but nothing new goes in and it isn't growing.</p>`
+      ? `<p class="ks-note-line">Your teacher has switched KiwiSaver off for now. Your money is safe, but nothing new goes in.</p>`
       : `<h2>${icon("kiwi", 18)} KiwiSaver is switched off</h2><p class="ks-note-line">Your teacher has switched KiwiSaver off for your class.</p>`;
   } else if (s.retired) {
     html = ks ? "" : `<h2>${icon("star", 18)} Your class has retired</h2><p class="ks-note-line">You weren't in KiwiSaver, so there's nothing to take out.</p>`;
@@ -114,13 +114,13 @@ function renderJoinCard(me, cls, s, ks) {
     html = `
       <h2>${icon("kiwi", 18)} ${job ? "You're about to be signed up" : "Join KiwiSaver"}</h2>
       <p class="ks-note-line">${job
-        ? `You have a job, so on your next pay day you'll be signed up automatically, like in real life. ${KS_DEFAULT_RATE}% of your pay will go in, and your employer and the government will add more. You'll start in the Balanced fund.`
-        : `You'll be signed up automatically when you get a job. You can also join now and put in extra money yourself. The government adds 25c for every $1.`}</p>
+        ? `You have a job, so you'll be signed up on your next pay day. ${KS_DEFAULT_RATE}% of your pay goes in, and your employer and the government add more.`
+        : `You'll be signed up when you get a job. You can also join now and put in extra money.`}</p>
       ${ksJoinChoicesHtml(job)}`;
   } else if (ks.status === "optedOut") {
     html = `
       <h2>${icon("kiwi", 18)} You've opted out</h2>
-      <p class="ks-note-line">You're not in KiwiSaver, so nothing comes out of your pay. You're also missing out on what your employer and the government would add. You can join again whenever you like.</p>
+      <p class="ks-note-line">You're not in KiwiSaver, so you're missing out on what your employer and the government would add. You can join again any time.</p>
       ${ksJoinChoicesHtml(false, true)}`;
   }
   card.innerHTML = html + `<div id="ksJoinMsg" aria-live="polite"></div>`;
@@ -181,22 +181,16 @@ async function ksWithdraw(e) {
 
 function renderBalance(me, cls, s, ks) {
   document.getElementById("ksBalance").textContent = fmtMoney(ks.balance);
-  // Worked out from the running totals, so it stays right after money has
-  // been taken out (balance alone can't say where it came from).
   const others = Math.round((ks.employer + ks.govt) * 100) / 100;
-  const made = Math.round((ks.you + others + ks.growth) * 100) / 100;
-  const lines = [];
+  let sub;
   if (ks.you > 0) {
-    lines.push(`You've put in ${fmtMoney(ks.you)}.`);
-    if (others > 0) lines.push(`Your employer and the government added ${fmtMoney(others)}.`);
-    if (ks.growth > 0.004) lines.push(`The fund has grown it by ${fmtMoney(ks.growth)}.`);
-    else if (ks.growth < -0.004) lines.push(`The fund is down ${fmtMoney(-ks.growth)} overall.`);
-    if (made > ks.you) lines.push(`That's ${fmtMoney(made / ks.you)} for every $1 you've put in.`);
-    if (ks.withdrawn > 0) lines.push(`${fmtMoney(ks.withdrawn)} has been taken out.`);
+    sub = `You put in ${fmtMoney(ks.you)}. Others added ${fmtMoney(others)}.`;
+    if (ks.withdrawn > 0) sub += ` ${fmtMoney(ks.withdrawn)} has been taken out.`;
+  } else {
+    sub = me.jobId ? "Nothing has gone in yet. It starts on your next pay day."
+      : "Nothing has gone in yet. Get a job, or put in extra money below.";
   }
-  document.getElementById("ksHeroSub").textContent = lines.length ? lines.join(" ")
-    : me.jobId ? "Nothing has gone in yet. Your next pay day will start it off."
-    : "Nothing has gone in yet. Put in extra money below, or get a job and it starts on pay day.";
+  document.getElementById("ksHeroSub").textContent = sub;
   const pill = document.getElementById("ksStatusPill");
   const fund = KS_FUNDS[ks.fund].name;
   pill.innerHTML = s.retired ? `<span class="ks-pill">Retired, unlocked</span>`
@@ -204,29 +198,12 @@ function renderBalance(me, cls, s, ks) {
     : ks.paused ? `<span class="ks-pill warn">Paused</span><span class="ks-pill-sub">${fund} fund</span>`
     : `<span class="ks-pill">${ksPct(ks.rate)} of my pay</span><span class="ks-pill-sub">${fund} fund</span>`;
 
-  // Where the money came from, as one bar. Growth only shows when it's up.
-  const parts = [
-    { k: "you", label: "Me", v: ks.you },
-    { k: "emp", label: "My employer", v: ks.employer },
-    { k: "gov", label: "Government", v: ks.govt },
-    { k: "grow", label: "Growth", v: Math.max(0, ks.growth) }
-  ].filter(p => p.v > 0);
-  const total = parts.reduce((a, p) => a + p.v, 0);
-  document.getElementById("ksMix").innerHTML = total > 0 ? `
-    <div class="ks-mix-bar" role="img" aria-label="${parts.map(p => `${p.label} ${fmtMoney(p.v)}`).join(", ")}">
-      ${parts.map(p => `<span class="ks-seg-${p.k}" style="width:${(p.v / total * 100).toFixed(2)}%"></span>`).join("")}
-    </div>
-    <div class="ks-mix-legend">${parts.map(p => `<span><i class="ks-dot ks-seg-${p.k}"></i>${p.label} ${fmtMoney(p.v)}</span>`).join("")}</div>` : "";
-
   const tile = (label, value, sub, cls2) => `<div class="ks-tile"><div class="ks-tile-label">${label}</div><div class="ks-tile-value ${cls2 || ""}">${value}</div>${sub ? `<div class="ks-tile-sub">${sub}</div>` : ""}</div>`;
-  const tiles = [
-    tile("I put in", fmtMoney(ks.you), "From my pay and any extra"),
-    tile("My employer added", fmtMoney(ks.employer), "After ESCT tax"),
-    tile("The government added", fmtMoney(ks.govt), "25c for every $1"),
-    tile("Growth", ksSigned(ks.growth), ks.growth < 0 ? "The fund is down overall. It can come back." : "What the fund has earned", ksMoveClass(ks.growth))
-  ];
-  if (ks.withdrawn > 0) tiles.push(tile("Taken out", fmtMoney(ks.withdrawn), ks.firstHomeUsed ? "Including my first home" : ""));
-  document.getElementById("ksTiles").innerHTML = tiles.join("");
+  document.getElementById("ksTiles").innerHTML = [
+    tile("I put in", fmtMoney(ks.you)),
+    tile("Added for me", fmtMoney(others), "Employer + government"),
+    tile("Growth", ksSigned(ks.growth), ks.growth < 0 ? "Down for now. It can come back." : "", ksMoveClass(ks.growth))
+  ].join("");
 }
 
 function renderPay(me, cls, s, ks) {
@@ -234,63 +211,31 @@ function renderPay(me, cls, s, ks) {
   const job = me.jobId ? (cls.jobs || []).find(j => j.id === me.jobId) : null;
   const tier = job ? getStudentTier(job, me) : null;
   if (!tier) {
-    body.innerHTML = `<p class="ks-note-line">You don't have a job right now, so nothing comes from your pay. You can still put in extra money below, and the government adds 25c for every $1.</p>`;
+    body.innerHTML = `<p class="ks-note-line">You don't have a job, so nothing comes from your pay. You can still put in extra money below.</p>`;
     return;
   }
   if (ks.paused) {
-    body.innerHTML = `<p class="ks-note-line">Your contributions are paused, so your full pay goes into your cash. Your employer doesn't add anything while you're paused either. Turn it back on below whenever you're ready.</p>`;
+    body.innerHTML = `<p class="ks-note-line">Your contributions are paused. Nothing comes out of your pay, and your employer doesn't add anything.</p>`;
     return;
   }
   const est = wageCreditEstimate(cls, me);
   const k = est.kiwi;
   if (!k) { body.innerHTML = ""; return; }
-  const inTotal = Math.round((k.you + k.employerNet + k.govt) * 100) / 100;
-  const perDollar = k.you > 0 ? inTotal / k.you : 0;
-  const year = ksYearOf(nzDateKey());
-  const usedGovt = ks.govtYear === year ? ks.govtThisYear : 0;
-  const govtPct = Math.min(100, usedGovt / KS_GOVT_YEAR_MAX * 100);
+  const added = Math.round((k.employerNet + k.govt) * 100) / 100;
+  const inTotal = Math.round((k.you + added) * 100) / 100;
   body.innerHTML = `
-    <p class="ks-note-line">From your pay of ${fmtMoney(est.gross)} (before tax) as ${escapeHtml(est.tierLabel || "")}:</p>
     <div class="ks-pay-rows">
-      <div class="ks-pay-row"><span>Me: ${ksPct(k.rate)} of my pay</span><strong>${fmtMoney(k.you)}</strong></div>
-      <div class="ks-pay-row"><span>My employer: ${ksPct(k.employerRate)} of my pay</span><strong>${fmtMoney(k.employerGross)}</strong></div>
-      <div class="ks-pay-row sub"><span>minus ESCT tax at ${ksPct(k.esctRate)} <button type="button" class="ks-why" onclick="this.parentElement.parentElement.nextElementSibling.classList.toggle('hidden')" aria-label="What is ESCT?">?</button></span><strong class="money-out">−${fmtMoney(k.esct)}</strong></div>
-      <div class="ks-pay-explain hidden">Your employer's money is taxed before it goes in. The rate depends on what you'd earn in a year: your pay × 52, plus your employer's contributions, which comes to ${fmtMoney((est.gross + k.employerGross) * 52)}.</div>
-      <div class="ks-pay-row"><span>The government: 25c for every $1 I put in</span><strong>${k.govt > 0 ? fmtMoney(k.govt) : "$0.00"}</strong></div>
-      <div class="ks-pay-row total"><span>Into my KiwiSaver every pay day</span><strong>${fmtMoney(inTotal)}</strong></div>
-    </div>
-    ${k.you > 0 ? `<p class="ks-callout">It costs you ${fmtMoney(k.you)} a pay day, and ${fmtMoney(inTotal)} goes in. That's <strong>${fmtMoney(perDollar)} for every $1</strong> you put in, before any growth.</p>` : ""}
-    ${s.govt ? `
-      <div class="ks-govt">
-        <div class="ks-govt-head"><span>Government contribution this KiwiSaver year</span><strong>${fmtMoney(usedGovt)} of ${fmtMoney(KS_GOVT_YEAR_MAX)}</strong></div>
-        <div class="ks-progress"><span style="width:${govtPct.toFixed(1)}%"></span></div>
-        <p class="muted-small ks-tight">${ksYearLabel(year)}. ${usedGovt >= KS_GOVT_YEAR_MAX - 0.005
-          ? "You've had the most the government gives this year. It starts again on 1 July."
-          : `You get the full ${fmtMoney(KS_GOVT_YEAR_MAX)} by putting in ${fmtMoney(KS_GOVT_FULL_AT)} during the year.`}${est.gross * 52 > KS_GOVT_INCOME_LIMIT ? " You earn over $180,000 a year, so the government doesn't add anything." : ""}</p>
-      </div>` : `<p class="muted-small">Your teacher has switched the government contribution off.</p>`}`;
+      <div class="ks-pay-row"><span>I put in (${ksPct(k.rate)} of my pay)</span><strong>${fmtMoney(k.you)}</strong></div>
+      <div class="ks-pay-row"><span>Added for me (employer + government)</span><strong>${fmtMoney(added)}</strong></div>
+      <div class="ks-pay-row total"><span>Goes into my KiwiSaver</span><strong>${fmtMoney(inTotal)}</strong></div>
+    </div>`;
 }
 
 function renderGrowth(cls, s, ks) {
   // Balance after each week's fund result, newest last.
   const pts = ks.history.map(h => ({ w: h.w, v: h.v, pct: h.pct, fund: h.fund }));
   document.getElementById("ksChart").innerHTML = pts.length >= 2 ? ksLineChart(pts)
-    : `<p class="muted-small">The chart fills in week by week. Each Monday, last week's fund result is added to your balance${pts.length === 1 ? ` (last week: ${ksSignedPct(pts[0].pct)})` : ""}.</p>`;
-
-  // The last 8 finished weeks for all three funds.
-  const thisMonday = budgetWeekStartKey();
-  const weeks = [];
-  for (let i = 8; i >= 1; i--) weeks.push(dateKeyPlusDays(thisMonday, -7 * i));
-  const table = document.getElementById("ksFundTable");
-  table.innerHTML = `
-    <thead><tr><th>Fund</th>${weeks.map(w => `<th>${ksWeekLabel(w)}</th>`).join("")}<th>8 weeks</th></tr></thead>
-    <tbody>${KS_FUND_ORDER.map(k => {
-      const rs = weeks.map(w => kiwiSaverFundReturn(cls, k, w));
-      const total = (rs.reduce((acc, r) => acc * (1 + r / 100), 1) - 1) * 100;
-      const mine = ks.fund === k;
-      return `<tr class="${mine ? "ks-mine" : ""}"><th scope="row">${KS_FUNDS[k].name}${mine ? ` <span class="ks-you-tag">mine</span>` : ""}</th>
-        ${rs.map(r => `<td class="${ksMoveClass(r)}">${ksSignedPct(r)}</td>`).join("")}
-        <td class="${ksMoveClass(total)}"><strong>${ksSignedPct(Math.round(total * 10) / 10)}</strong></td></tr>`;
-    }).join("")}</tbody>`;
+    : `<p class="muted-small">The chart fills in week by week${pts.length === 1 ? ` (last week: ${ksSignedPct(pts[0].pct)})` : ""}.</p>`;
 }
 
 // A small line chart of the balance, drawn as SVG. Points below the
@@ -322,50 +267,45 @@ function ksLineChart(pts) {
 function renderChoices(me, cls, s, ks) {
   const seg = document.getElementById("ksRateSeg");
   seg.innerHTML = KS_RATES.map(r => `<button type="button" role="radio" aria-checked="${r === ks.rate}" class="ks-seg-btn${r === ks.rate ? " on" : ""}" onclick="ksSetRate(${r})">${r}%</button>`).join("");
-  document.getElementById("ksRateNote").textContent = ks.rate === 3
-    ? "3% is the lower rate for a while. Your employer drops to 3% too. In real life you apply to Inland Revenue for it, and it lasts 3 to 12 months."
-    : `${KS_DEFAULT_RATE}% is the default. More goes in if you choose a higher rate, but the government's 25c per $1 stops at ${fmtMoney(KS_GOVT_YEAR_MAX)} a year, and your employer stays at ${KS_EMPLOYER_RATE}%.`;
+  document.getElementById("ksRateNote").textContent = `${KS_DEFAULT_RATE}% is the normal rate. A higher rate saves more.`;
 
-  const thisMonday = budgetWeekStartKey();
-  const lastWeek = dateKeyPlusDays(thisMonday, -7);
+  const lastWeek = dateKeyPlusDays(budgetWeekStartKey(), -7);
   document.getElementById("ksFundPick").innerHTML = KS_FUND_ORDER.map(k => {
-    const f = s.funds[k];
     const last = kiwiSaverFundReturn(cls, k, lastWeek);
     const on = ks.fund === k;
     return `<button type="button" role="radio" aria-checked="${on}" class="ks-fund${on ? " on" : ""}" onclick="ksSetFund('${k}')">
       <span class="ks-fund-name">${KS_FUNDS[k].name}${on ? `<span class="ks-you-tag">mine</span>` : ""}</span>
       <span class="ks-fund-about">${KS_FUNDS[k].about}</span>
-      <span class="ks-fund-stats"><span>Each week: ${ksFundRange(f)}</span><span>Average: ${ksSignedPct(f.avg)}</span><span>Last week: <b class="${ksMoveClass(last)}">${ksSignedPct(last)}</b></span></span>
+      <span class="ks-fund-stats"><span>Last week: <b class="${ksMoveClass(last)}">${ksSignedPct(last)}</b></span></span>
     </button>`;
   }).join("");
 
   document.getElementById("ksPauseBlock").innerHTML = `
     <div class="ks-choice-label">${ks.paused ? "My contributions are paused" : "Take a break"}</div>
     <p class="muted-small ks-tight">${ks.paused
-      ? "Nothing comes out of your pay, and your employer doesn't add anything. Your money stays invested."
-      : "Pausing (a \"savings suspension\") stops money coming out of your pay. Your employer stops adding too. In real life you can do this after your first year, for 3 months to a year at a time."}</p>
-    <button type="button" class="btn ${ks.paused ? "gold" : "secondary"}" id="ksPauseBtn" onclick="ksSetPaused(${!ks.paused})">${ks.paused ? "Start my contributions again" : "Pause my contributions"}</button>`;
+      ? "Nothing comes out of your pay and your employer adds nothing. Your money stays invested."
+      : "Stop money coming out of your pay for a while. Your employer stops adding too."}</p>
+    <button type="button" class="btn ${ks.paused ? "gold" : "secondary"}" id="ksPauseBtn" onclick="ksSetPaused(${!ks.paused})">${ks.paused ? "Start again" : "Pause my contributions"}</button>`;
 
   const yearly = ksYearlyPay(cls, me);
   const year = ksYearOf(nzDateKey());
   const usedGovt = ks.govtYear === year ? ks.govtThisYear : 0;
   const govtLeft = Math.max(0, KS_GOVT_YEAR_MAX - usedGovt);
-  document.getElementById("ksExtraNote").textContent = !s.govt ? "Move some of your cash into KiwiSaver. It's locked away until you retire, or buy your first home."
-    : yearly > KS_GOVT_INCOME_LIMIT ? "Move some of your cash into KiwiSaver. You earn over $180,000 a year, so the government doesn't add anything."
-    : govtLeft > 0.005 ? `Move some of your cash into KiwiSaver. The government adds 25c for every $1, up to ${fmtMoney(govtLeft)} more this KiwiSaver year. It's locked away until you retire, or buy your first home.`
-    : "Move some of your cash into KiwiSaver. You've already had the most the government gives this year.";
+  document.getElementById("ksExtraNote").textContent = s.govt && yearly <= KS_GOVT_INCOME_LIMIT && govtLeft > 0.005
+    ? "Move cash into KiwiSaver. The government adds 25c for every $1. It's locked until you retire or buy your first home."
+    : "Move cash into KiwiSaver. It's locked until you retire or buy your first home.";
 
   const ob = document.getElementById("ksOptOutBlock");
-  const today = nzDateKey();
-  const canOptOut = ks.optOutUntil && today <= ks.optOutUntil;
+  const canOptOut = ks.optOutUntil && nzDateKey() <= ks.optOutUntil;
   ob.classList.toggle("hidden", !canOptOut);
   if (canOptOut) {
     ob.innerHTML = `
       <div class="ks-choice-label">Opt out</div>
-      <p class="muted-small ks-tight">You were signed up automatically, so you can leave until ${ksDateLabel(ks.optOutUntil)}. You'd get back the ${fmtMoney(Math.max(0, ks.you - ks.withdrawn))} you put in. What your employer and the government added goes back to them, and you'd miss out on it from now on.</p>
+      <p class="muted-small ks-tight">You can leave until ${ksDateLabel(ks.optOutUntil)}. You get back the ${fmtMoney(Math.max(0, ks.you - ks.withdrawn))} you put in, but not what your employer and the government added.</p>
       <button type="button" class="btn secondary" id="ksOptOutBtn" onclick="ksOptOut()">Opt out of KiwiSaver</button>`;
   }
 }
+
 async function ksChoice(btnId, change, okText) {
   const btn = btnId ? document.getElementById(btnId) : null;
   if (btn) btn.disabled = true;
@@ -412,12 +352,11 @@ function renderHome(me, cls, s, ks) {
   const body = document.getElementById("ksHomeBody");
   if (info.eligible) {
     body.innerHTML = `
-      <p class="ks-note-line">You can put up to <strong>${fmtMoney(info.available)}</strong> of your KiwiSaver towards buying your first home${s.retired ? "" : `. ${fmtMoney(s.firstHomeKeep)} has to stay in`}.</p>
-      <p class="muted-small">On the Property page, tick "Use my KiwiSaver" when you buy. It pays as much of the price (or the deposit, with a mortgage) as it can, and your cash pays the rest.</p>
+      <p class="ks-note-line">You can use up to <strong>${fmtMoney(info.available)}</strong> of your KiwiSaver to buy your first home.</p>
+      <p class="muted-small">On the Property page, tick "Use my KiwiSaver" when you buy.</p>
       <a class="btn gold" href="property.html">Go to Property</a>`;
   } else {
-    body.innerHTML = `<p class="ks-note-line">${escapeHtml(info.reason || "You can't use your KiwiSaver for a home right now.")}</p>
-      ${!ks.firstHomeUsed && !s.retired ? `<p class="muted-small">When you can, it pays part of the price of your first property. You'll need to have been in KiwiSaver for ${s.firstHomeWeeks} week${s.firstHomeWeeks === 1 ? "" : "s"}, and ${fmtMoney(s.firstHomeKeep)} has to stay in. In real life it's 3 years and $1,000.</p>` : ""}`;
+    body.innerHTML = `<p class="ks-note-line">${escapeHtml(info.reason || "You can't use your KiwiSaver for a home right now.")}</p>`;
   }
 }
 

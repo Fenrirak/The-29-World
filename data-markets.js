@@ -1403,7 +1403,7 @@ async function decideTimeExemption(username, approve, extraMinutes) {
 
 /* ===================== Gambling (Blackjack) =====================
    Rules implemented strictly from Christchurch Casino's public
-   "Blackjack — How to Play" guide (4 decks, 3:2 blackjack, doubling on
+   "Blackjack — How to Play" guide (8 decks, 3:2 blackjack, doubling on
    any 2-card total that does NOT include an Ace, splitting same-value
    cards up to twice — max 3 hands — split Aces get exactly one card
    each and can't make a "blackjack", insurance at 2:1 when the dealer
@@ -1423,7 +1423,7 @@ async function saveBlackjackSettings(classCode, settings) {
 
 const BJ_SUITS = ["S", "H", "D", "C"];
 const BJ_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
-const BJ_NUM_DECKS = 4;
+const BJ_NUM_DECKS = 8;
 const BJ_BOT_NAMES = ["Ana", "Miro", "Kahu", "Priya", "Leo", "Sione"];
 
 // Rejection-sampled random ints from crypto.getRandomValues (falls back to
@@ -1441,7 +1441,7 @@ function bjRandomInt(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive);
 }
 // Fisher-Yates shuffle — every permutation equally likely, so the shoe is a
-// fair shuffle of the 4 decks.
+// fair shuffle of the 8 decks.
 function bjShuffle(arr) {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -1559,7 +1559,7 @@ function bjPlayBot(shoe, initialCards, dealerUpRank) {
 }
 function bjPlayBot_isFirstBust(h) { return bjIsBust(h.cards); }
 
-// Deals a fresh round: builds+shuffles a brand-new 4-deck shoe (a real
+// Deals a fresh round: builds+shuffles a brand-new 8-deck shoe (a real
 // table also reshuffles between rounds), seats the human in a random seat
 // (1, 2 or 3) with the other two seats filled by bots, deals in strict
 // table order (seat1, seat2, seat3, dealer-up, seat1, seat2, seat3,
@@ -1602,7 +1602,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
 
   // Build and deal the whole round in memory FIRST, before any money moves.
   // Shuffling/dealing/bot-play never touch the network and can't fail for a
-  // real user (bjDraw only throws if the 208-card shoe is ever exhausted,
+  // real user (bjDraw only throws if the 416-card shoe is ever exhausted,
   // which basic strategy play can't do) — but if something unexpected does
   // go wrong here, better to bail out now than escrow a bet for a round
   // that was never actually built.

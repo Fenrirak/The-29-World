@@ -1455,6 +1455,113 @@ async function createStudentAccount(name, username, password, classCode) {
   return { ok: true };
 }
 
+/* ---------------- Login lockout ----------------
+   5 wrong passwords for one username locks LOGINS for that username for
+   30 minutes. Devices that are already signed in are not touched at all:
+   a signed-in device keeps its Firebase Auth session, and nothing in
+   requireLogin()/getSessionUser() looks at this lock.
+
+   State lives in /loginLocks/{auth email of the username} (see the
+   matching rules in firestore.rules, which stop a client making up
+   counts or lock times). It is read/written before anyone is signed in,
+   which is why it can't live on the /users doc. If the lock can't be
+   read or written (offline, rules not deployed yet) login simply carries
+   on as before: a broken lock must never be what stops a student
+   logging in. */
+const T29_LOCK_MAX = 5;
+const T29_LOCK_MS = 30 * 60 * 1000;
+function t29LockKey(username) {
+  const u = String(username || "").trim();
+  return u ? t29AuthEmail(u) : "";
+}
+function _t29TsMs(v) {
+  if (!v) return 0;
+  if (typeof v.toMillis === "function") return v.toMillis();
+  if (typeof v.seconds === "number") return v.seconds * 1000;
+  return Number(v) || 0;
+}
+// { locked, msLeft, count, lockedUntil, lastLockAt (ms), exists }
+async function t29LoginLockStatus(username) {
+  const out = { locked: false, msLeft: 0, count: 0, lockedUntil: 0, lastLockAt: 0, exists: false };
+  const key = t29LockKey(username);
+  if (!key) return out;
+  try {
+    const snap = await fdb.collection("loginLocks").doc(key).get({ source: "server" });
+    if (!snap.exists) return out;
+    const d = snap.data() || {};
+    out.exists = true;
+    out.lastLockAt = _t29TsMs(d.lastLockAt);
+    const updatedAt = _t29TsMs(d.updatedAt);
+    const lockedAt = _t29TsMs(d.lockedAt);
+    const now = Date.now();
+    // Attempts only count while they're fresh (same rule firestore.rules uses).
+    out.count = updatedAt && now - updatedAt < T29_LOCK_MS ? (Number(d.count) || 0) : 0;
+    if (lockedAt && (Number(d.count) || 0) >= T29_LOCK_MAX) {
+      out.lockedUntil = lockedAt + T29_LOCK_MS;
+      out.msLeft = out.lockedUntil - now;
+      out.locked = out.msLeft > 0;
+    }
+  } catch (e) { /* fail open */ }
+  return out;
+}
+function t29LockedMessage(msLeft) {
+  const m = Math.max(1, Math.ceil((msLeft || T29_LOCK_MS) / 60000));
+  return `The password for this account was entered incorrectly ${T29_LOCK_MAX} times, so logging in is locked for another ${m} minute${m === 1 ? "" : "s"}. Devices that are already signed in can keep being used.`;
+}
+async function t29RecordFailedLogin(username) {
+  const key = t29LockKey(username);
+  if (!key) return { locked: false, attemptsLeft: T29_LOCK_MAX };
+  try {
+    const ref = fdb.collection("loginLocks").doc(key);
+    const snap = await ref.get({ source: "server" });
+    const prev = snap.exists ? snap.data() : null;
+    const fresh = prev && _t29TsMs(prev.updatedAt) && Date.now() - _t29TsMs(prev.updatedAt) < T29_LOCK_MS;
+    const count = fresh ? (Number(prev.count) || 0) + 1 : 1;
+    if (count > T29_LOCK_MAX) return { locked: true, attemptsLeft: 0 };
+    const FV = firebase.firestore.FieldValue;
+    const locking = count >= T29_LOCK_MAX;
+    await ref.set({
+      count,
+      lockedAt: locking ? FV.serverTimestamp() : null,
+      lastLockAt: locking ? FV.serverTimestamp() : (prev && prev.lastLockAt ? prev.lastLockAt : null),
+      updatedAt: FV.serverTimestamp()
+    });
+    return { locked: locking, attemptsLeft: Math.max(0, T29_LOCK_MAX - count) };
+  } catch (e) {
+    return { locked: false, attemptsLeft: T29_LOCK_MAX, error: true };
+  }
+}
+// After a successful login: forget the wrong attempts so far. lastLockAt
+// is kept on purpose: it's what the "your password was tried 5 times"
+// notice is built from.
+async function t29ClearLoginAttempts(username, status) {
+  if (!status || !status.exists || status.count <= 0) return;
+  try {
+    const FV = firebase.firestore.FieldValue;
+    const ref = fdb.collection("loginLocks").doc(t29LockKey(username));
+    const snap = await ref.get({ source: "server" });
+    const prev = snap.exists ? snap.data() : {};
+    await ref.set({ count: 0, lockedAt: null, lastLockAt: prev.lastLockAt || null, updatedAt: FV.serverTimestamp() });
+  } catch (e) { /* not important */ }
+}
+async function login(username, password) {
+  const lock = await t29LoginLockStatus(username);
+  if (lock.locked) return { ok: false, locked: true, error: t29LockedMessage(lock.msLeft) };
+  const res = await t29LoginCore(username, password);
+  if (res.ok) {
+    await t29ClearLoginAttempts(username, lock);
+    return res;
+  }
+  if (res.badCredentials) {
+    const rec = await t29RecordFailedLogin(username);
+    if (rec.locked) return { ok: false, locked: true, error: t29LockedMessage(T29_LOCK_MS) };
+    if (rec.attemptsLeft > 0 && rec.attemptsLeft <= 2) {
+      res.error += ` ${rec.attemptsLeft} attempt${rec.attemptsLeft === 1 ? "" : "s"} left before logging in is locked for 30 minutes.`;
+    }
+  }
+  return res;
+}
+
 /* ---------------- Login ----------------
    SECURITY FIX: password verification is now done entirely by Firebase
    Auth (signInWithEmailAndPassword) instead of comparing a plaintext
@@ -1471,7 +1578,7 @@ async function createStudentAccount(name, username, password, classCode) {
    password, so nobody else can either. Until a legacy account logs in
    once, its old password is still on its /users doc, which classmates
    and the teacher can read like any other classmate's doc. */
-async function login(username, password) {
+async function t29LoginCore(username, password) {
   try {
     await firebase.auth().signInWithEmailAndPassword(t29AuthEmail(username), password);
   } catch (e) {
@@ -1487,12 +1594,12 @@ async function login(username, password) {
     // still correctly falls through to "Incorrect username or password."
     if (e.code === "auth/user-not-found" || e.code === "auth/invalid-credential") {
       const migrated = await t29TryMigrateLegacyLogin(username, password);
-      if (!migrated.ok) return { ok: false, error: "Incorrect username or password." };
+      if (!migrated.ok) return { ok: false, badCredentials: true, error: "Incorrect username or password." };
     } else if (e.code === "auth/network-request-failed" || e.code === "auth/too-many-requests") {
       // Not the password's fault — say what actually went wrong.
       return { ok: false, error: t29AuthErrorMessage(e) };
     } else {
-      return { ok: false, error: "Incorrect username or password." };
+      return { ok: false, badCredentials: true, error: "Incorrect username or password." };
     }
   }
 

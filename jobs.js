@@ -132,7 +132,7 @@ function buildJobCard(j, jobStudents) {
           return st && st.id === t.id;
         });
         const avatars = here.map(s =>
-          `<span class="student-avatar ${avatarClass(s.username)}" title="${escapeHtml(s.name)}">${initials(s.name)}</span>`
+          avatarBadge(s)
         ).join("");
         return `
           <div class="tier-rung${here.length ? " has-students" : ""}">

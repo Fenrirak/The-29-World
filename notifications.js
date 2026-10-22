@@ -493,6 +493,103 @@ function buildNotifications(me, cls) {
   return items.slice(0, NOTIF_MAX);
 }
 
+/* ===================== Urgent: wrong-password lockout notice =====================
+   When someone enters the wrong password for this account 5 times, logging
+   in is locked for 30 minutes (see "Login lockout" in data-core.js). The
+   account's owner is told here, as an URGENT bell item (students) and a
+   red banner at the top of the page (students and teachers), with a
+   shortcut to change their password.
+
+   Like everything else in this file, nothing is written for this: it's
+   derived from /loginLocks/{email}.lastLockAt, which only the lock itself
+   can set. "Dismissed" is remembered per device in localStorage (by the
+   lock's timestamp) so a NEW lock always shows again. An active lock can't
+   be dismissed out of the bell. */
+const NOTIF_LOCK_SHOW_MS = 3 * 24 * 3600 * 1000;
+let NOTIF_LOCK_CURRENT = null; // { username, ts }
+
+function notifLockSeenKey(u) { return "t29-lock-seen-" + u; }
+function notifLockIsSeen(u, ts) {
+  try { return Number(localStorage.getItem(notifLockSeenKey(u)) || 0) >= ts; } catch (e) { return false; }
+}
+function notifLockMarkSeen(u, ts) {
+  try { localStorage.setItem(notifLockSeenKey(u), String(ts)); } catch (e) { /* ignore */ }
+}
+async function notifLockNotice(username) {
+  if (typeof t29LoginLockStatus !== "function") return null;
+  const st = await t29LoginLockStatus(username);
+  if (!st.lastLockAt) return null;
+  const recent = Date.now() - st.lastLockAt < NOTIF_LOCK_SHOW_MS;
+  if (!st.locked && (!recent || notifLockIsSeen(username, st.lastLockAt))) return null;
+  return st;
+}
+function notifLockTime(ms) {
+  return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+function notifLockText(st) {
+  return st.locked
+    ? `Someone entered the wrong password for your account 5 times, so logging in is locked until ${notifLockTime(st.lockedUntil)}. Please change your password now.`
+    : `Someone entered the wrong password for your account 5 times (${notifRelativeTime(st.lastLockAt)}), so logging in was locked for 30 minutes. If that wasn't you, change your password.`;
+}
+function notifLockItem(username, st) {
+  NOTIF_LOCK_CURRENT = { username, ts: st.lastLockAt };
+  return {
+    id: "lock-" + st.lastLockAt, ts: st.lastLockAt, icon: "lock", tone: "coral",
+    title: "Urgent: password tried incorrectly 5 times", body: notifLockText(st),
+    onClick: "notifLockChangePassword()", action: true, urgent: true
+  };
+}
+function notifLockChangePassword() {
+  if (NOTIF_LOCK_CURRENT) notifLockMarkSeen(NOTIF_LOCK_CURRENT.username, NOTIF_LOCK_CURRENT.ts);
+  const b = document.getElementById("t29LockBanner");
+  if (b) b.remove();
+  if (typeof openPasswordModal === "function") openPasswordModal();
+}
+function notifLockDismissBanner() {
+  if (NOTIF_LOCK_CURRENT) notifLockMarkSeen(NOTIF_LOCK_CURRENT.username, NOTIF_LOCK_CURRENT.ts);
+  const b = document.getElementById("t29LockBanner");
+  if (b) b.remove();
+}
+function notifInjectLockCss() {
+  if (document.getElementById("t29LockCss")) return;
+  const st = document.createElement("style");
+  st.id = "t29LockCss";
+  st.textContent = `
+.t29-lock-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fdecea;border:2px solid #c0392b;color:#7a1f14;border-radius:14px;padding:12px 16px;margin:0 0 16px;font-weight:600;line-height:1.45;}
+.t29-lock-banner .t29-lock-msg{flex:1 1 260px;min-width:0;}
+.t29-lock-banner .t29-lock-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.notif-row.urgent{background:#fdecea;border-left:4px solid #c0392b;}
+.notif-row.urgent .notif-title{color:#9b1c10;}
+.notif-row.urgent .notif-time{color:#b8402c;font-weight:800;letter-spacing:.03em;}
+html.dark-mode .t29-lock-banner{background:#3a1c19;border-color:#e0705f;color:#ffd9d3;}
+html.dark-mode .notif-row.urgent{background:#3a1c19;border-left-color:#e0705f;}
+html.dark-mode .notif-row.urgent .notif-title{color:#ffd9d3;}
+html.dark-mode .notif-row.urgent .notif-time{color:#ff9d8e;}`;
+  document.head.appendChild(st);
+}
+function notifShowLockBanner(username, st) {
+  if (notifLockIsSeen(username, st.lastLockAt)) return;
+  notifInjectLockCss();
+  NOTIF_LOCK_CURRENT = { username, ts: st.lastLockAt };
+  let b = document.getElementById("t29LockBanner");
+  if (!b) {
+    const host = document.querySelector("main") || document.body;
+    b = document.createElement("div");
+    b.id = "t29LockBanner";
+    b.className = "t29-lock-banner";
+    b.setAttribute("role", "alert");
+    host.insertBefore(b, host.firstChild);
+  }
+  b.innerHTML = `<span class="t29-lock-msg"><strong>Urgent:</strong> ${escapeHtml(notifLockText(st))}</span>
+    <span class="t29-lock-actions"><button type="button" class="btn small gold" onclick="notifLockChangePassword()">Change password</button>
+    <button type="button" class="btn small secondary" onclick="notifLockDismissBanner()">Dismiss</button></span>`;
+}
+// Teachers have no bell, so they just get the banner.
+async function notifLockBootTeacher(u) {
+  const st = await notifLockNotice(u.username);
+  if (st) notifShowLockBanner(u.username, st);
+}
+
 /* ================= UI ================= */
 let NOTIF_USER = null;
 let NOTIF_ITEMS = [];
@@ -689,12 +786,12 @@ function notifRenderList() {
     const clickable = !!(n.href || n.onClick);
     const tag = clickable ? "a" : "div";
     const href = n.href ? ` href="${n.href}"` : (n.onClick ? ` href="#" onclick="notifClose();${n.onClick};return false;"` : "");
-    return `<${tag}${href} class="notif-row${unread ? " unread" : ""}${n.action ? " action" : ""}">
+    return `<${tag}${href} class="notif-row${unread ? " unread" : ""}${n.action ? " action" : ""}${n.urgent ? " urgent" : ""}">
       <span class="notif-ic ${n.tone}">${notifIconFor(n.icon, 15)}</span>
       <span class="notif-body">
         <span class="notif-title">${escapeHtml(n.title)}</span>
         ${n.body ? `<span class="notif-sub">${escapeHtml(n.body)}</span>` : ""}
-        <span class="notif-time">${n.action ? "Needs your attention · " : ""}${notifRelativeTime(n.ts)}</span>
+        <span class="notif-time">${n.urgent ? "URGENT · " : n.action ? "Needs your attention · " : ""}${notifRelativeTime(n.ts)}</span>
       </span>
     </${tag}>`;
   }).join("");
@@ -726,6 +823,13 @@ async function notifRefresh(username, classCode) {
   if (!me || !cls) return;
   withNewModuleDefaults(cls);
   NOTIF_ITEMS = buildNotifications(Object.assign({ username }, me), cls);
+  try {
+    const lock = await notifLockNotice(username);
+    if (lock) {
+      NOTIF_ITEMS.unshift(notifLockItem(username, lock));
+      notifShowLockBanner(username, lock);
+    }
+  } catch (e) { /* the lock notice is optional */ }
   notifPaint();
 
   // Every page now gets the module locks applied to its nav, not just the
@@ -758,6 +862,7 @@ async function notifInit() {
   try { u = await getSessionUser(); } catch (e) { return; }
   // Teachers get their own dashboards for all of this; the feed is a
   // student-facing "what happened to ME" view.
+  if (u && u.role === "teacher") { notifInjectLockCss(); notifLockBootTeacher(u).catch(() => {}); return; }
   if (!u || u.role !== "student" || !u.classCode) return;
   NOTIF_USER = u.username;
 

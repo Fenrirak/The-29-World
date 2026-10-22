@@ -209,13 +209,14 @@ async function render() {
 
   const nwBox = document.getElementById("netWorthList");
   nwBox.innerHTML = "";
+  const avById = {}; students.forEach(s => { avById[s.username] = s; });
   const medalClass = i => (i === 0 ? "gold" : i === 1 ? "silver" : i === 2 ? "bronze" : "");
   board.forEach((row, i) => {
     const div = document.createElement("div");
     div.className = "leaderboard-row";
     div.innerHTML = `
       <span class="rank-pill ${medalClass(i)}">${i + 1}</span>
-      <span class="student-avatar ${avatarClass(row.username)}">${initials(row.name)}</span>
+      ${avatarBadge(avById[row.username] || row)}
       <div style="flex:1;">
         <div class="leaderboard-name">${escapeHtml(row.name)}</div>
         <div class="leaderboard-sub">${fmtMoney(row.balance)} cash + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.owed ? ` - ${fmtMoney(row.owed)} owed` : ""}</div>
@@ -234,7 +235,7 @@ async function render() {
   students.forEach(s => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span>${escapeHtml(s.name)}<div class="muted-small">@${escapeHtml(s.username)}</div></td>
+      <td>${avatarBadge(s)}${escapeHtml(s.name)}<div class="muted-small">@${escapeHtml(s.username)}</div></td>
       <td>${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `${icon("star", 11)} Task ✓` : `Task ✗`}</div>`; })() : ""}</td>
       <td><strong>${fmtMoney(s.balance)}</strong></td>
       <td>${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</td>
@@ -1177,7 +1178,7 @@ async function renderProfile(username) {
   const tier = job ? getStudentTier(job, s) : null;
   const tierIdx = (job && tier && job.tiers) ? job.tiers.indexOf(tier) : -1;
 
-  document.getElementById("profileName").innerHTML = `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${escapeHtml(s.name)}`;
+  document.getElementById("profileName").innerHTML = `${avatarBadge(s)} ${escapeHtml(s.name)}`;
   // BUGFIX: this sets textContent, which does its own escaping — running
   // the value through escapeHtml() first meant a username or job title
   // containing an apostrophe rendered literally as "&#39;" on screen.
