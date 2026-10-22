@@ -1126,6 +1126,24 @@ function closeProfile() {
   document.getElementById("profileModal").classList.add("hidden");
 }
 
+async function applyProfileGender(username) {
+  const sel = document.getElementById("profileGenderSelect");
+  if (!sel || !window.T29Avatar) return;
+  const btn = event && event.target;
+  if (btn) btn.disabled = true;
+  const res = await T29Avatar.setGender(username, sel.value);
+  if (!res.ok) { alert(res.error || "Couldn't update the body type."); if (btn) btn.disabled = false; return; }
+  // Keep the cached copy of the student in step so the profile and tables show the change straight away.
+  const cached = await getUserCached(username);
+  if (cached) {
+    const av = Object.assign({}, cached.avatar || {});
+    av.look = Object.assign({}, av.look || {}, { gender: sel.value });
+    cached.avatar = av;
+  }
+  await render();
+  await renderProfile(username);
+}
+
 async function applyProfileTierChange(username) {
   const sel = document.getElementById("profileTierSelect");
   if (!sel) return;
@@ -1195,6 +1213,19 @@ async function renderProfile(username) {
       <div class="profile-chip"><div class="label">Lifestyle rating</div><div class="value">${rating}${isOverride ? ` <span class="muted-small">(overridden)</span>` : ""}</div>${band ? `<div class="muted-small">${band}</div>` : ""}</div>
     </div>
   `);
+
+  /* ---- Avatar body type (students choose their own; teacher can override) ---- */
+  const curGender = (s.avatar && s.avatar.look && s.avatar.look.gender) || "neutral";
+  rows.push(`<h4>Avatar body type</h4>
+    <div class="auto-row">
+      <div class="auto-details">Students pick this themselves in their avatar editor. You can change it here.</div>
+      <div class="auto-details">
+        <select id="profileGenderSelect" aria-label="Avatar body type">
+          ${[["neutral", "Neutral"], ["boy", "Boy"], ["girl", "Girl"]].map(g => `<option value="${g[0]}"${g[0] === curGender ? " selected" : ""}>${g[1]}</option>`).join("")}
+        </select>
+        <button class="btn small" onclick="applyProfileGender('${escapeJsAttr(username)}')">Save</button>
+      </div>
+    </div>`);
 
   /* ---- Job & tier management ---- */
   rows.push(`<h4>${icon("briefcase", 16)} Job & tier</h4>`);
