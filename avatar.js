@@ -375,18 +375,20 @@
         `<path d="M71 31.4 C76.6 29.6 82.4 31.6 84.6 37 C81 35.2 78 35.6 75.6 37.4 C78.6 40.2 79.8 43.8 79.4 47.4 C76.6 43.8 74.4 41.6 71 40.2Z" fill="#e5484d"/>`
     }),
     wizard: (x) => {
-      const hoodOut = "M50 5 C60 9 72 14 77 28 C81 38 80 50 77 59 C75 66 71 72 66 77 C60 82 55 84 50 84 C45 84 40 82 34 77 C29 72 25 66 23 59 C20 50 19 38 23 28 C28 14 40 9 50 5Z";
-      const hole = "M31 44.6 a19 20.6 0 1 0 38 0 a19 20.6 0 1 0 -38 0Z";
-      const robe = topShape("#3a2f8f", "", x);
-      const runes = [[27, 40, 1.2], [26.4, 48, .9], [73, 40, 1.2], [73.6, 48, .9], [29, 56, 1], [71, 56, 1]].map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="${p[2]}" fill="#5ee6ff" opacity=".9"/>`).join("");
+      const L = "M25 82 C18 71 17 60 22 50.6 C25 56 30 63 38 70 L38 84Z";
+      const R = "M75 82 C82 71 83 60 78 50.6 C75 56 70 63 62 70 L62 84Z";
+      const spark = (cx, cy, r) => `<path d="M${cx} ${cy - r} Q${cx} ${cy} ${cx + r} ${cy} Q${cx} ${cy} ${cx} ${cy + r} Q${cx} ${cy} ${cx - r} ${cy} Q${cx} ${cy} ${cx} ${cy - r}Z" fill="#8ff3ff" stroke="#e8ffff" stroke-width=".5"/>`;
       return {
-        hide: { hat: 1, top: 1 }, clipHair: 1, body: robe,
-        over: x.body(`<path d="M10 100 C10 86 26 77.4 50 77.4 C74 77.4 90 86 90 100Z" fill="#4b3aa8"/><path d="M10 100 C10 86 26 77.4 50 77.4 C74 77.4 90 86 90 100" fill="none" stroke="#f5c542" stroke-width="2.2"/><path d="M50 82 V100" stroke="#2c2372" stroke-width="1.4"/>`) +
-          `<circle cx="50" cy="86.6" r="3.6" fill="#f5c542" stroke="#c9961a" stroke-width=".9"/><circle cx="50" cy="86.6" r="1.7" fill="#5ee6ff"/>`,
-        front: `<path fill-rule="evenodd" d="${hoodOut} ${hole}" fill="#2f2a7a"/>` +
-          x.clip(hoodOut, `<path d="M26 30 C22 48 26 66 36 78" stroke="#4b3aa8" stroke-width="2.2" fill="none" opacity=".6" stroke-linecap="round"/>`) +
-          `<ellipse cx="50" cy="44.6" rx="19.4" ry="21" fill="none" stroke="#6a4fd0" stroke-width="2.4"/><ellipse cx="50" cy="44.6" rx="20.6" ry="22.2" fill="none" stroke="#f5c542" stroke-width="1.1"/>` +
-          runes + `<path d="M50 20.6 L52.2 24.4 L50 28.2 L47.8 24.4Z" fill="#5ee6ff" stroke="#f5c542" stroke-width=".9" stroke-linejoin="round"/>`
+        hide: { hat: 1, top: 1 },
+        back: `<path d="${L}" fill="#2a2470"/><path d="${R}" fill="#2a2470"/>` +
+          x.clip(L, `<path d="M26 82 C20 71 19.6 61 23.6 53 C26.4 58 31 64 39 72 L39 84Z" fill="#5a3fb0"/>`) + x.clip(R, `<path d="M74 82 C80 71 80.4 61 76.4 53 C73.6 58 69 64 61 72 L61 84Z" fill="#5a3fb0"/>`) +
+          `<path d="M25 82 C18 71 17 60 22 50.6 C25 56 30 63 38 70" fill="none" stroke="#f5c542" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M75 82 C82 71 83 60 78 50.6 C75 56 70 63 62 70" fill="none" stroke="#f5c542" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`,
+        body: topShape("#3a2f8f", [[22, 92, 2.4], [76, 94, 2], [33, 86, 1.6], [67, 87, 1.6], [60, 98, 1.4]].map(p => star5(p[0], p[1], p[2], "#ffd23f")).join(""), x),
+        over: `<path d="M40.4 76.2 Q50 97.4 59.6 76.2Z" fill="#d9d2ff"/>` +
+          x.body(`<path d="M10 100 C10 87 26 78 50 78 C74 78 90 87 90 100" fill="none" stroke="#f5c542" stroke-width="2.4"/><path d="M14 99.4 C14 90 28 82.6 50 82.6 C72 82.6 86 90 86 99.4" fill="none" stroke="#f5c542" stroke-width=".8" stroke-dasharray="1.6 2.2" opacity=".9"/>`) +
+          `<path d="M37.8 76.4 Q50 101 62.2 76.4" fill="none" stroke="#f5c542" stroke-width="2" stroke-linecap="round"/><path d="M50 86.4 L53.4 91.6 L50 98.4 L46.6 91.6Z" fill="#5ee6ff" stroke="#f5c542" stroke-width="1" stroke-linejoin="round"/><path d="M50 88.4 L51.4 91.6 L50 95 L48.6 91.6Z" fill="#e8ffff" opacity=".8"/>`,
+        front: `<path d="M30.6 36.6 Q50 25.6 69.4 36.6" fill="none" stroke="#f5c542" stroke-width="2.2" stroke-linecap="round"/><circle cx="50" cy="31.4" r="4.4" fill="#5ee6ff" opacity=".35"/><path d="M50 26.8 L53.4 31.4 L50 36 L46.6 31.4Z" fill="#5ee6ff" stroke="#f5c542" stroke-width="1" stroke-linejoin="round"/><path d="M50 28.8 L51.5 31.4 L50 33.8Z" fill="#e8ffff"/>` +
+          spark(13, 62, 3.2) + spark(88, 40, 2.4) + spark(18, 31, 1.8) + `<circle cx="85" cy="58" r="7" fill="#5ee6ff" opacity=".22"/><circle cx="85" cy="58" r="4.2" fill="#5ee6ff" stroke="#e8ffff" stroke-width=".8"/><circle cx="83.6" cy="56.6" r="1.5" fill="#fff" opacity=".9"/>`
       };
     },
     shark: (x) => ({
