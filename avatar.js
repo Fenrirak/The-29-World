@@ -254,7 +254,7 @@
   const TOPS = {
     tee: (c, d, l, x) => ({ body: topShape(c, "", x), over: `<path d="M39 76 Q50 88 61 76" fill="none" stroke="${d}" stroke-width="3"/>` }),
     hoodie: (c, d, l, x) => ({
-      back: `<path d="M25 63 C21 74 25 83 38 85 L62 85 C75 83 79 74 75 63 C69 69 31 69 25 63Z" fill="${d}"/><path d="M32 68 C40 72 60 72 68 68 L69.5 77.4 C60 82 40 82 30.5 77.4Z" fill="${shade(d, -.22)}"/>`,
+      back: `<path d="M28 65 C24.6 74 28 82.4 38 84 L62 84 C72 82.4 75.4 74 72 65 C66 69.6 34 69.6 28 65Z" fill="${d}" stroke="${d}" stroke-width="3" stroke-linejoin="round"/><path d="M32 68 C40 72 60 72 68 68 L69.5 77.4 C60 82 40 82 30.5 77.4Z" fill="${shade(d, -.22)}"/>`,
       body: topShape(c, "", x),
       over: `<path d="M32.4 76.6 Q50 95.4 67.6 76.6" fill="none" stroke="${d}" stroke-width="6.4" stroke-linecap="round"/><path d="M32.8 75.6 Q50 93.4 67.2 75.6" fill="none" stroke="${c}" stroke-width="3.4" stroke-linecap="round"/><path d="M36 78 Q50 91 64 78" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="1.2" stroke-linecap="round"/>` +
         `<path d="M44.4 88.6 v7.4 M55.6 88.6 v7.4" stroke="${l}" stroke-width="1.8" stroke-linecap="round"/><rect x="43.4" y="95" width="2" height="3" rx="1" fill="${d}"/><rect x="54.6" y="95" width="2" height="3" rx="1" fill="${d}"/>` +
