@@ -1217,9 +1217,9 @@ async function renderProfile(username) {
   /* ---- Avatar body type (students choose their own; teacher can override) ---- */
   const curGender = (s.avatar && s.avatar.look && s.avatar.look.gender) || "neutral";
   rows.push(`<h4>Avatar body type</h4>
-    <div class="auto-row">
+    <div class="auto-row gender-row">
       <div class="auto-details">Students pick this themselves in their avatar editor. You can change it here.</div>
-      <div class="auto-details">
+      <div class="gender-controls">
         <select id="profileGenderSelect" aria-label="Avatar body type">
           ${[["neutral", "Neutral"], ["boy", "Boy"], ["girl", "Girl"]].map(g => `<option value="${g[0]}"${g[0] === curGender ? " selected" : ""}>${g[1]}</option>`).join("")}
         </select>

@@ -675,6 +675,10 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
   padding:12px;border:1.5px solid var(--line);border-radius:var(--r-3);margin-bottom:10px;flex-wrap:wrap;
 }
 .auto-details{font-size:.85rem;}
+.gender-row{flex-direction:column;align-items:flex-start;gap:12px;padding:14px 16px;}
+.gender-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.gender-controls select{width:auto;min-width:160px;margin:0;}
+.gender-controls .btn{margin:0;}
 .auto-details strong{color:var(--navy-900);}
 
 /* ==================================================================
