@@ -1130,7 +1130,7 @@ async function buyIntoGamblingAccount(username, classCode, amount) {
     if (e.message === "OVER_CAP") return { ok: false, error: "That's over today's buy-in limit." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "gambling-buyin", from: username, amount, note: `Bought in to Gambling: ${fmtMoney(amount)}` });
+  queueGamblingLog(classCode, { type: "gambling-buyin", from: username, amount, note: `Bought in to Gambling: ${fmtMoney(amount)}` });
   return { ok: true, balance: newBalance };
 }
 
@@ -1165,7 +1165,7 @@ async function cashOutGamblingAccount(username, classCode, amount) {
     if (e.message === "EMPTY") return { ok: false, error: "There's nothing in your gambling account to cash out." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "gambling-cashout", to: username, amount: cashedOut, note: `Cashed out from Gambling: ${fmtMoney(cashedOut)}` });
+  queueGamblingLog(classCode, { type: "gambling-cashout", to: username, amount: cashedOut, note: `Cashed out from Gambling: ${fmtMoney(cashedOut)}` });
   return { ok: true, amount: cashedOut };
 }
 
@@ -1177,9 +1177,22 @@ async function cashOutGamblingAccount(username, classCode, amount) {
 // without having to special-case "which calls count as a settlement".
 // Teachers are exempt entirely (parallels adjustBalance's "teachers have
 // unlimited funds" — see above), so this silently no-ops for them.
-async function adjustGamblingAccount(username, delta, dailyWinLimit) {
+// Gambling activity-log writes are slow (a transaction on the whole class doc) and the money has
+// already moved by the time they run, so they're queued in the background instead of making every
+// bet/buy-in/cash-out wait for them. gamblingLedgerSettled() lets a page wait before re-reading the log.
+let _gamblingLedgerPending = Promise.resolve();
+function queueGamblingLog(classCode, txn) {
+  const p = logTxn(classCode, txn).catch(e => console.error("Couldn't log gambling activity:", e));
+  _gamblingLedgerPending = Promise.all([_gamblingLedgerPending, p]).then(() => {});
+  return p;
+}
+function gamblingLedgerSettled() { return Promise.all([_gamblingLedgerPending, _bjLedgerPending]).then(() => {}); }
+
+// `extra` (optional) is extra fields to save in the SAME write as the balance change, saving a round-trip.
+// Teachers have no balance to change, so nothing is written for them (res.wrote is false).
+async function adjustGamblingAccount(username, delta, dailyWinLimit, extra) {
   const ref = usersCol().doc(username);
-  let winLimitHit = false;
+  let winLimitHit = false, wrote = false;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(ref);
@@ -1200,9 +1213,10 @@ async function adjustGamblingAccount(username, delta, dailyWinLimit) {
       acc.netToday = Math.round((acc.netToday + delta) * 100) / 100;
       if (dailyWinLimit && acc.netToday >= dailyWinLimit) acc.winLimitHit = true;
       winLimitHit = acc.winLimitHit;
-      t.update(ref, { gamblingAccount: acc });
+      t.update(ref, Object.assign({ gamblingAccount: acc }, extra || {}));
+      wrote = true;
     });
-    return { ok: true, winLimitHit };
+    return { ok: true, winLimitHit, wrote };
   } catch (e) {
     return { ok: false, winLimitHit: false, insufficientFunds: e.message === "INSUFFICIENT" };
   }
@@ -1212,24 +1226,13 @@ async function adjustGamblingAccount(username, delta, dailyWinLimit) {
 // depends on betType. Returns { ok, error } or resolves via a gambling
 // account update (see adjustGamblingAccount above).
 async function placeRouletteBet(username, classCode, betType, betAmount, selection) {
-  // Same fix as startBlackjackRound: fetch the class/user docs once and
-  // reuse them for the lock check instead of letting isModuleLockedForStudent
-  // fetch them again independently. Reads the class doc through the cache
-  // (getClassCached), not getClass: cls here only feeds settings the
-  // teacher configures (enabled/min/max/payouts), which don't change as a
-  // side effect of a bet, so the ~2s-stale read this file's own cache
-  // already considers safe for settings is safe here too — and it saves a
-  // full network round-trip on every single spin, by far the highest-
-  // frequency click in the app. Nothing downstream trusts this copy for
-  // money: adjustGamblingAccount below re-checks the real balance fresh,
-  // inside its own transaction, regardless of what this read shows.
+  // Fast path: the class settings come from the cache (they don't change as a side effect of a bet),
+  // and every check that needs the student's own data (lock, win limit, balance) plus the balance
+  // change itself happen inside ONE transaction. That's a single database round-trip before the wheel
+  // can start, instead of a separate read, a transaction and a log write one after the other.
   betAmount = cleanAmount(betAmount); // whole cents
-  const [clsRaw, user] = await Promise.all([getClassCached(classCode), getUser(username)]);
-  const cls = withNewModuleDefaults(clsRaw);
+  const cls = withNewModuleDefaults(await getClassCached(classCode));
   if (!cls) return { ok: false, error: "Class not found." };
-  if (isModuleLockedForStudentFromData(cls, user, username, "gambling")) {
-    return { ok: false, error: "Gambling is locked for you right now because of your lifestyle rating." };
-  }
   const g = cls.gambling;
   if (!g.enabled) return { ok: false, error: "Your teacher has temporarily turned off gambling for this class." };
   if (!(betAmount > 0)) return { ok: false, error: "Enter a bet amount greater than zero." };
@@ -1245,14 +1248,6 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   else return { ok: false, error: "Unknown bet type." };
   if (!valid) return { ok: false, error: "That's not a valid bet for this type." };
 
-  if (!user) return { ok: false, error: "User not found." };
-  const isTeacher = user.role === "teacher";
-  if (!isTeacher) {
-    const acc = gamblingAccountToday(user);
-    if (acc.winLimitHit) return { ok: false, error: g.winLimitMessage || "You've hit today's winning limit and can't gamble again until tomorrow." };
-    if (acc.balance < betAmount) return { ok: false, error: "You don't have enough in your gambling account for that bet — buy in first." };
-  }
-
   const spin = Math.floor(Math.random() * 37); // 0-36
   let win = false;
   if (betType === "straightUp") win = selection[0] === spin;
@@ -1264,21 +1259,36 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   // Bet amount is deducted; on a win, the taxed winnings are credited back (winnings only, stake already "spent").
   const netChange = win ? taxedWinnings : -betAmount;
 
-  // Apply the balance change first and check it actually went through
-  // before logging/settling anything. adjustGamblingAccount re-validates
-  // the balance atomically, so if a concurrent bet already spent the
-  // funds this check (not the stale one above) is what actually catches
-  // it — bail out here rather than logging a spin that was never paid
-  // for.
   let hitWinLimit = false;
-  if (!isTeacher) {
-    const r = await adjustGamblingAccount(username, netChange, g.dailyWinLimit);
-    if (!r.ok) {
-      return { ok: false, error: "Your gambling balance changed before this bet could be settled — please try again." };
-    }
-    hitWinLimit = r.winLimitHit;
+  try {
+    const ref = usersCol().doc(username);
+    await fdb.runTransaction(async (t) => {
+      hitWinLimit = false;
+      const snap = await t.get(ref);
+      if (!snap.exists) throw new Error("NO_USER");
+      const user = snap.data();
+      if (isModuleLockedForStudentFromData(cls, user, username, "gambling")) throw new Error("LOCKED");
+      if (user.role === "teacher") return; // teachers have unlimited funds — nothing to change
+      const acc = gamblingAccountToday(user);
+      if (acc.winLimitHit) throw new Error("WIN_LIMIT");
+      if (acc.balance < betAmount) throw new Error("INSUFFICIENT");
+      const newBalance = Math.round((acc.balance + netChange) * 100) / 100;
+      if (newBalance < 0) throw new Error("INSUFFICIENT");
+      acc.balance = newBalance;
+      acc.netToday = Math.round((acc.netToday + netChange) * 100) / 100;
+      if (g.dailyWinLimit && acc.netToday >= g.dailyWinLimit) acc.winLimitHit = true;
+      hitWinLimit = acc.winLimitHit;
+      t.update(ref, { gamblingAccount: acc });
+    });
+  } catch (e) {
+    if (e.message === "NO_USER") return { ok: false, error: "User not found." };
+    if (e.message === "LOCKED") return { ok: false, error: "Gambling is locked for you right now because of your lifestyle rating." };
+    if (e.message === "WIN_LIMIT") return { ok: false, error: g.winLimitMessage || "You've hit today's winning limit and can't gamble again until tomorrow." };
+    if (e.message === "INSUFFICIENT") return { ok: false, error: "You don't have enough in your gambling account for that bet — buy in first." };
+    return { ok: false, error: "Something went wrong placing that bet. Please try again." };
   }
-  await logTxn(classCode, {
+  // The log entry is written in the background while the wheel spins (see queueGamblingLog).
+  queueGamblingLog(classCode, {
     type: "gambling", from: username, amount: Math.abs(netChange), bet: betAmount,
     note: `Roulette (${betTypeLabel(betType)}): ${win ? "WON" : "lost"} — ball landed on ${spin}` + (win && taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "")
   });
@@ -1657,7 +1667,10 @@ async function startBlackjackRound(username, classCode, betAmount) {
   // land between the transaction's read and its commit and force Firestore to
   // abort and retry it (extra round-trips on every Deal). lastBjSeat is now
   // saved by the blackjackRound write below / in bjSettle instead.
-  const debitResult = await adjustGamblingAccount(username, -betAmount, cls.gambling.dailyWinLimit);
+  const naturalNow = round.hands[0].status === "blackjack" && !round.insurance.offered;
+  // The new round is saved in the same transaction as the debit (one round-trip instead of two).
+  const debitResult = await adjustGamblingAccount(username, -betAmount, cls.gambling.dailyWinLimit,
+    naturalNow ? undefined : { blackjackRound: round, lastBjSeat: round.humanSeat });
   // adjustGamblingAccount re-validates the balance atomically and can
   // fail here (e.g. a concurrent bet spent the funds between the stale
   // check above and now) — the round was only ever built in memory, so
@@ -1669,10 +1682,11 @@ async function startBlackjackRound(username, classCode, betAmount) {
   // From here on the bet is escrowed, so any failure must refund it rather
   // than leave the student down money with no round to show for it.
   try {
-    if (round.hands[0].status === "blackjack" && !round.insurance.offered) {
+    if (naturalNow) {
       return await bjAdvance(username, classCode, round);
     }
-    await usersCol().doc(username).update({ blackjackRound: round, lastBjSeat: round.humanSeat });
+    if (!debitResult.wrote) await usersCol().doc(username).update({ blackjackRound: round, lastBjSeat: round.humanSeat }); // teachers
+    _bjLiveSet(username, round);
     return { ok: true, round: bjClientView(round) };
   } catch (e) {
     await adjustGamblingAccount(username, betAmount, cls.gambling.dailyWinLimit);
@@ -1687,6 +1701,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
 // stage in a round none have been placed yet since insurance is offered
 // before any other action).
 async function blackjackInsurance(username, classCode, takeInsurance) {
+  _bjLive = null;
   const [user, cls] = await Promise.all([getUser(username), getClass(classCode)]);
   if (!user || !user.blackjackRound) return { ok: false, error: "No Blackjack round in progress." };
   const dailyWinLimit = cls && cls.gambling ? cls.gambling.dailyWinLimit : null;
@@ -1732,6 +1747,7 @@ async function blackjackInsurance(username, classCode, takeInsurance) {
     }
     round.phase = "playing";
     await usersCol().doc(username).update({ blackjackRound: round });
+    _bjLiveSet(username, round);
     return { ok: true, round: bjClientView(round) };
   } catch (e) {
     if (insAmount > 0) await adjustGamblingAccount(username, insAmount, dailyWinLimit);
@@ -1747,10 +1763,12 @@ async function bjAdvance(username, classCode, round) {
   let next = round.hands.findIndex(h => h.status === "playing");
   if (next === -1) {
     round.phase = "dealer";
+    _bjLive = null;
     return await bjSettle(username, classCode, round);
   }
   round.activeHandIndex = next;
   await usersCol().doc(username).update({ blackjackRound: round });
+  _bjLiveSet(username, round);
   return { ok: true, round: bjClientView(round) };
 }
 
@@ -1762,11 +1780,12 @@ async function blackjackAction(username, classCode, action) {
   // with no animation to hide a slow mobile round-trip behind. The cache
   // is invalidated instantly on any real write to this doc, so this only
   // ever skips a redundant re-fetch, never serves genuinely stale settings.
-  const [user, cls] = await Promise.all([getUser(username), getClassCached(classCode)]);
-  if (!user || !user.blackjackRound) return { ok: false, error: "No Blackjack round in progress." };
+  const fast = (action === "hit" || action === "stand") && _bjLive && _bjLive.username === username && Date.now() - _bjLive.at < 60000;
+  const [user, cls] = await Promise.all([fast ? null : getUser(username), getClassCached(classCode)]);
+  const round = fast ? JSON.parse(JSON.stringify(_bjLive.round)) : (user && user.blackjackRound);
+  if (!round) return { ok: false, error: "No Blackjack round in progress." };
   const dailyWinLimit = cls && cls.gambling ? cls.gambling.dailyWinLimit : null;
-  const isTeacher = user.role === "teacher";
-  const round = user.blackjackRound;
+  const isTeacher = !!user && user.role === "teacher";
   if (round.phase !== "playing") return { ok: false, error: "It's not your turn to act." };
   const hand = bjActiveHand(round);
   if (!hand || hand.status !== "playing") return { ok: false, error: "That hand is already finished." };
@@ -1840,6 +1859,16 @@ async function blackjackAction(username, classCode, action) {
 // transaction log entry.
 let _bjLedgerPending = Promise.resolve();
 function bjLedgerSettled() { return _bjLedgerPending; }
+
+// In-memory copy of this student's round as we last saved it. Hit/Stand are by far the most-clicked
+// buttons and used to re-read the user doc from the network before every action; with a fresh copy
+// (under a minute old, same page, tab never left) they skip that read. Double/split, insurance and
+// anything after a reload still read fresh, and leaving the tab discards the copy.
+let _bjLive = null;
+function _bjLiveSet(username, round) {
+  try { _bjLive = { username, at: Date.now(), round: JSON.parse(JSON.stringify(round)) }; } catch (e) { _bjLive = null; }
+}
+if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => { if (!document.hidden) _bjLive = null; });
 
 async function bjSettle(username, classCode, round) {
   // getClassCached: cls here only feeds tax rates and the win-limit

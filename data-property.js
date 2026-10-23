@@ -519,6 +519,9 @@ function mortgageWeekAmount(mortgage) {
 }
 
 async function payMortgage(username, classCode, propId, useCard) {
+  // Mortgage instalments are always paid from cash — a credit card can't be used for them (rent can).
+  // Enforced here, not just in the UI, so it can't be bypassed.
+  if (useCard) return { ok: false, error: "A credit card can't be used to pay a mortgage. Pay it from your cash." };
   const classRef = classesCol().doc(classCode);
   const userRef = usersCol().doc(username);
   let amt = 0, remainingAfter = 0, propName = "", payRes = { card: 0, cash: 0 };
@@ -544,7 +547,7 @@ async function payMortgage(username, classCode, propId, useCard) {
       // Interest is charged on the principal still remaining.
       const weekAmt = mortgageWeekAmount(prop.mortgage);
       amt = weekAmt.total;
-      payRes = cardPayInTxn(user, cls, amt, { useCard: !!useCard }); // throws BROKE / LIMIT / NOCARD
+      payRes = cardPayInTxn(user, cls, amt, { useCard: false }); // cash only (throws BROKE)
       t.update(userRef, Object.assign({ balance: Math.round((user.balance - payRes.cash) * 100) / 100 }, payRes.card > 0 ? { creditCard: user.creditCard } : {}));
       prop.mortgage.principalRemaining = Math.max(0, Math.round((weekAmt.balanceBefore - prop.mortgage.weeklyPayment) * 100) / 100);
       prop.mortgage.weeksLeft -= 1;

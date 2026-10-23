@@ -852,7 +852,7 @@ function mortgagePayBlock(p, cls) {
   return `
     <div class="card" style="margin-top:8px;padding:10px 12px;">
       <p class="muted-small">${status}</p>
-      ${canPay ? cardPayToggleHtml("m-" + p.id, window.T29_ME, cls) : ""}
+      ${canPay ? `<p class="muted-small" style="margin:6px 0;">Mortgage payments come out of your cash — a credit card can't be used.</p>` : ""}
       ${canPay ? `<button class="btn small gold" id="payMortgageBtn-${p.id}" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay this week's mortgage — ${fmtMoney(amt.total)}</button>` : ""}
       <div id="mortgageMsg-${p.id}"></div>
     </div>`;
@@ -864,7 +864,7 @@ async function payMortgageClick(id) {
   if (btn && btn.disabled) return;
   if (btn) btn.disabled = true;
   try {
-    const res = await payMortgage(CURRENT.username, CURRENT.classCode, id, cardPayToggleOn("m-" + id));
+    const res = await payMortgage(CURRENT.username, CURRENT.classCode, id, false); // cash only
     if (!res.ok) {
       const box = document.getElementById(`mortgageMsg-${id}`);
       if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`;

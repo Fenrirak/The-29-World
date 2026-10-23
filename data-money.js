@@ -3400,7 +3400,7 @@ function budgetWeekItems(cls, user, username) {
     const dayKey = forced && !done ? todayKey : dayOf(cls.mortgageDay);
     const status = free ? "free" : budgetStatus(dayKey, todayKey, done);
     items.push({ key: "mortgage-" + p.id, dir: "out", icon: "house", label: "Mortgage — " + p.name, amount: mortgageWeekAmount(p.mortgage).total, dayKey, status,
-      where: "Property", cardable: true,
+      where: "Property", cardable: false /* mortgages are cash-only */,
       note: free ? "The week you bought it is free" : status === "done" ? "Paid"
         : status === "missed" ? "Missed — it can only be paid on its day"
         : (forced ? "Your teacher has made it due now" : "You pay it on the Property page") });
@@ -3636,7 +3636,7 @@ function buildBudgetView(cls, user, username) {
   const unsaving = sum(items.filter(i => i.dir === "unsave" && ["today", "upcoming", "overdue"].includes(i.status)));
   const savingsSpare = budgetRound(Math.max(0, savings - unsaving));
   // Which upcoming payments can go on the credit card instead of out of cash? Automatic
-  // card payments always do; a manual bill (mortgage, school rent, transport) does when the
+  // card payments always do; a manual bill (school rent, transport — never the mortgage) does when the
   // card has room. Those never need money moved from savings, so they're left out of the
   // cash timeline below — the statement that pays them off is what needs cash, on its due date.
   const cardNow = cardBudgetInfo(cls, user);

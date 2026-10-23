@@ -358,7 +358,7 @@ function ccActiveHtml(me, cls) {
       <li>Your statement closes every 2 weeks (on a ${ccEsc(DAY_FULL[cardSettings(cls).statementDay] || "Friday")}). Whatever you owe then becomes the <strong>closing balance</strong>.</li>
       <li>Pay it <strong>in full</strong> by the due date and there's no interest. If you don't, interest is added at the next statement — only on the part you still owe from this one, never on new spending.</li>
       <li>The monthly fee is charged every 4 weeks. Cashback is added up when each statement closes, and spend-and-earn rewards are earned one purchase at a time. Both are taken <strong>off your closing balance</strong> (so your bill is smaller). They aren't paid into your cash, unless you owe less than you earned.</li>
-      <li>Use it wherever a real card works: the <a href="store.html">Store</a> (card perks apply there), Transport, insurance sign-up fees, the Trade Centre (not houses), school rentals, mortgages, and big or random events. Automatic payments can go on it too, but only to your teacher. It can't pay another student (except for Trade Centre purchases), loans, savings, shares or gambling.</li>
+      <li>Use it wherever a real card works: the <a href="store.html">Store</a> (card perks apply there), Transport, insurance sign-up fees, the Trade Centre (not houses), school rentals, and big or random events. Automatic payments can go on it too, but only to your teacher. It can't pay mortgages, another student (except for Trade Centre purchases), loans, savings, shares or gambling.</li>
       <li>On a big purchase (or one your card can't cover) you can split the payment between card and cash.</li>
     </ul>
   </details>

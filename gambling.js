@@ -34,18 +34,14 @@ function showRouletteAnimation(number) {
     const idx = WHEEL_ORDER.indexOf(number);
     const pocketAngle = idx * seg + seg / 2;
 
-    // Matches the CSS's `width:min(392px, 88vw)` for .wheel-stage — the
-    // number ring's radius is a fixed px offset, so on a shrunk (mobile)
-    // wheel it needs scaling down too, or the numbers would sit outside
-    // the visible disc instead of around its edge.
-    const stageSize = Math.min(392, window.innerWidth * 0.88);
-    const scale = stageSize / 392;
-    const radius = 165 * scale;
-
+    // The numbers sit on a ring whose radius depends on how big the wheel actually is on this screen,
+    // so they're positioned (and the tiles sized) from the measured stage once it's in the page — see
+    // layoutNumbers() below — instead of guessing from the window width, which put the wheel off-centre
+    // on phones.
     let numbersHtml = "";
     WHEEL_ORDER.forEach((n, i) => {
       const angle = i * seg + seg / 2;
-      numbersHtml += `<div class="wheel-number" style="transform:rotate(${angle}deg) translate(0,${(-radius).toFixed(1)}px) rotate(${-angle}deg);background:${wheelPocketColor(n)};">${n}</div>`;
+      numbersHtml += `<div class="wheel-number" data-angle="${angle}" style="background:${wheelPocketColor(n)};">${n}</div>`;
     });
 
     const overlay = document.createElement("div");
@@ -67,6 +63,22 @@ function showRouletteAnimation(number) {
       </div>
     `;
     document.body.appendChild(overlay);
+
+    const stage = overlay.querySelector(".wheel-stage");
+    const layoutNumbers = () => {
+      const size = stage.clientWidth || 300;
+      const radius = 165 * size / 392;
+      const tile = size >= 380 ? 34 : Math.max(20, Math.round(size * 0.0714));
+      overlay.querySelectorAll(".wheel-number").forEach(el => {
+        const a = Number(el.dataset.angle);
+        el.style.transform = `rotate(${a}deg) translate(0,${(-radius).toFixed(1)}px) rotate(${-a}deg)`;
+        el.style.width = el.style.height = tile + "px";
+        el.style.margin = (-tile / 2) + "px";
+        el.style.fontSize = Math.round(tile * 0.385) + "px";
+      });
+    };
+    layoutNumbers();
+    window.addEventListener("resize", layoutNumbers);
 
     const disc = document.getElementById("wheelDisc");
     const ballTrack = document.getElementById("wheelBallTrack");
@@ -92,6 +104,7 @@ function showRouletteAnimation(number) {
       const status = document.getElementById("wheelStatus");
       if (status) status.textContent = `Landed on ${number}!`;
       setTimeout(() => {
+        window.removeEventListener("resize", layoutNumbers);
         overlay.remove();
         resolve();
       }, 1300);
@@ -314,7 +327,9 @@ async function gaBuyIn() {
     }
     document.getElementById("gAcctBuyInAmount").value = "";
     box.innerHTML = `<div class="success-msg">Bought in ${fmtMoney(Number(amount))}.</div>`;
-    await Promise.all([refreshGamblingAccountCard(), refreshGamblingAccountRecent()]);
+    // Not awaited: the message above is already showing, and the button shouldn't stay disabled waiting on reads.
+    refreshGamblingAccountCard();
+    (typeof gamblingLedgerSettled === "function" ? gamblingLedgerSettled() : Promise.resolve()).then(refreshGamblingAccountRecent);
   } catch (e) {
     box.innerHTML = `<div class="error-msg">Something went wrong. Please try again.</div>`;
   } finally {
@@ -343,7 +358,9 @@ async function gaCashOut() {
     }
     if (amountInput) amountInput.value = "";
     box.innerHTML = `<div class="success-msg">Cashed out ${fmtMoney(res.amount)} to your cash balance.</div>`;
-    await Promise.all([refreshGamblingAccountCard(), refreshGamblingAccountRecent()]);
+    // Not awaited: the message above is already showing, and the button shouldn't stay disabled waiting on reads.
+    refreshGamblingAccountCard();
+    (typeof gamblingLedgerSettled === "function" ? gamblingLedgerSettled() : Promise.resolve()).then(refreshGamblingAccountRecent);
   } catch (e) {
     box.innerHTML = `<div class="error-msg">Something went wrong. Please try again.</div>`;
   } finally {
@@ -382,7 +399,9 @@ async function spin() {
     // underneath the animation instead of waiting for the animation to
     // finish first — on a slow connection this hides most or all of that
     // fetch behind time already being spent watching the wheel spin.
-    const renderPromise = render();
+    // The activity-log write runs in the background too, so wait for it before re-reading recent bets.
+    const renderPromise = (typeof gamblingLedgerSettled === "function" ? gamblingLedgerSettled() : Promise.resolve())
+      .then(() => render()).catch(e => console.warn("render after spin failed:", e));
     await showRouletteAnimation(res.spin);
     await renderPromise;
 

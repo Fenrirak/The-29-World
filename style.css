@@ -816,8 +816,11 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
    is always a perfect square on any screen — previously only width had
    max-width:100%, so on narrow phones the box got squashed into an oval
    (width shrunk, height stayed fixed at 392px) even though the spin
-   animation itself (a plain rotation) still looked like a circle. */
-.wheel-stage{position:relative;width:min(392px, 88vw);height:min(392px, 88vw);margin:24px auto 8px;}
+   animation itself (a plain rotation) still looked like a circle.
+   Now sized from the popup's own content width (100%) with a 1:1 aspect ratio — the old 88vw was wider
+   than the popup's content area on phones, so the wheel overflowed to the right instead of centring.
+   (56vh keeps it fully on-screen in landscape.) */
+.wheel-stage{position:relative;width:min(392px, 100%, 56vh);aspect-ratio:1/1;height:auto;margin:24px auto 8px;}
 .wheel-rim{
   position:absolute;inset:0;border-radius:50%;
   background:linear-gradient(135deg,var(--gold),var(--gold-dark));
@@ -3529,3 +3532,7 @@ img,video,iframe{max-width:100%;}
   .todo-item{flex-wrap:wrap;}
   .todo-item > :first-child{min-width:0;flex:1 1 180px;}
 }
+
+/* Instant tactile feedback on tap for the gambling tabs (the real work happens on the network, so show the press first). */
+#rouletteSection .btn:active:not(:disabled),#blackjackSection .btn:active:not(:disabled),#accountSection .btn:active:not(:disabled),
+.number-cell:active,.number-zero:active{transform:scale(.96);transition:transform .06s ease-out;}

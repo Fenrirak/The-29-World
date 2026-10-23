@@ -114,6 +114,8 @@ async function init() {
     safeBgJob(payMyDailyLifeAllowanceIfDue(u.username), "payMyDailyLifeAllowanceIfDue"),
     safeBgJob(processAutomations(u.classCode), "processAutomations"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
+    // Weekly rent for property owners used to only be collected when the Property page was opened.
+    safeBgJob(processPropertyRent(u.classCode), "processPropertyRent"),
     safeBgJob(processCreditCards(u.classCode), "processCreditCards"),
     safeBgJob(applyMyInterestIfDue(u.username), "applyMyInterestIfDue"),
     safeBgJob(applyMyKiwiSaverReturnsIfDue(u.username), "applyMyKiwiSaverReturnsIfDue"),

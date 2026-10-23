@@ -1,7 +1,7 @@
 /* ===================== The 29 World — Avatars =====================
    Students are shown as their initials by default. Clicking their own
    round avatar opens the editor, where they can build a character out of
-   body type, skin, hair, eyes, mouth, outfits, hats, glasses, extras,
+   body type, skin, hair, eyes, eyebrows, mouth, outfits, hats, glasses, extras, pets,
    backgrounds, effects and costumes. Everything is drawn as inline SVG
    (no image files).
 
@@ -137,7 +137,19 @@
     happy: () => both(x => `<path d="M${x - 4.2} ${EYE_Y + 1.6} Q${x} ${EYE_Y - 5} ${x + 4.2} ${EYE_Y + 1.6}" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`),
     sleepy: () => both(x => `<path d="M${x - 4} ${EYE_Y} Q${x} ${EYE_Y + 3.8} ${x + 4} ${EYE_Y}" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`),
     sparkle: () => both(x => `<circle cx="${x}" cy="${EYE_Y}" r="5.2" fill="#fff" stroke="${INK}" stroke-width=".8"/><circle cx="${x}" cy="${EYE_Y + .4}" r="3.4" fill="#3b2f66"/><circle cx="${x}" cy="${EYE_Y + .4}" r="1.9" fill="${INK}"/><circle cx="${x + 1.4}" cy="${EYE_Y - 1.2}" r="1.1" fill="#fff"/><circle cx="${x - 1.2}" cy="${EYE_Y + 1.6}" r=".6" fill="#fff"/>`),
-    wink: () => `<circle cx="41" cy="${EYE_Y}" r="2.8" fill="${INK}"/><circle cx="41.9" cy="${EYE_Y - .9}" r=".8" fill="#fff"/><path d="M55 ${EYE_Y + 1.6} Q59 ${EYE_Y - 5} 63 ${EYE_Y + 1.6}" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
+    wink: sk => `<circle cx="41" cy="${EYE_Y}" r="3" fill="${INK}"/><circle cx="42" cy="${EYE_Y - 1}" r="1" fill="#fff"/><circle cx="40.2" cy="${EYE_Y + 1.1}" r=".5" fill="#fff" opacity=".8"/>`
+      // closed eye: a lid line curving down like a happy squint, with a raised-cheek crease
+      + `<path d="M54.8 ${EYE_Y - .4} Q59 ${EYE_Y + 3.8} 63.2 ${EYE_Y - .4}" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`
+      + `<path d="M55.8 ${EYE_Y + 5.4} Q59 ${EYE_Y + 7} 62.2 ${EYE_Y + 5.4}" stroke="${shade(sk, -.2)}" stroke-width=".9" stroke-linecap="round" fill="none"/>`,
+    // half-open, just-woken eyes: only the lower part of the eye shows under a heavy lid
+    sleepywake: sk => both(x => {
+      const cy = EYE_Y + 1.2, y0 = cy - 1, w = 2.83;
+      return `<path d="M${x - w} ${y0} A3 3 0 1 0 ${x + w} ${y0}Z" fill="${INK}"/>`
+        + `<circle cx="${x + .9}" cy="${cy + 1}" r=".75" fill="#fff"/>`
+        + `<path d="M${x - 3.9} ${y0} H${x + 3.9}" stroke="${INK}" stroke-width="1.9" stroke-linecap="round"/>`
+        + `<path d="M${x - 3.2} ${y0 - 2.1} Q${x} ${y0 - 3.1} ${x + 3.2} ${y0 - 2.1}" stroke="${shade(sk, -.25)}" stroke-width=".8" fill="none" stroke-linecap="round"/>`
+        + `<path d="M${x - 2.6} ${y0 + 5.2} Q${x} ${y0 + 6.4} ${x + 2.6} ${y0 + 5.2}" stroke="${shade(sk, -.2)}" stroke-width=".7" fill="none" stroke-linecap="round"/>`;
+    }),
     cool: sk => both(x => {
       const y = EYE_Y + .6;
       return `<ellipse cx="${x}" cy="${y}" rx="4.4" ry="3.6" fill="#fff" stroke="${INK}" stroke-width=".8"/><circle cx="${x + 1}" cy="${y + 1.2}" r="2" fill="${INK}"/><path d="M${x - 4.4} ${y} A4.4 3.6 0 0 1 ${x + 4.4} ${y}Z" fill="${shade(sk, -.2)}"/><path d="M${x - 4.8} ${y} H${x + 4.8}" stroke="${INK}" stroke-width="1.3" stroke-linecap="round"/>`;
@@ -148,7 +160,7 @@
     dizzy: () => both(x => `<path d="M${x - 3.4} ${EYE_Y - 3.4} l6.8 6.8 M${x + 3.4} ${EYE_Y - 3.4} l-6.8 6.8" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>`),
     dollar: () => both(x => `<circle cx="${x}" cy="${EYE_Y}" r="5" fill="#3ecf8e" stroke="#1f8a5b" stroke-width="1"/><text x="${x}" y="${EYE_Y + 3.2}" font-size="8.6" font-weight="900" text-anchor="middle" fill="#0e4d33" font-family="Arial,sans-serif">$</text>`)
   };
-  const EYE_LIST = [["dots", "Dots", 0], ["round", "Round", 0], ["happy", "Happy", 0], ["sleepy", "Sleepy", 0], ["sparkle", "Sparkly", 1], ["wink", "Wink", 1],
+  const EYE_LIST = [["dots", "Dots", 0], ["round", "Round", 0], ["happy", "Happy", 0], ["sleepy", "Sleepy", 0], ["sleepywake", "Sleepy-wake", 1], ["sparkle", "Sparkly", 1], ["wink", "Wink", 1],
     ["lashes", "Lashes", 1], ["cool", "Cool", 1], ["dizzy", "Dizzy", 2], ["stars", "Star eyes", 3], ["hearts", "Heart eyes", 3], ["dollar", "Money eyes", 3]];
 
   /* ------------------------------ mouths -------------------------------- */
@@ -203,10 +215,21 @@
 
   /* ------------------------------ hats ---------------------------------- */
   // Hats that sit over the hair hide whatever hair would be above them.
-  const HAT_COVER = new Set(["cap", "beanie", "bucket", "beret", "hardhat", "grad", "chef", "cowboy", "santa", "sombrero", "tophat", "propeller"]);
+  const HAT_COVER = new Set(["cap", "capback", "beanie", "bucket", "beret", "hardhat", "grad", "chef", "cowboy", "santa", "sombrero", "tophat", "propeller"]);
   const HATS = {
     none: () => "",
     cap: (x) => { const crown = "M29.5 34 C27 7 73 7 70.5 34 Q50 29.5 29.5 34Z"; return `<path d="${crown}" fill="#e5484d"/>${x.clip(crown, `<path d="M50 14 V32 M39.4 16 Q37 24 36.4 32 M60.6 16 Q63 24 63.6 32" stroke="#b02a2f" stroke-width="1" fill="none" opacity=".55"/>`)}<circle cx="50" cy="14.6" r="2" fill="#b02a2f"/><path d="M26.5 33.4 Q50 26.8 73.5 33.4 Q50 38.8 26.5 33.4Z" fill="#b02a2f"/>`; },
+    capback: (x) => {
+      // Baseball cap worn backwards: from the front you see the back of the cap — the snapback strap across the forehead.
+      const crown = "M29.2 34.4 C26.6 7 73.4 7 70.8 34.4 Q50 39 29.2 34.4Z", blue = "#2f6fe0", dk = "#1f4fb0", hi = "#6a9ff2";
+      const yAt = px => { const t = (px - 40.6) / 18.8; return 31.4 + 2.6 * 4 * t * (1 - t); };
+      const holes = [.15, .325, .5, .675, .85].map(t => { const px = 40.6 + t * 18.8; return `<circle cx="${px.toFixed(1)}" cy="${(yAt(px) + 2.1).toFixed(1)}" r=".7" fill="#7d8597"/>`; }).join("");
+      return `<path d="${crown}" fill="${blue}"/>`
+        + x.clip(crown, `<path d="M50 11 V36 M38.6 13.6 Q35 24 34.2 36 M61.4 13.6 Q65 24 65.8 36" stroke="${dk}" stroke-width=".8" fill="none" opacity=".75"/><path d="M33 22 C36 13 45 9.6 55 10.4" stroke="${hi}" stroke-width="2" fill="none" stroke-linecap="round" opacity=".8"/><path d="M26 31.2 Q50 36.4 74 31.2 V40 H26Z" fill="${dk}"/><circle cx="33.6" cy="21.4" r=".9" fill="${dk}"/><circle cx="66.4" cy="21.4" r=".9" fill="${dk}"/>`)
+        + `<circle cx="50" cy="10.6" r="2.1" fill="${dk}"/><circle cx="49.5" cy="10.1" r=".7" fill="${hi}"/>`
+        + `<path d="M40.6 31.6 Q50 34.2 59.4 31.6 L59.4 35.4 Q50 38 40.6 35.4Z" fill="#e8ecf4" stroke="#aab2c4" stroke-width=".5" stroke-linejoin="round"/>${holes}`
+        + `<rect x="38.6" y="31.4" width="2.4" height="4.2" rx="1" fill="#cfd6e4" stroke="#aab2c4" stroke-width=".4"/><rect x="59" y="31.4" width="2.4" height="4.2" rx="1" fill="#cfd6e4" stroke="#aab2c4" stroke-width=".4"/>`;
+    },
     beanie: () => `<path d="M28.5 35 C25 4 75 4 71.5 35Z" fill="#8b5cf6"/><rect x="27" y="29.5" width="46" height="8" rx="4" fill="#6b3fd6"/><path d="M33 31 v5 M39 31 v5 M45 31 v5 M51 31 v5 M57 31 v5 M63 31 v5 M69 31.4 v4.2" stroke="#8b5cf6" stroke-width="1.2" stroke-linecap="round" opacity=".7"/><circle cx="50" cy="10.4" r="5.6" fill="#f1f1f6"/><circle cx="48.4" cy="8.8" r="1.4" fill="#fff"/>`,
     bucket: (x) => { const crown = "M30 34 L33 11.5 Q50 6 67 11.5 L70 34Z"; return `<path d="${crown}" fill="#7ac7a0"/>${x.clip(crown, `<path d="M20 27.4 H80" stroke="#fff" stroke-width="2.4"/>`)}<path d="M21 33.4 Q50 25 79 33.4 Q50 39.6 21 33.4Z" fill="#5fae86"/>`; },
     headband: () => `<path d="M29.4 34 Q50 21.5 70.6 34" stroke="#ff5d8f" stroke-width="4.6" fill="none" stroke-linecap="round"/>${star5(50, 26.6, 5.4, "#ffd23f", "#c9961a")}`,
@@ -225,7 +248,7 @@
     santa: () => `<path d="M27.5 33 C26 14 40 5 58 6 C70 7 79 14 83 26 C77 20.6 71.6 21.6 70.6 28.6 L72.4 33Z" fill="#e5484d"/><rect x="26" y="28.6" width="48" height="8" rx="4" fill="#fff"/><circle cx="82" cy="27" r="5.2" fill="#fff"/>`,
     crown: () => `<path d="M30 30 L28 10 L40 20 L50 6 L60 20 L72 10 L70 30Z" fill="#f5c542" stroke="#c9961a" stroke-width="1.6" stroke-linejoin="round"/><rect x="30" y="25.6" width="40" height="5.6" fill="#e0a82a"/><circle cx="50" cy="28.4" r="2.2" fill="#e5484d"/><circle cx="39" cy="28.4" r="1.8" fill="#3a8dff"/><circle cx="61" cy="28.4" r="1.8" fill="#3ecf8e"/><circle cx="28" cy="10" r="2.2" fill="#fff"/><circle cx="50" cy="6" r="2.2" fill="#fff"/><circle cx="72" cy="10" r="2.2" fill="#fff"/>`
   };
-  const HAT_LIST = [["none", "None", 0], ["cap", "Red cap", 1], ["beanie", "Beanie", 1], ["bucket", "Bucket hat", 1], ["headband", "Star headband", 1], ["beret", "Beret", 1], ["hardhat", "Hard hat", 2],
+  const HAT_LIST = [["none", "None", 0], ["cap", "Red cap", 1], ["capback", "Backwards cap", 1], ["beanie", "Beanie", 1], ["bucket", "Bucket hat", 1], ["headband", "Star headband", 1], ["beret", "Beret", 1], ["hardhat", "Hard hat", 2],
     ["grad", "Graduation cap", 2], ["chef", "Chef hat", 2], ["cowboy", "Cowboy hat", 2], ["party", "Party hat", 2], ["flowers", "Flower crown", 2], ["santa", "Santa hat", 2],
     ["devil", "Devil horns", 3], ["tophat", "Top hat", 3], ["sombrero", "Sombrero", 3], ["propeller", "Propeller cap", 3], ["halo", "Halo", 3], ["crown", "Golden crown", 4]];
 
@@ -244,9 +267,22 @@
     pearls: () => ({ over: [0, 1, 2, 3, 4, 5, 6].map(i => { const t = i / 6, px = 41.6 + t * 16.8, py = 76.4 + Math.sin(t * Math.PI) * 8; return `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.1" fill="#fbf7ee" stroke="#cfc7b4" stroke-width=".6"/>`; }).join("") }),
     lanyard: (x) => ({ over: x.body(`<path d="M40.4 75.4 L50 87.6 L59.6 75.4" stroke="#3a8dff" stroke-width="2.8" fill="none" stroke-linejoin="round"/>`) + `<rect x="48.4" y="86" width="3.2" height="3" rx=".8" fill="#9aa3b5"/><rect x="43" y="88.4" width="14" height="10.2" rx="2" fill="#fff" stroke="#8a93a6" stroke-width="1"/><rect x="45" y="90.6" width="4.4" height="4.4" fill="#f1c27d"/><path d="M51 91.4 h4 M51 94.4 h4" stroke="#8a93a6" stroke-width="1" stroke-linecap="round"/>` }),
     medal: (x) => ({ over: x.body(`<path d="M40.4 75.4 L47 87 M59.6 75.4 L53 87" stroke="#e5484d" stroke-width="4"/>`) + `<circle cx="50" cy="91.4" r="6.4" fill="#f5c542" stroke="#c9961a" stroke-width="1.4"/>${star5(50, 91.4, 4, "#c9961a")}` }),
+    backpack: (x) => {
+      // Backpack: the top of the bag peeks over both shoulders, padded straps run down the chest, and a sternum strap links them.
+      const bag = "#3b4358", bagHi = "#505a77", bagDk = "#2b3142", trim = "#ff8a3d";
+      const strap = m => { const p = [[33.6, 76.2], [40, 77.4], [34.8, 101], [27.2, 101]]; return p.map((q, i) => `${i ? "L" : "M"}${m ? 100 - q[0] : q[0]} ${q[1]}`).join(" ") + "Z"; };
+      const centre = m => `M${m ? 100 - 36.8 : 36.8} 77 C${m ? 100 - 35 : 35} 86 ${m ? 100 - 32.4 : 32.4} 93 ${m ? 100 - 31 : 31} 101`;
+      const one = m => `<path d="${strap(m)}" fill="${bag}" stroke="${bagDk}" stroke-width=".7" stroke-linejoin="round"/><path d="${centre(m)}" stroke="${bagHi}" stroke-width="1.6" fill="none" stroke-linecap="round"/><path d="${centre(m)}" stroke="${trim}" stroke-width=".4" fill="none" stroke-dasharray="1.2 1"/>`;
+      return {
+        back: `<path d="M19 100 V82 Q19 65.6 34 65.6 H66 Q81 65.6 81 82 V100Z" fill="${bag}"/><path d="M19.6 80 Q19.6 66.6 34 66.2 H46" stroke="${bagHi}" stroke-width="1.6" fill="none" stroke-linecap="round"/><path d="M22.4 74 Q23.4 68.4 34 68.4 H66 Q76.6 68.4 77.6 74" stroke="${trim}" stroke-width=".7" fill="none"/>`,
+        over: x.body(one(false) + one(true)
+          + `<path d="M35.4 90.2 H64.6" stroke="${bagDk}" stroke-width="2" stroke-linecap="round"/><path d="M35.4 90.2 H64.6" stroke="${bagHi}" stroke-width=".5" stroke-dasharray="1 1"/>`
+          + `<rect x="47.2" y="88.2" width="5.6" height="4" rx=".9" fill="${trim}" stroke="#c4631b" stroke-width=".4"/><rect x="48.5" y="89.3" width="3" height="1.8" rx=".4" fill="${bagDk}"/>`)
+      };
+    },
     eyepatch: (x) => ({ front: x.head(`<path d="M24 35 L54 42.6 M64 47.6 L76 50.6" stroke="#1d1d24" stroke-width="1.5" stroke-linecap="round"/>`) + `<ellipse cx="59" cy="45.6" rx="6.6" ry="5.6" fill="#1d1d24"/>` })
   };
-  const EXTRA_LIST = [["none", "None", 0], ["headphones", "Headphones", 1], ["earrings", "Gold earrings", 1], ["flowerear", "Flower behind ear", 1], ["bowtie", "Bow tie", 1], ["lanyard", "School lanyard", 1],
+  const EXTRA_LIST = [["none", "None", 0], ["headphones", "Headphones", 1], ["earrings", "Gold earrings", 1], ["flowerear", "Flower behind ear", 1], ["bowtie", "Bow tie", 1], ["lanyard", "School lanyard", 1], ["backpack", "Backpack straps", 1],
     ["pearls", "Pearl necklace", 2], ["scarf", "Striped scarf", 2], ["eyepatch", "Eyepatch", 2], ["medal", "Gold medal", 3]];
 
   /* ------------------------------ tops ---------------------------------- */
@@ -312,6 +348,60 @@
           + `<rect x="48.8" y="70.4" width="2.4" height="2.8" rx=".9" fill="#dde1ea" stroke="#7d8597" stroke-width=".4"/><rect x="49.4" y="73" width="1.2" height="4.6" rx=".5" fill="#c4c9d6" stroke="#7d8597" stroke-width=".3"/>`
       };
     },
+    raincoat: (c, d, l, x) => {
+      // Glossy waterproof jacket: hood stowed behind the neck, storm collar with drawcords,
+      // snap-up storm flap, taped seam, reflective band and a few raindrops. All solid fills.
+      const hi = shade(c, .17), lo = shade(c, -.14), deep = shade(c, -.3), crease = shade(c, -.44), gloss = shade(c, .3), lining = shade(c, -.5);
+      const stop = (o, col) => `<stop offset="${o}" stop-color="${col}"/>`;
+      const gB = x.id("rb"), gS = x.id("rs"), gC = x.id("rc");
+      x.defs += `<linearGradient id="${gB}" gradientUnits="userSpaceOnUse" x1="14" y1="76" x2="86" y2="100">${stop(0, hi)}${stop(.4, c)}${stop(.75, lo)}${stop(1, deep)}</linearGradient>`
+        + `<linearGradient id="${gS}" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="88" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".28"/><stop offset=".24" stop-color="#000" stop-opacity="0"/><stop offset=".76" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></linearGradient>`
+        + `<linearGradient id="${gC}" gradientUnits="userSpaceOnUse" x1="31" y1="0" x2="69" y2="0">${stop(0, deep)}${stop(.28, c)}${stop(.5, hi)}${stop(.72, c)}${stop(1, deep)}</linearGradient>`;
+      const seam = y => `<path d="M6 ${y + 1} Q50 ${y + 6} 94 ${y + 1}" stroke="${hi}" stroke-width=".7" fill="none"/><path d="M6 ${y} Q50 ${y + 5} 94 ${y}" stroke="${crease}" stroke-width=".9" fill="none"/><path d="M6 ${y - 1.4} Q50 ${y + 3.6} 94 ${y - 1.4}" stroke="${crease}" stroke-width=".4" stroke-dasharray="1.4 1" opacity=".7" fill="none"/>`;
+      const band = `<path d="M6 92.6 Q50 97.6 94 92.6" stroke="#e6ebf3" stroke-width="2.2" fill="none"/><path d="M6 91.4 Q50 96.4 94 91.4 M6 93.8 Q50 98.8 94 93.8" stroke="${crease}" stroke-width=".35" fill="none"/><path d="M6 92.6 Q50 97.6 94 92.6" stroke="#aab4c6" stroke-width=".6" stroke-dasharray=".9 .9" fill="none"/>`;
+      const sheen = `<path d="M17 100 L33 76 L40 76 L25 100Z" fill="${hi}"/><path d="M28 100 L41 80 L43 80 L31 100Z" fill="${hi}"/><path d="M75 100 L67 83 L70 83 L80 100Z" fill="${hi}"/>`;
+      const drop = (cx, cy, r) => `<path d="M${cx} ${(cy - r * 1.6).toFixed(2)} C${(cx + r * .9).toFixed(2)} ${(cy - r * .5).toFixed(2)} ${cx + r} ${(cy + r * .6).toFixed(2)} ${cx} ${cy + r} C${cx - r} ${(cy + r * .6).toFixed(2)} ${(cx - r * .9).toFixed(2)} ${(cy - r * .5).toFixed(2)} ${cx} ${(cy - r * 1.6).toFixed(2)}Z" fill="#d3eaff" fill-opacity=".88" stroke="#8fc0f0" stroke-width=".25"/><circle cx="${(cx - r * .35).toFixed(2)}" cy="${cy}" r="${(r * .28).toFixed(2)}" fill="#fff"/>`;
+      const drops = [[23.4, 90.4, .95], [29, 96.4, .8], [74.4, 88.2, 1], [70.2, 96.8, .8], [64.6, 84.6, .7], [35, 87, .65]].map(a => drop(...a)).join("");
+      const placket = `<path d="M46.8 80 H53.2 V102 H46.8Z" fill="${hi}"/><path d="M46.8 80 V102 M53.2 80 V102" stroke="${crease}" stroke-width=".6" fill="none"/><path d="M48 80 V102 M52 80 V102" stroke="${crease}" stroke-width=".35" stroke-dasharray="1.2 .9" opacity=".7" fill="none"/>`
+        + [86.4, 92.4, 98.2].map(y => `<circle cx="50" cy="${y}" r="1.3" fill="${gloss}" stroke="${crease}" stroke-width=".5"/><circle cx="49.6" cy="${y - .4}" r=".35" fill="#fff"/>`).join("");
+      const collar = "M31.5 75.4 C31 70.6 36 68.6 40.6 70 Q46 72.2 50 72.8 Q54 72.2 59.4 70 C64 68.6 69 70.6 68.5 75.4 L68.5 78.2 Q50 85.4 31.5 78.2Z";
+      return {
+        back: `<path d="M26 78 C24 70.5 30 70 36 72.4 C44 75.6 56 75.6 64 72.4 C70 70 76 70.5 74 78 C75 85 70 88.5 62 88.5 L38 88.5 C30 88.5 25 85 26 78Z" fill="${lo}" stroke="${deep}" stroke-width="1.2" stroke-linejoin="round"/>`
+          + `<path d="M34 72 C42 76 58 76 66 72 L67 79.4 C59 84 41 84 33 79.4Z" fill="${lining}"/>`
+          + `<path d="M29.4 74 C26.8 79.4 29.4 84.6 36 86" stroke="${hi}" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M70.6 74 C73.2 79.4 70.6 84.6 64 86" stroke="${deep}" stroke-width="1.3" fill="none" stroke-linecap="round"/>`,
+        body: `<path d="${BODY}" fill="url(#${gB})"/>` + x.body(sheen + seam(84.6) + band + `<rect x="8" y="64" width="84" height="40" fill="url(#${gS})"/>` + drops + placket),
+        over: `<path d="M31.5 78.2 Q50 85.4 68.5 78.2 L68.5 80.2 Q50 88 31.5 80.2Z" fill="${deep}"/>`
+          + `<path d="${collar}" fill="url(#${gC})"/>`
+          + `<path d="M31.5 75.4 C31 70.6 36 68.6 40.6 70 Q46 72.2 50 72.8 Q54 72.2 59.4 70 C64 68.6 69 70.6 68.5 75.4" fill="none" stroke="${crease}" stroke-width=".9" stroke-linejoin="round"/>`
+          + `<path d="M31.2 76.2 Q50 83.4 68.8 76.2" stroke="${crease}" stroke-width=".5" stroke-dasharray="1.3 1" fill="none" opacity=".8"/>`
+          + `<path d="M50 72.8 V84" stroke="${crease}" stroke-width=".7"/><circle cx="50" cy="79.6" r="1.2" fill="${gloss}" stroke="${crease}" stroke-width=".45"/>`
+          + `<path d="M41 79.8 Q39 85 40.4 91.2 M59 79.8 Q61 85 59.6 91.2" stroke="#f3f5fa" stroke-width=".9" fill="none" stroke-linecap="round"/>`
+          + `<circle cx="41" cy="79.6" r=".8" fill="${gloss}" stroke="${crease}" stroke-width=".3"/><circle cx="59" cy="79.6" r=".8" fill="${gloss}" stroke="${crease}" stroke-width=".3"/>`
+          + `<rect x="39" y="90.4" width="2.8" height="3.6" rx="1.2" fill="#2b3142"/><rect x="58.2" y="90.4" width="2.8" height="3.6" rx="1.2" fill="#2b3142"/>`
+      };
+    },
+    blazer: (c, d, l, x) => {
+      // Tailored blazer: notch lapels, white shirt with collar and a tonal tie, breast pocket with pocket square.
+      const hi = shade(c, .12), lo = shade(c, -.12), deep = shade(c, -.3), crease = shade(c, -.44), tie = shade(c, -.5), tieHi = shade(c, -.2);
+      const gS = x.id("bs");
+      x.defs += `<linearGradient id="${gS}" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="88" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".3"/><stop offset=".26" stop-color="#000" stop-opacity="0"/><stop offset=".74" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></linearGradient>`;
+      const LAP = [[39.6, 75.2], [35.9, 77.4], [38.6, 80.2], [35.4, 83.8], [47.2, 99.4], [50, 97.4]];
+      const pts = (a, m) => a.map(p => `${m ? 100 - p[0] : p[0]} ${p[1]}`).join(" L");
+      const lapel = (m, f) => `<path d="M${pts(LAP, m)}Z" fill="${f}" stroke="${crease}" stroke-width=".6" stroke-linejoin="round"/>`;
+      const wing = m => { const w = [[42.2, 73.8], [49.6, 78.6], [44.6, 84], [38.4, 76.6]]; return `<path d="M${pts(w, m)}Z" fill="#f8f9fc" stroke="#cdd3e2" stroke-width=".5" stroke-linejoin="round"/>`; };
+      const blade = "M48.4 81 H51.6 L53.4 92.6 L50 97 L46.6 92.6Z";
+      return {
+        back: `<path d="M34.6 71.4 C41 68 59 68 65.4 71.4 L67.4 78 L32.6 78Z" fill="${deep}"/>`,
+        body: `<path d="${BODY}" fill="${c}"/>` + x.body(`<ellipse cx="29" cy="79.6" rx="11" ry="3" fill="${hi}" transform="rotate(-18 29 79.6)"/><rect x="8" y="64" width="84" height="40" fill="url(#${gS})"/>`
+          + `<path d="M27 80 Q24.6 90 26 101 M73 80 Q75.4 90 74 101" stroke="${crease}" stroke-width=".7" fill="none" opacity=".8"/>`
+          + `<path d="M60.2 88.8 L70.2 87.6" stroke="${crease}" stroke-width="1.1" stroke-linecap="round"/><path d="M62 88.2 L62.8 85.4 L64.6 86.8 L66.2 84.9 L67.2 88Z" fill="#f8f9fc" stroke="#cdd3e2" stroke-width=".4" stroke-linejoin="round"/>`),
+        over: `<path d="M39.4 75 L50 98.4 L60.6 75Z" fill="#f8f9fc"/><path d="M40.6 76.4 L50 96.6 L59.4 76.4" fill="none" stroke="#dfe3ee" stroke-width="1.6"/>`
+          + wing(false) + wing(true)
+          + `<path d="M47.4 77.2 H52.6 L51.8 81.4 H48.2Z" fill="${tie}"/><path d="${blade}" fill="${tie}"/>`
+          + x.clip(blade, `<path d="M44 85.6 L56 81.6 M44 90.2 L56 86.2 M44 94.8 L56 90.8" stroke="${tieHi}" stroke-width="1.5"/>`)
+          + lapel(false, hi) + lapel(true, lo)
+      };
+    },
     rugby: (c, d, l, x) => ({ body: topShape("#26262e", `<path d="M8 94 H92 M8 98.4 H92" stroke="#fff" stroke-width="1.6" opacity=".7"/>`, x), over: `<path d="M38.5 76.4 L50 86 L61.5 76.4 L56 72.6 L50 78 L44 72.6Z" fill="#fff" stroke="#fff" stroke-width=".6" stroke-linejoin="round"/><path d="M50 86 V94" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>` }),
     kiwi: (c, d, l, x) => ({ body: topShape("#2f9a5d", "", x), over: `<path d="M39 76 Q50 88 61 76" fill="none" stroke="#1f7240" stroke-width="3"/><ellipse cx="46" cy="93.4" rx="8.6" ry="6" fill="#7a5a3a"/><circle cx="55.4" cy="88.4" r="3.6" fill="#7a5a3a"/><path d="M58 89.4 Q63.6 90.6 67 94.4" stroke="#d9b87c" stroke-width="1.4" fill="none" stroke-linecap="round"/><circle cx="55.8" cy="87.6" r="1.1" fill="#fff"/><circle cx="56" cy="87.7" r=".5" fill="#222"/><path d="M43 99 v-2.6 M49 99 v-2.6" stroke="#d9b87c" stroke-width="1.3" stroke-linecap="round"/>` }),
     disco: (c, d, l, x) => {
@@ -321,7 +411,7 @@
     }
   };
   const TOP_LIST = [["tee", "T-shirt", 0], ["hoodie", "Hoodie", 0], ["polo", "Polo", 1], ["overalls", "Overalls", 1], ["flannel", "Flannel shirt", 1],
-    ["jersey", "Team jersey \u201829\u2019", 2], ["varsity", "Varsity jacket", 2], ["suit", "Suit & tie", 2], ["lab", "Lab coat", 2], ["puffer", "Puffer jacket", 2],
+    ["jersey", "Team jersey \u201829\u2019", 2], ["varsity", "Varsity jacket", 2], ["suit", "Suit & tie", 2], ["lab", "Lab coat", 2], ["puffer", "Puffer jacket", 2], ["raincoat", "Raincoat", 2], ["blazer", "Blazer", 2],
     ["rugby", "Rugby top", 2], ["kiwi", "Kiwi tee", 2], ["disco", "Disco jacket", 4]];
 
   /* ------------------------------ backgrounds --------------------------- */
@@ -377,10 +467,45 @@
     checker: () => `<rect width="100" height="100" fill="#fff"/>${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(r => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(c => (r + c) % 2 === 0).map(c => `<rect x="${c * 10}" y="${r * 10}" width="10" height="10" fill="#ff8fb3"/>`).join("")).join("")}`,
     city: (ctx) => { const i = ctx.id("ct"); ctx.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b2f7a"/><stop offset="1" stop-color="#ff9a8b"/></linearGradient>`; const b = [[4, 58, 12, 42], [18, 48, 10, 52], [30, 62, 12, 38], [44, 40, 12, 60], [58, 56, 10, 44], [70, 46, 12, 54], [84, 60, 12, 40]].map(a => `<rect x="${a[0]}" y="${a[1]}" width="${a[2]}" height="${a[3]}" fill="#1d1a3f"/>`).join(""); return `<rect width="100" height="100" fill="url(#${i})"/>${b}${stars([[24, 56, .8], [48, 50, .8], [74, 54, .8], [36, 70, .8], [62, 68, .8]], "#ffe27a")}`; },
     candy: () => `<rect width="100" height="100" fill="#fff"/>${[-20, 0, 20, 40, 60, 80, 100].map((x, i) => `<path d="M${x} 0 L${x + 14} 0 L${x - 26} 100 L${x - 40} 100Z" fill="${i % 2 ? "#ff7aa8" : "#7ad7ff"}"/>`).join("")}`,
+    auckland: (ctx) => {
+      // Daytime Auckland: Sky Tower over the CBD, the Waitemata Harbour, Rangitoto and a yacht.
+      const sk = ctx.id("ak"), sea = ctx.id("as"), sun = ctx.id("au");
+      ctx.defs += `<linearGradient id="${sk}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b97ee"/><stop offset=".55" stop-color="#86c6fb"/><stop offset="1" stop-color="#e4f4ff"/></linearGradient>`
+        + `<linearGradient id="${sea}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a96e0"/><stop offset="1" stop-color="#17589e"/></linearGradient>`
+        + `<radialGradient id="${sun}" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff9d6"/><stop offset=".45" stop-color="#fff3b0" stop-opacity=".55"/><stop offset="1" stop-color="#fff3b0" stop-opacity="0"/></radialGradient>`;
+      const cloud = (cx, cy, s) => `<g fill="#fff" opacity=".95" transform="translate(${cx} ${cy}) scale(${s})"><ellipse cx="0" cy="2" rx="9" ry="3.2"/><ellipse cx="-3.6" cy="-.4" rx="4.4" ry="3.4"/><ellipse cx="2" cy="-1.6" rx="5.2" ry="4"/><ellipse cx="6" cy=".4" rx="3.6" ry="2.8"/></g>`;
+      const B = 69.5;
+      const far = [[8, 5, 14], [13, 4, 20], [28, 5, 16], [34, 6, 11], [56, 5, 11], [62, 4, 16], [68, 6, 10], [76, 5, 13], [82, 5, 9], [88, 6, 12]].map(([bx, w, h]) => `<rect x="${bx}" y="${B - h}" width="${w}" height="${h}" fill="#a9bfdc"/>`).join("");
+      const near = [[3, 6, 11], [9, 5, 16], [14.4, 4.6, 9], [24.4, 5.2, 13], [29.8, 5.4, 8], [66, 5, 8], [71.6, 6, 11], [78, 5, 7]].map(([bx, w, h]) => {
+        let s = `<rect x="${bx}" y="${B - h}" width="${w}" height="${h}" fill="#7f98ba"/><rect x="${bx + w * .62}" y="${B - h}" width="${w * .38}" height="${h}" fill="#6d86a9"/>`;
+        for (let yy = B - h + 2.2; yy < B - 1; yy += 2.6) s += `<path d="M${bx + .7} ${yy.toFixed(1)} H${bx + w - .7}" stroke="#b6c8e0" stroke-width=".5" opacity=".8"/>`;
+        return s;
+      }).join("");
+      const tower = `<g transform="translate(19 0)">`
+        + `<path d="M-4.4 70 C-2.4 66.4 -1.8 62 -1.5 56 H1.5 C1.8 62 2.4 66.4 4.4 70Z" fill="#dfe6f2"/><path d="M0 56 H1.5 C1.8 62 2.4 66.4 4.4 70 H0Z" fill="#c5cddd"/>`
+        + `<path d="M-1.2 37 H1.2 L1.5 56.4 H-1.5Z" fill="#e8edf6"/><path d="M0 37 H1.2 L1.5 56.4 H0Z" fill="#c5cddd"/>`
+        + `<path d="M-3.4 36.4 H3.4 L1.8 38.8 H-1.8Z" fill="#aeb9cf"/>`
+        + `<path d="M-5.4 33.6 C-5.4 31.6 -3.4 30.8 0 30.8 C3.4 30.8 5.4 31.6 5.4 33.6 C5.4 35.6 3.4 36.6 0 36.6 C-3.4 36.6 -5.4 35.6 -5.4 33.6Z" fill="#eef2f9" stroke="#b7c2d6" stroke-width=".35"/>`
+        + `<path d="M-5.1 33.1 C-3.4 32.3 3.4 32.3 5.1 33.1 V34.5 C3.4 35.3 -3.4 35.3 -5.1 34.5Z" fill="#46668c"/><path d="M-4.2 33.7 H-2.6 M-1.4 33.9 H.2 M1.6 33.9 H3.2 M3.9 33.7 H4.6" stroke="#9fc4ec" stroke-width=".5" stroke-linecap="round"/>`
+        + `<path d="M-1.2 31 H1.2 V29.8 H-1.2Z" fill="#dfe6f2"/>`
+        + `<path d="M-2.6 29.8 C-2.6 28.6 -1.4 28.2 0 28.2 C1.4 28.2 2.6 28.6 2.6 29.8 C2.6 31 1.4 31.4 0 31.4 C-1.4 31.4 -2.6 31 -2.6 29.8Z" fill="#e6ecf6" stroke="#b7c2d6" stroke-width=".3"/><path d="M-2.3 29.5 H2.3 V30.3 H-2.3Z" fill="#46668c"/>`
+        + `<path d="M-.9 28.4 H.9 L.5 22.4 H-.5Z" fill="#cfd7e6"/><rect x="-1.5" y="22.2" width="3" height=".7" rx=".3" fill="#aab4c8"/>`
+        + `<path d="M0 22.2 V15.8" stroke="#9aa6bd" stroke-width=".55"/><circle cx="0" cy="15.4" r="2.2" fill="#ff4d4d" opacity=".25"/><circle cx="0" cy="15.4" r=".75" fill="#ff4d4d"/></g>`;
+      const boat = `<g transform="translate(88 73.6) scale(.8)"><path d="M-6 0 H6 L4.4 2 H-4.4Z" fill="#233a66"/><path d="M.6 -.4 V-12.6 L6 -.4Z" fill="#fff"/><path d="M-.4 -.4 V-9.6 L-5.4 -.4Z" fill="#e9f2ff"/><path d="M0 -.4 V-13" stroke="#9aa7bf" stroke-width=".4"/></g>`;
+      return `<rect width="100" height="100" fill="url(#${sk})"/>`
+        + `<circle cx="80" cy="20" r="17" fill="url(#${sun})"/><circle cx="80" cy="20" r="4.2" fill="#fffbe0"/>`
+        + cloud(60, 9, .75) + cloud(89, 36, .6)
+        + `<path d="M46 69.5 C54 69.5 60 63.4 68 59.4 C74 56.4 80 56.4 86 59.4 C92 62.4 96 66 102 69.5Z" fill="#6f9fa0"/><path d="M62 62.4 C69 58.6 76 57.2 84 58.8" stroke="#9cc4bf" stroke-width=".8" fill="none" stroke-linecap="round" opacity=".8"/>`
+        + far + near + tower
+        + `<rect y="${B}" width="100" height="31" fill="url(#${sea})"/>`
+        + `<path d="M19 70 V82 M18 72 V79 M20 72 V79" stroke="#5aa8ea" stroke-width=".5" stroke-linecap="round" opacity=".8"/>`
+        + `<path d="M6 73.4 h5 M12 76.6 h6 M24 72.6 h4 M70 74 h6 M78 77.6 h7 M92 72.6 h4 M76 71.6 h3" stroke="#bfe3ff" stroke-width=".7" stroke-linecap="round" opacity=".75"/>`
+        + boat;
+    },
     synth: (ctx) => { const i = ctx.id("sy"); ctx.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a0f5c"/><stop offset=".6" stop-color="#ff3d9a"/><stop offset="1" stop-color="#ffd23f"/></linearGradient>`; return `<rect width="100" height="100" fill="url(#${i})"/><circle cx="50" cy="56" r="22" fill="#ffd23f" opacity=".9"/><rect y="62" width="100" height="40" fill="#1a0a3c"/>${[0, 1, 2, 3, 4, 5, 6].map(k => `<path d="M${50 + (k - 3) * 6} 62 L${50 + (k - 3) * 26} 100" stroke="#ff3d9a" stroke-width=".8"/>`).join("")}${[68, 76, 86, 98].map(y => `<path d="M0 ${y} H100" stroke="#ff3d9a" stroke-width=".8"/>`).join("")}`; }
   };
   const BG_LIST = [["sky", "Sky blue", 0], ["mint", "Mint", 0], ["blush", "Blush", 0], ["lemon", "Lemon", 0], ["candy", "Candy stripes", 1], ["checker", "Pink checks", 1], ["snow", "Snowy", 1],
-    ["forest", "Forest", 1], ["beach", "Beach day", 2], ["ocean", "Deep sea", 2], ["sunset", "Sunset", 2], ["rainbow", "Rainbow", 2], ["night", "Starry night", 3], ["city", "City dusk", 3],
+    ["forest", "Forest", 1], ["beach", "Beach day", 2], ["ocean", "Deep sea", 2], ["sunset", "Sunset", 2], ["rainbow", "Rainbow", 2], ["night", "Starry night", 3], ["city", "City dusk", 3], ["auckland", "Auckland & Sky Tower", 3],
     ["castleday", "Castle by day", 3], ["castle", "Castle at dusk", 3], ["lava", "Lava", 3], ["disco", "Disco", 3], ["galaxy", "Galaxy", 4], ["synth", "Synthwave", 4]];
 
   /* ------------------------------ effects ------------------------------- */
@@ -449,6 +574,65 @@
   };
   const COSTUME_LIST = [["none", "No costume", 0], ["ghost", "Friendly ghost", 3], ["ninja", "Ninja", 3], ["shark", "Shark hoodie", 3], ["wizard", "Mage", 4]];
 
+  /* ------------------------------ eyebrows ------------------------------ */
+  // "natural" is the original pair of simple strokes (so existing avatars don't change). The
+  // rest are tapered brow shapes: [outerX, outerY, ctrlX, ctrlY, innerX, innerY, thickness],
+  // written for the left brow and mirrored for the right; thickness follows the body type.
+  const browShape = (b, col, k) => {
+    const [x0, y0, cx, cy, x1, y1, t] = b, h = t * k;
+    return `<path d="M${x0} ${y0} Q${cx} ${(cy - h).toFixed(2)} ${x1} ${y1} Q${cx} ${(cy + h).toFixed(2)} ${x0} ${y0}Z" fill="${col}" stroke="${col}" stroke-width=".7" stroke-linejoin="round" opacity=".92"/>`;
+  };
+  const mirrorBrow = b => [100 - b[0], b[1], 100 - b[2], b[3], 100 - b[4], b[5], b[6]];
+  const browPair = b => (col, gd) => { const k = gd.brow / 1.7; return browShape(b, col, k) + browShape(mirrorBrow(b), col, k); };
+  const BROWS = {
+    natural: (col, gd) => { const cy = (38.3 - gd.arch).toFixed(1); return `<path d="M36 38.8 Q41 ${cy} 45.4 38" stroke="${col}" stroke-width="${gd.brow}" fill="none" stroke-linecap="round" opacity=".9"/><path d="M54.6 38 Q59 ${cy} 64 38.8" stroke="${col}" stroke-width="${gd.brow}" fill="none" stroke-linecap="round" opacity=".9"/>`; },
+    thick: browPair([35.2, 39.4, 40.6, 35.9, 45.9, 38.2, 3.8]),
+    thin: browPair([36.2, 38.8, 41, 35.2, 45.6, 37.6, 1.5]),
+    arched: browPair([35.8, 40.2, 41.2, 32.6, 46, 37.6, 2.4]),
+    flat: browPair([35.6, 38.8, 40.7, 38.4, 45.8, 38.6, 3]),
+    raised: browPair([36, 36.6, 41, 31.8, 45.6, 35.4, 2.6]),
+    worried: browPair([35.8, 40.6, 40.4, 36.6, 45.8, 35.2, 2.6]),
+    angry: browPair([35.2, 35.6, 40.6, 37.6, 45.6, 40.6, 3.4]),
+    skeptical: (col, gd) => { const k = gd.brow / 1.7; return browShape([35.6, 39.8, 40.6, 39.2, 45.8, 40, 3], col, k) + browShape([64.2, 36.6, 59.2, 31, 54.2, 35, 2.8], col, k); }
+  };
+  const BROW_LIST = [["natural", "Natural", 0], ["thick", "Thick", 0], ["thin", "Thin", 0], ["arched", "Arched", 1], ["flat", "Flat", 1], ["raised", "Raised", 1], ["worried", "Worried", 1], ["angry", "Angry", 2], ["skeptical", "One raised", 2]];
+
+  /* ------------------------------ pets ---------------------------------- */
+  // A little bird perched on the right shoulder, looking at its person. Drawn around a perch point at (0,0).
+  const kiwiArt = x => {
+    const g = x.id("kw");
+    x.defs += `<radialGradient id="${g}" cx=".42" cy=".34" r=".78"><stop offset="0" stop-color="#b58f60"/><stop offset=".55" stop-color="#8c6c46"/><stop offset="1" stop-color="#5e4427"/></radialGradient>`;
+    const body = "M-8.8 -8.4 C-8.8 -14.8 -4.2 -18 1.2 -17.8 C8 -17.4 10.8 -11.8 9.2 -6.4 C8 -2.6 3.6 -1.2 -1 -1.4 C-6 -1.6 -8.8 -4.4 -8.8 -8.4Z";
+    let tex = ""; for (let r = 0; r < 5; r++) for (let xx = -6.4 + (r % 2) * 1.7; xx < 9; xx += 3.4) tex += `M${xx.toFixed(1)} ${-15 + r * 3} q1.3 1.5 2.6 0 `;
+    return `<ellipse cx="0" cy=".3" rx="7.4" ry="1.2" fill="#000" opacity=".16"/>`
+      + `<path d="M-2.4 -2.4 V.1 M2.4 -2.4 V.1" stroke="#c79a52" stroke-width="1.3" stroke-linecap="round"/><path d="M-4.4 .5 H-1.2 M.8 .5 H4" stroke="#c79a52" stroke-width="1.1" stroke-linecap="round"/>`
+      + `<path d="${body}" fill="url(#${g})"/>`
+      + x.clip(body, `<path d="${tex}" stroke="#4f371e" stroke-width=".5" fill="none" stroke-linecap="round" opacity=".55" transform="translate(0 .5)"/><path d="${tex}" stroke="#c4a374" stroke-width=".4" fill="none" stroke-linecap="round" opacity=".5"/><ellipse cx="-1" cy="-5" rx="5.4" ry="3.2" fill="#a98558" opacity=".35"/>`)
+      + `<circle cx="-7.8" cy="-13.2" r="3.5" fill="#94724a"/><path d="M-9.6 -16 q1 -1 2 0 M-7.4 -16.5 q1 -1 2 0 M-5.4 -15.6 q1 -1 2 0" stroke="#5a4025" stroke-width=".45" fill="none" stroke-linecap="round"/>`
+      + `<circle cx="-9" cy="-13.7" r=".95" fill="#17120d"/><circle cx="-8.7" cy="-14" r=".3" fill="#fff"/>`
+      + `<path d="M-10.4 -13 C-12.8 -11.8 -14.6 -9.6 -15.8 -5.4 L-15 -5 C-13.8 -8.4 -12.2 -10.4 -10.2 -11.4Z" fill="#ead9b0" stroke="#b49a64" stroke-width=".35" stroke-linejoin="round"/>`
+      + `<path d="M-10 -11.8 L-12.8 -9.8 M-9.8 -12.6 L-13.4 -12" stroke="#4a3722" stroke-width=".3" stroke-linecap="round"/>`;
+  };
+  const tuiArt = x => {
+    const g = x.id("tu");
+    x.defs += `<linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#27406f"/><stop offset=".5" stop-color="#16264b"/><stop offset="1" stop-color="#0e1a36"/></linearGradient>`;
+    const body = "M-6.6 -9 C-6.8 -15 -2.4 -18.4 2.4 -17.2 C7.6 -15.8 8.2 -9 6.2 -4.4 C5 -1.8 1.6 -1 -1.4 -1.4 C-5.2 -2 -6.4 -5.4 -6.6 -9Z";
+    return `<ellipse cx="0" cy=".3" rx="7" ry="1.2" fill="#000" opacity=".16"/>`
+      + `<path d="M-1.8 -2.4 V.1 M1.8 -2.4 V.1" stroke="#3a3a46" stroke-width="1.1" stroke-linecap="round"/><path d="M-3.6 .5 H-.8 M.4 .5 H3.2" stroke="#3a3a46" stroke-width="1" stroke-linecap="round"/>`
+      + `<path d="M2.6 -6 C5 -4.4 7.6 -2.4 9.2 -.2 L7.6 .8 C5.8 -.6 3.6 -1.8 1 -3Z" fill="#101a33"/>`
+      + `<path d="${body}" fill="url(#${g})"/>`
+      + x.clip(body, `<ellipse cx="-2.6" cy="-8" rx="3.4" ry="4.6" fill="#2c4f92" opacity=".5"/><path d="M-6 -12.4 C-2.4 -15 3 -15 7 -11.4" stroke="#35c2b0" stroke-width="1" fill="none" opacity=".85"/><path d="M-6 -10.6 C-2.4 -13 3 -13 7 -9.6" stroke="#8a6fe0" stroke-width=".6" fill="none" opacity=".6"/><path d="M-5.6 -6.4 C-2 -8.4 2.4 -8 5.6 -5.2" stroke="#35c2b0" stroke-width=".6" fill="none" opacity=".5"/>`)
+      + `<path d="M1 -15.4 C6.2 -14 8.2 -8.4 5.8 -3.4 C3.6 -5 2 -9 1 -15.4Z" fill="#0f1830"/><path d="M2.2 -14.6 C5 -13.6 6.4 -11.6 6.8 -9.6 L5.4 -9.6 C5 -11.4 3.8 -12.8 1.8 -13.6Z" fill="#f4f6fb"/>`
+      + `<circle cx="-4.6" cy="-17.2" r="3.9" fill="#16224a"/><path d="M-7.4 -19 C-5.6 -20.4 -2.8 -20.2 -1.4 -18.4" stroke="#3fb8aa" stroke-width=".9" fill="none" stroke-linecap="round"/>`
+      + `<circle cx="-6.2" cy="-17.6" r="1.4" fill="#56648a"/><circle cx="-6.2" cy="-17.6" r=".8" fill="#06060a"/><circle cx="-5.95" cy="-17.9" r=".28" fill="#fff"/>`
+      + `<path d="M-8.2 -17 C-10.8 -16.8 -12.6 -15.6 -13.6 -13.6 C-11.2 -14.6 -9.4 -14.8 -7.6 -14.8Z" fill="#2a2a33"/>`
+      + `<path d="M-6 -13.6 C-8 -11.8 -8 -9.4 -6.2 -8.4 C-4.6 -9.4 -4.4 -12 -6 -13.6Z M-3.2 -13 C-4.6 -11.2 -4.4 -9 -3 -8.2 C-1.6 -9 -1.4 -11.4 -3.2 -13Z" fill="#fff" stroke="#d6dcea" stroke-width=".3" stroke-linejoin="round"/>`
+      + `<path d="M-6 -12.6 V-9.6 M-3.2 -12 V-9.2" stroke="#d6dcea" stroke-width=".25"/>`;
+  };
+  const petWrap = (gd, art) => `<g transform="translate(${(79.5 + (gd.sx - 1) * 27).toFixed(1)} 78.6) scale(1.1)">${art}</g>`;
+  const PETS = { none: () => "", kiwi: (gd, x) => petWrap(gd, kiwiArt(x)), tui: (gd, x) => petWrap(gd, `<g transform="translate(-1.5 0)">${tuiArt(x)}</g>`) };
+  const PET_LIST = [["none", "None", 0], ["kiwi", "Kiwi", 2], ["tui", "Tui", 2]];
+
   /* ------------------------------ catalog ------------------------------- */
   const CATS = [
     { id: "gender", label: "Body", list: GENDER_LIST },
@@ -457,6 +641,7 @@
     { id: "hairColor", label: "Hair colour", list: HAIRC.map(h => [h.id, h.name, h.r]) },
     { id: "skin", label: "Skin", list: SKINS.map(s => [s.id, s.name, 0]) },
     { id: "eyes", label: "Eyes", list: EYE_LIST },
+    { id: "brows", label: "Eyebrows", list: BROW_LIST },
     { id: "mouth", label: "Mouth", list: MOUTH_LIST },
     { id: "face", label: "Face", list: FACE_LIST },
     { id: "top", label: "Outfits", list: TOP_LIST },
@@ -464,11 +649,12 @@
     { id: "hat", label: "Hats", list: HAT_LIST },
     { id: "glasses", label: "Glasses", list: GLASS_LIST },
     { id: "extra", label: "Extras", list: EXTRA_LIST },
+    { id: "pet", label: "Pets", list: PET_LIST },
     { id: "bg", label: "Backgrounds", list: BG_LIST },
     { id: "fx", label: "Effects", list: FX_LIST }
   ];
-  const DEFAULT_LOOK = { gender: "neutral", skin: "s3", hair: "short", hairColor: "dkbrown", eyes: "dots", mouth: "smile", face: "none", top: "tee", topColor: "sky", glasses: "none", hat: "none", extra: "none", bg: "sky", fx: "none", costume: "none" };
-  const NONE_IDS = { face: "none", glasses: "none", hat: "none", extra: "none", fx: "none", costume: "none" };
+  const DEFAULT_LOOK = { gender: "neutral", skin: "s3", hair: "short", hairColor: "dkbrown", eyes: "dots", brows: "natural", mouth: "smile", face: "none", top: "tee", topColor: "sky", glasses: "none", hat: "none", extra: "none", pet: "none", bg: "sky", fx: "none", costume: "none" };
+  const NONE_IDS = { face: "none", glasses: "none", hat: "none", extra: "none", pet: "none", fx: "none", costume: "none" };
 
   /* ------------------------------ renderer ------------------------------ */
   function cleanLook(l) {
@@ -522,10 +708,7 @@
       s += `<ellipse cx="${e1}" cy="46" rx="3.6" ry="5" fill="${skin}"/><ellipse cx="${e2}" cy="46" rx="3.6" ry="5" fill="${skin}"/><ellipse cx="${e1 + .4}" cy="46.6" rx="1.6" ry="2.6" fill="${sk2}" opacity=".6"/><ellipse cx="${e2 - .4}" cy="46.6" rx="1.6" ry="2.6" fill="${sk2}" opacity=".6"/>`;
       s += `<ellipse cx="50" cy="${gd.cy}" rx="${gd.rx}" ry="${gd.ry}" fill="${skin}"/>`;
     }
-    const brows = () => {
-      const cy = (38.3 - gd.arch).toFixed(1);
-      return `<path d="M36 38.8 Q41 ${cy} 45.4 38" stroke="${browCol}" stroke-width="${gd.brow}" fill="none" stroke-linecap="round" opacity=".9"/><path d="M54.6 38 Q59 ${cy} 64 38.8" stroke="${browCol}" stroke-width="${gd.brow}" fill="none" stroke-linecap="round" opacity=".9"/>`;
-    };
+    const brows = () => (BROWS[look.brows] || BROWS.natural)(browCol, gd);
     const eyesAndBrows = () => (EYES[look.eyes] || EYES.dots)(skin) + brows();
     if (!hide.face) {
       if (FACE[look.face] && look.face !== "mask") s += FACE[look.face](hairDark, ctx);
@@ -540,6 +723,7 @@
     if (ex.over) s += ex.over;
     if (ex.front) s += ex.front;
     if (co && co.front) s += co.front;
+    if (PETS[look.pet]) s += PETS[look.pet](gd, ctx);
     if (co && co.eyesOnTop) { s += eyesAndBrows(); if (GLASS[look.glasses]) s += GLASS[look.glasses](ctx); }
     s += (FX[look.fx] || FX.none)(ctx);
 
