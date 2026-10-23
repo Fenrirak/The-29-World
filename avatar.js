@@ -267,7 +267,42 @@
     varsity: (c, d, l, x) => ({ body: topShape("#f1f1f6", `<path d="M12 100 C12 88 20 82 26 80 L24 100Z M88 100 C88 88 80 82 74 80 L76 100Z" fill="${c}"/>`, x), over: `<path d="M50 84 V100" stroke="${d}" stroke-width="1.4"/>` + x.body(`<path d="M38 75 Q50 86 62 75" fill="none" stroke="${c}" stroke-width="3.6"/>`) + `<circle cx="36" cy="92" r="4.4" fill="${c}"/><text x="36" y="94.4" font-size="6" font-weight="900" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">W</text>` }),
     suit: (c, d, l, x) => ({ body: topShape("#2b3350", "", x), over: `<path d="M40 76.2 L50 97 L60 76.2Z" fill="#fff"/><path d="M48.4 79.8 L51.6 79.8 L51 83 L49 83Z M49 83 L47.6 94 L50 97.6 L52.4 94 L51 83Z" fill="#e5484d"/><path d="M37.4 76.6 L40.6 76 L50 97 L48 99.6 L36 80Z M62.6 76.6 L59.4 76 L50 97 L52 99.6 L64 80Z" fill="#3a4470"/>` }),
     lab: (c, d, l, x) => ({ body: topShape("#f4f6fb", `<path d="M12 100 C12 84 28 75 50 75 C72 75 88 84 88 100Z" fill="none" stroke="#dfe3ee" stroke-width="1.4"/>`, x), over: `<path d="M40 76.2 L50 97 L60 76.2Z" fill="#6fb6ff"/><path d="M37.6 76.6 L40.6 76 L49.6 94.6 L44.4 97.4Z M62.4 76.6 L59.4 76 L50.4 94.6 L55.6 97.4Z" fill="#fff" stroke="#dfe3ee" stroke-width="1" stroke-linejoin="round"/><rect x="62" y="88" width="8" height="8" rx="1.4" fill="#fff" stroke="#dfe3ee"/><path d="M64.4 88 v-2.8 M67.4 88 v-3.8" stroke="#3a8dff" stroke-width="1.4" stroke-linecap="round"/>` }),
-    puffer: (c, d, l, x) => ({ body: topShape(c, [82, 89, 96].map(y => `<path d="M8 ${y} Q50 ${y - 5} 92 ${y}" stroke="${d}" stroke-width="1.6" fill="none"/>`).join(""), x), over: `<path d="M36.4 76.2 Q50 84 63.6 76.2 L63.6 82.4 Q50 90 36.4 82.4Z" fill="${d}" stroke="${d}" stroke-width=".6" stroke-linejoin="round"/><path d="M50 84.6 V100" stroke="${d}" stroke-width="1.6"/>` }),
+    puffer: (c, d, l, x) => {
+      // Quilted down jacket: puffy horizontal baffles with creased seams, side shading,
+      // a padded funnel collar and a centre zip. Shading uses black/white overlays so it
+      // reads on any jacket colour.
+      const gid = x.id("pf");
+      x.defs += `<linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="88" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".32"/><stop offset=".24" stop-color="#000" stop-opacity="0"/><stop offset=".76" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".32"/></linearGradient>`;
+      const seams = [84, 90.5, 97];
+      const bow = y => `M8 ${y} Q50 ${y + 7} 92 ${y}`;           // seam curves down in the middle (rounded chest)
+      const mid = (a, b) => `M8 ${(a + b) / 2} Q50 ${(a + b) / 2 + 7} 92 ${(a + b) / 2}`;
+      const baffles = [75, ...seams, 104].slice(0, -1).map((y, i, arr) => {
+        const next = [75, ...seams, 104][i + 1];
+        return i === 0 ? "" : `<path d="${mid(y, next)}" stroke="#fff" stroke-width="3.2" stroke-opacity=".13" fill="none" stroke-linecap="round"/><path d="${mid(y, next)}" stroke="#fff" stroke-width="1.3" stroke-opacity=".12" fill="none" stroke-linecap="round"/>`;
+      }).join("");
+      const seamLines = seams.map(y => `<path d="${bow(y + 1.1)}" stroke="#000" stroke-width="2.2" stroke-opacity=".13" fill="none"/><path d="${bow(y)}" stroke="#000" stroke-width=".8" stroke-opacity=".34" fill="none"/><path d="${bow(y - .8)}" stroke="#fff" stroke-width=".5" stroke-opacity=".16" fill="none"/>`).join("");
+      const sideSeams = `<path d="M26 79 Q24.2 90 25.4 100 M74 79 Q75.8 90 74.6 100" stroke="#000" stroke-width=".7" stroke-opacity=".3" fill="none" stroke-dasharray="1.6 1.1"/>`;
+      const shoulder = `<ellipse cx="33" cy="80" rx="13" ry="3.2" fill="#fff" opacity=".16" transform="rotate(-14 33 80)"/><ellipse cx="67" cy="80" rx="13" ry="3.2" fill="#fff" opacity=".1" transform="rotate(14 67 80)"/>`;
+      const collar = "M30 74 C29.5 68.5 35 66 40.5 67.6 Q46 70 50 71 Q54 70 59.5 67.6 C65 66 70.5 68.5 70 74 L70 77.5 Q50 86 30 77.5Z";
+      const collarSeam = "M30 71.6 Q50 78.6 70 71.6";
+      const collarFill = x.clip(collar,
+        `<rect x="26" y="62" width="48" height="26" fill="${shade(c, .06)}"/>`
+        + `<path d="M31 69.4 Q50 76 69 69.4" stroke="#fff" stroke-width="2.2" stroke-opacity=".2" fill="none" stroke-linecap="round"/>`
+        + `<path d="M31 74.4 Q50 82.4 69 74.4" stroke="#fff" stroke-width="2.4" stroke-opacity=".12" fill="none" stroke-linecap="round"/>`
+        + `<rect x="26" y="62" width="9" height="26" fill="#000" opacity=".14"/><rect x="65" y="62" width="9" height="26" fill="#000" opacity=".18"/>`
+        + `<path d="${collarSeam}" stroke="#000" stroke-width="2" stroke-opacity=".12" fill="none" transform="translate(0 1)"/><path d="${collarSeam}" stroke="#000" stroke-width=".8" stroke-opacity=".4" fill="none"/>`);
+      const zipTeeth = `<path d="M50 71.4 V100" stroke="#e6e9f0" stroke-width=".9" stroke-opacity=".9" stroke-dasharray=".7 .7" fill="none"/>`;
+      return {
+        // dark inside of the collar, seen between the jaw and the collar's front edge
+        back: `<path d="M31 72 C31.5 64 40 62 50 62 C60 62 68.5 64 69 72 L69 80 L31 80Z" fill="${shade(d, -.3)}"/>`,
+        body: topShape(c, `<rect x="8" y="70" width="84" height="34" fill="url(#${gid})"/>` + shoulder + baffles + seamLines + sideSeams, x),
+        over: `<path d="M30 77.5 Q50 86 70 77.5 L70 79.6 Q50 88.6 30 79.6Z" fill="#000" opacity=".13"/>`
+          + `<path d="${collar}" fill="${shade(c, .06)}"/>` + collarFill
+          + `<path d="${collar}" fill="none" stroke="#000" stroke-opacity=".38" stroke-width=".8" stroke-linejoin="round"/>`
+          + `<path d="M49.2 70.8 H50.8 V100 H49.2Z" fill="${shade(d, -.25)}" opacity=".9"/>` + zipTeeth
+          + `<rect x="48.9" y="70.6" width="2.2" height="2.6" rx=".9" fill="#d5d9e3" stroke="#7d8597" stroke-width=".4"/><rect x="49.4" y="73" width="1.2" height="4.4" rx=".5" fill="#b9bfcd" stroke="#7d8597" stroke-width=".3"/>`
+      };
+    },
     rugby: (c, d, l, x) => ({ body: topShape("#26262e", `<path d="M8 94 H92 M8 98.4 H92" stroke="#fff" stroke-width="1.6" opacity=".7"/>`, x), over: `<path d="M38.5 76.4 L50 86 L61.5 76.4 L56 72.6 L50 78 L44 72.6Z" fill="#fff" stroke="#fff" stroke-width=".6" stroke-linejoin="round"/><path d="M50 86 V94" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>` }),
     kiwi: (c, d, l, x) => ({ body: topShape("#2f9a5d", "", x), over: `<path d="M39 76 Q50 88 61 76" fill="none" stroke="#1f7240" stroke-width="3"/><ellipse cx="46" cy="93.4" rx="8.6" ry="6" fill="#7a5a3a"/><circle cx="55.4" cy="88.4" r="3.6" fill="#7a5a3a"/><path d="M58 89.4 Q63.6 90.6 67 94.4" stroke="#d9b87c" stroke-width="1.4" fill="none" stroke-linecap="round"/><circle cx="55.8" cy="87.6" r="1.1" fill="#fff"/><circle cx="56" cy="87.7" r=".5" fill="#222"/><path d="M43 99 v-2.6 M49 99 v-2.6" stroke="#d9b87c" stroke-width="1.3" stroke-linecap="round"/>` }),
     disco: (c, d, l, x) => {
