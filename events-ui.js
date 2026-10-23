@@ -494,7 +494,7 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
   // out with the reason; "Pay from cash" always stays available.
   const coverage = BIG_EVENT_COVERAGE[entry.module];
   const cover = entry.insuranceCover || [];
-  const claims = (claimOptions || []).map(o => ({ ...o, ok: isTeacher || o.studentPays <= 0 || cash >= o.studentPays || cardRoom >= o.studentPays }));
+  const claims = (claimOptions || []).map(o => ({ ...o, ok: isTeacher || o.studentPays <= 0 || cash >= o.studentPays || cardRoom >= o.studentPays || savings >= o.studentPays }));
   const impact = eventImpactText(entry, coverage);
   const coverLine = (impact ? `<p class="muted-small">${escapeHtml(impact)}</p>` : "")
     + (cover.length
@@ -551,7 +551,8 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
         <button class="btn gold" id="bigPaySavingsBtn" ${savingsOk ? "" : "disabled"}>
           Pay ${fmtMoney(entry.cost)} from savings${savingsOk ? "" : ` (only ${fmtMoney(savings)} available)`}
         </button>
-        ${hasCard && claims.length && cardRoom > 0 ? `<label class="muted-small" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="bigClaimOnCard"> Pay the claim's excess on my credit card (${fmtMoney(cardRoom)} available)</label>` : ""}
+        ${claims.length && ((hasCard && cardRoom > 0) || savings > 0) ? `<label class="muted-small" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">Pay the claim's excess from:
+          <select id="bigClaimPayFrom"><option value="cash">Cash (${fmtMoney(cash)})</option>${hasCard && cardRoom > 0 ? `<option value="card">Credit card (${fmtMoney(cardRoom)} available)</option>` : ""}${savings > 0 ? `<option value="savings">Savings (${fmtMoney(savings)})</option>` : ""}</select></label>` : ""}
         ${claimButtons}
       </div>
       <div id="bigEventMsg"></div>
@@ -594,9 +595,14 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
     document.getElementById("bigClaimBtn" + i).addEventListener("click", async () => {
       if (o.writeOff && !await confirmWriteOff(o)) return;
       if (o.losesVehicle && !await t29Confirm(`${insurancePlanName(o.plan)} pays for the damage to someone else's property, but it doesn't cover your own vehicle — so you'll lose ${vehicleName}. You pay your ${fmtMoney(o.excess)} excess.\n\nClaim anyway?`)) return;
-      const cb = document.getElementById("bigClaimOnCard");
-      // If cash can't cover the excess but the card can, use the card without making them tick the box.
-      resolve("claim", (cb && cb.checked) || (!isTeacher && cash < o.studentPays && cardRoom >= o.studentPays) ? "card" : null, o.plan.id);
+      const sel = document.getElementById("bigClaimPayFrom");
+      let src = sel ? sel.value : "cash";
+      if (src === "savings" && !isTeacher && savings < o.studentPays) {
+        document.getElementById("bigEventMsg").innerHTML = `<div class="error-msg">You only have ${fmtMoney(savings)} in savings — that's not enough for the ${fmtMoney(o.studentPays)} you'd pay.</div>`; return;
+      }
+      // If the chosen source can't cover it, fall back to whichever one can (card, then savings).
+      if (src === "cash" && !isTeacher && cash < o.studentPays) src = cardRoom >= o.studentPays ? "card" : (savings >= o.studentPays ? "savings" : "cash");
+      resolve("claim", src === "cash" ? null : src, o.plan.id);
     });
   });
 }

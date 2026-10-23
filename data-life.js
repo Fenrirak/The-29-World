@@ -2537,8 +2537,18 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
           if (!(cp.card > 0)) throw new Error("LIMIT");
           bigCard = cp.card;
         }
+        // Or straight from savings, if the student picked that (savings can't go negative).
+        let savPay = 0;
+        if (paySource === "savings" && !isTeacher && option.studentPays > 0) {
+          if ((user.savings || 0) < option.studentPays) throw new Error("BROKE_SAVINGS");
+          savPay = option.studentPays;
+          cp = { card: 0, cash: 0 };
+        }
         const toPay = cp.cash;
         if (!isTeacher && cash < toPay) throw new Error("BROKE_EXCESS");
+        const claimUpd = () => Object.assign({ balance: Math.round((cash - toPay) * 100) / 100 },
+          bigCard > 0 ? { creditCard: user.creditCard } : {},
+          savPay > 0 ? { savings: Math.round(((user.savings || 0) - savPay) * 100) / 100 } : {});
         entry.status = "claimed";
         amount = option.studentPays;
         if (option.losesVehicle) {
@@ -2549,13 +2559,14 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
           entry.lostVehicle = true;
           outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess; `
             + `the insurer covered the damage to someone else's property, but not their own vehicle${veh && veh.name ? ` (${veh.name})` : ""}, so they lost it`;
-          if (!isTeacher && (toPay > 0 || bigCard > 0)) t.update(userRef, Object.assign({ balance: Math.round((cash - toPay) * 100) / 100 }, bigCard > 0 ? { creditCard: user.creditCard } : {}));
+          if (!isTeacher && (toPay > 0 || bigCard > 0 || savPay > 0)) t.update(userRef, claimUpd());
           t.update(classRef, { vehicles: cls.vehicles, bigEventLog: cls.bigEventLog });
           return;
         }
         outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess`
-          + (option.uncovered > 0 ? ` + ${fmtMoney(option.uncovered)} not covered` : "");
-        if (!isTeacher && (toPay > 0 || bigCard > 0)) t.update(userRef, Object.assign({ balance: Math.round((cash - toPay) * 100) / 100 }, bigCard > 0 ? { creditCard: user.creditCard } : {}));
+          + (option.uncovered > 0 ? ` + ${fmtMoney(option.uncovered)} not covered` : "")
+          + (savPay > 0 ? " (from savings)" : "");
+        if (!isTeacher && (toPay > 0 || bigCard > 0 || savPay > 0)) t.update(userRef, claimUpd());
         t.update(classRef, { bigEventLog: cls.bigEventLog });
       } else {
         throw new Error("BAD_CHOICE");
