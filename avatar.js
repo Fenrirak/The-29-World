@@ -20,6 +20,11 @@
                    prices: { money:{ \"hat:crown\": 30 }, comets:{} },
                    hidden: [\"hat:crown\"] }
 
+   Epic (tier 3) and Legendary (tier 4) items get animated sheens, sparkles and glows.
+   renderSvg(look, { size, label, animate }): they only move when animate is true, or when
+   size >= 100 and animate isn't false; small badges and shop tiles stay still. Pure CSS
+   keyframes inside the SVG, switched off by prefers-reduced-motion.
+
    Drawing rules (so nothing ever pokes out):
      - anything with a pattern is clipped to the shape it sits on
      - arms, straps and strings that touch the head are clipped to the head
@@ -45,7 +50,9 @@
     const c = {
       defs: "", _h: null, _b: null,
       id: n => "av" + (++UID) + n,
-      clip(d, inner) { const i = c.id("k"); c.defs += `<clipPath id="${i}"><path d="${d}"/></clipPath>`; return `<g clip-path="url(#${i})">${inner}</g>`; },
+      // d may be one path, or a list of paths / raw clip children (e.g. "<ellipse .../>") that are unioned
+      clip(d, inner) { const i = c.id("k"); c.defs += `<clipPath id="${i}">${[].concat(d).map(p => p.charAt(0) === "<" ? p : `<path d="${p}"/>`).join("")}</clipPath>`; return `<g clip-path="url(#${i})">${inner}</g>`; },
+      mask(m, inner) { const i = c.id("m"); c.defs += `<mask id="${i}" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">${m}</mask>`; return `<g mask="url(#${i})">${inner}</g>`; },
       head(inner) {
         if (!c._h) { c._h = c.id("h"); c.defs += `<clipPath id="${c._h}"><ellipse cx="50" cy="44" rx="20" ry="22"/></clipPath>`; }
         return `<g clip-path="url(#${c._h})">${inner}</g>`;
@@ -665,11 +672,246 @@
     });
     return out;
   }
+  /* ------------------- Epic & Legendary effects ------------------------
+     Only items of tier 3 (Epic) and tier 4 (Legendary) get anything here;
+     tiers 0-2 render exactly as before (no extra markup, no extra ids).
+       Epic       a soft sheen sweeping across the item + small twinkling sparkles
+       Legendary  Epic + a gentle glow, a slowly shifting colour sheen, drifting
+                  or orbiting sparkles
+       Backgrounds get ambient motion; Epic/Legendary pets get a subtle idle.
+     Rules: pure CSS keyframes inside the SVG (no JS), transform + opacity only,
+     every sheen is clipped (clip-path / mask) to its item, and
+     prefers-reduced-motion switches the animation off (leaving a tidy still).
+     At most FX_BUDGET animated nodes per avatar; anything beyond that (or
+     anything rendered small / with animate:false) shows its still version. */
+  const FX_BUDGET = 5;
+  const tierOf = (cat, id) => { const c = CATS.find(k => k.id === cat), it = c && c.list.find(i => i[0] === id); return it ? it[2] : 0; };
+  const n2 = v => +v.toFixed(2);
+  const ellD = (cx, cy, rx, ry) => `M${cx - rx} ${cy} a${rx} ${ry} 0 1 0 ${2 * rx} 0 a${rx} ${ry} 0 1 0 ${-2 * rx} 0Z`;
+  const circD = (cx, cy, r) => ellD(cx, cy, r, r);
+  const starD = (x, y, r) => { let p = ""; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; p += (i ? "L" : "M") + (x + Math.cos(a) * rr).toFixed(1) + " " + (y + Math.sin(a) * rr).toFixed(1); } return p + "Z"; };
+  const heartD = (x, y, s) => `M${x} ${y + s * 0.9} C${x - s * 1.6} ${y - s * 0.1} ${x - s * 0.7} ${y - s * 1.2} ${x} ${y - s * 0.35} C${x + s * 0.7} ${y - s * 1.2} ${x + s * 1.6} ${y - s * 0.1} ${x} ${y + s * 0.9}Z`;
+  const flameD = (cx, w, h, lean) => `M${cx - w} 101 C${cx - w} ${101 - h * .38} ${cx - w * .25 + lean * .3} ${101 - h * .6} ${cx + lean} ${101 - h} C${cx + w * .05 + lean * .5} ${101 - h * .55} ${cx + w} ${101 - h * .34} ${cx + w} 101Z`;
+  const evenodd = d => `<path clip-rule="evenodd" d="${d}"/>`;
+  const bodyT = gd => `<path transform="translate(50 0) scale(${gd.sx} 1) translate(-50 0)" d="${BODY}"/>`;
+  // crisp 4-point sparkle, unit radius: tinted star + white core + faint round halo
+  const SPK = "M0 -1 C.07 -.24 .24 -.07 1 0 C.24 .07 .07 .24 0 1 C-.07 .24 -.24 .07 -1 0 C-.24 -.07 -.07 -.24 0 -1Z";
+  const spkArt = col => `<circle r="1.3" fill="${col}" opacity=".16"/><path d="${SPK}" fill="${col}" stroke="${shade(col, -.3)}" stroke-width=".09" stroke-linejoin="round"/><path d="${SPK}" fill="#fff" transform="scale(.55)"/><circle r=".14" fill="#fff"/>`;
+  const spkAt = p => `<g transform="translate(${p[0]} ${p[1]}) scale(${n2(p[2] * 1.25)})">${spkArt(p[3] || "#fff")}</g>`;
+  // animation "tokens" a layer can win from the shared budget, in the order they are handed out
+  const FX_TOK = { 3: ["sheen", "spark", "spark"], 4: ["sheen", "glow", "iri", "spark", "spark"], bg3: ["amb", "amb"], bg4: ["amb", "amb", "amb"], pet: ["breathe", "blink", "tilt"] };
+  const PET_EYE = { kiwi: { x: -9, y: -13.7, r: 1.5, f: "#94724a", l: "#4a3722" }, tui: { x: -7.7, y: -17.6, r: 1.9, f: "#16224a", l: "#56648a" } };
+
+  function fxState(ctx, anim, layers, rc) {
+    const p = ctx.id("f");
+    const st = { grant: {}, built: {}, layers: {}, css: "", n: 0, kf: 0, seed: 0 };
+    layers.forEach(l => { st.layers[l.key] = l; });
+    if (anim) {
+      let budget = FX_BUDGET;
+      const lists = layers.map(l => [l.key, l.key === "pet" ? FX_TOK.pet : l.key === "bg" ? FX_TOK[l.tier >= 4 ? "bg4" : "bg3"] : FX_TOK[l.tier >= 4 ? 4 : 3]]);
+      for (let r = 0; budget > 0 && r < 8; r++) lists.forEach(([k, t]) => {
+        if (budget > 0 && t[r]) { const g = st.grant[k] || (st.grant[k] = {}); g[t[r]] = (g[t[r]] || 0) + 1; budget--; }
+      });
+    }
+    const legN = layers.filter(l => l.tier >= 4 && l.key !== "bg" && l.key !== "pet").length, gk = 1 / (1 + .5 * Math.max(0, legN - 1));
+    const itemN = layers.filter(l => l.key !== "bg" && l.key !== "pet").length, stillN = itemN <= 2 ? 3 : itemN <= 4 ? 2 : 1;
+    const take = (k, t) => { const g = st.grant[k]; if (g && g[t] > 0) { g[t]--; st.n++; return true; } return false; };
+    const left = (k, t) => (st.grant[k] && st.grant[k][t]) || 0;
+    const kfn = body => { const n = p + "k" + (++st.kf); st.css += `@keyframes ${n}{${body}}`; return n; };
+    const dl = dur => n2(-((++st.seed * 0.6180339) % 1) * dur);
+    const at = (kf, dur, ease, delay) => ` class="${p}a" style="animation:${kf} ${n2(dur)}s ${ease} ${delay}s infinite"`;
+
+    // a generic moving/pulsing element; falls back to its still version when it has no slot
+    const mv = (k, tok, svg, kf, dur, o) => {
+      o = o || {};
+      const base = (o.base ? ` transform="${o.base}"` : "") + (o.op != null ? ` opacity="${o.op}"` : "");
+      if (take(k, tok)) return `<g${base}${at(kfn(kf), dur, o.ease || "ease-in-out", dl(dur))}>${svg}</g>`;
+      return o.still === false ? "" : `<g${base}>${svg}</g>`;
+    };
+    const glow = (k, gs) => {
+      const body = gs.map(g => {
+        const id = ctx.id("gl");
+        ctx.defs += `<radialGradient id="${id}"><stop offset="0" stop-color="${g.c}" stop-opacity="${n2(g.o * gk)}"/><stop offset=".55" stop-color="${g.c}" stop-opacity="${n2(g.o * gk * .4)}"/><stop offset="1" stop-color="${g.c}" stop-opacity="0"/></radialGradient>`;
+        return `<ellipse cx="${g.x}" cy="${g.y}" rx="${g.rx}" ry="${g.ry}" fill="url(#${id})"/>`;
+      }).join("");
+      return mv(k, "glow", body, "0%,100%{opacity:.5}50%{opacity:1}", 4.6);
+    };
+    // one walker = ONE animated node that twinkles up in each of its spots in turn
+    const walker = (g, o) => {
+      const m = g.length, slot = 100 / m, vis = slot * (o.vis || .62), rise = o.rise != null ? o.rise : (o.drift ? 3.2 : 0);
+      const tf = (x, y, s, r) => `transform:translate(${n2(x)}px,${n2(y)}px) scale(${n2(s)}) rotate(${r}deg)`;
+      let body = "";
+      g.forEach((q, i) => {
+        const t0 = i * slot;
+        body += `${n2(t0)}%{${tf(q[0], q[1] + rise / 2, .2, -16)};opacity:0}${n2(t0 + vis * .42)}%{${tf(q[0], q[1], q[2] * 1.25, 0)};opacity:1}${n2(t0 + vis)}%{${tf(q[0], q[1] - rise / 2, .2, 16)};opacity:0}`;
+      });
+      body += `100%{${tf(g[0][0], g[0][1] + rise / 2, .2, -16)};opacity:0}`;
+      const dur = m * 2.3 + 1;
+      return `<g transform="translate(${g[0][0]} ${g[0][1]}) scale(${n2(g[0][2] * 1.25)})"${at(kfn(body), dur, "ease-in-out", dl(dur))}>${spkArt(g[0][3] || "#fff")}</g>`;
+    };
+    const sparks = (pts, n, o) => {
+      o = o || {};
+      if (!n) return pts.slice(0, o.still || 3).map(spkAt).join("");
+      const groups = Array.from({ length: n }, () => []);
+      pts.forEach((q, i) => groups[i % n].push(q));
+      return groups.filter(g => g.length).map(g => walker(g, o)).join("");
+    };
+    const orbit = (k, o) => {
+      const s = o.s || 1.5, art = `<g transform="translate(${o.r} 0) scale(${s})">${spkArt(o.c)}</g><g transform="translate(${-o.r} 0) scale(${n2(s * .62)})">${spkArt(o.c)}</g>`;
+      const d = o.dur || 10;
+      return `<g transform="translate(${o.x} ${o.y})">${take(k, "spark") ? `<g${at(kfn("0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}"), d, "linear", dl(d))}>${art}</g>` : `<g>${art}</g>`}</g>`;
+    };
+
+    st.get = k => {
+      if (st.built[k]) return st.built[k];
+      const out = st.built[k] = { pre: "", post: "", spec: null }, l = st.layers[k];
+      if (!l || k === "pet") return out;
+      const spec = out.spec = RSPEC[k][l.id](rc), leg = l.tier >= 4;
+      if (spec.amb) {       // backgrounds: ambient motion only
+        spec.amb.forEach(a => {
+          if (a.t === "walk") out.post += sparks(a.pts, take(k, "amb") ? 1 : 0, a.o);
+          else { const el = mv(k, "amb", typeof a.svg === "function" ? a.svg(ctx) : a.svg, a.kf, a.dur, a.o); out.post += el && a.wrap ? a.wrap(el) : el; }
+        });
+        return out;
+      }
+      const g = leg && spec.glow ? glow(k, [].concat(spec.glow)) : "";
+      if (spec.glowPost) out.post += g; else out.pre += g;
+      const [x0, y0, x1, y1] = spec.box, w = x1 - x0, T = y0 - 6, H = y1 - y0 + 12, mid = T + H / 2, sl = .364;
+      const bw = spec.bw || Math.max(4, Math.min(leg ? 24 : 15, w * (leg ? .5 : .34)));
+      const bx = x0 - bw - sl * H / 2, D = n2(w + bw + sl * H);
+      const tint = spec.tint || "#fff", hue = spec.hue || ["#ffe9a8", "#ffd0f0", "#bff0ff"], pk = spec.peak || (leg ? .8 : .7);
+      const gid = ctx.id("sg");
+      ctx.defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">` + (leg
+        ? `<stop offset="0" stop-color="${hue[0]}" stop-opacity="0"/><stop offset=".3" stop-color="${hue[0]}" stop-opacity=".38"/><stop offset=".5" stop-color="${tint}" stop-opacity="${pk}"/><stop offset=".7" stop-color="${hue[1]}" stop-opacity=".38"/><stop offset="1" stop-color="${hue[1]}" stop-opacity="0"/>`
+        : `<stop offset="0" stop-color="${tint}" stop-opacity="0"/><stop offset=".36" stop-color="${tint}" stop-opacity="${n2(pk * .22)}"/><stop offset=".5" stop-color="${tint}" stop-opacity="${pk}"/><stop offset=".64" stop-color="${tint}" stop-opacity="${n2(pk * .22)}"/><stop offset="1" stop-color="${tint}" stop-opacity="0"/>`) + `</linearGradient>`;
+      const band = `<rect x="${n2(bx + sl * mid)}" y="${n2(T)}" width="${n2(bw)}" height="${n2(H)}" fill="url(#${gid})" transform="skewX(-20)"/>`;
+      const sdur = leg ? 9.2 : 5.6 + (Object.keys(st.built).length % 3) * .7, bt = `transform="translate(${n2(D * .42)} 0)"`;
+      const sheen = take(k, "sheen")
+        ? `<g ${bt}${at(kfn(`0%{transform:translateX(0px)}${leg ? 48 : 28}%{transform:translateX(${D}px)}100%{transform:translateX(${D}px)}`), sdur, "ease-in-out", dl(sdur))}>${band}</g>`
+        : anim ? "" : `<g ${bt}>${band}</g>`;
+      let iri = "";
+      if (leg && !spec.flick) {   // slowly shifting colour sheen (a seamless repeating gradient drifting by one period)
+        const L = 46, ang = 24 * Math.PI / 180, px = n2(L * Math.cos(ang)), py = n2(L * Math.sin(ang)), tx = n2(L * L / px), ig = ctx.id("ig");
+        ctx.defs += `<linearGradient id="${ig}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${px}" y2="${py}" spreadMethod="repeat"><stop offset="0" stop-color="${hue[0]}"/><stop offset=".34" stop-color="${hue[1]}"/><stop offset=".67" stop-color="${hue[2]}"/><stop offset="1" stop-color="${hue[0]}"/></linearGradient>`;
+        iri = mv(k, "iri", `<rect x="${n2(x0 - tx - 2)}" y="${n2(y0 - 4)}" width="${n2(w + tx + 4)}" height="${n2(y1 - y0 + 8)}" fill="url(#${ig})" opacity="${spec.iriOp || .26}"/>`, `0%{transform:translateX(0px)}100%{transform:translateX(${tx}px)}`, 12, { ease: "linear", still: !anim });
+      }
+      out.post += (spec.mask ? ctx.mask(spec.mask, iri + sheen) : ctx.clip(spec.clip, iri + sheen));
+      if (spec.orbit && leg) out.post += orbit(k, spec.orbit);
+      const sp = spec.sp || [], n = Math.min(left(k, "spark"), sp.length);
+      for (let i = 0; i < n; i++) take(k, "spark");
+      out.post += sparks(sp, n, Object.assign({ drift: leg, still: anim ? Math.min(2, stillN) : stillN }, spec.so));
+      return out;
+    };
+    // public API used by renderSvg
+    return {
+      pre: k => st.layers[k] ? st.get(k).pre : "",
+      post: k => st.layers[k] ? st.get(k).post : "",
+      wrap(k, svg) { if (!st.layers[k]) return svg; const o = st.get(k); return o.spec && o.spec.wrap ? o.spec.wrap({ mv: (t, s, kf, d, op) => mv(k, t, s, kf, d, op) }, svg) : svg; },
+      pet(svg) {
+        const l = st.layers.pet, m = l && svg.match(/^(<g transform="[^"]*">)([\s\S]*)<\/g>$/);
+        if (!m) return svg;
+        let inner = m[2];
+        const e = PET_EYE[rc.look.pet];
+        if (e && take("pet", "blink")) {   // a quick blink: an eyelid fades in and out over the eye
+          const lid = `<circle cx="${e.x}" cy="${e.y}" r="${n2(e.r * 1.05)}" fill="${e.f}"/><path d="M${n2(e.x - e.r * .8)} ${e.y} q${n2(e.r * .8)} ${n2(e.r * .55)} ${n2(e.r * 1.6)} 0" fill="none" stroke="${e.l}" stroke-width=".35" stroke-linecap="round"/>`;
+          inner += `<g opacity="0"${at(kfn("0%,88%{opacity:0}90%,93%{opacity:1}95.5%,100%{opacity:0}"), 5.4, "ease-in-out", dl(5.4))}>${lid}</g>`;
+        }
+        if (take("pet", "tilt")) inner = `<g${at(kfn("0%,100%{transform:rotate(-1.4deg)}50%{transform:rotate(1.6deg)}"), 6.8, "ease-in-out", dl(6.8))}>${inner}</g>`;
+        if (take("pet", "breathe")) inner = `<g${at(kfn("0%,100%{transform:scale(1,1)}50%{transform:scale(1.012,1.035)}"), 3.9, "ease-in-out", dl(3.9))}>${inner}</g>`;
+        // a still sparkle keeps the rarity visible even when nothing is moving
+        return m[1] + inner + "</g>" + spkAt([90.5, 62, 1.8, l.tier >= 4 ? "#ffb300" : "#ffd54a"]);
+      },
+      css() { return st.n ? `<style>${st.css}@media (prefers-reduced-motion:reduce){.${p}a{animation:none!important}}</style>` : ""; },
+      count() { return st.n; }
+    };
+  }
+  const NOFX = { pre: () => "", post: () => "", wrap: (k, s) => s, pet: s => s, css: () => "", count: () => 0 };
+
+  /* What each Epic / Legendary item looks like. clip = the item's own outline(s) (path "d" strings
+     or raw clip children), box = its bounding box (sets the sweep), sp = sparkle spots [x, y, size, colour]. */
+  const RSPEC = {
+    hat: {
+      devil: () => ({ clip: ["M31 27 C25.6 19 27.6 8.6 34 4.4 C33.6 12.4 37.6 18.6 42 22.4Z", "M69 27 C74.4 19 72.4 8.6 66 4.4 C66.4 12.4 62.4 18.6 58 22.4Z"], box: [25, 4, 75, 28], tint: "#fff1ee", peak: .6, sp: [[22.5, 17.5, 2.3, "#ff6a5f"], [78, 15.5, 1.9, "#ff8f86"], [50, 11, 1.5, "#ffb0a8"]] }),
+      tophat: () => ({ clip: ["M34 30 L35 8 Q50 4 65 8 L66 30Z", ellD(50, 30, 27, 5.2)], box: [23, 4, 77, 35], sp: [[21.5, 25, 2.2, "#f2b705"], [79, 23.5, 1.9, "#ffd54a"], [59, 11, 1.5, "#fff"]] }),
+      sombrero: () => ({ clip: [ellD(50, 27.6, 38, 7.6), "M36 28 C36 7 64 7 64 28Z"], box: [12, 9, 88, 36], tint: "#fffbe6", peak: .85, sp: [[14, 23, 2.2, "#f2a900"], [86.5, 22, 1.9, "#ffcf40"], [50, 9.2, 1.5, "#fff"]] }),
+      propeller: () => ({ clip: ["M29 34 C28 14 72 14 71 34Z", `<ellipse cx="41" cy="7.4" rx="9.4" ry="2.8" transform="rotate(-10 41 7.4)"/>`, `<ellipse cx="59" cy="7.4" rx="9.4" ry="2.8" transform="rotate(10 59 7.4)"/>`], box: [29, 4, 71, 35], sp: [[26, 15.5, 2.2, "#5aa8ff"], [76, 14, 1.8, "#ffc21a"]] }),
+      halo: () => ({ clip: [evenodd(ellD(50, 9, 18.7, 6.3) + " " + ellD(50, 9, 15.3, 2.9))], box: [31, 2, 69, 16], tint: "#fffdf0", peak: .8, sp: [[29, 13, 2.2, "#f5b800"], [71, 13, 2.2, "#ffd23f"]] }),
+      crown: () => ({ clip: ["M30 30 L28 10 L40 20 L50 6 L60 20 L72 10 L70 30Z"], box: [27, 5, 73, 31], tint: "#fffbe6", hue: ["#fff0a0", "#ffc4e8", "#b6efff"], iriOp: .2, glow: { x: 50, y: 19, rx: 31, ry: 19, c: "#ffd23f", o: .5 }, sp: [[28, 9.6, 2.3, "#fff3b0"], [72, 9.6, 2.3, "#fff3b0"], [50, 5.2, 2.5, "#fff"], [39, 21.5, 1.8, "#ffe28a"], [61, 21.5, 1.8, "#ffe28a"]] })
+    },
+    glasses: {
+      monocle: () => ({ clip: [circD(59, 45, 8.2)], box: [50, 36, 68, 54], bw: 4, sp: [[68.5, 37, 2.3, "#ffc21a"], [51.5, 53.5, 1.5, "#fff"]] }),
+      goggles: () => ({ clip: [circD(41, 45, 10), circD(59, 45, 10)], box: [31, 35, 69, 55], tint: "#fff6e0", bw: 6, sp: [[33, 35.5, 2.1, "#ffa940"], [67, 36, 1.8, "#ffc86b"]] }),
+      visor: () => ({ clip: ["M31 41 Q50 36 69 41 L68 50 Q50 54 32 50Z"], box: [31, 36, 69, 54], tint: "#eaffff", hue: ["#b8fff7", "#d2c2ff", "#f3ffb8"], glow: { x: 50, y: 45.5, rx: 30, ry: 11, c: "#19e3d4", o: .5 }, sp: [[30, 39.5, 2.3, "#19d3c5"], [70, 39.5, 2.3, "#19d3c5"], [50, 34.5, 1.7, "#fff"], [62, 55.5, 1.5, "#c9fff9"]] })
+    },
+    extra: {
+      medal: () => ({ clip: [circD(50, 91.4, 7.1)], box: [43, 84, 57, 98.5], tint: "#fffbe6", bw: 4, sp: [[58.5, 85.5, 2.3, "#ffc21a"], [41.5, 95.5, 1.7, "#fff"]] })
+    },
+    top: {
+      disco: () => ({ clip: [BODY], box: [12, 75, 88, 100], hue: ["#ffb3f0", "#a8e8ff", "#fff3a8"], glow: { x: 50, y: 93, rx: 54, ry: 26, c: "#ff7be0", o: .5 }, sp: [[28.8, 86.8, 2.4, "#ff7ad9"], [68, 90, 2.4, "#5ec8ff"], [40, 93, 1.9, "#b58cff"], [62, 83.5, 1.8, "#fff"]] })
+    },
+    eyes: (() => {
+      const mk = (clips, col, tint) => () => ({ clip: clips, box: [34, 38, 66, 52], tint, bw: 5, peak: .7, sp: [[34.4, 38.8, 1.7, col], [65.6, 38.8, 1.7, col]] });
+      return {
+        stars: mk([starD(41, 45, 5.4), starD(59, 45, 5.4)], "#ffc21a", "#fffbe0"),
+        hearts: mk([heartD(41, 44.4, 3.5), heartD(59, 44.4, 3.5)], "#ff5d8a", "#fff0f4"),
+        dollar: mk([circD(41, 45, 5), circD(59, 45, 5)], "#ffd23f", "#f4fff8")
+      };
+    })(),
+    mouth: {
+      gold: () => ({ clip: ["M44.4 55.2 Q50 59.6 55.6 55.2 L54.8 57.2 Q50 60.4 45.2 57.2Z"], box: [44, 54, 56, 61], tint: "#fffbe0", bw: 3.4, sp: [[58.5, 57, 1.8, "#ffc21a"], [41.5, 56, 1.4, "#fff"]] })
+    },
+    face: {
+      paintstars: () => ({ clip: [starD(36.6, 53, 3.4), starD(63.4, 53, 3.4)], box: [32, 49, 68, 57], bw: 4, sp: [[31, 48.5, 1.8, "#ff5d8f"], [69, 48.5, 1.8, "#3a8dff"]] })
+    },
+    hair: {
+      mohawk: () => ({ clip: ["M40.6 32 C38 22 39.4 13 43 7.4 C45 11.4 46.6 12.6 50 3 C53.4 12.6 55 11.4 57 7.4 C60.6 13 62 22 59.4 32 C54 28.6 46 28.6 40.6 32Z"], box: [38, 3, 62, 32], bw: 6, peak: .55, sp: [[35.5, 12, 2.1, "#ffe066"], [65, 10.5, 1.9, "#ff9ad5"]] })
+    },
+    hairc: {
+      rainbow: rc => ({ mask: (HAIR[rc.look.hair]("#fff", "#fff", rc.ctx).front || ""), box: [16, 3, 84, 60], tint: "#fff", hue: ["#ffb3d9", "#b3ecff", "#ffe9a8"], iriOp: .3, glow: { x: 50, y: 30, rx: 38, ry: 26, c: "#c3a2ff", o: .45 }, sp: [[29, 19, 2.3, "#ff7ac6"], [72, 17, 2.1, "#7ad8ff"], [50, 9.5, 1.7, "#ffd23f"]] })
+    },
+    costume: {
+      ghost: () => ({ clip: [evenodd("M14 100 C10 50 18 10 50 8 C82 10 90 50 86 100 L78 92 L70 100 L62 92 L54 100 L46 92 L38 100 L30 92 L22 100Z " + ellD(38, 42, 5, 7.4) + " " + ellD(62, 42, 5, 7.4) + " " + ellD(50, 58, 4, 5.4))], box: [10, 8, 90, 100], tint: "#b9d9ff", peak: .7, sp: [[17, 19, 2.4, "#7cc4ff"], [84, 25, 2.1, "#b39bff"], [77, 11.5, 1.7, "#9fe0ff"]] }),
+      ninja: rc => ({ clip: [bodyT(rc.gd), evenodd(NINJA_WRAP + " " + NINJA_WINDOW)], box: [8, 19, 92, 100], tint: "#cfd8ff", peak: .5, sp: [[84, 33, 2.3, "#ff6f6f"], [18, 40, 1.8, "#8fb4ff"]] }),
+      shark: rc => ({ clip: [bodyT(rc.gd), evenodd("M19 45 a31 33 0 1 0 62 0 a31 33 0 1 0 -62 0Z M31 44.6 a19 20.6 0 1 0 38 0 a19 20.6 0 1 0 -38 0Z " + circD(36, 19, 3) + " " + circD(64, 19, 3)), "M38 18 Q43 -1 64 14.4Z"], box: [10, 0, 90, 100], tint: "#d8f4ff", peak: .55, sp: [[17, 26, 2.1, "#5ec4ff"], [86, 32, 1.8, "#a6e3ff"]] }),
+      wizard: rc => ({ clip: [bodyT(rc.gd)], box: [12, 75, 88, 100], tint: "#e9ddff", hue: ["#9fe9ff", "#d6b8ff", "#ffe08a"], glowPost: true, glow: [{ x: 85, y: 58, rx: 11, ry: 11, c: "#5ee6ff", o: .5 }, { x: 50, y: 31.4, rx: 9, ry: 7, c: "#5ee6ff", o: .42 }], orbit: { x: 85, y: 58, r: 8.2, c: "#aef6ff", dur: 9 }, sp: [[26.5, 90, 2.2, "#ffd23f"], [71, 89, 2, "#5ee6ff"]] })
+    },
+    fx: {
+      lightning: () => ({ clip: ["M14 10 L6 30 L13 30 L9 46 L22 24 L14 24 L20 10Z", "M86 52 L79 70 L85 70 L82 84 L93 64 L87 64 L92 52Z"], box: [5, 9, 94, 85], tint: "#fffbe0", bw: 8, sp: [[27, 20, 2.1, "#ffd23f"], [74.5, 65, 2.1, "#ffd23f"]] }),
+      glow: () => ({ clip: [evenodd(circD(50, 50, 50) + " " + circD(50, 50, 37))], box: [0, 0, 100, 100], tint: "#fffbe6", bw: 12, peak: .55, sp: [[19.6, 19.6, 2.4, "#ffc21a"], [82, 24, 2, "#ffd23f"], [15, 70, 2, "#ffc21a"]] }),
+      flames: () => ({
+        clip: [[6, 9, 24, 3], [22, 10, 32, -4], [38, 10, 26, 4], [54, 11, 36, -3], [70, 10, 28, 4], [86, 11, 34, -4], [98, 8, 22, -2], [14, 9, 22, -3], [30, 9, 26, 3], [46, 10, 30, -3], [62, 10, 25, 4], [78, 9, 28, -3], [92, 8, 20, 3]].map(t => flameD(t[0], t[1], t[2], t[3])),
+        box: [0, 64, 100, 101], tint: "#fff6c8", hue: ["#fff1a8", "#ff9a3c", "#ffd54a"], flick: true,
+        glow: { x: 50, y: 98, rx: 62, ry: 32, c: "#ff8a1a", o: .5 },
+        sp: [[22, 70, 1.8, "#ffd54a"], [52, 64, 1.6, "#ffb62e"], [76, 68, 1.9, "#ffd54a"], [88, 73, 1.5, "#ffb62e"]], so: { rise: 11, vis: .7 },
+        // the whole fire breathes a touch taller and shorter, rooted at the bottom edge
+        wrap: (h, svg) => `<g transform="translate(50 101)">${h.mv("iri", `<g transform="translate(-50 -101)">${svg}</g>`, "0%,100%{transform:scale(1,1)}50%{transform:scale(1.012,1.035)}", 2.9)}</g>`
+      })
+    },
+    bg: (() => {
+      const cloud = y => ({ t: "mv", svg: `<g fill="#fff" opacity=".6"><ellipse cx="0" cy="2" rx="9" ry="3"/><ellipse cx="-3.6" cy="-.4" rx="4.4" ry="3.2"/><ellipse cx="2" cy="-1.4" rx="5" ry="3.6"/></g>`, kf: `0%{transform:translate(-14px,${y}px);opacity:0}8%{opacity:1}92%{opacity:1}100%{transform:translate(114px,${y}px);opacity:0}`, dur: 52, o: { ease: "linear", still: false } });
+      const walk = (pts, c, r, still) => ({ t: "walk", pts: pts.map(q => [q[0], q[1], q[2] || r, q[3] || c]), o: { still: still || 2 } });
+      const beams = () => `<g>${[0, 1, 2, 3, 4, 5].map(i => `<path d="M0 0 L90 -14 L90 14Z" fill="${["#fff", "#ffe14d", "#4dffea"][i % 3]}" opacity=".13" transform="rotate(${i * 60})"/>`).join("")}</g>`;
+      const discoDots = []; [2, 10, 13, 9].forEach(k => { const a = k * 2.4, r = 14 + (k % 4) * 11; discoDots.push([n2(50 + Math.cos(a) * r), n2(50 + Math.sin(a) * r)]); });
+      return {
+        night: () => ({ amb: [walk([[72, 12], [88, 28], [8, 52]], "#fff8dc", 2.5), walk([[30, 8], [20, 36], [60, 6]], "#e9efff", 2.1)] }),
+        city: () => ({ amb: [walk([[23, 16], [78, 16], [46, 8]], "#fff", 2, 1), walk([[24, 56], [74, 54], [62, 68]], "#ffe27a", 1.7)] }),
+        auckland: () => ({ amb: [cloud(10), walk([[14, 75], [31, 72.5], [69, 73.5], [80, 75], [86, 79]], "#fff", 1.6, 3)] }),
+        castleday: () => ({ amb: [cloud(9), walk([[26, 15.5, 2.2, "#fff8c8"], [28, 26, 1.8], [17.5, 27, 1.6, "#fff3b0"]], "#fff", 2, 2)] }),
+        castle: () => ({ amb: [walk([[56, 8], [10, 38, 1.7], [16.5, 19, 1.6]], "#fff6dd", 2), walk([[78.1, 43], [78.1, 53], [90.1, 50]], "#ffd98a", 1.7)] }),
+        lava: () => ({ amb: [walk([[18, 72, 1.8], [80, 78, 2], [90, 60, 1.6]], "#ffd36a", 1.8, 2), { t: "mv", svg: c => { const i = c.id("lg"); c.defs += `<radialGradient id="${i}"><stop offset="0" stop-color="#ffb02e" stop-opacity=".55"/><stop offset="1" stop-color="#ffb02e" stop-opacity="0"/></radialGradient>`; return `<ellipse cx="50" cy="100" rx="64" ry="30" fill="url(#${i})"/>`; }, kf: "0%,100%{opacity:.45}50%{opacity:1}", dur: 4.2, o: { op: .8 } }] }),
+        disco: () => ({ amb: [{ t: "mv", svg: beams(), kf: "0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}", dur: 30, o: { ease: "linear" }, wrap: e => `<g transform="translate(50 50)">${e}</g>` }, walk(discoDots, "#fff", 2.2, 2)] }),
+        galaxy: () => ({ amb: [walk([[70, 14], [10, 60, 2.2], [17, 23, 2.2], [91, 60, 2]], "#fff", 2.4), walk([[30, 12], [86, 40], [72, 11]], "#e6dcff", 2), { t: "mv", svg: c => { const i = c.id("ss"); c.defs += `<linearGradient id="${i}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="-26" y2="-11.4"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#bfa8ff" stop-opacity="0"/></linearGradient>`; return `<path d="M0 0 L-26 -11.4 L-25.4 -9.3 Z" fill="url(#${i})"/><circle r="1.2" fill="#fff"/>`; }, kf: "0%{transform:translate(8px,16px);opacity:0}3%{opacity:1}13%{transform:translate(50px,38px);opacity:0}100%{transform:translate(50px,38px);opacity:0}", dur: 11, o: { ease: "ease-out", still: false } }] }),
+        synth: () => ({ amb: [{ t: "mv", svg: c => { const i = c.id("sc"); c.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7ac8" stop-opacity="0"/><stop offset=".5" stop-color="#ffb3e0" stop-opacity=".9"/><stop offset="1" stop-color="#ff7ac8" stop-opacity="0"/></linearGradient>`; return `<rect x="0" y="-2" width="100" height="4" fill="url(#${i})"/>`; }, kf: "0%{transform:translateY(62px);opacity:0}12%{opacity:1}78%{opacity:1}100%{transform:translateY(98px);opacity:0}", dur: 5.4, o: { ease: "ease-in", still: false } }, walk([[20, 19], [79, 15], [22, 33], [80, 32]], "#fff", 2.1), walk([[10, 50, 1.8], [92, 48, 1.8, "#ffe9b8"], [26, 22, 1.6, "#ffd1ee"]], "#fff", 1.8)] })
+      };
+    })()
+  };
   function renderSvg(look, opts) {
     opts = opts || {};
     look = cleanLook(look);
     const ctx = makeCtx();
     const size = opts.size || 100;
+    // animate: true/false wins; otherwise only the big editor-size preview (100px+) moves
+    const anim = opts.animate === undefined ? size >= 100 : !!opts.animate;
     const gd = GENDERS[look.gender] || GENDERS.neutral;
     const T = s => gd.sx === 1 || !s ? s : `<g transform="translate(50 0) scale(${gd.sx} 1) translate(-50 0)">${s}</g>`;
     const co = COSTUMES[look.costume] ? COSTUMES[look.costume](ctx) : null;
@@ -688,9 +930,29 @@
     const hairDark = hc.v === "rainbow" ? "#6a3fd6" : shade(hc.v, -.15);
     const browCol = hc.v === "rainbow" ? "#7a4a2a" : shade(hc.v, -.3);
 
+    // Epic / Legendary layers actually drawn for this look (none for tiers 0-2)
+    const FXL = [];
+    const L = (key, cat, ok) => { if (!ok) return; const id = look[cat], t = tierOf(cat, id); if (t >= 3 && (key === "pet" || (RSPEC[key] && RSPEC[key][id]))) FXL.push({ key, tier: t, id }); };
+    L("costume", "costume", !!co);
+    L("top", "top", !(co && co.body !== undefined) && !hide.top && !!TOPS[look.top]);
+    L("hat", "hat", !hide.hat && !!HATS[look.hat]);
+    L("glasses", "glasses", !!GLASS[look.glasses] && (!hide.face || !!(co && co.eyesOnTop)));
+    L("hair", "hair", !hide.hair && !!HAIR[look.hair]);
+    L("hairc", "hairColor", !hide.hair && !!HAIR[look.hair] && look.hair !== "bald");
+    L("extra", "extra", !hide.extra && !!EXTRA[look.extra]);
+    L("eyes", "eyes", !hide.face);
+    L("mouth", "mouth", !hide.face && look.face !== "mask");
+    L("face", "face", !hide.face && !!FACE[look.face] && look.face !== "mask");
+    L("pet", "pet", !!PETS[look.pet]);
+    L("fx", "fx", true);
+    L("bg", "bg", true);
+    const E = FXL.length ? fxState(ctx, anim, FXL, { ctx, gd, look }) : NOFX;
+
     let s = (BG[look.bg] || BG.sky)(ctx);
+    s += E.post("bg");
     if (co && co.back) s += co.back;
     const hair = !hide.hair && HAIR[look.hair] ? HAIR[look.hair](hcol, hairDark, ctx) : {};
+    s += E.pre("hair") + E.pre("hairc");
     if (hair.back) s += hair.back;
     const ex = !hide.extra && EXTRA[look.extra] ? EXTRA[look.extra](ctx) : {};
     if (ex.back) s += ex.back;
@@ -699,36 +961,41 @@
     let top = { body: "", over: "" };
     if (co && co.body !== undefined) top = { body: co.body, over: co.over || "" };
     else if (!hide.top && TOPS[look.top]) top = TOPS[look.top](tc, td, tl, ctx);
+    s += E.pre("costume") + E.pre("top");
     s += T((top.back || "") + (top.body || ""));
     const nw = gd.neck;
     if (!hide.head) s += `<path d="M${50 - nw / 2} 60 h${nw} v17 q${-nw / 2} 8 ${-nw} 0z" fill="${sk2}"/>`;
-    s += T(top.over);
+    s += T(top.over) + T(E.post("top"));
     if (!hide.head) {
       const e1 = gd.ear, e2 = 100 - gd.ear;
       s += `<ellipse cx="${e1}" cy="46" rx="3.6" ry="5" fill="${skin}"/><ellipse cx="${e2}" cy="46" rx="3.6" ry="5" fill="${skin}"/><ellipse cx="${e1 + .4}" cy="46.6" rx="1.6" ry="2.6" fill="${sk2}" opacity=".6"/><ellipse cx="${e2 - .4}" cy="46.6" rx="1.6" ry="2.6" fill="${sk2}" opacity=".6"/>`;
       s += `<ellipse cx="50" cy="${gd.cy}" rx="${gd.rx}" ry="${gd.ry}" fill="${skin}"/>`;
     }
     const brows = () => (BROWS[look.brows] || BROWS.natural)(browCol, gd);
-    const eyesAndBrows = () => (EYES[look.eyes] || EYES.dots)(skin) + brows();
+    const eyesAndBrows = () => (EYES[look.eyes] || EYES.dots)(skin) + brows() + E.post("eyes");
     if (!hide.face) {
-      if (FACE[look.face] && look.face !== "mask") s += FACE[look.face](hairDark, ctx);
+      if (FACE[look.face] && look.face !== "mask") s += FACE[look.face](hairDark, ctx) + E.post("face");
       if (!co || !co.eyesOnTop) s += eyesAndBrows();
       s += `<ellipse cx="50" cy="50.4" rx="${gd.nx}" ry="${gd.ny}" fill="${sk2}"/>`;
       if (look.face === "mask") s += FACE.mask(hairDark, ctx);
-      else s += (MOUTH[look.mouth] || MOUTH.smile)();
+      else s += (MOUTH[look.mouth] || MOUTH.smile)() + E.post("mouth");
     }
     if (hair.front) s += ((!hide.hat && HAT_COVER.has(look.hat)) || (co && co.clipHair)) ? ctx.clip("M0 31 H100 V100 H0Z", hair.front) : hair.front;
-    if (!hide.hat && HATS[look.hat]) s += HATS[look.hat](ctx);
-    if (!hide.face && GLASS[look.glasses] && !(co && co.eyesOnTop)) s += GLASS[look.glasses](ctx);
+    { const hf = E.post("hair") + E.post("hairc"); if (hf) s += ((!hide.hat && HAT_COVER.has(look.hat)) || (co && co.clipHair)) ? ctx.clip("M0 31 H100 V100 H0Z", hf) : hf; }
+    if (!hide.hat && HATS[look.hat]) s += E.pre("hat") + HATS[look.hat](ctx) + E.post("hat");
+    if (!hide.face && GLASS[look.glasses] && !(co && co.eyesOnTop)) s += E.pre("glasses") + GLASS[look.glasses](ctx) + E.post("glasses");
+    s += E.pre("extra");
     if (ex.over) s += ex.over;
     if (ex.front) s += ex.front;
+    s += E.post("extra");
     if (co && co.front) s += co.front;
-    if (PETS[look.pet]) s += PETS[look.pet](gd, ctx);
-    if (co && co.eyesOnTop) { s += eyesAndBrows(); if (GLASS[look.glasses]) s += GLASS[look.glasses](ctx); }
-    s += (FX[look.fx] || FX.none)(ctx);
+    s += E.post("costume");
+    if (PETS[look.pet]) s += E.pet(PETS[look.pet](gd, ctx));
+    if (co && co.eyesOnTop) { s += eyesAndBrows(); if (GLASS[look.glasses]) s += E.pre("glasses") + GLASS[look.glasses](ctx) + E.post("glasses"); }
+    s += E.pre("fx") + E.wrap("fx", (FX[look.fx] || FX.none)(ctx)) + E.post("fx");
 
     const cid = ctx.id("cp");
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="${opts.label ? String(opts.label).replace(/[<>&"]/g, "") : "Avatar"}"><defs><clipPath id="${cid}"><circle cx="50" cy="50" r="50"/></clipPath>${ctx.defs}</defs><g clip-path="url(#${cid})">${s}</g></svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="${opts.label ? String(opts.label).replace(/[<>&"]/g, "") : "Avatar"}"><defs><clipPath id="${cid}"><circle cx="50" cy="50" r="50"/></clipPath>${ctx.defs}${E.css()}</defs><g clip-path="url(#${cid})">${s}</g></svg>`;
   }
 
   G.T29AvatarCore = { CATS, DEFAULT_LOOK, NONE_IDS, RARITY, HAIRC, TOPC, SKINS, cleanLook, renderSvg };
