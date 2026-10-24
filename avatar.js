@@ -145,9 +145,8 @@
     sleepy: () => both(x => `<path d="M${x - 4} ${EYE_Y} Q${x} ${EYE_Y + 3.8} ${x + 4} ${EYE_Y}" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`),
     sparkle: () => both(x => `<circle cx="${x}" cy="${EYE_Y}" r="5.2" fill="#fff" stroke="${INK}" stroke-width=".8"/><circle cx="${x}" cy="${EYE_Y + .4}" r="3.4" fill="#3b2f66"/><circle cx="${x}" cy="${EYE_Y + .4}" r="1.9" fill="${INK}"/><circle cx="${x + 1.4}" cy="${EYE_Y - 1.2}" r="1.1" fill="#fff"/><circle cx="${x - 1.2}" cy="${EYE_Y + 1.6}" r=".6" fill="#fff"/>`),
     wink: sk => `<circle cx="41" cy="${EYE_Y}" r="3" fill="${INK}"/><circle cx="42" cy="${EYE_Y - 1}" r="1" fill="#fff"/><circle cx="40.2" cy="${EYE_Y + 1.1}" r=".5" fill="#fff" opacity=".8"/>`
-      // closed eye: a lid line curving down like a happy squint, with a raised-cheek crease
-      + `<path d="M54.8 ${EYE_Y - .4} Q59 ${EYE_Y + 3.8} 63.2 ${EYE_Y - .4}" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`
-      + `<path d="M55.8 ${EYE_Y + 5.4} Q59 ${EYE_Y + 7} 62.2 ${EYE_Y + 5.4}" stroke="${shade(sk, -.2)}" stroke-width=".9" stroke-linecap="round" fill="none"/>`,
+      // closed eye: a bold "<" wink
+      + `<path d="M62.4 ${EYE_Y - 3.4} L56.4 ${EYE_Y} L62.4 ${EYE_Y + 3.4}" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
     // half-open, just-woken eyes: only the lower part of the eye shows under a heavy lid
     sleepywake: sk => both(x => {
       const cy = EYE_Y + 1.2, y0 = cy - 1, w = 2.83;
@@ -180,7 +179,19 @@
     tongue: () => `<path d="M47 58.2 Q47.2 65.6 51.2 65 Q54.2 62.4 53 58.2Z" fill="#ff6f91" stroke="${INK}" stroke-width="1" stroke-linejoin="round"/><path d="M50 59.4 V62.6" stroke="#d94a72" stroke-width=".8" stroke-linecap="round"/><path d="M43.5 55 Q50 62 56.5 55" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
     surprised: () => `<ellipse cx="50" cy="58" rx="3.2" ry="4" fill="#5a1f30" stroke="${INK}" stroke-width="1.4"/>`,
     kiss: () => heart(50, 57.6, 3.1, "#e8505b"),
-    gold: () => `<path d="M42.5 53.5 Q50 65 57.5 53.5Z" fill="#fff" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/><path d="M44.4 55.2 Q50 59.6 55.6 55.2 L54.8 57.2 Q50 60.4 45.2 57.2Z" fill="#f5c542"/>`,
+    gold: (x) => {
+      const D = "M42.5 53.5 Q50 65 57.5 53.5Z", g = x.id("gt");
+      x.defs += `<linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2b0"/><stop offset=".42" stop-color="#f7c948"/><stop offset="1" stop-color="#c98a12"/></linearGradient>`;
+      let teeth = "", glint = "";
+      for (let i = 0; i < 5; i++) {
+        const tx = 43.1 + i * 2.84, h = i === 2 ? 4.9 : i % 2 ? 4.2 : 4.6;
+        teeth += `<rect x="${tx.toFixed(2)}" y="52.8" width="2.6" height="${h}" rx="1.05" fill="url(#${g})" stroke="#a56f0e" stroke-width=".28"/>`;
+        glint += `M${(tx + .55).toFixed(2)} 54.1 v1.5 `;
+      }
+      return `<path d="${D}" fill="#55192a"/>`
+        + x.clip(D, `<ellipse cx="50" cy="59.2" rx="4.4" ry="2.2" fill="#e8607a"/><path d="M47.6 58.4 Q50 59.6 52.4 58.4" stroke="#c0405c" stroke-width=".35" fill="none" stroke-linecap="round"/>${teeth}<path d="${glint}" stroke="#fff" stroke-opacity=".85" stroke-width=".45" stroke-linecap="round" fill="none"/>`)
+        + `<path d="${D}" fill="none" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>`;
+    },
     braces: () => `<path d="M42.5 53.5 Q50 65 57.5 53.5Z" fill="#fff" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/><path d="M44.4 55.4 Q50 60 55.6 55.4" stroke="#9aa3b5" stroke-width="1.5" fill="none"/><path d="M47 55.8 v2.2 M50 56.6 v2.4 M53 55.8 v2.2" stroke="#9aa3b5" stroke-width="1"/>`
   };
   const MOUTH_LIST = [["smile", "Smile", 0], ["grin", "Big grin", 0], ["neutral", "Neutral", 0], ["open", "Open smile", 0], ["smirk", "Smirk", 1], ["tongue", "Tongue out", 1],
@@ -257,7 +268,7 @@
   };
   const HAT_LIST = [["none", "None", 0], ["cap", "Red cap", 1], ["capback", "Backwards cap", 1], ["beanie", "Beanie", 1], ["bucket", "Bucket hat", 1], ["headband", "Star headband", 1], ["beret", "Beret", 1], ["hardhat", "Hard hat", 2],
     ["grad", "Graduation cap", 2], ["chef", "Chef hat", 2], ["cowboy", "Cowboy hat", 2], ["party", "Party hat", 2], ["flowers", "Flower crown", 2], ["santa", "Santa hat", 2],
-    ["devil", "Devil horns", 3], ["tophat", "Top hat", 3], ["sombrero", "Sombrero", 3], ["propeller", "Propeller cap", 3], ["halo", "Halo", 3], ["crown", "Golden crown", 4]];
+    ["devil", "Devil horns", 3], ["tophat", "Top hat", 3], ["sombrero", "Sombrero", 2], ["propeller", "Propeller cap", 3], ["halo", "Halo", 3], ["crown", "Golden crown", 4]];
 
   /* ------------------------------ extras -------------------------------- */
   const EXTRA = {
@@ -412,9 +423,23 @@
     rugby: (c, d, l, x) => ({ body: topShape("#26262e", `<path d="M8 94 H92 M8 98.4 H92" stroke="#fff" stroke-width="1.6" opacity=".7"/>`, x), over: `<path d="M38.5 76.4 L50 86 L61.5 76.4 L56 72.6 L50 78 L44 72.6Z" fill="#fff" stroke="#fff" stroke-width=".6" stroke-linejoin="round"/><path d="M50 86 V94" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>` }),
     kiwi: (c, d, l, x) => ({ body: topShape("#2f9a5d", "", x), over: `<path d="M39 76 Q50 88 61 76" fill="none" stroke="#1f7240" stroke-width="3"/><ellipse cx="46" cy="93.4" rx="8.6" ry="6" fill="#7a5a3a"/><circle cx="55.4" cy="88.4" r="3.6" fill="#7a5a3a"/><path d="M58 89.4 Q63.6 90.6 67 94.4" stroke="#d9b87c" stroke-width="1.4" fill="none" stroke-linecap="round"/><circle cx="55.8" cy="87.6" r="1.1" fill="#fff"/><circle cx="56" cy="87.7" r=".5" fill="#222"/><path d="M43 99 v-2.6 M49 99 v-2.6" stroke="#d9b87c" stroke-width="1.3" stroke-linecap="round"/>` }),
     disco: (c, d, l, x) => {
-      const id = x.id("ds"); x.defs += `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d6d9e6"/><stop offset=".5" stop-color="#fff"/><stop offset="1" stop-color="#aeb4c8"/></linearGradient>`;
-      const dots = []; for (let y = 80; y < 100; y += 5) for (let xx = 18 + ((y / 5) % 2) * 3; xx < 84; xx += 6) dots.push(`<rect x="${xx}" y="${y}" width="3.6" height="3.6" fill="#fff" opacity=".9" stroke="#9aa3b5" stroke-width=".3"/>`);
-      return { body: topShape(`url(#${id})`, dots.join(""), x), over: `<path d="M38 76.2 L50 100 L62 76.2Z" fill="#2a2630" opacity=".25"/><path d="M38.4 76.2 Q50 88.6 61.6 76.2" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>` };
+      const g = x.id("ds"), gl = x.id("dl"), pt = x.id("dp");
+      x.defs += `<linearGradient id="${g}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f3f5ff"/><stop offset=".5" stop-color="#c5cde6"/><stop offset="1" stop-color="#8d97ba"/></linearGradient>`
+        + `<linearGradient id="${gl}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8a5cf0"/><stop offset=".5" stop-color="#5a32b8"/><stop offset="1" stop-color="#34196f"/></linearGradient>`
+        // a tile of staggered mirror sequins in four soft tints, each with a tiny glint
+        + `<pattern id="${pt}" patternUnits="userSpaceOnUse" width="7.6" height="7" patternTransform="translate(9 75.6)">`
+        + [[0, 0, "#ffffff"], [3.8, 0, "#dfe8ff"], [1.9, 3.5, "#ffe3f5"], [5.7, 3.5, "#dcf6ff"]].map(t => `<rect x="${t[0] + .2}" y="${t[1] + .2}" width="3.2" height="3.1" rx=".55" fill="${t[2]}" stroke="#8691b6" stroke-width=".25"/><path d="M${t[0] + .8} ${t[1] + 1.4} q.3 -.8 1.1 -.9" stroke="#fff" stroke-width=".4" stroke-linecap="round" fill="none"/>`).join("")
+        + `</pattern>`;
+      const body = `<rect width="100" height="100" fill="url(#${pt})"/><path d="M0 86 L100 70 V77 L0 94Z" fill="#fff" opacity=".14"/><path d="M12 100 C12 83 28 75 50 75 C72 75 88 83 88 100" fill="none" stroke="#6f7aa0" stroke-width="1.6" opacity=".35"/>`;
+      const lapelL = "M40 75.8 L29.4 78.2 L35.4 90 L50 98.4Z", lapelR = "M60 75.8 L70.6 78.2 L64.6 90 L50 98.4Z";
+      return {
+        body: topShape(`url(#${g})`, body, x),
+        over: `<path d="M40 75.8 L60 75.8 L50 98.4Z" fill="#17141f"/>`
+          + `<path d="M43.2 77 Q50 91.6 56.8 77" fill="none" stroke="#f5c542" stroke-width=".75" stroke-linecap="round"/><circle cx="50" cy="90.2" r="1.15" fill="#f5c542" stroke="#c9961a" stroke-width=".3"/>`
+          + `<path d="${lapelL}" fill="url(#${gl})"/><path d="${lapelR}" fill="url(#${gl})"/>`
+          + `<path d="M40 75.8 L29.4 78.2 L35.4 90 L50 98.4 M60 75.8 L70.6 78.2 L64.6 90 L50 98.4" fill="none" stroke="#f1f3ff" stroke-width=".9" stroke-linejoin="round" stroke-linecap="round"/>`
+          + `<path d="M38.4 77.4 L31.8 79 M61.6 77.4 L68.2 79" stroke="#b9a0ff" stroke-width=".7" stroke-linecap="round" opacity=".8"/>`
+      };
     }
   };
   const TOP_LIST = [["tee", "T-shirt", 0], ["hoodie", "Hoodie", 0], ["polo", "Polo", 1], ["overalls", "Overalls", 1], ["flannel", "Flannel shirt", 1],
@@ -423,6 +448,37 @@
 
   /* ------------------------------ backgrounds --------------------------- */
   const stars = (pts, col) => pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="${p[2]}" fill="${col || "#fff"}"/>`).join("");
+  // City Dusk skyline: three layers of towers (far haze, mid, near silhouettes) with rooftop details and lit windows.
+  const CITY = (() => {
+    const hash = n => { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+    const layers = [
+      { col: "#7b64b2", op: .85, b: [[-2, 9, 56], [6, 8, 46], [13, 7, 52], [19, 9, 40], [27, 8, 50], [34, 10, 36], [43, 8, 48], [50, 9, 42], [58, 8, 54], [65, 9, 38], [73, 8, 50], [80, 9, 44], [88, 8, 52], [95, 9, 46]] },
+      { col: "#46388b", win: .3, b: [[0, 11, 52], [10, 8, 44], [17, 10, 56], [26, 9, 47], [34, 9, 58], [43, 12, 52], [56, 9, 50], [64, 11, 43], [74, 9, 55], [82, 10, 46], [91, 10, 53]] },
+      { col: "#1e1a45", win: .42, b: [[-1, 12, 64], [11, 9, 58], [19, 7, 66], [27, 8, 60], [35, 10, 68], [45, 12, 70], [57, 10, 66], [67, 8, 61], [75, 9, 66], [83, 8, 57], [90, 11, 63]] }
+    ];
+    let svg = ""; const lit = []; let n = 0;
+    layers.forEach((L, li) => {
+      let warm = "", cool = "";
+      L.b.forEach(([bx, w, top], bi) => {
+        svg += `<rect x="${bx}" y="${top}" width="${w}" height="${100 - top}" fill="${L.col}"${L.op ? ` opacity="${L.op}"` : ""}/>`;
+        const h = hash(li * 40 + bi), mx = bx + w / 2;
+        if (li === 0 && h > .45) svg += `<path d="M${mx - 1.4} ${top} L${mx} ${top - 5} L${mx + 1.4} ${top}Z" fill="${L.col}" opacity=".85"/>`;
+        if (li >= 1 && h > .55) { svg += `<rect x="${mx - .25}" y="${top - 5}" width=".5" height="5" fill="${L.col}"/>`; if (li === 2) svg += `<circle cx="${mx}" cy="${top - 5}" r=".6" fill="#ff5a5a"/>`; }
+        if (li >= 1 && h < .3) svg += `<rect x="${bx + 1}" y="${top - 2.2}" width="${Math.min(3.2, w - 2)}" height="2.2" fill="${L.col}"/><rect x="${bx + 1.4}" y="${top - 3}" width=".5" height=".9" fill="${L.col}"/>`;
+        if (L.win) for (let yy = top + 2.4; yy < 92; yy += 3.4) for (let xx = bx + 1.4; xx + 1.3 <= bx + w - .7; xx += 2.5) {
+          n++; if (xx > 28 && xx < 72 && yy < 74) continue;
+          if (hash(n) < L.win) {
+            const cl = hash(n + 99) < .18;
+            if (cl) cool += `M${xx.toFixed(1)} ${yy.toFixed(1)}h1.2v1.6h-1.2z`; else warm += `M${xx.toFixed(1)} ${yy.toFixed(1)}h1.2v1.6h-1.2z`;
+            if (li >= 1 && !cl && (xx < 27 || xx > 73) && yy > 54 && yy < 84) lit.push([+(xx + .6).toFixed(1), +(yy + .8).toFixed(1)]);
+          }
+        }
+      });
+      if (warm) svg += `<path d="${warm}" fill="#ffd98a" opacity=".92"/>`;
+      if (cool) svg += `<path d="${cool}" fill="#9fd6ff" opacity=".9"/>`;
+    });
+    return { svg, lit };
+  })();
   const BG = {
     sky: () => `<rect width="100" height="100" fill="#cfe8ff"/>`,
     mint: () => `<rect width="100" height="100" fill="#d4f5e4"/>`,
@@ -472,7 +528,7 @@
     lava: (ctx) => { const i = ctx.id("lv"); ctx.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b0d0d"/><stop offset=".6" stop-color="#d9381e"/><stop offset="1" stop-color="#ffb02e"/></linearGradient>`; return `<rect width="100" height="100" fill="url(#${i})"/>${stars([[18, 72, 3], [80, 78, 4], [60, 90, 2.6], [30, 90, 2], [90, 60, 2]], "#ffd36a")}`; },
     snow: () => `<rect width="100" height="100" fill="#dceeff"/><path d="M0 82 Q25 70 50 80 T100 76 V100 H0Z" fill="#fff"/>${stars([[14, 16, 1.6], [30, 30, 1.2], [60, 12, 1.6], [84, 24, 1.3], [70, 44, 1], [10, 50, 1.2], [92, 56, 1.5]])}`,
     checker: () => `<rect width="100" height="100" fill="#fff"/>${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(r => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(c => (r + c) % 2 === 0).map(c => `<rect x="${c * 10}" y="${r * 10}" width="10" height="10" fill="#ff8fb3"/>`).join("")).join("")}`,
-    city: (ctx) => { const i = ctx.id("ct"); ctx.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b2f7a"/><stop offset="1" stop-color="#ff9a8b"/></linearGradient>`; const b = [[4, 58, 12, 42], [18, 48, 10, 52], [30, 62, 12, 38], [44, 40, 12, 60], [58, 56, 10, 44], [70, 46, 12, 54], [84, 60, 12, 40]].map(a => `<rect x="${a[0]}" y="${a[1]}" width="${a[2]}" height="${a[3]}" fill="#1d1a3f"/>`).join(""); return `<rect width="100" height="100" fill="url(#${i})"/>${b}${stars([[24, 56, .8], [48, 50, .8], [74, 54, .8], [36, 70, .8], [62, 68, .8]], "#ffe27a")}`; },
+    city: (ctx) => { const i = ctx.id("ct"), gl = ctx.id("cg"); ctx.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c2468"/><stop offset=".42" stop-color="#6a4a9e"/><stop offset=".72" stop-color="#ff9a8b"/><stop offset="1" stop-color="#ffd3a4"/></linearGradient><radialGradient id="${gl}"><stop offset="0" stop-color="#ffd7a0" stop-opacity=".75"/><stop offset="1" stop-color="#ffb08a" stop-opacity="0"/></radialGradient>`; return `<rect width="100" height="100" fill="url(#${i})"/>${stars([[20, 12, .7], [46, 7, .6], [78, 14, .7], [10, 30, .55], [90, 36, .6]], "#fff6e0")}<ellipse cx="50" cy="66" rx="58" ry="24" fill="url(#${gl})"/>${CITY.svg}`; },
     candy: () => `<rect width="100" height="100" fill="#fff"/>${[-20, 0, 20, 40, 60, 80, 100].map((x, i) => `<path d="M${x} 0 L${x + 14} 0 L${x - 26} 100 L${x - 40} 100Z" fill="${i % 2 ? "#ff7aa8" : "#7ad7ff"}"/>`).join("")}`,
     auckland: (ctx) => {
       // Daytime Auckland: Sky Tower over the CBD, the Waitemata Harbour, Rangitoto and a yacht.
@@ -488,16 +544,18 @@
         for (let yy = B - h + 2.2; yy < B - 1; yy += 2.6) s += `<path d="M${bx + .7} ${yy.toFixed(1)} H${bx + w - .7}" stroke="#b6c8e0" stroke-width=".5" opacity=".8"/>`;
         return s;
       }).join("");
+      // Auckland's Sky Tower (328 m): flared three-legged base, a fluted concrete shaft, the pod with its
+      // sloping skirt, glass band and white upper level, then the tapering mast and red beacon.
       const tower = `<g transform="translate(19 0)">`
-        + `<path d="M-4.4 70 C-2.4 66.4 -1.8 62 -1.5 56 H1.5 C1.8 62 2.4 66.4 4.4 70Z" fill="#dfe6f2"/><path d="M0 56 H1.5 C1.8 62 2.4 66.4 4.4 70 H0Z" fill="#c5cddd"/>`
-        + `<path d="M-1.2 37 H1.2 L1.5 56.4 H-1.5Z" fill="#e8edf6"/><path d="M0 37 H1.2 L1.5 56.4 H0Z" fill="#c5cddd"/>`
-        + `<path d="M-3.4 36.4 H3.4 L1.8 38.8 H-1.8Z" fill="#aeb9cf"/>`
-        + `<path d="M-5.4 33.6 C-5.4 31.6 -3.4 30.8 0 30.8 C3.4 30.8 5.4 31.6 5.4 33.6 C5.4 35.6 3.4 36.6 0 36.6 C-3.4 36.6 -5.4 35.6 -5.4 33.6Z" fill="#eef2f9" stroke="#b7c2d6" stroke-width=".35"/>`
-        + `<path d="M-5.1 33.1 C-3.4 32.3 3.4 32.3 5.1 33.1 V34.5 C3.4 35.3 -3.4 35.3 -5.1 34.5Z" fill="#46668c"/><path d="M-4.2 33.7 H-2.6 M-1.4 33.9 H.2 M1.6 33.9 H3.2 M3.9 33.7 H4.6" stroke="#9fc4ec" stroke-width=".5" stroke-linecap="round"/>`
-        + `<path d="M-1.2 31 H1.2 V29.8 H-1.2Z" fill="#dfe6f2"/>`
-        + `<path d="M-2.6 29.8 C-2.6 28.6 -1.4 28.2 0 28.2 C1.4 28.2 2.6 28.6 2.6 29.8 C2.6 31 1.4 31.4 0 31.4 C-1.4 31.4 -2.6 31 -2.6 29.8Z" fill="#e6ecf6" stroke="#b7c2d6" stroke-width=".3"/><path d="M-2.3 29.5 H2.3 V30.3 H-2.3Z" fill="#46668c"/>`
-        + `<path d="M-.9 28.4 H.9 L.5 22.4 H-.5Z" fill="#cfd7e6"/><rect x="-1.5" y="22.2" width="3" height=".7" rx=".3" fill="#aab4c8"/>`
-        + `<path d="M0 22.2 V15.8" stroke="#9aa6bd" stroke-width=".55"/><circle cx="0" cy="15.4" r="2.2" fill="#ff4d4d" opacity=".25"/><circle cx="0" cy="15.4" r=".75" fill="#ff4d4d"/></g>`;
+        + `<path d="M-5 70 C-3.6 67 -2.6 64.4 -1.7 59.6 H1.7 C2.6 64.4 3.6 67 5 70Z" fill="#dfe6f2"/><path d="M0 59.6 H1.7 C2.6 64.4 3.6 67 5 70 H0Z" fill="#c5cddd"/><path d="M-1.5 70 L-.6 63.6 M1.5 70 L.6 63.6" stroke="#aab4c8" stroke-width=".35" stroke-linecap="round"/>`
+        + `<path d="M-1.7 59.6 L-1.15 38.6 H1.15 L1.7 59.6Z" fill="#e8edf6"/><path d="M0 38.6 H1.15 L1.7 59.6 H0Z" fill="#c8d0df"/><path d="M-.6 58.8 L-.45 39.6 M.6 58.8 L.45 39.6" stroke="#b6c0d4" stroke-width=".3"/>`
+        + `<path d="M-1.2 38.6 L-3.3 36.4 H3.3 L1.2 38.6Z" fill="#b9c3d6"/>`
+        + `<rect x="-4" y="35.7" width="8" height=".9" rx=".4" fill="#e3e9f4"/>`
+        + `<rect x="-3.7" y="32.9" width="7.4" height="2.9" rx=".6" fill="#3f6c9c"/><path d="M-3.7 33.6 H3.7" stroke="#bfe0fa" stroke-width=".35" opacity=".9"/><path d="M-2.7 33.8 v1.7 M-1.4 33.8 v1.7 M-.1 33.8 v1.7 M1.2 33.8 v1.7 M2.5 33.8 v1.7" stroke="#8fc0ea" stroke-width=".4" opacity=".85"/>`
+        + `<rect x="-3.3" y="31.3" width="6.6" height="1.7" rx=".5" fill="#f1f4fa"/><path d="M-2.7 32.2 H2.7" stroke="#7aa6d0" stroke-width=".5"/>`
+        + `<path d="M-2.4 31.3 C-2.4 30.1 -1.3 29.6 0 29.6 C1.3 29.6 2.4 30.1 2.4 31.3Z" fill="#dfe6f2"/>`
+        + `<path d="M-.95 29.7 L-.5 24.4 H.5 L.95 29.7Z" fill="#d6deec"/><rect x="-1.6" y="23.9" width="3.2" height=".65" rx=".3" fill="#aab4c8"/><rect x="-1.1" y="26.6" width="2.2" height=".5" rx=".25" fill="#c9d2e3"/>`
+        + `<path d="M-.32 23.9 L-.14 15.6 H.14 L.32 23.9Z" fill="#9aa6bd"/><circle cx="0" cy="14.9" r="2.2" fill="#ff4d4d" opacity=".25"/><circle cx="0" cy="14.9" r=".8" fill="#ff4d4d"/></g>`;
       const boat = `<g transform="translate(88 73.6) scale(.8)"><path d="M-6 0 H6 L4.4 2 H-4.4Z" fill="#233a66"/><path d="M.6 -.4 V-12.6 L6 -.4Z" fill="#fff"/><path d="M-.4 -.4 V-9.6 L-5.4 -.4Z" fill="#e9f2ff"/><path d="M0 -.4 V-13" stroke="#9aa7bf" stroke-width=".4"/></g>`;
       return `<rect width="100" height="100" fill="url(#${sk})"/>`
         + `<circle cx="80" cy="20" r="17" fill="url(#${sun})"/><circle cx="80" cy="20" r="4.2" fill="#fffbe0"/>`
@@ -554,17 +612,35 @@
       const L = "M25 82 C18 71 17 60 22 50.6 C25 56 30 63 38 70 L38 84Z";
       const R = "M75 82 C82 71 83 60 78 50.6 C75 56 70 63 62 70 L62 84Z";
       const spark = (cx, cy, r) => `<path d="M${cx} ${cy - r} Q${cx} ${cy} ${cx + r} ${cy} Q${cx} ${cy} ${cx} ${cy + r} Q${cx} ${cy} ${cx - r} ${cy} Q${cx} ${cy} ${cx} ${cy - r}Z" fill="#8ff3ff" stroke="#e8ffff" stroke-width=".5"/>`;
+      const cg = x.id("wc"), lg = x.id("wl"), rg = x.id("wr"), gg = x.id("wg"), og = x.id("wo"), jg = x.id("wj");
+      x.defs += `<linearGradient id="${cg}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b3fae"/><stop offset="1" stop-color="#1d1660"/></linearGradient>`
+        + `<linearGradient id="${lg}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9a7cf5"/><stop offset="1" stop-color="#4a38aa"/></linearGradient>`
+        + `<linearGradient id="${rg}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5347c0"/><stop offset=".55" stop-color="#3a2f93"/><stop offset="1" stop-color="#241c70"/></linearGradient>`
+        + `<linearGradient id="${gg}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0b0"/><stop offset=".5" stop-color="#f5c542"/><stop offset="1" stop-color="#b8861a"/></linearGradient>`
+        + `<radialGradient id="${og}" cx=".36" cy=".3" r=".85"><stop offset="0" stop-color="#f2ffff"/><stop offset=".32" stop-color="#6aeaff"/><stop offset=".72" stop-color="#1c93d4"/><stop offset="1" stop-color="#0b3f86"/></radialGradient>`
+        + `<linearGradient id="${jg}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b8f8ff"/><stop offset=".5" stop-color="#3fd2f0"/><stop offset="1" stop-color="#1a7fc4"/></linearGradient>`;
+      const trim = `url(#${gg})`;
+      const cape = (d, lin, fold) => `<path d="${d}" fill="url(#${cg})"/>` + x.clip(d, `<path d="${lin}" fill="url(#${lg})"/><path d="${fold}" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="1.4" stroke-linecap="round"/>`);
+      const constel = (pts, ln) => `<path d="${ln}" fill="none" stroke="#ffd23f" stroke-width=".45" stroke-dasharray="1 1.3" opacity=".7"/>` + pts.map(p => star5(p[0], p[1], p[2], "#ffd23f")).join("");
       return {
         hide: { hat: 1, top: 1 },
-        back: `<path d="${L}" fill="#2a2470"/><path d="${R}" fill="#2a2470"/>` +
-          x.clip(L, `<path d="M26 82 C20 71 19.6 61 23.6 53 C26.4 58 31 64 39 72 L39 84Z" fill="#5a3fb0"/>`) + x.clip(R, `<path d="M74 82 C80 71 80.4 61 76.4 53 C73.6 58 69 64 61 72 L61 84Z" fill="#5a3fb0"/>`) + star5(27.4, 69, 2.2, "#ffd23f") + star5(72.6, 69, 2.2, "#ffd23f") + star5(24.6, 60, 1.4, "#fff") + star5(75.4, 60, 1.4, "#fff") +
-          `<path d="M25 82 C18 71 17 60 22 50.6 C25 56 30 63 38 70" fill="none" stroke="#f5c542" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M75 82 C82 71 83 60 78 50.6 C75 56 70 63 62 70" fill="none" stroke="#f5c542" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`,
-        body: topShape("#3a2f8f", [[22, 92, 2.4], [76, 94, 2], [33, 86, 1.6], [67, 87, 1.6], [60, 98, 1.4]].map(p => star5(p[0], p[1], p[2], "#ffd23f")).join(""), x),
-        over: `<path d="M40.4 76.2 Q50 97.4 59.6 76.2Z" fill="#d9d2ff"/>` +
-          x.body(`<path d="M10 100 C10.0 89.6 20.2 81.8 36.6 79.0" fill="none" stroke="#f5c542" stroke-width="2.4" stroke-linecap="round"/><path d="M90 100 C90.0 89.6 79.8 81.8 63.4 79.0" fill="none" stroke="#f5c542" stroke-width="2.4" stroke-linecap="round"/><path d="M14 99.4 C14 90 24 84.2 36 82.8 M86 99.4 C86 90 76 84.2 64 82.8" fill="none" stroke="#f5c542" stroke-width=".8" stroke-dasharray="1.6 2.2" opacity=".9"/>`) +
-          `<path d="M38.2 76.4 Q50 100 61.8 76.4" fill="none" stroke="#f5c542" stroke-width="1.7" stroke-linecap="round"/><path d="M50 86.4 L53.4 91.6 L50 98.4 L46.6 91.6Z" fill="#5ee6ff" stroke="#f5c542" stroke-width="1" stroke-linejoin="round"/><path d="M50 88.4 L51.4 91.6 L50 95 L48.6 91.6Z" fill="#e8ffff" opacity=".8"/>`,
-        front: `<path d="M30.6 36.6 Q50 25.6 69.4 36.6" fill="none" stroke="#f5c542" stroke-width="2.2" stroke-linecap="round"/><circle cx="50" cy="31.4" r="4.4" fill="#5ee6ff" opacity=".35"/><circle cx="31.6" cy="36" r="1.5" fill="#f5c542"/><circle cx="68.4" cy="36" r="1.5" fill="#f5c542"/><path d="M50 26.8 L53.4 31.4 L50 36 L46.6 31.4Z" fill="#5ee6ff" stroke="#f5c542" stroke-width="1" stroke-linejoin="round"/><path d="M50 28.8 L51.5 31.4 L50 33.8Z" fill="#e8ffff"/>` +
-          spark(13, 62, 3.2) + spark(88, 40, 2.4) + spark(18, 31, 1.8) + `<circle cx="85" cy="58" r="7" fill="#5ee6ff" opacity=".22"/><circle cx="85" cy="58" r="4.2" fill="#5ee6ff" stroke="#e8ffff" stroke-width=".8"/><circle cx="83.6" cy="56.6" r="1.5" fill="#fff" opacity=".9"/>`
+        back: cape(L, "M26 82 C20 71 19.6 61 23.6 53 C26.4 58 31 64 39 72 L39 84Z", "M31 79 C27 72 25.6 65 27 58.6")
+          + cape(R, "M74 82 C80 71 80.4 61 76.4 53 C73.6 58 69 64 61 72 L61 84Z", "M69 79 C73 72 74.4 65 73 58.6")
+          + star5(27.4, 69, 2.2, "#ffd23f") + star5(72.6, 69, 2.2, "#ffd23f") + star5(24.6, 60, 1.4, "#fff") + star5(75.4, 60, 1.4, "#fff")
+          + `<path d="M25 82 C18 71 17 60 22 50.6 C25 56 30 63 38 70" fill="none" stroke="${trim}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M75 82 C82 71 83 60 78 50.6 C75 56 70 63 62 70" fill="none" stroke="${trim}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`,
+        body: topShape(`url(#${rg})`,
+          `<path d="M20 100 C25 90 31 82 38 77 M80 100 C75 90 69 82 62 77" stroke="#fff" stroke-opacity=".09" stroke-width="3.2" fill="none" stroke-linecap="round"/><path d="M30 100 C32 92 35 86 40 80 M70 100 C68 92 65 86 60 80" stroke="#150f4a" stroke-opacity=".3" stroke-width="1.4" fill="none"/>`
+          + constel([[22, 92, 2.4], [33, 86, 1.6], [27, 97, 1.3]], "M22 92 L33 86 M22 92 L27 97") + constel([[76, 94, 2], [67, 87, 1.6], [72, 98.4, 1.3]], "M76 94 L67 87 M76 94 L72 98.4"), x),
+        over: `<path d="M40.4 76.2 Q50 97.4 59.6 76.2Z" fill="#e4deff"/><path d="M42 77 Q50 94 58 77" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width=".8"/>`
+          + x.body(`<path d="M10 100 C10.0 89.6 20.2 81.8 36.6 79.0" fill="none" stroke="${trim}" stroke-width="2.4" stroke-linecap="round"/><path d="M90 100 C90.0 89.6 79.8 81.8 63.4 79.0" fill="none" stroke="${trim}" stroke-width="2.4" stroke-linecap="round"/><path d="M14 99.4 C14 90 24 84.2 36 82.8 M86 99.4 C86 90 76 84.2 64 82.8" fill="none" stroke="#f5c542" stroke-width=".8" stroke-dasharray="1.6 2.2" opacity=".9"/>`)
+          + `<path d="M38.2 76.4 Q50 100 61.8 76.4" fill="none" stroke="${trim}" stroke-width="1.8" stroke-linecap="round"/>`
+          + `<path d="M50 86 L53.8 91.6 L50 98.8 L46.2 91.6Z" fill="url(#${jg})" stroke="${trim}" stroke-width="1.1" stroke-linejoin="round"/><path d="M50 86 V98.8 M46.2 91.6 H53.8" stroke="#e8ffff" stroke-width=".3" opacity=".7"/><path d="M50 88.2 L51.5 91.6 L50 95.2 L48.5 91.6Z" fill="#e8ffff" opacity=".75"/>`,
+        front: `<path d="M30.6 36.6 Q50 25.6 69.4 36.6" fill="none" stroke="${trim}" stroke-width="2.2" stroke-linecap="round"/><path d="M31.6 36 Q50 26.6 68.4 36" fill="none" stroke="#fff6c8" stroke-width=".5" opacity=".8" stroke-linecap="round"/>`
+          + `<path d="M34 35.4 q-1.9 -1.5 -.7 -3.3 q1.6 .8 1.8 2.5Z M66 35.4 q1.9 -1.5 .7 -3.3 q-1.6 .8 -1.8 2.5Z" fill="${trim}"/>`
+          + `<circle cx="50" cy="31.4" r="4.6" fill="#5ee6ff" opacity=".3"/><circle cx="31.6" cy="36" r="1.5" fill="${trim}"/><circle cx="68.4" cy="36" r="1.5" fill="${trim}"/><circle cx="31.2" cy="35.6" r=".45" fill="#fff" opacity=".9"/><circle cx="68" cy="35.6" r=".45" fill="#fff" opacity=".9"/>`
+          + `<path d="M50 26.4 L53.6 31.4 L50 36.4 L46.4 31.4Z" fill="url(#${jg})" stroke="${trim}" stroke-width="1" stroke-linejoin="round"/><path d="M50 26.4 V36.4 M46.4 31.4 H53.6" stroke="#e8ffff" stroke-width=".28" opacity=".7"/><path d="M50 28.4 L51.5 31.4 L50 34Z" fill="#e8ffff" opacity=".85"/>`
+          + spark(13, 62, 3.2) + spark(88, 40, 2.4) + spark(18, 31, 1.8)
+          + `<!--orb--><circle cx="85" cy="58" r="8" fill="#5ee6ff" opacity=".14"/><path d="M79.8 64.8 Q85 69.4 90.2 64.8" fill="none" stroke="${trim}" stroke-width="1.3" stroke-linecap="round"/><circle cx="85" cy="58" r="5" fill="url(#${og})" stroke="#e8ffff" stroke-width=".7"/><path d="M82.2 59.6 C82.5 55.8 86.4 54.8 87.8 57.2 C86.2 56.6 84.2 57.6 84.2 60Z" fill="#fff" opacity=".26"/><path d="M85.6 55.8 l.6 1.5 1.5 .6 -1.5 .6 -.6 1.5 -.6 -1.5 -1.5 -.6 1.5 -.6z" fill="#fff" opacity=".9"/><ellipse cx="83" cy="55.5" rx="1.5" ry="1" fill="#fff" opacity=".85" transform="rotate(-35 83 55.5)"/><!--/orb-->`
       };
     },
     shark: (x) => ({
@@ -605,40 +681,53 @@
   const BROW_LIST = [["natural", "Natural", 0], ["thick", "Thick", 0], ["thin", "Thin", 0], ["arched", "Arched", 1], ["flat", "Flat", 1], ["raised", "Raised", 1], ["worried", "Worried", 1], ["angry", "Angry", 2], ["skeptical", "One raised", 2]];
 
   /* ------------------------------ pets ---------------------------------- */
-  // A little bird perched on the right shoulder, looking at its person. Drawn around a perch point at (0,0).
-  const kiwiArt = x => {
-    const g = x.id("kw");
-    x.defs += `<radialGradient id="${g}" cx=".42" cy=".34" r=".78"><stop offset="0" stop-color="#b58f60"/><stop offset=".55" stop-color="#8c6c46"/><stop offset="1" stop-color="#5e4427"/></radialGradient>`;
-    const body = "M-8.8 -8.4 C-8.8 -14.8 -4.2 -18 1.2 -17.8 C8 -17.4 10.8 -11.8 9.2 -6.4 C8 -2.6 3.6 -1.2 -1 -1.4 C-6 -1.6 -8.8 -4.4 -8.8 -8.4Z";
+  // Pets sit on the right shoulder looking at their person, drawn around a perch point at (0,0).
+  // A = animation hooks: A.body wraps the body (breathing), A.head wraps the head around its neck pivot
+  // (tilt), A.lid adds a blink overlay. They are plain pass-throughs unless the pet is animating.
+  const PA0 = { body: s => s, head: s => s, lid: () => "" };
+  const kiwiArt = (x, A) => {
+    const g = x.id("kw"), hg = x.id("kh"), bg = x.id("kb");
+    x.defs += `<radialGradient id="${g}" cx=".38" cy=".28" r=".9"><stop offset="0" stop-color="#cfae7c"/><stop offset=".5" stop-color="#97744a"/><stop offset="1" stop-color="#5a4025"/></radialGradient>`
+      + `<radialGradient id="${hg}" cx=".4" cy=".3" r=".85"><stop offset="0" stop-color="#b8935f"/><stop offset="1" stop-color="#7d5d37"/></radialGradient>`
+      + `<linearGradient id="${bg}" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4e8c6"/><stop offset=".7" stop-color="#d8bf88"/><stop offset="1" stop-color="#9c7f48"/></linearGradient>`;
+    const body = "M-8.4 -8.6 C-8.6 -14.8 -3.8 -17.8 1.8 -17.5 C8.6 -17.1 11.4 -12 10.1 -6.6 C9.1 -2.6 4.6 -1 -.8 -1.2 C-5.8 -1.4 -8.2 -4.6 -8.4 -8.6Z";
     let tex = ""; for (let r = 0; r < 5; r++) for (let xx = -6.4 + (r % 2) * 1.7; xx < 9; xx += 3.4) tex += `M${xx.toFixed(1)} ${-15 + r * 3} q1.3 1.5 2.6 0 `;
-    return `<ellipse cx="0" cy=".3" rx="7.4" ry="1.2" fill="#000" opacity=".16"/>`
-      + `<path d="M-2.4 -2.4 V.1 M2.4 -2.4 V.1" stroke="#c79a52" stroke-width="1.3" stroke-linecap="round"/><path d="M-4.4 .5 H-1.2 M.8 .5 H4" stroke="#c79a52" stroke-width="1.1" stroke-linecap="round"/>`
+    const bodyArt = `<ellipse cx="0" cy=".3" rx="7.8" ry="1.2" fill="#000" opacity=".16"/>`
+      + `<path d="M-2.4 -2.4 V.1 M2.6 -2.4 V.1" stroke="#d3a553" stroke-width="1.4" stroke-linecap="round"/><path d="M-4.6 .5 H-.9 M1 .5 H4.5" stroke="#d3a553" stroke-width="1.1" stroke-linecap="round"/>`
       + `<path d="${body}" fill="url(#${g})"/>`
-      + x.clip(body, `<path d="${tex}" stroke="#4f371e" stroke-width=".5" fill="none" stroke-linecap="round" opacity=".55" transform="translate(0 .5)"/><path d="${tex}" stroke="#c4a374" stroke-width=".4" fill="none" stroke-linecap="round" opacity=".5"/><ellipse cx="-1" cy="-5" rx="5.4" ry="3.2" fill="#a98558" opacity=".35"/>`)
-      + `<circle cx="-7.8" cy="-13.2" r="3.5" fill="#94724a"/><path d="M-9.6 -16 q1 -1 2 0 M-7.4 -16.5 q1 -1 2 0 M-5.4 -15.6 q1 -1 2 0" stroke="#5a4025" stroke-width=".45" fill="none" stroke-linecap="round"/>`
-      + `<circle cx="-9" cy="-13.7" r=".95" fill="#17120d"/><circle cx="-8.7" cy="-14" r=".3" fill="#fff"/>`
-      + `<path d="M-10.4 -13 C-12.8 -11.8 -14.6 -9.6 -15.8 -5.4 L-15 -5 C-13.8 -8.4 -12.2 -10.4 -10.2 -11.4Z" fill="#ead9b0" stroke="#b49a64" stroke-width=".35" stroke-linejoin="round"/>`
-      + `<path d="M-10 -11.8 L-12.8 -9.8 M-9.8 -12.6 L-13.4 -12" stroke="#4a3722" stroke-width=".3" stroke-linecap="round"/>`;
+      + x.clip(body, `<path d="${tex}" stroke="#4a331b" stroke-width=".5" fill="none" stroke-linecap="round" opacity=".5" transform="translate(0 .5)"/><path d="${tex}" stroke="#d2b182" stroke-width=".42" fill="none" stroke-linecap="round" opacity=".55"/><ellipse cx="-.6" cy="-5.2" rx="5.6" ry="3.2" fill="#c9a877" opacity=".28"/><path d="M-1.8 -10.2 C1.2 -13.4 6.8 -12.6 8.2 -8 C5.8 -6.2 1.8 -6.2 -1.8 -10.2Z" fill="#6f5130" opacity=".5"/><path d="M-1.2 -9.4 C1.4 -11.6 5.6 -11 7 -8.2" stroke="#d9bc8c" stroke-width=".35" fill="none" opacity=".6"/>`)
+      + `<path d="M-3.4 -16.8 C2 -18.6 8.8 -16.8 10.2 -11" fill="none" stroke="#e6cb9b" stroke-width=".6" stroke-linecap="round" opacity=".55"/>`;
+    const head = `<circle cx="-7.8" cy="-13.2" r="3.6" fill="url(#${hg})"/><ellipse cx="-6.2" cy="-12" rx="1.7" ry="1.1" fill="#c9a877" opacity=".4"/>`
+      + `<path d="M-9.8 -16 q1 -1 2 0 M-7.5 -16.6 q1 -1 2 0 M-5.4 -15.6 q1 -1 2 0" stroke="#5a4025" stroke-width=".45" fill="none" stroke-linecap="round"/>`
+      + `<path d="M-10.5 -13 C-13 -11.9 -15 -9.4 -16.3 -5.6 L-15.3 -5.2 C-13.7 -8.4 -12.1 -10.3 -10.1 -11.3Z" fill="url(#${bg})" stroke="#a8884f" stroke-width=".3" stroke-linejoin="round"/><circle cx="-11.3" cy="-12" r=".3" fill="#6a5430"/>`
+      + `<path d="M-10 -11.8 L-12.8 -9.6 M-9.8 -12.6 L-13.4 -11.8 M-9.9 -11 L-12 -8.4" stroke="#4a3722" stroke-width=".3" stroke-linecap="round"/>`
+      + `<circle cx="-9" cy="-13.7" r="1.05" fill="#17120d"/><circle cx="-8.65" cy="-14.05" r=".34" fill="#fff"/><path d="M-10.3 -15.1 q1 -.8 2.1 -.2" stroke="#5a4025" stroke-width=".35" fill="none" stroke-linecap="round"/>`
+      + A.lid(-9, -13.7, 1.15, "#94724a", "#4a3722");
+    return A.body(bodyArt) + A.head(head, -5.4, -11.4, "0%,100%{transform:rotate(0deg)}24%{transform:rotate(-2.2deg)}44%{transform:rotate(3.6deg)}54%{transform:rotate(-.6deg)}74%{transform:rotate(2deg)}");
   };
-  const tuiArt = x => {
-    const g = x.id("tu");
-    x.defs += `<linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#27406f"/><stop offset=".5" stop-color="#16264b"/><stop offset="1" stop-color="#0e1a36"/></linearGradient>`;
-    const body = "M-6.6 -9 C-6.8 -15 -2.4 -18.4 2.4 -17.2 C7.6 -15.8 8.2 -9 6.2 -4.4 C5 -1.8 1.6 -1 -1.4 -1.4 C-5.2 -2 -6.4 -5.4 -6.6 -9Z";
-    return `<ellipse cx="0" cy=".3" rx="7" ry="1.2" fill="#000" opacity=".16"/>`
-      + `<path d="M-1.8 -2.4 V.1 M1.8 -2.4 V.1" stroke="#3a3a46" stroke-width="1.1" stroke-linecap="round"/><path d="M-3.6 .5 H-.8 M.4 .5 H3.2" stroke="#3a3a46" stroke-width="1" stroke-linecap="round"/>`
-      + `<path d="M2.6 -6 C5 -4.4 7.6 -2.4 9.2 -.2 L7.6 .8 C5.8 -.6 3.6 -1.8 1 -3Z" fill="#101a33"/>`
+  const tuiArt = (x, A) => {
+    const g = x.id("tu"), hg = x.id("th"), wg = x.id("tw");
+    x.defs += `<linearGradient id="${g}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#35549a"/><stop offset=".5" stop-color="#172a56"/><stop offset="1" stop-color="#0b1430"/></linearGradient>`
+      + `<radialGradient id="${hg}" cx=".4" cy=".3" r=".85"><stop offset="0" stop-color="#2f4a8c"/><stop offset="1" stop-color="#111c42"/></radialGradient>`
+      + `<linearGradient id="${wg}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a4684"/><stop offset="1" stop-color="#0d1834"/></linearGradient>`;
+    const body = "M-6.8 -9 C-7 -15.2 -2.6 -18.6 2.4 -17.4 C7.8 -16 8.4 -9.2 6.4 -4.4 C5.2 -1.8 1.6 -1 -1.4 -1.4 C-5.4 -2 -6.6 -5.4 -6.8 -9Z";
+    const bodyArt = `<ellipse cx="0" cy=".3" rx="7" ry="1.2" fill="#000" opacity=".16"/>`
+      + `<path d="M2.8 -5.8 C5.2 -4.2 7.8 -2.2 9.8 .4 L8.2 1.5 C6.2 .3 4 -.9 1.2 -2.6Z" fill="#0d1731"/><path d="M3.8 -4.4 L8.6 .5" stroke="#35c2b0" stroke-width=".35" opacity=".6" stroke-linecap="round"/>`
+      + `<path d="M-1.8 -2.4 V.1 M1.8 -2.4 V.1" stroke="#3b3b48" stroke-width="1.1" stroke-linecap="round"/><path d="M-3.6 .5 H-.8 M.4 .5 H3.2" stroke="#3b3b48" stroke-width="1" stroke-linecap="round"/>`
       + `<path d="${body}" fill="url(#${g})"/>`
-      + x.clip(body, `<ellipse cx="-2.6" cy="-8" rx="3.4" ry="4.6" fill="#2c4f92" opacity=".5"/><path d="M-6 -12.4 C-2.4 -15 3 -15 7 -11.4" stroke="#35c2b0" stroke-width="1" fill="none" opacity=".85"/><path d="M-6 -10.6 C-2.4 -13 3 -13 7 -9.6" stroke="#8a6fe0" stroke-width=".6" fill="none" opacity=".6"/><path d="M-5.6 -6.4 C-2 -8.4 2.4 -8 5.6 -5.2" stroke="#35c2b0" stroke-width=".6" fill="none" opacity=".5"/>`)
-      + `<path d="M1 -15.4 C6.2 -14 8.2 -8.4 5.8 -3.4 C3.6 -5 2 -9 1 -15.4Z" fill="#0f1830"/><path d="M2.2 -14.6 C5 -13.6 6.4 -11.6 6.8 -9.6 L5.4 -9.6 C5 -11.4 3.8 -12.8 1.8 -13.6Z" fill="#f4f6fb"/>`
-      + `<circle cx="-4.6" cy="-17.2" r="3.9" fill="#16224a"/><path d="M-7.4 -19 C-5.6 -20.4 -2.8 -20.2 -1.4 -18.4" stroke="#3fb8aa" stroke-width=".9" fill="none" stroke-linecap="round"/>`
-      + `<circle cx="-6.2" cy="-17.6" r="1.4" fill="#56648a"/><circle cx="-6.2" cy="-17.6" r=".8" fill="#06060a"/><circle cx="-5.95" cy="-17.9" r=".28" fill="#fff"/>`
-      + `<path d="M-8.2 -17 C-10.8 -16.8 -12.6 -15.6 -13.6 -13.6 C-11.2 -14.6 -9.4 -14.8 -7.6 -14.8Z" fill="#2a2a33"/>`
-      + `<path d="M-6 -13.6 C-8 -11.8 -8 -9.4 -6.2 -8.4 C-4.6 -9.4 -4.4 -12 -6 -13.6Z M-3.2 -13 C-4.6 -11.2 -4.4 -9 -3 -8.2 C-1.6 -9 -1.4 -11.4 -3.2 -13Z" fill="#fff" stroke="#d6dcea" stroke-width=".3" stroke-linejoin="round"/>`
-      + `<path d="M-6 -12.6 V-9.6 M-3.2 -12 V-9.2" stroke="#d6dcea" stroke-width=".25"/>`;
+      + x.clip(body, `<ellipse cx="-2.8" cy="-8" rx="3.2" ry="4.4" fill="#2c4f92" opacity=".45"/><path d="M-6.4 -12.4 C-2.6 -15.4 3 -15.4 7 -11.6" stroke="#35c9b4" stroke-width="1" fill="none" opacity=".8"/><path d="M-6.4 -10.4 C-2.6 -13.2 3 -13.2 7 -9.6" stroke="#8a6fe0" stroke-width=".6" fill="none" opacity=".6"/><path d="M-6 -6.4 C-2 -8.4 2.6 -8 5.8 -5.2" stroke="#c99a48" stroke-width=".5" fill="none" opacity=".55"/>`
+        + `<path d="M.2 -13.6 C4.8 -14.6 8.6 -10.8 7.8 -5.4 C6.4 -3.4 3.6 -3 1.4 -4.4 C-.4 -7 -.8 -10.6 .2 -13.6Z" fill="url(#${wg})"/><path d="M2 -11 L6.6 -7.6 M1 -8.8 L5.4 -5.6" stroke="#35c2b0" stroke-width=".3" opacity=".5" stroke-linecap="round"/><path d="M1.8 -13.8 C5.2 -14.2 8 -11.6 8.2 -8.6 L6.4 -9 C6 -11.2 4 -12.6 1.4 -12.4Z" fill="#f4f6fb"/>`);
+    const head = `<circle cx="-4.6" cy="-17.2" r="3.9" fill="url(#${hg})"/><path d="M-7.6 -19 C-5.8 -20.6 -2.8 -20.4 -1.4 -18.6" stroke="#3fb8aa" stroke-width=".9" fill="none" stroke-linecap="round"/>`
+      + `<path d="M-1.2 -16.2 q1.6 .2 2.2 1.6 M-.4 -17.6 q1.8 .4 2.2 2" stroke="#fff" stroke-opacity=".85" stroke-width=".45" fill="none" stroke-linecap="round"/>`
+      + `<path d="M-8.2 -17 C-10.8 -16.8 -12.6 -15.6 -13.6 -13.6 C-11.2 -14.6 -9.4 -14.8 -7.6 -14.8Z" fill="#24242e"/><path d="M-9 -16.4 C-10.4 -16.2 -11.6 -15.6 -12.4 -14.6" stroke="#6a6a80" stroke-width=".3" fill="none" stroke-linecap="round"/>`
+      + `<circle cx="-6.2" cy="-17.7" r="1.5" fill="#56648a"/><circle cx="-6.2" cy="-17.7" r=".85" fill="#06060a"/><circle cx="-5.95" cy="-18" r=".28" fill="#fff"/>`
+      + `<path d="M-6 -13.6 C-8 -11.8 -8 -9.4 -6.2 -8.4 C-4.6 -9.4 -4.4 -12 -6 -13.6Z M-3.2 -13 C-4.6 -11.2 -4.4 -9 -3 -8.2 C-1.6 -9 -1.4 -11.4 -3.2 -13Z" fill="#fff" stroke="#d6dcea" stroke-width=".3" stroke-linejoin="round"/><path d="M-6 -12.6 V-9.6 M-3.2 -12 V-9.2" stroke="#d6dcea" stroke-width=".25"/>`
+      + A.lid(-6.2, -17.7, 1.6, "#16224a", "#56648a");
+    return A.body(bodyArt) + A.head(head, -3.6, -13.4, "0%,100%{transform:rotate(-1.8deg)}38%{transform:rotate(2.4deg)}70%{transform:rotate(-.6deg)}");
   };
   const petWrap = (gd, art) => `<g transform="translate(${(79.5 + (gd.sx - 1) * 27).toFixed(1)} 78.6) scale(1.1)">${art}</g>`;
-  const PETS = { none: () => "", kiwi: (gd, x) => petWrap(gd, kiwiArt(x)), tui: (gd, x) => petWrap(gd, `<g transform="translate(-1.5 0)">${tuiArt(x)}</g>`) };
-  const PET_LIST = [["none", "None", 0], ["kiwi", "Kiwi", 2], ["tui", "Tui", 2]];
+  const PETS = { none: () => "", kiwi: (gd, x, A) => petWrap(gd, kiwiArt(x, A || PA0)), tui: (gd, x, A) => petWrap(gd, `<g transform="translate(-1.5 0)">${tuiArt(x, A || PA0)}</g>`) };
+  const PET_LIST = [["none", "None", 0], ["kiwi", "Kiwi", 3], ["tui", "Tui", 3]];
 
   /* ------------------------------ catalog ------------------------------- */
   const CATS = [
@@ -696,11 +785,16 @@
   const bodyT = gd => `<path transform="translate(50 0) scale(${gd.sx} 1) translate(-50 0)" d="${BODY}"/>`;
   // crisp 4-point sparkle, unit radius: tinted star + white core + faint round halo
   const SPK = "M0 -1 C.07 -.24 .24 -.07 1 0 C.24 .07 .07 .24 0 1 C-.07 .24 -.24 .07 -1 0 C-.24 -.07 -.07 -.24 0 -1Z";
-  const spkArt = col => `<circle r="1.3" fill="${col}" opacity=".16"/><path d="${SPK}" fill="${col}" stroke="${shade(col, -.3)}" stroke-width=".09" stroke-linejoin="round"/><path d="${SPK}" fill="#fff" transform="scale(.55)"/><circle r=".14" fill="#fff"/>`;
+  const spkArt = col => `<circle r="1.3" fill="${col}" opacity=".08"/><path d="${SPK}" fill="${col}" stroke="${shade(col, -.3)}" stroke-width=".09" stroke-linejoin="round"/><path d="${SPK}" fill="#fff" transform="scale(.55)"/><circle r=".14" fill="#fff"/>`;
   const spkAt = p => `<g transform="translate(${p[0]} ${p[1]}) scale(${n2(p[2] * 1.25)})">${spkArt(p[3] || "#fff")}</g>`;
   // animation "tokens" a layer can win from the shared budget, in the order they are handed out
-  const FX_TOK = { 3: ["sheen", "spark", "spark"], 4: ["sheen", "glow", "iri", "spark", "spark"], bg3: ["amb", "amb"], bg4: ["amb", "amb", "amb"], pet: ["breathe", "blink", "tilt"] };
-  const PET_EYE = { kiwi: { x: -9, y: -13.7, r: 1.5, f: "#94724a", l: "#4a3722" }, tui: { x: -7.7, y: -17.6, r: 1.9, f: "#16224a", l: "#56648a" } };
+  const FX_TOK = { 3: ["sheen", "spark", "spark"], 4: ["sheen", "glow", "iri", "spark", "spark"], bg3: ["amb", "amb"], bg4: ["amb", "amb", "amb"], pet: ["breathe", "tilt", "blink", "spark"] };
+  // items whose signature animation replaces (or adds to) the standard sheen
+  const FX_TOK_OVR = {
+    "fx.glow": ["warble", "fade", "spark"], "fx.lightning": ["flash", "spark", "spark"], "fx.flames": ["crackle", "crackle", "crackle", "glow", "spark"],
+    "hat.propeller": ["spin", "spark", "spark"], "eyes.stars": ["spin", "spin", "spark"], "eyes.hearts": ["spin", "spin", "spark"], "eyes.dollar": ["spin", "spin", "spark"],
+    "costume.wizard": ["sheen", "glow", "bob", "iri", "spark"], "bg.lava": ["amb", "amb", "amb"], "bg.auckland": ["amb", "amb", "amb"]
+  };
 
   function fxState(ctx, anim, layers, rc) {
     const p = ctx.id("f");
@@ -708,7 +802,7 @@
     layers.forEach(l => { st.layers[l.key] = l; });
     if (anim) {
       let budget = FX_BUDGET;
-      const lists = layers.map(l => [l.key, l.key === "pet" ? FX_TOK.pet : l.key === "bg" ? FX_TOK[l.tier >= 4 ? "bg4" : "bg3"] : FX_TOK[l.tier >= 4 ? 4 : 3]]);
+      const lists = layers.map(l => [l.key, FX_TOK_OVR[l.key + "." + l.id] || (l.key === "pet" ? FX_TOK.pet : l.key === "bg" ? FX_TOK[l.tier >= 4 ? "bg4" : "bg3"] : FX_TOK[l.tier >= 4 ? 4 : 3])]);
       for (let r = 0; budget > 0 && r < 8; r++) lists.forEach(([k, t]) => {
         if (budget > 0 && t[r]) { const g = st.grant[k] || (st.grant[k] = {}); g[t[r]] = (g[t[r]] || 0) + 1; budget--; }
       });
@@ -725,16 +819,16 @@
     const mv = (k, tok, svg, kf, dur, o) => {
       o = o || {};
       const base = (o.base ? ` transform="${o.base}"` : "") + (o.op != null ? ` opacity="${o.op}"` : "");
-      if (take(k, tok)) return `<g${base}${at(kfn(kf), dur, o.ease || "ease-in-out", dl(dur))}>${svg}</g>`;
+      if (take(k, tok)) return `<g${base}${at(kfn(kf), dur, o.ease || "ease-in-out", o.delay != null ? o.delay : dl(dur))}>${svg}</g>`;
       return o.still === false ? "" : `<g${base}>${svg}</g>`;
     };
-    const glow = (k, gs) => {
+    const glow = (k, gs, gkf, gdur) => {
       const body = gs.map(g => {
         const id = ctx.id("gl");
         ctx.defs += `<radialGradient id="${id}"><stop offset="0" stop-color="${g.c}" stop-opacity="${n2(g.o * gk)}"/><stop offset=".55" stop-color="${g.c}" stop-opacity="${n2(g.o * gk * .4)}"/><stop offset="1" stop-color="${g.c}" stop-opacity="0"/></radialGradient>`;
         return `<ellipse cx="${g.x}" cy="${g.y}" rx="${g.rx}" ry="${g.ry}" fill="url(#${id})"/>`;
       }).join("");
-      return mv(k, "glow", body, "0%,100%{opacity:.5}50%{opacity:1}", 4.6);
+      return mv(k, "glow", body, gkf || "0%,100%{opacity:.5}50%{opacity:1}", gdur || 4.6);
     };
     // one walker = ONE animated node that twinkles up in each of its spots in turn
     const walker = (g, o) => {
@@ -774,8 +868,10 @@
         });
         return out;
       }
-      const g = leg && spec.glow ? glow(k, [].concat(spec.glow)) : "";
+      const g = leg && spec.glow ? glow(k, [].concat(spec.glow), spec.glowKf, spec.glowDur) : "";
       if (spec.glowPost) out.post += g; else out.pre += g;
+      const h = { mv: (t, s2, kf, d, o) => mv(k, t, s2, kf, d, o) };
+      if (!spec.noSheen) {
       const [x0, y0, x1, y1] = spec.box, w = x1 - x0, T = y0 - 6, H = y1 - y0 + 12, mid = T + H / 2, sl = .364;
       const bw = spec.bw || Math.max(4, Math.min(leg ? 24 : 15, w * (leg ? .5 : .34)));
       const bx = x0 - bw - sl * H / 2, D = n2(w + bw + sl * H);
@@ -785,7 +881,7 @@
         ? `<stop offset="0" stop-color="${hue[0]}" stop-opacity="0"/><stop offset=".3" stop-color="${hue[0]}" stop-opacity=".38"/><stop offset=".5" stop-color="${tint}" stop-opacity="${pk}"/><stop offset=".7" stop-color="${hue[1]}" stop-opacity=".38"/><stop offset="1" stop-color="${hue[1]}" stop-opacity="0"/>`
         : `<stop offset="0" stop-color="${tint}" stop-opacity="0"/><stop offset=".36" stop-color="${tint}" stop-opacity="${n2(pk * .22)}"/><stop offset=".5" stop-color="${tint}" stop-opacity="${pk}"/><stop offset=".64" stop-color="${tint}" stop-opacity="${n2(pk * .22)}"/><stop offset="1" stop-color="${tint}" stop-opacity="0"/>`) + `</linearGradient>`;
       const band = `<rect x="${n2(bx + sl * mid)}" y="${n2(T)}" width="${n2(bw)}" height="${n2(H)}" fill="url(#${gid})" transform="skewX(-20)"/>`;
-      const sdur = leg ? 9.2 : 5.6 + (Object.keys(st.built).length % 3) * .7, bt = `transform="translate(${n2(D * .42)} 0)"`;
+      const sdur = leg ? 9.2 : 5.6 + (Object.keys(st.built).length % 3) * .7, bt = `transform="translate(${n2(D * (spec.at != null ? spec.at : .42))} 0)"`;
       const sheen = take(k, "sheen")
         ? `<g ${bt}${at(kfn(`0%{transform:translateX(0px)}${leg ? 48 : 28}%{transform:translateX(${D}px)}100%{transform:translateX(${D}px)}`), sdur, "ease-in-out", dl(sdur))}>${band}</g>`
         : anim ? "" : `<g ${bt}>${band}</g>`;
@@ -796,45 +892,47 @@
         iri = mv(k, "iri", `<rect x="${n2(x0 - tx - 2)}" y="${n2(y0 - 4)}" width="${n2(w + tx + 4)}" height="${n2(y1 - y0 + 8)}" fill="url(#${ig})" opacity="${spec.iriOp || .26}"/>`, `0%{transform:translateX(0px)}100%{transform:translateX(${tx}px)}`, 12, { ease: "linear", still: !anim });
       }
       out.post += (spec.mask ? ctx.mask(spec.mask, iri + sheen) : ctx.clip(spec.clip, iri + sheen));
+      }
+      if (spec.extra) out.post += spec.extra(h);
       if (spec.orbit && leg) out.post += orbit(k, spec.orbit);
       const sp = spec.sp || [], n = Math.min(left(k, "spark"), sp.length);
       for (let i = 0; i < n; i++) take(k, "spark");
       out.post += sparks(sp, n, Object.assign({ drift: leg, still: anim ? Math.min(2, stillN) : stillN }, spec.so));
       return out;
     };
+    const petA = st.layers.pet ? {
+      body: b => mv("pet", "breathe", b, "0%,100%{transform:scale(1,1)}50%{transform:scale(1.012,1.04)}", 3.9),
+      head: (b, px, py, kf) => `<g transform="translate(${px} ${py})">${mv("pet", "tilt", `<g transform="translate(${-px} ${-py})">${b}</g>`, kf, 6.4)}</g>`,
+      lid: (cx, cy, r, f, l) => mv("pet", "blink", `<circle cx="${cx}" cy="${cy}" r="${n2(r)}" fill="${f}"/><path d="M${n2(cx - r * .75)} ${cy} q${n2(r * .75)} ${n2(r * .5)} ${n2(r * 1.5)} 0" fill="none" stroke="${l}" stroke-width=".35" stroke-linecap="round"/>`, "0%,88%{opacity:0}90%,93%{opacity:1}95.5%,100%{opacity:0}", 5.4, { op: 0, still: false })
+    } : PA0;
     // public API used by renderSvg
     return {
+      petA,
+      bg(svg) { const o = st.layers.bg && st.get("bg"); return o && o.spec && o.spec.strip ? svg.replace(o.spec.strip, "") : svg; },
       pre: k => st.layers[k] ? st.get(k).pre : "",
       post: k => st.layers[k] ? st.get(k).post : "",
-      wrap(k, svg) { if (!st.layers[k]) return svg; const o = st.get(k); return o.spec && o.spec.wrap ? o.spec.wrap({ mv: (t, s, kf, d, op) => mv(k, t, s, kf, d, op) }, svg) : svg; },
+      wrap(k, svg) { if (!st.layers[k]) return svg; const o = st.get(k); return o.spec && o.spec.wrap ? o.spec.wrap({ mv: (t, s2, kf, d, op) => mv(k, t, s2, kf, d, op) }, svg) : svg; },
+      // pets: a twinkle near the perch (animated when it has a slot, otherwise a single still sparkle)
       pet(svg) {
-        const l = st.layers.pet, m = l && svg.match(/^(<g transform="[^"]*">)([\s\S]*)<\/g>$/);
-        if (!m) return svg;
-        let inner = m[2];
-        const e = PET_EYE[rc.look.pet];
-        if (e && take("pet", "blink")) {   // a quick blink: an eyelid fades in and out over the eye
-          const lid = `<circle cx="${e.x}" cy="${e.y}" r="${n2(e.r * 1.05)}" fill="${e.f}"/><path d="M${n2(e.x - e.r * .8)} ${e.y} q${n2(e.r * .8)} ${n2(e.r * .55)} ${n2(e.r * 1.6)} 0" fill="none" stroke="${e.l}" stroke-width=".35" stroke-linecap="round"/>`;
-          inner += `<g opacity="0"${at(kfn("0%,88%{opacity:0}90%,93%{opacity:1}95.5%,100%{opacity:0}"), 5.4, "ease-in-out", dl(5.4))}>${lid}</g>`;
-        }
-        if (take("pet", "tilt")) inner = `<g${at(kfn("0%,100%{transform:rotate(-1.4deg)}50%{transform:rotate(1.6deg)}"), 6.8, "ease-in-out", dl(6.8))}>${inner}</g>`;
-        if (take("pet", "breathe")) inner = `<g${at(kfn("0%,100%{transform:scale(1,1)}50%{transform:scale(1.012,1.035)}"), 3.9, "ease-in-out", dl(3.9))}>${inner}</g>`;
-        // a still sparkle keeps the rarity visible even when nothing is moving
-        return m[1] + inner + "</g>" + spkAt([90.5, 62, 1.8, l.tier >= 4 ? "#ffb300" : "#ffd54a"]);
+        const l = st.layers.pet;
+        return l ? svg + sparks([[91.5, 61.5, 1.9, l.tier >= 4 ? "#ffb300" : "#ffc21a"], [86.5, 56.5, 1.5, "#ffe9a0"]], take("pet", "spark") ? 1 : 0, { still: 1 }) : svg;
       },
       css() { return st.n ? `<style>${st.css}@media (prefers-reduced-motion:reduce){.${p}a{animation:none!important}}</style>` : ""; },
       count() { return st.n; }
     };
   }
-  const NOFX = { pre: () => "", post: () => "", wrap: (k, s) => s, pet: s => s, css: () => "", count: () => 0 };
+  const NOFX = { pre: () => "", post: () => "", wrap: (k, s) => s, pet: s => s, bg: s => s, petA: PA0, css: () => "", count: () => 0 };
 
   /* What each Epic / Legendary item looks like. clip = the item's own outline(s) (path "d" strings
      or raw clip children), box = its bounding box (sets the sweep), sp = sparkle spots [x, y, size, colour]. */
+  const CITY_OK = CITY.lit.filter(p => Math.hypot(p[0] - 50, p[1] - 50) < 42), CITY_PTS = [CITY_OK[1], CITY_OK[Math.floor(CITY_OK.length / 2)], CITY_OK[CITY_OK.length - 2]].filter(Boolean);
   const RSPEC = {
     hat: {
       devil: () => ({ clip: ["M31 27 C25.6 19 27.6 8.6 34 4.4 C33.6 12.4 37.6 18.6 42 22.4Z", "M69 27 C74.4 19 72.4 8.6 66 4.4 C66.4 12.4 62.4 18.6 58 22.4Z"], box: [25, 4, 75, 28], tint: "#fff1ee", peak: .6, sp: [[22.5, 17.5, 2.3, "#ff6a5f"], [78, 15.5, 1.9, "#ff8f86"], [50, 11, 1.5, "#ffb0a8"]] }),
       tophat: () => ({ clip: ["M34 30 L35 8 Q50 4 65 8 L66 30Z", ellD(50, 30, 27, 5.2)], box: [23, 4, 77, 35], sp: [[21.5, 25, 2.2, "#f2b705"], [79, 23.5, 1.9, "#ffd54a"], [59, 11, 1.5, "#fff"]] }),
-      sombrero: () => ({ clip: [ellD(50, 27.6, 38, 7.6), "M36 28 C36 7 64 7 64 28Z"], box: [12, 9, 88, 36], tint: "#fffbe6", peak: .85, sp: [[14, 23, 2.2, "#f2a900"], [86.5, 22, 1.9, "#ffcf40"], [50, 9.2, 1.5, "#fff"]] }),
-      propeller: () => ({ clip: ["M29 34 C28 14 72 14 71 34Z", `<ellipse cx="41" cy="7.4" rx="9.4" ry="2.8" transform="rotate(-10 41 7.4)"/>`, `<ellipse cx="59" cy="7.4" rx="9.4" ry="2.8" transform="rotate(10 59 7.4)"/>`], box: [29, 4, 71, 35], sp: [[26, 15.5, 2.2, "#5aa8ff"], [76, 14, 1.8, "#ffc21a"]] }),
+      propeller: () => ({ noSheen: true, sp: [[26, 15.5, 2.2, "#5aa8ff"], [76, 14, 1.8, "#ffc21a"]],
+        // edge-on spin: the two blades squash towards the hub and back again, in a short whirr every few seconds
+        wrap: (h, svg) => svg.replace(/(<ellipse cx="41" cy="7\.4"[^>]*\/><ellipse cx="59" cy="7\.4"[^>]*\/>)/, (m, bl) => `<g transform="translate(50 7.4)">${h.mv("spin", `<g transform="translate(-50 -7.4)">${bl}</g>`, "0%,56%{transform:scale(1,1)}60%{transform:scale(.1,1)}64%{transform:scale(1,1)}68%{transform:scale(.1,1)}72%{transform:scale(1,1)}76%{transform:scale(.12,1)}80%{transform:scale(1,1)}84%{transform:scale(.4,1)}88%,100%{transform:scale(1,1)}", 4.6)}</g>`) }),
       halo: () => ({ clip: [evenodd(ellD(50, 9, 18.7, 6.3) + " " + ellD(50, 9, 15.3, 2.9))], box: [31, 2, 69, 16], tint: "#fffdf0", peak: .8, sp: [[29, 13, 2.2, "#f5b800"], [71, 13, 2.2, "#ffd23f"]] }),
       crown: () => ({ clip: ["M30 30 L28 10 L40 20 L50 6 L60 20 L72 10 L70 30Z"], box: [27, 5, 73, 31], tint: "#fffbe6", hue: ["#fff0a0", "#ffc4e8", "#b6efff"], iriOp: .2, glow: { x: 50, y: 19, rx: 31, ry: 19, c: "#ffd23f", o: .5 }, sp: [[28, 9.6, 2.3, "#fff3b0"], [72, 9.6, 2.3, "#fff3b0"], [50, 5.2, 2.5, "#fff"], [39, 21.5, 1.8, "#ffe28a"], [61, 21.5, 1.8, "#ffe28a"]] })
     },
@@ -844,21 +942,24 @@
       visor: () => ({ clip: ["M31 41 Q50 36 69 41 L68 50 Q50 54 32 50Z"], box: [31, 36, 69, 54], tint: "#eaffff", hue: ["#b8fff7", "#d2c2ff", "#f3ffb8"], glow: { x: 50, y: 45.5, rx: 30, ry: 11, c: "#19e3d4", o: .5 }, sp: [[30, 39.5, 2.3, "#19d3c5"], [70, 39.5, 2.3, "#19d3c5"], [50, 34.5, 1.7, "#fff"], [62, 55.5, 1.5, "#c9fff9"]] })
     },
     extra: {
-      medal: () => ({ clip: [circD(50, 91.4, 7.1)], box: [43, 84, 57, 98.5], tint: "#fffbe6", bw: 4, sp: [[58.5, 85.5, 2.3, "#ffc21a"], [41.5, 95.5, 1.7, "#fff"]] })
+      medal: () => ({ clip: [circD(50, 91.4, 6.9)], box: [43, 84, 57, 98.5], tint: "#fffdf0", peak: .95, bw: 5.5, at: .5, sp: [[54.4, 88.4, 2.1, "#fff"], [46, 94.6, 1.5, "#fff3b0"]] })
     },
     top: {
       disco: () => ({ clip: [BODY], box: [12, 75, 88, 100], hue: ["#ffb3f0", "#a8e8ff", "#fff3a8"], glow: { x: 50, y: 93, rx: 54, ry: 26, c: "#ff7be0", o: .5 }, sp: [[28.8, 86.8, 2.4, "#ff7ad9"], [68, 90, 2.4, "#5ec8ff"], [40, 93, 1.9, "#b58cff"], [62, 83.5, 1.8, "#fff"]] })
     },
     eyes: (() => {
-      const mk = (clips, col, tint) => () => ({ clip: clips, box: [34, 38, 66, 52], tint, bw: 5, peak: .7, sp: [[34.4, 38.8, 1.7, col], [65.6, 38.8, 1.7, col]] });
+      const sp = col => [[34.4, 38.8, 1.7, col], [65.6, 38.8, 1.7, col]];
+      // each eye turns on its own centre; both eyes share one fixed delay so they move together
+      const pair = (split, kf, dur) => (h, svg) => { const i = split(svg); return [[41, svg.slice(0, i)], [59, svg.slice(i)]].map(p => `<g transform="translate(${p[0]} 45)">${h.mv("spin", `<g transform="translate(${-p[0]} -45)">${p[1]}</g>`, kf, dur, { delay: -1.6 })}</g>`).join(""); };
+      const second = svg => svg.indexOf("<path", 4);
       return {
-        stars: mk([starD(41, 45, 5.4), starD(59, 45, 5.4)], "#ffc21a", "#fffbe0"),
-        hearts: mk([heartD(41, 44.4, 3.5), heartD(59, 44.4, 3.5)], "#ff5d8a", "#fff0f4"),
-        dollar: mk([circD(41, 45, 5), circD(59, 45, 5)], "#ffd23f", "#f4fff8")
+        stars: () => ({ noSheen: true, sp: sp("#ffc21a"), wrap: pair(second, "0%,60%{transform:rotate(0deg)}74%,100%{transform:rotate(360deg)}", 5.4) }),
+        hearts: () => ({ noSheen: true, sp: sp("#ff5d8a"), wrap: pair(second, "0%,62%{transform:rotate(0deg) translate(0px,0px)}64.5%{transform:rotate(-13deg) translate(-.7px,0px)}67%{transform:rotate(13deg) translate(.7px,0px)}69.5%{transform:rotate(-12deg) translate(-.7px,0px)}72%{transform:rotate(10deg) translate(.5px,0px)}74.5%{transform:rotate(-6deg) translate(-.3px,0px)}77%,100%{transform:rotate(0deg) translate(0px,0px)}", 4.8) }),
+        dollar: () => ({ noSheen: true, sp: sp("#ffd23f"), wrap: pair(svg => svg.indexOf('<circle cx="59"'), "0%,58%{transform:scale(1,1)}64%{transform:scale(.08,1)}70%{transform:scale(1,1)}76%{transform:scale(.08,1)}82%{transform:scale(1,1)}88%,100%{transform:scale(1,1)}", 5.2) })
       };
     })(),
     mouth: {
-      gold: () => ({ clip: ["M44.4 55.2 Q50 59.6 55.6 55.2 L54.8 57.2 Q50 60.4 45.2 57.2Z"], box: [44, 54, 56, 61], tint: "#fffbe0", bw: 3.4, sp: [[58.5, 57, 1.8, "#ffc21a"], [41.5, 56, 1.4, "#fff"]] })
+      gold: () => ({ clip: [0, 1, 2, 3, 4].map(i => `<rect x="${(43.1 + i * 2.84).toFixed(2)}" y="54.2" width="2.6" height="${i === 2 ? 3.3 : i % 2 ? 2.6 : 3}" rx="1"/>`), box: [43, 54, 57.2, 58], tint: "#fffbe0", bw: 3.2, peak: .9, sp: [[58.6, 57.2, 1.8, "#ffc21a"], [41.6, 56.2, 1.4, "#fff3b0"]] })
     },
     face: {
       paintstars: () => ({ clip: [starD(36.6, 53, 3.4), starD(63.4, 53, 3.4)], box: [32, 49, 68, 57], bw: 4, sp: [[31, 48.5, 1.8, "#ff5d8f"], [69, 48.5, 1.8, "#3a8dff"]] })
@@ -873,18 +974,30 @@
       ghost: () => ({ clip: [evenodd("M14 100 C10 50 18 10 50 8 C82 10 90 50 86 100 L78 92 L70 100 L62 92 L54 100 L46 92 L38 100 L30 92 L22 100Z " + ellD(38, 42, 5, 7.4) + " " + ellD(62, 42, 5, 7.4) + " " + ellD(50, 58, 4, 5.4))], box: [10, 8, 90, 100], tint: "#b9d9ff", peak: .7, sp: [[17, 19, 2.4, "#7cc4ff"], [84, 25, 2.1, "#b39bff"], [77, 11.5, 1.7, "#9fe0ff"]] }),
       ninja: rc => ({ clip: [bodyT(rc.gd), evenodd(NINJA_WRAP + " " + NINJA_WINDOW)], box: [8, 19, 92, 100], tint: "#cfd8ff", peak: .5, sp: [[84, 33, 2.3, "#ff6f6f"], [18, 40, 1.8, "#8fb4ff"]] }),
       shark: rc => ({ clip: [bodyT(rc.gd), evenodd("M19 45 a31 33 0 1 0 62 0 a31 33 0 1 0 -62 0Z M31 44.6 a19 20.6 0 1 0 38 0 a19 20.6 0 1 0 -38 0Z " + circD(36, 19, 3) + " " + circD(64, 19, 3)), "M38 18 Q43 -1 64 14.4Z"], box: [10, 0, 90, 100], tint: "#d8f4ff", peak: .55, sp: [[17, 26, 2.1, "#5ec4ff"], [86, 32, 1.8, "#a6e3ff"]] }),
-      wizard: rc => ({ clip: [bodyT(rc.gd)], box: [12, 75, 88, 100], tint: "#e9ddff", hue: ["#9fe9ff", "#d6b8ff", "#ffe08a"], glowPost: true, glow: [{ x: 85, y: 58, rx: 11, ry: 11, c: "#5ee6ff", o: .5 }, { x: 50, y: 31.4, rx: 9, ry: 7, c: "#5ee6ff", o: .42 }], orbit: { x: 85, y: 58, r: 8.2, c: "#aef6ff", dur: 9 }, sp: [[26.5, 90, 2.2, "#ffd23f"], [71, 89, 2, "#5ee6ff"]] })
+      wizard: rc => ({ clip: [bodyT(rc.gd)], box: [12, 75, 88, 100], tint: "#e9ddff", hue: ["#9fe9ff", "#d6b8ff", "#ffe08a"], glowPost: true, glow: [{ x: 85, y: 58, rx: 11, ry: 11, c: "#5ee6ff", o: .5 }, { x: 50, y: 31.4, rx: 9, ry: 7, c: "#5ee6ff", o: .42 }], orbit: { x: 85, y: 58, r: 8.2, c: "#aef6ff", dur: 9 }, sp: [[26.5, 90, 2.2, "#ffd23f"], [71, 89, 2, "#5ee6ff"]],
+        // the orb hovers: a slow float, with its glow and orbiting sparkles around it
+        wrap: (h, svg) => svg.replace(/<!--orb-->([\s\S]*?)<!--\/orb-->/, (m, orb) => h.mv("bob", orb, "0%,100%{transform:translateY(0px)}50%{transform:translateY(-1.4px)}", 3.8)) })
     },
     fx: {
-      lightning: () => ({ clip: ["M14 10 L6 30 L13 30 L9 46 L22 24 L14 24 L20 10Z", "M86 52 L79 70 L85 70 L82 84 L93 64 L87 64 L92 52Z"], box: [5, 9, 94, 85], tint: "#fffbe0", bw: 8, sp: [[27, 20, 2.1, "#ffd23f"], [74.5, 65, 2.1, "#ffd23f"]] }),
-      glow: () => ({ clip: [evenodd(circD(50, 50, 50) + " " + circD(50, 50, 37))], box: [0, 0, 100, 100], tint: "#fffbe6", bw: 12, peak: .55, sp: [[19.6, 19.6, 2.4, "#ffc21a"], [82, 24, 2, "#ffd23f"], [15, 70, 2, "#ffc21a"]] }),
+      lightning: rc => ({ noSheen: true, sp: [[27, 20, 2.1, "#ffd23f"], [74.5, 65, 2.1, "#ffd23f"]],
+        // a quick double flash: the bolts whiten and a soft halo blooms round them
+        extra: h => { const c = rc.ctx, i = c.id("lf"); c.defs += `<radialGradient id="${i}"><stop offset="0" stop-color="#fff27a" stop-opacity=".7"/><stop offset="1" stop-color="#ffe14d" stop-opacity="0"/></radialGradient>`;
+          return h.mv("flash", `<ellipse cx="14" cy="28" rx="17" ry="25" fill="url(#${i})"/><ellipse cx="86" cy="68" rx="15" ry="23" fill="url(#${i})"/><path d="M14 10 L6 30 L13 30 L9 46 L22 24 L14 24 L20 10Z M86 52 L79 70 L85 70 L82 84 L93 64 L87 64 L92 52Z" fill="#fff"/>`, "0%,62%{opacity:0}64%{opacity:.95}67%{opacity:.2}70%{opacity:.9}76%{opacity:.25}82%,100%{opacity:0}", 3.4, { ease: "linear", op: 0, still: false }); } }),
+      glow: () => ({ noSheen: true, sp: [[19.6, 19.6, 2.4, "#ffc21a"], [82, 24, 2, "#ffd23f"], [15, 70, 2, "#ffc21a"]],
+        // the ring warbles: it swells and settles unevenly while its brightness drifts out of step
+        wrap: (h, svg) => h.mv("fade", `<g transform="translate(50 50)">${h.mv("warble", `<g transform="translate(-50 -50)">${svg}</g>`, "0%,100%{transform:scale(1,1)}22%{transform:scale(1.045,1.03)}47%{transform:scale(.975,.985)}71%{transform:scale(1.03,1.05)}", 5.2)}</g>`, "0%,100%{opacity:1}35%{opacity:.7}68%{opacity:.88}", 3.7) }),
       flames: () => ({
-        clip: [[6, 9, 24, 3], [22, 10, 32, -4], [38, 10, 26, 4], [54, 11, 36, -3], [70, 10, 28, 4], [86, 11, 34, -4], [98, 8, 22, -2], [14, 9, 22, -3], [30, 9, 26, 3], [46, 10, 30, -3], [62, 10, 25, 4], [78, 9, 28, -3], [92, 8, 20, 3]].map(t => flameD(t[0], t[1], t[2], t[3])),
-        box: [0, 64, 100, 101], tint: "#fff6c8", hue: ["#fff1a8", "#ff9a3c", "#ffd54a"], flick: true,
-        glow: { x: 50, y: 98, rx: 62, ry: 32, c: "#ff8a1a", o: .5 },
+        noSheen: true, glow: { x: 50, y: 98, rx: 62, ry: 32, c: "#ff8a1a", o: .5 }, glowKf: "0%,100%{opacity:.75}18%{opacity:1}41%{opacity:.8}67%{opacity:1}84%{opacity:.82}", glowDur: 2.3,
         sp: [[22, 70, 1.8, "#ffd54a"], [52, 64, 1.6, "#ffb62e"], [76, 68, 1.9, "#ffd54a"], [88, 73, 1.5, "#ffb62e"]], so: { rise: 11, vis: .7 },
-        // the whole fire breathes a touch taller and shorter, rooted at the bottom edge
-        wrap: (h, svg) => `<g transform="translate(50 101)">${h.mv("iri", `<g transform="translate(-50 -101)">${svg}</g>`, "0%,100%{transform:scale(1,1)}50%{transform:scale(1.012,1.035)}", 2.9)}</g>`
+        // crackle: the outer, middle and inner tongues each flicker on their own quick, uneven beat, rooted at the base
+        wrap: (h, svg) => {
+          const pick = cols => (svg.match(new RegExp(`<path d="[^"]*" fill="#(?:${cols})"/>`, "g")) || []).join("");
+          const rest = svg.replace(/<path d="[^"]*" fill="#(?:e5361b|ff7a1a|ffb62e|fff1a8)"\/>/g, "");
+          const grp = (inner, kf, d) => `<g transform="translate(50 101)">${h.mv("crackle", `<g transform="translate(-50 -101)">${inner}</g>`, kf, d)}</g>`;
+          return grp(pick("e5361b"), "0%,100%{transform:scale(1,1) rotate(0deg)}17%{transform:scale(1.012,1.055) rotate(.6deg)}33%{transform:scale(.992,.965) rotate(-.5deg)}56%{transform:scale(1.014,1.07) rotate(.4deg)}78%{transform:scale(1,.985) rotate(-.6deg)}", 1.7)
+            + grp(pick("ff7a1a|ffb62e"), "0%,100%{transform:scale(1,1) rotate(0deg)}21%{transform:scale(.99,1.075) rotate(-.7deg)}38%{transform:scale(1.012,.96) rotate(.6deg)}62%{transform:scale(1,1.06) rotate(-.4deg)}81%{transform:scale(1.01,.98) rotate(.7deg)}", 1.25)
+            + grp(pick("fff1a8"), "0%,100%{transform:scale(1,1)}14%{transform:scale(1.03,1.1)}29%{transform:scale(.97,.92)}46%{transform:scale(1.02,1.12)}63%{transform:scale(.98,.94)}82%{transform:scale(1.03,1.08)}", .95) + rest;
+        }
       })
     },
     bg: (() => {
@@ -894,11 +1007,15 @@
       const discoDots = []; [2, 10, 13, 9].forEach(k => { const a = k * 2.4, r = 14 + (k % 4) * 11; discoDots.push([n2(50 + Math.cos(a) * r), n2(50 + Math.sin(a) * r)]); });
       return {
         night: () => ({ amb: [walk([[72, 12], [88, 28], [8, 52]], "#fff8dc", 2.5), walk([[30, 8], [20, 36], [60, 6]], "#e9efff", 2.1)] }),
-        city: () => ({ amb: [walk([[23, 16], [78, 16], [46, 8]], "#fff", 2, 1), walk([[24, 56], [74, 54], [62, 68]], "#ffe27a", 1.7)] }),
-        auckland: () => ({ amb: [cloud(10), walk([[14, 75], [31, 72.5], [69, 73.5], [80, 75], [86, 79]], "#fff", 1.6, 3)] }),
+        city: () => ({ amb: [walk([[23, 16], [78, 16], [46, 8]], "#fff", 2, 1), walk(CITY_PTS, "#ffe27a", 1.7)] }),
+        auckland: () => ({ amb: [cloud(10), walk([[14, 75], [31, 72.5], [69, 73.5], [80, 75], [86, 79]], "#fff", 1.6, 3), { t: "mv", svg: '<circle cx="19" cy="14.9" r="2.8" fill="#ff4d4d"/>', kf: "0%,100%{opacity:.1}50%{opacity:.85}", dur: 2.4, o: { still: false } }] }),
         castleday: () => ({ amb: [cloud(9), walk([[26, 15.5, 2.2, "#fff8c8"], [28, 26, 1.8], [17.5, 27, 1.6, "#fff3b0"]], "#fff", 2, 2)] }),
         castle: () => ({ amb: [walk([[56, 8], [10, 38, 1.7], [16.5, 19, 1.6]], "#fff6dd", 2), walk([[78.1, 43], [78.1, 53], [90.1, 50]], "#ffd98a", 1.7)] }),
-        lava: () => ({ amb: [walk([[18, 72, 1.8], [80, 78, 2], [90, 60, 1.6]], "#ffd36a", 1.8, 2), { t: "mv", svg: c => { const i = c.id("lg"); c.defs += `<radialGradient id="${i}"><stop offset="0" stop-color="#ffb02e" stop-opacity=".55"/><stop offset="1" stop-color="#ffb02e" stop-opacity="0"/></radialGradient>`; return `<ellipse cx="50" cy="100" rx="64" ry="30" fill="url(#${i})"/>`; }, kf: "0%,100%{opacity:.45}50%{opacity:1}", dur: 4.2, o: { op: .8 } }] }),
+        lava: rc => { const bub = a => a.map(q => `<circle cx="${q[0]}" cy="${q[1]}" r="${q[2]}" fill="#ffd36a"/>`).join(""), a = rc.anim;
+          return { strip: a ? /<circle cx="[\d.]+" cy="[\d.]+" r="[\d.]+" fill="#ffd36a"\/>/g : null, amb: [
+            { t: "mv", svg: bub([[18, 72, 3], [30, 90, 2]]), kf: "0%,100%{transform:translate(0px,0px)}25%{transform:translate(2.6px,-4.2px)}50%{transform:translate(-1.4px,-8px)}75%{transform:translate(-3px,-3.2px)}", dur: 7.5, o: { still: a } },
+            { t: "mv", svg: bub([[80, 78, 4], [60, 90, 2.6]]), kf: "0%,100%{transform:translate(0px,0px)}30%{transform:translate(-3px,-5px)}60%{transform:translate(2px,-9px)}80%{transform:translate(3px,-3px)}", dur: 9.2, o: { still: a } },
+            { t: "mv", svg: bub([[90, 60, 2]]), kf: "0%,100%{transform:translate(0px,0px)}35%{transform:translate(-2.4px,-3.6px)}70%{transform:translate(2px,-6.5px)}", dur: 6.4, o: { still: a } }] }; },
         disco: () => ({ amb: [{ t: "mv", svg: beams(), kf: "0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}", dur: 30, o: { ease: "linear" }, wrap: e => `<g transform="translate(50 50)">${e}</g>` }, walk(discoDots, "#fff", 2.2, 2)] }),
         galaxy: () => ({ amb: [walk([[70, 14], [10, 60, 2.2], [17, 23, 2.2], [91, 60, 2]], "#fff", 2.4), walk([[30, 12], [86, 40], [72, 11]], "#e6dcff", 2), { t: "mv", svg: c => { const i = c.id("ss"); c.defs += `<linearGradient id="${i}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="-26" y2="-11.4"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#bfa8ff" stop-opacity="0"/></linearGradient>`; return `<path d="M0 0 L-26 -11.4 L-25.4 -9.3 Z" fill="url(#${i})"/><circle r="1.2" fill="#fff"/>`; }, kf: "0%{transform:translate(8px,16px);opacity:0}3%{opacity:1}13%{transform:translate(50px,38px);opacity:0}100%{transform:translate(50px,38px);opacity:0}", dur: 11, o: { ease: "ease-out", still: false } }] }),
         synth: () => ({ amb: [{ t: "mv", svg: c => { const i = c.id("sc"); c.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7ac8" stop-opacity="0"/><stop offset=".5" stop-color="#ffb3e0" stop-opacity=".9"/><stop offset="1" stop-color="#ff7ac8" stop-opacity="0"/></linearGradient>`; return `<rect x="0" y="-2" width="100" height="4" fill="url(#${i})"/>`; }, kf: "0%{transform:translateY(62px);opacity:0}12%{opacity:1}78%{opacity:1}100%{transform:translateY(98px);opacity:0}", dur: 5.4, o: { ease: "ease-in", still: false } }, walk([[20, 19], [79, 15], [22, 33], [80, 32]], "#fff", 2.1), walk([[10, 50, 1.8], [92, 48, 1.8, "#ffe9b8"], [26, 22, 1.6, "#ffd1ee"]], "#fff", 1.8)] })
@@ -946,9 +1063,9 @@
     L("pet", "pet", !!PETS[look.pet]);
     L("fx", "fx", true);
     L("bg", "bg", true);
-    const E = FXL.length ? fxState(ctx, anim, FXL, { ctx, gd, look }) : NOFX;
+    const E = FXL.length ? fxState(ctx, anim, FXL, { ctx, gd, look, anim }) : NOFX;
 
-    let s = (BG[look.bg] || BG.sky)(ctx);
+    let s = E.bg((BG[look.bg] || BG.sky)(ctx));
     s += E.post("bg");
     if (co && co.back) s += co.back;
     const hair = !hide.hair && HAIR[look.hair] ? HAIR[look.hair](hcol, hairDark, ctx) : {};
@@ -972,25 +1089,25 @@
       s += `<ellipse cx="50" cy="${gd.cy}" rx="${gd.rx}" ry="${gd.ry}" fill="${skin}"/>`;
     }
     const brows = () => (BROWS[look.brows] || BROWS.natural)(browCol, gd);
-    const eyesAndBrows = () => (EYES[look.eyes] || EYES.dots)(skin) + brows() + E.post("eyes");
+    const eyesAndBrows = () => E.wrap("eyes", (EYES[look.eyes] || EYES.dots)(skin)) + brows() + E.post("eyes");
     if (!hide.face) {
       if (FACE[look.face] && look.face !== "mask") s += FACE[look.face](hairDark, ctx) + E.post("face");
       if (!co || !co.eyesOnTop) s += eyesAndBrows();
       s += `<ellipse cx="50" cy="50.4" rx="${gd.nx}" ry="${gd.ny}" fill="${sk2}"/>`;
       if (look.face === "mask") s += FACE.mask(hairDark, ctx);
-      else s += (MOUTH[look.mouth] || MOUTH.smile)() + E.post("mouth");
+      else s += (MOUTH[look.mouth] || MOUTH.smile)(ctx) + E.post("mouth");
     }
     if (hair.front) s += ((!hide.hat && HAT_COVER.has(look.hat)) || (co && co.clipHair)) ? ctx.clip("M0 31 H100 V100 H0Z", hair.front) : hair.front;
     { const hf = E.post("hair") + E.post("hairc"); if (hf) s += ((!hide.hat && HAT_COVER.has(look.hat)) || (co && co.clipHair)) ? ctx.clip("M0 31 H100 V100 H0Z", hf) : hf; }
-    if (!hide.hat && HATS[look.hat]) s += E.pre("hat") + HATS[look.hat](ctx) + E.post("hat");
+    if (!hide.hat && HATS[look.hat]) s += E.pre("hat") + E.wrap("hat", HATS[look.hat](ctx)) + E.post("hat");
     if (!hide.face && GLASS[look.glasses] && !(co && co.eyesOnTop)) s += E.pre("glasses") + GLASS[look.glasses](ctx) + E.post("glasses");
     s += E.pre("extra");
     if (ex.over) s += ex.over;
     if (ex.front) s += ex.front;
     s += E.post("extra");
-    if (co && co.front) s += co.front;
+    if (co && co.front) s += E.wrap("costume", co.front);
     s += E.post("costume");
-    if (PETS[look.pet]) s += E.pet(PETS[look.pet](gd, ctx));
+    if (PETS[look.pet]) s += E.pet(PETS[look.pet](gd, ctx, E.petA));
     if (co && co.eyesOnTop) { s += eyesAndBrows(); if (GLASS[look.glasses]) s += E.pre("glasses") + GLASS[look.glasses](ctx) + E.post("glasses"); }
     s += E.pre("fx") + E.wrap("fx", (FX[look.fx] || FX.none)(ctx)) + E.post("fx");
 

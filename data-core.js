@@ -366,8 +366,7 @@ async function getClassStudents(code, precomputedCls) {
   // Individual getUser() calls below go through the `get` rule instead,
   // which Firestore evaluates per document against that document's real
   // data — no such restriction applies. This costs one read per student
-  // rather than one per 30, but a class tops out at 8 students, so the
-  // difference is negligible, and getUser() already coalesces duplicate
+  // rather than one per 30. getUser() already coalesces duplicate
   // in-flight requests for the same username.
   const users = await Promise.all(cls.students.map(u => getUser(u)));
   // PERF FIX: also hand these fresh copies to the short-lived read cache
