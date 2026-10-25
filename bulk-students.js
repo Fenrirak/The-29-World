@@ -42,6 +42,8 @@
   const PW_LENGTH = 6;
 
   const S = {
+    grant: 20,       // welcome grant used for the accounts made in this window
+    classGrant: 20,  // what the class setting currently is
     created: [],     // every account made since the window was opened: { name, username, password }
     saved: false,    // has the teacher copied / downloaded / printed the list?
     busy: false,     // accounts are being created right now
@@ -176,6 +178,14 @@
     }
   }
 
+  // The welcome grant box: { ok, value } or { ok:false, error }.
+  function readGrant() {
+    const raw = $("bulkGrant").value.trim();
+    const n = Number(raw);
+    if (raw === "" || !isFinite(n) || n < 0 || n > 100000) return { ok: false, error: "Enter a welcome grant between $0 and $100,000." };
+    return { ok: true, value: Math.round(n * 100) / 100 };
+  }
+
   function schedulePreview() {
     clearTimeout(previewTimer);
     previewTimer = setTimeout(renderPreview, 120);
@@ -186,8 +196,11 @@
     const box = $("bulkPreview");
     const btn = $("bulkCreateBtn");
     $("bulkInputMsg").innerHTML = "";
+    const grant = readGrant();
+    $("bulkCounter").textContent = rows.length + " student" + (rows.length === 1 ? "" : "s");
     if (!rows.length) {
-      box.innerHTML = "";
+      box.innerHTML = `<div class="bulk-empty">${icon("users", 22)}<div><strong>Your class list will appear here.</strong><br>Type or paste names above and you&rsquo;ll see each username before anything is created.</div></div>`;
+      if (!grant.ok) $("bulkInputMsg").innerHTML = `<div class="error-msg">${esc(grant.error)}</div>`;
       btn.disabled = true;
       btn.innerHTML = icon("plus", 15) + " Create accounts";
       return;
@@ -211,12 +224,14 @@
           </tbody>
         </table>
       </div>`;
-    if (tooMany) {
+    if (!grant.ok) {
+      $("bulkInputMsg").innerHTML = `<div class="error-msg">${esc(grant.error)}</div>`;
+    } else if (tooMany) {
       $("bulkInputMsg").innerHTML = `<div class="error-msg">That's more than ${MAX_PER_RUN} at once. Add the first ${MAX_PER_RUN} now, then the rest.</div>`;
     } else if (problems) {
       $("bulkInputMsg").innerHTML = `<div class="error-msg">Fix the highlighted lines (or delete them) to continue.</div>`;
     }
-    btn.disabled = tooMany || problems > 0 || ok === 0;
+    btn.disabled = tooMany || problems > 0 || ok === 0 || !grant.ok;
     btn.innerHTML = icon("plus", 15) + " Create " + ok + " account" + (ok === 1 ? "" : "s");
   }
 
@@ -240,6 +255,22 @@
       $("bulkInputMsg").innerHTML = `<div class="error-msg">This browser can't make secure random passwords. Try a current version of Chrome, Safari, Edge or Firefox.</div>`;
       return;
     }
+    const grant = readGrant();
+    if (!grant.ok) { renderPreview(); return; }
+    if (grant.value !== S.classGrant) {
+      // Save it on the class first — each new student's starting balance is
+      // read from the class when their account is made.
+      $("bulkCreateBtn").disabled = true;
+      const saved = await setClassWelcomeGrant(CLASS_CODE, grant.value);
+      if (!saved.ok) {
+        $("bulkInputMsg").innerHTML = `<div class="error-msg">${esc(saved.error)}</div>`;
+        $("bulkCreateBtn").disabled = false;
+        return;
+      }
+      S.classGrant = saved.amount;
+      if (typeof render === "function") Promise.resolve(render()).catch(() => {});
+    }
+    S.grant = S.classGrant;
     const entries = rows.map((r, i) => ({ index: i, name: r.name, username: r.username, password: passwords[i] }));
 
     S.busy = true;
@@ -471,13 +502,16 @@
 
   function renderResults() {
     const n = S.created.length;
-    $("bulkResultSummary").innerHTML = `<div class="success-msg">${n} account${n === 1 ? "" : "s"} created in ${esc(S.className)}</div>`;
+    $("bulkStats").innerHTML = `
+      <div class="bulk-stat good"><span>Accounts created</span><strong>${n}</strong></div>
+      <div class="bulk-stat"><span>Welcome grant each</span><strong>${esc(fmtMoney(S.grant))}</strong></div>
+      <div class="bulk-stat"><span>Class</span><strong class="bulk-stat-text">${esc(S.className)}</strong></div>`;
     const tbody = $("bulkResultTable").querySelector("tbody");
     tbody.innerHTML = S.created.map((st, i) => `
       <tr>
         <td>${esc(st.name)}</td>
-        <td data-label="Username"><code>${esc(st.username)}</code></td>
-        <td data-label="Password"><code class="bulk-pw">${esc(st.password)}</code></td>
+        <td data-label="Username"><code class="bulk-copy" tabindex="0" role="button" data-copy="${esc(st.username)}" title="Tap to copy">${esc(st.username)}</code></td>
+        <td data-label="Password"><code class="bulk-copy bulk-pw" tabindex="0" role="button" data-copy="${esc(st.password)}" title="Tap to copy">${esc(st.password)}</code></td>
         <td data-label="Message">
           <button type="button" class="btn small secondary" data-act="copy" data-i="${i}">Copy message</button>
           <button type="button" class="btn small secondary" data-act="mail" data-i="${i}">Email</button>
@@ -486,7 +520,12 @@
     renderEmailPreview();
   }
 
-  function rowAction(e) {
+  async function rowAction(e) {
+    const c = e.target.closest("[data-copy]");
+    if (c) {
+      if (await copyText(c.dataset.copy)) { markSaved(); t29Toast("Copied " + c.dataset.copy); }
+      return;
+    }
     const b = e.target.closest("button[data-act]");
     if (!b) return;
     const st = S.created[Number(b.dataset.i)];
@@ -507,7 +546,10 @@
     if (!cls) return;
     if (cls.archived) { t29Toast("This class is archived — reopen it to add students."); return; }
     S.className = cls.name;
+    S.classGrant = t29WelcomeGrantOf(cls);
+    S.grant = S.classGrant;
     $("bulkClassName").textContent = cls.name;
+    $("bulkGrant").value = S.classGrant;
     const t = loadTemplate();
     $("bulkEmailSubject").value = t.subject;
     $("bulkEmailBody").value = t.body;
@@ -553,7 +595,13 @@
     const open = $("addStudentsBtn");
     if (open) open.innerHTML = icon("plus", 14) + " Add students";
     if (!$("bulkAddModal")) return;
+    const ic = $("bulkIcon");
+    if (ic) ic.innerHTML = icon("users", 22);
     $("bulkNames").addEventListener("input", schedulePreview);
+    $("bulkGrant").addEventListener("input", schedulePreview);
+    $("bulkResultTable").addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-copy]")) { e.preventDefault(); e.target.click(); }
+    });
     $("bulkStyle").addEventListener("change", renderPreview);
     $("bulkEmailSubject").addEventListener("input", templateChanged);
     $("bulkEmailBody").addEventListener("input", templateChanged);

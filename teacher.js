@@ -48,6 +48,8 @@ function paintChrome() {
   document.getElementById("labRate").innerHTML = icon("piggy", 13) + " Savings interest rate (%)";
   document.getElementById("labCashRate").innerHTML = icon("coin", 13) + " Cash balance interest rate (%)";
   document.getElementById("saveRateBtn").innerHTML = icon("bank", 14) + " Save rate";
+  document.getElementById("labWelcomeGrant").innerHTML = icon("coin", 13) + " Welcome grant ($ each new student starts with)";
+  document.getElementById("saveWelcomeBtn").innerHTML = icon("bank", 14) + " Save welcome grant";
   document.getElementById("labInterestFreq").innerHTML = icon("repeat", 13) + " How often";
   document.getElementById("labInterestDay").innerHTML = icon("calendar", 13) + " On which day";
   document.getElementById("saveInterestAutoBtn").innerHTML = icon("bank", 14) + " Save interest schedule";
@@ -136,6 +138,8 @@ async function render() {
   document.getElementById("classArchivedBanner").classList.toggle("hidden", !cls.archived);
   document.getElementById("rate").value = cls.interestRate;
   document.getElementById("cashRate").value = cls.cashInterestRate || 0;
+  const welcomeEl = document.getElementById("welcomeGrant");
+  if (document.activeElement !== welcomeEl) welcomeEl.value = t29WelcomeGrantOf(cls);
   document.getElementById("interestAuto").checked = !!cls.interestAuto;
   document.getElementById("interestFreq").value = cls.interestFrequency || "weekly";
   document.getElementById("interestDay").value = cls.interestDay || "Fri";
@@ -1055,6 +1059,23 @@ async function saveRate() {
   await classesColUpdateRate(Number(document.getElementById("rate").value), Number(document.getElementById("cashRate").value));
   await render();
 }
+async function saveWelcomeGrant() {
+  const btn = document.getElementById("saveWelcomeBtn");
+  const msg = document.getElementById("welcomeGrantMsg");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  msg.innerHTML = "";
+  try {
+    const res = await setClassWelcomeGrant(CLASS_CODE, document.getElementById("welcomeGrant").value);
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`; return; }
+    await render();
+    flashMsg(msg, `<div class="success-msg">Saved — new students will start with ${fmtMoney(res.amount)}.</div>`, 4000);
+  } catch (e) {
+    msg.innerHTML = `<div class="error-msg">Couldn't save that — please try again.</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
 async function saveInterestAuto() {
   await saveInterestSettings(CLASS_CODE, {
     rate: document.getElementById("rate").value,
@@ -1741,7 +1762,7 @@ async function reopenThisClass() {
 async function restartClass() {
   const cls = await getClassCached(CLASS_CODE);
   const typed = await t29Prompt(
-    `This will start "${cls.name}" again as if it were a brand-new class: every student goes back to the $20 welcome grant, and everything they own or have done is wiped (jobs, houses, vehicles, shares, insurance, loans, savings, store items, events, activity and so on). Your settings — jobs, store, properties, companies, events, tax and everything else — stay exactly as they are.\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`, "", { placeholder: "Class name", confirmText: "Restart class", danger: true }
+    `This will start "${cls.name}" again as if it were a brand-new class: every student goes back to the ${fmtMoney(t29WelcomeGrantOf(cls))} welcome grant, and everything they own or have done is wiped (jobs, houses, vehicles, shares, insurance, loans, savings, store items, events, activity and so on). Your settings — jobs, store, properties, companies, events, tax and everything else — stay exactly as they are.\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`, "", { placeholder: "Class name", confirmText: "Restart class", danger: true }
   );
   if (typed === null) return;
   if (typed.trim() !== cls.name) {
@@ -1754,7 +1775,7 @@ async function restartClass() {
   } else if (res.failed.length) {
     alert(`Class restarted, but these students' accounts couldn't be reset: ${res.failed.join(", ")}. Run Restart class again to finish them.`);
   } else {
-    alert("Class restarted — everyone is back to the $20 welcome grant, with all your settings kept. This term's report cards were saved to the Reports page.");
+    alert(`Class restarted — everyone is back to the ${fmtMoney(t29WelcomeGrantOf(cls))} welcome grant, with all your settings kept. This term's report cards were saved to the Reports page.`);
   }
   await render();
 }

@@ -2505,7 +2505,7 @@ const RESTART_KEEP_USER_FIELDS = [
   "timeExemptionStatus", "timeExemptionDate", "timeExemptionRequestedAt",
   "extraMinutesToday", "extraMinutesDate", "parentViewToken"
 ];
-const NEW_STUDENT_WELCOME = 20; // same welcome grant as createStudentAccount
+// (Each student restarts at the class's own welcome grant — see t29WelcomeGrantOf.)
 
 // "Restart class": the class goes back to how a brand-new class with these
 // same settings would start. Every setting stays (jobs, store, properties,
@@ -2526,6 +2526,7 @@ async function resetClass(classCode, teacherUsername) {
   const cls = await getClass(classCode);
   if (!cls) return { ok: false, failed: [] };
   const students = await getClassStudents(classCode, cls);
+  const welcome = t29WelcomeGrantOf(cls);
 
   const fresh = _classDataFromTemplate(classCode, cls.name, cls.teacher, cls, { keepPrices: true });
   // The class's own identity, roster and saved report cards stay, and so
@@ -2538,7 +2539,7 @@ async function resetClass(classCode, teacherUsername) {
   // should start counting from, same as when the class was first made.
   fresh.createdAt = Date.now();
   fresh.txns = students.map(s => ({
-    id: uid("t"), type: "welcome", to: s.username, amount: NEW_STUDENT_WELCOME,
+    id: uid("t"), type: "welcome", to: s.username, amount: welcome,
     note: "Welcome grant (class restarted)", date: nowStr(), ts: Date.now()
   }));
   await classesCol().doc(classCode).update(fresh);
@@ -2548,10 +2549,10 @@ async function resetClass(classCode, teacherUsername) {
     try {
       const reportMonth = Object.assign(emptyReportBucket(), { monthKey: nzMonthKey() });
       const reportLifetime = emptyReportBucket();
-      addClassificationToBucket(reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: NEW_STUDENT_WELCOME });
-      addClassificationToBucket(reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: NEW_STUDENT_WELCOME });
+      addClassificationToBucket(reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: welcome });
+      addClassificationToBucket(reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: welcome });
       const update = {
-        balance: NEW_STUDENT_WELCOME, savings: 0, loans: [],
+        balance: welcome, savings: 0, loans: [],
         jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null,
         reportMonth, reportLifetime
       };

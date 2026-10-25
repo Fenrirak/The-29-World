@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=dc4ca901">
+<link rel="stylesheet" href="style.css?v=8b2ca165">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -219,6 +219,15 @@
     <div class="flex-between">
       <h2 id="hSettings">Class settings</h2>
     </div>
+    <div class="welcome-grant-box">
+      <label for="welcomeGrant" id="labWelcomeGrant">Welcome grant</label>
+      <div class="welcome-row">
+        <input id="welcomeGrant" type="number" min="0" max="100000" step="0.01" inputmode="decimal" style="max-width:160px;">
+        <button class="btn secondary small" onclick="saveWelcomeGrant()" id="saveWelcomeBtn">Save welcome grant</button>
+      </div>
+      <p class="muted-small">Given once to every student who joins this class &mdash; whether they sign up themselves or you add them. Students already in the class keep what they have. Restarting the class puts everyone back on this amount.</p>
+      <div id="welcomeGrantMsg"></div>
+    </div>
     <label for="rate" id="labRate">Savings interest rate (% applied each time interest runs)</label>
     <input id="rate" type="number" min="0" max="20" step="0.1" style="max-width:160px;">
     <label for="cashRate" id="labCashRate">Cash balance interest rate (% applied each time interest runs)</label>
@@ -306,7 +315,7 @@
 
     <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
       <h2 id="hDanger" style="color:var(--coral);">Danger zone</h2>
-      <p>Start the class again as if it were brand new: every student goes back to the $20 welcome grant and everything they own or have done is wiped. All your settings stay as they are, and so do student logins and the class code.</p>
+      <p>Start the class again as if it were brand new: every student goes back to the class&rsquo;s welcome grant and everything they own or have done is wiped. All your settings stay as they are, and so do student logins and the class code.</p>
       <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>
     </div>
   </div>
@@ -456,19 +465,23 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 
 <div id="bulkAddModal" class="hidden t29-modal-backdrop" ondblclick="if(event.target===this)closeBulkAdd()">
   <div class="card bulk-card">
-    <div class="flex-between">
-      <div>
-        <h2 id="bulkTitle" style="margin-bottom:2px;">Add students</h2>
+    <div class="bulk-head">
+      <span class="bulk-head-icon" id="bulkIcon" aria-hidden="true"></span>
+      <div class="bulk-head-text">
+        <h2 id="bulkTitle">Add students</h2>
         <p id="bulkSubtitle" class="muted-small">Create a whole class of accounts at once.</p>
       </div>
       <button class="btn small secondary" id="bulkCloseBtn" onclick="closeBulkAdd()">Close</button>
     </div>
 
     <div id="bulkStepInput">
-      <label for="bulkNames">Student names</label>
+      <div class="bulk-field-head">
+        <label for="bulkNames">Student names</label>
+        <span class="bulk-counter" id="bulkCounter">0 students</span>
+      </div>
       <textarea id="bulkNames" rows="8" data-enter="bulkCreateBtn" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Aroha Smith&#10;Liam Chen&#10;Sofia Rodriguez"></textarea>
-      <p class="muted-small" style="margin-top:6px;">One student per line, first name then last name. Each gets a username, a random 6-letter password and the usual $20 welcome grant in <strong id="bulkClassName">your class</strong>.</p>
-      <div class="bulk-row">
+      <p class="muted-small bulk-hint">One student per line, first name then last name &mdash; paste straight from a spreadsheet or class list. Every student also gets a random 6-letter password.</p>
+      <div class="bulk-settings">
         <div>
           <label for="bulkStyle">Username style</label>
           <select id="bulkStyle">
@@ -476,28 +489,39 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
             <option value="joined">arohasmith</option>
             <option value="initial">aroha.s</option>
           </select>
+          <p class="muted-small bulk-hint">A number is added if a username is already taken.</p>
+        </div>
+        <div>
+          <label for="bulkGrant">Welcome grant ($)</label>
+          <input id="bulkGrant" type="number" min="0" max="100000" step="0.01" inputmode="decimal">
+          <p class="muted-small bulk-hint">What each new student starts with in <strong id="bulkClassName">your class</strong>.</p>
         </div>
       </div>
       <div id="bulkPreview"></div>
       <div id="bulkInputMsg"></div>
-      <div class="bulk-actions">
+      <div class="bulk-footer">
         <button class="btn gold" id="bulkCreateBtn" onclick="bulkCreateClick()" disabled>Create accounts</button>
         <button class="btn secondary hidden" id="bulkViewLoginsBtn" type="button">Back to the logins</button>
       </div>
     </div>
 
-    <div id="bulkStepRunning" class="hidden">
-      <p id="bulkRunText" style="font-weight:800;margin:18px 0 0;">Creating accounts…</p>
+    <div id="bulkStepRunning" class="hidden" role="status" aria-live="polite">
+      <div class="bulk-running">
+        <div class="bulk-spinner" aria-hidden="true"></div>
+        <div>
+          <p id="bulkRunText" class="bulk-run-title">Creating accounts…</p>
+          <p id="bulkRunNow" class="muted-small"></p>
+        </div>
+      </div>
       <div class="progress-bar"><div id="bulkRunBar" style="width:0%;"></div></div>
-      <p id="bulkRunNow" class="muted-small" style="margin-top:8px;"></p>
-      <p class="muted-small">Please keep this window open until it finishes.</p>
-      <div class="bulk-actions">
+      <p class="muted-small" style="margin-top:10px;">Please keep this window open until it finishes.</p>
+      <div class="bulk-footer">
         <button class="btn small secondary" id="bulkStopBtn" onclick="bulkStopClick()">Stop after this student</button>
       </div>
     </div>
 
     <div id="bulkStepResults" class="hidden">
-      <div id="bulkResultSummary"></div>
+      <div id="bulkStats" class="bulk-stats"></div>
       <div id="bulkFailures"></div>
       <div class="bulk-warn">Passwords are only shown on this screen &mdash; they aren&rsquo;t saved anywhere, so they can&rsquo;t be looked up later. Copy, download or print them before you close it.</div>
       <div class="bulk-toolbar">
@@ -512,6 +536,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
           <tbody></tbody>
         </table>
       </div>
+      <p class="muted-small" style="margin-top:8px;">Tap a username or password to copy it.</p>
       <details class="bulk-details">
         <summary>Edit the email message</summary>
         <label for="bulkEmailSubject">Subject</label>
@@ -523,7 +548,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
         <label>Preview (first student)</label>
         <div id="bulkEmailPreview" class="bulk-email-preview"></div>
       </details>
-      <div class="bulk-actions">
+      <div class="bulk-footer">
         <button class="btn gold" onclick="bulkAddMore()">Add more students</button>
         <button class="btn secondary" onclick="closeBulkAdd()">Done</button>
       </div>
@@ -535,8 +560,8 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="icons.js?v=c9829d04"></script>
 <script defer src="settings-menu.js?v=70d4360c"></script>
 <script defer src="shortcuts.js?v=287cb4e1"></script>
-<script defer src="data-core.js?v=ba7caf4d"></script>
-<script defer src="data-money.js?v=65805677"></script>
+<script defer src="data-core.js?v=b3a2423a"></script>
+<script defer src="data-money.js?v=3a10270e"></script>
 <script defer src="data-life.js?v=b34d27a7"></script>
 <script defer src="data-property.js?v=e6e0c3f0"></script>
 <script defer src="data-markets.js?v=bbc0dcdd"></script>
@@ -547,7 +572,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="notifications.js?v=7b2c20a0"></script>
 <script defer src="pdf-report.js?v=12982e44"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
-<script defer src="teacher.js?v=b63aa43e"></script>
-<script defer src="bulk-students.js?v=d55fdf4c"></script>
+<script defer src="teacher.js?v=3936eaa2"></script>
+<script defer src="bulk-students.js?v=1a9fa053"></script>
 </body>
 </html>

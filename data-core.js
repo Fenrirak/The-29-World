@@ -907,6 +907,7 @@ function defaultClassData(code, className, teacherUsername) {
     sideHustles: [],
     lifestyleLock: { threshold: 0, modules: [] },
     dailyTimeLimitMinutes: null, // null/0 = no limit; minutes of active time per student per day
+    welcomeGrant: 20, // what each new student starts with — see t29WelcomeGrantOf()
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri",
     lastInterestRun: null, // legacy/unused — interest due-ness is now tracked per student (see lastInterestApplied, near applyMyInterestIfDue)
     insuranceDay: "Fri", lastInsuranceWeekRun: null,
@@ -1156,6 +1157,7 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
   // doesn't have the field at all (e.g. an older template predating it).
   cls.interestRate = (template.interestRate === undefined || template.interestRate === null) ? cls.interestRate : template.interestRate;
   cls.cashInterestRate = template.cashInterestRate || 0;
+  cls.welcomeGrant = t29WelcomeGrantOf(template);
   cls.interestAuto = !!template.interestAuto;
   cls.interestFrequency = template.interestFrequency || "weekly";
   cls.interestDay = template.interestDay || "Fri";
@@ -1380,6 +1382,40 @@ async function deleteClassPermanently(teacherUsername, classCode) {
 // Firebase Auth account is created first (password never touches
 // Firestore), then /uidIndex, /users, and the class-doc update happen
 // together in one transaction.
+// ---------------- Welcome grant ----------------
+// What a brand-new student starts with. A teacher can change it per class
+// (Class settings, or the Add students window); classes made before that
+// setting existed have no `welcomeGrant` and keep the original $20.
+const T29_DEFAULT_WELCOME_GRANT = 20;
+const T29_MAX_WELCOME_GRANT = 100000;
+
+function t29WelcomeGrantOf(cls) {
+  const raw = cls ? cls.welcomeGrant : undefined;
+  if (raw === undefined || raw === null || raw === "") return T29_DEFAULT_WELCOME_GRANT;
+  const n = Number(raw);
+  return (isFinite(n) && n >= 0 && n <= T29_MAX_WELCOME_GRANT) ? Math.round(n * 100) / 100 : T29_DEFAULT_WELCOME_GRANT;
+}
+
+// Only affects students who join AFTER the change — everyone already in the
+// class keeps what they have (and "Restart class" resets to the new amount).
+async function setClassWelcomeGrant(classCode, amount) {
+  const raw = typeof amount === "string" ? amount.replace(/[$,\s]/g, "") : amount;
+  const n = Number(raw);
+  if (raw === "" || raw === null || raw === undefined || !isFinite(n)) {
+    return { ok: false, error: "Enter the amount new students should start with, e.g. 20." };
+  }
+  if (n < 0) return { ok: false, error: "The welcome grant can't be negative." };
+  if (n > T29_MAX_WELCOME_GRANT) return { ok: false, error: "The welcome grant can be at most $" + T29_MAX_WELCOME_GRANT.toLocaleString("en-NZ") + "." };
+  const value = Math.round(n * 100) / 100;
+  try {
+    await classesCol().doc(classCode).update({ welcomeGrant: value });
+  } catch (e) {
+    console.warn("Saving the welcome grant failed:", e);
+    return { ok: false, error: "Couldn't save that — please try again." };
+  }
+  return { ok: true, amount: value };
+}
+
 // The Firestore half of joining a class as a brand-new student: the /uidIndex
 // entry, the /users doc and the roster line (plus the welcome grant) all
 // written together in one transaction. Shared by a student signing
@@ -1397,12 +1433,13 @@ async function t29JoinClassAsNewStudent(db, cred, name, username, classCode) {
     const clsSnap = await t.get(classRef);
     if (!clsSnap.exists) throw new Error("NO_CLASS");
     const cls = clsSnap.data();
+    const welcome = t29WelcomeGrantOf(cls);
 
     t.set(db.collection("uidIndex").doc(cred.user.uid), { username });
 
     const user = {
       username, authUid: cred.user.uid, role: "student", name,
-      classCode, balance: 20, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
+      classCode, balance: welcome, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
       sessionVersion: 0,
       // Denormalized copy of the class's daily time limit (see
       // setStudentTimeLimit below). Kept on the user doc itself so
@@ -1427,12 +1464,12 @@ async function t29JoinClassAsNewStudent(db, cred, name, username, classCode) {
       reportMonth: Object.assign(emptyReportBucket(), { monthKey: nzMonthKey() }),
       reportLifetime: emptyReportBucket()
     };
-    addClassificationToBucket(user.reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: 20 });
-    addClassificationToBucket(user.reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: 20 });
+    addClassificationToBucket(user.reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: welcome });
+    addClassificationToBucket(user.reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: welcome });
     t.set(db.collection("users").doc(username), user);
 
     cls.students.push(username);
-    cls.txns.unshift({ id: uid("t"), type: "welcome", to: username, amount: 20, note: "Welcome grant", date: nowStr(), ts: Date.now() });
+    cls.txns.unshift({ id: uid("t"), type: "welcome", to: username, amount: welcome, note: welcome > 0 ? "Welcome grant" : "Joined the class", date: nowStr(), ts: Date.now() });
     if (cls.txns.length > MAX_STORED_TXNS) cls.txns.length = MAX_STORED_TXNS;
     t.update(classRef, { students: cls.students, txns: cls.txns });
   });
@@ -2599,6 +2636,7 @@ function withNewModuleDefaults(cls) {
   // without deleting anything, so it can still be reopened later or used
   // as a template for a brand new class.
   if (cls.archived === undefined) cls.archived = false;
+  if (cls.welcomeGrant === undefined) cls.welcomeGrant = T29_DEFAULT_WELCOME_GRANT;
   if (cls.archivedAt === undefined) cls.archivedAt = null;
   if (cls.templateShareToken === undefined) cls.templateShareToken = null;
   cls.reportArchives = cls.reportArchives || [];
