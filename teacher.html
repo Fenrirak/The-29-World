@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=c240aca4">
+<link rel="stylesheet" href="style.css?v=dc4ca901">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -73,7 +73,7 @@
   }
 </style>
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="firebase-init.js?v=9f8488c9">
+<link rel="modulepreload" href="firebase-init.js?v=5c7cb457">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
@@ -159,7 +159,10 @@
   <div class="card">
     <div class="flex-between">
       <h2 id="hStudents">Students</h2>
-      <button class="btn small mint" onclick="markAllJobTasksDone()" id="markAllJobsBtn">Mark all jobs done</button>
+      <div class="bulk-head-actions">
+        <button class="btn small gold" onclick="openBulkAdd()" id="addStudentsBtn">Add students</button>
+        <button class="btn small mint" onclick="markAllJobTasksDone()" id="markAllJobsBtn">Mark all jobs done</button>
+      </div>
     </div>
     <div class="table-scroll">
     <table id="studentTable" class="stack-table">
@@ -167,7 +170,7 @@
       <tbody></tbody>
     </table>
     </div>
-    <p class="muted-small" id="noStudents">No students have joined yet. Share your class code to get started.</p>
+    <p class="muted-small" id="noStudents">No students have joined yet. Share your class code, or use <strong>Add students</strong> to create their accounts for them.</p>
   </div>
 
   <div class="card">
@@ -451,11 +454,88 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
   </div>
 </div>
 
-<script type="module" src="firebase-init.js?v=9f8488c9"></script>
+<div id="bulkAddModal" class="hidden t29-modal-backdrop" ondblclick="if(event.target===this)closeBulkAdd()">
+  <div class="card bulk-card">
+    <div class="flex-between">
+      <div>
+        <h2 id="bulkTitle" style="margin-bottom:2px;">Add students</h2>
+        <p id="bulkSubtitle" class="muted-small">Create a whole class of accounts at once.</p>
+      </div>
+      <button class="btn small secondary" id="bulkCloseBtn" onclick="closeBulkAdd()">Close</button>
+    </div>
+
+    <div id="bulkStepInput">
+      <label for="bulkNames">Student names</label>
+      <textarea id="bulkNames" rows="8" data-enter="bulkCreateBtn" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Aroha Smith&#10;Liam Chen&#10;Sofia Rodriguez"></textarea>
+      <p class="muted-small" style="margin-top:6px;">One student per line, first name then last name. Each gets a username, a random 6-letter password and the usual $20 welcome grant in <strong id="bulkClassName">your class</strong>.</p>
+      <div class="bulk-row">
+        <div>
+          <label for="bulkStyle">Username style</label>
+          <select id="bulkStyle">
+            <option value="dot">aroha.smith</option>
+            <option value="joined">arohasmith</option>
+            <option value="initial">aroha.s</option>
+          </select>
+        </div>
+      </div>
+      <div id="bulkPreview"></div>
+      <div id="bulkInputMsg"></div>
+      <div class="bulk-actions">
+        <button class="btn gold" id="bulkCreateBtn" onclick="bulkCreateClick()" disabled>Create accounts</button>
+        <button class="btn secondary hidden" id="bulkViewLoginsBtn" type="button">Back to the logins</button>
+      </div>
+    </div>
+
+    <div id="bulkStepRunning" class="hidden">
+      <p id="bulkRunText" style="font-weight:800;margin:18px 0 0;">Creating accounts…</p>
+      <div class="progress-bar"><div id="bulkRunBar" style="width:0%;"></div></div>
+      <p id="bulkRunNow" class="muted-small" style="margin-top:8px;"></p>
+      <p class="muted-small">Please keep this window open until it finishes.</p>
+      <div class="bulk-actions">
+        <button class="btn small secondary" id="bulkStopBtn" onclick="bulkStopClick()">Stop after this student</button>
+      </div>
+    </div>
+
+    <div id="bulkStepResults" class="hidden">
+      <div id="bulkResultSummary"></div>
+      <div id="bulkFailures"></div>
+      <div class="bulk-warn">Passwords are only shown on this screen &mdash; they aren&rsquo;t saved anywhere, so they can&rsquo;t be looked up later. Copy, download or print them before you close it.</div>
+      <div class="bulk-toolbar">
+        <button class="btn small secondary" onclick="bulkCopyAllMessages()">Copy all messages</button>
+        <button class="btn small secondary" onclick="bulkCopyList()">Copy list</button>
+        <button class="btn small secondary" onclick="bulkDownloadCsv()">Download CSV</button>
+        <button class="btn small secondary" onclick="bulkPrintSlips()">Print login slips</button>
+      </div>
+      <div class="table-scroll">
+        <table id="bulkResultTable" class="stack-table">
+          <thead><tr><th>Student</th><th>Username</th><th>Password</th><th>Message</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <details class="bulk-details">
+        <summary>Edit the email message</summary>
+        <label for="bulkEmailSubject">Subject</label>
+        <input id="bulkEmailSubject" autocomplete="off">
+        <label for="bulkEmailBody">Message</label>
+        <textarea id="bulkEmailBody" rows="11" autocomplete="off"></textarea>
+        <p class="muted-small" style="margin-top:6px;">Fills in for each student: <code>{first}</code> <code>{name}</code> <code>{username}</code> <code>{password}</code> <code>{link}</code> <code>{class}</code> <code>{teacher}</code>. Your changes are remembered on this device.</p>
+        <button class="btn small secondary" type="button" onclick="bulkResetTemplate()">Reset message</button>
+        <label>Preview (first student)</label>
+        <div id="bulkEmailPreview" class="bulk-email-preview"></div>
+      </details>
+      <div class="bulk-actions">
+        <button class="btn gold" onclick="bulkAddMore()">Add more students</button>
+        <button class="btn secondary" onclick="closeBulkAdd()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="firebase-init.js?v=5c7cb457"></script>
 <script defer src="icons.js?v=c9829d04"></script>
 <script defer src="settings-menu.js?v=70d4360c"></script>
 <script defer src="shortcuts.js?v=287cb4e1"></script>
-<script defer src="data-core.js?v=13b695a2"></script>
+<script defer src="data-core.js?v=ba7caf4d"></script>
 <script defer src="data-money.js?v=65805677"></script>
 <script defer src="data-life.js?v=b34d27a7"></script>
 <script defer src="data-property.js?v=e6e0c3f0"></script>
@@ -463,10 +543,11 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="tour.js?v=777683bc"></script>
 <script defer src="events-ui.js?v=b1bcab86"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
-<script defer src="avatar.js?v=b55d4a48"></script>
+<script defer src="avatar.js?v=26a5a8fc"></script>
 <script defer src="notifications.js?v=7b2c20a0"></script>
 <script defer src="pdf-report.js?v=12982e44"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
 <script defer src="teacher.js?v=b63aa43e"></script>
+<script defer src="bulk-students.js?v=d55fdf4c"></script>
 </body>
 </html>

@@ -768,6 +768,44 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
   overflow-y:auto;overscroll-behavior:contain;padding:40px 16px;
 }
 .t29-modal-backdrop.center{align-items:center;}
+
+/* ---------------- Add students in bulk (teacher page) ---------------- */
+.bulk-card{width:100%;max-width:840px;margin-top:0;}
+.bulk-head-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.bulk-row{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;}
+.bulk-row > div{flex:1 1 220px;min-width:0;}
+.bulk-count{margin:14px 0 6px;font-size:.9rem;}
+.bulk-bad{color:var(--coral-fill);font-weight:800;}
+.bulk-mini-scroll{max-height:240px;overflow:auto;border:1.5px solid var(--line);border-radius:var(--r-2);}
+.bulk-mini{width:100%;border-collapse:collapse;font-size:.88rem;}
+.bulk-mini th,.bulk-mini td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);}
+.bulk-mini th{position:sticky;top:0;background:var(--card);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.bulk-mini td:first-child{width:36px;color:var(--muted);}
+.bulk-mini tr:last-child td{border-bottom:0;}
+.bulk-mini tr.bad td{background:var(--warn-banner-grad-start);color:var(--warn-banner-text);}
+.bulk-card code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;}
+.bulk-pw{font-weight:800;letter-spacing:.12em;font-size:1rem;user-select:all;}
+.bulk-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
+.bulk-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;}
+.bulk-warn{background:linear-gradient(135deg,var(--warn-banner-grad-start),var(--warn-banner-grad-end));color:var(--warn-banner-text);padding:10px 12px;border-radius:var(--r-2);font-size:.85rem;font-weight:600;margin:14px 0 0;}
+.bulk-fail-list{margin:6px 0 6px 18px;padding:0;font-weight:600;}
+.bulk-details{margin-top:18px;border:1.5px solid var(--line);border-radius:var(--r-3);padding:10px 14px;}
+.bulk-details summary{cursor:pointer;font-weight:800;}
+.bulk-email-preview{white-space:pre-wrap;background:var(--bg);border:1px dashed var(--line);border-radius:var(--r-2);padding:12px;font-size:.85rem;max-height:240px;overflow:auto;}
+/* Printable login slips — built by bulk-students.js, only ever visible on paper. */
+#bulkPrintSheet{display:none;}
+@media print{
+  body.printing-bulk > *:not(#bulkPrintSheet){display:none !important;}
+  body.printing-bulk{background:#fff !important;}
+  body.printing-bulk #bulkPrintSheet{display:grid !important;grid-template-columns:1fr 1fr;gap:10px;color:#000;}
+  .bulk-slip{border:1.5px dashed #555;border-radius:8px;padding:12px 14px;break-inside:avoid;background:#fff;color:#000;font-size:11pt;}
+  .bulk-slip-brand{font-weight:800;font-size:13pt;}
+  .bulk-slip-class{color:#444;font-size:9.5pt;margin-bottom:8px;}
+  .bulk-slip-name{font-weight:800;font-size:12.5pt;margin-bottom:6px;}
+  .bulk-slip-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-top:1px solid #ccc;}
+  .bulk-slip-row strong{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.06em;}
+  .bulk-slip-hint{color:#444;font-size:9pt;margin-top:6px;}
+}
 .anw-modal-card{
   background:#fff;border-radius:var(--r-6);padding:26px;max-width:420px;width:100%;
   box-shadow:var(--shadow-xl);

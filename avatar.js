@@ -479,6 +479,142 @@
     });
     return { svg, lit };
   })();
+  // Auckland at blue hour, after a harbour-side photo: the Sky Tower over the lit CBD, the brick Viaduct apartments with
+  // their lamps, a marina of white yachts, gold light streaking across the water and the black mooring piles.
+  // Drawn in photo pixels (1777 x 1333) and fitted into the avatar circle by one transform; windows are merged into a
+  // few paths per layer to keep it light. Built once - AKL(ids) only fills in the gradient ids.
+  const AKL = (() => {
+    const hs = n => { const v = Math.sin(n * 91.7 + 17.3) * 43758.5453; return v - Math.floor(v); };
+    const R = Math.round;
+    let seed = 0, warm = "", cool = "";
+    const lit = (x, y, w, h, cw, ch, p, cp, fw) => {
+      for (let yy = y + ch * .4; yy + ch * .6 < y + h; yy += ch) for (let xx = x + cw * .3; xx + cw * .7 < x + w; xx += cw) {
+        seed++; if (hs(seed) >= p) continue;
+        const ww = R(cw * (fw || .46)), d = `M${R(xx)} ${R(yy)}h${ww}v${R(ch * .52)}h${-ww}z`;
+        if (hs(seed + 700) < cp) cool += d; else warm += d;
+      }
+    };
+    const blk = (x, y, w, h, col, cw, ch, p, cp, side, fw) => {
+      if (cw) lit(x, y, w, h, cw, ch, p, cp || 0, fw);
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${col}"/>`
+        + (side ? `<rect x="${R(x + w * (1 - side[0]))}" y="${y}" width="${R(w * side[0])}" height="${h}" fill="${side[1]}"/>` : "");
+    };
+    const flush = (wc, cc, gl) => {
+      const g = (d, col) => gl ? `<path d="${d}" fill="${col}" stroke="${col}" stroke-width="${gl}" stroke-linejoin="round" opacity=".26"/>` : "";
+      wc = wc || "#ffd48c"; cc = cc || "#c4e2ff";
+      const s = (warm ? g(warm, wc) + `<path d="${warm}" fill="${wc}" opacity=".93"/>` : "") + (cool ? g(cool, cc) + `<path d="${cool}" fill="${cc}" opacity=".85"/>` : "");
+      warm = cool = ""; return s;
+    };
+    const rows = (x0, x1, y0, y1, st) => { let d = ""; for (let y = y0; y <= y1; y += st) d += `M${x0} ${y}H${x1}`; return d; };
+    const vl = (x0, st, n, y0, y1) => { let d = ""; for (let i = 0; i < n; i++) d += `M${x0 + i * st} ${y0}V${y1}`; return d; };
+    const dots = (x0, st, n, y, w, h, p, s0) => { let d = ""; for (let i = 0; i < n; i++) if (hs(s0 + i) < p) d += `M${x0 + i * st} ${y}h${w}v${h}h${-w}z`; return d; };
+    const slots = (() => { let a = "", b = ""; for (let y = 574; y < 834; y += 30) { a += `M1135 ${y}v22`; b += `M1124.5 ${y + 10}v16`; } return [a, b]; })();
+
+    // far haze towers
+    const far = [[556, 866, 72, 92], [604, 836, 92, 122], [1452, 790, 92, 140], [1556, 806, 104, 124], [1664, 846, 113, 90]]
+      .map(b => blk(b[0], b[1], b[2], b[3], "#a39dc1", 16, 22, .12, .3)).join("") + flush();
+    // CBD back row: tall glass tower with the blue crown, red-capped tower, long grey block, pink-brown tower
+    let back = `<path d="M0 556Q6 520 30 512Q64 502 96 526V966H0Z" fill="#8a7985"/><rect x="72" y="524" width="24" height="442" fill="#76667a"/><rect x="62" y="516" width="34" height="34" fill="#4f9aa6" opacity=".8"/>`;
+    lit(0, 560, 96, 406, 15, 19, .52, .1);
+    back += `<ellipse cx="34" cy="506" rx="26" ry="9" fill="#5b8fd0"/><ellipse cx="34" cy="503" rx="19" ry="5" fill="#b2d6ff"/><path d="M34 497V468" stroke="#d3cbdc" stroke-width="3"/>`
+      + blk(96, 712, 28, 254, "#66596c", 14, 20, .55, .1)
+      + blk(120, 642, 100, 324, "#8f94b6", 17, 21, .45, .45, [.3, "#7a7fa2"]) + `<rect x="120" y="642" width="100" height="13" fill="#8e4546"/>`
+      + blk(144, 809, 368, 160, "#675a62", 17, 22, .36, .08) + `<rect x="300" y="782" width="160" height="30" fill="#6a5d68"/><path d="${rows(144, 512, 830, 940, 22)}" stroke="#7d6e7a" stroke-width="3" opacity=".65"/>`
+      + blk(306, 834, 100, 112, "#c9bac1", 14, 19, .28, .3) + `<path d="M326 836V946M346 836V946M366 836V946M386 836V946" stroke="#9a8d9a" stroke-width="3" opacity=".6"/>`
+      + blk(506, 871, 66, 80, "#cdbdc2", 14, 19, .2, .3) + `<rect x="506" y="896" width="66" height="14" fill="#d65a50"/>`
+      + blk(686, 718, 164, 240, "#a47e6b", 15, 21, .58, .06, [.24, "#8b665a"])
+      + `<path d="M700 764V744Q724 724 748 744V764Z" fill="#8196bf"/><path d="M704 748Q724 732 744 748" stroke="#d9e6ff" stroke-width="3" fill="none"/><rect x="790" y="724" width="38" height="14" fill="#eceef6"/>`
+      + blk(865, 746, 105, 160, "#6b5b66", 14, 20, .52, .08, [.3, "#5a4c58"]);
+    back += flush("#ffd48c", "#c4e2ff", 5);
+    // CBD middle row, either side of the tower
+    let mid = blk(925, 798, 120, 118, "#7a6a74", 15, 20, .45, .08)
+      + blk(1045, 788, 74, 130, "#a39096", 14, 20, .34, .3)
+      + blk(1160, 735, 102, 185, "#565770", 15, 20, .5, .25, [.42, "#6b6a82"]) + `<rect x="1178" y="722" width="38" height="15" fill="#5c5d76"/>`
+      + blk(1250, 815, 212, 104, "#9a98ab", 18, 21, .28, .2) + `<rect x="1250" y="811" width="212" height="6" fill="#cfcddd"/>`
+      + blk(1460, 824, 62, 94, "#cbbfc6", 16, 21, .25, .2)
+      + blk(1520, 816, 80, 102, "#9b6f66", 16, 21, .4, .06, [.3, "#845c55"])
+      + blk(1600, 884, 177, 40, "#7a768c") + `<path d="M1636 894L1738 880L1777 898V908H1636Z" fill="#e8e8f2"/>`;
+    mid += flush("#ffd48c", "#c4e2ff", 5);
+
+    // THE SKY TOWER: red/white antenna, silver barrel, wide viewing deck, black glass band, floodlit concrete shaft
+    const tower = `<circle cx="1138" cy="470" r="120" fill="url(#@hl)"/>`
+      + `<rect x="1137.5" y="72" width="3" height="22" fill="#e8e2ec"/><circle cx="1139" cy="70" r="12" fill="#ff5a4a" opacity=".2"/><circle cx="1139" cy="70" r="4" fill="#ff4d4d"/>`
+      + `<path d="M1137.5 92H1140.5L1143.5 112H1134.5Z" fill="#f1ecf4"/><rect x="1134.5" y="112" width="9" height="108" fill="#efe7ee"/><path d="M1137 112V220M1141 112V220" stroke="#c9c0d0" stroke-width="1" opacity=".7"/>`
+      + `<path d="M1134.5 128H1143.5" stroke="#d94a4a" stroke-width="5"/><path d="M1134.5 176H1143.5M1134.5 194H1143.5" stroke="#d94a4a" stroke-width="7"/>`
+      + `<rect x="1133.5" y="220" width="11" height="105" fill="#5a5668"/><path d="M1137 220V325M1141 220V325" stroke="#8f8aa3" stroke-width="1.4"/><path d="${rows(1133.5, 1144.5, 228, 318, 10)}" stroke="#7d7890" stroke-width="1" opacity=".6"/>`
+      + `<rect x="1134" y="325" width="10" height="6" fill="#d6d1e0"/>`
+      + `<path d="M1134 326Q1135 352 1110 363H1168Q1143 352 1144 326Z" fill="#b9aabf"/><path d="M1139 326H1144Q1143 352 1168 363H1139Z" fill="#d9c6cd"/>`
+      + `<ellipse cx="1139" cy="364" rx="31" ry="5" fill="#e6d8d2"/><rect x="1110" y="364" width="58" height="14" fill="#3a3340"/><path d="${dots(1115, 9, 6, 368, 4, 5, .85, 40)}" fill="#f2b46a"/>`
+      + `<path d="M1114 378H1164L1166 424H1112Z" fill="#a99bb0"/><path d="M1139 378H1164L1166 424H1139Z" fill="#cfb3c1"/><path d="${vl(1124, 10, 4, 380, 423)}M1113 398H1165M1112 411H1166" stroke="#6f6c86" stroke-width="1.6" opacity=".75" fill="none"/>`
+      + `<path d="M1106 424H1170L1190 436H1086Z" fill="#41394b"/>`
+      + `<path d="M1078 435Q1138 429 1198 435L1196 440Q1138 435 1080 440Z" fill="#d8c9b8"/>`
+      + `<path d="M1080 438H1196L1190 447H1086Z" fill="#e9dccb"/><path d="M1086 447H1190" stroke="#4a4050" stroke-width="2"/>`
+      + `<path d="M1092 447H1185L1183 462H1094Z" fill="#241c1c"/><path d="${dots(1098, 11, 8, 452, 6, 6, .85, 60)}" fill="#f2b46a"/>`
+      + `<path d="M1092 460H1186L1176 468H1102Z" fill="#d9c7ad"/>`
+      + `<path d="M1103 466H1175L1173 477H1105Z" fill="#4a3b31"/><path d="${dots(1109, 10, 6, 469, 5, 5, .85, 80)}" fill="#f2b46a"/>`
+      + `<rect x="1107" y="477" width="65" height="10" fill="#8d746f"/><path d="${vl(1113, 9, 7, 477, 487)}" stroke="#cfb3a8" stroke-width="2"/>`
+      + `<rect x="1108" y="487" width="62" height="7" fill="#9b8f9f"/><rect x="1109" y="494" width="60" height="26" fill="#1d1c2b"/><rect x="1160" y="494" width="9" height="26" fill="#4a4250"/>`
+      + `<path d="M1109 520H1169L1167 562H1111Z" fill="url(#@pg)"/><path d="M1110 529H1168M1110 541H1168" stroke="#4b4560" stroke-width="1.6" opacity=".6"/>`
+      + `<path d="M1113 560H1165L1158 640V840H1122V640Z" fill="url(#@sg)"/><path d="M1113 560H1165L1158 640V840H1122V640Z" fill="url(#@vg)"/>`
+      + `<path d="${slots[0]}" stroke="#2b2124" stroke-width="4"/><path d="${slots[1]}" stroke="#4a3b34" stroke-width="3" opacity=".9"/>`;
+
+    // front row: the block at the tower's foot, the brick Viaduct apartments with lamps, the lower buildings and offices
+    let front = blk(1048, 826, 192, 92, "#c4bfcb", 18, 20, .3, .2) + `<rect x="1048" y="822" width="192" height="6" fill="#e6e0ea"/>`;
+    front += flush("#ffd48c", "#c4e2ff", 5);
+    const lampX = [842, 999, 1148, 1295, 1432, 1569, 1700];
+    front += blk(780, 915, 326, 158, "#3b2a2b", 34, 30, .56, 0, null, .62) + blk(1106, 915, 46, 158, "#54494f") + blk(1152, 915, 625, 158, "#3d2926", 34, 30, .56, 0, null, .62)
+      + `<rect x="780" y="913" width="997" height="9" fill="#6a5654"/>` + flush("#ffb25e", "#ffb25e", 9)
+      + `<path d="${rows(780, 1777, 950, 1040, 30)}" stroke="#6e534d" stroke-width="4" opacity=".8"/>`
+      + `<rect x="780" y="1068" width="997" height="10" fill="#dfc7bb"/>`
+      + `<path d="${lampX.map(x => `M${x} 968V1070`).join("")}" stroke="#2a2128" stroke-width="4"/>`
+      + lampX.map(x => `<circle cx="${x}" cy="1020" r="30" fill="url(#@lg)"/><rect x="${x - 6}" y="1004" width="12" height="30" rx="6" fill="#fff4d8"/>`).join("");
+    front += `<rect x="0" y="1050" width="780" height="26" fill="#2b2733"/>`
+      + blk(0, 956, 132, 122, "#7c7a92", 16, 22, .62, .1, null, .55) + `<rect x="0" y="948" width="132" height="10" fill="#b9b6c8"/>`
+      + blk(135, 946, 392, 108, "#463f54", 20, 22, .8, .22, null, .6) + `<rect x="135" y="939" width="392" height="9" fill="#d2cbd6"/>`;
+    front += flush("#ffd890", "#6fd6c8", 6)
+      + `<g fill="#26332f"><ellipse cx="548" cy="1042" rx="36" ry="30"/><ellipse cx="614" cy="1036" rx="30" ry="28"/><ellipse cx="682" cy="1048" rx="34" ry="28"/><ellipse cx="758" cy="1040" rx="36" ry="30"/></g>`
+      + [[546, 1014], [662, 1030], [486, 1010]].map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="26" fill="url(#@lg)"/><circle cx="${p[0]}" cy="${p[1]}" r="6" fill="#fff0c4"/>`).join("");
+
+    // water, the golden light streaks, ripples
+    const st = (cx, y1, y2, w) => `M${R(cx - w / 2)} ${y1}H${R(cx + w / 2)}L${R(cx + w * .3)} ${y2}H${R(cx - w * .3)}Z`;
+    const streaks = [[283, 1146, 1300, 24], [333, 1146, 1282, 16], [532, 1150, 1296, 34], [566, 1150, 1230, 14], [686, 1160, 1252, 18], [850, 1150, 1312, 36], [1006, 1140, 1330, 40], [1062, 1146, 1240, 14], [1440, 1146, 1262, 24], [1580, 1146, 1240, 18], [60, 1150, 1250, 12], [236, 1146, 1210, 12]];
+    let sd = "", hd = "", rp = "";
+    streaks.forEach(([x, y1, y2, w]) => {
+      sd += st(x, y1, y2, w * .8) + st(x - w, y1 + 8, R(y1 + (y2 - y1) * .55), w * .3) + st(x + w * .95, y1 + 8, R(y1 + (y2 - y1) * .42), w * .25); hd += st(x, y1, R(y2 + 14), w * 1.7);
+      [.32, .62].forEach(f => { const yy = R(y1 + (y2 - y1) * f); rp += `M${R(x - w * .9)} ${yy}h${R(w * 1.8)}`; });
+    });
+    const water = `<rect x="0" y="1074" width="1777" height="330" fill="url(#@sea)"/><path d="${hd}" fill="url(#@rf)" opacity=".3"/><path d="${sd}" fill="url(#@rf)"/><path d="${rp}" stroke="#25405f" stroke-width="3" opacity=".45"/>`
+      + `<path d="M20 1250h150M240 1310h200M600 1280h180M900 1300h220M1250 1250h200M1500 1300h200M120 1170h120M1100 1190h160" stroke="#9fc4ee" stroke-width="3" opacity=".2" stroke-linecap="round"/>`;
+
+    // marina: crane and tug, the tall ship, white yachts, masts, pontoons
+    const yacht = (x, y, w, h, cab, gl) => {
+      const hy = R(y + h * .44), X = k => R(x + w * k), Y = k => R(y + h * k);
+      return `<path d="M${x} ${hy}H${x + w}L${X(.95)} ${y + h}H${X(.05)}Z" fill="#e6e3f0"/>`
+        + `<path d="M${X(.03)} ${Y(.82)}H${X(.97)}L${X(.95)} ${y + h}H${X(.05)}Z" fill="#aeb2d2"/>`
+        + `<path d="M${X(.17)} ${hy}L${X(.27)} ${Y(.12)}H${X(.74)}L${X(.84)} ${hy}Z" fill="${cab || "#f3f1f9"}"/>`
+        + `<path d="M${X(.26)} ${Y(.22)}H${X(.72)}L${X(.78)} ${Y(.38)}H${X(.2)}Z" fill="${gl || "#39466a"}"/>`;
+    };
+    const marina = `<path d="M703 1094L630 938" stroke="#33384a" stroke-width="9" stroke-linecap="round"/><path d="M714 1092L650 962M690 1020L722 1010" stroke="#33384a" stroke-width="4"/>`
+      + `<path d="M700 1128H846L836 1160H714Z" fill="#102d5f"/><rect x="740" y="1098" width="72" height="32" fill="#1b9a8f"/><rect x="760" y="1138" width="50" height="8" fill="#dfe6f4"/>`
+      + `<path d="M0 1130H160M556 1130H992" stroke="#262a45" stroke-width="12"/>`
+      + `<path d="M200 1112H425L408 1142H222Z" fill="#e6dfe0"/><path d="M200 1112H425V1120H203Z" fill="#9a6b45"/><rect x="262" y="1092" width="120" height="22" fill="#b07f55"/>`
+      + `<path d="M259 898V1112M340 898V1112" stroke="#8f5a3c" stroke-width="7"/><path d="M236 960H284M312 960H370" stroke="#8f5a3c" stroke-width="4"/><path d="M259 900L205 1112M259 900L330 1112M340 900L425 1112" stroke="#6b4a40" stroke-width="2" opacity=".7"/>`
+      + yacht(-8, 1068, 198, 72, "#f4f2fa")
+      + yacht(790, 1076, 90, 62) + yacht(868, 1068, 102, 68) + yacht(984, 1060, 112, 74)
+      + yacht(1088, 1052, 134, 80, "#b4c0e0", "#2e3b5e") + yacht(1206, 1074, 72, 56)
+      + yacht(1388, 1062, 150, 68, "#6d83c4", "#2a3a68") + yacht(1536, 1084, 92, 48)
+      + yacht(1618, 1054, 106, 64) + yacht(1712, 1060, 72, 54)
+      + `<path d="M603 890V1128M1010 984V1110M1298 1004V1080" stroke="#3f3a52" stroke-width="4"/>`;
+
+    // foreground: mooring piles with pale caps, the tidal-steps sign, and the big white yacht in the corner
+    const bol = (x, y, w) => `<path d="M${x} 1345V${y + 16}Q${x} ${y - 6} ${x + w / 2} ${y - 6}Q${x + w} ${y - 6} ${x + w} ${y + 16}V1345Z" fill="#061224"/><path d="M${x + 1} ${y + 15}Q${x + 1} ${y - 4} ${x + w / 2} ${y - 4}Q${x + w - 1} ${y - 4} ${x + w - 1} ${y + 15}Z" fill="#c9cce6"/><rect x="${x}" y="${y + 15}" width="${w}" height="4" fill="#0b1a30"/><rect x="${x + 3}" y="${y + 22}" width="3" height="200" fill="#22324e" opacity=".8"/>`;
+    const fore = `<path d="M1190 1236Q1196 1218 1300 1208L1777 1170V1345H1330Q1232 1300 1190 1236Z" fill="#e6e4f1"/><path d="M1340 1190L1480 1168L1777 1122V1160L1352 1214Z" fill="#232a44"/><path d="M1286 1196Q1330 1176 1440 1168V1214L1296 1226Z" fill="#f4f3fa"/>`
+      + bol(372, 1130, 28) + bol(472, 1124, 28) + bol(1128, 1134, 38) + bol(1250, 1100, 26) + bol(1278, 1106, 22)
+      + `<rect x="1130" y="1166" width="34" height="62" fill="#f1f1f6"/><rect x="1130" y="1166" width="34" height="9" fill="#c0392b"/><path d="M1138 1184H1156M1138 1194H1156M1138 1204H1150" stroke="#222" stroke-width="3"/><path d="M1147 1210V1222M1141 1216L1147 1223L1153 1216" stroke="#222" stroke-width="3" fill="none"/>`;
+
+    const body = `<circle cx="540" cy="205" r="4" fill="#f1eaff" opacity=".7"/>` + far + back + mid + tower + front + water + marina + fore;
+    return g => `<g transform="translate(.6 7.4) scale(.07)">${body.replace(/@(\w+)/g, (m, k) => g[k])}</g>`;
+  })();
   const BG = {
     sky: () => `<rect width="100" height="100" fill="#cfe8ff"/>`,
     mint: () => `<rect width="100" height="100" fill="#d4f5e4"/>`,
@@ -531,41 +667,17 @@
     city: (ctx) => { const i = ctx.id("ct"), gl = ctx.id("cg"); ctx.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c2468"/><stop offset=".42" stop-color="#6a4a9e"/><stop offset=".72" stop-color="#ff9a8b"/><stop offset="1" stop-color="#ffd3a4"/></linearGradient><radialGradient id="${gl}"><stop offset="0" stop-color="#ffd7a0" stop-opacity=".75"/><stop offset="1" stop-color="#ffb08a" stop-opacity="0"/></radialGradient>`; return `<rect width="100" height="100" fill="url(#${i})"/>${stars([[20, 12, .7], [46, 7, .6], [78, 14, .7], [10, 30, .55], [90, 36, .6]], "#fff6e0")}<ellipse cx="50" cy="66" rx="58" ry="24" fill="url(#${gl})"/>${CITY.svg}`; },
     candy: () => `<rect width="100" height="100" fill="#fff"/>${[-20, 0, 20, 40, 60, 80, 100].map((x, i) => `<path d="M${x} 0 L${x + 14} 0 L${x - 26} 100 L${x - 40} 100Z" fill="${i % 2 ? "#ff7aa8" : "#7ad7ff"}"/>`).join("")}`,
     auckland: (ctx) => {
-      // Daytime Auckland: Sky Tower over the CBD, the Waitemata Harbour, Rangitoto and a yacht.
-      const sk = ctx.id("ak"), sea = ctx.id("as"), sun = ctx.id("au");
-      ctx.defs += `<linearGradient id="${sk}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b97ee"/><stop offset=".55" stop-color="#86c6fb"/><stop offset="1" stop-color="#e4f4ff"/></linearGradient>`
-        + `<linearGradient id="${sea}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a96e0"/><stop offset="1" stop-color="#17589e"/></linearGradient>`
-        + `<radialGradient id="${sun}" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff9d6"/><stop offset=".45" stop-color="#fff3b0" stop-opacity=".55"/><stop offset="1" stop-color="#fff3b0" stop-opacity="0"/></radialGradient>`;
-      const cloud = (cx, cy, s) => `<g fill="#fff" opacity=".95" transform="translate(${cx} ${cy}) scale(${s})"><ellipse cx="0" cy="2" rx="9" ry="3.2"/><ellipse cx="-3.6" cy="-.4" rx="4.4" ry="3.4"/><ellipse cx="2" cy="-1.6" rx="5.2" ry="4"/><ellipse cx="6" cy=".4" rx="3.6" ry="2.8"/></g>`;
-      const B = 69.5;
-      const far = [[8, 5, 14], [13, 4, 20], [28, 5, 16], [34, 6, 11], [56, 5, 11], [62, 4, 16], [68, 6, 10], [76, 5, 13], [82, 5, 9], [88, 6, 12]].map(([bx, w, h]) => `<rect x="${bx}" y="${B - h}" width="${w}" height="${h}" fill="#a9bfdc"/>`).join("");
-      const near = [[3, 6, 11], [9, 5, 16], [14.4, 4.6, 9], [24.4, 5.2, 13], [29.8, 5.4, 8], [66, 5, 8], [71.6, 6, 11], [78, 5, 7]].map(([bx, w, h]) => {
-        let s = `<rect x="${bx}" y="${B - h}" width="${w}" height="${h}" fill="#7f98ba"/><rect x="${bx + w * .62}" y="${B - h}" width="${w * .38}" height="${h}" fill="#6d86a9"/>`;
-        for (let yy = B - h + 2.2; yy < B - 1; yy += 2.6) s += `<path d="M${bx + .7} ${yy.toFixed(1)} H${bx + w - .7}" stroke="#b6c8e0" stroke-width=".5" opacity=".8"/>`;
-        return s;
-      }).join("");
-      // Auckland's Sky Tower (328 m): flared three-legged base, a fluted concrete shaft, the pod with its
-      // sloping skirt, glass band and white upper level, then the tapering mast and red beacon.
-      const tower = `<g transform="translate(19 0)">`
-        + `<path d="M-5 70 C-3.6 67 -2.6 64.4 -1.7 59.6 H1.7 C2.6 64.4 3.6 67 5 70Z" fill="#dfe6f2"/><path d="M0 59.6 H1.7 C2.6 64.4 3.6 67 5 70 H0Z" fill="#c5cddd"/><path d="M-1.5 70 L-.6 63.6 M1.5 70 L.6 63.6" stroke="#aab4c8" stroke-width=".35" stroke-linecap="round"/>`
-        + `<path d="M-1.7 59.6 L-1.15 38.6 H1.15 L1.7 59.6Z" fill="#e8edf6"/><path d="M0 38.6 H1.15 L1.7 59.6 H0Z" fill="#c8d0df"/><path d="M-.6 58.8 L-.45 39.6 M.6 58.8 L.45 39.6" stroke="#b6c0d4" stroke-width=".3"/>`
-        + `<path d="M-1.2 38.6 L-3.3 36.4 H3.3 L1.2 38.6Z" fill="#b9c3d6"/>`
-        + `<rect x="-4" y="35.7" width="8" height=".9" rx=".4" fill="#e3e9f4"/>`
-        + `<rect x="-3.7" y="32.9" width="7.4" height="2.9" rx=".6" fill="#3f6c9c"/><path d="M-3.7 33.6 H3.7" stroke="#bfe0fa" stroke-width=".35" opacity=".9"/><path d="M-2.7 33.8 v1.7 M-1.4 33.8 v1.7 M-.1 33.8 v1.7 M1.2 33.8 v1.7 M2.5 33.8 v1.7" stroke="#8fc0ea" stroke-width=".4" opacity=".85"/>`
-        + `<rect x="-3.3" y="31.3" width="6.6" height="1.7" rx=".5" fill="#f1f4fa"/><path d="M-2.7 32.2 H2.7" stroke="#7aa6d0" stroke-width=".5"/>`
-        + `<path d="M-2.4 31.3 C-2.4 30.1 -1.3 29.6 0 29.6 C1.3 29.6 2.4 30.1 2.4 31.3Z" fill="#dfe6f2"/>`
-        + `<path d="M-.95 29.7 L-.5 24.4 H.5 L.95 29.7Z" fill="#d6deec"/><rect x="-1.6" y="23.9" width="3.2" height=".65" rx=".3" fill="#aab4c8"/><rect x="-1.1" y="26.6" width="2.2" height=".5" rx=".25" fill="#c9d2e3"/>`
-        + `<path d="M-.32 23.9 L-.14 15.6 H.14 L.32 23.9Z" fill="#9aa6bd"/><circle cx="0" cy="14.9" r="2.2" fill="#ff4d4d" opacity=".25"/><circle cx="0" cy="14.9" r=".8" fill="#ff4d4d"/></g>`;
-      const boat = `<g transform="translate(88 73.6) scale(.8)"><path d="M-6 0 H6 L4.4 2 H-4.4Z" fill="#233a66"/><path d="M.6 -.4 V-12.6 L6 -.4Z" fill="#fff"/><path d="M-.4 -.4 V-9.6 L-5.4 -.4Z" fill="#e9f2ff"/><path d="M0 -.4 V-13" stroke="#9aa7bf" stroke-width=".4"/></g>`;
-      return `<rect width="100" height="100" fill="url(#${sk})"/>`
-        + `<circle cx="80" cy="20" r="17" fill="url(#${sun})"/><circle cx="80" cy="20" r="4.2" fill="#fffbe0"/>`
-        + cloud(60, 9, .75) + cloud(89, 36, .6)
-        + `<path d="M46 69.5 C54 69.5 60 63.4 68 59.4 C74 56.4 80 56.4 86 59.4 C92 62.4 96 66 102 69.5Z" fill="#6f9fa0"/><path d="M62 62.4 C69 58.6 76 57.2 84 58.8" stroke="#9cc4bf" stroke-width=".8" fill="none" stroke-linecap="round" opacity=".8"/>`
-        + far + near + tower
-        + `<rect y="${B}" width="100" height="31" fill="url(#${sea})"/>`
-        + `<path d="M19 70 V82 M18 72 V79 M20 72 V79" stroke="#5aa8ea" stroke-width=".5" stroke-linecap="round" opacity=".8"/>`
-        + `<path d="M6 73.4 h5 M12 76.6 h6 M24 72.6 h4 M70 74 h6 M78 77.6 h7 M92 72.6 h4 M76 71.6 h3" stroke="#bfe3ff" stroke-width=".7" stroke-linecap="round" opacity=".75"/>`
-        + boat;
+      // Blue-hour Auckland: Sky Tower over the lit CBD, Viaduct apartments, marina and gold harbour reflections (see AKL).
+      const g = { sk: ctx.id("ak"), sea: ctx.id("as"), rf: ctx.id("ar"), hl: ctx.id("ah"), lg: ctx.id("al"), pg: ctx.id("ap"), sg: ctx.id("aq"), vg: ctx.id("av") };
+      ctx.defs += `<linearGradient id="${g.sk}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#667db4"/><stop offset=".08" stop-color="#6b81b7"/><stop offset=".28" stop-color="#8293c6"/><stop offset=".49" stop-color="#979fc9"/><stop offset=".62" stop-color="#aeafcd"/><stop offset=".72" stop-color="#bdb9d0"/><stop offset="1" stop-color="#bdb9d0"/></linearGradient>`
+        + `<linearGradient id="${g.sea}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22364f"/><stop offset=".2" stop-color="#35567a"/><stop offset=".4" stop-color="#4b6d98"/><stop offset=".6" stop-color="#455f88"/><stop offset="1" stop-color="#2f4565"/></linearGradient>`
+        + `<linearGradient id="${g.rf}" gradientUnits="userSpaceOnUse" x1="0" y1="1120" x2="0" y2="1340"><stop offset="0" stop-color="#fff0b4" stop-opacity=".95"/><stop offset=".35" stop-color="#f7c872" stop-opacity=".7"/><stop offset="1" stop-color="#e0a050" stop-opacity=".1"/></linearGradient>`
+        + `<radialGradient id="${g.hl}"><stop offset="0" stop-color="#ffe9b8" stop-opacity=".2"/><stop offset=".5" stop-color="#ffd9a0" stop-opacity=".06"/><stop offset="1" stop-color="#ffd9a0" stop-opacity="0"/></radialGradient>`
+        + `<radialGradient id="${g.lg}"><stop offset="0" stop-color="#fff3cf" stop-opacity=".8"/><stop offset=".4" stop-color="#ffe2a0" stop-opacity=".3"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></radialGradient>`
+        + `<linearGradient id="${g.pg}" gradientUnits="userSpaceOnUse" x1="1110" y1="0" x2="1168" y2="0"><stop offset="0" stop-color="#4d5069"/><stop offset=".35" stop-color="#7f7488"/><stop offset=".62" stop-color="#b7a0a9"/><stop offset=".85" stop-color="#f1cbc6"/><stop offset="1" stop-color="#e3bebc"/></linearGradient>`
+        + `<linearGradient id="${g.sg}" gradientUnits="userSpaceOnUse" x1="1122" y1="0" x2="1158" y2="0"><stop offset="0" stop-color="#b8a08c"/><stop offset=".3" stop-color="#d4bca6"/><stop offset=".5" stop-color="#e4c7ab"/><stop offset=".75" stop-color="#f4d9bd"/><stop offset="1" stop-color="#f8e6d0"/></linearGradient>`
+        + `<linearGradient id="${g.vg}" gradientUnits="userSpaceOnUse" x1="0" y1="560" x2="0" y2="840"><stop offset="0" stop-color="#5a4a48" stop-opacity=".25"/><stop offset=".28" stop-color="#5a4a48" stop-opacity=".08"/><stop offset=".42" stop-color="#fff4e0" stop-opacity="0"/><stop offset="1" stop-color="#fff4e0" stop-opacity=".62"/></linearGradient>`;
+      return `<rect width="100" height="100" fill="url(#${g.sk})"/>` + AKL(g);
     },
     synth: (ctx) => { const i = ctx.id("sy"); ctx.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a0f5c"/><stop offset=".6" stop-color="#ff3d9a"/><stop offset="1" stop-color="#ffd23f"/></linearGradient>`; return `<rect width="100" height="100" fill="url(#${i})"/><circle cx="50" cy="56" r="22" fill="#ffd23f" opacity=".9"/><rect y="62" width="100" height="40" fill="#1a0a3c"/>${[0, 1, 2, 3, 4, 5, 6].map(k => `<path d="M${50 + (k - 3) * 6} 62 L${50 + (k - 3) * 26} 100" stroke="#ff3d9a" stroke-width=".8"/>`).join("")}${[68, 76, 86, 98].map(y => `<path d="M0 ${y} H100" stroke="#ff3d9a" stroke-width=".8"/>`).join("")}`; }
   };
@@ -1008,7 +1120,7 @@
       return {
         night: () => ({ amb: [walk([[72, 12], [88, 28], [8, 52]], "#fff8dc", 2.5), walk([[30, 8], [20, 36], [60, 6]], "#e9efff", 2.1)] }),
         city: () => ({ amb: [walk([[23, 16], [78, 16], [46, 8]], "#fff", 2, 1), walk(CITY_PTS, "#ffe27a", 1.7)] }),
-        auckland: () => ({ amb: [cloud(10), walk([[14, 75], [31, 72.5], [69, 73.5], [80, 75], [86, 79]], "#fff", 1.6, 3), { t: "mv", svg: '<circle cx="19" cy="14.9" r="2.8" fill="#ff4d4d"/>', kf: "0%,100%{opacity:.1}50%{opacity:.85}", dur: 2.4, o: { still: false } }] }),
+        auckland: () => ({ amb: [walk([[81, 78.6], [80.3, 38.2], [12, 71], [89, 66]], "#ffe9b0", 1.3, 1), { t: "mv", svg: '<circle cx="80.3" cy="12.6" r="2.4" fill="#ff4d4d"/>', kf: "0%,100%{opacity:.1}50%{opacity:.85}", dur: 2.4, o: { still: false } }] }),
         castleday: () => ({ amb: [cloud(9), walk([[26, 15.5, 2.2, "#fff8c8"], [28, 26, 1.8], [17.5, 27, 1.6, "#fff3b0"]], "#fff", 2, 2)] }),
         castle: () => ({ amb: [walk([[56, 8], [10, 38, 1.7], [16.5, 19, 1.6]], "#fff6dd", 2), walk([[78.1, 43], [78.1, 53], [90.1, 50]], "#ffd98a", 1.7)] }),
         lava: rc => { const bub = a => a.map(q => `<circle cx="${q[0]}" cy="${q[1]}" r="${q[2]}" fill="#ffd36a"/>`).join(""), a = rc.anim;

@@ -22,7 +22,7 @@
    here — it will otherwise fail with "X is not a function", which is an
    easy, loud failure to spot (not a silent behavior change).
 ========================================================================= */
-import { initializeApp }
+import { initializeApp, deleteApp }
   from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   getFirestore, doc, collection, query, where,
@@ -31,7 +31,7 @@ import {
   serverTimestamp, increment, deleteField
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
-  getAuth, onAuthStateChanged, signOut, signInAnonymously,
+  getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signOut, signInAnonymously,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   EmailAuthProvider, reauthenticateWithCredential, updatePassword, deleteUser
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
@@ -87,8 +87,8 @@ function _wrapDocRef(realRef) {
   };
 }
 
-function _wrapCollectionRef(name) {
-  const realCol = collection(_db, name);
+function _wrapCollectionRef(name, db = _db) {
+  const realCol = collection(db, name);
   return {
     doc(id) { return _wrapDocRef(doc(realCol, id)); },
     // Only ever used as classesCol().where("teacher","==",username).get()
@@ -110,10 +110,13 @@ function _wrapCollectionRef(name) {
   };
 }
 
-const fdb = {
-  collection(name) { return _wrapCollectionRef(name); },
+// Built by a function (rather than one fixed object) so a second, separate
+// Firestore connection can get the exact same compat-shaped API — see
+// t29OpenSignupSession() below.
+function _makeFdb(db) { return {
+  collection(name) { return _wrapCollectionRef(name, db); },
   async runTransaction(updateFn) {
-    return runTransaction(_db, async (transaction) => {
+    return runTransaction(db, async (transaction) => {
       const t = {
         async get(docRefShim) {
           const snap = await transaction.get(docRefShim._ref);
@@ -132,7 +135,7 @@ const fdb = {
   // (see the data-*.js files) — batch.update()/.delete() aren't called anywhere in
   // this app, so this doesn't bother implementing them.
   batch() {
-    const b = writeBatch(_db);
+    const b = writeBatch(db);
     const shimBatch = {
       set(docRefShim, data, options) {
         options ? b.set(docRefShim._ref, data, options) : b.set(docRefShim._ref, data);
@@ -142,7 +145,8 @@ const fdb = {
     };
     return shimBatch;
   }
-};
+}; }
+const fdb = _makeFdb(_db);
 
 /* ---------------- Compat-shaped Auth shim ----------------
    Wraps the handful of Auth methods data-core.js actually calls (login/signup/
@@ -199,6 +203,41 @@ firestoreFn.FieldValue = { serverTimestamp, increment, delete: deleteField };
 // classic script's are.
 window.fdb = fdb;
 window.firebase = { auth: authFn, firestore: firestoreFn };
+
+// A second, throw-away Firebase connection used ONLY while a teacher adds a
+// list of students at once (see t29BulkCreateStudents in data-core.js).
+//
+// Why it exists: createUserWithEmailAndPassword() signs the new account in
+// on whatever connection created it. Doing that on the normal connection
+// would sign the teacher out and sign them in as the first student they
+// made. firestore.rules also only lets a brand-new login write its OWN
+// /uidIndex entry, /users doc and roster line (see isSignupClassJoin), so
+// each student's records have to be written while signed in as that
+// student. A separate, named app gives us a separate login to do that on,
+// leaving the teacher's own session completely untouched.
+//
+// The login is kept in memory only (never saved in the browser), is signed
+// out after every student, and the whole connection is deleted by close().
+let _signupSessionSeq = 0;
+window.t29OpenSignupSession = function t29OpenSignupSession() {
+  const app2 = initializeApp(firebaseConfig, "t29-signup-" + Date.now() + "-" + (++_signupSessionSeq));
+  const auth2 = initializeAuth(app2, { persistence: inMemoryPersistence });
+  const db2 = getFirestore(app2);
+  return {
+    fdb: _makeFdb(db2),
+    auth: {
+      async createUserWithEmailAndPassword(email, password) {
+        const r = await createUserWithEmailAndPassword(auth2, email, password);
+        return { user: _wrapUser(r.user) };
+      },
+      signOut() { return signOut(auth2); }
+    },
+    async close() {
+      try { await signOut(auth2); } catch (e) { /* nothing signed in */ }
+      try { await deleteApp(app2); } catch (e) { /* already gone */ }
+    }
+  };
+};
 
 // ---------------- Auth ----------------
 // SECURITY FIX: this app used to sign every visitor in anonymously and

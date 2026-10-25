@@ -1380,6 +1380,64 @@ async function deleteClassPermanently(teacherUsername, classCode) {
 // Firebase Auth account is created first (password never touches
 // Firestore), then /uidIndex, /users, and the class-doc update happen
 // together in one transaction.
+// The Firestore half of joining a class as a brand-new student: the /uidIndex
+// entry, the /users doc and the roster line (plus the welcome grant) all
+// written together in one transaction. Shared by a student signing
+// themselves up (createStudentAccount, below) and a teacher adding a whole
+// list at once (t29BulkCreateStudents, below), so a new student always
+// starts out identical whichever way their account was made.
+//
+// `db` must be the Firestore connection the NEW student's Auth login is
+// signed in on: firestore.rules only lets that brand-new login write these
+// three things (see isSignupClassJoin) — fdb for self-signup, or the
+// teacher's separate sign-up session (t29OpenSignupSession) for a bulk add.
+async function t29JoinClassAsNewStudent(db, cred, name, username, classCode) {
+  const classRef = db.collection("classes").doc(classCode);
+  await db.runTransaction(async (t) => {
+    const clsSnap = await t.get(classRef);
+    if (!clsSnap.exists) throw new Error("NO_CLASS");
+    const cls = clsSnap.data();
+
+    t.set(db.collection("uidIndex").doc(cred.user.uid), { username });
+
+    const user = {
+      username, authUid: cred.user.uid, role: "student", name,
+      classCode, balance: 20, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
+      sessionVersion: 0,
+      // Denormalized copy of the class's daily time limit (see
+      // setStudentTimeLimit below). Kept on the user doc itself so
+      // requireLogin() can check/enforce it using the user doc it
+      // already reads on every page — no extra class-doc read needed.
+      dailyLimitMinutes: cls.dailyTimeLimitMinutes || null,
+      timeSpentTodaySec: 0,
+      timeSpentDate: null,
+      // Time-limit exemption requests (see requestTimeExemption below).
+      // status is null/"pending"/"declined", scoped to timeExemptionDate
+      // (an NZ date key) so it naturally resets each day without a
+      // migration job — see timeExemptionState(). extraMinutesToday/
+      // -Date is the bonus time a teacher has granted for today only,
+      // added on top of dailyLimitMinutes by timeLimitStatus().
+      timeExemptionStatus: null,
+      timeExemptionDate: null,
+      extraMinutesToday: 0,
+      extraMinutesDate: null,
+      // Rolling report totals (see recordReportActivity below) — seeded
+      // here with the welcome grant itself, since it's logged inline
+      // below rather than through logTxn's usual recordReportActivity hook.
+      reportMonth: Object.assign(emptyReportBucket(), { monthKey: nzMonthKey() }),
+      reportLifetime: emptyReportBucket()
+    };
+    addClassificationToBucket(user.reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: 20 });
+    addClassificationToBucket(user.reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: 20 });
+    t.set(db.collection("users").doc(username), user);
+
+    cls.students.push(username);
+    cls.txns.unshift({ id: uid("t"), type: "welcome", to: username, amount: 20, note: "Welcome grant", date: nowStr(), ts: Date.now() });
+    if (cls.txns.length > MAX_STORED_TXNS) cls.txns.length = MAX_STORED_TXNS;
+    t.update(classRef, { students: cls.students, txns: cls.txns });
+  });
+}
+
 async function createStudentAccount(name, username, password, classCode) {
   // See the matching check in createTeacherAndClass above — same reason.
   if (!password || password.length < 6) {
@@ -1391,7 +1449,6 @@ async function createStudentAccount(name, username, password, classCode) {
   // See the matching note in createTeacherAndClass above.
   const existing = await getUser(username).catch(() => null);
   if (existing) return { ok: false, error: "That username is already taken." };
-  const classRef = classesCol().doc(classCode);
 
   let cred;
   try {
@@ -1401,49 +1458,7 @@ async function createStudentAccount(name, username, password, classCode) {
   }
 
   try {
-    await fdb.runTransaction(async (t) => {
-      const clsSnap = await t.get(classRef);
-      if (!clsSnap.exists) throw new Error("NO_CLASS");
-      const cls = clsSnap.data();
-
-      t.set(fdb.collection("uidIndex").doc(cred.user.uid), { username });
-
-      const user = {
-        username, authUid: cred.user.uid, role: "student", name,
-        classCode, balance: 20, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
-        sessionVersion: 0,
-        // Denormalized copy of the class's daily time limit (see
-        // setStudentTimeLimit below). Kept on the user doc itself so
-        // requireLogin() can check/enforce it using the user doc it
-        // already reads on every page — no extra class-doc read needed.
-        dailyLimitMinutes: cls.dailyTimeLimitMinutes || null,
-        timeSpentTodaySec: 0,
-        timeSpentDate: null,
-        // Time-limit exemption requests (see requestTimeExemption below).
-        // status is null/"pending"/"declined", scoped to timeExemptionDate
-        // (an NZ date key) so it naturally resets each day without a
-        // migration job — see timeExemptionState(). extraMinutesToday/
-        // -Date is the bonus time a teacher has granted for today only,
-        // added on top of dailyLimitMinutes by timeLimitStatus().
-        timeExemptionStatus: null,
-        timeExemptionDate: null,
-        extraMinutesToday: 0,
-        extraMinutesDate: null,
-        // Rolling report totals (see recordReportActivity below) — seeded
-        // here with the welcome grant itself, since it's logged inline
-        // below rather than through logTxn's usual recordReportActivity hook.
-        reportMonth: Object.assign(emptyReportBucket(), { monthKey: nzMonthKey() }),
-        reportLifetime: emptyReportBucket()
-      };
-      addClassificationToBucket(user.reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: 20 });
-      addClassificationToBucket(user.reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: 20 });
-      t.set(usersCol().doc(username), user);
-
-      cls.students.push(username);
-      cls.txns.unshift({ id: uid("t"), type: "welcome", to: username, amount: 20, note: "Welcome grant", date: nowStr(), ts: Date.now() });
-      if (cls.txns.length > MAX_STORED_TXNS) cls.txns.length = MAX_STORED_TXNS;
-      t.update(classRef, { students: cls.students, txns: cls.txns });
-    });
+    await t29JoinClassAsNewStudent(fdb, cred, name, username, classCode);
   } catch (e) {
     console.warn("Student signup failed:", e && (e.code || e.message), e);
     await cred.user.delete().catch(() => {}); // don't leave an orphaned Auth account
@@ -1452,6 +1467,98 @@ async function createStudentAccount(name, username, password, classCode) {
   }
   setSession(username, 0);
   return { ok: true };
+}
+
+/* ---------------- Teacher adds a list of students ---------------- */
+// Creates one real student account per entry — {name, username, password} —
+// in the teacher's class, exactly as if each student had used "Join a class"
+// themselves. Runs one student at a time on a separate sign-up connection
+// (see t29OpenSignupSession in firebase-init.js), so the teacher stays
+// signed in and nothing here touches their session.
+//
+// If an entry's username is already taken (usernames are shared across
+// every class), a number is added — sam.lee, sam.lee2, sam.lee3... — until
+// one is free; the username that was actually used comes back in the result.
+// Stops early (leaving the rest untried) on problems that would hit every
+// remaining student too: no connection, Firebase rate limit, sign-ups
+// switched off, a missing class, or rules refusing the write.
+//
+// opts: { onProgress(index, total, entry), shouldStop() }
+// Returns { results: [{ index, name, username, password, ok, error }], stopReason }
+async function t29BulkCreateStudents(classCode, entries, opts) {
+  opts = opts || {};
+  const results = [];
+  let stopReason = null;
+  let session;
+  try {
+    session = window.t29OpenSignupSession();
+  } catch (e) {
+    console.warn("Couldn't open a sign-up session:", e);
+    return { results, stopReason: "Couldn't start creating accounts. Please reload the page and try again." };
+  }
+  try {
+    for (let i = 0; i < entries.length; i++) {
+      if (opts.shouldStop && opts.shouldStop()) { stopReason = "Stopped before finishing."; break; }
+      if (opts.onProgress) opts.onProgress(i, entries.length, entries[i]);
+      let r;
+      try {
+        r = await _t29BulkCreateOne(session, classCode, entries[i]);
+      } catch (e) {
+        console.warn("Bulk student signup crashed:", e);
+        r = { index: entries[i].index, name: entries[i].name, username: null, password: entries[i].password, ok: false, fatal: true, error: "Something went wrong." };
+      }
+      results.push(r);
+      if (r.fatal) { stopReason = r.error; break; }
+    }
+  } finally {
+    await session.close();
+    // The class roster just changed behind the normal connection's back —
+    // drop its cached copy so the next read is fresh. (Undefined = a miss.)
+    try { window._rcSet("classes", classCode, undefined); } catch (e) { /* cache not started yet */ }
+  }
+  return { results, stopReason };
+}
+
+async function _t29BulkCreateOne(session, classCode, entry) {
+  const name = sanitizeUserText(entry.name, 60);
+  const res = { index: entry.index, name, username: null, password: entry.password, ok: false, error: null, fatal: false };
+  if (!name) { res.error = "No name."; return res; }
+
+  let cred = null;
+  for (let attempt = 0; attempt < 30 && !cred; attempt++) {
+    const candidate = attempt === 0 ? entry.username : entry.username + (attempt + 1);
+    try {
+      cred = await session.auth.createUserWithEmailAndPassword(t29AuthEmail(candidate), entry.password);
+      res.username = candidate;
+    } catch (e) {
+      if (e && e.code === "auth/email-already-in-use") continue; // taken — try the next number
+      res.error = t29AuthErrorMessage(e);
+      const code = e && e.code;
+      res.fatal = code === "auth/network-request-failed" || code === "auth/too-many-requests" || code === "auth/operation-not-allowed";
+      return res;
+    }
+  }
+  if (!cred) { res.error = "Couldn't find a free username for this name."; return res; }
+
+  try {
+    await t29JoinClassAsNewStudent(session.fdb, cred, name, res.username, classCode);
+    res.ok = true;
+  } catch (e) {
+    console.warn("Bulk student signup failed:", e && (e.code || e.message), e);
+    await cred.user.delete().catch(() => {}); // don't leave an orphaned Auth account
+    if (e && e.message === "NO_CLASS") {
+      res.error = "This class no longer exists."; res.fatal = true;
+    } else if (e && e.code === "permission-denied") {
+      res.error = "Firestore refused the sign-up (permission denied). Check that the latest firestore.rules are published."; res.fatal = true;
+    } else if (e && (e.code === "unavailable" || e.code === "failed-precondition")) {
+      res.error = "Can't connect right now — check your internet connection and try again."; res.fatal = true;
+    } else {
+      res.error = "Something went wrong saving this account.";
+    }
+    res.username = null;
+  }
+  try { await session.auth.signOut(); } catch (e) { /* ignore */ }
+  return res;
 }
 
 /* ---------------- Login lockout ----------------
