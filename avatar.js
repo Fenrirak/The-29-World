@@ -794,9 +794,9 @@
 
   /* ------------------------------ pets ---------------------------------- */
   // Pets perch on a shoulder and look at their person. Each is drawn around a perch point at (0,0), feet on y=0:
-  // the kiwi stands on the right shoulder facing left, the tui on the left shoulder facing right.
+  // the kiwi, rabbit and cat stand on the right shoulder facing left; the tui and kea on the left shoulder facing right.
   // A = animation hooks: A.body wraps the body (breathing), A.head wraps the head around its neck pivot
-  // (tilt), A.lid adds a blink overlay. They are plain pass-throughs unless the pet is animating.
+  // (tilt), A.lid adds a blink overlay (pass any extra eyes as a 6th argument). They are plain pass-throughs unless the pet is animating.
   const PA0 = { body: s => s, head: s => s, lid: () => "" };
   const prn = i => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
   const pStops = st => st.map(s => `<stop offset="${s[0]}" stop-color="${s[1]}"${s[2] == null ? "" : ` stop-opacity="${s[2]}"`}/>`).join("");
@@ -811,6 +811,35 @@
   };
   // rows of small overlapping scale arcs (feather texture)
   const pScales = (x0, x1, y0, rows, dx, dy) => { let d = ""; for (let r = 0; r < rows; r++) for (let xx = x0 + (r % 2) * dx / 2; xx < x1; xx += dx) d += `M${xx.toFixed(2)} ${(y0 + r * dy).toFixed(2)} q${(dx / 2).toFixed(2)} ${(dy * .8).toFixed(2)} ${dx.toFixed(2)} 0 `; return d; };
+  // rows of rounded feather tips (U-shaped scallops); alternate rows are offset by half a step. o = { j: jitter, sd: seed,
+  // keep(x, y, dx, d): false to leave an arc out (e.g. outside the shape it is clipped to), skip: share of arcs to drop }
+  const pScal = (x0, x1, y0, rows, dx, dy, dp, o) => {
+    o = o || {};
+    let d = "", n = o.sd || 0;
+    for (let r = 0; r < rows; r++) for (let xx = x0 + (r % 2) * dx / 2; xx < x1; xx += dx) {
+      n++;
+      const jx = (prn(n) - .5) * (o.j || 0), jy = (prn(n + 40) - .5) * (o.j || 0), p = dp * (.85 + prn(n + 80) * .3), px = xx + jx, py = y0 + r * dy + jy;
+      if ((o.skip && prn(n + 120) < o.skip) || (o.keep && !o.keep(px, py, dx, p))) continue;
+      d += `M${px.toFixed(1)} ${py.toFixed(1)}c0 ${(p * 1.33).toFixed(1)} ${dx} ${(p * 1.33).toFixed(1)} ${dx} 0`;
+    }
+    return d;
+  };
+  // point-in-polygon test, used to keep scallops inside the part of the body they decorate
+  const inPoly = (x, y, P) => { let o = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) if ((P[i][1] > y) !== (P[j][1] > y) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) o = !o; return o; };
+
+  // short fur flicks that follow the curve of a form: arcs about the ellipse E = [cx, cy, rx, ry], flowing toward the rump
+  const pFur = (E, x0, x1, y0, y1, dx, dy, seed, kmin, kmax, len, keep) => {
+    const f = ["", "", ""];
+    for (let gy = y0, r = 0, n = seed; gy < y1; gy += dy, r++) for (let gx = x0 + (r % 2) * dx / 2; gx < x1; gx += dx) {
+      n++;
+      const px = gx + (prn(n) - .5) * dx * .8, py = gy + (prn(n + 50) - .5) * dy * .8, u = (px - E[0]) / E[2], v = (py - E[1]) / E[3], k = Math.hypot(u, v);
+      if (k > kmax || k < kmin || prn(n + 9) < .45 || (keep && !keep(px, py))) continue;
+      const a = Math.atan2(v, u), bold = prn(n + 3) < .16, s = (len * (.7 + prn(n + 17) * .6) + (bold ? len * .3 : 0)) * (v > 0 ? -1 : 1), q = t => [E[0] + E[2] * k * Math.cos(t), E[1] + E[3] * k * Math.sin(t)], p0 = q(a), p1 = q(a + s);
+      f[bold ? 2 : prn(n + 5) < .5 ? 0 : 1] += `M${p0[0].toFixed(1)} ${p0[1].toFixed(1)} A${(E[2] * k).toFixed(1)} ${(E[3] * k).toFixed(1)} 0 0 ${s > 0 ? 1 : 0} ${p1[0].toFixed(1)} ${p1[1].toFixed(1)} `;
+    }
+    return f;
+  };
+
 
   /* ---- Kiwi: round russet-brown body, small head, long slender bill, strong scaly legs ---- */
   const kiwiArt = (x, A) => {
@@ -902,9 +931,161 @@
     // a slight forward lean (toward the person) about the feet; the contact shadow stays flat
     return `<ellipse cx="0" cy=".3" rx="6.4" ry="1" fill="#000" opacity=".13"/><g transform="rotate(4 1.3 0)">` + A.body(bodyArt) + A.head(headArt, 2.6, -16.8, "0%,100%{transform:rotate(-1.8deg)}38%{transform:rotate(2.4deg)}70%{transform:rotate(-.6deg)}") + `</g>`;
   };
+  /* ---- Kea: olive-green alpine parrot, dark-edged scalloped feathers, hooked grey bill, orange flash under the wing ---- */
+  const keaArt = (x, A) => {
+    const gc = x.id("ec"), gh = x.id("eh"), gm = x.id("em"), gw = x.id("ew"), gs = x.id("es"), gt = x.id("et"), gk = x.id("ek"), gp = x.id("ep"), gf = x.id("ef"), gv = x.id("ev"), go = x.id("eo"), gx = x.id("ex"), mk = x.id("ey");
+    x.defs += pLin(gc, 0, -14, 0, -1.5, [[0, "#7f6d38"], [.5, "#887839"], [1, "#9b9142"]])
+      + pLin(gh, 0, -17.6, 0, -11, [[0, "#67502e"], [.5, "#79642f"], [1, "#837239"]])
+      + pRad(gm, 10.9, -15.2, 2.6, [[0, "#26180b", .72], [.6, "#2e1f0e", .38], [1, "#2e1f0e", 0]])
+      + pLin(gw, 4.5, -14, -5, -4.8, [[0, "#808a3d"], [.5, "#6d7e38"], [1, "#4f7b4d"]])
+      + pRad(gs, 1.5, -11.6, 6.2, [[0, "#d6d56a", .34], [1, "#d6d56a", 0]])
+      + pLin(gt, -5, -7.5, -11.5, -2.5, [[0, "#41392f"], [1, "#171310"]])
+      + pLin(gk, 12.2, -16.2, 14.3, -12, [[0, "#858c93"], [.25, "#494f55"], [.65, "#272a2e"], [1, "#16181b"]])
+      + pRad(gp, 12.5, -15.4, .8, [[0, "#b9bcbf"], [1, "#7f8387"]])
+      + pRad(gf, 8.6, -12.4, 3.2, [[0, "#e6cc70", .4], [1, "#e6cc70", 0]])
+      + pLin(gv, 0, -8, -3, -4.6, [[0, "#4a9a78", 0], [1, "#4a9a78", .6]])
+      + pLin(go, 0, -4.6, 0, -1.6, [[0, "#3a2a10", 0], [1, "#3a2a10", .34]])
+      + pLin(gx, 0, -9.4, 0, -6.4, [[0, "#fff"], [1, "#000"]])
+      + `<mask id="${mk}" maskUnits="userSpaceOnUse" x="-20" y="-25" width="40" height="30"><rect x="-20" y="-25" width="40" height="30" fill="url(#${gx})"/></mask>`;
+    const tail = "M-5.2 -8.1 C-7.6 -7.6 -9.8 -6.4 -11.5 -4.8 C-11.9 -4.2 -11.6 -3.3 -11.1 -2.4 C-8.8 -2.9 -6 -3.7 -3.4 -4.6Z";
+    const body = "M4.6 -15.2 C2.6 -15 .2 -14 -1.6 -12.9 C-4 -11.2 -6.5 -9 -8.2 -7 C-9 -6.2 -8.6 -5.2 -7.8 -4.6 L-4.4 -3.7 C-3 -2.4 -.4 -1.5 2 -1.5 C4.2 -1.8 6 -4.2 7.3 -6.6 C8.5 -8.7 9.4 -10.4 10.4 -11.8 L10.8 -14.4Z";
+    const wing = "M4.5 -14.7 C2.2 -14.5 -.3 -13.3 -2 -12.2 C-4.4 -10.6 -6.9 -8.4 -9.2 -6.2 C-10.2 -5.4 -10.3 -4.7 -9.5 -4.6 C-7.6 -4.8 -4.8 -5.1 -2.4 -5.1 C-.4 -5.1 1.8 -5.2 3.8 -5.3 C4.2 -6.4 4.9 -7.6 5.6 -8.8 C6.3 -10.4 5.9 -12.4 4.9 -14Z";
+    const cov = "M4.5 -14.7 C2.2 -14.5 -.3 -13.3 -2 -12.2 C-4.4 -10.6 -6.9 -8.4 -9.2 -6.2 L-9.2 -4 L5.6 -4 C6.3 -8 5.9 -12.4 4.9 -14Z";
+    const head = "M4.6 -15.2 C5.9 -15.55 7.3 -17.2 9.2 -17.3 C10.7 -17.1 11.7 -16.7 12.3 -16.1 L12.2 -13.7 C11.5 -12.8 10.7 -12 10 -11.2 c0 .9 -1.37 .9 -1.37 0 c0 .9 -1.37 .9 -1.37 0 c0 .9 -1.37 .9 -1.37 0 C5.5 -11.5 5 -13.2 4.6 -15.2Z";
+    const edge = "M10 -11.2 c0 .9 -1.37 .9 -1.37 0 c0 .9 -1.37 .9 -1.37 0 c0 .9 -1.37 .9 -1.37 0";
+    const upper = "M12 -16.2 C12.9 -15.9 13.7 -15.2 14.1 -14.3 C14.5 -13.5 14.5 -12.6 14.25 -12 C14.1 -11.7 14 -11.55 13.9 -11.5 C13.7 -12.1 13.8 -12.8 13.45 -13.4 C13.05 -13.9 12.6 -14.1 12 -14.1Z";
+    const lower = "M12 -14.15 C12.8 -14.2 13.4 -14 13.7 -13.6 C13.75 -13.3 13.5 -13.1 13 -13.05 C12.6 -13.05 12.2 -13.25 12 -13.6Z";
+    const cere = "M12 -15.95 C12.4 -16.05 12.85 -15.8 12.95 -15.45 C12.95 -15.05 12.7 -14.9 12.3 -14.95 C11.95 -15.05 11.85 -15.5 12 -15.95Z";
+    const BODYP = [[-8.7, -7], [-9, -5], [-7.8, -4.6], [-4.4, -3.7], [-3, -2.5], [-.4, -1.5], [2, -1.4], [4.2, -1.8], [6, -4.2], [7.3, -6.6], [9.4, -10.4], [10.4, -11.8], [10.8, -14.4], [4.6, -15.2], [-1.6, -12.9]];
+    const COVP = [[4.6, -14.8], [-2, -12.3], [-9.3, -6.3], [-9.3, -6], [5.8, -6]];
+    const inBody = (px, py, dx, d) => [[px, py], [px + dx, py], [px + dx / 2, py + d]].some(q => inPoly(q[0], q[1], BODYP));
+    const inCov = (px, py, dx, d) => [[px, py], [px + dx, py], [px + dx / 2, py + d]].some(q => { const r = 52 * Math.PI / 180, u = q[0] + 1, v = q[1] + 9; return inPoly(-1 + u * Math.cos(r) - v * Math.sin(r), -9 + u * Math.sin(r) + v * Math.cos(r), COVP); });
+    const bar = "M2.6 -7.6 C3.3 -7.4 3.9 -6.9 3.9 -6 C3.9 -5.6 3.7 -5.4 3.4 -5.45 C2.9 -5.7 2.4 -6.4 2.3 -7Z";
+    const leg = (ax, c1, c2, c3) => {
+      const ay = -1.05, sh = `M${ax - .8} -3 C${ax - .7} -2.3 ${ax - .3} -1.6 ${ax} ${ay}`, T = [[10, 2.9], [27, 2.2], [-8, 2.5], [166, 1.2]];
+      const ts = T.map(t => pToe(ax, ay, t[0], t[1], .88, .52)).join(""), cl = T.map(t => { const r = t[0] * Math.PI / 180, tx = ax + Math.cos(r) * (t[1] + .02), ty = ay + Math.sin(r) * (t[1] + .02); return `M${tx.toFixed(2)} ${ty.toFixed(2)} q${(Math.cos(r) * .2).toFixed(2)} ${(Math.sin(r) * .2 + .24).toFixed(2)} ${(Math.cos(r) * .32).toFixed(2)} ${(Math.sin(r) * .32 + .42).toFixed(2)}`; }).join(" ");
+      return pSt(sh, c1, 1.3) + pSt(sh, c2, 1) + pSt(`M${ax - .45} -2.7 C${ax - .45} -2.2 ${ax - .2} -1.7 ${ax + .1} -1.3`, c3, .26, .8) + pFill(ts, c2) + pSt(cl, "#1d1f22", .28) + `<circle cx="${ax}" cy="${ay}" r=".55" fill="${c2}"/>` + pSt(`M${ax + .9} ${ay + .2} l.3 .1 M${ax + 1.6} ${ay + .35} l.28 .1`, "#4a4e52", .16, .6);
+    };
+    const bodyArt = pFill(tail, `url(#${gt})`) + pSt("M-4.6 -6.9 C-7 -6.2 -9.2 -5.1 -11.2 -3.6 M-4.2 -5.4 C-6.4 -4.9 -8.6 -4.1 -10.9 -3", "#050403", .2, .5) + pSt("M-6 -3.9 C-8 -3.5 -9.8 -3 -11.1 -2.5", "#2f7a72", .3, .6)
+      + leg(-.8, "#33373b", "#6a6f73", "#9da3a7") + leg(4, "#3b3f43", "#7a7f83", "#aab0b4")
+      + pFill(body, `url(#${gc})`)
+      + x.clip(body, pFill(body, `url(#${gf})`) + pFill(body, `url(#${go})`) + pSt(pScal(-9.18, 12, -11.2, 12, 1.37, .85, .62, { j: .2, sd: 7, keep: inBody }), "#3f2e16", .14, .38) + pSt(pScal(-9.08, 12, -11, 12, 1.37, .85, .4, { j: .2, sd: 70, keep: inBody, skip: .5 }), "#e8d27a", .1, .3))
+      + pFill(wing, `url(#${gw})`)
+      + x.clip(wing, pFill(wing, `url(#${gs})`) + pFill(wing, `url(#${gv})`)
+        + `<g mask="url(#${mk})">` + x.clip(cov, `<g transform="rotate(52 -1 -9)">` + pSt(pScal(-12, 10, -16, 14, 1.8, 1.1, .8, { j: .2, sd: 90, keep: inCov }), "#3b2a12", .16, .54) + pSt(pScal(-11.9, 10, -15.75, 14, 1.8, 1.1, .55, { j: .2, sd: 90, keep: inCov, skip: .4 }), "#c4c65a", .1, .3) + `</g>`) + `</g>`
+        + pSt("M3.6 -14 C1.4 -13.8 -.6 -12.8 -2.2 -11.8", "#e3e48e", .26, .24) + pSt("M2.9 -6.4 L-8 -5.1 M2.4 -7.2 L-8.4 -5.9 M1.7 -7.9 L-8.5 -6.6 M-1.6 -7.6 L-8.2 -6.3", "#2f4630", .14, .42))
+      + pFill(bar, "#55392e") + pSt("M3.8 -6.8 C3.8 -6.2 3.6 -5.8 3.4 -5.55", "#3f8a78", .18, .8)
+      + x.clip(body, pSt("M-5 -10.4 C-4.2 -11.2 -3.5 -11.8 -2.7 -12.3", "#e6602a", .8) + pSt("M-4.8 -10.8 C-4.1 -11.5 -3.4 -12 -2.8 -12.5", "#f59a45", .2, .85));
+    const headArt = pFill(head, `url(#${gh})`)
+      + x.clip(head, pFill(head, `url(#${gf})`) + pFill(head, `url(#${gm})`)
+        + pSt("M9.4 -15.9 C9.9 -16.5 11 -16.7 12 -16.2", "#2c1d0e", .36, .5)
+        + pSt("M5.8 -15 C6.5 -16 7.6 -16.7 9 -16.9 M6.4 -13.9 C7.6 -14.6 8.6 -14.9 9.6 -14.8 M7.8 -12.6 C8.8 -13.1 9.8 -13.3 10.8 -12.9", "#3a2813", .14, .46)
+        + pSt("M5.9 -13.5 C6.9 -14 7.9 -14.2 8.8 -13.9 M8.2 -11.8 C9.2 -12.2 10.1 -12.2 11 -11.8 M7.2 -16 C8 -16.5 9 -16.6 9.8 -16.4", "#e0c872", .12, .42))
+      + x.clip(body, pSt(edge, "#3f2e16", .16, .5))
+      + pFill(lower, "#34373b") + pSt("M12.2 -14 C12.8 -14 13.3 -13.85 13.55 -13.65", "#b3b9bf", .2, .8)
+      + pFill(upper, `url(#${gk})`) + pSt("M12.5 -15.9 C13.3 -15.5 13.9 -14.9 14.15 -14", "#b3b9bf", .18, .5)
+      + pFill(cere, `url(#${gp})`) + `<circle cx="12.55" cy="-15.35" r=".15" fill="#2a2a2c"/>`
+      + `<circle cx="10.9" cy="-15.3" r=".6" fill="#8a7a62"/><circle cx="10.9" cy="-15.3" r=".44" fill="#3b2818"/><circle cx="10.9" cy="-15.3" r=".31" fill="#0c0907"/><circle cx="10.75" cy="-15.45" r=".12" fill="#fff"/>`
+      + A.lid(10.9, -15.3, .6, "#58452a", "#2a1c0c");
+    return `<ellipse cx="1.4" cy=".3" rx="6.6" ry="1" fill="#000" opacity=".13"/>` + A.body(bodyArt)
+      + A.head(headArt, 8.4, -12.8, "0%,100%{transform:rotate(0deg)}30%{transform:rotate(-2.4deg)}52%{transform:rotate(2.8deg)}78%{transform:rotate(-.8deg)}");
+  };
+
+  /* ---- Rabbit: ginger sitting rabbit, tall ears with pink insides, cream eye-ring, chin and paws ---- */
+  const rabbitArt = (x, A) => {
+    const gb = x.id("rb"), gl = x.id("rl"), gd = x.id("rd"), gh = x.id("rh"), ge = x.id("re"), gi = x.id("ri"), gp = x.id("rp"), gr = x.id("rr"), gm = x.id("rm"), gc = x.id("rc");
+    x.defs += pLin(gb, 1, -15.5, -1, -1.5, [[0, "#d49860"], [.5, "#c68048"], [1, "#b06c3a"]])
+      + pRad(gl, -3.6, -8.4, 4.8, [[0, "#f2c892", .42], [1, "#f2c892", 0]])
+      + pRad(gd, 5.4, -4.4, 5.4, [[0, "#7a4626", .45], [1, "#7a4626", 0]])
+      + pRad(gh, -5.2, -13.6, 4.2, [[0, "#e8b680", .42], [1, "#e8b680", 0]])
+      + pRad(ge, -3.9, -15, 1.15, [[0, "#f7e9d2"], [.7, "#eed8bc"], [1, "#d6b48a"]])
+      + pLin(gi, 0, -20.4, 0, -15.8, [[0, "#e4cdd3"], [1, "#c7a1ab"]])
+      + pLin(gp, 0, -4.4, 0, 0, [[0, "#c4875a", 0], [.25, "#c68a58"], [.6, "#d9a878"], [1, "#efd6b0"]])
+      + pLin(gr, 0, -22, 0, -16, [[0, "#98603a"], [.35, "#c08455"], [1, "#cf9663"]])
+      + pRad(gm, -6.4, -11.8, 2.6, [[0, "#f6e6cc", .9], [1, "#f6e6cc", 0]])
+      + pRad(gc, -5.4, -12.9, 1.5, [[0, "#9a5c32", .3], [1, "#9a5c32", 0]]);
+    const torso = "M-6.8 -10.6 C-7.3 -8.9 -7.2 -7 -6.5 -5.4 C-5.9 -4.2 -5.3 -3.3 -5 -2.6 L-3.4 -1.9 L1.4 -1.5 C3.2 -1.7 4.8 -2.5 5.3 -3.6 C5.9 -5.2 5.9 -7.3 5.6 -8.6 C5.3 -10.4 4.6 -12 3.6 -13.2 C2.6 -14.4 1.4 -15 .3 -15.3 L-.5 -15.7 L-3 -11.5Z";
+    const legF = "M-4.9 -4.4 C-5 -3.3 -5 -2.3 -4.9 -1.5 C-5 -.8 -4.8 -.2 -4.2 -.08 C-3.6 0 -3 -.2 -2.6 -.8 C-2.3 -1.4 -2.3 -2.3 -2.3 -3.3 L-2.4 -4.3Z";
+    const legN = "M-2.4 -4.3 C-2.5 -3.2 -2.4 -2.1 -2.3 -1.3 C-2.35 -.6 -2.1 0 -1.4 .08 C-.7 .15 -.1 -.1 .1 -.7 C.3 -1.4 .3 -2.4 .2 -3.4 L.1 -4.2Z";
+    const hind = "M.2 -1.8 C1.2 -2.7 2.8 -2.9 3.9 -2.3 C4.5 -1.9 4.4 -.95 3.6 -.8 L.9 -.55 C.3 -.6 0 -1.3 .2 -1.8Z";
+    const head = "M-7.9 -12.6 C-7.95 -13.7 -7.45 -14.9 -6.5 -15.9 C-5.6 -16.8 -4.3 -17.3 -3 -17.25 C-1.8 -17.15 -.8 -16.4 -.3 -15.3 C0 -14 -.6 -12.4 -1.8 -11.3 C-3.2 -10.3 -5.3 -10.2 -6.6 -10.8 C-7.4 -11.2 -7.85 -11.8 -7.9 -12.6Z";
+    const earL = "M-5.9 -16.6 C-6.9 -18.6 -7.6 -20.4 -7.95 -21.4 C-8.1 -21.9 -7.6 -22.2 -7.2 -21.9 C-6 -21.1 -4.5 -19.3 -3.5 -17.9 C-3.1 -17.5 -2.7 -17.25 -2.2 -17.1 L-3.6 -16Z";
+    const earLi = "M-5.2 -17.6 C-6 -18.8 -6.6 -20 -7.1 -21 C-6.1 -20.3 -4.9 -19.2 -3.9 -18Z";
+    const earR = "M-2.3 -16 C-2.2 -17.9 -2 -19.5 -1.4 -20.3 C-1 -20.85 -.2 -21 .4 -20.7 C1 -20.35 1.15 -19.3 1.05 -18.1 C.95 -17.2 .6 -16.2 .2 -15.5 L-.6 -15.2Z";
+    const earRi = "M-1.8 -16.4 C-1.8 -17.9 -1.6 -19.2 -1.1 -19.8 C-.7 -20.2 -.1 -20.2 .3 -19.9 C.7 -19.5 .75 -18.7 .65 -17.7 C.55 -17 .2 -16.5 -.35 -16Z";
+    const muzzle = "M-7.95 -12.8 C-7.9 -11.9 -7.5 -11.1 -6.7 -10.75 C-5.6 -10.3 -4.2 -10.4 -3.2 -10.8 C-4.2 -11.2 -5.4 -11.5 -6.2 -12.2 C-6.7 -12.7 -7.3 -13 -7.95 -12.8Z";
+    const fb = pFur([1.2, -7.4, 6.4, 6.6], -7, 6.2, -14.6, -2, 1.25, 1, 11, .3, .96, .2);
+    const fh = pFur([-4.3, -13.9, 3.9, 3.6], -8, -.2, -17, -10.4, 1.05, .85, 140, .3, .96, .2, (px, py) => Math.hypot((px + 3.9) / 1.6, (py + 15) / 1.45) > 1);
+    const bodyArt = pFill(hind, "#efd6b0") + pSt("M1.2 -2 C2.2 -2.5 3.2 -2.5 3.9 -2.2", "#fff6e6", .14, .5)
+      + pFill(torso, `url(#${gb})`)
+      + x.clip(torso, pFill(torso, `url(#${gl})`) + pFill(torso, `url(#${gd})`)
+        + pSt(fb[0], "#7c4a29", .12, .3) + pSt(fb[1], "#f0c48e", .12, .3) + pSt(fb[2], "#7c4a29", .18, .24)
+        + pSt("M1.8 -9.6 C.4 -8.2 -.2 -6 .3 -3.8", "#7c4a29", .2, .26) + pSt("M-6.6 -9 C-6.7 -7.8 -6.3 -6.5 -5.7 -5.4", "#f4d3a4", .22, .16))
+      + pFill(legF, `url(#${gp})`) + pFill(legN, `url(#${gp})`) + pSt("M-2.6 -3.6 C-2.7 -2.6 -2.5 -1.7 -2.5 -.9", "#7c4a29", .16, .26)
+      + pSt("M-4.3 -.45 v.38 M-3.7 -.5 v.42 M-1.7 -.5 v.45 M-1.1 -.55 v.5 M-.5 -.5 v.42", "#a9784f", .11, .6);
+    const headArt = pFill(earL, `url(#${gr})`) + pFill(earLi, "#bd9a96", .9) + pSt("M-5 -17.7 C-5.9 -18.8 -6.5 -19.9 -7 -20.9", "#e9d3d3", .14, .5)
+      + pFill(earR, `url(#${gr})`) + pFill(earRi, `url(#${gi})`)
+      + pSt("M-1.8 -16.6 C-1.8 -18 -1.6 -19.3 -1.1 -19.85", "#a47a5c", .14, .5) + pSt("M-1.35 -17.3 C-1.35 -18.2 -1.2 -18.9 -.95 -19.4", "#f7ebee", .16, .4)
+      + pFill(head, `url(#${gb})`)
+      + x.clip(head, pFill(head, `url(#${gh})`) + pFill(head, `url(#${gm})`) + pFill(muzzle, "#f1dcc0", .72) + pFill(head, `url(#${gc})`)
+        + pSt(fh[0], "#7c4a29", .12, .3) + pSt(fh[1], "#f2c690", .12, .3) + pSt(fh[2], "#7c4a29", .18, .24))
+      + `<ellipse cx="-3.9" cy="-15" rx="1.05" ry=".94" fill="url(#${ge})"/><ellipse cx="-3.9" cy="-15" rx=".5" ry=".58" fill="#15110f"/><circle cx="-4.06" cy="-15.2" r=".13" fill="#fff"/><circle cx="-3.72" cy="-14.78" r=".06" fill="#fff" opacity=".55"/>`
+      + `<path d="M-8 -12.9 C-7.7 -13.15 -7.3 -13 -7.2 -12.7 C-7.2 -12.3 -7.6 -12.1 -7.9 -12.2 C-8.1 -12.4 -8.1 -12.7 -8 -12.9Z" fill="#c4867a"/>` + pSt("M-7.7 -12.1 C-7.6 -11.7 -7.3 -11.5 -6.8 -11.5", "#8d5b44", .14, .7)
+      + A.lid(-3.9, -15, .64, "#e2c4a0", "#6b4426");
+    return `<ellipse cx=".4" cy=".3" rx="6.4" ry=".95" fill="#000" opacity=".13"/>` + A.body(bodyArt)
+      + A.head(headArt, -3, -11.2, "0%,100%{transform:rotate(0deg)}28%{transform:rotate(-2deg)}52%{transform:rotate(2.6deg)}76%{transform:rotate(-.8deg)}");
+  };
+
+  /* ---- Cat: grey tabby with a white bib and socks, amber eyes, pink nose, tail curled up behind ---- */
+  const catArt = (x, A) => {
+    const gb = x.id("cb"), gh = x.id("ch"), gd = x.id("cd"), gi = x.id("ci"), gj = x.id("cj"), gw = x.id("cw"), gp = x.id("cp"), gt = x.id("ct"), gz = x.id("cz");
+    x.defs += pLin(gb, -4, -12.5, 5, -1, [[0, "#adb5bf"], [.5, "#8f97a3"], [1, "#6d7581"]])
+      + pLin(gh, -5, -18.3, -1, -11, [[0, "#a9b1bb"], [1, "#8d95a1"]])
+      + pRad(gd, 6, -3, 4.8, [[0, "#3c424d", .42], [1, "#3c424d", 0]])
+      + pRad(gi, -5.4, -14.9, 1.1, [[0, "#f9dc66"], [.6, "#efb92f"], [1, "#d08f18"]])
+      + pRad(gj, -2.3, -14.9, 1.2, [[0, "#f9dc66"], [.6, "#efb92f"], [1, "#d08f18"]])
+      + pLin(gw, 0, -11.2, 0, 0, [[0, "#ffffff"], [.6, "#f3f4f7"], [1, "#dde1e8"]])
+      + pRad(gz, 2.4, -9.2, 4.2, [[0, "#d6dce4", .34], [1, "#d6dce4", 0]])
+      + pLin(gp, 0, -22, 0, -17, [[0, "#9aa2ad"], [1, "#adb5bf"]])
+      + pLin(gt, 5, -3, 7, -12.6, [[0, "#868e9a"], [1, "#a3abb6"]]);
+    const tail = "M5.4 -2.2 C7.9 -2.8 9.3 -5 9.1 -8 C8.9 -10.6 7.5 -12.2 5.9 -12.6 C5.5 -12.7 5.3 -12.2 5.7 -11.9 C6.9 -11.1 7.7 -9.7 7.8 -8 C7.9 -6 6.9 -4.6 5.3 -4.1Z";
+    const body = "M-5.4 -11.8 C-6.6 -10 -6.8 -7.6 -6 -5.4 C-5.7 -4.2 -5.4 -2.4 -5.3 -.6 C-5.3 -.2 -5 0 -4.6 0 L3.6 0 C5.2 -.4 6.4 -2.2 6.2 -4.6 C6 -7 5 -9.6 3.4 -11.2 C2.2 -12.4 .6 -12.6 -1 -12.2 L-3 -11.6Z";
+    const head = "M-7.2 -14.4 C-7.3 -16.2 -6.2 -17.8 -4.4 -18.1 C-3.4 -18.3 -2.4 -18.3 -1.4 -18.1 C.2 -17.7 1 -16.3 1 -14.8 C1.1 -13.3 .5 -12.1 -.4 -11.6 C-1.6 -11.1 -2.8 -11 -3.9 -11.1 C-5.2 -11.2 -6.5 -11.9 -7 -12.9 C-7.2 -13.4 -7.2 -13.9 -7.2 -14.4Z";
+    const earF = "M-6.6 -15.8 C-7.3 -17.4 -7.2 -19.9 -6.5 -21.7 C-6.4 -22 -6.1 -22 -5.9 -21.8 C-5 -21 -4.2 -19.9 -3.7 -18.3 L-4 -15.6Z";
+    const earN = "M-3.1 -17.2 C-2.6 -19.7 -1.6 -21 -.6 -21.9 C-.4 -22.1 -.1 -22 0 -21.7 C.7 -20.3 1.05 -18.9 .85 -17.4 L-.4 -15.6Z";
+    const bib = "M-5.5 -11.2 C-4.4 -10.4 -2.4 -10.4 -1.4 -11.2 C-1.3 -9.2 -1.4 -7.4 -1.8 -6 C-1.4 -4.4 -1.1 -2.6 -1 -1.2 C-1 -.4 -1.3 0 -2.1 0 L-4.9 0 C-5.6 0 -5.9 -.4 -5.9 -1.2 C-5.9 -2.6 -5.9 -4.4 -6.1 -5.8 C-6.3 -7.6 -6 -9.6 -5.5 -11.2Z";
+    const muzzle = "M-5.9 -12.6 C-5.8 -13.4 -5 -13.7 -4 -13.5 C-3 -13.7 -2.2 -13.4 -2.1 -12.6 C-2.1 -11.8 -2.9 -11.3 -4 -11.3 C-5.1 -11.3 -5.9 -11.8 -5.9 -12.6Z";
+    const fb = pFur([.5, -6.4, 6.6, 6.4], -6, 6.6, -12.4, -.5, 1.3, 1.05, 31, .35, .96, .18);
+    const bodyArt = pFill(tail, `url(#${gt})`) + pSt("M8.1 -9.8 C8.7 -9.6 9.2 -9.1 9.3 -8.5 M7.9 -7.3 C8.5 -7 9 -6.6 9.2 -6 M7.1 -4.9 C7.7 -4.8 8.3 -4.4 8.6 -3.9 M6.2 -11.1 C6.7 -11 7.2 -10.6 7.5 -10.1", "#4a505b", .36, .6) + pSt("M5.7 -12.2 C5.4 -12.4 5.4 -12.7 5.8 -12.6", "#3a3f49", .5, .8)
+      + pFill(body, `url(#${gb})`)
+      + x.clip(body, pFill(body, `url(#${gz})`) + pFill(body, `url(#${gd})`) + pFill(bib, `url(#${gw})`)
+        + pSt("M2.2 -11.6 C3.6 -10.4 4.1 -8.8 3.9 -7.2 M3.3 -11.2 C4.8 -9.8 5.3 -8 5.1 -6.2 M4.3 -9.8 C5.4 -8.6 5.8 -7 5.6 -5.2 M1 -11.9 C1.8 -11.2 2.2 -10.3 2.3 -9.2", "#4a505b", .2, .36) + pSt("M1 -12.1 C3 -11.7 4.9 -9.9 5.7 -7.5 C6.1 -6.2 6.2 -5.1 6.1 -4", "#4a505b", .45, .3)
+        + pSt("M0 -8.4 C-1 -6.4 -.8 -3.6 .8 -1.8", "#4a505b", .24, .4) + pSt("M-3.5 -5.4 C-3.4 -4 -3.4 -2.4 -3.5 -.8", "#b4bcc8", .18, .7) + pSt("M-6.05 -9 C-6.25 -7.4 -6.05 -4.6 -5.95 -1.4", "#aeb6c2", .3, .55)
+       
+        + pSt(fb[0], "#4a505b", .12, .3) + pSt(fb[1], "#c8cfd8", .12, .34))
+      
+      + pFill("M.5 -1.1 C1.3 -1.6 2.9 -1.6 3.5 -1.1 C3.8 -.5 3.4 0 2.7 0 L1 0 C.4 0 .2 -.6 .5 -1.1Z", "#f6f4f1") + pSt("M1.4 -.9 v.7 M1.9 -.95 v.75 M2.4 -.9 v.7", "#b9bfc9", .1, .7)
+      + pSt("M-4.7 -.9 v.7 M-4.2 -.9 v.7 M-2.6 -.9 v.7 M-2.1 -.9 v.7", "#b9bfc9", .1, .7);
+    const headArt = pFill(earF, `url(#${gp})`) + pFill("M-6.4 -17.8 C-6.6 -19 -6.4 -20.2 -6.1 -20.8 C-5.5 -20.2 -4.9 -19.3 -4.6 -18.3Z", "#e9a1ab")
+      + pFill(earN, `url(#${gp})`) + pFill("M-2.3 -18 C-1.9 -19.1 -1.4 -20 -.7 -20.8 C-.3 -19.9 0 -18.8 0 -17.6Z", "#e9a1ab")
+      + pFill(head, `url(#${gh})`)
+      + x.clip(head, pFill(muzzle, "#f6f4f1")
+        + pSt("M-4.2 -18 v1.6 M-3.5 -18.1 v1.9 M-2.8 -18 v1.6", "#4a505b", .28, .6)
+        + pSt("M-1.3 -14.5 C-.4 -14.9 .4 -14.8 1 -14.5 M-1.3 -13.6 C-.4 -13.5 .4 -13.3 1 -13", "#4a505b", .26, .55) + pSt("M-5.8 -17.1 C-4.8 -17.9 -3.2 -18.1 -2 -17.8", "#fff", .3, .26))
+      + `<ellipse cx="-5.4" cy="-14.7" rx=".85" ry="1" fill="url(#${gi})"/><ellipse cx="-2.3" cy="-14.7" rx="1" ry="1.1" fill="url(#${gj})"/>`
+      + `<ellipse cx="-5.4" cy="-14.7" rx=".26" ry=".8" fill="#15110f"/><ellipse cx="-2.3" cy="-14.7" rx=".3" ry=".9" fill="#15110f"/><circle cx="-5.65" cy="-15.1" r=".2" fill="#fff"/><circle cx="-2.6" cy="-15.15" r=".24" fill="#fff"/>`
+      + `<path d="M-4.7 -13.5 C-4.2 -13.7 -3.8 -13.7 -3.3 -13.5 C-3.5 -13 -3.9 -12.7 -4 -12.6 C-4.1 -12.7 -4.5 -13 -4.7 -13.5Z" fill="#e58a98"/>`
+      + pSt("M-4 -12.6 C-4 -12.1 -4.4 -11.8 -4.9 -11.9 M-4 -12.6 C-4 -12.1 -3.6 -11.8 -3.1 -11.9", "#5a4a50", .13, .8)
+      + pSt("M-5.6 -12.7 L-8.6 -13.3 M-5.6 -12.4 L-8.8 -12.2 M-5.6 -12.1 L-8.4 -11.2 M-2.4 -12.7 L1 -13.3 M-2.4 -12.4 L1.2 -12.2 M-2.4 -12.1 L.8 -11.3", "#f4f6f9", .08, .8)
+      + A.lid(-5.4, -14.7, 1.05, "#8f97a3", "#2b2f36", [[-2.3, -14.7, 1.15, "#8f97a3", "#2b2f36"]]);
+    return `<ellipse cx=".6" cy=".3" rx="7.4" ry="1" fill="#000" opacity=".13"/>` + A.body(bodyArt)
+      + A.head(headArt, -3.2, -11.6, "0%,100%{transform:rotate(0deg)}28%{transform:rotate(-2.2deg)}52%{transform:rotate(2.8deg)}76%{transform:rotate(-.8deg)}");
+  };
+
   const petWrap = (gd, art, left) => `<g transform="translate(${(left ? 24.2 - (gd.sx - 1) * 27 : 77.8 + (gd.sx - 1) * 27).toFixed(1)} 83) scale(1.1)">${art}</g>`;
-  const PETS = { none: () => "", kiwi: (gd, x, A) => petWrap(gd, kiwiArt(x, A || PA0)), tui: (gd, x, A) => petWrap(gd, tuiArt(x, A || PA0), 1) };
-  const PET_LIST = [["none", "None", 0], ["kiwi", "Kiwi", 3], ["tui", "Tui", 3]];
+  const PETS = { none: () => "", kiwi: (gd, x, A) => petWrap(gd, kiwiArt(x, A || PA0)), tui: (gd, x, A) => petWrap(gd, tuiArt(x, A || PA0), 1),
+    kea: (gd, x, A) => petWrap(gd, keaArt(x, A || PA0), 1), rabbit: (gd, x, A) => petWrap(gd, rabbitArt(x, A || PA0)), cat: (gd, x, A) => petWrap(gd, catArt(x, A || PA0)) };
+  const PET_LIST = [["none", "None", 0], ["kiwi", "Kiwi", 3], ["tui", "Tui", 4], ["kea", "Kea", 3], ["rabbit", "Rabbit", 2], ["cat", "Cat", 2]];
 
   /* ------------------------------ catalog ------------------------------- */
   const CATS = [
@@ -1080,7 +1261,7 @@
     const petA = st.layers.pet ? {
       body: b => mv("pet", "breathe", b, "0%,100%{transform:scale(1,1)}50%{transform:scale(1.012,1.04)}", 3.9),
       head: (b, px, py, kf) => `<g transform="translate(${px} ${py})">${mv("pet", "tilt", `<g transform="translate(${-px} ${-py})">${b}</g>`, kf, 6.4)}</g>`,
-      lid: (cx, cy, r, f, l) => mv("pet", "blink", `<circle cx="${cx}" cy="${cy}" r="${n2(r)}" fill="${f}"/><path d="M${n2(cx - r * .75)} ${cy} q${n2(r * .75)} ${n2(r * .5)} ${n2(r * 1.5)} 0" fill="none" stroke="${l}" stroke-width=".35" stroke-linecap="round"/>`, "0%,88%{opacity:0}90%,93%{opacity:1}95.5%,100%{opacity:0}", 5.4, { op: 0, still: false })
+      lid: (cx, cy, r, f, l, more) => mv("pet", "blink", [[cx, cy, r, f, l]].concat(more || []).map(e => `<circle cx="${e[0]}" cy="${e[1]}" r="${n2(e[2])}" fill="${e[3]}"/><path d="M${n2(e[0] - e[2] * .75)} ${e[1]} q${n2(e[2] * .75)} ${n2(e[2] * .5)} ${n2(e[2] * 1.5)} 0" fill="none" stroke="${e[4]}" stroke-width=".35" stroke-linecap="round"/>`).join(""), "0%,88%{opacity:0}90%,93%{opacity:1}95.5%,100%{opacity:0}", 5.4, { op: 0, still: false })
     } : PA0;
     // public API used by renderSvg
     return {
@@ -1092,7 +1273,7 @@
       // pets: a twinkle near the perch (animated when it has a slot, otherwise a single still sparkle)
       pet(svg) {
         const l = st.layers.pet;
-        const lf = rc.look.pet === "tui", c1 = l && l.tier >= 4 ? "#ffb300" : "#ffc21a";
+        const lf = rc.look.pet === "tui" || rc.look.pet === "kea", c1 = l && l.tier >= 4 ? "#ffb300" : "#ffc21a";
         return l ? svg + sparks([[lf ? 8.5 : 91.5, 61.5, 1.9, c1], [lf ? 13.5 : 86.5, 56.5, 1.5, "#ffe9a0"]], take("pet", "spark") ? 1 : 0, { still: 1 }) : svg;
       },
       css() { return st.n ? `<style>${st.css}@media (prefers-reduced-motion:reduce){.${p}a{animation:none!important}}</style>` : ""; },
