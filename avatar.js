@@ -793,52 +793,117 @@
   const BROW_LIST = [["natural", "Natural", 0], ["thick", "Thick", 0], ["thin", "Thin", 0], ["arched", "Arched", 1], ["flat", "Flat", 1], ["raised", "Raised", 1], ["worried", "Worried", 1], ["angry", "Angry", 2], ["skeptical", "One raised", 2]];
 
   /* ------------------------------ pets ---------------------------------- */
-  // Pets sit on the right shoulder looking at their person, drawn around a perch point at (0,0).
+  // Pets perch on a shoulder and look at their person. Each is drawn around a perch point at (0,0), feet on y=0:
+  // the kiwi stands on the right shoulder facing left, the tui on the left shoulder facing right.
   // A = animation hooks: A.body wraps the body (breathing), A.head wraps the head around its neck pivot
   // (tilt), A.lid adds a blink overlay. They are plain pass-throughs unless the pet is animating.
   const PA0 = { body: s => s, head: s => s, lid: () => "" };
+  const prn = i => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+  const pStops = st => st.map(s => `<stop offset="${s[0]}" stop-color="${s[1]}"${s[2] == null ? "" : ` stop-opacity="${s[2]}"`}/>`).join("");
+  const pLin = (id, x1, y1, x2, y2, st) => `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${pStops(st)}</linearGradient>`;
+  const pRad = (id, cx, cy, r, st) => `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${cx}" cy="${cy}" r="${r}">${pStops(st)}</radialGradient>`;
+  const pSt = (d, c, w, o) => `<path d="${d}" stroke="${c}" stroke-width="${w}" fill="none" stroke-linecap="round" stroke-linejoin="round"${o == null ? "" : ` opacity="${o}"`}/>`;
+  const pFill = (d, f, o) => `<path d="${d}" fill="${f}"${o == null ? "" : ` opacity="${o}"`}/>`;
+  // a tapered toe from (x0,y0) at angle deg for len, width w0 -> w1, with a rounded tip
+  const pToe = (x0, y0, deg, len, w0, w1) => {
+    const a = deg * Math.PI / 180, dx = Math.cos(a), dy = Math.sin(a), nx = -dy, ny = dx, x1 = x0 + dx * len, y1 = y0 + dy * len, f = v => v.toFixed(2);
+    return `M${f(x0 + nx * w0 / 2)} ${f(y0 + ny * w0 / 2)} L${f(x1 + nx * w1 / 2)} ${f(y1 + ny * w1 / 2)} A${f(w1 / 2)} ${f(w1 / 2)} 0 0 0 ${f(x1 - nx * w1 / 2)} ${f(y1 - ny * w1 / 2)} L${f(x0 - nx * w0 / 2)} ${f(y0 - ny * w0 / 2)}Z`;
+  };
+  // rows of small overlapping scale arcs (feather texture)
+  const pScales = (x0, x1, y0, rows, dx, dy) => { let d = ""; for (let r = 0; r < rows; r++) for (let xx = x0 + (r % 2) * dx / 2; xx < x1; xx += dx) d += `M${xx.toFixed(2)} ${(y0 + r * dy).toFixed(2)} q${(dx / 2).toFixed(2)} ${(dy * .8).toFixed(2)} ${dx.toFixed(2)} 0 `; return d; };
+
+  /* ---- Kiwi: round russet-brown body, small head, long slender bill, strong scaly legs ---- */
   const kiwiArt = (x, A) => {
-    const g = x.id("kw"), hg = x.id("kh"), bg = x.id("kb");
-    x.defs += `<radialGradient id="${g}" cx=".38" cy=".28" r=".9"><stop offset="0" stop-color="#cfae7c"/><stop offset=".5" stop-color="#97744a"/><stop offset="1" stop-color="#5a4025"/></radialGradient>`
-      + `<radialGradient id="${hg}" cx=".4" cy=".3" r=".85"><stop offset="0" stop-color="#b8935f"/><stop offset="1" stop-color="#7d5d37"/></radialGradient>`
-      + `<linearGradient id="${bg}" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4e8c6"/><stop offset=".7" stop-color="#d8bf88"/><stop offset="1" stop-color="#9c7f48"/></linearGradient>`;
-    const body = "M-8.4 -8.6 C-8.6 -14.8 -3.8 -17.8 1.8 -17.5 C8.6 -17.1 11.4 -12 10.1 -6.6 C9.1 -2.6 4.6 -1 -.8 -1.2 C-5.8 -1.4 -8.2 -4.6 -8.4 -8.6Z";
-    let tex = ""; for (let r = 0; r < 5; r++) for (let xx = -6.4 + (r % 2) * 1.7; xx < 9; xx += 3.4) tex += `M${xx.toFixed(1)} ${-15 + r * 3} q1.3 1.5 2.6 0 `;
-    const bodyArt = `<ellipse cx="0" cy=".3" rx="7.8" ry="1.2" fill="#000" opacity=".16"/>`
-      + `<path d="M-2.4 -2.4 V.1 M2.6 -2.4 V.1" stroke="#d3a553" stroke-width="1.4" stroke-linecap="round"/><path d="M-4.6 .5 H-.9 M1 .5 H4.5" stroke="#d3a553" stroke-width="1.1" stroke-linecap="round"/>`
-      + `<path d="${body}" fill="url(#${g})"/>`
-      + x.clip(body, `<path d="${tex}" stroke="#4a331b" stroke-width=".5" fill="none" stroke-linecap="round" opacity=".5" transform="translate(0 .5)"/><path d="${tex}" stroke="#d2b182" stroke-width=".42" fill="none" stroke-linecap="round" opacity=".55"/><ellipse cx="-.6" cy="-5.2" rx="5.6" ry="3.2" fill="#c9a877" opacity=".28"/><path d="M-1.8 -10.2 C1.2 -13.4 6.8 -12.6 8.2 -8 C5.8 -6.2 1.8 -6.2 -1.8 -10.2Z" fill="#6f5130" opacity=".5"/><path d="M-1.2 -9.4 C1.4 -11.6 5.6 -11 7 -8.2" stroke="#d9bc8c" stroke-width=".35" fill="none" opacity=".6"/>`)
-      + `<path d="M-3.4 -16.8 C2 -18.6 8.8 -16.8 10.2 -11" fill="none" stroke="#e6cb9b" stroke-width=".6" stroke-linecap="round" opacity=".55"/>`;
-    const head = `<circle cx="-7.8" cy="-13.2" r="3.6" fill="url(#${hg})"/><ellipse cx="-6.2" cy="-12" rx="1.7" ry="1.1" fill="#c9a877" opacity=".4"/>`
-      + `<path d="M-9.8 -16 q1 -1 2 0 M-7.5 -16.6 q1 -1 2 0 M-5.4 -15.6 q1 -1 2 0" stroke="#5a4025" stroke-width=".45" fill="none" stroke-linecap="round"/>`
-      + `<path d="M-10.5 -13 C-13 -11.9 -15 -9.4 -16.3 -5.6 L-15.3 -5.2 C-13.7 -8.4 -12.1 -10.3 -10.1 -11.3Z" fill="url(#${bg})" stroke="#a8884f" stroke-width=".3" stroke-linejoin="round"/><circle cx="-11.3" cy="-12" r=".3" fill="#6a5430"/>`
-      + `<path d="M-10 -11.8 L-12.8 -9.6 M-9.8 -12.6 L-13.4 -11.8 M-9.9 -11 L-12 -8.4" stroke="#4a3722" stroke-width=".3" stroke-linecap="round"/>`
-      + `<circle cx="-9" cy="-13.7" r="1.05" fill="#17120d"/><circle cx="-8.65" cy="-14.05" r=".34" fill="#fff"/><path d="M-10.3 -15.1 q1 -.8 2.1 -.2" stroke="#5a4025" stroke-width=".35" fill="none" stroke-linecap="round"/>`
-      + A.lid(-9, -13.7, 1.15, "#94724a", "#4a3722");
-    return A.body(bodyArt) + A.head(head, -5.4, -11.4, "0%,100%{transform:rotate(0deg)}24%{transform:rotate(-2.2deg)}44%{transform:rotate(3.6deg)}54%{transform:rotate(-.6deg)}74%{transform:rotate(2deg)}");
+    const gb = x.id("kb"), gs = x.id("ks"), gk = x.id("kk"), gf = x.id("kf"), go = x.id("ko");
+    x.defs += pLin(gb, -9, -18.5, 10, -4.5, [[0, "#cf6046"], [.5, "#a74130"], [1, "#681f14"]])
+      + pRad(gs, -3, -15, 9, [[0, "#f39a74", .5], [1, "#f39a74", 0]])
+      + pRad(gf, -10, -7.6, 3.6, [[0, "#ea8261", .6], [1, "#ea8261", 0]])
+      + pLin(go, -7.8, 0, -10.4, 0, [[0, "#3a0f08", .42], [1, "#3a0f08", 0]])
+      + pLin(gk, -10.4, -6.2, -13.1, -.6, [[0, "#d98471"], [1, "#94443a"]]);
+    // the head sits behind the body: the chest fur overlaps the back of the head
+    const body = "M-6.9 -5.7 C-7.6 -7 -7.9 -9 -7.8 -10.6 C-7.4 -13 -5.8 -15.2 -3.6 -16.7 C-.4 -18.4 4.6 -18.9 8.2 -17.4 C11.2 -16.2 12.2 -12.8 11.6 -9.8 C11 -7.2 8.4 -5.4 4.8 -4.9 C1 -4.4 -3.4 -4.6 -6.9 -5.7Z";
+    const head = "M-7.4 -10.6 C-9.2 -10.8 -11 -9.8 -11.7 -8 C-12.1 -6.6 -11.6 -5.4 -10.5 -4.9 C-9.2 -4.4 -7.8 -4.8 -7 -5.9 L-6.6 -8Z";
+    const beak = "M-9.7 -6.1 Q-10.8 -3 -13.2 -.4 Q-11.3 -3.6 -11.7 -6.8Z";
+    // fur: a light scatter of fine strands that follow the curve of the back (front to rump) and along the belly
+    const E = [1.1, -11.3, 10.8, 7], f = ["", "", ""];
+    for (let gy = -17.6, r = 0, n = 3; gy < -5.2; gy += .95, r++) for (let gx = -9.6 + (r % 2) * .6; gx < 12; gx += 1.3) {
+      n++;
+      const px = gx + (prn(n) - .5) * 1.1, py = gy + (prn(n + 50) - .5) * .8, u = (px - E[0]) / E[2], v = (py - E[1]) / E[3], k = Math.hypot(u, v);
+      if (k > .95 || k < .25 || prn(n + 9) < .5) continue;
+      const a = Math.atan2(v, u), bold = prn(n + 3) < .16, s = (.2 + prn(n + 17) * .14 + (bold ? .08 : 0)) * (v > 0 ? -1 : 1), q = t => [E[0] + E[2] * k * Math.cos(t), E[1] + E[3] * k * Math.sin(t)], p0 = q(a), p1 = q(a + s);
+      f[bold ? 2 : prn(n + 5) < .5 ? 0 : 1] += `M${p0[0].toFixed(1)} ${p0[1].toFixed(1)} A${(E[2] * k).toFixed(1)} ${(E[3] * k).toFixed(1)} 0 0 ${s > 0 ? 1 : 0} ${p1[0].toFixed(1)} ${p1[1].toFixed(1)} `;
+    }
+    const leg = (lx, c1, c2, c3) => {
+      const sh = `M${lx + .7} -5.6 C${lx + .5} -3.8 ${lx - .1} -2.2 ${lx - .5} -.9`, ay = -.85, ax = lx - .5, T = [[196, 3.1], [168, 3.4], [146, 2.7]];
+      const ts = T.map(t => pToe(ax, ay, t[0], t[1], 1, .62)).join(""), cl = T.map(t => { const r = t[0] * Math.PI / 180, tx = ax + Math.cos(r) * (t[1] + .1), ty = ay + Math.sin(r) * (t[1] + .1); return `M${tx.toFixed(2)} ${ty.toFixed(2)} l${(Math.cos(r) * .38).toFixed(2)} ${(Math.sin(r) * .38 + .06).toFixed(2)}`; }).join(" ");
+      return pSt(sh, c1, 1.9) + pSt(sh, c2, 1.5) + pSt(`M${lx + .2} -5 C${lx} -3.6 ${lx - .4} -2.4 ${lx - .7} -1.5`, c3, .34, .75)
+        + pFill(ts, c1) + pSt(cl, "#2e0e09", .3) + `<circle cx="${ax}" cy="${ay}" r=".85" fill="${c2}"/>`;
+    };
+    const bodyArt = leg(-1.4, "#451610", "#65231a", "#a04a3c") + leg(4.6, "#5e1f17", "#8a382c", "#c0624e")
+      + `<g transform="translate(0 .6)">` + pFill(body, `url(#${gb})`)
+      + x.clip(body, pFill("M-9.6 -18 H12 V-4 H-9.6Z", `url(#${gs})`)
+        + pFill("M-6.5 -5.6 C-2 -4.4 6 -4.7 10.4 -8.4 C9.6 -6.2 7.2 -4.6 3.6 -4.2 C-.8 -3.8 -4.6 -4.4 -6.5 -5.6Z", "#3a0f08", .35)
+        + pSt(f[0], "#3a0e07", .13, .3) + pSt(f[1], "#f4b090", .13, .3) + pSt(f[2], "#3a0e07", .22, .26)
+        + pSt("M-6.6 -14.6 C-3.6 -17.6 3.4 -18.6 8 -16.8", "#f4a98a", .5, .4))
+      + pSt("M-7.9 -10 q-.55 .25 -.95 .9 M-7.9 -8.6 q-.55 .2 -1 .8 M-7.7 -7.2 q-.5 .2 -.9 .7", "#a84432", .24, .7) + `</g>`;
+    const headArt = `<g transform="translate(0 .6)">` + pFill(head, `url(#${gb})`)
+      + x.clip(head, pFill(head, `url(#${gf})`) + pFill("M-13 -12 H-6 V-3 H-13Z", `url(#${go})`))
+      + pFill(beak, `url(#${gk})`) + pSt("M-9.9 -6.2 Q-11 -3.2 -13 -.7", "#f0b5a3", .22, .8)
+      + `<circle cx="-9.6" cy="-7.9" r=".95" fill="#e2765a" opacity=".3"/><circle cx="-9.6" cy="-7.9" r=".55" fill="#150807"/><circle cx="-9.44" cy="-8.12" r=".18" fill="#fff"/>`
+      + A.lid(-9.6, -7.9, .95, "#b85640", "#3a0f08") + `</g>`;
+    return `<ellipse cx="0" cy=".3" rx="7.6" ry="1.1" fill="#000" opacity=".13"/>`
+      + A.head(headArt, -6.6, -7.8, "0%,100%{transform:rotate(0deg)}24%{transform:rotate(-2.2deg)}44%{transform:rotate(3.6deg)}54%{transform:rotate(-.6deg)}74%{transform:rotate(2deg)}") + A.body(bodyArt);
   };
+
+  /* ---- Tui: glossy blue-green black body, white throat tuft, lacy neck collar, curved dark bill ---- */
   const tuiArt = (x, A) => {
-    const g = x.id("tu"), hg = x.id("th"), wg = x.id("tw");
-    x.defs += `<linearGradient id="${g}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#35549a"/><stop offset=".5" stop-color="#172a56"/><stop offset="1" stop-color="#0b1430"/></linearGradient>`
-      + `<radialGradient id="${hg}" cx=".4" cy=".3" r=".85"><stop offset="0" stop-color="#2f4a8c"/><stop offset="1" stop-color="#111c42"/></radialGradient>`
-      + `<linearGradient id="${wg}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a4684"/><stop offset="1" stop-color="#0d1834"/></linearGradient>`;
-    const body = "M-6.8 -9 C-7 -15.2 -2.6 -18.6 2.4 -17.4 C7.8 -16 8.4 -9.2 6.4 -4.4 C5.2 -1.8 1.6 -1 -1.4 -1.4 C-5.4 -2 -6.6 -5.4 -6.8 -9Z";
-    const bodyArt = `<ellipse cx="0" cy=".3" rx="7" ry="1.2" fill="#000" opacity=".16"/>`
-      + `<path d="M2.8 -5.8 C5.2 -4.2 7.8 -2.2 9.8 .4 L8.2 1.5 C6.2 .3 4 -.9 1.2 -2.6Z" fill="#0d1731"/><path d="M3.8 -4.4 L8.6 .5" stroke="#35c2b0" stroke-width=".35" opacity=".6" stroke-linecap="round"/>`
-      + `<path d="M-1.8 -2.4 V.1 M1.8 -2.4 V.1" stroke="#3b3b48" stroke-width="1.1" stroke-linecap="round"/><path d="M-3.6 .5 H-.8 M.4 .5 H3.2" stroke="#3b3b48" stroke-width="1" stroke-linecap="round"/>`
-      + `<path d="${body}" fill="url(#${g})"/>`
-      + x.clip(body, `<ellipse cx="-2.8" cy="-8" rx="3.2" ry="4.4" fill="#2c4f92" opacity=".45"/><path d="M-6.4 -12.4 C-2.6 -15.4 3 -15.4 7 -11.6" stroke="#35c9b4" stroke-width="1" fill="none" opacity=".8"/><path d="M-6.4 -10.4 C-2.6 -13.2 3 -13.2 7 -9.6" stroke="#8a6fe0" stroke-width=".6" fill="none" opacity=".6"/><path d="M-6 -6.4 C-2 -8.4 2.6 -8 5.8 -5.2" stroke="#c99a48" stroke-width=".5" fill="none" opacity=".55"/>`
-        + `<path d="M.2 -13.6 C4.8 -14.6 8.6 -10.8 7.8 -5.4 C6.4 -3.4 3.6 -3 1.4 -4.4 C-.4 -7 -.8 -10.6 .2 -13.6Z" fill="url(#${wg})"/><path d="M2 -11 L6.6 -7.6 M1 -8.8 L5.4 -5.6" stroke="#35c2b0" stroke-width=".3" opacity=".5" stroke-linecap="round"/><path d="M1.8 -13.8 C5.2 -14.2 8 -11.6 8.2 -8.6 L6.4 -9 C6 -11.2 4 -12.6 1.4 -12.4Z" fill="#f4f6fb"/>`);
-    const head = `<circle cx="-4.6" cy="-17.2" r="3.9" fill="url(#${hg})"/><path d="M-7.6 -19 C-5.8 -20.6 -2.8 -20.4 -1.4 -18.6" stroke="#3fb8aa" stroke-width=".9" fill="none" stroke-linecap="round"/>`
-      + `<path d="M-1.2 -16.2 q1.6 .2 2.2 1.6 M-.4 -17.6 q1.8 .4 2.2 2" stroke="#fff" stroke-opacity=".85" stroke-width=".45" fill="none" stroke-linecap="round"/>`
-      + `<path d="M-8.2 -17 C-10.8 -16.8 -12.6 -15.6 -13.6 -13.6 C-11.2 -14.6 -9.4 -14.8 -7.6 -14.8Z" fill="#24242e"/><path d="M-9 -16.4 C-10.4 -16.2 -11.6 -15.6 -12.4 -14.6" stroke="#6a6a80" stroke-width=".3" fill="none" stroke-linecap="round"/>`
-      + `<circle cx="-6.2" cy="-17.7" r="1.5" fill="#56648a"/><circle cx="-6.2" cy="-17.7" r=".85" fill="#06060a"/><circle cx="-5.95" cy="-18" r=".28" fill="#fff"/>`
-      + `<path d="M-6 -13.6 C-8 -11.8 -8 -9.4 -6.2 -8.4 C-4.6 -9.4 -4.4 -12 -6 -13.6Z M-3.2 -13 C-4.6 -11.2 -4.4 -9 -3 -8.2 C-1.6 -9 -1.4 -11.4 -3.2 -13Z" fill="#fff" stroke="#d6dcea" stroke-width=".3" stroke-linejoin="round"/><path d="M-6 -12.6 V-9.6 M-3.2 -12 V-9.2" stroke="#d6dcea" stroke-width=".25"/>`
-      + A.lid(-6.2, -17.7, 1.6, "#16224a", "#56648a");
-    return A.body(bodyArt) + A.head(head, -3.6, -13.4, "0%,100%{transform:rotate(-1.8deg)}38%{transform:rotate(2.4deg)}70%{transform:rotate(-.6deg)}");
+    const gb = x.id("tb"), gc = x.id("tc"), gv = x.id("tv"), gd = x.id("td"), gy = x.id("ty"), gm = x.id("tm"), gw = x.id("tw"), gt = x.id("tt"), gp = x.id("tp"), gk = x.id("tk"), gl = x.id("tl");
+    x.defs += pLin(gb, 0, -18.5, 1.5, -3, [[0, "#3d7868"], [.3, "#22504f"], [.6, "#0d2535"], [1, "#04070b"]])
+      + pRad(gc, 2.9, -12.2, 4.3, [[0, "#8fd2b0", .55], [.6, "#4a9680", .24], [1, "#4a9680", 0]])
+      + pRad(gv, -2.4, -12, 4, [[0, "#4f93d6", .3], [1, "#4f93d6", 0]])
+      + pRad(gd, 2.6, -21.2, 3.6, [[0, "#0d3236", .85], [.7, "#12403f", .5], [1, "#12403f", 0]])
+      + pRad(gy, 1.8, -23, 2.6, [[0, "#7fc4c0", .55], [1, "#7fc4c0", 0]])
+      + pRad(gm, 5.3, -20.4, 3.7, [[0, "#02060a", 1], [.6, "#03090c", .92], [1, "#06120f", 0]])
+      + pLin(gw, 2.6, 0, -2.2, 0, [[0, "#081c2e", 0], [.55, "#071626", .8], [1, "#050c1a", .96]])
+      + pLin(gt, -1, -5.4, -4.4, 2, [[0, "#162030"], [1, "#05070b"]])
+      + pRad(gp, -.5, -.6, 2.5, [[0, "#ffffff"], [.6, "#f2f5fb"], [1, "#bcc7da"]])
+      + pLin(gk, 5.8, -21.9, 11.5, -20.7, [[0, "#171b1e"], [.3, "#2c3338"], [.75, "#262c31"], [1, "#14171a"]])
+      + pRad(gl, .6, -17.9, 2.6, [[0, "#d6e1ea", .85], [.55, "#d6e1ea", .65], [1, "#d6e1ea", 0]]);
+    const body = "M1 -17.8 C-1.4 -17.2 -3.6 -15 -4 -12 C-4.3 -9.4 -3.8 -7 -2.6 -5.2 C-1.6 -3.6 .4 -2.9 2.2 -3.3 C4.4 -3.8 5.8 -6.2 6 -9.4 C6.2 -12.6 5.4 -15.2 4 -17.2Z";
+    const head = "M5.7 -21.9 C5.4 -23.6 3.9 -24.6 2.3 -24.1 C.7 -23.6 -.2 -22.1 .1 -20.6 C-.5 -19.4 -1.2 -18.3 -1.2 -16.1 L5.2 -16.1 C5.2 -17.5 5.1 -18.5 4.9 -19.3 C5.6 -19.9 5.9 -20.8 5.7 -21.9Z";
+    const wing = "M-1 -13.8 C1 -13.4 2.2 -11.4 2 -8.4 C1.8 -6 .6 -4.2 -1.4 -3.4 L-3.6 -2.5 C-4.3 -4.8 -4.2 -9.4 -3.5 -11.8 C-3 -13 -2.1 -13.8 -1 -13.8Z";
+    const tail = "M-2.7 -5.4 C-3.6 -3.4 -4.2 -1.2 -4.3 1.4 C-3.7 2 -2.9 2.2 -2.3 2 C-1.8 .4 -1.1 -1.8 -.6 -3.8Z";
+    const beak = "M5.5 -21.9 C7.1 -22.9 9.6 -22.6 11.5 -20.7 C9.6 -21.7 7.7 -21.3 5.8 -20.5Z";
+    const puff = "M-1.5 .9 C-2.1 -.2 -1.6 -1.5 -.3 -1.9 C.8 -2.3 1.9 -1.9 2.5 -1.3 C2.2 -.6 2.3 .5 1.6 1.2 C.9 1.9 -.7 2.1 -1.5 .9Z";
+        // glossy feather lines flowing down the chest
+    const flow = "M3.4 -15.2 C4.9 -13 5.4 -10.2 4.8 -7.4 M2.2 -15.6 C3.8 -13.2 4.3 -10 3.7 -6.6 M1 -15.8 C2.4 -13.2 2.8 -9.8 2.3 -5.8 M-.2 -15.6 C1 -13 1.3 -9.6 .9 -5.2 M-1.4 -14.8 C-.4 -12.4 -.3 -9.2 -.6 -4.8";
+    const leg = lx => {
+      const ts = [[6, 2.4], [28, 2], [174, 1.1]].map(t => pToe(lx + .1, -.75, t[0], t[1], .66, .38)).join("");
+      return pFill(`M${lx - .5} -3.8 L${lx + .5} -3.8 L${lx + .45} -.75 L${lx - .3} -.75Z`, "#34353f") + pSt(`M${lx - .2} -3.6 L${lx - .1} -1`, "#7b7d92", .2, .7)
+        + pFill(ts, "#34353f") + pSt(`M${lx + 2.5} -.4 l.28 .12 M${lx + 2.1} .3 l.25 .15 M${lx - 1} -.6 l-.28 .08`, "#14141a", .26);
+    };
+    const bodyArt = pFill(tail, `url(#${gt})`) + pSt("M-2.3 -4.6 C-3.1 -2.6 -3.6 -.8 -3.8 .9", "#35557a", .26, .4)
+      + leg(-.2) + leg(2.8)
+      + pFill(body, `url(#${gb})`)
+      + x.clip(body, pFill("M-6 -19 H8 V-2H-6Z", `url(#${gc})`) + pFill("M-6 -19 H8 V-2H-6Z", `url(#${gv})`) + pSt(flow, "#9de0c4", .14, .16))
+      + pFill(wing, `url(#${gw})`)
+      + x.clip(body, pFill("M-6 -19 H8 V-2H-6Z", `url(#${gv})`))
+      + x.clip(wing, pSt("M-.6 -7.4 L-3.4 -2.8 M-1.6 -8.8 L-4.2 -4.6 M.4 -6 L-2.2 -2.6", "#03060c", .24, .45))
+      + x.clip(body, pSt("M-3.4 -12.6 C-4 -11.2 -4.2 -9.8 -4 -8.4", "#7fc0e8", .24, .3));
+    const headArt = `<g transform="rotate(-8 2.6 -16.8)">` + pFill(head, `url(#${gb})`)
+      + x.clip(head, pFill(head, `url(#${gd})`) + pFill(head, `url(#${gy})`) + pFill(head, `url(#${gm})`)
+        + pFill("M6.2 -22.5 C4.8 -22.8 3.2 -22.2 2.6 -21.1 C3.6 -21.5 4.8 -21.5 6.2 -21.1Z", "#05090b", .85)
+        + pSt("M1.3 -22.8 C2.4 -23.5 4.2 -23.4 5.2 -22.6", "#a7e0d6", .5, .5))
+      + x.clip(head, pSt(pScales(-1.6, 3.4, -19.7, 8, .7, .5), `url(#${gl})`, .1))
+      + `<g transform="translate(5.3 -16.7) rotate(-22) scale(.8)">${pFill(puff, `url(#${gp})`)}${pFill("M-1.5 .9 C-.7 2.1 .9 1.9 1.6 1.2 C.6 1.5 -.7 1.3 -1.5 .9Z", "#aab6cc", .4)}${pSt("M-1.2 .3 q.5 1 1.5 1 M-.7 -.7 q.8 .6 1.6 .4 M.1 -1.4 q1 .1 1.5 .9", "#b5c0d4", .13, 1)}${pSt("M2.2 -1.4 l.55 -.45 M1.9 -1.7 l.3 -.6 M2.4 -.8 l.55 -.1", "#e3e9f3", .17, 1)}</g>`
+      + pFill(beak, `url(#${gk})`) + x.clip(beak, `<ellipse cx="6.7" cy="-22.1" rx="1.3" ry=".42" fill="#e3a53a" opacity=".88" transform="rotate(-20 6.7 -22.1)"/>`) + pSt("M6.2 -22 C7.6 -22.8 9.6 -22.5 11.1 -21.1", "#7e8a92", .16, .75)
+      + `<circle cx="3.7" cy="-21.3" r=".95" fill="#5b1b2c"/><circle cx="3.7" cy="-21.3" r=".5" fill="#08040a"/><circle cx="3.4" cy="-21.65" r=".26" fill="#fff" opacity=".95"/>`
+      + A.lid(3.7, -21.3, 1.05, "#102323", "#04090b") + `</g>`;
+    // a slight forward lean (toward the person) about the feet; the contact shadow stays flat
+    return `<ellipse cx="0" cy=".3" rx="6.4" ry="1" fill="#000" opacity=".13"/><g transform="rotate(4 1.3 0)">` + A.body(bodyArt) + A.head(headArt, 2.6, -16.8, "0%,100%{transform:rotate(-1.8deg)}38%{transform:rotate(2.4deg)}70%{transform:rotate(-.6deg)}") + `</g>`;
   };
-  const petWrap = (gd, art) => `<g transform="translate(${(79.5 + (gd.sx - 1) * 27).toFixed(1)} 78.6) scale(1.1)">${art}</g>`;
-  const PETS = { none: () => "", kiwi: (gd, x, A) => petWrap(gd, kiwiArt(x, A || PA0)), tui: (gd, x, A) => petWrap(gd, `<g transform="translate(-1.5 0)">${tuiArt(x, A || PA0)}</g>`) };
+  const petWrap = (gd, art, left) => `<g transform="translate(${(left ? 24.2 - (gd.sx - 1) * 27 : 77.8 + (gd.sx - 1) * 27).toFixed(1)} 83) scale(1.1)">${art}</g>`;
+  const PETS = { none: () => "", kiwi: (gd, x, A) => petWrap(gd, kiwiArt(x, A || PA0)), tui: (gd, x, A) => petWrap(gd, tuiArt(x, A || PA0), 1) };
   const PET_LIST = [["none", "None", 0], ["kiwi", "Kiwi", 3], ["tui", "Tui", 3]];
 
   /* ------------------------------ catalog ------------------------------- */
@@ -1027,7 +1092,8 @@
       // pets: a twinkle near the perch (animated when it has a slot, otherwise a single still sparkle)
       pet(svg) {
         const l = st.layers.pet;
-        return l ? svg + sparks([[91.5, 61.5, 1.9, l.tier >= 4 ? "#ffb300" : "#ffc21a"], [86.5, 56.5, 1.5, "#ffe9a0"]], take("pet", "spark") ? 1 : 0, { still: 1 }) : svg;
+        const lf = rc.look.pet === "tui", c1 = l && l.tier >= 4 ? "#ffb300" : "#ffc21a";
+        return l ? svg + sparks([[lf ? 8.5 : 91.5, 61.5, 1.9, c1], [lf ? 13.5 : 86.5, 56.5, 1.5, "#ffe9a0"]], take("pet", "spark") ? 1 : 0, { still: 1 }) : svg;
       },
       css() { return st.n ? `<style>${st.css}@media (prefers-reduced-motion:reduce){.${p}a{animation:none!important}}</style>` : ""; },
       count() { return st.n; }
