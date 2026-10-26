@@ -593,21 +593,13 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
   letter-spacing:.01em;
 }
 .site-footer-links{
-  display:grid;
-  grid-template-columns:1fr auto 1fr;
-  align-items:center;
-  column-gap:12px;
-  margin-top:12px;
-  font-family:"Segoe UI","Trebuchet MS",Verdana,sans-serif;
-}
-.site-footer-about{grid-column:1;justify-self:start;}
-.site-footer-links-main{
-  grid-column:2;
   display:flex;
   flex-wrap:wrap;
   justify-content:center;
   align-items:center;
   gap:24px;
+  margin-top:12px;
+  font-family:"Segoe UI","Trebuchet MS",Verdana,sans-serif;
 }
 .site-footer-links a{color:var(--muted);text-decoration:none;font-size:.92rem;font-weight:600;}
 .site-footer-links a:hover{color:var(--navy-700);text-decoration:underline;}
@@ -620,8 +612,7 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
 @media (max-width:640px){
   .site-footer{padding:26px 16px 22px;}
   .site-footer-brand{font-size:1.1rem;}
-  .site-footer-links{column-gap:8px;margin-top:10px;}
-  .site-footer-links-main{gap:16px;}
+  .site-footer-links{gap:16px;margin-top:10px;}
   .site-footer-links a{font-size:.85rem;}
   .site-footer-copy{font-size:12.5px;margin-top:12px;}
 }
