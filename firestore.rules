@@ -124,20 +124,30 @@ service cloud.firestore {
     // fee-conserving trade purely as cover to freely inject or duplicate
     // arbitrary store items on either side, which would be a strictly
     // worse hole than the money-only case.
+    // CREDIT-CARD FIX: paying a classmate by credit card moves no cash out
+    // of the buyer's balance — the buyer's `creditCard.balance` (what they
+    // owe) goes UP instead. The old checks only counted cash, so any card
+    // purchase looked like money appearing from nowhere and the commit was
+    // refused with a 403 ("Something went wrong"). Money paid is now
+    // cash spent + card debt added; the seller can still never be credited
+    // more than that.
+    function cardDebtUp(b, a) {
+      return (b.get('creditCard', null) != null && a.get('creditCard', null) != null)
+        ? a.creditCard.get('balance', 0) - b.creditCard.get('balance', 0)
+        : 0;
+    }
     function isPeerTradeCredit(username) {
-      // Caller is receiving payment for something they sold (the seller
-      // side of buyListing(), called by the buyer) — this doc's balance
-      // goes UP, and if a store item changed hands, THIS doc (the seller)
-      // is the one that must have given it up.
+      // Caller (the buyer) is paying; THIS doc is the seller being paid.
       let before = resource.data;
       let after = request.resource.data;
       let delta = after.balance - before.balance;
-      let myDelta = myUserDoc().balance
-        - getAfter(/databases/$(database)/documents/users/$(myUsername())).data.balance;
-      return myUserDoc().classCode == before.classCode
+      let myBefore = myUserDoc();
+      let myAfter = getAfter(/databases/$(database)/documents/users/$(myUsername())).data;
+      let myPaid = (myBefore.balance - myAfter.balance) + cardDebtUp(myBefore, myAfter);
+      return myBefore.classCode == before.classCode
         && username != myUsername()
         && delta > 0
-        && myDelta >= delta
+        && myPaid >= delta
         && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems'])
         && (
           !after.diff(before).affectedKeys().hasAny(['storeItems']) ||
@@ -145,21 +155,29 @@ service cloud.firestore {
         );
     }
     function isPeerTradeDebit(username) {
-      // Caller is receiving payment for something they sold (the seller
-      // side of acceptOffer(), called by the seller) and this write is
-      // the OTHER half — the buyer paying for it. This doc's balance
-      // goes DOWN, and if a store item changed hands, THIS doc (the
-      // buyer) is the one that must have received it.
+      // Caller (the seller) accepted an offer; THIS doc is the buyer paying,
+      // by cash and/or their credit card (their chosen default account).
       let before = resource.data;
       let after = request.resource.data;
-      let delta = before.balance - after.balance;
-      let myDelta = getAfter(/databases/$(database)/documents/users/$(myUsername())).data.balance
-        - myUserDoc().balance;
-      return myUserDoc().classCode == before.classCode
+      let cashDown = before.balance - after.balance;
+      let cardUp = cardDebtUp(before, after);
+      let paid = cashDown + cardUp;
+      let myBefore = myUserDoc();
+      let myAfter = getAfter(/databases/$(database)/documents/users/$(myUsername())).data;
+      let myGain = myAfter.balance - myBefore.balance;
+      return myBefore.classCode == before.classCode
         && username != myUsername()
-        && delta > 0
-        && myDelta <= delta
-        && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems'])
+        && cashDown >= 0
+        && cardUp >= 0
+        && paid > 0
+        && myGain <= paid
+        && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems', 'creditCard'])
+        && (
+          !after.diff(before).affectedKeys().hasAny(['creditCard']) ||
+          (before.get('creditCard', null) != null && after.get('creditCard', null) != null
+            && after.creditCard.get('status', '') == before.creditCard.get('status', '')
+            && after.creditCard.get('planId', '') == before.creditCard.get('planId', ''))
+        )
         && (
           !after.diff(before).affectedKeys().hasAny(['storeItems']) ||
           after.storeItems.size() == before.get('storeItems', []).size() + 1
@@ -264,7 +282,16 @@ service cloud.firestore {
           after.quizResults.diff(before.quizResults).removedKeys().size() == 0 &&
           after.quizResults.diff(before.quizResults).affectedKeys().size() <= 1
         );
-      return loansOk && qrOk;
+      // Same idea for the credit card: a student can't make an owing card
+      // vanish by deleting/nulling the field (cancelling is only allowed once
+      // nothing is owed). Like the rest of this file, it can't check the
+      // amounts are right — only that the debt record isn't simply erased.
+      let cardOk = !('creditCard' in before)
+        || before.creditCard == null
+        || before.creditCard.get('status', '') != 'active'
+        || before.creditCard.get('balance', 0) <= 0
+        || ('creditCard' in after && after.creditCard != null);
+      return loansOk && qrOk && cardOk;
     }
 
     // SECURITY FIX: isSafeSelfEconomyChange() above only ever validated
@@ -330,7 +357,7 @@ service cloud.firestore {
         // today" markers but still can't touch anyone else's.
         'balance', 'savings', 'lastInterestApplied',
         'lastWagePaid', 'lastLifeAllowanceWeeklyPaid', 'lastLifeAllowanceDailyPaid',
-        'loans', 'quizResults', 'gamblingAccount',
+        'loans', 'quizResults', 'gamblingAccount', 'creditCard',
         'storeItems', 'insurance', 'sideHustle', 'termDeposits', 'truckLicence',
         // Economy-adjacent state each feature's own self-service flow owns.
         'sideHustleRequest', 'sideHustleDenialNote', 'truckCheckins',
@@ -369,7 +396,14 @@ service cloud.firestore {
         'kiwiSaver', 'payslips',
         // Time-limit tracking/exemption requests.
         'timeSpentTodaySec', 'timeSpentDate',
-        'timeExemptionStatus', 'timeExemptionDate', 'timeExemptionRequestedAt'
+        'timeExemptionStatus', 'timeExemptionDate', 'timeExemptionRequestedAt',
+        // Default pay account ("cash"/"card") the Trade Centre (accepted offers)
+        // and the Store pre-select. Preference only; moves no money.
+        'mpPayDefault', 'storePayDefault',
+        // Avatar editor: the look + list of owned items, and the Comets
+        // balance. Comets can only be SPENT by a student (see
+        // cometsNotRaised below); only a teacher can raise them.
+        'avatar', 'comets'
       ];
       // classCode: the ONE self-writable identity-ish field, and ONLY for
       // a teacher's own account — see createClassForTeacher/
@@ -385,8 +419,15 @@ service cloud.firestore {
         || (before.role == 'teacher' && changed.hasOnly(selfWritableFields.concat(['classCode'])));
     }
 
+    // Comets are handed out by teachers only: a student's own write may
+    // keep or lower the balance, never raise it.
+    function cometsNotRaised() {
+      return request.resource.data.get('comets', 0) <= resource.data.get('comets', 0);
+    }
+
     function isAllowedSelfUpdate(username) {
       return myUsername() == username
+        && cometsNotRaised()
         && (jobFieldsUnchanged() || isPromotionResponse() || isJobForfeit())
         && isSafeSelfEconomyChange()
         && isAllowedSelfFieldSet();
@@ -448,6 +489,65 @@ service cloud.firestore {
     }
 
     // ---------------- uid -> username mapping ----------------
+    /* ---------------- Login lockout (/loginLocks) ----------------
+       5 wrong passwords for one username locks logging in to it for 30
+       minutes (see "Login lockout" in data-core.js). This has to work
+       BEFORE anyone is signed in, so it is the one collection that
+       allows unauthenticated writes. To keep that safe, every write is
+       pinned to exactly the shapes the app makes:
+         - the doc id must be a "<name>@t29.local" auth email;
+         - a wrong attempt can only add exactly 1 to the count;
+         - the 5th attempt must stamp lockedAt/lastLockAt with the SERVER
+           time (request.time), so a client can't pick its own lock time
+           or lock someone for longer than 30 minutes;
+         - while locked (count 5, under 30 minutes old) nothing can change
+           it, except that it expires by itself (a stale doc restarts at 1);
+         - only the account's own signed-in login can reset the count
+           back to 0 (its token email must equal the doc id).
+       It stores no passwords and nothing but counts and timestamps. */
+    match /loginLocks/{name} {
+      allow get: if true;
+      allow list: if false;
+
+      function lockShapeOk() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['count', 'lockedAt', 'lastLockAt', 'updatedAt'])
+          && d.keys().hasAll(['count', 'lockedAt', 'lastLockAt', 'updatedAt'])
+          && d.count is int
+          && d.updatedAt == request.time
+          && name.size() <= 150
+          && name.matches('.*@t29[.]local');
+      }
+      function lockIsStale() {
+        return request.time > resource.data.updatedAt + duration.value(30, 'm');
+      }
+      function lockFailedAttempt() {
+        let d = request.resource.data;
+        let r = resource.data;
+        return (lockIsStale() && d.count == 1 && d.lockedAt == null && d.lastLockAt == r.lastLockAt)
+          || (!lockIsStale() && d.count == r.count + 1 && d.count <= 5
+              && (
+                (d.count < 5 && d.lockedAt == null && d.lastLockAt == r.lastLockAt)
+                || (d.count == 5 && d.lockedAt == request.time && d.lastLockAt == request.time)
+              ));
+      }
+      function lockOwnerReset() {
+        let d = request.resource.data;
+        let r = resource.data;
+        return request.auth != null
+          && request.auth.token.email == name
+          && d.count == 0 && d.lockedAt == null && d.lastLockAt == r.lastLockAt
+          && r.count > 0 && (r.count < 5 || lockIsStale());
+      }
+
+      allow create: if lockShapeOk()
+        && request.resource.data.count == 1
+        && request.resource.data.lockedAt == null
+        && request.resource.data.lastLockAt == null;
+      allow update: if lockShapeOk() && (lockFailedAttempt() || lockOwnerReset());
+      allow delete: if false;
+    }
+
     match /uidIndex/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;
       allow list: if false;
@@ -628,7 +728,7 @@ service cloud.firestore {
         'name', 'teacher', 'code', 'createdAt',
         'interestRate', 'cashInterestRate', 'interestAuto', 'interestFrequency', 'interestDay',
         'taxRates', 'wageTaxBrackets',
-        'loanTiers', 'maxLoanAmount', 'maxLoanCount', 'termDepositPlans',
+        'loanTiers', 'maxLoanAmount', 'maxLoanCount', 'termDepositPlans', 'cardPlans', 'cardSettings',
         'jobs', 'quizzes', 'quizGate', 'insurancePlans', 'insuranceDay',
         'gambling', 'blackjack',
         'priceRange', 'propertyPriceRange',
