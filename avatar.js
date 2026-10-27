@@ -141,10 +141,7 @@
     dreads: (c, d, x) => { const lock = (x0, y0, xm, ym, x1, y1, w) => `<path d="M${x0} ${y0} Q${xm} ${ym} ${x1} ${y1}" stroke="${c}" stroke-width="${w}" fill="none" stroke-linecap="round"/><path d="M${x0} ${y0} Q${xm} ${ym} ${x1} ${y1}" stroke="${d}" stroke-width="${w - 1}" fill="none" stroke-dasharray=".9 3.4" opacity=".6"/>`; const p = "M29 47 C26 22 38 14 50 14 C62 14 74 22 71 47 C70 38 66 31 58 29 C52 28 46 29 41 29 C36 31 31 38 29 47Z"; const crown = [-50, -25, 0, 25, 50].map(a => { const r = a * Math.PI / 180, sn = Math.sin(r), cs = Math.cos(r); return lock((50 + sn * 17).toFixed(1), (36 - cs * 19).toFixed(1), (50 + sn * 22).toFixed(1), (36 - cs * 25).toFixed(1), (50 + sn * 26).toFixed(1), (36 - cs * 29).toFixed(1), 9.6); }).join(""); return { back: [lock(34, 40, 30, 60, 31, 76, 6), lock(42, 44, 40, 62, 41, 80, 6), lock(58, 44, 60, 62, 59, 80, 6), lock(66, 40, 70, 60, 69, 76, 6)].join(""), front: `${crown}<path d="${p}" fill="${c}"/>${lock(29, 44, 24, 60, 25, 78, 6.4)}${lock(31.5, 47, 29, 62, 31, 82, 6.4)}${lock(71, 44, 76, 60, 75, 78, 6.4)}${lock(68.5, 47, 71, 62, 69, 82, 6.4)}` }; },
     animespikes: c => ({ front: `<path d="M28.5 46 C27 40 26.5 34 27.5 28.5 L18 20 L30 21 L25 8 L37 17 L39 2 L46 16 L51 0.5 L56 16 L63 2 L65 17 L75 8 L70 21 L82 20 L72.5 28.5 C73.5 34 73 40 71.5 46 C70 40 66 35 62 31 L57 34 L54 29.5 L50 35.5 L46 29.5 L43 34 L38 31 C34 35 30 40 28.5 46Z" fill="${c}" stroke="${c}" stroke-width="1" stroke-linejoin="round"/>` })
   };
-  const HAIR_LIST = [["bald", "Bald", 0], ["buzz", "Buzz cut", 0], ["short", "Short", 0], ["long", "Long", 0],
-    ["quiff", "Quiff", 1], ["bob", "Bob", 1], ["ponytail", "Ponytail", 1], ["swoop", "Side swoop", 1], ["sidepart", "Side part", 1], ["slickback", "Slick back", 1], ["flattop", "Flat top", 1],
-    ["wavy", "Wavy long", 2], ["braids", "Braids", 2], ["curly", "Curly", 2], ["spiky", "Spiky", 2], ["pompadour", "Pompadour", 2], ["undercut", "Undercut", 2], ["cornrows", "Cornrows", 2], ["afro", "Afro", 2], ["manbun", "Man bun", 2], ["dreads", "Dreadlocks", 2],
-    ["mohawk", "Mohawk", 3], ["animespikes", "Anime spikes", 3]];
+  const HAIR_LIST = [["bald", "Bald", 0], ["buzz", "Buzz cut", 0], ["short", "Short", 0], ["long", "Long", 0], ["bob", "Bob", 1], ["ponytail", "Ponytail", 3], ["swoop", "Side swoop", 2], ["sidepart", "Side part", 1], ["slickback", "Slick back", 1], ["wavy", "Wavy long", 4], ["braids", "Braids", 2], ["curly", "Curly", 2], ["spiky", "Spiky", 3], ["pompadour", "Pompadour", 2], ["undercut", "Undercut", 2], ["afro", "Afro", 2], ["manbun", "Man bun", 2], ["mohawk", "Mohawk", 4]];
 
   /* ------------------------------ eyes --------------------------------- */
   const EYE_Y = 45;
@@ -205,8 +202,7 @@
     },
     braces: () => `<path d="M42.5 53.5 Q50 65 57.5 53.5Z" fill="#fff" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/><path d="M44.4 55.4 Q50 60 55.6 55.4" stroke="#9aa3b5" stroke-width="1.5" fill="none"/><path d="M47 55.8 v2.2 M50 56.6 v2.4 M53 55.8 v2.2" stroke="#9aa3b5" stroke-width="1"/>`
   };
-  const MOUTH_LIST = [["smile", "Smile", 0], ["grin", "Big grin", 0], ["neutral", "Neutral", 0], ["open", "Open smile", 0], ["smirk", "Smirk", 1], ["tongue", "Tongue out", 1],
-    ["surprised", "Surprised", 1], ["braces", "Braces", 2], ["kiss", "Kiss", 2], ["gold", "Gold teeth", 3]];
+  const MOUTH_LIST = [["smile", "Smile", 0], ["grin", "Big grin", 0], ["neutral", "Neutral", 0], ["open", "Open smile", 0], ["smirk", "Smirk", 3], ["tongue", "Tongue out", 4], ["surprised", "Surprised", 1], ["braces", "Braces", 2], ["kiss", "Kiss", 2]];
 
   /* ------------------------------ face extras --------------------------- */
   const FACE = {
@@ -222,8 +218,7 @@
     scar: () => `<path d="M35.4 48.6 L40 58.4" stroke="#c4523f" stroke-width="1.5" stroke-linecap="round"/><path d="M35.2 52.3 l3.3 -1.5 M36.6 55.3 l3.3 -1.5 M37.6 57.6 l3 -1.4" stroke="#8f3322" stroke-width=".9" stroke-linecap="round"/>`,
     mask: (h, x) => x.head(`<path d="M28 50 C35 54 43 57 50 57 C57 57 65 54 72 50 V70 H28Z" fill="#cfe9ff" stroke="#8fb8d8" stroke-width="1"/><path d="M36 60 Q50 63.4 64 60 M37.4 64 Q50 67 62.6 64" stroke="#9fc4e0" stroke-width=".9" fill="none" stroke-linecap="round"/>`) + `<path d="M31.2 51.6 L29.2 49.8 M68.8 51.6 L70.8 49.8" stroke="#8fb8d8" stroke-width="1.2" stroke-linecap="round"/>`
   };
-  const FACE_LIST = [["none", "Nothing", 0], ["freckles", "Freckles", 1], ["blush", "Blush", 1], ["mustache", "Moustache", 1], ["goatee", "Goatee", 1], ["mask", "Face mask", 1],
-    ["beard", "Beard", 2], ["stripes", "Warpaint", 2], ["glitter", "Glitter", 2], ["scar", "Scar", 2], ["paintstars", "Star paint", 3]];
+  const FACE_LIST = [["none", "Nothing", 0], ["freckles", "Freckles", 1], ["blush", "Blush", 1], ["mustache", "Moustache", 1], ["goatee", "Goatee", 1], ["mask", "Face mask", 1], ["beard", "Beard", 2], ["stripes", "Warpaint", 4], ["glitter", "Glitter", 2], ["scar", "Scar", 3], ["paintstars", "Star paint", 3]];
 
   /* ------------------------------ glasses ------------------------------- */
   const shineLens = (x, y) => `<path d="M${x - 3.6} ${y - 2} Q${x - 2.4} ${y - 3.8} ${x - .4} ${y - 4.2}" stroke="#fff" stroke-opacity=".75" stroke-width="1.1" fill="none" stroke-linecap="round"/>`;
@@ -277,9 +272,7 @@
     santa: () => `<path d="M27.5 33 C26 14 40 5 58 6 C70 7 79 14 83 26 C77 20.6 71.6 21.6 70.6 28.6 L72.4 33Z" fill="#e5484d"/><rect x="26" y="28.6" width="48" height="8" rx="4" fill="#fff"/><circle cx="82" cy="27" r="5.2" fill="#fff"/>`,
     crown: () => `<path d="M30 30 L28 10 L40 20 L50 6 L60 20 L72 10 L70 30Z" fill="#f5c542" stroke="#c9961a" stroke-width="1.6" stroke-linejoin="round"/><rect x="30" y="25.6" width="40" height="5.6" fill="#e0a82a"/><circle cx="50" cy="28.4" r="2.2" fill="#e5484d"/><circle cx="39" cy="28.4" r="1.8" fill="#3a8dff"/><circle cx="61" cy="28.4" r="1.8" fill="#3ecf8e"/><circle cx="28" cy="10" r="2.2" fill="#fff"/><circle cx="50" cy="6" r="2.2" fill="#fff"/><circle cx="72" cy="10" r="2.2" fill="#fff"/>`
   };
-  const HAT_LIST = [["none", "None", 0], ["cap", "Red cap", 1], ["capback", "Backwards cap", 1], ["beanie", "Beanie", 1], ["bucket", "Bucket hat", 1], ["headband", "Star headband", 1], ["beret", "Beret", 1], ["hardhat", "Hard hat", 2],
-    ["grad", "Graduation cap", 2], ["chef", "Chef hat", 2], ["cowboy", "Cowboy hat", 2], ["party", "Party hat", 2], ["flowers", "Flower crown", 2], ["santa", "Santa hat", 2],
-    ["devil", "Devil horns", 3], ["tophat", "Top hat", 3], ["sombrero", "Sombrero", 2], ["propeller", "Propeller cap", 3], ["halo", "Halo", 3], ["crown", "Golden crown", 4]];
+  const HAT_LIST = [["none", "None", 0], ["cap", "Red cap", 1], ["capback", "Backwards cap", 1], ["beanie", "Beanie", 1], ["bucket", "Bucket hat", 1], ["beret", "Beret", 1], ["grad", "Graduation cap", 4], ["chef", "Chef hat", 2], ["cowboy", "Cowboy hat", 2], ["party", "Party hat", 2], ["flowers", "Flower crown", 2], ["santa", "Santa hat", 3], ["devil", "Devil horns", 3], ["sombrero", "Sombrero", 2], ["propeller", "Propeller cap", 3], ["halo", "Halo", 3], ["crown", "Golden crown", 4]];
 
   /* ------------------------------ extras -------------------------------- */
   const EXTRA = {
@@ -453,9 +446,7 @@
       };
     }
   };
-  const TOP_LIST = [["tee", "T-shirt", 0], ["hoodie", "Hoodie", 0], ["polo", "Polo", 1], ["overalls", "Overalls", 1], ["flannel", "Flannel shirt", 1],
-    ["jersey", "Team jersey \u201829\u2019", 2], ["varsity", "Varsity jacket", 2], ["suit", "Suit & tie", 2], ["lab", "Lab coat", 2], ["puffer", "Puffer jacket", 2], ["raincoat", "Raincoat", 2], ["blazer", "Blazer", 2],
-    ["rugby", "Rugby top", 2], ["kiwi", "Kiwi tee", 2], ["disco", "Disco jacket", 4]];
+  const TOP_LIST = [["tee", "T-shirt", 0], ["hoodie", "Hoodie", 2], ["polo", "Polo", 1], ["overalls", "Overalls", 1], ["flannel", "Flannel shirt", 1], ["jersey", "29 Shirt", 2], ["varsity", "Varsity jacket", 2], ["suit", "Suit & tie", 2], ["lab", "Lab coat", 2], ["puffer", "Puffer jacket", 3], ["raincoat", "Raincoat", 2], ["blazer", "Blazer", 3], ["rugby", "Rugby top", 1], ["kiwi", "Kiwi tee", 2], ["disco", "Disco jacket", 4]];
 
   /* ------------------------------ backgrounds --------------------------- */
   const stars = (pts, col) => pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="${p[2]}" fill="${col || "#fff"}"/>`).join("");
@@ -692,9 +683,7 @@
     },
     synth: (ctx) => { const i = ctx.id("sy"); ctx.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a0f5c"/><stop offset=".6" stop-color="#ff3d9a"/><stop offset="1" stop-color="#ffd23f"/></linearGradient>`; return `<rect width="100" height="100" fill="url(#${i})"/><circle cx="50" cy="56" r="22" fill="#ffd23f" opacity=".9"/><rect y="62" width="100" height="40" fill="#1a0a3c"/>${[0, 1, 2, 3, 4, 5, 6].map(k => `<path d="M${50 + (k - 3) * 6} 62 L${50 + (k - 3) * 26} 100" stroke="#ff3d9a" stroke-width=".8"/>`).join("")}${[68, 76, 86, 98].map(y => `<path d="M0 ${y} H100" stroke="#ff3d9a" stroke-width=".8"/>`).join("")}`; }
   };
-  const BG_LIST = [["sky", "Sky blue", 0], ["mint", "Mint", 0], ["blush", "Blush", 0], ["lemon", "Lemon", 0], ["candy", "Candy stripes", 1], ["checker", "Pink checks", 1], ["snow", "Snowy", 1],
-    ["forest", "Forest", 1], ["beach", "Beach day", 2], ["ocean", "Deep sea", 2], ["sunset", "Sunset", 2], ["rainbow", "Rainbow", 2], ["night", "Starry night", 3], ["city", "City dusk", 3], ["auckland", "Auckland & Sky Tower", 3],
-    ["castleday", "Castle by day", 3], ["castle", "Castle at dusk", 3], ["lava", "Lava", 3], ["disco", "Disco", 3], ["galaxy", "Galaxy", 4], ["synth", "Synthwave", 4]];
+  const BG_LIST = [["sky", "Sky blue", 0], ["mint", "Mint", 0], ["blush", "Blush", 0], ["lemon", "Lemon", 0], ["candy", "Candy stripes", 1], ["checker", "Pink checks", 1], ["snow", "Snowy", 1], ["forest", "Forest", 1], ["beach", "Beach day", 1], ["ocean", "Deep sea", 2], ["sunset", "Sunset", 2], ["night", "Starry night", 2], ["city", "City dusk", 3], ["auckland", "Auckland & Sky Tower", 4], ["castleday", "Castle by day", 3], ["castle", "Castle at dusk", 3], ["lava", "Lava", 3], ["disco", "Disco", 3], ["galaxy", "Galaxy", 4], ["synth", "Synthwave", 4]];
 
   /* ------------------------------ effects ------------------------------- */
   const FX = {
@@ -1098,6 +1087,41 @@
     kea: (gd, x, A) => petWrap(gd, keaArt(x, A || PA0), 1), rabbit: (gd, x, A) => petWrap(gd, rabbitArt(x, A || PA0)), cat: (gd, x, A) => petWrap(gd, catArt(x, A || PA0)) };
   const PET_LIST = [["none", "None", 0], ["kiwi", "Kiwi", 3], ["tui", "Tui", 4], ["kea", "Kea", 3], ["rabbit", "Rabbit", 2], ["cat", "Cat", 2]];
 
+
+  /* 2026 catalogue polish. SVG details stay vector-sharp at badge and editor sizes. */
+  const hairLines = (x, shape, d, paths, opacity = .3) => x.clip(shape, `<path d="${paths}" fill="none" stroke="${d}" stroke-width=".65" opacity="${opacity}" stroke-linecap="round"/>`);
+  HAIR.short = (c,d,x) => ({front:`<path d="${CAP}" fill="${c}"/>${shine(x,CAP)}${hairLines(x,CAP,d,"M36 30 Q39 25 44 24 M47 26 Q52 23 57 24 M60 27 Q64 28 66 31",.2)}`});
+  HAIR.swoop = (c,d,x) => { const p="M29 46 C24 25 34 13 51 13 C67 12 76 24 71 45 L67 34 C57 31 45 43 34 36Z"; return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M32 31 C44 35 55 18 67 24 M34 27 C45 29 52 16 62 18 M37 35 Q51 36 64 28",.48)}${shine(x,p)}`}; };
+  HAIR.undercut = (c,d,x) => {const p="M29 34 C27 20 38 10 53 11 C69 11 76 23 70 34 Q64 27 58 28 Q43 34 29 34Z";return {front:x.head(`<path d="M29 43 V28 Q50 17 71 28 V43 L65 33 Q50 27 35 33Z" fill="${d}" opacity=".48"/><path d="M31 36 L35 34 M66 34 L69 36" stroke="${d}" stroke-width=".6"/>`)+`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M32 29 C45 30 52 15 65 19 M34 25 C43 25 51 13 59 14 M38 32 Q54 31 68 24",.45)}${shine(x,p)}`};};
+  HAIR.pompadour = (c,d,x) => {const p="M29 45 C27 35 25 20 33 12 C42 3 63 4 69 13 C77 24 72 37 71 45 L65 32 Q55 25 43 31 Q34 34 29 45Z";return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M32 30 C32 18 44 10 57 11 M36 30 C39 20 51 14 64 17 M43 29 C49 23 59 21 69 24 M30 36 Q34 30 38 28",.5)}${shine(x,p)}`};};
+  HAIR.braids = (c,d,x) => { const p="M29 46 C26 24 37 15 50 15 C63 15 74 24 71 46 L66 34 Q56 29 50 26 Q44 29 34 34Z";let tails="";[30,70].forEach((xx,j)=>{let seg="";for(let i=0;i<8;i++){const y=48+i*4.5, w=3.4-i*.18;seg+=`<path d="M${xx} ${y-2} Q${xx-w*1.8} ${y} ${xx} ${y+3} Q${xx+w*1.8} ${y} ${xx} ${y-2}Z" fill="${i%2?c:shade(c,-.07)}" stroke="${d}" stroke-width=".45"/>`;}tails+=seg+`<rect x="${xx-2.4}" y="82" width="4.8" height="2.3" rx="1" fill="#526ca8"/><path d="M${xx-1.6} 84 L${xx-2} 88 Q${xx} 90 ${xx+2} 88 L${xx+1.6} 84Z" fill="${c}"/>`;});return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M50 16 V26 M47 18 Q37 22 32 32 M53 18 Q63 22 68 32 M46 23 Q39 27 34 35 M54 23 Q61 27 66 35",.5)}${tails}`};};
+  const curlHair = (c,d,x,afro) => {const p=afro?"M26 47 C18 39 20 23 29 17 C31 8 43 6 50 9 C59 5 70 11 73 19 C83 25 81 40 74 47 L68 43 Q65 32 50 32 Q35 32 32 43Z":"M29 43 C23 37 25 28 30 25 C28 16 39 12 44 15 C49 9 59 11 62 16 C73 13 79 24 73 30 C79 35 75 41 71 44 L66 34 Q50 28 34 35Z";let detail="";for(let row=0;row<4;row++)for(let i=0;i<7;i++){const xx=25+i*7+(row%2)*3, yy=15+row*7;detail+=`M${xx} ${yy} q-2 -3 -4 0 q-1 3 2 3 q3 0 2 -2 `;}return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,detail,.5)}${x.clip(p,`<path d="M31 20 Q45 10 62 17" stroke="#fff" stroke-opacity=".12" stroke-width="2" fill="none"/>`)}`};};
+  HAIR.curly=(c,d,x)=>curlHair(c,d,x,false); HAIR.afro=(c,d,x)=>curlHair(c,d,x,true);
+  MOUTH.grin = () => `<path d="M42 54 Q50 56 58 54 Q56 62 50 62 Q44 62 42 54Z" fill="#fffaf3" stroke="${INK}" stroke-width="1.25" stroke-linejoin="round"/><path d="M44 58 Q50 60 56 58" fill="none" stroke="#b7a8a4" stroke-width=".5"/>`;
+  MOUTH.braces = () => MOUTH.grin()+`<path d="M44 56.7 Q50 58.8 56 56.7" stroke="#73849a" stroke-width=".65" fill="none"/>`+[45.2,48.4,51.6,54.8].map(xx=>`<rect x="${xx-.6}" y="${57.1-Math.abs(xx-50)*.12}" width="1.2" height="1.5" rx=".25" fill="#c5d6e9" stroke="#65788d" stroke-width=".3"/>`).join("");
+  MOUTH.tongue = () => `<path d="M43 54.5 Q50 58 57 54.5 Q56 61 50 61 Q44 61 43 54.5Z" fill="#592735" stroke="${INK}" stroke-width="1.2"/><path d="M48 58.5 Q51 57.6 54 58.5 V61.7 C54 66.3 48 66.3 48 61.7Z" fill="#f47e98" stroke="#ae4563" stroke-width=".65"/><path d="M51 59.4 V62.5" stroke="#c75675" stroke-width=".55" stroke-linecap="round"/>`;
+  FACE.stripes=(h,x,col)=>x.head(`<path d="M31 50 L39 52 M31 54.5 L38.5 56 M69 50 L61 52 M69 54.5 L61.5 56" stroke="${col || '#3a8dff'}" stroke-width="2.5" stroke-linecap="round"/>`);
+  FACE.mask=(h,x)=>x.head(`<path d="M29 51 Q50 47 71 51 L66 62 Q50 70 34 62Z" fill="#438fd0" stroke="#28659b" stroke-width=".8"/><path d="M36 54 Q50 57 64 54 M36 58 Q50 61 64 58 M39 62 Q50 64 61 62" fill="none" stroke="#8cc7ee" stroke-width=".65"/><path d="M30 52 L26 47 M70 52 L74 47" stroke="#d7e9f7" stroke-width="1.3"/>`);
+  FACE.goatee=h=>`<path d="M45 61 Q50 63 55 61 Q55 66 50 67 Q45 66 45 61Z" fill="${h}"/><path d="M47 62.5 L48 65 M50 63 V66 M53 62.5 L52 65" stroke="${shade(h,.2)}" stroke-width=".4" opacity=".6"/>`;
+  FACE.mustache=h=>`<path d="M50 53 Q46 49.8 43 53 Q41 55 39.5 53 Q40 58 45 56 Q48 56 50 54.5 Q52 56 55 56 Q60 58 60.5 53 Q59 55 57 53 Q54 49.8 50 53Z" fill="${h}"/><path d="M44 53.4 Q46 52 48 53.5 M52 53.5 Q54 52 56 53.4" stroke="${shade(h,.2)}" stroke-width=".4" fill="none"/>`;
+  // Tapered brow silhouettes, rather than inflated lens-shaped blobs.
+  const polishedBrow=(b,col,k)=>{const [a,y,cx,cy,z,v,t]=b,w=Math.min(2.6,t*.53*k);return `<path d="M${a} ${y} Q${cx} ${cy-w} ${z} ${v} L${z} ${v+w*.7} Q${cx} ${cy+w*.25} ${a} ${y+.45}Z" fill="${col}"/>`;};
+  Object.keys(BROWS).forEach(id=>{if(id==='natural') BROWS[id]=(col,gd)=>polishedBrow([35.8,39,40,36.8,45.5,38,2],col,gd.brow/1.7)+polishedBrow([64.2,39,60,36.8,54.5,38,2],col,gd.brow/1.7);});
+  const browDefs={thick:[35.2,39.3,40.5,37,45.7,38.3,3.8],thin:[36,39,41,36.4,45.5,38,1.2],arched:[35.8,40,40,34.6,45.6,38,2.3],flat:[35.5,38.7,40.5,38.1,45.7,38.5,2.5],raised:[36,36.7,41,33.4,45.6,35.6,2.1],worried:[35.8,40.3,40.5,37.5,45.6,35.7,2.3],angry:[35.5,36.4,40.6,37.6,45.7,40,3]};
+  Object.keys(browDefs).forEach(id=>BROWS[id]=(col,gd)=>polishedBrow(browDefs[id],col,gd.brow/1.7)+polishedBrow(mirrorBrow(browDefs[id]),col,gd.brow/1.7));
+  BROWS.skeptical=(col,gd)=>polishedBrow([35.8,39.7,41,38.5,45.7,39.6,2.6],col,gd.brow/1.7)+polishedBrow([64.2,36.8,59,33.1,54.4,35.8,2.3],col,gd.brow/1.7);
+  HATS.beanie=x=>{const p="M28 33 C26 7 74 7 72 33Z";return `<path d="${p}" fill="#233857"/>${x.clip(p,`<path d="M34 15 Q31 23 32 32 M41 12 L39 32 M49 11 V32 M57 12 L59 32 M65 15 Q69 23 68 32" fill="none" stroke="#3d5275" stroke-width=".7"/>`)}<rect x="27" y="29" width="46" height="9" rx="3.5" fill="#192b46"/><path d="M32 31 V36 M37 31 V36 M42 31 V36 M47 31 V36 M52 31 V36 M57 31 V36 M62 31 V36 M67 31 V36" stroke="#344a6b" stroke-width=".65"/><rect x="57" y="31" width="6" height="4" rx=".8" fill="#d9e1ed"/>`;};
+  HATS.bucket=x=>{const p="M31 30 L34 14 Q50 10 66 14 L69 30Z";return `<path d="${p}" fill="#8bbba1"/>${x.clip(p,`<path d="M32 24 Q50 28 68 24" stroke="#507e68" stroke-width="3" fill="none"/><path d="M36 15 Q50 12 64 15 M33 28 Q50 32 67 28" stroke="#d2e8da" stroke-width=".6" fill="none"/>`)}<path d="M31 28 Q50 33 69 28 L78 36 Q50 44 22 36Z" fill="#719e85" stroke="#507e68" stroke-width=".7"/><path d="M27 35 Q50 41 73 35" fill="none" stroke="#c4ddcd" stroke-width=".65"/>`;};
+  // Add restrained stitching to the remaining fabric hats, preserving their distinct shapes.
+  ['cap','capback','beret','grad','chef','cowboy','santa','sombrero','propeller','party'].forEach(id=>{const draw=HATS[id];HATS[id]=x=>draw(x)+x.clip(id==='grad'?'M50 8 L84 20 L50 32 L16 20Z':'M31 20 Q50 12 69 20 L69 30 Q50 35 31 30Z',`<path d="M34 27 Q50 31 66 27" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width=".55" stroke-dasharray="1.2 1.1"/>`);});
+  TOPS.raincoat=(c,d,l,x)=>({back:`<path d="M28 77 Q24 62 39 66 Q50 72 61 66 Q76 62 72 77 L65 84 H35Z" fill="${d}"/><path d="M33 73 Q50 63 67 73 L62 79 H38Z" fill="${shade(c,-.4)}"/>`,body:topShape(c,`<path d="M24 83 Q50 92 76 83" stroke="${d}" stroke-width=".9" fill="none"/><path d="M26 93 L39 91 L40 96 L27 98Z M61 91 L74 93 L73 98 L60 96Z" fill="${d}"/><path d="M27 93 L39 91 M61 91 L73 93" stroke="${l}" stroke-width=".6"/><path d="M22 88 L28 85 M72 85 L78 88" stroke="#dbe6ee" stroke-width="2"/><path d="M48 80 H52 V101 H48Z" fill="${d}"/><path d="M50 82 V100" stroke="#c8d3de" stroke-width=".65" stroke-dasharray=".7 .7"/>`,x),over:`<path d="M36 73 L49 79 L44 86 L32 77Z M64 73 L51 79 L56 86 L68 77Z" fill="${shade(c,.1)}" stroke="${d}" stroke-width=".8"/><rect x="49" y="80" width="2" height="3" rx=".6" fill="#dbe6ee"/>`});
+  const discoDraw=TOPS.disco; TOPS.disco=(c,d,l,x)=>{const a=discoDraw(c,d,l,x);a.over+=x.body(`<path d="M25 84 Q23 91 25 100 M75 84 Q77 91 75 100" stroke="#69749c" stroke-width=".7" fill="none"/><path d="M30 94 L39 92 M61 92 L70 94" stroke="#f4f2ff" stroke-width="1.1"/>`);return a;};
+  const ghostDraw=COSTUMES.ghost; COSTUMES.ghost=x=>{const a=ghostDraw(x);a.front=`<g transform="translate(9 13) scale(.82)">${a.front}</g>`;return a;};
+  const mageDraw=COSTUMES.wizard; COSTUMES.wizard=x=>{const a=mageDraw(x);x.defs=x.defs.replace(/#4b3fae/g,'#382e88').replace(/#9a7cf5/g,'#7960c7').replace(/#5347c0/g,'#403594').replace(/#3a2f93/g,'#2c246f');a.over+=x.body(`<path d="M31 98 Q34 88 39 83 M69 98 Q66 88 61 83" stroke="#15103d" stroke-width=".65" fill="none"/>`);return a;};
+  const sharkDraw=COSTUMES.shark; COSTUMES.shark=x=>{const a=sharkDraw(x);a.front+=`<path d="M24 40 Q21 51 29 61 M76 40 Q79 51 71 61" fill="none" stroke="#496e96" stroke-width="1.2"/><path d="M24 43 l4 1 M24 48 l4 1 M76 43 l-4 1 M76 48 l-4 1" stroke="#3e5f83" stroke-width=".8"/><path d="M34 67 Q50 79 66 67" stroke="#a6bfd6" stroke-width="1.4" fill="none"/>`;a.over=`<path d="M42 81 L42 91 M58 81 L58 91" stroke="#dce8f2" stroke-width="1" stroke-linecap="round"/><path d="M38 97 Q50 91 62 97" stroke="#496e96" stroke-width=".8" fill="none"/>`;return a;};
+  // Refine every extra with subtle material detail; none remains deliberately empty.
+  Object.keys(EXTRA).filter(id=>id!=='none').forEach(id=>{const draw=EXTRA[id];EXTRA[id]=x=>{const a=draw(x);const detail={headphones:`<path d="M27 44 V51 M70 44 V51" stroke="#ffb1cf" stroke-width="1" stroke-linecap="round"/><path d="M33 27 Q50 13 67 27" fill="none" stroke="#606478" stroke-width=".8"/>`,earrings:`<circle cx="29.2" cy="52.3" r=".5" fill="#fff5c2"/><circle cx="69.6" cy="52.3" r=".5" fill="#fff5c2"/>`,flowerear:`<circle cx="29" cy="39.8" r=".65" fill="#fff5bc"/>`,eyepatch:`<path d="M55 43 Q59 40 63 43" stroke="#505563" stroke-width=".7" fill="none"/>`};if(detail[id])a.front=(a.front||'')+detail[id];else a.over=(a.over||'')+x.body(`<path d="${{bowtie:'M42 79 L46 80 M54 80 L58 79',scarf:'M36 77 Q47 83 59 77',pearls:'M42 77 L43 77 M49 82 L50 82 M57 77 L58 77',lanyard:'M45 97 H55',medal:'M46 88 Q50 85 54 88',backpack:'M29 96 L34 96 M66 96 L71 96'}[id]||'M0 0'}" stroke="#fff" stroke-opacity=".38" stroke-width=".55" fill="none" stroke-linecap="round"/>`);return a;};});
+
   /* ------------------------------ catalog ------------------------------- */
   const CATS = [
     { id: "gender", label: "Body", list: GENDER_LIST },
@@ -1128,6 +1152,7 @@
       const v = l[c.id];
       if (typeof v === "string" && c.list.some(it => it[0] === v)) out[c.id] = v;
     });
+    out.warpaintColor = l && /^#[0-9a-f]{6}$/i.test(l.warpaintColor || "") ? l.warpaintColor.toLowerCase() : "#3a8dff";
     return out;
   }
   /* ------------------- Epic & Legendary effects ------------------------
@@ -1393,6 +1418,15 @@
       };
     })()
   };
+
+  // New rarity assignments use masks of the actual refined artwork.
+  ['spiky','ponytail','wavy'].forEach(id=>RSPEC.hair[id]=rc=>{const a=HAIR[id]('#fff','#fff',rc.ctx);return {mask:(a.back||'')+(a.front||''),box:[20,6,90,94],peak:.38,sp:[[25,23,1.4,'#d5c2ff'],[77,29,1.2,'#fff1b5']]};});
+  ['puffer','blazer'].forEach(id=>RSPEC.top[id]=()=>({clip:[BODY],box:[12,75,88,100],peak:.4,sp:[[28,87,1.2,'#d7c8ff'],[72,88,1.2,'#fff']]}));
+  ['smirk','tongue'].forEach(id=>RSPEC.mouth[id]=()=>({noSheen:true,sp:[[59,57,1.1,'#f1d6ff']]}));
+  ['scar','stripes'].forEach(id=>RSPEC.face[id]=()=>({noSheen:true,sp:[[32,57,1.1,'#c7e4ff']]}));
+  ['grad','santa'].forEach(id=>RSPEC.hat[id]=rc=>({mask:HATS[id](rc.ctx),box:[16,6,85,38],peak:.4,sp:[[24,23,1.4,'#fff1bc'],[77,26,1.2,'#fff']]}));
+  const ghostSpec=RSPEC.costume.ghost; RSPEC.costume.ghost=rc=>{const a=ghostSpec(rc);a.clip=a.clip.map(p=>`<g transform="translate(9 13) scale(.82)">${p}</g>`);a.box=[17,19,83,95];a.sp=[[22,30,1.5,'#9ccfff'],[77,34,1.4,'#cbbaff']];return a;};
+
   function renderSvg(look, opts) {
     opts = opts || {};
     look = cleanLook(look);
@@ -1403,7 +1437,8 @@
     const gd = GENDERS[look.gender] || GENDERS.neutral;
     const T = s => gd.sx === 1 || !s ? s : `<g transform="translate(50 0) scale(${gd.sx} 1) translate(-50 0)">${s}</g>`;
     const co = COSTUMES[look.costume] ? COSTUMES[look.costume](ctx) : null;
-    const hide = (co && co.hide) || {};
+    const hide = Object.assign({}, (co && co.hide) || {});
+    if (!hide.hat && HAT_COVER.has(look.hat)) hide.hair = 1;
     const skin = (SKINS.find(s => s.id === look.skin) || SKINS[2]).v;
     const sk2 = shade(skin, -.14);
     const hc = HAIRC.find(h => h.id === look.hairColor) || HAIRC[1];
@@ -1462,7 +1497,7 @@
     const brows = () => (BROWS[look.brows] || BROWS.natural)(browCol, gd);
     const eyesAndBrows = () => E.wrap("eyes", (EYES[look.eyes] || EYES.dots)(skin)) + brows() + E.post("eyes");
     if (!hide.face) {
-      if (FACE[look.face] && look.face !== "mask") s += FACE[look.face](hairDark, ctx) + E.post("face");
+      if (FACE[look.face] && look.face !== "mask") s += FACE[look.face](hairDark, ctx, look.warpaintColor) + E.post("face");
       if (!co || !co.eyesOnTop) s += eyesAndBrows();
       s += `<ellipse cx="50" cy="50.4" rx="${gd.nx}" ry="${gd.ny}" fill="${sk2}"/>`;
       if (look.face === "mask") s += FACE.mask(hairDark, ctx);
@@ -1659,6 +1694,24 @@ html.dark-mode .av-self-btn .av-pen{border-color:#1a2036;}
 .leaderboard-row .av-img[data-av-user]{cursor:zoom-in !important;}
 html.dark-mode .av-lb-chip{background:#222b46;}
 html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.08);}`;
+    st.textContent += `
+/* Avatar editor: keep labels inside pills, even in a short or narrow modal. */
+.av-tabs{flex:0 0 auto;align-items:center;min-height:52px;overflow-x:auto;overflow-y:hidden;padding:4px 2px 10px;max-width:100%;scroll-padding-inline:4px;}
+.av-tabs .av-tab{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-height:38px;height:auto;max-width:none;padding:8px 14px;line-height:1.25;white-space:nowrap;overflow-wrap:normal;word-break:normal;box-sizing:border-box;margin:0;}
+.av-right{min-height:0;min-width:0;}
+.av-hint{flex:0 0 auto;line-height:1.45;overflow-wrap:anywhere;}
+.av-grid{min-height:0;align-content:start;grid-template-columns:repeat(auto-fill,minmax(min(92px,100%),1fr));}
+.av-tile{min-width:0;}
+.av-tile .av-t-name,.av-tile .av-t-price{max-width:100%;overflow-wrap:anywhere;line-height:1.3;}
+.av-lb-chip,.av-chip{max-width:100%;height:auto;min-height:28px;white-space:normal;overflow-wrap:anywhere;}
+.av-lb-chip>span{min-width:0;}
+.av-paint-box{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;flex:none;padding:10px 12px;margin:0 0 10px;border:1px solid var(--line,#e3e7f0);border-radius:12px;}
+.av-paint-box[hidden]{display:none;}
+.av-paint-box label{margin:0;}
+.av-paint-box input[type=color]{width:48px;height:36px;min-height:36px;padding:3px;flex:none;cursor:pointer;}
+.av-paint-box span{flex:1 1 180px;min-width:0;font-size:.78rem;line-height:1.4;color:var(--muted,#6b7390);}
+@media(max-width:700px){.av-right{flex:0 0 auto;}.av-grid{max-height:48vh;}.av-tabs{min-height:52px;}}
+`;
     document.head.appendChild(st);
   }
   function toast(html, btnText, onBtn) {
@@ -1782,7 +1835,8 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     const av = me.avatar || {};
     ED = {
       me, shop: shopOf(cls), owned: new Set(av.owned || []), look: cleanLook(av.look || DEFAULT_LOOK),
-      on: !!av.on, cat: "gender", busy: false
+      on: !!av.on, cat: "gender", busy: false,
+      purchasedPaint: cleanLook({ warpaintColor: av.warpaintColor || (av.look && av.look.warpaintColor) }).warpaintColor
     };
     const ov = document.createElement("div");
     ov.id = "avOv"; ov.className = "av-ov";
@@ -1813,8 +1867,16 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     ov.querySelector("#avTabs").onclick = e => { const b = e.target.closest("[data-cat]"); if (b) { ED.cat = b.dataset.cat; paintEditor(); } };
     ov.querySelector("#avGrid").onclick = e => {
       const b = e.target.closest("[data-id]"); if (!b) return;
+      if (ED.busy) return;
       ED.look[ED.cat] = b.dataset.id; ED.on = true; chk.checked = false; paintEditor();
     };
+    const paintBox = document.createElement("div");
+    paintBox.id = "avPaintBox"; paintBox.className = "av-paint-box";
+    ov.querySelector("#avHint").after(paintBox);
+    paintBox.addEventListener("change", e => {
+      if (!ED || ED.busy || e.target.id !== "avPaintColour") return;
+      ED.look.warpaintColor = e.target.value; paintEditor();
+    });
     const log = (me.cometLog || []).slice(0, 3).map(l => `<div>${COMET}${l.amount > 0 ? "+" : ""}${esc(l.amount)} ${esc(l.note || "")}</div>`).join("");
     ov.querySelector("#avLog").innerHTML = ED.shop.currency === "comets" && log ? `<b>Recent Comets</b>${log}` : "";
     paintEditor();
@@ -1826,11 +1888,11 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     }).map((it, i) => ({ it, i, p: it[2] === 0 || ED.owned.has(cat + ":" + it[0]) ? (it[2] === 0 ? -1 : 0) : priceOf(ED.shop, cat, it[0], it[2]) }))
       .sort((a, b) => a.p - b.p || a.it[2] - b.it[2] || a.i - b.i).map(x => x.it);
   }
-  function cartOf(look, owned, shop) {
+  function cartOf(look, owned, shop, purchasedPaint) {
     const items = [];
     CATS.forEach(c => {
       const id = look[c.id], r = rOf(c.id, id), key = c.id + ":" + id;
-      if (r > 0 && !owned.has(key)) items.push({ cat: c.id, id, key, price: priceOf(shop, c.id, id, r) });
+      if (r > 0 && (!owned.has(key) || (key === "face:stripes" && look.warpaintColor !== (purchasedPaint || "#3a8dff")))) items.push({ cat: c.id, id, key, price: priceOf(shop, c.id, id, r) });
     });
     return items;
   }
@@ -1843,9 +1905,15 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     else { prev.className = "av-prev av-initials"; prev.textContent = (typeof initials === "function" ? initials(E.me.name) : "?").replace(/&amp;/g, "&"); }
     document.querySelectorAll("#avTabs .av-tab").forEach(b => b.classList.toggle("on", b.dataset.cat === E.cat));
     const cat = E.cat, list = visible(cat);
+    const paintBox = $("avPaintBox");
+    if (paintBox) {
+      paintBox.hidden = !(cat === "face" && E.look.face === "stripes");
+      const changing = E.owned.has("face:stripes") && E.look.warpaintColor !== E.purchasedPaint;
+      paintBox.innerHTML = `<label for="avPaintColour">Warpaint colour</label><input id="avPaintColour" type="color" value="${esc(E.look.warpaintColor)}" ${E.busy ? "disabled" : ""}><span>${changing ? "New colour: buy Warpaint again to save it." : E.owned.has("face:stripes") ? "Your purchased colour is locked. Choosing another colour requires buying Warpaint again." : "Choose your colour before buying. Colour changes require another purchase."}</span>`;
+    }
     $("avGrid").innerHTML = list.map(it => {
       const id = it[0], r = it[2], key = cat + ":" + id, price = priceOf(E.shop, cat, id, r);
-      const own = r === 0 || E.owned.has(key), on = E.look[cat] === id;
+      const own = r === 0 || (E.owned.has(key) && !(key === "face:stripes" && E.look.warpaintColor !== E.purchasedPaint)), on = E.look[cat] === id;
       const look = Object.assign({}, E.look, { [cat]: id });
       const chip = own ? `<span class="av-t-price own">${r === 0 ? "Free" : "Owned"}</span>` : price === 0 ? `<span class="av-t-price own">Free</span>` : `<span class="av-t-price">${fmtPrice(E.shop, price)}</span>`;
       return `<button type="button" class="av-tile${on ? " on" : ""}" data-id="${esc(id)}" aria-pressed="${on}" title="${esc(it[1])} (${RARITY[r]})">${r ? `<i class="av-r av-r${r}"></i>` : ""}<span class="av-t-img">${renderSvg(look, { size: 68 })}</span><span class="av-t-name">${esc(it[1])}</span>${chip}</button>`;
@@ -1853,7 +1921,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     const hide = E.look.costume !== "none" && ["hair", "hairColor", "top", "topColor", "hat"].includes(cat);
     $("avGuide").innerHTML = rarityGuide(E.shop, "student");
     $("avHint").textContent = cat === "gender" ? "Pick the body type for your avatar. It makes small changes to face shape and features. Your teacher can also change it." : hide ? "Your costume is covering this, so changes here won't show until you take the costume off." : E.shop.currency === "free" ? "Everything is free in this class. Have fun!" : "";
-    const cart = cartOf(E.look, E.owned, E.shop).filter(i => i.price > 0);
+    const cart = cartOf(E.look, E.owned, E.shop, E.purchasedPaint).filter(i => i.price > 0);
     const total = cart.reduce((a, i) => a + i.price, 0);
     const bal = E.shop.currency === "comets" ? (Number(E.me.comets) || 0) : (Number(E.me.balance) || 0);
     $("avWallet").innerHTML = E.shop.currency === "comets" ? `<span class="av-chip">${COMET}${bal} Comets</span>` : E.shop.currency === "money" ? `<span class="av-chip">${fmtPrice(E.shop, bal)} cash</span>` : "";
@@ -1863,6 +1931,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
   async function saveEditor(close) {
     const E = ED; if (!E || E.busy) return;
     E.busy = true;
+    const savedLook = cleanLook(E.look);
     const msg = document.getElementById("avMsg"), btn = document.getElementById("avSave");
     btn.disabled = true; msg.textContent = "";
     try {
@@ -1873,7 +1942,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
         const snap = await t.get(ref);
         const u = snap.data(), a = u.avatar || {};
         const owned = new Set(a.owned || []);
-        const cart = cartOf(E.look, owned, shop);
+        const cart = cartOf(savedLook, owned, shop, cleanLook({warpaintColor: a.warpaintColor || (a.look && a.look.warpaintColor)}).warpaintColor);
         const total = Math.round(cart.reduce((s, i) => s + i.price, 0) * 100) / 100;
         const upd = {};
         if (total > 0) {
@@ -1886,13 +1955,18 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
           }
         }
         cart.forEach(i => owned.add(i.key));
-        upd.avatar = { on: E.on, look: E.look, owned: Array.from(owned) };
+        // Preserve the purchased paint colour even while another face item is equipped.
+        const previousPaint = cleanLook({warpaintColor: a.warpaintColor || (a.look && a.look.warpaintColor)}).warpaintColor;
+        const purchasedPaint = savedLook.face === "stripes" ? savedLook.warpaintColor : previousPaint;
+        savedLook.warpaintColor = purchasedPaint;
+        upd.avatar = { on: E.on, look: savedLook, owned: Array.from(owned), warpaintColor: purchasedPaint };
         paid = total; names = cart.filter(i => i.price > 0).map(i => nameOf(i.cat, i.id));
         t.update(ref, upd);
       });
       if (paid > 0 && shop.currency === "money" && typeof logTxn === "function") {
         await logTxn(ME.classCode, { type: "store-buy", from: ME.username, amount: paid, note: "Avatar items: " + names.join(", ") }).catch(() => {});
       }
+      E.look = savedLook;
       close();
       document.querySelectorAll(`[data-av-user="${CSS.escape(ME.username)}"]`).forEach(el => {
         const tmp = document.createElement("div");

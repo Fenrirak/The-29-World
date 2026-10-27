@@ -3680,3 +3680,21 @@ img,video,iframe{max-width:100%;}
 /* Instant tactile feedback on tap for the gambling tabs (the real work happens on the network, so show the press first). */
 #rouletteSection .btn:active:not(:disabled),#blackjackSection .btn:active:not(:disabled),#accountSection .btn:active:not(:disabled),
 .number-cell:active,.number-zero:active{transform:scale(.96);transition:transform .06s ease-out;}
+
+
+/* Avatar editor: keep labels inside pills, even in a short or narrow modal. */
+.av-tabs{flex:0 0 auto;align-items:center;min-height:52px;overflow-x:auto;overflow-y:hidden;padding:4px 2px 10px;max-width:100%;scroll-padding-inline:4px;}
+.av-tabs .av-tab{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-height:38px;height:auto;max-width:none;padding:8px 14px;line-height:1.25;white-space:nowrap;overflow-wrap:normal;word-break:normal;box-sizing:border-box;margin:0;}
+.av-right{min-height:0;min-width:0;}
+.av-hint{flex:0 0 auto;line-height:1.45;overflow-wrap:anywhere;}
+.av-grid{min-height:0;align-content:start;grid-template-columns:repeat(auto-fill,minmax(min(92px,100%),1fr));}
+.av-tile{min-width:0;}
+.av-tile .av-t-name,.av-tile .av-t-price{max-width:100%;overflow-wrap:anywhere;line-height:1.3;}
+.av-lb-chip,.av-chip{max-width:100%;height:auto;min-height:28px;white-space:normal;overflow-wrap:anywhere;}
+.av-lb-chip>span{min-width:0;}
+.av-paint-box{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;flex:none;padding:10px 12px;margin:0 0 10px;border:1px solid var(--line,#e3e7f0);border-radius:12px;}
+.av-paint-box[hidden]{display:none;}
+.av-paint-box label{margin:0;}
+.av-paint-box input[type=color]{width:48px;height:36px;min-height:36px;padding:3px;flex:none;cursor:pointer;}
+.av-paint-box span{flex:1 1 180px;min-width:0;font-size:.78rem;line-height:1.4;color:var(--muted,#6b7390);}
+@media(max-width:700px){.av-right{flex:0 0 auto;}.av-grid{max-height:48vh;}.av-tabs{min-height:52px;}}
