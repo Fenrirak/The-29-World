@@ -1670,6 +1670,20 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     });
     return out.sort((a, b) => b.r - a.r);
   }
+  // Overall rarity = average rarity of every equipped item, rounded up (0 Starter .. 4 Legendary).
+  // Only non-starter items are averaged; starter items and empty ("none") slots are ignored. No non-starter items = Starter.
+  function lbAvg(look) {
+    let sum = 0, n = 0;
+    CATS.forEach(c => {
+      if (look[c.id] === C.NONE_IDS[c.id]) return;
+      const it = c.list.find(i => i[0] === look[c.id]);
+      if (!it) return;
+      const r = Number(it[2]) || 0;
+      if (r > 0) { sum += r; n++; }   // starter items (rarity 0) are ignored
+    });
+    const avg = n ? sum / n : 0;
+    return { avg, n, sum, tier: Math.min(4, Math.ceil(avg - 1e-9)) };
+  }
   function closeAvatarView(instant) {
     if (!LB) return;
     const L = LB; LB = null;
@@ -1695,7 +1709,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     if (!info || LB || document.getElementById("avLb")) return;
     css();
     const look = cleanLook(info.look), name = info.name || "Student";
-    const items = lbItems(look), top = items.length ? items[0].r : 0, MAX = 12;
+    const items = lbItems(look), ra = lbAvg(look), top = ra.tier, MAX = 12;
     const chips = items.slice(0, MAX).map(i => `<span class="av-lb-chip"><i class="av-lb-dot av-r${i.r}"></i><span>${esc(i.name)}</span><small>${esc(i.cat)}</small></span>`).join("")
       + (items.length > MAX ? `<span class="av-lb-chip av-lb-more">+${items.length - MAX} more</span>` : "");
     const ov = document.createElement("div");
@@ -1707,7 +1721,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
       </div>
       <div class="av-lb-info">
         <h3 class="av-lb-name">${esc(name)}</h3>
-        ${top ? `<span class="av-lb-pill av-lb-p${top}">${RARITY[top]} look</span>` : `<span class="av-lb-sub">Rocking the starter look</span>`}
+        ${top ? `<span class="av-lb-pill av-lb-p${top}" title="Average rarity ${ra.avg.toFixed(2)} across ${ra.n} non-starter item${ra.n === 1 ? "" : "s"}, rounded up">${RARITY[top]} look</span>` : `<span class="av-lb-sub">Rocking the starter look</span>`}
         ${items.length ? `<div class="av-lb-sec">Wearing</div><div class="av-lb-chips">${chips}</div>` : ""}
       </div>
     </div>`;
