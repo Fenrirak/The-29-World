@@ -1643,6 +1643,8 @@ html.dark-mode .av-self-btn .av-pen{border-color:#1a2036;}
 @keyframes avLbPop{from{opacity:0;transform:translateY(14px) scale(.9)}to{opacity:1;transform:none}}
 @keyframes avLbPopOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(8px) scale(.95)}}
 @media (prefers-reduced-motion:reduce){.av-lb,.av-lb-card{animation:none !important}.av-img[data-av-user]{transition:none}.av-img[data-av-user]:hover{transform:none}}
+.leaderboard-row .student-avatar{width:48px !important;height:48px !important;min-width:48px;font-size:16px !important;}
+.leaderboard-row .av-img[data-av-user]{cursor:zoom-in !important;}
 html.dark-mode .av-lb-chip{background:#222b46;}
 html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.08);}`;
     document.head.appendChild(st);
@@ -1746,7 +1748,8 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
       const el = e.target.closest && e.target.closest(".student-avatar.av-img[data-av-user]");
       if (!el) return;
       const un = el.dataset.avUser;
-      if (!un || (ME && ME.role === "student" && un === ME.username)) return;   // your own avatar opens the editor instead
+      // your own avatar opens the editor everywhere except the leaderboard, where it gets the same popup as everyone else
+      if (!un || (ME && ME.role === "student" && un === ME.username && !el.closest(".leaderboard-row"))) return;
       e.preventDefault(); e.stopPropagation();
       openAvatarView(un, el);
     }, true);
