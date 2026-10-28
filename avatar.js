@@ -707,8 +707,8 @@
   const NINJA_WRAP = "M50 19 C63 19 74.4 28 74.4 44 C74.4 56 68 64 60 68 L67 78 Q50 91 33 78 L40 68 C32 64 25.6 56 25.6 44 C25.6 28 37 19 50 19Z";
   const NINJA_WINDOW = "M31 43.2 Q31 37.6 37 37.6 H63 Q69 37.6 69 43.2 V47 Q69 51.4 63 51.4 H37 Q31 51.4 31 47Z";
   // Adventurer Mage: shared geometry keeps cloth and rarity effects aligned.
-  const MAGE_HOOD = "M24 71 C17 59 19 37 29 23 C35 14 42 8 49 5 C58 7 64 13 69 20 L78 28 Q80 32 74 32 L71 31 C80 47 81 61 76 71 Q63 79 50 77 Q37 79 24 71Z";
-  const MAGE_OPENING = "M50 23 C39 23 30 31 28.5 43 C27 55 34 65 42 68 Q50 72 58 68 C66 65 73 55 71.5 43 C70 31 61 23 50 23Z";
+  const MAGE_HOOD = "M24 71 C17 59 19 37 29 23 C35 14 42 8.5 49 8.5 C57 8.5 64 14 69 20 L78 28 Q80 32 74 32 L71 31 C80 47 81 61 76 71 Q63 79 50 77 Q37 79 24 71Z";
+  const MAGE_OPENING = "M50 25.5 C39 25.5 30 32.5 28.5 43 C27 55 34 65 42 68 Q50 72 58 68 C66 65 73 55 71.5 43 C70 32.5 61 25.5 50 25.5Z";
   const MAGE_RING = MAGE_HOOD + " " + MAGE_OPENING;
   const COSTUMES = {
     ninja: (x) => ({
@@ -727,11 +727,11 @@
       const capeR = "M62 74 Q73 76 83 86 L87 100 H65 L53 81Z";
       const ring = `<path d="${MAGE_RING}" fill="${cloth}" fill-rule="evenodd" stroke="${deep}" stroke-width=".9" stroke-linejoin="round"/>`;
       const hood = ring + x.clip(`<path d="${MAGE_RING}" clip-rule="evenodd"/>`,
-        `<path d="M49 5 Q32 29 26 55 Q23 66 27 74 L16 75 V4Z" fill="${light}"/>`
-        + `<path d="M51 6 Q65 23 69 37 Q78 56 72 74 L85 74 V5Z" fill="${deep}" opacity=".42"/>`
-        + `<path d="M49 8 Q43 14 40 23 M69 21 L76 28 L71 28 M24 55 Q23 65 28 70 M76 54 Q78 65 73 70" fill="none" stroke="${light}" stroke-width=".8" stroke-linecap="round"/>`)
+        `<path d="M49 8.5 Q32 30 26 55 Q23 66 27 74 L16 75 V4Z" fill="${light}"/>`
+        + `<path d="M51 8.5 Q65 24 69 37 Q78 56 72 74 L85 74 V5Z" fill="${deep}" opacity=".42"/>`
+        + `<path d="M49 10 Q43 16 40 25 M69 21 L76 28 L71 28 M24 55 Q23 65 28 70 M76 54 Q78 65 73 70" fill="none" stroke="${light}" stroke-width=".8" stroke-linecap="round"/>`)
         + `<path d="${MAGE_OPENING}" fill="none" stroke="${gold}" stroke-width="1.25"/>`
-        + `<path d="M31 34 Q37 25 47 24 M29 48 Q29 58 35 63" fill="none" stroke="${goldHi}" stroke-width=".45" stroke-linecap="round"/>`
+        + `<path d="M31 35 Q37 27.5 47 26.5 M29 48 Q29 58 35 63" fill="none" stroke="${goldHi}" stroke-width=".45" stroke-linecap="round"/>`
         + `<path d="M50 11 L53.3 16.5 L50 22 L46.7 16.5Z" fill="${gold}" stroke="${deep}" stroke-width=".6"/>`
         + `<path d="M50 12.8 L52 16.5 L50 20.2 L48 16.5Z" fill="#a58adf"/><path d="M50 12.8 V20.2 L48 16.5Z" fill="#d4baff"/>`;
       const cape = x.body(`<path d="${capeL}" fill="${cloth}"/><path d="${capeR}" fill="${cloth}"/>`
