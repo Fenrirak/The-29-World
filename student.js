@@ -230,7 +230,7 @@ async function render() {
     const j = cls.jobs.find(jj => jj.id === s.jobId);
     const sTier = j ? getStudentTier(j, s) : null;
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${avatarBadge(s)}${escapeHtml(s.name)}</td><td>${sTier ? escapeHtml(sTier.name) : (j ? escapeHtml(j.title) : "—")}</td>`;
+    tr.innerHTML = `<td><span class="cm-name">${avatarBadge(s)}<span>${escapeHtml(s.name)}</span></span></td><td>${sTier ? escapeHtml(sTier.name) : (j ? escapeHtml(j.title) : "—")}</td>`;
     ctbl.appendChild(tr);
   });
 

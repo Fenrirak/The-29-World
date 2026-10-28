@@ -423,12 +423,12 @@ html.dark-mode .legal-main .about-card .about-lead{color:var(--heading-text);}
   box-shadow:var(--shadow-md);
 }
 .stat .icon{
-  position:absolute;top:16px;right:16px;width:34px;height:34px;
+  position:absolute;top:14px;right:14px;width:28px;height:28px;
   opacity:.9;color:rgba(255,255,255,0.85);
 }
 .stat.gold .icon{color:rgba(31,43,68,0.35);}
-.stat .label{color:#a9b6d1;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;display:flex;align-items:center;gap:6px;padding-right:44px;}
-.stat .value{font-size:2.1rem;font-weight:900;margin-top:6px;line-height:1.15;overflow-wrap:anywhere;}
+.stat .label{color:#a9b6d1;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;display:flex;align-items:center;gap:6px;padding-right:42px;min-height:28px;}
+.stat .value{font-size:2.1rem;font-weight:900;margin-top:14px;line-height:1.15;overflow-wrap:anywhere;}
 .stat.gold{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);box-shadow:0 8px 22px rgba(201,154,46,0.3);}
 .stat.gold .label{color:#5a4415;}
 .stat.mint{background:linear-gradient(135deg,var(--mint-fill),var(--mint-fill-dark));box-shadow:0 8px 22px rgba(46,152,115,0.3);}
@@ -786,7 +786,9 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
   .card{padding:16px;}
   .grid{gap:14px;}
   .stat{padding:16px;}
-  .stat .value{font-size:1.5rem;}
+  .stat .icon{top:12px;right:12px;width:24px;height:24px;}
+  .stat .label{padding-right:36px;min-height:24px;}
+  .stat .value{font-size:1.5rem;margin-top:10px;}
   .company-card .row-flex svg{width:90px;}
   .class-card{flex-direction:column;align-items:stretch;}
   .class-card .class-card-main{flex-direction:column;align-items:flex-start;gap:10px;}
@@ -3698,3 +3700,50 @@ img,video,iframe{max-width:100%;}
 .av-paint-box input[type=color]{width:48px;height:36px;min-height:36px;padding:3px;flex:none;cursor:pointer;}
 .av-paint-box span{flex:1 1 180px;min-width:0;font-size:.78rem;line-height:1.4;color:var(--muted,#6b7390);}
 @media(max-width:700px){.av-right{flex:0 0 auto;}.av-grid{max-height:48vh;}.av-tabs{min-height:52px;}}
+
+
+/* ---- Dashboard "My classmates" list: bigger rows, name centred on avatar ---- */
+#classmateTable td{padding:14px 10px;font-size:1.1rem;vertical-align:middle;line-height:1.3;}
+#classmateTable .cm-name{display:flex;align-items:center;gap:14px;font-weight:600;min-width:0;}
+#classmateTable .cm-name > span:last-child{overflow-wrap:anywhere;}
+#classmateTable .student-avatar{width:56px;height:56px;min-width:56px;margin-right:0;font-size:1.1rem;}
+.card:has(#classmateTable) thead th{font-size:.78rem;padding:10px;}
+@media (max-width:600px){
+  #classmateTable td{padding:12px 8px;font-size:1rem;}
+  #classmateTable .cm-name{gap:10px;}
+  #classmateTable .student-avatar{width:48px;height:48px;min-width:48px;}
+}
+
+/* ==================================================================
+   Site-wide refinements (polish pass)
+================================================================== */
+/* Avatars next to text in any table cell / inline row: centre on the text line, not the baseline */
+td > .student-avatar,
+li > .student-avatar,
+p > .student-avatar{vertical-align:middle;}
+td > .student-avatar{margin-right:10px;}
+
+/* Money and numbers: equal-width digits so columns and totals line up */
+.stat .value,.leaderboard-net,.profile-chip .value,td,th{font-variant-numeric:tabular-nums;}
+
+/* Stat numbers shrink to fit the card instead of breaking mid-number or running under the icon */
+@supports (container-type:inline-size){
+  .grid > .stat{container-type:inline-size;}
+  .grid > .stat .value{font-size:clamp(1.3rem,11cqi,2.1rem);overflow-wrap:normal;}
+}
+
+/* Disabled buttons look and act disabled */
+.btn:disabled,button.btn[disabled]{opacity:.6;cursor:not-allowed;box-shadow:none;transform:none;filter:grayscale(.15);}
+
+/* Keyboard focus ring on links, buttons and summaries (low specificity so page-specific rings still win) */
+:where(a,button,summary,[role="button"]):focus-visible{outline:2px solid var(--navy-900);outline-offset:2px;}
+html.dark-mode :where(a,button,summary,[role="button"]):focus-visible{outline-color:var(--gold);}
+
+/* Nicer line breaks in headings and paragraphs */
+h1,h2,h3{text-wrap:balance;}
+p{text-wrap:pretty;}
+
+/* Touch screens: small buttons get a full-size tap target */
+@media (pointer:coarse){
+  .btn.small{min-height:44px;}
+}
