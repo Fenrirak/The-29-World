@@ -5,7 +5,7 @@
    while someone is typing in a box or a pop-up is waiting for an answer.
 
      / or ?       show the shortcut list (also in the Settings menu)
-     Shift        tap it, then start typing a module name: a small box appears
+     Shift        (also works inside number/date/time boxes) tap it, then start typing a module name: a small box appears
                   and predicts the rest of the word as you type. Enter opens
                   the predicted module (Bank, Store, Jobs ...). Up/Down switch
                   between other matches, Esc cancels. Matches the start of the
@@ -569,7 +569,8 @@
     var solo = shiftSolo && Date.now() - shiftAt < 700;
     shiftSolo = false;
     if (!keysOn || !solo || finderEl || helpEl) return;
-    if (isTyping(e.target) || blockingPopupOpen()) return;
+    // Boxes where Space never types (number, date, time...) still allow the tap, like Space Space.
+    if ((isTyping(e.target) && !spaceFree(e.target)) || blockingPopupOpen()) return;
     openFinder();
   }
 
