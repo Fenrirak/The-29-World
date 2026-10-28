@@ -475,59 +475,59 @@ function renderMyJob(me, cls) {
    buildPayslip in data-money.js), so these are records, not estimates —
    a later change to the wage or tax brackets doesn't change an old one. */
 function payslipDateLabel(dateKey) {
-  return new Date(dateKeyToUTC(dateKey) + 12 * 3600000).toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+  const date = new Date(dateKeyToUTC(dateKey) + 12 * 3600000);
+  return Number.isNaN(date.getTime()) ? "Date unavailable" : date.toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 const psPct = n => (Math.round(Number(n) * 100) / 100).toString() + "%";
-function payslipHtml(p) {
-  const line = (label, amount, opts = {}) => `
-    <div class="ps-line${opts.cls ? " " + opts.cls : ""}">
-      <span>${label}</span>
-      <span class="${opts.money || ""}">${amount}</span>
-    </div>`;
-  const bands = (p.taxBands || []).filter(b => b.amount > 0);
-  const bandLines = bands.length > 1 || (bands.length === 1 && bands[0].rate > 0)
-    ? bands.map((b, i) => line(b.rate > 0 ? `${psPct(b.rate)} on the ${i === 0 ? "first" : "next"} ${fmtMoney(b.amount)}` : `Tax-free ${i === 0 ? "first" : "next"} ${fmtMoney(b.amount)}`, fmtMoney(b.tax), { cls: "sub" })).join("")
-    : "";
+function payslipHtml(p, latest = false) {
+  const line = (label, amount, cls = "") => `<div class="ps-line ${cls}"><span>${label}</span><span>${amount}</span></div>`;
+  const signed = n => (n < 0 ? "−" : "+") + fmtMoney(Math.abs(n));
   const k = p.kiwi;
-  const rows = [
-    `<div class="ps-section">Earnings</div>`,
-    line("Pay before tax", fmtMoney(p.gross)),
-    `<div class="ps-section">Taken off</div>`,
-    line("Tax (PAYE)", p.tax > 0 ? "−" + fmtMoney(p.tax) : fmtMoney(0), { money: p.tax > 0 ? "money-out" : "" }),
-    bandLines,
-    p.taxRefund > 0 ? line("Tax cut (life event)", "+" + fmtMoney(p.taxRefund), { money: "money-in" }) : "",
-    p.boost ? line(p.boost > 0 ? "Pay boost (life event)" : "Pay cut (life event)", (p.boost > 0 ? "+" : "−") + fmtMoney(Math.abs(p.boost)), { money: p.boost > 0 ? "money-in" : "money-out" }) : "",
-    k && !k.paused ? line(`KiwiSaver (${psPct(k.rate)} of your pay)`, "−" + fmtMoney(k.you), { money: "money-out" }) : "",
-    k && k.paused ? line("KiwiSaver (paused)", fmtMoney(0)) : "",
-    line("Take-home pay", fmtMoney(p.net), { cls: "total" })
-  ];
+  const bands = (p.taxBands || []).filter(b => b.amount > 0);
+  const bandLines = bands.map((b, i) => line(
+    b.rate > 0 ? `${psPct(b.rate)} on the ${i === 0 ? "first" : "next"} ${fmtMoney(b.amount)}` : `Tax-free ${i === 0 ? "first" : "next"} ${fmtMoney(b.amount)}`,
+    fmtMoney(b.tax), "sub")).join("");
+  const adjustments = [
+    p.taxRefund > 0 ? line("Tax cut (life event)", signed(p.taxRefund), "ps-credit") : "",
+    p.boost ? line(p.boost > 0 ? "Pay boost (life event)" : "Pay cut (life event)", signed(p.boost), p.boost > 0 ? "ps-credit" : "ps-debit") : ""
+  ].join("");
   const kiwiBox = k && !k.paused ? `
-    <div class="ps-kiwi">
-      <div class="ps-section">Into your KiwiSaver this pay day <span class="muted-small">(not in your cash)</span></div>
-      ${line("You", fmtMoney(k.you))}
-      ${line(`Your employer (${psPct(k.employerRate)} of your pay)`, fmtMoney(k.employerGross))}
-      ${line(`minus ESCT tax at ${psPct(k.esctRate)}`, "−" + fmtMoney(k.esct), { cls: "sub", money: "money-out" })}
-      ${line("The government (25c per $1 you put in)", fmtMoney(k.govt))}
-      ${line("Total into KiwiSaver", fmtMoney(Math.round((k.you + k.employerNet + k.govt) * 100) / 100), { cls: "total" })}
-    </div>` : "";
-  return `
-    <div class="payslip">
-      <div class="ps-head">
-        <div>
-          <div class="ps-kicker">Payslip</div>
-          <div class="ps-job">${escapeHtml(p.tier || p.job || "")}${p.job && p.tier && p.job !== p.tier ? ` <span class="muted-small">· ${escapeHtml(p.job)}</span>` : ""}</div>
-        </div>
-        <div class="ps-date">${payslipDateLabel(p.dateKey)}</div>
+    <section class="ps-savings" aria-label="KiwiSaver contributions">
+      <div class="ps-panel-head"><h3>KiwiSaver savings</h3><span class="ps-tag">Separate from take-home pay</span></div>
+      <p class="ps-help">This money goes into your KiwiSaver, not your cash balance.</p>
+      ${line("Your contribution", fmtMoney(k.you))}
+      ${line(`Employer contribution (${psPct(k.employerRate)})`, fmtMoney(k.employerGross))}
+      ${line(`Employer contribution tax (ESCT, ${psPct(k.esctRate)})`, "−" + fmtMoney(k.esct), "sub")}
+      ${line("Government contribution", fmtMoney(k.govt))}
+      ${line("Total added to KiwiSaver", fmtMoney(Math.round((k.you + k.employerNet + k.govt) * 100) / 100), "total")}
+    </section>` : "";
+  return `<article class="payslip ps-redesign" aria-label="Payslip for ${escapeHtml(payslipDateLabel(p.dateKey))}">
+    <header class="ps-head">
+      <div><div class="ps-kicker">${latest ? "Latest payslip" : "Payslip"}</div>
+        <div class="ps-job">${escapeHtml(p.tier || p.job || "Pay record")}</div>
+        ${p.job && p.tier && p.job !== p.tier ? `<div class="ps-help ps-role">${escapeHtml(p.job)}</div>` : ""}
       </div>
-      <div class="ps-lines">${rows.join("")}</div>
-      ${kiwiBox}
-    </div>`;
+      <div class="ps-date"><span>Pay date</span><strong>${escapeHtml(payslipDateLabel(p.dateKey))}</strong></div>
+    </header>
+    <div class="ps-takehome"><div><span>Take-home pay</span><p>Added to your cash balance</p></div><strong>${fmtMoney(p.net)}</strong></div>
+    <section class="ps-breakdown" aria-label="Pay breakdown">
+      <h3>How your pay adds up</h3>
+      <div class="ps-section">Earnings</div>
+      ${line("Pay before tax", fmtMoney(p.gross))}
+      <div class="ps-section">Deductions</div>
+      ${line("Income tax (PAYE)", p.tax > 0 ? "−" + fmtMoney(p.tax) : fmtMoney(0), p.tax > 0 ? "ps-debit" : "")}
+      ${bands.length && p.tax > 0 ? `<details class="ps-tax-details"><summary>View tax breakdown</summary><div>${bandLines}</div></details>` : ""}
+      ${k && !k.paused ? line(`Your KiwiSaver contribution (${psPct(k.rate)})`, "−" + fmtMoney(k.you), "ps-debit") : ""}
+      ${k && k.paused ? line("KiwiSaver", "Paused", "ps-paused") : ""}
+      ${adjustments ? `<div class="ps-section">Life-event adjustments</div>${adjustments}` : ""}
+      ${line("Take-home pay", fmtMoney(p.net), "total")}
+    </section>${kiwiBox}
+  </article>`;
 }
 function renderPayslips(me, cls) {
   const box = document.getElementById("payslipBox");
+  if (!box) return;
   const slips = Array.isArray(me.payslips) ? me.payslips : [];
-  // What the next pay day should bring, worked out the same way pay day
-  // does it (so tax, life events and KiwiSaver are all included).
   let next = "";
   const job = me.jobId ? (cls.jobs || []).find(j => j.id === me.jobId) : null;
   if (job && cls.payDay) {
@@ -535,23 +535,27 @@ function renderPayslips(me, cls) {
     const approved = isJobTaskApprovedThisWeek(me, cls);
     const paidToday = me.lastWagePaid === nzDateKey();
     if (est.gross > 0 && !paidToday) {
-      next = `<p class="ps-next">Next pay day (${DAY_FULL[cls.payDay] || cls.payDay}): <strong>${fmtMoney(est.net)}</strong> take-home from ${fmtMoney(est.gross)} before tax${approved ? "." : ", once your teacher ticks off this week's job task."}</p>`;
+      next = `<aside class="ps-upcoming" aria-label="Next pay estimate">
+        <div class="ps-upcoming-main"><div><span class="ps-kicker">Next pay estimate</span><strong>${escapeHtml(DAY_FULL[cls.payDay] || cls.payDay)}</strong></div>
+        <div class="ps-upcoming-amount"><strong>${fmtMoney(est.net)}</strong><span>estimated take-home</span></div></div>
+        <p>${fmtMoney(est.gross)} before tax. ${approved ? "This week's job task is approved." : "Your teacher still needs to approve this week's job task."}</p>
+      </aside>`;
     }
   }
   if (!slips.length) {
-    box.innerHTML = next + `<p class="muted-small">${job ? "Your payslips will show up here after your first pay day. Each one shows your pay, the tax taken off, KiwiSaver, and what you take home." : "Once you have a job, a payslip shows up here every pay day."}</p>`;
+    box.innerHTML = next + `<div class="ps-empty"><strong>No payslips yet</strong><p>${job ? "Your first payslip will appear after pay day. It will show your earnings, deductions and take-home pay." : "Once you have a job, your payslips will appear here after each pay day."}</p></div>`;
     return;
   }
   const [latest, ...older] = slips;
-  box.innerHTML = next + payslipHtml(latest) + (older.length ? `
-    <div class="ps-older">
-      <div class="ps-older-head">Earlier payslips</div>
-      ${older.map(p => `
-        <details class="ps-older-item">
-          <summary><span>${payslipDateLabel(p.dateKey)}</span><span class="ps-older-amt">${fmtMoney(p.net)} <span class="muted-small">take-home</span></span></summary>
-          ${payslipHtml(p)}
-        </details>`).join("")}
-    </div>` : "");
+  box.innerHTML = next + payslipHtml(latest, true) + (older.length ? `
+    <section class="ps-older" aria-label="Earlier payslips">
+      <div class="ps-history-heading"><h3>Earlier payslips</h3><span>${older.length} ${older.length === 1 ? "payslip" : "payslips"}</span></div>
+      <p class="ps-help">Select a payslip to see its breakdown.</p>
+      ${older.map(p => `<details class="ps-older-item"><summary>
+        <span class="ps-history-info"><strong>${escapeHtml(payslipDateLabel(p.dateKey))}</strong><span>${escapeHtml(p.tier || p.job || "Pay record")}</span></span>
+        <span class="ps-history-money"><strong>${fmtMoney(p.net)}</strong><span>take-home</span></span><span class="ps-chevron" aria-hidden="true"></span>
+        </summary>${payslipHtml(p)}</details>`).join("")}
+    </section>` : "");
 }
 
 /* ── Job board ──────────────────────────────────────────────────────── */

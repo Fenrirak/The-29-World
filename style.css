@@ -3747,3 +3747,76 @@ p{text-wrap:pretty;}
 @media (pointer:coarse){
   .btn.small{min-height:44px;}
 }
+
+/* My payslips: scoped readability and layout refresh. */
+#payslipBox{min-width:0;color:var(--ink);}
+#payslipBox .payslip,#payslipBox .ps-older{max-width:none;width:100%;}
+#payslipBox .payslip{background:var(--card);padding:22px;border:1px solid var(--line);border-radius:var(--r-5);}
+#payslipBox .ps-head{align-items:start;padding-bottom:18px;border-bottom:1px solid var(--line);}
+#payslipBox .ps-head>div{min-width:0;}
+#payslipBox .ps-kicker{font-size:.75rem;letter-spacing:.065em;line-height:1.5;}
+#payslipBox .ps-job{font-size:1.18rem;line-height:1.4;overflow-wrap:anywhere;margin-top:4px;}
+#payslipBox .ps-help{color:var(--muted);font-size:.86rem;line-height:1.55;margin:6px 0 12px;}
+#payslipBox .ps-role{margin:3px 0 0;}
+#payslipBox .ps-date{display:grid;gap:4px;text-align:right;font-size:.88rem;line-height:1.5;}
+#payslipBox .ps-date>span{color:var(--muted);font-size:.76rem;font-weight:600;}
+#payslipBox .ps-date>strong{font-weight:700;}
+#payslipBox .ps-takehome{display:flex;justify-content:space-between;align-items:center;gap:16px;background:var(--bg);border:1px solid var(--line);border-left:4px solid var(--mint);border-radius:var(--r-3);padding:18px;margin:18px 0 22px;}
+#payslipBox .ps-takehome span{font-weight:800;}
+#payslipBox .ps-takehome p{margin:4px 0 0;font-size:.82rem;line-height:1.5;color:var(--muted);}
+#payslipBox .ps-takehome>strong{font-size:clamp(1.45rem,3vw,2rem);line-height:1.2;font-variant-numeric:tabular-nums;white-space:nowrap;}
+#payslipBox h3{font-size:.98rem;line-height:1.5;color:inherit;margin:0;font-weight:800;}
+#payslipBox .ps-section{font-size:.72rem;letter-spacing:.055em;margin:18px 0 4px;}
+#payslipBox .ps-line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:baseline;padding:9px 0;font-size:.92rem;line-height:1.5;}
+#payslipBox .ps-line>span:first-child{overflow-wrap:anywhere;}
+#payslipBox .ps-line>span:last-child{text-align:right;font-variant-numeric:tabular-nums;}
+#payslipBox .ps-line.sub{font-size:.82rem;padding-left:12px;}
+#payslipBox .ps-line.total{margin-top:12px;padding-top:14px;border-top:1px solid var(--line);color:inherit;}
+#payslipBox .ps-line.total>span:last-child{font-size:1.08rem;}
+#payslipBox .ps-credit>span:last-child{color:var(--mint-fill);}
+#payslipBox .ps-debit>span:last-child{color:var(--coral-fill);}
+#payslipBox .ps-paused>span:last-child{color:var(--muted);font-size:.84rem;}
+#payslipBox .ps-tax-details{margin:0 0 6px;color:var(--muted);}
+#payslipBox .ps-tax-details summary{cursor:pointer;font-size:.82rem;padding:5px 0;width:fit-content;}
+#payslipBox .ps-tax-details>div{border-left:2px solid var(--line);margin:6px 0;}
+#payslipBox summary:focus-visible{outline:3px solid var(--sky);outline-offset:3px;border-radius:var(--r-1);}
+#payslipBox .ps-savings{border-top:1px solid var(--line);margin-top:22px;padding-top:20px;}
+#payslipBox .ps-panel-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+#payslipBox .ps-tag{font-size:.72rem;font-weight:600;background:var(--bg);color:var(--muted);padding:4px 8px;border-radius:var(--r-1);}
+#payslipBox .ps-upcoming{padding:16px 18px;margin-bottom:18px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-3);}
+#payslipBox .ps-upcoming-main{display:flex;justify-content:space-between;gap:14px;align-items:center;}
+#payslipBox .ps-upcoming-main>div{display:grid;gap:3px;}
+#payslipBox .ps-upcoming-amount{text-align:right;}
+#payslipBox .ps-upcoming-amount strong{font-size:1.2rem;font-variant-numeric:tabular-nums;}
+#payslipBox .ps-upcoming-amount span{font-size:.76rem;color:var(--muted);}
+#payslipBox .ps-upcoming p{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line);font-size:.83rem;line-height:1.6;color:var(--muted);}
+#payslipBox .ps-older{margin-top:24px;}
+#payslipBox .ps-history-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+#payslipBox .ps-history-heading>span{font-size:.78rem;color:var(--muted);}
+#payslipBox .ps-older-item{border:1px solid var(--line);border-radius:var(--r-3);margin-top:8px;overflow:hidden;}
+#payslipBox .ps-older-item>summary{display:grid;grid-template-columns:minmax(0,1fr) auto 10px;align-items:center;gap:16px;padding:14px 16px;color:inherit;}
+#payslipBox .ps-history-info,#payslipBox .ps-history-money{display:grid;gap:3px;min-width:0;line-height:1.5;}
+#payslipBox .ps-history-info strong{font-size:.9rem;overflow-wrap:anywhere;}
+#payslipBox .ps-history-info>span,#payslipBox .ps-history-money>span{font-size:.77rem;color:var(--muted);font-weight:400;overflow-wrap:anywhere;}
+#payslipBox .ps-history-money{text-align:right;font-variant-numeric:tabular-nums;}
+#payslipBox .ps-chevron{width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);}
+#payslipBox .ps-older-item[open]>summary{background:var(--bg);border-bottom:1px solid var(--line);}
+#payslipBox .ps-older-item[open]>summary .ps-chevron{transform:rotate(225deg);}
+#payslipBox .ps-older-item .payslip{border:0;border-radius:0;margin:0;}
+#payslipBox .ps-empty{padding:20px;border:1px dashed var(--line);border-radius:var(--r-3);}
+#payslipBox .ps-empty p{margin:7px 0 0;color:var(--muted);line-height:1.6;font-size:.9rem;}
+html.dark-mode #payslipBox .payslip{background:var(--surface-2);}
+html.dark-mode #payslipBox .ps-job,html.dark-mode #payslipBox h3,html.dark-mode #payslipBox .ps-takehome,html.dark-mode #payslipBox .ps-line.total{color:var(--heading-text);}
+html.dark-mode #payslipBox .ps-date{color:var(--heading-text);}
+html.dark-mode #payslipBox .ps-credit>span:last-child{color:var(--mint);}
+html.dark-mode #payslipBox .ps-debit>span:last-child{color:var(--coral);}
+@media(max-width:520px){
+  #payslipBox .payslip{padding:16px;}
+  #payslipBox .ps-head{display:grid;gap:12px;}
+  #payslipBox .ps-date{text-align:left;gap:2px;}
+  #payslipBox .ps-takehome{flex-wrap:wrap;padding:14px;gap:10px;}
+  #payslipBox .ps-line{gap:10px;font-size:.86rem;}
+  #payslipBox .ps-upcoming-main{flex-wrap:wrap;}
+  #payslipBox .ps-older-item>summary{padding:12px;gap:10px;}
+  #payslipBox .ps-history-money strong{font-size:.9rem;}
+}
