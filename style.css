@@ -3820,3 +3820,36 @@ html.dark-mode #payslipBox .ps-debit>span:last-child{color:var(--coral);}
   #payslipBox .ps-older-item>summary{padding:12px;gap:10px;}
   #payslipBox .ps-history-money strong{font-size:.9rem;}
 }
+
+/* Payslip typography: match the site's body, headings and money displays.
+   Scoped here so other pages and components are unchanged. */
+#payslipBox{font-family:inherit;font-style:normal;letter-spacing:normal;}
+#payslipBox :where(p,span,strong,summary,div){font-family:inherit;font-style:inherit;}
+#payslipBox h3,#payslipBox .ps-job{
+  font-family:"Trebuchet MS","Segoe UI",Verdana,sans-serif;
+  font-size:1rem;font-weight:800;letter-spacing:-.01em;line-height:1.5;
+}
+#payslipBox .ps-kicker,#payslipBox .ps-section{
+  font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+}
+#payslipBox .ps-line{font-size:.85rem;line-height:1.5;}
+#payslipBox .ps-line>span:first-child{font-weight:400;}
+#payslipBox .ps-line>span:last-child{font-weight:700;}
+#payslipBox .ps-line.sub{font-size:.78rem;}
+#payslipBox .ps-line.sub>span:last-child{font-weight:600;}
+#payslipBox .ps-help,#payslipBox .ps-date>span,
+#payslipBox .ps-tax-details summary,#payslipBox .ps-upcoming p,
+#payslipBox .ps-upcoming-amount span,#payslipBox .ps-history-heading>span,
+#payslipBox .ps-history-info>span,#payslipBox .ps-history-money>span{
+  font-size:.78rem;font-weight:400;line-height:1.5;letter-spacing:normal;
+}
+#payslipBox .ps-date,#payslipBox .ps-history-info strong,
+#payslipBox .ps-history-money strong{font-size:.85rem;font-weight:700;}
+#payslipBox .ps-line.total>span{font-size:1rem;font-weight:900;}
+#payslipBox .ps-upcoming-amount strong{font-size:1.2rem;font-weight:900;}
+/* Same equal-width digits used by site-wide tables, balances and stats. */
+#payslipBox .ps-line>span:last-child,#payslipBox .ps-history-money,
+#payslipBox .ps-upcoming-amount strong,#payslipBox .ps-date strong{
+  font-family:inherit;font-style:normal;font-variant-numeric:tabular-nums;
+  font-feature-settings:normal;letter-spacing:normal;
+}
