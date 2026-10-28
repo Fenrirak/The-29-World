@@ -163,7 +163,21 @@
       const lt = hexOr(c, .3, "#fff");
       return { front: `<path d="${p}" fill="${c}"/>${x.clip(p, `<path d="M26 46 V28 Q31.5 28 34.5 37 L35 46Z M74 46 V28 Q68.5 28 65.5 37 L65 46Z" fill="${d}" opacity=".55"/><path d="M33 30 C33 17 44 9 58 10.5 C66 11.5 70 15 70.5 20" fill="none" stroke="${d}" stroke-width="1.3" stroke-linecap="round" opacity=".55"/><path d="M38 30 C38 21 46 14 56 14.5 M44 31 C43 24 49 18 59 18.5 M52 30.5 C52 25 57 21 64 21.5" fill="none" stroke="${lt}" stroke-width=".8" stroke-linecap="round" opacity=".5"/><path d="M40 27 C37 21 38 14 43 10.5 M33 27 C31 22 32 17 35 14 M62 28.4 C66 25 68.5 21 69.5 17" fill="none" stroke="${d}" stroke-width=".7" stroke-linecap="round" opacity=".5"/>`)}` };
     },
-    undercut: (c,d,x) => {const p="M29 34 C27 20 38 10 53 11 C69 11 76 23 70 34 Q64 27 58 28 Q43 34 29 34Z";return {front:x.head(`<path d="M29 43 V28 Q50 17 71 28 V43 L65 33 Q50 27 35 33Z" fill="${d}" opacity=".48"/><path d="M31 36 L35 34 M66 34 L69 36" stroke="${d}" stroke-width=".6"/>`)+`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M32 29 C45 30 52 15 65 19 M34 25 C43 25 51 13 59 14 M38 32 Q54 31 68 24",.45)}${shine(x,p)}`};},
+    undercut: (c, d, x) => {
+      // swept-back top with shaved sides: stubble hugs the skull and fades out towards the ears
+      const top = "M33.5 37 C30.5 25 35 13.5 50 11.5 C65 10.5 71 20 68.5 37 C65.5 30 59 28 54.5 29.5 C49 31.5 42 29.6 37.5 32.4 C35.6 33.8 34.4 35.4 33.5 37Z";
+      const sides = "M29.2 47 C26.2 25 36 17.5 50 17.5 C64 17.5 73.8 25 70.8 47 C69.6 41 68 37.5 65.5 34.5 C62 29 56 28 50 28 C44 28 38 29 34.5 34.5 C32 37.5 30.4 41 29.2 47Z";
+      const g = x.id("g");
+      x.defs += `<linearGradient id="${g}" gradientUnits="userSpaceOnUse" x1="0" y1="18" x2="0" y2="47"><stop offset="0" stop-color="${d}"/><stop offset=".6" stop-color="${d}"/><stop offset="1" stop-color="${d}" stop-opacity=".1"/></linearGradient>`;
+      let dots = "";
+      [[30.8, 41], [32.6, 38.4], [31.4, 35.4], [33.8, 33], [30.2, 44.2], [32.2, 42.2], [34.2, 36.6], [33, 30.8], [35.6, 33.8], [31.6, 31.2], [29.8, 38], [34.8, 31]].forEach(([px, py]) => { dots += `<circle cx="${px}" cy="${py}" r=".38"/><circle cx="${100 - px}" cy="${py}" r=".38"/>`; });
+      const lines = "M39 31 C40 23 44 15.5 50 11.5 M45.5 30 C46 22 50 15.5 57 12 M52.5 29 C54 22 58.5 17 64 14.5 M58 28.5 C61 23.5 64 20.5 66.5 19.5";
+      return {
+        front: `<path d="${sides}" fill="url(#${g})"/>`
+          + x.clip(sides, `<path d="${top}" transform="translate(0 1.3)" fill="#000" opacity=".16"/><g fill="${d}" opacity=".55">${dots}</g>`)
+          + `<path d="${top}" fill="${c}"/>${hairLines(x, top, d, lines, .45)}${x.clip(top, `<path d="M36 24 C41 13 56 10.5 65 16" stroke="#fff" stroke-opacity=".22" stroke-width="2.2" fill="none" stroke-linecap="round"/>`)}`
+      };
+    },
     manbun: (c, d, x) => { const p = "M29.5 47 C26.5 24 38 16 50 16 C62 16 73.5 24 70.5 47 C69.5 39 66 32 59 29.5 C53 28 47 29.5 41 29 C36 30 31 38 29.5 47Z"; return { front: `<circle cx="50" cy="9.5" r="8.5" fill="${c}"/><path d="M44 5 C47 9 47 12 45 15 M50 2.5 C52 7 52 11 50 15.5 M56 5 C53 9 53 12 55 15" stroke="${d}" stroke-width="1" fill="none" stroke-linecap="round" opacity=".5"/><path d="${p}" fill="${c}"/>${shine(x, p)}<ellipse cx="50" cy="16.6" rx="7.2" ry="2.1" fill="${d}"/>` }; },
   };
   const HAIR_LIST = [["bald", "Bald", 0], ["buzz", "Buzz cut", 0], ["short", "Short", 0], ["long", "Long", 0], ["bob", "Bob", 1], ["ponytail", "Ponytail", 3], ["swoop", "Side swoop", 2], ["sidepart", "Side part", 1], ["slickback", "Slick back", 1], ["wavy", "Wavy long", 4], ["braids", "Braids", 2], ["curly", "Curly", 2], ["spiky", "Spiky", 3], ["pompadour", "Pompadour", 2], ["undercut", "Undercut", 2], ["manbun", "Man bun", 2], ["mohawk", "Mohawk", 4]];
@@ -199,7 +213,7 @@
     dizzy: () => both(x => `<path d="M${x - 3.4} ${EYE_Y - 3.4} l6.8 6.8 M${x + 3.4} ${EYE_Y - 3.4} l-6.8 6.8" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>`),
     dollar: () => both(x => `<circle cx="${x}" cy="${EYE_Y}" r="5" fill="#3ecf8e" stroke="#1f8a5b" stroke-width="1"/><text x="${x}" y="${EYE_Y + 3.2}" font-size="8.6" font-weight="900" text-anchor="middle" fill="#0e4d33" font-family="Arial,sans-serif">$</text>`)
   };
-  const EYE_LIST = [["dots", "Dots", 0], ["round", "Round", 0], ["happy", "Happy", 0], ["sleepy", "Sleepy", 0], ["sleepywake", "Sleepy-wake", 1], ["sparkle", "Sparkly", 1], ["wink", "Wink", 1],
+  const EYE_LIST = [["dots", "Dots", 0], ["round", "Round", 0], ["happy", "Happy", 0], ["sleepy", "Sleepy", 0], ["sleepywake", "Sleepy-wake", 1], ["sparkle", "Sparkly", 1], ["wink", "Wink", 2],
     ["lashes", "Lashes", 1], ["cool", "Cool", 1], ["dizzy", "Dizzy", 2], ["stars", "Star eyes", 3], ["hearts", "Heart eyes", 3], ["dollar", "Money eyes", 3]];
 
   /* ------------------------------ mouths -------------------------------- */
@@ -1871,7 +1885,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     return items;
   }
   // readable on every skin tone: no oranges, tans or browns that would blend into skin
-  const PAINTS = [["#3a8dff", "Blue"], ["#e0245e", "Crimson"], ["#2fb36d", "Green"], ["#12a8b8", "Teal"], ["#8b5cf6", "Purple"], ["#ec4899", "Pink"], ["#7bc418", "Lime"], ["#24409a", "Navy"]];
+  const PAINTS = [["#3a8dff", "Blue"], ["#c52053", "Crimson"], ["#299e60", "Green"], ["#12a8b8", "Teal"], ["#8b5cf6", "Purple"], ["#ec4899", "Pink"], ["#7bc418", "Lime"], ["#24409a", "Navy"]];
   function paintEditor() {
     const E = ED; if (!E) return;
     const $ = id => document.getElementById(id);
