@@ -47,6 +47,36 @@ const firebaseConfig = {
 };
 
 const _app = initializeApp(firebaseConfig);
+
+/* ---------------- App Check (OFF until you paste a key) ----------------
+   App Check makes Firebase refuse requests that don't come from THIS
+   website (scripts, curl, copies of the site on other domains). Leave the
+   key below empty and nothing at all changes: no extra download, no
+   behaviour change. To turn it on: Firebase console > App Check > register
+   the web app with reCAPTCHA v3, paste the SITE key here, deploy, watch
+   the App Check metrics for a few days, THEN switch on enforcement for
+   Cloud Firestore. It cannot stop a student using the console on the real
+   site (that visitor passes the check) -- see the rate limit that goes
+   inside Cloud Functions for that. */
+const T29_APPCHECK_SITE_KEY = "";
+let _appCheckMod = null;
+async function _t29EnableAppCheck(app) {
+  if (!T29_APPCHECK_SITE_KEY) return;
+  try {
+    if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+    _appCheckMod = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app-check.js");
+    _appCheckMod.initializeAppCheck(app, {
+      provider: new _appCheckMod.ReCaptchaV3Provider(T29_APPCHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+  } catch (e) {
+    // Never let App Check stop the site from loading.
+    console.warn("App Check could not start:", e);
+  }
+}
+const _appCheckReady = _t29EnableAppCheck(_app);
 const _db = getFirestore(_app);
 const _auth = getAuth(_app);
 
@@ -222,6 +252,16 @@ let _signupSessionSeq = 0;
 window.t29OpenSignupSession = function t29OpenSignupSession() {
   const app2 = initializeApp(firebaseConfig, "t29-signup-" + Date.now() + "-" + (++_signupSessionSeq));
   const auth2 = initializeAuth(app2, { persistence: inMemoryPersistence });
+  // Same App Check as the main connection (no-op while the key is empty),
+  // so adding students in bulk keeps working once enforcement is on.
+  if (_appCheckMod) {
+    try {
+      _appCheckMod.initializeAppCheck(app2, {
+        provider: new _appCheckMod.ReCaptchaV3Provider(T29_APPCHECK_SITE_KEY),
+        isTokenAutoRefreshEnabled: false
+      });
+    } catch (e) { console.warn("App Check (signup session):", e); }
+  }
   const db2 = getFirestore(app2);
   return {
     fdb: _makeFdb(db2),
@@ -255,7 +295,7 @@ window.t29OpenSignupSession = function t29OpenSignupSession() {
 // rest of the app makes its first Firestore call — it does NOT create a
 // new session itself. A page that needs someone to actually be logged in
 // still goes through requireLogin() in data-core.js, same as before.
-window.T29_AUTH_READY = new Promise(resolve => {
+window.T29_AUTH_READY = _appCheckReady.then(() => new Promise(resolve => {
   const unsub = authShim.onAuthStateChanged(async (user) => {
     unsub();
     // BUGFIX: before this security fix shipped, EVERY visitor was signed
@@ -293,7 +333,7 @@ window.T29_AUTH_READY = new Promise(resolve => {
     }
     resolve();
   });
-});
+}));
 
 // Every account is stored in Firebase Auth under a synthetic email built
 // from its app-level username, since this app never collects real email
