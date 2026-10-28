@@ -493,8 +493,8 @@ function payslipHtml(p, latest = false) {
   ].join("");
   const kiwiBox = k && !k.paused ? `
     <section class="ps-savings" aria-label="KiwiSaver contributions">
-      <div class="ps-panel-head"><h3>KiwiSaver savings</h3><span class="ps-tag">Separate from take-home pay</span></div>
-      <p class="ps-help">This money goes into your KiwiSaver, not your cash balance.</p>
+      <div class="ps-panel-head"><h3>KiwiSaver savings</h3></div>
+      <p class="ps-help">This money goes into your KiwiSaver, not your cash balance. Separate from take-home pay.</p>
       ${line("Your contribution", fmtMoney(k.you))}
       ${line(`Employer contribution (${psPct(k.employerRate)})`, fmtMoney(k.employerGross))}
       ${line(`Employer contribution tax (ESCT, ${psPct(k.esctRate)})`, "−" + fmtMoney(k.esct), "sub")}
@@ -509,8 +509,7 @@ function payslipHtml(p, latest = false) {
       </div>
       <div class="ps-date"><span>Pay date</span><strong>${escapeHtml(payslipDateLabel(p.dateKey))}</strong></div>
     </header>
-    <div class="ps-takehome"><div><span>Take-home pay</span><p>Added to your cash balance</p></div><strong>${fmtMoney(p.net)}</strong></div>
-    <section class="ps-breakdown" aria-label="Pay breakdown">
+    <section class="ps-breakdown" style="padding-top:20px" aria-label="Pay breakdown">
       <h3>How your pay adds up</h3>
       <div class="ps-section">Earnings</div>
       ${line("Pay before tax", fmtMoney(p.gross))}
