@@ -2263,6 +2263,12 @@ function pickBigEventDef(cls, student, defs) {
   const fits = defs.filter(d => bigEventFitsStudent(cls, student, d));
   return fits.length ? fits[Math.floor(Math.random() * fits.length)] : null;
 }
+// Short tag naming the property/vehicle a big event is about, for
+// transaction notes. Empty when it isn't about one specific asset.
+function bigEventAssetTag(e) {
+  if (!e || !e.assetName) return "";
+  return ` (${e.assetType === "property" ? "property" : "vehicle"}: ${e.assetName})`;
+}
 // A big event log entry for one student, from the event as it is now.
 function bigEventEntry(cls, username, def, weekKey, revealAt) {
   const percent = bigEventIsPercent(def);
@@ -2271,7 +2277,7 @@ function bigEventEntry(cls, username, def, weekKey, revealAt) {
   // house's or vehicle's price, then it's that one (and it has to have a price).
   const coverage = def.kind !== "good" ? MODULE_TO_COVERAGE[def.module] : null;
   const assetKind = coverage === "property" || coverage === "transport" ? coverage
-    : (percent && (def.module === "property" || def.module === "transport") ? def.module : null);
+    : ((percent || def.kind === "good") && (def.module === "property" || def.module === "transport") ? def.module : null);
   const asset = assetKind
     ? pickEventAsset(cls, username, assetKind, def.kind === "good" ? null : def.incident, false, percent) : null;
   return {
@@ -2424,7 +2430,7 @@ async function revealBigEvent(classCode, logId) {
   // telling the student why is shown straight after (checkBigEventPopup).
   if (entry && entry.kind === "good") {
     await adjustBalance(entry.studentUser, entry.cost);
-    await logTxn(classCode, { type: "big-event", to: entry.studentUser, amount: entry.cost, note: `Big event windfall: "${entry.name}"` + (entry.description ? " — " + entry.description : "") + (entry.basisNote ? ` (${entry.basisNote})` : "") });
+    await logTxn(classCode, { type: "big-event", to: entry.studentUser, amount: entry.cost, note: `Big event windfall: "${entry.name}"` + bigEventAssetTag(entry) + (entry.description ? " — " + entry.description : "") + (entry.basisNote ? ` (${entry.basisNote})` : "") });
   }
   return entry;
 }
@@ -2439,7 +2445,7 @@ async function revealBigEvent(classCode, logId) {
 async function resolveBigEvent(username, classCode, logId, choice, paySource, planId) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let outcomeNote = "", amount = 0, writeOffNet = null, bigCard = 0;
+  let outcomeNote = "", amount = 0, writeOffNet = null, bigCard = 0, assetTag = "";
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -2450,6 +2456,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
       const entry = (cls.bigEventLog || []).find(e => e.id === logId && e.studentUser === username && e.status === "pending");
       if (!entry) throw new Error("NOT_FOUND");
       const isTeacher = user.role === "teacher";
+      assetTag = bigEventAssetTag(entry);
 
       if (choice === "forfeit") {
         // Defensive server-side check — the UI already hides this option
@@ -2582,6 +2589,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
     if (e.message === "NOT_FOUND") return { ok: false, error: "That event is no longer pending." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
+  outcomeNote += assetTag;
   if (writeOffNet !== null) {
     // Money came IN from the insurer (or, with a big mortgage, went out —
     // logged the same way a sale that went negative is).

@@ -48,7 +48,7 @@
   // Per-render drawing context: unique ids, shared <defs>, and clip helpers.
   function makeCtx() {
     const c = {
-      defs: "", _h: null, _b: null,
+      defs: "", css: "", hat: false, anim: false, _h: null, _b: null,
       id: n => "av" + (++UID) + n,
       // d may be one path, or a list of paths / raw clip children (e.g. "<ellipse .../>") that are unioned
       clip(d, inner) { const i = c.id("k"); c.defs += `<clipPath id="${i}">${[].concat(d).map(p => p.charAt(0) === "<" ? p : `<path d="${p}"/>`).join("")}</clipPath>`; return `<g clip-path="url(#${i})">${inner}</g>`; },
@@ -113,35 +113,71 @@
     const xe = x0 + dir * 5 * 0.35;
     return s + `<ellipse cx="${xe.toFixed(1)}" cy="91.4" rx="3" ry="2.1" fill="#ff5d8f"/>`;
   };
+  const hairLines = (x, shape, d, paths, opacity = .3) => x.clip(shape, `<path d="${paths}" fill="none" stroke="${d}" stroke-width=".65" opacity="${opacity}" stroke-linecap="round"/>`);
+  const curlHair = (c,d,x) => {const p="M29 43 C23 37 25 28 30 25 C28 16 39 12 44 15 C49 9 59 11 62 16 C73 13 79 24 73 30 C79 35 75 41 71 44 L66 34 Q50 28 34 35Z";let detail="";for(let row=0;row<4;row++)for(let i=0;i<7;i++){const xx=25+i*7+(row%2)*3, yy=15+row*7;detail+=`M${xx} ${yy} q-2 -3 -4 0 q-1 3 2 3 q3 0 2 -2 `;}return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,detail,.5)}${x.clip(p,`<path d="M31 20 Q45 10 62 17" stroke="#fff" stroke-opacity=".12" stroke-width="2" fill="none"/>`)}`};};
+  /* ---- flowing locks: a ribbon of hair that follows a wavy centre line ---- */
+  const r1 = v => +v.toFixed(1);
+  const hexOr = (c, p, alt) => /^#/.test(c) ? shade(c, p) : alt;
+  // smooth open curve through points (Catmull-Rom as cubic Beziers); returns the segments after the first point
+  const smoothC = pts => { let s = ""; for (let i = 0; i < pts.length - 1; i++) { const a = pts[i - 1] || pts[i], b = pts[i], e = pts[i + 1], f = pts[i + 2] || e; s += `C${r1(b[0] + (e[0] - a[0]) / 6)} ${r1(b[1] + (e[1] - a[1]) / 6)} ${r1(e[0] - (f[0] - b[0]) / 6)} ${r1(e[1] - (f[1] - b[1]) / 6)} ${r1(e[0])} ${r1(e[1])}`; } return s; };
+  // o: x, y0, y1, dx (drift), amp/fr/ph (wave), w (10 widths top to tip), tip (tip lean)
+  const lockD = o => {
+    const N = o.w.length - 1, L = [], R = [], M = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, y = o.y0 + (o.y1 - o.y0) * t, cx = o.x + o.dx * t + o.amp * Math.sin(6.2832 * o.fr * t + o.ph) * Math.min(1, t * 2.5), h = o.w[i] / 2;
+      L.push([cx - h, y]); R.push([cx + h, y]); M.push([cx, y, h]);
+    }
+    const tip = [M[N][0] + o.tip, o.y1 + 3];
+    const d = `M${r1(L[0][0])} ${r1(L[0][1])}${smoothC(L)}Q${r1(tip[0])} ${r1(tip[1])} ${r1(R[N][0])} ${r1(R[N][1])}${smoothC(R.slice().reverse())}Z`;
+    const ln = [-.24, .2].map(k => { const P = M.slice(1, N).map(m => [m[0] + k * m[2] * 2, m[1]]); return `M${r1(P[0][0])} ${r1(P[0][1])}${smoothC(P)}`; }).join(" ");
+    return { d, ln };
+  };
+  const lockPaint = (x, o, c, d, op) => { const l = lockD(o); return `<path d="${l.d}" fill="${c}"/>${x.clip(l.d, `<path d="${l.ln}" fill="none" stroke="${d}" stroke-width=".7" stroke-linecap="round" opacity="${op || .4}"/>`)}`; };
+  // A gust of wind: the hair leans, flutters back and settles, then rests for a while. Transform-only CSS
+  // (pivoting at the head), still when not animated, and switched off for prefers-reduced-motion.
+  const swish = (x, inner, a, dur, delay, py) => {
+    if (!x.anim) return inner;
+    const n = x.id("w"), f = k => `skewX(${r1(a * k)}deg)`;
+    x.css += `@keyframes ${n}{0%,46%{transform:${f(0)}}54%{transform:${f(1)}}61%{transform:${f(.52)}}68%{transform:${f(.86)}}76%{transform:${f(-.3)}}85%{transform:${f(.1)}}93%,100%{transform:${f(0)}}}.${n}{animation:${n} ${dur}s ease-in-out ${delay}s infinite}`;
+    return `<g transform="translate(50 ${py})"><g class="${n} t29sw"><g transform="translate(-50 -${py})">${inner}</g></g></g>`;
+  };
   const HAIR = {
     bald: () => ({}),
     buzz: c => ({ front: `<path d="M30 40 C29 24 40 19 50 19 C60 19 71 24 70 40 C66 31 58 27 50 27 C42 27 34 31 30 40Z" fill="${c}"/>` }),
-    short: (c, d, x) => ({ front: `<path d="${CAP}" fill="${c}"/>${shine(x, CAP)}` }),
-    quiff: (c, d, x) => { const p = "M29 47 C24 24 38 9 56 11 C72 13 76 30 71 47 C69 36 62 29 52 28 C42 28 33 34 29 47Z"; return { front: `<path d="${p}" fill="${c}"/>${x.clip(p, `<path d="M36 22 C42 13 60 11 70 22" stroke="#fff" stroke-opacity=".2" stroke-width="2.4" fill="none" stroke-linecap="round"/>`)}` }; },
-    long: (c, d, x) => ({ back: `<path d="M26 46 C21 72 26 90 36 94 L64 94 C74 90 79 72 74 46Z" fill="${c}"/>`, front: `<path d="${CAP}" fill="${c}"/>${shine(x, CAP)}` }),
-    bob: (c, d, x) => { const p = "M28 47 C26 22 38 14 50 14 C62 14 74 22 72 47 C70 37 62 32 50 32 C38 32 30 37 28 47Z"; return { back: `<path d="M25 44 C21 62 25 73 36 75 L64 75 C75 73 79 62 75 44Z" fill="${c}"/>`, front: `<path d="${p}" fill="${c}"/>${shine(x, p)}` }; },
+    short: (c,d,x) => ({front:`<path d="${CAP}" fill="${c}"/>${shine(x,CAP)}${hairLines(x,CAP,d,"M36 30 Q39 25 44 24 M47 26 Q52 23 57 24 M60 27 Q64 28 66 31",.2)}`}),
+    long: (c, d, x) => { if (x.hat) return { back: `<path d="M31 30 C21 48 23 84 36 94 L64 94 C77 84 79 48 69 30Z" fill="${c}"/>`, front: lockPaint(x, { x: 31, y0: 29, y1: 82, dx: -4.6, amp: .6, fr: 1, ph: 0, w: [2.5, 6.5, 8.5, 8.5, 8, 7.5, 7, 6.2, 5, 3.6], tip: 0 }, c, d, .3) + lockPaint(x, { x: 69, y0: 29, y1: 82, dx: 4.6, amp: .6, fr: 1, ph: 3.14, w: [2.5, 6.5, 8.5, 8.5, 8, 7.5, 7, 6.2, 5, 3.6], tip: 0 }, c, d, .3) }; return { back: `<path d="M26 46 C21 72 26 90 36 94 L64 94 C74 90 79 72 74 46Z" fill="${c}"/>`, front: `<path d="${CAP}" fill="${c}"/>${shine(x, CAP)}` }; },
+    bob: (c, d, x) => { const p = "M28 47 C26 22 38 14 50 14 C62 14 74 22 72 47 C70 37 62 32 50 32 C38 32 30 37 28 47Z"; if (x.hat) return { back: `<path d="M31 30 C21 46 23 68 36 75 L64 75 C77 68 79 46 69 30Z" fill="${c}"/>`, front: lockPaint(x, { x: 31, y0: 29, y1: 66, dx: -3.6, amp: .5, fr: 1, ph: 0, w: [2.5, 7, 9.5, 9.5, 9.5, 9, 8.4, 7.4, 6, 4.4], tip: 0 }, c, d, .3) + lockPaint(x, { x: 69, y0: 29, y1: 66, dx: 3.6, amp: .5, fr: 1, ph: 3.14, w: [2.5, 7, 9.5, 9.5, 9.5, 9, 8.4, 7.4, 6, 4.4], tip: 0 }, c, d, .3) }; return { back: `<path d="M25 44 C21 62 25 73 36 75 L64 75 C75 73 79 62 75 44Z" fill="${c}"/>`, front: `<path d="${p}" fill="${c}"/>${shine(x, p)}` }; },
     ponytail: (c, d, x) => ({
       back: `<path d="M68 27 C80 24 91 36 88 53 C86 63 80 70 77 77 C75 67 78 59 76 51 C74 45 70 42 67 40Z" fill="${c}"/>`,
-      front: `<path d="${CAP}" fill="${c}"/>${shine(x, CAP)}<ellipse cx="70.4" cy="32" rx="2.6" ry="3.4" fill="#ff5d8f" transform="rotate(-14 70.4 32)"/>`
+      front: (x.hat ? "" : `<path d="${CAP}" fill="${c}"/>${shine(x, CAP)}`) + `<ellipse cx="70.4" cy="32" rx="2.6" ry="3.4" fill="#ff5d8f" transform="rotate(-14 70.4 32)"/>`
     }),
-    swoop: (c, d, x) => { const p = "M28.5 47 C23 22 40 11 55 13 C71 15 75 30 71.5 47 C69 36 62 30 54 31 C46 32 38 33 33 40 C31.5 42.5 30 45 28.5 47Z"; return { front: `<path d="${p}" fill="${c}"/>${x.clip(p, `<path d="M34 24 C42 15 60 14 68 24" stroke="#fff" stroke-opacity=".2" stroke-width="2.4" fill="none" stroke-linecap="round"/>`)}` }; },
-    wavy: (c, d, x) => ({ back: `<path d="M26 46 C20 58 28 66 25 77 C24 84 30 88 35 88 L65 88 C70 88 76 84 75 77 C72 66 80 58 74 46Z" fill="${c}"/>`, front: `<path d="${CAP}" fill="${c}"/>${shine(x, CAP)}` }),
-    braids: (c, d, x) => ({ front: `<path d="${CAP}" fill="${c}"/>${shine(x, CAP)}${braid(29.6, -1, c, d)}${braid(70.4, 1, c, d)}` }),
-    curly: c => ({ front: ["34,26,9", "44,19,9.5", "56,19,9.5", "66,26,9", "29,38,7", "71,38,7", "50,23,9"].map(s => { const [x, y, r] = s.split(","); return `<circle cx="${x}" cy="${y}" r="${r}" fill="${c}"/>`; }).join("") }),
+    swoop: (c,d,x) => { const p="M29 46 C24 25 34 13 51 13 C67 12 76 24 71 45 L67 34 C57 31 45 43 34 36Z"; return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M32 31 C44 35 55 18 67 24 M34 27 C45 29 52 16 62 18 M37 35 Q51 36 64 28",.48)}${shine(x,p)}`}; },
+    wavy: (c, d, x) => {
+      // long, wavy hair that drapes over the shoulders and swishes now and then (no gloss)
+      const hat = !!x.hat, top = hat ? 29 : 34, py = hat ? 33 : 36, sh = hexOr(c, -.12, c);
+      const back = `<path d="M31 ${top} C21 ${top + 16} 19 56 22 66 C24 74 20 80 25 87 C30 93 38 91 42 87 L58 87 C62 91 70 93 75 87 C80 80 76 74 78 66 C81 56 79 ${top + 16} 69 ${top}Z" fill="${sh}"/>`;
+      const W = [2.6, 7, 9, 9, 8.4, 7.6, 6.6, 5.6, 4.4, 3];
+      const Ld = { x: 31, y0: top, y1: 90, dx: -5.6, amp: 2.6, fr: 1.5, ph: 0, w: W, tip: -1.2 };
+      const Rd = { x: 69, y0: top, y1: 90, dx: 5.6, amp: 2.6, fr: 1.5, ph: 3.9, w: W, tip: 1.2 };
+      const locks = swish(x, lockPaint(x, Ld, c, d, .42), 6.4, 10, -3, py) + swish(x, lockPaint(x, Rd, c, d, .42), 7.4, 10, -2.94, py);
+      return { back: swish(x, back, 3.4, 10, -2.88, py), front: locks + (hat ? "" : `<path d="${CAP}" fill="${c}"/>${hairLines(x, CAP, d, "M36 30 Q39 25 44 24 M47 26 Q52 23 57 24 M60 27 Q64 28 66 31", .2)}`) };
+    },
+    braids: (c,d,x) => { const hat=!!x.hat, p="M29 46 C26 24 37 15 50 15 C63 15 74 24 71 46 L66 34 Q56 29 50 26 Q44 29 34 34Z";let tails="";[30,70].forEach((xx,j)=>{let seg="";for(let i=hat?-2:0;i<8;i++){const y=48+i*4.5, w=3.4-i*.18;seg+=`<path d="M${xx} ${y-2} Q${xx-w*1.8} ${y} ${xx} ${y+3} Q${xx+w*1.8} ${y} ${xx} ${y-2}Z" fill="${i%2?c:shade(c,-.07)}" stroke="${d}" stroke-width=".45"/>`;}tails+=seg+`<rect x="${xx-2.4}" y="82" width="4.8" height="2.3" rx="1" fill="#526ca8"/><path d="M${xx-1.6} 84 L${xx-2} 88 Q${xx} 90 ${xx+2} 88 L${xx+1.6} 84Z" fill="${c}"/>`;});return {front:(hat?"":`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M50 16 V26 M47 18 Q37 22 32 32 M53 18 Q63 22 68 32 M46 23 Q39 27 34 35 M54 23 Q61 27 66 35",.5)}`)+tails};},
+    curly: (c,d,x)=>curlHair(c,d,x),
     spiky: c => ({ front: `<path d="M28 44 L25 21 L36 28 L37 9 L46 24 L52 5 L58 24 L66 9 L66 28 L75 21 L72 44 C68 34 60 30 50 30 C40 30 32 34 28 44Z" fill="${c}" stroke="${c}" stroke-width="1" stroke-linejoin="round"/>` }),
     mohawk: (c, d) => ({ front: `<path d="M30.4 40 C29.4 27 40 22 50 22 C60 22 70.6 27 69.6 40 C66 33 58 29 50 29 C42 29 34 33 30.4 40Z" fill="${d}" opacity=".55"/><path d="M40.6 32 C38 22 39.4 13 43 7.4 C45 11.4 46.6 12.6 50 3 C53.4 12.6 55 11.4 57 7.4 C60.6 13 62 22 59.4 32 C54 28.6 46 28.6 40.6 32Z" fill="${c}" stroke="${c}" stroke-width="1" stroke-linejoin="round"/>` }),
     sidepart: (c, d, x) => { const p = "M29 47 C24 24 37 11.5 51 12 C68 12.5 75.5 26 71 47 C69.5 39 66.5 33 60.5 30 C55 28 49 31 43 29 C37 28.5 31 37 29 47Z"; return { front: `<path d="${p}" fill="${c}"/>${x.clip(p, `<path d="M43.5 29 C41 22 40.5 17 41.5 12.5" stroke="#fff" stroke-opacity=".38" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M42.5 29 C40.5 22 40 17 41 12.5" stroke="${d}" stroke-width="1.1" fill="none" stroke-linecap="round" opacity=".8"/><path d="M44 15.5 C55 13.5 67 19 70.5 31 M44.5 21 C54 19 63 24 67.5 34 M45.5 26 C52 24.5 58 27 61 33" stroke="${d}" stroke-width="1" fill="none" stroke-linecap="round" opacity=".4"/><path d="M48 14.5 C56 13 64 15.5 68.5 21" stroke="#fff" stroke-opacity=".24" stroke-width="2.4" fill="none" stroke-linecap="round"/>`)}` }; },
     slickback: (c, d, x) => { const p = "M29.5 46 C25 22 38 13.5 50 13.5 C62 13.5 75 22 70.5 46 C69.5 38 67 32 62.5 28.5 C58.5 26 55 26 50 29.5 C45 26 41.5 26 37.5 28.5 C33 32 30.5 38 29.5 46Z"; return { front: `<path d="${p}" fill="${c}"/>${x.clip(p, `<path d="M36 28 C33.5 22 35 17.5 40 14.5 M42 27 C40 21 41.5 17 46 14 M50 29 C50 22 50 17.5 50 13.5 M58 27 C60 21 58.5 17 54 14 M64 28 C66.5 22 65 17.5 60 14.5" stroke="${d}" stroke-width="1" fill="none" stroke-linecap="round" opacity=".55"/><path d="M35 21 C41 14.5 59 14.5 65 21" stroke="#fff" stroke-opacity=".28" stroke-width="2.2" fill="none" stroke-linecap="round"/>`)}` }; },
-    flattop: (c, d, x) => { const p = "M29.5 47 C27.5 36 28 26 30.5 19 Q32 12.5 38 12.5 H62 Q68 12.5 69.5 19 C72 26 72.5 36 70.5 47 C69.5 39 66 33.5 60 31 H40 C34 33.5 30.5 39 29.5 47Z"; return { front: `<path d="${p}" fill="${c}"/>${x.clip(p, `<path d="M33 20.5 H67" stroke="${d}" stroke-width="1" opacity=".3"/><path d="M34.5 15.6 H65.5" stroke="#fff" stroke-opacity=".22" stroke-width="2.4" stroke-linecap="round"/><path d="M29 26 H35 M29 33 H34 M71 26 H65 M71 33 H66" stroke="${d}" stroke-width="1.2" opacity=".28" stroke-linecap="round"/>`)}` }; },
-    pompadour: (c, d, x) => { const p = "M29 47 C26.5 33 24 14 36 7 C44 2.5 58 2 66 7 C77 14 73.5 31 71 47 C69.5 39 66.5 33 62 30 C58 27.5 54 27 50 29 C46 27 42 27.5 38 30 C33.5 33 30.5 39 29 47Z", roll = "M30.5 31 C27 19 37 9 50 9 C63 9 73 19 69.5 31 C66 25 59 22.5 50 22.5 C41 22.5 34 25 30.5 31Z"; return { front: `<path d="${p}" fill="${c}"/>${x.clip(p, `<path d="M33 30 C32 21 36 14 42 10 M66 30 C67 22 64 15 58 10" stroke="${d}" stroke-width="1" fill="none" stroke-linecap="round" opacity=".4"/>`)}<path d="${roll}" fill="${c}" stroke="${d}" stroke-opacity=".75" stroke-width="1"/>${x.clip(roll, `<path d="M36 26 C38 18 44 13 52 12 M42 24 C44 18 49 15 56 14.5 M48 23 C51 19 56 17 63 17.5" stroke="${d}" stroke-width="1" fill="none" stroke-linecap="round" opacity=".42"/><path d="M33 17 C40 9 58 7 67 13" stroke="#fff" stroke-opacity=".3" stroke-width="2.8" fill="none" stroke-linecap="round"/>`)}` }; },
-    undercut: (c, d, x) => { const top = "M29.5 38 C24 20 34 6.5 52 6 C71 6.5 78.5 21 69.5 36 L65 28 L60.5 32 L56 25.5 L51 31 L46 25.5 L41.5 31 L36 27Z"; return { front: x.clip(['<ellipse cx="50" cy="44" rx="20.1" ry="22.2"/>'], `<path d="M29 47 C25 24 38 16 50 16 C62 16 75 24 71 47 C70 38 66 30 62 27 L38 27 C34 30 30 38 29 47Z" fill="${c}" opacity=".62"/>`) + `<path d="${top}" fill="${c}" stroke="${c}" stroke-width=".8" stroke-linejoin="round"/>` + x.clip(top, `<path d="M37 26 C37 16 45 10 56 10 M43 25 C44 17 51 12 62 13 M51 24 C53 18 60 15 69 17" stroke="${d}" stroke-width="1" fill="none" stroke-linecap="round" opacity=".45"/><path d="M36 19 C43 11 58 9 68 14" stroke="#fff" stroke-opacity=".26" stroke-width="2.4" fill="none" stroke-linecap="round"/>`) }; },
-    cornrows: (c, d, x) => { const p = "M29.5 47 C26.5 24 38 15.5 50 15.5 C62 15.5 73.5 24 70.5 47 C69.5 39 66 32 59 29.5 C53 28 47 29.5 41 29 C36 30 31 38 29.5 47Z"; let rows = ""; [-22, -15, -8, 0, 8, 15, 22].forEach(o => { const a = Math.abs(o), y0 = 30 + a * .12, xe = 50 + o * .34; rows += `<path d="M${50 + o} ${y0.toFixed(1)} C${(50 + o * 1.04).toFixed(1)} 23 ${(50 + o * .8).toFixed(1)} 18.5 ${xe.toFixed(1)} 14" stroke="${d}" stroke-width="1.3" fill="none" stroke-linecap="round" opacity=".75"/><path d="M${(50 + o + 3.6 * Math.sign(o || 1) * 0).toFixed(1)} ${(y0 - 1).toFixed(1)} C${(50 + o * 1.04).toFixed(1)} 22 ${(50 + o * .8).toFixed(1)} 17.5 ${xe.toFixed(1)} 13.5" stroke="#fff" stroke-opacity=".22" stroke-width="2.6" fill="none" stroke-dasharray="1.3 1.5"/>`; }); return { front: `<path d="${p}" fill="${c}"/>${x.clip(p, rows)}` }; },
-    afro: (c, d, x) => { let b = `<ellipse cx="50" cy="33" rx="25" ry="19" fill="${c}"/>`, k = ""; for (let a = 0; a < 360; a += 24) { const r = a * Math.PI / 180, s = Math.sin(r); if (s > .72) continue; const sk = Math.abs(Math.cos(r)) < .25; const cx = 50 + Math.cos(r) * 25, cy = 33 + s * 19; b += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="10.5" fill="${c}"/>`; if (!sk) k += `<path d="M${(cx - 4.5).toFixed(1)} ${(cy + 1).toFixed(1)} A4.6 4.6 0 0 1 ${(cx + 3).toFixed(1)} ${(cy - 3.4).toFixed(1)}" stroke="${d}" stroke-width="1" fill="none" stroke-linecap="round" opacity=".28"/>`; } const p = "M30 45 C28.5 30 36 19.5 50 19.5 C64 19.5 71.5 30 70 45 C68 37 62 32 50 32 C38 32 32 37 30 45Z"; return { back: b + k, front: `<path d="${p}" fill="${c}"/>` }; },
+    pompadour: (c, d, x) => {
+      // a swept-up quiff: tapered sides, a soft hairline and tonal strands (no gloss, so dark hair never reads as a helmet)
+      const p = "M30 39 C27.5 32 28 26 31.5 22 C30 13 39 6.5 52 6.5 C64 6.5 73.5 12 71 22 C73 27 72.5 33 70 39 C68.6 35.6 67.4 32.6 65 30.6 C62 28.4 58.5 28.6 55 30 C52 33 46 34.6 41.5 31.4 C37.5 30 34.6 33.6 33 37 C32 38.6 31 39 30 39Z";
+      const lt = hexOr(c, .3, "#fff");
+      return { front: `<path d="${p}" fill="${c}"/>${x.clip(p, `<path d="M26 46 V28 Q31.5 28 34.5 37 L35 46Z M74 46 V28 Q68.5 28 65.5 37 L65 46Z" fill="${d}" opacity=".55"/><path d="M33 30 C33 17 44 9 58 10.5 C66 11.5 70 15 70.5 20" fill="none" stroke="${d}" stroke-width="1.3" stroke-linecap="round" opacity=".55"/><path d="M38 30 C38 21 46 14 56 14.5 M44 31 C43 24 49 18 59 18.5 M52 30.5 C52 25 57 21 64 21.5" fill="none" stroke="${lt}" stroke-width=".8" stroke-linecap="round" opacity=".5"/><path d="M40 27 C37 21 38 14 43 10.5 M33 27 C31 22 32 17 35 14 M62 28.4 C66 25 68.5 21 69.5 17" fill="none" stroke="${d}" stroke-width=".7" stroke-linecap="round" opacity=".5"/>`)}` };
+    },
+    undercut: (c,d,x) => {const p="M29 34 C27 20 38 10 53 11 C69 11 76 23 70 34 Q64 27 58 28 Q43 34 29 34Z";return {front:x.head(`<path d="M29 43 V28 Q50 17 71 28 V43 L65 33 Q50 27 35 33Z" fill="${d}" opacity=".48"/><path d="M31 36 L35 34 M66 34 L69 36" stroke="${d}" stroke-width=".6"/>`)+`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M32 29 C45 30 52 15 65 19 M34 25 C43 25 51 13 59 14 M38 32 Q54 31 68 24",.45)}${shine(x,p)}`};},
     manbun: (c, d, x) => { const p = "M29.5 47 C26.5 24 38 16 50 16 C62 16 73.5 24 70.5 47 C69.5 39 66 32 59 29.5 C53 28 47 29.5 41 29 C36 30 31 38 29.5 47Z"; return { front: `<circle cx="50" cy="9.5" r="8.5" fill="${c}"/><path d="M44 5 C47 9 47 12 45 15 M50 2.5 C52 7 52 11 50 15.5 M56 5 C53 9 53 12 55 15" stroke="${d}" stroke-width="1" fill="none" stroke-linecap="round" opacity=".5"/><path d="${p}" fill="${c}"/>${shine(x, p)}<ellipse cx="50" cy="16.6" rx="7.2" ry="2.1" fill="${d}"/>` }; },
-    dreads: (c, d, x) => { const lock = (x0, y0, xm, ym, x1, y1, w) => `<path d="M${x0} ${y0} Q${xm} ${ym} ${x1} ${y1}" stroke="${c}" stroke-width="${w}" fill="none" stroke-linecap="round"/><path d="M${x0} ${y0} Q${xm} ${ym} ${x1} ${y1}" stroke="${d}" stroke-width="${w - 1}" fill="none" stroke-dasharray=".9 3.4" opacity=".6"/>`; const p = "M29 47 C26 22 38 14 50 14 C62 14 74 22 71 47 C70 38 66 31 58 29 C52 28 46 29 41 29 C36 31 31 38 29 47Z"; const crown = [-50, -25, 0, 25, 50].map(a => { const r = a * Math.PI / 180, sn = Math.sin(r), cs = Math.cos(r); return lock((50 + sn * 17).toFixed(1), (36 - cs * 19).toFixed(1), (50 + sn * 22).toFixed(1), (36 - cs * 25).toFixed(1), (50 + sn * 26).toFixed(1), (36 - cs * 29).toFixed(1), 9.6); }).join(""); return { back: [lock(34, 40, 30, 60, 31, 76, 6), lock(42, 44, 40, 62, 41, 80, 6), lock(58, 44, 60, 62, 59, 80, 6), lock(66, 40, 70, 60, 69, 76, 6)].join(""), front: `${crown}<path d="${p}" fill="${c}"/>${lock(29, 44, 24, 60, 25, 78, 6.4)}${lock(31.5, 47, 29, 62, 31, 82, 6.4)}${lock(71, 44, 76, 60, 75, 78, 6.4)}${lock(68.5, 47, 71, 62, 69, 82, 6.4)}` }; },
-    animespikes: c => ({ front: `<path d="M28.5 46 C27 40 26.5 34 27.5 28.5 L18 20 L30 21 L25 8 L37 17 L39 2 L46 16 L51 0.5 L56 16 L63 2 L65 17 L75 8 L70 21 L82 20 L72.5 28.5 C73.5 34 73 40 71.5 46 C70 40 66 35 62 31 L57 34 L54 29.5 L50 35.5 L46 29.5 L43 34 L38 31 C34 35 30 40 28.5 46Z" fill="${c}" stroke="${c}" stroke-width="1" stroke-linejoin="round"/>` })
   };
-  const HAIR_LIST = [["bald", "Bald", 0], ["buzz", "Buzz cut", 0], ["short", "Short", 0], ["long", "Long", 0], ["bob", "Bob", 1], ["ponytail", "Ponytail", 3], ["swoop", "Side swoop", 2], ["sidepart", "Side part", 1], ["slickback", "Slick back", 1], ["wavy", "Wavy long", 4], ["braids", "Braids", 2], ["curly", "Curly", 2], ["spiky", "Spiky", 3], ["pompadour", "Pompadour", 2], ["undercut", "Undercut", 2], ["afro", "Afro", 2], ["manbun", "Man bun", 2], ["mohawk", "Mohawk", 4]];
+  const HAIR_LIST = [["bald", "Bald", 0], ["buzz", "Buzz cut", 0], ["short", "Short", 0], ["long", "Long", 0], ["bob", "Bob", 1], ["ponytail", "Ponytail", 3], ["swoop", "Side swoop", 2], ["sidepart", "Side part", 1], ["slickback", "Slick back", 1], ["wavy", "Wavy long", 4], ["braids", "Braids", 2], ["curly", "Curly", 2], ["spiky", "Spiky", 3], ["pompadour", "Pompadour", 2], ["undercut", "Undercut", 2], ["manbun", "Man bun", 2], ["mohawk", "Mohawk", 4]];
 
   /* ------------------------------ eyes --------------------------------- */
   const EYE_Y = 45;
@@ -180,27 +216,14 @@
   /* ------------------------------ mouths -------------------------------- */
   const MOUTH = {
     smile: () => `<path d="M43.5 55 Q50 62 56.5 55" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
-    grin: () => `<path d="M42.5 53.5 Q50 65 57.5 53.5Z" fill="#fff" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/><path d="M44.4 57.4 H55.6" stroke="${INK}" stroke-width=".8"/>`,
+    grin: () => `<path d="M42 54 Q50 56 58 54 Q56 62 50 62 Q44 62 42 54Z" fill="#fffaf3" stroke="${INK}" stroke-width="1.25" stroke-linejoin="round"/><path d="M44 58 Q50 60 56 58" fill="none" stroke="#b7a8a4" stroke-width=".5"/>`,
     neutral: () => `<path d="M45 57 H55" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>`,
     open: () => `<path d="M43.5 54 Q50 68 56.5 54Z" fill="#6e2233" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/><path d="M46.4 61.2 Q50 57.8 53.6 61.2 Q50 64.4 46.4 61.2Z" fill="#ff7b8e"/>`,
     smirk: () => `<path d="M45 57.4 Q51 59.6 57.4 53.8" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
-    tongue: () => `<path d="M47 58.2 Q47.2 65.6 51.2 65 Q54.2 62.4 53 58.2Z" fill="#ff6f91" stroke="${INK}" stroke-width="1" stroke-linejoin="round"/><path d="M50 59.4 V62.6" stroke="#d94a72" stroke-width=".8" stroke-linecap="round"/><path d="M43.5 55 Q50 62 56.5 55" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
+    tongue: () => `<path d="M43 54.5 Q50 58 57 54.5 Q56 61 50 61 Q44 61 43 54.5Z" fill="#592735" stroke="${INK}" stroke-width="1.2"/><path d="M48 58.5 Q51 57.6 54 58.5 V61.7 C54 66.3 48 66.3 48 61.7Z" fill="#f47e98" stroke="#ae4563" stroke-width=".65"/><path d="M51 59.4 V62.5" stroke="#c75675" stroke-width=".55" stroke-linecap="round"/>`,
     surprised: () => `<ellipse cx="50" cy="58" rx="3.2" ry="4" fill="#5a1f30" stroke="${INK}" stroke-width="1.4"/>`,
     kiss: () => heart(50, 57.6, 3.1, "#e8505b"),
-    gold: (x) => {
-      const D = "M42.5 53.5 Q50 65 57.5 53.5Z", g = x.id("gt");
-      x.defs += `<linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2b0"/><stop offset=".42" stop-color="#f7c948"/><stop offset="1" stop-color="#c98a12"/></linearGradient>`;
-      let teeth = "", glint = "";
-      for (let i = 0; i < 5; i++) {
-        const tx = 43.1 + i * 2.84, h = i === 2 ? 4.9 : i % 2 ? 4.2 : 4.6;
-        teeth += `<rect x="${tx.toFixed(2)}" y="52.8" width="2.6" height="${h}" rx="1.05" fill="url(#${g})" stroke="#a56f0e" stroke-width=".28"/>`;
-        glint += `M${(tx + .55).toFixed(2)} 54.1 v1.5 `;
-      }
-      return `<path d="${D}" fill="#55192a"/>`
-        + x.clip(D, `<ellipse cx="50" cy="59.2" rx="4.4" ry="2.2" fill="#e8607a"/><path d="M47.6 58.4 Q50 59.6 52.4 58.4" stroke="#c0405c" stroke-width=".35" fill="none" stroke-linecap="round"/>${teeth}<path d="${glint}" stroke="#fff" stroke-opacity=".85" stroke-width=".45" stroke-linecap="round" fill="none"/>`)
-        + `<path d="${D}" fill="none" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>`;
-    },
-    braces: () => `<path d="M42.5 53.5 Q50 65 57.5 53.5Z" fill="#fff" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/><path d="M44.4 55.4 Q50 60 55.6 55.4" stroke="#9aa3b5" stroke-width="1.5" fill="none"/><path d="M47 55.8 v2.2 M50 56.6 v2.4 M53 55.8 v2.2" stroke="#9aa3b5" stroke-width="1"/>`
+    braces: () => MOUTH.grin()+`<path d="M44 56.7 Q50 58.8 56 56.7" stroke="#73849a" stroke-width=".65" fill="none"/>`+[45.2,48.4,51.6,54.8].map(xx=>`<rect x="${xx-.6}" y="${57.1-Math.abs(xx-50)*.12}" width="1.2" height="1.5" rx=".25" fill="#c5d6e9" stroke="#65788d" stroke-width=".3"/>`).join(""),
   };
   const MOUTH_LIST = [["smile", "Smile", 0], ["grin", "Big grin", 0], ["neutral", "Neutral", 0], ["open", "Open smile", 0], ["smirk", "Smirk", 3], ["tongue", "Tongue out", 4], ["surprised", "Surprised", 1], ["braces", "Braces", 2], ["kiss", "Kiss", 2]];
 
@@ -209,14 +232,14 @@
     none: () => "",
     freckles: () => ["35,52", "38.5,54.4", "41.5,51.6", "58.5,51.6", "61.5,54.4", "65,52"].map(s => { const [x, y] = s.split(","); return `<circle cx="${x}" cy="${y}" r=".95" fill="#a8613a" opacity=".85"/>`; }).join(""),
     blush: () => `<ellipse cx="37" cy="53" rx="4.4" ry="2.7" fill="#ff7b9c" opacity=".5"/><ellipse cx="63" cy="53" rx="4.4" ry="2.7" fill="#ff7b9c" opacity=".5"/>`,
-    mustache: h => `<path d="M42 54.4 C43.6 50.6 47.6 51.2 50 53.2 C52.4 51.2 56.4 50.6 58 54.4 C55.4 53.6 52.6 54.8 50 56.2 C47.4 54.8 44.6 53.6 42 54.4Z" fill="${h}"/>`,
-    goatee: h => `<path d="M44.6 60.4 C46.4 58.8 53.6 58.8 55.4 60.4 C56.4 63.8 54.6 67 50 67 C45.4 67 43.6 63.8 44.6 60.4Z" fill="${h}"/>`,
+    mustache: h=>`<path d="M50 53 Q46 49.8 43 53 Q41 55 39.5 53 Q40 58 45 56 Q48 56 50 54.5 Q52 56 55 56 Q60 58 60.5 53 Q59 55 57 53 Q54 49.8 50 53Z" fill="${h}"/><path d="M44 53.4 Q46 52 48 53.5 M52 53.5 Q54 52 56 53.4" stroke="${shade(h,.2)}" stroke-width=".4" fill="none"/>`,
+    goatee: h=>`<path d="M45 61 Q50 63 55 61 Q55 66 50 67 Q45 66 45 61Z" fill="${h}"/><path d="M47 62.5 L48 65 M50 63 V66 M53 62.5 L52 65" stroke="${shade(h,.2)}" stroke-width=".4" opacity=".6"/>`,
     beard: h => `<path fill-rule="evenodd" d="M30.8 49 C31 58 36 70 50 70 C64 70 69 58 69.2 49 C66 53.4 62.5 54 58.5 53.2 C55.4 52 52.8 52.4 50 53.2 C47.2 52.4 44.6 52 41.5 53.2 C37.5 54 34 53.4 30.8 49Z M42 55.2 Q50 51.8 58 55.2 Q57.6 63.6 50 64.2 Q42.4 63.6 42 55.2Z" fill="${h}"/>`,
-    stripes: (h, x) => x.head(`<path d="M30 49.6 L38.4 51.8 M30 54.6 L38 56.2 M70 49.6 L61.6 51.8 M70 54.6 L62 56.2" stroke="#3a8dff" stroke-width="2.4" stroke-linecap="round"/>`),
+    stripes: (h,x,col)=>x.head(`<path d="M31 50 L39 52 M31 54.5 L38.5 56 M69 50 L61 52 M69 54.5 L61.5 56" stroke="${col || '#3a8dff'}" stroke-width="2.5" stroke-linecap="round"/>`),
     paintstars: () => star5(36.6, 53, 3.6, "#ff5d8f") + star5(63.4, 53, 3.6, "#3a8dff"),
     glitter: () => ["35,50,1.2", "38,55,.9", "63,50,1.2", "61,55,.9", "50,37,1", "46,38.4,.8"].map(s => { const [x, y, r] = s.split(","); return `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff6a8" stroke="#f5b82e" stroke-width=".4"/>`; }).join(""),
     scar: () => `<path d="M35.4 48.6 L40 58.4" stroke="#c4523f" stroke-width="1.5" stroke-linecap="round"/><path d="M35.2 52.3 l3.3 -1.5 M36.6 55.3 l3.3 -1.5 M37.6 57.6 l3 -1.4" stroke="#8f3322" stroke-width=".9" stroke-linecap="round"/>`,
-    mask: (h, x) => x.head(`<path d="M28 50 C35 54 43 57 50 57 C57 57 65 54 72 50 V70 H28Z" fill="#cfe9ff" stroke="#8fb8d8" stroke-width="1"/><path d="M36 60 Q50 63.4 64 60 M37.4 64 Q50 67 62.6 64" stroke="#9fc4e0" stroke-width=".9" fill="none" stroke-linecap="round"/>`) + `<path d="M31.2 51.6 L29.2 49.8 M68.8 51.6 L70.8 49.8" stroke="#8fb8d8" stroke-width="1.2" stroke-linecap="round"/>`
+    mask: (h,x)=>x.head(`<path d="M29 51 Q50 47 71 51 L66 62 Q50 70 34 62Z" fill="#438fd0" stroke="#28659b" stroke-width=".8"/><path d="M36 54 Q50 57 64 54 M36 58 Q50 61 64 58 M39 62 Q50 64 61 62" fill="none" stroke="#8cc7ee" stroke-width=".65"/><path d="M30 52 L26 47 M70 52 L74 47" stroke="#d7e9f7" stroke-width="1.3"/>`),
   };
   const FACE_LIST = [["none", "Nothing", 0], ["freckles", "Freckles", 1], ["blush", "Blush", 1], ["mustache", "Moustache", 1], ["goatee", "Goatee", 1], ["mask", "Face mask", 1], ["beard", "Beard", 2], ["stripes", "Warpaint", 4], ["glitter", "Glitter", 2], ["scar", "Scar", 3], ["paintstars", "Star paint", 3]];
 
@@ -239,10 +262,14 @@
 
   /* ------------------------------ hats ---------------------------------- */
   // Hats that sit over the hair hide whatever hair would be above them.
-  const HAT_COVER = new Set(["cap", "capback", "beanie", "bucket", "beret", "hardhat", "grad", "chef", "cowboy", "santa", "sombrero", "tophat", "propeller"]);
+  const HAT_COVER = new Set(["cap", "capback", "beanie", "bucket", "beret", "grad", "chef", "cowboy", "santa", "sombrero", "propeller"]);
+  // long styles whose hair still hangs out from under a hat
+  const HAT_HAIR = new Set(["long", "wavy", "bob", "ponytail", "braids"]);
+  // restrained stitching added to the fabric hats
+  const hatStitch = (id, x) => x.clip(id==='grad'?'M50 8 L84 20 L50 32 L16 20Z':'M31 20 Q50 12 69 20 L69 30 Q50 35 31 30Z',`<path d="M34 27 Q50 31 66 27" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width=".55" stroke-dasharray="1.2 1.1"/>`);
   const HATS = {
     none: () => "",
-    cap: (x) => { const crown = "M29.5 34 C27 7 73 7 70.5 34 Q50 29.5 29.5 34Z"; return `<path d="${crown}" fill="#e5484d"/>${x.clip(crown, `<path d="M50 14 V32 M39.4 16 Q37 24 36.4 32 M60.6 16 Q63 24 63.6 32" stroke="#b02a2f" stroke-width="1" fill="none" opacity=".55"/>`)}<circle cx="50" cy="14.6" r="2" fill="#b02a2f"/><path d="M26.5 33.4 Q50 26.8 73.5 33.4 Q50 38.8 26.5 33.4Z" fill="#b02a2f"/>`; },
+    cap: (x) => { const crown = "M29.5 34 C27 7 73 7 70.5 34 Q50 29.5 29.5 34Z"; return `<path d="${crown}" fill="#e5484d"/>${x.clip(crown, `<path d="M50 14 V32 M39.4 16 Q37 24 36.4 32 M60.6 16 Q63 24 63.6 32" stroke="#b02a2f" stroke-width="1" fill="none" opacity=".55"/>`)}<circle cx="50" cy="14.6" r="2" fill="#b02a2f"/><path d="M26.5 33.4 Q50 26.8 73.5 33.4 Q50 38.8 26.5 33.4Z" fill="#b02a2f"/>` + hatStitch('cap', x); },
     capback: (x) => {
       // Baseball cap worn backwards: from the front you see the back of the cap — the snapback strap across the forehead.
       const crown = "M29.2 34.4 C26.6 7 73.4 7 70.8 34.4 Q50 39 29.2 34.4Z", blue = "#2f6fe0", dk = "#1f4fb0", hi = "#6a9ff2";
@@ -252,43 +279,42 @@
         + x.clip(crown, `<path d="M50 11 V36 M38.6 13.6 Q35 24 34.2 36 M61.4 13.6 Q65 24 65.8 36" stroke="${dk}" stroke-width=".8" fill="none" opacity=".75"/><path d="M33 22 C36 13 45 9.6 55 10.4" stroke="${hi}" stroke-width="2" fill="none" stroke-linecap="round" opacity=".8"/><path d="M26 31.2 Q50 36.4 74 31.2 V40 H26Z" fill="${dk}"/><circle cx="33.6" cy="21.4" r=".9" fill="${dk}"/><circle cx="66.4" cy="21.4" r=".9" fill="${dk}"/>`)
         + `<circle cx="50" cy="10.6" r="2.1" fill="${dk}"/><circle cx="49.5" cy="10.1" r=".7" fill="${hi}"/>`
         + `<path d="M40.6 31.6 Q50 34.2 59.4 31.6 L59.4 35.4 Q50 38 40.6 35.4Z" fill="#e8ecf4" stroke="#aab2c4" stroke-width=".5" stroke-linejoin="round"/>${holes}`
-        + `<rect x="38.6" y="31.4" width="2.4" height="4.2" rx="1" fill="#cfd6e4" stroke="#aab2c4" stroke-width=".4"/><rect x="59" y="31.4" width="2.4" height="4.2" rx="1" fill="#cfd6e4" stroke="#aab2c4" stroke-width=".4"/>`;
+        + `<rect x="38.6" y="31.4" width="2.4" height="4.2" rx="1" fill="#cfd6e4" stroke="#aab2c4" stroke-width=".4"/><rect x="59" y="31.4" width="2.4" height="4.2" rx="1" fill="#cfd6e4" stroke="#aab2c4" stroke-width=".4"/>` + hatStitch('capback', x);
     },
-    beanie: () => `<path d="M28.5 35 C25 4 75 4 71.5 35Z" fill="#8b5cf6"/><rect x="27" y="29.5" width="46" height="8" rx="4" fill="#6b3fd6"/><path d="M33 31 v5 M39 31 v5 M45 31 v5 M51 31 v5 M57 31 v5 M63 31 v5 M69 31.4 v4.2" stroke="#8b5cf6" stroke-width="1.2" stroke-linecap="round" opacity=".7"/><circle cx="50" cy="10.4" r="5.6" fill="#f1f1f6"/><circle cx="48.4" cy="8.8" r="1.4" fill="#fff"/>`,
-    bucket: (x) => { const crown = "M30 34 L33 11.5 Q50 6 67 11.5 L70 34Z"; return `<path d="${crown}" fill="#7ac7a0"/>${x.clip(crown, `<path d="M20 27.4 H80" stroke="#fff" stroke-width="2.4"/>`)}<path d="M21 33.4 Q50 25 79 33.4 Q50 39.6 21 33.4Z" fill="#5fae86"/>`; },
-    headband: () => `<path d="M29.4 34 Q50 21.5 70.6 34" stroke="#ff5d8f" stroke-width="4.6" fill="none" stroke-linecap="round"/>${star5(50, 26.6, 5.4, "#ffd23f", "#c9961a")}`,
-    beret: () => `<path d="M27 33.4 C23 17 38 8 56 9 C72 10 80 20 72 31 C60 35 40 36 27 33.4Z" fill="#e5484d"/><path d="M33 31.6 Q50 35.4 70.6 30.6" stroke="#b02a2f" stroke-width="1.2" fill="none" opacity=".6" stroke-linecap="round"/><rect x="54" y="4.8" width="3.4" height="5" rx="1.7" fill="#b02a2f"/>`,
-    hardhat: (x) => { const crown = "M28 34 C26 9 74 9 72 34Z"; return `<path d="${crown}" fill="#ffc21f"/>${x.clip(crown, `<path d="M44.4 10 L55.6 10 L56.4 34 L43.6 34Z" fill="#e8a600" opacity=".55"/><path d="M44.4 10 V34 M55.6 10 V34" stroke="#e8a600" stroke-width="1.2"/>`)}<rect x="24" y="30" width="52" height="5.6" rx="2.8" fill="#e8a600"/><circle cx="50" cy="24" r="2.6" fill="#fff6c9" stroke="#e8a600" stroke-width="1"/>`; },
-    grad: () => `<path d="M34 24 L34 32.6 Q50 38.4 66 32.6 L66 24Z" fill="#2a2630"/><path d="M50 8 L84 20 L50 32 L16 20Z" fill="#33333d" stroke="#1d1d24" stroke-width="1" stroke-linejoin="round"/><path d="M50 19.6 Q66 23.2 78.4 21.4" stroke="#f5c542" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M78.4 21.4 V29.6" stroke="#f5c542" stroke-width="1.3" stroke-linecap="round"/><path d="M76.6 29.4 h3.6 l.7 4.6 h-5z" fill="#f5c542"/><circle cx="50" cy="19.8" r="2.1" fill="#f5c542"/>`,
-    chef: (x) => { const band = "M33 21 H67 V34 H33Z"; return `<circle cx="38" cy="16" r="9" fill="#fff"/><circle cx="62" cy="16" r="9" fill="#fff"/><circle cx="50" cy="10" r="10" fill="#fff"/><path d="M33 21 H67 V34 H33Z" fill="#fff" stroke="#d8dce6" stroke-width="1.2" stroke-linejoin="round"/>${x.clip(band, `<path d="M41 22 V33 M50 22 V33 M59 22 V33" stroke="#d8dce6" stroke-width="1"/>`)}<path d="M33 30 H67" stroke="#d8dce6" stroke-width="1.2"/>`; },
-    cowboy: (x) => { const crown = "M33 28 C32 12 38 8 50 9 C62 8 68 12 67 28Z"; return `<path d="M13 30 C24 37 34 31 36 28.4 L64 28.4 C66 31 76 37 87 30 C85 22 74 24 69 26 L31 26 C26 24 15 22 13 30Z" fill="#a8743a"/><path d="${crown}" fill="#c08848"/>${x.clip(crown, `<path d="M30 24.6 H70" stroke="#6b4a22" stroke-width="3.2"/>`)}<path d="M42 12 Q50 17 58 12" stroke="#a8743a" stroke-width="1.6" fill="none" stroke-linecap="round"/>`; },
-    party: (x) => { const cone = "M50 6 L35.5 33 Q50 37 64.5 33Z"; return `<path d="${cone}" fill="#ff5d8f"/>${x.clip(cone, `<path d="M30 17 L70 17 M30 24.4 L70 24.4" stroke="#ffd23f" stroke-width="3"/><circle cx="46.6" cy="29.6" r="1.3" fill="#3a8dff"/><circle cx="53.6" cy="29.8" r="1.3" fill="#3ecf8e"/><circle cx="51" cy="12.4" r="1.1" fill="#3a8dff"/>`)}<circle cx="50" cy="6.4" r="3.6" fill="#ffd23f"/>`; },
+    beanie: x=>{const p="M28 33 C26 7 74 7 72 33Z";return `<path d="${p}" fill="#233857"/>${x.clip(p,`<path d="M34 15 Q31 23 32 32 M41 12 L39 32 M49 11 V32 M57 12 L59 32 M65 15 Q69 23 68 32" fill="none" stroke="#3d5275" stroke-width=".7"/>`)}<rect x="27" y="29" width="46" height="9" rx="3.5" fill="#192b46"/><path d="M32 31 V36 M37 31 V36 M42 31 V36 M47 31 V36 M52 31 V36 M57 31 V36 M62 31 V36 M67 31 V36" stroke="#344a6b" stroke-width=".65"/><rect x="57" y="31" width="6" height="4" rx=".8" fill="#d9e1ed"/>`;},
+    bucket: x=>{const p="M31 30 L34 14 Q50 10 66 14 L69 30Z";return `<path d="${p}" fill="#8bbba1"/>${x.clip(p,`<path d="M32 24 Q50 28 68 24" stroke="#507e68" stroke-width="3" fill="none"/><path d="M36 15 Q50 12 64 15 M33 28 Q50 32 67 28" stroke="#d2e8da" stroke-width=".6" fill="none"/>`)}<path d="M31 28 Q50 33 69 28 L78 36 Q50 44 22 36Z" fill="#719e85" stroke="#507e68" stroke-width=".7"/><path d="M27 35 Q50 41 73 35" fill="none" stroke="#c4ddcd" stroke-width=".65"/>`;},
+    beret: (x) => `<path d="M27 33.4 C23 17 38 8 56 9 C72 10 80 20 72 31 C60 35 40 36 27 33.4Z" fill="#e5484d"/><path d="M33 31.6 Q50 35.4 70.6 30.6" stroke="#b02a2f" stroke-width="1.2" fill="none" opacity=".6" stroke-linecap="round"/><rect x="54" y="4.8" width="3.4" height="5" rx="1.7" fill="#b02a2f"/>` + hatStitch('beret', x),
+    grad: (x) => `<path d="M34 24 L34 32.6 Q50 38.4 66 32.6 L66 24Z" fill="#2a2630"/><path d="M50 8 L84 20 L50 32 L16 20Z" fill="#33333d" stroke="#1d1d24" stroke-width="1" stroke-linejoin="round"/><path d="M50 19.6 Q66 23.2 78.4 21.4" stroke="#f5c542" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M78.4 21.4 V29.6" stroke="#f5c542" stroke-width="1.3" stroke-linecap="round"/><path d="M76.6 29.4 h3.6 l.7 4.6 h-5z" fill="#f5c542"/><circle cx="50" cy="19.8" r="2.1" fill="#f5c542"/>` + hatStitch('grad', x),
+    chef: (x) => { const band = "M33 21 H67 V34 H33Z"; return `<circle cx="38" cy="16" r="9" fill="#fff"/><circle cx="62" cy="16" r="9" fill="#fff"/><circle cx="50" cy="10" r="10" fill="#fff"/><path d="M33 21 H67 V34 H33Z" fill="#fff" stroke="#d8dce6" stroke-width="1.2" stroke-linejoin="round"/>${x.clip(band, `<path d="M41 22 V33 M50 22 V33 M59 22 V33" stroke="#d8dce6" stroke-width="1"/>`)}<path d="M33 30 H67" stroke="#d8dce6" stroke-width="1.2"/>` + hatStitch('chef', x); },
+    cowboy: (x) => { const crown = "M33 28 C32 12 38 8 50 9 C62 8 68 12 67 28Z"; return `<path d="M13 30 C24 37 34 31 36 28.4 L64 28.4 C66 31 76 37 87 30 C85 22 74 24 69 26 L31 26 C26 24 15 22 13 30Z" fill="#a8743a"/><path d="${crown}" fill="#c08848"/>${x.clip(crown, `<path d="M30 24.6 H70" stroke="#6b4a22" stroke-width="3.2"/>`)}<path d="M42 12 Q50 17 58 12" stroke="#a8743a" stroke-width="1.6" fill="none" stroke-linecap="round"/>` + hatStitch('cowboy', x); },
+    party: (x) => { const cone = "M50 6 L35.5 33 Q50 37 64.5 33Z"; return `<path d="${cone}" fill="#ff5d8f"/>${x.clip(cone, `<path d="M30 17 L70 17 M30 24.4 L70 24.4" stroke="#ffd23f" stroke-width="3"/><circle cx="46.6" cy="29.6" r="1.3" fill="#3a8dff"/><circle cx="53.6" cy="29.8" r="1.3" fill="#3ecf8e"/><circle cx="51" cy="12.4" r="1.1" fill="#3a8dff"/>`)}<circle cx="50" cy="6.4" r="3.6" fill="#ffd23f"/>` + hatStitch('party', x); },
     flowers: () => `<path d="M30 34 Q50 22 70 34" stroke="#3ea66a" stroke-width="2" fill="none" stroke-linecap="round"/>` + ["32,32.6,#ff7eb6", "39,28,#ffd23f", "46,25.6,#ff7eb6", "54,25.6,#8b5cf6", "61,28,#ff7eb6", "68,32.6,#ffd23f"].map(s => { const [x, y, f] = s.split(","); return `<g fill="${f}"><circle cx="${x}" cy="${+y - 2.4}" r="2.6"/><circle cx="${+x + 2.4}" cy="${y}" r="2.6"/><circle cx="${x}" cy="${+y + 2.4}" r="2.6"/><circle cx="${+x - 2.4}" cy="${y}" r="2.6"/><circle cx="${x}" cy="${y}" r="1.6" fill="#fff6a8"/></g>`; }).join(""),
     halo: () => `<ellipse cx="50" cy="9" rx="17" ry="4.6" fill="none" stroke="#f5c542" stroke-width="3.4"/><ellipse cx="50" cy="9" rx="17" ry="4.6" fill="none" stroke="#fff6a8" stroke-width="1" opacity=".8"/>`,
     devil: () => `<path d="M31 27 C25.6 19 27.6 8.6 34 4.4 C33.6 12.4 37.6 18.6 42 22.4Z M69 27 C74.4 19 72.4 8.6 66 4.4 C66.4 12.4 62.4 18.6 58 22.4Z" fill="#e5484d" stroke="#a82327" stroke-width="1" stroke-linejoin="round"/>`,
-    tophat: (x) => { const crown = "M34 30 L35 8 Q50 4 65 8 L66 30Z"; return `<ellipse cx="50" cy="30" rx="27" ry="5.2" fill="#1d1d24"/><path d="${crown}" fill="#26262e"/>${x.clip(crown, `<path d="M30 22.4 H70 V28.4 H30Z" fill="#e5484d"/>`)}<ellipse cx="50" cy="7.8" rx="15.2" ry="3" fill="#33333d"/>`; },
-    sombrero: (x) => { const crown = "M36 28 C36 7 64 7 64 28Z"; return `<ellipse cx="50" cy="27.6" rx="38" ry="7.6" fill="#e8b04c"/><ellipse cx="50" cy="27.6" rx="34.4" ry="6.3" fill="none" stroke="#e5484d" stroke-width="1.1" stroke-dasharray="2 2.4"/><path d="${crown}" fill="#f5c76b"/>${x.clip(crown, `<path d="M30 23.6 H70" stroke="#e5484d" stroke-width="3.2"/>`)}`; },
-    propeller: (x) => { const crown = "M29 34 C28 14 72 14 71 34Z"; return `<path d="${crown}" fill="#3a8dff"/>${x.clip(crown, `<path d="M29 31 Q50 36 71 31 V35 H29Z" fill="#e5484d"/>`)}<path d="M50 16.6 V9" stroke="#8a93a6" stroke-width="2" stroke-linecap="round"/><ellipse cx="41" cy="7.4" rx="9.4" ry="2.8" fill="#ffd23f" stroke="#c9961a" stroke-width=".8" transform="rotate(-10 41 7.4)"/><ellipse cx="59" cy="7.4" rx="9.4" ry="2.8" fill="#ffd23f" stroke="#c9961a" stroke-width=".8" transform="rotate(10 59 7.4)"/><circle cx="50" cy="8" r="2.2" fill="#e5484d"/>`; },
-    santa: () => `<path d="M27.5 33 C26 14 40 5 58 6 C70 7 79 14 83 26 C77 20.6 71.6 21.6 70.6 28.6 L72.4 33Z" fill="#e5484d"/><rect x="26" y="28.6" width="48" height="8" rx="4" fill="#fff"/><circle cx="82" cy="27" r="5.2" fill="#fff"/>`,
+    sombrero: (x) => { const crown = "M36 28 C36 7 64 7 64 28Z"; return `<ellipse cx="50" cy="27.6" rx="38" ry="7.6" fill="#e8b04c"/><ellipse cx="50" cy="27.6" rx="34.4" ry="6.3" fill="none" stroke="#e5484d" stroke-width="1.1" stroke-dasharray="2 2.4"/><path d="${crown}" fill="#f5c76b"/>${x.clip(crown, `<path d="M30 23.6 H70" stroke="#e5484d" stroke-width="3.2"/>`)}` + hatStitch('sombrero', x); },
+    propeller: (x) => { const crown = "M29 34 C28 14 72 14 71 34Z"; return `<path d="${crown}" fill="#3a8dff"/>${x.clip(crown, `<path d="M29 31 Q50 36 71 31 V35 H29Z" fill="#e5484d"/>`)}<path d="M50 16.6 V9" stroke="#8a93a6" stroke-width="2" stroke-linecap="round"/><ellipse cx="41" cy="7.4" rx="9.4" ry="2.8" fill="#ffd23f" stroke="#c9961a" stroke-width=".8" transform="rotate(-10 41 7.4)"/><ellipse cx="59" cy="7.4" rx="9.4" ry="2.8" fill="#ffd23f" stroke="#c9961a" stroke-width=".8" transform="rotate(10 59 7.4)"/><circle cx="50" cy="8" r="2.2" fill="#e5484d"/>` + hatStitch('propeller', x); },
+    santa: (x) => `<path d="M27.5 33 C26 14 40 5 58 6 C70 7 79 14 83 26 C77 20.6 71.6 21.6 70.6 28.6 L72.4 33Z" fill="#e5484d"/><rect x="26" y="28.6" width="48" height="8" rx="4" fill="#fff"/><circle cx="82" cy="27" r="5.2" fill="#fff"/>` + hatStitch('santa', x),
     crown: () => `<path d="M30 30 L28 10 L40 20 L50 6 L60 20 L72 10 L70 30Z" fill="#f5c542" stroke="#c9961a" stroke-width="1.6" stroke-linejoin="round"/><rect x="30" y="25.6" width="40" height="5.6" fill="#e0a82a"/><circle cx="50" cy="28.4" r="2.2" fill="#e5484d"/><circle cx="39" cy="28.4" r="1.8" fill="#3a8dff"/><circle cx="61" cy="28.4" r="1.8" fill="#3ecf8e"/><circle cx="28" cy="10" r="2.2" fill="#fff"/><circle cx="50" cy="6" r="2.2" fill="#fff"/><circle cx="72" cy="10" r="2.2" fill="#fff"/>`
   };
   const HAT_LIST = [["none", "None", 0], ["cap", "Red cap", 1], ["capback", "Backwards cap", 1], ["beanie", "Beanie", 1], ["bucket", "Bucket hat", 1], ["beret", "Beret", 1], ["grad", "Graduation cap", 4], ["chef", "Chef hat", 2], ["cowboy", "Cowboy hat", 2], ["party", "Party hat", 2], ["flowers", "Flower crown", 2], ["santa", "Santa hat", 3], ["devil", "Devil horns", 3], ["sombrero", "Sombrero", 2], ["propeller", "Propeller cap", 3], ["halo", "Halo", 3], ["crown", "Golden crown", 4]];
 
   /* ------------------------------ extras -------------------------------- */
+  // a faint highlight stroke added over the neckline extras
+  const extraGlint = (x, d) => x.body(`<path d="${d}" stroke="#fff" stroke-opacity=".38" stroke-width=".55" fill="none" stroke-linecap="round"/>`);
   const EXTRA = {
     none: () => ({}),
-    headphones: () => ({ front: `<path d="M28.5 46 C26.5 21 36 17.5 50 17.5 C64 17.5 73.5 21 71.5 46" stroke="#33333d" stroke-width="4.2" fill="none" stroke-linecap="round"/><rect x="24.5" y="40" width="9" height="16" rx="4.5" fill="#ff5d8f" stroke="#33333d" stroke-width="2"/><rect x="66.5" y="40" width="9" height="16" rx="4.5" fill="#ff5d8f" stroke="#33333d" stroke-width="2"/>` }),
-    earrings: () => ({ front: `<circle cx="29.8" cy="53.4" r="2" fill="none" stroke="#f5c542" stroke-width="1.3"/><circle cx="70.2" cy="53.4" r="2" fill="none" stroke="#f5c542" stroke-width="1.3"/>` }),
-    flowerear: () => ({ front: `<g transform="translate(29.6 40.4)"><path d="M0 0 L-6.4 3 Q-4 -1 0 0Z M0 0 L-2.4 6.6 Q1.4 4 0 0Z" fill="#3ea66a"/><g fill="#ff5d8f"><circle cy="-3.6" r="3.2"/><circle cx="3.6" r="3.2"/><circle cy="3.6" r="3.2"/><circle cx="-3.6" r="3.2"/></g><circle r="2.2" fill="#ffd23f"/></g>` }),
-    bowtie: () => ({ over: `<path d="M50 80.4 C45.4 74.8 39.2 75.2 39.2 80.4 C39.2 85.6 45.4 86 50 80.4Z M50 80.4 C54.6 74.8 60.8 75.2 60.8 80.4 C60.8 85.6 54.6 86 50 80.4Z" fill="#e5484d" stroke="#a82327" stroke-width="1" stroke-linejoin="round"/><rect x="47.4" y="77.6" width="5.2" height="5.6" rx="2" fill="#c43a40" stroke="#a82327" stroke-width=".8"/>` }),
+    headphones: () => ({ front: `<path d="M28.5 46 C26.5 21 36 17.5 50 17.5 C64 17.5 73.5 21 71.5 46" stroke="#33333d" stroke-width="4.2" fill="none" stroke-linecap="round"/><rect x="24.5" y="40" width="9" height="16" rx="4.5" fill="#ff5d8f" stroke="#33333d" stroke-width="2"/><rect x="66.5" y="40" width="9" height="16" rx="4.5" fill="#ff5d8f" stroke="#33333d" stroke-width="2"/>` + `<path d="M27 44 V51 M70 44 V51" stroke="#ffb1cf" stroke-width="1" stroke-linecap="round"/><path d="M33 27 Q50 13 67 27" fill="none" stroke="#606478" stroke-width=".8"/>` }),
+    earrings: () => ({ front: `<circle cx="29.8" cy="53.4" r="2" fill="none" stroke="#f5c542" stroke-width="1.3"/><circle cx="70.2" cy="53.4" r="2" fill="none" stroke="#f5c542" stroke-width="1.3"/>` + `<circle cx="29.2" cy="52.3" r=".5" fill="#fff5c2"/><circle cx="69.6" cy="52.3" r=".5" fill="#fff5c2"/>` }),
+    flowerear: () => ({ front: `<g transform="translate(29.6 40.4)"><path d="M0 0 L-6.4 3 Q-4 -1 0 0Z M0 0 L-2.4 6.6 Q1.4 4 0 0Z" fill="#3ea66a"/><g fill="#ff5d8f"><circle cy="-3.6" r="3.2"/><circle cx="3.6" r="3.2"/><circle cy="3.6" r="3.2"/><circle cx="-3.6" r="3.2"/></g><circle r="2.2" fill="#ffd23f"/></g>` + `<circle cx="29" cy="39.8" r=".65" fill="#fff5bc"/>` }),
+    bowtie: (x) => ({ over: `<path d="M50 80.4 C45.4 74.8 39.2 75.2 39.2 80.4 C39.2 85.6 45.4 86 50 80.4Z M50 80.4 C54.6 74.8 60.8 75.2 60.8 80.4 C60.8 85.6 54.6 86 50 80.4Z" fill="#e5484d" stroke="#a82327" stroke-width="1" stroke-linejoin="round"/><rect x="47.4" y="77.6" width="5.2" height="5.6" rx="2" fill="#c43a40" stroke="#a82327" stroke-width=".8"/>` + extraGlint(x, 'M42 79 L46 80 M54 80 L58 79') }),
     scarf: (x) => {
       const wrap = "M41.4 67.4 Q50 74 58.6 67.4 L62 72 C67.5 74 70.5 77 71 81.4 Q50 93 29 81.4 C29.5 77 32.5 74 38 72Z";
       const tail = "M56.6 82 L66.4 80.4 L68.4 98.2 L58 99.6Z";
-      return { over: `<path d="${wrap}" fill="#e5484d"/>${x.clip(wrap, `<path d="M36 70 L33 90 M43 73 L41 92 M50 74 L50 94 M57 73 L59 92 M64 70 L67 90" stroke="#fff" stroke-width="2.6" opacity=".85"/>`)}<path d="${tail}" fill="#c43a40"/>${x.clip(tail, `<path d="M55 88 H70 M55 93.6 H70" stroke="#fff" stroke-width="2.4" opacity=".85"/>`)}` };
+      return { over: `<path d="${wrap}" fill="#e5484d"/>${x.clip(wrap, `<path d="M36 70 L33 90 M43 73 L41 92 M50 74 L50 94 M57 73 L59 92 M64 70 L67 90" stroke="#fff" stroke-width="2.6" opacity=".85"/>`)}<path d="${tail}" fill="#c43a40"/>${x.clip(tail, `<path d="M55 88 H70 M55 93.6 H70" stroke="#fff" stroke-width="2.4" opacity=".85"/>`)}` + extraGlint(x, 'M36 77 Q47 83 59 77') };
     },
-    pearls: () => ({ over: [0, 1, 2, 3, 4, 5, 6].map(i => { const t = i / 6, px = 41.6 + t * 16.8, py = 76.4 + Math.sin(t * Math.PI) * 8; return `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.1" fill="#fbf7ee" stroke="#cfc7b4" stroke-width=".6"/>`; }).join("") }),
-    lanyard: (x) => ({ over: x.body(`<path d="M40.4 75.4 L50 87.6 L59.6 75.4" stroke="#3a8dff" stroke-width="2.8" fill="none" stroke-linejoin="round"/>`) + `<rect x="48.4" y="86" width="3.2" height="3" rx=".8" fill="#9aa3b5"/><rect x="43" y="88.4" width="14" height="10.2" rx="2" fill="#fff" stroke="#8a93a6" stroke-width="1"/><rect x="45" y="90.6" width="4.4" height="4.4" fill="#f1c27d"/><path d="M51 91.4 h4 M51 94.4 h4" stroke="#8a93a6" stroke-width="1" stroke-linecap="round"/>` }),
-    medal: (x) => ({ over: x.body(`<path d="M40.4 75.4 L47 87 M59.6 75.4 L53 87" stroke="#e5484d" stroke-width="4"/>`) + `<circle cx="50" cy="91.4" r="6.4" fill="#f5c542" stroke="#c9961a" stroke-width="1.4"/>${star5(50, 91.4, 4, "#c9961a")}` }),
+    pearls: (x) => ({ over: [0, 1, 2, 3, 4, 5, 6].map(i => { const t = i / 6, px = 41.6 + t * 16.8, py = 76.4 + Math.sin(t * Math.PI) * 8; return `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.1" fill="#fbf7ee" stroke="#cfc7b4" stroke-width=".6"/>`; }).join("") + extraGlint(x, 'M42 77 L43 77 M49 82 L50 82 M57 77 L58 77') }),
+    lanyard: (x) => ({ over: x.body(`<path d="M40.4 75.4 L50 87.6 L59.6 75.4" stroke="#3a8dff" stroke-width="2.8" fill="none" stroke-linejoin="round"/>`) + `<rect x="48.4" y="86" width="3.2" height="3" rx=".8" fill="#9aa3b5"/><rect x="43" y="88.4" width="14" height="10.2" rx="2" fill="#fff" stroke="#8a93a6" stroke-width="1"/><rect x="45" y="90.6" width="4.4" height="4.4" fill="#f1c27d"/><path d="M51 91.4 h4 M51 94.4 h4" stroke="#8a93a6" stroke-width="1" stroke-linecap="round"/>` + extraGlint(x, 'M45 97 H55') }),
+    medal: (x) => ({ over: x.body(`<path d="M40.4 75.4 L47 87 M59.6 75.4 L53 87" stroke="#e5484d" stroke-width="4"/>`) + `<circle cx="50" cy="91.4" r="6.4" fill="#f5c542" stroke="#c9961a" stroke-width="1.4"/>${star5(50, 91.4, 4, "#c9961a")}` + extraGlint(x, 'M46 88 Q50 85 54 88') }),
     backpack: (x) => {
       // Backpack: the top of the bag peeks over both shoulders, padded straps run down the chest, and a sternum strap links them.
       const bag = "#3b4358", bagHi = "#505a77", bagDk = "#2b3142", trim = "#ff8a3d";
@@ -299,10 +325,10 @@
         back: `<path d="M19 100 V82 Q19 65.6 34 65.6 H66 Q81 65.6 81 82 V100Z" fill="${bag}"/><path d="M19.6 80 Q19.6 66.6 34 66.2 H46" stroke="${bagHi}" stroke-width="1.6" fill="none" stroke-linecap="round"/><path d="M22.4 74 Q23.4 68.4 34 68.4 H66 Q76.6 68.4 77.6 74" stroke="${trim}" stroke-width=".7" fill="none"/>`,
         over: x.body(one(false) + one(true)
           + `<path d="M35.4 90.2 H64.6" stroke="${bagDk}" stroke-width="2" stroke-linecap="round"/><path d="M35.4 90.2 H64.6" stroke="${bagHi}" stroke-width=".5" stroke-dasharray="1 1"/>`
-          + `<rect x="47.2" y="88.2" width="5.6" height="4" rx=".9" fill="${trim}" stroke="#c4631b" stroke-width=".4"/><rect x="48.5" y="89.3" width="3" height="1.8" rx=".4" fill="${bagDk}"/>`)
+          + `<rect x="47.2" y="88.2" width="5.6" height="4" rx=".9" fill="${trim}" stroke="#c4631b" stroke-width=".4"/><rect x="48.5" y="89.3" width="3" height="1.8" rx=".4" fill="${bagDk}"/>`) + extraGlint(x, 'M29 96 L34 96 M66 96 L71 96')
       };
     },
-    eyepatch: (x) => ({ front: x.head(`<path d="M24 35 L54 42.6 M64 47.6 L76 50.6" stroke="#1d1d24" stroke-width="1.5" stroke-linecap="round"/>`) + `<ellipse cx="59" cy="45.6" rx="6.6" ry="5.6" fill="#1d1d24"/>` })
+    eyepatch: (x) => ({ front: x.head(`<path d="M24 35 L54 42.6 M64 47.6 L76 50.6" stroke="#1d1d24" stroke-width="1.5" stroke-linecap="round"/>`) + `<ellipse cx="59" cy="45.6" rx="6.6" ry="5.6" fill="#1d1d24"/>` + `<path d="M55 43 Q59 40 63 43" stroke="#505563" stroke-width=".7" fill="none"/>` })
   };
   const EXTRA_LIST = [["none", "None", 0], ["headphones", "Headphones", 1], ["earrings", "Gold earrings", 1], ["flowerear", "Flower behind ear", 1], ["bowtie", "Bow tie", 1], ["lanyard", "School lanyard", 1], ["backpack", "Backpack straps", 1],
     ["pearls", "Pearl necklace", 2], ["scarf", "Striped scarf", 2], ["eyepatch", "Eyepatch", 2], ["medal", "Gold medal", 3]];
@@ -370,38 +396,7 @@
           + `<rect x="48.8" y="70.4" width="2.4" height="2.8" rx=".9" fill="#dde1ea" stroke="#7d8597" stroke-width=".4"/><rect x="49.4" y="73" width="1.2" height="4.6" rx=".5" fill="#c4c9d6" stroke="#7d8597" stroke-width=".3"/>`
       };
     },
-    raincoat: (c, d, l, x) => {
-      // Glossy waterproof jacket: hood stowed behind the neck, storm collar with drawcords,
-      // snap-up storm flap, taped seam, reflective band and a few raindrops. All solid fills.
-      const hi = shade(c, .17), lo = shade(c, -.14), deep = shade(c, -.3), crease = shade(c, -.44), gloss = shade(c, .3), lining = shade(c, -.5);
-      const stop = (o, col) => `<stop offset="${o}" stop-color="${col}"/>`;
-      const gB = x.id("rb"), gS = x.id("rs"), gC = x.id("rc");
-      x.defs += `<linearGradient id="${gB}" gradientUnits="userSpaceOnUse" x1="14" y1="76" x2="86" y2="100">${stop(0, hi)}${stop(.4, c)}${stop(.75, lo)}${stop(1, deep)}</linearGradient>`
-        + `<linearGradient id="${gS}" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="88" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".28"/><stop offset=".24" stop-color="#000" stop-opacity="0"/><stop offset=".76" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></linearGradient>`
-        + `<linearGradient id="${gC}" gradientUnits="userSpaceOnUse" x1="31" y1="0" x2="69" y2="0">${stop(0, deep)}${stop(.28, c)}${stop(.5, hi)}${stop(.72, c)}${stop(1, deep)}</linearGradient>`;
-      const seam = y => `<path d="M6 ${y + 1} Q50 ${y + 6} 94 ${y + 1}" stroke="${hi}" stroke-width=".7" fill="none"/><path d="M6 ${y} Q50 ${y + 5} 94 ${y}" stroke="${crease}" stroke-width=".9" fill="none"/><path d="M6 ${y - 1.4} Q50 ${y + 3.6} 94 ${y - 1.4}" stroke="${crease}" stroke-width=".4" stroke-dasharray="1.4 1" opacity=".7" fill="none"/>`;
-      const band = `<path d="M6 92.6 Q50 97.6 94 92.6" stroke="#e6ebf3" stroke-width="2.2" fill="none"/><path d="M6 91.4 Q50 96.4 94 91.4 M6 93.8 Q50 98.8 94 93.8" stroke="${crease}" stroke-width=".35" fill="none"/><path d="M6 92.6 Q50 97.6 94 92.6" stroke="#aab4c6" stroke-width=".6" stroke-dasharray=".9 .9" fill="none"/>`;
-      const sheen = `<path d="M17 100 L33 76 L40 76 L25 100Z" fill="${hi}"/><path d="M28 100 L41 80 L43 80 L31 100Z" fill="${hi}"/><path d="M75 100 L67 83 L70 83 L80 100Z" fill="${hi}"/>`;
-      const drop = (cx, cy, r) => `<path d="M${cx} ${(cy - r * 1.6).toFixed(2)} C${(cx + r * .9).toFixed(2)} ${(cy - r * .5).toFixed(2)} ${cx + r} ${(cy + r * .6).toFixed(2)} ${cx} ${cy + r} C${cx - r} ${(cy + r * .6).toFixed(2)} ${(cx - r * .9).toFixed(2)} ${(cy - r * .5).toFixed(2)} ${cx} ${(cy - r * 1.6).toFixed(2)}Z" fill="#d3eaff" fill-opacity=".88" stroke="#8fc0f0" stroke-width=".25"/><circle cx="${(cx - r * .35).toFixed(2)}" cy="${cy}" r="${(r * .28).toFixed(2)}" fill="#fff"/>`;
-      const drops = [[23.4, 90.4, .95], [29, 96.4, .8], [74.4, 88.2, 1], [70.2, 96.8, .8], [64.6, 84.6, .7], [35, 87, .65]].map(a => drop(...a)).join("");
-      const placket = `<path d="M46.8 80 H53.2 V102 H46.8Z" fill="${hi}"/><path d="M46.8 80 V102 M53.2 80 V102" stroke="${crease}" stroke-width=".6" fill="none"/><path d="M48 80 V102 M52 80 V102" stroke="${crease}" stroke-width=".35" stroke-dasharray="1.2 .9" opacity=".7" fill="none"/>`
-        + [86.4, 92.4, 98.2].map(y => `<circle cx="50" cy="${y}" r="1.3" fill="${gloss}" stroke="${crease}" stroke-width=".5"/><circle cx="49.6" cy="${y - .4}" r=".35" fill="#fff"/>`).join("");
-      const collar = "M31.5 75.4 C31 70.6 36 68.6 40.6 70 Q46 72.2 50 72.8 Q54 72.2 59.4 70 C64 68.6 69 70.6 68.5 75.4 L68.5 78.2 Q50 85.4 31.5 78.2Z";
-      return {
-        back: `<path d="M26 78 C24 70.5 30 70 36 72.4 C44 75.6 56 75.6 64 72.4 C70 70 76 70.5 74 78 C75 85 70 88.5 62 88.5 L38 88.5 C30 88.5 25 85 26 78Z" fill="${lo}" stroke="${deep}" stroke-width="1.2" stroke-linejoin="round"/>`
-          + `<path d="M34 72 C42 76 58 76 66 72 L67 79.4 C59 84 41 84 33 79.4Z" fill="${lining}"/>`
-          + `<path d="M29.4 74 C26.8 79.4 29.4 84.6 36 86" stroke="${hi}" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M70.6 74 C73.2 79.4 70.6 84.6 64 86" stroke="${deep}" stroke-width="1.3" fill="none" stroke-linecap="round"/>`,
-        body: `<path d="${BODY}" fill="url(#${gB})"/>` + x.body(sheen + seam(84.6) + band + `<rect x="8" y="64" width="84" height="40" fill="url(#${gS})"/>` + drops + placket),
-        over: `<path d="M31.5 78.2 Q50 85.4 68.5 78.2 L68.5 80.2 Q50 88 31.5 80.2Z" fill="${deep}"/>`
-          + `<path d="${collar}" fill="url(#${gC})"/>`
-          + `<path d="M31.5 75.4 C31 70.6 36 68.6 40.6 70 Q46 72.2 50 72.8 Q54 72.2 59.4 70 C64 68.6 69 70.6 68.5 75.4" fill="none" stroke="${crease}" stroke-width=".9" stroke-linejoin="round"/>`
-          + `<path d="M31.2 76.2 Q50 83.4 68.8 76.2" stroke="${crease}" stroke-width=".5" stroke-dasharray="1.3 1" fill="none" opacity=".8"/>`
-          + `<path d="M50 72.8 V84" stroke="${crease}" stroke-width=".7"/><circle cx="50" cy="79.6" r="1.2" fill="${gloss}" stroke="${crease}" stroke-width=".45"/>`
-          + `<path d="M41 79.8 Q39 85 40.4 91.2 M59 79.8 Q61 85 59.6 91.2" stroke="#f3f5fa" stroke-width=".9" fill="none" stroke-linecap="round"/>`
-          + `<circle cx="41" cy="79.6" r=".8" fill="${gloss}" stroke="${crease}" stroke-width=".3"/><circle cx="59" cy="79.6" r=".8" fill="${gloss}" stroke="${crease}" stroke-width=".3"/>`
-          + `<rect x="39" y="90.4" width="2.8" height="3.6" rx="1.2" fill="#2b3142"/><rect x="58.2" y="90.4" width="2.8" height="3.6" rx="1.2" fill="#2b3142"/>`
-      };
-    },
+    raincoat: (c,d,l,x)=>({back:`<path d="M28 77 Q24 62 39 66 Q50 72 61 66 Q76 62 72 77 L65 84 H35Z" fill="${d}"/><path d="M33 73 Q50 63 67 73 L62 79 H38Z" fill="${shade(c,-.4)}"/>`,body:topShape(c,`<path d="M24 83 Q50 92 76 83" stroke="${d}" stroke-width=".9" fill="none"/><path d="M26 93 L39 91 L40 96 L27 98Z M61 91 L74 93 L73 98 L60 96Z" fill="${d}"/><path d="M27 93 L39 91 M61 91 L73 93" stroke="${l}" stroke-width=".6"/><path d="M22 88 L28 85 M72 85 L78 88" stroke="#dbe6ee" stroke-width="2"/><path d="M48 80 H52 V101 H48Z" fill="${d}"/><path d="M50 82 V100" stroke="#c8d3de" stroke-width=".65" stroke-dasharray=".7 .7"/>`,x),over:`<path d="M36 73 L49 79 L44 86 L32 77Z M64 73 L51 79 L56 86 L68 77Z" fill="${shade(c,.1)}" stroke="${d}" stroke-width=".8"/><rect x="49" y="80" width="2" height="3" rx=".6" fill="#dbe6ee"/>`}),
     blazer: (c, d, l, x) => {
       // Tailored blazer: notch lapels, white shirt with collar and a tonal tie, breast pocket with pocket square.
       const hi = shade(c, .12), lo = shade(c, -.12), deep = shade(c, -.3), crease = shade(c, -.44), tie = shade(c, -.5), tieHi = shade(c, -.2);
@@ -442,7 +437,7 @@
           + `<path d="M43.2 77 Q50 91.6 56.8 77" fill="none" stroke="#f5c542" stroke-width=".75" stroke-linecap="round"/><circle cx="50" cy="90.2" r="1.15" fill="#f5c542" stroke="#c9961a" stroke-width=".3"/>`
           + `<path d="${lapelL}" fill="url(#${gl})"/><path d="${lapelR}" fill="url(#${gl})"/>`
           + `<path d="M40 75.8 L29.4 78.2 L35.4 90 L50 98.4 M60 75.8 L70.6 78.2 L64.6 90 L50 98.4" fill="none" stroke="#f1f3ff" stroke-width=".9" stroke-linejoin="round" stroke-linecap="round"/>`
-          + `<path d="M38.4 77.4 L31.8 79 M61.6 77.4 L68.2 79" stroke="#b9a0ff" stroke-width=".7" stroke-linecap="round" opacity=".8"/>`
+          + `<path d="M38.4 77.4 L31.8 79 M61.6 77.4 L68.2 79" stroke="#b9a0ff" stroke-width=".7" stroke-linecap="round" opacity=".8"/>` + x.body(`<path d="M25 84 Q23 91 25 100 M75 84 Q77 91 75 100" stroke="#69749c" stroke-width=".7" fill="none"/><path d="M30 94 L39 92 M61 92 L70 94" stroke="#f4f2ff" stroke-width="1.1"/>`)
       };
     }
   };
@@ -661,7 +656,6 @@
         `<path d="M8.5 76 L12.4 64 L16.3 76Z M6.4 81 L12.4 68 L18.4 81Z M21 79 L24 70 L27 79Z" fill="#2f8a4a"/><path d="M12.4 81 V84 M24 79 V82" stroke="#6b4a2a" stroke-width="1.6"/>`;
     },
     beach: () => `<rect width="100" height="100" fill="#bfe6ff"/><circle cx="80" cy="20" r="10" fill="#ffd23f"/><rect y="58" width="100" height="18" fill="#3fb6e8"/><path d="M0 74 Q12 68 25 74 T50 74 T75 74 T100 74 V80 H0Z" fill="#fff" opacity=".5"/><rect y="78" width="100" height="22" fill="#f4d9a0"/>`,
-    rainbow: () => `<rect width="100" height="100" fill="#e9f5ff"/>${["#ff5d5d", "#ffa94d", "#ffe066", "#69db7c", "#4dabf7", "#9775fa"].map((c, i) => `<circle cx="50" cy="104" r="${92 - i * 8}" fill="none" stroke="${c}" stroke-width="8"/>`).join("")}`,
     disco: (ctx) => { const i = ctx.id("dc"); ctx.defs += `<radialGradient id="${i}" cx=".5" cy=".5" r=".7"><stop offset="0" stop-color="#ff8ad8"/><stop offset="1" stop-color="#5b2fc9"/></radialGradient>`; let d = ""; for (let k = 0; k < 14; k++) { const a = k * 2.4, r = 14 + (k % 4) * 11; d += `<circle cx="${50 + Math.cos(a) * r}" cy="${50 + Math.sin(a) * r}" r="${2 + k % 3}" fill="${["#fff", "#ffe14d", "#4dffea", "#ff7aa8"][k % 4]}" opacity=".7"/>`; } return `<rect width="100" height="100" fill="url(#${i})"/>${d}`; },
     lava: (ctx) => { const i = ctx.id("lv"); ctx.defs += `<linearGradient id="${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b0d0d"/><stop offset=".6" stop-color="#d9381e"/><stop offset="1" stop-color="#ffb02e"/></linearGradient>`; return `<rect width="100" height="100" fill="url(#${i})"/>${stars([[18, 72, 3], [80, 78, 4], [60, 90, 2.6], [30, 90, 2], [90, 60, 2]], "#ffd36a")}`; },
     snow: () => `<rect width="100" height="100" fill="#dceeff"/><path d="M0 82 Q25 70 50 80 T100 76 V100 H0Z" fill="#fff"/>${stars([[14, 16, 1.6], [30, 30, 1.2], [60, 12, 1.6], [84, 24, 1.3], [70, 44, 1], [10, 50, 1.2], [92, 56, 1.5]])}`,
@@ -712,6 +706,10 @@
   /* ------------------------------ costumes ------------------------------ */
   const NINJA_WRAP = "M50 19 C63 19 74.4 28 74.4 44 C74.4 56 68 64 60 68 L67 78 Q50 91 33 78 L40 68 C32 64 25.6 56 25.6 44 C25.6 28 37 19 50 19Z";
   const NINJA_WINDOW = "M31 43.2 Q31 37.6 37 37.6 H63 Q69 37.6 69 43.2 V47 Q69 51.4 63 51.4 H37 Q31 51.4 31 47Z";
+  // Adventurer Mage: shared geometry keeps cloth and rarity effects aligned.
+  const MAGE_HOOD = "M24 71 C17 59 19 37 29 23 C35 14 42 8 49 5 C58 7 64 13 69 20 L78 28 Q80 32 74 32 L71 31 C80 47 81 61 76 71 Q63 79 50 77 Q37 79 24 71Z";
+  const MAGE_OPENING = "M50 23 C39 23 30 31 28.5 43 C27 55 34 65 42 68 Q50 72 58 68 C66 65 73 55 71.5 43 C70 31 61 23 50 23Z";
+  const MAGE_RING = MAGE_HOOD + " " + MAGE_OPENING;
   const COSTUMES = {
     ninja: (x) => ({
       hide: { hair: 1, hat: 1, top: 1 }, eyesOnTop: 1,
@@ -721,38 +719,41 @@
         `<path d="M71 31.4 C76.6 29.6 82.4 31.6 84.6 37 C81 35.2 78 35.6 75.6 37.4 C78.6 40.2 79.8 43.8 79.4 47.4 C76.6 43.8 74.4 41.6 71 40.2Z" fill="#e5484d"/>`
     }),
     wizard: (x) => {
-      const L = "M25 82 C18 71 17 60 22 50.6 C25 56 30 63 38 70 L38 84Z";
-      const R = "M75 82 C82 71 83 60 78 50.6 C75 56 70 63 62 70 L62 84Z";
-      const spark = (cx, cy, r) => `<path d="M${cx} ${cy - r} Q${cx} ${cy} ${cx + r} ${cy} Q${cx} ${cy} ${cx} ${cy + r} Q${cx} ${cy} ${cx - r} ${cy} Q${cx} ${cy} ${cx} ${cy - r}Z" fill="#8ff3ff" stroke="#e8ffff" stroke-width=".5"/>`;
-      const cg = x.id("wc"), lg = x.id("wl"), rg = x.id("wr"), gg = x.id("wg"), og = x.id("wo"), jg = x.id("wj");
-      x.defs += `<linearGradient id="${cg}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b3fae"/><stop offset="1" stop-color="#1d1660"/></linearGradient>`
-        + `<linearGradient id="${lg}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9a7cf5"/><stop offset="1" stop-color="#4a38aa"/></linearGradient>`
-        + `<linearGradient id="${rg}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5347c0"/><stop offset=".55" stop-color="#3a2f93"/><stop offset="1" stop-color="#241c70"/></linearGradient>`
-        + `<linearGradient id="${gg}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0b0"/><stop offset=".5" stop-color="#f5c542"/><stop offset="1" stop-color="#b8861a"/></linearGradient>`
-        + `<radialGradient id="${og}" cx=".36" cy=".3" r=".85"><stop offset="0" stop-color="#f2ffff"/><stop offset=".32" stop-color="#6aeaff"/><stop offset=".72" stop-color="#1c93d4"/><stop offset="1" stop-color="#0b3f86"/></radialGradient>`
-        + `<linearGradient id="${jg}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b8f8ff"/><stop offset=".5" stop-color="#3fd2f0"/><stop offset="1" stop-color="#1a7fc4"/></linearGradient>`;
-      const trim = `url(#${gg})`;
-      const cape = (d, lin, fold) => `<path d="${d}" fill="url(#${cg})"/>` + x.clip(d, `<path d="${lin}" fill="url(#${lg})"/><path d="${fold}" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="1.4" stroke-linecap="round"/>`);
-      const constel = (pts, ln) => `<path d="${ln}" fill="none" stroke="#ffd23f" stroke-width=".45" stroke-dasharray="1 1.3" opacity=".7"/>` + pts.map(p => star5(p[0], p[1], p[2], "#ffd23f")).join("");
+      // Flat, compact SVG clothing, not a raster illustration. All torso details
+      // share BODY clipping; the open hood never paints over the face.
+      const cloth = "#39315f", deep = "#211d38", light = "#51447c";
+      const gold = "#d5ad62", goldHi = "#f0d69a", leather = "#79533c";
+      const capeL = "M38 74 Q27 76 17 86 L13 100 H35 L47 81Z";
+      const capeR = "M62 74 Q73 76 83 86 L87 100 H65 L53 81Z";
+      const ring = `<path d="${MAGE_RING}" fill="${cloth}" fill-rule="evenodd" stroke="${deep}" stroke-width=".9" stroke-linejoin="round"/>`;
+      const hood = ring + x.clip(`<path d="${MAGE_RING}" clip-rule="evenodd"/>`,
+        `<path d="M49 5 Q32 29 26 55 Q23 66 27 74 L16 75 V4Z" fill="${light}"/>`
+        + `<path d="M51 6 Q65 23 69 37 Q78 56 72 74 L85 74 V5Z" fill="${deep}" opacity=".42"/>`
+        + `<path d="M49 8 Q43 14 40 23 M69 21 L76 28 L71 28 M24 55 Q23 65 28 70 M76 54 Q78 65 73 70" fill="none" stroke="${light}" stroke-width=".8" stroke-linecap="round"/>`)
+        + `<path d="${MAGE_OPENING}" fill="none" stroke="${gold}" stroke-width="1.25"/>`
+        + `<path d="M31 34 Q37 25 47 24 M29 48 Q29 58 35 63" fill="none" stroke="${goldHi}" stroke-width=".45" stroke-linecap="round"/>`
+        + `<path d="M50 11 L53.3 16.5 L50 22 L46.7 16.5Z" fill="${gold}" stroke="${deep}" stroke-width=".6"/>`
+        + `<path d="M50 12.8 L52 16.5 L50 20.2 L48 16.5Z" fill="#a58adf"/><path d="M50 12.8 V20.2 L48 16.5Z" fill="#d4baff"/>`;
+      const cape = x.body(`<path d="${capeL}" fill="${cloth}"/><path d="${capeR}" fill="${cloth}"/>`
+        + `<path d="M36 78 Q26 83 22 100 M64 78 Q74 83 78 100" fill="none" stroke="${light}" stroke-width="2"/>`
+        + `<path d="M18 87 L34 83 L43 78 M82 87 L66 83 L57 78 M34 85 L29 100 M66 85 L71 100" fill="none" stroke="${gold}" stroke-width="1.15" stroke-linejoin="round"/>`
+        + `<path d="M25 93 L27 90 L29 93 L27 96Z M71 93 L73 90 L75 93 L73 96Z" fill="${gold}" opacity=".75"/>`);
+      const gear = x.body(
+        `<path d="M62 78 L67 80 L44 102 L37 102Z" fill="${leather}" stroke="#493326" stroke-width=".7"/>`
+        + `<path d="M63 80 L41 101" fill="none" stroke="#b68a5a" stroke-width=".5"/>`
+        + `<g transform="translate(53 90) rotate(-46)"><rect x="-3.1" y="-3.6" width="6.2" height="7.2" rx=".8" fill="${gold}" stroke="#785d32" stroke-width=".5"/><rect x="-1.9" y="-2.3" width="3.8" height="4.6" rx=".3" fill="${leather}"/><path d="M-2.2 0 H2.4" stroke="${goldHi}" stroke-width=".65"/></g>`
+        + `<path d="M32 94 H45 V100 H32Z" fill="#60412f" stroke="#392b24" stroke-width=".65"/><path d="M31.5 94 Q38.5 91.8 45.5 94 L44 97 H33Z" fill="#906747" stroke="#493326" stroke-width=".6"/><rect x="37.4" y="94.5" width="2.2" height="3.2" rx=".5" fill="${gold}"/>`
+        + `<path d="M62 90 V93 M67 90 V93" stroke="#493326" stroke-width="1.3"/><path d="M62 92 H67 V94 L68 95 V99 Q64.5 101 61 99 V95 L62 94Z" fill="#b8a3e5" stroke="#3a2d56" stroke-width=".65"/><path d="M61.7 96 Q64.5 95.2 67.3 96 V98.7 Q64.5 100 61.7 98.7Z" fill="#8061c1"/><rect x="62" y="91.4" width="5" height="1.5" rx=".35" fill="#b58a57"/><path d="M62.6 94.7 V97.8" stroke="#e7dcff" stroke-width=".6" stroke-linecap="round"/>`);
       return {
-        hide: { hat: 1, top: 1 },
-        back: cape(L, "M26 82 C20 71 19.6 61 23.6 53 C26.4 58 31 64 39 72 L39 84Z", "M31 79 C27 72 25.6 65 27 58.6")
-          + cape(R, "M74 82 C80 71 80.4 61 76.4 53 C73.6 58 69 64 61 72 L61 84Z", "M69 79 C73 72 74.4 65 73 58.6")
-          + star5(27.4, 69, 2.2, "#ffd23f") + star5(72.6, 69, 2.2, "#ffd23f") + star5(24.6, 60, 1.4, "#fff") + star5(75.4, 60, 1.4, "#fff")
-          + `<path d="M25 82 C18 71 17 60 22 50.6 C25 56 30 63 38 70" fill="none" stroke="${trim}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M75 82 C82 71 83 60 78 50.6 C75 56 70 63 62 70" fill="none" stroke="${trim}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`,
-        body: topShape(`url(#${rg})`,
-          `<path d="M20 100 C25 90 31 82 38 77 M80 100 C75 90 69 82 62 77" stroke="#fff" stroke-opacity=".09" stroke-width="3.2" fill="none" stroke-linecap="round"/><path d="M30 100 C32 92 35 86 40 80 M70 100 C68 92 65 86 60 80" stroke="#150f4a" stroke-opacity=".3" stroke-width="1.4" fill="none"/>`
-          + constel([[22, 92, 2.4], [33, 86, 1.6], [27, 97, 1.3]], "M22 92 L33 86 M22 92 L27 97") + constel([[76, 94, 2], [67, 87, 1.6], [72, 98.4, 1.3]], "M76 94 L67 87 M76 94 L72 98.4"), x),
-        over: `<path d="M40.4 76.2 Q50 97.4 59.6 76.2Z" fill="#e4deff"/><path d="M42 77 Q50 94 58 77" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width=".8"/>`
-          + x.body(`<path d="M10 100 C10.0 89.6 20.2 81.8 36.6 79.0" fill="none" stroke="${trim}" stroke-width="2.4" stroke-linecap="round"/><path d="M90 100 C90.0 89.6 79.8 81.8 63.4 79.0" fill="none" stroke="${trim}" stroke-width="2.4" stroke-linecap="round"/><path d="M14 99.4 C14 90 24 84.2 36 82.8 M86 99.4 C86 90 76 84.2 64 82.8" fill="none" stroke="#f5c542" stroke-width=".8" stroke-dasharray="1.6 2.2" opacity=".9"/>`)
-          + `<path d="M38.2 76.4 Q50 100 61.8 76.4" fill="none" stroke="${trim}" stroke-width="1.8" stroke-linecap="round"/>`
-          + `<path d="M50 86 L53.8 91.6 L50 98.8 L46.2 91.6Z" fill="url(#${jg})" stroke="${trim}" stroke-width="1.1" stroke-linejoin="round"/><path d="M50 86 V98.8 M46.2 91.6 H53.8" stroke="#e8ffff" stroke-width=".3" opacity=".7"/><path d="M50 88.2 L51.5 91.6 L50 95.2 L48.5 91.6Z" fill="#e8ffff" opacity=".75"/>`,
-        front: `<path d="M30.6 36.6 Q50 25.6 69.4 36.6" fill="none" stroke="${trim}" stroke-width="2.2" stroke-linecap="round"/><path d="M31.6 36 Q50 26.6 68.4 36" fill="none" stroke="#fff6c8" stroke-width=".5" opacity=".8" stroke-linecap="round"/>`
-          + `<path d="M34 35.4 q-1.9 -1.5 -.7 -3.3 q1.6 .8 1.8 2.5Z M66 35.4 q1.9 -1.5 .7 -3.3 q-1.6 .8 -1.8 2.5Z" fill="${trim}"/>`
-          + `<circle cx="50" cy="31.4" r="4.6" fill="#5ee6ff" opacity=".3"/><circle cx="31.6" cy="36" r="1.5" fill="${trim}"/><circle cx="68.4" cy="36" r="1.5" fill="${trim}"/><circle cx="31.2" cy="35.6" r=".45" fill="#fff" opacity=".9"/><circle cx="68" cy="35.6" r=".45" fill="#fff" opacity=".9"/>`
-          + `<path d="M50 26.4 L53.6 31.4 L50 36.4 L46.4 31.4Z" fill="url(#${jg})" stroke="${trim}" stroke-width="1" stroke-linejoin="round"/><path d="M50 26.4 V36.4 M46.4 31.4 H53.6" stroke="#e8ffff" stroke-width=".28" opacity=".7"/><path d="M50 28.4 L51.5 31.4 L50 34Z" fill="#e8ffff" opacity=".85"/>`
-          + spark(13, 62, 3.2) + spark(88, 40, 2.4) + spark(18, 31, 1.8)
-          + `<!--orb--><circle cx="85" cy="58" r="8" fill="#5ee6ff" opacity=".14"/><path d="M79.8 64.8 Q85 69.4 90.2 64.8" fill="none" stroke="${trim}" stroke-width="1.3" stroke-linecap="round"/><circle cx="85" cy="58" r="5" fill="url(#${og})" stroke="#e8ffff" stroke-width=".7"/><path d="M82.2 59.6 C82.5 55.8 86.4 54.8 87.8 57.2 C86.2 56.6 84.2 57.6 84.2 60Z" fill="#fff" opacity=".26"/><path d="M85.6 55.8 l.6 1.5 1.5 .6 -1.5 .6 -.6 1.5 -.6 -1.5 -1.5 -.6 1.5 -.6z" fill="#fff" opacity=".9"/><ellipse cx="83" cy="55.5" rx="1.5" ry="1" fill="#fff" opacity=".85" transform="rotate(-35 83 55.5)"/><!--/orb-->`
+        hide: { hair: 1, hat: 1, top: 1 },
+        back: `<path d="${MAGE_HOOD}" fill="${deep}"/>`,
+        body: topShape("#2b293c", `<path d="M43 77 L50 83 L57 77 V100 H43Z" fill="#343044"/><path d="M50 84 V100 M39 88 L36 100 M61 88 L64 100" stroke="#1e1c2c" stroke-width=".8" fill="none"/>`, x),
+        over: cape + gear,
+        front: hood
+          + `<path d="M29 68 Q39 71 50 74 Q61 71 71 68 L73 74 Q64 81 50 82 Q36 81 27 74Z" fill="${light}" stroke="${deep}" stroke-width=".8" stroke-linejoin="round"/>`
+          + `<path d="M30 73 Q39 78 47 78 M53 78 Q61 78 70 73" stroke="${gold}" stroke-width="1" fill="none" stroke-linecap="round"/>`
+          + `<path d="M33 71 Q40 75 46 75 M54 75 Q60 75 67 71" stroke="#756397" stroke-width=".7" fill="none"/>`
+          + `<circle cx="50" cy="77.5" r="4.1" fill="${gold}" stroke="#765b32" stroke-width=".7"/><circle cx="50" cy="77.5" r="2.8" fill="#7250ad" stroke="${deep}" stroke-width=".5"/><path d="M50 75.2 L51.7 77.5 L50 79.8 L48.3 77.5Z" fill="#b99ae8"/><path d="M50 75.2 L48.3 77.5 L50 78Z" fill="#e4d2ff"/>`
       };
     },
     shark: (x) => ({
@@ -760,11 +761,12 @@
       body: topShape("#5f81a8", `<path d="M34 100 Q34 88 50 85.6 Q66 88 66 100Z" fill="#eaf2fa"/>`, x),
       front: `<path d="M38 18 Q43 -1 64 14.4Z" fill="#587aa0"/><path fill-rule="evenodd" d="M19 45 a31 33 0 1 0 62 0 a31 33 0 1 0 -62 0Z M31 44.6 a19 20.6 0 1 0 38 0 a19 20.6 0 1 0 -38 0Z" fill="#6d8fb5"/>` +
         [[38, 28.8], [44, 25.2], [50, 24], [56, 25.2], [62, 28.8]].map(p => `<path d="M${p[0] - 2.6} ${p[1] - 1} L${p[0] + 2.6} ${p[1] - 1} L${p[0]} ${p[1] + 4.8}Z" fill="#fff" stroke="#c9d6e6" stroke-width=".8" stroke-linejoin="round"/>`).join("") +
-        `<circle cx="36" cy="19" r="2.8" fill="#fff"/><circle cx="64" cy="19" r="2.8" fill="#fff"/><circle cx="36.3" cy="19.2" r="1.3" fill="${INK}"/><circle cx="63.7" cy="19.2" r="1.3" fill="${INK}"/>`
+        `<circle cx="36" cy="19" r="2.8" fill="#fff"/><circle cx="64" cy="19" r="2.8" fill="#fff"/><circle cx="36.3" cy="19.2" r="1.3" fill="${INK}"/><circle cx="63.7" cy="19.2" r="1.3" fill="${INK}"/><path d="M24 40 Q21 51 29 61 M76 40 Q79 51 71 61" fill="none" stroke="#496e96" stroke-width="1.2"/><path d="M24 43 l4 1 M24 48 l4 1 M76 43 l-4 1 M76 48 l-4 1" stroke="#3e5f83" stroke-width=".8"/><path d="M34 67 Q50 79 66 67" stroke="#a6bfd6" stroke-width="1.4" fill="none"/>`,
+      over: `<path d="M42 81 L42 91 M58 81 L58 91" stroke="#dce8f2" stroke-width="1" stroke-linecap="round"/><path d="M38 97 Q50 91 62 97" stroke="#496e96" stroke-width=".8" fill="none"/>`
     }),
     ghost: () => ({
       hide: { hair: 1, hat: 1, top: 1, face: 1, head: 1, extra: 1 }, body: "",
-      front: `<path d="M14 100 C10 50 18 10 50 8 C82 10 90 50 86 100 L78 92 L70 100 L62 92 L54 100 L46 92 L38 100 L30 92 L22 100Z" fill="#fafbff" stroke="#d6dbea" stroke-width="1.6" stroke-linejoin="round"/><ellipse cx="38" cy="42" rx="5" ry="7.4" fill="#1d1d24"/><ellipse cx="62" cy="42" rx="5" ry="7.4" fill="#1d1d24"/><ellipse cx="50" cy="58" rx="4" ry="5.4" fill="#1d1d24"/><ellipse cx="29" cy="54" rx="4" ry="2.4" fill="#ffb4c8" opacity=".7"/><ellipse cx="71" cy="54" rx="4" ry="2.4" fill="#ffb4c8" opacity=".7"/>`
+      front: `<g transform="translate(9 13) scale(.82)"><path d="M14 100 C10 50 18 10 50 8 C82 10 90 50 86 100 L78 92 L70 100 L62 92 L54 100 L46 92 L38 100 L30 92 L22 100Z" fill="#fafbff" stroke="#d6dbea" stroke-width="1.6" stroke-linejoin="round"/><ellipse cx="38" cy="42" rx="5" ry="7.4" fill="#1d1d24"/><ellipse cx="62" cy="42" rx="5" ry="7.4" fill="#1d1d24"/><ellipse cx="50" cy="58" rx="4" ry="5.4" fill="#1d1d24"/><ellipse cx="29" cy="54" rx="4" ry="2.4" fill="#ffb4c8" opacity=".7"/><ellipse cx="71" cy="54" rx="4" ry="2.4" fill="#ffb4c8" opacity=".7"/></g>`
     })
   };
   const COSTUME_LIST = [["none", "No costume", 0], ["ghost", "Friendly ghost", 3], ["ninja", "Ninja", 3], ["shark", "Shark hoodie", 3], ["wizard", "Mage", 4]];
@@ -779,17 +781,22 @@
   };
   const mirrorBrow = b => [100 - b[0], b[1], 100 - b[2], b[3], 100 - b[4], b[5], b[6]];
   const browPair = b => (col, gd) => { const k = gd.brow / 1.7; return browShape(b, col, k) + browShape(mirrorBrow(b), col, k); };
+  // Tapered brow silhouettes, rather than inflated lens-shaped blobs.
+  const polishedBrow=(b,col,k)=>{const [a,y,cx,cy,z,v,t]=b,w=Math.min(2.6,t*.53*k);return `<path d="M${a} ${y} Q${cx} ${cy-w} ${z} ${v} L${z} ${v+w*.7} Q${cx} ${cy+w*.25} ${a} ${y+.45}Z" fill="${col}"/>`;};
+  const browDefs={thick:[35.2,39.3,40.5,37,45.7,38.3,3.8],thin:[36,39,41,36.4,45.5,38,1.2],arched:[35.8,40,40,34.6,45.6,38,2.3],flat:[35.5,38.7,40.5,38.1,45.7,38.5,2.5],raised:[36,36.7,41,33.4,45.6,35.6,2.1],worried:[35.8,40.3,40.5,37.5,45.6,35.7,2.3],angry:[35.5,36.4,40.6,37.6,45.7,40,3]};
+  const polishedPair = b => (col, gd) => polishedBrow(b, col, gd.brow / 1.7) + polishedBrow(mirrorBrow(b), col, gd.brow / 1.7);
   const BROWS = {
-    natural: (col, gd) => { const cy = (38.3 - gd.arch).toFixed(1); return `<path d="M36 38.8 Q41 ${cy} 45.4 38" stroke="${col}" stroke-width="${gd.brow}" fill="none" stroke-linecap="round" opacity=".9"/><path d="M54.6 38 Q59 ${cy} 64 38.8" stroke="${col}" stroke-width="${gd.brow}" fill="none" stroke-linecap="round" opacity=".9"/>`; },
-    thick: browPair([35.2, 39.4, 40.6, 35.9, 45.9, 38.2, 3.8]),
-    thin: browPair([36.2, 38.8, 41, 35.2, 45.6, 37.6, 1.5]),
-    arched: browPair([35.8, 40.2, 41.2, 32.6, 46, 37.6, 2.4]),
-    flat: browPair([35.6, 38.8, 40.7, 38.4, 45.8, 38.6, 3]),
-    raised: browPair([36, 36.6, 41, 31.8, 45.6, 35.4, 2.6]),
-    worried: browPair([35.8, 40.6, 40.4, 36.6, 45.8, 35.2, 2.6]),
-    angry: browPair([35.2, 35.6, 40.6, 37.6, 45.6, 40.6, 3.4]),
-    skeptical: (col, gd) => { const k = gd.brow / 1.7; return browShape([35.6, 39.8, 40.6, 39.2, 45.8, 40, 3], col, k) + browShape([64.2, 36.6, 59.2, 31, 54.2, 35, 2.8], col, k); }
+    natural: (col,gd)=>polishedBrow([35.8,39,40,36.8,45.5,38,2],col,gd.brow/1.7)+polishedBrow([64.2,39,60,36.8,54.5,38,2],col,gd.brow/1.7),
+    thick: polishedPair(browDefs.thick),
+    thin: polishedPair(browDefs.thin),
+    arched: polishedPair(browDefs.arched),
+    flat: polishedPair(browDefs.flat),
+    raised: polishedPair(browDefs.raised),
+    worried: polishedPair(browDefs.worried),
+    angry: polishedPair(browDefs.angry),
+    skeptical: (col,gd)=>polishedBrow([35.8,39.7,41,38.5,45.7,39.6,2.6],col,gd.brow/1.7)+polishedBrow([64.2,36.8,59,33.1,54.4,35.8,2.3],col,gd.brow/1.7)
   };
+
   const BROW_LIST = [["natural", "Natural", 0], ["thick", "Thick", 0], ["thin", "Thin", 0], ["arched", "Arched", 1], ["flat", "Flat", 1], ["raised", "Raised", 1], ["worried", "Worried", 1], ["angry", "Angry", 2], ["skeptical", "One raised", 2]];
 
   /* ------------------------------ pets ---------------------------------- */
@@ -839,7 +846,6 @@
     }
     return f;
   };
-
 
   /* ---- Kiwi: round russet-brown body, small head, long slender bill, strong scaly legs ---- */
   const kiwiArt = (x, A) => {
@@ -1087,41 +1093,6 @@
     kea: (gd, x, A) => petWrap(gd, keaArt(x, A || PA0), 1), rabbit: (gd, x, A) => petWrap(gd, rabbitArt(x, A || PA0)), cat: (gd, x, A) => petWrap(gd, catArt(x, A || PA0)) };
   const PET_LIST = [["none", "None", 0], ["kiwi", "Kiwi", 3], ["tui", "Tui", 4], ["kea", "Kea", 3], ["rabbit", "Rabbit", 2], ["cat", "Cat", 2]];
 
-
-  /* 2026 catalogue polish. SVG details stay vector-sharp at badge and editor sizes. */
-  const hairLines = (x, shape, d, paths, opacity = .3) => x.clip(shape, `<path d="${paths}" fill="none" stroke="${d}" stroke-width=".65" opacity="${opacity}" stroke-linecap="round"/>`);
-  HAIR.short = (c,d,x) => ({front:`<path d="${CAP}" fill="${c}"/>${shine(x,CAP)}${hairLines(x,CAP,d,"M36 30 Q39 25 44 24 M47 26 Q52 23 57 24 M60 27 Q64 28 66 31",.2)}`});
-  HAIR.swoop = (c,d,x) => { const p="M29 46 C24 25 34 13 51 13 C67 12 76 24 71 45 L67 34 C57 31 45 43 34 36Z"; return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M32 31 C44 35 55 18 67 24 M34 27 C45 29 52 16 62 18 M37 35 Q51 36 64 28",.48)}${shine(x,p)}`}; };
-  HAIR.undercut = (c,d,x) => {const p="M29 34 C27 20 38 10 53 11 C69 11 76 23 70 34 Q64 27 58 28 Q43 34 29 34Z";return {front:x.head(`<path d="M29 43 V28 Q50 17 71 28 V43 L65 33 Q50 27 35 33Z" fill="${d}" opacity=".48"/><path d="M31 36 L35 34 M66 34 L69 36" stroke="${d}" stroke-width=".6"/>`)+`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M32 29 C45 30 52 15 65 19 M34 25 C43 25 51 13 59 14 M38 32 Q54 31 68 24",.45)}${shine(x,p)}`};};
-  HAIR.pompadour = (c,d,x) => {const p="M29 45 C27 35 25 20 33 12 C42 3 63 4 69 13 C77 24 72 37 71 45 L65 32 Q55 25 43 31 Q34 34 29 45Z";return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M32 30 C32 18 44 10 57 11 M36 30 C39 20 51 14 64 17 M43 29 C49 23 59 21 69 24 M30 36 Q34 30 38 28",.5)}${shine(x,p)}`};};
-  HAIR.braids = (c,d,x) => { const p="M29 46 C26 24 37 15 50 15 C63 15 74 24 71 46 L66 34 Q56 29 50 26 Q44 29 34 34Z";let tails="";[30,70].forEach((xx,j)=>{let seg="";for(let i=0;i<8;i++){const y=48+i*4.5, w=3.4-i*.18;seg+=`<path d="M${xx} ${y-2} Q${xx-w*1.8} ${y} ${xx} ${y+3} Q${xx+w*1.8} ${y} ${xx} ${y-2}Z" fill="${i%2?c:shade(c,-.07)}" stroke="${d}" stroke-width=".45"/>`;}tails+=seg+`<rect x="${xx-2.4}" y="82" width="4.8" height="2.3" rx="1" fill="#526ca8"/><path d="M${xx-1.6} 84 L${xx-2} 88 Q${xx} 90 ${xx+2} 88 L${xx+1.6} 84Z" fill="${c}"/>`;});return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,"M50 16 V26 M47 18 Q37 22 32 32 M53 18 Q63 22 68 32 M46 23 Q39 27 34 35 M54 23 Q61 27 66 35",.5)}${tails}`};};
-  const curlHair = (c,d,x,afro) => {const p=afro?"M26 47 C18 39 20 23 29 17 C31 8 43 6 50 9 C59 5 70 11 73 19 C83 25 81 40 74 47 L68 43 Q65 32 50 32 Q35 32 32 43Z":"M29 43 C23 37 25 28 30 25 C28 16 39 12 44 15 C49 9 59 11 62 16 C73 13 79 24 73 30 C79 35 75 41 71 44 L66 34 Q50 28 34 35Z";let detail="";for(let row=0;row<4;row++)for(let i=0;i<7;i++){const xx=25+i*7+(row%2)*3, yy=15+row*7;detail+=`M${xx} ${yy} q-2 -3 -4 0 q-1 3 2 3 q3 0 2 -2 `;}return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,detail,.5)}${x.clip(p,`<path d="M31 20 Q45 10 62 17" stroke="#fff" stroke-opacity=".12" stroke-width="2" fill="none"/>`)}`};};
-  HAIR.curly=(c,d,x)=>curlHair(c,d,x,false); HAIR.afro=(c,d,x)=>curlHair(c,d,x,true);
-  MOUTH.grin = () => `<path d="M42 54 Q50 56 58 54 Q56 62 50 62 Q44 62 42 54Z" fill="#fffaf3" stroke="${INK}" stroke-width="1.25" stroke-linejoin="round"/><path d="M44 58 Q50 60 56 58" fill="none" stroke="#b7a8a4" stroke-width=".5"/>`;
-  MOUTH.braces = () => MOUTH.grin()+`<path d="M44 56.7 Q50 58.8 56 56.7" stroke="#73849a" stroke-width=".65" fill="none"/>`+[45.2,48.4,51.6,54.8].map(xx=>`<rect x="${xx-.6}" y="${57.1-Math.abs(xx-50)*.12}" width="1.2" height="1.5" rx=".25" fill="#c5d6e9" stroke="#65788d" stroke-width=".3"/>`).join("");
-  MOUTH.tongue = () => `<path d="M43 54.5 Q50 58 57 54.5 Q56 61 50 61 Q44 61 43 54.5Z" fill="#592735" stroke="${INK}" stroke-width="1.2"/><path d="M48 58.5 Q51 57.6 54 58.5 V61.7 C54 66.3 48 66.3 48 61.7Z" fill="#f47e98" stroke="#ae4563" stroke-width=".65"/><path d="M51 59.4 V62.5" stroke="#c75675" stroke-width=".55" stroke-linecap="round"/>`;
-  FACE.stripes=(h,x,col)=>x.head(`<path d="M31 50 L39 52 M31 54.5 L38.5 56 M69 50 L61 52 M69 54.5 L61.5 56" stroke="${col || '#3a8dff'}" stroke-width="2.5" stroke-linecap="round"/>`);
-  FACE.mask=(h,x)=>x.head(`<path d="M29 51 Q50 47 71 51 L66 62 Q50 70 34 62Z" fill="#438fd0" stroke="#28659b" stroke-width=".8"/><path d="M36 54 Q50 57 64 54 M36 58 Q50 61 64 58 M39 62 Q50 64 61 62" fill="none" stroke="#8cc7ee" stroke-width=".65"/><path d="M30 52 L26 47 M70 52 L74 47" stroke="#d7e9f7" stroke-width="1.3"/>`);
-  FACE.goatee=h=>`<path d="M45 61 Q50 63 55 61 Q55 66 50 67 Q45 66 45 61Z" fill="${h}"/><path d="M47 62.5 L48 65 M50 63 V66 M53 62.5 L52 65" stroke="${shade(h,.2)}" stroke-width=".4" opacity=".6"/>`;
-  FACE.mustache=h=>`<path d="M50 53 Q46 49.8 43 53 Q41 55 39.5 53 Q40 58 45 56 Q48 56 50 54.5 Q52 56 55 56 Q60 58 60.5 53 Q59 55 57 53 Q54 49.8 50 53Z" fill="${h}"/><path d="M44 53.4 Q46 52 48 53.5 M52 53.5 Q54 52 56 53.4" stroke="${shade(h,.2)}" stroke-width=".4" fill="none"/>`;
-  // Tapered brow silhouettes, rather than inflated lens-shaped blobs.
-  const polishedBrow=(b,col,k)=>{const [a,y,cx,cy,z,v,t]=b,w=Math.min(2.6,t*.53*k);return `<path d="M${a} ${y} Q${cx} ${cy-w} ${z} ${v} L${z} ${v+w*.7} Q${cx} ${cy+w*.25} ${a} ${y+.45}Z" fill="${col}"/>`;};
-  Object.keys(BROWS).forEach(id=>{if(id==='natural') BROWS[id]=(col,gd)=>polishedBrow([35.8,39,40,36.8,45.5,38,2],col,gd.brow/1.7)+polishedBrow([64.2,39,60,36.8,54.5,38,2],col,gd.brow/1.7);});
-  const browDefs={thick:[35.2,39.3,40.5,37,45.7,38.3,3.8],thin:[36,39,41,36.4,45.5,38,1.2],arched:[35.8,40,40,34.6,45.6,38,2.3],flat:[35.5,38.7,40.5,38.1,45.7,38.5,2.5],raised:[36,36.7,41,33.4,45.6,35.6,2.1],worried:[35.8,40.3,40.5,37.5,45.6,35.7,2.3],angry:[35.5,36.4,40.6,37.6,45.7,40,3]};
-  Object.keys(browDefs).forEach(id=>BROWS[id]=(col,gd)=>polishedBrow(browDefs[id],col,gd.brow/1.7)+polishedBrow(mirrorBrow(browDefs[id]),col,gd.brow/1.7));
-  BROWS.skeptical=(col,gd)=>polishedBrow([35.8,39.7,41,38.5,45.7,39.6,2.6],col,gd.brow/1.7)+polishedBrow([64.2,36.8,59,33.1,54.4,35.8,2.3],col,gd.brow/1.7);
-  HATS.beanie=x=>{const p="M28 33 C26 7 74 7 72 33Z";return `<path d="${p}" fill="#233857"/>${x.clip(p,`<path d="M34 15 Q31 23 32 32 M41 12 L39 32 M49 11 V32 M57 12 L59 32 M65 15 Q69 23 68 32" fill="none" stroke="#3d5275" stroke-width=".7"/>`)}<rect x="27" y="29" width="46" height="9" rx="3.5" fill="#192b46"/><path d="M32 31 V36 M37 31 V36 M42 31 V36 M47 31 V36 M52 31 V36 M57 31 V36 M62 31 V36 M67 31 V36" stroke="#344a6b" stroke-width=".65"/><rect x="57" y="31" width="6" height="4" rx=".8" fill="#d9e1ed"/>`;};
-  HATS.bucket=x=>{const p="M31 30 L34 14 Q50 10 66 14 L69 30Z";return `<path d="${p}" fill="#8bbba1"/>${x.clip(p,`<path d="M32 24 Q50 28 68 24" stroke="#507e68" stroke-width="3" fill="none"/><path d="M36 15 Q50 12 64 15 M33 28 Q50 32 67 28" stroke="#d2e8da" stroke-width=".6" fill="none"/>`)}<path d="M31 28 Q50 33 69 28 L78 36 Q50 44 22 36Z" fill="#719e85" stroke="#507e68" stroke-width=".7"/><path d="M27 35 Q50 41 73 35" fill="none" stroke="#c4ddcd" stroke-width=".65"/>`;};
-  // Add restrained stitching to the remaining fabric hats, preserving their distinct shapes.
-  ['cap','capback','beret','grad','chef','cowboy','santa','sombrero','propeller','party'].forEach(id=>{const draw=HATS[id];HATS[id]=x=>draw(x)+x.clip(id==='grad'?'M50 8 L84 20 L50 32 L16 20Z':'M31 20 Q50 12 69 20 L69 30 Q50 35 31 30Z',`<path d="M34 27 Q50 31 66 27" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width=".55" stroke-dasharray="1.2 1.1"/>`);});
-  TOPS.raincoat=(c,d,l,x)=>({back:`<path d="M28 77 Q24 62 39 66 Q50 72 61 66 Q76 62 72 77 L65 84 H35Z" fill="${d}"/><path d="M33 73 Q50 63 67 73 L62 79 H38Z" fill="${shade(c,-.4)}"/>`,body:topShape(c,`<path d="M24 83 Q50 92 76 83" stroke="${d}" stroke-width=".9" fill="none"/><path d="M26 93 L39 91 L40 96 L27 98Z M61 91 L74 93 L73 98 L60 96Z" fill="${d}"/><path d="M27 93 L39 91 M61 91 L73 93" stroke="${l}" stroke-width=".6"/><path d="M22 88 L28 85 M72 85 L78 88" stroke="#dbe6ee" stroke-width="2"/><path d="M48 80 H52 V101 H48Z" fill="${d}"/><path d="M50 82 V100" stroke="#c8d3de" stroke-width=".65" stroke-dasharray=".7 .7"/>`,x),over:`<path d="M36 73 L49 79 L44 86 L32 77Z M64 73 L51 79 L56 86 L68 77Z" fill="${shade(c,.1)}" stroke="${d}" stroke-width=".8"/><rect x="49" y="80" width="2" height="3" rx=".6" fill="#dbe6ee"/>`});
-  const discoDraw=TOPS.disco; TOPS.disco=(c,d,l,x)=>{const a=discoDraw(c,d,l,x);a.over+=x.body(`<path d="M25 84 Q23 91 25 100 M75 84 Q77 91 75 100" stroke="#69749c" stroke-width=".7" fill="none"/><path d="M30 94 L39 92 M61 92 L70 94" stroke="#f4f2ff" stroke-width="1.1"/>`);return a;};
-  const ghostDraw=COSTUMES.ghost; COSTUMES.ghost=x=>{const a=ghostDraw(x);a.front=`<g transform="translate(9 13) scale(.82)">${a.front}</g>`;return a;};
-  const mageDraw=COSTUMES.wizard; COSTUMES.wizard=x=>{const a=mageDraw(x);x.defs=x.defs.replace(/#4b3fae/g,'#382e88').replace(/#9a7cf5/g,'#7960c7').replace(/#5347c0/g,'#403594').replace(/#3a2f93/g,'#2c246f');a.over+=x.body(`<path d="M31 98 Q34 88 39 83 M69 98 Q66 88 61 83" stroke="#15103d" stroke-width=".65" fill="none"/>`);return a;};
-  const sharkDraw=COSTUMES.shark; COSTUMES.shark=x=>{const a=sharkDraw(x);a.front+=`<path d="M24 40 Q21 51 29 61 M76 40 Q79 51 71 61" fill="none" stroke="#496e96" stroke-width="1.2"/><path d="M24 43 l4 1 M24 48 l4 1 M76 43 l-4 1 M76 48 l-4 1" stroke="#3e5f83" stroke-width=".8"/><path d="M34 67 Q50 79 66 67" stroke="#a6bfd6" stroke-width="1.4" fill="none"/>`;a.over=`<path d="M42 81 L42 91 M58 81 L58 91" stroke="#dce8f2" stroke-width="1" stroke-linecap="round"/><path d="M38 97 Q50 91 62 97" stroke="#496e96" stroke-width=".8" fill="none"/>`;return a;};
-  // Refine every extra with subtle material detail; none remains deliberately empty.
-  Object.keys(EXTRA).filter(id=>id!=='none').forEach(id=>{const draw=EXTRA[id];EXTRA[id]=x=>{const a=draw(x);const detail={headphones:`<path d="M27 44 V51 M70 44 V51" stroke="#ffb1cf" stroke-width="1" stroke-linecap="round"/><path d="M33 27 Q50 13 67 27" fill="none" stroke="#606478" stroke-width=".8"/>`,earrings:`<circle cx="29.2" cy="52.3" r=".5" fill="#fff5c2"/><circle cx="69.6" cy="52.3" r=".5" fill="#fff5c2"/>`,flowerear:`<circle cx="29" cy="39.8" r=".65" fill="#fff5bc"/>`,eyepatch:`<path d="M55 43 Q59 40 63 43" stroke="#505563" stroke-width=".7" fill="none"/>`};if(detail[id])a.front=(a.front||'')+detail[id];else a.over=(a.over||'')+x.body(`<path d="${{bowtie:'M42 79 L46 80 M54 80 L58 79',scarf:'M36 77 Q47 83 59 77',pearls:'M42 77 L43 77 M49 82 L50 82 M57 77 L58 77',lanyard:'M45 97 H55',medal:'M46 88 Q50 85 54 88',backpack:'M29 96 L34 96 M66 96 L71 96'}[id]||'M0 0'}" stroke="#fff" stroke-opacity=".38" stroke-width=".55" fill="none" stroke-linecap="round"/>`);return a;};});
-
   /* ------------------------------ catalog ------------------------------- */
   const CATS = [
     { id: "gender", label: "Body", list: GENDER_LIST },
@@ -1148,6 +1119,7 @@
   /* ------------------------------ renderer ------------------------------ */
   function cleanLook(l) {
     const out = Object.assign({}, DEFAULT_LOOK);
+    if (l && typeof l === "object" && l.hair === "afro") l = Object.assign({}, l, { hair: "curly" });   // the Afro was retired
     if (l && typeof l === "object") CATS.forEach(c => {
       const v = l[c.id];
       if (typeof v === "string" && c.list.some(it => it[0] === v)) out[c.id] = v;
@@ -1187,7 +1159,7 @@
   const FX_TOK_OVR = {
     "fx.glow": ["warble", "fade", "spark"], "fx.lightning": ["flash", "spark", "spark"], "fx.flames": ["crackle", "crackle", "crackle", "glow", "spark"],
     "hat.propeller": ["spin", "spark", "spark"], "eyes.stars": ["spin", "spin", "spark"], "eyes.hearts": ["spin", "spin", "spark"], "eyes.dollar": ["spin", "spin", "spark"],
-    "costume.wizard": ["sheen", "glow", "bob", "iri", "spark"], "bg.lava": ["amb", "amb", "amb"], "bg.auckland": ["amb", "amb", "amb"]
+    "costume.wizard": ["sheen", "glow", "iri", "spark", "spark"], "bg.lava": ["amb", "amb", "amb"], "bg.auckland": ["amb", "amb", "amb"]
   };
 
   function fxState(ctx, anim, layers, rc) {
@@ -1321,15 +1293,18 @@
   /* What each Epic / Legendary item looks like. clip = the item's own outline(s) (path "d" strings
      or raw clip children), box = its bounding box (sets the sweep), sp = sparkle spots [x, y, size, colour]. */
   const CITY_OK = CITY.lit.filter(p => Math.hypot(p[0] - 50, p[1] - 50) < 42), CITY_PTS = [CITY_OK[1], CITY_OK[Math.floor(CITY_OK.length / 2)], CITY_OK[CITY_OK.length - 2]].filter(Boolean);
+  // effect mask for spiky / ponytail / wavy hair: the real hair artwork drawn in white
+  const hairMaskSpec = id => rc=>{const a=HAIR[id]('#fff','#fff',rc.ctx);return {mask:(a.back||'')+(a.front||''),box:[20,6,90,94],peak:.38,sp:[[25,23,1.4,'#d5c2ff'],[77,29,1.2,'#fff1b5']]};};
   const RSPEC = {
     hat: {
       devil: () => ({ clip: ["M31 27 C25.6 19 27.6 8.6 34 4.4 C33.6 12.4 37.6 18.6 42 22.4Z", "M69 27 C74.4 19 72.4 8.6 66 4.4 C66.4 12.4 62.4 18.6 58 22.4Z"], box: [25, 4, 75, 28], tint: "#fff1ee", peak: .6, sp: [[22.5, 17.5, 2.3, "#ff6a5f"], [78, 15.5, 1.9, "#ff8f86"], [50, 11, 1.5, "#ffb0a8"]] }),
-      tophat: () => ({ clip: ["M34 30 L35 8 Q50 4 65 8 L66 30Z", ellD(50, 30, 27, 5.2)], box: [23, 4, 77, 35], sp: [[21.5, 25, 2.2, "#f2b705"], [79, 23.5, 1.9, "#ffd54a"], [59, 11, 1.5, "#fff"]] }),
       propeller: () => ({ noSheen: true, sp: [[26, 15.5, 2.2, "#5aa8ff"], [76, 14, 1.8, "#ffc21a"]],
         // edge-on spin: the two blades squash towards the hub and back again, in a short whirr every few seconds
         wrap: (h, svg) => svg.replace(/(<ellipse cx="41" cy="7\.4"[^>]*\/><ellipse cx="59" cy="7\.4"[^>]*\/>)/, (m, bl) => `<g transform="translate(50 7.4)">${h.mv("spin", `<g transform="translate(-50 -7.4)">${bl}</g>`, "0%,56%{transform:scale(1,1)}60%{transform:scale(.1,1)}64%{transform:scale(1,1)}68%{transform:scale(.1,1)}72%{transform:scale(1,1)}76%{transform:scale(.12,1)}80%{transform:scale(1,1)}84%{transform:scale(.4,1)}88%,100%{transform:scale(1,1)}", 4.6)}</g>`) }),
       halo: () => ({ clip: [evenodd(ellD(50, 9, 18.7, 6.3) + " " + ellD(50, 9, 15.3, 2.9))], box: [31, 2, 69, 16], tint: "#fffdf0", peak: .8, sp: [[29, 13, 2.2, "#f5b800"], [71, 13, 2.2, "#ffd23f"]] }),
-      crown: () => ({ clip: ["M30 30 L28 10 L40 20 L50 6 L60 20 L72 10 L70 30Z"], box: [27, 5, 73, 31], tint: "#fffbe6", hue: ["#fff0a0", "#ffc4e8", "#b6efff"], iriOp: .2, glow: { x: 50, y: 19, rx: 31, ry: 19, c: "#ffd23f", o: .5 }, sp: [[28, 9.6, 2.3, "#fff3b0"], [72, 9.6, 2.3, "#fff3b0"], [50, 5.2, 2.5, "#fff"], [39, 21.5, 1.8, "#ffe28a"], [61, 21.5, 1.8, "#ffe28a"]] })
+      crown: () => ({ clip: ["M30 30 L28 10 L40 20 L50 6 L60 20 L72 10 L70 30Z"], box: [27, 5, 73, 31], tint: "#fffbe6", hue: ["#fff0a0", "#ffc4e8", "#b6efff"], iriOp: .2, glow: { x: 50, y: 19, rx: 31, ry: 19, c: "#ffd23f", o: .5 }, sp: [[28, 9.6, 2.3, "#fff3b0"], [72, 9.6, 2.3, "#fff3b0"], [50, 5.2, 2.5, "#fff"], [39, 21.5, 1.8, "#ffe28a"], [61, 21.5, 1.8, "#ffe28a"]] }),
+      grad: rc => ({mask:HATS.grad(rc.ctx),box:[16,6,85,38],peak:.4,sp:[[24,23,1.4,'#fff1bc'],[77,26,1.2,'#fff']]}),
+      santa: rc => ({mask:HATS.santa(rc.ctx),box:[16,6,85,38],peak:.4,sp:[[24,23,1.4,'#fff1bc'],[77,26,1.2,'#fff']]})
     },
     glasses: {
       monocle: () => ({ clip: [circD(59, 45, 8.2)], box: [50, 36, 68, 54], bw: 4, sp: [[68.5, 37, 2.3, "#ffc21a"], [51.5, 53.5, 1.5, "#fff"]] }),
@@ -1340,7 +1315,9 @@
       medal: () => ({ clip: [circD(50, 91.4, 6.9)], box: [43, 84, 57, 98.5], tint: "#fffdf0", peak: .95, bw: 5.5, at: .5, sp: [[54.4, 88.4, 2.1, "#fff"], [46, 94.6, 1.5, "#fff3b0"]] })
     },
     top: {
-      disco: () => ({ clip: [BODY], box: [12, 75, 88, 100], hue: ["#ffb3f0", "#a8e8ff", "#fff3a8"], glow: { x: 50, y: 93, rx: 54, ry: 26, c: "#ff7be0", o: .5 }, sp: [[28.8, 86.8, 2.4, "#ff7ad9"], [68, 90, 2.4, "#5ec8ff"], [40, 93, 1.9, "#b58cff"], [62, 83.5, 1.8, "#fff"]] })
+      disco: () => ({ clip: [BODY], box: [12, 75, 88, 100], hue: ["#ffb3f0", "#a8e8ff", "#fff3a8"], glow: { x: 50, y: 93, rx: 54, ry: 26, c: "#ff7be0", o: .5 }, sp: [[28.8, 86.8, 2.4, "#ff7ad9"], [68, 90, 2.4, "#5ec8ff"], [40, 93, 1.9, "#b58cff"], [62, 83.5, 1.8, "#fff"]] }),
+      puffer: () => ({clip:[BODY],box:[12,75,88,100],peak:.4,sp:[[28,87,1.2,'#d7c8ff'],[72,88,1.2,'#fff']]}),
+      blazer: () => ({clip:[BODY],box:[12,75,88,100],peak:.4,sp:[[28,87,1.2,'#d7c8ff'],[72,88,1.2,'#fff']]})
     },
     eyes: (() => {
       const sp = col => [[34.4, 38.8, 1.7, col], [65.6, 38.8, 1.7, col]];
@@ -1354,25 +1331,35 @@
       };
     })(),
     mouth: {
-      gold: () => ({ clip: [0, 1, 2, 3, 4].map(i => `<rect x="${(43.1 + i * 2.84).toFixed(2)}" y="54.2" width="2.6" height="${i === 2 ? 3.3 : i % 2 ? 2.6 : 3}" rx="1"/>`), box: [43, 54, 57.2, 58], tint: "#fffbe0", bw: 3.2, peak: .9, sp: [[58.6, 57.2, 1.8, "#ffc21a"], [41.6, 56.2, 1.4, "#fff3b0"]] })
+      smirk: () => ({noSheen:true,sp:[[59,57,1.1,'#f1d6ff']]}),
+      tongue: () => ({noSheen:true,sp:[[59,57,1.1,'#f1d6ff']]})
     },
     face: {
-      paintstars: () => ({ clip: [starD(36.6, 53, 3.4), starD(63.4, 53, 3.4)], box: [32, 49, 68, 57], bw: 4, sp: [[31, 48.5, 1.8, "#ff5d8f"], [69, 48.5, 1.8, "#3a8dff"]] })
+      paintstars: () => ({ clip: [starD(36.6, 53, 3.4), starD(63.4, 53, 3.4)], box: [32, 49, 68, 57], bw: 4, sp: [[31, 48.5, 1.8, "#ff5d8f"], [69, 48.5, 1.8, "#3a8dff"]] }),
+      scar: () => ({noSheen:true,sp:[[32,57,1.1,'#c7e4ff']]}),
+      stripes: () => ({noSheen:true,sp:[[32,57,1.1,'#c7e4ff']]})
     },
     hair: {
       mohawk: () => ({ clip: ["M40.6 32 C38 22 39.4 13 43 7.4 C45 11.4 46.6 12.6 50 3 C53.4 12.6 55 11.4 57 7.4 C60.6 13 62 22 59.4 32 C54 28.6 46 28.6 40.6 32Z"], box: [38, 3, 62, 32], bw: 6, peak: .55, sp: [[35.5, 12, 2.1, "#ffe066"], [65, 10.5, 1.9, "#ff9ad5"]] }),
-      animespikes: () => ({ clip: ["M27.5 28.5 L18 20 L30 21 L25 8 L37 17 L39 2 L46 16 L51 0.5 L56 16 L63 2 L65 17 L75 8 L70 21 L82 20 L72.5 28.5 C73 32 72 36 70 38 L62 31 L57 34 L54 29.5 L50 35.5 L46 29.5 L43 34 L38 31 L30 38 C28 36 27 32 27.5 28.5Z"], box: [18, 0, 82, 36], bw: 7, peak: .55, sp: [[22, 17, 2.1, "#ffe066"], [78, 15, 1.9, "#ff9ad5"]] })
+      spiky: hairMaskSpec('spiky'),
+      ponytail: hairMaskSpec('ponytail'),
+      wavy: () => ({ noSheen: true, sp: [[25, 23, 1.4, '#d5c2ff'], [77, 29, 1.2, '#fff1b5'], [23, 70, 1.3, '#fff']] })
     },
     hairc: {
       rainbow: rc => ({ mask: (HAIR[rc.look.hair]("#fff", "#fff", rc.ctx).front || ""), box: [16, 3, 84, 60], tint: "#fff", hue: ["#ffb3d9", "#b3ecff", "#ffe9a8"], iriOp: .3, glow: { x: 50, y: 30, rx: 38, ry: 26, c: "#c3a2ff", o: .45 }, sp: [[29, 19, 2.3, "#ff7ac6"], [72, 17, 2.1, "#7ad8ff"], [50, 9.5, 1.7, "#ffd23f"]] })
     },
     costume: {
-      ghost: () => ({ clip: [evenodd("M14 100 C10 50 18 10 50 8 C82 10 90 50 86 100 L78 92 L70 100 L62 92 L54 100 L46 92 L38 100 L30 92 L22 100Z " + ellD(38, 42, 5, 7.4) + " " + ellD(62, 42, 5, 7.4) + " " + ellD(50, 58, 4, 5.4))], box: [10, 8, 90, 100], tint: "#b9d9ff", peak: .7, sp: [[17, 19, 2.4, "#7cc4ff"], [84, 25, 2.1, "#b39bff"], [77, 11.5, 1.7, "#9fe0ff"]] }),
+      ghost: () => ({ clip: [evenodd("M14 100 C10 50 18 10 50 8 C82 10 90 50 86 100 L78 92 L70 100 L62 92 L54 100 L46 92 L38 100 L30 92 L22 100Z " + ellD(38, 42, 5, 7.4) + " " + ellD(62, 42, 5, 7.4) + " " + ellD(50, 58, 4, 5.4))].map(p => `<g transform="translate(9 13) scale(.82)">${p}</g>`), box: [17, 19, 83, 95], tint: "#b9d9ff", peak: .7, sp: [[22, 30, 1.5, "#9ccfff"], [77, 34, 1.4, "#cbbaff"]] }),
       ninja: rc => ({ clip: [bodyT(rc.gd), evenodd(NINJA_WRAP + " " + NINJA_WINDOW)], box: [8, 19, 92, 100], tint: "#cfd8ff", peak: .5, sp: [[84, 33, 2.3, "#ff6f6f"], [18, 40, 1.8, "#8fb4ff"]] }),
       shark: rc => ({ clip: [bodyT(rc.gd), evenodd("M19 45 a31 33 0 1 0 62 0 a31 33 0 1 0 -62 0Z M31 44.6 a19 20.6 0 1 0 38 0 a19 20.6 0 1 0 -38 0Z " + circD(36, 19, 3) + " " + circD(64, 19, 3)), "M38 18 Q43 -1 64 14.4Z"], box: [10, 0, 90, 100], tint: "#d8f4ff", peak: .55, sp: [[17, 26, 2.1, "#5ec4ff"], [86, 32, 1.8, "#a6e3ff"]] }),
-      wizard: rc => ({ clip: [bodyT(rc.gd)], box: [12, 75, 88, 100], tint: "#e9ddff", hue: ["#9fe9ff", "#d6b8ff", "#ffe08a"], glowPost: true, glow: [{ x: 85, y: 58, rx: 11, ry: 11, c: "#5ee6ff", o: .5 }, { x: 50, y: 31.4, rx: 9, ry: 7, c: "#5ee6ff", o: .42 }], orbit: { x: 85, y: 58, r: 8.2, c: "#aef6ff", dur: 9 }, sp: [[26.5, 90, 2.2, "#ffd23f"], [71, 89, 2, "#5ee6ff"]],
-        // the orb hovers: a slow float, with its glow and orbiting sparkles around it
-        wrap: (h, svg) => svg.replace(/<!--orb-->([\s\S]*?)<!--\/orb-->/, (m, orb) => h.mv("bob", orb, "0%,100%{transform:translateY(0px)}50%{transform:translateY(-1.4px)}", 3.8)) })
+      // The sheen uses the same open hood as the costume: no effects over the face.
+      wizard: rc => ({ clip: [bodyT(rc.gd), evenodd(MAGE_RING)],
+        box: [13, 5, 87, 100], tint: "#eee3ff", peak: .34,
+        hue: ["#d4baff", "#f0d69a", "#d4baff"], iriOp: .1,
+        glowPost: true,
+        glow: [{ x: 50, y: 16.5, rx: 5, ry: 6, c: "#bda0ed", o: .17 },
+          { x: 50, y: 77.5, rx: 6, ry: 5, c: "#bda0ed", o: .2 }],
+        sp: [[50, 16.5, 1.1, "#ead8ff"], [50, 77.5, 1, "#f0d69a"], [64.5, 96, .8, "#d4baff"]] })
     },
     fx: {
       lightning: rc => ({ noSheen: true, sp: [[27, 20, 2.1, "#ffd23f"], [74.5, 65, 2.1, "#ffd23f"]],
@@ -1419,14 +1406,6 @@
     })()
   };
 
-  // New rarity assignments use masks of the actual refined artwork.
-  ['spiky','ponytail','wavy'].forEach(id=>RSPEC.hair[id]=rc=>{const a=HAIR[id]('#fff','#fff',rc.ctx);return {mask:(a.back||'')+(a.front||''),box:[20,6,90,94],peak:.38,sp:[[25,23,1.4,'#d5c2ff'],[77,29,1.2,'#fff1b5']]};});
-  ['puffer','blazer'].forEach(id=>RSPEC.top[id]=()=>({clip:[BODY],box:[12,75,88,100],peak:.4,sp:[[28,87,1.2,'#d7c8ff'],[72,88,1.2,'#fff']]}));
-  ['smirk','tongue'].forEach(id=>RSPEC.mouth[id]=()=>({noSheen:true,sp:[[59,57,1.1,'#f1d6ff']]}));
-  ['scar','stripes'].forEach(id=>RSPEC.face[id]=()=>({noSheen:true,sp:[[32,57,1.1,'#c7e4ff']]}));
-  ['grad','santa'].forEach(id=>RSPEC.hat[id]=rc=>({mask:HATS[id](rc.ctx),box:[16,6,85,38],peak:.4,sp:[[24,23,1.4,'#fff1bc'],[77,26,1.2,'#fff']]}));
-  const ghostSpec=RSPEC.costume.ghost; RSPEC.costume.ghost=rc=>{const a=ghostSpec(rc);a.clip=a.clip.map(p=>`<g transform="translate(9 13) scale(.82)">${p}</g>`);a.box=[17,19,83,95];a.sp=[[22,30,1.5,'#9ccfff'],[77,34,1.4,'#cbbaff']];return a;};
-
   function renderSvg(look, opts) {
     opts = opts || {};
     look = cleanLook(look);
@@ -1438,7 +1417,9 @@
     const T = s => gd.sx === 1 || !s ? s : `<g transform="translate(50 0) scale(${gd.sx} 1) translate(-50 0)">${s}</g>`;
     const co = COSTUMES[look.costume] ? COSTUMES[look.costume](ctx) : null;
     const hide = Object.assign({}, (co && co.hide) || {});
-    if (!hide.hat && HAT_COVER.has(look.hat)) hide.hair = 1;
+    const hatOn = !hide.hat && HAT_COVER.has(look.hat);
+    ctx.hat = hatOn && HAT_HAIR.has(look.hair); ctx.anim = anim;
+    if (hatOn && !ctx.hat) hide.hair = 1;   // long styles stay: only the hair that comes out from under the hat shows
     const skin = (SKINS.find(s => s.id === look.skin) || SKINS[2]).v;
     const sk2 = shade(skin, -.14);
     const hc = HAIRC.find(h => h.id === look.hairColor) || HAIRC[1];
@@ -1518,7 +1499,7 @@
     s += E.pre("fx") + E.wrap("fx", (FX[look.fx] || FX.none)(ctx)) + E.post("fx");
 
     const cid = ctx.id("cp");
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="${opts.label ? String(opts.label).replace(/[<>&"]/g, "") : "Avatar"}"><defs><clipPath id="${cid}"><circle cx="50" cy="50" r="50"/></clipPath>${ctx.defs}${E.css()}</defs><g clip-path="url(#${cid})">${s}</g></svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="${opts.label ? String(opts.label).replace(/[<>&"]/g, "") : "Avatar"}"><defs><clipPath id="${cid}"><circle cx="50" cy="50" r="50"/></clipPath>${ctx.defs}${E.css()}${ctx.css ? `<style>${ctx.css}@media (prefers-reduced-motion:reduce){.t29sw{animation:none!important}}</style>` : ""}</defs><g clip-path="url(#${cid})">${s}</g></svg>`;
   }
 
   G.T29AvatarCore = { CATS, DEFAULT_LOOK, NONE_IDS, RARITY, HAIRC, TOPC, SKINS, cleanLook, renderSvg };
@@ -1707,9 +1688,14 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
 .av-lb-chip>span{min-width:0;}
 .av-paint-box{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;flex:none;padding:10px 12px;margin:0 0 10px;border:1px solid var(--line,#e3e7f0);border-radius:12px;}
 .av-paint-box[hidden]{display:none;}
-.av-paint-box label{margin:0;}
-.av-paint-box input[type=color]{width:48px;height:36px;min-height:36px;padding:3px;flex:none;cursor:pointer;}
-.av-paint-box span{flex:1 1 180px;min-width:0;font-size:.78rem;line-height:1.4;color:var(--muted,#6b7390);}
+.av-paint-title{font-weight:600;font-size:.85rem;flex:none;}
+.av-swatches{display:flex;flex-wrap:wrap;gap:8px;flex:none;}
+.av-sw{width:30px;height:30px;min-height:30px;padding:0;border-radius:50%;background:var(--sw);border:2px solid #fff;box-shadow:0 0 0 1px rgba(30,40,80,.28);cursor:pointer;transition:transform .12s;}
+.av-sw:hover:not(:disabled){transform:scale(1.1);}
+.av-sw:focus-visible{outline:2px solid var(--brand,#3a6cf0);outline-offset:3px;}
+.av-sw.on{box-shadow:0 0 0 2.5px var(--brand,#3a6cf0);transform:scale(1.08);}
+.av-sw:disabled{opacity:.55;cursor:default;}
+.av-paint-box .av-paint-note{flex:1 1 180px;min-width:0;font-size:.78rem;line-height:1.4;color:var(--muted,#6b7390);}
 @media(max-width:700px){.av-right{flex:0 0 auto;}.av-grid{max-height:48vh;}.av-tabs{min-height:52px;}}
 `;
     document.head.appendChild(st);
@@ -1873,9 +1859,11 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     const paintBox = document.createElement("div");
     paintBox.id = "avPaintBox"; paintBox.className = "av-paint-box";
     ov.querySelector("#avHint").after(paintBox);
-    paintBox.addEventListener("change", e => {
-      if (!ED || ED.busy || e.target.id !== "avPaintColour") return;
-      ED.look.warpaintColor = e.target.value; paintEditor();
+    paintBox.addEventListener("click", e => {
+      const b = e.target.closest("[data-paint]");
+      if (!b || !ED || ED.busy || !/^#[0-9a-f]{6}$/i.test(b.dataset.paint)) return;
+      ED.look.warpaintColor = b.dataset.paint.toLowerCase(); paintEditor();
+      const nb = paintBox.querySelector('[aria-pressed="true"]'); if (nb) nb.focus({ preventScroll: true });
     });
     const log = (me.cometLog || []).slice(0, 3).map(l => `<div>${COMET}${l.amount > 0 ? "+" : ""}${esc(l.amount)} ${esc(l.note || "")}</div>`).join("");
     ov.querySelector("#avLog").innerHTML = ED.shop.currency === "comets" && log ? `<b>Recent Comets</b>${log}` : "";
@@ -1896,6 +1884,8 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     });
     return items;
   }
+  // readable on every skin tone: no oranges, tans or browns that would blend into skin
+  const PAINTS = [["#3a8dff", "Blue"], ["#e0245e", "Crimson"], ["#2fb36d", "Green"], ["#12a8b8", "Teal"], ["#8b5cf6", "Purple"], ["#ec4899", "Pink"], ["#7bc418", "Lime"], ["#24409a", "Navy"]];
   function paintEditor() {
     const E = ED; if (!E) return;
     const $ = id => document.getElementById(id);
@@ -1909,7 +1899,8 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     if (paintBox) {
       paintBox.hidden = !(cat === "face" && E.look.face === "stripes");
       const changing = E.owned.has("face:stripes") && E.look.warpaintColor !== E.purchasedPaint;
-      paintBox.innerHTML = `<label for="avPaintColour">Warpaint colour</label><input id="avPaintColour" type="color" value="${esc(E.look.warpaintColor)}" ${E.busy ? "disabled" : ""}><span>${changing ? "New colour: buy Warpaint again to save it." : E.owned.has("face:stripes") ? "Your purchased colour is locked. Choosing another colour requires buying Warpaint again." : "Choose your colour before buying. Colour changes require another purchase."}</span>`;
+      const cur = E.look.warpaintColor, sw = PAINTS.some(p => p[0] === cur) ? PAINTS : PAINTS.concat([[cur, "Your colour"]]);
+      paintBox.innerHTML = `<span class="av-paint-title" id="avPaintLbl">Warpaint colour</span><div class="av-swatches" role="group" aria-labelledby="avPaintLbl">${sw.map(p => `<button type="button" class="av-sw${p[0] === cur ? " on" : ""}" data-paint="${p[0]}" style="--sw:${p[0]}" title="${p[1]}" aria-label="${p[1]}" aria-pressed="${p[0] === cur}" ${E.busy ? "disabled" : ""}></button>`).join("")}</div><span class="av-paint-note">${changing ? "New colour: buy Warpaint again to save it." : E.owned.has("face:stripes") ? "Your purchased colour is locked. Choosing another colour requires buying Warpaint again." : "Choose your colour before buying. Colour changes require another purchase."}</span>`;
     }
     $("avGrid").innerHTML = list.map(it => {
       const id = it[0], r = it[2], key = cat + ":" + id, price = priceOf(E.shop, cat, id, r);
