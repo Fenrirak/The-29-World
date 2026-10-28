@@ -4227,7 +4227,7 @@ function cardMakeActive(plan, cls, todayKey) {
   return {
     status: "active", planId: plan.id, appliedTs: Date.now(), startKey: todayKey,
     balance: 0, periodSpend: 0, periodFixed: 0, periodSteps: 0, cycles: 0, nextCloseKey, stmt: null,
-    vouchers: cardIssueVouchers(plan, nextCloseKey),
+    vouchers: [], // none on signup: the first voucher batch is issued when the first statement closes (stops sign-up/cancel farming)
     lifetime: { cashback: 0, interest: 0, fees: 0 }
   };
 }
