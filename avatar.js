@@ -11,14 +11,14 @@
 
    Stored on the student's /users doc:
      avatar: { on: bool, look: {... gender: "boy"|"girl"|"neutral" ...},
-               owned: [\"hair:curly\", ...] }
+               owned: ["hair:curly", ...] }
      comets: number            (only a teacher can raise it)
      cometLog: [{ at, amount, note }]   (last 20, written by the teacher)
    and on the class doc:
-     avatarShop: { currency: \"free\"|\"money\"|\"comets\",
+     avatarShop: { currency: "free"|"money"|"comets",
                    tiers: { money:{1..4}, comets:{1..4} },
-                   prices: { money:{ \"hat:crown\": 30 }, comets:{} },
-                   hidden: [\"hat:crown\"] }
+                   prices: { money:{ "hat:crown": 30 }, comets:{} },
+                   hidden: ["hat:crown"] }
 
    Epic (tier 3) and Legendary (tier 4) items get animated sheens, sparkles and glows.
    renderSvg(look, { size, label, animate }): they only move when animate is true, or when
@@ -98,21 +98,10 @@
   /* ------------------------------ shared shapes ------------------------- */
   const star5 = (x, y, r, f, st) => { let p = ""; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; p += (i ? "L" : "M") + (x + Math.cos(a) * rr).toFixed(1) + " " + (y + Math.sin(a) * rr).toFixed(1); } return `<path d="${p}Z" fill="${f}"${st ? ` stroke="${st}" stroke-width=".9" stroke-linejoin="round"` : ""}/>`; };
   const heart = (x, y, s, f) => `<path d="M${x} ${y + s * 0.9} C${x - s * 1.6} ${y - s * 0.1} ${x - s * 0.7} ${y - s * 1.2} ${x} ${y - s * 0.35} C${x + s * 0.7} ${y - s * 1.2} ${x + s * 1.6} ${y - s * 0.1} ${x} ${y + s * 0.9}Z" fill="${f}"/>`;
-  const rrect = (x, y, w, h, r) => `M${x + r} ${y} H${x + w - r} Q${x + w} ${y} ${x + w} ${y + r} V${y + h - r} Q${x + w} ${y + h} ${x + w - r} ${y + h} H${x + r} Q${x} ${y + h} ${x} ${y + h - r} V${y + r} Q${x} ${y} ${x + r} ${y}Z`;
 
   /* ------------------------------ hair --------------------------------- */
   const CAP = "M29 47 C26 22 38 14 50 14 C62 14 74 22 71 47 C70 38 66 31 58 29 C52 34 40 32 34 36 C31 39 30 43 29 47Z";
   const shine = (ctx, d) => ctx.clip(d, `<path d="M33 28 C39 18 58 15.5 67 24" stroke="#fff" stroke-opacity=".2" stroke-width="2.4" fill="none" stroke-linecap="round"/>`);
-  const braid = (x0, dir, c, d) => {
-    let s = "";
-    const ys = [55, 61.4, 67.8, 74.2, 80.6, 87];
-    ys.forEach((y, i) => {
-      const x = x0 + dir * i * 0.35, r = 3.5 - i * 0.12;
-      s += `<ellipse cx="${x.toFixed(1)}" cy="${y}" rx="${r.toFixed(1)}" ry="3.9" fill="${c}"/><path d="M${(x - r + .6).toFixed(1)} ${y - 1.2} Q${x.toFixed(1)} ${y + 2.4} ${(x + r - .6).toFixed(1)} ${y - 1.2}" stroke="${d}" stroke-width=".9" fill="none" stroke-linecap="round" opacity=".7"/>`;
-    });
-    const xe = x0 + dir * 5 * 0.35;
-    return s + `<ellipse cx="${xe.toFixed(1)}" cy="91.4" rx="3" ry="2.1" fill="#ff5d8f"/>`;
-  };
   const hairLines = (x, shape, d, paths, opacity = .3) => x.clip(shape, `<path d="${paths}" fill="none" stroke="${d}" stroke-width=".65" opacity="${opacity}" stroke-linecap="round"/>`);
   const curlHair = (c,d,x) => {const p="M29 43 C23 37 25 28 30 25 C28 16 39 12 44 15 C49 9 59 11 62 16 C73 13 79 24 73 30 C79 35 75 41 71 44 L66 34 Q50 28 34 35Z";let detail="";for(let row=0;row<4;row++)for(let i=0;i<7;i++){const xx=25+i*7+(row%2)*3, yy=15+row*7;detail+=`M${xx} ${yy} q-2 -3 -4 0 q-1 3 2 3 q3 0 2 -2 `;}return {front:`<path d="${p}" fill="${c}"/>${hairLines(x,p,d,detail,.5)}${x.clip(p,`<path d="M31 20 Q45 10 62 17" stroke="#fff" stroke-opacity=".12" stroke-width="2" fill="none"/>`)}`};};
   /* ---- flowing locks: a ribbon of hair that follows a wavy centre line ---- */
@@ -780,7 +769,6 @@
     return `<path d="M${x0} ${y0} Q${cx} ${(cy - h).toFixed(2)} ${x1} ${y1} Q${cx} ${(cy + h).toFixed(2)} ${x0} ${y0}Z" fill="${col}" stroke="${col}" stroke-width=".7" stroke-linejoin="round" opacity=".92"/>`;
   };
   const mirrorBrow = b => [100 - b[0], b[1], 100 - b[2], b[3], 100 - b[4], b[5], b[6]];
-  const browPair = b => (col, gd) => { const k = gd.brow / 1.7; return browShape(b, col, k) + browShape(mirrorBrow(b), col, k); };
   // Tapered brow silhouettes, rather than inflated lens-shaped blobs.
   const polishedBrow=(b,col,k)=>{const [a,y,cx,cy,z,v,t]=b,w=Math.min(2.6,t*.53*k);return `<path d="M${a} ${y} Q${cx} ${cy-w} ${z} ${v} L${z} ${v+w*.7} Q${cx} ${cy+w*.25} ${a} ${y+.45}Z" fill="${col}"/>`;};
   const browDefs={thick:[35.2,39.3,40.5,37,45.7,38.3,3.8],thin:[36,39,41,36.4,45.5,38,1.2],arched:[35.8,40,40,34.6,45.6,38,2.3],flat:[35.5,38.7,40.5,38.1,45.7,38.5,2.5],raised:[36,36.7,41,33.4,45.6,35.6,2.1],worried:[35.8,40.3,40.5,37.5,45.6,35.7,2.3],angry:[35.5,36.4,40.6,37.6,45.7,40,3]};
@@ -1067,9 +1055,9 @@
       + x.clip(body, pFill(body, `url(#${gz})`) + pFill(body, `url(#${gd})`) + pFill(bib, `url(#${gw})`)
         + pSt("M2.2 -11.6 C3.6 -10.4 4.1 -8.8 3.9 -7.2 M3.3 -11.2 C4.8 -9.8 5.3 -8 5.1 -6.2 M4.3 -9.8 C5.4 -8.6 5.8 -7 5.6 -5.2 M1 -11.9 C1.8 -11.2 2.2 -10.3 2.3 -9.2", "#4a505b", .2, .36) + pSt("M1 -12.1 C3 -11.7 4.9 -9.9 5.7 -7.5 C6.1 -6.2 6.2 -5.1 6.1 -4", "#4a505b", .45, .3)
         + pSt("M0 -8.4 C-1 -6.4 -.8 -3.6 .8 -1.8", "#4a505b", .24, .4) + pSt("M-3.5 -5.4 C-3.4 -4 -3.4 -2.4 -3.5 -.8", "#b4bcc8", .18, .7) + pSt("M-6.05 -9 C-6.25 -7.4 -6.05 -4.6 -5.95 -1.4", "#aeb6c2", .3, .55)
-       
+
         + pSt(fb[0], "#4a505b", .12, .3) + pSt(fb[1], "#c8cfd8", .12, .34))
-      
+
       + pFill("M.5 -1.1 C1.3 -1.6 2.9 -1.6 3.5 -1.1 C3.8 -.5 3.4 0 2.7 0 L1 0 C.4 0 .2 -.6 .5 -1.1Z", "#f6f4f1") + pSt("M1.4 -.9 v.7 M1.9 -.95 v.75 M2.4 -.9 v.7", "#b9bfc9", .1, .7)
       + pSt("M-4.7 -.9 v.7 M-4.2 -.9 v.7 M-2.6 -.9 v.7 M-2.1 -.9 v.7", "#b9bfc9", .1, .7);
     const headArt = pFill(earF, `url(#${gp})`) + pFill("M-6.4 -17.8 C-6.6 -19 -6.4 -20.2 -6.1 -20.8 C-5.5 -20.2 -4.9 -19.3 -4.6 -18.3Z", "#e9a1ab")
@@ -1145,8 +1133,6 @@
   const ellD = (cx, cy, rx, ry) => `M${cx - rx} ${cy} a${rx} ${ry} 0 1 0 ${2 * rx} 0 a${rx} ${ry} 0 1 0 ${-2 * rx} 0Z`;
   const circD = (cx, cy, r) => ellD(cx, cy, r, r);
   const starD = (x, y, r) => { let p = ""; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; p += (i ? "L" : "M") + (x + Math.cos(a) * rr).toFixed(1) + " " + (y + Math.sin(a) * rr).toFixed(1); } return p + "Z"; };
-  const heartD = (x, y, s) => `M${x} ${y + s * 0.9} C${x - s * 1.6} ${y - s * 0.1} ${x - s * 0.7} ${y - s * 1.2} ${x} ${y - s * 0.35} C${x + s * 0.7} ${y - s * 1.2} ${x + s * 1.6} ${y - s * 0.1} ${x} ${y + s * 0.9}Z`;
-  const flameD = (cx, w, h, lean) => `M${cx - w} 101 C${cx - w} ${101 - h * .38} ${cx - w * .25 + lean * .3} ${101 - h * .6} ${cx + lean} ${101 - h} C${cx + w * .05 + lean * .5} ${101 - h * .55} ${cx + w} ${101 - h * .34} ${cx + w} 101Z`;
   const evenodd = d => `<path clip-rule="evenodd" d="${d}"/>`;
   const bodyT = gd => `<path transform="translate(50 0) scale(${gd.sx} 1) translate(-50 0)" d="${BODY}"/>`;
   // crisp 4-point sparkle, unit radius: tinted star + white core + faint round halo
@@ -2085,7 +2071,6 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
         b.innerHTML = badge({ username: u.username, name: u.name, avatar: me && me.avatar }, { size: 56 }).replace('class="student-avatar', 'class="av-big student-avatar').replace(/ role="button" tabindex="0" aria-label="[^"]*"/, "") + `<span class="av-pen">\u270e</span>`;
         b.onclick = e => { e.stopPropagation(); openEditor(); };
         row.insertBefore(b, row.firstChild);
-        row.style.justifyContent = row.style.justifyContent || "";
       }
       try {
         const me = await getUserCached(u.username), c = Number(me && me.comets) || 0, key = "t29-comets-seen-" + u.username;
