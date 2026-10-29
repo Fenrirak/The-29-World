@@ -701,7 +701,23 @@
         row([[22, 3.6, 11, -2], [54, 4, 13, -1], [86, 4, 12, -2], [38, 3.4, 8, 2], [70, 3.4, 9, 2]], "#fff1a8") +
         `<circle cx="14" cy="64" r="1.1" fill="#ffb62e"/><circle cx="31" cy="58" r=".9" fill="#ff7a1a"/><circle cx="47" cy="63" r="1" fill="#ffd54a"/><circle cx="66" cy="57" r="1.1" fill="#ffb62e"/><circle cx="84" cy="62" r=".9" fill="#ff7a1a"/><circle cx="93" cy="55" r=".8" fill="#ffd54a"/>`;
     },
-    glow: (ctx) => { const i = ctx.id("gl"); ctx.defs += `<radialGradient id="${i}" cx=".5" cy=".5" r=".5"><stop offset=".7" stop-color="#ffe27a" stop-opacity="0"/><stop offset="1" stop-color="#ffd23f" stop-opacity=".85"/></radialGradient>`; return `<circle cx="50" cy="50" r="50" fill="url(#${i})"/>`; }
+    // Golden glow frame. The gradient lives in user space and the fill is an oversized square, so there is no
+    // shape edge anywhere near the avatar's rim: the last stop simply pads outwards. Whatever the warble does
+    // (it scales this layer), the pixels along the clipped border always sit on the flat, full-strength gold
+    // plateau, so the rim stays one clean, constant ring. Only the soft inner fall-off ever moves.
+    // Fall-off is a smoothstep from r=39 (invisible) to r=48 (full), i.e. a slimmer glow than before (was r=35 -> 50).
+    glow: (ctx) => {
+      const i = ctx.id("gl");
+      ctx.defs += `<radialGradient id="${i}" cx="50" cy="50" r="50" gradientUnits="userSpaceOnUse">`
+        + `<stop offset=".78" stop-color="#ffe27a" stop-opacity="0"/>`
+        + `<stop offset=".8025" stop-color="#ffe074" stop-opacity=".037"/>`
+        + `<stop offset=".825" stop-color="#ffdf70" stop-opacity=".133"/>`
+        + `<stop offset=".87" stop-color="#ffdb62" stop-opacity=".425"/>`
+        + `<stop offset=".915" stop-color="#ffd74e" stop-opacity=".717"/>`
+        + `<stop offset=".9375" stop-color="#ffd445" stop-opacity=".814"/>`
+        + `<stop offset=".96" stop-color="#ffd23f" stop-opacity=".85"/></radialGradient>`;
+      return `<rect x="-20" y="-20" width="140" height="140" fill="url(#${i})"/>`;
+    }
   };
   const FX_LIST = [["none", "None", 0], ["sparkles", "Sparkles", 1], ["hearts", "Floating hearts", 1], ["bubbles", "Bubbles", 1], ["snowfall", "Snowfall", 1], ["notes", "Music notes", 2], ["confetti", "Confetti", 2],
     ["lightning", "Lightning", 3], ["glow", "Golden glow", 3], ["flames", "Flames", 4]];
@@ -1427,7 +1443,7 @@
         extra: h => { const c = rc.ctx, i = c.id("lf"); c.defs += `<radialGradient id="${i}"><stop offset="0" stop-color="#fff27a" stop-opacity=".7"/><stop offset="1" stop-color="#ffe14d" stop-opacity="0"/></radialGradient>`;
           return h.mv("flash", `<ellipse cx="14" cy="28" rx="17" ry="25" fill="url(#${i})"/><ellipse cx="86" cy="68" rx="15" ry="23" fill="url(#${i})"/><path d="M14 10 L6 30 L13 30 L9 46 L22 24 L14 24 L20 10Z M86 52 L79 70 L85 70 L82 84 L93 64 L87 64 L92 52Z" fill="#fff"/>`, "0%,62%{opacity:0}64%{opacity:.95}67%{opacity:.2}70%{opacity:.9}76%{opacity:.25}82%,100%{opacity:0}", 3.4, { ease: "linear", op: 0, still: false }); } }),
       glow: () => ({
-        // the ring warbles: it swells and settles unevenly while its brightness drifts out of step
+        // the ring warbles: its inner edge swells and settles unevenly while its brightness drifts out of step (the rim itself stays put, see FX.glow)
         wrap: (h, svg) => h.mv("fade", `<g transform="translate(50 50)">${h.mv("warble", `<g transform="translate(-50 -50)">${svg}</g>`, "0%,100%{transform:scale(1,1)}22%{transform:scale(1.045,1.03)}47%{transform:scale(.975,.985)}71%{transform:scale(1.03,1.05)}", 5.2)}</g>`, "0%,100%{opacity:1}35%{opacity:.7}68%{opacity:.88}", 3.7) }),
       flames: () => ({
         glow: { x: 50, y: 98, rx: 62, ry: 32, c: "#ff8a1a", o: .5 }, glowKf: "0%,100%{opacity:.75}18%{opacity:1}41%{opacity:.8}67%{opacity:1}84%{opacity:.82}", glowDur: 2.3,
