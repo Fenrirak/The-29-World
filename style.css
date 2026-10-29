@@ -1145,7 +1145,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .notif-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;}
 .notif-title{font-weight:800;font-size:.85rem;color:var(--navy-900);line-height:1.3;}
 .notif-sub{font-size:.78rem;color:var(--muted);line-height:1.4;}
-.notif-time{font-size:.7rem;color:#9aa4b8;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
+.notif-time{font-size:.7rem;color:#6b768c;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
 .notif-row.action .notif-time{color:#b8402c;}
 .notif-showmore{
   display:block;width:100%;
@@ -3847,4 +3847,14 @@ html.dark-mode #payslipBox .ps-debit>span:last-child{color:var(--coral);}
 #payslipBox .ps-upcoming-amount strong,#payslipBox .ps-date strong{
   font-family:inherit;font-style:normal;font-variant-numeric:tabular-nums;
   font-feature-settings:normal;letter-spacing:normal;
+}
+
+/* Respect "reduce motion": stop decorative animation and smooth scrolling everywhere.
+   Spinners and loading bars are left running (just slowed) so people can still see that something is loading. */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto;}
+  *,*::before,*::after{transition-duration:.01ms !important;scroll-behavior:auto !important;}
+  *:not(.t29-loadbar):not(.t29-spinner):not(.bulk-spinner),
+  *:not(.t29-loadbar):not(.t29-spinner):not(.bulk-spinner)::before,
+  *:not(.t29-loadbar):not(.t29-spinner):not(.bulk-spinner)::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;}
 }
