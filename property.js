@@ -969,7 +969,7 @@ function ownedHomeCard(p, cls, nameOf) {
   const gcls = gain ? (gain.diff > 0 ? "ticker-up" : gain.diff < 0 ? "ticker-down" : "muted-small") : "";
   const sgn = gain ? (gain.diff > 0 ? "+" : gain.diff < 0 ? "-" : "") : "";
   const gainHtml = gain
-    ? `<span class="pcard-delta ${gcls}">${sgn}${Math.abs(gain.pct).toFixed(1)}%</span><span class="muted-small">You bought for ${fmtMoney(p.purchasePrice)}</span>`
+    ? `<span class="pcard-delta ${gcls}">${sgn}${fmtMoney(Math.abs(gain.diff))} (${sgn}${Math.abs(gain.pct).toFixed(1)}%)</span><span class="muted-small">You bought for ${fmtMoney(p.purchasePrice)}</span>`
     : "";
   return `
     <article class="pcard">
