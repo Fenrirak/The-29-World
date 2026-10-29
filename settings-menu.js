@@ -100,6 +100,17 @@ function smKeysDesc() {
     : 'See every key — or press <kbd class="t29-kbd">?</kbd> or <kbd class="t29-kbd">/</kbd> any time.';
 }
 
+function smInjectCss() {
+  if (document.getElementById("t29SettingsMenuCss")) return;
+  const st = document.createElement("style");
+  st.id = "t29SettingsMenuCss";
+  st.textContent = `
+.sm-divider{height:1px;background:var(--line);margin:14px 0;} /* same rhythm as style.css's adjacent-row rule */
+#t29DeviceAlertsHost:empty{display:none;}
+.sm-divider:has(+ #t29DeviceAlertsHost:empty){display:none;}`;
+  document.head.appendChild(st);
+}
+
 function smBuildPopover() {
   if (document.getElementById("t29SettingsPopover")) return document.getElementById("t29SettingsPopover");
 
@@ -109,9 +120,10 @@ function smBuildPopover() {
   pop.setAttribute("role", "dialog");
   pop.setAttribute("aria-label", "Display settings");
 
-  pop.innerHTML = `
-    <div class="settings-popover-heading">${typeof icon === "function" ? icon("settings", 15) : ""}<span>Settings</span></div>
-    <div class="settings-popover-row">
+  // Each setting is its own block; they're joined with a divider so every
+  // row is visually separated (blocks that don't apply here are skipped).
+  const rows = [
+    `<div class="settings-popover-row">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Dark mode</div>
         <div class="settings-popover-desc">Switch to a dark theme — easier on the eyes in low light.</div>
@@ -120,9 +132,8 @@ function smBuildPopover() {
         <input type="checkbox" id="t29DarkModeToggle">
         <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
       </label>
-    </div>
-    ${smHasSidebar() ? `
-    <div class="settings-popover-row">
+    </div>`,
+    smHasSidebar() ? `<div class="settings-popover-row">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Sidebar navigation</div>
         <div class="settings-popover-desc">Show the menu as a side panel instead of the top bar — a slide-out menu on phones (on by default there).</div>
@@ -131,24 +142,18 @@ function smBuildPopover() {
         <input type="checkbox" id="t29SidebarNavToggle">
         <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
       </label>
-    </div>` : ""}
-    ${typeof t29TourForThisPage === "function" && t29TourForThisPage() ? `
-    <div class="settings-popover-row" id="t29TourRow" role="button" tabindex="0" style="cursor:pointer;">
-      <div class="settings-popover-text">
-        <div class="settings-popover-title">Show me around</div>
-        <div class="settings-popover-desc">A one-minute tour of this page.</div>
-      </div>
-      <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
-    </div>` : ""}
-    ${typeof t29ShowShortcuts === "function" && typeof t29HasKeyboard === "function" && t29HasKeyboard() ? `
-    <div class="settings-popover-row" id="t29KeysRow" role="button" tabindex="0" style="cursor:pointer;">
+    </div>` : "",
+    // Notifications get their own section. Filled in by notifications.js
+    // (students only — it stays empty for teachers, and its divider hides).
+    `<div id="t29DeviceAlertsHost" data-style="row"></div>`,
+    typeof t29ShowShortcuts === "function" && typeof t29HasKeyboard === "function" && t29HasKeyboard() ? `<div class="settings-popover-row" id="t29KeysRow" role="button" tabindex="0" style="cursor:pointer;">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Keyboard shortcuts</div>
         <div class="settings-popover-desc" id="t29KeysDesc">${smKeysDesc()}</div>
       </div>
       <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
-    </div>
-    <div class="settings-popover-row">
+    </div>` : "",
+    typeof t29ShowShortcuts === "function" && typeof t29HasKeyboard === "function" && t29HasKeyboard() ? `<div class="settings-popover-row">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Use keyboard shortcuts</div>
         <div class="settings-popover-desc">Turn off if keys like S, D or the arrow keys get in your way.</div>
@@ -157,17 +162,29 @@ function smBuildPopover() {
         <input type="checkbox" id="t29KeysToggle" aria-label="Use keyboard shortcuts">
         <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
       </label>
-    </div>` : ""}
-    <div id="t29DeviceAlertsHost" data-style="row"></div>
-    <div class="settings-popover-row" id="t29ChangePasswordRow" role="button" tabindex="0" style="cursor:pointer;">
+    </div>` : "",
+    typeof t29TourForThisPage === "function" && t29TourForThisPage() ? `<div class="settings-popover-row" id="t29TourRow" role="button" tabindex="0" style="cursor:pointer;">
+      <div class="settings-popover-text">
+        <div class="settings-popover-title">Show me around</div>
+        <div class="settings-popover-desc">A one-minute tour of this page.</div>
+      </div>
+      <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
+    </div>` : "",
+    `<div class="settings-popover-row" id="t29ChangePasswordRow" role="button" tabindex="0" style="cursor:pointer;">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Change password</div>
         <div class="settings-popover-desc">You'll stay signed in here — any other device you're logged in on will need to sign back in.</div>
       </div>
       <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
-    </div>
-    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;">
-      <a href="https://buymeacoffee.com/29world" target="_blank" rel="noopener" id="t29SupportCreatorRow" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 14px;border-radius:10px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);font-weight:800;text-decoration:none;">☕ Support the Creator</a>
+    </div>`
+  ].filter(Boolean);
+
+  smInjectCss();
+  pop.innerHTML = `
+    <div class="settings-popover-heading">${typeof icon === "function" ? icon("settings", 15) : ""}<span>Settings</span></div>
+    ${rows.join('<div class="sm-divider" role="separator"></div>')}
+    <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;">
+      <a href="https://buymeacoffee.com/29world" target="_blank" rel="noopener" id="t29SupportCreatorRow" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 12px;border-radius:8px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);font-weight:800;font-size:.8rem;text-decoration:none;">☕ Support the Creator</a>
     </div>
   `;
 

@@ -763,21 +763,13 @@ function notifInjectDeviceCss() {
   if (document.getElementById("t29DeviceCss")) return;
   const st = document.createElement("style");
   st.id = "t29DeviceCss";
+  // Reuses the settings popover's own row + switch classes (so dark mode and
+  // spacing come from style.css); this only adds the bar it sits in inside
+  // the bell panel, and the inline "Send a test" link.
   st.textContent = `
-.t29-da{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(127,127,127,.25);background:rgba(127,127,127,.07);}
-.t29-da-ic{flex:0 0 auto;display:inline-flex;opacity:.8;}
-.t29-da-txt{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px;line-height:1.3;}
-.t29-da-title{font-weight:700;font-size:.9rem;}
-.t29-da-sub{font-size:.76rem;opacity:.75;}
-.t29-da-sub button{all:unset;cursor:pointer;text-decoration:underline;font-weight:700;}
-.t29-da-hint{padding:8px 14px 10px;font-size:.76rem;line-height:1.4;border-bottom:1px solid rgba(127,127,127,.25);background:rgba(224,160,40,.12);}
-.t29-da-switch{all:unset;flex:0 0 auto;box-sizing:border-box;width:42px;height:24px;border-radius:12px;background:rgba(127,127,127,.45);position:relative;cursor:pointer;transition:background .15s;}
-.t29-da-switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.3);}
-.t29-da-switch[aria-checked="true"]{background:#2f9e6a;}
-.t29-da-switch[aria-checked="true"]::after{transform:translateX(18px);}
-.t29-da-switch:focus-visible{outline:2px solid #2f9e6a;outline-offset:2px;}
-.t29-da-switch[disabled]{opacity:.45;cursor:not-allowed;}
-.settings-popover-desc button[data-da]{all:unset;cursor:pointer;text-decoration:underline;font-weight:700;}`;
+.t29-da{flex-shrink:0;padding:11px 16px;border-bottom:1.5px solid var(--line);background:var(--bg);}
+.settings-popover-desc button[data-da]{all:unset;cursor:pointer;text-decoration:underline;font-weight:700;color:inherit;}
+.settings-popover-desc button[data-da]:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}`;
   document.head.appendChild(st);
 }
 function notifDeviceControl(host) {
@@ -790,62 +782,41 @@ function notifDeviceControl(host) {
 function notifDeviceRepaintAll() {
   NOTIF_DEVICE_HOSTS.forEach(h => { if (!h.isConnected) NOTIF_DEVICE_HOSTS.delete(h); else notifDeviceRender(h); });
 }
+// One markup for both places it appears. data-style="row" (settings menu)
+// renders the bare row; otherwise (bell panel) it's wrapped in a bar.
 function notifDeviceRender(host) {
   if (!NOTIF_USER) { host.innerHTML = ""; return; } // teachers / not ready yet
   const supported = notifPushSupported();
-  const perm = supported ? Notification.permission : "unsupported";
+  const blocked = supported && Notification.permission === "denied";
   const on = notifDeviceAlertsOn();
-  const blocked = perm === "denied";
-  let sub, hint = "";
+  let desc;
   if (!supported) {
-    sub = "Not available in this browser.";
-    hint = notifIsIos() ? "On iPhone or iPad, tap Share, then Add to Home Screen, and open the site from your Home Screen to turn alerts on."
+    desc = "Not available in this browser. " + (notifIsIos()
+      ? "On iPhone or iPad, tap Share, then Add to Home Screen, and open the site from your Home Screen to turn alerts on."
       : window.isSecureContext === false ? "Alerts need a secure (https) connection."
-      : "This browser can't show device alerts. Try Chrome, Edge, Firefox or Safari.";
+      : "Try Chrome, Edge, Firefox or Safari.");
   } else if (blocked) {
-    sub = "Blocked in your browser.";
-    hint = "Allow notifications for this site in your browser's site settings, then reopen this menu.";
+    desc = "Blocked in your browser. Allow notifications for this site in your browser's site settings, then reopen this menu.";
   } else if (on) {
-    sub = `On for this device only. Needs the site open in a tab or app. <button type="button" data-da="test">Send a test</button>`;
+    desc = `Alerts you to new notifications on this device only. Needs the site open in a tab or app. <button type="button" data-da="test">Send a test</button>`;
   } else {
-    sub = "Off on this device. Turn on to get pinged here.";
+    desc = "Get an alert on this device when you have a new notification. This device only.";
   }
-  const disabled = !supported || blocked;
-  if (host.dataset.style === "row") {
-    // Same look as the other rows in the settings popover (lg-switch).
-    host.innerHTML = `<div class="settings-popover-row">
-        <div class="settings-popover-text">
-          <div class="settings-popover-title">Alert this device</div>
-          <div class="settings-popover-desc">${sub}${hint ? " " + escapeHtml(hint) : ""}</div>
-        </div>
-        <label class="lg-switch">
-          <input type="checkbox" aria-label="Alert this device"${on ? " checked" : ""}${disabled ? " disabled" : ""}>
-          <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
-        </label>
-      </div>`;
-    const cb = host.querySelector("input");
-    cb.addEventListener("change", async () => {
-      cb.disabled = true;
-      if (cb.checked) await notifDeviceEnable(); else notifDeviceDisable();
-      notifDeviceRepaintAll();
-    });
-    const t = host.querySelector('[data-da="test"]');
-    if (t) t.addEventListener("click", async e => {
-      e.stopPropagation();
-      t.textContent = (await notifShowDeviceAlert({ title: "Test alert", body: "If you can see this, alerts work on this device.", tag: "t29-test" })) ? "Sent" : "Couldn't show it";
-    });
-    return;
-  }
-  host.innerHTML = `<div class="t29-da">
-      <span class="t29-da-ic">${notifIconFor("bell", 16)}</span>
-      <span class="t29-da-txt"><span class="t29-da-title">Alert this device</span><span class="t29-da-sub">${sub}</span></span>
-      <button type="button" role="switch" class="t29-da-switch" aria-label="Alert this device" aria-checked="${on}"${disabled ? " disabled" : ""}></button>
-    </div>${hint ? `<div class="t29-da-hint">${escapeHtml(hint)}</div>` : ""}`;
-  const sw = host.querySelector(".t29-da-switch");
-  sw.addEventListener("click", async e => {
-    e.stopPropagation();
-    sw.disabled = true; // one tap = one change, even while the permission prompt is up
-    if (notifDeviceAlertsOn()) notifDeviceDisable(); else await notifDeviceEnable();
+  const row = `<div class="settings-popover-row">
+      <div class="settings-popover-text">
+        <div class="settings-popover-title">Notification alerts</div>
+        <div class="settings-popover-desc">${desc}</div>
+      </div>
+      <label class="lg-switch">
+        <input type="checkbox" aria-label="Notification alerts on this device"${on ? " checked" : ""}${!supported || blocked ? " disabled" : ""}>
+        <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
+      </label>
+    </div>`;
+  host.innerHTML = host.dataset.style === "row" ? row : `<div class="t29-da">${row}</div>`;
+  const cb = host.querySelector("input");
+  cb.addEventListener("change", async () => {
+    cb.disabled = true; // one tap = one change, even while the permission prompt is up
+    if (cb.checked) await notifDeviceEnable(); else notifDeviceDisable();
     notifDeviceRepaintAll();
   });
   const test = host.querySelector('[data-da="test"]');
