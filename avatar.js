@@ -1576,6 +1576,14 @@
     if (PETS[look.pet]) s += E.pet(PETS[look.pet](gd, ctx, E.petA));
     if (co && co.eyesOnTop) { s += eyesAndBrows(); if (GLASS[look.glasses]) s += E.pre("glasses") + E.wrap("glasses", GLASS[look.glasses](ctx)) + E.post("glasses"); }
     s += E.pre("fx") + E.wrap("fx", (FX[look.fx] || FX.none)(ctx)) + E.post("fx");
+    // Golden glow: a solid, static gold rim sits on top of everything, outside the animated (semi-transparent) glow layers.
+    // It is fully opaque at the very edge, so nothing from the scene or the clothes underneath, and no compositing
+    // fringe from the animation, can show through along the clipped border. It never warbles or fades.
+    if (look.fx === "glow") {
+      const ri = ctx.id("rm");
+      ctx.defs += `<radialGradient id="${ri}" cx="50" cy="50" r="50" gradientUnits="userSpaceOnUse"><stop offset=".93" stop-color="#ffd23f" stop-opacity="0"/><stop offset=".97" stop-color="#ffd23f" stop-opacity=".9"/><stop offset=".985" stop-color="#ffd23f" stop-opacity="1"/></radialGradient>`;
+      s += `<rect x="-20" y="-20" width="140" height="140" fill="url(#${ri})"/>`;
+    }
 
     const cid = ctx.id("cp");
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="${opts.label ? String(opts.label).replace(/[<>&"]/g, "") : "Avatar"}"><defs><clipPath id="${cid}"><circle cx="50" cy="50" r="50"/></clipPath>${ctx.defs}${E.css()}${ctx.css ? `<style>${ctx.css}@media (prefers-reduced-motion:reduce){.t29sw{animation:none!important}}</style>` : ""}</defs><g clip-path="url(#${cid})">${s}</g></svg>`;
