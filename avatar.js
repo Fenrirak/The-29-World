@@ -1579,14 +1579,19 @@
     // Golden glow: a solid, static gold rim sits on top of everything, outside the animated (semi-transparent) glow layers.
     // It is fully opaque at the very edge, so nothing from the scene or the clothes underneath, and no compositing
     // fringe from the animation, can show through along the clipped border. It never warbles or fades.
+    // GLOW_TRIM_PX: the golden glow frame is cut this many pixels in from the very edge (about 2px at any size,
+    // clamped to 0.5 to 1.5 viewBox units), which removes the outermost anti-aliased fringe where stray dark pixels used to show.
+    // The glow frame is cut with a mask, not a clip-path: a clip-path is anti-aliased per layer, so the edge pixels leak a little of
+    // every layer underneath (the dark scene, clothes). A mask cuts the finished picture once, so the rim stays clean gold.
+    const glowEdge = look.fx === "glow" ? 50 - Math.min(1.5, Math.max(.5, 2 * 100 / size)) : 50;
     if (look.fx === "glow") {
-      const ri = ctx.id("rm");
-      ctx.defs += `<radialGradient id="${ri}" cx="50" cy="50" r="50" gradientUnits="userSpaceOnUse"><stop offset=".93" stop-color="#ffd23f" stop-opacity="0"/><stop offset=".97" stop-color="#ffd23f" stop-opacity=".9"/><stop offset=".985" stop-color="#ffd23f" stop-opacity="1"/></radialGradient>`;
+      const ri = ctx.id("rm"), o = d => n2((glowEdge - d) / 50);
+      ctx.defs += `<radialGradient id="${ri}" cx="50" cy="50" r="50" gradientUnits="userSpaceOnUse"><stop offset="${o(3.5)}" stop-color="#ffd23f" stop-opacity="0"/><stop offset="${o(1.5)}" stop-color="#ffd23f" stop-opacity=".9"/><stop offset="${o(.75)}" stop-color="#ffd23f" stop-opacity="1"/></radialGradient>`;
       s += `<rect x="-20" y="-20" width="140" height="140" fill="url(#${ri})"/>`;
     }
 
     const cid = ctx.id("cp");
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="${opts.label ? String(opts.label).replace(/[<>&"]/g, "") : "Avatar"}"><defs><clipPath id="${cid}"><circle cx="50" cy="50" r="50"/></clipPath>${ctx.defs}${E.css()}${ctx.css ? `<style>${ctx.css}@media (prefers-reduced-motion:reduce){.t29sw{animation:none!important}}</style>` : ""}</defs><g clip-path="url(#${cid})">${s}</g></svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}"${glowEdge < 50 ? ' style="border-radius:50%;background:#ffd23f"' : ""} role="img" aria-label="${opts.label ? String(opts.label).replace(/[<>&"]/g, "") : "Avatar"}"><defs>${look.fx === "glow" ? `<mask id="${cid}" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><circle cx="50" cy="50" r="${n2(glowEdge)}" fill="#fff"/></mask>` : `<clipPath id="${cid}"><circle cx="50" cy="50" r="50"/></clipPath>`}${ctx.defs}${E.css()}${ctx.css ? `<style>${ctx.css}@media (prefers-reduced-motion:reduce){.t29sw{animation:none!important}}</style>` : ""}</defs><g ${look.fx === "glow" ? "mask" : "clip-path"}="url(#${cid})">${s}</g></svg>`;
   }
 
   G.T29AvatarCore = { CATS, DEFAULT_LOOK, NONE_IDS, RARITY, HAIRC, TOPC, SKINS, cleanLook, renderSvg };
@@ -1857,7 +1862,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     ov.innerHTML = `<div class="av-lb-card" role="dialog" aria-modal="true" aria-label="${esc(name)}'s avatar">
       <div class="av-lb-hero av-lb-t${top}">
         <button class="av-lb-x" type="button" aria-label="Close">\u00d7</button>
-        <div class="av-lb-av">${renderSvg(look, { size: 300, animate: true, label: name + "'s avatar" })}</div>
+        <div class="av-lb-av"${look.fx === "glow" ? ' style="background:#ffd23f"' : ""}>${renderSvg(look, { size: 300, animate: true, label: name + "'s avatar" })}</div>
       </div>
       <div class="av-lb-info">
         <h3 class="av-lb-name">${esc(name)}</h3>
