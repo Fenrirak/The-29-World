@@ -29,7 +29,7 @@ function propertyDailyChange(p) {
 // value, so this reads the same wherever it's shown.
 function movingCostNote(cls) {
   const cost = Number(cls && cls.movingCost) || 0;
-  return `<p class="muted-small">${icon("send", 12)} Moving cost: <strong>${cost > 0 ? fmtMoney(cost) : "Free"}</strong> &middot; you can only move house once a day.</p>`;
+  return `<p class="muted-small"> Moving cost: <strong>${cost > 0 ? fmtMoney(cost) : "Free"}</strong> &middot; you can only move house once a day.</p>`;
 }
 
 
@@ -334,9 +334,9 @@ function mortgageStatusBadges(cls, previewForceDue) {
   const forceDue = previewForceDue === undefined ? storedForceDue : previewForceDue;
   const dueToday = day === nzDayName();
 
-  let badges = `<span class="badge navy">${icon("calendar", 12)}Due every ${DAY_FULL[day]}</span>`;
-  if (dueToday) badges += `<span class="badge mint">${icon("house", 12)}Due today</span>`;
-  if (forceDue && !dueToday) badges += `<span class="badge gold">${icon("send", 12)}This week: due now (override)</span>`;
+  let badges = `<span class="badge navy">Due every ${DAY_FULL[day]}</span>`;
+  if (dueToday) badges += `<span class="badge mint">Due today</span>`;
+  if (forceDue && !dueToday) badges += `<span class="badge gold">This week: due now (override)</span>`;
   if (forceDue !== storedForceDue) badges += `<span class="badge lilac">Unsaved change — click Save below</span>`;
   return badges;
 }
@@ -702,7 +702,7 @@ function lifestyleChip(cls, p) {
   const pv = propertyLifestylePreview(cls, p);
   if (!pv) return "";
   const title = `Owning it: +${pv.ownPoints} lifestyle points. Living in it instead of renting it out: +${pv.livingBonusPoints} more on top (${pv.livingBonusStars} bonus star${pv.livingBonusStars === 1 ? "" : "s"} x ${pv.weight} pts/star).`;
-  return `<span class="chip" title="${title}">${icon("star", 12)} Lifestyle +${pv.ownPoints} &middot; +${pv.livingBonusPoints} living in</span>`;
+  return `<span class="chip" title="${title}">Lifestyle +${pv.ownPoints} &middot; +${pv.livingBonusPoints} living in</span>`;
 }
 
 function paintChrome() {
@@ -735,12 +735,11 @@ function listingTop(p, cls, me, badgesHtml) {
   const hist = p.priceHistory && p.priceHistory.length ? p.priceHistory : [p.price];
   const chg = propertyDailyChange(p);
   const dir = chg.diff > 0 ? "ticker-up" : chg.diff < 0 ? "ticker-down" : "muted-small";
-  const arrow = chg.diff > 0 ? "\u25B2 " : chg.diff < 0 ? "\u25BC " : "";
-  const today = hist.length > 1 ? `<span class="pcard-delta ${dir}">${arrow}${Math.abs(chg.pct).toFixed(1)}% today</span>` : "";
+  const sgn = chg.diff > 0 ? "+" : chg.diff < 0 ? "-" : "";
+  const today = hist.length > 1 ? `<span class="pcard-delta ${dir}">${sgn}${Math.abs(chg.pct).toFixed(1)}% today</span>` : "";
   return `
     <div class="pcard-top">
       <div class="pcard-id">
-        <span class="pcard-ico">${icon("house", 20)}</span>
         <div class="pcard-name">
           <h3>${escapeHtml(p.name)}</h3>
           ${badgesHtml ? `<div class="pcard-badges">${badgesHtml}</div>` : ""}
@@ -756,14 +755,16 @@ function listingTop(p, cls, me, badgesHtml) {
     </div>`;
 }
 function listingChips(p, cls, extraChips) {
-  const chips = [`<span class="chip">${comfortStars(p.comfort)}</span>`];
+  const chips = [];
+  if (extraChips) chips.push(extraChips);
+  chips.push(`<span class="chip">${comfortStars(p.comfort)}</span>`);
   chips.push(p.mortgageWeeks > 0
-    ? `<span class="chip" title="Weekly payments are due ${dayFull(cls.mortgageDay)}s">${icon("bank", 12)} Mortgage ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`
+    ? `<span class="chip" title="Weekly payments are due ${dayFull(cls.mortgageDay)}s">Mortgage ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`
     : `<span class="chip">Cash only</span>`);
-  if (p.rentPerWeek > 0) chips.push(`<span class="chip">${icon("coin", 12)} Rent income ${fmtMoney(p.rentPerWeek)}/wk</span>`);
+  if (p.rentPerWeek > 0) chips.push(`<span class="chip">Rent income ${fmtMoney(p.rentPerWeek)}/wk</span>`);
   const ls = lifestyleChip(cls, p);
   if (ls) chips.push(ls);
-  return `<div class="pcard-chips">${chips.join("")}${extraChips || ""}</div>`;
+  return `<div class="pcard-chips">${chips.join("")}</div>`;
 }
 function availabilityChip(units, available) {
   if (available.length === 0) return `<span class="chip chip-off">Sold out</span>`;
@@ -771,14 +772,14 @@ function availabilityChip(units, available) {
 }
 // A small badge showing what an owned unit is currently being used for.
 function occupancyChip(p) {
-  if (p.occupancy === "living") return `<span class="badge mint">${icon("house", 12)}Living here</span>`;
-  if (p.occupancy === "rented") return `<span class="badge gold">${icon("coin", 12)}Rented out</span>`;
+  if (p.occupancy === "living") return `<span class="badge mint">Living here</span>`;
+  if (p.occupancy === "rented") return `<span class="badge gold">Rented out</span>`;
   if (p.occupancy === "sublet" && p.sublet) {
     const s = p.sublet;
-    if (s.status === "pending") return `<span class="badge lilac">${icon("send", 12)}Awaiting approval</span>`;
+    if (s.status === "pending") return `<span class="badge lilac">Awaiting approval</span>`;
     if (s.status === "rejected") return `<span class="badge coral">Listing declined</span>`;
-    if (!s.tenant) return `<span class="badge navy">${icon("users", 12)}Listed to classmates</span>`;
-    return `<span class="badge gold">${icon("users", 12)}Rented to a classmate</span>`;
+    if (!s.tenant) return `<span class="badge navy">Listed to classmates</span>`;
+    return `<span class="badge gold">Rented to a classmate</span>`;
   }
   return `<span class="badge navy">Not set yet</span>`;
 }
@@ -794,7 +795,7 @@ function renderStudent(cls, props, me, nameOf) {
   // Listings the student already owns a unit of live under "My homes".
   const groups = groupProperties(props).filter(units => !units.some(u => u.owner === me.username));
   // Anything still available first; sold-out listings after (stable sort).
-  groups.sort((a, b) => (a.some(u => !u.owner) ? 0 : 1) - (b.some(u => !u.owner) ? 0 : 1));
+  groups.sort((a, b) => ((a.some(u => !u.owner) ? 0 : 1) - (b.some(u => !u.owner) ? 0 : 1)) || (a[0].price - b[0].price));
   // First-home KiwiSaver: when a student can put it towards a purchase,
   // each listing they can buy gets a "Use my KiwiSaver" tick box.
   const ksHome = typeof kiwiSaverFirstHomeInfo === "function"
@@ -843,8 +844,8 @@ function buyControls(p, gid, minDeposit, ksHome, cls) {
       <button class="btn small gold" id="buyOutrightBtn-${gid}" onclick="buyOutright('${gid}')">${icon("coin", 13)} Buy cash</button>
       ${p.mortgageWeeks > 0 ? `
         <div class="deposit-group">
-          <span class="deposit-prefix">$</span>
-          <input type="number" id="depositAmt-${gid}" min="${minDeposit}" step="0.01" value="${minDeposit}" aria-label="Deposit amount in dollars, minimum ${fmtMoney(minDeposit)}">
+          <div class="deposit-field"><span class="deposit-prefix">$</span>
+          <input type="number" id="depositAmt-${gid}" min="${minDeposit}" step="0.01" value="${minDeposit}" aria-label="Deposit amount in dollars, minimum ${fmtMoney(minDeposit)}"></div>
           <button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Mortgage</button>
         </div>
         <span class="muted-small buy-hint">Deposit from ${fmtMoney(minDeposit)} &middot; weekly payments due ${dayFull(cls.mortgageDay)}s</span>` : ""}
@@ -966,22 +967,21 @@ function studentSubletRows(p, cls, nameOf) {
 function ownedHomeCard(p, cls, nameOf) {
   const gain = propertyGainSinceBought(p);
   const gcls = gain ? (gain.diff > 0 ? "ticker-up" : gain.diff < 0 ? "ticker-down" : "muted-small") : "";
-  const arrow = gain ? (gain.diff > 0 ? "\u25B2 " : gain.diff < 0 ? "\u25BC " : "") : "";
+  const sgn = gain ? (gain.diff > 0 ? "+" : gain.diff < 0 ? "-" : "") : "";
   const gainHtml = gain
-    ? `<span class="pcard-delta ${gcls}">${arrow}${fmtMoney(Math.abs(gain.diff))} (${Math.abs(gain.pct).toFixed(1)}%)</span><span class="muted-small">since you paid ${fmtMoney(p.purchasePrice)}</span>`
+    ? `<span class="pcard-delta ${gcls}">${sgn}${Math.abs(gain.pct).toFixed(1)}%</span><span class="muted-small">You bought for ${fmtMoney(p.purchasePrice)}</span>`
     : "";
   return `
     <article class="pcard">
       <div class="pcard-top">
         <div class="pcard-id">
-          <span class="pcard-ico">${icon("house", 20)}</span>
           <div class="pcard-name">
             <h3>${escapeHtml(p.name)}</h3>
             <div class="pcard-badges">${occupancyChip(p)}<span class="chip">${comfortStars(p.comfort)}</span></div>
           </div>
         </div>
         <div class="pcard-money">
-          <span class="pcard-cap">Worth now</span>
+          <span class="pcard-cap">Current Price</span>
           <div class="pcard-price">${fmtMoney(p.price)}</div>
           ${gainHtml}
         </div>
@@ -1000,7 +1000,6 @@ function rentedHomeCard(o) {
     <article class="pcard">
       <div class="pcard-top">
         <div class="pcard-id">
-          <span class="pcard-ico">${icon(o.icon, 20)}</span>
           <div class="pcard-name">
             <h3>${escapeHtml(o.name)}</h3>
             <div class="pcard-badges">${o.badge}</div>
@@ -1046,7 +1045,7 @@ function renderStudentHomes(cls, props, me, nameOf) {
     const t = tenantRentStatusLine(s.leaseStartWeekKey, s.rentLastWeekPaid, rentedProp.rentDay, s.price, isSubletRentOverdue(rentedProp, cls));
     items.push({ rank: 0, due: t.canPay, html: rentedHomeCard({
       icon: "house", name: rentedProp.name, desc: `Renting from ${nameOf(rentedProp.owner)}`,
-      badge: `<span class="badge navy">${icon("users", 12)}Classmate rental</span>`,
+      badge: `<span class="badge navy">Classmate rental</span>`,
       price: s.price, status: t.status, canPay: t.canPay, why: t.why,
       payId: `payTenantRentBtn-${rentedProp.id}`, payFn: `payTenantRentClick('${rentedProp.id}')`, msgId: `tenantRentMsg-${rentedProp.id}`,
       canMoveOut: leaseMinWeeksElapsed(s), minWeeks: s.minWeeks, moveFn: `tenantMoveOutClick('${rentedProp.id}')`
@@ -1055,7 +1054,7 @@ function renderStudentHomes(cls, props, me, nameOf) {
     const t = tenantRentStatusLine(npcUnit.leaseStartWeekKey, npcUnit.rentLastWeekPaid, npcUnit.rentDay, npcUnit.rentPerWeek, isNpcRentOverdue(npcUnit));
     items.push({ rank: 0, due: t.canPay, html: rentedHomeCard({
       icon: "building", name: npcUnit.name, desc: npcUnit.description || "",
-      badge: `<span class="badge lilac">${icon("building", 12)}School rental</span>`,
+      badge: `<span class="badge lilac">School rental</span>`,
       price: npcUnit.rentPerWeek, status: t.status, canPay: t.canPay, why: t.why,
       cardToggle: t.canPay ? cardPayToggleHtml("n-" + npcUnit.id, window.T29_ME, cls) : "",
       payId: `payNpcRentBtn-${npcUnit.id}`, payFn: `payNpcRentClick('${npcUnit.id}')`, msgId: `npcRentMsg-${npcUnit.id}`,
@@ -1086,7 +1085,7 @@ function renderStudentRentals(cls, props, me, nameOf) {
       rows.push(`
         <div class="prow rent-row">
           <div class="prow-main">
-            <div class="prow-title">${escapeHtml(p.name)} <span class="badge navy">${icon("users", 12)}Classmate</span></div>
+            <div class="prow-title">${escapeHtml(p.name)} <span class="badge navy">Classmate</span></div>
             <div class="prow-sub">Rented out by ${escapeHtml(nameOf(p.owner))}</div>
             <div class="rent-chips"><span class="chip">${comfortStars(p.comfort)}</span><span class="chip">${p.sublet.minWeeks}-week minimum lease</span></div>
           </div>
@@ -1107,11 +1106,11 @@ function renderStudentRentals(cls, props, me, nameOf) {
     rows.push(`
       <div class="prow rent-row">
         <div class="prow-main">
-          <div class="prow-title">${escapeHtml(p.name)} <span class="badge lilac">${icon("building", 12)}School</span></div>
+          <div class="prow-title">${escapeHtml(p.name)} <span class="badge lilac">School</span></div>
           ${p.description ? `<div class="prow-sub">${escapeHtml(p.description)}</div>` : ""}
           <div class="rent-chips">
             <span class="chip">${p.minWeeks}-week minimum lease</span>
-            ${p.lifestylePoints > 0 ? `<span class="chip">${icon("star", 12)} +${p.lifestylePoints} lifestyle while you live here</span>` : ""}
+            ${p.lifestylePoints > 0 ? `<span class="chip">+${p.lifestylePoints} lifestyle while you live here</span>` : ""}
             <span class="chip chip-ok">${g.length > 1 ? `${available.length} of ${g.length} available` : "Available"}</span>
           </div>
         </div>
@@ -1193,7 +1192,7 @@ function teacherListingCard(units, cls, me, nameOf) {
   const owned = units.filter(u => u.owner);
   const available = units.filter(u => !u.owner);
   const range = p.priceRange || cls.propertyPriceRange || { min: 0.5, max: 2 };
-  const rangeChip = `<span class="chip" title="${p.priceRange ? "Custom range for this listing" : "Class-wide default range"}">${icon("chart", 12)} ${range.min}%\u2013${range.max}%/day${p.priceRange ? " (custom)" : ""}</span>`;
+  const rangeChip = `<span class="chip" title="${p.priceRange ? "Custom range for this listing" : "Class-wide default range"}">${range.min}%\u2013${range.max}%/day${p.priceRange ? " (custom)" : ""}</span>`;
   return `
     <article class="pcard">
       ${listingTop(p, cls, me, "")}
@@ -1430,7 +1429,6 @@ function renderNpcListings(cls, nameOf) {
       <article class="pcard">
         <div class="pcard-top">
           <div class="pcard-id">
-            <span class="pcard-ico">${icon("building", 20)}</span>
             <div class="pcard-name">
               <h3>${escapeHtml(p.name)}</h3>
               <div class="pcard-badges"><span class="badge lilac">School rental</span></div>
@@ -1444,7 +1442,7 @@ function renderNpcListings(cls, nameOf) {
         <div class="pcard-chips">
           <span class="chip">${p.minWeeks}-week minimum lease</span>
           <span class="chip">Due ${dayFull(p.rentDay)}s</span>
-          ${p.lifestylePoints > 0 ? `<span class="chip">${icon("star", 12)} +${p.lifestylePoints} lifestyle</span>` : ""}
+          ${p.lifestylePoints > 0 ? `<span class="chip">+${p.lifestylePoints} lifestyle</span>` : ""}
           ${vacant.length ? `<span class="chip chip-ok">${g.length > 1 ? `${vacant.length} of ${g.length} available` : "Available"}</span>` : `<span class="chip chip-off">${g.length > 1 ? "All rented" : "Rented"}</span>`}
         </div>
         <div class="pcard-msg" id="npcMsg-${gid}"></div>
@@ -1470,7 +1468,7 @@ function npcTenantBlock(u, nameOf) {
   return `
     <div class="prow">
       <div class="prow-main">
-        <div class="prow-title">${escapeHtml(nameOf(u.tenant))} ${overdue ? `<span class="badge coral">${icon("bell", 12)}Rent overdue</span>` : ""}</div>
+        <div class="prow-title">${escapeHtml(nameOf(u.tenant))} ${overdue ? `<span class="badge coral">Rent overdue</span>` : ""}</div>
       </div>
       <div class="prow-actions">
         ${overdue ? `<button class="btn small secondary" onclick="resolveNpcOverdueClick('${u.id}')">Mark as resolved</button>` : ""}

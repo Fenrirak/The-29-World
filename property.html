@@ -56,9 +56,8 @@
   .p-tabs button:hover { color: var(--ink); }
   .p-tabs button.active {
     background: var(--card); color: var(--ink);
-    box-shadow: var(--shadow-sm), inset 0 -3px 0 var(--gold);
+    box-shadow: var(--shadow-sm);
   }
-  .p-tabs .icon-slot { width: 16px; height: 16px; }
   .p-count {
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
@@ -104,13 +103,14 @@
     .pcard-top { padding: 16px 16px 10px; }
   }
 
-  .pcard-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 18px 14px; }
+  .pcard-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 18px 14px; }
+  .pcard-chips > .chip:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  @media (max-width: 380px) { .pcard-chips { grid-template-columns: 1fr; } }
   .chip {
-    display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px;
+    display: flex; align-items: center; min-width: 0; padding: 7px 12px; border-radius: 10px;
     background: var(--bg); border: 1px solid var(--line); color: var(--ink);
     font-size: .76rem; font-weight: 700; line-height: 1.3;
   }
-  .chip .icon { width: 12px; height: 12px; }
   .chip.chip-ok { background: #e3f8f0; border-color: transparent; color: #217a5a; }
   .chip.chip-off { background: #fceae7; border-color: transparent; color: #b8402c; }
   html.dark-mode .chip.chip-ok { background: rgba(63,191,143,.16); color: #6fdcb2; }
@@ -130,15 +130,15 @@
   /* Buy controls */
   .buy-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .buy-hint { flex: 1 1 100%; }
-  .deposit-group {
+  .deposit-group { display: inline-flex; align-items: center; gap: 8px; }
+  .deposit-field {
     display: inline-flex; align-items: center; overflow: hidden;
     border: 1.5px solid var(--line); border-radius: var(--r-2); background: var(--card);
   }
-  .deposit-group:focus-within { border-color: var(--gold); }
+  .deposit-field:focus-within { border-color: var(--gold); }
   .deposit-prefix { padding: 0 2px 0 12px; color: var(--muted); font-weight: 700; }
   .deposit-group input { width: 96px; min-height: 38px; padding: 6px 8px; border: none; border-radius: 0; background: transparent; font-size: .92rem; }
   .deposit-group input:focus { outline: none; }
-  .deposit-group .btn { border-radius: 0; min-height: 38px; }
 
   /* Flat rows (owners, tenants, rentals, living options) */
   .prow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 10px 0; }
@@ -257,17 +257,17 @@
 
   <!-- Student tabs -->
   <div id="studentTabs" class="p-tabs hidden" role="tablist" aria-label="Property sections">
-    <button type="button" role="tab" data-tab="homes" onclick="setTab('homes')"><span class="icon-slot" data-icon="house"></span>My homes <span class="p-count" id="cntHomes"></span></button>
-    <button type="button" role="tab" data-tab="buy" onclick="setTab('buy')"><span class="icon-slot" data-icon="cart"></span>For sale <span class="p-count" id="cntBuy"></span></button>
-    <button type="button" role="tab" data-tab="rent" onclick="setTab('rent')"><span class="icon-slot" data-icon="key"></span>To rent <span class="p-count" id="cntRent"></span></button>
+    <button type="button" role="tab" data-tab="homes" onclick="setTab('homes')">My homes <span class="p-count" id="cntHomes"></span></button>
+    <button type="button" role="tab" data-tab="buy" onclick="setTab('buy')">For sale <span class="p-count" id="cntBuy"></span></button>
+    <button type="button" role="tab" data-tab="rent" onclick="setTab('rent')">To rent <span class="p-count" id="cntRent"></span></button>
   </div>
 
   <!-- Teacher tabs -->
   <div id="teacherTabs" class="p-tabs hidden" role="tablist" aria-label="Property management">
-    <button type="button" role="tab" data-tab="listings" onclick="setTab('listings')"><span class="icon-slot" data-icon="house"></span>Listings <span class="p-count" id="cntListings"></span></button>
-    <button type="button" role="tab" data-tab="school" onclick="setTab('school')"><span class="icon-slot" data-icon="building"></span>School rentals <span class="p-count" id="cntSchool"></span></button>
-    <button type="button" role="tab" data-tab="classmates" onclick="setTab('classmates')"><span class="icon-slot" data-icon="users"></span>Classmate rentals <span class="p-count" id="cntPending"></span></button>
-    <button type="button" role="tab" data-tab="settings" onclick="setTab('settings')"><span class="icon-slot" data-icon="settings"></span>Settings</button>
+    <button type="button" role="tab" data-tab="listings" onclick="setTab('listings')">Listings <span class="p-count" id="cntListings"></span></button>
+    <button type="button" role="tab" data-tab="school" onclick="setTab('school')">School rentals <span class="p-count" id="cntSchool"></span></button>
+    <button type="button" role="tab" data-tab="classmates" onclick="setTab('classmates')">Classmate rentals <span class="p-count" id="cntPending"></span></button>
+    <button type="button" role="tab" data-tab="settings" onclick="setTab('settings')">Settings</button>
   </div>
 
   <div id="pageMsg" role="status"></div>
@@ -629,6 +629,6 @@
 <script defer src="events-ui.js?v=b1bcab86"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="notifications.js?v=7b2c20a0"></script>
-<script defer src="property.js?v=9b626476"></script>
+<script defer src="property.js?v=a82986c5"></script>
 </body>
 </html>
