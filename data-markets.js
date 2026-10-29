@@ -1181,20 +1181,46 @@ async function cashOutGamblingAccount(username, classCode, amount) {
 // already moved by the time they run, so they're queued in the background instead of making every
 // bet/buy-in/cash-out wait for them. gamblingLedgerSettled() lets a page wait before re-reading the log.
 let _gamblingLedgerPending = Promise.resolve();
-function queueGamblingLog(classCode, txn) {
-  const p = logTxn(classCode, txn).catch(e => console.error("Couldn't log gambling activity:", e));
+function queueGamblingLog(classCode, txn, opts) {
+  const p = logTxn(classCode, txn, opts).catch(e => console.error("Couldn't log gambling activity:", e));
   _gamblingLedgerPending = Promise.all([_gamblingLedgerPending, p]).then(() => {});
   return p;
 }
 function gamblingLedgerSettled() { return Promise.all([_gamblingLedgerPending, _bjLedgerPending]).then(() => {}); }
 
+// Builds a ledger entry exactly the way logTxn() builds one (same id/date/ts fields), so the SAME object can be fed
+// into the money transaction's report totals (reportFieldsForTxn) and then written to the class log by logTxn(..., { entry }).
+function buildLedgerEntry(txn) { return Object.assign({ id: uid("t"), date: nowStr(), ts: Date.now() }, txn); }
+
+// recordReportActivity()'s maths, for a user doc the caller has ALREADY read inside its own transaction. Returns the
+// extra fields ({reportMonth, reportLifetime}) to add to that transaction's update, or null when there is nothing to
+// record (or anything goes wrong - the caller then simply lets logTxn() run the old separate recordReportActivity()).
+function reportFieldsForTxn(userData, username, entry) {
+  try {
+    if (!username || !txnBelongsTo(entry, username)) return null;
+    const c = classifyTxnForReport(entry, username);
+    if (!c) return null;
+    const monthKey = nzMonthKey();
+    const month = (userData.reportMonth && userData.reportMonth.monthKey === monthKey)
+      ? userData.reportMonth
+      : Object.assign(emptyReportBucket(), { monthKey });
+    const lifetime = userData.reportLifetime || emptyReportBucket();
+    addClassificationToBucket(month, c);
+    addClassificationToBucket(lifetime, c);
+    return { reportMonth: month, reportLifetime: lifetime };
+  } catch (e) { return null; }
+}
+
 // `extra` (optional) is extra fields to save in the SAME write as the balance change, saving a round-trip.
+// `reportEntry` (optional) is the ledger entry for this movement: its rolling report totals are written in the same
+// transaction too (res.reported), instead of a second transaction on the same user doc afterwards.
 // Teachers have no balance to change, so nothing is written for them (res.wrote is false).
-async function adjustGamblingAccount(username, delta, dailyWinLimit, extra) {
+async function adjustGamblingAccount(username, delta, dailyWinLimit, extra, reportEntry) {
   const ref = usersCol().doc(username);
-  let winLimitHit = false, wrote = false;
+  let winLimitHit = false, wrote = false, reported = false;
   try {
     await fdb.runTransaction(async (t) => {
+      reported = false;
       const snap = await t.get(ref);
       if (!snap.exists) throw new Error("NO_USER");
       const user = snap.data();
@@ -1213,10 +1239,12 @@ async function adjustGamblingAccount(username, delta, dailyWinLimit, extra) {
       acc.netToday = Math.round((acc.netToday + delta) * 100) / 100;
       if (dailyWinLimit && acc.netToday >= dailyWinLimit) acc.winLimitHit = true;
       winLimitHit = acc.winLimitHit;
-      t.update(ref, Object.assign({ gamblingAccount: acc }, extra || {}));
+      const rep = reportEntry ? reportFieldsForTxn(user, username, reportEntry) : null;
+      reported = !!rep;
+      t.update(ref, Object.assign({ gamblingAccount: acc }, extra || {}, rep || {}));
       wrote = true;
     });
-    return { ok: true, winLimitHit, wrote };
+    return { ok: true, winLimitHit, wrote, reported };
   } catch (e) {
     return { ok: false, winLimitHit: false, insufficientFunds: e.message === "INSUFFICIENT" };
   }
@@ -1259,11 +1287,20 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   // Bet amount is deducted; on a win, the taxed winnings are credited back (winnings only, stake already "spent").
   const netChange = win ? taxedWinnings : -betAmount;
 
+  // Same entry as before (same fields/text), built up front so the bet transaction can also fold this bet into the
+  // student's rolling report totals - one transaction instead of a second one on the same doc after the log write.
+  const logBody = {
+    type: "gambling", from: username, amount: Math.abs(netChange), bet: betAmount,
+    note: `Roulette (${betTypeLabel(betType)}): ${win ? "WON" : "lost"} — ball landed on ${spin}` + (win && taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "")
+  };
+  const logEntry = buildLedgerEntry(logBody);
+  let reported = false;
   let hitWinLimit = false;
   try {
     const ref = usersCol().doc(username);
     await fdb.runTransaction(async (t) => {
       hitWinLimit = false;
+      reported = false;
       const snap = await t.get(ref);
       if (!snap.exists) throw new Error("NO_USER");
       const user = snap.data();
@@ -1278,7 +1315,9 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
       acc.netToday = Math.round((acc.netToday + netChange) * 100) / 100;
       if (g.dailyWinLimit && acc.netToday >= g.dailyWinLimit) acc.winLimitHit = true;
       hitWinLimit = acc.winLimitHit;
-      t.update(ref, { gamblingAccount: acc });
+      const rep = reportFieldsForTxn(user, username, logEntry);
+      reported = !!rep;
+      t.update(ref, Object.assign({ gamblingAccount: acc }, rep || {}));
     });
   } catch (e) {
     if (e.message === "NO_USER") return { ok: false, error: "User not found." };
@@ -1288,10 +1327,7 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
     return { ok: false, error: "Something went wrong placing that bet. Please try again." };
   }
   // The log entry is written in the background while the wheel spins (see queueGamblingLog).
-  queueGamblingLog(classCode, {
-    type: "gambling", from: username, amount: Math.abs(netChange), bet: betAmount,
-    note: `Roulette (${betTypeLabel(betType)}): ${win ? "WON" : "lost"} — ball landed on ${spin}` + (win && taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "")
-  });
+  queueGamblingLog(classCode, logBody, { entry: logEntry, reportDone: reported });
 
   return { ok: true, spin, win, netChange, hitWinLimit, winLimitMessage: hitWinLimit ? g.winLimitMessage : null };
 }
@@ -1781,7 +1817,10 @@ async function blackjackAction(username, classCode, action) {
   // is invalidated instantly on any real write to this doc, so this only
   // ever skips a redundant re-fetch, never serves genuinely stale settings.
   const fast = (action === "hit" || action === "stand") && _bjLive && _bjLive.username === username && Date.now() - _bjLive.at < 60000;
-  const [user, cls] = await Promise.all([fast ? null : getUser(username), getClassCached(classCode)]);
+  // The class doc is only needed for dailyWinLimit, which only double/split use (they move money). Hit/stand never
+  // touch it, so they no longer pay a class-doc read each.
+  const needsCls = action === "double" || action === "split";
+  const [user, cls] = await Promise.all([fast ? null : getUser(username), needsCls ? getClassCached(classCode) : null]);
   const round = fast ? JSON.parse(JSON.stringify(_bjLive.round)) : (user && user.blackjackRound);
   if (!round) return { ok: false, error: "No Blackjack round in progress." };
   const dailyWinLimit = cls && cls.gambling ? cls.gambling.dailyWinLimit : null;
@@ -1930,20 +1969,6 @@ async function bjSettle(username, classCode, round) {
     totalCredit += protectedRefund;
   }
 
-  // adjustGamblingAccount reports failure (busy document, dropped connection)
-  // instead of throwing, and a credit can never fail for lack of funds - so a
-  // failure here is always transient. Retry a few times rather than let a
-  // paid-out win vanish while the round is still recorded as settled.
-  if (totalCredit > 0) {
-    let credited = false;
-    for (let attempt = 0; attempt < 3 && !credited; attempt++) {
-      const r = await adjustGamblingAccount(username, totalCredit, cls.gambling.dailyWinLimit);
-      credited = !!(r && r.ok);
-      if (!credited) await new Promise(res => setTimeout(res, 400 * (attempt + 1)));
-    }
-    if (!credited) console.error("Blackjack: couldn't credit " + totalCredit + " to " + username + " after 3 tries");
-  }
-
   // BUGFIX: insurance is settled directly against the gambling account
   // back in blackjackInsurance() (stake debited when taken; stake back +
   // 2:1 credited immediately if the dealer turns out to have blackjack) —
@@ -1983,21 +2008,7 @@ async function bjSettle(username, classCode, round) {
     handsDesc = results.map((r, i) => `hand ${i + 1}: ${bjHandValue(r.hand.cards).total}${r.hand.status === "bust" ? " (bust)" : ""} (${outcomeWord[r.outcome]})`).join(", ");
   }
 
-  // Read back the account's current lock state rather than relying only on
-  // this call's own return value — an earlier movement in the SAME round
-  // (e.g. an insurance payout before this settle, or one of several split
-  // hands) may have already tripped the winning limit even when this
-  // particular credit is zero or negative. This read, the ledger write, and
-  // clearing the finished round off the user doc don't depend on each
-  // other — they used to run one after another, which meant every single
-  // finished hand (Stand, a bust, a split resolving) paid for 3 sequential
-  // round-trips here on top of everything before it. Firing them together
-  // cuts that to the time of whichever one is slowest.
-  // The ledger entry is a transaction on the class doc (shared by every
-  // student, so it can retry under contention) and nothing below needs it, so
-  // it runs in the background instead of holding up the Stand/bust result.
-  // bjLedgerSettled() lets the page wait for it before re-reading recent bets.
-  _bjLedgerPending = logTxn(classCode, {
+  const ledgerBody = {
       // `bet` here is the original stake for the round (round.betAmount) —
       // not the total actually risked, which can be higher once doubling
       // down or splitting adds more on top. Kept for the teacher's ledger;
@@ -2005,12 +2016,39 @@ async function bjSettle(username, classCode, round) {
       // at buy-in time — see startBlackjackRound/buyIntoGamblingAccount).
       type: "gambling", from: username, amount: Math.abs(netForTxn), bet: round.betAmount,
       note: `Blackjack: ${handsDesc}; ${dealerDesc} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${protectedRefund > 0 ? ` ${fmtMoney(protectedRefund)} of doubled/split bets returned (dealer blackjack).` : ""}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
-  }).catch(e => { console.error("Blackjack ledger entry failed:", e); });
-  const [finalUser] = await Promise.all([
-    getUser(username),
-    usersCol().doc(username).update(Object.assign({ blackjackRound: null }, round.humanSeat ? { lastBjSeat: round.humanSeat } : {}))
-  ]);
-  const hitWinLimit = finalUser ? gamblingAccountToday(finalUser).winLimitHit : false;
+  };
+  const ledgerEntry = buildLedgerEntry(ledgerBody);
+
+  // ONE transaction now does what used to be three separate steps (credit transaction -> read the user back for
+  // winLimitHit -> separate update clearing the finished round) plus the later report-totals transaction:
+  // credit the payout, clear blackjackRound/lastBjSeat, fold this round into the report totals, and return the
+  // post-credit winLimitHit (which already includes any earlier movement this round that tripped the limit,
+  // exactly what the old read-back returned). A zero credit (lost round) still runs it, with delta 0.
+  // adjustGamblingAccount reports failure (busy document, dropped connection) instead of throwing, and a credit can
+  // never fail for lack of funds - so a failure is always transient. Retry a few times rather than let a paid-out
+  // win vanish while the round is still recorded as settled.
+  const clearFields = Object.assign({ blackjackRound: null }, round.humanSeat ? { lastBjSeat: round.humanSeat } : {});
+  let settled = null;
+  for (let attempt = 0; attempt < 3 && !(settled && settled.ok); attempt++) {
+    settled = await adjustGamblingAccount(username, totalCredit, cls.gambling.dailyWinLimit, clearFields, ledgerEntry);
+    if (!settled.ok) await new Promise(res => setTimeout(res, 400 * (attempt + 1)));
+  }
+  let hitWinLimit = false;
+  if (settled && settled.ok) {
+    hitWinLimit = settled.winLimitHit;
+    // Teachers have no balance to change, so adjustGamblingAccount wrote nothing - clear the round the old way.
+    if (!settled.wrote) await usersCol().doc(username).update(clearFields);
+  } else {
+    // Same outcome as before when the credit could not land: log it, still clear the finished round.
+    console.error("Blackjack: couldn't settle " + totalCredit + " for " + username + " after 3 tries");
+    const [finalUser] = await Promise.all([getUser(username), usersCol().doc(username).update(clearFields)]);
+    hitWinLimit = finalUser ? gamblingAccountToday(finalUser).winLimitHit : false;
+  }
+  // The ledger entry is a transaction on the class doc (shared by every student, so it can retry under contention) and
+  // nothing below needs it, so it runs in the background instead of holding up the Stand/bust result.
+  // bjLedgerSettled() lets the page wait for it before re-reading recent bets.
+  _bjLedgerPending = logTxn(classCode, ledgerBody, { entry: ledgerEntry, reportDone: !!(settled && settled.reported) })
+    .catch(e => { console.error("Blackjack ledger entry failed:", e); });
 
   const finalRound = Object.assign({}, round, {
     phase: "done", results: results.map(r => r.outcome), netChange: netForTxn,

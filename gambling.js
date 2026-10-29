@@ -280,6 +280,15 @@ function renderGamblingAccountCard(view) {
   }
 }
 
+// The Account-tab card is hidden while Roulette/Blackjack is showing, and switchMode("account") re-reads it before it
+// can be seen again - so refreshing it in the background while hidden only wastes reads (user + class doc each time).
+// Checks the real DOM state, not MODE: accountSection is visible from first paint, before init() calls switchMode().
+function refreshGamblingAccountCardIfVisible() {
+  const sec = document.getElementById("accountSection");
+  if (sec && sec.classList.contains("hidden")) return Promise.resolve();
+  return refreshGamblingAccountCard();
+}
+
 async function refreshGamblingAccountCard() {
   // Defensive by design, not just at the render() call site: this now adds
   // a real network round-trip (a fresh user-doc read) into render() and
@@ -626,7 +635,7 @@ async function bjDeal() {
     // there's nothing below for it to protect. Letting it run alongside
     // the deal instead of blocking in front of it means a slow mobile
     // connection no longer delays the very first card of every hand.
-    refreshGamblingAccountCard();
+    refreshGamblingAccountCardIfVisible();
 
     const token = ++DEAL_TOKEN;
     await bjAnimateInitialDeal(CURRENT_ROUND, token);
@@ -679,7 +688,7 @@ async function bjDoInsurance(take) {
     // Not awaited — same reasoning as bjDeal() above: this only repaints
     // the separate Account-tab card and can't throw, so the reveal below
     // has nothing to wait on.
-    refreshGamblingAccountCard();
+    refreshGamblingAccountCardIfVisible();
 
     const dealerHadBlackjack = CURRENT_ROUND.hands[0].status === "push" || CURRENT_ROUND.hands[0].status === "lost-to-dealer-blackjack";
     if (CURRENT_ROUND.phase === "done" && dealerHadBlackjack) {
@@ -750,7 +759,7 @@ async function bjDoAction(action) {
     }
     // Not awaited: it only repaints the Account-tab card and catches its own
     // errors, so a slow read must not keep Hit/Stand disabled.
-    refreshGamblingAccountCard();
+    refreshGamblingAccountCardIfVisible();
   } catch (e) {
     document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong with that action. Please refresh the page — any stake taken for it is automatically refunded on failure.</div>`;
   } finally {
@@ -797,7 +806,7 @@ async function bjFinalizeRound(round) {
     (typeof bjLedgerSettled === "function" ? bjLedgerSettled() : Promise.resolve())
       .then(() => getClassCached(CURRENT.classCode))
       .then(cls => { CLS = cls; renderRecentBlackjack(cls); renderGamblingAccountRecent(cls); }),
-    refreshGamblingAccountCard()
+    refreshGamblingAccountCardIfVisible()
   ]);
 }
 
@@ -1313,7 +1322,7 @@ async function render() {
   // paused, the tab itself stays reachable so a student can still cash
   // out; renderGamblingAccountCard() handles showing the paused banner
   // and hiding the buy-in form for that case.
-  refreshGamblingAccountCard();
+  refreshGamblingAccountCardIfVisible();
   renderGamblingAccountRecent(CLS);
 
   /* ---- Roulette tab ---- */

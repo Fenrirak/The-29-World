@@ -1996,13 +1996,16 @@ async function adjustBalance(username, delta) {
   }
 }
 
-async function logTxn(classCode, txn) {
+async function logTxn(classCode, txn, opts) {
   const classRef = classesCol().doc(classCode);
   // Built once, outside the transaction, so every retry (Firestore retries
   // on contention) pushes the exact same entry rather than a new id/ts each
   // time, and so recordReportActivity() below has a stable reference to the
   // entry that actually got committed.
-  const built = Object.assign({ id: uid("t"), date: nowStr(), ts: Date.now() }, txn);
+  // opts (optional, gambling only): { entry } = an entry already built by buildLedgerEntry() (same shape as below);
+  // { reportDone: true } = this entry's rolling report totals were already written inside the money transaction,
+  // so the separate recordReportActivity() transaction below is skipped. Omitting opts behaves exactly as before.
+  const built = (opts && opts.entry) || Object.assign({ id: uid("t"), date: nowStr(), ts: Date.now() }, txn);
   const committed = await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return false;
@@ -2013,6 +2016,7 @@ async function logTxn(classCode, txn) {
     return true;
   });
   if (!committed) return; // class didn't exist — nothing was logged, so nothing to report either
+  if (opts && opts.reportDone) return; // report totals already committed with the money (see reportFieldsForTxn)
   // Feed this txn into the rolling per-student report totals (see
   // recordReportActivity below) for whichever real student(s) it belongs
   // to. Best-effort and non-blocking of the money movement above, which
