@@ -984,6 +984,7 @@ function ownedHomeCard(p, cls, nameOf) {
           <span class="pcard-cap">Current Price</span>
           <div class="pcard-price">${fmtMoney(p.price)}</div>
           ${gainHtml}
+          ${sparkline(p.priceHistory && p.priceHistory.length ? p.priceHistory : [p.price], 112, 28)}
         </div>
       </div>
       ${p.mortgage ? mortgageSection(p, cls) : ""}
