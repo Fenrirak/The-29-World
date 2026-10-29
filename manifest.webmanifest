@@ -1,0 +1,9 @@
+{
+  "name": "The 29 World",
+  "short_name": "The 29 World",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff"
+}

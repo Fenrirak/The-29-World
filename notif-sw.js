@@ -1,9 +1,10 @@
-/* Minimal service worker for The 29 World device alerts. It exists only so
-   alerts can be shown on phones (Android Chrome refuses page-created
-   notifications) and so tapping one brings the site to the front. It
-   caches nothing and intercepts no requests. */
+/* Service worker for The 29 World device alerts. It lets alerts show on
+   phones (Android Chrome refuses page-created notifications; iOS only allows
+   notifications from a Home Screen web app) and brings the site to the front
+   when one is tapped. It caches nothing and intercepts no requests. */
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
+
 self.addEventListener("notificationclick", e => {
   e.notification.close();
   const url = (e.notification.data && e.notification.data.url) || "";

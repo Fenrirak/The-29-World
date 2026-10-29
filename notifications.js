@@ -651,9 +651,14 @@ async function notifLockBootTeacher(u) {
 
    LIMIT (by design of this app, which has no server code): alerts are raised
    by this page's own poll, so they work while the site is open in a tab or
-   the installed app — including a background tab — but not after the
-   browser is fully closed. True closed-browser push needs Firebase Cloud
-   Messaging plus a Cloud Function that builds these notifications.
+   the installed app, including a background tab, but not after the browser
+   is fully closed. True closed-browser push needs a server (Firebase Cloud
+   Messaging or Web Push plus a Cloud Function), which this app doesn't use.
+   iOS/iPadOS (16.4+) only allows notifications for a site ADDED TO THE HOME
+   SCREEN (needs manifest.webmanifest, display: standalone). In an ordinary
+   Safari or Chrome tab `Notification` does not exist, so the control just
+   tells the student how to install it. Without a server, iOS also freezes
+   a backgrounded app, so alerts only fire while it is still running.
 
    Which items alert: unread (newer than the shared read watermark, so
    anything read on another device stays quiet), not alerted on this device
@@ -671,6 +676,19 @@ function notifPushSupported() {
 function notifIsIos() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
+function notifIsStandalone() {
+  try { return navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches; } catch (e) { return false; }
+}
+
+// Gives iOS the manifest it needs to treat Add to Home Screen as a web app.
+// Better still: put <link rel="manifest" href="manifest.webmanifest"> in each page's <head>.
+function notifEnsureManifest() {
+  if (document.querySelector('link[rel="manifest"]')) return;
+  const l = document.createElement("link");
+  l.rel = "manifest"; l.href = "manifest.webmanifest";
+  document.head.appendChild(l);
+}
+
 function notifDeviceAlertsOn() {
   return !!NOTIF_USER && notifPushSupported() && Notification.permission === "granted" && notifGetDevicePref(NOTIF_USER);
 }
@@ -688,7 +706,7 @@ async function notifGetSwReg() {
   if (!("serviceWorker" in navigator)) return null;
   try {
     let reg = await navigator.serviceWorker.getRegistration();
-    if (!reg) reg = await navigator.serviceWorker.register("notif-sw.js?v=4bff3690");
+    if (!reg) reg = await navigator.serviceWorker.register("notif-sw.js?v=8d0012ee");
     if (!reg.active) await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(r, 4000))]);
     return reg;
   } catch (e) { return null; }
@@ -814,10 +832,12 @@ function notifDeviceRender(host) {
   const on = notifDeviceAlertsOn();
   let desc;
   if (!supported) {
-    desc = "Not available in this browser. " + (notifIsIos()
-      ? "On iPhone or iPad, tap Share, then Add to Home Screen, and open the site from your Home Screen to turn alerts on."
+    desc = notifIsIos()
+      ? (notifIsStandalone()
+          ? "Alerts need iOS or iPadOS 16.4 or newer. Update your device, then reopen the app."
+          : "iPhone and iPad only allow alerts for sites added to the Home Screen. Tap Share, then Add to Home Screen, open The 29 World from its new icon, and switch this on there.")
       : window.isSecureContext === false ? "Alerts need a secure (https) connection."
-      : "Try Chrome, Edge, Firefox or Safari.");
+      : "Not available in this browser. Try Chrome, Edge, Firefox or Safari.";
   } else if (blocked) {
     desc = "Blocked in your browser. Allow notifications for this site in your browser's site settings, then reopen this menu.";
   } else if (on) {
@@ -1127,6 +1147,7 @@ function notifStopPoll() {
 }
 
 async function notifInit() {
+  notifEnsureManifest();
   let u = null;
   try { u = await getSessionUser(); } catch (e) { return; }
   // Teachers get their own dashboards for all of this; the feed is a
