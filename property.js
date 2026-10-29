@@ -1,44 +1,10 @@
 let CURRENT, IS_TEACHER, EDITING_ID = null, EDITING_NPC_ID = null;
 let MORTGAGE_SETTINGS_CLS = null; // last-loaded class doc, used to preview the force-due toggle before saving
-// render() rebuilds every listing card from scratch (list.innerHTML = "")
-// on every action, so a plain <details open> would snap shut the moment a
-// teacher saves anything inside it. Track which listings' "Pricing
-// controls" are open here and re-apply it after each rebuild instead.
-const OPEN_PRICING = new Set();
-function onPricingToggle(id, isOpen) {
-  if (isOpen) OPEN_PRICING.add(id); else OPEN_PRICING.delete(id);
-}
-
 function comfortStars(n) {
   n = Number(n) || 0;
   return `<span class="ticker-up">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span>`;
 }
 
-// Small inline "recent days" price trend chart for a property listing —
-// same look as the Stock Market's own sparkline() (the data layer's
-// applyPropertyMarketDayMoves keeps the two features' price history in
-// the same shape), kept as its own copy here since this page doesn't load
-// market.js. Green when the most recent point is higher than the one
-// before it, coral when it's lower. Safe to call with a one-point history
-// (a brand-new listing that hasn't seen a simulated day yet) — it just
-// draws no line segments.
-function sparkline(history) {
-  const hist = (history && history.length ? history : [0]);
-  const w = 140, h = 40;
-  const max = Math.max(...hist), min = Math.min(...hist);
-  const range = (max - min) || 1;
-  const pts = hist.map((v, i) => {
-    const x = (i / (hist.length - 1 || 1)) * w;
-    const y = h - ((v - min) / range) * h;
-    return { x, y };
-  });
-  const segments = pts.slice(1).map((pt, i) => {
-    const prev = pts[i];
-    const up = pt.y <= prev.y; // y is inverted (smaller y = higher price)
-    return `<line x1="${prev.x.toFixed(1)}" y1="${prev.y.toFixed(1)}" x2="${pt.x.toFixed(1)}" y2="${pt.y.toFixed(1)}" stroke="${up ? '#3fbf8f' : '#e8735f'}" stroke-width="2.5" stroke-linecap="round"/>`;
-  }).join("");
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="max-width:140px;width:100%;height:auto;flex-shrink:0;">${segments}</svg>`;
-}
 
 // "Today's" price move for a listing — the difference between the most
 // recent two points in its priceHistory (NOT the oldest-vs-newest of the
@@ -66,51 +32,8 @@ function movingCostNote(cls) {
   return `<p class="muted-small">${icon("send", 12)} Moving cost: <strong>${cost > 0 ? fmtMoney(cost) : "Free"}</strong> &middot; you can only move house once a day.</p>`;
 }
 
-// Shows a student browsing a listing what owning it (and, on top of that,
-// living in it) would do to their lifestyle rating — the owning bonus
-// applies as soon as it's bought, the living bonus is extra on top if they
-// then choose to live in it rather than rent it out. Note: for a listing
-// with several units, every unit shares the same comfort and living-bonus
-// values, so this preview is the same regardless of which unit gets bought.
-function lifestylePreviewLine(cls, p) {
-  const preview = propertyLifestylePreview(cls, p);
-  if (!preview) return "";
-  return `<p class="muted-small">Owning this: +${preview.ownPoints} lifestyle points. Living in it instead of renting it out: +${preview.livingBonusPoints} more on top (${preview.livingBonusStars} bonus star${preview.livingBonusStars === 1 ? "" : "s"} &times; ${preview.weight} pts/star).</p>`;
-}
 
-function paintChrome() {
-  paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("house", 26) + " Property";
-  document.getElementById("hMortgageSettings").innerHTML = icon("house", 18) + " Mortgage settings";
-  document.getElementById("hMortgageDay").innerHTML = icon("calendar", 15) + " Weekly due day";
-  document.getElementById("labMortgageDay").innerHTML = "Due day";
-  document.getElementById("saveMortgageDayBtn").innerHTML = icon("calendar", 14) + " Save mortgage day";
-  document.getElementById("hMortgageForceDue").innerHTML = icon("send", 15) + " Manual override";
-  document.getElementById("saveMortgageForceDueBtn").innerHTML = icon("send", 14) + " Save";
-  document.getElementById("hRentalSettings").innerHTML = icon("users", 18) + " Renting to classmates";
-  document.getElementById("saveRentalSettingsBtn").innerHTML = icon("send", 14) + " Save settings";
-  document.getElementById("hPropertyMarket").innerHTML = icon("chart", 18) + " Daily price movement";
-  document.getElementById("labPropRangeMin").innerHTML = icon("chart", 13) + " Minimum % change";
-  document.getElementById("labPropRangeMax").innerHTML = icon("chart", 13) + " Maximum % change";
-  document.getElementById("savePropRangeBtn").innerHTML = icon("bank", 14) + " Save range";
-  document.getElementById("simPropDayBtn").innerHTML = icon("repeat", 15) + " Simulate a property day";
-  document.getElementById("hAddNpc").innerHTML = icon("building", 18) + " Add an NPC property";
-  document.getElementById("addNpcBtn").innerHTML = icon("plus", 15) + " Add NPC property";
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a property";
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add property";
-}
 
-// Used by the quick-nav pills (property.html) and by editProp/editNpcProp
-// below — a settings panel is a <details class="card"> now (see
-// property.html), so jumping to one that's collapsed needs to open it
-// first or the person scrolls straight to a blank header. Plain
-// non-<details> targets (teacherPanel, propList) just scroll as before.
-function jumpTo(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  if (el.tagName === "DETAILS") el.open = true;
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
-}
 
 async function init() {
   const u = await requireLogin();
@@ -120,13 +43,12 @@ async function init() {
   document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
-  document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
-  document.getElementById("mortgagePanel").classList.toggle("hidden", !IS_TEACHER);
-  document.getElementById("propertyMarketPanel").classList.toggle("hidden", !IS_TEACHER);
-  document.getElementById("rentalsPanel").classList.toggle("hidden", !IS_TEACHER);
-  document.getElementById("npcPanel").classList.toggle("hidden", !IS_TEACHER);
-  document.getElementById("teacherQuickNav").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("teacherTabs").classList.toggle("hidden", !IS_TEACHER);
+  document.getElementById("studentTabs").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
+  // Teachers don't need data to know which tab to open; students get theirs
+  // in render() once it's known whether they own or rent anything.
+  if (IS_TEACHER) setTab(TABS_BY_ROLE.teacher.includes(savedTab()) ? savedTab() : "listings", false);
   // BUGFIX: this page runs the same day-gated jobs (automations, rent,
   // interest, term deposits...) as bank.js/teacher.js/student.js but was
   // missing the server-clock sync those pages already do first — see
@@ -185,142 +107,6 @@ function groupProperties(props) {
   return order.map(gid => byGroup.get(gid));
 }
 
-async function render() {
-  // getUser and getClass are independent reads — CURRENT.classCode is
-  // already known without needing `me` first, so fetch both at once
-  // instead of waiting on one before starting the other.
-  const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
-  window.T29_ME = me; // used by the "pay with credit card" tick boxes
-  const propTaxEl = document.getElementById("propTaxNote");
-  if (propTaxEl) { const r = IS_TEACHER ? 0 : t29TaxRate(cls, "property"); propTaxEl.innerHTML = t29TaxNoteHtml(r ? `Buying a property adds <strong>${t29TaxPct(r)}</strong> tax on top of the price.` : ""); }
-  const props = cls.properties || [];
-  // Hand over the class doc already in hand (when it's the same class) so
-  // this doesn't read it a second time before reading the students.
-  const students = await getClassStudents(me.classCode, me.classCode === CURRENT.classCode ? cls : undefined);
-  const nameOf = un => (students.find(s => s.username === un) || {}).name || un;
-
-  if (IS_TEACHER) {
-    populateMortgageSettings(cls);
-    populatePropertyMarketSettings(cls);
-    populateRentalSettings(cls);
-    renderPendingSublets(cls, nameOf);
-    renderNpcListings(cls, nameOf);
-  } else {
-    renderMyRentedHome(cls, me, nameOf);
-    renderAvailableSublets(cls, me, nameOf);
-    renderAvailableNpcRentals(cls, me, nameOf);
-  }
-
-  const list = document.getElementById("propList");
-  list.innerHTML = "";
-  document.getElementById("noProps").classList.toggle("hidden", props.length > 0);
-
-  const groups = groupProperties(props);
-  // First-home KiwiSaver: when a student can put it towards a purchase,
-  // each listing they can buy gets a "Use my KiwiSaver" tick box.
-  const ksHome = !IS_TEACHER && typeof kiwiSaverFirstHomeInfo === "function"
-    ? kiwiSaverFirstHomeInfo(cls, me, me.username) : { eligible: false };
-  // Students see their own home(s) first — everything else keeps its
-  // original (teacher-set) order after that. Array.sort is stable, so this
-  // only ever moves "owned by me" groups up, never reshuffles the rest.
-  // Teachers never own a unit, so this is a no-op for the teacher view.
-  if (!IS_TEACHER) {
-    groups.sort((a, b) => {
-      const aMine = a.some(u => u.owner === me.username) ? 0 : 1;
-      const bMine = b.some(u => u.owner === me.username) ? 0 : 1;
-      return aMine - bMine;
-    });
-  }
-
-  groups.forEach(units => {
-    const p = units[0]; // shared listing fields (name/price/comfort/etc) come from any unit
-    const gid = p.groupId || p.id;
-    const owned = units.filter(u => u.owner);
-    const available = units.filter(u => !u.owner);
-    const myUnit = units.find(u => u.owner === me.username);
-
-    // Daily price movement — see applyPropertyMarketDayMoves in data-property.js.
-    const hist = p.priceHistory && p.priceHistory.length ? p.priceHistory : [p.price];
-    const chg = propertyDailyChange(p);
-    const chgClass = chg.diff > 0 ? "ticker-up" : chg.diff < 0 ? "ticker-down" : "";
-    const chgSign = chg.diff > 0 ? "+" : chg.diff < 0 ? "-" : "";
-    const chgBadge = hist.length > 1 ? ` <span class="${chgClass} muted-small">(${chgSign}${Math.abs(chg.pct).toFixed(1)}% today)</span>` : "";
-    const listingRange = p.priceRange || cls.propertyPriceRange || { min: 0.5, max: 2 };
-    // Same price the server will actually charge (discount + tax applied),
-    // computed with the exact same shared functions the data-*.js files use server-side
-    // so the minimum deposit shown here never drifts from what buyProperty
-    // enforces. Only meaningful when this listing offers financing.
-    let minDeposit = 0;
-    if (p.mortgageWeeks > 0) {
-      const discounted = applyLifeDiscount(me, "property", p.price);
-      const taxed = applyTaxToExpense(cls, "property", discounted).total;
-      minDeposit = Math.round(taxed * 0.1 * 100) / 100;
-    }
-
-    const div = document.createElement("div");
-    div.className = "card company-card";
-    div.innerHTML = `
-      <div class="flex-between">
-        <div>
-          <h4>${icon("house", 20)}${escapeHtml(p.name)} ${myUnit ? '<span class="badge mint">Your home</span>' : ""}</h4>
-          <p>${escapeHtml(p.description) || "No description provided."}</p>
-          <p>${comfortStars(p.comfort)} comfort</p>
-          ${lifestylePreviewLine(cls, p)}
-          <p>${priceWithLifeDiscount(me, "property", p.price)}${IS_TEACHER ? "" : t29TaxChip(cls, "property")}${chgBadge} ${p.mortgageWeeks > 0 ? `&middot; mortgage available over ${p.mortgageWeeks} weeks, due ${DAY_FULL[cls.mortgageDay || "Fri"]}s${p.mortgageInterestRate > 0 ? ` (+${p.mortgageInterestRate}%/week interest)` : ""} &middot; min deposit ${fmtMoney(minDeposit)}` : "&middot; cash purchase only"}
-            ${p.rentPerWeek > 0 ? `&middot; rentable for ${fmtMoney(p.rentPerWeek)}/week` : ""}</p>
-          <p class="muted-small">${units.length > 1 ? `${available.length} of ${units.length} available` : (available.length > 0 ? "Available" : `Owned by ${nameOf(owned[0].owner)}`)}</p>
-        </div>
-        ${sparkline(hist)}
-      </div>
-      <div id="msg-${gid}"></div>
-      <div class="row-flex" style="gap:8px;margin-top:10px;flex-wrap:wrap;">
-        ${IS_TEACHER
-          ? `<button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button><button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>`
-          : (!myUnit && available.length > 0
-              ? `${ksHome.eligible ? `<label class="ks-use" for="useKs-${gid}"><input type="checkbox" id="useKs-${gid}"> Use my KiwiSaver (up to ${fmtMoney(ksHome.available)})</label>` : ""}
-                 <button class="btn small gold" id="buyOutrightBtn-${gid}" onclick="buyOutright('${gid}')">Buy cash</button>
-                 ${p.mortgageWeeks > 0 ? `
-                   <span class="row-flex" style="gap:6px;align-items:center;">
-                     <span class="muted-small">$</span>
-                     <input type="number" id="depositAmt-${gid}" min="${minDeposit}" step="0.01" value="${minDeposit}" style="width:90px;" title="Deposit amount in dollars, minimum ${fmtMoney(minDeposit)}">
-                     <button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Mortgage</button>
-                   </span>` : ""}`
-              : "")}
-      </div>
-      ${IS_TEACHER ? `
-        <details class="listing-advanced" ontoggle="onPricingToggle('${p.id}', this.open)"${OPEN_PRICING.has(p.id) ? " open" : ""}>
-          <summary>${icon("chart", 13)} Pricing controls <span class="muted-small">(${p.priceRange ? "custom" : "class default"}: ${listingRange.min}%\u2013${listingRange.max}% per day)</span></summary>
-          <div class="grid grid-2" style="margin-top:10px;">
-            <div>
-              <label>Set new price</label>
-              <div class="row-flex" style="gap:8px;">
-                <input type="number" min="0.01" step="0.01" id="price-${p.id}" value="${p.price}">
-                <button class="btn small" onclick="overridePriceClick('${p.id}')">${icon("chart", 13)} Update</button>
-              </div>
-            </div>
-          </div>
-          <div class="grid grid-3" style="margin-top:10px;">
-            <div>
-              <label>Min % change (this listing)</label>
-              <input type="number" min="0" step="0.1" id="prmin-${p.id}" value="${listingRange.min}">
-            </div>
-            <div>
-              <label>Max % change (this listing)</label>
-              <input type="number" min="0" step="0.1" id="prmax-${p.id}" value="${listingRange.max}">
-            </div>
-            <div style="display:flex;align-items:flex-end;gap:8px;">
-              <button class="btn small secondary" style="width:100%;" onclick="setListingRangeClick('${p.id}')">${icon("chart", 13)} Save range</button>
-            </div>
-          </div>
-          ${p.priceRange ? `<p class="muted-small">Using a custom range for this listing. <a href="#" onclick="clearListingRangeClick('${p.id}');return false;">Reset to class default</a></p>` : `<p class="muted-small">Using the class-wide default range (set above under "Daily price movement").</p>`}
-        </details>
-      ` : ""}
-      ${owned.filter(u => IS_TEACHER || u.owner === me.username)
-             .map(u => ownedUnitBlock(u, u.owner === me.username, cls, nameOf)).join("")}
-    `;
-    list.appendChild(div);
-  });
-}
 
 /* ---------------- Teacher: property daily price movement ---------------- */
 function populatePropertyMarketSettings(cls) {
@@ -332,7 +118,7 @@ async function savePropRange() {
   const min = document.getElementById("propRangeMin").value;
   const max = document.getElementById("propRangeMax").value;
   await setPropertyPriceRange(CURRENT.classCode, min, max);
-  document.getElementById("propRangeMsg").innerHTML = `<div class="success-msg">Saved — listings without their own custom range will move between ${min}% and ${max}% per simulated day.</div>`;
+  setMsg("propRangeMsg", `<div class="success-msg">Saved — listings without their own custom range will move between ${min}% and ${max}% per simulated day.</div>`);
   await render();
 }
 async function runPropertyMarketDay() {
@@ -364,14 +150,6 @@ async function clearListingRangeClick(id) {
   const res = await setListingPriceRange(CURRENT.classCode, id, "", "");
   await showListingActionResult(id, res, "Reset to the class default range.");
 }
-async function showListingActionResult(id, res, successMsg) {
-  const cls = await getClassCached(CURRENT.classCode);
-  const target = (cls.properties || []).find(pp => pp.id === id);
-  const gid = target ? (target.groupId || target.id) : id;
-  const box = document.getElementById("msg-" + gid);
-  if (box) box.innerHTML = res.ok ? `<div class="success-msg">${successMsg}</div>` : `<div class="error-msg">${res.error}</div>`;
-  await render();
-}
 
 // "Since you bought it" gain/loss for an owned unit — how today's
 // (fluctuating — see applyPropertyMarketDayMoves) price compares to what
@@ -387,121 +165,8 @@ function propertyGainSinceBought(p) {
   return { diff, pct };
 }
 
-// Renders one owned unit's status/actions within a listing card — mortgage
-// info, default warning, occupancy choice, and (teacher-only / owner-only)
-// sell-back controls. Each owned unit still tracks its own mortgage and
-// occupancy independently even when several students own units from the
-// same listing.
-function ownedUnitBlock(p, isMine, cls, nameOf) {
-  const who = isMine ? "You" : nameOf(p.owner);
-  const gain = propertyGainSinceBought(p);
-  const gainClass = gain ? (gain.diff > 0 ? "ticker-up" : gain.diff < 0 ? "ticker-down" : "") : "";
-  const gainSign = gain && gain.diff > 0 ? "+" : gain && gain.diff < 0 ? "-" : "";
-  const gainLine = gain
-    ? `<p class="muted-small">${isMine ? "You" : who} bought this for ${fmtMoney(p.purchasePrice)} — it's now worth <strong class="${gainClass}">${fmtMoney(p.price)}</strong> <span class="${gainClass}">(${gainSign}${fmtMoney(Math.abs(gain.diff))}, ${gainSign}${Math.abs(gain.pct).toFixed(1)}%)</span> since ${isMine ? "you bought it" : "purchase"}.</p>`
-    : "";
-  return `
-    <div class="card" style="margin-top:8px;padding:10px 12px;">
-      ${gainLine}
-      <p class="muted-small"><strong>${who}</strong> ${p.mortgage ? `— mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance still owed (shrinks each week)` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}` : ""}</p>
-      ${isMine && p.mortgage ? mortgagePayBlock(p, cls) : ""}
-      ${occupancyBlock(p, isMine, cls, nameOf)}
-      <div class="row-flex" style="gap:8px;margin-top:6px;">
-        ${IS_TEACHER ? `<button class="btn small secondary" onclick="forceSell('${p.id}')">Sell back (${who})</button>` : (isMine ? `<button class="btn small secondary" onclick="sellMine('${p.id}')">Sell back</button>` : "")}
-      </div>
-    </div>`;
-}
 
-// Renders the "living in it / rented out / rented to a classmate" status +
-// choice for an owned property. Only the owner sees the choice controls —
-// everyone else (only ever the teacher — students never see another
-// student's owned-unit card, see the `owned.filter` in render() above) just
-// sees a summary of what's currently going on with it.
-function occupancyBlock(p, isMine, cls, nameOf) {
-  const pr = (cls && cls.propertyRentals) || {};
-  const canSublet = pr.enabled && p.rentPerWeek > 0;
-  const preview = propertyLifestylePreview(cls, p);
-  const livingBonusPts = preview ? preview.livingBonusPoints : 0;
 
-  if (!isMine) {
-    if (p.occupancy === "living") return `<p class="muted-small">${icon("house", 13)} Owner is living here.</p>`;
-    if (p.occupancy === "rented") return `<p class="muted-small">This property is currently rented out.</p>`;
-    if (p.occupancy === "sublet" && p.sublet) return subletStatusForTeacher(p, nameOf);
-    return "";
-  }
-
-  if (p.occupancy === "living") {
-    return `
-      <div class="card" style="margin-top:8px;padding:10px 12px;">
-        <p><strong>${icon("house", 14)} You're living here</strong> — your lifestyle rating gets a +${livingBonusPts} bonus (property category) while you live in it. You're not collecting rent.</p>
-        <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
-          ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out instead</button>` : ""}
-          ${canSublet ? `<button class="btn small secondary" onclick="showSubletForm('${p.id}')">Rent it to a classmate instead</button>` : ""}
-        </div>
-        ${!p.rentPerWeek ? `<p class="muted-small">Your teacher hasn't set a rent amount for this property, so it can't be rented out yet.</p>` : ""}
-        <div id="subletForm-${p.id}"></div>
-      </div>`;
-  }
-  if (p.occupancy === "rented") {
-    return `
-      <div class="card" style="margin-top:8px;padding:10px 12px;">
-        <p><strong>${icon("coin", 14)} Rented out</strong> — you're earning ${fmtMoney(p.rentPerWeek)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}. You're not getting the living-in-it lifestyle bonus.</p>
-        ${movingCostNote(cls)}
-        <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
-          <button class="btn small secondary" onclick="chooseOccupancy('${p.id}','living')">Move in instead</button>
-          ${canSublet ? `<button class="btn small secondary" onclick="showSubletForm('${p.id}')">Rent it to a classmate instead</button>` : ""}
-        </div>
-        <div id="subletForm-${p.id}"></div>
-      </div>`;
-  }
-  if (p.occupancy === "sublet" && p.sublet) {
-    return subletStatusForOwner(p, cls, nameOf);
-  }
-  // Owned but no choice made yet — explain the consequences of all
-  // available options up front before the student picks one.
-  return `
-    <div class="card" style="margin-top:8px;padding:10px 12px;">
-      <p><strong>Live in it, rent it out, or rent it to a classmate?</strong></p>
-      <p class="muted-small">Live in it: no rent income, but +${livingBonusPts} to your lifestyle rating (property category) while you live there.<br>
-      Rent it out: ${p.rentPerWeek > 0 ? `${fmtMoney(p.rentPerWeek)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}` : "your teacher hasn't set a rent amount yet"} — but no lifestyle bonus, only the property's base comfort rating counts.<br>
-      ${canSublet ? `Rent it to a classmate: you set the price and a minimum lease length yourself, and get real weekly rent paid by whoever moves in — also no living-in-it lifestyle bonus for you.<br>` : ""}
-      You can change your mind at any time.</p>
-      ${movingCostNote(cls)}
-      <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
-        <button class="btn small gold" onclick="chooseOccupancy('${p.id}','living')">Live in it</button>
-        ${p.rentPerWeek > 0 ? `<button class="btn small secondary" onclick="chooseOccupancy('${p.id}','rented')">Rent it out</button>` : ""}
-        ${canSublet ? `<button class="btn small secondary" onclick="showSubletForm('${p.id}')">Rent to a classmate</button>` : ""}
-      </div>
-      <div id="subletForm-${p.id}"></div>
-    </div>`;
-}
-
-// The inline "list it for rent" form — price + minimum lease length, both
-// bounded by the teacher's settings. Shown on demand (showSubletForm)
-// rather than always, so the plain living/rented choice isn't crowded out
-// for classes that never turn this feature on.
-function showSubletForm(id) {
-  const box = document.getElementById(`subletForm-${id}`);
-  if (!box) return;
-  if (box.dataset.open === "1") { box.innerHTML = ""; box.dataset.open = "0"; return; }
-  box.dataset.open = "1";
-  box.innerHTML = `
-    <div class="card" style="margin-top:8px;padding:10px 12px;">
-      <div class="grid grid-2">
-        <div>
-          <label for="subletPrice-${id}">Weekly rent to charge</label>
-          <input id="subletPrice-${id}" type="number" min="0" step="0.01">
-        </div>
-        <div>
-          <label for="subletWeeks-${id}">Minimum lease length (weeks)</label>
-          <input id="subletWeeks-${id}" type="number" min="1" step="1" value="1">
-        </div>
-      </div>
-      <p class="muted-small" id="subletHint-${id}"></p>
-      <button class="btn small gold" onclick="createSubletClick('${id}')">${icon("send", 13)} List it</button>
-      <div id="subletFormMsg-${id}"></div>
-    </div>`;
-}
 async function createSubletClick(id) {
   const price = document.getElementById(`subletPrice-${id}`).value;
   const weeks = document.getElementById(`subletWeeks-${id}`).value;
@@ -511,51 +176,7 @@ async function createSubletClick(id) {
   await render();
 }
 
-// What the OWNER sees for their own property once it's set to "sublet" —
-// covers all three sublet states: still pending teacher approval, actively
-// searching for a tenant, or already occupied.
-function subletStatusForOwner(p, cls, nameOf) {
-  const s = p.sublet;
-  if (s.status === "pending") {
-    return `
-      <div class="card" style="margin-top:8px;padding:10px 12px;">
-        <p><strong>${icon("send", 14)} Waiting for teacher approval</strong> — listed at ${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum lease. It'll be visible to classmates once approved.</p>
-        <button class="btn small secondary" onclick="cancelSubletClick('${p.id}')">Withdraw listing</button>
-      </div>`;
-  }
-  if (s.status === "rejected") {
-    return `
-      <div class="card" style="margin-top:8px;padding:10px 12px;">
-        <p><strong>${icon("house", 14)} Listing declined by your teacher</strong>${s.rejectReason ? `: ${s.rejectReason}` : "."}</p>
-        <button class="btn small secondary" onclick="cancelSubletClick('${p.id}')">Remove listing</button>
-      </div>`;
-  }
-  if (!s.tenant) {
-    return `
-      <div class="card" style="margin-top:8px;padding:10px 12px;">
-        <p><strong>${icon("users", 14)} Listed for rent to classmates</strong> — ${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum lease. No one's moved in yet.</p>
-        <button class="btn small secondary" onclick="cancelSubletClick('${p.id}')">Withdraw listing</button>
-      </div>`;
-  }
-  const canEnd = leaseMinWeeksElapsed(s);
-  return `
-    <div class="card" style="margin-top:8px;padding:10px 12px;">
-      <p><strong>${icon("coin", 14)} Rented to ${nameOf(s.tenant)}</strong> — ${fmtMoney(s.price)}/week, paid every ${DAY_FULL[p.rentDay || "Fri"]}. Minimum ${s.minWeeks}-week lease${canEnd ? " (met — you can end it any time now)" : " (still running)"}.</p>
-      ${canEnd ? `<button class="btn small secondary" onclick="cancelSubletClick('${p.id}')">End lease</button>` : ""}
-    </div>`;
-}
 
-// What the TEACHER sees for a student's property once it's set to
-// "sublet" — same information as subletStatusForOwner, but read-only
-// (the teacher's own override lives in the "End rental" button below, via
-// teacherEndSubletClick, not here).
-function subletStatusForTeacher(p, nameOf) {
-  const s = p.sublet;
-  if (s.status === "pending") return `<p class="muted-small">Waiting for your approval to rent to classmates — ${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum. See "Pending rental requests" above.</p>`;
-  if (s.status === "rejected") return `<p class="muted-small">Rental listing declined${s.rejectReason ? `: ${s.rejectReason}` : "."}</p>`;
-  if (!s.tenant) return `<p class="muted-small">Listed for rent to classmates — ${fmtMoney(s.price)}/week, no tenant yet. <button class="btn small coral" onclick="teacherEndSubletClick('${p.id}')">End listing</button></p>`;
-  return `<p class="muted-small">Rented to ${nameOf(s.tenant)} at ${fmtMoney(s.price)}/week. <button class="btn small coral" onclick="teacherEndSubletClick('${p.id}')">End rental</button></p>`;
-}
 
 async function cancelSubletClick(id) {
   const res = await cancelSublet(CURRENT.username, CURRENT.classCode, id);
@@ -587,30 +208,8 @@ async function saveRentalSettingsClick() {
     maxLeaseWeeks: document.getElementById("rentalMaxLeaseWeeks").value
   };
   await saveSubletSettings(CURRENT.classCode, settings);
-  document.getElementById("rentalSettingsMsg").innerHTML = `<div class="success-msg">Settings saved.</div>`;
+  setMsg("rentalSettingsMsg", `<div class="success-msg">Settings saved.</div>`);
   await render();
-}
-function renderPendingSublets(cls, nameOf) {
-  const box = document.getElementById("pendingSublets");
-  const badge = document.getElementById("pendingSubletsBadge");
-  if (!box) return;
-  const pending = (cls.properties || []).filter(p => p.sublet && p.sublet.status === "pending");
-  if (badge) {
-    badge.classList.toggle("hidden", pending.length === 0);
-    badge.textContent = pending.length ? `${pending.length} pending` : "";
-  }
-  if (!pending.length) { box.innerHTML = ""; return; }
-  box.innerHTML = `<h3 style="margin-top:22px;">${icon("send", 15)} Pending rental requests</h3>` + pending.map(p => `
-    <div class="auto-row">
-      <div class="auto-details">
-        <strong>${escapeHtml(p.name)}</strong> — ${nameOf(p.owner)} wants to rent it out at ${fmtMoney(p.sublet.price)}/week, ${p.sublet.minWeeks}-week minimum lease.
-      </div>
-      <div class="row-flex" style="gap:8px;">
-        <button class="btn small mint" onclick="approveSubletClick('${p.id}')">Approve</button>
-        <button class="btn small coral" onclick="rejectSubletClick('${p.id}')">Reject</button>
-      </div>
-    </div>
-  `).join("");
 }
 async function approveSubletClick(id) {
   await decideSublet(CURRENT.classCode, id, true);
@@ -640,34 +239,6 @@ function tenantRentStatusLine(leaseStartWeekKey, rentLastWeekPaid, rentDay, pric
   return { status: `${overdue ? "This week's rent is overdue. " : "Rent is due today. "}<strong>${fmtMoney(price)}</strong>.`, canPay: true };
 }
 
-// A student can only ever have ONE current home (see currentHomeOf), so
-// this checks the classmate-sublet case first and falls back to the NPC
-// case — never both at once.
-function renderMyRentedHome(cls, me, nameOf) {
-  const box = document.getElementById("myRentedHome");
-  if (!box) return;
-  const prop = (cls.properties || []).find(p => p.sublet && p.sublet.tenant === me.username);
-  if (prop) { renderMyClassmateRentedHome(box, prop, cls, nameOf); return; }
-  const unit = (cls.npcProperties || []).find(p => p.tenant === me.username);
-  if (unit) { renderMyNpcRentedHome(box, unit, cls); return; }
-  box.innerHTML = "";
-}
-function renderMyClassmateRentedHome(box, prop, cls, nameOf) {
-  const s = prop.sublet;
-  const overdue = isSubletRentOverdue(prop, cls);
-  const { status, canPay, why } = tenantRentStatusLine(s.leaseStartWeekKey, s.rentLastWeekPaid, prop.rentDay, s.price, overdue);
-  const canMoveOut = leaseMinWeeksElapsed(s);
-  box.innerHTML = `
-    <div class="card">
-      <h2>${icon("house", 18)} Your rented home</h2>
-      <p><strong>${escapeHtml(prop.name)}</strong> — renting from ${nameOf(prop.owner)} at ${fmtMoney(s.price)}/week.</p>
-      <p class="muted-small">${status}</p>
-      <button class="btn small gold rent-pay-btn" id="payTenantRentBtn-${prop.id}" ${canPay ? "" : `disabled title="${why}"`} onclick="payTenantRentClick('${prop.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(s.price)}</button>
-      <div id="tenantRentMsg-${prop.id}"></div>
-      <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${s.minWeeks}-week lease, so you can't move out just yet.`}</p>
-      ${canMoveOut ? `<button class="btn small secondary" onclick="tenantMoveOutClick('${prop.id}')">Move out</button>` : ""}
-    </div>`;
-}
 async function payTenantRentClick(id) {
   // Same double-tap guard as buy() in market.js.
   const btn = document.getElementById("payTenantRentBtn-" + id);
@@ -689,59 +260,15 @@ async function tenantMoveOutClick(id) {
   await render();
 }
 
-function renderAvailableSublets(cls, me, nameOf) {
-  const box = document.getElementById("availableSublets");
-  if (!box) return;
-  const pr = cls.propertyRentals || {};
-  if (!pr.enabled) { box.innerHTML = ""; return; }
-  const listings = (cls.properties || []).filter(p =>
-    p.sublet && p.sublet.status === "active" && !p.sublet.tenant && p.owner !== me.username
-  );
-  if (!listings.length) { box.innerHTML = ""; return; }
-  const alreadyHoused = !!currentHomeOf(cls, me.username);
-  box.innerHTML = `
-    <div class="card">
-      <h2>${icon("users", 18)} Rent from a classmate</h2>
-      ${movingCostNote(cls)}
-      ${alreadyHoused ? `<p class="muted-small">You're already living somewhere — move out first if you'd rather rent one of these instead.</p>` : ""}
-      ${listings.map(p => `
-        <div class="auto-row">
-          <div class="auto-details">
-            <strong>${escapeHtml(p.name)}</strong> — ${comfortStars(p.comfort)}<br>
-            <span class="muted-small">${fmtMoney(p.sublet.price)}/week from ${nameOf(p.owner)}, ${p.sublet.minWeeks}-week minimum lease</span>
-          </div>
-          <button class="btn small gold" ${alreadyHoused ? "disabled" : ""} onclick="claimSubletClick('${p.id}')">Move in</button>
-        </div>
-      `).join("")}
-      <div id="claimSubletMsg"></div>
-    </div>`;
-}
 async function claimSubletClick(id) {
   const res = await claimSublet(CURRENT.username, CURRENT.classCode, id);
-  const box = document.getElementById("claimSubletMsg");
+  const box = document.getElementById("rentMsg");
   if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
   await render();
+  setTab("homes");
 }
 
 /* ---------------- Student: NPC (school) rentals ---------------- */
-function renderMyNpcRentedHome(box, unit, cls) {
-  const overdue = isNpcRentOverdue(unit);
-  const { status, canPay, why } = tenantRentStatusLine(unit.leaseStartWeekKey, unit.rentLastWeekPaid, unit.rentDay, unit.rentPerWeek, overdue);
-  const canMoveOut = leaseMinWeeksElapsed(unit);
-  box.innerHTML = `
-    <div class="card">
-      <h2>${icon("building", 18)} Your rented home</h2>
-      <p><strong>${escapeHtml(unit.name)}</strong> <span class="badge lilac">${icon("building", 12)}School rental</span><br>
-      renting from the school at ${fmtMoney(unit.rentPerWeek)}/week.</p>
-      ${unit.description ? `<p class="muted-small">${escapeHtml(unit.description)}</p>` : ""}
-      <p class="muted-small">${status}</p>
-      ${canPay ? cardPayToggleHtml("n-" + unit.id, window.T29_ME, cls) : ""}
-      <button class="btn small gold rent-pay-btn" id="payNpcRentBtn-${unit.id}" ${canPay ? "" : `disabled title="${why}"`} onclick="payNpcRentClick('${unit.id}')">${icon("send", 13)} Pay this week's rent — ${fmtMoney(unit.rentPerWeek)}</button>
-      <div id="npcRentMsg-${unit.id}"></div>
-      <p class="muted-small" style="margin-top:10px;">${canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${unit.minWeeks}-week lease, so you can't move out just yet.`}</p>
-      ${canMoveOut ? `<button class="btn small secondary" onclick="npcMoveOutClick('${unit.id}')">Move out</button>` : ""}
-    </div>`;
-}
 async function payNpcRentClick(id) {
   // Same double-tap guard as buy() in market.js.
   const btn = document.getElementById("payNpcRentBtn-" + id);
@@ -763,42 +290,6 @@ async function npcMoveOutClick(id) {
   await render();
 }
 
-// Groups NPC units into listings the same way groupProperties does for
-// purchasable properties, so a listing with several units shows as one
-// card with "X of Y available" rather than one row per unit.
-function renderAvailableNpcRentals(cls, me, nameOf) {
-  const box = document.getElementById("availableNpcRentals");
-  if (!box) return;
-  const units = cls.npcProperties || [];
-  if (!units.length) { box.innerHTML = ""; return; }
-  const groups = groupProperties(units); // groupProperties is generic — works on any id/groupId array
-  const alreadyHoused = !!currentHomeOf(cls, me.username);
-  const cardsHtml = groups.map(g => {
-    const gid = g[0].groupId || g[0].id;
-    const p = g[0];
-    const available = g.filter(u => !u.tenant);
-    if (!available.length) return "";
-    return `
-      <div class="auto-row">
-        <div class="auto-details">
-          <strong>${escapeHtml(p.name)}</strong> <span class="badge lilac">${icon("building", 12)}School rental</span><br>
-          ${p.description ? `<span class="muted-small">${escapeHtml(p.description)}</span><br>` : ""}
-          <span class="muted-small">${fmtMoney(p.rentPerWeek)}/week from the school, ${p.minWeeks}-week minimum lease${p.lifestylePoints > 0 ? `, +${p.lifestylePoints} lifestyle points while you live there` : ""}
-          &middot; ${g.length > 1 ? `${available.length} of ${g.length} available` : "Available"}</span>
-        </div>
-        <button class="btn small gold" ${alreadyHoused ? "disabled" : ""} onclick="rentNpcClick('${gid}')">Move in</button>
-      </div>`;
-  }).join("");
-  if (!cardsHtml.trim()) { box.innerHTML = ""; return; }
-  box.innerHTML = `
-    <div class="card">
-      <h2>${icon("building", 18)} Rent from the school</h2>
-      ${movingCostNote(cls)}
-      ${alreadyHoused ? `<p class="muted-small">You're already living somewhere — move out first if you'd rather rent one of these instead.</p>` : ""}
-      ${cardsHtml}
-      <div id="rentNpcMsg"></div>
-    </div>`;
-}
 async function pickAvailableNpcUnitId(gid) {
   const cls = await getClassCached(CURRENT.classCode);
   const unit = (cls.npcProperties || []).find(p => (p.groupId || p.id) === gid && !p.tenant);
@@ -806,57 +297,14 @@ async function pickAvailableNpcUnitId(gid) {
 }
 async function rentNpcClick(gid) {
   const id = await pickAvailableNpcUnitId(gid);
-  const box = document.getElementById("rentNpcMsg");
+  const box = document.getElementById("rentMsg");
   if (!id) { if (box) box.innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
   const res = await rentNpcProperty(CURRENT.username, CURRENT.classCode, id);
   if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
   await render();
+  setTab("homes");
 }
 
-// Shows this week's mortgage-payment status for the owner, and — only on
-// the exact due day, for the exact due week — a button to pay it. There's
-// never an amount to type in, but the actual dollar figure (principal +
-// interest on whatever's still owed) is worked out and shown up front, so
-// a student is never surprised by what the button is about to charge —
-// it's the same number payMortgage() itself will use.
-function mortgagePayBlock(p, cls) {
-  const mortgageDayName = DAY_FULL[cls.mortgageDay || "Fri"];
-  const weekKey = isoWeekKey();
-  const purchaseWeek = p.mortgage.purchaseWeekKey === weekKey;
-  const alreadyPaid = p.mortgage.lastWeekPaid === weekKey;
-  // Payable either on the class's normal mortgage day, or — for this ISO
-  // week only — if the teacher has manually marked mortgages as due (see
-  // setMortgageDueOverride).
-  const forcedDue = cls.mortgageForceDueWeek === weekKey;
-  const isDueToday = (cls.mortgageDay || "Fri") === nzDayName() || forcedDue;
-  const amt = mortgageWeekAmount(p.mortgage);
-  const breakdown = amt.interest > 0
-    ? `${fmtMoney(amt.principal)} + ${fmtMoney(amt.interest)} interest on the ${fmtMoney(amt.balanceBefore)} still owed`
-    : `${fmtMoney(amt.principal)}, no interest owing`;
-
-  let status, canPay = false;
-  if (purchaseWeek) {
-    status = `Your first payment isn't due yet — the week you bought is free. It'll be ${fmtMoney(amt.total)} (${breakdown}).`;
-  } else if (alreadyPaid) {
-    status = `${icon("house", 13)} This week's payment of ${fmtMoney(amt.total)} is already sorted.`;
-  } else if (!isDueToday) {
-    status = `Mortgage payments are due every ${mortgageDayName}. This week's would be ${fmtMoney(amt.total)} (${breakdown}) — come back then to pay it yourself.`;
-  } else {
-    const dueLine = forcedDue && (cls.mortgageDay || "Fri") !== nzDayName()
-      ? `Your teacher has marked this week's mortgage payment as due now.`
-      : `This week's payment is due today.`;
-    status = `${dueLine} <strong>${fmtMoney(amt.total)}</strong> — ${breakdown}.`;
-    canPay = true;
-  }
-
-  return `
-    <div class="card" style="margin-top:8px;padding:10px 12px;">
-      <p class="muted-small">${status}</p>
-      ${canPay ? `<p class="muted-small" style="margin:6px 0;">Mortgage payments come out of your cash — a credit card can't be used.</p>` : ""}
-      ${canPay ? `<button class="btn small gold" id="payMortgageBtn-${p.id}" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay this week's mortgage — ${fmtMoney(amt.total)}</button>` : ""}
-      <div id="mortgageMsg-${p.id}"></div>
-    </div>`;
-}
 
 async function payMortgageClick(id) {
   // Same double-tap guard as buy() in market.js.
@@ -905,14 +353,14 @@ function populateMortgageSettings(cls) {
 async function saveMovingCostClick() {
   const val = document.getElementById("movingCostInput").value;
   await setMovingCost(CURRENT.classCode, val);
-  document.getElementById("movingCostMsg").innerHTML = `<div class="success-msg">Moving cost saved. Students are charged this the moment they move into a new home (buying and choosing to live in it, or moving in as a classmate's tenant) — capped at one move per student per day.</div>`;
+  setMsg("movingCostMsg", `<div class="success-msg">Moving cost saved. Students are charged this the moment they move into a new home (buying and choosing to live in it, or moving in as a classmate's tenant) — capped at one move per student per day.</div>`);
   await render();
 }
 
 async function saveMortgageBreakFeeClick() {
   const val = document.getElementById("mortgageBreakFeeInput").value;
   await setPropertyBreakFee(CURRENT.classCode, val);
-  document.getElementById("mortgageBreakFeeMsg").innerHTML = `<div class="success-msg">Break fee saved. It'll be deducted on top of the remaining mortgage payoff whenever a student sells back a property that still has a mortgage on it.</div>`;
+  setMsg("mortgageBreakFeeMsg", `<div class="success-msg">Break fee saved. It'll be deducted on top of the remaining mortgage payoff whenever a student sells back a property that still has a mortgage on it.</div>`);
   await render();
 }
 
@@ -927,14 +375,14 @@ function previewMortgageForceDue() {
 
 async function saveMortgageDayClick() {
   await setMortgageDay(CURRENT.classCode, document.getElementById("mortgageDaySelect").value);
-  document.getElementById("mortgageDayMsg").innerHTML = `<div class="success-msg">Mortgage day saved. Students can pay their weekly mortgage installment themselves on this day.</div>`;
+  setMsg("mortgageDayMsg", `<div class="success-msg">Mortgage day saved. Students can pay their weekly mortgage installment themselves on this day.</div>`);
   await render();
 }
 
 async function saveMortgageForceDue() {
   const active = document.getElementById("mortgageForceDue").checked;
   await setMortgageDueOverride(CURRENT.classCode, active);
-  document.getElementById("mortgageForceDueMsg").innerHTML = `<div class="success-msg">${active ? "This week's mortgage payments are now marked as due — students can pay below." : "Manual override turned off."}</div>`;
+  setMsg("mortgageForceDueMsg", `<div class="success-msg">${active ? "This week's mortgage payments are now marked as due — students can pay below." : "Manual override turned off."}</div>`);
   await render();
 }
 
@@ -956,82 +404,8 @@ async function chooseOccupancy(id, choice) {
   await render();
 }
 
-async function addProp(e) {
-  e.preventDefault();
-  const prop = {
-    name: document.getElementById("hName").value.trim(),
-    price: document.getElementById("hPrice").value,
-    comfort: document.getElementById("hComfort").value,
-    quantity: document.getElementById("hQuantity").value,
-    livingBonusStars: document.getElementById("hLivingBonus").value,
-    mortgageWeeks: document.getElementById("hMortgage").value,
-    mortgageInterestRate: document.getElementById("hMortgageRate").value,
-    description: document.getElementById("hDesc").value.trim(),
-    rentPerWeek: document.getElementById("hRent").value,
-    rentDay: document.getElementById("hRentDay").value
-  };
-  if (EDITING_ID) {
-    await updateProperty(CURRENT.classCode, EDITING_ID, prop);
-    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Property updated!</div>`;
-    cancelEditProp();
-  } else {
-    await addProperty(CURRENT.classCode, prop);
-    document.getElementById("addMsg").innerHTML = `<div class="success-msg">Property added!</div>`;
-    ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
-    document.getElementById("hComfort").value = 3;
-    document.getElementById("hQuantity").value = 1;
-    document.getElementById("hLivingBonus").value = 1;
-    document.getElementById("hMortgage").value = 0;
-    document.getElementById("hMortgageRate").value = 0;
-    document.getElementById("hRent").value = 0;
-    document.getElementById("hRentDay").value = "Fri";
-  }
-  await render();
-  return false;
-}
 
-// id is any unit's id within the listing — edits apply to the whole
-// group (see updateProperty in data-property.js). Quantity shown is how many
-// units currently exist in that group.
-async function editProp(id) {
-  const cls = await getClassCached(CURRENT.classCode);
-  const props = cls.properties || [];
-  const prop = props.find(p => p.id === id);
-  if (!prop) return;
-  const gid = prop.groupId || prop.id;
-  const groupSize = props.filter(p => (p.groupId || p.id) === gid).length;
-  EDITING_ID = id;
-  document.getElementById("hName").value = prop.name;
-  document.getElementById("hPrice").value = prop.price;
-  document.getElementById("hComfort").value = prop.comfort;
-  document.getElementById("hQuantity").value = groupSize;
-  document.getElementById("hLivingBonus").value = prop.livingBonusStars !== undefined ? prop.livingBonusStars : 1;
-  document.getElementById("hMortgage").value = prop.mortgageWeeks || 0;
-  document.getElementById("hMortgageRate").value = prop.mortgageInterestRate || 0;
-  document.getElementById("hDesc").value = prop.description || "";
-  document.getElementById("hRent").value = prop.rentPerWeek || 0;
-  document.getElementById("hRentDay").value = prop.rentDay || "Fri";
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit property";
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
-  document.getElementById("cancelEditBtn").classList.remove("hidden");
-  document.getElementById("addMsg").innerHTML = "";
-  document.getElementById("teacherPanel").scrollIntoView({ behavior: "smooth", block: "start" });
-}
 
-function cancelEditProp() {
-  EDITING_ID = null;
-  ["hName","hPrice","hDesc"].forEach(id => document.getElementById(id).value = "");
-  document.getElementById("hComfort").value = 3;
-  document.getElementById("hQuantity").value = 1;
-  document.getElementById("hLivingBonus").value = 1;
-  document.getElementById("hMortgage").value = 0;
-  document.getElementById("hMortgageRate").value = 0;
-  document.getElementById("hRent").value = 0;
-  document.getElementById("hRentDay").value = "Fri";
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a property";
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add property";
-  document.getElementById("cancelEditBtn").classList.add("hidden");
-}
 
 async function deleteProp(id) {
   if (await t29Confirm("Remove this property listing (all units of it)? Any owners will not be refunded automatically.")) {
@@ -1128,11 +502,6 @@ async function pickAvailableUnitId(gid) {
   const unit = (cls.properties || []).find(p => (p.groupId || p.id) === gid && !p.owner);
   return unit ? unit.id : null;
 }
-// Shows a message in a listing's box for about 3 seconds. Called after
-// render(), which rebuilds the box.
-function flashListingMsg(gid, html) {
-  flashMsg(document.getElementById("msg-" + gid), html);
-}
 function ksTicked(gid) {
   const box = document.getElementById("useKs-" + gid);
   return !!(box && box.checked);
@@ -1156,7 +525,7 @@ async function buyOutright(gid) {
     await render();
     // render() rebuilds this listing's card (and its message box), so the
     // success message goes in afterwards — same pattern as transport.js.
-    flashListingMsg(gid, `<div class="success-msg">Congratulations, it's yours!${res.fromKiwi > 0 ? ` ${fmtMoney(res.fromKiwi)} came from your KiwiSaver.` : ""}</div>`);
+    showPurchaseResult(`<div class="success-msg">Congratulations, it's yours!${res.fromKiwi > 0 ? ` ${fmtMoney(res.fromKiwi)} came from your KiwiSaver.` : ""}</div>`);
   } finally {
     if (btn) btn.disabled = false;
     if (btn2) btn2.disabled = false;
@@ -1204,7 +573,7 @@ async function buyFinanced(gid) {
     // Mortgage payments are never taken automatically — the student pays
     // each one themselves on the class's mortgage day (see payMortgage).
     const cls = await getClassCached(CURRENT.classCode);
-    flashListingMsg(gid, `<div class="success-msg">Mortgaged with a ${fmtMoney(depositAmt)} deposit${res.fromKiwi > 0 ? ` (${fmtMoney(res.fromKiwi)} of it from your KiwiSaver)` : ""}! Payments aren't taken automatically — come back every ${DAY_FULL[cls.mortgageDay || "Fri"]} to pay them yourself (the week you bought is free).</div>`);
+    showPurchaseResult(`<div class="success-msg">Mortgaged with a ${fmtMoney(depositAmt)} deposit${res.fromKiwi > 0 ? ` (${fmtMoney(res.fromKiwi)} of it from your KiwiSaver)` : ""}! Payments aren't taken automatically — come back every ${DAY_FULL[cls.mortgageDay || "Fri"]} to pay them yourself (the week you bought is free).</div>`);
   } finally {
     if (btn) btn.disabled = false;
     if (btn2) btn2.disabled = false;
@@ -1212,54 +581,6 @@ async function buyFinanced(gid) {
 }
 
 /* ---------------- Teacher: NPC (school) property listings ---------------- */
-function renderNpcListings(cls, nameOf) {
-  const list = document.getElementById("npcPropList");
-  const units = cls.npcProperties || [];
-  document.getElementById("noNpcProps").classList.toggle("hidden", units.length > 0);
-  if (!units.length) { list.innerHTML = ""; return; }
-  const groups = groupProperties(units);
-  list.innerHTML = groups.map(g => {
-    const p = g[0];
-    const gid = p.groupId || p.id;
-    const tenanted = g.filter(u => u.tenant);
-    const vacant = g.filter(u => !u.tenant);
-    return `
-      <div class="card company-card">
-        <div class="flex-between">
-          <div>
-            <h4>${icon("building", 20)}${escapeHtml(p.name)} <span class="badge lilac">School rental</span></h4>
-            <p>${escapeHtml(p.description) || "No description provided."}</p>
-            <p>${fmtMoney(p.rentPerWeek)}/week &middot; ${p.minWeeks}-week minimum lease &middot; due ${DAY_FULL[p.rentDay || "Fri"]}s${p.lifestylePoints > 0 ? ` &middot; +${p.lifestylePoints} lifestyle points while renting` : ""}</p>
-            <p class="muted-small">${g.length > 1 ? `${vacant.length} of ${g.length} available` : (vacant.length > 0 ? "Available" : "Tenanted")}</p>
-          </div>
-          <div class="row-flex" style="gap:8px;">
-            <button class="btn small secondary" onclick="editNpcProp('${p.id}')">${icon("plus", 13)} Edit</button>
-            <button class="btn small coral" onclick="deleteNpcProp('${p.id}')">${icon("trash", 13)} Remove</button>
-          </div>
-        </div>
-        <div id="npcMsg-${gid}"></div>
-        ${tenanted.map(u => npcTenantBlock(u, nameOf)).join("")}
-      </div>`;
-  }).join("");
-}
-// Renders one tenanted unit's status within a listing card — who's
-// renting it, whether this week's rent is overdue, and the teacher's
-// override controls (waive the overdue payment, or end the tenancy
-// outright). Mirrors subletStatusForTeacher's role for classmate rentals.
-function npcTenantBlock(u, nameOf) {
-  const overdue = isNpcRentOverdue(u);
-  return `
-    <div class="auto-row">
-      <div class="auto-details">
-        <strong>${nameOf(u.tenant)}</strong> is renting this
-        ${overdue ? `<span class="badge coral">${icon("bell", 12)}Rent overdue</span>` : ""}
-      </div>
-      <div class="row-flex" style="gap:8px;">
-        ${overdue ? `<button class="btn small secondary" onclick="resolveNpcOverdueClick('${u.id}')">Mark as resolved</button>` : ""}
-        <button class="btn small coral" onclick="teacherEndNpcTenancyClick('${u.id}')">End tenancy</button>
-      </div>
-    </div>`;
-}
 async function resolveNpcOverdueClick(id) {
   const res = await resolveNpcRentOverdue(CURRENT.classCode, id);
   if (!res.ok) { alert(res.error); return; }
@@ -1280,8 +601,904 @@ function resetNpcForm() {
   document.getElementById("npcMinWeeks").value = 1;
   document.getElementById("npcLifestylePoints").value = 0;
 }
+async function deleteNpcProp(id) {
+  if (await t29Confirm("Remove this NPC property listing (all units of it)? Any current tenants will be moved out immediately.")) {
+    await removeNpcProperty(CURRENT.classCode, id);
+    await render();
+  }
+}
+
+/* =====================================================================
+   Page structure — tabs, dialogs and small helpers
+
+   The page is split into tabs instead of one long stack of cards:
+     Students: My homes / For sale / To rent
+     Teachers: Listings / School rentals / Classmate rentals / Settings
+   render() fills every pane on each pass, so switching tabs is instant
+   (no re-render) and an action in one pane never loses another's state.
+   Add / edit / pricing forms live in dialogs, which keeps the page
+   itself short no matter how many listings a class has.
+   ===================================================================== */
+const TABS_BY_ROLE = { student: ["homes", "buy", "rent"], teacher: ["listings", "school", "classmates", "settings"] };
+let ACTIVE_TAB = null;
+// Listings whose owner list is fully expanded (render() rebuilds every card,
+// so this has to live outside the DOM).
+const OWNERS_EXPANDED = new Set();
+const OWNERS_PREVIEW = 3;
+
+function tabStorageKey() { return "t29-prop-tab-" + (IS_TEACHER ? "teacher" : "student"); }
+function savedTab() { try { return sessionStorage.getItem(tabStorageKey()); } catch (e) { return null; } }
+function setTab(tab, remember) {
+  const allowed = IS_TEACHER ? TABS_BY_ROLE.teacher : TABS_BY_ROLE.student;
+  if (!allowed.includes(tab)) return;
+  ACTIVE_TAB = tab;
+  if (remember !== false) { try { sessionStorage.setItem(tabStorageKey(), tab); } catch (e) {} }
+  allowed.forEach(t => {
+    const pane = document.getElementById("pane-" + t);
+    if (pane) pane.classList.toggle("hidden", t !== tab);
+  });
+  document.querySelectorAll(".p-tabs button").forEach(b => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-selected", on ? "true" : "false");
+  });
+}
+function setCount(id, n, alert) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = n > 0 ? String(n) : "";
+  el.classList.toggle("alert", !!alert && n > 0);
+}
+// Shows a message in a box and clears it again after a few seconds, so
+// success notes don't sit on the page forever.
+function setMsg(id, html, ms) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = html;
+  clearTimeout(el._t);
+  if (html) el._t = setTimeout(() => { el.innerHTML = ""; }, ms || 5000);
+}
+function openOverlay(id) { const o = document.getElementById(id); if (o) o.classList.remove("hidden"); }
+function closeOverlay(id) { const o = document.getElementById(id); if (o) o.classList.add("hidden"); }
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  const open = id => { const o = document.getElementById(id); return o && !o.classList.contains("hidden"); };
+  if (open("propModal")) closePropModal();
+  else if (open("npcModal")) closeNpcModal();
+  else if (open("pricingModal")) closePricingModal();
+});
+function dayFull(d) { return DAY_FULL[d || "Fri"]; }
+async function gidOfProperty(id, npc) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const list = (npc ? cls.npcProperties : cls.properties) || [];
+  const t = list.find(x => x.id === id);
+  return t ? (t.groupId || t.id) : id;
+}
+
+// Small inline "recent days" price trend chart (same look as the Stock
+// Market's sparkline). Green when the latest point is up on the one before,
+// coral when it's down. Safe with a one-point history.
+function sparkline(history, w, h) {
+  const hist = (history && history.length ? history : [0]);
+  w = w || 140; h = h || 40;
+  const pad = 2;
+  const max = Math.max(...hist), min = Math.min(...hist);
+  const range = (max - min) || 1;
+  const pts = hist.map((v, i) => ({
+    x: pad + (i / (hist.length - 1 || 1)) * (w - pad * 2),
+    y: (h - pad) - ((v - min) / range) * (h - pad * 2)
+  }));
+  const segments = pts.slice(1).map((pt, i) => {
+    const prev = pts[i];
+    const up = pt.y <= prev.y; // y is inverted (smaller y = higher price)
+    return `<line x1="${prev.x.toFixed(1)}" y1="${prev.y.toFixed(1)}" x2="${pt.x.toFixed(1)}" y2="${pt.y.toFixed(1)}" stroke="${up ? '#3fbf8f' : '#e8735f'}" stroke-width="2.5" stroke-linecap="round"/>`;
+  }).join("");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="max-width:${w}px;width:100%;height:auto;flex-shrink:0;" aria-hidden="true">${segments}</svg>`;
+}
+
+// One compact chip describing what owning (and living in) a listing does
+// for a student's lifestyle rating — replaces the long explanatory line.
+function lifestyleChip(cls, p) {
+  const pv = propertyLifestylePreview(cls, p);
+  if (!pv) return "";
+  const title = `Owning it: +${pv.ownPoints} lifestyle points. Living in it instead of renting it out: +${pv.livingBonusPoints} more on top (${pv.livingBonusStars} bonus star${pv.livingBonusStars === 1 ? "" : "s"} x ${pv.weight} pts/star).`;
+  return `<span class="chip" title="${title}">${icon("star", 12)} Lifestyle +${pv.ownPoints} &middot; +${pv.livingBonusPoints} living in</span>`;
+}
+
+function paintChrome() {
+  paintIconSlots();
+  document.getElementById("pageTitle").innerHTML = icon("house", 26) + " Property";
+  setPropModalMode(false);
+  setNpcModalMode(false);
+}
+
+/* ---------------- Render ---------------- */
+async function render() {
+  // getUser and getClass are independent reads — fetch both at once.
+  const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+  window.T29_ME = me; // used by the "pay with credit card" tick boxes
+  const propTaxEl = document.getElementById("propTaxNote");
+  if (propTaxEl) { const r = IS_TEACHER ? 0 : t29TaxRate(cls, "property"); propTaxEl.innerHTML = t29TaxNoteHtml(r ? `Buying a property adds <strong>${t29TaxPct(r)}</strong> tax on top of the price.` : ""); }
+  const props = cls.properties || [];
+  // Hand over the class doc already in hand (when it's the same class) so
+  // this doesn't read it a second time before reading the students.
+  const students = await getClassStudents(me.classCode, me.classCode === CURRENT.classCode ? cls : undefined);
+  const nameOf = un => (students.find(s => s.username === un) || {}).name || un;
+  if (IS_TEACHER) renderTeacher(cls, props, me, nameOf);
+  else renderStudent(cls, props, me, nameOf);
+}
+
+/* ================= Shared listing-card pieces ================= */
+// Header of a for-sale listing: icon, name, description, and the price block
+// (price after life discount, tax chip for students, today's move, trend).
+function listingTop(p, cls, me, badgesHtml) {
+  const hist = p.priceHistory && p.priceHistory.length ? p.priceHistory : [p.price];
+  const chg = propertyDailyChange(p);
+  const dir = chg.diff > 0 ? "ticker-up" : chg.diff < 0 ? "ticker-down" : "muted-small";
+  const arrow = chg.diff > 0 ? "\u25B2 " : chg.diff < 0 ? "\u25BC " : "";
+  const today = hist.length > 1 ? `<span class="pcard-delta ${dir}">${arrow}${Math.abs(chg.pct).toFixed(1)}% today</span>` : "";
+  return `
+    <div class="pcard-top">
+      <div class="pcard-id">
+        <span class="pcard-ico">${icon("house", 20)}</span>
+        <div class="pcard-name">
+          <h3>${escapeHtml(p.name)}</h3>
+          ${badgesHtml ? `<div class="pcard-badges">${badgesHtml}</div>` : ""}
+          <p class="pcard-desc">${escapeHtml(p.description) || "No description provided."}</p>
+        </div>
+      </div>
+      <div class="pcard-money">
+        <div class="pcard-price">${priceWithLifeDiscount(me, "property", p.price)}</div>
+        ${IS_TEACHER ? "" : t29TaxChip(cls, "property")}
+        ${today}
+        ${sparkline(hist, 112, 28)}
+      </div>
+    </div>`;
+}
+function listingChips(p, cls, extraChips) {
+  const chips = [`<span class="chip">${comfortStars(p.comfort)}</span>`];
+  chips.push(p.mortgageWeeks > 0
+    ? `<span class="chip" title="Weekly payments are due ${dayFull(cls.mortgageDay)}s">${icon("bank", 12)} Mortgage ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`
+    : `<span class="chip">Cash only</span>`);
+  if (p.rentPerWeek > 0) chips.push(`<span class="chip">${icon("coin", 12)} Rent income ${fmtMoney(p.rentPerWeek)}/wk</span>`);
+  const ls = lifestyleChip(cls, p);
+  if (ls) chips.push(ls);
+  return `<div class="pcard-chips">${chips.join("")}${extraChips || ""}</div>`;
+}
+function availabilityChip(units, available) {
+  if (available.length === 0) return `<span class="chip chip-off">Sold out</span>`;
+  return `<span class="chip chip-ok">${units.length > 1 ? `${available.length} of ${units.length} available` : "Available"}</span>`;
+}
+// A small badge showing what an owned unit is currently being used for.
+function occupancyChip(p) {
+  if (p.occupancy === "living") return `<span class="badge mint">${icon("house", 12)}Living here</span>`;
+  if (p.occupancy === "rented") return `<span class="badge gold">${icon("coin", 12)}Rented out</span>`;
+  if (p.occupancy === "sublet" && p.sublet) {
+    const s = p.sublet;
+    if (s.status === "pending") return `<span class="badge lilac">${icon("send", 12)}Awaiting approval</span>`;
+    if (s.status === "rejected") return `<span class="badge coral">Listing declined</span>`;
+    if (!s.tenant) return `<span class="badge navy">${icon("users", 12)}Listed to classmates</span>`;
+    return `<span class="badge gold">${icon("users", 12)}Rented to a classmate</span>`;
+  }
+  return `<span class="badge navy">Not set yet</span>`;
+}
+function choiceRow(title, sub, actionsHtml) {
+  return `<div class="prow"><div class="prow-main"><div class="prow-title">${title}</div>${sub ? `<div class="prow-sub">${sub}</div>` : ""}</div>${actionsHtml ? `<div class="prow-actions">${actionsHtml}</div>` : ""}</div>`;
+}
+
+/* ================= Student view ================= */
+function renderStudent(cls, props, me, nameOf) {
+  const homes = renderStudentHomes(cls, props, me, nameOf);
+  const rentals = renderStudentRentals(cls, props, me, nameOf);
+
+  // Listings the student already owns a unit of live under "My homes".
+  const groups = groupProperties(props).filter(units => !units.some(u => u.owner === me.username));
+  // Anything still available first; sold-out listings after (stable sort).
+  groups.sort((a, b) => (a.some(u => !u.owner) ? 0 : 1) - (b.some(u => !u.owner) ? 0 : 1));
+  // First-home KiwiSaver: when a student can put it towards a purchase,
+  // each listing they can buy gets a "Use my KiwiSaver" tick box.
+  const ksHome = typeof kiwiSaverFirstHomeInfo === "function"
+    ? kiwiSaverFirstHomeInfo(cls, me, me.username) : { eligible: false };
+  document.getElementById("propList").innerHTML = groups.map(units => buyCard(units, cls, me, ksHome)).join("");
+  const noProps = document.getElementById("noProps");
+  noProps.classList.toggle("hidden", groups.length > 0);
+  noProps.firstElementChild.textContent = props.length ? "There's nothing else for sale right now." : "No properties are listed yet.";
+
+  setCount("cntHomes", homes.count, homes.due);
+  setCount("cntBuy", groups.filter(g => g.some(u => !u.owner)).length);
+  setCount("cntRent", rentals.count);
+
+  if (!ACTIVE_TAB) {
+    const saved = savedTab();
+    setTab(TABS_BY_ROLE.student.includes(saved) ? saved : (homes.count > 0 ? "homes" : "buy"), false);
+  }
+}
+
+function buyCard(units, cls, me, ksHome) {
+  const p = units[0]; // shared listing fields come from any unit
+  const gid = p.groupId || p.id;
+  const available = units.filter(u => !u.owner);
+  // Same price the server will actually charge (discount + tax applied),
+  // computed with the exact same shared functions the data-*.js files use
+  // server-side so the minimum deposit shown here never drifts from what
+  // buyProperty enforces. Only meaningful when this listing offers financing.
+  let minDeposit = 0;
+  if (p.mortgageWeeks > 0) {
+    const discounted = applyLifeDiscount(me, "property", p.price);
+    const taxed = applyTaxToExpense(cls, "property", discounted).total;
+    minDeposit = Math.round(taxed * 0.1 * 100) / 100;
+  }
+  return `
+    <article class="pcard${available.length ? "" : " is-sold"}">
+      ${listingTop(p, cls, me, "")}
+      ${listingChips(p, cls, availabilityChip(units, available))}
+      <div class="pcard-msg" id="msg-${gid}"></div>
+      ${available.length ? `<div class="pcard-foot">${buyControls(p, gid, minDeposit, ksHome, cls)}</div>` : ""}
+    </article>`;
+}
+function buyControls(p, gid, minDeposit, ksHome, cls) {
+  return `
+    ${ksHome.eligible ? `<label class="ks-use" for="useKs-${gid}"><input type="checkbox" id="useKs-${gid}"> Use my KiwiSaver (up to ${fmtMoney(ksHome.available)})</label>` : ""}
+    <div class="buy-row">
+      <button class="btn small gold" id="buyOutrightBtn-${gid}" onclick="buyOutright('${gid}')">${icon("coin", 13)} Buy cash</button>
+      ${p.mortgageWeeks > 0 ? `
+        <div class="deposit-group">
+          <span class="deposit-prefix">$</span>
+          <input type="number" id="depositAmt-${gid}" min="${minDeposit}" step="0.01" value="${minDeposit}" aria-label="Deposit amount in dollars, minimum ${fmtMoney(minDeposit)}">
+          <button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Mortgage</button>
+        </div>
+        <span class="muted-small buy-hint">Deposit from ${fmtMoney(minDeposit)} &middot; weekly payments due ${dayFull(cls.mortgageDay)}s</span>` : ""}
+    </div>`;
+}
+
+/* ---------- Student: My homes ---------- */
+// Pure status calculation for an owned unit's mortgage this week — shared by
+// the card below and the "payment due" marker on the tab. Never an amount
+// to type in; the figure shown is the same one payMortgage() will charge.
+function mortgageStatus(p, cls) {
+  const mortgageDayName = DAY_FULL[cls.mortgageDay || "Fri"];
+  const weekKey = isoWeekKey();
+  const purchaseWeek = p.mortgage.purchaseWeekKey === weekKey;
+  const alreadyPaid = p.mortgage.lastWeekPaid === weekKey;
+  // Payable either on the class's normal mortgage day, or — for this ISO
+  // week only — if the teacher has manually marked mortgages as due (see
+  // setMortgageDueOverride).
+  const forcedDue = cls.mortgageForceDueWeek === weekKey;
+  const isDueToday = (cls.mortgageDay || "Fri") === nzDayName() || forcedDue;
+  const amt = mortgageWeekAmount(p.mortgage);
+  const breakdown = amt.interest > 0
+    ? `${fmtMoney(amt.principal)} + ${fmtMoney(amt.interest)} interest on the ${fmtMoney(amt.balanceBefore)} still owed`
+    : `${fmtMoney(amt.principal)}, no interest owing`;
+  let status, canPay = false;
+  if (purchaseWeek) {
+    status = `Your first payment isn't due yet — the week you bought is free. It'll be ${fmtMoney(amt.total)} (${breakdown}).`;
+  } else if (alreadyPaid) {
+    status = `This week's payment of ${fmtMoney(amt.total)} is already sorted.`;
+  } else if (!isDueToday) {
+    status = `Due every ${mortgageDayName}. This week's would be ${fmtMoney(amt.total)} (${breakdown}) — come back then to pay it yourself.`;
+  } else {
+    const dueLine = forcedDue && (cls.mortgageDay || "Fri") !== nzDayName()
+      ? `Your teacher has marked this week's payment as due now.`
+      : `This week's payment is due today.`;
+    status = `${dueLine} <strong>${fmtMoney(amt.total)}</strong> — ${breakdown}.`;
+    canPay = true;
+  }
+  return { status, canPay, amt };
+}
+function mortgageSection(p, cls) {
+  const st = mortgageStatus(p, cls);
+  const m = p.mortgage;
+  return `
+    <div class="pcard-sec">
+      <div class="pcard-sec-head">Mortgage</div>
+      <div class="prow">
+        <div class="prow-main">
+          <div class="prow-title">${fmtMoney(m.weeklyPayment)}/week base &middot; ${m.weeksLeft} week${m.weeksLeft === 1 ? "" : "s"} left</div>
+          <div class="prow-sub">Due ${dayFull(cls.mortgageDay)}s${m.interestRate > 0 ? ` &middot; plus ${m.interestRate}% interest on the balance still owed (shrinks each week)` : ""}</div>
+          <div class="prow-sub">${st.status}</div>
+        </div>
+        ${st.canPay ? `<button class="btn small gold" id="payMortgageBtn-${p.id}" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay ${fmtMoney(st.amt.total)}</button>` : ""}
+      </div>
+      ${st.canPay ? `<p class="muted-small">Mortgage payments come out of your cash — a credit card can't be used.</p>` : ""}
+      <div id="mortgageMsg-${p.id}"></div>
+    </div>`;
+}
+
+// "Living here / rented out / rented to a classmate" status + choices for a
+// property the student owns, as flat rows (no boxes inside the card).
+function studentOccupancySection(p, cls, nameOf) {
+  const pr = cls.propertyRentals || {};
+  const canSublet = !!(pr.enabled && p.rentPerWeek > 0);
+  const pv = propertyLifestylePreview(cls, p);
+  const bonus = pv ? pv.livingBonusPoints : 0;
+  const btn = (label, fn, cls2) => `<button class="btn small ${cls2 || "secondary"}" onclick="${fn}">${label}</button>`;
+  const sublet = `${btn("Rent to a classmate", `showSubletForm('${p.id}')`)}`;
+  let inner;
+  if (p.occupancy === "living") {
+    inner = choiceRow("You're living here",
+      `+${bonus} lifestyle bonus (property category) while you live here. You're not collecting rent.`,
+      `${p.rentPerWeek > 0 ? btn("Rent it out", `chooseOccupancy('${p.id}','rented')`) : ""}${canSublet ? sublet : ""}`)
+      + (!p.rentPerWeek ? `<p class="muted-small">Your teacher hasn't set a rent amount for this property, so it can't be rented out yet.</p>` : "");
+  } else if (p.occupancy === "rented") {
+    inner = choiceRow(`Rented out — ${fmtMoney(p.rentPerWeek)}/week`,
+      `Paid every ${dayFull(p.rentDay)}. You're not getting the living-in lifestyle bonus.`,
+      `${btn("Move in instead", `chooseOccupancy('${p.id}','living')`)}${canSublet ? sublet : ""}`)
+      + movingCostNote(cls);
+  } else if (p.occupancy === "sublet" && p.sublet) {
+    inner = studentSubletRows(p, cls, nameOf);
+  } else {
+    // Owned but no choice made yet — spell out each option before they pick.
+    inner = `<p class="muted-small" style="margin:0 0 4px;">Choose how to use it — you can change your mind at any time.</p>`
+      + choiceRow("Live in it", `No rent income, but +${bonus} to your lifestyle rating (property category) while you live there.`, btn("Live here", `chooseOccupancy('${p.id}','living')`, "gold"))
+      + (p.rentPerWeek > 0
+          ? choiceRow("Rent it out", `${fmtMoney(p.rentPerWeek)}/week, paid every ${dayFull(p.rentDay)}. No lifestyle bonus — only the base comfort rating counts.`, btn("Rent it out", `chooseOccupancy('${p.id}','rented')`))
+          : choiceRow("Rent it out", "Your teacher hasn't set a rent amount yet.", ""))
+      + (canSublet ? choiceRow("Rent to a classmate", "You set the price and minimum lease, and get real weekly rent from whoever moves in. No living-in bonus for you.", sublet) : "")
+      + movingCostNote(cls);
+  }
+  return `
+    <div class="pcard-sec">
+      <div class="pcard-sec-head">Living arrangement</div>
+      ${inner}
+      <div id="subletForm-${p.id}"></div>
+    </div>`;
+}
+// The owner's view once a unit is set to "sublet": waiting for approval,
+// declined, listed with no tenant yet, or occupied.
+function studentSubletRows(p, cls, nameOf) {
+  const s = p.sublet;
+  const withdraw = label => `<button class="btn small secondary" onclick="cancelSubletClick('${p.id}')">${label}</button>`;
+  if (s.status === "pending") {
+    return choiceRow("Waiting for teacher approval", `Listed at ${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum lease. It'll be visible to classmates once approved.`, withdraw("Withdraw listing"));
+  }
+  if (s.status === "rejected") {
+    return choiceRow("Listing declined by your teacher", s.rejectReason ? escapeHtml(s.rejectReason) : "", withdraw("Remove listing"));
+  }
+  if (!s.tenant) {
+    return choiceRow("Listed for rent to classmates", `${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum lease. No one's moved in yet.`, withdraw("Withdraw listing"));
+  }
+  const canEnd = leaseMinWeeksElapsed(s);
+  return choiceRow(`Rented to ${escapeHtml(nameOf(s.tenant))}`,
+    `${fmtMoney(s.price)}/week, paid every ${dayFull(p.rentDay)}. Minimum ${s.minWeeks}-week lease${canEnd ? " (met — you can end it any time now)" : " (still running)"}.`,
+    canEnd ? withdraw("End lease") : "");
+}
+
+function ownedHomeCard(p, cls, nameOf) {
+  const gain = propertyGainSinceBought(p);
+  const gcls = gain ? (gain.diff > 0 ? "ticker-up" : gain.diff < 0 ? "ticker-down" : "muted-small") : "";
+  const arrow = gain ? (gain.diff > 0 ? "\u25B2 " : gain.diff < 0 ? "\u25BC " : "") : "";
+  const gainHtml = gain
+    ? `<span class="pcard-delta ${gcls}">${arrow}${fmtMoney(Math.abs(gain.diff))} (${Math.abs(gain.pct).toFixed(1)}%)</span><span class="muted-small">since you paid ${fmtMoney(p.purchasePrice)}</span>`
+    : "";
+  return `
+    <article class="pcard">
+      <div class="pcard-top">
+        <div class="pcard-id">
+          <span class="pcard-ico">${icon("house", 20)}</span>
+          <div class="pcard-name">
+            <h3>${escapeHtml(p.name)}</h3>
+            <div class="pcard-badges">${occupancyChip(p)}<span class="chip">${comfortStars(p.comfort)}</span></div>
+          </div>
+        </div>
+        <div class="pcard-money">
+          <span class="pcard-cap">Worth now</span>
+          <div class="pcard-price">${fmtMoney(p.price)}</div>
+          ${gainHtml}
+        </div>
+      </div>
+      ${p.mortgage ? mortgageSection(p, cls) : ""}
+      ${studentOccupancySection(p, cls, nameOf)}
+      <div class="pcard-foot pcard-foot-end"><button class="btn small secondary" onclick="sellMine('${p.id}')">Sell back</button></div>
+    </article>`;
+}
+
+// Shared card for a tenant's rented home — works for both a classmate sublet
+// and an NPC unit, since both carry the same lease shape (see
+// tenantRentStatusLine), just with different ids/handlers passed in.
+function rentedHomeCard(o) {
+  return `
+    <article class="pcard">
+      <div class="pcard-top">
+        <div class="pcard-id">
+          <span class="pcard-ico">${icon(o.icon, 20)}</span>
+          <div class="pcard-name">
+            <h3>${escapeHtml(o.name)}</h3>
+            <div class="pcard-badges">${o.badge}</div>
+            ${o.desc ? `<p class="pcard-desc">${escapeHtml(o.desc)}</p>` : ""}
+          </div>
+        </div>
+        <div class="pcard-money">
+          <span class="pcard-cap">Your rent</span>
+          <div class="pcard-price">${fmtMoney(o.price)}<small class="muted-small">/wk</small></div>
+        </div>
+      </div>
+      <div class="pcard-sec">
+        <div class="pcard-sec-head">This week's rent</div>
+        <div class="prow">
+          <div class="prow-main"><div class="prow-sub">${o.status}</div>${o.cardToggle || ""}</div>
+          <button class="btn small gold rent-pay-btn" id="${o.payId}" ${o.canPay ? "" : `disabled title="${o.why}"`} onclick="${o.payFn}">${icon("send", 13)} Pay ${fmtMoney(o.price)}</button>
+        </div>
+        <div id="${o.msgId}"></div>
+      </div>
+      <div class="pcard-sec">
+        <div class="pcard-sec-head">Lease</div>
+        <div class="prow">
+          <div class="prow-main"><div class="prow-sub">${o.canMoveOut ? "You've met the minimum lease length, so you can move out at any time." : `You agreed to a minimum ${o.minWeeks}-week lease, so you can't move out just yet.`}</div></div>
+          ${o.canMoveOut ? `<button class="btn small secondary" onclick="${o.moveFn}">Move out</button>` : ""}
+        </div>
+      </div>
+    </article>`;
+}
+
+// A student can only ever have ONE current home (see currentHomeOf), so a
+// classmate rental and a school rental never show together.
+function renderStudentHomes(cls, props, me, nameOf) {
+  const box = document.getElementById("myHomes");
+  const items = props.filter(p => p.owner === me.username).map(p => ({
+    rank: p.occupancy === "living" ? 0 : 1,
+    due: !!p.mortgage && mortgageStatus(p, cls).canPay,
+    html: ownedHomeCard(p, cls, nameOf)
+  }));
+  const rentedProp = props.find(p => p.sublet && p.sublet.tenant === me.username);
+  const npcUnit = rentedProp ? null : (cls.npcProperties || []).find(u => u.tenant === me.username);
+  if (rentedProp) {
+    const s = rentedProp.sublet;
+    const t = tenantRentStatusLine(s.leaseStartWeekKey, s.rentLastWeekPaid, rentedProp.rentDay, s.price, isSubletRentOverdue(rentedProp, cls));
+    items.push({ rank: 0, due: t.canPay, html: rentedHomeCard({
+      icon: "house", name: rentedProp.name, desc: `Renting from ${nameOf(rentedProp.owner)}`,
+      badge: `<span class="badge navy">${icon("users", 12)}Classmate rental</span>`,
+      price: s.price, status: t.status, canPay: t.canPay, why: t.why,
+      payId: `payTenantRentBtn-${rentedProp.id}`, payFn: `payTenantRentClick('${rentedProp.id}')`, msgId: `tenantRentMsg-${rentedProp.id}`,
+      canMoveOut: leaseMinWeeksElapsed(s), minWeeks: s.minWeeks, moveFn: `tenantMoveOutClick('${rentedProp.id}')`
+    }) });
+  } else if (npcUnit) {
+    const t = tenantRentStatusLine(npcUnit.leaseStartWeekKey, npcUnit.rentLastWeekPaid, npcUnit.rentDay, npcUnit.rentPerWeek, isNpcRentOverdue(npcUnit));
+    items.push({ rank: 0, due: t.canPay, html: rentedHomeCard({
+      icon: "building", name: npcUnit.name, desc: npcUnit.description || "",
+      badge: `<span class="badge lilac">${icon("building", 12)}School rental</span>`,
+      price: npcUnit.rentPerWeek, status: t.status, canPay: t.canPay, why: t.why,
+      cardToggle: t.canPay ? cardPayToggleHtml("n-" + npcUnit.id, window.T29_ME, cls) : "",
+      payId: `payNpcRentBtn-${npcUnit.id}`, payFn: `payNpcRentClick('${npcUnit.id}')`, msgId: `npcRentMsg-${npcUnit.id}`,
+      canMoveOut: leaseMinWeeksElapsed(npcUnit), minWeeks: npcUnit.minWeeks, moveFn: `npcMoveOutClick('${npcUnit.id}')`
+    }) });
+  }
+  items.sort((a, b) => a.rank - b.rank);
+  box.innerHTML = items.length
+    ? `<div class="prop-grid">${items.map(i => i.html).join("")}</div>`
+    : `<div class="empty-state">
+         <p>You don't own or rent a home yet.</p>
+         <div class="p-actions" style="justify-content:center;">
+           <button type="button" class="btn small gold" onclick="setTab('buy')">Browse properties for sale</button>
+           <button type="button" class="btn small secondary" onclick="setTab('rent')">Find a rental</button>
+         </div>
+       </div>`;
+  return { count: items.length, due: items.some(i => i.due) };
+}
+
+/* ---------- Student: To rent (classmates + school, one list) ---------- */
+function renderStudentRentals(cls, props, me, nameOf) {
+  const box = document.getElementById("rentList");
+  const pr = cls.propertyRentals || {};
+  const alreadyHoused = !!currentHomeOf(cls, me.username);
+  const rows = [];
+  if (pr.enabled) {
+    props.filter(p => p.sublet && p.sublet.status === "active" && !p.sublet.tenant && p.owner !== me.username).forEach(p => {
+      rows.push(`
+        <div class="prow rent-row">
+          <div class="prow-main">
+            <div class="prow-title">${escapeHtml(p.name)} <span class="badge navy">${icon("users", 12)}Classmate</span></div>
+            <div class="prow-sub">Rented out by ${escapeHtml(nameOf(p.owner))}</div>
+            <div class="rent-chips"><span class="chip">${comfortStars(p.comfort)}</span><span class="chip">${p.sublet.minWeeks}-week minimum lease</span></div>
+          </div>
+          <div class="rent-side">
+            <div class="rent-price">${fmtMoney(p.sublet.price)}<small>/wk</small></div>
+            <button class="btn small gold" ${alreadyHoused ? "disabled" : ""} onclick="claimSubletClick('${p.id}')">Move in</button>
+          </div>
+        </div>`);
+    });
+  }
+  // Group NPC units into listings the same way groupProperties does for
+  // purchasable properties, so a listing with several units is one row.
+  groupProperties(cls.npcProperties || []).forEach(g => {
+    const p = g[0];
+    const gid = p.groupId || p.id;
+    const available = g.filter(u => !u.tenant);
+    if (!available.length) return;
+    rows.push(`
+      <div class="prow rent-row">
+        <div class="prow-main">
+          <div class="prow-title">${escapeHtml(p.name)} <span class="badge lilac">${icon("building", 12)}School</span></div>
+          ${p.description ? `<div class="prow-sub">${escapeHtml(p.description)}</div>` : ""}
+          <div class="rent-chips">
+            <span class="chip">${p.minWeeks}-week minimum lease</span>
+            ${p.lifestylePoints > 0 ? `<span class="chip">${icon("star", 12)} +${p.lifestylePoints} lifestyle while you live here</span>` : ""}
+            <span class="chip chip-ok">${g.length > 1 ? `${available.length} of ${g.length} available` : "Available"}</span>
+          </div>
+        </div>
+        <div class="rent-side">
+          <div class="rent-price">${fmtMoney(p.rentPerWeek)}<small>/wk</small></div>
+          <button class="btn small gold" ${alreadyHoused ? "disabled" : ""} onclick="rentNpcClick('${gid}')">Move in</button>
+        </div>
+      </div>`);
+  });
+  if (!rows.length) {
+    box.innerHTML = `<div class="empty-state"><p>No rentals are available right now. Check back later — your teacher or a classmate may list one.</p></div>`;
+    return { count: 0 };
+  }
+  box.innerHTML = `
+    <div class="card">
+      <div class="set-head"><h2>${icon("key", 18)} Available rentals</h2></div>
+      <div style="margin-top:6px;">${movingCostNote(cls)}</div>
+      ${alreadyHoused ? `<p class="muted-small">You're already living somewhere — move out first if you'd rather rent one of these instead.</p>` : ""}
+      <div id="rentMsg"></div>
+      ${rows.join("")}
+    </div>`;
+  return { count: rows.length };
+}
+
+/* Inline "list it for rent" form — price + minimum lease length, both
+   bounded by the teacher's settings. Shown on demand rather than always,
+   so the plain living/rented choice isn't crowded out. */
+async function showSubletForm(id) {
+  const box = document.getElementById(`subletForm-${id}`);
+  if (!box) return;
+  if (box.dataset.open === "1") { box.innerHTML = ""; box.dataset.open = "0"; return; }
+  box.dataset.open = "1";
+  const cls = await getClassCached(CURRENT.classCode);
+  const p = (cls.properties || []).find(x => x.id === id);
+  const pr = cls.propertyRentals || {};
+  let hint = "";
+  if (p && p.rentPerWeek > 0) {
+    const minPct = pr.minPricePct != null ? pr.minPricePct : 25;
+    const maxPct = pr.maxPricePct != null ? pr.maxPricePct : 200;
+    const lo = Math.round(p.rentPerWeek * minPct) / 100;
+    const hi = Math.round(p.rentPerWeek * maxPct) / 100;
+    const weeks = pr.maxLeaseWeeks != null ? ` and a minimum lease of up to ${pr.maxLeaseWeeks} week${pr.maxLeaseWeeks === 1 ? "" : "s"}` : "";
+    hint = `Your teacher allows ${fmtMoney(lo)}${maxPct > 0 ? ` to ${fmtMoney(hi)}` : " or more"} per week${weeks}.`;
+  }
+  box.innerHTML = `
+    <div class="p-inline-form">
+      <div class="grid grid-2">
+        <div>
+          <label for="subletPrice-${id}">Weekly rent to charge</label>
+          <input id="subletPrice-${id}" type="number" min="0" step="0.01">
+        </div>
+        <div>
+          <label for="subletWeeks-${id}">Minimum lease (weeks)</label>
+          <input id="subletWeeks-${id}" type="number" min="1" step="1" value="1">
+        </div>
+      </div>
+      <span class="muted-small" id="subletHint-${id}">${hint}</span>
+      <div><button class="btn small gold" onclick="createSubletClick('${id}')">${icon("send", 13)} List it</button></div>
+      <div id="subletFormMsg-${id}"></div>
+    </div>`;
+}
+
+/* ================= Teacher view ================= */
+function renderTeacher(cls, props, me, nameOf) {
+  populateMortgageSettings(cls);
+  populatePropertyMarketSettings(cls);
+  populateRentalSettings(cls);
+  renderPendingSublets(cls, nameOf);
+  renderNpcListings(cls, nameOf);
+  const groups = groupProperties(props);
+  document.getElementById("teacherPropList").innerHTML = groups.map(units => teacherListingCard(units, cls, me, nameOf)).join("");
+  document.getElementById("noTeacherProps").classList.toggle("hidden", groups.length > 0);
+  setCount("cntListings", groups.length);
+}
+
+function teacherListingCard(units, cls, me, nameOf) {
+  const p = units[0];
+  const gid = p.groupId || p.id;
+  const owned = units.filter(u => u.owner);
+  const available = units.filter(u => !u.owner);
+  const range = p.priceRange || cls.propertyPriceRange || { min: 0.5, max: 2 };
+  const rangeChip = `<span class="chip" title="${p.priceRange ? "Custom range for this listing" : "Class-wide default range"}">${icon("chart", 12)} ${range.min}%\u2013${range.max}%/day${p.priceRange ? " (custom)" : ""}</span>`;
+  return `
+    <article class="pcard">
+      ${listingTop(p, cls, me, "")}
+      ${listingChips(p, cls, availabilityChip(units, available) + rangeChip)}
+      <div class="pcard-msg" id="msg-${gid}"></div>
+      <div class="pcard-sec">
+        <div class="p-actions">
+          <button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button>
+          <button class="btn small secondary" onclick="openPricingModal('${p.id}')">${icon("chart", 13)} Pricing</button>
+          <button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>
+        </div>
+      </div>
+      ${ownersSection(owned, cls, nameOf, gid)}
+    </article>`;
+}
+function ownersSection(owned, cls, nameOf, gid) {
+  if (!owned.length) return "";
+  const expanded = OWNERS_EXPANDED.has(gid);
+  const shown = expanded ? owned : owned.slice(0, OWNERS_PREVIEW);
+  const hidden = owned.length - OWNERS_PREVIEW;
+  return `
+    <div class="pcard-sec">
+      <div class="pcard-sec-head">Owners (${owned.length})</div>
+      ${shown.map(u => ownerRowTeacher(u, cls, nameOf)).join("")}
+      ${hidden > 0 ? `<button type="button" class="link-btn" onclick="toggleOwners('${gid}')">${expanded ? "Show fewer" : `Show ${hidden} more`}</button>` : ""}
+    </div>`;
+}
+async function toggleOwners(gid) {
+  if (OWNERS_EXPANDED.has(gid)) OWNERS_EXPANDED.delete(gid); else OWNERS_EXPANDED.add(gid);
+  await render();
+}
+// One owned unit as a flat row: who, what it's worth vs what they paid,
+// mortgage, how it's being used — plus the teacher's override buttons.
+function ownerRowTeacher(u, cls, nameOf) {
+  const gain = propertyGainSinceBought(u);
+  const bits = [];
+  if (gain) {
+    const gc = gain.diff > 0 ? "ticker-up" : gain.diff < 0 ? "ticker-down" : "";
+    const sign = gain.diff > 0 ? "+" : gain.diff < 0 ? "-" : "";
+    bits.push(`bought ${fmtMoney(u.purchasePrice)}, now ${fmtMoney(u.price)} <span class="${gc}">(${sign}${Math.abs(gain.pct).toFixed(1)}%)</span>`);
+  }
+  if (u.mortgage) bits.push(`mortgage ${fmtMoney(u.mortgage.weeklyPayment)}/wk, ${u.mortgage.weeksLeft} wk left`);
+  let note = "", action = "";
+  const s = u.occupancy === "sublet" ? u.sublet : null;
+  if (s) {
+    if (s.status === "pending") note = `Wants to rent to classmates at ${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum — see Classmate rentals.`;
+    else if (s.status === "rejected") note = `Rental listing declined${s.rejectReason ? `: ${escapeHtml(s.rejectReason)}` : "."}`;
+    else if (!s.tenant) { note = `Listed at ${fmtMoney(s.price)}/week, no tenant yet.`; action = `<button class="btn small coral" onclick="teacherEndSubletClick('${u.id}')">End listing</button>`; }
+    else { note = `Rented to ${escapeHtml(nameOf(s.tenant))} at ${fmtMoney(s.price)}/week.`; action = `<button class="btn small coral" onclick="teacherEndSubletClick('${u.id}')">End rental</button>`; }
+  }
+  return `
+    <div class="prow">
+      <div class="prow-main">
+        <div class="prow-title">${escapeHtml(nameOf(u.owner))} ${occupancyChip(u)}</div>
+        ${bits.length ? `<div class="prow-sub">${bits.join(" &middot; ")}</div>` : ""}
+        ${note ? `<div class="prow-sub">${note}</div>` : ""}
+      </div>
+      <div class="prow-actions">${action}<button class="btn small secondary" onclick="forceSell('${u.id}')">Sell back</button></div>
+    </div>`;
+}
+
+/* ---------------- Teacher: pricing dialog ---------------- */
+async function openPricingModal(id) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const p = (cls.properties || []).find(x => x.id === id);
+  if (!p) return;
+  const dflt = cls.propertyPriceRange || { min: 0.5, max: 2 };
+  const range = p.priceRange || dflt;
+  document.getElementById("pricingTitle").textContent = "Pricing \u2014 " + p.name;
+  document.getElementById("pricingBody").innerHTML = `
+    <div class="form-sec">
+      <div class="form-sec-title">Set a new price</div>
+      <span class="muted-small">Changes the price right away. It's currently ${fmtMoney(p.price)}.</span>
+      <div class="p-inline">
+        <input type="number" min="0.01" step="0.01" id="price-${p.id}" value="${p.price}" aria-label="New price in dollars">
+        <button class="btn small" onclick="overridePriceClick('${p.id}')">${icon("chart", 13)} Update</button>
+      </div>
+    </div>
+    <div class="form-sec">
+      <div class="form-sec-title">Daily movement for this listing</div>
+      <span class="muted-small">${p.priceRange ? "This listing uses its own custom range." : `Using the class-wide default (${dflt.min}%\u2013${dflt.max}% per day).`}</span>
+      <div class="grid grid-2">
+        <div><label for="prmin-${p.id}">Min % change</label><input type="number" min="0" step="0.1" id="prmin-${p.id}" value="${range.min}"></div>
+        <div><label for="prmax-${p.id}">Max % change</label><input type="number" min="0" step="0.1" id="prmax-${p.id}" value="${range.max}"></div>
+      </div>
+      <div class="p-modal-foot">
+        <button class="btn small gold" onclick="setListingRangeClick('${p.id}')">${icon("chart", 13)} Save range</button>
+        ${p.priceRange ? `<button class="btn small secondary" onclick="clearListingRangeClick('${p.id}')">Reset to class default</button>` : ""}
+      </div>
+    </div>
+    <div id="pricingMsg"></div>`;
+  openOverlay("pricingModal");
+}
+function closePricingModal() { closeOverlay("pricingModal"); }
+// id is any unit's id within the listing. Errors stay in the dialog; on
+// success it closes and the confirmation shows on the listing's own card.
+async function showListingActionResult(id, res, successMsg) {
+  if (!res.ok) { setMsg("pricingMsg", `<div class="error-msg">${res.error}</div>`, 7000); return; }
+  closePricingModal();
+  const gid = await gidOfProperty(id);
+  await render();
+  setMsg("msg-" + gid, `<div class="success-msg">${successMsg}</div>`, 4000);
+}
+
+/* ---------------- Teacher: classmate-rental requests ---------------- */
+function renderPendingSublets(cls, nameOf) {
+  const box = document.getElementById("pendingSublets");
+  if (!box) return;
+  const pending = (cls.properties || []).filter(p => p.sublet && p.sublet.status === "pending");
+  setCount("cntPending", pending.length, true);
+  if (!pending.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `
+    <div class="card p-pending">
+      <div class="set-head"><h2>${icon("send", 18)} Pending rental requests</h2><span class="badge coral">${pending.length} waiting</span></div>
+      ${pending.map(p => `
+        <div class="prow">
+          <div class="prow-main">
+            <div class="prow-title">${escapeHtml(p.name)}</div>
+            <div class="prow-sub">${escapeHtml(nameOf(p.owner))} wants to rent it out at ${fmtMoney(p.sublet.price)}/week, ${p.sublet.minWeeks}-week minimum lease.</div>
+          </div>
+          <div class="prow-actions">
+            <button class="btn small mint" onclick="approveSubletClick('${p.id}')">Approve</button>
+            <button class="btn small coral" onclick="rejectSubletClick('${p.id}')">Reject</button>
+          </div>
+        </div>`).join("")}
+    </div>`;
+}
+
+/* ---------------- Teacher: add / edit a property (dialog) ---------------- */
+function resetPropForm() {
+  ["hName", "hPrice", "hDesc"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("hComfort").value = 3;
+  document.getElementById("hQuantity").value = 1;
+  document.getElementById("hLivingBonus").value = 1;
+  document.getElementById("hMortgage").value = 0;
+  document.getElementById("hMortgageRate").value = 0;
+  document.getElementById("hRent").value = 0;
+  document.getElementById("hRentDay").value = "Fri";
+}
+function setPropModalMode(editing) {
+  document.getElementById("hAdd").textContent = editing ? "Edit property" : "Add a property";
+  document.getElementById("addBtn").innerHTML = editing ? icon("send", 15) + " Save changes" : icon("plus", 15) + " Add property";
+  document.getElementById("addMsg").innerHTML = "";
+}
+function openPropModal() {
+  EDITING_ID = null;
+  resetPropForm();
+  setPropModalMode(false);
+  openOverlay("propModal");
+}
+function closePropModal() {
+  closeOverlay("propModal");
+  EDITING_ID = null;
+  resetPropForm();
+  setPropModalMode(false);
+}
+async function addProp(e) {
+  e.preventDefault();
+  const btn = document.getElementById("addBtn");
+  if (btn.disabled) return false;
+  const prop = {
+    name: document.getElementById("hName").value.trim(),
+    price: document.getElementById("hPrice").value,
+    comfort: document.getElementById("hComfort").value,
+    quantity: document.getElementById("hQuantity").value,
+    livingBonusStars: document.getElementById("hLivingBonus").value,
+    mortgageWeeks: document.getElementById("hMortgage").value,
+    mortgageInterestRate: document.getElementById("hMortgageRate").value,
+    description: document.getElementById("hDesc").value.trim(),
+    rentPerWeek: document.getElementById("hRent").value,
+    rentDay: document.getElementById("hRentDay").value
+  };
+  const editingId = EDITING_ID;
+  btn.disabled = true;
+  try {
+    if (editingId) {
+      await updateProperty(CURRENT.classCode, editingId, prop);
+      const gid = await gidOfProperty(editingId);
+      closePropModal();
+      await render();
+      setMsg("msg-" + gid, `<div class="success-msg">Property updated!</div>`, 4000);
+    } else {
+      await addProperty(CURRENT.classCode, prop);
+      closePropModal();
+      setTab("listings");
+      await render();
+      setMsg("pageMsg", `<div class="success-msg">Property added!</div>`, 4000);
+    }
+  } catch (err) {
+    document.getElementById("addMsg").innerHTML = `<div class="error-msg">${escapeHtml(err && err.message ? err.message : "Something went wrong — please try again.")}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+  return false;
+}
+// id is any unit's id within the listing — edits apply to the whole
+// group (see updateProperty in data-property.js). Quantity shown is how many
+// units currently exist in that group.
+async function editProp(id) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const props = cls.properties || [];
+  const prop = props.find(p => p.id === id);
+  if (!prop) return;
+  const gid = prop.groupId || prop.id;
+  const groupSize = props.filter(p => (p.groupId || p.id) === gid).length;
+  EDITING_ID = id;
+  document.getElementById("hName").value = prop.name;
+  document.getElementById("hPrice").value = prop.price;
+  document.getElementById("hComfort").value = prop.comfort;
+  document.getElementById("hQuantity").value = groupSize;
+  document.getElementById("hLivingBonus").value = prop.livingBonusStars !== undefined ? prop.livingBonusStars : 1;
+  document.getElementById("hMortgage").value = prop.mortgageWeeks || 0;
+  document.getElementById("hMortgageRate").value = prop.mortgageInterestRate || 0;
+  document.getElementById("hDesc").value = prop.description || "";
+  document.getElementById("hRent").value = prop.rentPerWeek || 0;
+  document.getElementById("hRentDay").value = prop.rentDay || "Fri";
+  setPropModalMode(true);
+  openOverlay("propModal");
+}
+
+/* ---------------- Teacher: NPC (school) rentals ---------------- */
+function renderNpcListings(cls, nameOf) {
+  const list = document.getElementById("npcPropList");
+  const units = cls.npcProperties || [];
+  const groups = groupProperties(units);
+  document.getElementById("noNpcProps").classList.toggle("hidden", groups.length > 0);
+  setCount("cntSchool", groups.length);
+  list.innerHTML = groups.map(g => {
+    const p = g[0];
+    const gid = p.groupId || p.id;
+    const tenanted = g.filter(u => u.tenant);
+    const vacant = g.filter(u => !u.tenant);
+    return `
+      <article class="pcard">
+        <div class="pcard-top">
+          <div class="pcard-id">
+            <span class="pcard-ico">${icon("building", 20)}</span>
+            <div class="pcard-name">
+              <h3>${escapeHtml(p.name)}</h3>
+              <div class="pcard-badges"><span class="badge lilac">School rental</span></div>
+              <p class="pcard-desc">${escapeHtml(p.description) || "No description provided."}</p>
+            </div>
+          </div>
+          <div class="pcard-money">
+            <div class="pcard-price">${fmtMoney(p.rentPerWeek)}<small class="muted-small">/wk</small></div>
+          </div>
+        </div>
+        <div class="pcard-chips">
+          <span class="chip">${p.minWeeks}-week minimum lease</span>
+          <span class="chip">Due ${dayFull(p.rentDay)}s</span>
+          ${p.lifestylePoints > 0 ? `<span class="chip">${icon("star", 12)} +${p.lifestylePoints} lifestyle</span>` : ""}
+          ${vacant.length ? `<span class="chip chip-ok">${g.length > 1 ? `${vacant.length} of ${g.length} available` : "Available"}</span>` : `<span class="chip chip-off">${g.length > 1 ? "All rented" : "Rented"}</span>`}
+        </div>
+        <div class="pcard-msg" id="npcMsg-${gid}"></div>
+        <div class="pcard-sec">
+          <div class="p-actions">
+            <button class="btn small secondary" onclick="editNpcProp('${p.id}')">${icon("plus", 13)} Edit</button>
+            <button class="btn small coral" onclick="deleteNpcProp('${p.id}')">${icon("trash", 13)} Remove</button>
+          </div>
+        </div>
+        ${tenanted.length ? `
+          <div class="pcard-sec">
+            <div class="pcard-sec-head">Tenants (${tenanted.length})</div>
+            ${tenanted.map(u => npcTenantBlock(u, nameOf)).join("")}
+          </div>` : ""}
+      </article>`;
+  }).join("");
+}
+// One tenanted unit as a flat row — who's renting it, whether this week's
+// rent is overdue, and the teacher's override controls (waive the overdue
+// payment, or end the tenancy outright).
+function npcTenantBlock(u, nameOf) {
+  const overdue = isNpcRentOverdue(u);
+  return `
+    <div class="prow">
+      <div class="prow-main">
+        <div class="prow-title">${escapeHtml(nameOf(u.tenant))} ${overdue ? `<span class="badge coral">${icon("bell", 12)}Rent overdue</span>` : ""}</div>
+      </div>
+      <div class="prow-actions">
+        ${overdue ? `<button class="btn small secondary" onclick="resolveNpcOverdueClick('${u.id}')">Mark as resolved</button>` : ""}
+        <button class="btn small coral" onclick="teacherEndNpcTenancyClick('${u.id}')">End tenancy</button>
+      </div>
+    </div>`;
+}
+function setNpcModalMode(editing) {
+  document.getElementById("hAddNpc").textContent = editing ? "Edit school rental" : "Add a school rental";
+  document.getElementById("addNpcBtn").innerHTML = editing ? icon("send", 15) + " Save changes" : icon("plus", 15) + " Add school rental";
+  document.getElementById("addNpcMsg").innerHTML = "";
+}
+function openNpcModal() {
+  EDITING_NPC_ID = null;
+  resetNpcForm();
+  setNpcModalMode(false);
+  openOverlay("npcModal");
+}
+function closeNpcModal() {
+  closeOverlay("npcModal");
+  EDITING_NPC_ID = null;
+  resetNpcForm();
+  setNpcModalMode(false);
+}
 async function addNpcProp(e) {
   e.preventDefault();
+  const btn = document.getElementById("addNpcBtn");
+  if (btn.disabled) return false;
   const listing = {
     name: document.getElementById("npcName").value.trim(),
     description: document.getElementById("npcDesc").value.trim(),
@@ -1291,16 +1508,27 @@ async function addNpcProp(e) {
     minWeeks: document.getElementById("npcMinWeeks").value,
     lifestylePoints: document.getElementById("npcLifestylePoints").value
   };
-  if (EDITING_NPC_ID) {
-    await updateNpcProperty(CURRENT.classCode, EDITING_NPC_ID, listing);
-    document.getElementById("addNpcMsg").innerHTML = `<div class="success-msg">NPC property updated!</div>`;
-    cancelEditNpcProp();
-  } else {
-    await addNpcProperty(CURRENT.classCode, listing);
-    document.getElementById("addNpcMsg").innerHTML = `<div class="success-msg">NPC property added!</div>`;
-    resetNpcForm();
+  const editingId = EDITING_NPC_ID;
+  btn.disabled = true;
+  try {
+    if (editingId) {
+      await updateNpcProperty(CURRENT.classCode, editingId, listing);
+      const gid = await gidOfProperty(editingId, true);
+      closeNpcModal();
+      await render();
+      setMsg("npcMsg-" + gid, `<div class="success-msg">School rental updated!</div>`, 4000);
+    } else {
+      await addNpcProperty(CURRENT.classCode, listing);
+      closeNpcModal();
+      setTab("school");
+      await render();
+      setMsg("pageMsg", `<div class="success-msg">School rental added!</div>`, 4000);
+    }
+  } catch (err) {
+    document.getElementById("addNpcMsg").innerHTML = `<div class="error-msg">${escapeHtml(err && err.message ? err.message : "Something went wrong — please try again.")}</div>`;
+  } finally {
+    btn.disabled = false;
   }
-  await render();
   return false;
 }
 // id is any unit's id within the listing — edits apply to the whole
@@ -1321,24 +1549,17 @@ async function editNpcProp(id) {
   document.getElementById("npcRentDay").value = p.rentDay || "Fri";
   document.getElementById("npcMinWeeks").value = p.minWeeks || 1;
   document.getElementById("npcLifestylePoints").value = p.lifestylePoints || 0;
-  document.getElementById("hAddNpc").innerHTML = icon("building", 18) + " Edit NPC property";
-  document.getElementById("addNpcBtn").innerHTML = icon("plus", 15) + " Save changes";
-  document.getElementById("cancelEditNpcBtn").classList.remove("hidden");
-  document.getElementById("addNpcMsg").innerHTML = "";
-  jumpTo("npcPanel");
+  setNpcModalMode(true);
+  openOverlay("npcModal");
 }
-function cancelEditNpcProp() {
-  EDITING_NPC_ID = null;
-  resetNpcForm();
-  document.getElementById("hAddNpc").innerHTML = icon("building", 18) + " Add an NPC property";
-  document.getElementById("addNpcBtn").innerHTML = icon("plus", 15) + " Add NPC property";
-  document.getElementById("cancelEditNpcBtn").classList.add("hidden");
-}
-async function deleteNpcProp(id) {
-  if (await t29Confirm("Remove this NPC property listing (all units of it)? Any current tenants will be moved out immediately.")) {
-    await removeNpcProperty(CURRENT.classCode, id);
-    await render();
-  }
+
+// A successful purchase / move-in changes what's in "My homes", and the
+// listing leaves the For-sale tab — so confirm at the top of the page and
+// take the student to where their new home now lives.
+function showPurchaseResult(html) {
+  setTab("homes");
+  setMsg("pageMsg", html, 10000);
+  try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
 }
 
 document.addEventListener("DOMContentLoaded", init);

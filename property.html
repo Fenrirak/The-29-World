@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=f7e26c3f">
+<link rel="stylesheet" href="style.css?v=b5a8168a">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -37,117 +37,181 @@
 <link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <style>
-  /* Mortgage settings card (teacher-only) */
-  #mortgagePanel .mortgage-status-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 22px; }
-  #mortgagePanel .mortgage-subsection { margin-top: 26px; padding-top: 22px; border-top: 1.5px solid var(--line); }
-  #mortgagePanel .mortgage-subsection:first-of-type { margin-top: 22px; padding-top: 0; border-top: none; }
-  #mortgagePanel .mortgage-subsection-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-  #mortgagePanel .mortgage-subsection-head h3 { margin: 0; font-size: 1rem; }
-  #mortgagePanel .mortgage-day-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 10px; }
-  #mortgagePanel .mortgage-day-row select { max-width: 200px; margin-bottom: 0; }
+  /* ===== Property page ===== */
+  .page-lede { margin: 0 0 18px; }
 
-  .mortgage-toggle-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    margin-top: 12px;
-    padding: 14px 16px;
-    border: 1.5px solid var(--line);
-    border-radius: 12px;
-    background: rgba(0,0,0,0.012);
-    cursor: pointer;
+  /* --- Tabs (segmented control) --- */
+  .p-tabs {
+    display: flex; gap: 4px; padding: 4px; margin: 0 0 20px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-4);
+    overflow-x: auto; scrollbar-width: none;
   }
-  .mortgage-toggle-row input[type="checkbox"] {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
+  .p-tabs::-webkit-scrollbar { display: none; }
+  .p-tabs button {
+    flex: 1 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    min-height: 42px; padding: 9px 16px; border: none; border-radius: var(--r-3);
+    background: transparent; color: var(--muted); font: inherit; font-weight: 700; font-size: .88rem;
+    white-space: nowrap; cursor: pointer; transition: background .15s ease, color .15s ease;
   }
-  .mortgage-toggle-track {
-    position: relative;
-    flex: 0 0 44px;
-    width: 44px;
-    height: 26px;
-    margin-top: 1px;
-    border-radius: 999px;
-    background: #d7dae0;
-    transition: background .18s ease;
+  .p-tabs button:hover { color: var(--ink); }
+  .p-tabs button.active {
+    background: var(--card); color: var(--ink);
+    box-shadow: var(--shadow-sm), inset 0 -3px 0 var(--gold);
   }
-  .mortgage-toggle-track .mortgage-toggle-thumb {
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow: 0 1px 3px rgba(0,0,0,.28);
-    transition: transform .18s ease;
+  .p-tabs .icon-slot { width: 16px; height: 16px; }
+  .p-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+    background: var(--line); color: var(--ink); font-size: .72rem; font-weight: 800;
   }
-  .mortgage-toggle-row input:checked ~ .mortgage-toggle-track { background: #c9932e; }
-  .mortgage-toggle-row input:checked ~ .mortgage-toggle-track .mortgage-toggle-thumb { transform: translateX(18px); }
-  .mortgage-toggle-row input:focus-visible ~ .mortgage-toggle-track { outline: 2px solid #c9932e; outline-offset: 2px; }
-  .mortgage-toggle-text { flex: 1; }
-  .mortgage-toggle-text strong { display: block; margin-bottom: 2px; }
+  .p-count:empty { display: none; }
+  .p-count.alert { background: var(--coral-fill); color: #fff; }
 
-  /* Collapsible settings panels (teacher-only) — Mortgage settings, Daily
-     price movement, Renting to classmates, Add an NPC property all wrap a
-     <details class="card"> instead of a plain <div class="card"> now, so a
-     class with everything configured can collapse them out of the way
-     instead of stacking four fully-expanded cards above the listings every
-     single time. */
-  details.card { padding: 0; }
-  details.card > summary {
-    cursor: pointer;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 22px;
-  }
-  details.card > summary::-webkit-details-marker { display: none; }
-  details.card > summary h2 { margin: 0; flex: 1; }
-  details.card > summary::after {
-    content: "▾";
-    font-size: .75em;
-    opacity: .55;
-    flex-shrink: 0;
-    transition: transform .15s ease;
-  }
-  details.card[open] > summary::after { transform: rotate(180deg); }
-  details.card > summary:hover::after { opacity: .9; }
-  details.card > *:not(summary):first-of-type { margin-top: 0; }
-  details.card > :not(summary) { padding: 0 22px; }
-  details.card > summary + * { margin-top: 0; }
-  details.card > *:last-child { padding-bottom: 22px; }
+  .p-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; }
+  .p-toolbar h2 { margin: 0; font-size: 1.15rem; }
+  .p-toolbar .btn { margin-top: 0; }
+  #pageMsg:empty { display: none; }
+  #pageMsg .success-msg, #pageMsg .error-msg { margin: 0 0 14px; }
 
-  /* Quick-jump pills to each settings panel (teacher-only) — a flat page
-     of several collapsed cards still needs an at-a-glance way to find the
-     right one without scanning past all of them. */
-  .property-quicknav { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
-  .property-quicknav a {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 7px 14px; border-radius: 999px;
-    border: 1.5px solid var(--line); background: var(--card);
-    font-size: .85rem; font-weight: 600; text-decoration: none; color: inherit;
-    transition: background .15s ease, border-color .15s ease;
+  /* --- Listing cards --- */
+  .prop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 18px; align-items: start; }
+  .prop-grid > * { min-width: 0; }
+  .pcard {
+    display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); transition: box-shadow .2s ease;
   }
-  .property-quicknav a:hover { border-color: var(--gold); background: rgba(201,147,46,0.08); }
-  .property-quicknav a .icon-slot { width: 14px; height: 14px; }
+  .pcard:hover { box-shadow: var(--shadow-lift); }
+  .pcard.is-sold { opacity: .72; }
+  .pcard-top { display: flex; flex-wrap: wrap; gap: 12px 16px; justify-content: space-between; align-items: flex-start; padding: 18px 18px 12px; }
+  .pcard-id { display: flex; gap: 12px; flex: 1 1 200px; min-width: 0; }
+  .pcard-ico {
+    flex: 0 0 40px; width: 40px; height: 40px; border-radius: var(--r-3);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(232,184,75,.16); color: var(--gold-dark);
+  }
+  .pcard-name { min-width: 0; }
+  .pcard h3 { margin: 0; font-size: 1.05rem; line-height: 1.3; overflow-wrap: anywhere; }
+  .pcard-badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 5px; }
+  .pcard-desc { margin: 5px 0 0; font-size: .85rem; line-height: 1.45; }
+  .pcard-money { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: 0 0 auto; text-align: right; }
+  .pcard-price { font-size: 1.3rem; font-weight: 900; line-height: 1.2; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .pcard-delta { font-size: .78rem; font-weight: 800; }
+  .pcard-cap { font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .pcard-money svg { margin-top: 6px; }
+  @media (max-width: 480px) {
+    .pcard-money { align-items: flex-start; text-align: left; flex: 1 1 100%; }
+    .pcard-top { padding: 16px 16px 10px; }
+  }
 
-  /* Per-listing "Pricing controls" — the price override + per-listing
-     daily-range settings tucked behind a small collapsible toggle inside
-     each property card, so a page with many listings doesn't show two
-     extra input grids per card by default. */
-  .listing-advanced { margin-top: 12px; padding-top: 12px; border-top: 1.5px solid var(--line); }
-  .listing-advanced > summary {
-    cursor: pointer; list-style: none;
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: .85rem; font-weight: 700; color: var(--muted);
+  .pcard-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 18px 14px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--line); color: var(--ink);
+    font-size: .76rem; font-weight: 700; line-height: 1.3;
   }
-  .listing-advanced > summary::-webkit-details-marker { display: none; }
-  .listing-advanced > summary::after { content: "▾"; font-size: .75em; opacity: .7; }
-  .listing-advanced[open] > summary::after { content: "▴"; }
+  .chip .icon { width: 12px; height: 12px; }
+  .chip.chip-ok { background: #e3f8f0; border-color: transparent; color: #217a5a; }
+  .chip.chip-off { background: #fceae7; border-color: transparent; color: #b8402c; }
+  html.dark-mode .chip.chip-ok { background: rgba(63,191,143,.16); color: #6fdcb2; }
+  html.dark-mode .chip.chip-off { background: rgba(232,115,95,.16); color: #f0a08f; }
+
+  .pcard-msg:not(:empty) { padding: 0 18px 14px; }
+  .pcard-msg .success-msg, .pcard-msg .error-msg { margin: 0; }
+
+  .pcard-sec { border-top: 1px solid var(--line); padding: 14px 18px; }
+  .pcard-sec-head { margin: 0 0 6px; font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .pcard-sec > p { margin: 8px 0 0; }
+  .pcard-foot { border-top: 1px solid var(--line); padding: 14px 18px; background: rgba(128,128,128,.045); display: flex; flex-direction: column; gap: 10px; }
+  .pcard-foot.pcard-foot-end { align-items: flex-end; padding: 10px 18px; }
+  .pcard .btn { margin-top: 0; }
+  .p-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  /* Buy controls */
+  .buy-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .buy-hint { flex: 1 1 100%; }
+  .deposit-group {
+    display: inline-flex; align-items: center; overflow: hidden;
+    border: 1.5px solid var(--line); border-radius: var(--r-2); background: var(--card);
+  }
+  .deposit-group:focus-within { border-color: var(--gold); }
+  .deposit-prefix { padding: 0 2px 0 12px; color: var(--muted); font-weight: 700; }
+  .deposit-group input { width: 96px; min-height: 38px; padding: 6px 8px; border: none; border-radius: 0; background: transparent; font-size: .92rem; }
+  .deposit-group input:focus { outline: none; }
+  .deposit-group .btn { border-radius: 0; min-height: 38px; }
+
+  /* Flat rows (owners, tenants, rentals, living options) */
+  .prow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 10px 0; }
+  .prow + .prow { border-top: 1px solid var(--line); }
+  .prow-main { flex: 1 1 220px; min-width: 0; }
+  .prow-title { font-weight: 800; font-size: .9rem; color: var(--ink); overflow-wrap: anywhere; }
+  .prow-sub { font-size: .8rem; line-height: 1.45; color: var(--muted); }
+  .prow-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .prow .btn { margin-top: 0; }
+  .link-btn {
+    background: none; border: none; padding: 8px 0 2px; cursor: pointer;
+    color: var(--accent-text, var(--navy-700)); font: inherit; font-weight: 700; font-size: .82rem; text-decoration: underline;
+  }
+  .p-inline-form { margin-top: 8px; padding: 12px 14px; border-radius: var(--r-3); background: rgba(128,128,128,.08); }
+  .p-inline-form .grid { gap: 0 14px; }
+  .p-inline-form .btn { margin-top: 12px; }
+
+  /* Rentals list */
+  .rent-side { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .rent-price { font-size: 1.1rem; font-weight: 900; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .rent-price small { font-size: .72rem; font-weight: 700; color: var(--muted); }
+  .rent-row { padding: 14px 0; }
+  .rent-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+  .p-note { margin: 0 0 12px; }
+
+  /* --- Teacher settings rows --- */
+  .set-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .set-head h2 { margin: 0; }
+  .mortgage-status-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 2px; }
+  .mortgage-status-row:empty { display: none; }
+  .set-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; padding: 16px 0; border-top: 1px solid var(--line); }
+  .set-head + .set-row, .mortgage-status-row + .set-row, p + .set-row { margin-top: 14px; }
+  .set-text { flex: 1 1 240px; min-width: 0; }
+  .set-text strong { display: block; margin-bottom: 2px; color: var(--ink); font-size: .92rem; }
+  .set-ctl { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+  .set-ctl .btn { margin-top: 0; }
+  .set-ctl select, .set-ctl input[type="number"] { width: 130px; min-height: 42px; }
+  .set-ctl .field-sm label { margin: 0 0 4px; font-size: .75rem; color: var(--muted); }
+  .set-ctl .field-sm input { width: 92px; }
+  .set-msg { flex-basis: 100%; }
+  .set-msg:empty { display: none; }
+  .set-msg .success-msg { margin-top: 0; }
+  .set-limits { border-top: 1px solid var(--line); padding: 16px 0 4px; }
+  .set-limits .grid { gap: 0 14px; }
+  .set-limits label { align-items: flex-end; min-height: 2.7em; }
+  .set-limits .btn { margin-top: 14px; }
+  .p-pending { border-color: var(--gold); }
+
+  /* Toggle switch */
+  .p-toggle { display: inline-flex; margin: 0; cursor: pointer; flex-shrink: 0; }
+  .p-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .p-switch-track { position: relative; width: 44px; height: 26px; border-radius: 999px; background: var(--line); border: 1px solid rgba(128,128,128,.3); transition: background .18s ease; }
+  .p-switch-thumb { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.28); transition: transform .18s ease; }
+  .p-toggle input:checked ~ .p-switch-track { background: var(--gold-dark); border-color: transparent; }
+  .p-toggle input:checked ~ .p-switch-track .p-switch-thumb { transform: translateX(18px); }
+  .p-toggle input:focus-visible ~ .p-switch-track { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* --- Modal dialogs (add / edit / pricing) --- */
+  .anw-modal-card.p-modal { max-width: 660px; padding: 22px 24px; }
+  .anw-modal-card.p-modal-sm { max-width: 500px; }
+  .p-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .p-modal-head h2 { margin: 0; font-size: 1.2rem; }
+  .p-modal .form-sec { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .p-modal .form-sec:first-of-type { margin-top: 6px; padding-top: 0; border-top: none; }
+  .form-sec-title { margin: 0; font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .p-modal .grid { gap: 0 14px; }
+  .p-modal .muted-small { display: block; margin-top: 6px; }
+  .p-modal-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .p-modal-foot .btn { margin-top: 0; }
+  .p-inline { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
+  .p-inline input { flex: 1; }
+  .p-inline .btn { margin-top: 0; }
+  .set-head + .prow { margin-top: 8px; }
 </style>
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
 <link rel="modulepreload" href="firebase-init.js?v=aca5590e">
@@ -189,279 +253,359 @@
 
 <main>
   <h1 id="pageTitle">Property</h1>
-  <p>Buy a house outright, or finance it with a weekly mortgage — or rent one from your teacher's listings or from a classmate.</p>
+  <p class="page-lede">Buy a house outright, or finance it with a weekly mortgage — or rent one from your teacher's listings or from a classmate.</p>
 
-  <div id="propTaxNote"></div>
-
-  <div id="teacherQuickNav" class="property-quicknav hidden">
-    <a href="#" onclick="jumpTo('mortgagePanel');return false;"><span class="icon-slot" data-icon="house"></span>Mortgage</a>
-    <a href="#" onclick="jumpTo('propertyMarketPanel');return false;"><span class="icon-slot" data-icon="chart"></span>Pricing</a>
-    <a href="#" onclick="jumpTo('rentalsPanel');return false;"><span class="icon-slot" data-icon="users"></span>Rentals</a>
-    <a href="#" onclick="jumpTo('npcPanel');return false;"><span class="icon-slot" data-icon="building"></span>NPC listings</a>
-    <a href="#" onclick="jumpTo('teacherPanel');return false;"><span class="icon-slot" data-icon="plus"></span>Add property</a>
-    <a href="#" onclick="jumpTo('propList');return false;"><span class="icon-slot" data-icon="house"></span>Listings</a>
+  <!-- Student tabs -->
+  <div id="studentTabs" class="p-tabs hidden" role="tablist" aria-label="Property sections">
+    <button type="button" role="tab" data-tab="homes" onclick="setTab('homes')"><span class="icon-slot" data-icon="house"></span>My homes <span class="p-count" id="cntHomes"></span></button>
+    <button type="button" role="tab" data-tab="buy" onclick="setTab('buy')"><span class="icon-slot" data-icon="cart"></span>For sale <span class="p-count" id="cntBuy"></span></button>
+    <button type="button" role="tab" data-tab="rent" onclick="setTab('rent')"><span class="icon-slot" data-icon="key"></span>To rent <span class="p-count" id="cntRent"></span></button>
   </div>
 
-  <div id="myRentedHome"></div>
-  <div id="availableSublets"></div>
-  <div id="availableNpcRentals"></div>
+  <!-- Teacher tabs -->
+  <div id="teacherTabs" class="p-tabs hidden" role="tablist" aria-label="Property management">
+    <button type="button" role="tab" data-tab="listings" onclick="setTab('listings')"><span class="icon-slot" data-icon="house"></span>Listings <span class="p-count" id="cntListings"></span></button>
+    <button type="button" role="tab" data-tab="school" onclick="setTab('school')"><span class="icon-slot" data-icon="building"></span>School rentals <span class="p-count" id="cntSchool"></span></button>
+    <button type="button" role="tab" data-tab="classmates" onclick="setTab('classmates')"><span class="icon-slot" data-icon="users"></span>Classmate rentals <span class="p-count" id="cntPending"></span></button>
+    <button type="button" role="tab" data-tab="settings" onclick="setTab('settings')"><span class="icon-slot" data-icon="settings"></span>Settings</button>
+  </div>
 
-  <details id="mortgagePanel" class="card hidden">
-    <summary><h2 id="hMortgageSettings">Mortgage settings</h2></summary>
-    <p>Control when weekly mortgage installments become payable for financed properties.</p>
-    <div class="mortgage-status-row" id="mortgageStatusRow"></div>
+  <div id="pageMsg" role="status"></div>
 
-    <div class="mortgage-subsection">
-      <div class="mortgage-subsection-head">
-        <h3 id="hMortgageDay">Weekly due day</h3>
-      </div>
-      <p class="muted-small" id="pMortgageDay">Financed properties owe their weekly mortgage payment on this day (skipping the week the property was bought). Students pay it themselves from this page. If a student hasn't paid by the time this day passes, it shows up as a red "payment overdue" warning on their profile until they pay.</p>
-      <div class="mortgage-day-row">
-        <div>
-          <label for="mortgageDaySelect" id="labMortgageDay">Due day</label>
-          <select id="mortgageDaySelect">
-            <option value="Mon">Monday</option>
-            <option value="Tue">Tuesday</option>
-            <option value="Wed">Wednesday</option>
-            <option value="Thu">Thursday</option>
-            <option value="Fri">Friday</option>
-            <option value="Sat">Saturday</option>
-            <option value="Sun">Sunday</option>
-          </select>
-        </div>
-        <button class="btn secondary small" onclick="saveMortgageDayClick()" id="saveMortgageDayBtn">Save mortgage day</button>
-      </div>
-      <div id="mortgageDayMsg"></div>
+  <!-- ============ Student panes ============ -->
+  <section id="pane-homes" class="p-pane hidden">
+    <div id="myHomes"></div>
+  </section>
+
+  <section id="pane-buy" class="p-pane hidden">
+    <div id="propTaxNote"></div>
+    <div id="propList" class="prop-grid"></div>
+    <div class="empty-state hidden" id="noProps"><p>No properties are listed yet.</p></div>
+  </section>
+
+  <section id="pane-rent" class="p-pane hidden">
+    <div id="rentList"></div>
+  </section>
+
+  <!-- ============ Teacher panes ============ -->
+  <section id="pane-listings" class="p-pane hidden">
+    <div class="p-toolbar">
+      <h2>Properties for sale</h2>
+      <button type="button" class="btn small gold" onclick="openPropModal()"><span class="icon-slot" data-icon="plus"></span> Add property</button>
     </div>
-
-    <div class="mortgage-subsection">
-      <div class="mortgage-subsection-head">
-        <h3 id="hMortgageForceDue">Manual override</h3>
-      </div>
-      <label class="mortgage-toggle-row" for="mortgageForceDue">
-        <input type="checkbox" id="mortgageForceDue" onchange="previewMortgageForceDue()">
-        <span class="mortgage-toggle-track"><span class="mortgage-toggle-thumb"></span></span>
-        <span class="mortgage-toggle-text">
-          <strong id="labMortgageForceDue">Mark this week's mortgage payments as due now</strong>
-          <span class="muted-small">Overrides the due day above for the rest of this week only, so students can pay their weekly installment right now instead of waiting for the usual day. Doesn't charge anyone automatically — students still pay it themselves. Turns back off on its own once the week ends.</span>
-        </span>
-      </label>
-      <button class="btn secondary small" style="margin-top:12px;" onclick="saveMortgageForceDue()" id="saveMortgageForceDueBtn">Save</button>
-      <div id="mortgageForceDueMsg"></div>
+    <div id="teacherPropList" class="prop-grid"></div>
+    <div class="empty-state hidden" id="noTeacherProps">
+      <p>No properties are listed yet. Add your first one and students can start buying.</p>
+      <button type="button" class="btn small gold" onclick="openPropModal()"><span class="icon-slot" data-icon="plus"></span> Add property</button>
     </div>
+  </section>
 
-    <div class="mortgage-subsection">
-      <div class="mortgage-subsection-head">
-        <h3>Moving cost</h3>
-      </div>
-      <p class="muted-small">A one-off fee charged the moment a student moves into a new home — moving into a property they own, moving in as a classmate's tenant, or moving in as the tenant of one of your NPC property listings below. Set to 0 for free moves. Students can only move into one home at a time, and only once per day, no matter what this is set to.</p>
-      <div class="mortgage-day-row">
-        <div>
-          <label for="movingCostInput">Moving cost ($)</label>
-          <input id="movingCostInput" type="number" min="0" step="0.01" style="max-width:200px;">
-        </div>
-        <button class="btn secondary small" onclick="saveMovingCostClick()" id="saveMovingCostBtn">Save moving cost</button>
-      </div>
-      <div id="movingCostMsg"></div>
+  <section id="pane-school" class="p-pane hidden">
+    <div class="p-toolbar">
+      <h2>School rentals</h2>
+      <button type="button" class="btn small gold" onclick="openNpcModal()"><span class="icon-slot" data-icon="plus"></span> Add school rental</button>
     </div>
-
-    <div class="mortgage-subsection">
-      <div class="mortgage-subsection-head">
-        <h3>Break fee</h3>
-      </div>
-      <p class="muted-small">An extra flat fee charged on top of paying off the remaining mortgage when a student sells back a property that still has a mortgage on it. Selling a property with no mortgage never charges this. Set to 0 for no break fee.</p>
-      <div class="mortgage-day-row">
-        <div>
-          <label for="mortgageBreakFeeInput">Break fee ($)</label>
-          <input id="mortgageBreakFeeInput" type="number" min="0" step="0.01" style="max-width:200px;">
-        </div>
-        <button class="btn secondary small" onclick="saveMortgageBreakFeeClick()" id="saveMortgageBreakFeeBtn">Save break fee</button>
-      </div>
-      <div id="mortgageBreakFeeMsg"></div>
+    <p class="muted-small p-note">Rentals with no student owner — the school is the landlord. Students move straight in at the terms you set here.</p>
+    <div id="npcPropList" class="prop-grid"></div>
+    <div class="empty-state hidden" id="noNpcProps">
+      <p>No school rentals are listed yet.</p>
+      <button type="button" class="btn small gold" onclick="openNpcModal()"><span class="icon-slot" data-icon="plus"></span> Add school rental</button>
     </div>
-  </details>
+  </section>
 
-  <details id="propertyMarketPanel" class="card hidden">
-    <summary><h2 id="hPropertyMarket">Daily price movement</h2></summary>
-    <p>Just like the Stock Market, property prices drift by a random percentage every simulated day — up or down, within the range below. It runs automatically once per day (the first page load of the day, on any page, triggers it), or you can trigger an extra day right now with the button below. Any listing can also be given its own range instead of this class-wide default — see the "Pricing controls" toggle under each listing further down the page.</p>
-    <div class="grid grid-2">
-      <div>
-        <label for="propRangeMin" id="labPropRangeMin">Minimum % change</label>
-        <input id="propRangeMin" type="number" min="0" step="0.1">
-      </div>
-      <div>
-        <label for="propRangeMax" id="labPropRangeMax">Maximum % change</label>
-        <input id="propRangeMax" type="number" min="0" step="0.1">
-      </div>
-    </div>
-    <div class="row-flex" style="gap:8px;flex-wrap:wrap;">
-      <button class="btn secondary small" onclick="savePropRange()" id="savePropRangeBtn">Save range</button>
-      <button class="btn small gold" onclick="runPropertyMarketDay()" id="simPropDayBtn">Simulate a property day</button>
-    </div>
-    <div id="propRangeMsg"></div>
-  </details>
-
-  <details id="rentalsPanel" class="card hidden">
-    <summary><h2 id="hRentalSettings">Renting to classmates</h2><span id="pendingSubletsBadge" class="badge coral hidden"></span></summary>
-    <p>Let students who own a property lease it to a classmate for real weekly rent, instead of just living in it or renting it out for free passive income.</p>
-
-    <label class="mortgage-toggle-row" for="rentalEnabled">
-      <input type="checkbox" id="rentalEnabled">
-      <span class="mortgage-toggle-track"><span class="mortgage-toggle-thumb"></span></span>
-      <span class="mortgage-toggle-text">
-        <strong>Allow renting to classmates</strong>
-        <span class="muted-small">When off, students can still buy properties, live in them, or rent them out for passive income — but not lease them to a specific classmate.</span>
-      </span>
-    </label>
-
-    <label class="mortgage-toggle-row" for="rentalRequireApproval" style="margin-top:12px;">
-      <input type="checkbox" id="rentalRequireApproval">
-      <span class="mortgage-toggle-track"><span class="mortgage-toggle-thumb"></span></span>
-      <span class="mortgage-toggle-text">
-        <strong>New rental listings need your approval</strong>
-        <span class="muted-small">When on, a listing only becomes visible to classmates once you approve it below. When off, listings go live the moment a student creates them.</span>
-      </span>
-    </label>
-
-    <div class="mortgage-subsection">
-      <div class="mortgage-subsection-head">
-        <h3>Price &amp; lease limits</h3>
-      </div>
-      <div class="grid grid-3">
-        <div>
-          <label for="rentalMinPricePct">Minimum price (% of the property's set rent)</label>
-          <input id="rentalMinPricePct" type="number" min="0" step="1">
-        </div>
-        <div>
-          <label for="rentalMaxPricePct">Maximum price (% of set rent, 0 = no limit)</label>
-          <input id="rentalMaxPricePct" type="number" min="0" step="1">
-        </div>
-        <div>
-          <label for="rentalMaxLeaseWeeks">Longest minimum lease an owner can require (weeks)</label>
-          <input id="rentalMaxLeaseWeeks" type="number" min="1" step="1">
-        </div>
-      </div>
-      <button class="btn secondary small" onclick="saveRentalSettingsClick()" id="saveRentalSettingsBtn">Save settings</button>
-      <div id="rentalSettingsMsg"></div>
-    </div>
-
+  <section id="pane-classmates" class="p-pane hidden">
     <div id="pendingSublets"></div>
-  </details>
 
-  <details id="npcPanel" class="card hidden">
-    <summary><h2 id="hAddNpc">Add an NPC property</h2></summary>
-    <p>List a rental with no student owner — "the school" is the landlord. Rent, minimum lease, and the lifestyle-rating bonus for living there are all fixed by you on the listing itself, so students just move straight in at the terms you set.</p>
-    <form onsubmit="return addNpcProp(event)">
-      <div class="grid grid-2">
-        <div>
-          <label for="npcName" id="labNpcName">Property name</label>
-          <input id="npcName" placeholder="e.g. Riverside Dorms" required>
-        </div>
-        <div>
-          <label for="npcQuantity" id="labNpcQuantity">Quantity available</label>
-          <input id="npcQuantity" type="number" min="1" step="1" value="1" required>
-        </div>
-      </div>
-      <label for="npcDesc" id="labNpcDesc">Description</label>
-      <input id="npcDesc" placeholder="Shown to students">
-      <div class="grid grid-3">
-        <div>
-          <label for="npcRent" id="labNpcRent">Rent (per week)</label>
-          <input id="npcRent" type="number" min="0" step="0.01" required>
-        </div>
-        <div>
-          <label for="npcRentDay" id="labNpcRentDay">Rent paid on</label>
-          <select id="npcRentDay">
-            <option value="Mon">Monday</option>
-            <option value="Tue">Tuesday</option>
-            <option value="Wed">Wednesday</option>
-            <option value="Thu">Thursday</option>
-            <option value="Fri" selected>Friday</option>
-            <option value="Sat">Saturday</option>
-            <option value="Sun">Sunday</option>
-          </select>
-        </div>
-        <div>
-          <label for="npcMinWeeks" id="labNpcMinWeeks">Minimum lease (weeks)</label>
-          <input id="npcMinWeeks" type="number" min="1" step="1" value="1" required>
-        </div>
-      </div>
-      <label for="npcLifestylePoints" id="labNpcLifestylePoints">Lifestyle rating increase (points, while a tenant lives here)</label>
-      <input id="npcLifestylePoints" type="number" min="0" step="1" value="0">
-      <p class="muted-small" id="pNpcLifestylePoints" style="margin-top:8px;">Added straight to a tenant's lifestyle score for as long as they live here — set directly in points, not stars, so it isn't affected by the property category's points-per-star weight.</p>
-      <button class="btn gold" type="submit" id="addNpcBtn">Add NPC property</button>
-      <button type="button" class="btn small secondary hidden" id="cancelEditNpcBtn" onclick="cancelEditNpcProp()">Cancel edit</button>
-    </form>
-    <div id="addNpcMsg"></div>
-    <div id="npcPropList" style="margin-top:18px;"></div>
-    <p class="muted-small" id="noNpcProps">No NPC properties are listed yet.</p>
-  </details>
+    <div class="card">
+      <div class="set-head"><h2><span class="icon-slot" data-icon="users"></span> Renting to classmates</h2></div>
+      <p class="muted-small" style="margin:6px 0 0;">Let students who own a property lease it to a classmate for real weekly rent, instead of just living in it or renting it out for passive income.</p>
 
-  <div id="teacherPanel" class="card hidden">
-    <h2 id="hAdd">Add a property</h2>
-    <form onsubmit="return addProp(event)">
-      <div class="grid grid-3">
-        <div>
-          <label for="hName" id="labName">Property name</label>
-          <input id="hName" placeholder="e.g. Cosy Cottage" required>
+      <div class="set-row">
+        <div class="set-text">
+          <strong>Allow renting to classmates</strong>
+          <span class="muted-small">When off, students can still buy, live in, or rent out properties for passive income — just not lease to a specific classmate.</span>
         </div>
-        <div>
-          <label for="hPrice" id="labPrice">Price</label>
-          <input id="hPrice" type="number" min="0" step="0.01" required>
-        </div>
-        <div>
-          <label for="hComfort" id="labComfort">Comfort rating (1-5)</label>
-          <input id="hComfort" type="number" min="1" max="5" step="1" value="3" required>
-        </div>
+        <label class="p-toggle" for="rentalEnabled" aria-label="Allow renting to classmates"><input type="checkbox" id="rentalEnabled"><span class="p-switch-track"><span class="p-switch-thumb"></span></span></label>
       </div>
-      <label for="hQuantity" id="labQuantity">Quantity available for sale</label>
-      <input id="hQuantity" type="number" min="1" step="1" value="1" required>
-      <div class="grid grid-2">
-        <div>
-          <label for="hLivingBonus" id="labLivingBonus">Living-in bonus (stars, 0 = none)</label>
-          <input id="hLivingBonus" type="number" min="0" step="1" value="1">
+      <div class="set-row">
+        <div class="set-text">
+          <strong>New listings need your approval</strong>
+          <span class="muted-small">When on, a listing only becomes visible to classmates once you approve it. When off, listings go live as soon as a student creates them.</span>
         </div>
+        <label class="p-toggle" for="rentalRequireApproval" aria-label="New listings need approval"><input type="checkbox" id="rentalRequireApproval"><span class="p-switch-track"><span class="p-switch-thumb"></span></span></label>
       </div>
-      <p class="muted-small" id="pLivingBonus" style="margin-top:8px;">Extra lifestyle-rating stars the owner gets on top of the comfort rating above, while they choose to live in this property instead of renting it out (multiplied by the class's property points-per-star setting).</p>
-      <div class="grid grid-2">
-        <div>
-          <label for="hMortgage" id="labMortgage">Mortgage length in weeks (0 = cash only)</label>
-          <input id="hMortgage" type="number" min="0" step="1" value="0">
+      <div class="set-limits">
+        <div class="form-sec-title">Price &amp; lease limits</div>
+        <div class="grid grid-3">
+          <div>
+            <label for="rentalMinPricePct">Minimum price (% of set rent)</label>
+            <input id="rentalMinPricePct" type="number" min="0" step="1">
+          </div>
+          <div>
+            <label for="rentalMaxPricePct">Maximum price (% of set rent, 0 = no limit)</label>
+            <input id="rentalMaxPricePct" type="number" min="0" step="1">
+          </div>
+          <div>
+            <label for="rentalMaxLeaseWeeks">Longest minimum lease (weeks)</label>
+            <input id="rentalMaxLeaseWeeks" type="number" min="1" step="1">
+          </div>
         </div>
-        <div>
-          <label for="hMortgageRate" id="labMortgageRate">Mortgage interest (% per week, 0 = none)</label>
-          <input id="hMortgageRate" type="number" min="0" step="0.1" value="0">
-        </div>
+        <button class="btn small gold" onclick="saveRentalSettingsClick()" id="saveRentalSettingsBtn"><span class="icon-slot" data-icon="send"></span> Save settings</button>
+        <div id="rentalSettingsMsg"></div>
       </div>
-      <div class="grid grid-3">
-        <div>
-          <label for="hRent" id="labRent">Rent income if rented out (per week, 0 = can't be rented)</label>
-          <input id="hRent" type="number" min="0" step="0.01" value="0">
-        </div>
-        <div>
-          <label for="hRentDay" id="labRentDay">Rent paid on</label>
-          <select id="hRentDay">
-            <option value="Mon">Monday</option>
-            <option value="Tue">Tuesday</option>
-            <option value="Wed">Wednesday</option>
-            <option value="Thu">Thursday</option>
-            <option value="Fri" selected>Friday</option>
-            <option value="Sat">Saturday</option>
-            <option value="Sun">Sunday</option>
-          </select>
-        </div>
-      </div>
-      <label for="hDesc" id="labDesc">Description</label>
-      <input id="hDesc" placeholder="Shown to students">
-      <button class="btn gold" type="submit" id="addBtn">Add property</button>
-      <button type="button" class="btn small secondary hidden" id="cancelEditBtn" onclick="cancelEditProp()">Cancel edit</button>
-    </form>
-    <div id="addMsg"></div>
-  </div>
+    </div>
+  </section>
 
-  <div id="propList"></div>
-  <p class="muted-small" id="noProps">No properties are listed yet.</p>
+  <section id="pane-settings" class="p-pane hidden">
+    <div class="grid grid-2" style="align-items:start;">
+      <div class="card">
+        <div class="set-head"><h2><span class="icon-slot" data-icon="house"></span> Mortgages</h2></div>
+        <div class="mortgage-status-row" id="mortgageStatusRow"></div>
+
+        <div class="set-row">
+          <div class="set-text">
+            <strong>Weekly due day</strong>
+            <span class="muted-small">Financed properties owe their weekly payment on this day (the week of purchase is free). Students pay it themselves — if it's still unpaid once the day passes, a red "payment overdue" warning shows on their profile.</span>
+          </div>
+          <div class="set-ctl">
+            <select id="mortgageDaySelect" aria-label="Mortgage due day">
+              <option value="Mon">Monday</option>
+              <option value="Tue">Tuesday</option>
+              <option value="Wed">Wednesday</option>
+              <option value="Thu">Thursday</option>
+              <option value="Fri">Friday</option>
+              <option value="Sat">Saturday</option>
+              <option value="Sun">Sunday</option>
+            </select>
+            <button class="btn small secondary" onclick="saveMortgageDayClick()" id="saveMortgageDayBtn">Save</button>
+          </div>
+          <div id="mortgageDayMsg" class="set-msg"></div>
+        </div>
+
+        <div class="set-row">
+          <div class="set-text">
+            <strong>Mark this week's payments as due now</strong>
+            <span class="muted-small">Overrides the due day for the rest of this week only, so students can pay right away. Doesn't charge anyone automatically, and turns itself off when the week ends.</span>
+          </div>
+          <div class="set-ctl" style="align-items:center;">
+            <label class="p-toggle" for="mortgageForceDue" aria-label="Mark this week's mortgage payments as due now"><input type="checkbox" id="mortgageForceDue" onchange="previewMortgageForceDue()"><span class="p-switch-track"><span class="p-switch-thumb"></span></span></label>
+            <button class="btn small secondary" onclick="saveMortgageForceDue()" id="saveMortgageForceDueBtn">Save</button>
+          </div>
+          <div id="mortgageForceDueMsg" class="set-msg"></div>
+        </div>
+
+        <div class="set-row">
+          <div class="set-text">
+            <strong>Moving cost</strong>
+            <span class="muted-small">One-off fee when a student moves into a new home (their own, a classmate's, or a school rental). 0 = free. Students can only move once per day regardless.</span>
+          </div>
+          <div class="set-ctl">
+            <input id="movingCostInput" type="number" min="0" step="0.01" aria-label="Moving cost in dollars" placeholder="$">
+            <button class="btn small secondary" onclick="saveMovingCostClick()" id="saveMovingCostBtn">Save</button>
+          </div>
+          <div id="movingCostMsg" class="set-msg"></div>
+        </div>
+
+        <div class="set-row">
+          <div class="set-text">
+            <strong>Break fee</strong>
+            <span class="muted-small">Flat fee added to the payoff when a student sells back a property that still has a mortgage. 0 = none. Selling a mortgage-free property never charges it.</span>
+          </div>
+          <div class="set-ctl">
+            <input id="mortgageBreakFeeInput" type="number" min="0" step="0.01" aria-label="Break fee in dollars" placeholder="$">
+            <button class="btn small secondary" onclick="saveMortgageBreakFeeClick()" id="saveMortgageBreakFeeBtn">Save</button>
+          </div>
+          <div id="mortgageBreakFeeMsg" class="set-msg"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="set-head"><h2><span class="icon-slot" data-icon="chart"></span> Daily price movement</h2></div>
+        <p class="muted-small" style="margin:6px 0 0;">Like the Stock Market, property prices drift by a random percentage every simulated day. It runs automatically once a day (the first page load of the day triggers it). Any listing can override this range from its <strong>Pricing</strong> button.</p>
+
+        <div class="set-row">
+          <div class="set-text">
+            <strong>Class-wide range</strong>
+            <span class="muted-small">Daily % change, up or down.</span>
+          </div>
+          <div class="set-ctl">
+            <div class="field-sm"><label for="propRangeMin">Min %</label><input id="propRangeMin" type="number" min="0" step="0.1"></div>
+            <div class="field-sm"><label for="propRangeMax">Max %</label><input id="propRangeMax" type="number" min="0" step="0.1"></div>
+            <button class="btn small secondary" onclick="savePropRange()" id="savePropRangeBtn">Save</button>
+          </div>
+          <div id="propRangeMsg" class="set-msg"></div>
+        </div>
+
+        <div class="set-row">
+          <div class="set-text">
+            <strong>Run a day now</strong>
+            <span class="muted-small">Trigger one extra simulated day immediately.</span>
+          </div>
+          <div class="set-ctl">
+            <button class="btn small gold" onclick="runPropertyMarketDay()" id="simPropDayBtn"><span class="icon-slot" data-icon="repeat"></span> Simulate a property day</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
+
+<!-- ============ Teacher dialogs ============ -->
+<div id="propModal" class="anw-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="hAdd" onclick="if(event.target===this)closePropModal()">
+  <div class="anw-modal-card p-modal">
+    <div class="p-modal-head">
+      <h2 id="hAdd">Add a property</h2>
+      <button type="button" class="btn small secondary" onclick="closePropModal()">Close</button>
+    </div>
+    <form onsubmit="return addProp(event)">
+      <div class="form-sec">
+        <div class="form-sec-title">Basics</div>
+        <div class="grid grid-2">
+          <div>
+            <label for="hName">Property name</label>
+            <input id="hName" placeholder="e.g. Cosy Cottage" required>
+          </div>
+          <div>
+            <label for="hDesc">Description</label>
+            <input id="hDesc" placeholder="Shown to students">
+          </div>
+        </div>
+        <div class="grid grid-3">
+          <div>
+            <label for="hPrice">Price ($)</label>
+            <input id="hPrice" type="number" min="0" step="0.01" required>
+          </div>
+          <div>
+            <label for="hComfort">Comfort (1–5 stars)</label>
+            <input id="hComfort" type="number" min="1" max="5" step="1" value="3" required>
+          </div>
+          <div>
+            <label for="hQuantity">Quantity for sale</label>
+            <input id="hQuantity" type="number" min="1" step="1" value="1" required>
+          </div>
+        </div>
+        <label for="hLivingBonus">Living-in bonus (stars, 0 = none)</label>
+        <input id="hLivingBonus" type="number" min="0" step="1" value="1" style="max-width:200px;">
+        <span class="muted-small" id="pLivingBonus">Extra lifestyle stars the owner gets on top of the comfort rating while they live in it instead of renting it out (multiplied by the class's points-per-star setting).</span>
+      </div>
+
+      <div class="form-sec">
+        <div class="form-sec-title">Financing</div>
+        <div class="grid grid-2">
+          <div>
+            <label for="hMortgage">Mortgage length (weeks)</label>
+            <input id="hMortgage" type="number" min="0" step="1" value="0">
+          </div>
+          <div>
+            <label for="hMortgageRate">Interest (% per week)</label>
+            <input id="hMortgageRate" type="number" min="0" step="0.1" value="0">
+          </div>
+        </div>
+        <span class="muted-small">0 weeks = cash purchase only. 0% interest = interest-free.</span>
+      </div>
+
+      <div class="form-sec">
+        <div class="form-sec-title">Renting out</div>
+        <div class="grid grid-2">
+          <div>
+            <label for="hRent">Rent income per week ($)</label>
+            <input id="hRent" type="number" min="0" step="0.01" value="0">
+          </div>
+          <div>
+            <label for="hRentDay">Rent paid on</label>
+            <select id="hRentDay">
+              <option value="Mon">Monday</option>
+              <option value="Tue">Tuesday</option>
+              <option value="Wed">Wednesday</option>
+              <option value="Thu">Thursday</option>
+              <option value="Fri" selected>Friday</option>
+              <option value="Sat">Saturday</option>
+              <option value="Sun">Sunday</option>
+            </select>
+          </div>
+        </div>
+        <span class="muted-small">0 = this property can't be rented out.</span>
+      </div>
+
+      <div id="addMsg"></div>
+      <div class="p-modal-foot">
+        <button class="btn gold" type="submit" id="addBtn">Add property</button>
+        <button type="button" class="btn secondary" onclick="closePropModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="npcModal" class="anw-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="hAddNpc" onclick="if(event.target===this)closeNpcModal()">
+  <div class="anw-modal-card p-modal">
+    <div class="p-modal-head">
+      <h2 id="hAddNpc">Add a school rental</h2>
+      <button type="button" class="btn small secondary" onclick="closeNpcModal()">Close</button>
+    </div>
+    <form onsubmit="return addNpcProp(event)">
+      <div class="form-sec">
+        <div class="form-sec-title">Basics</div>
+        <div class="grid grid-2">
+          <div>
+            <label for="npcName">Property name</label>
+            <input id="npcName" placeholder="e.g. Riverside Dorms" required>
+          </div>
+          <div>
+            <label for="npcQuantity">Units available</label>
+            <input id="npcQuantity" type="number" min="1" step="1" value="1" required>
+          </div>
+        </div>
+        <label for="npcDesc">Description</label>
+        <input id="npcDesc" placeholder="Shown to students">
+      </div>
+
+      <div class="form-sec">
+        <div class="form-sec-title">Terms</div>
+        <div class="grid grid-3">
+          <div>
+            <label for="npcRent">Rent per week ($)</label>
+            <input id="npcRent" type="number" min="0" step="0.01" required>
+          </div>
+          <div>
+            <label for="npcRentDay">Rent paid on</label>
+            <select id="npcRentDay">
+              <option value="Mon">Monday</option>
+              <option value="Tue">Tuesday</option>
+              <option value="Wed">Wednesday</option>
+              <option value="Thu">Thursday</option>
+              <option value="Fri" selected>Friday</option>
+              <option value="Sat">Saturday</option>
+              <option value="Sun">Sunday</option>
+            </select>
+          </div>
+          <div>
+            <label for="npcMinWeeks">Minimum lease (weeks)</label>
+            <input id="npcMinWeeks" type="number" min="1" step="1" value="1" required>
+          </div>
+        </div>
+        <label for="npcLifestylePoints">Lifestyle rating bonus (points)</label>
+        <input id="npcLifestylePoints" type="number" min="0" step="1" value="0" style="max-width:200px;">
+        <span class="muted-small" id="pNpcLifestylePoints">Added straight to a tenant's lifestyle score while they live here — set in points, not stars, so the property category's points-per-star weight doesn't affect it.</span>
+      </div>
+
+      <div id="addNpcMsg"></div>
+      <div class="p-modal-foot">
+        <button class="btn gold" type="submit" id="addNpcBtn">Add school rental</button>
+        <button type="button" class="btn secondary" onclick="closeNpcModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="pricingModal" class="anw-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pricingTitle" onclick="if(event.target===this)closePricingModal()">
+  <div class="anw-modal-card p-modal p-modal-sm">
+    <div class="p-modal-head">
+      <h2 id="pricingTitle">Pricing</h2>
+      <button type="button" class="btn small secondary" onclick="closePricingModal()">Close</button>
+    </div>
+    <div id="pricingBody"></div>
+  </div>
+</div>
 
 <footer class="site-footer">
   <div class="site-footer-brand">The 29 World</div>
@@ -485,6 +629,6 @@
 <script defer src="events-ui.js?v=b1bcab86"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="notifications.js?v=7b2c20a0"></script>
-<script defer src="property.js?v=0d6ad4e5"></script>
+<script defer src="property.js?v=9b626476"></script>
 </body>
 </html>

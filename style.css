@@ -674,10 +674,6 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
   box-shadow:var(--shadow-sm);
 }
 .company-card{border:1.5px solid var(--line);border-radius:var(--r-4);padding:16px;position:relative;overflow:hidden;}
-.company-card::before{
-  content:"";position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;
-  background:radial-gradient(circle,rgba(232,184,75,0.14),transparent 70%);
-}
 .company-card h4{margin-bottom:2px;display:flex;align-items:center;gap:8px;}
 .company-card h4 .icon{color:var(--navy-700);width:20px;height:20px;}
 .progress-bar{height:7px;background:var(--line);border-radius:5px;overflow:hidden;margin-top:10px;}
@@ -1967,7 +1963,6 @@ html.dark-mode .stat.lilac .muted-small{color:#fff;}
    throws a bright halo against the dark surface. ---------------- */
 html.dark-mode .brand .coin, html.dark-mode .brand .icon-slot{filter:none;}
 html.dark-mode .auth-logo .coin{filter:none;}
-html.dark-mode .company-card::before{background:none;}
 
 html.dark-mode .anw-balance-widget{
   background:linear-gradient(135deg,var(--gold-dim),var(--gold-dark-dim));
