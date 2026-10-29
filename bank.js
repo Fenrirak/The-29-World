@@ -335,9 +335,9 @@ async function sendMoney(e) {
     // teacher's side (their balance is unlimited), so this goes through the
     // same balance-adjustment path as the "Give a bonus or fine" tool
     // instead of the peer-to-peer transfer path.
-    const sendOne = username => (IS_TEACHER && amount < 0)
+    const sendOne = (username, silent) => (IS_TEACHER && amount < 0)
       ? teacherAdjust(CURRENT.username, username, amount, note)
-      : transferMoney(CURRENT.username, username, amount, note);
+      : transferMoney(CURRENT.username, username, amount, note, silent ? { silent: true } : undefined);
 
     if (IS_TEACHER && to === AUTOPAY_ALL_STUDENTS) {
       const targets = ALL_STUDENTS.slice();
@@ -347,10 +347,15 @@ async function sendMoney(e) {
       // Dashboard): every payment also writes to the class's activity log,
       // and firing them all at once risks one write clobbering another.
       let okCount = 0;
-      const failedNames = [];
+      const failedNames = [], paidUsers = [];
       for (const s of targets) {
-        const r = await sendOne(s.username);
-        if (r.ok) okCount++; else failedNames.push(s.name || s.username);
+        const r = await sendOne(s.username, true);
+        if (r.ok) { okCount++; paidUsers.push(s.username); } else failedNames.push(s.name || s.username);
+      }
+      // One notice for everyone who was paid (not one class write per student). Deductions already pop up via teacherAdjust.
+      if (amount > 0 && paidUsers.length) {
+        await t29NotifyStudents(CURRENT.classCode, { to: paidUsers, icon: "coin", tone: "mint",
+          title: `Your teacher sent you ${fmtMoney(amount)}`, body: note ? `Note: ${note}` : "It was added to your balance.", href: "bank.html" });
       }
       const verb = amount >= 0 ? "Sent" : "Deducted";
       if (okCount === targets.length) {

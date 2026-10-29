@@ -37,12 +37,15 @@ async function addJob(classCode, title, tiers, autoPromoteWeeks) {
 }
 async function updateJob(classCode, jobId, updates) {
   const classRef = classesCol().doc(classCode);
+  let before = null, after = null; // what the teacher changed, for the job holders' notification
   await fdb.runTransaction(async (t) => {
+    before = null; after = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
     const job = cls.jobs.find(j => j.id === jobId);
     if (!job) return;
+    before = { title: job.title, autoPromoteWeeks: job.autoPromoteWeeks || 0, tiers: (job.tiers || []).map(x => ({ id: x.id, name: x.name, wage: x.wage })) };
     // Same sanitizing as addJob — editing a job is the same write path and
     // shouldn't be a way to sneak back in what creating one blocks.
     job.title = sanitizeUserText(updates.title, 60);
@@ -54,34 +57,65 @@ async function updateJob(classCode, jobId, updates) {
     }
     job.autoPromoteWeeks = Math.max(0, Number(updates.autoPromoteWeeks) || 0);
     t.update(classRef, { jobs: cls.jobs });
+    after = { title: job.title, autoPromoteWeeks: job.autoPromoteWeeks, tiers: (job.tiers || []).map(x => ({ id: x.id, name: x.name, wage: x.wage })) };
   });
+  if (before && after) {
+    const holders = (await getClassStudents(classCode).catch(() => [])).filter(s => s && s.role !== "teacher" && s.jobId === jobId);
+    const m = fmtMoney, out = [];
+    holders.forEach(s => {
+      const parts = [];
+      if (after.title !== before.title) parts.push(`job renamed from ${before.title} to ${after.title}`);
+      const myId = s.jobTierId || (before.tiers[0] && before.tiers[0].id);
+      const oldT = before.tiers.find(x => x.id === myId), newT = after.tiers.find(x => x.id === myId);
+      if (oldT && !newT) parts.push(`your tier (${oldT.name}) was removed`);
+      else if (oldT && newT) {
+        if (oldT.name !== newT.name) parts.push(`your tier is now called ${newT.name}`);
+        if (Number(oldT.wage) !== Number(newT.wage)) parts.push(`your wage ${m(oldT.wage)} → ${m(newT.wage)}`);
+      }
+      if (after.autoPromoteWeeks !== before.autoPromoteWeeks) {
+        parts.push(after.autoPromoteWeeks > 0 ? `you are now offered a promotion every ${after.autoPromoteWeeks} ${after.autoPromoteWeeks === 1 ? "week" : "weeks"}` : "automatic promotions were turned off");
+      }
+      if (!parts.length) return;
+      const wageUp = oldT && newT && Number(newT.wage) > Number(oldT.wage), wageDown = oldT && newT && Number(newT.wage) < Number(oldT.wage);
+      out.push({ to: s.username, icon: "briefcase", tone: wageUp ? "mint" : (wageDown ? "coral" : "gold"),
+        title: `Your teacher changed your job: ${after.title}`, body: parts.join("; ") + ".", href: "jobs.html" });
+    });
+    await t29NotifyStudents(classCode, out);
+  }
 }
 async function removeJob(classCode, jobId) {
   const classRef = classesCol().doc(classCode);
-  let affectedStudents = [];
+  let affectedStudents = [], removedTitle = "";
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
+    const removed = cls.jobs.find(j => j.id === jobId);
     cls.jobs = cls.jobs.filter(j => j.id !== jobId);
     cls.jobApplications = (cls.jobApplications || []).filter(a => a.jobId !== jobId);
     t.update(classRef, { jobs: cls.jobs, jobApplications: cls.jobApplications });
     affectedStudents = cls.students;
+    removedTitle = removed ? removed.title : "";
   });
   // unassign anyone with this job (separate user docs)
   const students = await Promise.all(affectedStudents.map(getUser));
-  await Promise.all(students.filter(s => s && s.jobId === jobId).map(s =>
+  const lost = students.filter(s => s && s.jobId === jobId);
+  await Promise.all(lost.map(s =>
     usersCol().doc(s.username).update({ jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null })
   ));
+  if (lost.length) {
+    await t29NotifyStudents(classCode, { to: lost.map(s => s.username), icon: "briefcase", tone: "coral",
+      title: `Your teacher removed the job ${removedTitle || "you had"}`, body: "You don't have a job right now. Check the Jobs page to apply for another one.", href: "jobs.html" });
+  }
 }
 async function assignJob(studentUser, jobId, classCode) {
-  let tierId = null;
-  if (jobId && classCode) {
-    const cls = await getClass(classCode);
-    if (cls) {
-      const job = (cls.jobs || []).find(j => j.id === jobId);
-      if (job && job.tiers && job.tiers.length) tierId = job.tiers[0].id;
-    }
+  let tierId = null, job = null;
+  const stu = await getUser(studentUser).catch(() => null);
+  const cc = classCode || (stu && stu.classCode);
+  const cls = cc ? await getClass(cc).catch(() => null) : null;
+  if (jobId && cls) {
+    job = (cls.jobs || []).find(j => j.id === jobId) || null;
+    if (job && job.tiers && job.tiers.length) tierId = job.tiers[0].id;
   }
   await usersCol().doc(studentUser).update({
     jobId: jobId || null,
@@ -89,6 +123,18 @@ async function assignJob(studentUser, jobId, classCode) {
     jobTierSince: tierId ? nzDateKey() : null,
     pendingPromotion: null
   });
+  if (cc && stu && (stu.jobId || null) !== (jobId || null)) {
+    if (jobId) {
+      const tier = job && job.tiers && job.tiers[0];
+      await t29NotifyStudents(cc, { to: studentUser, icon: "briefcase", tone: "mint",
+        title: `Your teacher gave you a job: ${job ? job.title : "a new job"}`,
+        body: tier ? `You start as ${tier.name}, earning ${fmtMoney(tier.wage)} per pay.` : "Check the Jobs page for the details.", href: "jobs.html" });
+    } else {
+      const oldJob = ((cls && cls.jobs) || []).find(j => j.id === stu.jobId);
+      await t29NotifyStudents(cc, { to: studentUser, icon: "briefcase", tone: "coral",
+        title: "Your teacher took you off your job", body: oldJob ? `You no longer work as ${oldJob.title}.` : "You no longer have a job.", href: "jobs.html" });
+    }
+  }
 }
 
 /* ---------------- Job applications ---------------- */
@@ -114,10 +160,19 @@ async function approveApplication(classCode, appId) {
     jobTierSince: tierId ? nzDateKey() : null,
     pendingPromotion: null
   });
+  if (studentUser) {
+    const cls = await getClass(classCode).catch(() => null);
+    const job = cls && (cls.jobs || []).find(j => j.id === jobId);
+    await t29NotifyStudents(classCode, { to: studentUser, icon: "briefcase", tone: "mint",
+      title: `Your teacher approved your job application${job ? `: ${job.title}` : ""}`,
+      body: job && job.tiers && job.tiers[0] ? `You start as ${job.tiers[0].name}, earning ${fmtMoney(job.tiers[0].wage)} per pay.` : "You got the job.", href: "jobs.html" });
+  }
 }
 async function declineApplication(classCode, appId) {
   const classRef = classesCol().doc(classCode);
+  let declined = null;
   await fdb.runTransaction(async (t) => {
+    declined = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
@@ -125,7 +180,13 @@ async function declineApplication(classCode, appId) {
     if (!app) return;
     app.status = "declined";
     t.update(classRef, { jobApplications: cls.jobApplications });
+    declined = { user: app.studentUser, jobId: app.jobId, title: ((cls.jobs || []).find(j => j.id === app.jobId) || {}).title };
   });
+  if (declined) {
+    await t29NotifyStudents(classCode, { to: declined.user, icon: "briefcase", tone: "coral",
+      title: `Your teacher declined your job application${declined.title ? `: ${declined.title}` : ""}`,
+      body: "You can apply for a different job on the Jobs page.", href: "jobs.html" });
+  }
 }
 
 
@@ -161,6 +222,10 @@ async function setStudentJobTier(classCode, username, tierId) {
     return { ok: true, tier: newTier, isPromotion: true, offered: true };
   }
   await usersCol().doc(username).update({ jobTierId: tierId, jobTierSince: nzDateKey() });
+  const oldTier = job.tiers[effectiveCurIdx];
+  await t29NotifyStudents(classCode, { to: username, icon: "briefcase", tone: "coral",
+    title: `Your teacher moved you down to ${newTier.name} (${job.title})`,
+    body: oldTier ? `Your wage is now ${fmtMoney(newTier.wage)} (was ${fmtMoney(oldTier.wage)}).` : `Your wage is now ${fmtMoney(newTier.wage)}.`, href: "jobs.html" });
   return { ok: true, tier: newTier, isPromotion: false };
 }
 
@@ -265,7 +330,14 @@ async function respondToPromotion(username, accept) {
 // Teacher revokes an outstanding promotion offer before the student has
 // responded to it. No side effects beyond removing the offer itself.
 async function cancelPendingPromotion(username) {
+  const stu = await getUser(username).catch(() => null);
+  const promo = stu && stu.pendingPromotion;
   await usersCol().doc(username).update({ pendingPromotion: null });
+  if (stu && stu.classCode && promo) {
+    await t29NotifyStudents(stu.classCode, { to: username, icon: "briefcase", tone: "coral",
+      title: "Your teacher withdrew your promotion offer",
+      body: `The offer to become ${promo.tierName || "the next tier"}${promo.jobTitle ? ` (${promo.jobTitle})` : ""} is no longer available.`, href: "jobs.html" });
+  }
   return { ok: true };
 }
 
@@ -302,22 +374,34 @@ async function addVehicle(classCode, v) {
 }
 async function removeVehicle(classCode, vehId) {
   const classRef = classesCol().doc(classCode);
+  let gone = null;
   await fdb.runTransaction(async (t) => {
+    gone = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    const target = cls.vehicles.find(v => v.id === vehId);
+    if (target) gone = { name: target.name, owners: (target.owners || []).slice() };
     cls.vehicles = cls.vehicles.filter(v => v.id !== vehId);
     t.update(classRef, { vehicles: cls.vehicles });
   });
+  if (gone && gone.owners.length) {
+    await t29NotifyStudents(classCode, { to: gone.owners, icon: "car", tone: "coral",
+      title: `Your teacher removed the vehicle ${gone.name}`, body: "It is no longer in your belongings. Check with your teacher if you expected a refund.", href: "transport.html" });
+  }
 }
 async function updateVehicle(classCode, vehId, updates) {
   const classRef = classesCol().doc(classCode);
+  let before = null, after = null; // what the teacher changed, for the owners' notification
   await fdb.runTransaction(async (t) => {
+    before = null; after = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const veh = cls.vehicles.find(v => v.id === vehId);
     if (!veh) return;
+    before = { name: veh.name, price: veh.price, comfort: veh.comfort, drivePayout: veh.drivePayout || 0,
+               weeklyExpense: veh.weeklyExpense || 0, offset: veh.publicTransportOffsetPct || 0, owners: (veh.owners || []).slice() };
     veh.name = updates.name;
     veh.price = Math.max(0, Number(updates.price) || 0);
     veh.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
@@ -328,7 +412,22 @@ async function updateVehicle(classCode, vehId, updates) {
     veh.publicTransportOffsetPct = Math.max(0, Math.min(100, Number(updates.publicTransportOffsetPct) || 0));
     veh.stockLimit = (updates.stockLimit === "" || updates.stockLimit === undefined || updates.stockLimit === null) ? null : Math.max(0, Math.floor(Number(updates.stockLimit)));
     t.update(classRef, { vehicles: cls.vehicles });
+    after = { name: veh.name, price: veh.price, comfort: veh.comfort, drivePayout: veh.drivePayout || 0,
+              weeklyExpense: veh.weeklyExpense || 0, offset: veh.publicTransportOffsetPct || 0 };
   });
+  if (before && after && before.owners.length) {
+    const m = fmtMoney, parts = [];
+    if (after.name !== before.name) parts.push(`renamed to ${after.name}`);
+    if (Number(after.price) !== Number(before.price)) parts.push(`price ${m(before.price)} → ${m(after.price)}`);
+    if (Number(after.comfort) !== Number(before.comfort)) parts.push(`comfort ${before.comfort} → ${after.comfort} stars`);
+    if (after.weeklyExpense !== before.weeklyExpense) parts.push(`weekly running cost ${m(before.weeklyExpense)} → ${m(after.weeklyExpense)}`);
+    if (after.drivePayout !== before.drivePayout) parts.push(`pay per drive ${m(before.drivePayout)} → ${m(after.drivePayout)}`);
+    if (after.offset !== before.offset) parts.push(`public transport offset ${before.offset}% → ${after.offset}%`);
+    if (parts.length) {
+      await t29NotifyStudents(classCode, { to: before.owners, icon: "car", tone: "gold",
+        title: `Your teacher changed your vehicle: ${before.name}`, body: parts.join("; ") + ".", href: "transport.html" });
+    }
+  }
 }
 async function buyVehicle(username, classCode, vehId, opts) {
   const userRef = usersCol().doc(username);
@@ -457,7 +556,12 @@ async function buyTruckLicence(username, classCode, opts) {
 // Teacher control to revoke a student's truck licence (e.g. from the
 // profile panel) — no refund, mirrors the manual nature of repossession.
 async function revokeTruckLicence(username) {
+  const stu = await getUser(username).catch(() => null);
   await usersCol().doc(username).update({ truckLicence: false });
+  if (stu && stu.classCode && stu.truckLicence) {
+    await t29NotifyStudents(stu.classCode, { to: username, icon: "car", tone: "coral",
+      title: "Your teacher took away your truck licence", body: "You can't drive trucks until you get a licence again.", href: "transport.html" });
+  }
   return true;
 }
 
@@ -473,7 +577,20 @@ async function setSellBackRates(classCode, rates) {
     pct = Math.max(0, Math.min(100, pct));
     clean[type] = Math.round(pct) / 100;
   });
+  const oldCls = await getClass(classCode).catch(() => null);
+  const oldRates = (oldCls && oldCls.sellBackRates) || {};
   await classesCol().doc(classCode).update({ sellBackRates: clean });
+  const out = [];
+  VEHICLE_TYPES.forEach(type => {
+    const was = oldRates[type] !== undefined ? oldRates[type] : 0.85;
+    if (Math.round(was * 100) === Math.round(clean[type] * 100)) return;
+    const owners = [];
+    ((oldCls && oldCls.vehicles) || []).filter(v => normalizeVehicleType(v.type) === type).forEach(v => (v.owners || []).forEach(u => owners.push(u)));
+    out.push({ to: owners, icon: "car", tone: clean[type] > was ? "mint" : "coral",
+      title: `Your teacher changed the sell-back rate for ${type === "bike" ? "bikes" : type + "s"}`,
+      body: `Selling one back now returns ${Math.round(clean[type] * 100)}% of its price (was ${Math.round(was * 100)}%).`, href: "transport.html" });
+  });
+  await t29NotifyStudents(classCode, out);
   return clean;
 }
 
@@ -551,7 +668,14 @@ async function checkinTruckDrive(username, classCode, vehId) {
 // life event with its own fee override (see setPublicTransportFeeOverrides).
 async function setPublicTransportFee(classCode, amount, description) {
   const clean = { amount: Math.max(0, Number(amount) || 0), description: (description || "").trim() };
+  const oldCls = await getClass(classCode).catch(() => null);
+  const oldAmt = Number(oldCls && oldCls.publicTransportFee && oldCls.publicTransportFee.amount) || 0;
   await classesCol().doc(classCode).update({ publicTransportFee: clean });
+  if (oldAmt !== clean.amount) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "car", tone: clean.amount > oldAmt ? "coral" : "mint",
+      title: "Your teacher changed the weekly public transport fee",
+      body: `It is now ${fmtMoney(clean.amount)} a week (was ${fmtMoney(oldAmt)}).`, href: "transport.html" });
+  }
   return clean;
 }
 // Teacher control for per-life-event public transport fees: `overrides` is
@@ -572,7 +696,17 @@ async function setPublicTransportFeeOverrides(classCode, overrides) {
       clean[id] = Math.round(n * 100) / 100;
     }
   });
+  const oldCls = await getClass(classCode).catch(() => null);
+  const oldOv = (oldCls && oldCls.publicTransportFeeOverrides) || {};
   await classesCol().doc(classCode).update({ publicTransportFeeOverrides: clean });
+  const ids = Array.from(new Set(Object.keys(oldOv).concat(Object.keys(clean)))).filter(id => oldOv[id] !== clean[id]);
+  if (ids.length) {
+    const flat = Number(oldCls && oldCls.publicTransportFee && oldCls.publicTransportFee.amount) || 0;
+    const affected = await t29StudentsWhere(classCode, s => (s.lifeItems || []).some(it => ids.includes(it.templateId)));
+    await t29NotifyStudents(classCode, { to: affected, icon: "car", tone: "gold",
+      title: "Your teacher changed your public transport fee",
+      body: `The fee that goes with one of your life events was changed${flat ? ` (the usual fee is ${fmtMoney(flat)} a week)` : ""}. Check the Transport page for what you owe.`, href: "transport.html" });
+  }
   return clean;
 }
 // Which of a student's currently-held life events (if any) carries a
@@ -600,7 +734,13 @@ function currentLifeTransportFee(cls, user) {
 }
 // Class-wide day transport expenses are payable on (like payDay/mortgageDay).
 async function setTransportDay(classCode, day) {
-  await classesCol().doc(classCode).update({ transportDay: DAY_NAMES.includes(day) ? day : "Fri" });
+  const oldCls = await getClass(classCode).catch(() => null);
+  const clean = DAY_NAMES.includes(day) ? day : "Fri";
+  await classesCol().doc(classCode).update({ transportDay: clean });
+  if (oldCls && oldCls.transportDay && oldCls.transportDay !== clean) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "car", tone: "gold",
+      title: "Your teacher changed the transport payment day", body: `Transport expenses are now paid on ${clean} (was ${oldCls.transportDay}).`, href: "transport.html" });
+  }
 }
 
 // A student's comfiest owned vehicle — the only one whose weeklyExpense
@@ -739,6 +879,10 @@ async function resolveTransportOverdue(classCode, username) {
   } catch (e) {
     if (e.message === "NOT_OVERDUE") return { ok: false, error: "This student doesn't have an overdue transport payment." };
     return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  if (resolved) {
+    await t29NotifyStudents(classCode, { to: username, icon: "car", tone: "mint",
+      title: "Your teacher cleared your overdue transport payment", body: "No money was taken from you for that payment.", href: "transport.html" });
   }
   return { ok: resolved };
 }
@@ -1133,7 +1277,9 @@ function writeOffText(o) {
 
 async function addInsurancePlan(classCode, plan) {
   const classRef = classesCol().doc(classCode);
+  let added = null;
   await fdb.runTransaction(async (t) => {
+    added = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
@@ -1149,21 +1295,39 @@ async function addInsurancePlan(classCode, plan) {
       active: true
     });
     t.update(classRef, { insurancePlans: cls.insurancePlans });
+    added = cls.insurancePlans[cls.insurancePlans.length - 1];
   });
+  if (added) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "shield", tone: "navy",
+      title: `Your teacher added a new insurance plan: ${added.name}`,
+      body: `${fmtMoney(added.price)} per week, with a ${fmtMoney(added.excess)} excess. See it on the Insurance page.`, href: "insurance.html" });
+  }
 }
 async function removeInsurancePlan(classCode, planId) {
   const classRef = classesCol().doc(classCode);
+  let gone = null;
   await fdb.runTransaction(async (t) => {
+    gone = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    const target = cls.insurancePlans.find(p => p.id === planId);
+    if (target) gone = target.name;
     cls.insurancePlans = cls.insurancePlans.filter(p => p.id !== planId);
     t.update(classRef, { insurancePlans: cls.insurancePlans });
   });
+  if (gone) {
+    const subs = await t29StudentsWhere(classCode, s => (s.insurance || []).includes(planId));
+    await t29NotifyStudents(classCode, { to: subs, icon: "shield", tone: "coral",
+      title: `Your teacher removed the insurance plan ${gone}`,
+      body: "You are no longer covered by it, so you may want to pick another plan.", href: "insurance.html" });
+  }
 }
 async function editInsurancePlan(classCode, planId, plan) {
   const classRef = classesCol().doc(classCode);
+  let before = null, after = null; // what the teacher changed, for the subscribers' notification
   await fdb.runTransaction(async (t) => {
+    before = null; after = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
@@ -1182,7 +1346,24 @@ async function editInsurancePlan(classCode, planId, plan) {
       signupFee: Math.max(0, Number(plan.signupFee) || 0)
     };
     t.update(classRef, { insurancePlans: cls.insurancePlans });
+    before = existing; after = cls.insurancePlans[idx];
   });
+  if (before && after) {
+    const m = fmtMoney, parts = [];
+    if (after.name !== before.name) parts.push(`renamed to ${after.name}`);
+    if ((Number(before.price) || 0) !== after.price) parts.push(`price ${m(before.price || 0)} → ${m(after.price)} per week`);
+    if ((Number(before.excess) || 0) !== after.excess) parts.push(`excess ${m(before.excess || 0)} → ${m(after.excess)}`);
+    if (before.coverage !== after.coverage || before.insType !== after.insType) parts.push(`what it covers changed (${insuranceTypeLabel(after.coverage, after.insType) || after.coverage})`);
+    if ((Number(before.stars) || 0) !== after.stars) parts.push(`lifestyle stars ${before.stars || 0} → ${after.stars}`);
+    if ((Number(before.signupFee) || 0) !== after.signupFee) parts.push(`sign-up fee ${m(before.signupFee || 0)} → ${m(after.signupFee)}`);
+    if ((before.description || "") !== after.description) parts.push("its description changed");
+    if (parts.length) {
+      const subs = await t29StudentsWhere(classCode, s => (s.insurance || []).includes(planId));
+      const priceUp = after.price > (Number(before.price) || 0);
+      await t29NotifyStudents(classCode, { to: subs, icon: "shield", tone: after.price === (Number(before.price) || 0) ? "gold" : (priceUp ? "coral" : "mint"),
+        title: `Your teacher changed your insurance plan: ${before.name}`, body: parts.join("; ") + ".", href: "insurance.html" });
+    }
+  }
 }
 // Renames a company - every plan under it carries the name, so all of
 // them are updated together.
@@ -1190,24 +1371,41 @@ async function renameInsuranceCompany(classCode, companyId, name) {
   const clean = String(name || "").trim().slice(0, 60);
   if (!clean) return;
   const classRef = classesCol().doc(classCode);
+  let oldName = "", ids = [];
   await fdb.runTransaction(async (t) => {
+    oldName = ""; ids = []; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
-    cls.insurancePlans.forEach(p => { if (p.companyId === companyId) p.company = clean; });
+    cls.insurancePlans.forEach(p => { if (p.companyId === companyId) { if (p.company !== clean) { oldName = p.company; ids.push(p.id); } p.company = clean; } });
     t.update(classRef, { insurancePlans: cls.insurancePlans });
   });
+  if (ids.length) {
+    const subs = await t29StudentsWhere(classCode, s => (s.insurance || []).some(id => ids.includes(id)));
+    await t29NotifyStudents(classCode, { to: subs, icon: "shield", tone: "gold",
+      title: "Your teacher renamed your insurance company", body: `${oldName || "It"} is now called ${clean}.`, href: "insurance.html" });
+  }
 }
 // Removes a company and every plan under it (same as removing each plan).
 async function removeInsuranceCompany(classCode, companyId) {
   const classRef = classesCol().doc(classCode);
+  let removed = [];
   await fdb.runTransaction(async (t) => {
+    removed = []; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    removed = cls.insurancePlans.filter(p => p.companyId === companyId).map(p => ({ id: p.id, name: p.name, company: p.company }));
     cls.insurancePlans = cls.insurancePlans.filter(p => p.companyId !== companyId);
     t.update(classRef, { insurancePlans: cls.insurancePlans });
   });
+  if (removed.length) {
+    const ids = removed.map(p => p.id);
+    const subs = await t29StudentsWhere(classCode, s => (s.insurance || []).some(id => ids.includes(id)));
+    await t29NotifyStudents(classCode, { to: subs, icon: "shield", tone: "coral",
+      title: `Your teacher removed the insurance company ${removed[0].company || ""}`.trim(),
+      body: "Its plans are gone, so you are no longer covered by them. You may want to pick another plan.", href: "insurance.html" });
+  }
 }
 
 /* ===================== Side hustles =====================
@@ -1237,31 +1435,60 @@ async function addSideHustle(classCode, hustle) {
     });
     t.update(classRef, { sideHustles: cls.sideHustles });
   });
+  await t29NotifyStudents(classCode, { to: "all", icon: "briefcase", tone: "navy",
+    title: `Your teacher added a new side hustle: ${hustle.name}`, body: "Have a look on your dashboard to see what it pays.", href: "student.html" });
 }
 async function editSideHustle(classCode, hustleId, hustle) {
   const classRef = classesCol().doc(classCode);
+  let before = null, after = null; // what the teacher changed, for the side hustlers' notification
   await fdb.runTransaction(async (t) => {
+    before = null; after = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const idx = cls.sideHustles.findIndex(h => h.id === hustleId);
     if (idx === -1) return;
+    const prevH = cls.sideHustles[idx];
     cls.sideHustles[idx] = {
       ...cls.sideHustles[idx],
       name: hustle.name, description: hustle.description || "", payouts: cleanHustlePayouts(hustle.payouts)
     };
     t.update(classRef, { sideHustles: cls.sideHustles });
+    before = prevH; after = cls.sideHustles[idx];
   });
+  if (before && after) {
+    const doers = (await getClassStudents(classCode).catch(() => [])).filter(s => s && s.role !== "teacher" && s.sideHustle && s.sideHustle.hustleId === hustleId);
+    const out = [];
+    doers.forEach(s => {
+      const parts = [], hr = s.sideHustle.checkinHour;
+      if (after.name !== before.name) parts.push(`renamed to ${after.name}`);
+      const a = Number((before.payouts || {})[hr]) || 0, b = Number((after.payouts || {})[hr]) || 0;
+      if (a !== b) parts.push(`your ${hourLabel(hr)} check-in pays ${fmtMoney(b)} (was ${fmtMoney(a)})`);
+      if (!parts.length) return;
+      out.push({ to: s.username, icon: "briefcase", tone: b > a ? "mint" : (b < a ? "coral" : "gold"),
+        title: `Your teacher changed your side hustle: ${before.name}`, body: parts.join("; ") + ".", href: "student.html" });
+    });
+    await t29NotifyStudents(classCode, out);
+  }
 }
 async function removeSideHustle(classCode, hustleId) {
   const classRef = classesCol().doc(classCode);
+  let gone = null;
   await fdb.runTransaction(async (t) => {
+    gone = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    const target = cls.sideHustles.find(h => h.id === hustleId);
+    if (target) gone = target.name;
     cls.sideHustles = cls.sideHustles.filter(h => h.id !== hustleId);
     t.update(classRef, { sideHustles: cls.sideHustles });
   });
+  if (gone) {
+    const doers = await t29StudentsWhere(classCode, s => s.sideHustle && s.sideHustle.hustleId === hustleId);
+    await t29NotifyStudents(classCode, { to: doers, icon: "briefcase", tone: "coral",
+      title: `Your teacher removed the side hustle ${gone}`, body: "You can't check in for it any more. Pick another side hustle from your dashboard.", href: "student.html" });
+  }
 }
 
 // Student picks (or changes) which hustle + hour they're committing to.
@@ -1333,6 +1560,11 @@ async function approveSideHustleChange(username, classCode) {
   const res = await setStudentSideHustle(username, classCode, req.hustleId, req.checkinHour);
   if (!res.ok) return res;
   await usersCol().doc(username).update({ sideHustleRequest: null });
+  const cls = await getClass(classCode).catch(() => null);
+  const hustle = cls && (cls.sideHustles || []).find(h => h.id === req.hustleId);
+  await t29NotifyStudents(classCode, { to: username, icon: "briefcase", tone: "mint",
+    title: "Your teacher approved your side hustle change",
+    body: `You now do ${hustle ? hustle.name : "your new side hustle"}, checking in at ${hourLabel(req.checkinHour)}.`, href: "student.html" });
   return { ok: true };
 }
 
@@ -1478,12 +1710,16 @@ async function addStoreItem(classCode, item) {
 }
 async function updateStoreItem(classCode, itemId, item) {
   const classRef = classesCol().doc(classCode);
+  let before = null, after = null; // what the teacher changed, for the owners' notification
   await fdb.runTransaction(async (t) => {
+    before = null; after = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const existing = cls.storeItems.find(i => i.id === itemId);
     if (!existing) return;
+    before = { name: existing.name, price: existing.price, stars: existing.stars || 0, effect: existing.effect || "",
+               description: existing.description || "", countsNetWorth: existing.countsNetWorth !== false };
     existing.name = item.name;
     existing.price = Math.max(0, Number(item.price) || 0);
     existing.description = item.description || "";
@@ -1499,7 +1735,24 @@ async function updateStoreItem(classCode, itemId, item) {
     existing.stars = Math.max(0, Math.min(5, Number(item.stars) || 0));
     existing.countsNetWorth = item.countsNetWorth !== false;
     t.update(classRef, { storeItems: cls.storeItems });
+    after = { name: existing.name, price: existing.price, stars: existing.stars || 0, effect: existing.effect || "",
+              description: existing.description || "", countsNetWorth: existing.countsNetWorth };
   });
+  if (before && after) {
+    const m = fmtMoney, parts = [];
+    if (after.name !== before.name) parts.push(`renamed to ${after.name}`);
+    if (after.price !== before.price) parts.push(`price ${m(before.price)} → ${m(after.price)}`);
+    if (after.stars !== before.stars) parts.push(`lifestyle stars ${before.stars} → ${after.stars}`);
+    if (after.effect !== before.effect) parts.push(after.effect ? `effect is now "${after.effect}"` : "its effect was removed");
+    if (after.countsNetWorth !== before.countsNetWorth) parts.push(after.countsNetWorth ? "it now counts towards your net worth" : "it no longer counts towards your net worth");
+    if (after.description !== before.description) parts.push("its description changed");
+    if (parts.length) {
+      const owners = await t29StudentsWhere(classCode, s => (s.storeItems || []).includes(itemId));
+      const priceUp = after.price > before.price;
+      await t29NotifyStudents(classCode, { to: owners, icon: "cart", tone: after.price === before.price ? "gold" : (priceUp ? "mint" : "coral"),
+        title: `Your teacher changed ${before.name}, which you own`, body: parts.join("; ") + ".", href: "store.html" });
+    }
+  }
 }
 // Removing an item from the store no longer deletes its record outright —
 // it's archived instead (hidden from the buyable list) so that students who
@@ -1507,7 +1760,9 @@ async function updateStoreItem(classCode, itemId, item) {
 // toward lifestyle rating / net worth as before.
 async function removeStoreItem(classCode, itemId) {
   const classRef = classesCol().doc(classCode);
+  let gone = null;
   await fdb.runTransaction(async (t) => {
+    gone = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
@@ -1515,7 +1770,14 @@ async function removeStoreItem(classCode, itemId) {
     if (!item) return;
     item.archived = true;
     t.update(classRef, { storeItems: cls.storeItems });
+    gone = item.name;
   });
+  if (gone) {
+    const owners = await t29StudentsWhere(classCode, s => (s.storeItems || []).includes(itemId));
+    await t29NotifyStudents(classCode, { to: owners, icon: "cart", tone: "gold",
+      title: `Your teacher removed ${gone} from the store`,
+      body: "You still own the one you bought, but nobody can buy it any more.", href: "store.html" });
+  }
 }
 // Saves the teacher's chosen display order. The array order of
 // cls.storeItems IS the order students see. Archived items keep their
@@ -1703,6 +1965,8 @@ async function giveFreeStoreItem(classCode, username, itemId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "store-gift", to: username, amount: 0, note: `Given for free by teacher: ${itemName}` });
+  await t29NotifyStudents(classCode, { to: username, icon: "cart", tone: "mint",
+    title: `Your teacher gave you ${itemName} for free`, body: "It is now in your belongings.", href: "store.html" });
   return { ok: true };
 }
 
@@ -1800,6 +2064,22 @@ async function sellStoreItemBulk(username, classCode, itemId, qty, rate) {
 // discounts, lifestyle points, tax cut) applies continuously either way.
 function normalizeLifeFrequency(f) {
   return f === "daily" ? "daily" : "weekly";
+}
+// Plain-English "A → B" list of what differs between two sets of life-event benefits.
+function lifeBenefitChangeParts(a, b) {
+  const labels = {
+    cashOnce: ["one-off cash", v => fmtMoney(v)], allowance: ["allowance", v => fmtMoney(v)],
+    incomePercent: ["income boost", v => v + "%"], discountStore: ["store discount", v => v + "%"],
+    discountTransport: ["transport discount", v => v + "%"], discountProperty: ["property discount", v => v + "%"],
+    discountInsurance: ["insurance discount", v => v + "%"], lifestylePoints: ["lifestyle points", v => String(v)],
+    taxCutPercent: ["wage tax cut", v => v + "%"]
+  };
+  const parts = [];
+  Object.keys(labels).forEach(k => {
+    const x = Number((a || {})[k]) || 0, y = Number((b || {})[k]) || 0;
+    if (x !== y) parts.push(`${labels[k][0]} ${labels[k][1](x)} → ${labels[k][1](y)}`);
+  });
+  return parts;
 }
 function sanitizeLifeBenefits(b) {
   b = b || {};
@@ -1906,15 +2186,16 @@ async function updateLifeItem(classCode, itemId, item) {
   const description = (item.description || "").trim();
   const benefits = sanitizeLifeBenefits(item.benefits);
   const frequency = normalizeLifeFrequency(item.frequency);
-  let found = false;
+  let found = false, before = null;
   await fdb.runTransaction(async (t) => {
-    found = false;
+    found = false; before = null;
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const existing = cls.lifeItems.find(i => i.id === itemId);
     if (!existing) return;
     found = true;
+    before = { name: existing.name, description: existing.description || "", benefits: existing.benefits || {}, frequency: existing.frequency || "weekly" };
     existing.name = name;
     existing.description = description;
     existing.benefits = benefits;
@@ -1951,6 +2232,18 @@ async function updateLifeItem(classCode, itemId, item) {
     } catch (e) {
       console.warn("updateLifeItem: couldn't update " + s.username + "'s copy", e);
       failed.push(s.name || s.username);
+    }
+  }
+  if (before) {
+    const parts = [];
+    if (name !== before.name) parts.push(`renamed to ${name}`);
+    parts.push(...lifeBenefitChangeParts(before.benefits, benefits));
+    if (frequency !== before.frequency) parts.push(`paid ${frequency} instead of ${before.frequency}`);
+    if (description !== before.description) parts.push("its description changed");
+    if (parts.length) {
+      const holders = students.filter(s => (s.lifeItems || []).some(it => it.templateId === itemId) && !failed.includes(s.name || s.username)).map(s => s.username);
+      await t29NotifyStudents(classCode, { to: holders, icon: "star", tone: "gold",
+        title: `Your teacher changed your life event: ${before.name}`, body: parts.join("; ") + ".", href: "life.html" });
     }
   }
   return { ok: true, updated, failed };
@@ -2005,6 +2298,12 @@ async function grantLifeItem(classCode, username, templateId, teacherUsername) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "life-grant", to: username, amount: cashOnce, note: `Life event: ${tmpl.name}` });
+  if (username !== teacherUsername) {
+    const gp = lifeBenefitChangeParts({}, sanitizeLifeBenefits(tmpl.benefits)).map(s => s.replace(/ 0%? → /, " ").replace(/^(.*?) \$0\.00 → /, "$1 "));
+    await t29NotifyStudents(classCode, { to: username, icon: "star", tone: "mint",
+      title: `Your teacher gave you a life event: ${tmpl.name}`,
+      body: (gp.length ? gp.join("; ") + "." : (tmpl.description || "Check the Life page for the details.")), href: "life.html" });
+  }
   return { ok: true };
 }
 async function revokeLifeItem(classCode, username, grantId) {
@@ -2021,6 +2320,8 @@ async function revokeLifeItem(classCode, username, grantId) {
   });
   if (itemName) {
     await logTxn(classCode, { type: "life-revoke", from: username, amount: 0, note: `Life event removed: ${itemName}` });
+    await t29NotifyStudents(classCode, { to: username, icon: "star", tone: "coral",
+      title: `Your teacher removed your life event: ${itemName}`, body: "Its benefits no longer apply to you.", href: "life.html" });
   }
   return { ok: true };
 }
@@ -3193,7 +3494,15 @@ function propertyLifestylePreview(cls, prop) {
 const TENANT_LIVING_BONUS = 5;
 
 async function saveLifestyleConfig(classCode, config) {
+  const oldCfg = (((await getClass(classCode).catch(() => null)) || {}).lifestyleConfig) || {};
   await classesCol().doc(classCode).update({ lifestyleConfig: config });
+  // The card/loan penalties have their own notices; anything else is a change to how the rating is worked out.
+  const strip = c => { const o = Object.assign({}, c || {}); delete o.creditCard; delete o.loan; return JSON.stringify(o); };
+  if (strip(oldCfg) !== strip(config)) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "star", tone: "gold",
+      title: "Your teacher changed how your lifestyle rating is worked out",
+      body: "Your rating may go up or down. Check the Life page to see where you are now.", href: "life.html" });
+  }
 }
 // thresholds: array of { min, max, label, minNetWorth, minPropertyComfort,
 // minTransportComfort }, sorted low to high, describing named bands for the
@@ -3221,7 +3530,13 @@ async function saveLifestyleThresholds(classCode, thresholds) {
       minTransportComfort: Math.max(0, Math.min(5, Number(t.minTransportComfort) || 0))
     }))
     .sort((a, b) => a.min - b.min);
+  const oldTh = ((await getClass(classCode).catch(() => null)) || {}).lifestyleThresholds || [];
   await classesCol().doc(classCode).update({ lifestyleThresholds: clean });
+  if (JSON.stringify(oldTh) !== JSON.stringify(clean)) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "star", tone: "gold",
+      title: "Your teacher changed the lifestyle levels",
+      body: clean.length ? `The levels are now: ${clean.map(x => `${x.label} from ${x.min}`).join(", ")}.` : "The lifestyle levels were cleared.", href: "life.html" });
+  }
 }
 // Does a student meet a given band's extra requirements? `stats` is
 // optional — omit it (or pass nothing) to check score-range membership
@@ -3573,11 +3888,21 @@ async function setLifestyleOverride(username, score) {
   const n = Number(score);
   if (!Number.isFinite(n)) return { ok: false, error: "Enter a number 0 or greater." };
   const clamped = Math.max(0, Math.round(n));
+  const stu = await getUser(username).catch(() => null);
   await usersCol().doc(username).update({ lifestyleOverride: clamped });
+  if (stu && stu.classCode) {
+    await t29NotifyStudents(stu.classCode, { to: username, icon: "star", tone: "gold",
+      title: `Your teacher set your lifestyle rating to ${clamped}`, body: "It stays at this number until your teacher removes it.", href: "life.html" });
+  }
   return { ok: true };
 }
 async function clearLifestyleOverride(username) {
+  const stu = await getUser(username).catch(() => null);
   await usersCol().doc(username).update({ lifestyleOverride: null });
+  if (stu && stu.classCode && stu.lifestyleOverride !== null && stu.lifestyleOverride !== undefined) {
+    await t29NotifyStudents(stu.classCode, { to: username, icon: "star", tone: "gold",
+      title: "Your teacher removed your fixed lifestyle rating", body: "Your rating is worked out from what you own and do again.", href: "life.html" });
+  }
   return { ok: true };
 }
 
@@ -3609,7 +3934,14 @@ async function saveLifestyleLock(classCode, threshold, modules) {
     threshold: Math.max(0, Math.round(Number(threshold) || 0)),
     modules: (modules || []).filter(k => LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === k))
   };
+  const oldLock = ((await getClass(classCode).catch(() => null)) || {}).lifestyleLock || { threshold: 0, modules: [] };
   await classesCol().doc(classCode).update({ lifestyleLock: clean });
+  if (oldLock.threshold !== clean.threshold || JSON.stringify((oldLock.modules || []).slice().sort()) !== JSON.stringify(clean.modules.slice().sort())) {
+    const names = clean.modules.map(k => (LIFESTYLE_LOCKABLE_MODULES.find(x => x.key === k) || {}).label || k);
+    await t29NotifyStudents(classCode, { to: "all", icon: "lock", tone: "gold",
+      title: "Your teacher changed the lifestyle locks",
+      body: clean.modules.length && clean.threshold > 0 ? `You need a lifestyle rating of ${clean.threshold} to use: ${names.join(", ")}.` : "No pages are locked by lifestyle rating any more.", href: "life.html" });
+  }
   return clean;
 }
 
@@ -3838,7 +4170,13 @@ function normalizeQuiz(q, existing) {
 }
 
 async function setQuizGateEnabled(classCode, enabled) {
+  const wasOn = !!((((await getClass(classCode).catch(() => null)) || {}).quizGate) || {}).enabled;
   await classesCol().doc(classCode).update({ quizGate: { enabled: !!enabled } });
+  if (wasOn !== !!enabled) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "lock", tone: "gold",
+      title: enabled ? "Your teacher turned quiz locks on" : "Your teacher turned quiz locks off",
+      body: enabled ? "Some pages may need a passed quiz before you can use them." : "Quizzes no longer lock any pages.", href: "quizzes.html" });
+  }
   return !!enabled;
 }
 
@@ -3973,13 +4311,22 @@ async function submitQuizAttempt(username, classCode, quizId, answers) {
 // again from scratch (which locks the module back up if the gate is on).
 async function resetQuizResult(username, quizId) {
   const userRef = usersCol().doc(username);
+  let hadResult = false, classCode = null;
   await fdb.runTransaction(async (t) => {
+    hadResult = false; classCode = null; // reset every attempt — this callback can be retried
     const snap = await t.get(userRef);
     if (!snap.exists) return;
     const user = snap.data();
     const results = user.quizResults || {};
+    hadResult = !!results[quizId]; classCode = user.classCode;
     delete results[quizId];
     t.update(userRef, { quizResults: results });
   });
+  if (hadResult && classCode) {
+    const cls = await getClass(classCode).catch(() => null);
+    const q = cls && (cls.quizzes || []).find(x => x.id === quizId);
+    await t29NotifyStudents(classCode, { to: username, icon: "star", tone: "gold",
+      title: `Your teacher reset your result for the quiz${q ? ": " + q.title : ""}`, body: "You can take it again.", href: "quizzes.html" });
+  }
   return { ok: true };
 }

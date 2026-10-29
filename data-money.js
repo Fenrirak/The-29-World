@@ -974,6 +974,23 @@ async function saveKiwiSaverSettings(classCode, settings) {
     retired: cur.retired, retiredAt: cur.retiredAt
   };
   await classesCol().doc(classCode).update({ kiwiSaver: next });
+  const parts = [], everyone = [];
+  if (cur.enabled !== next.enabled) everyone.push(next.enabled ? "KiwiSaver is now switched on" : "KiwiSaver is now switched off");
+  if (cur.govt !== next.govt) parts.push(next.govt ? "the government contribution is now on" : "the government contribution is now off");
+  KS_FUND_ORDER.forEach(k => {
+    const a = cur.funds[k], b = next.funds[k];
+    if (a.avg !== b.avg) parts.push(`${KS_FUNDS[k].name} fund average return ${a.avg}% → ${b.avg}%`);
+    if (a.swing !== b.swing) parts.push(`${KS_FUNDS[k].name} fund ups and downs ±${a.swing}% → ±${b.swing}%`);
+  });
+  if (cur.firstHomeWeeks !== next.firstHomeWeeks) parts.push(`first-home withdrawals need ${next.firstHomeWeeks} weeks (was ${cur.firstHomeWeeks})`);
+  if (cur.firstHomeKeep !== next.firstHomeKeep) parts.push(`${fmtMoney(next.firstHomeKeep)} must stay in KiwiSaver after a first-home withdrawal (was ${fmtMoney(cur.firstHomeKeep)})`);
+  const out = [];
+  if (everyone.length) out.push({ to: "all", icon: "kiwi", tone: "gold", title: "Your teacher changed KiwiSaver", body: everyone.join("; ") + ".", href: "kiwisaver.html" });
+  if (parts.length) {
+    const members = await t29StudentsWhere(classCode, s => { const k = kiwiSaverOf(s); return !!k && k.status === "member"; });
+    out.push({ to: members, icon: "kiwi", tone: "gold", title: "Your teacher changed your KiwiSaver settings", body: parts.join("; ") + ".", href: "kiwisaver.html" });
+  }
+  await t29NotifyStudents(classCode, out);
   return { ok: true };
 }
 
@@ -1007,6 +1024,8 @@ async function kiwiSaverHardshipRelease(classCode, username, amount, reason) {
   }
   const why = sanitizeUserText(reason || "", 120);
   await logTxn(classCode, { type: "kiwisaver-out", to: username, amount, note: "KiwiSaver hardship withdrawal" + (why ? " — " + why : "") });
+  await t29NotifyStudents(classCode, { to: username, icon: "kiwi", tone: "mint",
+    title: `Your teacher released ${fmtMoney(amount)} from your KiwiSaver`, body: "It was added to your cash balance." + (why ? ` Reason: ${why}` : ""), href: "kiwisaver.html" });
   return { ok: true };
 }
 
@@ -1029,6 +1048,8 @@ async function retireClass(classCode) {
     } catch (e) { failed.push(st.name || st.username); }
   });
   await classesCol().doc(classCode).update({ kiwiSaver: Object.assign({}, s, { retired: true, retiredAt: Date.now() }) });
+  await t29NotifyStudents(classCode, { to: students.filter(st => (st.jobId || st.pendingPromotion) && !failed.includes(st.name || st.username)).map(st => st.username), icon: "kiwi", tone: "gold",
+    title: "Your teacher retired the class", body: "Your job has ended for now, so your wages stop. Your KiwiSaver savings are still yours.", href: "kiwisaver.html" });
   return { ok: true, failed };
 }
 async function undoRetireClass(classCode) {
@@ -1036,7 +1057,7 @@ async function undoRetireClass(classCode) {
   if (!cls) return { ok: false, error: "Class not found." };
   const s = kiwiSaverSettings(cls);
   const students = await getClassStudents(classCode, cls);
-  const failed = [];
+  const failed = [], restored = [];
   await t29RunLimited(students, SWEEP_PARALLEL, async st => {
     if (!st.retiredJob) return;
     const r = st.retiredJob;
@@ -1044,9 +1065,11 @@ async function undoRetireClass(classCode) {
     const update = { retiredJob: firebase.firestore.FieldValue.delete() };
     // Only give the old job back if they haven't been given a new one since.
     if (!st.jobId && jobStillThere) Object.assign(update, { jobId: r.jobId, jobTierId: r.jobTierId || null, jobTierSince: r.jobTierSince || null });
-    try { await usersCol().doc(st.username).update(update); } catch (e) { failed.push(st.name || st.username); }
+    try { await usersCol().doc(st.username).update(update); restored.push(st.username); } catch (e) { failed.push(st.name || st.username); }
   });
   await classesCol().doc(classCode).update({ kiwiSaver: Object.assign({}, s, { retired: false, retiredAt: null }) });
+  await t29NotifyStudents(classCode, { to: restored, icon: "kiwi", tone: "mint",
+    title: "Your teacher ended retirement", body: "Your job is back, so your wages start again.", href: "jobs.html" });
   return { ok: true, failed };
 }
 
@@ -1257,7 +1280,15 @@ async function setLoanLifestylePenalty(classCode, { enabled, perAmount, points }
     perAmount: Math.max(0, Number(perAmount) || 0),
     points: Math.max(0, Number(points) || 0)
   };
+  const oldCls = await getClass(classCode).catch(() => null);
+  const old = (oldCls && oldCls.lifestyleConfig && oldCls.lifestyleConfig.loan) || { enabled: false, perAmount: 0, points: 0 };
   await classesCol().doc(classCode).update({ "lifestyleConfig.loan": clean });
+  const desc = p => p.enabled && p.perAmount > 0 && p.points > 0 ? `lose ${p.points} lifestyle ${p.points === 1 ? "point" : "points"} for every ${fmtMoney(p.perAmount)} owing` : "no lifestyle penalty";
+  if (!!old.enabled !== clean.enabled || (clean.enabled && (Number(old.perAmount) !== clean.perAmount || Number(old.points) !== clean.points))) {
+    const borrowers = await t29StudentsWhere(classCode, s => (s.loans || []).some(l => l.status === "active"));
+    await t29NotifyStudents(classCode, { to: borrowers, icon: "handshake", tone: "gold",
+      title: "Your teacher changed the loan lifestyle penalty", body: `Now: ${desc(clean)} (was: ${desc(old)}).`, href: "loan.html" });
+  }
   return clean;
 }
 
@@ -2070,13 +2101,15 @@ async function addTermDepositPlan(classCode, plan) {
 }
 async function editTermDepositPlan(classCode, planId, plan) {
   const classRef = classesCol().doc(classCode);
-  let updatedPlan = null;
+  let updatedPlan = null, before = null;
   await fdb.runTransaction(async (t) => {
+    before = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const existing = cls.termDepositPlans.find(p => p.id === planId);
     if (!existing) return;
+    before = { name: existing.name, days: existing.days, rate: existing.rate, earlyFeePct: existing.earlyFeePct, minAmount: existing.minAmount };
     existing.name = plan.name;
     existing.minAmount = Math.max(0, Number(plan.minAmount) || 0);
     existing.days = Math.max(1, Number(plan.days) || 1);
@@ -2113,16 +2146,37 @@ async function editTermDepositPlan(classCode, planId, plan) {
       if (changed) t.update(userRef, { termDeposits: liveDeposits });
     });
   }));
+  if (before) {
+    const a = updatedPlan, parts = [];
+    if (a.name !== before.name) parts.push(`renamed to ${a.name}`);
+    if (a.rate !== before.rate) parts.push(`interest ${before.rate}% → ${a.rate}%`);
+    if (a.days !== before.days) parts.push(`term ${before.days} → ${a.days} days`);
+    if (a.earlyFeePct !== before.earlyFeePct) parts.push(`early withdrawal fee ${before.earlyFeePct}% → ${a.earlyFeePct}%`);
+    if (parts.length) {
+      const holders = students.filter(s => (s.termDeposits || []).some(d => d.planId === planId)).map(s => s.username);
+      await t29NotifyStudents(classCode, { to: holders, icon: "piggy", tone: "gold",
+        title: `Your teacher changed the term deposit plan ${before.name}`, body: parts.join("; ") + ". This applies to your deposit.", href: "termdeposit.html" });
+    }
+  }
 }
 async function removeTermDepositPlan(classCode, planId) {
   const classRef = classesCol().doc(classCode);
+  let gone = null;
   await fdb.runTransaction(async (t) => {
+    gone = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    const target = cls.termDepositPlans.find(p => p.id === planId);
+    if (target) gone = target.name;
     cls.termDepositPlans = cls.termDepositPlans.filter(p => p.id !== planId);
     t.update(classRef, { termDepositPlans: cls.termDepositPlans });
   });
+  if (gone) {
+    const holders = await t29StudentsWhere(classCode, s => (s.termDeposits || []).some(d => d.planId === planId));
+    await t29NotifyStudents(classCode, { to: holders, icon: "piggy", tone: "gold",
+      title: `Your teacher removed the term deposit plan ${gone}`, body: "It is no longer offered, but your existing deposit carries on as normal.", href: "termdeposit.html" });
+  }
 }
 async function openTermDeposit(username, classCode, planId, amount) {
   amount = cleanAmount(amount);
@@ -2310,13 +2364,28 @@ async function _matureTermDepositsFor(classCode, students, todayKey) {
 
 /* ===================== Auto interest ===================== */
 async function saveInterestSettings(classCode, settings) {
-  await classesCol().doc(classCode).update({
+  const old = (await getClass(classCode).catch(() => null)) || {};
+  const now = {
     interestRate: Math.max(0, Number(settings.rate) || 0),
     cashInterestRate: Math.max(0, Number(settings.cashRate) || 0),
     interestAuto: !!settings.auto,
     interestFrequency: settings.frequency || "weekly",
     interestDay: settings.day || "Fri"
-  });
+  };
+  await classesCol().doc(classCode).update(now);
+  const out = [];
+  if ((old.interestRate || 0) !== now.interestRate) {
+    const savers = await t29StudentsWhere(classCode, s => (Number(s.savings) || 0) > 0);
+    out.push({ to: savers, icon: "piggy", tone: now.interestRate > (old.interestRate || 0) ? "mint" : "coral",
+      title: `Your teacher changed the savings interest rate: ${old.interestRate || 0}% → ${now.interestRate}%`,
+      body: "This is the rate your savings account now earns.", href: "bank.html" });
+  }
+  const cashParts = [];
+  if ((old.cashInterestRate || 0) !== now.cashInterestRate) cashParts.push(`interest on cash ${old.cashInterestRate || 0}% → ${now.cashInterestRate}%`);
+  if (!!old.interestAuto !== now.interestAuto) cashParts.push(now.interestAuto ? "interest is now paid automatically" : "interest is no longer paid automatically");
+  else if (now.interestAuto && ((old.interestFrequency || "weekly") !== now.interestFrequency || (old.interestDay || "Fri") !== now.interestDay)) cashParts.push(`interest is now paid ${INTEREST_FREQ_LABEL[now.interestFrequency] || now.interestFrequency}${now.interestFrequency === "daily" ? "" : " on " + (DAY_FULL[now.interestDay] || now.interestDay)}`);
+  if (cashParts.length) out.push({ to: "all", icon: "piggy", tone: "gold", title: "Your teacher changed how interest works", body: cashParts.join("; ") + ".", href: "bank.html" });
+  await t29NotifyStudents(classCode, out);
 }
 // Is it THIS student's turn for interest, going by the class's schedule
 // and THEIR OWN lastInterestApplied stamp (not a single class-wide
@@ -2534,6 +2603,7 @@ async function resetClass(classCode, teacherUsername) {
   ["code", "name", "teacher", "students", "archived", "archivedAt", "templateShareToken", "reportArchives",
     "lastPropertyMarketDayRun"].forEach(k => { delete fresh[k]; });
   fresh.listings = [];
+  fresh.teacherNotices = []; // old "your teacher changed..." notices belong to the last term
   fresh.lastTermDepositCheckDay = null;
   // A fresh createdAt marks where the new term's report-card period
   // should start counting from, same as when the class was first made.
@@ -2568,6 +2638,9 @@ async function resetClass(classCode, teacherUsername) {
       failed.push(s.name || s.username);
     }
   }));
+  await t29NotifyStudents(classCode, { to: students.map(s => s.username).filter(u => !failed.includes(u)), icon: "star", tone: "gold",
+    title: "Your teacher restarted the class",
+    body: `Everyone is back to the ${fmtMoney(welcome)} welcome grant. Your jobs, belongings and savings were reset.`, href: "student.html" });
   return { ok: true, failed };
 }
 
@@ -3144,7 +3217,11 @@ async function classesColUpdateInsuranceDay(classCode, day) {
 async function saveTaxRates(classCode, rates) {
   const clean = {};
   Object.keys(rates).forEach(k => { clean[k] = Math.min(100, Math.max(0, Number(rates[k]) || 0)); });
+  const oldRates = ((await getClass(classCode).catch(() => null)) || {}).taxRates || {};
   await classesCol().doc(classCode).update({ taxRates: clean });
+  const label = { property: "tax on property", transport: "tax on transport", interest: "tax on interest", gambling: "tax on gambling" };
+  const parts = Object.keys(clean).filter(k => (Number(oldRates[k]) || 0) !== clean[k]).map(k => `${label[k] || k} ${Number(oldRates[k]) || 0}% → ${clean[k]}%`);
+  if (parts.length) await t29NotifyStudents(classCode, { to: "all", icon: "percent", tone: "gold", title: "Your teacher changed the tax rates", body: parts.join("; ") + ".", href: "tax.html" });
 }
 // For purchases: student pays base cost + tax on top.
 function applyTaxToExpense(cls, category, baseAmount) {
@@ -3220,7 +3297,15 @@ async function saveWageTaxBrackets(classCode, brackets) {
       rate: Math.min(100, Math.max(0, Number(b.rate) || 0))
     }))
     .sort((a, b) => (a.upTo == null ? Infinity : a.upTo) - (b.upTo == null ? Infinity : b.upTo));
+  const oldCls = await getClass(classCode).catch(() => null);
+  const oldBr = (oldCls && oldCls.wageTaxBrackets) || [];
   await classesCol().doc(classCode).update({ wageTaxBrackets: clean });
+  if (JSON.stringify(oldBr) !== JSON.stringify(clean)) {
+    const desc = clean.length ? clean.map(b => `${b.upTo == null ? "above that" : "up to " + fmtMoney(b.upTo)}: ${b.rate}%`).join(", ") : "no wage tax";
+    const earners = await t29StudentsWhere(classCode, s => !!s.jobId);
+    await t29NotifyStudents(classCode, { to: earners, icon: "percent", tone: "gold",
+      title: "Your teacher changed the wage tax brackets", body: `Your wages are now taxed like this: ${desc}.`, href: "tax.html" });
+  }
 }
 
 /* ===================== Budgeting tool =====================
@@ -4272,37 +4357,113 @@ async function saveCardSettings(classCode, s) {
     statementDay: DAY_NAMES.includes(s.statementDay) ? s.statementDay : "Fri",
     splitMin: s.splitMin === undefined || s.splitMin === "" ? CARD_DEFAULT_SETTINGS.splitMin : Math.max(0, cardRound(s.splitMin))
   };
+  const oldCls = await getClass(classCode).catch(() => null);
+  const old = cardSettings(oldCls);
   await classesCol().doc(classCode).update({ cardSettings: clean });
+  // Tell students what changed. On/off and how cards are approved matter to
+  // anyone who might apply; the statement day and split minimum only to people
+  // who already hold (or have applied for) a card.
+  const everyone = [], holdersOnly = [];
+  if (old.enabled !== clean.enabled) everyone.push(clean.enabled ? "credit cards are now switched on" : "credit cards are now switched off");
+  if (old.approval !== clean.approval) everyone.push(clean.approval === "instant" ? "new cards are now approved instantly" : "new cards now need teacher approval");
+  if (old.statementDay !== clean.statementDay) holdersOnly.push(`your statement now closes on ${clean.statementDay} (was ${old.statementDay})`);
+  if (old.splitMin !== clean.splitMin) holdersOnly.push(`only purchases of ${fmtMoney(clean.splitMin)} or more can be split between card and cash (was ${fmtMoney(old.splitMin)})`);
+  const out = [];
+  if (everyone.length) out.push({ to: "all", icon: "cards", tone: "gold", title: "Your teacher changed the credit card settings", body: everyone.join("; ") + ".", href: "bank.html#cardCard" });
+  if (holdersOnly.length) {
+    const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending"));
+    out.push({ to: holders, icon: "cards", tone: "gold", title: "Your teacher changed your credit card settings", body: holdersOnly.join("; ") + ".", href: "bank.html#cardCard" });
+  }
+  await t29NotifyStudents(classCode, out);
   return clean;
+}
+
+// Plain-English list of what differs between two versions of a card plan.
+function cardPlanChangeParts(o, n) {
+  const m = fmtMoney, parts = [];
+  const rw = p => p.rewardEvery > 0 && p.rewardBack > 0 ? `${m(p.rewardBack)} back for every ${m(p.rewardEvery)} spent` : "no spend reward";
+  const vl = v => v.kind === "percent" ? `${v.value}% off` : `${m(v.value)} credit`;
+  const num = (a, b) => (Number(a) || 0) !== (Number(b) || 0);
+  if (o.name !== n.name) parts.push(`renamed to ${n.name}`);
+  if (num(o.limit, n.limit)) parts.push(`limit ${m(o.limit)} → ${m(n.limit)}`);
+  if (num(o.rate, n.rate)) parts.push(`interest ${o.rate || 0}% → ${n.rate}%`);
+  if (num(o.monthlyFee, n.monthlyFee)) parts.push(`fee ${m(o.monthlyFee || 0)} → ${m(n.monthlyFee)}`);
+  if (num(o.freeDays, n.freeDays)) parts.push(`interest-free days ${o.freeDays || 0} → ${n.freeDays}`);
+  if (num(o.minPct, n.minPct)) parts.push(`minimum payment ${o.minPct || 0}% → ${n.minPct}%`);
+  if (num(o.lateFee, n.lateFee)) parts.push(`late fee ${m(o.lateFee || 0)} → ${m(n.lateFee)}`);
+  if (num(o.cashbackPct, n.cashbackPct)) parts.push(`cashback ${o.cashbackPct || 0}% → ${n.cashbackPct}%`);
+  if (num(o.rewardEvery, n.rewardEvery) || num(o.rewardBack, n.rewardBack)) parts.push(`rewards: ${rw(o)} → ${rw(n)}`);
+  if (num(o.storeDiscountPct, n.storeDiscountPct)) parts.push(`store discount ${o.storeDiscountPct || 0}% → ${n.storeDiscountPct}%`);
+  if (JSON.stringify(o.vouchers || []) !== JSON.stringify(n.vouchers || [])) {
+    parts.push(`statement vouchers: ${(n.vouchers || []).length ? n.vouchers.map(vl).join(", ") : "none"}`);
+  }
+  if (num(o.minLifestyle, n.minLifestyle)) parts.push(`lifestyle rating needed ${o.minLifestyle || 0} → ${n.minLifestyle}`);
+  return parts;
 }
 async function saveCardPlan(classCode, raw) {
   const classRef = classesCol().doc(classCode);
   const clean = cardCleanPlan(raw);
+  let before = null, isNew = false;
   await fdb.runTransaction(async (t) => {
+    before = null; isNew = false; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) throw new Error("NO_CLASS");
     const plans = (snap.data().cardPlans || []).slice();
     const i = plans.findIndex(p => p.id === clean.id);
-    if (i >= 0) plans[i] = clean; else plans.push(clean);
+    if (i >= 0) { before = plans[i]; plans[i] = clean; } else { isNew = true; plans.push(clean); }
     t.update(classRef, { cardPlans: plans });
   });
+  if (isNew) {
+    if (!clean.archived) {
+      await t29NotifyStudents(classCode, { to: "all", icon: "cards", tone: "navy",
+        title: `Your teacher added a new credit card: ${clean.name}`,
+        body: `Limit ${fmtMoney(clean.limit)}${cardHasRewards(clean) ? ", with rewards" : ""}. You can apply for it on the Bank page.`, href: "bank.html#cardCard" });
+    }
+  } else if (before) {
+    const parts = cardPlanChangeParts(before, clean);
+    if (parts.length) {
+      const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending") && s.creditCard.planId === clean.id);
+      await t29NotifyStudents(classCode, { to: holders, icon: "cards", tone: "gold",
+        title: `Your teacher changed your ${clean.name} card`,
+        body: parts.join("; ") + ". Changes apply to your card from your next statement, and in the store straight away.", href: "bank.html#cardCard" });
+    }
+  }
   return clean;
 }
 // A plan someone still holds is hidden from new applicants (archived)
 // instead of deleted, so existing cards keep working.
 async function removeCardPlan(classCode, planId, archiveOnly) {
   const classRef = classesCol().doc(classCode);
+  let gone = null;
   await fdb.runTransaction(async (t) => {
+    gone = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) throw new Error("NO_CLASS");
     let plans = (snap.data().cardPlans || []).slice();
+    const target = plans.find(p => p.id === planId);
+    if (target) gone = { name: target.name, archived: !!archiveOnly };
     plans = archiveOnly ? plans.map(p => p.id === planId ? Object.assign({}, p, { archived: true }) : p) : plans.filter(p => p.id !== planId);
     t.update(classRef, { cardPlans: plans });
   });
+  if (gone && gone.archived) {
+    const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending") && s.creditCard.planId === planId);
+    await t29NotifyStudents(classCode, { to: holders, icon: "cards", tone: "gold",
+      title: `Your teacher retired the ${gone.name} card`,
+      body: "It is no longer offered to new students. Your own card keeps working.", href: "bank.html#cardCard" });
+  }
 }
 async function setCardLifestylePenalty(classCode, { enabled, perAmount, points }) {
   const clean = { enabled: !!enabled, perAmount: Math.max(0, Number(perAmount) || 0), points: Math.max(0, Number(points) || 0) };
+  const oldCls = await getClass(classCode).catch(() => null);
+  const old = (oldCls && oldCls.lifestyleConfig && oldCls.lifestyleConfig.creditCard) || { enabled: false, perAmount: 0, points: 0 };
   await classesCol().doc(classCode).update({ "lifestyleConfig.creditCard": clean });
+  const desc = p => p.enabled && p.perAmount > 0 && p.points > 0 ? `lose ${p.points} lifestyle ${p.points === 1 ? "point" : "points"} for every ${fmtMoney(p.perAmount)} left unpaid` : "no lifestyle penalty";
+  if (!!old.enabled !== clean.enabled || (clean.enabled && (Number(old.perAmount) !== clean.perAmount || Number(old.points) !== clean.points))) {
+    const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending"));
+    await t29NotifyStudents(classCode, { to: holders, icon: "cards", tone: "gold",
+      title: "Your teacher changed the credit card lifestyle penalty",
+      body: `Now: ${desc(clean)} (was: ${desc(old)}).`, href: "bank.html#cardCard" });
+  }
   return clean;
 }
 
@@ -4335,7 +4496,9 @@ async function applyForCreditCard(username, classCode, planId) {
 }
 async function approveCreditCard(classCode, username) {
   const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let approvedPlan = null;
   try {
+    approvedPlan = null; // (set again inside the transaction)
     await fdb.runTransaction(async (t) => {
       const us = await t.get(userRef), cs = await t.get(classRef);
       if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
@@ -4344,8 +4507,14 @@ async function approveCreditCard(classCode, username) {
       const plan = cardPlanById(cls, user.creditCard.planId);
       if (!plan) throw new Error("NOT_FOUND");
       t.update(userRef, { creditCard: cardMakeActive(plan, cls, nzDateKey()) });
+      approvedPlan = plan;
     });
   } catch (e) { return { ok: false, error: "Couldn't approve that card — it may have changed. Refresh and try again." }; }
+  if (approvedPlan) {
+    await t29NotifyStudents(classCode, { to: username, icon: "cards", tone: "mint",
+      title: `Your teacher approved your ${approvedPlan.name} card`,
+      body: `You can spend up to ${fmtMoney(approvedPlan.limit)} on it. Find it on the Bank page.`, href: "bank.html#cardCard" });
+  }
   return { ok: true };
 }
 async function declineCreditCard(classCode, username) {
@@ -4359,6 +4528,9 @@ async function declineCreditCard(classCode, username) {
       t.update(userRef, { creditCard: { status: "denied", planId: c.planId, deniedTs: Date.now() } });
     });
   } catch (e) { return { ok: false, error: "Couldn't decline that — it may have changed. Refresh and try again." }; }
+  await t29NotifyStudents(classCode, { to: username, icon: "cards", tone: "coral",
+    title: "Your teacher declined your credit card application",
+    body: "You can ask your teacher why, or apply again later.", href: "bank.html#cardCard" });
   return { ok: true };
 }
 async function cancelCreditCard(username, classCode) {

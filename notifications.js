@@ -13,7 +13,8 @@
    of the bell.
 
    The important design decision here is that this file adds NO new game
-   state and writes NOTHING to Firestore. Every notification is derived,
+   state and writes NOTHING to Firestore (the one exception, below, is read
+   here but written by the teacher's pages). Every notification is derived,
    live, from data the rest of the app already generates — the class
    transaction log, the student's loans/term deposits, company price
    history, the event logs, listings and quiz results. Adding a new kind of
@@ -491,6 +492,27 @@ function notifMarketplaceItems(me, cls) {
 /* Builds the whole feed. `action: true` items — the things that actually
    need the student to do something — always sort above the informational
    market moves, and within each group it's newest first. */
+// Things the TEACHER changed that touch this student (a price they own, a
+// card's rewards, a manual market run ...). Unlike every other builder these
+// are read from class.teacherNotices, which the teacher's pages write via
+// t29NotifyStudents() (data-core.js) — a teacher's edit leaves no other trace.
+const NOTIF_TEACHER_TTL_MS = 7 * 24 * 3600 * 1000;
+function notifTeacherChangeItems(me, cls) {
+  const list = cls && Array.isArray(cls.teacherNotices) ? cls.teacherNotices : [];
+  const cutoff = trustedNow().getTime() - NOTIF_TEACHER_TTL_MS;
+  const out = [];
+  list.forEach(n => {
+    if (!n || !n.id || !n.title || (n.ts || 0) < cutoff) return;
+    const mine = n.to === "all" || (Array.isArray(n.to) && n.to.indexOf(me.username) !== -1);
+    if (!mine) return;
+    out.push({
+      id: "tch-" + n.id, ts: n.ts, icon: n.icon || "bell", tone: n.tone || "gold",
+      title: n.title, body: n.body || "", href: n.href || ""
+    });
+  });
+  return out;
+}
+
 function buildNotifications(me, cls) {
   const items = [].concat(
     notifLoanItems(me),
@@ -506,7 +528,8 @@ function buildNotifications(me, cls) {
     notifSideHustleItems(me, cls),
     notifSideHustleRequestItems(me, cls),
     notifQuizItems(me, cls),
-    notifMarketplaceItems(me, cls)
+    notifMarketplaceItems(me, cls),
+    notifTeacherChangeItems(me, cls)
   );
   // Order: needs-action first, then unread-over-read, then newest first.
   // The unread tiebreaker matters because several builders (term deposits,

@@ -58,22 +58,38 @@ async function addProperty(classCode, prop) {
     }
     t.update(classRef, { properties: cls.properties });
   });
+  await t29NotifyStudents(classCode, { to: "all", icon: "house", tone: "navy",
+    title: `Your teacher listed a new property: ${prop.name}`,
+    body: `For sale at ${fmtMoney(Math.max(0, Number(prop.price) || 0))}${qty > 1 ? ` (${qty} available)` : ""}.`, href: "property.html" });
 }
 // propId here is the id of ANY unit in the listing — removes every unit
 // that shares its groupId (i.e. removes the whole listing, all units).
 // Owners of removed units are not refunded automatically (same as before).
 async function removeProperty(classCode, propId) {
   const classRef = classesCol().doc(classCode);
+  let gone = null;
   await fdb.runTransaction(async (t) => {
+    gone = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const target = cls.properties.find(p => p.id === propId);
     if (!target) return;
     const gid = groupIdOf(target);
+    const units = cls.properties.filter(p => groupIdOf(p) === gid);
+    gone = { name: target.name, owners: units.filter(u => u.owner).map(u => u.owner),
+             tenants: units.filter(u => u.sublet && u.sublet.tenant).map(u => u.sublet.tenant) };
     cls.properties = cls.properties.filter(p => groupIdOf(p) !== gid);
     t.update(classRef, { properties: cls.properties });
   });
+  if (gone) {
+    await t29NotifyStudents(classCode, [
+      { to: gone.owners, icon: "house", tone: "coral", title: `Your teacher removed the property ${gone.name}`,
+        body: "It is no longer in the class property list. Check with your teacher if you were expecting a refund.", href: "property.html" },
+      { to: gone.tenants, icon: "house", tone: "coral", title: `Your teacher removed ${gone.name}, the place you were renting`,
+        body: "That rental has ended, so you may need to find somewhere else to live.", href: "property.html" }
+    ]);
+  }
 }
 // propId is the id of ANY unit in the listing. Shared fields (name,
 // price, comfort, mortgage terms, description, rent) are applied to every
@@ -85,7 +101,9 @@ async function removeProperty(classCode, propId) {
 // to the requested count, it removes as many as it safely can and stops.
 async function updateProperty(classCode, propId, updates) {
   const classRef = classesCol().doc(classCode);
+  let changed = null; // what the teacher changed, for the owners' notification
   await fdb.runTransaction(async (t) => {
+    changed = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
@@ -93,6 +111,9 @@ async function updateProperty(classCode, propId, updates) {
     if (!target) return;
     const gid = groupIdOf(target);
     const units = cls.properties.filter(p => groupIdOf(p) === gid);
+    changed = { owners: units.filter(u => u.owner).map(u => u.owner),
+      before: { name: target.name, price: Number(target.price), rentPerWeek: target.rentPerWeek, rentDay: target.rentDay,
+                comfort: target.comfort, livingBonusStars: target.livingBonusStars || 0 } };
     // A manual price edit here is a deliberate teacher override, same as
     // clicking "Update" on a company's price in the Stock Market — it
     // should show up in the price history/sparkline too, not just silently
@@ -151,7 +172,24 @@ async function updateProperty(classCode, propId, updates) {
       }
     }
     t.update(classRef, { properties: cls.properties });
+    if (changed) {
+      changed.after = { name: target.name, price: target.price, rentPerWeek: target.rentPerWeek, rentDay: target.rentDay,
+                        comfort: target.comfort, livingBonusStars: target.livingBonusStars || 0 };
+    }
   });
+  if (changed && changed.after && changed.owners.length) {
+    const b = changed.before, a = changed.after, parts = [];
+    if (a.name !== b.name) parts.push(`renamed to ${a.name}`);
+    if (a.price !== b.price) parts.push(`value ${fmtMoney(b.price)} → ${fmtMoney(a.price)}`);
+    if (a.rentPerWeek !== b.rentPerWeek) parts.push(`rent ${fmtMoney(b.rentPerWeek)} → ${fmtMoney(a.rentPerWeek)} a week`);
+    if (a.rentDay !== b.rentDay) parts.push(`rent day ${b.rentDay} → ${a.rentDay}`);
+    if (a.comfort !== b.comfort) parts.push(`comfort ${b.comfort} → ${a.comfort} stars`);
+    if (a.livingBonusStars !== b.livingBonusStars) parts.push(`living bonus ${b.livingBonusStars} → ${a.livingBonusStars} stars`);
+    if (parts.length) {
+      await t29NotifyStudents(classCode, { to: changed.owners, icon: "house", tone: "gold",
+        title: `Your teacher changed your property ${b.name}`, body: parts.join(", ") + ".", href: "property.html" });
+    }
+  }
 }
 
 /* ---------------- Property: daily price movement ----------------
@@ -170,9 +208,15 @@ async function updateProperty(classCode, propId, updates) {
 // doesn't have its own priceRange override. Fire-and-forget, matching
 // setPriceRange's style for the stock market.
 async function setPropertyPriceRange(classCode, min, max) {
-  await classesCol().doc(classCode).update({
-    propertyPriceRange: { min: Math.max(0, Number(min)), max: Math.max(0, Number(max)) }
-  });
+  const before = (await getClass(classCode).catch(() => null)) || {};
+  const old = before.propertyPriceRange || { min: 0.5, max: 2 };
+  const now = { min: Math.max(0, Number(min)), max: Math.max(0, Number(max)) };
+  await classesCol().doc(classCode).update({ propertyPriceRange: now });
+  if (old.min !== now.min || old.max !== now.max) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "house", tone: "gold",
+      title: "Your teacher changed how much property prices can move",
+      body: `The usual daily move is now ${now.min}%–${now.max}% (was ${old.min}%–${old.max}%).`, href: "property.html" });
+  }
 }
 
 // Quick teacher override for a listing's price alone — same idea as the
@@ -190,7 +234,9 @@ async function setPropertyPrice(classCode, propId, newPrice) {
     return { ok: false, error: "Enter a valid price greater than 0." };
   }
   const classRef = classesCol().doc(classCode);
+  let changed = null; // what the teacher changed, for the owners' notification
   await fdb.runTransaction(async (t) => {
+    changed = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
@@ -199,6 +245,8 @@ async function setPropertyPrice(classCode, propId, newPrice) {
     const gid = groupIdOf(target);
     const oldPrice = target.price;
     const newP = Math.max(0.01, Math.round(parsed * 100) / 100);
+    changed = { name: target.name, prev: oldPrice, price: newP,
+      owned: cls.properties.filter(p => groupIdOf(p) === gid && p.owner).map(p => ({ owner: p.owner, paid: p.purchasePrice })) };
     const dateKey = nzDateKey();
     cls.properties.filter(p => groupIdOf(p) === gid).forEach(p => {
       if (!Array.isArray(p.priceHistory) || p.priceHistory.length === 0) p.priceHistory = [oldPrice];
@@ -211,6 +259,14 @@ async function setPropertyPrice(classCode, propId, newPrice) {
     });
     t.update(classRef, { properties: cls.properties });
   });
+  if (changed && changed.prev !== changed.price) {
+    const c = changed, up = c.price > c.prev;
+    await t29NotifyStudents(classCode, c.owned.map(o => ({
+      to: o.owner, icon: "house", tone: up ? "mint" : "coral",
+      title: `Your teacher changed the price of your property ${c.name}: ${fmtMoney(c.prev)} → ${fmtMoney(c.price)}`,
+      body: `It is now worth ${fmtMoney(c.price)}${o.paid ? ` (you paid ${fmtMoney(o.paid)})` : ""}.`, href: "property.html"
+    })));
+  }
   return { ok: true };
 }
 
@@ -229,7 +285,9 @@ async function setListingPriceRange(classCode, propId, min, max) {
     return { ok: false, error: "Enter valid numbers for the price range." };
   }
   const classRef = classesCol().doc(classCode);
+  let changed = null;
   await fdb.runTransaction(async (t) => {
+    changed = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
@@ -237,9 +295,17 @@ async function setListingPriceRange(classCode, propId, min, max) {
     if (!target) return;
     const gid = groupIdOf(target);
     const range = hasMin ? { min: Math.max(0, parsedMin), max: Math.max(0, parsedMax) } : null;
+    const oldRange = target.priceRange || cls.propertyPriceRange || { min: 0.5, max: 2 };
     cls.properties.filter(p => groupIdOf(p) === gid).forEach(p => { p.priceRange = range; });
     t.update(classRef, { properties: cls.properties });
+    const newRange = range || cls.propertyPriceRange || { min: 0.5, max: 2 };
+    changed = { name: target.name, oldRange, newRange, owners: cls.properties.filter(p => groupIdOf(p) === gid && p.owner).map(p => p.owner) };
   });
+  if (changed && changed.owners.length && (changed.oldRange.min !== changed.newRange.min || changed.oldRange.max !== changed.newRange.max)) {
+    await t29NotifyStudents(classCode, { to: changed.owners, icon: "house", tone: "gold",
+      title: `Your teacher changed how much your property ${changed.name} can move in a day`,
+      body: `A daily move of ${changed.oldRange.min}%–${changed.oldRange.max}% is now ${changed.newRange.min}%–${changed.newRange.max}%.`, href: "property.html" });
+  }
   return { ok: true };
 }
 
@@ -311,15 +377,49 @@ async function autoPropertyMarketDayIfDue(classCode) {
 async function simulatePropertyMarketDay(classCode) {
   const classRef = classesCol().doc(classCode);
   let results = [];
+  let moved = null; // before/after prices + owners, so every student can be told what the run did
   await fdb.runTransaction(async (t) => {
     results = []; // reset every attempt — this callback can be retried
+    moved = null;
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    const prevPrices = cls.properties.map(p => p.price);
     results = applyPropertyMarketDayMoves(cls);
     t.update(classRef, { properties: cls.properties });
+    moved = {
+      students: (cls.students || []).slice(),
+      props: cls.properties.map((p, i) => ({ gid: groupIdOf(p), name: p.name, prev: prevPrices[i], price: p.price, owner: p.owner || null }))
+    };
   });
+  if (moved) await t29NotifyPropertyRun(classCode, moved);
   return results;
+}
+
+// Tells the students who own property that the teacher ran the property
+// market by hand, and what it did to THEIR property. Others aren't told.
+async function t29NotifyPropertyRun(classCode, m) {
+  const moved = m.props.filter(p => p.prev > 0 && p.price !== p.prev);
+  if (!moved.length) return;
+  const pct = p => ((p.price - p.prev) / p.prev) * 100;
+  const fmtPct = p => `${p.price > p.prev ? "▲" : "▼"}${Math.abs(pct(p)).toFixed(1)}%`;
+  const notices = [];
+  m.students.forEach(u => {
+    const mine = moved.filter(p => p.owner === u);
+    if (!mine.length) return;
+    let was = 0, now = 0;
+    mine.forEach(p => { was += p.prev; now += p.price; });
+    const diff = Math.round((now - was) * 100) / 100;
+    mine.sort((a, b) => Math.abs(b.price - b.prev) - Math.abs(a.price - a.prev));
+    const parts = mine.slice(0, 3).map(p => `${p.name} ${fmtPct(p)} to ${fmtMoney(p.price)}`);
+    if (mine.length > 3) parts.push(`+${mine.length - 3} more`);
+    notices.push({
+      to: u, icon: "house", tone: diff >= 0 ? "mint" : "coral",
+      title: `Your teacher ran the property market: your property ${diff >= 0 ? "gained" : "lost"} ${fmtMoney(Math.abs(diff))}`,
+      body: `${parts.join(", ")}.`, href: "property.html"
+    });
+  });
+  await t29NotifyStudents(classCode, notices);
 }
 
 // opts.useKiwiSaver: put the student's KiwiSaver towards it (first home
@@ -683,6 +783,9 @@ async function resolveMortgageOverdue(classCode, propId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "mortgage", from: ownerUsername, note: `Mortgage payment marked as resolved by teacher, no charge: ${propName}` + (remainingAfter <= 0 ? " — paid off!" : "") });
+  await t29NotifyStudents(classCode, { to: ownerUsername, icon: "house", tone: "mint",
+    title: `Your teacher cleared your overdue mortgage payment for ${propName}`,
+    body: remainingAfter <= 0 ? "No money was taken, and your mortgage is now fully paid off." : "No money was taken from you for that payment.", href: "property.html" });
   return { ok: true, fullyPaid: remainingAfter <= 0 };
 }
 
@@ -719,6 +822,9 @@ async function teacherEndRental(classCode, propId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "property-occupancy", to: owner, note: `Teacher ended the rental / kicked out tenants: ${propName}` });
+  await t29NotifyStudents(classCode, { to: owner, icon: "house", tone: "coral",
+    title: `Your teacher ended the rental of your property ${propName}`,
+    body: "The tenants were removed and it is no longer being rented out.", href: "property.html" });
   return { ok: true };
 }
 
@@ -866,7 +972,18 @@ async function saveSubletSettings(classCode, settings) {
   if (clean.maxPricePct > 0 && clean.maxPricePct < clean.minPricePct) {
     const tmp = clean.minPricePct; clean.minPricePct = clean.maxPricePct; clean.maxPricePct = tmp;
   }
+  const oldPr = ((await getClass(classCode).catch(() => null)) || {}).propertyRentals || {};
   await classesCol().doc(classCode).update({ propertyRentals: clean });
+  const parts = [];
+  if (!!oldPr.enabled !== clean.enabled) parts.push(clean.enabled ? "renting to classmates is now on" : "renting to classmates is now off");
+  if (!!oldPr.requireApproval !== clean.requireApproval) parts.push(clean.requireApproval ? "rentals now need teacher approval" : "rentals no longer need teacher approval");
+  if ((oldPr.minPricePct || 0) !== clean.minPricePct) parts.push(`lowest rent ${oldPr.minPricePct || 0}% → ${clean.minPricePct}% of the usual`);
+  if ((oldPr.maxPricePct || 0) !== clean.maxPricePct) parts.push(`highest rent ${oldPr.maxPricePct ? oldPr.maxPricePct + "%" : "no limit"} → ${clean.maxPricePct ? clean.maxPricePct + "%" : "no limit"} of the usual`);
+  if ((oldPr.maxLeaseWeeks || 0) !== clean.maxLeaseWeeks && oldPr.maxLeaseWeeks !== undefined) parts.push(`longest lease ${oldPr.maxLeaseWeeks} → ${clean.maxLeaseWeeks} weeks`);
+  if (parts.length) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "house", tone: "gold",
+      title: "Your teacher changed the classmate rental rules", body: parts.join("; ") + ".", href: "property.html" });
+  }
   return clean;
 }
 
@@ -901,7 +1018,13 @@ function currentHomeOf(cls, username) {
 // default and chargeMoveOrThrow for where it's actually applied.
 async function setMovingCost(classCode, cost) {
   const clean = Math.max(0, Math.round((Number(cost) || 0) * 100) / 100);
+  const oldCost = ((await getClass(classCode).catch(() => null)) || {}).movingCost;
   await classesCol().doc(classCode).update({ movingCost: clean });
+  if (oldCost !== undefined && Number(oldCost) !== clean) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "house", tone: "gold",
+      title: "Your teacher changed the cost of moving house",
+      body: `Moving into a place you own now costs ${fmtMoney(clean)} (was ${fmtMoney(Number(oldCost) || 0)}).`, href: "property.html" });
+  }
   return clean;
 }
 
@@ -911,7 +1034,13 @@ async function setMovingCost(classCode, cost) {
 // default and sellProperty for where it's actually applied.
 async function setPropertyBreakFee(classCode, fee) {
   const clean = Math.max(0, Math.round((Number(fee) || 0) * 100) / 100);
+  const oldFee = ((await getClass(classCode).catch(() => null)) || {}).propertyBreakFee;
   await classesCol().doc(classCode).update({ propertyBreakFee: clean });
+  if (oldFee !== undefined && Number(oldFee) !== clean) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "house", tone: "gold",
+      title: "Your teacher changed the fee for breaking a rental early",
+      body: `The break fee is now ${fmtMoney(clean)} (was ${fmtMoney(Number(oldFee) || 0)}).`, href: "property.html" });
+  }
   return clean;
 }
 
@@ -1160,7 +1289,7 @@ async function decideSublet(classCode, propId, approve, reason) {
 // teacherEndRental does for the passive scheme.
 async function teacherEndSublet(classCode, propId) {
   const classRef = classesCol().doc(classCode);
-  let propName = "", owner = null;
+  let propName = "", owner = null, subTenant = null;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(classRef);
@@ -1170,6 +1299,7 @@ async function teacherEndSublet(classCode, propId) {
       if (!prop || !prop.sublet) throw new Error("NOT_FOUND");
       propName = prop.name;
       owner = prop.owner;
+      subTenant = prop.sublet.tenant || null;
       prop.occupancy = null;
       prop.sublet = null;
       prop.rentLastWeekPaid = null;
@@ -1179,6 +1309,12 @@ async function teacherEndSublet(classCode, propId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "property-occupancy", to: owner, note: `Teacher ended the classmate rental: ${propName}` });
+  await t29NotifyStudents(classCode, [
+    { to: owner, icon: "house", tone: "coral", title: `Your teacher ended the classmate rental of ${propName}`,
+      body: "It is no longer rented out to your classmate.", href: "property.html" },
+    { to: subTenant, icon: "house", tone: "coral", title: `Your teacher ended your rental of ${propName}`,
+      body: "You no longer live there, so you may need to find somewhere else.", href: "property.html" }
+  ]);
   return { ok: true };
 }
 
@@ -1317,6 +1453,8 @@ async function resolveSubletRentOverdue(classCode, propId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "property-occupancy", from: tenantUsername, note: `Weekly rent marked as resolved by teacher, no charge: ${propName}` });
+  await t29NotifyStudents(classCode, { to: tenantUsername, icon: "house", tone: "mint",
+    title: `Your teacher cleared your overdue rent for ${propName}`, body: "No money was taken from you for that payment.", href: "property.html" });
   return { ok: true };
 }
 
@@ -1361,6 +1499,9 @@ async function addNpcProperty(classCode, listing) {
     }
     t.update(classRef, { npcProperties: cls.npcProperties });
   });
+  await t29NotifyStudents(classCode, { to: "all", icon: "house", tone: "navy",
+    title: `Your teacher listed a new place to rent: ${listing.name}`,
+    body: `${fmtMoney(Math.max(0, Number(listing.rentPerWeek) || 0))} a week${qty > 1 ? ` (${qty} available)` : ""}.`, href: "property.html" });
 }
 // unitId is the id of ANY unit in the listing — shared fields apply to
 // every unit in the group, tenanted or not, without touching anyone's
@@ -1368,7 +1509,9 @@ async function addNpcProperty(classCode, listing) {
 // — shrinking only ever removes currently-untenanted units.
 async function updateNpcProperty(classCode, unitId, updates) {
   const classRef = classesCol().doc(classCode);
+  let changed = null; // what the teacher changed, for the tenants' notification
   await fdb.runTransaction(async (t) => {
+    changed = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
@@ -1376,6 +1519,8 @@ async function updateNpcProperty(classCode, unitId, updates) {
     if (!target) return;
     const gid = groupIdOf(target);
     const units = cls.npcProperties.filter(p => groupIdOf(p) === gid);
+    changed = { tenants: units.filter(u => u.tenant).map(u => u.tenant),
+      before: { name: target.name, rentPerWeek: target.rentPerWeek, rentDay: target.rentDay, minWeeks: target.minWeeks, lifestylePoints: target.lifestylePoints } };
     units.forEach(u => {
       u.groupId = gid;
       u.name = updates.name;
@@ -1410,23 +1555,44 @@ async function updateNpcProperty(classCode, unitId, updates) {
       }
     }
     t.update(classRef, { npcProperties: cls.npcProperties });
+    if (changed) changed.after = { name: target.name, rentPerWeek: target.rentPerWeek, rentDay: target.rentDay, minWeeks: target.minWeeks, lifestylePoints: target.lifestylePoints };
   });
+  if (changed && changed.after && changed.tenants.length) {
+    const b = changed.before, a = changed.after, parts = [];
+    if (a.name !== b.name) parts.push(`renamed to ${a.name}`);
+    if (a.rentPerWeek !== b.rentPerWeek) parts.push(`rent ${fmtMoney(b.rentPerWeek)} → ${fmtMoney(a.rentPerWeek)} a week`);
+    if (a.rentDay !== b.rentDay) parts.push(`rent day ${b.rentDay} → ${a.rentDay}`);
+    if (a.minWeeks !== b.minWeeks) parts.push(`minimum stay ${b.minWeeks} → ${a.minWeeks} weeks`);
+    if (a.lifestylePoints !== b.lifestylePoints) parts.push(`lifestyle points ${b.lifestylePoints} → ${a.lifestylePoints}`);
+    if (parts.length) {
+      await t29NotifyStudents(classCode, { to: changed.tenants, icon: "house", tone: "gold",
+        title: `Your teacher changed the school rental you live in, ${b.name}`, body: parts.join(", ") + ".", href: "property.html" });
+    }
+  }
 }
 // Removes every unit in the listing (whole group). Any current tenants are
 // simply displaced — same permissive, no-refund-owed pattern as
 // removeProperty, since nobody paid anything up front for a rental.
 async function removeNpcProperty(classCode, unitId) {
   const classRef = classesCol().doc(classCode);
+  let gone = null;
   await fdb.runTransaction(async (t) => {
+    gone = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     const target = cls.npcProperties.find(p => p.id === unitId);
     if (!target) return;
     const gid = groupIdOf(target);
+    gone = { name: target.name, tenants: cls.npcProperties.filter(p => groupIdOf(p) === gid && p.tenant).map(p => p.tenant) };
     cls.npcProperties = cls.npcProperties.filter(p => groupIdOf(p) !== gid);
     t.update(classRef, { npcProperties: cls.npcProperties });
   });
+  if (gone && gone.tenants.length) {
+    await t29NotifyStudents(classCode, { to: gone.tenants, icon: "house", tone: "coral",
+      title: `Your teacher removed the school rental ${gone.name}`,
+      body: "Your tenancy has ended, so you may need to find somewhere else to live.", href: "property.html" });
+  }
 }
 
 // A student moves in as the tenant of a specific (untenanted) unit. Every
@@ -1530,6 +1696,9 @@ async function teacherEndNpcTenancy(classCode, unitId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "property-occupancy", to: tenantUsername, note: `Teacher ended the school rental tenancy: ${propName}` });
+  await t29NotifyStudents(classCode, { to: tenantUsername, icon: "house", tone: "coral",
+    title: `Your teacher ended your tenancy of ${propName}`,
+    body: "You no longer rent it from the school, so you may need to find somewhere else to live.", href: "property.html" });
   return { ok: true };
 }
 
@@ -1624,5 +1793,7 @@ async function resolveNpcRentOverdue(classCode, unitId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "property-occupancy", from: tenantUsername, note: `Weekly rent marked as resolved by teacher, no charge: ${propName} (school rental)` });
+  await t29NotifyStudents(classCode, { to: tenantUsername, icon: "house", tone: "mint",
+    title: `Your teacher cleared your overdue rent for ${propName}`, body: "No money was taken from you for that payment.", href: "property.html" });
   return { ok: true };
 }

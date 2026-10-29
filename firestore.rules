@@ -403,7 +403,11 @@ service cloud.firestore {
         // Avatar editor: the look + list of owned items, and the Comets
         // balance. Comets can only be SPENT by a student (see
         // cometsNotRaised below); only a teacher can raise them.
-        'avatar', 'comets'
+        'avatar', 'comets',
+        // Notification bell "read up to" timestamp (notifications.js), so
+        // marking read on one device/tab holds on the others. A single
+        // number; moves no money and unlocks nothing.
+        'notifLastRead'
       ];
       // classCode: the ONE self-writable identity-ish field, and ONLY for
       // a teacher's own account — see createClassForTeacher/

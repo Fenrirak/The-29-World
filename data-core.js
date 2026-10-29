@@ -2025,7 +2025,7 @@ async function logTxn(classCode, txn, opts) {
   await Promise.all([...affected].map(u => recordReportActivity(u, built)));
 }
 
-async function transferMoney(fromUser, toUser, amount, note) {
+async function transferMoney(fromUser, toUser, amount, note, opts) {
   // BUGFIX (defensive, same as adjustBalance above): coerce here rather
   // than trusting the caller, so `fromData.balance - amount` can never
   // silently become string concatenation.
@@ -2054,6 +2054,10 @@ async function transferMoney(fromUser, toUser, amount, note) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(from.classCode, { type: "transfer", from: fromUser, to: toUser, amount, note: note || "" });
+  if (fromIsTeacher && !(opts && opts.silent)) {
+    await t29NotifyStudents(from.classCode, { to: toUser, icon: "coin", tone: "mint",
+      title: `Your teacher sent you ${fmtMoney(amount)}`, body: note ? `Note: ${note}` : "It was added to your balance.", href: "bank.html" });
+  }
   return { ok: true };
 }
 
@@ -2071,6 +2075,96 @@ async function teacherAdjust(teacherUser, studentUser, amount, note, kind) {
     announce: true, acknowledged: false
   });
   return { ok: true };
+}
+
+/* ===================== Teacher change notices =====================
+   Whenever the TEACHER changes something that affects a student (a price
+   they own, a card's rewards, a manual market run, a job's pay ...), the
+   student should be told what changed. Everything else in the bell is
+   derived live from existing data, but a teacher's edit leaves no trace
+   once it's applied, so these are the one thing that IS written down:
+   class.teacherNotices = [{ id, ts, to, icon, tone, title, body, href }]
+   newest first, where `to` is "all" or an array of student usernames.
+   One small write on the class doc (the teacher may already write it, the
+   students only ever read it). The list is capped and expires itself, and
+   notifications.js (notifTeacherChangeItems) turns each into a bell row.
+   Best-effort: a failure here must never fail the teacher's real action,
+   so this never throws. */
+const T29_NOTICE_MAX = 120;
+const T29_NOTICE_TTL_MS = 14 * 24 * 3600 * 1000;
+
+function t29NoticeClip(s, n) {
+  s = String(s === undefined || s === null ? "" : s).replace(/\s+/g, " ").trim();
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+async function t29NotifyStudents(classCode, notices) {
+  try {
+    if (!classCode) return false;
+    const now = trustedNow().getTime();
+    const entries = [];
+    (Array.isArray(notices) ? notices : [notices]).forEach(n => {
+      if (!n || !n.title || !n.to) return;
+      let to = n.to;
+      if (to !== "all") {
+        to = Array.from(new Set((Array.isArray(to) ? to : [to]).filter(u => typeof u === "string" && u)));
+        if (!to.length) return;
+      }
+      entries.push({
+        id: uid("n"), ts: now, to, icon: n.icon || "bell", tone: n.tone || "gold",
+        title: t29NoticeClip(n.title, 120), body: t29NoticeClip(n.body, 400), href: n.href || ""
+      });
+    });
+    if (!entries.length) return false;
+    const classRef = classesCol().doc(classCode);
+    await fdb.runTransaction(async (t) => {
+      const snap = await t.get(classRef);
+      if (!snap.exists) return;
+      const cur = Array.isArray(snap.data().teacherNotices) ? snap.data().teacherNotices : [];
+      const cutoff = now - T29_NOTICE_TTL_MS;
+      const next = entries.concat(cur).filter(n => n && (n.ts || 0) >= cutoff).slice(0, T29_NOTICE_MAX);
+      t.update(classRef, { teacherNotices: next });
+    });
+    return true;
+  } catch (e) {
+    console.warn("t29NotifyStudents failed:", e);
+    return false;
+  }
+}
+
+// Usernames of the students in a class who match `test(studentDoc)`.
+async function t29StudentsWhere(classCode, test) {
+  try {
+    const all = await getClassStudents(classCode);
+    return all.filter(s => s && s.username && s.role !== "teacher" && test(s)).map(s => s.username);
+  } catch (e) { return []; }
+}
+
+// After the teacher runs pay day / interest by hand: tells each student what
+// they were paid, read back from the class transaction log (only entries
+// written since `sinceTs`, so nothing is announced twice).
+async function t29NotifyRunPayments(classCode, sinceTs, kind) {
+  try {
+    const cls = await getClass(classCode);
+    if (!cls) return;
+    const types = kind === "interest" ? ["interest", "cash-interest"] : ["wage"];
+    const totals = {};
+    (cls.txns || []).forEach(x => {
+      if (x && x.to && (x.ts || 0) >= sinceTs && types.includes(x.type)) totals[x.to] = (totals[x.to] || 0) + (Number(x.amount) || 0);
+    });
+    await t29NotifyStudents(classCode, Object.keys(totals).filter(u => totals[u] > 0).map(u => {
+      const amt = Math.round(totals[u] * 100) / 100;
+      return kind === "interest"
+        ? { to: u, icon: "piggy", tone: "mint", title: `Your teacher paid interest: you earned ${fmtMoney(amt)}`, body: "It was added to your account.", href: "bank.html" }
+        : { to: u, icon: "coin", tone: "mint", title: `Your teacher ran pay day: you were paid ${fmtMoney(amt)}`, body: "It was added to your account.", href: "bank.html" };
+    }));
+  } catch (e) { console.warn("t29NotifyRunPayments failed:", e); }
+}
+
+// "$1.50" / "$12" style helper for notice text, and a tidy "was → now".
+function t29Chg(a, b, fmt) {
+  const f = fmt || (v => v);
+  return `${f(a)} → ${f(b)}`;
 }
 
 // Marks a bonus/fine txn as seen so its one-time popup doesn't show again.
@@ -2180,12 +2274,25 @@ async function removeStudent(classCode, studentUser) {
 }
 
 async function setPayDay(classCode, day) {
+  const oldDay = ((await getClass(classCode).catch(() => null)) || {}).payDay;
   await classesCol().doc(classCode).update({ payDay: day });
+  if (oldDay !== day) {
+    const earners = await t29StudentsWhere(classCode, s => !!s.jobId);
+    await t29NotifyStudents(classCode, { to: earners, icon: "coin", tone: "gold",
+      title: "Your teacher changed pay day", body: `You are now paid on ${day}${oldDay ? ` (was ${oldDay})` : ""}.`, href: "bank.html" });
+  }
 }
 
 // Class-wide day mortgage installments fall due on (see payMortgage).
 async function setMortgageDay(classCode, day) {
-  await classesCol().doc(classCode).update({ mortgageDay: DAY_NAMES.includes(day) ? day : "Fri" });
+  const newDay = DAY_NAMES.includes(day) ? day : "Fri";
+  const oldCls = (await getClass(classCode).catch(() => null)) || {};
+  await classesCol().doc(classCode).update({ mortgageDay: newDay });
+  if (oldCls.mortgageDay && oldCls.mortgageDay !== newDay) {
+    const owners = Array.from(new Set((oldCls.properties || []).filter(p => p.owner && p.mortgage).map(p => p.owner)));
+    await t29NotifyStudents(classCode, { to: owners, icon: "house", tone: "gold",
+      title: "Your teacher changed mortgage day", body: `Mortgage payments are now due on ${newDay} (was ${oldCls.mortgageDay}).`, href: "property.html" });
+  }
 }
 
 // Teacher-only manual override: makes this week's mortgage installment
@@ -2199,7 +2306,15 @@ async function setMortgageDay(classCode, day) {
 // the normal due day (see payMortgage's comment for why mortgages are
 // manual-only).
 async function setMortgageDueOverride(classCode, active) {
+  const oldCls = (await getClass(classCode).catch(() => null)) || {};
+  const wasOn = !!oldCls.mortgageForceDueWeek && oldCls.mortgageForceDueWeek === isoWeekKey();
   await classesCol().doc(classCode).update({ mortgageForceDueWeek: active ? isoWeekKey() : null });
+  if (wasOn !== !!active) {
+    const owners = Array.from(new Set((oldCls.properties || []).filter(p => p.owner && p.mortgage).map(p => p.owner)));
+    await t29NotifyStudents(classCode, { to: owners, icon: "house", tone: active ? "coral" : "gold",
+      title: active ? "Your teacher made this week's mortgage payment due now" : "Your teacher put mortgage payments back to normal",
+      body: active ? "Pay it on the Property page." : "Mortgage payments are due on the usual day again.", href: "property.html" });
+  }
 }
 
 // Identifies the current "pay cycle" by the date of its next upcoming (or
@@ -2225,10 +2340,13 @@ function payCycleKey(payDay) {
 // current pay cycle. The box doesn't carry over — it resets automatically
 // the moment pay day arrives (Friday by default, or whatever the class's
 // pay day is set to), so the teacher has to tick it again each cycle.
-async function setJobTaskApproval(classCode, username, approved) {
+async function setJobTaskApproval(classCode, username, approved, opts) {
   const cls = await getClass(classCode);
   const weekKey = payCycleKey(cls && cls.payDay);
   await usersCol().doc(username).update({ jobTaskApproval: { weekKey, approved: !!approved } });
+  if (!(opts && opts.silent)) await t29NotifyStudents(classCode, { to: username, icon: "briefcase", tone: approved ? "mint" : "coral",
+    title: approved ? "Your teacher ticked off your job task for this week" : "Your teacher un-ticked your job task for this week",
+    body: approved ? "Your wage for this pay cycle is approved." : "Your wage for this pay cycle is on hold until the task is done.", href: "jobs.html" });
   return { ok: true };
 }
 function isJobTaskApprovedThisWeek(user, cls) {

@@ -999,7 +999,9 @@ async function saveLifestyle() {
 }
 
 async function runPayDay() {
+  const runStart = Date.now() - 1000;
   const { newlyPaid, hasJobs, unapprovedCount } = await payDay(CLASS_CODE);
+  if (newlyPaid > 0) await t29NotifyRunPayments(CLASS_CODE, runStart, "payday");
   if (!hasJobs) {
     alert("No students have a job assigned yet.");
   } else if (newlyPaid > 0 && unapprovedCount > 0) {
@@ -1027,8 +1029,11 @@ async function markAllJobTasksDone() {
   btn.disabled = true;
   try {
     // Each write hits a different student's own document, so it's safe to run together.
-    const results = await Promise.allSettled(targets.map(s => setJobTaskApproval(CLASS_CODE, s.username, true)));
+    const results = await Promise.allSettled(targets.map(s => setJobTaskApproval(CLASS_CODE, s.username, true, { silent: true })));
     const failed = results.filter(r => r.status === "rejected").length;
+    // One notice for everyone that worked (not one class write per student).
+    await t29NotifyStudents(CLASS_CODE, { to: targets.filter((s, i) => results[i].status === "fulfilled").map(s => s.username), icon: "briefcase", tone: "mint",
+      title: "Your teacher ticked off your job task for this week", body: "Your wage for this pay cycle is approved.", href: "jobs.html" });
     if (failed) alert(`Marked ${targets.length - failed} of ${targets.length} as done. ${failed} failed — please try again.`);
     await render();
   } finally {
@@ -1036,7 +1041,9 @@ async function markAllJobTasksDone() {
   }
 }
 async function runInterest() {
+  const runStart = Date.now() - 1000;
   const count = await applyInterest(CLASS_CODE);
+  if (count > 0) await t29NotifyRunPayments(CLASS_CODE, runStart, "interest");
   // count only reflects students who HADN'T already been paid today —
   // anyone already covered (their own visit, or an earlier automatic
   // sweep today) is correctly skipped rather than paid twice.
@@ -1094,7 +1101,12 @@ document.addEventListener("change", (e) => {
 });
 
 async function classesColUpdateRate(rate, cashRate) {
-  await fdb.collection("classes").doc(CLASS_CODE).update({ interestRate: rate, cashInterestRate: cashRate });
+  // Goes through saveInterestSettings (keeping the schedule as it is) so students are told about a rate change.
+  const cls = await getClass(CLASS_CODE);
+  await saveInterestSettings(CLASS_CODE, {
+    rate, cashRate, auto: !!(cls && cls.interestAuto),
+    frequency: cls && cls.interestFrequency, day: cls && cls.interestDay
+  });
 }
 async function savePayDay() {
   await setPayDay(CLASS_CODE, document.getElementById("payDaySelect").value);
@@ -1614,8 +1626,12 @@ async function profileRemoveProperty(propId) {
     "Any mortgage still owing — plus the class's break fee, if one is set — comes out of that payout first, " +
     "so the student can end up receiving nothing, or going backwards, on a heavily mortgaged property."
   )) return;
+  const propName = (((await getClassCached(CLASS_CODE)).properties || []).find(p => p.id === propId) || {}).name || "your property";
   const res = await sellProperty(CLASS_CODE, propId);
   if (!res.ok) { alert("That property couldn't be repossessed — it may have already been sold."); return; }
+  await t29NotifyStudents(CLASS_CODE, { to: PROFILE_USER, icon: "house", tone: "coral",
+    title: `Your teacher repossessed your property ${propName}`,
+    body: `You were paid ${fmtMoney(res.payout)}: the market price of ${fmtMoney(res.marketPrice)}${res.mortgagePayoff > 0 ? `, less ${fmtMoney(res.mortgagePayoff)} mortgage payoff` : ""}${res.breakFee > 0 ? `, less ${fmtMoney(res.breakFee)} break fee` : ""}.`, href: "property.html" });
   const parts = [`Market price ${fmtMoney(res.marketPrice)}`];
   if (res.mortgagePayoff > 0) parts.push(`less ${fmtMoney(res.mortgagePayoff)} mortgage payoff`);
   if (res.breakFee > 0) parts.push(`less ${fmtMoney(res.breakFee)} break fee`);
@@ -1678,7 +1694,13 @@ function vehicleTypeLabel(type) {
 async function profileRemoveVehicle(vehId, username) {
   const rate = await confirmRefundRate("Repossess this vehicle?", 90);
   if (rate === null) return;
+  const veh = ((await getClassCached(CLASS_CODE)).vehicles || []).find(v => v.id === vehId);
   await sellVehicle(CLASS_CODE, vehId, username, rate);
+  if (veh) {
+    await t29NotifyStudents(CLASS_CODE, { to: username, icon: "car", tone: "coral",
+      title: `Your teacher took back your vehicle ${veh.name}`,
+      body: rate > 0 ? `You were refunded ${Math.round(rate * 100)}% of its price (${fmtMoney(Math.round(veh.price * rate * 100) / 100)}).` : "No refund was given.", href: "transport.html" });
+  }
   await render();
   await renderProfile(PROFILE_USER);
 }
@@ -1699,7 +1721,13 @@ async function profileGiveStoreItem(username) {
 async function profileRemoveStoreItem(username, itemId) {
   const rate = await confirmRefundRate("Remove this item from the student?", 80);
   if (rate === null) return;
-  await sellStoreItem(username, CLASS_CODE, itemId, rate);
+  const item = ((await getClassCached(CLASS_CODE)).storeItems || []).find(i => i.id === itemId);
+  const sold = await sellStoreItem(username, CLASS_CODE, itemId, rate);
+  if (item && sold && sold.ok !== false) {
+    await t29NotifyStudents(CLASS_CODE, { to: username, icon: "cart", tone: "coral",
+      title: `Your teacher took ${item.name} from you`,
+      body: rate > 0 ? `You were refunded ${Math.round(rate * 100)}% of its price (${fmtMoney(Math.round(item.price * rate * 100) / 100)}).` : "No refund was given.", href: "store.html" });
+  }
   await render();
   await renderProfile(username);
 }
@@ -1732,14 +1760,23 @@ async function profileRemoveStoreItemBulk(username, itemId, maxQty) {
     80
   );
   if (rate === null) return;
+  const item = ((await getClassCached(CLASS_CODE)).storeItems || []).find(i => i.id === itemId);
   const res = await sellStoreItemBulk(username, CLASS_CODE, itemId, qty, rate);
   if (res && res.ok === false) { alert(res.error); return; }
+  if (item) {
+    await t29NotifyStudents(CLASS_CODE, { to: username, icon: "cart", tone: "coral",
+      title: `Your teacher took ${qty === 1 ? "" : qty + " of your "}${item.name}${qty === 1 ? " from you" : ""}`,
+      body: rate > 0 ? `You were refunded ${Math.round(rate * 100)}% of the price (${fmtMoney(Math.round(item.price * rate * qty * 100) / 100)}).` : "No refund was given.", href: "store.html" });
+  }
   await render();
   await renderProfile(username);
 }
 async function profileRemoveInsurance(username, planId) {
   if (!await t29Confirm("Cancel this student's insurance plan?")) return;
+  const plan = ((await getClassCached(CLASS_CODE)).insurancePlans || []).find(p => p.id === planId);
   await cancelInsurance(username, planId);
+  await t29NotifyStudents(CLASS_CODE, { to: username, icon: "shield", tone: "coral",
+    title: `Your teacher cancelled your insurance${plan ? ": " + plan.name : ""}`, body: "You are no longer covered by it. You can pick a plan again on the Insurance page.", href: "insurance.html" });
   await render();
   await renderProfile(username);
 }

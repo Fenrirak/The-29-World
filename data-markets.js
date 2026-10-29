@@ -37,6 +37,9 @@ async function openCompany(classCode, name, price, totalShares) {
     console.error("openCompany failed:", e);
     return { ok: false, error: "Something went wrong. Please try again. (" + (e.code || e.message || "unknown") + ")" };
   }
+  await t29NotifyStudents(classCode, { to: "all", icon: "chart", tone: "navy",
+    title: `Your teacher opened a new company: ${name}`,
+    body: `${parsedShares} shares are for sale at ${fmtMoney(parsedPrice)} each on the share market.`, href: "market.html" });
   return { ok: true };
 }
 
@@ -46,15 +49,24 @@ async function setCompanyPriceRange(classCode, companyId, min, max) {
     return { ok: false, error: "Enter valid numbers for the price range." };
   }
   const classRef = classesCol().doc(classCode);
+  let changed = null;
   await fdb.runTransaction(async (t) => {
+    changed = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
     const co = cls.companies.find(c => c.id === companyId);
     if (!co) return;
+    const old = co.priceRange || cls.priceRange || { min: 1, max: 5 };
     co.priceRange = { min: Math.max(0, parsedMin), max: Math.max(0, parsedMax) };
     t.update(classRef, { companies: cls.companies });
+    changed = { name: co.name, old, now: co.priceRange, holders: Object.keys(co.holders || {}).filter(u => co.holders[u] > 0) };
   });
+  if (changed && (changed.old.min !== changed.now.min || changed.old.max !== changed.now.max) && changed.holders.length) {
+    await t29NotifyStudents(classCode, { to: changed.holders, icon: "chart", tone: "gold",
+      title: `Your teacher changed how much ${changed.name} can move in a day`,
+      body: `A daily move of ${changed.old.min}%–${changed.old.max}% is now ${changed.now.min}%–${changed.now.max}%. You hold shares in it.`, href: "market.html" });
+  }
   return { ok: true };
 }
 
@@ -71,26 +83,48 @@ async function updateCompanyPrice(classCode, companyId, newPrice) {
     return { ok: false, error: "Enter a valid price greater than 0." };
   }
   const classRef = classesCol().doc(classCode);
+  let changed = null; // what the teacher just changed, for the holders' notification
   await fdb.runTransaction(async (t) => {
+    changed = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
     const co = cls.companies.find(c => c.id === companyId);
     if (!co) return;
+    const prev = co.price;
     co.price = Math.max(0.01, parsed);
     co.history.push(co.price);
     (co.historyDates = co.historyDates || []).push(nzDateKey());
     if (co.history.length > 30) co.history.shift();
     if (co.historyDates.length > 30) co.historyDates.shift();
     t.update(classRef, { companies: cls.companies });
+    changed = { name: co.name, prev, price: co.price, holders: Object.assign({}, co.holders || {}) };
   });
+  if (changed && changed.prev !== changed.price) {
+    const c = changed, up = c.price > c.prev;
+    await t29NotifyStudents(classCode, Object.keys(c.holders).filter(u => c.holders[u] > 0).map(u => {
+      const n = c.holders[u];
+      return {
+        to: u, icon: "chart", tone: up ? "mint" : "coral",
+        title: `Your teacher changed the ${c.name} share price: ${fmtMoney(c.prev)} → ${fmtMoney(c.price)}`,
+        body: `You hold ${n} ${n === 1 ? "share" : "shares"}, now worth ${fmtMoney(n * c.price)} (was ${fmtMoney(n * c.prev)}).`,
+        href: "market.html"
+      };
+    }));
+  }
   return { ok: true };
 }
 
 async function setPriceRange(classCode, min, max) {
-  await classesCol().doc(classCode).update({
-    priceRange: { min: Math.max(0, Number(min)), max: Math.max(0, Number(max)) }
-  });
+  const before = (await getClass(classCode).catch(() => null)) || {};
+  const old = before.priceRange || { min: 1, max: 5 };
+  const now = { min: Math.max(0, Number(min)), max: Math.max(0, Number(max)) };
+  await classesCol().doc(classCode).update({ priceRange: now });
+  if (old.min !== now.min || old.max !== now.max) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "chart", tone: "gold",
+      title: "Your teacher changed how much share prices can move",
+      body: `The usual daily move is now ${now.min}%–${now.max}% (was ${old.min}%–${old.max}%).`, href: "market.html" });
+  }
 }
 
 // Applies one simulated day's random price move to every company on `cls`
@@ -188,15 +222,50 @@ async function autoMarketDayIfDue(classCode) {
 async function simulateMarketDay(classCode) {
   const classRef = classesCol().doc(classCode);
   let results = [];
+  let moved = null; // before/after prices + holders, so every student can be told what the run did to them
   await fdb.runTransaction(async (t) => {
     results = []; // reset every attempt — this callback can be retried
+    moved = null;
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
+    const prevPrices = cls.companies.map(c => c.price);
     results = applyMarketDayMoves(cls);
     t.update(classRef, { companies: cls.companies });
+    moved = {
+      students: (cls.students || []).slice(),
+      cos: cls.companies.map((c, i) => ({ name: c.name, prev: prevPrices[i], price: c.price, holders: Object.assign({}, c.holders || {}) }))
+    };
   });
+  if (moved) await t29NotifyMarketRun(classCode, moved);
   return results;
+}
+
+// Tells the students who hold shares that the teacher ran the market by
+// hand, and what it did to THEIR shares. Students with no shares aren't told.
+async function t29NotifyMarketRun(classCode, m) {
+  const cos = m.cos.filter(c => c.prev > 0 && c.price !== c.prev);
+  if (!cos.length) return;
+  const pct = c => ((c.price - c.prev) / c.prev) * 100;
+  const fmtPct = c => `${c.price > c.prev ? "▲" : "▼"}${Math.abs(pct(c)).toFixed(1)}%`;
+  const notices = [];
+  m.students.forEach(u => {
+    const mine = cos.filter(c => (c.holders[u] || 0) > 0);
+    if (!mine.length) return;
+    let was = 0, now = 0;
+    mine.forEach(c => { was += c.holders[u] * c.prev; now += c.holders[u] * c.price; });
+    const diff = Math.round((now - was) * 100) / 100;
+    mine.sort((a, b) => Math.abs(b.holders[u] * (b.price - b.prev)) - Math.abs(a.holders[u] * (a.price - a.prev)));
+    const parts = mine.slice(0, 3).map(c => `${c.name} ${fmtPct(c)} to ${fmtMoney(c.price)}`);
+    if (mine.length > 3) parts.push(`+${mine.length - 3} more`);
+    notices.push({
+      to: u, icon: "chart", tone: diff >= 0 ? "mint" : "coral",
+      title: `Your teacher ran the stock market: your shares ${diff >= 0 ? "gained" : "lost"} ${fmtMoney(Math.abs(diff))}`,
+      body: `${parts.join(", ")}. Your holdings are now worth ${fmtMoney(now)} (was ${fmtMoney(was)}).`,
+      href: "market.html"
+    });
+  });
+  await t29NotifyStudents(classCode, notices);
 }
 
 async function closeCompany(classCode, companyId) {
@@ -219,6 +288,12 @@ async function closeCompany(classCode, companyId) {
     cls.companies = cls.companies.filter(c => c.id !== companyId);
     t.update(classRef, { companies: cls.companies });
   });
+  await t29NotifyStudents(classCode, payouts.map(p => ({
+    to: p.uname, icon: "chart", tone: "gold",
+    title: `Your teacher closed ${p.coName} and cashed out your shares`,
+    body: `${p.shares} ${p.shares === 1 ? "share" : "shares"} at ${fmtMoney(p.pricePerShare)} each: ${fmtMoney(p.payout)} was added to your balance.`,
+    href: "market.html"
+  })));
   for (const p of payouts) {
     await adjustBalance(p.uname, p.payout);
     await logTxn(classCode, {
@@ -447,7 +522,20 @@ async function saveMarketplaceSettings(classCode, settings) {
   if (clean.maxPricePct > 0 && clean.maxPricePct < clean.minPricePct) {
     const tmp = clean.minPricePct; clean.minPricePct = clean.maxPricePct; clean.maxPricePct = tmp;
   }
+  const oldM = (((await getClass(classCode).catch(() => null)) || {}).marketplace) || {};
   await classesCol().doc(classCode).update({ marketplace: clean });
+  const parts = [], onoff = (v, a, b) => v ? a : b;
+  if (!!oldM.enabled !== clean.enabled) parts.push(onoff(clean.enabled, "the Trade Centre is now open", "the Trade Centre is now closed"));
+  if (!!oldM.requireApproval !== clean.requireApproval) parts.push(onoff(clean.requireApproval, "listings now need teacher approval", "listings no longer need teacher approval"));
+  if (!!oldM.allowOffers !== clean.allowOffers) parts.push(onoff(clean.allowOffers, "offers are now allowed", "offers are no longer allowed"));
+  if (!!oldM.allowStore !== clean.allowStore) parts.push(onoff(clean.allowStore, "you can now sell store items", "you can no longer sell store items"));
+  if (!!oldM.allowVehicle !== clean.allowVehicle) parts.push(onoff(clean.allowVehicle, "you can now sell vehicles", "you can no longer sell vehicles"));
+  if (!!oldM.allowProperty !== clean.allowProperty) parts.push(onoff(clean.allowProperty, "you can now sell property", "you can no longer sell property"));
+  if ((oldM.minPricePct || 0) !== clean.minPricePct) parts.push(`lowest price ${oldM.minPricePct || 0}% → ${clean.minPricePct}% of value`);
+  if ((oldM.maxPricePct || 0) !== clean.maxPricePct) parts.push(`highest price ${oldM.maxPricePct ? oldM.maxPricePct + "%" : "no limit"} → ${clean.maxPricePct ? clean.maxPricePct + "%" : "no limit"} of value`);
+  if ((oldM.maxActiveListings || 0) !== clean.maxActiveListings) parts.push(`active listings allowed ${oldM.maxActiveListings || "no limit"} → ${clean.maxActiveListings || "no limit"}`);
+  if ((oldM.feePct || 0) !== clean.feePct) parts.push(`selling fee ${oldM.feePct || 0}% → ${clean.feePct}%`);
+  if (parts.length) await t29NotifyStudents(classCode, { to: "all", icon: "users", tone: "gold", title: "Your teacher changed the Trade Centre rules", body: parts.join("; ") + ".", href: "marketplace.html" });
   return clean;
 }
 
@@ -990,6 +1078,7 @@ async function acceptOffer(username, classCode, listingId, offerId) {
 
 /* ===================== Gambling (Roulette) ===================== */
 async function saveGamblingSettings(classCode, settings) {
+  const oldG = (((await getClass(classCode).catch(() => null)) || {}).gambling) || {};
   await classesCol().doc(classCode).update({
     gambling: {
       enabled: settings.enabled !== false,
@@ -1008,6 +1097,19 @@ async function saveGamblingSettings(classCode, settings) {
       }
     }
   });
+  const newG = ((await getClass(classCode).catch(() => null)) || {}).gambling || {};
+  const parts = [], m = fmtMoney, lim = v => v === null || v === undefined ? "no limit" : m(v);
+  if ((oldG.enabled !== false) !== (newG.enabled !== false)) parts.push(newG.enabled !== false ? "gambling is now on" : "gambling is now off");
+  if ((Number(oldG.minBet) || 0) !== (Number(newG.minBet) || 0)) parts.push(`smallest bet ${m(oldG.minBet || 0)} → ${m(newG.minBet || 0)}`);
+  if ((Number(oldG.maxBet) || 0) !== (Number(newG.maxBet) || 0)) parts.push(`biggest bet ${m(oldG.maxBet || 0)} → ${m(newG.maxBet || 0)}`);
+  if ((oldG.dailyBuyInLimit ?? null) !== (newG.dailyBuyInLimit ?? null)) parts.push(`daily buy-in limit ${lim(oldG.dailyBuyInLimit ?? null)} → ${lim(newG.dailyBuyInLimit ?? null)}`);
+  if ((oldG.dailyWinLimit ?? null) !== (newG.dailyWinLimit ?? null)) parts.push(`daily winning limit ${lim(oldG.dailyWinLimit ?? null)} → ${lim(newG.dailyWinLimit ?? null)}`);
+  const pl = { straightUp: "straight-up", split: "split", street: "street", corner: "corner", sixLine: "six-line", oddEven: "odd/even" };
+  Object.keys(pl).forEach(k => {
+    const a = Number((oldG.payouts || {})[k]) || 0, b = Number((newG.payouts || {})[k]) || 0;
+    if (a !== b) parts.push(`${pl[k]} payout ${a}:1 → ${b}:1`);
+  });
+  if (parts.length) await t29NotifyStudents(classCode, { to: "all", icon: "dice", tone: "gold", title: "Your teacher changed the gambling settings", body: parts.join("; ") + ".", href: "gambling.html" });
 }
 
 function rouletteRowCol(n) { return { row: Math.ceil(n / 3), col: ((n - 1) % 3) + 1 }; }
@@ -1336,13 +1438,20 @@ function betTypeLabel(t) {
 }
 async function setGamblingEnabled(classCode, enabled) {
   const classRef = classesCol().doc(classCode);
+  let wasOn = !!enabled; // (set again inside the transaction)
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
+    wasOn = cls.gambling.enabled !== false;
     cls.gambling.enabled = !!enabled;
     t.update(classRef, { gambling: cls.gambling });
   });
+  if (wasOn !== !!enabled) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "dice", tone: enabled ? "mint" : "coral",
+      title: enabled ? "Your teacher switched gambling on" : "Your teacher switched gambling off",
+      body: enabled ? "You can play on the Gambling page again." : "You can't play on the Gambling page until it is switched back on.", href: "gambling.html" });
+  }
 }
 
 // Sets (or clears, with minutes <= 0) the class's daily active-time limit.
@@ -1357,6 +1466,7 @@ async function setGamblingEnabled(classCode, enabled) {
 async function setStudentTimeLimit(classCode, minutes) {
   const limit = Number(minutes) > 0 ? Math.round(Number(minutes)) : null;
   const classRef = classesCol().doc(classCode);
+  const oldLimit = ((await getClass(classCode).catch(() => null)) || {}).dailyTimeLimitMinutes ?? null;
   await classRef.update({ dailyTimeLimitMinutes: limit });
 
   const cls = await getClass(classCode);
@@ -1373,6 +1483,11 @@ async function setStudentTimeLimit(classCode, minutes) {
       batch.set(usersCol().doc(username), { dailyLimitMinutes: limit }, { merge: true });
     });
     await batch.commit();
+  }
+  if (oldLimit !== limit) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "calendar", tone: "gold",
+      title: "Your teacher changed your daily time limit",
+      body: limit ? `You can now spend ${limit} minutes a day on the site (${oldLimit ? "was " + oldLimit + " minutes" : "there was no limit before"}).` : "There is no daily time limit any more.", href: "student.html" });
   }
 }
 
@@ -1444,6 +1559,13 @@ async function decideTimeExemption(username, approve, extraMinutes) {
     if (e.message === "NOT_PENDING") return { ok: false, error: "That request isn't pending anymore." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
+  const stu = await getUser(username).catch(() => null);
+  if (stu && stu.classCode) {
+    const grant = approve ? Math.max(0, Math.round(Number(extraMinutes)) || 0) : 0;
+    await t29NotifyStudents(stu.classCode, { to: username, icon: "calendar", tone: approve ? "mint" : "coral",
+      title: approve ? "Your teacher gave you more time today" : "Your teacher declined your request for more time",
+      body: approve ? `You have ${grant} extra ${grant === 1 ? "minute" : "minutes"} on the site today.` : "Your daily time limit stays the same.", href: "student.html" });
+  }
   return { ok: true };
 }
 
@@ -1458,13 +1580,18 @@ async function decideTimeExemption(username, approve, extraMinutes) {
    PDF were confirmed with the teacher building this: the dealer stands
    on every 17 (hard or soft), and the bots play full basic strategy. */
 async function saveBlackjackSettings(classCode, settings) {
-  await classesCol().doc(classCode).update({
-    blackjack: {
-      enabled: settings.enabled !== false,
-      minBet: Math.max(0, Number(settings.minBet) || 0),
-      maxBet: Math.max(0, Number(settings.maxBet) || 0)
-    }
-  });
+  const oldB = (((await getClass(classCode).catch(() => null)) || {}).blackjack) || {};
+  const newB = {
+    enabled: settings.enabled !== false,
+    minBet: Math.max(0, Number(settings.minBet) || 0),
+    maxBet: Math.max(0, Number(settings.maxBet) || 0)
+  };
+  await classesCol().doc(classCode).update({ blackjack: newB });
+  const parts = [], m = fmtMoney;
+  if ((oldB.enabled !== false) !== newB.enabled) parts.push(newB.enabled ? "blackjack is now on" : "blackjack is now off");
+  if ((Number(oldB.minBet) || 0) !== newB.minBet) parts.push(`smallest bet ${m(oldB.minBet || 0)} → ${m(newB.minBet)}`);
+  if ((Number(oldB.maxBet) || 0) !== newB.maxBet) parts.push(`biggest bet ${m(oldB.maxBet || 0)} → ${m(newB.maxBet)}`);
+  if (parts.length) await t29NotifyStudents(classCode, { to: "all", icon: "dice", tone: "gold", title: "Your teacher changed the blackjack settings", body: parts.join("; ") + ".", href: "gambling.html" });
 }
 
 const BJ_SUITS = ["S", "H", "D", "C"];
