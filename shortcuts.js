@@ -38,7 +38,8 @@
      Enter        in an amount/field that isn't inside a <form>, press the
                   button that goes with it (Ctrl/Cmd + Enter does the same
                   from a multi-line box, e.g. the job application letter)
-     page keys    Store: C = cart.  Blackjack: Enter = new round.
+     page keys    Store: C = cart.  Gambling: 1 = Account, 2 = Roulette, 3 = Blackjack
+                  (same order as the tabs); Blackjack: Enter = new round.
 
    All of the above can be switched off in Settings ("Use keyboard shortcuts").
    Esc, Enter-for-the-matching-button and the accessibility extras below are
@@ -591,7 +592,12 @@
       run: function () {
         if (typeof CART_OPEN !== "undefined" && CART_OPEN && typeof window.cartCloseDrawer === "function") window.cartCloseDrawer();
         else window.cartOpen();
-      } }
+      } },
+    // Gambling tabs: they press the real tab buttons, so switchMode() runs as normal.
+    // Digits are free everywhere else (the Jump box is a text box and stops its own keys).
+    { file: "gambling.html", key: "1", label: "Account tab", btn: "modeBtnAccount" },
+    { file: "gambling.html", key: "2", label: "Roulette tab", btn: "modeBtnRoulette" },
+    { file: "gambling.html", key: "3", label: "Blackjack tab", btn: "modeBtnBlackjack" }
   ];
   function pageKeys() { var f = pageFile(); return PAGE_KEYS.filter(function (p) { return p.file === f; }); }
 
@@ -837,7 +843,9 @@
     hintButtons();
   }
   // Hover tips that show the key: "Notifications (N)", "Settings (S)".
-  var KEY_TIPS = [ { id: "notifBell", key: "N", fallback: "Notifications" }, { id: "settingsBtn", key: "S", fallback: "Settings" } ];
+  var KEY_TIPS = [ { id: "notifBell", key: "N", fallback: "Notifications" }, { id: "settingsBtn", key: "S", fallback: "Settings" },
+    { id: "modeBtnAccount", key: "1", fallback: "Account" }, { id: "modeBtnRoulette", key: "2", fallback: "Roulette" },
+    { id: "modeBtnBlackjack", key: "3", fallback: "Blackjack" } ];
   function hintButtons() {
     KEY_TIPS.forEach(function (t) {
       var b = byId(t.id); if (!b) return;
