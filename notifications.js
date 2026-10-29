@@ -21,11 +21,22 @@
    data; it never means another field to migrate or another write on a hot
    path.
 
-   "Read" state is the one thing that has to be remembered, and it's
-   deliberately kept in localStorage (one timestamp per username) rather
-   than on the user doc: it's per-device, worthless to anyone else, and
-   the alternative is a Firestore write every single time a student opens
-   the panel.
+   "Read" state is the one thing that has to be remembered. It is a single
+   watermark timestamp per student, stored in TWO places: localStorage (so
+   this device/tab responds instantly and works offline) and
+   users/{username}.notifLastRead (so every other device/tab sees it too
+   and can't show the same notifications as unread again). The effective
+   watermark is always the LARGER of the two, so it can only move forward.
+   The Firestore write is skipped when nothing was actually unread, so
+   re-opening the panel doesn't cost a write.
+
+   DEVICE ALERTS (opt-in, per device): a student can switch on alerts for
+   the device/browser they're using (bell panel, and the settings menu via
+   notifDeviceControl()). That choice lives ONLY in localStorage, never on
+   the account, so a phone can be on while the school laptop is off. While
+   on, new unread items raise an OS notification even if the tab is in the
+   background. It needs the site open in a tab or installed app: there is no
+   server to push to a closed browser (see the notes by notifDeviceAlertNew).
 
    Loaded on every page (after the data-*.js files). It injects its own bell button
    into .topbar-actions, so pages don't need any markup for it — and it
@@ -39,7 +50,11 @@ const NOTIF_POLL_MS = 120000; // see the balance widget in the data-*.js files f
 /* ---------------- Read-state (per device, per student) ---------------- */
 function notifReadKey(username) { return "t29-notif-read-" + username; }
 
-function notifGetLastRead(username) {
+// Latest watermark known to be on the user doc (users/{username}.notifLastRead).
+let NOTIF_REMOTE_READ = 0;
+let NOTIF_REMOTE_WRITE_OK = true; // flips off after a refused/failed write so we don't retry every poll
+
+function notifGetLocalRead(username) {
   try {
     const raw = localStorage.getItem(notifReadKey(username));
     return raw ? Number(raw) || 0 : 0;
@@ -47,8 +62,23 @@ function notifGetLastRead(username) {
     return 0;
   }
 }
+// Effective watermark = newest of this device's copy and the shared one.
+function notifGetLastRead(username) {
+  return Math.max(notifGetLocalRead(username), NOTIF_REMOTE_READ);
+}
+function notifPushRemoteRead(username, ts) {
+  if (!NOTIF_REMOTE_WRITE_OK || typeof usersCol !== "function" || ts <= NOTIF_REMOTE_READ) return;
+  NOTIF_REMOTE_READ = ts;
+  Promise.resolve()
+    .then(() => usersCol().doc(username).update({ notifLastRead: ts }))
+    .catch(() => { NOTIF_REMOTE_WRITE_OK = false; }); // local copy still holds; best-effort
+}
 function notifSetLastRead(username, ts) {
+  const prev = notifGetLastRead(username);
+  if (ts <= prev) return; // watermark only ever moves forward
   try { localStorage.setItem(notifReadKey(username), String(ts)); } catch (e) { /* private mode — fine */ }
+  // Only touch Firestore if something was genuinely unread.
+  if (NOTIF_ITEMS.some(n => (n.ts || 0) > prev)) notifPushRemoteRead(username, ts);
 }
 
 /* ---------------- Time helpers ----------------
@@ -186,7 +216,7 @@ function notifPropertyRentalItems(me, cls) {
     if (p.sublet && p.owner === me.username) {
       if (p.sublet.status === "pending") {
         out.push({
-          id: "sublet-pending-" + p.id, ts: p.sublet.createdTs || dayStart, icon: "house", tone: "navy",
+          id: "sublet-pending-" + p.id, ts: p.sublet.createdTs || dayStart, quiet: true, icon: "house", tone: "navy",
           title: `${p.name} is waiting for teacher approval`,
           body: `Listed at ${fmtMoney(p.sublet.price)}/week. It's visible to classmates once your teacher approves it.`,
           href: "property.html"
@@ -270,7 +300,7 @@ function notifMarketItems(me, cls) {
   mine.forEach(m => {
     const up = m.pct > 0;
     out.push({
-      id: "mkt-" + m.co.id + "-" + nzDateKey(), ts: dayStart, icon: "chart", tone: up ? "mint" : "coral",
+      id: "mkt-" + m.co.id + "-" + nzDateKey(), ts: dayStart, quiet: true, icon: "chart", tone: up ? "mint" : "coral",
       title: `${m.co.name} share price ${up ? "rose" : "fell"} ${Math.abs(m.pct).toFixed(1)}%`,
       body: `Now ${fmtMoney(m.co.price)} a share. You hold ${m.shares} ${m.shares === 1 ? "share" : "shares"} — ${fmtMoney(m.shares * m.co.price)}.`,
       href: "market.html"
@@ -284,7 +314,7 @@ function notifMarketItems(me, cls) {
     if (Math.abs(top.pct) >= 2) {
       const up = top.pct > 0;
       out.push({
-        id: "mkt-top-" + top.co.id + "-" + nzDateKey(), ts: dayStart, icon: "chart", tone: up ? "mint" : "coral",
+        id: "mkt-top-" + top.co.id + "-" + nzDateKey(), ts: dayStart, quiet: true, icon: "chart", tone: up ? "mint" : "coral",
         title: `${top.co.name} ${up ? "rose" : "fell"} ${Math.abs(top.pct).toFixed(1)}% today`,
         body: `Today's biggest mover on the class market. Now ${fmtMoney(top.co.price)} a share.`,
         href: "market.html"
@@ -379,7 +409,7 @@ function notifSideHustleRequestItems(me, cls) {
   if (req && req.status === "pending") {
     const hustle = (cls.sideHustles || []).find(h => h.id === req.hustleId);
     out.push({
-      id: "sh-request-" + req.hustleId + "-" + req.checkinHour, ts: dayStart, icon: "briefcase", tone: "navy",
+      id: "sh-request-" + req.hustleId + "-" + req.checkinHour, ts: dayStart, quiet: true, icon: "briefcase", tone: "navy",
       title: "Side hustle change waiting for approval",
       body: `Switching to ${hustle ? hustle.name : "a new hustle"}, checking in at ${hourLabel(req.checkinHour)}. It applies once your teacher approves it.`,
       href: "student.html"
@@ -440,7 +470,7 @@ function notifMarketplaceItems(me, cls) {
     }
     if (l.seller === me.username && l.status === "pending") {
       out.push({
-        id: "pending-" + l.id, ts: l.ts || dayStart, icon: "cart", tone: "navy",
+        id: "pending-" + l.id, ts: l.ts || dayStart, quiet: true, icon: "cart", tone: "navy",
         title: `${l.name}${listingQuantity(l) > 1 ? " ×" + listingQuantity(l) : ""} ${listingQuantity(l) > 1 ? "are" : "is"} waiting for teacher approval`,
         body: `Listed at ${fmtMoney(l.price)}. It goes live once your teacher approves it.`,
         href: "marketplace.html"
@@ -590,6 +620,241 @@ async function notifLockBootTeacher(u) {
   if (st) notifShowLockBanner(u.username, st);
 }
 
+/* ===================== Device alerts (per device, opt-in) =====================
+   The on/off choice is a localStorage flag keyed by username, so two
+   students sharing a school computer never inherit each other's choice, and
+   nothing about it goes near Firestore. "On" also needs the browser's own
+   permission, which is per browser and which a page can't revoke.
+
+   LIMIT (by design of this app, which has no server code): alerts are raised
+   by this page's own poll, so they work while the site is open in a tab or
+   the installed app — including a background tab — but not after the
+   browser is fully closed. True closed-browser push needs Firebase Cloud
+   Messaging plus a Cloud Function that builds these notifications.
+
+   Which items alert: unread (newer than the shared read watermark, so
+   anything read on another device stays quiet), not alerted on this device
+   before, not `quiet` (share moves and "waiting for approval" statuses), and
+   only while the page isn't in front of the student (the bell covers that). */
+function notifPrefKey(u) { return "t29-notif-device-" + u; }
+function notifAlertedKey(u) { return "t29-notif-alerted-" + u; }
+function notifGetDevicePref(u) { try { return localStorage.getItem(notifPrefKey(u)) === "1"; } catch (e) { return false; } }
+function notifSetDevicePref(u, on) {
+  try { if (on) localStorage.setItem(notifPrefKey(u), "1"); else localStorage.removeItem(notifPrefKey(u)); } catch (e) { /* private mode */ }
+}
+function notifPushSupported() {
+  return typeof Notification !== "undefined" && window.isSecureContext !== false;
+}
+function notifIsIos() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+function notifDeviceAlertsOn() {
+  return !!NOTIF_USER && notifPushSupported() && Notification.permission === "granted" && notifGetDevicePref(NOTIF_USER);
+}
+
+function notifAlertedSet() {
+  try { return new Set(JSON.parse(localStorage.getItem(notifAlertedKey(NOTIF_USER)) || "[]")); } catch (e) { return new Set(); }
+}
+function notifSaveAlerted(set) {
+  try { localStorage.setItem(notifAlertedKey(NOTIF_USER), JSON.stringify(Array.from(set).slice(-200))); } catch (e) { /* fine */ }
+}
+
+// A service worker is needed to show alerts on phones. If the site already
+// has one we reuse it rather than replace it; otherwise we register ours.
+async function notifGetSwReg() {
+  if (!("serviceWorker" in navigator)) return null;
+  try {
+    let reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) reg = await navigator.serviceWorker.register("notif-sw.js?v=4bff3690");
+    if (!reg.active) await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(r, 4000))]);
+    return reg;
+  } catch (e) { return null; }
+}
+
+async function notifShowDeviceAlert(a) {
+  const opts = { body: a.body || "", tag: a.tag, data: { url: a.url || "" } };
+  const reg = await notifGetSwReg();
+  if (reg && reg.showNotification) {
+    try { await reg.showNotification(a.title, opts); return true; } catch (e) { /* fall through */ }
+  }
+  try {
+    const n = new Notification(a.title, opts);
+    n.onclick = () => { window.focus(); if (a.url) location.href = a.url; n.close(); };
+    return true;
+  } catch (e) { return false; }
+}
+
+function notifDeviceAlertNew() {
+  if (!notifDeviceAlertsOn()) return;
+  const lastRead = notifGetLastRead(NOTIF_USER);
+  const seen = notifAlertedSet();
+  const fresh = NOTIF_ITEMS.filter(n => !n.quiet && (n.ts || 0) > lastRead && !seen.has(n.id));
+  if (!fresh.length) return;
+  fresh.forEach(n => seen.add(n.id));
+  notifSaveAlerted(seen);
+  // Looking at the site right now: the bell badge already says it.
+  if (document.visibilityState === "visible" && document.hasFocus()) return;
+  const clip = t => (t || "").length > 140 ? t.slice(0, 137) + "…" : (t || "");
+  if (fresh.length > 3) {
+    notifShowDeviceAlert({
+      title: `${fresh.length} new notifications`,
+      body: clip(fresh.slice(0, 2).map(n => n.title).join(" · ") + ` and ${fresh.length - 2} more`),
+      tag: "t29-notif-summary"
+    });
+  } else {
+    fresh.forEach(n => notifShowDeviceAlert({
+      title: n.title, body: clip(n.body), tag: "t29-" + n.id,
+      url: n.href ? new URL(n.href, location.href).href : ""
+    }));
+  }
+}
+
+// Tab title "(3) …" and the installed-app icon badge, only while alerts are on.
+let NOTIF_BADGE_SET = false;
+function notifSyncTabBadge(n) {
+  const on = notifDeviceAlertsOn();
+  const base = document.title.replace(/^\(\d+\)\s*/, "");
+  const want = on && n > 0 ? `(${n}) ${base}` : base;
+  if (document.title !== want) document.title = want;
+  try {
+    if (on && n > 0 && navigator.setAppBadge) { navigator.setAppBadge(n); NOTIF_BADGE_SET = true; }
+    else if (NOTIF_BADGE_SET && navigator.clearAppBadge) { navigator.clearAppBadge(); NOTIF_BADGE_SET = false; }
+  } catch (e) { /* badge API is optional */ }
+}
+
+// Alerts need the poll to keep running in a background tab.
+let NOTIF_CLASS = null;
+function notifSyncPolling() {
+  if (!NOTIF_USER || !NOTIF_CLASS) return;
+  if (document.hidden && !notifDeviceAlertsOn()) notifStopPoll();
+  else notifStartPoll(NOTIF_USER, NOTIF_CLASS);
+}
+
+async function notifDeviceEnable() {
+  if (!notifPushSupported()) return false;
+  let perm = Notification.permission;
+  if (perm === "default") {
+    perm = await new Promise(res => { const p = Notification.requestPermission(res); if (p && p.then) p.then(res); });
+  }
+  if (perm !== "granted") { notifDeviceRepaintAll(); return false; }
+  notifSetDevicePref(NOTIF_USER, true);
+  // Don't flood them with everything already sitting in the bell.
+  const seen = notifAlertedSet();
+  NOTIF_ITEMS.forEach(n => seen.add(n.id));
+  notifSaveAlerted(seen);
+  notifSyncPolling();
+  notifUpdateBadge();
+  notifDeviceRepaintAll();
+  notifShowDeviceAlert({ title: "Alerts are on for this device", body: "You'll get a ping here when something new needs you.", tag: "t29-test" });
+  return true;
+}
+function notifDeviceDisable() {
+  notifSetDevicePref(NOTIF_USER, false);
+  notifSyncPolling();
+  notifUpdateBadge();
+  notifDeviceRepaintAll();
+}
+
+/* ---- The on/off control. notifDeviceControl(hostElement) renders it into
+   any container (the bell panel uses it; settings-menu.js can call it too)
+   and keeps it in sync across every place it's shown. ---- */
+const NOTIF_DEVICE_HOSTS = new Set();
+function notifInjectDeviceCss() {
+  if (document.getElementById("t29DeviceCss")) return;
+  const st = document.createElement("style");
+  st.id = "t29DeviceCss";
+  st.textContent = `
+.t29-da{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(127,127,127,.25);background:rgba(127,127,127,.07);}
+.t29-da-ic{flex:0 0 auto;display:inline-flex;opacity:.8;}
+.t29-da-txt{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px;line-height:1.3;}
+.t29-da-title{font-weight:700;font-size:.9rem;}
+.t29-da-sub{font-size:.76rem;opacity:.75;}
+.t29-da-sub button{all:unset;cursor:pointer;text-decoration:underline;font-weight:700;}
+.t29-da-hint{padding:8px 14px 10px;font-size:.76rem;line-height:1.4;border-bottom:1px solid rgba(127,127,127,.25);background:rgba(224,160,40,.12);}
+.t29-da-switch{all:unset;flex:0 0 auto;box-sizing:border-box;width:42px;height:24px;border-radius:12px;background:rgba(127,127,127,.45);position:relative;cursor:pointer;transition:background .15s;}
+.t29-da-switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.3);}
+.t29-da-switch[aria-checked="true"]{background:#2f9e6a;}
+.t29-da-switch[aria-checked="true"]::after{transform:translateX(18px);}
+.t29-da-switch:focus-visible{outline:2px solid #2f9e6a;outline-offset:2px;}
+.t29-da-switch[disabled]{opacity:.45;cursor:not-allowed;}
+.settings-popover-desc button[data-da]{all:unset;cursor:pointer;text-decoration:underline;font-weight:700;}`;
+  document.head.appendChild(st);
+}
+function notifDeviceControl(host) {
+  if (!host) return false;
+  notifInjectDeviceCss();
+  NOTIF_DEVICE_HOSTS.add(host);
+  notifDeviceRender(host);
+  return !!NOTIF_USER;
+}
+function notifDeviceRepaintAll() {
+  NOTIF_DEVICE_HOSTS.forEach(h => { if (!h.isConnected) NOTIF_DEVICE_HOSTS.delete(h); else notifDeviceRender(h); });
+}
+function notifDeviceRender(host) {
+  if (!NOTIF_USER) { host.innerHTML = ""; return; } // teachers / not ready yet
+  const supported = notifPushSupported();
+  const perm = supported ? Notification.permission : "unsupported";
+  const on = notifDeviceAlertsOn();
+  const blocked = perm === "denied";
+  let sub, hint = "";
+  if (!supported) {
+    sub = "Not available in this browser.";
+    hint = notifIsIos() ? "On iPhone or iPad, tap Share, then Add to Home Screen, and open the site from your Home Screen to turn alerts on."
+      : window.isSecureContext === false ? "Alerts need a secure (https) connection."
+      : "This browser can't show device alerts. Try Chrome, Edge, Firefox or Safari.";
+  } else if (blocked) {
+    sub = "Blocked in your browser.";
+    hint = "Allow notifications for this site in your browser's site settings, then reopen this menu.";
+  } else if (on) {
+    sub = `On for this device only. Needs the site open in a tab or app. <button type="button" data-da="test">Send a test</button>`;
+  } else {
+    sub = "Off on this device. Turn on to get pinged here.";
+  }
+  const disabled = !supported || blocked;
+  if (host.dataset.style === "row") {
+    // Same look as the other rows in the settings popover (lg-switch).
+    host.innerHTML = `<div class="settings-popover-row">
+        <div class="settings-popover-text">
+          <div class="settings-popover-title">Alert this device</div>
+          <div class="settings-popover-desc">${sub}${hint ? " " + escapeHtml(hint) : ""}</div>
+        </div>
+        <label class="lg-switch">
+          <input type="checkbox" aria-label="Alert this device"${on ? " checked" : ""}${disabled ? " disabled" : ""}>
+          <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
+        </label>
+      </div>`;
+    const cb = host.querySelector("input");
+    cb.addEventListener("change", async () => {
+      cb.disabled = true;
+      if (cb.checked) await notifDeviceEnable(); else notifDeviceDisable();
+      notifDeviceRepaintAll();
+    });
+    const t = host.querySelector('[data-da="test"]');
+    if (t) t.addEventListener("click", async e => {
+      e.stopPropagation();
+      t.textContent = (await notifShowDeviceAlert({ title: "Test alert", body: "If you can see this, alerts work on this device.", tag: "t29-test" })) ? "Sent" : "Couldn't show it";
+    });
+    return;
+  }
+  host.innerHTML = `<div class="t29-da">
+      <span class="t29-da-ic">${notifIconFor("bell", 16)}</span>
+      <span class="t29-da-txt"><span class="t29-da-title">Alert this device</span><span class="t29-da-sub">${sub}</span></span>
+      <button type="button" role="switch" class="t29-da-switch" aria-label="Alert this device" aria-checked="${on}"${disabled ? " disabled" : ""}></button>
+    </div>${hint ? `<div class="t29-da-hint">${escapeHtml(hint)}</div>` : ""}`;
+  const sw = host.querySelector(".t29-da-switch");
+  sw.addEventListener("click", async e => {
+    e.stopPropagation();
+    sw.disabled = true; // one tap = one change, even while the permission prompt is up
+    if (notifDeviceAlertsOn()) notifDeviceDisable(); else await notifDeviceEnable();
+    notifDeviceRepaintAll();
+  });
+  const test = host.querySelector('[data-da="test"]');
+  if (test) test.addEventListener("click", async e => {
+    e.stopPropagation();
+    test.textContent = (await notifShowDeviceAlert({ title: "Test alert", body: "If you can see this, alerts work on this device.", tag: "t29-test" })) ? "Sent" : "Couldn't show it";
+  });
+}
+
 /* ================= UI ================= */
 let NOTIF_USER = null;
 let NOTIF_ITEMS = [];
@@ -656,10 +921,12 @@ function notifBuildPanel() {
       <div class="notif-head-title">${notifIconFor("bell", 15)}<span>Notifications</span></div>
       <button type="button" class="notif-markread" id="notifMarkRead">Mark all read</button>
     </div>
+    <div class="notif-device" id="notifDevice"></div>
     <div class="notif-list" id="notifList"></div>
     <div class="notif-foot"><a href="bank.html">See my full account history ›</a></div>
   `;
   document.body.appendChild(panel);
+  notifDeviceControl(panel.querySelector("#notifDevice"));
   panel.addEventListener("click", e => e.stopPropagation());
   panel.querySelector("#notifMarkRead").addEventListener("click", () => {
     notifSetLastRead(NOTIF_USER, trustedNow().getTime());
@@ -726,6 +993,7 @@ function notifOpen() {
   const panel = notifBuildPanel();
   NOTIF_EXPANDED = false;
   notifRenderList();
+  notifDeviceRepaintAll(); // the browser permission may have changed since last time
   notifPositionPanel(panel, btn);
   btn.setAttribute("aria-expanded", "true");
   btn.classList.add("active");
@@ -764,6 +1032,7 @@ function notifUpdateBadge() {
   // Phone menu button (sidebar-nav.js) shows a dot too, since the bell is
   // hidden inside the closed menu there.
   if (typeof sbSyncUnreadDot === "function") sbSyncUnreadDot();
+  notifSyncTabBadge(n);
 }
 
 function notifRenderList() {
@@ -822,6 +1091,11 @@ async function notifRefresh(username, classCode) {
   const [me, cls] = await Promise.all([getUserCached(username), getClassCached(classCode)]);
   if (!me || !cls) return;
   withNewModuleDefaults(cls);
+  // Pick up a "mark read" done on another device/tab, and (one-off) push up
+  // a watermark that so far only exists in this device's localStorage.
+  if (Number(me.notifLastRead) > NOTIF_REMOTE_READ) NOTIF_REMOTE_READ = Number(me.notifLastRead);
+  const localRead = notifGetLocalRead(username);
+  if (localRead > NOTIF_REMOTE_READ) notifPushRemoteRead(username, localRead);
   NOTIF_ITEMS = buildNotifications(Object.assign({ username }, me), cls);
   try {
     const lock = await notifLockNotice(username);
@@ -831,6 +1105,7 @@ async function notifRefresh(username, classCode) {
     }
   } catch (e) { /* the lock notice is optional */ }
   notifPaint();
+  notifDeviceAlertNew();
 
   // Every page now gets the module locks applied to its nav, not just the
   // three that happened to call this themselves — this file is the only
@@ -865,9 +1140,16 @@ async function notifInit() {
   if (u && u.role === "teacher") { notifInjectLockCss(); notifLockBootTeacher(u).catch(() => {}); return; }
   if (!u || u.role !== "student" || !u.classCode) return;
   NOTIF_USER = u.username;
+  NOTIF_CLASS = u.classCode;
+  notifDeviceRepaintAll(); // a settings control may have been drawn before we knew who this was
 
   if (!notifBuildBell()) return;
 
+  // Another tab on this device marked read: repaint right away.
+  window.addEventListener("storage", e => {
+    if (e.key === notifReadKey(NOTIF_USER)) notifPaint();
+    if (e.key === notifPrefKey(NOTIF_USER)) { notifDeviceRepaintAll(); notifSyncPolling(); notifUpdateBadge(); }
+  });
   document.addEventListener("click", () => notifClose());
   document.addEventListener("keydown", e => { if (e.key === "Escape") notifClose(); });
   window.addEventListener("resize", () => {
@@ -876,12 +1158,12 @@ async function notifInit() {
     if (panel && btn && !panel.classList.contains("hidden")) notifPositionPanel(panel, btn);
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) notifStopPoll();
+    if (document.hidden) notifSyncPolling(); // keeps polling only if this device has alerts on
     else { notifRefresh(u.username, u.classCode).catch(() => {}); notifStartPoll(u.username, u.classCode); }
   });
 
   await notifRefresh(u.username, u.classCode).catch(() => {});
-  if (!document.hidden) notifStartPoll(u.username, u.classCode);
+  if (!document.hidden || notifDeviceAlertsOn()) notifStartPoll(u.username, u.classCode);
 }
 
 // The bell is never why someone opened the page, so let the page's own

@@ -158,6 +158,7 @@ function smBuildPopover() {
         <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
       </label>
     </div>` : ""}
+    <div id="t29DeviceAlertsHost" data-style="row"></div>
     <div class="settings-popover-row" id="t29ChangePasswordRow" role="button" tabindex="0" style="cursor:pointer;">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Change password</div>
@@ -171,6 +172,10 @@ function smBuildPopover() {
   `;
 
   document.body.appendChild(pop);
+
+  // Per-device alerts (students only — renders nothing for teachers). The
+  // control lives in notifications.js, which loads on every page.
+  if (typeof notifDeviceControl === "function") notifDeviceControl(pop.querySelector("#t29DeviceAlertsHost"));
 
   const dmToggle = pop.querySelector("#t29DarkModeToggle");
   if (dmToggle) {
@@ -260,6 +265,8 @@ function smOpenPopover(btn) {
   if (dm) dm.checked = document.documentElement.classList.contains("dark-mode");
   const sbCb = pop.querySelector("#t29SidebarNavToggle");
   if (sbCb) sbCb.checked = smSidebarIsOn();
+  // Browser notification permission can change outside the page.
+  if (typeof notifDeviceRepaintAll === "function") notifDeviceRepaintAll();
   smPositionPopover(pop, btn);
   btn.setAttribute("aria-expanded", "true");
 }
