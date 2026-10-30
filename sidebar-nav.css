@@ -45,7 +45,7 @@
 html.sidebar-nav .sb-group-label{
   display: block;
   margin: 12px 4px 2px;
-  font-size: .7rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -104,7 +104,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
   }
   html.sidebar-nav .topbar nav a{
     width: 100%;
-    font-size: .92rem;
+    font-size: var(--fs-lg);
     padding: 11px 12px;
     min-height: 0;
     gap: 10px;
@@ -140,12 +140,12 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
      both already carry an aria-label for assistive tech regardless. */
   html.sidebar-nav #settingsBtn::after{
     content: "Settings";
-    font-size: .92rem;
+    font-size: var(--fs-lg);
     font-weight: 700;
   }
   html.sidebar-nav #notifBell::after{
     content: "Notifications";
-    font-size: .92rem;
+    font-size: var(--fs-lg);
     font-weight: 700;
   }
   /* In the rail the unread badge sits inline after the label rather than
@@ -179,7 +179,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
     min-width: 120px;
     padding: 11px 14px;
   }
-  html.sidebar-nav .anw-balance-widget .anw-bw-label{ font-size: .7rem; }
+  html.sidebar-nav .anw-balance-widget .anw-bw-label{ font-size: var(--fs-xs); }
   html.sidebar-nav .anw-balance-widget .anw-bw-value{ font-size: 1.35rem; }
 }
 
@@ -317,8 +317,8 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
     justify-content: flex-start; padding: 11px 12px; gap: 10px; min-width: 0;
   }
   html.sidebar-nav .btn-logout .nav-label{ display: inline; }
-  html.sidebar-nav #settingsBtn::after{ content: "Settings"; font-size: .92rem; font-weight: 700; }
-  html.sidebar-nav #notifBell::after{ content: "Notifications"; font-size: .92rem; font-weight: 700; }
+  html.sidebar-nav #settingsBtn::after{ content: "Settings"; font-size: var(--fs-lg); font-weight: 700; }
+  html.sidebar-nav #notifBell::after{ content: "Notifications"; font-size: var(--fs-lg); font-weight: 700; }
   html.sidebar-nav #notifBell .notif-dot{ position: static; order: 1; margin-left: auto; border-color: transparent; }
   html.sidebar-nav .settings-dropdown{ left: 0; right: auto; bottom: calc(100% + 8px); top: auto; width: 100%; }
 

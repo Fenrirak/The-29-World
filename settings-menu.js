@@ -44,7 +44,7 @@ function dmSetOn(on) {
 }
 
 const SM_BUNDLES = {
-  sb: { css: "sidebar-nav.css?v=b256adec", js: "sidebar-nav.js?v=8d951bc5", setter: "sbSetOn" }
+  sb: { css: "sidebar-nav.css?v=db165b29", js: "sidebar-nav.js?v=8d951bc5", setter: "sbSetOn" }
 };
 
 // Loads a feature's CSS+JS the first time it's needed (idempotent — safe to
@@ -184,7 +184,7 @@ function smBuildPopover() {
     <div class="settings-popover-heading">${typeof icon === "function" ? icon("settings", 15) : ""}<span>Settings</span></div>
     ${rows.join('<div class="sm-divider" role="separator"></div>')}
     <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;">
-      <a href="https://buymeacoffee.com/29world" target="_blank" rel="noopener" id="t29SupportCreatorRow" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 12px;border-radius:8px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);font-weight:800;font-size:.8rem;text-decoration:none;">☕ Support the Creator</a>
+      <a href="https://buymeacoffee.com/29world" target="_blank" rel="noopener" id="t29SupportCreatorRow" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 12px;border-radius:8px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);font-weight:800;font-size:var(--fs-sm);text-decoration:none;">☕ Support the Creator</a>
     </div>
   `;
 

@@ -1906,11 +1906,11 @@ function _pwBuildModal() {
         <h2 style="margin:0 0 2px;">Change password</h2>
         <button class="btn small secondary" type="button" id="t29PwCloseBtn">Close</button>
       </div>
-      <label style="display:block;margin:14px 0 4px;font-size:.92rem;" for="t29PwCurrent">Current password</label>
+      <label style="display:block;margin:14px 0 4px;font-size:var(--fs-lg);" for="t29PwCurrent">Current password</label>
       <input type="password" id="t29PwCurrent" autocomplete="current-password" style="width:100%;">
-      <label style="display:block;margin:12px 0 4px;font-size:.92rem;" for="t29PwNew">New password</label>
+      <label style="display:block;margin:12px 0 4px;font-size:var(--fs-lg);" for="t29PwNew">New password</label>
       <input type="password" id="t29PwNew" autocomplete="new-password" style="width:100%;">
-      <label style="display:block;margin:12px 0 4px;font-size:.92rem;" for="t29PwConfirm">Confirm new password</label>
+      <label style="display:block;margin:12px 0 4px;font-size:var(--fs-lg);" for="t29PwConfirm">Confirm new password</label>
       <input type="password" id="t29PwConfirm" autocomplete="new-password" style="width:100%;">
       <p class="muted-small" id="t29PwMsg" style="min-height:1.2em;margin-top:10px;"></p>
       <button class="btn gold" type="button" id="t29PwSubmitBtn">Update password</button>
@@ -2416,6 +2416,7 @@ function safeBgJob(promise, label) {
 let _t29SessionConnectionFailed = false;
 let _t29LoadingStarted = false;
 let _t29PageIsReady = false;
+let _t29ReadyAt = 0;
 let _t29SlowLoadTimer = null;
 
 // True for "couldn't reach Firebase" failures (offline, Wi-Fi dropped,
@@ -2451,6 +2452,7 @@ function t29StartPageLoading() {
 function t29PageReady() {
   if (_t29PageIsReady) return;
   _t29PageIsReady = true;
+  _t29ReadyAt = Date.now();
   clearTimeout(_t29SlowLoadTimer);
   if (typeof document === "undefined") return;
   document.documentElement.classList.remove("t29-loading");
@@ -2505,18 +2507,69 @@ if (typeof document !== "undefined" && typeof MutationObserver !== "undefined") 
       });
     });
   };
+  // Phones: a table wider than the screen scrolls sideways, so it fades out at
+  // whichever edge still has more to see (the fade itself is CSS, phones only).
+  const markScroller = el => {
+    const max = el.scrollWidth - el.clientWidth;
+    el.classList.toggle("t29-fade-r", max > 2 && el.scrollLeft < max - 2);
+    el.classList.toggle("t29-fade-l", max > 2 && el.scrollLeft > 2);
+  };
+  const sizeWatcher = typeof ResizeObserver !== "undefined" ? new ResizeObserver(entries => entries.forEach(e => markScroller(e.target.closest(".table-scroll") || e.target))) : null;
+  const markScrollers = () => {
+    document.querySelectorAll(".table-scroll").forEach(el => {
+      if (!el.dataset.fadeBound) {
+        el.dataset.fadeBound = "1";
+        el.addEventListener("scroll", () => markScroller(el), { passive: true });
+        if (sizeWatcher) { sizeWatcher.observe(el); if (el.firstElementChild) sizeWatcher.observe(el.firstElementChild); }
+      }
+      markScroller(el);
+    });
+  };
   let labelQueued = false;
   const queueLabels = () => {
     if (labelQueued) return;
     labelQueued = true;
-    requestAnimationFrame(() => { labelQueued = false; labelStackTables(); });
+    requestAnimationFrame(() => { labelQueued = false; labelStackTables(); markScrollers(); });
   };
   const startLabelling = () => {
     labelStackTables();
+    markScrollers();
     new MutationObserver(queueLabels).observe(document.body, { childList: true, subtree: true });
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", startLabelling);
   else if (document.body) startLabelling();
+}
+
+// When a figure on a dashboard card changes (cash after a purchase, pay arriving),
+// it briefly flashes so the change is noticed: green and lifted when it goes up,
+// a quiet dip when it goes down. Nothing runs while the page is still loading or
+// in the first moments after, so the first real numbers never flash.
+if (typeof document !== "undefined" && typeof MutationObserver !== "undefined") {
+  const seen = new WeakMap();
+  const num = t => parseFloat(String(t).replace(/[^0-9.\-]/g, ""));
+  const flash = (el, cls) => {
+    el.classList.remove("t29-up", "t29-down", "t29-changed");
+    void el.offsetWidth;
+    el.classList.add(cls);
+    el.addEventListener("animationend", () => el.classList.remove(cls), { once: true });
+  };
+  const check = el => {
+    const now = el.textContent.trim(), before = seen.get(el);
+    seen.set(el, now);
+    if (before === undefined || before === now || !before || !_t29PageIsReady || Date.now() - _t29ReadyAt < 1500) return;
+    const a = num(before), b = num(now);
+    flash(el, isNaN(a) || isNaN(b) ? "t29-changed" : b > a ? "t29-up" : "t29-down");
+  };
+  const watchStats = () => {
+    document.querySelectorAll(".stat .value").forEach(el => {
+      if (seen.has(el)) return;
+      seen.set(el, el.textContent.trim());
+      new MutationObserver(() => check(el)).observe(el, { childList: true, characterData: true, subtree: true });
+    });
+  };
+  const startWatching = () => { watchStats(); new MutationObserver(watchStats).observe(document.body, { childList: true, subtree: true }); };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", startWatching);
+  else if (document.body) startWatching();
 }
 
 // Scrolls smoothly to an element (the next step on an "empty" message),

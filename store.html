@@ -20,7 +20,7 @@
     var s = document.createElement('script'); s.src = js;
     document.head.appendChild(s);
   }
-  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=b256adec', 'sidebar-nav.js?v=8d951bc5');
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=db165b29', 'sidebar-nav.js?v=8d951bc5');
 })();
 </script>
 <title>Class Store — The 29 World</title>
@@ -29,18 +29,18 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=ec4ad9ed">
+<link rel="stylesheet" href="style.css?v=2d152432">
 <style>
 /* ---- Teacher: arrange the store ---- */
 .sort-bar{margin-bottom:18px}
 .sort-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
 .sort-title{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:1.1rem}
-.sort-status{font-size:.85rem;opacity:.75;min-height:1em}
+.sort-status{font-size:var(--fs-md);opacity:.75;min-height:1em}
 .sort-status.ok{color:#2e9d6a;opacity:1}
 .sort-status.err{color:#d8563f;opacity:1}
 .sort-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
-.sort-row-label{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.6;min-width:74px}
-.sort-chip{width:auto;margin:0;font:inherit;font-size:.85rem;font-weight:600;color:inherit;background:transparent;border:1.5px solid rgba(128,128,128,.4);border-radius:999px;padding:7px 14px;min-height:38px;cursor:pointer;transition:background .18s,border-color .18s,transform .18s,box-shadow .18s}
+.sort-row-label{font-size:var(--fs-xs);font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.6;min-width:74px}
+.sort-chip{width:auto;margin:0;font:inherit;font-size:var(--fs-md);font-weight:600;color:inherit;background:transparent;border:1.5px solid rgba(128,128,128,.4);border-radius:999px;padding:7px 14px;min-height:38px;cursor:pointer;transition:background .18s,border-color .18s,transform .18s,box-shadow .18s}
 .sort-chip:hover{border-color:#e3a72f;transform:translateY(-1px)}
 .sort-chip.active{background:#e3a72f;border-color:#e3a72f;color:#1f2b44;box-shadow:0 3px 10px rgba(227,167,47,.35)}
 .sort-chip:focus-visible,.rc-btn:focus-visible,.rc-grip:focus-visible{outline:3px solid rgba(227,167,47,.6);outline-offset:2px}
@@ -49,7 +49,7 @@
 .store-left{display:flex;gap:12px;align-items:flex-start;min-width:0;flex:1}
 .store-info{min-width:0;flex:1}
 .reorder-ctl{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
-.rank-badge{font-size:.78rem;font-weight:700;opacity:.65;min-width:22px;text-align:center}
+.rank-badge{font-size:var(--fs-sm);font-weight:700;opacity:.65;min-width:22px;text-align:center}
 .rc-btn,.rc-grip{width:36px;height:30px;padding:0;margin:0;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;border:1.5px solid rgba(128,128,128,.35);background:transparent;color:inherit;cursor:pointer;transition:background .15s,border-color .15s}
 .rc-btn:hover:not(:disabled),.rc-grip:hover{border-color:#e3a72f;background:rgba(227,167,47,.14)}
 .rc-btn:disabled{opacity:.28;cursor:default}
@@ -162,9 +162,9 @@ body.store-dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
 
 <script type="module" src="firebase-init.js?v=aca5590e"></script>
 <script defer src="icons.js?v=c9829d04"></script>
-<script defer src="settings-menu.js?v=576b9ff7"></script>
+<script defer src="settings-menu.js?v=07d1ebe2"></script>
 <script defer src="shortcuts.js?v=80d22675"></script>
-<script defer src="data-core.js?v=821182d7"></script>
+<script defer src="data-core.js?v=592e5fc3"></script>
 <script defer src="data-money.js?v=7399c2f5"></script>
 <script defer src="data-life.js?v=1f1ba032"></script>
 <script defer src="data-property.js?v=0274c245"></script>
@@ -173,6 +173,6 @@ body.store-dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="notifications.js?v=e921b3db"></script>
 <script defer src="creditcard.js?v=79209516"></script>
-<script defer src="store.js?v=20101d2a"></script>
+<script defer src="store.js?v=c82f083c"></script>
 </body>
 </html>

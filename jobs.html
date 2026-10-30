@@ -20,7 +20,7 @@
     var s = document.createElement('script'); s.src = js;
     document.head.appendChild(s);
   }
-  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=b256adec', 'sidebar-nav.js?v=8d951bc5');
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=db165b29', 'sidebar-nav.js?v=8d951bc5');
 })();
 </script>
 <title>Jobs — The 29 World</title>
@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=ec4ad9ed">
+<link rel="stylesheet" href="style.css?v=2d152432">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -106,7 +106,7 @@
         weeks &nbsp;<span class="muted-small">(0 = disabled — teacher promotes manually)</span>
       </label>
 
-      <h3 style="margin:20px 0 10px;font-size:.92rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);">Tiers</h3>
+      <h3 style="margin:20px 0 10px;font-size:var(--fs-lg);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);">Tiers</h3>
       <div id="addTiersList"></div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
         <button class="btn small secondary" type="button" onclick="addTierRowBtn('add')">+ Add tier</button>
@@ -121,7 +121,7 @@
     <!-- Applications -->
     <div class="card">
       <div class="flex-between">
-        <h2>Pending applications <span id="applicationsBadge" class="badge coral hidden" style="font-size:.7rem;vertical-align:middle;"></span></h2>
+        <h2>Pending applications <span id="applicationsBadge" class="badge coral hidden" style="font-size:var(--fs-xs);vertical-align:middle;"></span></h2>
       </div>
       <p class="muted-small">When students apply for a job, they always start at the entry tier.</p>
       <div id="applicationsBox"></div>
@@ -181,7 +181,7 @@
       weeks &nbsp;<span class="muted-small">(0 = off)</span>
     </label>
 
-    <h3 style="margin:20px 0 10px;font-size:.92rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);">Tiers</h3>
+    <h3 style="margin:20px 0 10px;font-size:var(--fs-lg);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);">Tiers</h3>
     <div id="editTiersList"></div>
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center;">
       <button class="btn small secondary" type="button" onclick="addTierRowBtn('edit')">+ Add tier</button>
@@ -221,16 +221,16 @@
 
 <script type="module" src="firebase-init.js?v=aca5590e"></script>
 <script defer src="icons.js?v=c9829d04"></script>
-<script defer src="settings-menu.js?v=576b9ff7"></script>
+<script defer src="settings-menu.js?v=07d1ebe2"></script>
 <script defer src="shortcuts.js?v=80d22675"></script>
-<script defer src="data-core.js?v=821182d7"></script>
+<script defer src="data-core.js?v=592e5fc3"></script>
 <script defer src="data-money.js?v=7399c2f5"></script>
 <script defer src="data-life.js?v=1f1ba032"></script>
 <script defer src="data-property.js?v=0274c245"></script>
 <script defer src="data-markets.js?v=49205e15"></script>
 <script defer src="events-ui.js?v=b1bcab86"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
-<script defer src="avatar.js?v=ac7f711e"></script>
+<script defer src="avatar.js?v=2ca835ab"></script>
 <script defer src="notifications.js?v=e921b3db"></script>
 <script defer src="jobs.js?v=3d2cc670"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
