@@ -1,20 +1,18 @@
 /* ===================== The 29 World — Reports page =====================
    Teacher side: a live "this month" report for the whole class (net
    worth, savings rate, biggest expense category, loan history per
-   student), plus a permanent list of previously saved report cards
-   (see archiveClassReport() in data-money.js) that survive class resets.
+   student). Each student's report card carries a net-worth trend built from
+   the figure noted every Monday (see recordMyNetWorthIfDue() in
+   data-money.js), so nobody has to save anything.
    Student side: the same breakdown, but scoped to just their own numbers,
-   with a simple net-worth trend built from their own past saved reports,
    plus an "entire history" breakdown that only starts again when the
    class is restarted (see
    recordReportActivity()/reportLifetime in data-money.js).
 ========================================================================== */
 
 let CURRENT, IS_TEACHER, CLASS_CODE;
-let ARCHIVES = [];
-let CURRENT_REPORT = null;   // the live, unsaved report for "now"
-let VIEWING = "current";     // "current" or an archive id
-let VIEWED_REPORT = null;    // whichever report (current or archived) is on screen
+let CURRENT_REPORT = null;   // the live report for "now"
+let VIEWED_REPORT = null;    // the report on screen
 
 const AVATAR_COLORS = ["c1", "c2", "c3", "c4", "c5"];
 function avatarClass(username) {
@@ -27,9 +25,7 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("idcard", 26) + " Reports";
   document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + " This month";
-  document.getElementById("hPastReports").innerHTML = icon("vault", 18) + " Past reports";
   document.getElementById("hMyReport").innerHTML = icon("idcard", 18) + " My report card";
-  document.getElementById("saveSnapshotBtn").innerHTML = icon("star", 15) + " Save a report card now";
 }
 
 async function init() {
@@ -63,18 +59,12 @@ async function init() {
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
     safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
   ]);
-  // Don't block the report on the day's jobs — fetch the archives
-  // alongside them and draw as soon as that one read lands, then redraw
+  // Don't block the report on the day's jobs — draw first, then redraw
   // once the jobs have finished in case they changed anything.
-  ARCHIVES = await getReportArchives(CLASS_CODE);
   await t29FirstPaint(showCurrentPeriod);
   await T29_STARTUP_JOBS;
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
-  // ARCHIVES is deliberately NOT re-fetched here — archives only ever
-  // change when a teacher explicitly archives a report, never as a result
-  // of the background jobs above, so the copy fetched a moment ago is
-  // still current. Only the live report is regenerated.
   await showCurrentPeriod();
   // Keep family links' summaries up to date (quietly, and only when due).
   if (IS_TEACHER) {
@@ -87,36 +77,9 @@ async function init() {
 }
 
 async function showCurrentPeriod() {
-  VIEWING = "current";
   CURRENT_REPORT = await generateClassReport(CLASS_CODE);
   VIEWED_REPORT = CURRENT_REPORT;
   render();
-}
-
-function showArchive(id) {
-  const a = ARCHIVES.find(x => x.id === id);
-  if (!a) return;
-  VIEWING = id;
-  VIEWED_REPORT = {
-    classCode: CLASS_CODE, periodStart: a.periodStart, periodEnd: a.periodEnd,
-    students: a.students, archivedDate: a.date
-  };
-  render();
-}
-
-async function saveSnapshot() {
-  if (!await t29Confirm("Save a report card for right now? This locks in everyone's numbers so far as a permanent record — it never gets deleted by a class reset.")) return;
-  await archiveClassReport(CLASS_CODE, CURRENT.username);
-  ARCHIVES = await getReportArchives(CLASS_CODE);
-  await showCurrentPeriod();
-}
-
-async function deleteArchiveClick(id, dateLabel) {
-  if (!await t29Confirm(`Delete the report card saved on ${dateLabel}? This can't be undone.`)) return;
-  await deleteReportArchive(CLASS_CODE, id);
-  ARCHIVES = await getReportArchives(CLASS_CODE);
-  if (VIEWING === id) await showCurrentPeriod();
-  else renderArchiveList();
 }
 
 function fmtRange(start, end) {
@@ -132,13 +95,8 @@ function render() {
 
 /* ---------------- Teacher view ---------------- */
 function renderTeacher() {
-  const isArchive = VIEWING !== "current";
-  document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + (isArchive ? " Saved report" : " This month");
-  document.getElementById("periodRange").textContent = isArchive
-    ? `Saved ${VIEWED_REPORT.archivedDate} — covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`
-    : `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)} — not yet saved`;
-  document.getElementById("backToCurrentBtn").style.display = isArchive ? "" : "none";
-  document.getElementById("saveSnapshotBtn").style.display = isArchive ? "none" : "";
+  document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + " This month";
+  document.getElementById("periodRange").textContent = `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
 
   const rows = document.getElementById("classReportRows");
   const students = (VIEWED_REPORT.students || []).slice().sort((a, b) => b.netWorth - a.netWorth);
@@ -152,25 +110,6 @@ function renderTeacher() {
       <td class="no-print"><button class="btn small secondary" onclick="openStudentReport('${escapeJsAttr(s.username)}')">View</button></td>
     </tr>
   `).join("");
-
-  renderArchiveList();
-}
-
-function renderArchiveList() {
-  const box = document.getElementById("archiveList");
-  document.getElementById("noArchivesMsg").style.display = ARCHIVES.length ? "none" : "";
-  const sorted = ARCHIVES.slice().reverse(); // newest first
-  box.innerHTML = sorted.map(a => `
-    <div class="auto-row">
-      <div class="auto-details">
-        <strong>${a.date}</strong>
-        <div class="muted-small">Covers ${fmtRange(a.periodStart, a.periodEnd)} &middot; ${(a.students || []).length} student${(a.students || []).length === 1 ? "" : "s"}${a.generatedBy ? ` &middot; saved by ${a.generatedBy}` : ""}</div>
-      </div>
-      <button class="btn small ${VIEWING === a.id ? "gold" : "secondary"}" onclick="showArchive('${a.id}')">${VIEWING === a.id ? "Viewing" : "View"}</button>
-      <button class="btn small secondary" onclick='exportArchiveCSV("${a.id}")'>${icon("chart", 13)} CSV</button>
-      <button class="btn small coral" onclick="deleteArchiveClick('${a.id}', '${a.date}')">${icon("trash", 13)} Delete</button>
-    </div>
-  `).join("");
 }
 
 let MODAL_STUDENT = null;   // whichever student's detail modal is open, for the PDF export
@@ -182,7 +121,7 @@ function openStudentReport(username) {
   document.getElementById("reportModalName").innerHTML =
     `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${escapeHtml(s.name)}`;
   document.getElementById("reportModalSubtitle").textContent =
-    `@${s.username} — ${VIEWING === "current" ? "this month" : "saved " + VIEWED_REPORT.archivedDate}, covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
+    `@${s.username} — this month, covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
   // The modal's own heading isn't printed (it sits with the buttons), so
   // the printout gets the name and dates here instead.
   document.getElementById("reportModalBody").innerHTML =
@@ -199,49 +138,74 @@ function closeStudentReport() {
 /* ---------------- Student view ---------------- */
 function renderStudent() {
   const s = (VIEWED_REPORT.students || []).find(x => x.username === CURRENT.username);
-  document.getElementById("myPeriodRange").textContent = `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)} (updates automatically until your teacher saves it)`;
+  document.getElementById("myPeriodRange").textContent = `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)} (updates automatically)`;
   const body = document.getElementById("myReportBody");
   if (!s) {
     body.innerHTML = `<p class="muted-small">No data yet — get started with a job, some savings, or a purchase and check back here.</p>`;
     return;
   }
-  const history = myNetWorthHistory(s);
-
   body.innerHTML = `
     <p class="print-only rpt-print-head"><strong>${escapeHtml(s.name)}</strong></p>
-    <h3>${icon("chart", 16)} Net worth over time</h3>
-    ${netWorthSparkline(history)}
     ${studentReportHTML(s)}
   `;
 }
 
-// This student's net worth on each saved report card, then now — the
-// trend line on their own report (and its PDF).
-function myNetWorthHistory(s) {
-  const history = ARCHIVES.filter(a => (a.students || []).some(x => x.username === CURRENT.username))
-    .map(a => (a.students.find(x => x.username === CURRENT.username) || {}).netWorth)
-    .filter(v => typeof v === "number");
-  history.push(s.netWorth);
-  return history;
+// "26 Oct" (or "26 Oct 2025" when the year isn't this one) in NZ time.
+function nwDay(t, withYear) {
+  return new Date(t).toLocaleDateString("en-NZ", Object.assign({ day: "numeric", month: "short", timeZone: "Pacific/Auckland" }, withYear ? { year: "numeric" } : {}));
+}
+// $1.2k / $34k / $1.5m for the chart's tight axis labels.
+function nwShort(v, span) {
+  const a = Math.abs(v), sign = v < 0 ? "-" : "";
+  if (span < 5000 && a < 1e6) return `${sign}$${Math.round(a).toLocaleString("en-NZ")}`; // tight range: whole dollars, so the labels stay distinct
+  if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(a >= 1e7 ? 0 : 1)}m`;
+  if (a >= 1e4) return `${sign}$${Math.round(a / 1e3)}k`;
+  if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(1)}k`;
+  return `${sign}$${Math.round(a)}`;
 }
 
-function netWorthSparkline(history) {
-  if (history.length < 2) {
-    return `<p class="muted-small">Not enough saved reports yet to show a trend — ask your teacher to save a report card each week to start building one.</p>`;
+// The student's net worth over time, on its own full-width row: one point for
+// each Monday it was noted (plus any older saved report cards), then now.
+// Green where it rose, red where it fell. Drawn by time, so a gap in the
+// history is a gap on the chart rather than being squashed together.
+function netWorthChartHTML(s) {
+  const pts = netWorthSeries(s);
+  const head = `<div class="nw-trend-head"><h3>${icon("chart", 16)} Net worth over time</h3><span class="muted-small">Noted automatically every Monday</span></div>`;
+  if (pts.length < 2) {
+    return `<section class="nw-trend">${head}<p class="muted-small">Your trend starts building once your net worth has been noted for a Monday &mdash; check back soon.</p></section>`;
   }
-  const w = 320, h = 70;
-  const max = Math.max(...history), min = Math.min(...history);
-  const range = (max - min) || 1;
-  const pts = history.map((v, i) => ({ x: (i / (history.length - 1 || 1)) * w, y: h - ((v - min) / range) * (h - 10) - 5 }));
-  const segments = pts.slice(1).map((p, i) => {
-    const prev = pts[i];
-    const up = p.y <= prev.y; // y is inverted (smaller y = higher net worth)
-    return `<line x1="${prev.x.toFixed(1)}" y1="${prev.y.toFixed(1)}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${up ? "#3fbf8f" : "#e8735f"}" stroke-width="2.5" stroke-linecap="round"/>`;
+  const W = 640, H = 230, L = 64, R = 18, T = 16, B = 34, pw = W - L - R, ph = H - T - B;
+  let max = Math.max(...pts.map(p => p.v)), min = Math.min(...pts.map(p => p.v));
+  if (max === min) { max += 1; min -= 1; }
+  const pad = (max - min) * 0.08; max += pad; min -= pad;
+  const t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+  const X = t => L + (t1 === t0 ? pw / 2 : ((t - t0) / (t1 - t0)) * pw);
+  const Y = v => T + ph - ((v - min) / (max - min)) * ph;
+  const grid = [max, (max + min) / 2, min].map(v =>
+    `<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W - R}" y2="${Y(v).toFixed(1)}" stroke="currentColor" stroke-opacity=".12"/>` +
+    `<text x="${L - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end" class="nw-axis">${nwShort(v, max - min)}</text>`).join("");
+  const segs = pts.slice(1).map((p, i) => {
+    const q = pts[i];
+    return `<line x1="${X(q.t).toFixed(1)}" y1="${Y(q.v).toFixed(1)}" x2="${X(p.t).toFixed(1)}" y2="${Y(p.v).toFixed(1)}" stroke="${p.v >= q.v ? "#3fbf8f" : "#e8735f"}" stroke-width="2.5" stroke-linecap="round"/>`;
   }).join("");
-  const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.2" fill="currentColor"/>`).join("");
-  // color:var(--ink) so the dots stay readable in dark mode (they'd
-  // otherwise be a fixed dark navy, invisible on a dark card background).
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="max-width:100%;color:var(--ink);">${segments}${dots}</svg>`;
+  const dots = pts.map(p => {
+    const label = p.now ? "Now" : (p.saved ? "Saved report, " : "Monday ") + nwDay(dateKeyToUTC(p.day));
+    return `<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="${p.now ? 5 : 3.4}" fill="${p.now ? "var(--card, #fff)" : "currentColor"}" ${p.now ? 'stroke="currentColor" stroke-width="2.5"' : ""}><title>${label}: ${fmtMoney(p.v)}</title></circle>`;
+  }).join("");
+  const yearDiffers = new Date(t0).getFullYear() !== new Date(t1).getFullYear();
+  const xlabels = `<text x="${L}" y="${H - 8}" text-anchor="start" class="nw-axis">${nwDay(t0, yearDiffers)}</text>` +
+    `<text x="${W - R}" y="${H - 8}" text-anchor="end" class="nw-axis">${nwDay(t1, yearDiffers)}</text>`;
+  const first = pts[0], now = pts[pts.length - 1], diff = Math.round((now.v - first.v) * 100) / 100;
+  const pct = first.v !== 0 ? ` (${diff >= 0 ? "+" : ""}${Math.round((diff / Math.abs(first.v)) * 1000) / 10}%)` : "";
+  return `<section class="nw-trend">${head}
+    <svg viewBox="0 0 ${W} ${H}" class="nw-chart" role="img" aria-label="Net worth over time, from ${fmtMoney(first.v)} to ${fmtMoney(now.v)}" style="color:var(--ink);">${grid}${segs}${dots}${xlabels}</svg>
+    <div class="profile-summary nw-trend-stats">
+      <div class="profile-chip"><div class="label">First noted</div><div class="value">${fmtMoney(first.v)}</div><div class="muted-small">${nwDay(first.t, true)}</div></div>
+      <div class="profile-chip"><div class="label">Now</div><div class="value">${fmtMoney(now.v)}</div></div>
+      <div class="profile-chip"><div class="label">Change</div><div class="value ${diff >= 0 ? "ticker-up" : "ticker-down"}">${diff >= 0 ? "+" : "-"}${fmtMoney(Math.abs(diff))}</div><div class="muted-small">${pct.trim()}</div></div>
+      <div class="profile-chip"><div class="label">Weeks tracked</div><div class="value">${Math.max(1, Math.round((now.t - first.t) / 604800000))}</div></div>
+    </div>
+  </section>`;
 }
 
 /* ---------------- Shared per-student breakdown ---------------- */
@@ -279,6 +243,8 @@ function studentReportHTML(s) {
       <div class="profile-chip"><div class="label">Income this month</div><div class="value">${fmtMoney(s.incomeTotal)}</div></div>
       <div class="profile-chip"><div class="label">Biggest expense</div><div class="value">${s.topExpenseCategory ? s.topExpenseCategory.category : "—"}</div>${s.topExpenseCategory ? `<div class="muted-small">${fmtMoney(s.topExpenseCategory.amount)}</div>` : ""}</div>
     </div>
+
+    ${netWorthChartHTML(s)}
 
     <h4>${icon("bank", 16)} Net worth breakdown</h4>
     <div class="table-scroll"><table><tbody>
@@ -491,7 +457,7 @@ async function downloadReportPDF() {
   }
   const me = (VIEWED_REPORT.students || []).find(x => x.username === CURRENT.username);
   if (!me) { alert("There's no report data to download yet."); return; }
-  downloadStudentReportPDF(me, VIEWED_REPORT, myNetWorthHistory(me));
+  downloadStudentReportPDF(me, VIEWED_REPORT);
 }
 
 function reportToRows(report) {
@@ -525,14 +491,7 @@ function safeFilenamePart(s) {
 }
 
 function exportCurrentCSV() {
-  const label = VIEWING === "current" ? "current" : VIEWED_REPORT.archivedDate;
-  downloadCSV(reportToRows(VIEWED_REPORT), `report-${safeFilenamePart(CLASS_CODE)}-${safeFilenamePart(label)}.csv`);
-}
-
-function exportArchiveCSV(id) {
-  const a = ARCHIVES.find(x => x.id === id);
-  if (!a) return;
-  downloadCSV(reportToRows(a), `report-${safeFilenamePart(CLASS_CODE)}-${safeFilenamePart(a.date)}.csv`);
+  downloadCSV(reportToRows(VIEWED_REPORT), `report-${safeFilenamePart(CLASS_CODE)}-current.csv`);
 }
 
 document.addEventListener("DOMContentLoaded", init);

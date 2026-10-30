@@ -35,6 +35,10 @@ async function addProperty(classCode, prop) {
         // principal (percent per week, e.g. 2 = 2%/week). Defaults to 0 —
         // an interest-free installment plan — unless the teacher sets one.
         mortgageInterestRate: Math.max(0, Number(prop.mortgageInterestRate) || 0),
+        // Optional VARIABLE mortgage on this listing: a weekly rate range the
+        // floating rate moves within (see advanceVariableRates). 0–0 = not
+        // offered, so the listing stays fixed-only exactly as before.
+        ...variableListingFields(prop.variableRateMin, prop.variableRateMax),
         description: prop.description || "", owner: null,
         // Weekly rent an owner can earn if they choose to rent this property
         // out instead of living in it, and which NZ weekday that rent is
@@ -131,6 +135,9 @@ async function updateProperty(classCode, propId, updates) {
       prop.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
       prop.mortgageWeeks = Math.max(0, Number(updates.mortgageWeeks) || 0);
       prop.mortgageInterestRate = Math.max(0, Number(updates.mortgageInterestRate) || 0);
+      if (updates.variableRateMin !== undefined || updates.variableRateMax !== undefined) {
+        applyVariableRange(prop, updates.variableRateMin, updates.variableRateMax);
+      }
       prop.description = updates.description || "";
       prop.rentPerWeek = Math.max(0, Number(updates.rentPerWeek) || 0);
       prop.rentDay = DAY_NAMES.includes(updates.rentDay) ? updates.rentDay : "Fri";
@@ -151,6 +158,9 @@ async function updateProperty(classCode, propId, updates) {
           id: uid("prop"), groupId: gid, name: template.name, price: template.price,
           comfort: template.comfort, mortgageWeeks: template.mortgageWeeks,
           mortgageInterestRate: template.mortgageInterestRate || 0,
+          variableRateMin: template.variableRateMin || 0, variableRateMax: template.variableRateMax || 0,
+          variableRate: template.variableRate || 0, variableRateWeek: template.variableRateWeek || null,
+          variableRateHistory: (template.variableRateHistory || []).slice(),
           description: template.description, owner: null,
           rentPerWeek: template.rentPerWeek, rentDay: template.rentDay,
           livingBonusStars: template.livingBonusStars || 0,
@@ -430,15 +440,19 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
   const useKiwiSaver = !!(opts && opts.useKiwiSaver);
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let deposit = 0, weekly = 0, propName = "", cashPaid = 0, taxAmount = 0, mortgaged = false, fromKiwi = 0;
+  const wantVariable = !!(opts && opts.mortgageType === "variable");
+  let deposit = 0, weekly = 0, propName = "", cashPaid = 0, taxAmount = 0, mortgaged = false, fromKiwi = 0, boughtVariable = false;
   try {
     await fdb.runTransaction(async (t) => {
-      deposit = 0; cashPaid = 0; mortgaged = false; fromKiwi = 0; // reset every attempt — this callback can be retried
+      deposit = 0; cashPaid = 0; mortgaged = false; fromKiwi = 0; boughtVariable = false; // reset every attempt — this callback can be retried
       const userSnap = await t.get(userRef);
       const classSnap = await t.get(classRef);
       if (!userSnap.exists || !classSnap.exists) throw new Error("NOT_FOUND");
       const user = userSnap.data();
       const cls = withNewModuleDefaults(classSnap.data());
+      // Make sure this week's variable rate is in place before it's locked
+      // into (or read for) anyone's mortgage — it's written with the rest.
+      advanceVariableRates(cls, false);
       const prop = cls.properties.find(p => p.id === propId);
       if (!prop) throw new Error("NOT_FOUND");
       if (prop.owner) throw new Error("TAKEN");
@@ -475,6 +489,7 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
       // day to day. See propertyGainSinceBought in property.js.
       prop.purchasePrice = Math.round(taxedPrice * 100) / 100;
       if (financed && prop.mortgageWeeks > 0) {
+        if (wantVariable && !variableRateOffered(prop)) throw new Error("NO_VARIABLE");
         // Deposit is now student-chosen in dollars, not a fixed 10% — but
         // 10% of the taxed price is still the floor, and the full price is
         // the ceiling (can't "deposit" more than the property costs).
@@ -500,9 +515,15 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
         prop.mortgage = {
           weeksLeft: prop.mortgageWeeks, weeklyPayment: weekly,
           purchaseWeekKey: isoWeekKey(), lastWeekPaid: null,
-          interestRate: prop.mortgageInterestRate || 0,
+          // A FIXED mortgage keeps the listing's fixed rate for its whole
+          // life; a VARIABLE one starts at the listing's current variable
+          // rate and is moved with it every time it changes (see
+          // advanceVariableRates).
+          interestRate: wantVariable ? (Number(prop.variableRate) || 0) : (prop.mortgageInterestRate || 0),
+          rateType: wantVariable ? "variable" : "fixed",
           principalRemaining: Math.round((taxedPrice - deposit) * 100) / 100
         };
+        boughtVariable = wantVariable;
         prop.occupancy = null; prop.rentLastWeekPaid = null;
         prop.sublet = null; // a new owner never inherits someone else's tenant or rental listing
         mortgaged = true;
@@ -523,6 +544,7 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
     if (e.message === "TAKEN") return { ok: false, error: "Someone already bought that property." };
     if (e.message === "BROKE") return { ok: false, error: useKiwiSaver ? "You don't have enough money for that, even with your KiwiSaver." : "You don't have enough money for that." };
     if (e.message === "NO_KIWI") return { ok: false, error: "You can't use your KiwiSaver for this property." };
+    if (e.message === "NO_VARIABLE") return { ok: false, error: "A variable-rate mortgage isn't offered on this property any more. Please pick again." };
     if (e.message === "LIFEV") return { ok: false, error: "That life voucher isn't available any more (already used this week?). Pick another or none." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -530,8 +552,8 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
   // doesn't offer one buys it outright, and is logged as that. The amount
   // is the CASH that left their account; KiwiSaver's part is in the note.
   const kiwiNote = fromKiwi > 0 ? ` (${fmtMoney(fromKiwi)} from KiwiSaver)` : "";
-  await logTxn(classCode, { type: "property-buy", from: username, amount: mortgaged ? Math.round((deposit - fromKiwi) * 100) / 100 : cashPaid, note: (mortgaged ? `Bought (mortgaged): ${propName} — ${fmtMoney(deposit)} deposit${kiwiNote}` : `Bought outright: ${propName}${kiwiNote}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
-  return { ok: true, fromKiwi };
+  await logTxn(classCode, { type: "property-buy", from: username, amount: mortgaged ? Math.round((deposit - fromKiwi) * 100) / 100 : cashPaid, note: (mortgaged ? `Bought (mortgaged${boughtVariable ? ", variable rate" : ""}): ${propName} — ${fmtMoney(deposit)} deposit${kiwiNote}` : `Bought outright: ${propName}${kiwiNote}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
+  return { ok: true, fromKiwi, mortgageType: boughtVariable ? "variable" : "fixed" };
 }
 // Sells a property back to the class. The owner is paid whatever the
 // property's current market price is (prop.price — already reflects daily
@@ -567,7 +589,9 @@ async function sellProperty(classCode, propId) {
     marketPrice = prop.price;
     if (prop.mortgage) {
       mortgagePayoff = mortgageWeekAmount(prop.mortgage).balanceBefore;
-      breakFee = Math.max(0, Number(cls.propertyBreakFee) || 0);
+      // Break fees are the price of leaving a FIXED rate early; a variable
+      // mortgage can be cleared any time without one.
+      breakFee = isVariableMortgage(prop.mortgage) ? 0 : Math.max(0, Number(cls.propertyBreakFee) || 0);
     }
     payout = Math.round((marketPrice - mortgagePayoff - breakFee) * 100) / 100;
     prop.owner = null;
@@ -636,6 +660,7 @@ async function payMortgage(username, classCode, propId, useCard) {
       const userSnap = await t.get(userRef);
       if (!classSnap.exists || !userSnap.exists) throw new Error("NOT_FOUND");
       const cls = withNewModuleDefaults(classSnap.data());
+      advanceVariableRates(cls, false); // this week's variable rate before the payment is worked out
       const user = userSnap.data();
       const prop = cls.properties.find(p => p.id === propId);
       if (!prop || prop.owner !== username || !prop.mortgage || prop.mortgage.weeksLeft <= 0) throw new Error("NOT_FOUND");
@@ -672,6 +697,239 @@ async function payMortgage(username, classCode, propId, useCard) {
   }
   await logTxn(classCode, { type: "mortgage", from: username, amount: amt, note: `Mortgage payment: ${propName}` + (payRes.card > 0 ? " (credit card)" : "") + (remainingAfter <= 0 ? " — paid off!" : "") });
   return { ok: true, amount: amt, fullyPaid: remainingAfter <= 0 };
+}
+
+/* =====================================================================
+   Fixed vs variable mortgages
+
+   FIXED (the original mortgage): the listing's mortgageInterestRate is
+   locked in at purchase and never changes. Repayments follow the schedule
+   (the same instalment of principal each week + interest on what's still
+   owed) and selling early pays the class's break fee.
+
+   VARIABLE: only on listings where the teacher has also set a variable
+   rate range (variableRateMin–variableRateMax, % per week). The listing's
+   variableRate drifts inside that range once a week (advanceVariableRates)
+   and every variable mortgage on it follows, so the interest part of the
+   weekly payment rises and falls. In return the owner can make extra
+   repayments whenever they like (payExtraMortgage), which cut the balance
+   and shorten the mortgage, and can clear it with no break fee.
+
+   A mortgage knows which kind it is from mortgage.rateType; mortgages
+   from before this feature have no rateType and are fixed.
+   ===================================================================== */
+function vr2(n) { return Math.round(n * 100) / 100; }
+function isVariableMortgage(m) { return !!m && m.rateType === "variable"; }
+// A listing offers a variable mortgage only if it offers mortgages at all
+// AND the teacher gave it a variable rate range.
+function variableRateOffered(p) {
+  return !!p && Number(p.mortgageWeeks) > 0 && Number(p.variableRateMax) > 0;
+}
+function normaliseVariableRange(min, max) {
+  let lo = Number(min), hi = Number(max);
+  lo = Number.isFinite(lo) ? Math.max(0, lo) : 0;
+  hi = Number.isFinite(hi) ? Math.max(0, hi) : 0;
+  if (hi <= 0) return { min: 0, max: 0 };
+  if (lo > hi) { const tmp = lo; lo = hi; hi = tmp; }
+  return { min: vr2(lo), max: vr2(hi) };
+}
+// The variable fields for a brand-new listing: the rate starts mid-range.
+function variableListingFields(min, max) {
+  const r = normaliseVariableRange(min, max);
+  if (!(r.max > 0)) return { variableRateMin: 0, variableRateMax: 0, variableRate: 0, variableRateWeek: null, variableRateHistory: [] };
+  const wk = isoWeekKey(), mid = vr2((r.min + r.max) / 2);
+  return { variableRateMin: r.min, variableRateMax: r.max, variableRate: mid, variableRateWeek: wk, variableRateHistory: [{ week: wk, rate: mid }] };
+}
+// Records a new variable rate on one unit and moves its variable mortgage
+// (if it has one) to the same rate.
+function setUnitVariableRate(u, rate, weekKey) {
+  u.variableRate = rate;
+  u.variableRateWeek = weekKey;
+  const h = Array.isArray(u.variableRateHistory) ? u.variableRateHistory : [];
+  h.push({ week: weekKey, rate });
+  while (h.length > 12) h.shift();
+  u.variableRateHistory = h;
+  if (isVariableMortgage(u.mortgage)) u.mortgage.interestRate = rate;
+}
+// Teacher edited the range on a listing: store it, and pull the current rate
+// back inside it (or start it mid-range if there wasn't one). Clearing the
+// range (0–0) stops NEW variable mortgages; ones already running keep the
+// last rate they had.
+function applyVariableRange(u, min, max) {
+  const r = normaliseVariableRange(min, max);
+  u.variableRateMin = r.min;
+  u.variableRateMax = r.max;
+  if (!(r.max > 0)) return;
+  const wk = isoWeekKey();
+  const cur = Number(u.variableRate);
+  if (u.variableRateWeek == null || !Number.isFinite(cur)) {
+    setUnitVariableRate(u, vr2((r.min + r.max) / 2), wk);
+  } else if (cur < r.min || cur > r.max) {
+    setUnitVariableRate(u, Math.min(r.max, Math.max(r.min, cur)), wk);
+  } else if (isVariableMortgage(u.mortgage)) {
+    u.mortgage.interestRate = cur;
+  }
+}
+// One week's move: a random step (up to ~30% of the range either way) with a
+// gentle pull back towards the middle so the rate doesn't sit on a wall.
+// `force` makes sure a manual "change now" really changes it.
+function stepVariableRate(cur, min, max, force) {
+  const span = max - min;
+  if (!(span > 0)) return vr2(min);
+  const maxStep = Math.max(0.01, span * 0.3);
+  const mid = (min + max) / 2;
+  const pick = () => vr2(Math.min(max, Math.max(min, cur + (Math.random() * 2 - 1) * maxStep + (mid - cur) * 0.1)));
+  let next = pick();
+  for (let i = 0; force && next === vr2(cur) && span >= 0.01 && i < 12; i++) next = pick();
+  if (force && next === vr2(cur) && span >= 0.01) next = vr2(cur + 0.01 <= max ? cur + 0.01 : cur - 0.01);
+  return next;
+}
+function weeksBetweenKeys(a, b) {
+  const [y1, w1] = String(a).split("-W").map(Number);
+  const [y2, w2] = String(b).split("-W").map(Number);
+  if (![y1, w1, y2, w2].every(Number.isFinite)) return 1;
+  return (y2 - y1) * 52 + (w2 - w1);
+}
+// Moves every variable-rate listing on `cls` (IN PLACE) up to this ISO week —
+// one step per week missed, capped — or one step right now when `force`.
+// Returns { changes, touched }: changes = listings whose rate actually moved
+// (for notifying owners), touched = whether anything on cls was edited and
+// so needs writing back. Safe to call on every read-modify-write of the
+// class doc: it does nothing when the rates are already current.
+function advanceVariableRates(cls, force) {
+  const out = { changes: [], touched: false };
+  const weekKey = isoWeekKey();
+  const groups = new Map();
+  (cls.properties || []).forEach(p => {
+    const g = groupIdOf(p);
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(p);
+  });
+  groups.forEach((units, gid) => {
+    const first = units[0];
+    if (!variableRateOffered(first)) return;
+    const min = Number(first.variableRateMin) || 0, max = Number(first.variableRateMax) || 0;
+    const before = Number(first.variableRate);
+    if (first.variableRateWeek == null || !Number.isFinite(before)) {
+      const start = vr2((min + max) / 2);
+      units.forEach(u => setUnitVariableRate(u, start, weekKey));
+      out.touched = true;
+      return;
+    }
+    let steps = 0;
+    if (force) steps = 1;
+    else if (first.variableRateWeek !== weekKey) steps = Math.min(8, Math.max(1, weeksBetweenKeys(first.variableRateWeek, weekKey)));
+    if (steps === 0) return;
+    let cur = Math.min(max, Math.max(min, before));
+    for (let i = 0; i < steps; i++) cur = stepVariableRate(cur, min, max, force && i === 0);
+    units.forEach(u => setUnitVariableRate(u, cur, weekKey));
+    out.touched = true;
+    if (cur !== before) {
+      out.changes.push({ gid, name: first.name, from: before, to: cur,
+        owners: units.filter(u => u.owner && isVariableMortgage(u.mortgage)).map(u => u.owner) });
+    }
+  });
+  return out;
+}
+async function notifyVariableRateChanges(classCode, changes) {
+  const notices = [];
+  (changes || []).forEach(c => {
+    if (!c.owners.length || c.from === c.to) return;
+    const up = c.to > c.from;
+    notices.push({ to: c.owners, icon: "house", tone: up ? "coral" : "mint",
+      title: `The variable rate on ${c.name} ${up ? "went up" : "came down"}`,
+      body: `Your variable mortgage rate moved from ${c.from}% to ${c.to}% per week — your next payment will be ${up ? "a bit higher" : "a bit lower"}.`, href: "property.html" });
+  });
+  if (notices.length) await t29NotifyStudents(classCode, notices);
+}
+// Brings every variable rate in the class up to date (or, with force, moves
+// each one a step right now — the teacher's "change rates now" button) in one
+// transaction, then tells affected owners. Returns the listings that moved.
+async function runVariableRateRefresh(classCode, force) {
+  const classRef = classesCol().doc(classCode);
+  let res = { changes: [], touched: false };
+  await fdb.runTransaction(async (t) => {
+    res = { changes: [], touched: false }; // reset every attempt — this callback can be retried
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    res = advanceVariableRates(cls, !!force);
+    if (res.touched) t.update(classRef, { properties: cls.properties });
+  });
+  await notifyVariableRateChanges(classCode, res.changes);
+  return res.changes;
+}
+// Once-a-week automatic move — the first page load of the week wins, same
+// idea as autoPropertyMarketDayIfDue. The cheap pre-check avoids a
+// transaction on every page load; the transaction re-checks for real.
+async function autoVariableRatesIfDue(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls || cls.archived) return [];
+  const wk = isoWeekKey();
+  if (!(cls.properties || []).some(p => variableRateOffered(p) && p.variableRateWeek !== wk)) return [];
+  return runVariableRateRefresh(classCode, false);
+}
+// Extra repayment on a VARIABLE mortgage: any amount, any day (it doesn't
+// replace the weekly payment, which is still due on the mortgage day). It
+// comes straight off the balance, so later interest is charged on less, and
+// the mortgage finishes sooner because the remaining balance covers fewer
+// weekly instalments. Paying the full balance closes it with no break fee.
+// Cash only, like every other mortgage payment.
+async function payExtraMortgage(username, classCode, propId, amount, payOff) {
+  const classRef = classesCol().doc(classCode);
+  const userRef = usersCol().doc(username);
+  let paid = 0, balanceAfter = 0, weeksLeftAfter = 0, propName = "", cleared = false, owedNow = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      paid = 0; balanceAfter = 0; weeksLeftAfter = 0; cleared = false; // reset every attempt — this callback can be retried
+      const classSnap = await t.get(classRef);
+      const userSnap = await t.get(userRef);
+      if (!classSnap.exists || !userSnap.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(classSnap.data());
+      advanceVariableRates(cls, false);
+      const user = userSnap.data();
+      const prop = cls.properties.find(p => p.id === propId);
+      if (!prop || prop.owner !== username || !prop.mortgage || prop.mortgage.weeksLeft <= 0) throw new Error("NOT_FOUND");
+      if (!isVariableMortgage(prop.mortgage)) throw new Error("NOT_VARIABLE");
+      propName = prop.name;
+      const m = prop.mortgage;
+      const owed = mortgageWeekAmount(m).balanceBefore;
+      owedNow = owed;
+      let amt = payOff ? owed : Math.round((Number(amount) || 0) * 100) / 100;
+      if (!(amt > 0)) throw new Error("BAD_AMOUNT");
+      if (amt > owed + 0.005) throw new Error("TOO_MUCH");
+      amt = Math.min(amt, owed);
+      const payRes = cardPayInTxn(user, cls, amt, { useCard: false }); // cash only (throws BROKE)
+      t.update(userRef, Object.assign({ balance: Math.round((user.balance - payRes.cash) * 100) / 100 }, payRes.card > 0 ? { creditCard: user.creditCard } : {}));
+      paid = amt;
+      const left = Math.round((owed - amt) * 100) / 100;
+      if (left <= 0) {
+        cleared = true;
+        prop.mortgage = null;
+      } else {
+        m.principalRemaining = left;
+        // The balance now covers fewer instalments. Never longer than before
+        // (rounding in the weekly figure could otherwise add a week); the
+        // last payment always clears whatever is left.
+        const weeklyCents = Math.round((Number(m.weeklyPayment) || 0) * 100);
+        if (weeklyCents > 0) m.weeksLeft = Math.max(1, Math.min(m.weeksLeft, Math.ceil(Math.round(left * 100) / weeklyCents)));
+        m.extraPaid = Math.round(((Number(m.extraPaid) || 0) + amt) * 100) / 100;
+        balanceAfter = left;
+        weeksLeftAfter = m.weeksLeft;
+      }
+      t.update(classRef, { properties: cls.properties });
+    });
+  } catch (e) {
+    if (e.message === "NOT_VARIABLE") return { ok: false, error: "Extra repayments are only available on variable-rate mortgages." };
+    if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than $0." };
+    if (e.message === "TOO_MUCH") return { ok: false, error: `You only owe ${fmtMoney(owedNow)} on this mortgage.` };
+    { const ce = cardPayError(e); if (ce) return { ok: false, error: ce }; }
+    if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for that repayment." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That mortgage couldn't be found." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "mortgage-extra", from: username, amount: paid, note: `Extra mortgage repayment (variable): ${propName}` + (cleared ? " — paid off!" : "") });
+  return { ok: true, amount: paid, fullyPaid: cleared, balanceAfter, weeksLeft: weeksLeftAfter };
 }
 
 // Turns an isoWeekKey() string ("2026-W9") into a plain number that sorts

@@ -18,7 +18,7 @@ function badgeType(type) {
     "store-sell": ["gold", "cart", "Store sale"],
     "property-buy": ["navy", "house", "Property"],
     "property-sell": ["gold", "house", "Property sold"],
-    "mortgage": ["coral", "house", "Mortgage"],
+    "mortgage": ["coral", "house", "Mortgage"], "mortgage-extra": ["coral", "house", "Extra mortgage payment"],
     "event": ["lilac", "dice", "Random event"],
     "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
     "transport-expense": ["coral", "car", "Transport expenses"],

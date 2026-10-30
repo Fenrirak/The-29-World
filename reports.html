@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=2d152432">
+<link rel="stylesheet" href="style.css?v=6d4bd49e">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -76,7 +76,7 @@
 
 <main>
   <h1 id="pageTitle">Reports</h1>
-  <p id="pageIntro">Report cards: net worth, savings rate, biggest expenses and loan history — saved permanently so nothing is lost when the class resets.</p>
+  <p id="pageIntro">Report cards: net worth, savings rate, biggest expenses and loan history. Net worth is noted automatically every Monday, so each student's trend builds up on its own.</p>
 
   <!-- ================= TEACHER VIEW ================= -->
   <div id="teacherPanel" class="card hidden">
@@ -86,8 +86,6 @@
         <p class="muted-small" id="periodRange">–</p>
       </div>
       <div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn small secondary" id="backToCurrentBtn" onclick="showCurrentPeriod()" style="display:none;">Back to this month</button>
-        <button class="btn small gold" id="saveSnapshotBtn" onclick="saveSnapshot()">Save a report card now</button>
         <button class="btn small secondary" id="familyLinksBtn" onclick="openClassFamilyLinks()">Family links</button>
         <button class="btn small secondary" onclick="exportCurrentCSV()">Export CSV</button>
         <button class="btn small secondary" onclick="printReport()">Print</button>
@@ -104,11 +102,6 @@
       </div>
       <p class="muted-small" id="noStudentsMsg" style="display:none;">No students in this class yet.</p>
     </div>
-
-    <h2 style="margin-top:28px;" id="hPastReports">Past reports</h2>
-    <p class="muted-small">Every time you save a report card, it's kept here permanently — including automatically right before a class reset — so you can always look back at a previous term.</p>
-    <div id="archiveList"></div>
-    <p class="muted-small" id="noArchivesMsg" style="display:none;">No report cards saved yet. Click "Save a report card now" above to create the first one.</p>
   </div>
 
   <!-- ================= STUDENT VIEW ================= -->
@@ -172,15 +165,15 @@
 <script defer src="icons.js?v=c9829d04"></script>
 <script defer src="settings-menu.js?v=07d1ebe2"></script>
 <script defer src="shortcuts.js?v=80d22675"></script>
-<script defer src="data-core.js?v=592e5fc3"></script>
-<script defer src="data-money.js?v=38fc4f1e"></script>
+<script defer src="data-core.js?v=211fc637"></script>
+<script defer src="data-money.js?v=a9828229"></script>
 <script defer src="data-life.js?v=5c2eb4d1"></script>
-<script defer src="data-property.js?v=10c4d531"></script>
+<script defer src="data-property.js?v=c2b192e9"></script>
 <script defer src="data-markets.js?v=49205e15"></script>
 <script defer src="events-ui.js?v=68fd100a"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
-<script defer src="notifications.js?v=e921b3db"></script>
-<script defer src="pdf-report.js?v=12982e44"></script>
-<script defer src="reports.js?v=b2786f98"></script>
+<script defer src="notifications.js?v=6ecf8d21"></script>
+<script defer src="pdf-report.js?v=9198db19"></script>
+<script defer src="reports.js?v=4e97fcde"></script>
 </body>
 </html>

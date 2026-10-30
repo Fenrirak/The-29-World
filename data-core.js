@@ -2848,6 +2848,15 @@ function withNewModuleDefaults(cls) {
     // (payMortgage falls back to weeklyPayment*weeksLeft for
     // principalRemaining and 0 for interestRate on those).
     if (p.mortgageInterestRate === undefined) p.mortgageInterestRate = 0;
+    // Optional variable-rate mortgage on the listing (weekly % range, 0–0 =
+    // not offered) and the floating rate currently in force — see
+    // advanceVariableRates in data-property.js. Listings saved before this
+    // existed stay fixed-only.
+    if (p.variableRateMin === undefined) p.variableRateMin = 0;
+    if (p.variableRateMax === undefined) p.variableRateMax = 0;
+    if (p.variableRate === undefined) p.variableRate = 0;
+    if (p.variableRateWeek === undefined) p.variableRateWeek = null;
+    if (!Array.isArray(p.variableRateHistory)) p.variableRateHistory = [];
     // Teacher-set number of bonus "stars" this specific property is worth
     // (on top of its own comfort rating) when its owner chooses to live in
     // it rather than rent it out — see lifestyleRatingFromData. Properties
@@ -3144,6 +3153,11 @@ async function anwGlobalBootstrap() {
   if (u.classCode) {
     autoMarketDayIfDue(u.classCode).catch(() => {});
     autoPropertyMarketDayIfDue(u.classCode).catch(() => {});
+    window.T29_RATES_READY = autoVariableRatesIfDue(u.classCode).catch(() => {});
+    // Note down net worth for the report trend: every Monday, first thing.
+    // A teacher's visit covers the whole class; a student's covers themselves.
+    if (u.role === "teacher" && typeof recordClassNetWorthIfDue === "function") recordClassNetWorthIfDue(u.classCode).catch(() => {});
+    else if (u.role === "student" && typeof recordMyNetWorthIfDue === "function") recordMyNetWorthIfDue(u.username).catch(() => {});
   }
   applyNavRoleVisibility(u.role);
   if (u.role === "student") {

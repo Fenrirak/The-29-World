@@ -81,7 +81,8 @@ async function init() {
       : safeBgJob(applyMyInterestIfDue(u.username), "applyMyInterestIfDue"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
-    safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
+    safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents"),
+    safeBgJob(autoVariableRatesIfDue(u.classCode), "autoVariableRatesIfDue")
   ]);
   await T29_STARTUP_JOBS;
   // These popups read the results of the jobs above, so they still need
@@ -357,6 +358,28 @@ async function saveMovingCostClick() {
   await render();
 }
 
+// Moves every variable rate one step right now (the weekly auto-move still
+// happens on its own) and says what changed.
+async function changeVariableRatesNow() {
+  const btn = document.getElementById("changeVarRatesBtn");
+  if (btn && btn.disabled) return;
+  const cls = await getClassCached(CURRENT.classCode);
+  if (!((cls && cls.properties) || []).some(variableRateOffered)) {
+    setMsg("variableRatesMsg", `<div class="error-msg">No listings offer a variable rate yet. Add a variable range in a listing's Financing section first.</div>`, 6000);
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const changes = await runVariableRateRefresh(CURRENT.classCode, true);
+    const lines = changes.map(c => `${escapeHtml(c.name)}: ${c.from}% &rarr; ${c.to}%`);
+    setMsg("variableRatesMsg", `<div class="success-msg">${lines.length ? "Rates moved &mdash; " + lines.join("; ") + ". Students with a variable mortgage on those were told." : "Rates are already as far as they can go in their range."}</div>`, 9000);
+    await render();
+  } catch (err) {
+    setMsg("variableRatesMsg", `<div class="error-msg">Couldn't change the rates — please try again.</div>`, 6000);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 async function saveMortgageBreakFeeClick() {
   const val = document.getElementById("mortgageBreakFeeInput").value;
   await setPropertyBreakFee(CURRENT.classCode, val);
@@ -466,8 +489,9 @@ async function openSellModal(id, isTeacherSelling) {
   let mortgagePayoff = 0, breakFee = 0;
   if (prop.mortgage) {
     mortgagePayoff = mortgageWeekAmount(prop.mortgage).balanceBefore;
-    breakFee = Math.max(0, Number(cls.propertyBreakFee) || 0);
+    breakFee = isVariableMortgage(prop.mortgage) ? 0 : Math.max(0, Number(cls.propertyBreakFee) || 0);
   }
+  const breakFeeWaived = !!prop.mortgage && isVariableMortgage(prop.mortgage) && (Number(cls.propertyBreakFee) || 0) > 0;
   const payout = Math.round((marketPrice - mortgagePayoff - breakFee) * 100) / 100;
   const overlay = _sellBuildModal();
   document.getElementById("sellModalTitle").innerHTML = icon("house", 18) + ` Sell ${escapeHtml(prop.name)}`;
@@ -475,6 +499,7 @@ async function openSellModal(id, isTeacherSelling) {
   if (prop.mortgage) {
     body += `<p>This property still has a mortgage on it. <strong>${fmtMoney(mortgagePayoff)}</strong> will be deducted from the sale to pay off the remaining mortgage`;
     body += breakFee > 0 ? `, plus a <strong>${fmtMoney(breakFee)}</strong> break fee for selling with financing still owing.</p>` : `.</p>`;
+    if (breakFeeWaived) body += `<p class="muted-small">No break fee — it's a variable-rate mortgage, which can be cleared at any time.</p>`;
   }
   const who = isTeacherSelling ? "The owner" : "You";
   body += `<p class="muted-small">${who} will receive <strong>${fmtMoney(payout)}</strong>${payout < 0 ? " — this will come out of their balance instead, since what's owed is more than the sale is worth" : ""}.</p>`;
@@ -566,6 +591,22 @@ async function buyFinanced(gid) {
     document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">You don't have enough money for that deposit${useKs ? ", even with your KiwiSaver" : ""}.</div>`;
     return;
   }
+  // Listings that offer both kinds of mortgage ask which one first (each is
+  // explained in the dialog); fixed-only listings carry straight on.
+  const clsV = await getClassCached(CURRENT.classCode);
+  const listing = ((clsV && clsV.properties) || []).find(p => (p.groupId || p.id) === gid);
+  if (listing && variableRateOffered(listing)) {
+    openMortgageChoiceModal(gid, depositAmt, useKs);
+    return;
+  }
+  await completeFinancedPurchase(gid, depositAmt, useKs, "fixed");
+}
+// The actual financed purchase, once the student's deposit and mortgage type
+// are settled. Same double-tap guard as buyOutright/buyFinanced.
+async function completeFinancedPurchase(gid, depositAmt, useKs, mortgageType) {
+  const btn = document.getElementById("buyFinancedBtn-" + gid);
+  const btn2 = document.getElementById("buyOutrightBtn-" + gid);
+  if (btn && btn.disabled) return;
   if (btn) btn.disabled = true;
   if (btn2) btn2.disabled = true;
   try {
@@ -575,17 +616,162 @@ async function buyFinanced(gid) {
     const lProp = ((lCls && lCls.properties) || []).find(p => p.id === id);
     let lifeVid = "";
     if (lProp) { const lv = await lifeAskVoucher(lMe, "property", lProp.price, lProp.name); if (lv === null) return; lifeVid = lv; }
-    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true, depositAmt, { useKiwiSaver: useKs, lifeVoucherId: lifeVid });
+    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true, depositAmt, { useKiwiSaver: useKs, lifeVoucherId: lifeVid, mortgageType });
     if (!res.ok) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
     // Mortgage payments are never taken automatically — the student pays
     // each one themselves on the class's mortgage day (see payMortgage).
     const cls = await getClassCached(CURRENT.classCode);
-    showPurchaseResult(`<div class="success-msg">Mortgaged with a ${fmtMoney(depositAmt)} deposit${res.fromKiwi > 0 ? ` (${fmtMoney(res.fromKiwi)} of it from your KiwiSaver)` : ""}! Payments aren't taken automatically — come back every ${DAY_FULL[cls.mortgageDay || "Fri"]} to pay them yourself (the week you bought is free).</div>`);
+    showPurchaseResult(`<div class="success-msg">Mortgaged (${mortgageType === "variable" ? "variable" : "fixed"} rate) with a ${fmtMoney(depositAmt)} deposit${res.fromKiwi > 0 ? ` (${fmtMoney(res.fromKiwi)} of it from your KiwiSaver)` : ""}! Payments aren't taken automatically — come back every ${DAY_FULL[cls.mortgageDay || "Fri"]} to pay them yourself (the week you bought is free).${mortgageType === "variable" ? " Because it's variable, you can make extra repayments any time from My homes." : ""}</div>`);
   } finally {
     if (btn) btn.disabled = false;
     if (btn2) btn2.disabled = false;
   }
+}
+
+/* ---------------- Fixed or variable? (shown when a listing offers both) ---------------- */
+function _mcBuildModal() {
+  const existing = document.getElementById("mortgageChoiceModal");
+  if (existing) return existing;
+  const overlay = document.createElement("div");
+  overlay.id = "mortgageChoiceModal";
+  overlay.className = "anw-modal-overlay hidden";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-labelledby", "mcTitle");
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeMortgageChoiceModal(); });
+  overlay.innerHTML = `<div class="anw-modal-card mc-modal"><div id="mcBody"></div></div>`;
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !overlay.classList.contains("hidden")) closeMortgageChoiceModal();
+  });
+  return overlay;
+}
+function closeMortgageChoiceModal() {
+  const overlay = document.getElementById("mortgageChoiceModal");
+  if (overlay) overlay.classList.add("hidden");
+}
+// Opens the dialog that explains fixed vs variable for one listing and lets
+// the student pick. The deposit (and KiwiSaver tick) were already validated
+// by buyFinanced; nothing is bought until a choice button is pressed.
+// The payment figures are estimates from the listed price plus tax — the
+// real first payment is shown on the property afterwards.
+async function openMortgageChoiceModal(gid, depositAmt, useKs) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const p = ((cls && cls.properties) || []).find(x => (x.groupId || x.id) === gid);
+  if (!p) return;
+  const overlay = _mcBuildModal();
+  const taxed = applyTaxToExpense(cls, "property", p.price).total;
+  const deposit = Math.min(taxed, Math.max(0, Number(depositAmt) || 0));
+  const loan = Math.max(0, Math.round((taxed - deposit) * 100) / 100);
+  const weeks = p.mortgageWeeks;
+  const principal = loan / weeks;
+  const firstPay = rate => fmtMoney(Math.round((principal + loan * (rate / 100)) * 100) / 100);
+  const fixedRate = Number(p.mortgageInterestRate) || 0;
+  const vMin = Number(p.variableRateMin) || 0, vMax = Number(p.variableRateMax) || 0, vNow = Number(p.variableRate) || 0;
+  const fee = Math.max(0, Number(cls.propertyBreakFee) || 0);
+  const day = dayFull(cls.mortgageDay);
+  document.getElementById("mcBody").innerHTML = `
+    <div class="p-modal-head">
+      <h2 id="mcTitle">${icon("house", 18)} Choose your mortgage</h2>
+      <button type="button" class="btn small secondary" id="mcCloseBtn">Close</button>
+    </div>
+    <div class="mc-deal">
+      <span><strong>${escapeHtml(p.name)}</strong></span>
+      <span>Borrowing <strong>${fmtMoney(loan)}</strong> over <strong>${weeks} weeks</strong></span>
+      <span>Deposit <strong>${fmtMoney(deposit)}</strong></span>
+    </div>
+    <div class="mc-grid">
+      <section class="mc-opt is-fixed" aria-label="Fixed rate mortgage">
+        <div class="mc-head">
+          <div class="mc-ico">${icon("lock", 20)}</div>
+          <div><h3 class="mc-title">Fixed rate</h3><span class="mc-tag">Predictable</span></div>
+        </div>
+        <div>
+          <div class="mc-rate">${fixedRate}%<small> per week</small></div>
+          <div class="mc-rate-sub">Locked in for all ${weeks} weeks.</div>
+        </div>
+        <ul class="mc-points">
+          <li>The rate never changes, so you always know what you'll owe.</li>
+          <li>Pay it off on the weekly schedule every ${day}.</li>
+          <li class="is-trade">No extra repayments.${fee > 0 ? ` Selling before it's paid off costs a ${fmtMoney(fee)} break fee.` : ""}</li>
+        </ul>
+        <div class="mc-est">First payment about <strong>${firstPay(fixedRate)}</strong>, then a little less each week as what you owe goes down.</div>
+        <button type="button" class="btn gold" id="mcPickFixed">${icon("lock", 14)} Choose fixed</button>
+      </section>
+      <section class="mc-opt is-variable" aria-label="Variable rate mortgage">
+        <div class="mc-head">
+          <div class="mc-ico">${icon("chart", 20)}</div>
+          <div><h3 class="mc-title">Variable rate</h3><span class="mc-tag">Flexible</span></div>
+        </div>
+        <div>
+          <div class="mc-rate">${vMin}&ndash;${vMax}%<small> per week</small></div>
+          <div class="mc-rate-sub">Right now it's <strong>${vNow}%</strong>.</div>
+        </div>
+        <ul class="mc-points">
+          <li>Pay extra whenever you like to clear it faster and save interest.</li>
+          <li>Pay it all off, or sell, with no break fee.</li>
+          <li class="is-trade">The rate moves up or down each week, so your payment can change too.</li>
+        </ul>
+        <div class="mc-est">First payment about <strong>${firstPay(vNow)}</strong> now. It could be anywhere from <strong>${firstPay(vMin)}</strong> to <strong>${firstPay(vMax)}</strong> as the rate moves.</div>
+        <button type="button" class="btn sky" id="mcPickVariable">${icon("chart", 14)} Choose variable</button>
+      </section>
+    </div>
+    <p class="muted-small mc-note">Payment figures are estimates. Either way, nothing comes out automatically &mdash; you pay each week yourself on ${day}s, and the week you buy is free.</p>`;
+  const pick = (type) => {
+    closeMortgageChoiceModal();
+    completeFinancedPurchase(gid, deposit, useKs, type);
+  };
+  document.getElementById("mcCloseBtn").onclick = closeMortgageChoiceModal;
+  document.getElementById("mcPickFixed").onclick = () => pick("fixed");
+  document.getElementById("mcPickVariable").onclick = () => pick("variable");
+  overlay.classList.remove("hidden");
+  // Focus the dialog itself, not an option, so neither choice looks pre-selected.
+  const card = overlay.querySelector(".mc-modal");
+  if (card) { card.setAttribute("tabindex", "-1"); card.focus(); }
+}
+
+// Extra repayment / pay-off on a variable mortgage (see payExtraMortgage).
+async function payExtraMortgageClick(id, payOff) {
+  const btn = document.getElementById("extraBtn-" + id);
+  const btn2 = document.getElementById("payoffBtn-" + id);
+  if ((btn && btn.disabled) || (btn2 && btn2.disabled)) return;
+  const box = document.getElementById("extraMsg-" + id);
+  let amount = 0;
+  if (!payOff) {
+    const input = document.getElementById("extraAmt-" + id);
+    amount = Number(input && input.value);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      if (box) box.innerHTML = `<div class="error-msg">Enter how much extra you'd like to pay.</div>`;
+      return;
+    }
+  }
+  if (btn) btn.disabled = true;
+  if (btn2) btn2.disabled = true;
+  try {
+    const res = await payExtraMortgage(CURRENT.username, CURRENT.classCode, id, amount, !!payOff);
+    if (!res.ok) { if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
+    await render();
+    // render() rebuilds the card, so the message goes in afterwards.
+    if (res.fullyPaid) {
+      setMsg("pageMsg", `<div class="success-msg">Mortgage paid off with ${fmtMoney(res.amount)} &mdash; no break fee. The property is all yours!</div>`, 10000);
+      try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
+    } else {
+      setMsg("extraMsg-" + id, `<div class="success-msg">${fmtMoney(res.amount)} paid off your mortgage. You now owe ${fmtMoney(res.balanceAfter)} &mdash; about ${res.weeksLeft} week${res.weeksLeft === 1 ? "" : "s"} to go.</div>`, 8000);
+    }
+  } finally {
+    const b1 = document.getElementById("extraBtn-" + id), b2 = document.getElementById("payoffBtn-" + id);
+    if (b1) b1.disabled = false;
+    if (b2) b2.disabled = false;
+  }
+}
+async function payOffMortgageClick(id) {
+  const cls = await getClassCached(CURRENT.classCode);
+  const prop = ((cls && cls.properties) || []).find(x => x.id === id);
+  if (!prop || !prop.mortgage) return;
+  const owed = mortgageWeekAmount(prop.mortgage).balanceBefore;
+  if (!await t29Confirm(`Pay off the whole mortgage on ${prop.name} now? ${fmtMoney(owed)} will come out of your cash. There's no break fee on a variable mortgage.`)) return;
+  await payExtraMortgageClick(id, true);
 }
 
 /* ---------------- Teacher: NPC (school) property listings ---------------- */
@@ -766,9 +952,15 @@ function listingChips(p, cls, extraChips) {
   const chips = [];
   if (extraChips) chips.push(extraChips);
   chips.push(`<span class="chip">${comfortStars(p.comfort)}</span>`);
-  chips.push(p.mortgageWeeks > 0
-    ? `<span class="chip" title="Weekly payments are due ${dayFull(cls.mortgageDay)}s">Mortgage ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`
-    : `<span class="chip">Cash only</span>`);
+  if (p.mortgageWeeks > 0 && variableRateOffered(p)) {
+    const due = `Weekly payments are due ${dayFull(cls.mortgageDay)}s`;
+    chips.push(`<span class="chip chip-fixed" title="Rate locked in for the whole mortgage. ${due}"><span class="chip-ico">${icon("lock", 13)}</span>Fixed ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`);
+    chips.push(`<span class="chip chip-var" title="Rate moves each week inside this range. ${due}"><span class="chip-ico">${icon("chart", 13)}</span>Variable ${p.variableRateMin}\u2013${p.variableRateMax}%/wk &middot; now ${p.variableRate}%</span>`);
+  } else {
+    chips.push(p.mortgageWeeks > 0
+      ? `<span class="chip" title="Weekly payments are due ${dayFull(cls.mortgageDay)}s">Mortgage ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`
+      : `<span class="chip">Cash only</span>`);
+  }
   if (p.rentPerWeek > 0) chips.push(`<span class="chip">Rent income ${fmtMoney(p.rentPerWeek)}/wk</span>`);
   const ls = lifestyleChip(cls, p);
   if (ls) chips.push(ls);
@@ -856,7 +1048,8 @@ function buyControls(p, gid, minDeposit, ksHome, cls) {
           <input type="number" id="depositAmt-${gid}" min="${minDeposit}" step="0.01" value="${minDeposit}" aria-label="Deposit amount in dollars, minimum ${fmtMoney(minDeposit)}"></div>
           <button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Mortgage</button>
         </div>
-        <span class="muted-small buy-hint">Deposit from ${fmtMoney(minDeposit)} &middot; weekly payments due ${dayFull(cls.mortgageDay)}s</span>` : ""}
+        <span class="muted-small buy-hint">Deposit from ${fmtMoney(minDeposit)} &middot; weekly payments due ${dayFull(cls.mortgageDay)}s</span>
+        ${variableRateOffered(p) ? `<div class="buy-choice">${icon("chart", 15)}<span>This one comes with a choice: tap <strong>Mortgage</strong> and you'll pick a <strong>fixed</strong> or a <strong>variable</strong> rate &mdash; each is explained first, and nothing is bought until you choose.</span></div>` : ""}` : ""}
     </div>`;
 }
 
@@ -894,22 +1087,61 @@ function mortgageStatus(p, cls) {
   }
   return { status, canPay, amt };
 }
+// The rate the variable mortgage was on before its latest change (null when
+// there's no earlier rate or it hasn't moved) — for the "up from / down from" note.
+function previousVariableRate(p, nowRate) {
+  const h = Array.isArray(p.variableRateHistory) ? p.variableRateHistory : [];
+  for (let i = h.length - 2; i >= 0; i--) {
+    if (Number(h[i].rate) !== Number(nowRate)) return Number(h[i].rate);
+  }
+  return null;
+}
 function mortgageSection(p, cls) {
   const st = mortgageStatus(p, cls);
   const m = p.mortgage;
+  const variable = isVariableMortgage(m);
+  const badge = variable ? `<span class="badge lilac">Variable rate</span>` : `<span class="badge navy">Fixed rate</span>`;
+  let rateLine;
+  if (variable) {
+    const prev = previousVariableRate(p, m.interestRate);
+    const move = prev == null ? "" : (m.interestRate > prev
+      ? ` <span class="rate-up">&#9650; up from ${prev}%</span>`
+      : ` <span class="rate-down">&#9660; down from ${prev}%</span>`);
+    const range = variableRateOffered(p) ? ` &middot; moves between ${p.variableRateMin}% and ${p.variableRateMax}%` : "";
+    rateLine = `<div class="prow-sub rate-line">Due ${dayFull(cls.mortgageDay)}s &middot; interest at <strong>${m.interestRate}%</strong> a week on the balance still owed${move}${range}</div>`;
+  } else {
+    rateLine = `<div class="prow-sub">Due ${dayFull(cls.mortgageDay)}s${m.interestRate > 0 ? ` &middot; plus ${m.interestRate}% interest on the balance still owed (shrinks each week)` : ""} &middot; rate locked in</div>`;
+  }
+  const owed = st.amt.balanceBefore;
+  const fee = Math.max(0, Number(cls.propertyBreakFee) || 0);
+  const extra = variable ? `
+      <div class="mx-box">
+        <div class="mx-head">${icon("chart", 15)} Extra repayments</div>
+        <span class="muted-small">Pay any amount, any day. It comes straight off the <strong>${fmtMoney(owed)}</strong> you owe, so you pay less interest and finish sooner. It doesn't replace the weekly payment. No break fee.${m.extraPaid > 0 ? ` You've paid ${fmtMoney(m.extraPaid)} extra so far.` : ""}</span>
+        <div class="mx-row">
+          <div class="deposit-group">
+            <div class="deposit-field"><span class="deposit-prefix">$</span>
+            <input type="number" id="extraAmt-${p.id}" min="0.01" max="${owed}" step="0.01" placeholder="0.00" aria-label="Extra repayment in dollars"></div>
+            <button class="btn small gold" id="extraBtn-${p.id}" onclick="payExtraMortgageClick('${p.id}')">${icon("send", 13)} Pay extra</button>
+          </div>
+          <button class="btn small secondary" id="payoffBtn-${p.id}" onclick="payOffMortgageClick('${p.id}')">Pay off in full &middot; ${fmtMoney(owed)}</button>
+        </div>
+        <div id="extraMsg-${p.id}"></div>
+      </div>` : `
+      <p class="muted-small">Fixed rate: your rate can't change, so your payments are easy to plan. Extra repayments aren't available${fee > 0 ? ` and selling before it's paid off costs a ${fmtMoney(fee)} break fee` : ""}.</p>`;
   return `
     <div class="pcard-sec">
-      <div class="pcard-sec-head">Mortgage</div>
+      <div class="pcard-sec-head">Mortgage ${badge}</div>
       <div class="prow">
         <div class="prow-main">
           <div class="prow-title">${fmtMoney(m.weeklyPayment)}/week base &middot; ${m.weeksLeft} week${m.weeksLeft === 1 ? "" : "s"} left</div>
-          <div class="prow-sub">Due ${dayFull(cls.mortgageDay)}s${m.interestRate > 0 ? ` &middot; plus ${m.interestRate}% interest on the balance still owed (shrinks each week)` : ""}</div>
+          ${rateLine}
           <div class="prow-sub">${st.status}</div>
         </div>
         ${st.canPay ? `<button class="btn small gold" id="payMortgageBtn-${p.id}" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay ${fmtMoney(st.amt.total)}</button>` : ""}
       </div>
       ${st.canPay ? `<p class="muted-small">Mortgage payments come out of your cash — a credit card can't be used.</p>` : ""}
-      <div id="mortgageMsg-${p.id}"></div>
+      <div id="mortgageMsg-${p.id}"></div>${extra}
     </div>`;
 }
 
@@ -1338,6 +1570,8 @@ function resetPropForm() {
   document.getElementById("hLivingBonus").value = 1;
   document.getElementById("hMortgage").value = 0;
   document.getElementById("hMortgageRate").value = 0;
+  document.getElementById("hVarMin").value = 0;
+  document.getElementById("hVarMax").value = 0;
   document.getElementById("hRent").value = 0;
   document.getElementById("hRentDay").value = "Fri";
 }
@@ -1362,6 +1596,13 @@ async function addProp(e) {
   e.preventDefault();
   const btn = document.getElementById("addBtn");
   if (btn.disabled) return false;
+  const varMin = Number(document.getElementById("hVarMin").value) || 0;
+  const varMax = Number(document.getElementById("hVarMax").value) || 0;
+  const addMsgEl = document.getElementById("addMsg");
+  if (varMin < 0 || varMax < 0) { addMsgEl.innerHTML = `<div class="error-msg">Variable rates can't be negative.</div>`; return false; }
+  if (varMax > 0 && varMin > varMax) { addMsgEl.innerHTML = `<div class="error-msg">The lowest variable rate can't be higher than the highest.</div>`; return false; }
+  if (varMax > 0 && !(Number(document.getElementById("hMortgage").value) > 0)) { addMsgEl.innerHTML = `<div class="error-msg">Set a mortgage length above 0 weeks to offer a variable rate.</div>`; return false; }
+  addMsgEl.innerHTML = "";
   const prop = {
     name: document.getElementById("hName").value.trim(),
     price: document.getElementById("hPrice").value,
@@ -1370,6 +1611,8 @@ async function addProp(e) {
     livingBonusStars: document.getElementById("hLivingBonus").value,
     mortgageWeeks: document.getElementById("hMortgage").value,
     mortgageInterestRate: document.getElementById("hMortgageRate").value,
+    variableRateMin: varMin,
+    variableRateMax: varMax,
     description: document.getElementById("hDesc").value.trim(),
     rentPerWeek: document.getElementById("hRent").value,
     rentDay: document.getElementById("hRentDay").value
@@ -1415,6 +1658,8 @@ async function editProp(id) {
   document.getElementById("hLivingBonus").value = prop.livingBonusStars !== undefined ? prop.livingBonusStars : 1;
   document.getElementById("hMortgage").value = prop.mortgageWeeks || 0;
   document.getElementById("hMortgageRate").value = prop.mortgageInterestRate || 0;
+  document.getElementById("hVarMin").value = prop.variableRateMin || 0;
+  document.getElementById("hVarMax").value = prop.variableRateMax || 0;
   document.getElementById("hDesc").value = prop.description || "";
   document.getElementById("hRent").value = prop.rentPerWeek || 0;
   document.getElementById("hRentDay").value = prop.rentDay || "Fri";

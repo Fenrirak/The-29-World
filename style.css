@@ -3896,3 +3896,14 @@ html.dark-mode .stat .value.t29-up{animation-name:t29UpDark;}
   *:not(.t29-loadbar):not(.t29-spinner):not(.bulk-spinner)::before,
   *:not(.t29-loadbar):not(.t29-spinner):not(.bulk-spinner)::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;}
 }
+
+/* ---- Net worth trend on the report card: its own full-width row ---- */
+.nw-trend{margin:18px 0 8px;padding:16px 16px 12px;border:1px solid var(--line);border-radius:var(--r-5);background:var(--card);}
+.nw-trend-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;}
+.nw-trend-head h3{margin:0;}
+.nw-chart{display:block;width:100%;height:auto;margin-top:10px;overflow:visible;}
+.nw-axis{font-size:11px;fill:var(--muted);font-weight:700;}
+.nw-trend-stats{margin:10px 0 0;}
+.nw-trend .ticker-up{color:var(--mint-dark);}
+.nw-trend .ticker-down{color:var(--coral);}
+@media (max-width:560px){ .nw-axis{font-size:19px;} }

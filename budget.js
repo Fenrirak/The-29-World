@@ -57,7 +57,9 @@ async function init() {
     safeBgJob(IS_TEACHER ? kiwiSaverReturnsForClassIfDue(u.classCode) : applyMyKiwiSaverReturnsIfDue(u.username), "kiwiSaverReturns"),
     safeBgJob(processInsurancePayments(u.classCode), "processInsurancePayments"),
     safeBgJob(processWeeklyEvents(u.classCode), "processWeeklyEvents"),
-    safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents")
+    safeBgJob(processWeeklyBigEvents(u.classCode), "processWeeklyBigEvents"),
+    // This week's variable mortgage rate has to be in place before the bills are worked out.
+    safeBgJob(autoVariableRatesIfDue(u.classCode), "autoVariableRatesIfDue")
   ]);
   await T29_STARTUP_JOBS;
   // These popups read the results of the jobs above (e.g. a weekly event

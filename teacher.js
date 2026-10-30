@@ -420,7 +420,7 @@ function describeTxn(t, nameOf) {
     case "store-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "property-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "property-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "mortgage": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "mortgage": case "mortgage-extra": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "event": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "vehicle-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "vehicle-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
@@ -480,7 +480,7 @@ function badge(type) {
     "store-sell": ["gold", "cart", "Store sale"],
     "property-buy": ["navy", "house", "Property"],
     "property-sell": ["gold", "house", "Property sold"],
-    "mortgage": ["coral", "house", "Mortgage"],
+    "mortgage": ["coral", "house", "Mortgage"], "mortgage-extra": ["coral", "house", "Extra mortgage payment"],
     "event": ["lilac", "dice", "Random event"],
     "vehicle-buy": ["navy", "car", "Vehicle"], "vehicle-sell": ["gold", "car", "Vehicle sold"],
     "transport-expense": ["coral", "car", "Transport expenses"],
@@ -1415,7 +1415,7 @@ async function renderProfile(username) {
             : "Hasn't chosen to live in it, rent it out, or rent it to a classmate yet";
         return `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(p.name)}</strong> — ${fmtMoney(p.price)}
           <div class="muted-small">${occupancyLine}</div>
-          ${p.mortgage ? `<div class="muted-small">Mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance owed` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]} — this week's payment is ${fmtMoney(mortgageWeekAmount(p.mortgage).total)}</div>` : ""}</div>
+          ${p.mortgage ? `<div class="muted-small">${isVariableMortgage(p.mortgage) ? "Variable" : "Fixed"} mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance owed` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]} — this week's payment is ${fmtMoney(mortgageWeekAmount(p.mortgage).total)}</div>` : ""}</div>
           <div class="row-flex" style="gap:8px;">
             ${p.occupancy === "rented" ? `<button class="btn small secondary" onclick="profileEndRental('${p.id}')">Stop renting / kick out tenants</button>` : ""}
             ${p.occupancy === "sublet" ? `<button class="btn small secondary" onclick="profileEndSublet('${p.id}')">End classmate rental</button>` : ""}

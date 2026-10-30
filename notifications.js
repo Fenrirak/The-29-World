@@ -1102,6 +1102,8 @@ function notifPaint() {
 }
 
 async function notifRefresh(username, classCode) {
+  // A new week's variable mortgage rate must be in place before any payment amount is quoted.
+  try { if (window.T29_RATES_READY) await window.T29_RATES_READY; } catch (e) {}
   const [me, cls] = await Promise.all([getUserCached(username), getClassCached(classCode)]);
   if (!me || !cls) return;
   withNewModuleDefaults(cls);

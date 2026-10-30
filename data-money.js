@@ -2530,7 +2530,7 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
     (cls.properties || []).forEach(p => {
       if (p.owner !== s.username) return;
       propertyValue += p.price;
-      if (p.mortgage) mortgageOwed += (p.mortgage.weeklyPayment || 0) * (p.mortgage.weeksLeft || 0);
+      if (p.mortgage) mortgageOwed += p.mortgage.principalRemaining != null ? (Number(p.mortgage.principalRemaining) || 0) : (p.mortgage.weeklyPayment || 0) * (p.mortgage.weeksLeft || 0);
     });
     propertyValue = Math.round(propertyValue * 100) / 100;
     mortgageOwed = Math.round(mortgageOwed * 100) / 100;
@@ -2572,7 +2572,8 @@ const RESTART_KEEP_USER_FIELDS = [
   "username", "authUid", "role", "name", "classCode", "sessionVersion", "password",
   "dailyLimitMinutes", "timeSpentTodaySec", "timeSpentDate",
   "timeExemptionStatus", "timeExemptionDate", "timeExemptionRequestedAt",
-  "extraMinutesToday", "extraMinutesDate", "parentViewToken"
+  "extraMinutesToday", "extraMinutesDate", "parentViewToken",
+  "netWorthLog" // the weekly Monday net-worth notes — the trend carries on across a restart
 ];
 // (Each student restarts at the class's own welcome grant — see t29WelcomeGrantOf.)
 
@@ -2586,12 +2587,6 @@ const RESTART_KEEP_USER_FIELDS = [
 // Returns { ok, failed } — failed names students whose account couldn't
 // be reset (running Restart again finishes them off).
 async function resetClass(classCode, teacherUsername) {
-  // Save a permanent report-card snapshot of exactly what's about to be
-  // wiped — txns get cleared below and balances reset, so without this a
-  // reset would silently erase the only record of the term that just
-  // finished. Best-effort: a failed archive (e.g. offline) never blocks
-  // the reset itself, since teachers may still need to restart the class.
-  try { await archiveClassReport(classCode, teacherUsername); } catch (e) { /* proceed with reset regardless */ }
   const cls = await getClass(classCode);
   if (!cls) return { ok: false, failed: [] };
   const students = await getClassStudents(classCode, cls);
@@ -2852,10 +2847,8 @@ async function storeItemsValue(username, classCode) {
 }
 
 /* ===================== Reports ===================== */
-// Keeps the class doc from growing forever — same pattern as
-// MAX_STORED_TXNS. ~2 years of weekly report cards before the oldest
-// archive rolls off.
-const MAX_REPORT_ARCHIVES = 104;
+// Weekly net-worth notes kept per student (about 10 years of Mondays).
+const NET_WORTH_LOG_MAX = 520;
 
 // Maps a transaction to a report-card bucket + human category label.
 // Independent from bank.js's own statement rendering (which needs a
@@ -2896,7 +2889,7 @@ const REPORT_SPENT_TYPES = {
   // as the one-off purchases above, since from the student's point of
   // view it's all money going out on getting around.
   "transport-expense": "Transport",
-  "property-buy": "Housing", "mortgage": "Housing", "property-rent-pay": "Housing", "insurance-buy": "Insurance",
+  "property-buy": "Housing", "mortgage": "Housing", "mortgage-extra": "Housing", "property-rent-pay": "Housing", "insurance-buy": "Insurance",
   "insurance-signup-fee": "Insurance", "loan-repayment": "Loan repayments",
   "loan-interest": "Loan interest", fine: "Fines",
   // Card spending counts when it is spent (not when the bill is paid), so
@@ -3018,7 +3011,7 @@ function buildStudentReportData(student, cls) {
   (cls.properties || []).forEach(p => {
     if (p.owner !== username) return;
     propertyValue += p.price;
-    if (p.mortgage) mortgageOwed += (p.mortgage.weeklyPayment || 0) * (p.mortgage.weeksLeft || 0);
+    if (p.mortgage) mortgageOwed += p.mortgage.principalRemaining != null ? (Number(p.mortgage.principalRemaining) || 0) : (p.mortgage.weeklyPayment || 0) * (p.mortgage.weeksLeft || 0);
   });
   let vehicleValue = 0;
   (cls.vehicles || []).forEach(v => { if ((v.owners || []).includes(username)) vehicleValue += v.price; });
@@ -3053,7 +3046,9 @@ function buildStudentReportData(student, cls) {
     // Entire history — never reset, see recordReportActivity above.
     lifetimeIncome: lifetime.income, lifetimeSaved: lifetime.saved, lifetimeSpent: lifetime.spent,
     lifetimeIncomeTotal: lifetime.incomeTotal, lifetimeSavedTotal: lifetime.savedTotal,
-    lifetimeSpentTotal: lifetime.spentTotal, lifetimeBorrowedTotal: lifetime.borrowedTotal
+    lifetimeSpentTotal: lifetime.spentTotal, lifetimeBorrowedTotal: lifetime.borrowedTotal,
+    // Net worth noted every Monday (plus any older saved report cards) — see netWorthTrendPoints.
+    netWorthTrend: netWorthTrendPoints(student, cls)
   };
 }
 
@@ -3071,47 +3066,81 @@ async function generateClassReport(classCode) {
   };
 }
 
-// Permanently saves the current live report as an archive entry, so it
-// survives future activity rolling old txns off the class doc (and
-// survives resetClass(), which calls this automatically before wiping
-// anything). Can also be triggered manually from the Reports page at any
-// time — e.g. "save this week's report cards" without resetting the class.
-async function archiveClassReport(classCode, generatedBy) {
-  const report = await generateClassReport(classCode);
-  if (!report) return null;
-  const entry = {
-    id: uid("report"), date: nowStr(), ts: Date.now(),
-    generatedBy: generatedBy || null,
-    periodStart: report.periodStart, periodEnd: report.periodEnd,
-    students: report.students
-  };
-  const classRef = classesCol().doc(classCode);
-  await fdb.runTransaction(async (t) => {
-    const snap = await t.get(classRef);
-    if (!snap.exists) return;
-    const liveCls = snap.data();
-    const archives = (liveCls.reportArchives || []).concat([entry]);
-    if (archives.length > MAX_REPORT_ARCHIVES) archives.splice(0, archives.length - MAX_REPORT_ARCHIVES);
-    t.update(classRef, { reportArchives: archives });
+/* ---------------- Net worth trend (noted every Monday) ----------------
+   Each student's own doc keeps netWorthLog: one { d, v, t } per week —
+   d the NZ date of that week's Monday, v their net worth, t when it was
+   actually noted. The first page load on or after Monday morning notes it
+   (a teacher's visit notes the whole class at once; a student's own visit
+   notes just them), so nobody has to save anything. Old report cards a
+   teacher saved before this existed (cls.reportArchives) still feed the
+   trend as extra points, so the history reaches back as far as possible. */
+function netWorthTrendPoints(student, cls) {
+  const byDay = new Map();
+  (cls.reportArchives || []).forEach(a => {
+    const me = (a.students || []).find(x => x.username === student.username);
+    const t = Number(a.periodEnd || a.ts);
+    if (!me || typeof me.netWorth !== "number" || !Number.isFinite(t)) return;
+    byDay.set(nzDateKey(new Date(t)), { t, v: me.netWorth, day: nzDateKey(new Date(t)), saved: true });
   });
-  return entry;
+  (student.netWorthLog || []).forEach(e => {
+    if (!e || typeof e.v !== "number" || !e.d) return;
+    byDay.set(e.d, { t: Number(e.t) || dateKeyToUTC(e.d), v: e.v, day: e.d });
+  });
+  return Array.from(byDay.values()).sort((x, y) => x.t - y.t);
 }
 
-async function getReportArchives(classCode) {
-  const cls = await getClassCached(classCode);
-  return (cls && cls.reportArchives) || [];
+// The points to draw for one student's report: everything noted so far,
+// then "now" (their live net worth) on the end.
+function netWorthSeries(s) {
+  const pts = (s.netWorthTrend || []).slice();
+  const last = pts.length ? pts[pts.length - 1].t : 0;
+  pts.push({ t: Math.max(Date.now(), last), v: s.netWorth, day: nzDateKey(), now: true });
+  return pts;
 }
 
-async function deleteReportArchive(classCode, archiveId) {
-  const classRef = classesCol().doc(classCode);
+async function _appendNetWorthNote(username, monday, value) {
+  const ref = usersCol().doc(username);
   await fdb.runTransaction(async (t) => {
-    const snap = await t.get(classRef);
+    const snap = await t.get(ref);
     if (!snap.exists) return;
-    const cls = snap.data();
-    cls.reportArchives = (cls.reportArchives || []).filter(a => a.id !== archiveId);
-    t.update(classRef, { reportArchives: cls.reportArchives });
+    const log = Array.isArray(snap.data().netWorthLog) ? snap.data().netWorthLog.slice() : [];
+    if (log.length && log[log.length - 1].d >= monday) return; // already noted this week
+    log.push({ d: monday, v: Math.round(value * 100) / 100, t: Date.now() });
+    if (log.length > NET_WORTH_LOG_MAX) log.splice(0, log.length - NET_WORTH_LOG_MAX);
+    t.update(ref, { netWorthLog: log });
   });
-  return true;
+}
+
+// A student's own session: note their net worth for this week if it hasn't
+// been noted yet.
+async function recordMyNetWorthIfDue(username) {
+  const me = await getUserCached(username);
+  if (!me || me.role === "teacher" || !me.classCode) return;
+  await syncServerClock(me.classCode); // "Monday" must come from the server's clock, not a drifted device
+  const monday = budgetWeekStartKey();
+  const lastNote = (me.netWorthLog || [])[(me.netWorthLog || []).length - 1];
+  if (lastNote && lastNote.d >= monday) return;
+  const cls = await getClassCached(me.classCode);
+  if (!cls || cls.archived) return;
+  await _appendNetWorthNote(username, monday, buildStudentReportData(me, withNewModuleDefaults(cls)).netWorth);
+}
+
+// A teacher's session: note everyone who hasn't been noted this week yet.
+// The class doc remembers which Monday it last did this for, so a teacher
+// opening pages all week doesn't re-read every student each time.
+async function recordClassNetWorthIfDue(classCode) {
+  await syncServerClock(classCode);
+  const monday = budgetWeekStartKey();
+  const cls0 = await getClassCached(classCode);
+  if (!cls0 || cls0.archived || cls0.netWorthLogWeek === monday) return;
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const students = await getClassStudents(classCode, cls);
+  const due = students.filter(st => { const l = (st.netWorthLog || [])[(st.netWorthLog || []).length - 1]; return !(l && l.d >= monday); });
+  for (let i = 0; i < due.length; i += 8) {
+    await Promise.all(due.slice(i, i + 8).map(st =>
+      _appendNetWorthNote(st.username, monday, buildStudentReportData(st, cls).netWorth).catch(e => console.warn("net worth note failed for " + st.username, e))));
+  }
+  await classesCol().doc(classCode).update({ netWorthLogWeek: monday });
 }
 
 /* ---------------- Rolling per-student report totals ----------------
@@ -3490,6 +3519,10 @@ function budgetWeekItems(cls, user, username) {
       note: free ? "The week you bought it is free" : status === "done" ? "Paid"
         : status === "missed" ? "Missed — it can only be paid on its day"
         : (forced ? "Your teacher has made it due now" : "You pay it on the Property page") });
+    // A floating-rate bill can change from week to week — say so on any unpaid bill.
+    if (isVariableMortgage(p.mortgage) && !free && status !== "done") {
+      items[items.length - 1].note += ` — variable rate (${p.mortgage.interestRate}%/wk), so it can change if the rate moves`;
+    }
   });
   const tenancies = [];
   (cls.properties || []).forEach(p => {
@@ -3623,6 +3656,8 @@ function budgetWeekActuals(cls, username, weekStartKey) {
       case "p2p-buy": add(purchases, "Trade Centre", amt); break;
       case "vehicle-buy": case "truck-licence-buy": add(purchases, "Transport", amt); break;
       case "property-buy": add(purchases, "Housing", amt); break;
+      // Extra repayments on a variable mortgage: optional money out, unlike the weekly payment (a scheduled bill, not counted here).
+      case "mortgage-extra": add(purchases, "Extra mortgage repayments", amt); break;
       case "property-occupancy": if (out) add(purchases, "Moving house", amt); break;
       case "insurance-signup-fee": add(purchases, "Insurance sign-up", amt); break;
       // Bets happen inside the gambling account — what counts for cash is
@@ -3945,7 +3980,7 @@ const TXN_MONEY_IN = new Set([
   "kiwisaver-out", "kiwisaver-refund"
 ]);
 const TXN_MONEY_OUT = new Set([
-  "fine", "insurance-buy", "store-buy", "mortgage", "property-buy", "property-rent-pay", "vehicle-buy", "transport-expense",
+  "fine", "insurance-buy", "store-buy", "mortgage", "mortgage-extra", "property-buy", "property-rent-pay", "vehicle-buy", "transport-expense",
   "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "loan-interest",
   "p2p-buy", "truck-licence-buy", "gambling-buyin", "stock-buy", "kiwisaver-in", "card-payment"
 ]);

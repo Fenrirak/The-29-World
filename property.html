@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=2d152432">
+<link rel="stylesheet" href="style.css?v=6d4bd49e">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -40,23 +40,30 @@
   /* ===== Property page ===== */
   .page-lede { margin: 0 0 18px; }
 
-  /* --- Tabs (segmented control) --- */
+  /* --- Tabs (segmented pill, matches the Gambling mode switch) --- */
   .p-tabs {
-    display: flex; gap: 4px; padding: 4px; margin: 0 0 20px;
-    background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-4);
+    display: inline-flex; max-width: 100%; gap: 4px; padding: 4px; margin: 0 0 20px;
+    border-radius: 999px; background: rgba(212,162,76,0.07); border: 1px solid rgba(212,162,76,0.35);
     overflow-x: auto; scrollbar-width: none;
   }
+  .p-tabs.hidden { display: none; }
   .p-tabs::-webkit-scrollbar { display: none; }
   .p-tabs button {
-    flex: 1 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-    min-height: 42px; padding: 9px 16px; border: none; border-radius: var(--r-3);
-    background: transparent; color: var(--muted); font: inherit; font-weight: 700; font-size: var(--fs-md);
-    white-space: nowrap; cursor: pointer; transition: background .15s ease, color .15s ease;
+    flex: 1 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 9px 22px; border: none; border-radius: 999px;
+    background: transparent; color: var(--gold, #d4a24c); font: inherit; font-weight: 800; font-size: 14px; line-height: 1;
+    white-space: nowrap; cursor: pointer; transition: background .18s ease, color .18s ease, box-shadow .18s ease;
   }
-  .p-tabs button:hover { color: var(--ink); }
+  .p-tabs button:hover:not(.active) { background: rgba(212,162,76,0.14); }
   .p-tabs button.active {
-    background: var(--card); color: var(--ink);
-    box-shadow: var(--shadow-sm);
+    background: var(--gold, #d4a24c); color: #1f2b44;
+    box-shadow: 0 2px 8px rgba(212,162,76,0.4);
+  }
+  .p-tabs button.active .p-count:not(.alert) { background: rgba(31,43,68,0.18); color: #1f2b44; }
+  @media (max-width: 520px) {
+    .p-tabs { display: flex; width: 100%; }
+    .p-tabs.hidden { display: none; }
+    .p-tabs button { flex: 1 0 auto; padding: 9px 12px; gap: 5px; font-size: 13px; }
   }
   .p-count {
     display: inline-flex; align-items: center; justify-content: center;
@@ -212,6 +219,64 @@
   .p-inline input { flex: 1; }
   .p-inline .btn { margin-top: 0; }
   .set-head + .prow { margin-top: 8px; }
+
+  /* --- Fixed vs variable mortgage --- */
+  .fin-sub { display: flex; align-items: center; gap: 7px; margin: 16px 0 8px; font-size: var(--fs-md); font-weight: 800; color: var(--ink); }
+  .fin-sub .icon-slot { color: var(--sky-fill); display: inline-flex; }
+  .fin-opt { margin-left: 2px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .chip.chip-fixed { background: rgba(232,184,75,.14); border-color: rgba(212,162,76,.4); }
+  .chip.chip-var { background: rgba(91,141,239,.11); border-color: rgba(91,141,239,.35); }
+  .chip-ico { display: inline-flex; margin-right: 7px; flex: 0 0 auto; }
+  .chip-fixed .chip-ico { color: var(--gold-dark); }
+  .chip-var .chip-ico { color: var(--sky-fill); }
+  html.dark-mode .chip-var .chip-ico { color: var(--sky); }
+  .buy-choice { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 100%; padding: 8px 12px; border-radius: var(--r-3); background: rgba(91,141,239,.1); border: 1px dashed rgba(91,141,239,.45); font-size: var(--fs-sm); font-weight: 600; line-height: 1.35; color: var(--ink); }
+  .buy-choice .icon { color: var(--sky-fill); flex: 0 0 auto; }
+  html.dark-mode .buy-choice .icon { color: var(--sky); }
+
+  /* Choose-your-mortgage dialog */
+  .anw-modal-card.mc-modal { max-width: 780px; padding: 22px 24px; }
+  .mc-deal { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 0; font-size: var(--fs-md); color: var(--muted); }
+  .mc-deal strong { color: var(--ink); }
+  .mc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+  @media (max-width: 660px) { .anw-modal-card.mc-modal { padding: 18px 16px; } .mc-grid { grid-template-columns: 1fr; } }
+  .mc-opt { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border: 1.5px solid var(--line); border-radius: var(--r-5); background: var(--card); transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+  .mc-opt:hover { border-color: var(--gold); box-shadow: var(--shadow-lift); transform: translateY(-2px); }
+  .mc-opt.is-variable:hover { border-color: var(--sky); }
+  .anw-modal-card.mc-modal:focus { outline: none; }
+  #mcTitle { display: flex; align-items: center; gap: 8px; }
+  .mc-head { display: flex; align-items: center; gap: 11px; }
+  .mc-ico { flex: 0 0 40px; width: 40px; height: 40px; border-radius: var(--r-3); display: flex; align-items: center; justify-content: center; background: rgba(232,184,75,.16); color: var(--gold-dark); }
+  .is-variable .mc-ico { background: rgba(91,141,239,.14); color: var(--sky-fill); }
+  html.dark-mode .is-variable .mc-ico { color: var(--sky); }
+  .mc-title { margin: 0; font-size: 1.08rem; line-height: 1.2; }
+  .mc-tag { display: block; margin-top: 2px; font-size: var(--fs-xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .mc-rate { font-size: 1.6rem; font-weight: 900; line-height: 1.1; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .mc-rate small { font-size: var(--fs-sm); font-weight: 700; color: var(--muted); }
+  .mc-rate-sub { margin-top: 3px; font-size: var(--fs-sm); line-height: 1.4; color: var(--muted); }
+  .mc-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-md); line-height: 1.4; color: var(--ink); }
+  .mc-points li { position: relative; padding-left: 22px; }
+  .mc-points li::before { content: "\2713"; position: absolute; left: 0; top: 0; font-weight: 900; color: var(--mint-dark); }
+  .mc-points li.is-trade::before { content: "!"; left: 4px; color: var(--coral); }
+  .mc-est { margin-top: auto; padding: 10px 12px; border-radius: var(--r-3); background: var(--bg); border: 1px solid var(--line); font-size: var(--fs-sm); line-height: 1.5; color: var(--muted); }
+  .mc-est strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .mc-opt .btn { width: 100%; margin-top: 0; justify-content: center; }
+  .mc-opt .btn.sky { background: linear-gradient(135deg, var(--sky-fill), var(--sky-fill-dark)); color: #fff; box-shadow: 0 4px 12px rgba(61,114,217,.3); }
+  .mc-opt .btn.sky:hover { box-shadow: 0 8px 22px rgba(61,114,217,.4); }
+  .mc-note { margin: 14px 0 0; }
+
+  /* Owned mortgage: rate line + extra repayments */
+  .rate-up { color: var(--coral-fill); font-weight: 800; }
+  .rate-down { color: var(--mint-fill); font-weight: 800; }
+  html.dark-mode .rate-up { color: #f0a08f; }
+  html.dark-mode .rate-down { color: #6fdcb2; }
+  .mx-box { margin-top: 12px; padding: 12px 14px; border-radius: var(--r-4); background: rgba(91,141,239,.08); border: 1px solid rgba(91,141,239,.3); }
+  .mx-head { display: flex; align-items: center; gap: 7px; font-weight: 800; font-size: var(--fs-md); color: var(--ink); }
+  .mx-head .icon { color: var(--sky-fill); }
+  html.dark-mode .mx-head .icon { color: var(--sky); }
+  .mx-box > .muted-small { display: block; margin-top: 4px; }
+  .mx-row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-top: 10px; }
+  .mx-row .btn { margin-top: 0; }
 </style>
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
 <link rel="modulepreload" href="firebase-init.js?v=aca5590e">
@@ -409,13 +474,24 @@
         <div class="set-row">
           <div class="set-text">
             <strong>Break fee</strong>
-            <span class="muted-small">Flat fee added to the payoff when a student sells back a property that still has a mortgage. 0 = none. Selling a mortgage-free property never charges it.</span>
+            <span class="muted-small">Flat fee added to the payoff when a student sells back a property that still has a fixed-rate mortgage. 0 = none. Variable mortgages and mortgage-free properties never charge it.</span>
           </div>
           <div class="set-ctl">
             <input id="mortgageBreakFeeInput" type="number" min="0" step="0.01" aria-label="Break fee in dollars" placeholder="$">
             <button class="btn small secondary" onclick="saveMortgageBreakFeeClick()" id="saveMortgageBreakFeeBtn">Save</button>
           </div>
           <div id="mortgageBreakFeeMsg" class="set-msg"></div>
+        </div>
+
+        <div class="set-row">
+          <div class="set-text">
+            <strong>Variable rates</strong>
+            <span class="muted-small">Each listing with a variable range has a floating rate that moves by itself once a week (the first page load of the week triggers it) and stays inside that range. Set the range in the listing's Financing section. Use this to move every rate one step right now — handy for showing the class what a rate change does to repayments.</span>
+          </div>
+          <div class="set-ctl">
+            <button class="btn small gold" onclick="changeVariableRatesNow()" id="changeVarRatesBtn"><span class="icon-slot" data-icon="repeat"></span> Change rates now</button>
+          </div>
+          <div id="variableRatesMsg" class="set-msg"></div>
         </div>
       </div>
 
@@ -497,11 +573,23 @@
             <input id="hMortgage" type="number" min="0" step="1" value="0">
           </div>
           <div>
-            <label for="hMortgageRate">Interest (% per week)</label>
+            <label for="hMortgageRate">Fixed interest (% per week)</label>
             <input id="hMortgageRate" type="number" min="0" step="0.1" value="0">
           </div>
         </div>
-        <span class="muted-small">0 weeks = cash purchase only. 0% interest = interest-free.</span>
+        <span class="muted-small">0 weeks = cash purchase only. 0% interest = interest-free. This is the <strong>fixed</strong> mortgage — the rate is locked in for the whole term.</span>
+        <div class="fin-sub"><span class="icon-slot" data-icon="chart"></span> Variable rate range <span class="fin-opt">optional</span></div>
+        <div class="grid grid-2">
+          <div>
+            <label for="hVarMin">Lowest (% per week)</label>
+            <input id="hVarMin" type="number" min="0" step="0.01" value="0">
+          </div>
+          <div>
+            <label for="hVarMax">Highest (% per week)</label>
+            <input id="hVarMax" type="number" min="0" step="0.01" value="0">
+          </div>
+        </div>
+        <span class="muted-small" id="hVarHint">Leave the highest at 0 for fixed-only. Otherwise students can choose a <strong>variable</strong> mortgage for the same length: its rate moves up and down each week inside this range, and they can make extra repayments or pay it off early with no break fee.</span>
       </div>
 
       <div class="form-sec">
@@ -621,14 +709,14 @@
 <script defer src="icons.js?v=c9829d04"></script>
 <script defer src="settings-menu.js?v=07d1ebe2"></script>
 <script defer src="shortcuts.js?v=80d22675"></script>
-<script defer src="data-core.js?v=592e5fc3"></script>
-<script defer src="data-money.js?v=38fc4f1e"></script>
+<script defer src="data-core.js?v=211fc637"></script>
+<script defer src="data-money.js?v=a9828229"></script>
 <script defer src="data-life.js?v=5c2eb4d1"></script>
-<script defer src="data-property.js?v=10c4d531"></script>
+<script defer src="data-property.js?v=c2b192e9"></script>
 <script defer src="data-markets.js?v=49205e15"></script>
 <script defer src="events-ui.js?v=68fd100a"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
-<script defer src="notifications.js?v=e921b3db"></script>
-<script defer src="property.js?v=193fd3a0"></script>
+<script defer src="notifications.js?v=6ecf8d21"></script>
+<script defer src="property.js?v=134b7d2e"></script>
 </body>
 </html>

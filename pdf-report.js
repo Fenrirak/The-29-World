@@ -135,27 +135,33 @@ function pdfDoc() {
       });
       this.y -= 1;
     },
-    // Net worth over time — the same line as on the student's own report
-    // page: green where it went up, red where it went down.
-    trend(values) {
+    // Net worth over time — the same line as on the report page: green where
+    // it went up, red where it went down, drawn by date. pts: [{ t, v }].
+    trend(pts) {
       const h = 70, w = 300;
-      this.need(h + 18);
+      this.need(h + 30);
       this.y -= h + 6;
       const x0 = PDF_MARGIN, base = this.y;
-      const max = Math.max(...values), min = Math.min(...values), range = (max - min) || 1;
-      const pts = values.map((v, i) => [x0 + (i / (values.length - 1)) * w, base + 5 + ((v - min) / range) * (h - 10)]);
+      const vals = pts.map(p => p.v);
+      const max = Math.max(...vals), min = Math.min(...vals), range = (max - min) || 1;
+      const t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+      const xs = p => x0 + (t1 === t0 ? w / 2 : ((p.t - t0) / (t1 - t0)) * w);
+      const xy = pts.map(p => [xs(p), base + 5 + ((p.v - min) / range) * (h - 10)]);
       this.rect(x0, base, w, 0.6, PDF_COLORS.line);
-      for (let i = 1; i < pts.length; i++) {
-        const c = pts[i][1] >= pts[i - 1][1] ? PDF_COLORS.mint : PDF_COLORS.coral;
-        this.stream += `q ${this.color(c)} RG 2 w 1 J ${pts[i - 1][0].toFixed(2)} ${pts[i - 1][1].toFixed(2)} m ${pts[i][0].toFixed(2)} ${pts[i][1].toFixed(2)} l S Q\n`;
+      for (let i = 1; i < xy.length; i++) {
+        const c = xy[i][1] >= xy[i - 1][1] ? PDF_COLORS.mint : PDF_COLORS.coral;
+        this.stream += `q ${this.color(c)} RG 2 w 1 J ${xy[i - 1][0].toFixed(2)} ${xy[i - 1][1].toFixed(2)} m ${xy[i][0].toFixed(2)} ${xy[i][1].toFixed(2)} l S Q\n`;
       }
-      pts.forEach(p => this.rect(p[0] - 2.2, p[1] - 2.2, 4.4, 4.4, PDF_COLORS.navy));
+      xy.forEach(p => this.rect(p[0] - 2.2, p[1] - 2.2, 4.4, 4.4, PDF_COLORS.navy));
+      const d = t => new Date(t).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric", timeZone: "Pacific/Auckland" });
+      this.text(d(t0), x0, base - 10, 8, { color: PDF_COLORS.muted });
+      this.text(d(t1), x0 + w, base - 10, 8, { color: PDF_COLORS.muted, align: "right" });
       const tx = x0 + w + 24;
-      this.text("Started at", tx, base + h - 12, 8.5, { color: PDF_COLORS.muted });
-      this.text(fmtMoney(values[0]), tx, base + h - 25, 11, { bold: true, color: PDF_COLORS.navy });
+      this.text("First noted", tx, base + h - 12, 8.5, { color: PDF_COLORS.muted });
+      this.text(fmtMoney(vals[0]), tx, base + h - 25, 11, { bold: true, color: PDF_COLORS.navy });
       this.text("Now", tx, base + h - 44, 8.5, { color: PDF_COLORS.muted });
-      this.text(fmtMoney(values[values.length - 1]), tx, base + h - 57, 11, { bold: true, color: PDF_COLORS.navy });
-      this.y -= 4;
+      this.text(fmtMoney(vals[vals.length - 1]), tx, base + h - 57, 11, { bold: true, color: PDF_COLORS.navy });
+      this.y -= 14;
     },
     // A label/value row with the value hard right — used for every table
     // in the report, which keeps the whole document on one grid.
@@ -295,14 +301,13 @@ function pdfBarsSection(doc, title, map, colorName, total) {
 }
 
 // The same sections, in the same order, as the printed report card
-// (studentReportHTML in reports.js). history: the student's net worth on
-// each saved report and now — only their own report shows the trend.
-function pdfStudentReport(doc, s, report, history) {
-  if (history) {
-    doc.heading("Net worth over time");
-    if (history.length < 2) doc.para("Not enough saved reports yet to show a trend - ask your teacher to save a report card each week to start building one.");
-    else doc.trend(history);
-  }
+// (studentReportHTML in reports.js). The net worth trend is the figure noted
+// every Monday (see netWorthSeries in data-money.js), ending with right now.
+function pdfStudentReport(doc, s, report) {
+  const trendPts = netWorthSeries(s);
+  doc.heading("Net worth over time");
+  if (trendPts.length < 2) doc.para("Net worth is noted every Monday - the trend will appear here once it has been noted for a Monday.");
+  else doc.trend(trendPts);
   doc.chips([
     { label: "Net worth", value: fmtMoney(s.netWorth), color: "navy" },
     { label: "Savings rate", value: s.savingsRate === null ? "-" : s.savingsRate + "%", color: "mint" },
@@ -354,14 +359,14 @@ function pdfStudentReport(doc, s, report, history) {
   }
 }
 
-function downloadStudentReportPDF(s, report, history) {
+function downloadStudentReportPDF(s, report) {
   const doc = pdfDoc();
   doc.titleBlock(
     s.name || "Report card",
     `Report card - covers ${fmtRange(report.periodStart, report.periodEnd)}`,
     "Generated " + nowStr()
   );
-  pdfStudentReport(doc, s, report, history);
+  pdfStudentReport(doc, s, report);
   pdfSave(doc, `report-card-${pdfSafeName(s.name)}.pdf`);
 }
 
