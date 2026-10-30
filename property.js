@@ -595,11 +595,14 @@ async function buyFinanced(gid) {
   // explained in the dialog); fixed-only listings carry straight on.
   const clsV = await getClassCached(CURRENT.classCode);
   const listing = ((clsV && clsV.properties) || []).find(p => (p.groupId || p.id) === gid);
-  if (listing && variableRateOffered(listing)) {
-    openMortgageChoiceModal(gid, depositAmt, useKs);
-    return;
+  if (!listing) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">That listing isn't available any more.</div>`; return; }
+  // Always ask first (never silently default to fixed). Listings with no
+  // variable range still show the dialog, with only the fixed option live.
+  try { await openMortgageChoiceModal(gid, depositAmt, useKs); }
+  catch (err) {
+    console.error("Mortgage dialog failed", err);
+    document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Couldn't open the mortgage options. Please try again.</div>`;
   }
-  await completeFinancedPurchase(gid, depositAmt, useKs, "fixed");
 }
 // The actual financed purchase, once the student's deposit and mortgage type
 // are settled. Same double-tap guard as buyOutright/buyFinanced.
@@ -671,6 +674,31 @@ async function openMortgageChoiceModal(gid, depositAmt, useKs) {
   const vMin = Number(p.variableRateMin) || 0, vMax = Number(p.variableRateMax) || 0, vNow = Number(p.variableRate) || 0;
   const fee = Math.max(0, Number(cls.propertyBreakFee) || 0);
   const day = dayFull(cls.mortgageDay);
+  const varOn = variableRateOffered(p);
+  const varCard = varOn ? `<section class="mc-opt is-variable" aria-label="Variable rate mortgage">
+        <div class="mc-head">
+          <div class="mc-ico">${icon("chart", 20)}</div>
+          <div><h3 class="mc-title">Variable rate</h3><span class="mc-tag">Flexible</span></div>
+        </div>
+        <div>
+          <div class="mc-rate">${vMin}&ndash;${vMax}%<small> per week</small></div>
+          <div class="mc-rate-sub">Right now it's <strong>${vNow}%</strong>.</div>
+        </div>
+        <ul class="mc-points">
+          <li>Pay extra whenever you like to clear it faster and save interest.</li>
+          <li>Pay it all off, or sell, with no break fee.</li>
+          <li class="is-trade">The rate moves up or down each week, so your payment can change too.</li>
+        </ul>
+        <div class="mc-est">First payment about <strong>${firstPay(vNow)}</strong> now. It could be anywhere from <strong>${firstPay(vMin)}</strong> to <strong>${firstPay(vMax)}</strong> as the rate moves.</div>
+        <button type="button" class="btn sky" id="mcPickVariable">${icon("chart", 14)} Choose variable</button>
+      </section>` : `<section class="mc-opt is-variable is-off" aria-label="Variable rate mortgage, not offered">
+        <div class="mc-head">
+          <div class="mc-ico">${icon("chart", 20)}</div>
+          <div><h3 class="mc-title">Variable rate</h3><span class="mc-tag">Not offered</span></div>
+        </div>
+        <div class="mc-rate-sub">A variable mortgage has a rate that moves each week, but lets you pay extra or pay off early with no break fee. Your teacher hasn't turned it on for this property.</div>
+        <button type="button" class="btn sky" disabled>Not available here</button>
+      </section>`;
   document.getElementById("mcBody").innerHTML = `
     <div class="p-modal-head">
       <h2 id="mcTitle">${icon("house", 18)} Choose your mortgage</h2>
@@ -699,23 +727,7 @@ async function openMortgageChoiceModal(gid, depositAmt, useKs) {
         <div class="mc-est">First payment about <strong>${firstPay(fixedRate)}</strong>, then a little less each week as what you owe goes down.</div>
         <button type="button" class="btn gold" id="mcPickFixed">${icon("lock", 14)} Choose fixed</button>
       </section>
-      <section class="mc-opt is-variable" aria-label="Variable rate mortgage">
-        <div class="mc-head">
-          <div class="mc-ico">${icon("chart", 20)}</div>
-          <div><h3 class="mc-title">Variable rate</h3><span class="mc-tag">Flexible</span></div>
-        </div>
-        <div>
-          <div class="mc-rate">${vMin}&ndash;${vMax}%<small> per week</small></div>
-          <div class="mc-rate-sub">Right now it's <strong>${vNow}%</strong>.</div>
-        </div>
-        <ul class="mc-points">
-          <li>Pay extra whenever you like to clear it faster and save interest.</li>
-          <li>Pay it all off, or sell, with no break fee.</li>
-          <li class="is-trade">The rate moves up or down each week, so your payment can change too.</li>
-        </ul>
-        <div class="mc-est">First payment about <strong>${firstPay(vNow)}</strong> now. It could be anywhere from <strong>${firstPay(vMin)}</strong> to <strong>${firstPay(vMax)}</strong> as the rate moves.</div>
-        <button type="button" class="btn sky" id="mcPickVariable">${icon("chart", 14)} Choose variable</button>
-      </section>
+      ${varCard}
     </div>
     <p class="muted-small mc-note">Payment figures are estimates. Either way, nothing comes out automatically &mdash; you pay each week yourself on ${day}s, and the week you buy is free.</p>`;
   const pick = (type) => {
@@ -724,7 +736,8 @@ async function openMortgageChoiceModal(gid, depositAmt, useKs) {
   };
   document.getElementById("mcCloseBtn").onclick = closeMortgageChoiceModal;
   document.getElementById("mcPickFixed").onclick = () => pick("fixed");
-  document.getElementById("mcPickVariable").onclick = () => pick("variable");
+  const vb = document.getElementById("mcPickVariable");
+  if (vb) vb.onclick = () => pick("variable");
   overlay.classList.remove("hidden");
   // Focus the dialog itself, not an option, so neither choice looks pre-selected.
   const card = overlay.querySelector(".mc-modal");
@@ -1049,7 +1062,9 @@ function buyControls(p, gid, minDeposit, ksHome, cls) {
           <button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Mortgage</button>
         </div>
         <span class="muted-small buy-hint">Deposit from ${fmtMoney(minDeposit)} &middot; weekly payments due ${dayFull(cls.mortgageDay)}s</span>
-        ${variableRateOffered(p) ? `<div class="buy-choice">${icon("chart", 15)}<span>This one comes with a choice: tap <strong>Mortgage</strong> and you'll pick a <strong>fixed</strong> or a <strong>variable</strong> rate &mdash; each is explained first, and nothing is bought until you choose.</span></div>` : ""}` : ""}
+        ${variableRateOffered(p)
+          ? `<div class="buy-choice">${icon("chart", 15)}<span>This one comes with a choice: tap <strong>Mortgage</strong> and you'll pick a <strong>fixed</strong> or a <strong>variable</strong> rate &mdash; each is explained first, and nothing is bought until you choose.</span></div>`
+          : `<div class="buy-choice">${icon("lock", 15)}<span>Tap <strong>Mortgage</strong> to see how the loan works first &mdash; nothing is bought until you confirm.</span></div>`}` : ""}
     </div>`;
 }
 

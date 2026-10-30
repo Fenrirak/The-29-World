@@ -264,6 +264,12 @@
   .mc-opt .btn.sky { background: linear-gradient(135deg, var(--sky-fill), var(--sky-fill-dark)); color: #fff; box-shadow: 0 4px 12px rgba(61,114,217,.3); }
   .mc-opt .btn.sky:hover { box-shadow: 0 8px 22px rgba(61,114,217,.4); }
   .mc-note { margin: 14px 0 0; }
+  .mc-opt.is-off { opacity: .6; background: var(--bg); }
+  .mc-opt.is-off:hover { border-color: var(--line); box-shadow: none; transform: none; }
+  .mc-opt .btn[disabled] { opacity: .55; cursor: not-allowed; box-shadow: none; }
+  .anw-modal-card.mc-modal { animation: mcPop .22s ease-out; }
+  @keyframes mcPop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .anw-modal-card.mc-modal { animation: none; } }
 
   /* Owned mortgage: rate line + extra repayments */
   .rate-up { color: var(--coral-fill); font-weight: 800; }
@@ -717,6 +723,6 @@
 <script defer src="events-ui.js?v=68fd100a"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="notifications.js?v=6ecf8d21"></script>
-<script defer src="property.js?v=134b7d2e"></script>
+<script defer src="property.js?v=7751a39b"></script>
 </body>
 </html>
