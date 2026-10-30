@@ -230,9 +230,6 @@
   .chip-fixed .chip-ico { color: var(--gold-dark); }
   .chip-var .chip-ico { color: var(--sky-fill); }
   html.dark-mode .chip-var .chip-ico { color: var(--sky); }
-  .buy-choice { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 100%; padding: 8px 12px; border-radius: var(--r-3); background: rgba(91,141,239,.1); border: 1px dashed rgba(91,141,239,.45); font-size: var(--fs-sm); font-weight: 600; line-height: 1.35; color: var(--ink); }
-  .buy-choice .icon { color: var(--sky-fill); flex: 0 0 auto; }
-  html.dark-mode .buy-choice .icon { color: var(--sky); }
 
   /* Choose-your-mortgage dialog */
   .anw-modal-card.mc-modal { max-width: 780px; padding: 22px 24px; }
@@ -245,19 +242,13 @@
   .mc-opt.is-variable:hover { border-color: var(--sky); }
   .anw-modal-card.mc-modal:focus { outline: none; }
   #mcTitle { display: flex; align-items: center; gap: 8px; }
-  .mc-head { display: flex; align-items: center; gap: 11px; }
-  .mc-ico { flex: 0 0 40px; width: 40px; height: 40px; border-radius: var(--r-3); display: flex; align-items: center; justify-content: center; background: rgba(232,184,75,.16); color: var(--gold-dark); }
-  .is-variable .mc-ico { background: rgba(91,141,239,.14); color: var(--sky-fill); }
-  html.dark-mode .is-variable .mc-ico { color: var(--sky); }
+  .mc-head { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
   .mc-title { margin: 0; font-size: 1.08rem; line-height: 1.2; }
   .mc-tag { display: block; margin-top: 2px; font-size: var(--fs-xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
   .mc-rate { font-size: 1.6rem; font-weight: 900; line-height: 1.1; color: var(--ink); font-variant-numeric: tabular-nums; }
   .mc-rate small { font-size: var(--fs-sm); font-weight: 700; color: var(--muted); }
   .mc-rate-sub { margin-top: 3px; font-size: var(--fs-sm); line-height: 1.4; color: var(--muted); }
-  .mc-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-md); line-height: 1.4; color: var(--ink); }
-  .mc-points li { position: relative; padding-left: 22px; }
-  .mc-points li::before { content: "\2713"; position: absolute; left: 0; top: 0; font-weight: 900; color: var(--mint-dark); }
-  .mc-points li.is-trade::before { content: "!"; left: 4px; color: var(--coral); }
+  .mc-desc { margin: 0; font-size: var(--fs-md); line-height: 1.6; color: var(--ink); }
   .mc-est { margin-top: auto; padding: 10px 12px; border-radius: var(--r-3); background: var(--bg); border: 1px solid var(--line); font-size: var(--fs-sm); line-height: 1.5; color: var(--muted); }
   .mc-est strong { color: var(--ink); font-variant-numeric: tabular-nums; }
   .mc-opt .btn { width: 100%; margin-top: 0; justify-content: center; }
@@ -723,6 +714,6 @@
 <script defer src="events-ui.js?v=68fd100a"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="notifications.js?v=6ecf8d21"></script>
-<script defer src="property.js?v=7751a39b"></script>
+<script defer src="property.js?v=5af8f021"></script>
 </body>
 </html>

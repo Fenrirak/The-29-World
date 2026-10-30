@@ -677,23 +677,17 @@ async function openMortgageChoiceModal(gid, depositAmt, useKs) {
   const varOn = variableRateOffered(p);
   const varCard = varOn ? `<section class="mc-opt is-variable" aria-label="Variable rate mortgage">
         <div class="mc-head">
-          <div class="mc-ico">${icon("chart", 20)}</div>
           <div><h3 class="mc-title">Variable rate</h3><span class="mc-tag">Flexible</span></div>
         </div>
         <div>
           <div class="mc-rate">${vMin}&ndash;${vMax}%<small> per week</small></div>
           <div class="mc-rate-sub">Right now it's <strong>${vNow}%</strong>.</div>
         </div>
-        <ul class="mc-points">
-          <li>Pay extra whenever you like to clear it faster and save interest.</li>
-          <li>Pay it all off, or sell, with no break fee.</li>
-          <li class="is-trade">The rate moves up or down each week, so your payment can change too.</li>
-        </ul>
+        <p class="mc-desc">The rate moves up or down each week, so your payment can change too. In return, you can pay extra whenever you like and pay it all off, or sell, with no break fee.</p>
         <div class="mc-est">First payment about <strong>${firstPay(vNow)}</strong> now. It could be anywhere from <strong>${firstPay(vMin)}</strong> to <strong>${firstPay(vMax)}</strong> as the rate moves.</div>
-        <button type="button" class="btn sky" id="mcPickVariable">${icon("chart", 14)} Choose variable</button>
+        <button type="button" class="btn sky" id="mcPickVariable">Choose variable</button>
       </section>` : `<section class="mc-opt is-variable is-off" aria-label="Variable rate mortgage, not offered">
         <div class="mc-head">
-          <div class="mc-ico">${icon("chart", 20)}</div>
           <div><h3 class="mc-title">Variable rate</h3><span class="mc-tag">Not offered</span></div>
         </div>
         <div class="mc-rate-sub">A variable mortgage has a rate that moves each week, but lets you pay extra or pay off early with no break fee. Your teacher hasn't turned it on for this property.</div>
@@ -701,7 +695,7 @@ async function openMortgageChoiceModal(gid, depositAmt, useKs) {
       </section>`;
   document.getElementById("mcBody").innerHTML = `
     <div class="p-modal-head">
-      <h2 id="mcTitle">${icon("house", 18)} Choose your mortgage</h2>
+      <h2 id="mcTitle">Choose your mortgage</h2>
       <button type="button" class="btn small secondary" id="mcCloseBtn">Close</button>
     </div>
     <div class="mc-deal">
@@ -712,20 +706,15 @@ async function openMortgageChoiceModal(gid, depositAmt, useKs) {
     <div class="mc-grid">
       <section class="mc-opt is-fixed" aria-label="Fixed rate mortgage">
         <div class="mc-head">
-          <div class="mc-ico">${icon("lock", 20)}</div>
           <div><h3 class="mc-title">Fixed rate</h3><span class="mc-tag">Predictable</span></div>
         </div>
         <div>
           <div class="mc-rate">${fixedRate}%<small> per week</small></div>
           <div class="mc-rate-sub">Locked in for all ${weeks} weeks.</div>
         </div>
-        <ul class="mc-points">
-          <li>The rate never changes, so you always know what you'll owe.</li>
-          <li>Pay it off on the weekly schedule every ${day}.</li>
-          <li class="is-trade">No extra repayments.${fee > 0 ? ` Selling before it's paid off costs a ${fmtMoney(fee)} break fee.` : ""}</li>
-        </ul>
+        <p class="mc-desc">The rate is locked in, so you always know what you'll owe. You pay it off on the weekly schedule every ${day}, with no extra repayments.${fee > 0 ? ` Selling before it's paid off costs a ${fmtMoney(fee)} break fee.` : ""}</p>
         <div class="mc-est">First payment about <strong>${firstPay(fixedRate)}</strong>, then a little less each week as what you owe goes down.</div>
-        <button type="button" class="btn gold" id="mcPickFixed">${icon("lock", 14)} Choose fixed</button>
+        <button type="button" class="btn gold" id="mcPickFixed">Choose fixed</button>
       </section>
       ${varCard}
     </div>
@@ -1061,10 +1050,7 @@ function buyControls(p, gid, minDeposit, ksHome, cls) {
           <input type="number" id="depositAmt-${gid}" min="${minDeposit}" step="0.01" value="${minDeposit}" aria-label="Deposit amount in dollars, minimum ${fmtMoney(minDeposit)}"></div>
           <button class="btn small secondary" id="buyFinancedBtn-${gid}" onclick="buyFinanced('${gid}')">Mortgage</button>
         </div>
-        <span class="muted-small buy-hint">Deposit from ${fmtMoney(minDeposit)} &middot; weekly payments due ${dayFull(cls.mortgageDay)}s</span>
-        ${variableRateOffered(p)
-          ? `<div class="buy-choice">${icon("chart", 15)}<span>This one comes with a choice: tap <strong>Mortgage</strong> and you'll pick a <strong>fixed</strong> or a <strong>variable</strong> rate &mdash; each is explained first, and nothing is bought until you choose.</span></div>`
-          : `<div class="buy-choice">${icon("lock", 15)}<span>Tap <strong>Mortgage</strong> to see how the loan works first &mdash; nothing is bought until you confirm.</span></div>`}` : ""}
+        <span class="muted-small buy-hint">Deposit from ${fmtMoney(minDeposit)} &middot; weekly payments due ${dayFull(cls.mortgageDay)}s</span>` : ""}
     </div>`;
 }
 
