@@ -4737,8 +4737,9 @@ function cardUsableVouchers(user, todayKey) {
 function cardVoucherLabel(v) { return v.kind === "percent" ? `${v.value}% off` : `${fmtMoney(v.left !== null && v.left !== undefined ? v.left : v.value)} credit`; }
 // One place that works out a class-store price, used by the checkout and
 // by the price shown on the Buy button so the two can never disagree.
-function cardStorePricing(user, cls, basePrice, qty, useCard, voucherId, todayKey) {
-  let unit = applyLifeDiscount(user, "store", basePrice), cardPct = 0;
+function cardStorePricing(user, cls, basePrice, qty, useCard, voucherId, todayKey, lifeVoucherId) {
+  const lv = lifeFindVoucher(user, "store", lifeVoucherId);
+  let unit = applyLifeDiscount(user, "store", basePrice, lifeVoucherId), cardPct = 0;
   if (useCard && cardIsActive(user)) {
     const plan = cardPlanById(cls, user.creditCard.planId);
     if (plan) cardPct = plan.storeDiscountPct || 0;
@@ -4754,7 +4755,7 @@ function cardStorePricing(user, cls, basePrice, qty, useCard, voucherId, todayKe
       if (saves > 0) { voucher = { id: v.id, kind: v.kind, saves, label: cardVoucherLabel(v) }; total = cardRound(total - saves); }
     }
   }
-  return { unit: cardRound(unit), total, beforeVoucher, cardPct, voucher };
+  return { unit: cardRound(unit), total, beforeVoucher, cardPct, voucher, lifeVoucher: lv ? { id: lv.id, pct: lv.pct, name: lv.itemName } : null };
 }
 function cardConsumeVoucher(card, voucher) {
   if (!card || !voucher) return;

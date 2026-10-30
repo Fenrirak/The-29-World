@@ -393,10 +393,12 @@ async function buyVeh(id) {
     // Same price the checkout works out: life discount, then tax.
     const [vMe, vCls0] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
     const vCls = withNewModuleDefaults(vCls0), vVeh = (vCls.vehicles || []).find(v => v.id === id);
-    const vTotal = vVeh ? applyTaxToExpense(vCls, "transport", applyLifeDiscount(vMe, "transport", vVeh.price)).total : 0;
+    let lifeVid = "";
+    if (vVeh) { const lv = await lifeAskVoucher(vMe, "transport", vVeh.price, vVeh.name); if (lv === null) return; lifeVid = lv; }
+    const vTotal = vVeh ? applyTaxToExpense(vCls, "transport", applyLifeDiscount(vMe, "transport", vVeh.price, lifeVid)).total : 0;
     const pay = await cardAskPay(vTotal, vVeh ? vVeh.name : "Vehicle");
     if (!pay) return; // backed out
-    const res = await buyVehicle(CURRENT.username, CURRENT.classCode, id, pay);
+    const res = await buyVehicle(CURRENT.username, CURRENT.classCode, id, Object.assign({}, pay, { lifeVoucherId: lifeVid }));
     if (!res.ok) {
       document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`;
       await render();

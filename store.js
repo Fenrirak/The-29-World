@@ -1,5 +1,16 @@
 let CURRENT, IS_TEACHER;
 let ITEMS_CACHE = [];
+let LIFE_STORE_VID = "";       // chosen weekly life voucher for the store ("" = none)
+function lifeStoreBarRender(me) {
+  const el = document.getElementById("storeLifeBar"); if (!el) return;
+  const vs = lifeUsableVouchers(me, "store");
+  if (!vs.length) { LIFE_STORE_VID = ""; el.classList.add("hidden"); el.innerHTML = ""; return; }
+  if (!vs.some(v => v.id === LIFE_STORE_VID)) LIFE_STORE_VID = "";
+  el.classList.remove("hidden");
+  el.innerHTML = `<div class="cc-pb-voucher"><label for="lifeStoreVoucher">${icon("trophy", 14)} Life voucher <span class="muted-small">(weekly, one use)</span></label>
+    <select id="lifeStoreVoucher" onchange="lifeStoreSetVoucher(this.value)"><option value="">None</option>${vs.map(v => `<option value="${escapeHtml(v.id)}" ${LIFE_STORE_VID === v.id ? "selected" : ""}>${v.pct}% off &middot; ${escapeHtml(v.itemName)} &middot; this week only</option>`).join("")}</select></div>`;
+}
+function lifeStoreSetVoucher(id) { LIFE_STORE_VID = id || ""; updateAllBuyLabels(); }
 let CLS_CACHE = null;           // the class doc — needed to price card discounts/vouchers
 let MANUAL_ITEMS = [];          // live items in the teacher's saved (custom) order
 let SORT_MODE = "manual";
@@ -109,6 +120,7 @@ async function render() {
   ME_CACHE = me;
   CLS_CACHE = cls;
   ccStoreBarRender(me, cls); // "Pay with: Cash / Credit card" bar (creditcard.js)
+  lifeStoreBarRender(me);
   MANUAL_ITEMS = (cls.storeItems || []).filter(i => !i.archived);
   SORT_MODE = SORT_MODES.some(m => m.id === cls.storeSortMode) ? cls.storeSortMode : "manual";
   const items = sortStoreItems(MANUAL_ITEMS, SORT_MODE);
@@ -223,7 +235,7 @@ function updateBuyLabel(id) {
   if (max !== null && max !== "" && qty > Number(max)) qty = Number(max);
   // Same pricing function the checkout uses, so the button always matches the charge.
   // The card discount needs the whole bill on the card, so a split is priced like cash (same as the checkout).
-  const pr = cardStorePricing(ME_CACHE, CLS_CACHE, it.price, qty, CC_STORE_PAY.useCard && !CC_STORE_PAY.split, CC_STORE_PAY.voucherId, nzDateKey());
+  const pr = cardStorePricing(ME_CACHE, CLS_CACHE, it.price, qty, CC_STORE_PAY.useCard && !CC_STORE_PAY.split, CC_STORE_PAY.voucherId, nzDateKey(), LIFE_STORE_VID);
   const how = CC_STORE_PAY.useCard && cardIsActive(ME_CACHE) ? (CC_STORE_PAY.split ? " (card + cash)" : " on card") : "";
   label.textContent = (qty > 1 ? `Add ×${qty}` : "Add to cart") + ` — ${fmtMoney(pr.total)}${how}`;
 }
@@ -351,16 +363,16 @@ function cartClean() {
 
 // ---- pricing: always the same function the checkout uses ----
 const cartUsesCardPrice = () => CC_STORE_PAY.useCard && !CC_STORE_PAY.split;
-const cartPrice = (price, qty, voucherId) => cardStorePricing(ME_CACHE, CLS_CACHE, price, qty, cartUsesCardPrice(), voucherId || "", nzDateKey()).total;
-const cartPayOpts = () => ({ useCard: CC_STORE_PAY.useCard, voucherId: CC_STORE_PAY.voucherId, split: CC_STORE_PAY.useCard && CC_STORE_PAY.split, cardMax: CC_STORE_PAY.cardMax === "" ? null : Number(CC_STORE_PAY.cardMax) });
+const cartPrice = (price, qty, voucherId, lifeVid) => cardStorePricing(ME_CACHE, CLS_CACHE, price, qty, cartUsesCardPrice(), voucherId || "", nzDateKey(), lifeVid || "").total;
+const cartPayOpts = () => ({ useCard: CC_STORE_PAY.useCard, voucherId: CC_STORE_PAY.voucherId, lifeVoucherId: LIFE_STORE_VID, split: CC_STORE_PAY.useCard && CC_STORE_PAY.split, cardMax: CC_STORE_PAY.cardMax === "" ? null : Number(CC_STORE_PAY.cardMax) });
 // Dearest line first: in line-by-line mode the voucher goes on that one.
 const cartOrdered = lines => lines.slice().sort((a, b) => cartPrice(b.it.price, b.qty, "") - cartPrice(a.it.price, a.qty, ""));
 function cartTotals(lines) {
   const vid = CC_STORE_PAY.voucherId;
   const sub = cardRound(lines.reduce((s, l) => s + cartPrice(l.it.price, l.qty, ""), 0));
   let total = 0;
-  if (lines.length && cartApi()) total = cartPrice(lines.reduce((s, l) => s + Number(l.it.price) * l.qty, 0), 1, vid);
-  else if (lines.length) { const o = cartOrdered(lines); total = cardRound(o.reduce((s, l, i) => s + cartPrice(l.it.price, l.qty, i === 0 ? vid : ""), 0)); }
+  if (lines.length && cartApi()) total = cartPrice(lines.reduce((s, l) => s + Number(l.it.price) * l.qty, 0), 1, vid, LIFE_STORE_VID);
+  else if (lines.length) { const o = cartOrdered(lines); total = cardRound(o.reduce((s, l, i) => s + cartPrice(l.it.price, l.qty, i === 0 ? vid : "", i === 0 ? LIFE_STORE_VID : ""), 0)); }
   return { sub, total, saved: Math.max(0, cardRound(sub - total)) };
 }
 
@@ -408,11 +420,11 @@ async function checkoutCart() {
       err = "A card limit on a part-card payment needs the single-transaction checkout. Clear the limit box, or pay fully by card or cash.";
     } else {
       // Fallback until buyStoreCart() exists: one purchase per line, voucher on the dearest line only.
-      let vid = opts.voucherId;
+      let vid = opts.voucherId, lvid = opts.lifeVoucherId;
       for (const l of cartOrdered(lines)) {
-        const r = await buyStoreItem(CURRENT.username, CURRENT.classCode, l.it.id, l.qty, Object.assign({}, opts, { voucherId: vid }));
+        const r = await buyStoreItem(CURRENT.username, CURRENT.classCode, l.it.id, l.qty, Object.assign({}, opts, { voucherId: vid, lifeVoucherId: lvid }));
         if (!r.ok) { err = `${l.it.name}: ${r.error}`; break; }
-        done.push(l); vid = "";
+        done.push(l); vid = ""; lvid = "";
       }
     }
   } catch (e) { console.error("Checkout failed", e); err = "Something went wrong. Please try again."; }

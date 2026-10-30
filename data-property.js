@@ -443,7 +443,11 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
       if (!prop) throw new Error("NOT_FOUND");
       if (prop.owner) throw new Error("TAKEN");
       propName = prop.name;
-      const discountedPropPrice = applyLifeDiscount(user, "property", prop.price);
+      const lifeVid = user.role === "teacher" ? "" : ((opts && opts.lifeVoucherId) || "");
+      if (lifeVid && !lifeFindVoucher(user, "property", lifeVid)) throw new Error("LIFEV");
+      const discountedPropPrice = applyLifeDiscount(user, "property", prop.price, lifeVid);
+      if (lifeVid) lifeConsumeVoucher(user, "property", lifeVid);
+      const lifeUpd = lifeVid ? { lifeVoucherUsed: user.lifeVoucherUsed } : {};
       const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "property", discountedPropPrice);
       taxAmount = tax;
       const isTeacher = user.role === "teacher";
@@ -502,7 +506,7 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
         prop.occupancy = null; prop.rentLastWeekPaid = null;
         prop.sublet = null; // a new owner never inherits someone else's tenant or rental listing
         mortgaged = true;
-        if (!isTeacher) t.update(userRef, Object.assign({ balance: Math.round((user.balance - (deposit - fromKiwi)) * 100) / 100 }, kiwiUpdate));
+        if (!isTeacher) t.update(userRef, Object.assign({ balance: Math.round((user.balance - (deposit - fromKiwi)) * 100) / 100 }, kiwiUpdate, lifeUpd));
       } else {
         const kiwiUpdate = takeFromKiwi(taxedPrice);
         if (!isTeacher && user.balance < taxedPrice - fromKiwi) throw new Error("BROKE");
@@ -511,7 +515,7 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
         prop.occupancy = null; prop.rentLastWeekPaid = null;
         prop.sublet = null; // a new owner never inherits someone else's tenant or rental listing
         cashPaid = Math.round((taxedPrice - fromKiwi) * 100) / 100;
-        if (!isTeacher) t.update(userRef, Object.assign({ balance: Math.round((user.balance - cashPaid) * 100) / 100 }, kiwiUpdate));
+        if (!isTeacher) t.update(userRef, Object.assign({ balance: Math.round((user.balance - cashPaid) * 100) / 100 }, kiwiUpdate, lifeUpd));
       }
       t.update(classRef, { properties: cls.properties });
     });
@@ -519,6 +523,7 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
     if (e.message === "TAKEN") return { ok: false, error: "Someone already bought that property." };
     if (e.message === "BROKE") return { ok: false, error: useKiwiSaver ? "You don't have enough money for that, even with your KiwiSaver." : "You don't have enough money for that." };
     if (e.message === "NO_KIWI") return { ok: false, error: "You can't use your KiwiSaver for this property." };
+    if (e.message === "LIFEV") return { ok: false, error: "That life voucher isn't available any more (already used this week?). Pick another or none." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   // `mortgaged`, not `financed`: asking for a mortgage on a listing that

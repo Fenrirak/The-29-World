@@ -455,7 +455,10 @@ async function buyVehicle(username, classCode, vehId, opts) {
           normalizeVehicleType(v2.type) === "truck" && (v2.owners || []).includes(username));
         if (alreadyOwnsTruck) throw new Error("TRUCK_LIMIT");
       }
-      const discountedVehPrice = applyLifeDiscount(user, "transport", veh.price);
+      const lifeVid = isTeacher ? "" : ((opts && opts.lifeVoucherId) || "");
+      if (lifeVid && !lifeFindVoucher(user, "transport", lifeVid)) throw new Error("LIFEV");
+      const discountedVehPrice = applyLifeDiscount(user, "transport", veh.price, lifeVid);
+      if (lifeVid) lifeConsumeVoucher(user, "transport", lifeVid);
       const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "transport", discountedVehPrice);
       taxAmount = tax;
       payRes = { card: 0, cash: taxedPrice };
@@ -463,7 +466,7 @@ async function buyVehicle(username, classCode, vehId, opts) {
       veh.owners.push(username);
       vehName = veh.name;
       cashPaid = taxedPrice;
-      if (!isTeacher) t.update(userRef, Object.assign({ balance: Math.round((user.balance - payRes.cash) * 100) / 100 }, payRes.card > 0 ? { creditCard: user.creditCard } : {}));
+      if (!isTeacher) t.update(userRef, Object.assign({ balance: Math.round((user.balance - payRes.cash) * 100) / 100 }, payRes.card > 0 ? { creditCard: user.creditCard } : {}, lifeVid ? { lifeVoucherUsed: user.lifeVoucherUsed } : {}));
       t.update(classRef, { vehicles: cls.vehicles });
     });
   } catch (e) {
@@ -473,6 +476,7 @@ async function buyVehicle(username, classCode, vehId, opts) {
     if (e.message === "SOLD_OUT") return { ok: false, error: "This vehicle is sold out." };
     if (e.message === "NO_LICENCE") return { ok: false, error: "You need a truck licence before buying this vehicle." };
     if (e.message === "TRUCK_LIMIT") return { ok: false, error: "You can only own one truck at a time." };
+    if (e.message === "LIFEV") return { ok: false, error: "That life voucher isn't available any more (already used this week?). Pick another or none." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logPurchaseTxn(classCode, username, payRes, "Transport", { type: "vehicle-buy", from: username, amount: cashPaid, note: `Bought: ${vehName}` + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
@@ -1648,12 +1652,16 @@ async function buyInsurance(username, classCode, planId, opts) {
       if (user.insurance.includes(planId)) throw new Error("ALREADY");
       planName = insurancePlanName(plan);
       fee = Math.max(0, Number(plan.signupFee) || 0);
-      fee = applyLifeDiscount(user, "insurance", fee);
+      const lifeVid = user.role === "teacher" ? "" : ((opts && opts.lifeVoucherId) || "");
+      if (lifeVid && !lifeFindVoucher(user, "insurance", lifeVid)) throw new Error("LIFEV");
+      fee = applyLifeDiscount(user, "insurance", fee, lifeVid);
+      if (lifeVid) lifeConsumeVoucher(user, "insurance", lifeVid);
       const isTeacher = user.role === "teacher";
       payRes = { card: 0, cash: fee };
       if (!isTeacher && fee > 0) payRes = cardPayInTxn(user, cls, fee, opts);
       user.insurance.push(planId);
       const update = { insurance: user.insurance };
+      if (lifeVid) update.lifeVoucherUsed = user.lifeVoucherUsed;
       if (!isTeacher && fee > 0) {
         update.balance = Math.round((user.balance - payRes.cash) * 100) / 100;
         if (payRes.card > 0) update.creditCard = user.creditCard;
@@ -1663,6 +1671,7 @@ async function buyInsurance(username, classCode, planId, opts) {
   } catch (e) {
     { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "ALREADY") return { ok: false, error: "You already have this plan." };
+    if (e.message === "LIFEV") return { ok: false, error: "That life voucher isn't available any more (already used this week?). Pick another or none." };
     if (e.message === "BIG_EVENT") return { ok: false, error: BIG_EVENT_BLOCK_MESSAGE };
     if (e.message === "BROKE") return { ok: false, error: `You don't have enough money to pay the ${fmtMoney(fee)} sign-up fee.` };
     return { ok: false, error: "Something went wrong. Please try again." };
@@ -1834,12 +1843,15 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
       const isTeacher = user.role === "teacher";
       usedCard = !!opts.useCard && !isTeacher;
       // The class-store card discount needs the WHOLE bill on the card; a split gets cashback only.
-      const pr = cardStorePricing(user, cls, item.price, qty, usedCard && !opts.split, isTeacher ? "" : opts.voucherId, nzDateKey());
+      const pr = cardStorePricing(user, cls, item.price, qty, usedCard && !opts.split, isTeacher ? "" : opts.voucherId, nzDateKey(), isTeacher ? "" : opts.lifeVoucherId);
       if (opts.voucherId && !isTeacher && !pr.voucher) throw new Error("VOUCHER");
+      if (opts.lifeVoucherId && !isTeacher && !pr.lifeVoucher) throw new Error("LIFEV");
+      if (pr.lifeVoucher) lifeConsumeVoucher(user, "store", pr.lifeVoucher.id);
       const total = pr.total;
       payRes = { card: 0, cash: total };
       if (!isTeacher) payRes = cardPayInTxn(user, cls, total, { useCard: usedCard, split: !!opts.split, cardMax: opts.cardMax });
       if (pr.voucher) { cardConsumeVoucher(user.creditCard, pr.voucher); voucherNote = ` (${pr.voucher.label} voucher saved ${fmtMoney(pr.voucher.saves)})`; }
+      if (pr.lifeVoucher) voucherNote += ` (${pr.lifeVoucher.pct}% life voucher: ${pr.lifeVoucher.name})`;
       itemName = item.name;
       if (item.stock !== null) item.stock -= qty;
       item.sold = (item.sold || 0) + qty;
@@ -1848,6 +1860,7 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
       if (!isTeacher) {
         const patch = { balance: Math.round((user.balance - payRes.cash) * 100) / 100, storeItems: user.storeItems };
         if (payRes.card > 0 || pr.voucher) patch.creditCard = user.creditCard;
+        if (pr.lifeVoucher) patch.lifeVoucherUsed = user.lifeVoucherUsed;
         t.update(userRef, patch);
       }
       else t.update(userRef, { storeItems: user.storeItems });
@@ -1860,6 +1873,7 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
     if (e.message === "LIMIT") return { ok: false, error: "That would go over your credit card limit." };
     if (e.message === "NOCARD") return { ok: false, error: "Your credit card isn't available. Pay with cash instead." };
     if (e.message === "VOUCHER") return { ok: false, error: "That voucher isn't valid any more. Pick another or none." };
+    if (e.message === "LIFEV") return { ok: false, error: "That life voucher isn't available any more (already used this week?). Pick another or none." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logPurchaseTxn(classCode, username, payRes, null, { type: "store-buy", note: `Bought from store: ${itemName}${qty > 1 ? ` ×${qty}` : ""}${voucherNote}` });
@@ -1903,12 +1917,15 @@ async function buyStoreCart(username, classCode, lines, opts) {
       const isTeacher = user.role === "teacher";
       const usedCard = !!opts.useCard && !isTeacher;
       // Same pricing as a single purchase, applied to the whole basket (one voucher, one card discount).
-      const pr = cardStorePricing(user, cls, base, 1, usedCard && !opts.split, isTeacher ? "" : opts.voucherId, nzDateKey());
+      const pr = cardStorePricing(user, cls, base, 1, usedCard && !opts.split, isTeacher ? "" : opts.voucherId, nzDateKey(), isTeacher ? "" : opts.lifeVoucherId);
       if (opts.voucherId && !isTeacher && !pr.voucher) throw new Error("VOUCHER");
+      if (opts.lifeVoucherId && !isTeacher && !pr.lifeVoucher) throw new Error("LIFEV");
+      if (pr.lifeVoucher) lifeConsumeVoucher(user, "store", pr.lifeVoucher.id);
       const total = pr.total;
       payRes = { card: 0, cash: total };
       if (!isTeacher) payRes = cardPayInTxn(user, cls, total, { useCard: usedCard, split: !!opts.split, cardMax: opts.cardMax });
       if (pr.voucher) { cardConsumeVoucher(user.creditCard, pr.voucher); voucherNote = ` (${pr.voucher.label} voucher saved ${fmtMoney(pr.voucher.saves)})`; }
+      if (pr.lifeVoucher) voucherNote += ` (${pr.lifeVoucher.pct}% life voucher: ${pr.lifeVoucher.name})`;
       user.storeItems = user.storeItems || [];
       picked.forEach(({ item, qty }) => {
         if (item.stock !== null) item.stock -= qty;
@@ -1919,6 +1936,7 @@ async function buyStoreCart(username, classCode, lines, opts) {
       if (!isTeacher) {
         const patch = { balance: Math.round((user.balance - payRes.cash) * 100) / 100, storeItems: user.storeItems };
         if (payRes.card > 0 || pr.voucher) patch.creditCard = user.creditCard;
+        if (pr.lifeVoucher) patch.lifeVoucherUsed = user.lifeVoucherUsed;
         t.update(userRef, patch);
       } else t.update(userRef, { storeItems: user.storeItems });
       t.update(classRef, { storeItems: cls.storeItems });
@@ -1929,6 +1947,7 @@ async function buyStoreCart(username, classCode, lines, opts) {
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "One of those items isn't in the store any more. Nothing was bought." };
     if (e.message === "VOUCHER") return { ok: false, error: "That voucher isn't valid any more. Pick another or none." };
+    if (e.message === "LIFEV") return { ok: false, error: "That life voucher isn't available any more (already used this week?). Pick another or none." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logPurchaseTxn(classCode, username, payRes, null, { type: "store-buy", note: `Bought from store: ${names.join(", ")}${voucherNote}` });
@@ -2069,9 +2088,9 @@ function normalizeLifeFrequency(f) {
 function lifeBenefitChangeParts(a, b) {
   const labels = {
     cashOnce: ["one-off cash", v => fmtMoney(v)], allowance: ["allowance", v => fmtMoney(v)],
-    incomePercent: ["income boost", v => v + "%"], discountStore: ["store discount", v => v + "%"],
-    discountTransport: ["transport discount", v => v + "%"], discountProperty: ["property discount", v => v + "%"],
-    discountInsurance: ["insurance discount", v => v + "%"], lifestylePoints: ["lifestyle points", v => String(v)],
+    incomePercent: ["income boost", v => v + "%"], discountStore: ["weekly store voucher", v => v + "%"],
+    discountTransport: ["weekly transport voucher", v => v + "%"], discountProperty: ["weekly property voucher", v => v + "%"],
+    discountInsurance: ["weekly insurance voucher", v => v + "%"], lifestylePoints: ["lifestyle points", v => String(v)],
     taxCutPercent: ["wage tax cut", v => v + "%"]
   };
   const parts = [];
@@ -2127,36 +2146,58 @@ function getLifeAllowanceByFrequency(user, frequency) {
   });
   return Math.round(total * 100) / 100;
 }
-// Applies a student's stacked discount for one category ("store",
-// "transport", "property", "insurance") to a base price.
-function applyLifeDiscount(user, category, baseAmount) {
-  const totals = getLifeBenefitTotals(user);
-  const key = "discount" + category.charAt(0).toUpperCase() + category.slice(1);
-  const pct = totals[key] || 0;
-  if (!pct || !(baseAmount > 0)) return Math.round((baseAmount || 0) * 100) / 100;
-  return Math.round(baseAmount * (1 - pct / 100) * 100) / 100;
+// ---- Weekly life vouchers ----
+// A life item's store / transport / property / insurance % is no longer an
+// always-on discount. Each week it gives the student ONE voucher per category,
+// picked at checkout (like a credit card voucher) and used once. A voucher is
+// available until the end of the NZ ISO week (isoWeekKey) and is then
+// replaced by a fresh one. Used vouchers are stamped on the student's own doc
+// as user.lifeVoucherUsed = { "<lifeItemId>:<category>": "<isoWeekKey>" }.
+// Only students get vouchers (a teacher's own prices stay full price).
+const LIFE_VOUCHER_CATS = ["store", "transport", "property", "insurance"];
+function lifeVoucherBenefitKey(category) { return "discount" + category.charAt(0).toUpperCase() + category.slice(1); }
+function lifeUsableVouchers(user, category) {
+  if (!user || user.role === "teacher") return [];
+  const wk = isoWeekKey(), used = user.lifeVoucherUsed || {}, key = lifeVoucherBenefitKey(category), out = [];
+  (user.lifeItems || []).forEach(it => {
+    const pct = Math.max(0, Math.min(95, Number((it.benefits || {})[key]) || 0));
+    if (!pct) return;
+    const id = it.id + ":" + category;
+    if (used[id] === wk) return;
+    out.push({ id, itemName: it.name || "Life event", pct, category });
+  });
+  return out;
 }
-// Builds the price markup shown on browse cards in Store/Transport/
-// Property/Insurance: a plain price normally, or — when the signed-in
-// student's stacked Life family-event benefits knock a % off this
-// category — the original price crossed out next to the discounted one,
-// with a small badge naming the cut. Safe to call with a teacher doc (or
-// any user with no lifeItems): falls back to a plain price since
-// getLifeBenefitTotals then returns all zeros.
+function lifeFindVoucher(user, category, voucherId) {
+  return voucherId ? (lifeUsableVouchers(user, category).find(v => v.id === voucherId) || null) : null;
+}
+// Price after the chosen life voucher (or the plain price if none / invalid).
+function applyLifeDiscount(user, category, baseAmount, voucherId) {
+  const base = Math.round((Number(baseAmount) || 0) * 100) / 100;
+  const v = lifeFindVoucher(user, category, voucherId);
+  if (!v || !(base > 0)) return base;
+  return Math.round(base * (1 - v.pct / 100) * 100) / 100;
+}
+// Marks the voucher used on the in-memory user doc. The caller must write
+// user.lifeVoucherUsed back in the SAME transaction. Last week's stamps are
+// dropped here so the map never grows. Returns false if it isn't valid.
+function lifeConsumeVoucher(user, category, voucherId) {
+  const v = lifeFindVoucher(user, category, voucherId);
+  if (!v) return false;
+  const wk = isoWeekKey(), old = user.lifeVoucherUsed || {}, next = {};
+  Object.keys(old).forEach(k => { if (old[k] === wk) next[k] = wk; });
+  next[v.id] = wk;
+  user.lifeVoucherUsed = next;
+  return true;
+}
+// Browse-card price: always the plain price now, plus a small badge when the
+// student has a weekly voucher waiting for this category.
 function priceWithLifeDiscount(user, category, baseAmount) {
   const base = Math.round((Number(baseAmount) || 0) * 100) / 100;
-  const totals = getLifeBenefitTotals(user);
-  const key = "discount" + category.charAt(0).toUpperCase() + category.slice(1);
-  const pct = totals[key] || 0;
-  if (!pct || !(base > 0)) {
-    return `<strong>${fmtMoney(base)}</strong>`;
-  }
-  const discounted = applyLifeDiscount(user, category, base);
-  return `<span class="life-discount-price" style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <s class="muted-small" style="opacity:.7;">${fmtMoney(base)}</s>
-      <strong class="ticker-up" style="font-size:1.05em;">${fmtMoney(discounted)}</strong>
-      <span class="badge lilac">${icon("trophy", 11)}${pct}% off</span>
-    </span>`;
+  const vs = base > 0 ? lifeUsableVouchers(user, category) : [];
+  if (!vs.length) return `<strong>${fmtMoney(base)}</strong>`;
+  const best = Math.max.apply(null, vs.map(v => v.pct));
+  return `<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;"><strong>${fmtMoney(base)}</strong><span class="badge lilac">${icon("trophy", 11)}${best}% voucher ready</span></span>`;
 }
 async function addLifeItem(classCode, item) {
   const classRef = classesCol().doc(classCode);

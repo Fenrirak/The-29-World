@@ -15,10 +15,10 @@ function lifeBenefitChips(b, frequency) {
   if (num("cashOnce")) chips.push(`<span class="badge gold">${icon("coin", 12)}${num("cashOnce") >= 0 ? "+" : ""}${fmtMoney(b.cashOnce)} one-time</span>`);
   if (num("allowance")) chips.push(`<span class="badge mint">${icon("coin", 12)}+${fmtMoney(b.allowance)} ${frequency === "daily" ? "every day" : "every pay day"}</span>`);
   if (num("incomePercent")) chips.push(`<span class="badge ${num("incomePercent") >= 0 ? "mint" : "coral"}">${icon("briefcase", 12)}${num("incomePercent") >= 0 ? "+" : ""}${b.incomePercent}% job income</span>`);
-  if (num("discountStore")) chips.push(`<span class="badge lilac">${icon("cart", 12)}${b.discountStore}% off Store</span>`);
-  if (num("discountTransport")) chips.push(`<span class="badge lilac">${icon("car", 12)}${b.discountTransport}% off Transport</span>`);
-  if (num("discountProperty")) chips.push(`<span class="badge lilac">${icon("house", 12)}${b.discountProperty}% off Property</span>`);
-  if (num("discountInsurance")) chips.push(`<span class="badge lilac">${icon("shield", 12)}${b.discountInsurance}% off Insurance</span>`);
+  if (num("discountStore")) chips.push(`<span class="badge lilac">${icon("cart", 12)}${b.discountStore}% off Store, weekly voucher</span>`);
+  if (num("discountTransport")) chips.push(`<span class="badge lilac">${icon("car", 12)}${b.discountTransport}% off Transport, weekly voucher</span>`);
+  if (num("discountProperty")) chips.push(`<span class="badge lilac">${icon("house", 12)}${b.discountProperty}% off Property, weekly voucher</span>`);
+  if (num("discountInsurance")) chips.push(`<span class="badge lilac">${icon("shield", 12)}${b.discountInsurance}% off Insurance, weekly voucher</span>`);
   if (num("lifestylePoints")) chips.push(`<span class="badge ${num("lifestylePoints") >= 0 ? "navy" : "coral"}">${icon("star", 12)}${num("lifestylePoints") >= 0 ? "+" : ""}${b.lifestylePoints} lifestyle pts</span>`);
   if (num("taxCutPercent")) chips.push(`<span class="badge navy">${icon("percent", 12)}${b.taxCutPercent}% off tax bill</span>`);
   return chips.length ? chips.join(" ") : `<span class="muted-small">No active benefits set</span>`;

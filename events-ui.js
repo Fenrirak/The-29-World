@@ -607,6 +607,39 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
   });
 }
 
+/* ===================== Weekly life voucher picker =====================
+   Life items give a student one voucher per category (store / transport /
+   property / insurance) every week. Called before the pay step of a purchase.
+   Resolves "" if they have no voucher to offer or chose none, the voucher id
+   if they picked one, or null if they backed out. */
+async function lifeAskVoucher(me, category, price, what) {
+  price = Math.round((Number(price) || 0) * 100) / 100;
+  const vs = price > 0 ? lifeUsableVouchers(me, category) : [];
+  if (!vs.length) return "";
+  return new Promise(resolve => {
+    const overlay = document.createElement("div");
+    overlay.className = "anw-modal-overlay";
+    overlay.innerHTML = `
+      <div class="anw-modal-card">
+        <h2 style="display:flex;align-items:center;gap:9px;">${icon("trophy", 24)} Use a life voucher?</h2>
+        <p><strong>${escapeHtml(what || "This purchase")}</strong> &middot; ${fmtMoney(price)}</p>
+        <p class="muted-small">Each voucher works once and runs out at the end of this week.</p>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+          ${vs.map(v => `<button class="btn gold" data-vid="${escapeHtml(v.id)}">${v.pct}% off &middot; ${escapeHtml(v.itemName)} <small>(saves ${fmtMoney(Math.round(price * v.pct) / 100)})</small></button>`).join("")}
+          <button class="btn secondary" data-vid="">No voucher, pay full price</button>
+          <button class="btn" data-vid="__cancel">Cancel</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const done = v => { overlay.remove(); resolve(v); };
+    overlay.querySelectorAll("[data-vid]").forEach(b => b.addEventListener("click", () => {
+      const v = b.getAttribute("data-vid");
+      done(v === "__cancel" ? null : v);
+    }));
+    overlay.addEventListener("click", e => { if (e.target === overlay) done(null); });
+  });
+}
+
 /* ===================== Pay with: cash, credit card, or both =====================
    Used by every purchase a real card could pay for (vehicles, licence,
    weekly transport, insurance sign-up, Trade Centre). A student with no

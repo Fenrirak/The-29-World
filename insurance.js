@@ -90,7 +90,7 @@ function planButtonsHtml(p, me, owned) {
   }
   return owned
     ? `<button class="btn small secondary" id="cancelBtn-${p.id}" onclick="cancelPlan('${p.id}')">Cancel cover</button>`
-    : `<button class="btn small gold" id="buyBtn-${p.id}" onclick="buyPlan('${p.id}', ${applyLifeDiscount(me, "insurance", Number(p.signupFee) || 0)})">${icon("shield", 13)} Sign up</button>`;
+    : `<button class="btn small gold" id="buyBtn-${p.id}" onclick="buyPlan('${p.id}', ${Number(p.signupFee) || 0})">${icon("shield", 13)} Sign up</button>`;
 }
 
 function planPriceHtml(p, me) {
@@ -441,6 +441,14 @@ async function deletePlan(id) {
 }
 
 async function buyPlan(id, fee) {
+  let lifeVid = "";
+  if (fee > 0) {
+    const lMe = await getUserCached(CURRENT.username);
+    const lv = await lifeAskVoucher(lMe, "insurance", fee, "Insurance sign-up fee");
+    if (lv === null) return;
+    lifeVid = lv;
+    fee = applyLifeDiscount(lMe, "insurance", fee, lifeVid);
+  }
   if (fee > 0 && !await t29Confirm(`This plan has a one-off sign-up fee of ${fmtMoney(fee)}, charged immediately. Continue?`)) return;
   // A free plan (fee === 0) skips the confirm() above, so — same as
   // buy() in market.js — nothing else blocks a fast double-tap here.
@@ -450,7 +458,7 @@ async function buyPlan(id, fee) {
   try {
     const pay = fee > 0 ? await cardAskPay(fee, "Insurance sign-up fee") : {};
     if (!pay) return; // backed out
-    const res = await buyInsurance(CURRENT.username, CURRENT.classCode, id, pay);
+    const res = await buyInsurance(CURRENT.username, CURRENT.classCode, id, Object.assign({}, pay, { lifeVoucherId: lifeVid }));
     // render() rebuilds the whole list, so the message goes in afterwards —
     // written before it, it was wiped straight away and never seen.
     await render();

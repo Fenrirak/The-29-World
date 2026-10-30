@@ -520,7 +520,11 @@ async function buyOutright(gid) {
   try {
     const id = await pickAvailableUnitId(gid);
     if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
-    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, false, undefined, { useKiwiSaver: ksTicked(gid) });
+    const [lMe, lCls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+    const lProp = ((lCls && lCls.properties) || []).find(p => p.id === id);
+    let lifeVid = "";
+    if (lProp) { const lv = await lifeAskVoucher(lMe, "property", lProp.price, lProp.name); if (lv === null) return; lifeVid = lv; }
+    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, false, undefined, { useKiwiSaver: ksTicked(gid), lifeVoucherId: lifeVid });
     if (!res.ok) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
     // render() rebuilds this listing's card (and its message box), so the
@@ -567,7 +571,11 @@ async function buyFinanced(gid) {
   try {
     const id = await pickAvailableUnitId(gid);
     if (!id) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">Sorry, none are available right now.</div>`; return; }
-    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true, depositAmt, { useKiwiSaver: useKs });
+    const [lMe, lCls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+    const lProp = ((lCls && lCls.properties) || []).find(p => p.id === id);
+    let lifeVid = "";
+    if (lProp) { const lv = await lifeAskVoucher(lMe, "property", lProp.price, lProp.name); if (lv === null) return; lifeVid = lv; }
+    const res = await buyProperty(CURRENT.username, CURRENT.classCode, id, true, depositAmt, { useKiwiSaver: useKs, lifeVoucherId: lifeVid });
     if (!res.ok) { document.getElementById("msg-" + gid).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
     await render();
     // Mortgage payments are never taken automatically — the student pays
@@ -825,7 +833,7 @@ function buyCard(units, cls, me, ksHome) {
   // buyProperty enforces. Only meaningful when this listing offers financing.
   let minDeposit = 0;
   if (p.mortgageWeeks > 0) {
-    const discounted = applyLifeDiscount(me, "property", p.price);
+    const discounted = p.price;
     const taxed = applyTaxToExpense(cls, "property", discounted).total;
     minDeposit = Math.round(taxed * 0.1 * 100) / 100;
   }
