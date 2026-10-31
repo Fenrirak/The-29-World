@@ -1067,7 +1067,9 @@ function mortgageStatus(p, cls) {
   // week only — if the teacher has manually marked mortgages as due (see
   // setMortgageDueOverride).
   const forcedDue = cls.mortgageForceDueWeek === weekKey;
-  const isDueToday = isMortgagePayableNow(cls) || forcedDue; // due day, or any later day that week
+  const variable = isVariableMortgage(p.mortgage);
+  const dueNow = isMortgagePayableNow(cls) || forcedDue; // due day, or any later day that week
+  const isDueToday = variable || dueNow; // variable mortgages can be paid any day
   const amt = mortgageWeekAmount(p.mortgage);
   const breakdown = amt.interest > 0
     ? `${fmtMoney(amt.principal)} + ${fmtMoney(amt.interest)} interest on the ${fmtMoney(amt.balanceBefore)} still owed`
@@ -1082,12 +1084,14 @@ function mortgageStatus(p, cls) {
   } else {
     const onDueDay = (cls.mortgageDay || "Fri") === nzDayName();
     const dueLine = onDueDay ? `This week's payment is due today.`
+      : (variable && !dueNow) ? `This week's payment is open: variable mortgages can be paid any day.`
       : (forcedDue && !isMortgagePayableNow(cls)) ? `Your teacher has marked this week's payment as due now.`
       : `This week's payment was due ${mortgageDayName} and is still open until the end of the week.`;
     status = `${dueLine} <strong>${fmtMoney(amt.total)}</strong> — ${breakdown}.`;
     canPay = true;
   }
-  return { status, canPay, amt };
+  const reason = purchaseWeek ? "Your first payment isn't due yet" : alreadyPaid ? "Already paid this week" : !isDueToday ? `Opens on ${mortgageDayName}` : "";
+  return { status, canPay, amt, reason, dueNow: dueNow && !purchaseWeek && !alreadyPaid };
 }
 // The rate the variable mortgage was on before its latest change (null when
 // there's no earlier rate or it hasn't moved) — for the "up from / down from" note.
@@ -1118,13 +1122,13 @@ function mortgageSection(p, cls) {
   const fee = Math.max(0, Number(cls.propertyBreakFee) || 0);
   const extra = variable ? `
       <div class="mx-box">
-        <div class="mx-head">${icon("chart", 15)} Extra repayments</div>
-        <span class="muted-small">Pay any amount, any day. It comes straight off the <strong>${fmtMoney(owed)}</strong> you owe, so you pay less interest and finish sooner. It doesn't replace the weekly payment. No break fee.${m.extraPaid > 0 ? ` You've paid ${fmtMoney(m.extraPaid)} extra so far.` : ""}</span>
+        <div class="mx-head">${icon("chart", 15)} Pay a custom amount</div>
+        <span class="muted-small">Choose any amount, on any day. It comes straight off the <strong>${fmtMoney(owed)}</strong> you owe, so you pay less interest and finish sooner. It doesn't replace the weekly payment. No break fee.${m.extraPaid > 0 ? ` You've paid ${fmtMoney(m.extraPaid)} extra so far.` : ""}</span>
         <div class="mx-row">
           <div class="deposit-group">
             <div class="deposit-field"><span class="deposit-prefix">$</span>
-            <input type="number" id="extraAmt-${p.id}" min="0.01" max="${owed}" step="0.01" placeholder="0.00" aria-label="Extra repayment in dollars"></div>
-            <button class="btn small gold" id="extraBtn-${p.id}" onclick="payExtraMortgageClick('${p.id}')">${icon("send", 13)} Pay extra</button>
+            <input type="number" id="extraAmt-${p.id}" min="0.01" max="${owed}" step="0.01" value="${Math.min(st.amt.total, owed)}" placeholder="0.00" aria-label="Amount to pay in dollars"></div>
+            <button class="btn small gold" id="extraBtn-${p.id}" onclick="payExtraMortgageClick('${p.id}')">${icon("send", 13)} Pay amount</button>
           </div>
           <button class="btn small secondary" id="payoffBtn-${p.id}" onclick="payOffMortgageClick('${p.id}')">Pay off in full &middot; ${fmtMoney(owed)}</button>
         </div>
@@ -1140,9 +1144,9 @@ function mortgageSection(p, cls) {
           ${rateLine}
           <div class="prow-sub">${st.status}</div>
         </div>
-        ${st.canPay ? `<button class="btn small gold" id="payMortgageBtn-${p.id}" onclick="payMortgageClick('${p.id}')">${icon("send", 13)} Pay ${fmtMoney(st.amt.total)}</button>` : ""}
+        <button class="btn small gold pay-btn" id="payMortgageBtn-${p.id}" ${st.canPay ? `onclick="payMortgageClick('${p.id}')"` : `disabled aria-disabled="true" title="${st.reason}"`}>${icon("send", 13)} Pay ${fmtMoney(st.amt.total)}</button>
       </div>
-      ${st.canPay ? `<p class="muted-small">Mortgage payments come out of your cash — a credit card can't be used.</p>` : ""}
+      <p class="muted-small">Mortgage payments come out of your cash — a credit card can't be used.</p>
       <div id="mortgageMsg-${p.id}"></div>${extra}
     </div>`;
 }
@@ -1278,7 +1282,7 @@ function renderStudentHomes(cls, props, me, nameOf) {
   const box = document.getElementById("myHomes");
   const items = props.filter(p => p.owner === me.username).map(p => ({
     rank: p.occupancy === "living" ? 0 : 1,
-    due: !!p.mortgage && mortgageStatus(p, cls).canPay,
+    due: !!p.mortgage && mortgageStatus(p, cls).dueNow,
     html: ownedHomeCard(p, cls, nameOf)
   }));
   const rentedProp = props.find(p => p.sublet && p.sublet.tenant === me.username);

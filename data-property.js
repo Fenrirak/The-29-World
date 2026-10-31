@@ -679,7 +679,8 @@ async function payMortgage(username, classCode, propId, useCard) {
       const forcedDue = cls.mortgageForceDueWeek === weekKey;
       propName = prop.name;
 
-      if (!isMortgagePayableNow(cls) && !forcedDue) throw new Error("WRONG_DAY");
+      // Variable mortgages can be paid any day; fixed ones from the due day to the end of that week.
+      if (!isVariableMortgage(prop.mortgage) && !isMortgagePayableNow(cls) && !forcedDue) throw new Error("WRONG_DAY");
       if (prop.mortgage.purchaseWeekKey === weekKey) throw new Error("PURCHASE_WEEK");
       if (prop.mortgage.lastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
       // Interest is charged on the principal still remaining.
