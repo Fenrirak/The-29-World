@@ -398,7 +398,7 @@ function previewMortgageForceDue() {
 
 async function saveMortgageDayClick() {
   await setMortgageDay(CURRENT.classCode, document.getElementById("mortgageDaySelect").value);
-  setMsg("mortgageDayMsg", `<div class="success-msg">Mortgage day saved. Students can pay their weekly mortgage installment themselves on this day.</div>`);
+  setMsg("mortgageDayMsg", `<div class="success-msg">Mortgage day saved. Students can pay their weekly mortgage installment themselves on this day, or any day after it that week.</div>`);
   await render();
 }
 
@@ -1067,7 +1067,7 @@ function mortgageStatus(p, cls) {
   // week only — if the teacher has manually marked mortgages as due (see
   // setMortgageDueOverride).
   const forcedDue = cls.mortgageForceDueWeek === weekKey;
-  const isDueToday = (cls.mortgageDay || "Fri") === nzDayName() || forcedDue;
+  const isDueToday = isMortgagePayableNow(cls) || forcedDue; // due day, or any later day that week
   const amt = mortgageWeekAmount(p.mortgage);
   const breakdown = amt.interest > 0
     ? `${fmtMoney(amt.principal)} + ${fmtMoney(amt.interest)} interest on the ${fmtMoney(amt.balanceBefore)} still owed`
@@ -1080,9 +1080,10 @@ function mortgageStatus(p, cls) {
   } else if (!isDueToday) {
     status = `Due every ${mortgageDayName}. This week's would be ${fmtMoney(amt.total)} (${breakdown}) — come back then to pay it yourself.`;
   } else {
-    const dueLine = forcedDue && (cls.mortgageDay || "Fri") !== nzDayName()
-      ? `Your teacher has marked this week's payment as due now.`
-      : `This week's payment is due today.`;
+    const onDueDay = (cls.mortgageDay || "Fri") === nzDayName();
+    const dueLine = onDueDay ? `This week's payment is due today.`
+      : (forcedDue && !isMortgagePayableNow(cls)) ? `Your teacher has marked this week's payment as due now.`
+      : `This week's payment was due ${mortgageDayName} and is still open until the end of the week.`;
     status = `${dueLine} <strong>${fmtMoney(amt.total)}</strong> — ${breakdown}.`;
     canPay = true;
   }

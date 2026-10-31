@@ -647,6 +647,14 @@ function mortgageWeekAmount(mortgage) {
   return { balanceBefore: Math.round(principalBefore * 100) / 100, interest, principal, total: Math.round((principal + interest) * 100) / 100 };
 }
 
+// A mortgage can be paid from the class's mortgage day through the end of
+// that same Mon-Sun ISO week (so a student who misses the due day can still
+// pay on the weekend). Same ISO ordinal as lastMortgageDueWeekKey.
+function isMortgagePayableNow(cls) {
+  const isoIdx = day => (DAY_NAMES.indexOf(day) + 6) % 7;
+  return isoIdx(nzDayName()) >= isoIdx(cls.mortgageDay || "Fri");
+}
+
 async function payMortgage(username, classCode, propId, useCard) {
   // Mortgage instalments are always paid from cash — a credit card can't be used for them (rent can).
   // Enforced here, not just in the UI, so it can't be bypassed.
@@ -671,7 +679,7 @@ async function payMortgage(username, classCode, propId, useCard) {
       const forcedDue = cls.mortgageForceDueWeek === weekKey;
       propName = prop.name;
 
-      if ((cls.mortgageDay || "Fri") !== nzDayName() && !forcedDue) throw new Error("WRONG_DAY");
+      if (!isMortgagePayableNow(cls) && !forcedDue) throw new Error("WRONG_DAY");
       if (prop.mortgage.purchaseWeekKey === weekKey) throw new Error("PURCHASE_WEEK");
       if (prop.mortgage.lastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
       // Interest is charged on the principal still remaining.
@@ -687,7 +695,7 @@ async function payMortgage(username, classCode, propId, useCard) {
       t.update(classRef, { properties: cls.properties });
     });
   } catch (e) {
-    if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay your mortgage on its due day." };
+    if (e.message === "WRONG_DAY") return { ok: false, error: "You can pay your mortgage from its due day until the end of that week." };
     if (e.message === "PURCHASE_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you bought is free." };
     if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's payment has already gone through." };
     { const ce = cardPayError(e); if (ce) return { ok: false, error: ce }; }
