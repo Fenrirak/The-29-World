@@ -897,9 +897,8 @@ function defaultClassData(code, className, teacherUsername) {
     lastPropertyMarketDayRun: null,
     automations: [],
     jobApplications: [],
-    lastPayDayRun: null, // legacy/unused — pay day due-ness is now tracked per student (see lastWagePaid, near payMyWageIfDue)
     insurancePlans: [], storeItems: [], properties: [],
-    eventDefs: [], eventLog: [], lastEventWeekRun: null, lastEventDayRun: null,
+    eventDefs: [], eventLog: [], lastEventWeekRun: null,
     vehicles: [], termDepositPlans: [],
     truckLicence: { price: 0, description: "" },
     sellBackRates: { car: 0.85, truck: 0.85, bike: 0.85 },
@@ -909,8 +908,7 @@ function defaultClassData(code, className, teacherUsername) {
     dailyTimeLimitMinutes: null, // null/0 = no limit; minutes of active time per student per day
     welcomeGrant: 20, // what each new student starts with — see t29WelcomeGrantOf()
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri",
-    lastInterestRun: null, // legacy/unused — interest due-ness is now tracked per student (see lastInterestApplied, near applyMyInterestIfDue)
-    insuranceDay: "Fri", lastInsuranceWeekRun: null,
+    insuranceDay: "Fri",
     gambling: {
       enabled: true, minBet: 1, maxBet: 20,
       // dailyBuyInLimit caps how much a student can move from cash into
@@ -1437,6 +1435,8 @@ async function t29JoinClassAsNewStudent(db, cred, name, username, classCode) {
 
     t.set(db.collection("uidIndex").doc(cred.user.uid), { username });
 
+    // firestore.rules (isSaneNewStudentDoc) only accepts exactly these fields on a
+    // brand-new student doc — add any new one there too, or signup will be refused.
     const user = {
       username, authUid: cred.user.uid, role: "student", name,
       classCode, balance: welcome, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
@@ -1980,6 +1980,7 @@ async function adjustBalance(username, delta) {
   // means this function is safe regardless of what a caller hands it,
   // instead of relying on every caller to remember to do it themselves.
   delta = Number(delta) || 0;
+  if (!isFinite(delta)) return false; // Infinity would be written into the balance as-is
   const ref = usersCol().doc(username);
   try {
     await fdb.runTransaction(async (t) => {
@@ -2036,7 +2037,10 @@ async function transferMoney(fromUser, toUser, amount, note, opts) {
   const to = await getUser(toUser);
   if (!from || !to) return { ok: false, error: "User not found." };
   if (from.classCode !== to.classCode) return { ok: false, error: "You can only send money within your own class." };
-  if (amount <= 0) return { ok: false, error: "Enter an amount greater than zero." };
+  if (!(amount > 0) || !isFinite(amount)) return { ok: false, error: "Enter an amount greater than zero." };
+  // Both writes below would hit the same doc and the second would win, leaving the
+  // sender with MORE money instead of the same.
+  if (fromUser === toUser) return { ok: false, error: "You can't send money to yourself." };
   const fromIsTeacher = from.role === "teacher";
 
   try {
@@ -2159,12 +2163,6 @@ async function t29NotifyRunPayments(classCode, sinceTs, kind) {
         : { to: u, icon: "coin", tone: "mint", title: `Your teacher ran pay day: you were paid ${fmtMoney(amt)}`, body: "It was added to your account.", href: "bank.html" };
     }));
   } catch (e) { console.warn("t29NotifyRunPayments failed:", e); }
-}
-
-// "$1.50" / "$12" style helper for notice text, and a tidy "was → now".
-function t29Chg(a, b, fmt) {
-  const f = fmt || (v => v);
-  return `${f(a)} → ${f(b)}`;
 }
 
 // Marks a bonus/fine txn as seen so its one-time popup doesn't show again.
@@ -2939,7 +2937,6 @@ function withNewModuleDefaults(cls) {
   cls.eventDefs = cls.eventDefs || [];
   cls.eventLog = cls.eventLog || [];
   cls.lastEventWeekRun = cls.lastEventWeekRun || null;
-  cls.lastEventDayRun = cls.lastEventDayRun || null;
   cls.termDepositPlans = cls.termDepositPlans || [];
   cls.sideHustles = cls.sideHustles || [];
   cls.lifestyleLock = cls.lifestyleLock || { threshold: 0, modules: [] };
@@ -2995,9 +2992,7 @@ function withNewModuleDefaults(cls) {
   cls.cashInterestRate = cls.cashInterestRate || 0;
   cls.interestFrequency = cls.interestFrequency || "weekly";
   cls.interestDay = cls.interestDay || "Fri";
-  cls.lastInterestRun = cls.lastInterestRun || null;
   cls.insuranceDay = cls.insuranceDay || "Fri";
-  cls.lastInsuranceWeekRun = cls.lastInsuranceWeekRun || null;
   cls.gambling = cls.gambling || {
     minBet: 1, maxBet: 20,
     payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 }

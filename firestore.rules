@@ -359,6 +359,8 @@ service cloud.firestore {
         'lastWagePaid', 'lastLifeAllowanceWeeklyPaid', 'lastLifeAllowanceDailyPaid',
         'loans', 'quizResults', 'gamblingAccount', 'creditCard',
         'storeItems', 'insurance', 'sideHustle', 'termDeposits', 'truckLicence',
+        // lifeVoucherUsed: which weekly life-item vouchers this student has used this week.
+        'lifeVoucherUsed',
         // Economy-adjacent state each feature's own self-service flow owns.
         'sideHustleRequest', 'sideHustleDenialNote', 'truckCheckins',
         'lastMoveDate', 'blackjackRound', 'lastBjSeat', 'budget',
@@ -383,6 +385,10 @@ service cloud.firestore {
         // the Reports page showed "Nothing here yet" for most students.
         // They only feed the report card, never any balance.
         'reportMonth', 'reportLifetime',
+        // netWorthLog: the weekly Monday net-worth notes behind the report
+        // card's trend line (recordMyNetWorthIfDue in data-money.js). Only feeds the
+        // report; moves no money.
+        'netWorthLog',
         // Savings goals (addSavingsGoal etc. in data-money.js) and the id
         // of the student's family link (createParentLink). Neither moves
         // or creates any money — goals are just names and target amounts,
@@ -480,6 +486,36 @@ service cloud.firestore {
         && (
           (data.get('role', null) == 'teacher' && isOwnBrandNewClass(data.classCode, username)) ||
           (data.get('role', null) == 'student' && isJoiningExistingClass(data.classCode, username))
+        );
+    }
+    // A brand-new STUDENT doc may only carry the fields t29JoinClassAsNewStudent()
+    // (data-core.js) writes, and may start with no more than the class's welcome
+    // grant (or the $20 default) and no savings, loans or job. Without this, a new
+    // account could be created with any balance or any asset. If that function ever
+    // writes another field at signup, add it to this list or signup will be refused.
+    function isSaneNewStudentDoc(data) {
+      return data.get('role', null) != 'student'
+        || (
+          data.keys().hasOnly([
+            'username', 'authUid', 'role', 'name', 'classCode',
+            'balance', 'jobId', 'jobTierId', 'jobTierSince', 'pendingPromotion',
+            'savings', 'loans', 'sessionVersion', 'dailyLimitMinutes',
+            'timeSpentTodaySec', 'timeSpentDate',
+            'timeExemptionStatus', 'timeExemptionDate',
+            'extraMinutesToday', 'extraMinutesDate',
+            'reportMonth', 'reportLifetime'
+          ])
+          && data.balance >= 0
+          && (
+            data.balance <= 20
+            || data.balance <= get(/databases/$(database)/documents/classes/$(data.classCode)).data.get('welcomeGrant', 20)
+          )
+          && data.get('savings', 0) == 0
+          && data.get('loans', []).size() == 0
+          && data.get('jobId', null) == null
+          && data.get('jobTierId', null) == null
+          && data.get('pendingPromotion', null) == null
+          && data.get('extraMinutesToday', 0) == 0
         );
     }
     function isOwnBrandNewClass(code, username) {
@@ -622,7 +658,8 @@ service cloud.firestore {
         && request.resource.data.authUid == request.auth.uid
         && request.resource.data.username == username
         && !exists(/databases/$(database)/documents/users/$(username))
-        && isValidNewAccount(username);
+        && isValidNewAccount(username)
+        && isSaneNewStudentDoc(request.resource.data);
 
       allow update: if signedIn() && (
         // First, so it short-circuits before myUsername() (which can't
@@ -782,7 +819,11 @@ service cloud.firestore {
         // The class's KiwiSaver settings (fund returns, retirement) —
         // only ever saved by the teacher (saveKiwiSaverSettings /
         // retireClass in data-money.js).
-        'kiwiSaver'
+        'kiwiSaver',
+        // Teacher-only settings that were missing from this list: a student could
+        // otherwise raise the welcome grant (then farm second accounts), change the
+        // store sort, or make every avatar item free.
+        'welcomeGrant', 'storeSortMode', 'avatarShop'
       ];
       return !changed.hasAny(lockedFields) && isSafeStudentsFieldChange() && isSafeStudentCatalogChange();
     }

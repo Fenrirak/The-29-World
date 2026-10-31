@@ -791,13 +791,8 @@
   const COSTUME_LIST = [["none", "No costume", 0], ["ghost", "Friendly ghost", 3], ["ninja", "Ninja", 3], ["shark", "Shark hoodie", 3], ["wizard", "Mage", 4]];
 
   /* ------------------------------ eyebrows ------------------------------ */
-  // "natural" is the original pair of simple strokes (so existing avatars don't change). The
-  // rest are tapered brow shapes: [outerX, outerY, ctrlX, ctrlY, innerX, innerY, thickness],
-  // written for the left brow and mirrored for the right; thickness follows the body type.
-  const browShape = (b, col, k) => {
-    const [x0, y0, cx, cy, x1, y1, t] = b, h = t * k;
-    return `<path d="M${x0} ${y0} Q${cx} ${(cy - h).toFixed(2)} ${x1} ${y1} Q${cx} ${(cy + h).toFixed(2)} ${x0} ${y0}Z" fill="${col}" stroke="${col}" stroke-width=".7" stroke-linejoin="round" opacity=".92"/>`;
-  };
+  // Brow shapes are [outerX, outerY, ctrlX, ctrlY, innerX, innerY, thickness], written for the
+  // left brow and mirrored for the right; thickness follows the body type.
   const mirrorBrow = b => [100 - b[0], b[1], 100 - b[2], b[3], 100 - b[4], b[5], b[6]];
   // Tapered brow silhouettes, rather than inflated lens-shaped blobs.
   const polishedBrow=(b,col,k)=>{const [a,y,cx,cy,z,v,t]=b,w=Math.min(2.6,t*.53*k);return `<path d="M${a} ${y} Q${cx} ${cy-w} ${z} ${v} L${z} ${v+w*.7} Q${cx} ${cy+w*.25} ${a} ${y+.45}Z" fill="${col}"/>`;};

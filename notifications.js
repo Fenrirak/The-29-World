@@ -497,6 +497,15 @@ function notifMarketplaceItems(me, cls) {
 // are read from class.teacherNotices, which the teacher's pages write via
 // t29NotifyStudents() (data-core.js) — a teacher's edit leaves no other trace.
 const NOTIF_TEACHER_TTL_MS = 7 * 24 * 3600 * 1000;
+// Teacher notices sit on the class doc, which every classmate's client is allowed
+// to write to (student actions post notices too), so nothing in one can be trusted
+// as markup: tone/icon become class names and href becomes a link target.
+function notifSafeTone(t) { return /^[a-z]{2,12}$/.test(String(t || "")) ? t : "gold"; }
+function notifSafeIcon(i) { return /^[a-z0-9_-]{1,30}$/i.test(String(i || "")) ? i : "bell"; }
+function notifSafeHref(h) {
+  h = String(h || "");
+  return /^(?![a-z][a-z0-9+.-]*:|\/\/)[\w\-./]*(\?[\w\-=&%.]*)?(#[\w\-]*)?$/i.test(h) ? h : "";
+}
 function notifTeacherChangeItems(me, cls) {
   const list = cls && Array.isArray(cls.teacherNotices) ? cls.teacherNotices : [];
   const cutoff = trustedNow().getTime() - NOTIF_TEACHER_TTL_MS;
@@ -506,8 +515,8 @@ function notifTeacherChangeItems(me, cls) {
     const mine = n.to === "all" || (Array.isArray(n.to) && n.to.indexOf(me.username) !== -1);
     if (!mine) return;
     out.push({
-      id: "tch-" + n.id, ts: n.ts, icon: n.icon || "bell", tone: n.tone || "gold",
-      title: n.title, body: n.body || "", href: n.href || ""
+      id: "tch-" + n.id, ts: n.ts, icon: notifSafeIcon(n.icon), tone: notifSafeTone(n.tone),
+      title: String(n.title), body: String(n.body || ""), href: notifSafeHref(n.href)
     });
   });
   return out;
@@ -655,7 +664,7 @@ async function notifLockBootTeacher(u) {
    is fully closed. True closed-browser push needs a server (Firebase Cloud
    Messaging or Web Push plus a Cloud Function), which this app doesn't use.
    iOS/iPadOS (16.4+) only allows notifications for a site ADDED TO THE HOME
-   SCREEN (needs manifest.webmanifest, display: standalone). In an ordinary
+   SCREEN (needs manifest.json, display: standalone). In an ordinary
    Safari or Chrome tab `Notification` does not exist, so the control just
    tells the student how to install it. Without a server, iOS also freezes
    a backgrounded app, so alerts only fire while it is still running.
@@ -681,11 +690,11 @@ function notifIsStandalone() {
 }
 
 // Gives iOS the manifest it needs to treat Add to Home Screen as a web app.
-// Better still: put <link rel="manifest" href="manifest.webmanifest"> in each page's <head>.
+// Better still: put <link rel="manifest" href="manifest.json"> in each page's <head>.
 function notifEnsureManifest() {
   if (document.querySelector('link[rel="manifest"]')) return;
   const l = document.createElement("link");
-  l.rel = "manifest"; l.href = "manifest.webmanifest";
+  l.rel = "manifest"; l.href = "manifest.json";
   document.head.appendChild(l);
 }
 
@@ -1068,9 +1077,9 @@ function notifRenderList() {
     // tappable but isn't.
     const clickable = !!(n.href || n.onClick);
     const tag = clickable ? "a" : "div";
-    const href = n.href ? ` href="${n.href}"` : (n.onClick ? ` href="#" onclick="notifClose();${n.onClick};return false;"` : "");
+    const href = n.href ? ` href="${escapeHtml(n.href)}"` : (n.onClick ? ` href="#" onclick="notifClose();${n.onClick};return false;"` : "");
     return `<${tag}${href} class="notif-row${unread ? " unread" : ""}${n.action ? " action" : ""}${n.urgent ? " urgent" : ""}">
-      <span class="notif-ic ${n.tone}">${notifIconFor(n.icon, 15)}</span>
+      <span class="notif-ic ${escapeHtml(n.tone)}">${notifIconFor(n.icon, 15)}</span>
       <span class="notif-body">
         <span class="notif-title">${escapeHtml(n.title)}</span>
         ${n.body ? `<span class="notif-sub">${escapeHtml(n.body)}</span>` : ""}

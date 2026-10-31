@@ -67,7 +67,7 @@ function enablePasswordToggles() {
 
 function icon(name, size) {
   const s = size || 20;
-  return `<span class="icon" style="width:${s}px;height:${s}px;display:inline-flex;">${ICONS[name] || ""}</span>`;
+  return `<span class="icon" style="width:${s}px;height:${s}px;display:inline-flex;">${Object.prototype.hasOwnProperty.call(ICONS, name) ? ICONS[name] : ""}</span>`;
 }
 
 // Fills every element with a data-icon attribute (used for nav bars, brand

@@ -44,7 +44,7 @@ function dmSetOn(on) {
 }
 
 const SM_BUNDLES = {
-  sb: { css: "sidebar-nav.css?v=db165b29", js: "sidebar-nav.js?v=8d951bc5", setter: "sbSetOn" }
+  sb: { css: "sidebar-nav.css?v=5b24fba0", js: "sidebar-nav.js?v=8d951bc5", setter: "sbSetOn" }
 };
 
 // Loads a feature's CSS+JS the first time it's needed (idempotent — safe to

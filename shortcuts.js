@@ -67,8 +67,6 @@
   ];
 
   var FINE_POINTER = !!(window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches);
-  var IS_MAC = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || "");
-  var MOD = IS_MAC ? "\u2318" : "Ctrl";
 
   // ---------- on / off (Settings -> "Use keyboard shortcuts") ----------
   var PREF_KEY = "t29-shortcuts-off";

@@ -38,23 +38,6 @@
    button chrome (a small white/gray box) instead of disappearing. */
 .sb-hamburger{ display: none; }
 
-/* Section headings ("Money", "Life", ...) that sidebar-nav.js puts between
-   groups of links. Only meaningful in the side menu — hidden in the plain
-   top bar, which is also why icons.js's width-fitting never counts them. */
-.sb-group-label{ display: none; }
-html.sidebar-nav .sb-group-label{
-  display: block;
-  margin: 12px 4px 2px;
-  font-size: var(--fs-xs);
-  font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: rgba(247,241,230,.55);
-}
-/* Teacher-only links (Quizzes, Reports) are hidden for students, so their
-   heading is too — html.role-teacher is set by applyNavRoleVisibility(). */
-html.sidebar-nav:not(.role-teacher) .sb-group-label.sb-group-teacher{ display: none; }
-
 /* Unread-notifications dot on the menu button (see sbSyncUnreadDot). */
 .sb-hamburger{ position: relative; }
 html.sidebar-nav .sb-hamburger.has-unread::after{
@@ -125,8 +108,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
     gap: 6px;
   }
   html.sidebar-nav .btn-logout,
-  html.sidebar-nav .btn-icon-topbar,
-  html.sidebar-nav .settings-dropdown-wrap{ width: 100%; }
+  html.sidebar-nav .btn-icon-topbar{ width: 100%; }
   html.sidebar-nav .btn-logout,
   html.sidebar-nav .btn-icon-topbar{
     justify-content: flex-start;
@@ -158,13 +140,6 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
        an unread count belongs. */
     position: static; order: 1; margin-left: auto; border-color: transparent;
   }
-  /* The legacy inline settings dropdown (student.html only) anchors
-     bottom-left instead of top-right so it opens into the rail rather
-     than off the edge of the screen. */
-  html.sidebar-nav .settings-dropdown{
-    left: 0; right: auto; top: auto; bottom: calc(100% + 8px); width: 100%; min-width: 0;
-  }
-
   html.sidebar-nav .sb-hamburger,
   html.sidebar-nav .sb-backdrop{ display: none !important; }
 
@@ -310,8 +285,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
     z-index: 131;
   }
   html.sidebar-nav .btn-logout,
-  html.sidebar-nav .btn-icon-topbar,
-  html.sidebar-nav .settings-dropdown-wrap{ width: 100%; }
+  html.sidebar-nav .btn-icon-topbar{ width: 100%; }
   html.sidebar-nav .btn-logout,
   html.sidebar-nav .btn-icon-topbar{
     justify-content: flex-start; padding: 11px 12px; gap: 10px; min-width: 0;
@@ -320,7 +294,6 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
   html.sidebar-nav #settingsBtn::after{ content: "Settings"; font-size: var(--fs-lg); font-weight: 700; }
   html.sidebar-nav #notifBell::after{ content: "Notifications"; font-size: var(--fs-lg); font-weight: 700; }
   html.sidebar-nav #notifBell .notif-dot{ position: static; order: 1; margin-left: auto; border-color: transparent; }
-  html.sidebar-nav .settings-dropdown{ left: 0; right: auto; bottom: calc(100% + 8px); top: auto; width: 100%; }
 
   /* Keep the closed drawer out of the tab order so keyboard focus can't
      land on links the user can't currently see. sidebar-nav.js toggles

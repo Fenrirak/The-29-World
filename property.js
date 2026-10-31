@@ -565,7 +565,6 @@ async function buyFinanced(gid) {
   // buyOutright both draw from the same available-units pool for this
   // listing group.
   const btn = document.getElementById("buyFinancedBtn-" + gid);
-  const btn2 = document.getElementById("buyOutrightBtn-" + gid);
   if (btn && btn.disabled) return;
   // Student's custom deposit, in dollars. The input's own min= stops most
   // typing/arrow attempts below the 10% floor, but a pasted or emptied

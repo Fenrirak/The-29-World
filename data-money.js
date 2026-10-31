@@ -554,7 +554,6 @@ const KS_DEFAULT_RATE = 3.5;
 const KS_EMPLOYER_RATE = 3.5;
 const KS_GOVT_PER_DOLLAR = 0.25;
 const KS_GOVT_YEAR_MAX = 260.72;
-const KS_GOVT_FULL_AT = 1042.86; // what you need to put in during a year to get the full $260.72
 const KS_GOVT_INCOME_LIMIT = 180000;
 // ESCT bands from 1 April 2025 (unchanged for 2026/27): a year's pay plus
 // the employer's contributions -> tax rate on those contributions.
@@ -639,10 +638,6 @@ function ksNewMember(todayKey, auto) {
 function ksYearOf(dateKey) {
   const y = Number(dateKey.slice(0, 4)), m = Number(dateKey.slice(5, 7));
   return String(m >= 7 ? y : y - 1);
-}
-function ksYearLabel(year) {
-  const y = Number(year);
-  return `1 July ${y} – 30 June ${y + 1}`;
 }
 function ksEsctRate(yearlyPayPlusEmployer) {
   for (const b of KS_ESCT_BANDS) if (yearlyPayPlusEmployer <= b.upTo) return b.rate;
@@ -1410,34 +1405,42 @@ async function repayLoan(username, loanId, amount) {
   return { ok: true, fullyPaid };
 }
 
-// Charges another week of compounding interest on every still-active loan,
-// first thing every Monday — same "first thing on day X" idea as
-// applyMyInterestIfDue/applyInterestToClassIfDue, but on a fixed Monday schedule rather than a
-// teacher-configurable day, since loan interest isn't tied to the bank's
-// interest settings. A loan's very first week of interest is charged the
-// moment it's taken out (see takeLoan) — this only ever adds the 2nd, 3rd,
-// ... week's interest on top of that. Tracks the ISO week each loan was
-// last charged for (lastInterestWeek) so: (a) re-running this on the same
-// Monday (e.g. the teacher reloading the page) never double-charges, and
-// (b) a loan gets skipped for good the moment it's fully repaid — a loan
-// paid off is status "paid" and simply never matches the active filter
-// again, so it stops accruing interest for good, whatever day that happens.
+// Charges compounding interest on every still-active loan for each ISO week that
+// has started since the loan was last charged (lastInterestWeek), the first time
+// anyone opens a page in a new week. A loan's very first week of interest is
+// charged the moment it's taken out (see takeLoan) — this only ever adds the 2nd,
+// 3rd, ... week's interest on top of that.
+// This used to run on Mondays only, so a Monday nobody opened the site was skipped
+// for good — and a student who simply stayed away on Mondays never paid weekly
+// interest at all. Now every missed week is made up (capped at a year), and the
+// per-loan lastInterestWeek stamp still means (a) re-running it in the same week
+// (e.g. the teacher reloading the page) never double-charges, and (b) a loan that is
+// fully repaid is status "paid", never matches the active filter, and stops accruing.
+// Whole ISO weeks from one isoWeekKey() value to another (null if either is unreadable).
+function isoWeeksBetween(fromKey, toKey) {
+  const monday = k => {
+    const m = /^(\d{4})-W(\d{1,2})$/.exec(String(k || ""));
+    if (!m) return null;
+    const jan4 = new Date(Date.UTC(Number(m[1]), 0, 4));
+    return jan4.getTime() - ((jan4.getUTCDay() + 6) % 7) * 86400000 + (Number(m[2]) - 1) * 7 * 86400000;
+  };
+  const a = monday(fromKey), b = monday(toKey);
+  return a === null || b === null ? null : Math.round((b - a) / (7 * 86400000));
+}
+
 async function processLoanInterest(classCode) {
-  if (nzDayName() !== "Mon") return 0;
+  const weekKey = isoWeekKey();
+  const selfOnly = t29SessionStudent();
+  // Once a full pass has finished for this week, nothing more can come due until the
+  // next one (a loan taken later this week is stamped with this week already).
+  const doneKey = "t29-loanint-" + classCode + "-" + (selfOnly || "teacher") + "-" + weekKey;
+  try { if (sessionStorage.getItem(doneKey) === "1") return 0; } catch (e) { /* private mode */ }
   const cls = await getClass(classCode);
   if (!cls || cls.archived) return 0;
-  const weekKey = isoWeekKey();
-  // A student's account can only charge its own loans (see
-  // t29SessionStudent) — don't spend a refused transaction per classmate.
-  const selfOnly = t29SessionStudent();
   const students = selfOnly ? [await getUser(selfOnly)].filter(Boolean) : await getClassStudents(classCode);
-  let count = 0;
+  let count = 0, failed = false;
   for (const student of students) {
     const loans = student.loans || [];
-    // Only loans taken out under the weekly-compounding model (see takeLoan)
-    // are eligible — loans taken before that change never got the
-    // weeklyCompounding flag, so they're skipped here and keep the flat,
-    // one-time-interest behavior they were taken out under.
     const due = loans.filter(l => l.status === "active" && l.weeklyCompounding && l.lastInterestWeek !== weekKey);
     if (due.length === 0) continue;
     const userRef = usersCol().doc(student.username);
@@ -1451,23 +1454,26 @@ async function processLoanInterest(classCode) {
         const liveLoans = user.loans || [];
         liveLoans.forEach(l => {
           if (l.status !== "active" || !l.weeklyCompounding || l.lastInterestWeek === weekKey) return;
+          const gap = isoWeeksBetween(l.lastInterestWeek, weekKey);
+          const weeks = gap === null ? 1 : Math.max(0, Math.min(52, gap));
           const before = l.owed;
-          l.owed = Math.round(l.owed * (1 + (l.rate / 100)) * 100) / 100;
+          for (let i = 0; i < weeks; i++) l.owed = Math.round(l.owed * (1 + (l.rate / 100)) * 100) / 100;
           l.lastInterestWeek = weekKey;
           const interest = Math.round((l.owed - before) * 100) / 100;
-          if (interest > 0) charged.push({ interest, owedAfter: l.owed });
+          if (interest > 0) charged.push({ interest, owedAfter: l.owed, weeks });
         });
         t.update(userRef, { loans: liveLoans });
       });
-    } catch (e) { continue; }
+    } catch (e) { failed = true; continue; }
     for (const c of charged) {
       await logTxn(classCode, {
         type: "loan-interest", to: student.username, amount: c.interest,
-        note: `Weekly loan interest — now owe ${fmtMoney(c.owedAfter)}`
+        note: (c.weeks > 1 ? `${c.weeks} weeks of loan interest` : "Weekly loan interest") + ` — now owe ${fmtMoney(c.owedAfter)}`
       });
       count++;
     }
   }
+  if (!failed) { try { sessionStorage.setItem(doneKey, "1"); } catch (e) { /* private mode */ } }
   return count;
 }
 
@@ -4298,13 +4304,6 @@ function cardRewardOf(plan, spend) {
   const fixed = cardRound(steps * back);
   const total = cardRound(Math.min(spend, pct + fixed));
   return { pct, steps, fixed, total, every: everyC / 100, back };
-}
-// For the progress bar: how far into the NEXT reward step the student is.
-function cardRewardProgress(plan, spend) {
-  const r = cardRewardOf(plan, spend);
-  if (!(r.every > 0 && r.back > 0)) return null;
-  const into = cardRound(cardRound(spend) - r.steps * r.every);
-  return { steps: r.steps, earned: r.fixed, into, toNext: cardRound(Math.max(0, r.every - into)), pct: Math.max(0, Math.min(100, into / r.every * 100)) };
 }
 // Spend-and-earn is judged ONE PURCHASE AT A TIME: a single charge must reach
 // $rewardEvery to earn, each whole step earns $rewardBack, and the leftover

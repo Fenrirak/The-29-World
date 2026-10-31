@@ -2154,7 +2154,6 @@ function getLifeAllowanceByFrequency(user, frequency) {
 // replaced by a fresh one. Used vouchers are stamped on the student's own doc
 // as user.lifeVoucherUsed = { "<lifeItemId>:<category>": "<isoWeekKey>" }.
 // Only students get vouchers (a teacher's own prices stay full price).
-const LIFE_VOUCHER_CATS = ["store", "transport", "property", "insurance"];
 function lifeVoucherBenefitKey(category) { return "discount" + category.charAt(0).toUpperCase() + category.slice(1); }
 function lifeUsableVouchers(user, category) {
   if (!user || user.role === "teacher") return [];
