@@ -1199,23 +1199,23 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("dice", 26) + " Gambling";
   document.getElementById("hSettings").innerHTML = icon("dice", 18) + " Roulette settings";
-  document.getElementById("saveSettingsBtn").innerHTML = icon("bank", 14) + " Save settings";
+  document.getElementById("saveSettingsBtn").innerHTML = icon("save", 14) + " Save settings";
   document.getElementById("labEnabled").textContent = "Allow students to gamble";
   document.getElementById("hDisabled").innerHTML = icon("dice", 20) + " Gambling is paused";
   document.getElementById("hBet").innerHTML = icon("dice", 18) + " Place a bet";
-  document.getElementById("hRecent").innerHTML = icon("bank", 18) + " My recent bets";
+  document.getElementById("hRecent").innerHTML = icon("history", 18) + " My recent bets";
 
   document.getElementById("bjHSettings").innerHTML = icon("cards", 18) + " Blackjack settings";
-  document.getElementById("bjSaveSettingsBtn").innerHTML = icon("bank", 14) + " Save settings";
+  document.getElementById("bjSaveSettingsBtn").innerHTML = icon("save", 14) + " Save settings";
   document.getElementById("bjLabEnabled").textContent = "Allow students to play Blackjack";
   document.getElementById("bjHDisabled").innerHTML = icon("cards", 20) + " Blackjack is paused";
   document.getElementById("bjHTable").innerHTML = icon("cards", 18) + " Blackjack table";
-  document.getElementById("bjHRecent").innerHTML = icon("bank", 18) + " My recent bets";
+  document.getElementById("bjHRecent").innerHTML = icon("history", 18) + " My recent bets";
 
-  document.getElementById("hAccountSettings").innerHTML = icon("piggy", 18) + " Gambling account settings";
-  document.getElementById("acctSaveSettingsBtn").innerHTML = icon("bank", 14) + " Save settings";
-  document.getElementById("acctHDisabled").innerHTML = icon("piggy", 20) + " Gambling is paused";
-  document.getElementById("hGamblingAccount").innerHTML = icon("piggy", 18) + " Gambling account";
+  document.getElementById("hAccountSettings").innerHTML = icon("dice", 18) + " Gambling account settings";
+  document.getElementById("acctSaveSettingsBtn").innerHTML = icon("save", 14) + " Save settings";
+  document.getElementById("acctHDisabled").innerHTML = icon("dice", 20) + " Gambling is paused";
+  document.getElementById("hGamblingAccount").innerHTML = icon("dice", 18) + " Gambling account";
 }
 
 async function init() {
@@ -1223,7 +1223,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);

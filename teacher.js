@@ -26,54 +26,54 @@ function parseMoneyInput(str) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("codeIcon").innerHTML = icon("key", 15);
-  document.getElementById("payDayBtn").innerHTML = icon("coin", 15) + " Run Pay Day";
-  document.getElementById("interestBtn").innerHTML = icon("chart", 15) + " Apply Interest";
+  document.getElementById("payDayBtn").innerHTML = icon("briefcase", 15) + " Run Pay Day";
+  document.getElementById("interestBtn").innerHTML = icon("percent", 15) + " Apply Interest";
   document.getElementById("iconStudents").innerHTML = icon("users", 30);
   document.getElementById("iconSavings").innerHTML = icon("piggy", 30);
   document.getElementById("classArchivedIcon").innerHTML = icon("lock", 15);
-  document.getElementById("iconCompanies").innerHTML = icon("building", 30);
+  document.getElementById("iconCompanies").innerHTML = icon("mortarboard", 30);
   document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students";
   document.getElementById("hNetWorth").innerHTML = icon("medal", 18) + " Net worth ranking";
-  document.getElementById("hAdjust").innerHTML = icon("star", 18) + " Quick transactions";
-  document.getElementById("hSettings").innerHTML = icon("bank", 18) + " Class settings";
-  document.getElementById("hDanger").innerHTML = icon("coin", 18) + " Danger zone";
+  document.getElementById("hAdjust").innerHTML = icon("coin", 18) + " Quick transactions";
+  document.getElementById("hSettings").innerHTML = icon("settings", 18) + " Class settings";
+  document.getElementById("hDanger").innerHTML = icon("trash", 18) + " Danger zone";
   document.getElementById("hCostBasis").innerHTML = icon("chart", 18) + " Stock cost history";
   document.getElementById("recoverCostBasisBtn").innerHTML = icon("chart", 15) + " Recover stock cost history";
-  document.getElementById("restartBtn").innerHTML = icon("chart", 15) + " Restart class";
-  document.getElementById("hActivity").innerHTML = icon("chart", 18) + " Recent activity";
+  document.getElementById("restartBtn").innerHTML = icon("repeat", 15) + " Restart class";
+  document.getElementById("hActivity").innerHTML = icon("history", 18) + " Recent activity";
   document.getElementById("labAdjStudent").innerHTML = icon("users", 13) + " Student";
   document.getElementById("labAdjAmount").innerHTML = icon("coin", 13) + " Amount (negative for a fine)";
-  document.getElementById("labAdjNote").innerHTML = icon("star", 13) + " Reason";
+  document.getElementById("labAdjNote").innerHTML = icon("note", 13) + " Reason";
   document.getElementById("applyAdjBtn").innerHTML = icon("send", 15) + " Apply";
   document.getElementById("labRate").innerHTML = icon("piggy", 13) + " Savings interest rate (%)";
-  document.getElementById("labCashRate").innerHTML = icon("coin", 13) + " Cash balance interest rate (%)";
-  document.getElementById("saveRateBtn").innerHTML = icon("bank", 14) + " Save rate";
+  document.getElementById("labCashRate").innerHTML = icon("percent", 13) + " Cash balance interest rate (%)";
+  document.getElementById("saveRateBtn").innerHTML = icon("save", 14) + " Save rate";
   document.getElementById("labWelcomeGrant").innerHTML = icon("coin", 13) + " Welcome grant ($ each new student starts with)";
-  document.getElementById("saveWelcomeBtn").innerHTML = icon("bank", 14) + " Save welcome grant";
+  document.getElementById("saveWelcomeBtn").innerHTML = icon("save", 14) + " Save welcome grant";
   document.getElementById("labInterestFreq").innerHTML = icon("repeat", 13) + " How often";
   document.getElementById("labInterestDay").innerHTML = icon("calendar", 13) + " On which day";
-  document.getElementById("saveInterestAutoBtn").innerHTML = icon("bank", 14) + " Save interest schedule";
+  document.getElementById("saveInterestAutoBtn").innerHTML = icon("save", 14) + " Save interest schedule";
   document.getElementById("labPayDay").innerHTML = icon("calendar", 13) + " Pay day (which day wages are due)";
-  document.getElementById("savePayDayBtn").innerHTML = icon("calendar", 14) + " Save pay day";
+  document.getElementById("savePayDayBtn").innerHTML = icon("save", 14) + " Save pay day";
   document.getElementById("mortgageSettingsMoved").innerHTML = icon("house", 13) + ` Mortgage due day and "mark due now" controls have moved to the <a href="property.html">Property</a> page.`;
-  document.getElementById("saveGamblingEnabledBtn").innerHTML = icon("dice", 14) + " Save gambling setting";
-  document.getElementById("hEvents").innerHTML = icon("dice", 18) + " Random weekly events";
-  document.getElementById("runEventsNowBtn").innerHTML = icon("repeat", 14) + " Run this week's events now";
-  document.getElementById("labEvType").innerHTML = icon("dice", 13) + " Event type";
-  document.getElementById("labEvOptions").innerHTML = icon("star", 13) + " Choices — one per line, as \"Label | amount | what happened (optional)\" — the amount can also be a percentage, like -20%";
-  document.getElementById("labEvName").innerHTML = icon("star", 13) + " Event name";
+  document.getElementById("saveGamblingEnabledBtn").innerHTML = icon("save", 14) + " Save gambling setting";
+  document.getElementById("hEvents").innerHTML = icon("sparkle", 18) + " Random weekly events";
+  document.getElementById("runEventsNowBtn").innerHTML = icon("sparkle", 14) + " Run this week's events now";
+  document.getElementById("labEvType").innerHTML = icon("sparkle", 13) + " Event type";
+  document.getElementById("labEvOptions").innerHTML = icon("sparkle", 13) + " Choices — one per line, as \"Label | amount | what happened (optional)\" — the amount can also be a percentage, like -20%";
+  document.getElementById("labEvName").innerHTML = icon("sparkle", 13) + " Event name";
   document.getElementById("labEvAmount").innerHTML = icon("coin", 13) + " Amount (negative for a cost)";
   document.getElementById("labEvAmountMode").innerHTML = icon("coin", 13) + " Amount is";
   document.getElementById("labEvPercent").innerHTML = icon("coin", 13) + " Percentage (negative for a cost)";
   document.getElementById("labEvBase").innerHTML = icon("coin", 13) + " The percentage is of";
-  document.getElementById("labEvDesc").innerHTML = icon("idcard", 13) + " Description (shown in the activity feed)";
-  document.getElementById("labEvSeverity").innerHTML = icon("star", 13) + " Severity";
+  document.getElementById("labEvDesc").innerHTML = icon("note", 13) + " Description (shown in the activity feed)";
+  document.getElementById("labEvSeverity").innerHTML = icon("sparkle", 13) + " Severity";
   document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Add event";
   document.getElementById("hLifestyle").innerHTML = icon("star", 18) + " Lifestyle rating settings";
-  document.getElementById("saveLifestyleBtn").innerHTML = icon("bank", 14) + " Save lifestyle settings";
+  document.getElementById("saveLifestyleBtn").innerHTML = icon("save", 14) + " Save lifestyle settings";
   document.getElementById("hThresholds").innerHTML = icon("star", 18) + " Lifestyle rating bands";
   document.getElementById("addThresholdBtn").innerHTML = icon("plus", 13) + " Add band";
-  document.getElementById("saveThresholdsBtn").innerHTML = icon("bank", 14) + " Save bands";
+  document.getElementById("saveThresholdsBtn").innerHTML = icon("save", 14) + " Save bands";
 }
 
 async function init() {
@@ -88,7 +88,7 @@ async function init() {
   if (!CLASS_CODE) { window.location.href = "teacher-home.html"; return; }
   const clsCheck = await getClassCached(CLASS_CODE);
   if (!clsCheck) { window.location.href = "teacher-home.html"; return; }
-  document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   paintChrome();
   enablePasswordToggles();
   // BUGFIX: get a server-trustworthy "now" before any of the day-gated
@@ -240,7 +240,7 @@ async function render() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${avatarBadge(s)}${escapeHtml(s.name)}<div class="muted-small">@${escapeHtml(s.username)}</div></td>
-      <td>${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `${icon("star", 11)} Task ✓` : `Task ✗`}</div>`; })() : ""}</td>
+      <td>${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `${icon("check", 11)} Task ✓` : `Task ✗`}</div>`; })() : ""}</td>
       <td><strong>${fmtMoney(s.balance)}</strong></td>
       <td>${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</td>
       <td>${fmtMoney(netByUser[s.username] || 0)}</td>
@@ -264,14 +264,14 @@ async function render() {
       ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${escapeHtml(o.label)} (${eventAmountText(o.amount, o.percent, ev.amountBase)})${o.outcome ? ` — ${escapeHtml(o.outcome)}` : ""}`).join(", ")}`
       : `&middot; ${eventAmountText(ev.amount, ev.amountMode === "percent" ? ev.amountPercent : 0, ev.amountBase)}`;
     row.innerHTML = `
-      <div class="auto-details">${icon("dice", 14)} <strong>${escapeHtml(ev.name)}</strong>
+      <div class="auto-details">${icon("sparkle", 14)} <strong>${escapeHtml(ev.name)}</strong>
         ${middle}
         &middot; ${ev.repeatable ? "Can repeat" : "Once per student"}
         &middot; <span class="badge ${ev.severity === 'bad' ? 'coral' : 'navy'}">${ev.severity === 'bad' ? 'Bad' : 'Neutral'}</span>
         ${ev.description ? `<div class="muted-small">${escapeHtml(ev.description)}</div>` : ""}
         ${ev.severity === 'bad' ? `<div class="muted-small">${icon("shield", 12)} ${weeklyEventInsuranceText(ev)}</div>` : ""}
       </div>
-      <button class="btn small secondary" onclick="startEditEvent('${ev.id}')">${icon("idcard", 13)} Edit</button>
+      <button class="btn small secondary" onclick="startEditEvent('${ev.id}')">${icon("edit", 13)} Edit</button>
       <button class="btn small coral" onclick="removeEvent('${ev.id}')">${icon("trash", 13)} Remove</button>
     `;
     evBox.appendChild(row);
@@ -315,7 +315,7 @@ async function render() {
         <div class="muted-small">${payoutSummary}</div>
         ${h.description ? `<div class="muted-small">${escapeHtml(h.description)}</div>` : ""}
       </div>
-      <button class="btn small secondary" onclick="startEditSideHustle('${h.id}')">${icon("idcard", 13)} Edit</button>
+      <button class="btn small secondary" onclick="startEditSideHustle('${h.id}')">${icon("edit", 13)} Edit</button>
       <button class="btn small coral" onclick="removeSideHustleClick('${h.id}')">${icon("trash", 13)} Remove</button>
     `;
     shBox.appendChild(row);
@@ -382,7 +382,7 @@ async function render() {
   txbody.innerHTML = "";
   const nameOf = u => nameCache[u] || u;
   const recentTxns = (cls.txns || []).filter(t => t.type !== "gambling").slice(0, MAX_STORED_TXNS);
-  document.getElementById("hActivity").innerHTML = icon("chart", 18) + ` Recent activity (last ${MAX_STORED_TXNS} transactions)`;
+  document.getElementById("hActivity").innerHTML = icon("history", 18) + ` Recent activity (last ${MAX_STORED_TXNS} transactions)`;
   // Coloured from the student's side (green = money in to them, red =
   // out of them). Money passed between two students is left plain.
   const BETWEEN_STUDENTS = ["transfer", "automation", "p2p-buy", "p2p-sell", "property-rent-pay", "property-rent-receive"];
@@ -773,7 +773,7 @@ function startEditEvent(id) {
     document.getElementById("evPercent").value = ev.amountMode === "percent" && ev.amountPercent ? ev.amountPercent : "";
     if (ev.amountBase) document.getElementById("evBase").value = ev.amountBase;
     toggleEventType();
-    document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Save changes";
+    document.getElementById("addEventBtn").innerHTML = icon("save", 15) + " Save changes";
     if (!document.getElementById("cancelEditEventBtn")) {
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";
@@ -891,7 +891,7 @@ function startEditSideHustle(id) {
     document.getElementById("shPayoutsArea").value = Object.keys(h.payouts || {})
       .map(Number).sort((a, b) => a - b)
       .map(hr => `${hourLabel(hr)} | ${h.payouts[hr]}`).join("\n");
-    document.getElementById("addSideHustleBtn").innerHTML = icon("plus", 15) + " Save changes";
+    document.getElementById("addSideHustleBtn").innerHTML = icon("save", 15) + " Save changes";
     if (!document.getElementById("cancelEditSideHustleBtn")) {
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";
@@ -1350,7 +1350,7 @@ async function renderProfile(username) {
   }
 
   if (s.dailyLimitMinutes > 0) {
-    rows.push(`<h4>${icon("calendar", 16)} Time on site</h4>`);
+    rows.push(`<h4>${icon("history", 16)} Time on site</h4>`);
     const tStatus = timeLimitStatus(s);
     const usedMin = Math.floor((tStatus.spentSec || 0) / 60);
     const totalMin = s.dailyLimitMinutes + (tStatus.extraMin || 0);
@@ -1561,7 +1561,7 @@ async function renderProfile(username) {
 
   // Read-only — goals are the student's own (see "Savings goals" in data-money.js).
   const goals = savingsGoalProgress(s);
-  rows.push(`<h4>${icon("trophy", 16)} Savings goals</h4>`);
+  rows.push(`<h4>${icon("target", 16)} Savings goals</h4>`);
   rows.push(goals.length
     ? goals.map(g => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(g.name)}</strong>${g.reached ? " — reached!" : ""}</div>
         <div class="auto-details">${fmtMoney(g.saved)} of ${fmtMoney(g.target)}</div></div>`).join("")

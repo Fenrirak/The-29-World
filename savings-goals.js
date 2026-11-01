@@ -24,7 +24,7 @@ function buildGoalsCard() {
     : `your <a href="bank.html">Savings account</a>`;
   card.innerHTML = `
     <div class="flex-between">
-      <h2 id="hGoals">${icon("trophy", 18)} My savings goals</h2>
+      <h2 id="hGoals">${icon("target", 18)} My savings goals</h2>
       <button class="btn small gold" type="button" id="addGoalBtn" onclick="toggleGoalForm(true)">Add a goal</button>
     </div>
     <p class="muted-small" style="margin-top:0;">Money in ${savingsRef} counts towards your goals — your top goal fills up first.</p>
@@ -62,7 +62,7 @@ function renderGoals(me) {
     <div class="goal-row${g.reached ? " reached" : ""}">
       <div class="goal-head">
         <strong class="goal-name">${escapeHtml(g.name)}</strong>
-        ${g.reached ? `<span class="badge mint">${icon("star", 12)} Reached!</span>` : ""}
+        ${g.reached ? `<span class="badge mint">${icon("target", 12)} Reached!</span>` : ""}
         <span class="goal-amounts">${fmtMoney(g.saved)} of ${fmtMoney(g.target)}</span>
       </div>
       <div class="rpt-bar-track goal-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${g.pct}" aria-label="${escapeHtml(g.name)}: ${g.pct}% saved">

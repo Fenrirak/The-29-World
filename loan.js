@@ -11,15 +11,15 @@ function paintChrome() {
   document.getElementById("labTierRate").innerHTML = icon("percent", 13) + " Interest rate (% per week, compounding)";
   document.getElementById("labMaxLoan").innerHTML = icon("handshake", 13) + " Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
   document.getElementById("labMaxLoanCount").innerHTML = icon("handshake", 13) + " Maximum number of loans a student can have open at once (0 = no limit)";
-  document.getElementById("saveMaxLoanBtn").innerHTML = icon("plus", 13) + " Save maximums";
+  document.getElementById("saveMaxLoanBtn").innerHTML = icon("save", 13) + " Save maximums";
   document.getElementById("hLoanLifestyle").innerHTML = icon("star", 18) + " Lifestyle rating penalty";
   document.getElementById("labLoanLifestyleEnabled").textContent = "Dock lifestyle points for outstanding loans";
   document.getElementById("labLoanLifestylePoints").innerHTML = icon("star", 13) + " Lifestyle points lost";
   document.getElementById("labLoanLifestylePerAmount").innerHTML = icon("coin", 13) + " Per this much owed";
-  document.getElementById("saveLoanLifestyleBtn").innerHTML = icon("plus", 13) + " Save penalty";
+  document.getElementById("saveLoanLifestyleBtn").innerHTML = icon("save", 13) + " Save penalty";
   document.getElementById("hTake").innerHTML = icon("handshake", 18) + " Take out a loan";
   document.getElementById("labLoanAmount").innerHTML = icon("coin", 13) + " How much do you want to borrow?";
-  document.getElementById("takeLoanBtn").innerHTML = icon("send", 15) + " Borrow";
+  document.getElementById("takeLoanBtn").innerHTML = icon("handshake", 15) + " Borrow";
   document.getElementById("hMyLoan").innerHTML = icon("handshake", 18) + " My loans";
   document.getElementById("hPastLoans").innerHTML = icon("handshake", 18) + " Loan history";
 }
@@ -29,7 +29,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -95,7 +95,7 @@ async function render() {
             <p>${termLabel(t.termWeeks)} term &middot; <strong>${t.rate}%</strong> interest per week (charged on take-out, then compounds every Monday until paid off)</p>
           </div>
           <div>
-            <button class="btn small secondary" onclick="editTier('${t.id}')">${icon("idcard", 13)} Edit</button>
+            <button class="btn small secondary" onclick="editTier('${t.id}')">${icon("edit", 13)} Edit</button>
             <button class="btn small coral" onclick="removeTier('${t.id}')">${icon("trash", 13)} Remove</button>
           </div>
         </div>
@@ -256,7 +256,7 @@ async function editTier(id) {
   document.getElementById("tierTerm").value = tier.termWeeks;
   document.getElementById("tierRate").value = tier.rate;
   document.getElementById("addTierBtn").dataset.editingId = id;
-  document.getElementById("addTierBtn").innerHTML = icon("plus", 15) + " Save changes";
+  document.getElementById("addTierBtn").innerHTML = icon("save", 15) + " Save changes";
   document.getElementById("addTierBtn").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 

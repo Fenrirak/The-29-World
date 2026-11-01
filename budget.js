@@ -3,12 +3,12 @@ let CURRENT, IS_TEACHER;
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("calendar", 26) + (IS_TEACHER ? " Budgeting" : " Budget");
-  document.getElementById("hBudget").innerHTML = icon("calendar", 18) + " Budget";
+  document.getElementById("hBudget").innerHTML = icon("wallet", 18) + " Budget";
   document.getElementById("hBudPlan").innerHTML = icon("piggy", 15) + " My plan";
-  document.getElementById("hBudTrack").innerHTML = icon("chart", 15) + " How this week is going";
+  document.getElementById("hBudTrack").innerHTML = icon("wallet", 15) + " How this week is going";
   document.getElementById("hBudDays").innerHTML = icon("calendar", 15) + " Day by day";
   document.getElementById("labBudSave").innerHTML = icon("piggy", 13) + " How much will I save each week?";
-  document.getElementById("hBudgetTeacher").innerHTML = icon("chart", 18) + " Students' budgets this week";
+  document.getElementById("hBudgetTeacher").innerHTML = icon("wallet", 18) + " Students' budgets this week";
 }
 
 async function init() {
@@ -16,7 +16,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   paintChrome();
@@ -224,7 +224,7 @@ function renderBudgetStudent(me, cls) {
     if (v.plan.hasPlan && v.spendLeft < v.safeNow - 0.005) safeWhy += v.spendLeft > 0.005 ? ` Your plan only has ${fmtMoney(v.spendLeft)} of spending money left.` : " You've already used all of your plan's spending money.";
   }
   document.getElementById("budSafe").innerHTML = `
-    <div class="bud-safe-label">${icon("shield", 14)} Safe to spend right now</div>
+    <div class="bud-safe-label">${icon("wallet", 14)} Safe to spend right now</div>
     <div class="bud-safe-value">${fmtMoney(v.safeNow)}</div>
     <div class="bud-safe-why">${budEsc(safeWhy)}</div>
     <div class="bud-safe-have"><span>Cash <strong>${fmtSigned(v.cash)}</strong></span><span>Savings <strong>${fmtMoney(v.savings)}</strong></span><span>Still coming in <strong>+${fmtMoney(v.restIn)}</strong></span><span>Bills to pay <strong>−${fmtMoney(v.restBills)}</strong></span></div>`;

@@ -148,7 +148,7 @@ service cloud.firestore {
         && username != myUsername()
         && delta > 0
         && myPaid >= delta
-        && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems'])
+        && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems', 'storePaid'])
         && (
           !after.diff(before).affectedKeys().hasAny(['storeItems']) ||
           after.storeItems.size() == before.get('storeItems', []).size() - 1
@@ -171,7 +171,7 @@ service cloud.firestore {
         && cardUp >= 0
         && paid > 0
         && myGain <= paid
-        && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems', 'creditCard'])
+        && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems', 'storePaid', 'creditCard'])
         && (
           !after.diff(before).affectedKeys().hasAny(['creditCard']) ||
           (before.get('creditCard', null) != null && after.get('creditCard', null) != null
@@ -358,7 +358,8 @@ service cloud.firestore {
         'balance', 'savings', 'lastInterestApplied',
         'lastWagePaid', 'lastLifeAllowanceWeeklyPaid', 'lastLifeAllowanceDailyPaid',
         'loans', 'quizResults', 'gamblingAccount', 'creditCard',
-        'storeItems', 'insurance', 'sideHustle', 'termDeposits', 'truckLicence',
+        // storePaid: what each owned store unit cost, so a sell-back can't refund more than was paid.
+        'storeItems', 'storePaid', 'insurance', 'sideHustle', 'termDeposits', 'truckLicence',
         // lifeVoucherUsed: which weekly life-item vouchers this student has used this week.
         'lifeVoucherUsed',
         // Economy-adjacent state each feature's own self-service flow owns.

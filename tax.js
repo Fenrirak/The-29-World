@@ -68,7 +68,7 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("percent", 26) + " Tax";
   document.getElementById("hRates").innerHTML = icon("percent", 18) + " Tax rates";
-  document.getElementById("saveBtn").innerHTML = icon("bank", 15) + " Save tax rates";
+  document.getElementById("saveBtn").innerHTML = icon("save", 15) + " Save tax rates";
   document.getElementById("hWageBrackets").innerHTML = icon("percent", 18) + " Wage tax brackets";
 }
 
@@ -82,7 +82,7 @@ async function init() {
   // interest tax on Bank, winnings tax on Gambling). This page is where the
   // teacher sets the rates.
   if (!IS_TEACHER) { location.replace("student.html"); return; }
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);

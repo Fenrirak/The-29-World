@@ -70,11 +70,11 @@ function updateCoverBox(cover, incident) {
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("star", 26) + " Big Events";
+  document.getElementById("pageTitle").innerHTML = icon("bolt", 26) + " Big Events";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a big event";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add event";
-  document.getElementById("runBigEventsBtn").innerHTML = icon("repeat", 14) + " Run this week's big events now";
-  document.getElementById("hHistory").innerHTML = icon("star", 18) + " My big event history";
+  document.getElementById("runBigEventsBtn").innerHTML = icon("bolt", 14) + " Run this week's big events now";
+  document.getElementById("hHistory").innerHTML = icon("bolt", 18) + " My big event history";
 }
 
 async function init() {
@@ -82,7 +82,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   if (IS_TEACHER) updateCostLabel();
@@ -154,7 +154,7 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${icon("star", 20)}${escapeHtml(d.name)} <span class="badge navy">${MODULE_LABEL[d.module]}</span> <span class="badge ${isGood ? "gold" : "coral"}">${isGood ? "Good" : "Bad"}</span></h4>
+            <h4>${icon("bolt", 20)}${escapeHtml(d.name)} <span class="badge navy">${MODULE_LABEL[d.module]}</span> <span class="badge ${isGood ? "gold" : "coral"}">${isGood ? "Good" : "Bad"}</span></h4>
             <p>${escapeHtml(d.description) || "No description provided."}</p>
             <p>${d.costMode === "percent"
               ? `<strong>${isGood ? "+" : ""}${Number(d.costPercent)}%</strong> of ${PERCENT_BASE_TEXT[d.module] || "the item's present cost"}, ${isGood ? "paid to the student" : "to pay"}`
@@ -164,7 +164,7 @@ async function render() {
             ${isGood && isGeneral ? `<p class="muted-small">Open to everyone — not tied to any job, property, or vehicle.</p>` : ""}
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn small secondary" onclick="startEditEvent('${d.id}')">${icon("idcard", 13)} Edit</button>
+            <button class="btn small secondary" onclick="startEditEvent('${d.id}')">${icon("edit", 13)} Edit</button>
             <button class="btn small coral" onclick="deleteEvent('${d.id}')">${icon("trash", 13)} Remove</button>
           </div>
         </div>
@@ -260,7 +260,7 @@ function startEditEvent(id) {
     document.getElementById("beTakesAsset").checked = d.takesAsset !== false;
     updateCostLabel();
     updateCoverBox(d.insuranceCover || [], d.incident || null);
-    document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
+    document.getElementById("addBtn").innerHTML = icon("save", 15) + " Save changes";
     if (!document.getElementById("cancelEditBtn")) {
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";

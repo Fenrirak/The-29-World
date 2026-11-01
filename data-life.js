@@ -1819,6 +1819,46 @@ async function setStoreSortMode(classCode, mode) {
   if (!allowed.includes(mode)) throw new Error("Unknown sort mode");
   await classesCol().doc(classCode).update({ storeSortMode: mode });
 }
+/* ===================== What each store unit cost (caps sell-back refunds) =====================
+   Selling back used to refund a flat 80% of the LIST price, so anything bought for less than
+   that (a voucher, a life voucher, a card discount) could be sold straight back at a profit.
+   user.storePaid[itemId] now holds what each owned unit actually cost, lowest first, and a
+   student's own sell-back refunds the lower of 80% of list and what that unit cost.
+   Units with no record (gifts from the teacher, items bought before this existed) keep the
+   plain 80%-of-list refund. A unit that changes hands on the Trade Centre carries its cost
+   with it, so trading it can't be used to wash the discount away. */
+function storePaidList(user, itemId) {
+  const owned = (user.storeItems || []).filter(id => id === itemId).length;
+  const raw = (user.storePaid && user.storePaid[itemId]) || [];
+  // Units that left some other way (a teacher took one) leave stale records: keep the cheapest.
+  return raw.map(Number).filter(n => isFinite(n) && n >= 0).sort((a, b) => a - b).slice(0, owned);
+}
+function storePaidSet(user, itemId, list) {
+  user.storePaid = Object.assign({}, user.storePaid || {});
+  if (list.length) user.storePaid[itemId] = list; else delete user.storePaid[itemId];
+}
+// Call AFTER the units were pushed onto user.storeItems. Returns true if user.storePaid changed.
+function storePaidAdd(user, itemId, perUnit, qty) {
+  const cost = Math.round(Number(perUnit) * 100) / 100;
+  if (user.role === "teacher" || !isFinite(cost) || cost < 0) return false;
+  const list = storePaidList(user, itemId);
+  for (let i = 0; i < qty; i++) list.push(cost);
+  storePaidSet(user, itemId, list.sort((a, b) => a - b));
+  return true;
+}
+// What the next unit of this item would refund if the student sold it back now.
+function storeNextRefund(user, item) {
+  const flat = Math.round(Number(item.price) * 0.8 * 100) / 100;
+  const list = storePaidList(user, item.id);
+  return list.length ? Math.min(flat, list[0]) : flat;
+}
+// Button/confirm wording: "80%" normally, the dollar amount when what they paid is lower.
+function storeRefundLabel(user, item) {
+  const flat = Math.round(Number(item.price) * 0.8 * 100) / 100;
+  const now = storeNextRefund(user, item);
+  return now < flat ? fmtMoney(now) : "80%";
+}
+
 // opts = { useCard, voucherId } — pay with the credit card and/or use a card voucher.
 async function buyStoreItem(username, classCode, itemId, qty, opts) {
   opts = opts || {};
@@ -1857,10 +1897,12 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
       item.sold = (item.sold || 0) + qty;
       user.storeItems = user.storeItems || [];
       for (let i = 0; i < qty; i++) user.storeItems.push(itemId);
+      const paidTouched = storePaidAdd(user, itemId, total / qty, qty);
       if (!isTeacher) {
         const patch = { balance: Math.round((user.balance - payRes.cash) * 100) / 100, storeItems: user.storeItems };
         if (payRes.card > 0 || pr.voucher) patch.creditCard = user.creditCard;
         if (pr.lifeVoucher) patch.lifeVoucherUsed = user.lifeVoucherUsed;
+        if (paidTouched) patch.storePaid = user.storePaid;
         t.update(userRef, patch);
       }
       else t.update(userRef, { storeItems: user.storeItems });
@@ -1927,16 +1969,20 @@ async function buyStoreCart(username, classCode, lines, opts) {
       if (pr.voucher) { cardConsumeVoucher(user.creditCard, pr.voucher); voucherNote = ` (${pr.voucher.label} voucher saved ${fmtMoney(pr.voucher.saves)})`; }
       if (pr.lifeVoucher) voucherNote += ` (${pr.lifeVoucher.pct}% life voucher: ${pr.lifeVoucher.name})`;
       user.storeItems = user.storeItems || [];
+      let paidTouched = false;
+      const costShare = base > 0 ? total / base : 1; // the fraction of list price this checkout actually charged
       picked.forEach(({ item, qty }) => {
         if (item.stock !== null) item.stock -= qty;
         item.sold = (item.sold || 0) + qty;
         for (let i = 0; i < qty; i++) user.storeItems.push(item.id);
+        if (storePaidAdd(user, item.id, Number(item.price) * costShare, qty)) paidTouched = true;
       });
       paid = total;
       if (!isTeacher) {
         const patch = { balance: Math.round((user.balance - payRes.cash) * 100) / 100, storeItems: user.storeItems };
         if (payRes.card > 0 || pr.voucher) patch.creditCard = user.creditCard;
         if (pr.lifeVoucher) patch.lifeVoucherUsed = user.lifeVoucherUsed;
+        if (paidTouched) patch.storePaid = user.storePaid;
         t.update(userRef, patch);
       } else t.update(userRef, { storeItems: user.storeItems });
       t.update(classRef, { storeItems: cls.storeItems });
@@ -1954,7 +2000,8 @@ async function buyStoreCart(username, classCode, lines, opts) {
   return { ok: true, qty: totalQty, total: paid };
 }
 
-// Sell back one unit of an owned store item for 80% of its base price.
+// Sell back one unit of an owned store item: 80% of its base price, but never more than the
+// student paid for that unit (see storePaidList). A teacher-chosen `rate` skips that cap.
 // Removes it from the student's owned items (which also reduces their
 // lifestyle rating automatically, since that's computed live from
 // user.storeItems) and restocks it if the item has limited stock.
@@ -1992,7 +2039,7 @@ async function giveFreeStoreItem(classCode, username, itemId) {
 async function sellStoreItem(username, classCode, itemId, rate) {
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let itemName = "", payout = 0, effectiveRate = 0;
+  let itemName = "", payout = 0, effectiveRate = 0, capped = false;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -2005,22 +2052,35 @@ async function sellStoreItem(username, classCode, itemId, rate) {
       user.storeItems = user.storeItems || [];
       const idx = user.storeItems.indexOf(itemId);
       if (idx === -1) throw new Error("NOT_OWNED");
+      const basis = storePaidList(user, itemId); // before the splice, while the unit still counts as owned
       user.storeItems.splice(idx, 1);
       itemName = item.name;
       effectiveRate = rate !== undefined ? rate : 0.8;
       payout = Math.round(item.price * effectiveRate * 100) / 100;
+      capped = false; // reset every attempt — this callback can be retried
+      let paidChanged = false;
+      if (basis.length) {
+        if (rate === undefined) { // the student's own sell-back: never more than they paid for this unit
+          const cost = basis.shift();
+          if (cost < payout) { payout = cost; capped = true; }
+        } else basis.pop(); // a teacher took it back at a rate they chose: no cap, the cheapest records stay
+        storePaidSet(user, itemId, basis);
+        paidChanged = true;
+      }
       if (item.stock !== null) item.stock += 1;
       item.sold = Math.max(0, (item.sold || 0) - 1);
       const isTeacher = user.role === "teacher";
-      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + payout) * 100) / 100, storeItems: user.storeItems });
-      else t.update(userRef, { storeItems: user.storeItems });
+      const sellPatch = { storeItems: user.storeItems };
+      if (paidChanged) sellPatch.storePaid = user.storePaid;
+      if (!isTeacher) sellPatch.balance = Math.round((user.balance + payout) * 100) / 100;
+      t.update(userRef, sellPatch);
       t.update(classRef, { storeItems: cls.storeItems });
     });
   } catch (e) {
     if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that item." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "store-sell", to: username, amount: payout, note: `Sold back to store: ${itemName} (${Math.round(effectiveRate * 100)}% refund)` });
+  await logTxn(classCode, { type: "store-sell", to: username, amount: payout, note: `Sold back to store: ${itemName} (${capped ? "refund capped at what you paid" : Math.round(effectiveRate * 100) + "% refund"})` });
   return { ok: true, payout };
 }
 
@@ -2049,16 +2109,25 @@ async function sellStoreItemBulk(username, classCode, itemId, qty, rate) {
       itemName = item.name;
       effectiveRate = rate !== undefined ? rate : 0.8;
       const perUnitPayout = Math.round(item.price * effectiveRate * 100) / 100;
+      const basis = storePaidList(user, itemId); // same cost records as sellStoreItem
+      const hadPaid = basis.length > 0;
+      let sum = 0;
       for (let i = 0; i < removedCount; i++) {
         const idx = user.storeItems.indexOf(itemId);
         user.storeItems.splice(idx, 1);
         if (item.stock !== null) item.stock += 1;
         item.sold = Math.max(0, (item.sold || 0) - 1);
+        let unit = perUnitPayout;
+        if (basis.length) { if (rate === undefined) unit = Math.min(unit, basis.shift()); else basis.pop(); }
+        sum += unit;
       }
-      totalPayout = Math.round(perUnitPayout * removedCount * 100) / 100;
+      if (hadPaid) storePaidSet(user, itemId, basis);
+      totalPayout = Math.round(sum * 100) / 100;
       const isTeacher = user.role === "teacher";
-      if (!isTeacher) t.update(userRef, { balance: Math.round((user.balance + totalPayout) * 100) / 100, storeItems: user.storeItems });
-      else t.update(userRef, { storeItems: user.storeItems });
+      const sellPatch = { storeItems: user.storeItems };
+      if (hadPaid) sellPatch.storePaid = user.storePaid;
+      if (!isTeacher) sellPatch.balance = Math.round((user.balance + totalPayout) * 100) / 100;
+      t.update(userRef, sellPatch);
       t.update(classRef, { storeItems: cls.storeItems });
     });
   } catch (e) {
@@ -2196,7 +2265,7 @@ function priceWithLifeDiscount(user, category, baseAmount) {
   const vs = base > 0 ? lifeUsableVouchers(user, category) : [];
   if (!vs.length) return `<strong>${fmtMoney(base)}</strong>`;
   const best = Math.max.apply(null, vs.map(v => v.pct));
-  return `<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;"><strong>${fmtMoney(base)}</strong><span class="badge lilac">${icon("trophy", 11)}${best}% voucher ready</span></span>`;
+  return `<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;"><strong>${fmtMoney(base)}</strong><span class="badge lilac">${icon("ticket", 11)}${best}% voucher ready</span></span>`;
 }
 async function addLifeItem(classCode, item) {
   const classRef = classesCol().doc(classCode);

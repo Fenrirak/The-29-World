@@ -412,7 +412,7 @@ async function t29NotifyPropertyRun(classCode, m) {
   const moved = m.props.filter(p => p.prev > 0 && p.price !== p.prev);
   if (!moved.length) return;
   const pct = p => ((p.price - p.prev) / p.prev) * 100;
-  const fmtPct = p => `${p.price > p.prev ? "▲" : "▼"}${Math.abs(pct(p)).toFixed(1)}%`;
+  const fmtPct = p => `${p.price > p.prev ? "+" : "-"}${Math.abs(pct(p)).toFixed(1)}%`;
   const notices = [];
   m.students.forEach(u => {
     const mine = moved.filter(p => p.owner === u);

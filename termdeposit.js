@@ -6,7 +6,7 @@ function paintChrome() {
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a term deposit plan";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add plan";
   document.getElementById("hMine").innerHTML = icon("vault", 18) + " My term deposits";
-  document.getElementById("hEdit").innerHTML = icon("vault", 18) + " Edit term deposit plan";
+  document.getElementById("hEdit").innerHTML = icon("edit", 18) + " Edit term deposit plan";
 }
 
 async function init() {
@@ -14,7 +14,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -81,7 +81,7 @@ async function render() {
         <div>
           ${IS_TEACHER
             ? `<div class="row-flex" style="gap:8px;">
-                 <button class="btn small" onclick="openEditPlan('${p.id}')">${icon("vault", 13)} Edit</button>
+                 <button class="btn small" onclick="openEditPlan('${p.id}')">${icon("edit", 13)} Edit</button>
                  <button class="btn small coral" onclick="deletePlan('${p.id}')">${icon("trash", 13)} Remove</button>
                </div>`
             : `<div class="row-flex" style="gap:8px;">

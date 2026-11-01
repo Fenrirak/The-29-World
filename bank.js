@@ -12,12 +12,12 @@ function paintChrome() {
   document.getElementById("iconBalance").innerHTML = icon("piggy", 30);
   document.getElementById("iconAuto").innerHTML = icon("repeat", 30);
   document.getElementById("hSend").innerHTML = icon("send", 18) + " Send money";
-  document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Set up an automatic payment";
+  document.getElementById("hNewAuto").innerHTML = icon("repeat", 18) + " Set up an automatic payment";
   document.getElementById("hAutoList").innerHTML = icon("repeat", 18) + " My automatic payments";
   document.getElementById("hActivity").innerHTML = icon("bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 3 days)");
-  document.getElementById("labTo").innerHTML = icon("users", 13) + " Send to";
+  document.getElementById("labTo").innerHTML = icon("user", 13) + " Send to";
   document.getElementById("labAmount").innerHTML = icon("coin", 13) + (IS_TEACHER ? " Amount (negative to deduct from a student)" : " Amount");
-  document.getElementById("labNote").innerHTML = icon("star", 13) + " What's it for?";
+  document.getElementById("labNote").innerHTML = icon("note", 13) + " What's it for?";
   document.getElementById("sendBtn").innerHTML = icon("send", 15) + " Send";
   if (IS_TEACHER) {
     const amtInput = document.getElementById("amount");
@@ -27,21 +27,21 @@ function paintChrome() {
   document.getElementById("labAutoDay").innerHTML = icon("calendar", 13) + " Day of the week";
   document.getElementById("labAutoFreq").innerHTML = icon("repeat", 13) + " How often";
   document.getElementById("labAutoAmount").innerHTML = icon("coin", 13) + " Amount";
-  document.getElementById("labAutoTo").innerHTML = icon("users", 13) + " Pay to";
-  document.getElementById("labAutoNote").innerHTML = icon("star", 13) + " Reference / what's it for?";
+  document.getElementById("labAutoTo").innerHTML = icon("user", 13) + " Pay to";
+  document.getElementById("labAutoNote").innerHTML = icon("note", 13) + " Reference / what's it for?";
   document.getElementById("addAutoBtn").innerHTML = icon("plus", 15) + " Create automatic payment";
   document.getElementById("hSavings").innerHTML = icon("piggy", 18) + " Savings account";
   document.getElementById("iconSavings").innerHTML = icon("piggy", 26);
   document.getElementById("iconSavingsRate").innerHTML = icon("percent", 26);
   document.getElementById("labDeposit").innerHTML = icon("piggy", 13) + " Deposit into savings";
-  document.getElementById("labWithdraw").innerHTML = icon("send", 13) + " Withdraw back to cash";
+  document.getElementById("labWithdraw").innerHTML = icon("download", 13) + " Withdraw back to cash";
   document.getElementById("depositBtn").innerHTML = icon("plus", 15) + " Deposit";
-  document.getElementById("withdrawBtn").innerHTML = icon("send", 15) + " Withdraw";
+  document.getElementById("withdrawBtn").innerHTML = icon("download", 15) + " Withdraw";
   document.getElementById("labSavAutoDirection").innerHTML = icon("repeat", 13) + " Direction";
   document.getElementById("labSavAutoDay").innerHTML = icon("calendar", 13) + " Day of the week";
   document.getElementById("labSavAutoFreq").innerHTML = icon("repeat", 13) + " How often";
   document.getElementById("labSavAutoAmount").innerHTML = icon("coin", 13) + " Amount";
-  document.getElementById("labSavAutoNote").innerHTML = icon("star", 13) + " Note (optional)";
+  document.getElementById("labSavAutoNote").innerHTML = icon("note", 13) + " Note (optional)";
   document.getElementById("addSavAutoBtn").innerHTML = icon("plus", 15) + " Create automatic transfer";
 }
 
@@ -50,7 +50,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   paintChrome();
@@ -454,7 +454,7 @@ function startEditAuto(a) {
   document.getElementById("autoNote").value = a.note || "";
   { const c = document.getElementById("autoUseCard"); if (c) c.checked = !!a.useCard; }
   autoSyncCardRow();
-  document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Edit automatic payment";
+  document.getElementById("hNewAuto").innerHTML = icon("edit", 18) + " Edit automatic payment";
   document.getElementById("addAutoBtn").innerHTML = "Save changes";
   document.getElementById("cancelAutoEditBtn").classList.remove("hidden");
   document.getElementById("autoMsg").innerHTML = "";
@@ -468,7 +468,7 @@ function cancelEditAuto() {
   document.getElementById("autoTo").value = "";
   { const c = document.getElementById("autoUseCard"); if (c) c.checked = false; }
   autoSyncCardRow();
-  document.getElementById("hNewAuto").innerHTML = icon("calendar", 18) + " Set up an automatic payment";
+  document.getElementById("hNewAuto").innerHTML = icon("repeat", 18) + " Set up an automatic payment";
   document.getElementById("addAutoBtn").innerHTML = icon("plus", 15) + " Create automatic payment";
   document.getElementById("cancelAutoEditBtn").classList.add("hidden");
 }

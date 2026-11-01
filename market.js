@@ -42,8 +42,8 @@ function paintChrome() {
   document.getElementById("hVolatility").innerHTML = icon("chart", 18) + " Daily price movement";
   document.getElementById("labRangeMin").innerHTML = icon("chart", 13) + " Minimum % change";
   document.getElementById("labRangeMax").innerHTML = icon("chart", 13) + " Maximum % change";
-  document.getElementById("saveRangeBtn").innerHTML = icon("bank", 14) + " Save range";
-  document.getElementById("simDayBtn").innerHTML = icon("repeat", 15) + " Simulate a market day";
+  document.getElementById("saveRangeBtn").innerHTML = icon("save", 14) + " Save range";
+  document.getElementById("simDayBtn").innerHTML = icon("chart", 15) + " Simulate a market day";
 }
 
 async function init() {
@@ -53,7 +53,7 @@ async function init() {
     CURRENT = u;
     CLASS_CODE = u.classCode;
     IS_TEACHER = u.role === "teacher";
-    document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+    document.getElementById("whoami").textContent = t29DisplayName(u);
     document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
     document.getElementById("navHomeLabel").textContent = "Dashboard";
     document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -181,9 +181,14 @@ async function render() {
     const totalHeld = Object.values(co.holders).reduce((a, b) => a + b, 0);
     const pctSold = Math.round((totalHeld / co.totalShares) * 100);
     const myShares = co.holders[CURRENT.username] || 0;
-    const first = co.history[0], last = co.history[co.history.length - 1];
-    const change = last - first;
-    const changeNum = first ? (change / first) * 100 : 0;
+    // "Today" is the last two points in the history — NOT oldest vs newest of the whole
+    // 30-day window, which blurred a month of moves into one number that was labelled "today"
+    // (and often looked like nothing had moved). Same rule the Property page uses.
+    const hist = co.history && co.history.length ? co.history : [co.price];
+    const last = hist[hist.length - 1];
+    const prev = hist.length > 1 ? hist[hist.length - 2] : last;
+    const change = last - prev;
+    const changeNum = prev ? (change / prev) * 100 : 0;
     const changePct = (Math.round(changeNum * 10) === 0 ? 0 : changeNum).toFixed(1);
 
     const div = document.createElement("div");
@@ -192,7 +197,7 @@ async function render() {
       <div class="flex-between">
         <div>
           <h4>${icon("building", 20)}${escapeHtml(co.name)}</h4>
-          <div class="${change > 0 ? 'ticker-up' : change < 0 ? 'ticker-down' : ''}">${fmtMoney(co.price)} <span class="muted-small">(${change > 0 ? '+' : ''}${changePct}% today)</span></div>
+          <div class="${change > 0 ? 'ticker-up' : change < 0 ? 'ticker-down' : ''}">${fmtMoney(co.price)} ${hist.length > 1 ? `<span class="muted-small">(${change > 0 ? '+' : ''}${changePct}% today)</span>` : ""}</div>
         </div>
         ${sparkline(co.history)}
       </div>
@@ -205,7 +210,7 @@ async function render() {
             <label>Set new price</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="0.01" step="0.01" id="price-${co.id}" value="${co.price}">
-              <button class="btn small" onclick="setPrice('${co.id}')">${icon("chart",13)} Update</button>
+              <button class="btn small" onclick="setPrice('${co.id}')">${icon("save",13)} Update</button>
             </div>
           </div>
           <div style="text-align:right;">
@@ -223,7 +228,7 @@ async function render() {
             <input type="number" min="0" step="0.5" id="rmax-${co.id}" value="${(co.priceRange || cls.priceRange || {max:5}).max}">
           </div>
           <div style="display:flex;align-items:flex-end;">
-            <button class="btn small secondary" style="width:100%;" onclick="setCoRange('${co.id}')">${icon("chart",13)} Save range</button>
+            <button class="btn small secondary" style="width:100%;" onclick="setCoRange('${co.id}')">${icon("save",13)} Save range</button>
           </div>
         </div>
       ` : `

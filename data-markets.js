@@ -247,7 +247,7 @@ async function t29NotifyMarketRun(classCode, m) {
   const cos = m.cos.filter(c => c.prev > 0 && c.price !== c.prev);
   if (!cos.length) return;
   const pct = c => ((c.price - c.prev) / c.prev) * 100;
-  const fmtPct = c => `${c.price > c.prev ? "▲" : "▼"}${Math.abs(pct(c)).toFixed(1)}%`;
+  const fmtPct = c => `${c.price > c.prev ? "+" : "-"}${Math.abs(pct(c)).toFixed(1)}%`;
   const notices = [];
   m.students.forEach(u => {
     const mine = cos.filter(c => (c.holders[u] || 0) > 0);
@@ -535,7 +535,7 @@ async function saveMarketplaceSettings(classCode, settings) {
   if ((oldM.maxPricePct || 0) !== clean.maxPricePct) parts.push(`highest price ${oldM.maxPricePct ? oldM.maxPricePct + "%" : "no limit"} → ${clean.maxPricePct ? clean.maxPricePct + "%" : "no limit"} of value`);
   if ((oldM.maxActiveListings || 0) !== clean.maxActiveListings) parts.push(`active listings allowed ${oldM.maxActiveListings || "no limit"} → ${clean.maxActiveListings || "no limit"}`);
   if ((oldM.feePct || 0) !== clean.feePct) parts.push(`selling fee ${oldM.feePct || 0}% → ${clean.feePct}%`);
-  if (parts.length) await t29NotifyStudents(classCode, { to: "all", icon: "users", tone: "gold", title: "Your teacher changed the Trade Centre rules", body: parts.join("; ") + ".", href: "marketplace.html" });
+  if (parts.length) await t29NotifyStudents(classCode, { to: "all", icon: "swap", tone: "gold", title: "Your teacher changed the Trade Centre rules", body: parts.join("; ") + ".", href: "marketplace.html" });
   return clean;
 }
 
@@ -860,12 +860,27 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
       // teacher-run store would refuse a buyer (no truck licence, already
       // owns this vehicle) is refused here too — a peer sale is a
       // different price, not a loophole around the class's own rules.
+      let storePaidMoved = false;
       if (listing.assetType === "store") {
         seller.storeItems = seller.storeItems || [];
         const idx = seller.storeItems.indexOf(listing.assetId);
         if (idx === -1) throw new Error("GONE");
+        const carried = storePaidList(seller, listing.assetId); // before the splice, while the unit still counts as owned
         seller.storeItems.splice(idx, 1);
         buyer.storeItems = (buyer.storeItems || []).concat([listing.assetId]);
+        // What the unit cost at the store goes with it (the dearest record, so the seller keeps
+        // the cheapest), otherwise a discounted unit could be washed through a friend and sold
+        // back to the store at full refund.
+        if (carried.length) {
+          const cost = carried.pop();
+          storePaidSet(seller, listing.assetId, carried);
+          if (buyer.role !== "teacher") {
+            const theirs = storePaidList(buyer, listing.assetId);
+            theirs.push(cost);
+            storePaidSet(buyer, listing.assetId, theirs.sort((x, y) => x - y));
+          }
+          storePaidMoved = true;
+        }
       } else if (listing.assetType === "vehicle") {
         const veh = cls.vehicles.find(v => v.id === listing.assetId);
         if (!veh) throw new Error("GONE");
@@ -941,10 +956,12 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
         if (buyPay.card > 0) buyerUpdate.creditCard = buyer.creditCard;
       }
       if (listing.assetType === "store") buyerUpdate.storeItems = buyer.storeItems;
+      if (storePaidMoved && buyer.storePaid) buyerUpdate.storePaid = buyer.storePaid;
       t.update(buyerRef, buyerUpdate);
 
       const sellerUpdate = { balance: Math.round((seller.balance + proceeds) * 100) / 100 };
       if (listing.assetType === "store") sellerUpdate.storeItems = seller.storeItems;
+      if (storePaidMoved) sellerUpdate.storePaid = seller.storePaid;
       t.update(sellerRef, sellerUpdate);
 
       t.update(classRef, {

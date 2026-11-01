@@ -20,7 +20,7 @@ const ASSET_ICON = { store: "cart", vehicle: "car", property: "house" };
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("users", 26) + " Trade Centre";
+  document.getElementById("pageTitle").innerHTML = icon("swap", 26) + " Trade Centre";
 }
 
 async function init() {
@@ -28,7 +28,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -37,7 +37,7 @@ async function init() {
   if (!IS_TEACHER) {
     document.getElementById("iconListings").innerHTML = icon("cart", 30);
     document.getElementById("iconEarned").innerHTML = icon("coin", 30);
-    document.getElementById("iconForSale").innerHTML = icon("users", 30);
+    document.getElementById("iconForSale").innerHTML = icon("swap", 30);
   }
 
   const T29_STARTUP_JOBS = Promise.all([
@@ -117,7 +117,7 @@ function renderTeacher() {
         <div class="mkt-sell-name">${icon(ASSET_ICON[l.assetType] || "cart", 15)} ${esc(l.name)}${listingQuantity(l) > 1 ? ` <span class="badge navy">×${listingQuantity(l)}</span>` : ""}</div>
         <div class="muted-small">Listed by ${esc(nameOf(l.seller))} at <strong>${fmtMoney(l.price)}</strong>${listingQuantity(l) > 1 ? " each" : ""} — originally ${fmtMoney(l.refPrice)}${l.description ? ` · "${esc(l.description)}"` : ""}</div>
       </div>
-      <button class="btn small mint" onclick="approve('${l.id}', true)">${icon("plus", 13)} Approve</button>
+      <button class="btn small mint" onclick="approve('${l.id}', true)">${icon("check", 13)} Approve</button>
       <button class="btn small coral" onclick="approve('${l.id}', false)">Reject</button>
     </div>`).join("");
 
@@ -293,7 +293,7 @@ function listingCardHtml(l, opts) {
     if (CLS.marketplace.allowOffers) {
       actions += myOffer
         ? `<button class="btn small secondary" onclick="withdraw('${l.id}','${myOffer.id}')">Withdraw my ${fmtMoney(myOffer.amount)} offer</button>`
-        : `<button class="btn small secondary" onclick="toggleOffer('${l.id}')">${icon("handshake", 13)} Make an offer</button>`;
+        : `<button class="btn small secondary" onclick="toggleOffer('${l.id}')">${icon("swap", 13)} Make an offer</button>`;
     }
   }
 
@@ -332,7 +332,7 @@ function listingCardHtml(l, opts) {
       </div>
       <div class="mkt-seller">
         ${mine ? `<span class="mkt-status ${l.status}">${l.status === "pending" ? "Awaiting approval" : "Live"}</span>${qty > 1 ? ` <span class="muted-small">· ${qty} left</span>` : ""}`
-               : `${icon("users", 13)} ${esc(nameOf(l.seller))}`}
+               : `${icon("swap", 13)} ${esc(nameOf(l.seller))}`}
         ${!mine && qty > 1 ? `<span class="muted-small">· ${qty} available</span>` : ""}
         ${!mine && openOffers.length ? `<span class="muted-small">· ${openOffers.length} offer${openOffers.length === 1 ? "" : "s"} in</span>` : ""}
         ${teacher ? `<span class="muted-small">· ${esc(nameOf(l.seller))}</span>` : ""}

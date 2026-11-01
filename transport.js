@@ -19,9 +19,9 @@ function paintChrome() {
   document.getElementById("hLicenceSettings").innerHTML = icon("car", 18) + " Truck licence";
   document.getElementById("hLicenceBuy").innerHTML = icon("car", 18) + " Truck licence";
   document.getElementById("hSellBack").innerHTML = icon("car", 18) + " Sell-back rates";
-  document.getElementById("hTransportSettings").innerHTML = icon("repeat", 18) + " Weekly transport expenses";
-  document.getElementById("hTransportExpenses").innerHTML = icon("repeat", 18) + " Weekly transport expenses";
-  document.getElementById("hLifeFeeOverrides").innerHTML = icon("trophy", 18) + " Public transport fee by life event";
+  document.getElementById("hTransportSettings").innerHTML = icon("car", 18) + " Weekly transport expenses";
+  document.getElementById("hTransportExpenses").innerHTML = icon("car", 18) + " Weekly transport expenses";
+  document.getElementById("hLifeFeeOverrides").innerHTML = icon("car", 18) + " Public transport fee by life event";
   document.getElementById("labStock").textContent = "Stock limit (leave blank for unlimited)";
 }
 
@@ -30,7 +30,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -213,7 +213,7 @@ async function render() {
         </div>
         <div class="row-flex" style="gap:8px;">
           ${IS_TEACHER
-            ? `<button class="btn small secondary" onclick="editVeh('${v.id}')">${icon("plus", 13)} Edit</button><button class="btn small coral" onclick="deleteVeh('${v.id}')">${icon("trash", 13)} Remove</button>`
+            ? `<button class="btn small secondary" onclick="editVeh('${v.id}')">${icon("edit", 13)} Edit</button><button class="btn small coral" onclick="deleteVeh('${v.id}')">${icon("trash", 13)} Remove</button>`
             : isMine
               ? `<button class="btn small secondary" onclick="sellMine('${v.id}')">Sell back</button>`
               : soldOut
@@ -283,8 +283,8 @@ async function editVeh(id) {
   document.getElementById("hPublicOffset").value = veh.publicTransportOffsetPct || 0;
   onTypeChange();
   document.getElementById("hStock").value = (veh.stockLimit === null || veh.stockLimit === undefined) ? "" : veh.stockLimit;
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit vehicle";
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
+  document.getElementById("hAdd").innerHTML = icon("edit", 18) + " Edit vehicle";
+  document.getElementById("addBtn").innerHTML = icon("save", 15) + " Save changes";
   document.getElementById("cancelEditBtn").classList.remove("hidden");
   document.getElementById("addMsg").innerHTML = "";
   document.getElementById("teacherPanel").scrollIntoView({ behavior: "smooth", block: "start" });

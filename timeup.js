@@ -15,7 +15,7 @@ async function init() {
   CURRENT = u;
 
   paintIconSlots();
-  document.getElementById("clockIcon").innerHTML = icon("calendar", 40);
+  document.getElementById("clockIcon").innerHTML = icon("history", 40);
   document.getElementById("whoami").textContent = u.name;
 
   if (!timeLimitStatus(u).reached) {

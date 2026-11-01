@@ -161,7 +161,7 @@ function notifCardItems(me, cls) {
     title = days === 0 ? "Credit card payment due today" : `Credit card statement closed: ${fmtMoney(s.amount)}`;
     body = `Pay ${fmtMoney(owe)} by ${cardDateLabel(s.dueKey)} (${days} ${days === 1 ? "day" : "days"} left) to avoid interest.${penNote}`;
   }
-  return [{ id, ts, icon: "cards", tone, title, body, href: "bank.html#cardCard", action: true }];
+  return [{ id, ts, icon: "creditcard", tone, title, body, href: "bank.html#cardCard", action: true }];
 }
 
 function notifMortgageItems(me, cls) {
@@ -350,7 +350,7 @@ function notifEventItems(me, cls) {
   (cls.bigEventLog || []).forEach(e => {
     if (e.studentUser !== me.username || e.status !== "pending") return;
     out.push({
-      id: "bigev-" + e.id, ts: dayStart, icon: "star", tone: "coral",
+      id: "bigev-" + e.id, ts: dayStart, icon: "bolt", tone: "coral",
       title: "Big event needs a decision",
       body: `${e.name} — ${fmtMoney(e.cost)}. ${e.takesAsset === false ? "Pay it or claim on insurance." : "Pay it, claim on insurance, or lose the asset."}`,
       href: "bigevents.html", action: true
@@ -442,7 +442,7 @@ function notifQuizItems(me, cls) {
     const r = quizResultFor(me, q.id);
     return !r || !r.passed;
   }).slice(0, 5).map(q => ({
-    id: "quiz-" + q.id + "-" + nzDateKey(), ts: dayStart, icon: "idcard", tone: "gold",
+    id: "quiz-" + q.id + "-" + nzDateKey(), ts: dayStart, icon: "book", tone: "gold",
     title: `Quiz to pass: ${q.title}`,
     body: `Passing this unlocks ${labelOf(q.moduleKey)}. You need ${q.passMark}% or better.`,
     // Students can't open the Quizzes page (it sends them home), so this
@@ -462,7 +462,7 @@ function notifMarketplaceItems(me, cls) {
         const best = open.reduce((a, b) => (b.amount > a.amount ? b : a));
         out.push({
           id: "offers-" + l.id + "-" + open.length + "-" + Math.round(best.amount * 100),
-          ts: Math.max(dayStart, best.ts || 0), icon: "handshake", tone: "gold",
+          ts: Math.max(dayStart, best.ts || 0), icon: "swap", tone: "gold",
           title: `${open.length} ${open.length === 1 ? "offer" : "offers"} on ${l.name}`,
           body: `Best offer so far is ${fmtMoney(best.amount)} against your ${fmtMoney(l.price)} asking price.`,
           href: "marketplace.html", action: true
@@ -471,7 +471,7 @@ function notifMarketplaceItems(me, cls) {
     }
     if (l.seller === me.username && l.status === "pending") {
       out.push({
-        id: "pending-" + l.id, ts: l.ts || dayStart, quiet: true, icon: "cart", tone: "navy",
+        id: "pending-" + l.id, ts: l.ts || dayStart, quiet: true, icon: "swap", tone: "navy",
         title: `${l.name}${listingQuantity(l) > 1 ? " ×" + listingQuantity(l) : ""} ${listingQuantity(l) > 1 ? "are" : "is"} waiting for teacher approval`,
         body: `Listed at ${fmtMoney(l.price)}. It goes live once your teacher approves it.`,
         href: "marketplace.html"
@@ -479,7 +479,7 @@ function notifMarketplaceItems(me, cls) {
     }
     if (l.seller === me.username && l.status === "rejected" && trustedNow().getTime() - (l.ts || 0) < 3 * 86400000) {
       out.push({
-        id: "rejected-" + l.id, ts: l.ts || dayStart, icon: "cart", tone: "coral",
+        id: "rejected-" + l.id, ts: l.ts || dayStart, icon: "swap", tone: "coral",
         title: `Your listing for ${l.name} was taken down`,
         body: l.rejectReason || "Your teacher removed this listing.",
         href: "marketplace.html"

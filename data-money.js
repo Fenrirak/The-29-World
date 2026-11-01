@@ -2639,7 +2639,7 @@ async function resetClass(classCode, teacherUsername) {
       failed.push(s.name || s.username);
     }
   }));
-  await t29NotifyStudents(classCode, { to: students.map(s => s.username).filter(u => !failed.includes(u)), icon: "star", tone: "gold",
+  await t29NotifyStudents(classCode, { to: students.map(s => s.username).filter(u => !failed.includes(u)), icon: "repeat", tone: "gold",
     title: "Your teacher restarted the class",
     body: `Everyone is back to the ${fmtMoney(welcome)} welcome grant. Your jobs, belongings and savings were reset.`, href: "student.html" });
   return { ok: true, failed };
@@ -3568,7 +3568,7 @@ function budgetWeekItems(cls, user, username) {
       const overdue = cs.dueKey < todayKey;
       // repay: it pays off card spending that was already counted when it was swiped, so it
       // only matters for cash timing, never for the week's bills or spending plan.
-      items.push({ key: "card-stmt", dir: "out", repay: true, icon: "cards", label: "Credit card statement", amount: owe,
+      items.push({ key: "card-stmt", dir: "out", repay: true, icon: "creditcard", label: "Credit card statement", amount: owe,
         dayKey: overdue ? todayKey : cs.dueKey, status: overdue ? "overdue" : budgetStatus(cs.dueKey, todayKey, false), where: "Bank",
         note: (overdue ? "Overdue — pay it on the Bank page" : "Due " + (cs.dueKey === todayKey ? "today" : dayWord(cs.dueKey)) + " — pay it on the Bank page")
           + " (pay it all by the due date to avoid interest). It pays off card spending already counted in your plan, so it isn't counted again" });
@@ -3889,16 +3889,16 @@ function buildBudgetView(cls, user, username) {
     notes.push({ tone: "warn", icon: "handshake", text: `Your loans grow by about ${fmtMoney(loanGrowth)} in interest every Monday until you pay them off.` });
   }
   items.filter(i => i.cardOk && !i.viaCard && i.status === "today").forEach(i => {
-    notes.push({ tone: "warn", icon: "cards", text: `Today is the day to pay ${i.label} (${fmtMoney(i.amount)}) on the ${i.where} page. You can put it on your credit card or pay cash.` });
+    notes.push({ tone: "warn", icon: "creditcard", text: `Today is the day to pay ${i.label} (${fmtMoney(i.amount)}) on the ${i.where} page. You can put it on your credit card or pay cash.` });
   });
   const cardInfo = cardNow;
   if (cardInfo) {
     const wk0 = budgetWeekStartKey(), wk1 = dateKeyPlusDays(wk0, 6);
     if (cardInfo.stmtRemaining > 0 && cardInfo.dueKey > wk1) {
-      notes.push({ tone: "warn", icon: "cards", text: `Your credit card statement (${fmtMoney(cardInfo.stmtRemaining)}) is due ${cardDateLabel(cardInfo.dueKey)}. Pay all of it by then and there's no interest.` });
+      notes.push({ tone: "warn", icon: "creditcard", text: `Your credit card statement (${fmtMoney(cardInfo.stmtRemaining)}) is due ${cardDateLabel(cardInfo.dueKey)}. Pay all of it by then and there's no interest.` });
     }
     if (cardInfo.unbilled > 0 && cardInfo.nextCloseKey >= wk0 && cardInfo.nextCloseKey <= wk1) {
-      notes.push({ tone: "warn", icon: "cards", text: `Your card statement closes ${cardDateLabel(cardInfo.nextCloseKey)}. The ${fmtMoney(cardInfo.unbilled)} on your card so far becomes the closing balance you'll need to pay.` });
+      notes.push({ tone: "warn", icon: "creditcard", text: `Your card statement closes ${cardDateLabel(cardInfo.nextCloseKey)}. The ${fmtMoney(cardInfo.unbilled)} on your card so far becomes the closing balance you'll need to pay.` });
     }
   }
   // KiwiSaver comes off the pay before it arrives; the tracker explains it in its own row.
@@ -4403,10 +4403,10 @@ async function saveCardSettings(classCode, s) {
   if (old.statementDay !== clean.statementDay) holdersOnly.push(`your statement now closes on ${clean.statementDay} (was ${old.statementDay})`);
   if (old.splitMin !== clean.splitMin) holdersOnly.push(`only purchases of ${fmtMoney(clean.splitMin)} or more can be split between card and cash (was ${fmtMoney(old.splitMin)})`);
   const out = [];
-  if (everyone.length) out.push({ to: "all", icon: "cards", tone: "gold", title: "Your teacher changed the credit card settings", body: everyone.join("; ") + ".", href: "bank.html#cardCard" });
+  if (everyone.length) out.push({ to: "all", icon: "creditcard", tone: "gold", title: "Your teacher changed the credit card settings", body: everyone.join("; ") + ".", href: "bank.html#cardCard" });
   if (holdersOnly.length) {
     const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending"));
-    out.push({ to: holders, icon: "cards", tone: "gold", title: "Your teacher changed your credit card settings", body: holdersOnly.join("; ") + ".", href: "bank.html#cardCard" });
+    out.push({ to: holders, icon: "creditcard", tone: "gold", title: "Your teacher changed your credit card settings", body: holdersOnly.join("; ") + ".", href: "bank.html#cardCard" });
   }
   await t29NotifyStudents(classCode, out);
   return clean;
@@ -4449,7 +4449,7 @@ async function saveCardPlan(classCode, raw) {
   });
   if (isNew) {
     if (!clean.archived) {
-      await t29NotifyStudents(classCode, { to: "all", icon: "cards", tone: "navy",
+      await t29NotifyStudents(classCode, { to: "all", icon: "creditcard", tone: "navy",
         title: `Your teacher added a new credit card: ${clean.name}`,
         body: `Limit ${fmtMoney(clean.limit)}${cardHasRewards(clean) ? ", with rewards" : ""}. You can apply for it on the Bank page.`, href: "bank.html#cardCard" });
     }
@@ -4457,7 +4457,7 @@ async function saveCardPlan(classCode, raw) {
     const parts = cardPlanChangeParts(before, clean);
     if (parts.length) {
       const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending") && s.creditCard.planId === clean.id);
-      await t29NotifyStudents(classCode, { to: holders, icon: "cards", tone: "gold",
+      await t29NotifyStudents(classCode, { to: holders, icon: "creditcard", tone: "gold",
         title: `Your teacher changed your ${clean.name} card`,
         body: parts.join("; ") + ". Changes apply to your card from your next statement, and in the store straight away.", href: "bank.html#cardCard" });
     }
@@ -4481,7 +4481,7 @@ async function removeCardPlan(classCode, planId, archiveOnly) {
   });
   if (gone && gone.archived) {
     const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending") && s.creditCard.planId === planId);
-    await t29NotifyStudents(classCode, { to: holders, icon: "cards", tone: "gold",
+    await t29NotifyStudents(classCode, { to: holders, icon: "creditcard", tone: "gold",
       title: `Your teacher retired the ${gone.name} card`,
       body: "It is no longer offered to new students. Your own card keeps working.", href: "bank.html#cardCard" });
   }
@@ -4494,7 +4494,7 @@ async function setCardLifestylePenalty(classCode, { enabled, perAmount, points }
   const desc = p => p.enabled && p.perAmount > 0 && p.points > 0 ? `lose ${p.points} lifestyle ${p.points === 1 ? "point" : "points"} for every ${fmtMoney(p.perAmount)} left unpaid` : "no lifestyle penalty";
   if (!!old.enabled !== clean.enabled || (clean.enabled && (Number(old.perAmount) !== clean.perAmount || Number(old.points) !== clean.points))) {
     const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending"));
-    await t29NotifyStudents(classCode, { to: holders, icon: "cards", tone: "gold",
+    await t29NotifyStudents(classCode, { to: holders, icon: "creditcard", tone: "gold",
       title: "Your teacher changed the credit card lifestyle penalty",
       body: `Now: ${desc(clean)} (was: ${desc(old)}).`, href: "bank.html#cardCard" });
   }
@@ -4545,7 +4545,7 @@ async function approveCreditCard(classCode, username) {
     });
   } catch (e) { return { ok: false, error: "Couldn't approve that card — it may have changed. Refresh and try again." }; }
   if (approvedPlan) {
-    await t29NotifyStudents(classCode, { to: username, icon: "cards", tone: "mint",
+    await t29NotifyStudents(classCode, { to: username, icon: "creditcard", tone: "mint",
       title: `Your teacher approved your ${approvedPlan.name} card`,
       body: `You can spend up to ${fmtMoney(approvedPlan.limit)} on it. Find it on the Bank page.`, href: "bank.html#cardCard" });
   }
@@ -4562,7 +4562,7 @@ async function declineCreditCard(classCode, username) {
       t.update(userRef, { creditCard: { status: "denied", planId: c.planId, deniedTs: Date.now() } });
     });
   } catch (e) { return { ok: false, error: "Couldn't decline that — it may have changed. Refresh and try again." }; }
-  await t29NotifyStudents(classCode, { to: username, icon: "cards", tone: "coral",
+  await t29NotifyStudents(classCode, { to: username, icon: "creditcard", tone: "coral",
     title: "Your teacher declined your credit card application",
     body: "You can ask your teacher why, or apply again later.", href: "bank.html#cardCard" });
   return { ok: true };

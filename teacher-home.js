@@ -15,7 +15,7 @@ async function init() {
   if (!u) return;
   if (u.role !== "teacher") { window.location.href = "student.html"; return; }
   CURRENT = u;
-  document.getElementById("whoami").textContent = "Ms/Mr " + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   paintIconSlots();
   await t29FirstPaint(render);
   loanInterestForMyClasses(); // background - never holds up the page
@@ -51,7 +51,7 @@ async function render() {
     card.className = "class-card" + (cls.archived ? " archived" : "");
     card.innerHTML = `
       <div class="class-card-main">
-        <h3>${icon("building", 18)} ${escapeHtml(cls.name)}</h3>
+        <h3>${icon("mortarboard", 18)} ${escapeHtml(cls.name)}</h3>
         ${cls.archived ? `<span class="badge coral">${icon("lock", 12)} Archived</span>` : ""}
         <div class="class-card-meta">
           <span>${icon("users", 14)} ${cls.studentCount} student${cls.studentCount === 1 ? "" : "s"}</span>
@@ -61,7 +61,7 @@ async function render() {
       </div>
       <div class="class-card-actions">
         <button class="btn small gold" type="button" data-open="${cls.code}">${icon("send", 12)} Open</button>
-        <button class="btn small secondary" type="button" data-share="${cls.code}">${icon("handshake", 12)} Share Template</button>
+        <button class="btn small secondary" type="button" data-share="${cls.code}">${icon("send", 12)} Share Template</button>
         <button class="btn small secondary" type="button" data-archive="${cls.code}">${cls.archived ? icon("repeat", 12) + " Reopen" : icon("lock", 12) + " Archive"}</button>
         <button class="btn small coral" type="button" data-delete="${cls.code}">${icon("trash", 12)} Delete</button>
       </div>

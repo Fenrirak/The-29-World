@@ -28,7 +28,7 @@ function moduleLabel(key) {
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("key", 26) + " Quizzes";
+  document.getElementById("pageTitle").innerHTML = icon("book", 26) + " Quizzes";
 }
 
 async function init() {
@@ -40,7 +40,7 @@ async function init() {
   // as a popup on the module it guards (see quiz-gate.js), so anyone
   // landing here without being a teacher goes back to their dashboard.
   if (!IS_TEACHER) { window.location.href = "student.html"; return; }
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -108,18 +108,18 @@ async function renderTeacher() {
     <div class="quiz-card${q.moduleKey ? " locking" : ""}">
       <div class="flex-between">
         <div style="flex:1;min-width:220px;">
-          <h3>${icon("key", 18)}${esc(q.title)}</h3>
+          <h3>${icon("book", 18)}${esc(q.title)}</h3>
           ${q.description ? `<p class="muted-small" style="margin:0 0 6px;">${esc(q.description)}</p>` : ""}
           <div class="quiz-meta">
             <span class="quiz-pill${q.moduleKey ? " coral" : ""}">${icon("lock", 12)}Unlocks: ${esc(moduleLabel(q.moduleKey))}</span>
-            <span class="quiz-pill">${icon("percent", 12)}Pass mark ${q.passMark}%</span>
-            <span class="quiz-pill">${icon("cards", 12)}${q.questions.length} ${q.questions.length === 1 ? "question" : "questions"}</span>
+            <span class="quiz-pill">${icon("check", 12)}Pass mark ${q.passMark}%</span>
+            <span class="quiz-pill">${icon("book", 12)}${q.questions.length} ${q.questions.length === 1 ? "question" : "questions"}</span>
             ${q.reward > 0 ? `<span class="quiz-pill gold">${icon("coin", 12)}${fmtMoney(q.reward)} bonus</span>` : ""}
             <span class="quiz-pill${q.active ? " mint" : ""}">${q.active ? "Active" : "Paused"}</span>
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
-          <button class="btn small secondary" onclick="startEditQuiz('${q.id}')">${icon("plus", 13)} Edit</button>
+          <button class="btn small secondary" onclick="startEditQuiz('${q.id}')">${icon("edit", 13)} Edit</button>
           <button class="btn small secondary" onclick="toggleQuizActive('${q.id}', ${!q.active})">${q.active ? "Pause" : "Activate"}</button>
           <button class="btn small coral" onclick="deleteQuiz('${q.id}')">${icon("trash", 13)} Remove</button>
         </div>
@@ -289,7 +289,7 @@ function startEditQuiz(id) {
     id: qq.id, text: qq.text, options: qq.options.slice(), answer: qq.answer, explain: qq.explain || ""
   }));
   paintBuilder();
-  document.getElementById("hBuilder").innerHTML = icon("plus", 18) + " Edit quiz";
+  document.getElementById("hBuilder").innerHTML = icon("edit", 18) + " Edit quiz";
   document.getElementById("saveQuizBtn").innerHTML = "Save changes";
   document.getElementById("cancelEditBtn").classList.remove("hidden");
   document.getElementById("hBuilder").scrollIntoView({ behavior: "smooth", block: "start" });

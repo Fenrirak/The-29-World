@@ -18,7 +18,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=ee2247bc">
+<link rel="stylesheet" href="style.css?v=3f1e0bd6">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -70,14 +70,34 @@
       <!-- Teacher creates a class -->
       <form id="panel-teacher-new" class="hidden" onsubmit="return doTeacherSignup(event)">
         <p class="muted-small" style="margin-top:0;">Set up your classroom — you'll get a unique class code straight away so students can join.</p>
-        <label for="t-name"><span class="icon-slot"></span> Your name</label>
-        <input id="t-name" required autocomplete="name" placeholder="Your name">
+        <label for="t-title"><span class="icon-slot"></span> Title</label>
+        <select id="t-title" required autocomplete="honorific-prefix">
+          <option value="" disabled selected>Choose a title</option>
+          <option value="Mr">Mr</option>
+          <option value="Ms">Ms</option>
+          <option value="Mrs">Mrs</option>
+          <option value="Miss">Miss</option>
+          <option value="Dr">Dr</option>
+        </select>
+        <div class="name-row">
+          <div>
+            <label for="t-first"><span class="icon-slot"></span> First name</label>
+            <input id="t-first" required autocomplete="given-name" autocapitalize="words" placeholder="First name">
+          </div>
+          <div>
+            <label for="t-last"><span class="icon-slot"></span> Last name</label>
+            <input id="t-last" required autocomplete="family-name" autocapitalize="words" placeholder="Last name">
+          </div>
+        </div>
+        <p class="field-hint" id="t-name-hint">This is how your students will see you, e.g. Ms Smith.</p>
         <label for="t-class"><span class="icon-slot"></span> Class name</label>
         <input id="t-class" placeholder="Class name, e.g. Room 12" autocomplete="off" required>
         <label for="t-username"><span class="icon-slot"></span> Choose a username</label>
         <input id="t-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
+        <p class="field-hint">This is what you'll type to log in. Keep it simple, with no spaces.</p>
         <label for="t-password"><span class="icon-slot"></span> Choose a password</label>
         <input id="t-password" type="password" required autocomplete="new-password" placeholder="Choose a password">
+        <p class="field-hint">At least 6 characters.</p>
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Create my class</button>
       </form>
     </div>
@@ -106,12 +126,23 @@
       <form id="panel-student-new" class="hidden" onsubmit="return doStudentSignup(event)">
         <label for="s-code"><span class="icon-slot"></span> Class code</label>
         <input id="s-code" placeholder="Class code, e.g. F7K2M" required autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" style="text-transform:uppercase;">
-        <label for="s-name"><span class="icon-slot"></span> Your name</label>
-        <input id="s-name" required autocomplete="name" placeholder="Your name">
+        <div class="name-row">
+          <div>
+            <label for="s-first"><span class="icon-slot"></span> First name</label>
+            <input id="s-first" required autocomplete="given-name" autocapitalize="words" placeholder="First name">
+          </div>
+          <div>
+            <label for="s-last"><span class="icon-slot"></span> Last name</label>
+            <input id="s-last" required autocomplete="family-name" autocapitalize="words" placeholder="Last name">
+          </div>
+        </div>
+        <p class="field-hint">This is your display name. Your teacher and classmates will see it.</p>
         <label for="s-username"><span class="icon-slot"></span> Choose a username</label>
         <input id="s-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
+        <p class="field-hint">This is what you'll type to log in. We suggest one from your name, and you can change it (no spaces).</p>
         <label for="s-password"><span class="icon-slot"></span> Choose a password</label>
         <input id="s-password" type="password" required autocomplete="new-password" placeholder="Choose a password">
+        <p class="field-hint">At least 6 characters.</p>
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Join class</button>
         <p class="muted-small" style="text-align:center;margin-top:10px;">Ask your teacher for the class code.</p>
       </form>
@@ -142,12 +173,12 @@
      background, in the same relative order, still finishing before
      DOMContentLoaded — matching how every other page already does it. -->
 <script type="module" src="firebase-init.js?v=aca5590e"></script>
-<script defer src="icons.js?v=dd0d867b"></script>
-<script defer src="data-core.js?v=15a7a54d"></script>
-<script defer src="data-money.js?v=db2a422f"></script>
-<script defer src="data-life.js?v=9a2b8469"></script>
-<script defer src="data-property.js?v=d8628ae4"></script>
-<script defer src="data-markets.js?v=49205e15"></script>
+<script defer src="icons.js?v=fa4a03d9"></script>
+<script defer src="data-core.js?v=186811d4"></script>
+<script defer src="data-money.js?v=b3375627"></script>
+<script defer src="data-life.js?v=d62c66a1"></script>
+<script defer src="data-property.js?v=233a9933"></script>
+<script defer src="data-markets.js?v=d6ba8dd6"></script>
 <script>
 // Fill every .icon-slot next to its text with the matching icon. This is
 // purely decorative — every label/button already has real text, so the
@@ -155,19 +186,20 @@
 function paintIcons() {
   if (typeof icon !== "function") return;
   const map = [
-    ["#role-teacher", "briefcase"], ["#role-student", "users"],
+    ["#role-teacher", "mortarboard"], ["#role-student", "user"],
     ["#tab-teacher-login", "key"], ["#tab-teacher-new", "plus"],
-    ["#tab-student-login", "key"], ["#tab-student-new", "star"],
-    ['label[for="l-username"]', "users"], ['label[for="l-password"]', "lock"],
+    ["#tab-student-login", "key"], ["#tab-student-new", "users"],
+    ['label[for="l-username"]', "at"], ['label[for="l-password"]', "lock"],
     ['#panel-teacher-login button[type="submit"]', "send"],
-    ['label[for="t-name"]', "users"], ['label[for="t-class"]', "building"],
-    ['label[for="t-username"]', "key"], ['label[for="t-password"]', "lock"],
+    ['label[for="t-title"]', "user"], ['label[for="t-first"]', "user"], ['label[for="t-last"]', "user"],
+    ['label[for="t-class"]', "mortarboard"],
+    ['label[for="t-username"]', "at"], ['label[for="t-password"]', "lock"],
     ['#panel-teacher-new button[type="submit"]', "plus"],
-    ['label[for="sl-username"]', "users"], ['label[for="sl-password"]', "lock"],
+    ['label[for="sl-username"]', "at"], ['label[for="sl-password"]', "lock"],
     ['#panel-student-login button[type="submit"]', "send"],
-    ['label[for="s-code"]', "key"], ['label[for="s-name"]', "users"],
-    ['label[for="s-username"]', "key"], ['label[for="s-password"]', "lock"],
-    ['#panel-student-new button[type="submit"]', "star"]
+    ['label[for="s-code"]', "mortarboard"], ['label[for="s-first"]', "user"], ['label[for="s-last"]', "user"],
+    ['label[for="s-username"]', "at"], ['label[for="s-password"]', "lock"],
+    ['#panel-student-new button[type="submit"]', "users"]
   ];
   map.forEach(([sel, name]) => {
     const el = document.querySelector(sel);
@@ -302,15 +334,36 @@ async function doTeacherSignup(e) {
 }
 
 async function doTeacherSignupInner(e) {
-  const name = document.getElementById("t-name").value.trim();
+  const title = document.getElementById("t-title").value;
+  const first = document.getElementById("t-first").value.trim();
+  const last = t29TidyName(document.getElementById("t-last").value.replace(/\s+/g, " ").trim());
+  const name = t29TidyName(first.replace(/\s+/g, " ")) + " " + last;
   const className = document.getElementById("t-class").value.trim();
   const username = document.getElementById("t-username").value.trim();
   const password = document.getElementById("t-password").value;
-  const res = await createTeacherAndClass(name, username, password, className);
+  if (/\s/.test(username)) { showMsg("Usernames can't have spaces. Try something like smith.m", false); return false; }
+  const res = await createTeacherAndClass(name, username, password, className, { title, lastName: last });
   if (!res.ok) { showMsg(res.error, false); return false; }
   setSession(username);
   window.location.href = getSafeReturnTo() || "teacher.html?welcome=1";
   return false;
+}
+
+// Shows a teacher exactly how their students will see them, as they pick a title and type a last name.
+function updateTeacherNameHint() {
+  const t = document.getElementById("t-title").value;
+  const l = t29TidyName(document.getElementById("t-last").value.replace(/\s+/g, " ").trim());
+  document.getElementById("t-name-hint").textContent = (t && l)
+    ? "Your students will see you as " + t + " " + l + "."
+    : "This is how your students will see you, e.g. Ms Smith.";
+}
+
+// Fills in the username from the first and last name, until the student types their own.
+let sUsernameEdited = false;
+function suggestStudentUsername() {
+  if (sUsernameEdited) return;
+  document.getElementById("s-username").value =
+    t29SuggestUsername(document.getElementById("s-first").value, document.getElementById("s-last").value);
 }
 
 async function doStudentSignup(e) {
@@ -320,9 +373,12 @@ async function doStudentSignup(e) {
 
 async function doStudentSignupInner(e) {
   const code = document.getElementById("s-code").value.trim().toUpperCase();
-  const name = document.getElementById("s-name").value.trim();
+  const first = document.getElementById("s-first").value.trim();
+  const last = document.getElementById("s-last").value.trim();
+  const name = t29TidyName(first.replace(/\s+/g, " ")) + " " + t29TidyName(last.replace(/\s+/g, " "));
   const username = document.getElementById("s-username").value.trim();
   const password = document.getElementById("s-password").value;
+  if (/\s/.test(username)) { showMsg("Usernames can't have spaces. Try something like sam.lee", false); return false; }
   const res = await createStudentAccount(name, username, password, code);
   if (!res.ok) { showMsg(res.error, false); return false; }
   setSession(username);
@@ -340,6 +396,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   paintIcons();
   enablePasswordToggles();
   loadRememberedLogins();
+  document.getElementById("t-title").addEventListener("change", updateTeacherNameHint);
+  document.getElementById("t-last").addEventListener("input", updateTeacherNameHint);
+  document.getElementById("s-first").addEventListener("input", suggestStudentUsername);
+  document.getElementById("s-last").addEventListener("input", suggestStudentUsername);
+  // Typing their own username stops the suggestions; emptying the box starts them again.
+  document.getElementById("s-username").addEventListener("input", (ev) => { sUsernameEdited = ev.target.value.trim() !== ""; });
 
   // The link a teacher hands to students (index.html?role=student) opens
   // straight on the student tab instead of the teacher one.

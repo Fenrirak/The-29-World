@@ -34,7 +34,7 @@ async function init() {
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
   CLASS_CODE = u.classCode;
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -170,7 +170,7 @@ function nwShort(v, span) {
 // history is a gap on the chart rather than being squashed together.
 function netWorthChartHTML(s) {
   const pts = netWorthSeries(s);
-  const head = `<div class="nw-trend-head"><h3>${icon("chart", 16)} Net worth over time</h3><span class="muted-small">Noted automatically every Monday</span></div>`;
+  const head = `<div class="nw-trend-head"><h3>${icon("medal", 16)} Net worth over time</h3><span class="muted-small">Noted automatically every Monday</span></div>`;
   if (pts.length < 2) {
     return `<section class="nw-trend">${head}<p class="muted-small">Your trend starts building once your net worth has been noted for a Monday &mdash; check back soon.</p></section>`;
   }
@@ -246,7 +246,7 @@ function studentReportHTML(s) {
 
     ${netWorthChartHTML(s)}
 
-    <h4>${icon("bank", 16)} Net worth breakdown</h4>
+    <h4>${icon("medal", 16)} Net worth breakdown</h4>
     <div class="table-scroll"><table><tbody>
       <tr><td>Cash balance</td><td>${fmtMoney(s.balance)}</td></tr>
       <tr><td>Savings account</td><td>${fmtMoney(s.savings)}</td></tr>
@@ -259,27 +259,27 @@ function studentReportHTML(s) {
       <tr><td>Owed (loans + mortgage)</td><td>-${fmtMoney(s.owed)}</td></tr>
     </tbody></table></div>
 
-    <h4>${icon("piggy", 16)} Income this month ${fmtMoney(s.incomeTotal)}</h4>
+    <h4>${icon("download", 16)} Income this month ${fmtMoney(s.incomeTotal)}</h4>
     ${renderBars(s.income, "gold")}
 
-    <h4>${icon("vault", 16)} Saved &amp; invested this month ${fmtMoney(s.savedTotal)}</h4>
+    <h4>${icon("piggy", 16)} Saved &amp; invested this month ${fmtMoney(s.savedTotal)}</h4>
     ${renderBars(s.saved, "mint")}
     ${s.borrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this month (not counted as income).</p>` : ""}
 
-    <h4>${icon("cart", 16)} Spent this month ${fmtMoney(s.spentTotal)}</h4>
+    <h4>${icon("send", 16)} Spent this month ${fmtMoney(s.spentTotal)}</h4>
     ${renderBars(s.spent, "coral")}
 
-    <h3 style="margin-top:26px;">${icon("vault", 17)} Entire history</h3>
+    <h3 style="margin-top:26px;">${icon("history", 17)} Entire history</h3>
     <p class="muted-small">${REPORT_LIFETIME_NOTE}</p>
 
-    <h4>${icon("piggy", 16)} All-time income ${fmtMoney(s.lifetimeIncomeTotal)}</h4>
+    <h4>${icon("download", 16)} All-time income ${fmtMoney(s.lifetimeIncomeTotal)}</h4>
     ${renderBars(s.lifetimeIncome, "gold")}
 
-    <h4>${icon("vault", 16)} All-time saved &amp; invested ${fmtMoney(s.lifetimeSavedTotal)}</h4>
+    <h4>${icon("piggy", 16)} All-time saved &amp; invested ${fmtMoney(s.lifetimeSavedTotal)}</h4>
     ${renderBars(s.lifetimeSaved, "mint")}
     ${s.lifetimeBorrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.lifetimeBorrowedTotal)} in loans in total (not counted as income).</p>` : ""}
 
-    <h4>${icon("cart", 16)} All-time spent ${fmtMoney(s.lifetimeSpentTotal)}</h4>
+    <h4>${icon("send", 16)} All-time spent ${fmtMoney(s.lifetimeSpentTotal)}</h4>
     ${renderBars(s.lifetimeSpent, "coral")}
 
     <h4>${icon("handshake", 16)} Loan history</h4>

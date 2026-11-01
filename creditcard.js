@@ -149,7 +149,7 @@ function ccPerks(plan) {
   if (plan.cashbackPct > 0) out.push(`<span class="cc-chip mint">${icon("coin", 12)}${plan.cashbackPct}% cashback</span>`);
   if (plan.rewardEvery > 0 && plan.rewardBack > 0) out.push(`<span class="cc-chip mint">${fmtMoney(plan.rewardBack)} back per ${fmtMoney(plan.rewardEvery)} in one purchase</span>`);
   if (plan.storeDiscountPct > 0) out.push(`<span class="cc-chip gold">${icon("cart", 12)}${plan.storeDiscountPct}% off the class store</span>`);
-  (plan.vouchers || []).forEach(v => out.push(`<span class="cc-chip lilac">${icon("trophy", 12)}${v.kind === "percent" ? `${v.value}% off voucher` : `${fmtMoney(v.value)} store voucher`}</span>`));
+  (plan.vouchers || []).forEach(v => out.push(`<span class="cc-chip lilac">${icon("ticket", 12)}${v.kind === "percent" ? `${v.value}% off voucher` : `${fmtMoney(v.value)} store voucher`}</span>`));
   return out.length ? out.join("") : `<span class="cc-chip plain">No extra perks</span>`;
 }
 // Rewards panel: spend-and-earn counts ONE purchase at a time (nothing adds up or rolls over); % cashback is per statement.
@@ -207,7 +207,7 @@ function ccRenderStudent(me, cls) {
     el.innerHTML = head("Application sent") + (plan ? `<div class="cc-pending">
         <div class="cc-pending-card">${ccVisual(cls, plan, me.name, cardLast4(me.username), { pending: true })}</div>
         <div class="cc-pending-text">
-          <span class="badge gold">${icon("calendar", 12)} Waiting for approval</span>
+          <span class="badge gold">${icon("history", 12)} Waiting for approval</span>
           <h3>Your ${ccEsc(plan.name)} application is with your teacher</h3>
           <p class="muted-small">You'll be able to spend as soon as it's approved. Nothing else to do.</p>
           <button class="btn small" onclick="ccCancel()">Withdraw application</button>
@@ -268,7 +268,7 @@ function ccActiveHtml(me, cls) {
     banner = `<div class="cc-stmt ${cls2}">
       <div class="cc-stmt-top">
         <div>
-          <div class="cc-stmt-label">${icon("idcard", 14)} Closing balance${late ? " — overdue" : ""}</div>
+          <div class="cc-stmt-label">${icon("coin", 14)} Closing balance${late ? " — overdue" : ""}</div>
           <div class="cc-stmt-value">${fmtMoney(rem)}</div>
           ${rem < s.amount - 0.004 ? `<div class="cc-stmt-sub">${fmtMoney(s.amount)} statement · ${fmtMoney(s.paid)} paid so far</div>` : `<div class="cc-stmt-sub">Statement closed ${ccEsc(cardDateLabel(s.closeKey))}</div>`}
         </div>
@@ -294,7 +294,7 @@ function ccActiveHtml(me, cls) {
 
   // ---- vouchers ----
   const vs = cardUsableVouchers(me, today);
-  const vouchers = vs.length ? `<div class="cc-vouchers"><h3>${icon("trophy", 16)} Your vouchers</h3><div class="cc-voucher-row">${vs.map(v => `
+  const vouchers = vs.length ? `<div class="cc-vouchers"><h3>${icon("ticket", 16)} Your vouchers</h3><div class="cc-voucher-row">${vs.map(v => `
       <a class="cc-voucher" href="store.html">
         <div class="cc-voucher-val">${v.kind === "percent" ? `${v.value}%` : fmtMoney(v.left)}</div>
         <div class="cc-voucher-txt"><strong>${v.kind === "percent" ? "off a store purchase" : "store credit"}</strong><span>Use by ${ccEsc(cardDateLabel(v.expiryKey))}</span></div>
@@ -426,7 +426,7 @@ function ccRenderTeacher(cls, students) {
       </div></div>`;
   }).join("") : `<div class="empty-state"><p>No plans yet. Add your first one below — try a basic card with a low limit, then a premium one with better perks.</p></div>`;
 
-  const pendRows = pending.length ? `<h3 class="cc-sub">${icon("calendar", 16)} Waiting for approval (${pending.length})</h3>
+  const pendRows = pending.length ? `<h3 class="cc-sub">${icon("history", 16)} Waiting for approval (${pending.length})</h3>
     <div class="table-scroll cc-tablewrap"><table><thead><tr><th>Student</th><th>Card</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(s => {
       const p = cardPlanById(cls, s.creditCard.planId); if (!p) return "";
       const sc = lifestyleRatingFromData(cls, s, s.username), ok = sc >= p.minLifestyle;
@@ -640,7 +640,7 @@ function ccStoreBarRender(me, cls) {
       <label class="cc-check"><input type="checkbox" ${CC_STORE_PAY.split ? "checked" : ""} onchange="ccStoreSetSplit(this.checked)"> Part card, part cash</label>
       ${CC_STORE_PAY.split ? `<span>Card covers up to $<input id="ccStoreCardMax" type="number" min="0.01" step="0.01" style="width:90px" value="${ccEsc(CC_STORE_PAY.cardMax)}" placeholder="all it can" onchange="ccStoreSetCardMax(this.value)"></span>` : ""}
       <div class="muted-small">${CC_STORE_PAY.split ? "A split gets cashback on the card part but not the store discount. " : ""}Splitting works on purchases of ${fmtMoney(cardSettings(cls).splitMin)} or more, or whenever the card can't cover it all.</div></div>` : ""}
-    ${vs.length ? `<div class="cc-pb-voucher"><label for="ccStoreVoucher">${icon("trophy", 14)} Voucher</label>
+    ${vs.length ? `<div class="cc-pb-voucher"><label for="ccStoreVoucher">${icon("ticket", 14)} Voucher</label>
       <select id="ccStoreVoucher" onchange="ccStoreSetVoucher(this.value)"><option value="">None</option>${vs.map(v => `<option value="${ccEsc(v.id)}" ${CC_STORE_PAY.voucherId === v.id ? "selected" : ""}>${ccEsc(cardVoucherLabel(v))} · by ${ccEsc(cardDateLabel(v.expiryKey))}</option>`).join("")}</select></div>` : ""}`;
 }
 async function ccStoreSetPay(useCard) {

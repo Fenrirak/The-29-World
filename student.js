@@ -67,10 +67,10 @@ function paintChrome() {
   document.getElementById("iconJob").innerHTML = icon("briefcase", 30);
   document.getElementById("iconLifestyle").innerHTML = icon("star", 30);
   document.getElementById("hLeaderboard").innerHTML = icon("medal", 18) + " Net worth ranking";
-  document.getElementById("hBank").innerHTML = icon("bank", 18) + " Bank account";
+  document.getElementById("hBank").innerHTML = icon("piggy", 18) + " Bank account";
   document.getElementById("hClassmates").innerHTML = icon("users", 18) + " My classmates";
   document.getElementById("hMarket").innerHTML = icon("chart", 18) + " Market snapshot";
-  document.getElementById("hActivity").innerHTML = icon("bank", 18) + " My recent activity (last 3 days)";
+  document.getElementById("hActivity").innerHTML = icon("history", 18) + " My recent activity (last 3 days)";
   document.getElementById("bankLink").innerHTML = icon("piggy", 14) + " Go to Bank";
   document.getElementById("iconBcSavings").innerHTML = icon("piggy", 26);
   document.getElementById("iconBcRate").innerHTML = icon("percent", 26);
@@ -701,7 +701,7 @@ function nextTierHtml(tier) {
   if (tier.atTop) {
     return `
       <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1.5px solid var(--line);">
-        <h4>${icon("trophy", 14)} Next tier</h4>
+        <h4>${icon("briefcase", 14)} Next tier</h4>
         <p class="muted-small">You're already at the top tier${tier.currentLabel ? ` — <strong>${tier.currentLabel}</strong>` : ""}. Nothing more needed!</p>
       </div>
     `;
@@ -713,7 +713,7 @@ function nextTierHtml(tier) {
   if (tier.transportComfortNeeded > 0) needs.push(`${tier.transportComfortNeeded} more transport comfort`);
   return `
     <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1.5px solid var(--line);">
-      <h4>${icon("trophy", 14)} Next tier</h4>
+      <h4>${icon("briefcase", 14)} Next tier</h4>
       <p class="muted-small">To reach <strong>${tier.nextLabel}</strong>${tier.currentLabel ? ` from ${tier.currentLabel}` : ""}, you still need:</p>
       ${needs.length
         ? `<ul style="margin:6px 0 0 18px;padding:0;">${needs.map(n => `<li class="muted-small">${n}</li>`).join("")}</ul>`

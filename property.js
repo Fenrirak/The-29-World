@@ -40,7 +40,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherTabs").classList.toggle("hidden", !IS_TEACHER);
@@ -956,7 +956,7 @@ function listingChips(p, cls, extraChips) {
   if (p.mortgageWeeks > 0 && variableRateOffered(p)) {
     const due = `Weekly payments are due ${dayFull(cls.mortgageDay)}s`;
     chips.push(`<span class="chip chip-fixed" title="Rate locked in for the whole mortgage. ${due}"><span class="chip-ico">${icon("lock", 13)}</span>Fixed ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`);
-    chips.push(`<span class="chip chip-var" title="Rate moves each week inside this range. ${due}"><span class="chip-ico">${icon("chart", 13)}</span>Variable ${p.variableRateMin}\u2013${p.variableRateMax}%/wk &middot; now ${p.variableRate}%</span>`);
+    chips.push(`<span class="chip chip-var" title="Rate moves each week inside this range. ${due}"><span class="chip-ico">${icon("percent", 13)}</span>Variable ${p.variableRateMin}\u2013${p.variableRateMax}%/wk &middot; now ${p.variableRate}%</span>`);
   } else {
     chips.push(p.mortgageWeeks > 0
       ? `<span class="chip" title="Weekly payments are due ${dayFull(cls.mortgageDay)}s">Mortgage ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`
@@ -1121,7 +1121,7 @@ function mortgageSection(p, cls) {
   const fee = Math.max(0, Number(cls.propertyBreakFee) || 0);
   const extra = variable ? `
       <div class="mx-box">
-        <div class="mx-head">${icon("chart", 15)} Pay a custom amount</div>
+        <div class="mx-head">${icon("coin", 15)} Pay a custom amount</div>
         <span class="muted-small">Choose any amount, on any day. It comes straight off the <strong>${fmtMoney(owed)}</strong> you owe, so you pay less interest and finish sooner. It doesn't replace the weekly payment. No break fee.${m.extraPaid > 0 ? ` You've paid ${fmtMoney(m.extraPaid)} extra so far.` : ""}</span>
         <div class="mx-row">
           <div class="deposit-group">
@@ -1372,7 +1372,7 @@ function renderStudentRentals(cls, props, me, nameOf) {
   }
   box.innerHTML = `
     <div class="card">
-      <div class="set-head"><h2>${icon("key", 18)} Available rentals</h2></div>
+      <div class="set-head"><h2>${icon("house", 18)} Available rentals</h2></div>
       <div style="margin-top:6px;">${movingCostNote(cls)}</div>
       ${alreadyHoused ? `<p class="muted-small">You're already living somewhere — move out first if you'd rather rent one of these instead.</p>` : ""}
       <div id="rentMsg"></div>
@@ -1446,8 +1446,8 @@ function teacherListingCard(units, cls, me, nameOf) {
       <div class="pcard-msg" id="msg-${gid}"></div>
       <div class="pcard-sec">
         <div class="p-actions">
-          <button class="btn small secondary" onclick="editProp('${p.id}')">${icon("plus", 13)} Edit</button>
-          <button class="btn small secondary" onclick="openPricingModal('${p.id}')">${icon("chart", 13)} Pricing</button>
+          <button class="btn small secondary" onclick="editProp('${p.id}')">${icon("edit", 13)} Edit</button>
+          <button class="btn small secondary" onclick="openPricingModal('${p.id}')">${icon("coin", 13)} Pricing</button>
           <button class="btn small coral" onclick="deleteProp('${p.id}')">${icon("trash", 13)} Remove</button>
         </div>
       </div>
@@ -1514,7 +1514,7 @@ async function openPricingModal(id) {
       <span class="muted-small">Changes the price right away. It's currently ${fmtMoney(p.price)}.</span>
       <div class="p-inline">
         <input type="number" min="0.01" step="0.01" id="price-${p.id}" value="${p.price}" aria-label="New price in dollars">
-        <button class="btn small" onclick="overridePriceClick('${p.id}')">${icon("chart", 13)} Update</button>
+        <button class="btn small" onclick="overridePriceClick('${p.id}')">${icon("save", 13)} Update</button>
       </div>
     </div>
     <div class="form-sec">
@@ -1525,7 +1525,7 @@ async function openPricingModal(id) {
         <div><label for="prmax-${p.id}">Max % change</label><input type="number" min="0" step="0.1" id="prmax-${p.id}" value="${range.max}"></div>
       </div>
       <div class="p-modal-foot">
-        <button class="btn small gold" onclick="setListingRangeClick('${p.id}')">${icon("chart", 13)} Save range</button>
+        <button class="btn small gold" onclick="setListingRangeClick('${p.id}')">${icon("save", 13)} Save range</button>
         ${p.priceRange ? `<button class="btn small secondary" onclick="clearListingRangeClick('${p.id}')">Reset to class default</button>` : ""}
       </div>
     </div>
@@ -1552,7 +1552,7 @@ function renderPendingSublets(cls, nameOf) {
   if (!pending.length) { box.innerHTML = ""; return; }
   box.innerHTML = `
     <div class="card p-pending">
-      <div class="set-head"><h2>${icon("send", 18)} Pending rental requests</h2><span class="badge coral">${pending.length} waiting</span></div>
+      <div class="set-head"><h2>${icon("house", 18)} Pending rental requests</h2><span class="badge coral">${pending.length} waiting</span></div>
       ${pending.map(p => `
         <div class="prow">
           <div class="prow-main">
@@ -1582,7 +1582,7 @@ function resetPropForm() {
 }
 function setPropModalMode(editing) {
   document.getElementById("hAdd").textContent = editing ? "Edit property" : "Add a property";
-  document.getElementById("addBtn").innerHTML = editing ? icon("send", 15) + " Save changes" : icon("plus", 15) + " Add property";
+  document.getElementById("addBtn").innerHTML = editing ? icon("save", 15) + " Save changes" : icon("plus", 15) + " Add property";
   document.getElementById("addMsg").innerHTML = "";
 }
 function openPropModal() {
@@ -1707,7 +1707,7 @@ function renderNpcListings(cls, nameOf) {
         <div class="pcard-msg" id="npcMsg-${gid}"></div>
         <div class="pcard-sec">
           <div class="p-actions">
-            <button class="btn small secondary" onclick="editNpcProp('${p.id}')">${icon("plus", 13)} Edit</button>
+            <button class="btn small secondary" onclick="editNpcProp('${p.id}')">${icon("edit", 13)} Edit</button>
             <button class="btn small coral" onclick="deleteNpcProp('${p.id}')">${icon("trash", 13)} Remove</button>
           </div>
         </div>
@@ -1737,7 +1737,7 @@ function npcTenantBlock(u, nameOf) {
 }
 function setNpcModalMode(editing) {
   document.getElementById("hAddNpc").textContent = editing ? "Edit school rental" : "Add a school rental";
-  document.getElementById("addNpcBtn").innerHTML = editing ? icon("send", 15) + " Save changes" : icon("plus", 15) + " Add school rental";
+  document.getElementById("addNpcBtn").innerHTML = editing ? icon("save", 15) + " Save changes" : icon("plus", 15) + " Add school rental";
   document.getElementById("addNpcMsg").innerHTML = "";
 }
 function openNpcModal() {

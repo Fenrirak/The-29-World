@@ -145,7 +145,7 @@ function showChoiceEventPopup(entry, username, classCode) {
 
   overlay.innerHTML = `
     <div class="anw-modal-card">
-      <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${escapeHtml(entry.name)}</h2>
+      <h2 style="display:flex;align-items:center;gap:9px;">${icon("sparkle", 24)} ${escapeHtml(entry.name)}</h2>
       <p>${escapeHtml(entry.description) || ""}</p>
       <p class="muted-small">You need to choose how to handle this before you can continue.</p>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
@@ -182,7 +182,7 @@ function showChoiceOutcome(overlay, entry, amount, outcome, username, classCode)
   // nothing to claim, even though the event itself is tagged bad.
   const claimable = entry.severity === "bad" && amount < 0;
   card.innerHTML = `
-    <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} ${escapeHtml(entry.name)}</h2>
+    <h2 style="display:flex;align-items:center;gap:9px;">${icon("sparkle", 24)} ${escapeHtml(entry.name)}</h2>
     ${outcome ? `<p>${escapeHtml(outcome)}</p>` : ""}
     <p class="${amount < 0 ? 'ticker-down' : 'ticker-up'}" style="font-weight:900;font-size:1.2em;">${amount >= 0 ? "+" : "-"}${fmtMoney(Math.abs(amount))}</p>
     ${claimable ? `<button class="btn small secondary" data-claim-btn onclick="claimFromPopup('${entry.id}', '${escapeJsAttr(username)}', '${classCode}', this)">${icon("shield", 13)} Claim insurance</button>` : ""}
@@ -201,7 +201,7 @@ function showEventPopup(events, username, classCode) {
 
   const rows = events.map(e => `
     <div class="anw-event-row">
-      <span class="icon" style="width:26px;height:26px;flex-shrink:0;">${icon("dice", 26)}</span>
+      <span class="icon" style="width:26px;height:26px;flex-shrink:0;">${icon("sparkle", 26)}</span>
       <div style="flex:1;">
         <div class="anw-event-name">${escapeHtml(e.name)}</div>
         ${e.description ? `<div class="muted-small">${escapeHtml(e.description)}</div>` : ""}
@@ -219,7 +219,7 @@ function showEventPopup(events, username, classCode) {
 
   overlay.innerHTML = `
     <div class="anw-modal-card">
-      <h2 style="display:flex;align-items:center;gap:9px;">${icon("dice", 24)} Random events this week!</h2>
+      <h2 style="display:flex;align-items:center;gap:9px;">${icon("sparkle", 24)} Random events this week!</h2>
       <p>Here's what happened to you this week:</p>
       ${rows}
       <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwEventCloseBtn">Nice, got it</button>
@@ -438,7 +438,7 @@ function showGoodBigEventPopup(entry) {
 
   overlay.innerHTML = `
     <div class="anw-modal-card">
-      <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${escapeHtml(entry.name)}</h2>
+      <h2 style="display:flex;align-items:center;gap:9px;">${icon("bolt", 24)} Big event: ${escapeHtml(entry.name)}</h2>
       <p>${escapeHtml(entry.description) || ""}</p>
       <p class="ticker-up" style="font-weight:900;font-size:1.2em;">+${fmtMoney(entry.cost)}</p>
       ${entry.basisNote ? `<p class="muted-small">${escapeHtml(entry.basisNote)}</p>` : ""}
@@ -534,7 +534,7 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
 
   overlay.innerHTML = `
     <div class="anw-modal-card">
-      <h2 style="display:flex;align-items:center;gap:9px;">${icon("star", 24)} Big event: ${escapeHtml(entry.name)}</h2>
+      <h2 style="display:flex;align-items:center;gap:9px;">${icon("bolt", 24)} Big event: ${escapeHtml(entry.name)}</h2>
       <p>${escapeHtml(entry.description) || ""}</p>
       <p><strong>${BIG_EVENT_MODULE_LABEL[entry.module]}</strong> &middot; costs <strong>${fmtMoney(entry.cost)}</strong> to resolve</p>
       ${entry.basisNote ? `<p class="muted-small">${escapeHtml(entry.basisNote)}</p>` : ""}
@@ -621,7 +621,7 @@ async function lifeAskVoucher(me, category, price, what) {
     overlay.className = "anw-modal-overlay";
     overlay.innerHTML = `
       <div class="anw-modal-card">
-        <h2 style="display:flex;align-items:center;gap:9px;">${icon("trophy", 24)} Use a life voucher?</h2>
+        <h2 style="display:flex;align-items:center;gap:9px;">${icon("ticket", 24)} Use a life voucher?</h2>
         <p><strong>${escapeHtml(what || "This purchase")}</strong> &middot; ${fmtMoney(price)}</p>
         <p class="muted-small">Each voucher works once and runs out at the end of this week.</p>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
@@ -665,7 +665,7 @@ async function cardAskPay(total, what) {
     overlay.className = "anw-modal-overlay";
     overlay.innerHTML = `
       <div class="anw-modal-card">
-        <h2 style="display:flex;align-items:center;gap:9px;">${icon("cards", 24)} How do you want to pay?</h2>
+        <h2 style="display:flex;align-items:center;gap:9px;">${icon("creditcard", 24)} How do you want to pay?</h2>
         <p><strong>${escapeHtml(what || "This purchase")}</strong> &middot; ${fmtMoney(total)}</p>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
           <button class="btn gold" data-mode="cash">Pay from cash <small>(${fmtMoney(cash)} available)</small></button>

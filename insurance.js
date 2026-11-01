@@ -193,7 +193,7 @@ function paintChrome() {
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add plan";
   document.getElementById("hMine").innerHTML = icon("shield", 18) + " My cover";
   document.getElementById("hPayDay").innerHTML = icon("calendar", 18) + " Premium payment day";
-  document.getElementById("saveDayBtn").innerHTML = icon("calendar", 14) + " Save day";
+  document.getElementById("saveDayBtn").innerHTML = icon("save", 14) + " Save day";
 }
 
 async function init() {
@@ -201,7 +201,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -384,7 +384,7 @@ function startEditPlan(id) {
   document.getElementById("pDesc").value = p.description || "";
   document.getElementById("pStars").value = p.stars || 0;
   document.getElementById("pSignupFee").value = p.signupFee || 0;
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Edit insurance plan";
+  document.getElementById("hAdd").innerHTML = icon("edit", 18) + " Edit insurance plan";
   document.getElementById("addBtn").innerHTML = "Save changes";
   document.getElementById("cancelEditBtn").classList.remove("hidden");
   document.getElementById("addMsg").innerHTML = "";

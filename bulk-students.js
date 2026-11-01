@@ -85,26 +85,6 @@
 
   /* ---------------- Reading the names box ---------------- */
 
-  const LETTER_FIXES = { "ø": "o", "ß": "ss", "æ": "ae", "œ": "oe", "ł": "l", "đ": "d", "ð": "d", "þ": "th", "ı": "i" };
-
-  // "Māia O'Brien" -> "maia" / "obrien": accents and macrons dropped, anything
-  // that isn't a letter or number removed, so it's always a safe username.
-  function slug(s) {
-    return String(s || "")
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[øßæœłđðþı]/g, (c) => LETTER_FIXES[c])
-      .replace(/[^a-z0-9]/g, "");
-  }
-
-  // Names typed all lower-case or all CAPS get tidied ("aroha smith" -> "Aroha
-  // Smith"); a name with its own capitals ("Mc Donald", "de Vries") is left alone.
-  function tidyCase(name) {
-    if (!/\p{L}/u.test(name)) return name;
-    if (name !== name.toLowerCase() && name !== name.toUpperCase()) return name;
-    return name.toLowerCase().replace(/(^|[\s'’-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
-  }
-
   // One line of the box -> { raw, name, words, problem } (or null for a blank line).
   // Understands "First Last", "Last, First", and lines copied from a numbered
   // or bulleted list or a spreadsheet row.
@@ -117,15 +97,15 @@
     }
     t = t.replace(/[\t;]+/g, " ").replace(/\s+/g, " ").trim();
     if (!t) return null;
-    const name = sanitizeUserText(tidyCase(t), 60);
+    const name = sanitizeUserText(t29TidyName(t), 60);
     const words = name.split(" ");
     return { raw: String(raw).trim(), name, words, username: null, inClass: false,
              problem: words.length < 2 ? "Needs a first and last name" : null };
   }
 
   function baseUsername(words, style) {
-    const first = slug(words[0]);
-    const last = slug(words[words.length - 1]);
+    const first = t29NameSlug(words[0]);
+    const last = t29NameSlug(words[words.length - 1]);
     let b;
     if (style === "joined") b = first + last;
     else if (style === "initial") b = (first && last) ? first + "." + last[0] : (first || last);

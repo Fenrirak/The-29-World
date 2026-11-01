@@ -39,7 +39,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -98,7 +98,7 @@ async function render() {
             <div style="margin-top:6px;">${lifeBenefitChips(item.benefits, item.frequency)}</div>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn small secondary" type="button" onclick="startEditLifeItem('${item.id}')">${icon("idcard", 13)} Edit</button>
+            <button class="btn small secondary" type="button" onclick="startEditLifeItem('${item.id}')">${icon("edit", 13)} Edit</button>
             <button class="btn small coral" type="button" onclick="deleteLifeItem('${item.id}')">${icon("trash", 13)} Remove</button>
           </div>
         </div>
@@ -218,7 +218,7 @@ function startEditLifeItem(id) {
     document.getElementById("liLifestyle").value = b.lifestylePoints || "";
     document.getElementById("liTaxCut").value = b.taxCutPercent || "";
     document.getElementById("liAllowanceFrequency").value = d.frequency === "daily" ? "daily" : "weekly";
-    document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Save changes";
+    document.getElementById("addBtn").innerHTML = icon("save", 15) + " Save changes";
     if (!document.getElementById("cancelEditBtn")) {
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";

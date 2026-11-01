@@ -578,6 +578,10 @@ label .icon-slot{color:var(--navy-700);}
 }
 .hidden{display:none !important;}
 .muted-small{color:var(--muted);font-size:var(--fs-sm);}
+/* One-line explanation under a form field (signup page), and a first/last name pair side by side. */
+.field-hint{margin:6px 2px 0;color:var(--muted);font-size:var(--fs-sm);line-height:1.4;}
+.name-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+@media (max-width:360px){.name-row{grid-template-columns:1fr;}}
 
 /* "Stroll down memory lane" read-only banner for archived classes — see
    applyArchivedReadOnlyLock() in data.js. */

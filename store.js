@@ -7,7 +7,7 @@ function lifeStoreBarRender(me) {
   if (!vs.length) { LIFE_STORE_VID = ""; el.classList.add("hidden"); el.innerHTML = ""; return; }
   if (!vs.some(v => v.id === LIFE_STORE_VID)) LIFE_STORE_VID = "";
   el.classList.remove("hidden");
-  el.innerHTML = `<div class="cc-pb-voucher"><label for="lifeStoreVoucher">${icon("trophy", 14)} Life voucher <span class="muted-small">(weekly, one use)</span></label>
+  el.innerHTML = `<div class="cc-pb-voucher"><label for="lifeStoreVoucher">${icon("ticket", 14)} Life voucher <span class="muted-small">(weekly, one use)</span></label>
     <select id="lifeStoreVoucher" onchange="lifeStoreSetVoucher(this.value)"><option value="">None</option>${vs.map(v => `<option value="${escapeHtml(v.id)}" ${LIFE_STORE_VID === v.id ? "selected" : ""}>${v.pct}% off &middot; ${escapeHtml(v.itemName)} &middot; this week only</option>`).join("")}</select></div>`;
 }
 function lifeStoreSetVoucher(id) { LIFE_STORE_VID = id || ""; updateAllBuyLabels(); }
@@ -73,7 +73,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
@@ -158,7 +158,7 @@ async function render() {
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
           ${IS_TEACHER
-            ? `<button class="btn small secondary" onclick="editItem('${it.id}')">${icon("plus", 13)} Edit</button>
+            ? `<button class="btn small secondary" onclick="editItem('${it.id}')">${icon("edit", 13)} Edit</button>
                <button class="btn small coral" onclick="deleteItem('${it.id}')">${icon("trash", 13)} Remove</button>`
             : outOfStock
               ? `<button class="btn small gold" disabled>${icon("cart", 13)} Out of stock</button>`
@@ -174,7 +174,7 @@ async function render() {
                    </div>
                    <button class="btn small gold qty-buy-btn" id="buyBtn-${it.id}" onclick="addToCart('${it.id}')">${icon("cart", 13)} <span id="buyLabel-${it.id}">Add to cart</span></button>
                  </div>`}
-          ${(!IS_TEACHER && owned) ? `<button class="btn small secondary" onclick="sellItem('${it.id}')">${icon("trash", 13)} Sell back (80%)</button>` : ""}
+          ${(!IS_TEACHER && owned) ? `<button class="btn small secondary" onclick="sellItem('${it.id}')">${icon("download", 13)} Sell back (${storeRefundLabel(me, it)})</button>` : ""}
         </div>
       </div>
       <div id="edit-${it.id}" class="hidden"></div>
@@ -293,7 +293,7 @@ function editItem(id) {
       Counts towards net worth / leaderboard
     </label>
     <div class="row-flex" style="gap:8px;margin-top:14px;">
-      <button class="btn small gold" onclick="saveItemEdit('${id}')">${icon("plus", 13)} Save changes</button>
+      <button class="btn small gold" onclick="saveItemEdit('${id}')">${icon("save", 13)} Save changes</button>
       <button class="btn small secondary" onclick="cancelItemEdit('${id}')">Cancel</button>
     </div>
   `;
@@ -326,7 +326,11 @@ async function deleteItem(id) {
 }
 
 async function sellItem(id) {
-  if (!await t29Confirm("Sell this item back to the store for an 80% refund?")) return;
+  const sellItemObj = (MANUAL_ITEMS || []).find(i => i.id === id);
+  const refundLabel = sellItemObj && ME_CACHE ? storeRefundLabel(ME_CACHE, sellItemObj) : "80%";
+  if (!await t29Confirm(refundLabel === "80%"
+    ? "Sell this item back to the store for an 80% refund?"
+    : `Sell this item back to the store? You'll get ${refundLabel} — the most you can get back is what you paid for it.`)) return;
   const res = await sellStoreItem(CURRENT.username, CURRENT.classCode, id);
   if (!res.ok) { document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
   await render();

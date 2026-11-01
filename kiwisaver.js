@@ -26,7 +26,7 @@ async function init() {
   if (!u) return;
   CURRENT = u;
   IS_TEACHER = u.role === "teacher";
-  document.getElementById("whoami").textContent = (IS_TEACHER ? "Ms/Mr " : "") + u.name;
+  document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherView").classList.toggle("hidden", !IS_TEACHER);
@@ -108,7 +108,7 @@ function renderJoinCard(me, cls, s, ks) {
       ? `<p class="ks-note-line">Your teacher has switched KiwiSaver off for now. Your money is safe, but nothing new goes in.</p>`
       : `<h2>${icon("kiwi", 18)} KiwiSaver is switched off</h2><p class="ks-note-line">Your teacher has switched KiwiSaver off for your class.</p>`;
   } else if (s.retired) {
-    html = ks ? "" : `<h2>${icon("star", 18)} Your class has retired</h2><p class="ks-note-line">You weren't in KiwiSaver, so there's nothing to take out.</p>`;
+    html = ks ? "" : `<h2>${icon("kiwi", 18)} Your class has retired</h2><p class="ks-note-line">You weren't in KiwiSaver, so there's nothing to take out.</p>`;
   } else if (!ks) {
     const job = me.jobId && (cls.jobs || []).some(j => j.id === me.jobId);
     html = `
@@ -155,7 +155,7 @@ async function ksJoin() {
 function renderRetired(ks) {
   const card = document.getElementById("ksRetiredCard");
   card.innerHTML = `
-    <h2>${icon("star", 18)} You've retired</h2>
+    <h2>${icon("kiwi", 18)} You've retired</h2>
     <p class="ks-note-line">Your class has reached 65, so your KiwiSaver is unlocked. You can take out as much as you like, whenever you like. Whatever you leave in stays invested, so it can keep growing (or shrinking).</p>
     ${ks.balance > 0 ? `
       <form class="ks-inline-form" onsubmit="return ksWithdraw(event)">

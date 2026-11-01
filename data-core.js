@@ -108,6 +108,45 @@ function sanitizeUserText(s, maxLen) {
     .slice(0, maxLen || 60);
 }
 
+// Name helpers shared by the signup page and the teacher's bulk "Add students" box, so a
+// student who joins themselves and one a teacher adds end up with the same kind of name
+// and username.
+const T29_LETTER_FIXES = { "ø": "o", "ß": "ss", "æ": "ae", "œ": "oe", "ł": "l", "đ": "d", "ð": "d", "þ": "th", "ı": "i" };
+
+// "Māia O'Brien" -> "maia" / "obrien": accents and macrons dropped, anything that isn't a
+// letter or number removed, so it's always a safe username.
+function t29NameSlug(s) {
+  return String(s || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[øßæœłđðþı]/g, (c) => T29_LETTER_FIXES[c])
+    .replace(/[^a-z0-9]/g, "");
+}
+
+// Names typed all lower-case or all CAPS get tidied ("aroha smith" -> "Aroha Smith"); a
+// name with its own capitals ("Mc Donald", "de Vries") is left alone.
+function t29TidyName(name) {
+  if (!/\p{L}/u.test(name)) return name;
+  if (name !== name.toLowerCase() && name !== name.toUpperCase()) return name;
+  return name.toLowerCase().replace(/(^|[\s'’-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+}
+
+// The titles a teacher can pick when they sign up, and how a teacher is shown to students:
+// "Ms Smith" when they picked one, "Ms/Mr <name>" for older accounts that never did.
+const T29_TEACHER_TITLES = ["Mr", "Ms", "Mrs", "Miss", "Dr"];
+function t29DisplayName(u) {
+  if (!u) return "";
+  if (u.role !== "teacher") return u.name || "";
+  return u.title ? u.title + " " + (u.lastName || u.name || "") : "Ms/Mr " + (u.name || "");
+}
+
+// "Sam" + "Lee" -> "sam.lee" (the same first.last style the bulk creator uses by default).
+function t29SuggestUsername(first, last) {
+  const f = t29NameSlug(first), l = t29NameSlug(last);
+  const b = (f && l) ? f + "." + l : (f || l);
+  return b.slice(0, 24).replace(/\.+$/, "");
+}
+
 // Puts a message in a box and clears it again after about 3 seconds. For
 // messages shown straight after a render() (which rebuilds the box), so
 // they don't vanish the instant they appear. A newer message put in the
@@ -939,7 +978,7 @@ function defaultClassData(code, className, teacherUsername) {
 // a plain Firestore field. See firebase-init.js for t29AuthEmail() and
 // firestore.rules for how /uidIndex maps the resulting Auth uid back to
 // this app's own username.
-async function createTeacherAndClass(name, username, password, className) {
+async function createTeacherAndClass(name, username, password, className, extra) {
   // Firebase itself already refuses to create an account with a password
   // under 6 characters (see t29AuthErrorMessage's "auth/weak-password"
   // case below) — this check just catches that instantly, client-side,
@@ -951,6 +990,10 @@ async function createTeacherAndClass(name, username, password, className) {
 
   name = sanitizeUserText(name, 60);
   className = sanitizeUserText(className, 60);
+  // extra = { title, lastName } from the signup form. An unknown title is dropped rather than stored.
+  extra = extra || {};
+  const title = T29_TEACHER_TITLES.includes(extra.title) ? extra.title : "";
+  const lastName = sanitizeUserText(extra.lastName, 60);
 
   // These two checks run before the visitor is signed in, which
   // firestore.rules can refuse. A refused check must not stop the signup
@@ -958,7 +1001,7 @@ async function createTeacherAndClass(name, username, password, className) {
   // a taken username is still caught further down, by Firebase Auth
   // ("email-already-in-use") and by the /users create rule.
   const existing = await getUser(username).catch(() => null);
-  if (existing) return { ok: false, error: "That username is already taken." };
+  if (existing) return { ok: false, error: "That username is already taken — try adding a number to the end." };
 
   let code;
   do { code = genCode(5); } while ((await getClass(code).catch(() => null)));
@@ -974,6 +1017,7 @@ async function createTeacherAndClass(name, username, password, className) {
     username, authUid: cred.user.uid, role: "teacher", name,
     classCode: code, balance: 0, sessionVersion: 0
   };
+  if (title) { user.title = title; if (lastName) user.lastName = lastName; }
   const cls = defaultClassData(code, className, username);
 
   try {
@@ -997,7 +1041,7 @@ async function createTeacherAndClass(name, username, password, className) {
 // message this app already shows for every other form error.
 function t29AuthErrorMessage(e) {
   switch (e && e.code) {
-    case "auth/email-already-in-use": return "That username is already taken.";
+    case "auth/email-already-in-use": return "That username is already taken — try adding a number to the end.";
     case "auth/weak-password": return "Password must be at least 6 characters.";
     case "auth/invalid-email": return "That username can't be used — try letters and numbers only.";
     case "auth/network-request-failed": return "Can't connect right now — check your internet connection and try again.";
@@ -1485,7 +1529,7 @@ async function createStudentAccount(name, username, password, classCode) {
 
   // See the matching note in createTeacherAndClass above.
   const existing = await getUser(username).catch(() => null);
-  if (existing) return { ok: false, error: "That username is already taken." };
+  if (existing) return { ok: false, error: "That username is already taken — try adding a number to the end." };
 
   let cred;
   try {
@@ -3225,7 +3269,7 @@ function _anwShowsChips() {
 function _anwWidgetLabelHtml() {
   return _anwShowsChips()
     ? `${icon("dice", 14)} Chips balance`
-    : `${icon("piggy", 14)} Cash balance`;
+    : `${icon("coin", 14)} Cash balance`;
 }
 
 // The one place that actually repaints the widget's number. Always an
