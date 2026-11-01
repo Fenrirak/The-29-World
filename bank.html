@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=3f1e0bd6">
+<link rel="stylesheet" href="style.css?v=ad2d7bbb">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -88,6 +88,12 @@
       <span class="icon" id="iconAuto"></span>
       <div class="label">Active automatic payments</div>
       <div class="value" id="autoCount">0</div>
+    </div>
+    <div class="stat mint hidden" id="acctStat">
+      <span class="icon" id="iconAcctStat"></span>
+      <div class="label">In my other accounts</div>
+      <div class="value" id="acctTotal">$0.00</div>
+      <div class="muted-small" id="acctStatNote"></div>
     </div>
     <div class="stat lilac hidden" id="cardStat">
       <span class="icon" id="iconCardStat"></span>
@@ -171,6 +177,10 @@
     </div>
   </div>
 
+
+  <!-- ---------------- Extra bank accounts — screens are drawn by accounts.js, rules live in data-money.js ---------------- -->
+  <div class="card cc-card ac-card hidden" id="acctCard"></div>
+  <div class="card cc-card ac-card hidden" id="acctTeacherCard"></div>
 
 <div class="grid grid-2">
     <div class="card">
@@ -261,8 +271,8 @@
 <script defer src="icons.js?v=fa4a03d9"></script>
 <script defer src="settings-menu.js?v=8dde546c"></script>
 <script defer src="shortcuts.js?v=bcda2833"></script>
-<script defer src="data-core.js?v=186811d4"></script>
-<script defer src="data-money.js?v=b3375627"></script>
+<script defer src="data-core.js?v=1860738e"></script>
+<script defer src="data-money.js?v=b96e0737"></script>
 <script defer src="data-life.js?v=d62c66a1"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=d6ba8dd6"></script>
@@ -271,6 +281,7 @@
 <script defer src="notifications.js?v=beececba"></script>
 <script defer src="savings-goals.js?v=bea990fb"></script>
 <script defer src="creditcard.js?v=5bd1bfc9"></script>
-<script defer src="bank.js?v=12a9334b"></script>
+<script defer src="accounts.js?v=0e5712f5"></script>
+<script defer src="bank.js?v=820f0a99"></script>
 </body>
 </html>

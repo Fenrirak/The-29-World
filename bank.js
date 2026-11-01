@@ -156,8 +156,11 @@ async function render() {
   // Credit card: the stat tile up top, and the card section (see creditcard.js).
   const showCardStat = !IS_TEACHER && cardIsActive(me);
   document.getElementById("cardStat").classList.toggle("hidden", !showCardStat);
-  document.getElementById("topStats").classList.toggle("grid-3", showCardStat);
-  document.getElementById("topStats").classList.toggle("grid-2", !showCardStat);
+  renderBankAccounts(me, cls, allStudents); // extra bank accounts (see accounts.js) — sets the "other accounts" stat tile too
+  // 2 tiles → 2 columns, 3 tiles → 3 columns, 4 tiles → a 2 x 2 grid
+  const statCount = 2 + (showCardStat ? 1 : 0) + (acStatVisible() ? 1 : 0);
+  document.getElementById("topStats").classList.toggle("grid-3", statCount === 3);
+  document.getElementById("topStats").classList.toggle("grid-2", statCount !== 3);
   if (showCardStat) {
     const cp = cardPlanById(cls, me.creditCard.planId);
     document.getElementById("cardOwing").textContent = fmtMoney(me.creditCard.balance || 0);
@@ -277,7 +280,7 @@ async function render() {
       "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
       "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"],
       "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
-    "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"],
+    "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"], "account-fee": ["coral", "coin", "Account fee"],
     "card-cashback": ["mint", "cards", "Cashback"], "card-statement": ["gold", "cards", "Statement"],
     "loan-interest": ["coral", "handshake", "Loan interest"], "side-hustle": ["mint", "briefcase", "Side hustle"],
       "truck-drive": ["mint", "car", "Truck drive"], "truck-licence-buy": ["navy", "car", "Truck licence"],

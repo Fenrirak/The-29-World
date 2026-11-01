@@ -132,7 +132,7 @@ function _wageMightBePayable(cls, student) {
 }
 function _interestMightBePayable(cls, student) {
   const credit = computeInterestCredit(cls, student);
-  return credit.savingsNet > 0 || credit.cashNet > 0;
+  return credit.savingsNet > 0 || credit.cashNet > 0 || credit.acct.changed;
 }
 
 // Credits ONE student's wage in a single transaction on their own doc.
@@ -1095,6 +1095,7 @@ function computeInterestCredit(cls, student) {
   const savingsTax = savingsInterestGross > 0 ? applyTaxToIncome(cls, "interest", savingsInterestGross) : { net: 0, taxAmount: 0 };
   const cashTax = cashInterestGross > 0 ? applyTaxToIncome(cls, "interest", cashInterestGross) : { net: 0, taxAmount: 0 };
   return {
+    acct: acctComputeInterest(cls, student), // extra bank accounts (interest, fees, withdrawal-counter reset)
     savingsNet: savingsTax.net, savingsTaxAmount: savingsTax.taxAmount,
     cashNet: cashTax.net, cashTaxAmount: cashTax.taxAmount,
     newSavings: Math.round(((student.savings || 0) + savingsTax.net) * 100) / 100,
@@ -1125,8 +1126,10 @@ async function _creditStudentInterest(classCode, username, dateKey, { force = fa
       if (!cls) return;
       if (!force && !isInterestDueForUser(cls, user, dateKey)) return;
       const credit = computeInterestCredit(cls, user);
-      if (credit.savingsNet <= 0 && credit.cashNet <= 0) return; // nothing to pay — leave unstamped so a same-day rate change can still catch them
-      t.update(userRef, { savings: credit.newSavings, balance: credit.newBalance, lastInterestApplied: dateKey });
+      if (credit.savingsNet <= 0 && credit.cashNet <= 0 && !credit.acct.changed) return; // nothing to pay — leave unstamped so a same-day rate change can still catch them
+      const upd = { savings: credit.newSavings, balance: credit.newBalance, lastInterestApplied: dateKey };
+      if (credit.acct.accounts) upd.bankAccounts = credit.acct.accounts;
+      t.update(userRef, upd);
       credited = credit;
     });
   } catch (e) {
@@ -1136,6 +1139,10 @@ async function _creditStudentInterest(classCode, username, dateKey, { force = fa
   const log = async entry => { if (logSink) logSink.push(entry); else await logTxn(classCode, entry); };
   if (credited.savingsNet > 0) {
     await log({ type: "interest", to: username, amount: credited.savingsNet, note: "Savings account interest" + (credited.savingsTaxAmount > 0 ? ` (${fmtMoney(credited.savingsTaxAmount)} tax withheld)` : "") });
+  }
+  for (const l of credited.acct.lines) {
+    if (l.kind === "interest") await log({ type: "interest", to: username, amount: l.net, note: `${l.name} interest${l.bonus ? " (incl. no-withdrawal bonus)" : ""}` + (l.tax > 0 ? ` (${fmtMoney(l.tax)} tax withheld)` : "") });
+    else await log({ type: "account-fee", from: username, amount: l.amount, note: `Account fee — ${l.name}` });
   }
   if (credited.cashNet > 0) {
     await log({ type: "cash-interest", to: username, amount: credited.cashNet, note: "Cash balance interest" + (credited.cashTaxAmount > 0 ? ` (${fmtMoney(credited.cashTaxAmount)} tax withheld)` : "") });
@@ -2545,7 +2552,7 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
     (cls.vehicles || []).forEach(v => { if ((v.owners || []).includes(s.username)) vehicleValue += v.price; });
     vehicleValue = Math.round(vehicleValue * 100) / 100;
 
-    const savings = s.savings || 0;
+    const savings = Math.round(((s.savings || 0) + acctTotalOf(s)) * 100) / 100; // Savings Account + any extra bank accounts
     const owed = (s.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0) + mortgageOwed + cardOwed(s);
     const termDeposits = (s.termDeposits || []).reduce((sum, d) => sum + d.amount, 0);
     // Gambling account balance counts toward net worth like any other
@@ -2900,7 +2907,8 @@ const REPORT_SPENT_TYPES = {
   "loan-interest": "Loan interest", fine: "Fines",
   // Card spending counts when it is spent (not when the bill is paid), so
   // "card-payment" is left out on purpose — it would count the same money twice.
-  "card-purchase": "Store purchases", "card-interest": "Card interest & fees", "card-fee": "Card interest & fees"
+  "card-purchase": "Store purchases", "card-interest": "Card interest & fees", "card-fee": "Card interest & fees",
+  "account-fee": "Bank fees"
 };
 
 function classifyTxnForReport(t, username) {
@@ -3021,7 +3029,7 @@ function buildStudentReportData(student, cls) {
   });
   let vehicleValue = 0;
   (cls.vehicles || []).forEach(v => { if ((v.owners || []).includes(username)) vehicleValue += v.price; });
-  const savings = student.savings || 0;
+  const savings = Math.round(((student.savings || 0) + acctTotalOf(student)) * 100) / 100; // Savings Account + any extra bank accounts
   const termDeposits = (student.termDeposits || []).reduce((s, d) => s + d.amount, 0);
   const activeLoanOwed = loans.filter(l => l.status === "active").reduce((s, l) => s + l.owed, 0);
   const owed = Math.round((activeLoanOwed + mortgageOwed + cardOwed(student)) * 100) / 100;
@@ -3658,6 +3666,7 @@ function budgetWeekActuals(cls, username, weekStartKey) {
         if (t.scheduled || /^Weekly transport expenses/.test(t.note || "")) break;
         add(t.surprise ? surprises : purchases, (t.cat || "Store") + " (card)", amt); break;
       case "card-interest": case "card-fee": add(surprises, "Card interest & fees", amt); break;
+      case "account-fee": add(surprises, "Bank fees", amt); break;
       case "card-cashback": add(extra, "Card cashback", amt); break;
       case "p2p-buy": add(purchases, "Trade Centre", amt); break;
       case "vehicle-buy": case "truck-licence-buy": add(purchases, "Transport", amt); break;
@@ -3988,7 +3997,7 @@ const TXN_MONEY_IN = new Set([
 const TXN_MONEY_OUT = new Set([
   "fine", "insurance-buy", "store-buy", "mortgage", "mortgage-extra", "property-buy", "property-rent-pay", "vehicle-buy", "transport-expense",
   "term-deposit-open", "insurance-premium", "insurance-signup-fee", "savings-deposit", "loan-repayment", "loan-interest",
-  "p2p-buy", "truck-licence-buy", "gambling-buyin", "stock-buy", "kiwisaver-in", "card-payment"
+  "p2p-buy", "truck-licence-buy", "gambling-buyin", "stock-buy", "kiwisaver-in", "card-payment", "account-fee"
 ]);
 function txnDirection(t, username) {
   const raw = Number(t.amount) || 0;
@@ -4942,4 +4951,344 @@ function cardDateLabel(key) {
   if (!key) return "";
   const d = new Date(dateKeyToUTC(key));
   return `${DAY_NAMES[d.getUTCDay()]} ${d.getUTCDate()} ${CARD_MONTHS[d.getUTCMonth()]}`;
+}
+
+
+/* ===================== Bank accounts (extra everyday + savings accounts) =====================
+   The class always has the two original accounts: the cash balance (`balance`,
+   what the rest of the site spends from) and the Savings Account (`savings`,
+   paid at cls.interestRate). On top of those a teacher can offer any number of
+   account PLANS (class doc: `accountPlans`, `accountSettings`) and a student
+   opens the ones they like (their own doc: `bankAccounts`). Money moves between
+   the cash balance and any account with moveBankMoney().
+
+   Each plan is either "everyday" or "savings" and can set: an interest rate
+   (% every time interest is paid, on the class's normal interest schedule), a
+   bonus rate for a period with no withdrawals, a minimum balance to earn
+   interest, an account fee (with a balance that waives it), a fee per
+   withdrawal, a cap on withdrawals per interest period, a balance cap, and a
+   minimum lifestyle tier. Interest and fees are worked out inside
+   computeInterestCredit(), so every path that pays interest handles accounts
+   too. Screens: accounts.js. */
+const ACCT_DEFAULT_SETTINGS = { enabled: true, approval: "instant", maxEveryday: 2, maxSavings: 3 };
+const ACCT_KINDS = ["everyday", "savings"];
+
+function acctRound(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+function acctSettings(cls) { return Object.assign({}, ACCT_DEFAULT_SETTINGS, (cls && cls.accountSettings) || {}); }
+function acctPlansOf(cls) { return ((cls && cls.accountPlans) || []).filter(p => !p.archived); }
+function acctPlanById(cls, id) { return ((cls && cls.accountPlans) || []).find(p => p.id === id) || null; }
+function acctListOf(user) { return Array.isArray(user && user.bankAccounts) ? user.bankAccounts : []; }
+function acctActiveOf(user) { return acctListOf(user).filter(a => a.status === "active"); }
+function acctTotalOf(user) { return acctRound(acctActiveOf(user).reduce((s, a) => s + (Number(a.balance) || 0), 0)); }
+function acctLast4(a) { // a stable, made-up last 4 digits from the account id
+  let h = 0; String((a && a.id) || "0").split("").forEach(c => { h = (h * 31 + c.charCodeAt(0)) % 10000; });
+  return String(h).padStart(4, "0");
+}
+function acctCleanPlan(p) {
+  const num = (v, min, max, dflt) => { let n = Number(v); if (!isFinite(n)) n = dflt; return Math.min(max, Math.max(min, n)); };
+  const kind = ACCT_KINDS.includes(p.kind) ? p.kind : "everyday";
+  const sav = kind === "savings";
+  return {
+    id: p.id || uid("ac"),
+    name: String(p.name || "").trim().slice(0, 40) || (sav ? "Savings account" : "Everyday account"),
+    kind,
+    blurb: String(p.blurb || "").trim().slice(0, 90),
+    theme: CARD_THEME_IDS.includes(p.theme) ? p.theme : "",
+    rate: acctRound(num(p.rate, 0, 100, 0)),
+    bonusRate: sav ? acctRound(num(p.bonusRate, 0, 100, 0)) : 0,
+    minBalance: acctRound(num(p.minBalance, 0, 1000000, 0)),
+    fee: acctRound(num(p.fee, 0, 10000, 0)),
+    feeWaiveAt: acctRound(num(p.feeWaiveAt, 0, 10000000, 0)),
+    withdrawFee: acctRound(num(p.withdrawFee, 0, 10000, 0)),
+    maxWithdrawals: sav ? Math.floor(num(p.maxWithdrawals, 0, 100, 0)) : 0,
+    maxBalance: acctRound(num(p.maxBalance, 0, 100000000, 0)),
+    minLifestyle: Math.floor(num(p.minLifestyle, 0, 100000, 0)),
+    archived: !!p.archived
+  };
+}
+function acctPlanChangeParts(o, n) {
+  const m = fmtMoney, parts = [];
+  const num = (a, b) => (Number(a) || 0) !== (Number(b) || 0);
+  if (o.name !== n.name) parts.push(`renamed to ${n.name}`);
+  if (num(o.rate, n.rate)) parts.push(`interest ${o.rate || 0}% → ${n.rate}%`);
+  if (num(o.bonusRate, n.bonusRate)) parts.push(`no-withdrawal bonus ${o.bonusRate || 0}% → ${n.bonusRate}%`);
+  if (num(o.minBalance, n.minBalance)) parts.push(`balance needed to earn interest ${m(o.minBalance || 0)} → ${m(n.minBalance)}`);
+  if (num(o.fee, n.fee)) parts.push(`account fee ${m(o.fee || 0)} → ${m(n.fee)}`);
+  if (num(o.feeWaiveAt, n.feeWaiveAt)) parts.push(n.feeWaiveAt > 0 ? `fee waived from ${m(n.feeWaiveAt)}` : "fee is no longer waived");
+  if (num(o.withdrawFee, n.withdrawFee)) parts.push(`withdrawal fee ${m(o.withdrawFee || 0)} → ${m(n.withdrawFee)}`);
+  if (num(o.maxWithdrawals, n.maxWithdrawals)) parts.push(`withdrawals per interest period ${o.maxWithdrawals || "unlimited"} → ${n.maxWithdrawals || "unlimited"}`);
+  if (num(o.maxBalance, n.maxBalance)) parts.push(`balance cap ${o.maxBalance ? m(o.maxBalance) : "none"} → ${n.maxBalance ? m(n.maxBalance) : "none"}`);
+  return parts;
+}
+
+/* ---------------- Teacher: settings + plans ---------------- */
+async function saveAccountSettings(classCode, s) {
+  const lim = v => Math.min(10, Math.max(0, Math.floor(Number(v) || 0)));
+  const clean = {
+    enabled: !!s.enabled,
+    approval: s.approval === "teacher" ? "teacher" : "instant",
+    maxEveryday: lim(s.maxEveryday),
+    maxSavings: lim(s.maxSavings)
+  };
+  const oldCls = await getClass(classCode).catch(() => null);
+  const old = acctSettings(oldCls);
+  await classesCol().doc(classCode).update({ accountSettings: clean });
+  const msgs = [];
+  if (old.enabled !== clean.enabled) msgs.push(clean.enabled ? "extra bank accounts are now switched on" : "extra bank accounts are now switched off");
+  if (old.approval !== clean.approval) msgs.push(clean.approval === "instant" ? "new accounts are now opened instantly" : "new accounts now need teacher approval");
+  if (old.maxEveryday !== clean.maxEveryday) msgs.push(`you can hold up to ${clean.maxEveryday} extra everyday account${clean.maxEveryday === 1 ? "" : "s"}`);
+  if (old.maxSavings !== clean.maxSavings) msgs.push(`you can hold up to ${clean.maxSavings} extra savings account${clean.maxSavings === 1 ? "" : "s"}`);
+  if (msgs.length) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "piggy", tone: "gold",
+      title: "Your teacher changed the bank account settings", body: msgs.join("; ") + ".", href: "bank.html#acctCard" });
+  }
+  return clean;
+}
+async function saveAccountPlan(classCode, raw) {
+  const classRef = classesCol().doc(classCode);
+  const clean = acctCleanPlan(raw);
+  let before = null, isNew = false;
+  await fdb.runTransaction(async (t) => {
+    before = null; isNew = false; // reset every attempt — this callback can be retried
+    const snap = await t.get(classRef);
+    if (!snap.exists) throw new Error("NO_CLASS");
+    const plans = (snap.data().accountPlans || []).slice();
+    const i = plans.findIndex(p => p.id === clean.id);
+    if (i >= 0) { before = plans[i]; plans[i] = clean; } else { isNew = true; plans.push(clean); }
+    t.update(classRef, { accountPlans: plans });
+  });
+  if (isNew) {
+    if (!clean.archived) {
+      await t29NotifyStudents(classCode, { to: "all", icon: "piggy", tone: "navy",
+        title: `Your teacher added a new account: ${clean.name}`,
+        body: `${clean.kind === "savings" ? "A savings account" : "An everyday account"}${clean.rate > 0 ? ` paying ${clean.rate}% interest` : ""}. You can open it on the Bank page.`, href: "bank.html#acctCard" });
+    }
+  } else if (before) {
+    const parts = acctPlanChangeParts(before, clean);
+    if (parts.length) {
+      const holders = await t29StudentsWhere(classCode, s => acctListOf(s).some(a => a.planId === clean.id && (a.status === "active" || a.status === "pending")));
+      await t29NotifyStudents(classCode, { to: holders, icon: "piggy", tone: "gold",
+        title: `Your teacher changed the ${clean.name} account`,
+        body: parts.join("; ") + ". Changes apply from the next interest payment (withdrawal and balance rules apply straight away).", href: "bank.html#acctCard" });
+    }
+  }
+  return clean;
+}
+// A plan someone holds is hidden from new students (archived) instead of deleted, so existing accounts keep working.
+async function removeAccountPlan(classCode, planId, archiveOnly) {
+  const classRef = classesCol().doc(classCode);
+  let gone = null;
+  await fdb.runTransaction(async (t) => {
+    gone = null;
+    const snap = await t.get(classRef);
+    if (!snap.exists) throw new Error("NO_CLASS");
+    let plans = (snap.data().accountPlans || []).slice();
+    const target = plans.find(p => p.id === planId);
+    if (target) gone = { name: target.name, archived: !!archiveOnly };
+    plans = archiveOnly ? plans.map(p => p.id === planId ? Object.assign({}, p, { archived: true }) : p) : plans.filter(p => p.id !== planId);
+    t.update(classRef, { accountPlans: plans });
+  });
+  if (gone && gone.archived) {
+    const holders = await t29StudentsWhere(classCode, s => acctListOf(s).some(a => a.planId === planId && (a.status === "active" || a.status === "pending")));
+    await t29NotifyStudents(classCode, { to: holders, icon: "piggy", tone: "gold",
+      title: `Your teacher retired the ${gone.name} account`,
+      body: "It is no longer offered to new students. Your own account keeps working.", href: "bank.html#acctCard" });
+  }
+}
+
+/* ---------------- Student: open, approve, close ---------------- */
+async function openBankAccount(username, classCode, planId) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let status = "pending";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef), cs = await t.get(classRef);
+      if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
+      const user = us.data(), cls = withNewModuleDefaults(cs.data());
+      if (user.role === "teacher") throw new Error("TEACHER");
+      const st = acctSettings(cls);
+      if (!st.enabled) throw new Error("OFF");
+      const plan = acctPlanById(cls, planId);
+      if (!plan || plan.archived) throw new Error("NOT_FOUND");
+      const list = acctListOf(user).slice();
+      if (list.some(a => a.planId === planId && (a.status === "active" || a.status === "pending"))) throw new Error("HAS_IT");
+      const sameKind = list.filter(a => (a.status === "active" || a.status === "pending") && (acctPlanById(cls, a.planId) || {}).kind === plan.kind).length;
+      if (sameKind >= (plan.kind === "savings" ? st.maxSavings : st.maxEveryday)) throw new Error("MAX");
+      if (lifestyleRatingFromData(cls, user, username) < plan.minLifestyle) throw new Error("LIFESTYLE");
+      const base = { id: uid("ac"), planId, appliedTs: Date.now(), balance: 0, wd: 0, lifetime: { interest: 0, fees: 0 } };
+      if (st.approval === "instant") { status = "active"; list.push(Object.assign(base, { status: "active", openedKey: nzDateKey() })); }
+      else { status = "pending"; list.push(Object.assign(base, { status: "pending" })); }
+      t.update(userRef, { bankAccounts: list });
+    });
+  } catch (e) {
+    const m = { OFF: "Extra bank accounts aren't switched on for this class.", HAS_IT: "You already have that account.",
+      MAX: "You've reached the limit for that kind of account. Close one you don't use first.",
+      LIFESTYLE: "Your lifestyle rating isn't high enough for that account yet.", NOT_FOUND: "That account isn't available any more." };
+    return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
+  }
+  return { ok: true, status };
+}
+async function approveBankAccount(classCode, username, accountId) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let plan = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      plan = null;
+      const us = await t.get(userRef), cs = await t.get(classRef);
+      if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
+      const cls = withNewModuleDefaults(cs.data());
+      const list = acctListOf(us.data()).map(a => Object.assign({}, a));
+      const a = list.find(x => x.id === accountId && x.status === "pending");
+      if (!a) throw new Error("NOT_PENDING");
+      plan = acctPlanById(cls, a.planId);
+      if (!plan) throw new Error("NOT_FOUND");
+      a.status = "active"; a.openedKey = nzDateKey();
+      t.update(userRef, { bankAccounts: list });
+    });
+  } catch (e) { return { ok: false, error: "Couldn't approve that account — it may have changed. Refresh and try again." }; }
+  if (plan) await t29NotifyStudents(classCode, { to: username, icon: "piggy", tone: "mint",
+    title: `Your teacher approved your ${plan.name} account`, body: "It's open now — find it on the Bank page and move some money in.", href: "bank.html#acctCard" });
+  return { ok: true };
+}
+async function declineBankAccount(classCode, username, accountId) {
+  const userRef = usersCol().doc(username);
+  let name = "account";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef);
+      if (!us.exists) throw new Error("NOT_FOUND");
+      const list = acctListOf(us.data());
+      if (!list.some(x => x.id === accountId && x.status === "pending")) throw new Error("NOT_PENDING");
+      t.update(userRef, { bankAccounts: list.filter(x => x.id !== accountId) });
+    });
+  } catch (e) { return { ok: false, error: "Couldn't decline that — it may have changed. Refresh and try again." }; }
+  await t29NotifyStudents(classCode, { to: username, icon: "piggy", tone: "coral",
+    title: "Your teacher declined an account application", body: "You can ask your teacher why, or apply for a different account.", href: "bank.html#acctCard" });
+  return { ok: true };
+}
+// Withdraw a waiting application (balance is always $0 while pending).
+async function cancelBankAccountApplication(username, accountId) {
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef);
+      if (!us.exists) return;
+      t.update(userRef, { bankAccounts: acctListOf(us.data()).filter(x => !(x.id === accountId && x.status === "pending")) });
+    });
+  } catch (e) { return { ok: false, error: "Something went wrong. Please try again." }; }
+  return { ok: true };
+}
+// Closing sends whatever is left back to the cash balance.
+async function closeBankAccount(username, classCode, accountId) {
+  const userRef = usersCol().doc(username);
+  let moved = 0, name = "account";
+  try {
+    await fdb.runTransaction(async (t) => {
+      moved = 0;
+      const us = await t.get(userRef);
+      if (!us.exists) throw new Error("NOT_FOUND");
+      const user = us.data(), list = acctListOf(user);
+      const a = list.find(x => x.id === accountId && x.status === "active");
+      if (!a) throw new Error("NOT_FOUND");
+      moved = acctRound(a.balance || 0);
+      t.update(userRef, { bankAccounts: list.filter(x => x.id !== accountId), balance: acctRound((user.balance || 0) + moved) });
+    });
+  } catch (e) { return { ok: false, error: "Couldn't close that account. Refresh and try again." }; }
+  if (moved > 0) await logTxn(classCode, { type: "savings-withdraw", to: username, amount: moved, note: "Closed an account — balance moved back to cash" });
+  return { ok: true, moved };
+}
+
+/* ---------------- Moving money ---------------- */
+// ids: "cash", "savings" (the original Savings Account) or a bankAccounts id.
+// Withdrawing from an account follows its plan: withdrawal cap, withdrawal fee.
+// Paying into one follows its balance cap.
+async function moveBankMoney(username, classCode, fromId, toId, amount) {
+  amount = cleanAmount(amount);
+  if (!(amount > 0)) return { ok: false, error: "Enter an amount greater than zero." };
+  if (!fromId || !toId || fromId === toId) return { ok: false, error: "Pick two different accounts." };
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let logs = [];
+  try {
+    await fdb.runTransaction(async (t) => {
+      logs = [];
+      const us = await t.get(userRef), cs = await t.get(classRef);
+      if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
+      const user = us.data(), cls = withNewModuleDefaults(cs.data());
+      let bal = user.balance || 0, sav = user.savings || 0;
+      const list = acctListOf(user).map(a => Object.assign({}, a));
+      const find = id => list.find(a => a.id === id && a.status === "active");
+      const nameOf = id => id === "cash" ? "Cash" : id === "savings" ? "Savings Account" : ((acctPlanById(cls, (find(id) || {}).planId) || {}).name || "account");
+      // --- take it out of the source ---
+      let fee = 0, feeName = "";
+      if (fromId === "cash") { if (bal < amount) throw new Error("BROKE_CASH"); bal -= amount; }
+      else if (fromId === "savings") { if (sav < amount) throw new Error("BROKE_SAV"); sav -= amount; }
+      else {
+        const a = find(fromId); if (!a) throw new Error("NOT_FOUND");
+        const plan = acctPlanById(cls, a.planId);
+        if (plan && plan.maxWithdrawals > 0 && (a.wd || 0) >= plan.maxWithdrawals) throw new Error("LIMIT:" + plan.maxWithdrawals);
+        fee = plan ? plan.withdrawFee || 0 : 0; feeName = plan ? plan.name : "";
+        if ((a.balance || 0) < amount + fee) throw new Error(fee > 0 && (a.balance || 0) >= amount ? "BROKE_FEE:" + fee : "BROKE_ACCT");
+        a.balance = acctRound((a.balance || 0) - amount - fee);
+        a.wd = (a.wd || 0) + 1;
+        if (fee > 0) a.lifetime = Object.assign({}, a.lifetime, { fees: acctRound(((a.lifetime || {}).fees || 0) + fee) });
+      }
+      // --- put it into the destination ---
+      if (toId === "cash") bal += amount;
+      else if (toId === "savings") sav += amount;
+      else {
+        const a = find(toId); if (!a) throw new Error("NOT_FOUND");
+        const plan = acctPlanById(cls, a.planId);
+        if (plan && plan.maxBalance > 0 && (a.balance || 0) + amount > plan.maxBalance + 0.001) throw new Error("CAP:" + acctRound(Math.max(0, plan.maxBalance - (a.balance || 0))));
+        a.balance = acctRound((a.balance || 0) + amount);
+      }
+      t.update(userRef, { balance: acctRound(bal), savings: acctRound(sav), bankAccounts: list });
+      // --- what shows in the activity list ---
+      const note = `Moved from ${nameOf(fromId)} to ${nameOf(toId)}`;
+      if (fromId !== "cash") logs.push({ type: "savings-withdraw", to: username, amount, note });
+      if (toId !== "cash") logs.push({ type: "savings-deposit", from: username, amount, note });
+      if (fee > 0) logs.push({ type: "account-fee", from: username, amount: fee, note: `Withdrawal fee — ${feeName}` });
+    });
+  } catch (e) {
+    const [code, arg] = String(e.message).split(":");
+    const m = {
+      BROKE_CASH: "You don't have enough cash for that.", BROKE_SAV: "You don't have that much in your Savings Account.",
+      BROKE_ACCT: "There isn't that much in that account.",
+      BROKE_FEE: `That account charges a ${fmtMoney(Number(arg) || 0)} withdrawal fee, so it needs a little more than that in it.`,
+      LIMIT: `That account allows ${arg} withdrawal${arg === "1" ? "" : "s"} each interest period, and you've used ${arg === "1" ? "it" : "them"} up. It resets when interest is next paid.`,
+      CAP: `That account can only hold up to its balance cap — you can add ${fmtMoney(Number(arg) || 0)} more.`,
+      NOT_FOUND: "That account isn't available any more."
+    };
+    return { ok: false, error: m[code] || "Something went wrong. Please try again." };
+  }
+  for (const l of logs) await logTxn(classCode, l);
+  return { ok: true };
+}
+
+/* ---------------- Interest + fees (called from computeInterestCredit) ---------------- */
+// Works out, for every active account: interest (with tax), the account fee,
+// and the reset of the withdrawal counter. Pure — nothing is written here.
+function acctComputeInterest(cls, user) {
+  const out = { accounts: null, lines: [], net: 0, tax: 0, fees: 0, changed: false };
+  const list = acctListOf(user);
+  if (!list.length) return out;
+  out.accounts = list.map(a => {
+    if (a.status !== "active") return a;
+    const plan = acctPlanById(cls, a.planId);
+    const bal = acctRound(a.balance || 0), wd = a.wd || 0;
+    if (!plan) return a;
+    const bonus = wd === 0 && plan.bonusRate > 0 ? plan.bonusRate : 0;
+    const rate = (plan.rate || 0) + bonus;
+    const gross = bal > 0 && bal >= (plan.minBalance || 0) && rate > 0 ? acctRound(bal * rate / 100) : 0;
+    const tx = gross > 0 ? applyTaxToIncome(cls, "interest", gross) : { net: 0, taxAmount: 0 };
+    let nb = acctRound(bal + tx.net), fee = 0;
+    if (plan.fee > 0 && nb > 0 && !(plan.feeWaiveAt > 0 && bal >= plan.feeWaiveAt)) fee = acctRound(Math.min(plan.fee, nb));
+    nb = acctRound(nb - fee);
+    if (tx.net > 0 || fee > 0 || wd > 0) out.changed = true;
+    if (tx.net > 0) out.lines.push({ kind: "interest", name: plan.name, net: tx.net, tax: tx.taxAmount, bonus: bonus > 0 });
+    if (fee > 0) out.lines.push({ kind: "fee", name: plan.name, amount: fee });
+    out.net = acctRound(out.net + tx.net); out.tax = acctRound(out.tax + tx.taxAmount); out.fees = acctRound(out.fees + fee);
+    const lt = a.lifetime || {};
+    return Object.assign({}, a, { balance: nb, wd: 0, lifetime: { interest: acctRound((lt.interest || 0) + tx.net), fees: acctRound((lt.fees || 0) + fee) } });
+  });
+  return out;
 }

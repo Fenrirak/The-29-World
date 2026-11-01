@@ -440,7 +440,7 @@ function describeTxn(t, nameOf) {
     case "loan-taken": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "loan-repayment": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "loan-interest": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "card-purchase": case "card-payment": case "card-interest": case "card-fee": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
+    case "card-purchase": case "card-payment": case "card-interest": case "card-fee": case "account-fee": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "card-cashback": case "card-statement": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "side-hustle": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "truck-drive": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
@@ -494,7 +494,7 @@ function badge(type) {
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
     "loan-taken": ["navy", "handshake", "Loan"], "loan-repayment": ["mint", "handshake", "Loan repayment"],
     "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
-    "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"],
+    "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"], "account-fee": ["coral", "coin", "Account fee"],
     "card-cashback": ["mint", "cards", "Cashback"], "card-statement": ["gold", "cards", "Statement"],
     "loan-interest": ["coral", "handshake", "Loan interest"],
     "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],

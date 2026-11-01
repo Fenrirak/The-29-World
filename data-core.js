@@ -3132,6 +3132,8 @@ function withNewModuleDefaults(cls) {
   if (!cls.lifestyleConfig.loan) cls.lifestyleConfig.loan = { enabled: false, perAmount: 0, points: 0 };
   if (!cls.lifestyleConfig.creditCard) cls.lifestyleConfig.creditCard = { enabled: false, perAmount: 0, points: 1 };
   cls.cardPlans = cls.cardPlans || [];
+  cls.accountPlans = cls.accountPlans || [];
+  cls.accountSettings = cls.accountSettings || { enabled: true, approval: "instant", maxEveryday: 2, maxSavings: 3 };
   cls.cardSettings = cls.cardSettings || { enabled: true, approval: "teacher", statementDay: "Fri" };
   cls.lifestyleThresholds = cls.lifestyleThresholds && cls.lifestyleThresholds.length ? cls.lifestyleThresholds : [
     { min: 0, max: 10, label: "Poor", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },

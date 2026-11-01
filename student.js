@@ -29,7 +29,7 @@ function badgeType(type) {
     "insurance-signup-fee": ["lilac", "shield", "Insurance sign-up"],
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
     "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
-    "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"],
+    "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"], "account-fee": ["coral", "coin", "Account fee"],
     "card-cashback": ["mint", "cards", "Cashback"], "card-statement": ["gold", "cards", "Statement"],
     "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"],
     "side-hustle": ["mint", "briefcase", "Side hustle"],
