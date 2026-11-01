@@ -3,12 +3,12 @@ let CURRENT, IS_TEACHER;
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("calendar", 26) + (IS_TEACHER ? " Budgeting" : " Budget");
-  document.getElementById("hBudget").innerHTML = icon("wallet", 18) + " Budget";
+  document.getElementById("hBudget").innerHTML = "Budget";
   document.getElementById("hBudPlan").innerHTML = icon("piggy", 15) + " My plan";
   document.getElementById("hBudTrack").innerHTML = icon("wallet", 15) + " How this week is going";
-  document.getElementById("hBudDays").innerHTML = icon("calendar", 15) + " Day by day";
+  document.getElementById("hBudDays").innerHTML = "Day by day";
   document.getElementById("labBudSave").innerHTML = icon("piggy", 13) + " How much will I save each week?";
-  document.getElementById("hBudgetTeacher").innerHTML = icon("wallet", 18) + " Students' budgets this week";
+  document.getElementById("hBudgetTeacher").innerHTML = "Students' budgets this week";
 }
 
 async function init() {
