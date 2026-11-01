@@ -4,10 +4,10 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("calendar", 26) + (IS_TEACHER ? " Budgeting" : " Budget");
   document.getElementById("hBudget").innerHTML = "Budget";
-  document.getElementById("hBudPlan").innerHTML = icon("piggy", 15) + " My plan";
-  document.getElementById("hBudTrack").innerHTML = icon("wallet", 15) + " How this week is going";
+  document.getElementById("hBudPlan").innerHTML = "My plan";
+  document.getElementById("hBudTrack").innerHTML = "How this week is going";
   document.getElementById("hBudDays").innerHTML = "Day by day";
-  document.getElementById("labBudSave").innerHTML = icon("piggy", 13) + " How much will I save each week?";
+  document.getElementById("labBudSave").innerHTML = "How much will I save each week?";
   document.getElementById("hBudgetTeacher").innerHTML = "Students' budgets this week";
 }
 
@@ -133,7 +133,7 @@ function renderBudgetStudent(me, cls) {
   /* ---- The three numbers ---- */
   const tile = (cls2, ic, label, value, sub) => `
     <div class="bud-tile ${cls2}">
-      <div class="bud-tile-label">${icon(ic, 14)}<span>${label}</span></div>
+      <div class="bud-tile-label"><span>${label}</span></div>
       <div class="bud-tile-value">${value}</div>
       <div class="bud-tile-sub">${sub}</div>
     </div>`;
@@ -224,7 +224,7 @@ function renderBudgetStudent(me, cls) {
     if (v.plan.hasPlan && v.spendLeft < v.safeNow - 0.005) safeWhy += v.spendLeft > 0.005 ? ` Your plan only has ${fmtMoney(v.spendLeft)} of spending money left.` : " You've already used all of your plan's spending money.";
   }
   document.getElementById("budSafe").innerHTML = `
-    <div class="bud-safe-label">${icon("wallet", 14)} Safe to spend right now</div>
+    <div class="bud-safe-label">Safe to spend right now</div>
     <div class="bud-safe-value">${fmtMoney(v.safeNow)}</div>
     <div class="bud-safe-why">${budEsc(safeWhy)}</div>
     <div class="bud-safe-have"><span>Cash <strong>${fmtSigned(v.cash)}</strong></span><span>Savings <strong>${fmtMoney(v.savings)}</strong></span><span>Still coming in <strong>+${fmtMoney(v.restIn)}</strong></span><span>Bills to pay <strong>−${fmtMoney(v.restBills)}</strong></span></div>`;
