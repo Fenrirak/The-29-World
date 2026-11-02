@@ -43,6 +43,7 @@ function paintChrome() {
   document.getElementById("labRangeMin").innerHTML = icon("chart", 13) + " Minimum % change";
   document.getElementById("labRangeMax").innerHTML = icon("chart", 13) + " Maximum % change";
   document.getElementById("saveRangeBtn").innerHTML = icon("save", 14) + " Save range";
+  document.getElementById("hMarketDay").innerHTML = icon("chart", 18) + " Market day";
   document.getElementById("simDayBtn").innerHTML = icon("chart", 15) + " Simulate a market day";
 }
 

@@ -282,7 +282,7 @@ function studentReportHTML(s) {
     <h4>${icon("send", 16)} All-time spent ${fmtMoney(s.lifetimeSpentTotal)}</h4>
     ${renderBars(s.lifetimeSpent, "coral")}
 
-    <h4>${icon("handshake", 16)} Loan history</h4>
+    <h4>${icon("loan", 16)} Loan history</h4>
     ${renderLoanHistory(s.loans)}
   `;
 }

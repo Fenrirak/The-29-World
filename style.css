@@ -3901,3 +3901,64 @@ html.dark-mode .ac-swap{color:var(--ink);}
 #savingsSettingsCard .bs-save .btn{margin-top:0;flex:none;}
 #savingsSettingsCard .bs-save .muted-small{flex:1 1 240px;margin:0;line-height:1.45;}
 #savingsSettingsCard .bs-save .muted-small strong{color:var(--ink);font-weight:700;}
+
+/* ---------------- Teacher settings: tiles, rows, class-code line ---------------- */
+.class-code-line{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin:6px 0 0;}
+/* letter-spacing leaves a gap after the last character, which pulls the code off-centre in its pill */
+.class-code-pill > span:last-child{margin-right:-.12em;}
+
+.set-lead{margin:2px 0 0;max-width:70ch;}
+.set-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px;}
+.set-tile{display:flex;flex-direction:column;gap:10px;min-width:0;background:var(--cc-surface);border:1.5px solid var(--line);border-radius:var(--r-5);padding:18px 20px;}
+.set-tile h3{display:flex;align-items:center;gap:9px;margin:0;font-size:1.05rem;}
+.set-tile h3 .icon{color:var(--navy-900);flex-shrink:0;width:18px;height:18px;}
+html.dark-mode .set-tile h3 .icon{color:var(--ink);}
+.set-tile > p{margin:0;font-size:var(--fs-md);line-height:1.55;}
+.set-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;margin-top:auto;padding-top:6px;}
+.set-controls .btn{margin-top:0;}
+.set-controls .cc-num{position:relative;flex:0 1 180px;min-width:120px;}
+.set-controls .cc-num input{margin:0;min-height:44px;font-weight:800;}
+.set-controls .cc-num.money input{padding-left:30px;}
+.set-controls .cc-num i:last-child{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-style:normal;font-weight:700;font-size:var(--fs-sm);color:var(--muted);pointer-events:none;}
+.set-controls .cc-num.unit input{padding-right:54px;}
+.set-controls select{margin:0;flex:0 1 220px;min-height:44px;font-weight:700;}
+.set-tile .success-msg,.set-tile .error-msg{margin:0;}
+.set-tile.danger{background:var(--cc-coral-bg);border-color:var(--cc-coral-line);}
+.set-tile.danger h3,.set-tile.danger h3 .icon{color:var(--cc-coral-ink);}
+.set-tile.danger > p{color:var(--cc-coral-ink);}
+
+/* module-page settings card (Pay day on Jobs, etc.) */
+.set-inline{display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;margin-top:14px;}
+.set-inline select{margin:0;flex:0 1 240px;min-height:44px;font-weight:700;}
+.set-inline .btn{margin-top:0;}
+
+@media(max-width:800px){
+  .set-grid{grid-template-columns:minmax(0,1fr);}
+  .set-tile{padding:16px;}
+  .set-controls .btn{flex:1 1 100%;}
+  .set-controls .cc-num,.set-controls select,.set-inline select{flex:1 1 100%;}
+  .set-inline .btn{flex:1 1 100%;}
+}
+.set-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px 28px;}
+.set-row-text{flex:1 1 320px;min-width:0;}
+.set-row-text p{margin:0;}
+.set-row .set-inline{margin-top:0;flex-wrap:nowrap;}
+.set-row .set-inline select{flex:0 0 170px;}
+.set-row .set-inline .btn{flex:none;white-space:nowrap;}
+@media(max-width:800px){.set-row .set-inline{width:100%;flex-wrap:wrap;}.set-row .set-inline select{flex:1 1 100%;}}
+
+/* Collapsible sections: a whole card (details.fold) or a section inside a card (details.fold-sub) */
+details.fold > summary,details.fold-sub > summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;border-radius:var(--r-3);}
+details.fold > summary::-webkit-details-marker,details.fold-sub > summary::-webkit-details-marker{display:none;}
+details.fold > summary::after,details.fold-sub > summary::after{content:"";flex:none;width:9px;height:9px;margin:0 4px 3px 0;border-right:2.5px solid var(--muted);border-bottom:2.5px solid var(--muted);transform:rotate(45deg);transition:transform .2s ease;}
+details.fold[open] > summary::after,details.fold-sub[open] > summary::after{transform:rotate(-135deg);margin-bottom:-3px;}
+details.fold > summary:focus-visible,details.fold-sub > summary:focus-visible{outline:2px solid var(--gold);outline-offset:4px;}
+.fold-head{flex:1;min-width:0;}
+.fold-head h2,.fold-head h3{margin:0;}
+.fold-hint{display:block;margin-top:2px;color:var(--muted);font-size:var(--fs-sm);font-weight:500;line-height:1.4;}
+details.fold[open] > summary,details.fold-sub[open] > summary{margin-bottom:14px;}
+details.fold-sub{margin-top:20px;padding-top:16px;border-top:1.5px solid var(--line);}
+details.fold-sub > summary .fold-head{font-weight:800;font-size:1.05rem;color:var(--navy-900);}
+html.dark-mode details.fold-sub > summary .fold-head{color:var(--heading-text);}
+.fold-sub-btn{display:inline-flex;align-items:center;gap:7px;}
+@media (prefers-reduced-motion:reduce){details.fold > summary::after,details.fold-sub > summary::after{transition:none;}}

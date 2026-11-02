@@ -1,16 +1,5 @@
-let CURRENT, CLASS_CODE, PROFILE_USER, EDITING_EVENT_ID = null, EDITING_SIDE_HUSTLE_ID = null;
+let CURRENT, CLASS_CODE, PROFILE_USER, EDITING_EVENT_ID = null;
 let LAST_STUDENTS = []; // roster snapshot from the last render(), reused by "pay all" so it doesn't need its own fetch
-
-// "1am" / "12pm" -> 0-23, or null if unrecognized.
-function parseHourLabel(str) {
-  const m = String(str || "").trim().toLowerCase().match(/^(\d{1,2})\s*(am|pm)$/);
-  if (!m) return null;
-  let h = parseInt(m[1], 10);
-  if (h < 1 || h > 12) return null;
-  if (m[2] === "am") h = (h === 12) ? 0 : h;
-  else h = (h === 12) ? 12 : h + 12;
-  return h;
-}
 
 // Teachers naturally type amounts like "$10" or "1,000" in a money app —
 // plain Number() chokes on those and silently falls back to 0, which is
@@ -29,40 +18,31 @@ function paintChrome() {
   document.getElementById("payDayBtn").innerHTML = icon("briefcase", 15) + " Run Pay Day";
   document.getElementById("interestBtn").innerHTML = icon("percent", 15) + " Apply Interest";
   document.getElementById("iconStudents").innerHTML = icon("users", 30);
-  document.getElementById("iconSavings").innerHTML = icon("piggy", 30);
+  document.getElementById("iconNetWorth").innerHTML = icon("wallet", 30);
   document.getElementById("classArchivedIcon").innerHTML = icon("lock", 15);
-  document.getElementById("iconCompanies").innerHTML = icon("mortarboard", 30);
+  // Same icon as the Stock Market page and menu.
+  document.getElementById("iconCompanies").innerHTML = icon("chart", 30);
   document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students";
   document.getElementById("hNetWorth").innerHTML = icon("medal", 18) + " Net worth ranking";
   document.getElementById("hAdjust").innerHTML = icon("coin", 18) + " Quick transactions";
   document.getElementById("hSettings").innerHTML = icon("settings", 18) + " Class settings";
-  document.getElementById("hDanger").innerHTML = icon("trash", 18) + " Danger zone";
-  document.getElementById("hCostBasis").innerHTML = icon("chart", 18) + " Stock cost history";
-  document.getElementById("recoverCostBasisBtn").innerHTML = icon("chart", 15) + " Recover stock cost history";
+  document.getElementById("hWelcome").innerHTML = icon("sparkle", 18) + " Welcome grant";
+  document.getElementById("hTimeLimit").innerHTML = icon("hourglass", 18) + " Daily time limit";
+  document.getElementById("hExport").innerHTML = icon("download", 18) + " Export this class";
+  document.getElementById("hDanger").innerHTML = icon("repeat", 18) + " Restart class";
+  document.getElementById("saveWelcomeBtn").innerHTML = icon("save", 14) + " Save welcome grant";
+  document.getElementById("saveDailyTimeLimitBtn").innerHTML = icon("save", 14) + " Save time limit";
+  document.getElementById("exportPdfBtn").innerHTML = icon("download", 15) + " Download as PDF";
+  document.getElementById("exportMdBtn").innerHTML = icon("download", 15) + " Download as Markdown";
   document.getElementById("restartBtn").innerHTML = icon("repeat", 15) + " Restart class";
   document.getElementById("hActivity").innerHTML = icon("history", 18) + " Recent activity";
   document.getElementById("labAdjStudent").innerHTML = icon("users", 13) + " Student";
   document.getElementById("labAdjAmount").innerHTML = icon("coin", 13) + " Amount (negative for a fine)";
   document.getElementById("labAdjNote").innerHTML = icon("note", 13) + " Reason";
   document.getElementById("applyAdjBtn").innerHTML = icon("send", 15) + " Apply";
-  document.getElementById("labWelcomeGrant").innerHTML = icon("coin", 13) + " Welcome grant ($ each new student starts with)";
-  document.getElementById("saveWelcomeBtn").innerHTML = icon("save", 14) + " Save welcome grant";
-  document.getElementById("labPayDay").innerHTML = icon("calendar", 13) + " Pay day (which day wages are due)";
-  document.getElementById("savePayDayBtn").innerHTML = icon("save", 14) + " Save pay day";
-  document.getElementById("savingsSettingsMoved").innerHTML = icon("piggy", 13) + ` Savings interest rates and how often interest is paid now live on the <a href="bank.html">Bank</a> page. Loan settings live on the Loans page.`;
-  document.getElementById("mortgageSettingsMoved").innerHTML = icon("house", 13) + ` Mortgage due day and "mark due now" controls have moved to the <a href="property.html">Property</a> page.`;
-  document.getElementById("saveGamblingEnabledBtn").innerHTML = icon("save", 14) + " Save gambling setting";
   document.getElementById("hEvents").innerHTML = icon("sparkle", 18) + " Random weekly events";
   document.getElementById("runEventsNowBtn").innerHTML = icon("sparkle", 14) + " Run this week's events now";
-  document.getElementById("labEvType").innerHTML = icon("sparkle", 13) + " Event type";
-  document.getElementById("labEvOptions").innerHTML = icon("sparkle", 13) + " Choices — one per line, as \"Label | amount | what happened (optional)\" — the amount can also be a percentage, like -20%";
-  document.getElementById("labEvName").innerHTML = icon("sparkle", 13) + " Event name";
-  document.getElementById("labEvAmount").innerHTML = icon("coin", 13) + " Amount (negative for a cost)";
-  document.getElementById("labEvAmountMode").innerHTML = icon("coin", 13) + " Amount is";
-  document.getElementById("labEvPercent").innerHTML = icon("coin", 13) + " Percentage (negative for a cost)";
-  document.getElementById("labEvBase").innerHTML = icon("coin", 13) + " The percentage is of";
-  document.getElementById("labEvDesc").innerHTML = icon("note", 13) + " Description (shown in the activity feed)";
-  document.getElementById("labEvSeverity").innerHTML = icon("sparkle", 13) + " Severity";
+  // The "Add event" form's labels are plain text (set in teacher.html) — no icons.
   document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Add event";
   document.getElementById("hLifestyle").innerHTML = icon("star", 18) + " Lifestyle rating settings";
   document.getElementById("saveLifestyleBtn").innerHTML = icon("save", 14) + " Save lifestyle settings";
@@ -133,15 +113,11 @@ async function render() {
   document.getElementById("classArchivedBanner").classList.toggle("hidden", !cls.archived);
   const welcomeEl = document.getElementById("welcomeGrant");
   if (document.activeElement !== welcomeEl) welcomeEl.value = t29WelcomeGrantOf(cls);
-  document.getElementById("payDaySelect").value = cls.payDay || "Fri";
-  document.getElementById("gamblingEnabled").checked = cls.gambling ? cls.gambling.enabled !== false : true;
   document.getElementById("dailyTimeLimit").value = cls.dailyTimeLimitMinutes || "";
 
   // Pass the class doc already in hand, so this doesn't read it again first.
   const students = await getClassStudents(CLASS_CODE, cls);
   document.getElementById("statStudents").textContent = students.length;
-  const total = students.reduce((sum, s) => sum + s.balance, 0);
-  document.getElementById("statTotal").textContent = fmtMoney(total);
   document.getElementById("statCompanies").textContent = cls.companies.length;
 
   // Time exemption requests (students out of time asking for more — see
@@ -176,6 +152,9 @@ async function render() {
   // Pass in `students` (already fetched above) so this doesn't re-run the
   // batched per-student Firestore read a second time.
   const board = await classLeaderboard(CLASS_CODE, undefined, students);
+  // Total class net worth: every student's net worth (cash, savings, shares, property, vehicles,
+  // KiwiSaver and more, minus what they owe) added together — the same figures as the ranking below.
+  document.getElementById("statTotal").textContent = fmtMoney(board.reduce((sum, r) => sum + (Number(r.net) || 0), 0));
   const lifestyleByUser = {};
   const lifestyleBandByUser = {};
   await Promise.all(students.map(async s => {
@@ -264,50 +243,6 @@ async function render() {
       <button class="btn small coral" onclick="removeEvent('${ev.id}')">${icon("trash", 13)} Remove</button>
     `;
     evBox.appendChild(row);
-  });
-
-  // side hustles
-  const reqBox = document.getElementById("sideHustleRequests");
-  const pending = students.filter(s => s.sideHustleRequest && s.sideHustleRequest.status === "pending");
-  document.getElementById("noSideHustleRequests").classList.toggle("hidden", pending.length > 0);
-  reqBox.innerHTML = "";
-  pending.forEach(s => {
-    const req = s.sideHustleRequest;
-    const hustles = cls.sideHustles || [];
-    const from = hustles.find(h => h.id === (s.sideHustle || {}).hustleId);
-    const to = hustles.find(h => h.id === req.hustleId);
-    const row = document.createElement("div");
-    row.className = "auto-row";
-    row.innerHTML = `
-      <div class="auto-details"><strong>${escapeHtml(s.name)}</strong>
-        wants to switch ${from ? `from ${escapeHtml(from.name)} (${hourLabel((s.sideHustle || {}).checkinHour)})` : "(no current hustle)"}
-        to <strong>${to ? to.name : "—"}</strong> at ${hourLabel(req.checkinHour)}
-      </div>
-      <button class="btn small" onclick="approveSideHustleRequest('${escapeJsAttr(s.username)}')">Approve</button>
-      <button class="btn small coral" onclick="denySideHustleRequest('${escapeJsAttr(s.username)}')">Deny</button>
-    `;
-    reqBox.appendChild(row);
-  });
-
-  const shBox = document.getElementById("sideHustleList");
-  const hustles = cls.sideHustles || [];
-  document.getElementById("noSideHustlesTeacher").classList.toggle("hidden", hustles.length > 0);
-  shBox.innerHTML = "";
-  hustles.forEach(h => {
-    const row = document.createElement("div");
-    row.className = "auto-row";
-    const payoutSummary = Object.keys(h.payouts || {})
-      .map(Number).sort((a, b) => a - b)
-      .map(hr => `${hourLabel(hr)}: ${fmtMoney(h.payouts[hr])}`).join(", ") || "No payouts set";
-    row.innerHTML = `
-      <div class="auto-details">${icon("briefcase", 14)} <strong>${escapeHtml(h.name)}</strong>
-        <div class="muted-small">${payoutSummary}</div>
-        ${h.description ? `<div class="muted-small">${escapeHtml(h.description)}</div>` : ""}
-      </div>
-      <button class="btn small secondary" onclick="startEditSideHustle('${h.id}')">${icon("edit", 13)} Edit</button>
-      <button class="btn small coral" onclick="removeSideHustleClick('${h.id}')">${icon("trash", 13)} Remove</button>
-    `;
-    shBox.appendChild(row);
   });
 
   // lifestyle settings
@@ -481,11 +416,11 @@ function badge(type) {
     "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
     "cash-interest": ["gold", "coin", "Cash interest"],
     "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
-    "loan-taken": ["navy", "handshake", "Loan"], "loan-repayment": ["mint", "handshake", "Loan repayment"],
+    "loan-taken": ["navy", "loan", "Loan"], "loan-repayment": ["mint", "loan", "Loan repayment"],
     "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
     "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"], "account-fee": ["coral", "coin", "Account fee"],
     "card-cashback": ["mint", "cards", "Cashback"], "card-statement": ["gold", "cards", "Statement"],
-    "loan-interest": ["coral", "handshake", "Loan interest"],
+    "loan-interest": ["coral", "loan", "Loan interest"],
     "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
     "life-allowance": ["mint", "trophy", "Life allowance"],
     "side-hustle": ["mint", "briefcase", "Side hustle"],
@@ -725,6 +660,8 @@ function resetEventForm() {
   document.getElementById("evType").value = "fixed";
   toggleEventType();
   document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Add event";
+  document.getElementById("eventFoldTitle").textContent = "Add an event";
+  document.getElementById("eventFold").open = false;
   const cancelBtn = document.getElementById("cancelEditEventBtn");
   if (cancelBtn) cancelBtn.remove();
 }
@@ -763,6 +700,8 @@ function startEditEvent(id) {
     if (ev.amountBase) document.getElementById("evBase").value = ev.amountBase;
     toggleEventType();
     document.getElementById("addEventBtn").innerHTML = icon("save", 15) + " Save changes";
+    document.getElementById("eventFoldTitle").textContent = "Edit event";
+    document.getElementById("eventFold").open = true;
     if (!document.getElementById("cancelEditEventBtn")) {
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";
@@ -809,96 +748,6 @@ async function removeEvent(id) {
   if (await t29Confirm("Remove this event? It will no longer be handed out.")) {
     if (id === EDITING_EVENT_ID) resetEventForm();
     await removeEventDef(CLASS_CODE, id);
-    await render();
-  }
-}
-
-async function approveSideHustleRequest(username) {
-  const res = await approveSideHustleChange(username, CLASS_CODE);
-  if (!res.ok) alert(res.error || "Couldn't approve that request.");
-  await render();
-}
-
-async function denySideHustleRequest(username) {
-  const reason = await t29Prompt("Optional reason to show the student (leave blank to skip):", "", { confirmText: "Send", placeholder: "Reason (optional)" }) || "";
-  await denySideHustleChange(username, reason);
-  await render();
-}
-
-async function addSideHustleForm(e) {
-  e.preventDefault();
-  const name = document.getElementById("shName").value.trim();
-  const description = document.getElementById("shDesc").value.trim();
-  const lines = document.getElementById("shPayoutsArea").value.split("\n").map(l => l.trim()).filter(Boolean);
-  const payouts = {};
-  for (const line of lines) {
-    const [hourPart, amtPart] = line.split("|");
-    const hour = parseHourLabel(hourPart);
-    if (hour === null) {
-      alert(`Couldn't read the hour "${(hourPart || "").trim()}" — use a plain hour like "1am" or "3pm".`);
-      return false;
-    }
-    const amount = parseMoneyInput(amtPart);
-    if (Number.isNaN(amount)) {
-      alert(`Couldn't read the amount for "${(hourPart || "").trim()}" — enter a plain number like 20 (no currency symbols needed).`);
-      return false;
-    }
-    payouts[hour] = amount;
-  }
-  if (Object.keys(payouts).length === 0) {
-    alert('Add at least one payout, as "hour | amount" (e.g. "1am | 20").');
-    return false;
-  }
-
-  if (EDITING_SIDE_HUSTLE_ID) {
-    await editSideHustle(CLASS_CODE, EDITING_SIDE_HUSTLE_ID, { name, description, payouts });
-  } else {
-    await addSideHustle(CLASS_CODE, { name, description, payouts });
-  }
-  resetSideHustleForm();
-  await render();
-  return false;
-}
-
-function resetSideHustleForm() {
-  EDITING_SIDE_HUSTLE_ID = null;
-  document.getElementById("shName").value = "";
-  document.getElementById("shDesc").value = "";
-  document.getElementById("shPayoutsArea").value = "";
-  document.getElementById("addSideHustleBtn").innerHTML = icon("plus", 15) + " Add side hustle";
-  const cancelBtn = document.getElementById("cancelEditSideHustleBtn");
-  if (cancelBtn) cancelBtn.remove();
-}
-
-function startEditSideHustle(id) {
-  getClassCached(CLASS_CODE).then(cls => {
-    const h = (cls.sideHustles || []).find(x => x.id === id);
-    if (!h) return;
-    EDITING_SIDE_HUSTLE_ID = id;
-    document.getElementById("shName").value = h.name;
-    document.getElementById("shDesc").value = h.description || "";
-    document.getElementById("shPayoutsArea").value = Object.keys(h.payouts || {})
-      .map(Number).sort((a, b) => a - b)
-      .map(hr => `${hourLabel(hr)} | ${h.payouts[hr]}`).join("\n");
-    document.getElementById("addSideHustleBtn").innerHTML = icon("save", 15) + " Save changes";
-    if (!document.getElementById("cancelEditSideHustleBtn")) {
-      const cancelBtn = document.createElement("button");
-      cancelBtn.type = "button";
-      cancelBtn.id = "cancelEditSideHustleBtn";
-      cancelBtn.className = "btn small secondary";
-      cancelBtn.style.marginLeft = "8px";
-      cancelBtn.textContent = "Cancel edit";
-      cancelBtn.onclick = resetSideHustleForm;
-      document.getElementById("addSideHustleBtn").insertAdjacentElement("afterend", cancelBtn);
-    }
-    document.getElementById("addSideHustleBtn").scrollIntoView({ behavior: "smooth", block: "center" });
-  });
-}
-
-async function removeSideHustleClick(id) {
-  if (await t29Confirm("Remove this side hustle? Students currently using it will lose their check-in until they pick a new one.")) {
-    if (id === EDITING_SIDE_HUSTLE_ID) resetSideHustleForm();
-    await removeSideHustle(CLASS_CODE, id);
     await render();
   }
 }
@@ -1068,11 +917,6 @@ async function saveWelcomeGrant() {
     btn.disabled = false;
   }
 }
-async function savePayDay() {
-  await setPayDay(CLASS_CODE, document.getElementById("payDaySelect").value);
-  alert("Pay day saved. Wages will now be paid automatically whenever that day comes around — or click Run Pay Day any time to pay early.");
-  await render();
-}
 async function approveTimeExemptionRequest(username) {
   const raw = await t29Prompt("How many extra minutes should they get today?", "10", { type: "number", min: 1, step: 1, confirmText: "Approve" });
   if (raw === null) return; // cancelled
@@ -1086,12 +930,6 @@ async function declineTimeExemptionRequest(username) {
   if (!await t29Confirm("Decline this request? They won't be able to ask again until tomorrow.")) return;
   const res = await decideTimeExemption(username, false);
   if (!res.ok) alert(res.error || "Couldn't decline that request.");
-  await render();
-}
-async function saveGamblingEnabled() {
-  const enabled = document.getElementById("gamblingEnabled").checked;
-  await setGamblingEnabled(CLASS_CODE, enabled);
-  document.getElementById("gamblingMsg").innerHTML = `<div class="success-msg">${enabled ? "Gambling is now allowed." : "Gambling is now turned off for your class."}</div>`;
   await render();
 }
 async function saveDailyTimeLimit() {
@@ -1492,7 +1330,7 @@ async function renderProfile(username) {
 
   const activeLoans = (s.loans || []).filter(l => l.status === "active");
   const todayKey = nzDateKey();
-  rows.push(`<h4>${icon("handshake", 16)} Loans</h4>`);
+  rows.push(`<h4>${icon("loan", 16)} Loans</h4>`);
   rows.push(activeLoans.length
     ? activeLoans.map(l => {
         const overdue = l.dueDate < todayKey;
@@ -1777,21 +1615,5 @@ async function restartClass() {
   await render();
 }
 
-async function recoverStockCostHistory() {
-  const btn = document.getElementById("recoverCostBasisBtn");
-  const msg = document.getElementById("recoverCostBasisMsg");
-  btn.disabled = true;
-  msg.textContent = "Working…";
-  try {
-    const result = await backfillCostBasisFromTxns(CLASS_CODE);
-    msg.textContent = result.filled > 0
-      ? `Done — recovered cost history for ${result.filled} company holding${result.filled === 1 ? "" : "s"} across your students. Anything not found was either already tracked, or its purchase has aged out of the shared activity log (the log holds the class's most recent ${MAX_STORED_TXNS} transactions total, not ${MAX_STORED_TXNS} per student, so older stock purchases can already be gone).`
-      : `Nothing new to recover — either everything's already tracked, or the relevant purchases have aged out of the shared activity log (it holds the class's most recent ${MAX_STORED_TXNS} transactions total, not ${MAX_STORED_TXNS} per student).`;
-  } catch (e) {
-    msg.textContent = "Something went wrong — please try again.";
-  } finally {
-    btn.disabled = false;
-  }
-}
 
 document.addEventListener("DOMContentLoaded", init);

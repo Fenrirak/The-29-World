@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=1e23cf8f">
+<link rel="stylesheet" href="style.css?v=e62208eb">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -89,7 +89,7 @@
     <a href="budget.html" data-module="budget"><span class="icon-slot" data-icon="calendar"></span><span class="nav-label">Budget</span></a>
     <a href="termdeposit.html" data-module="termdeposit"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
     <a href="kiwisaver.html" data-module="kiwisaver"><span class="icon-slot" data-icon="kiwi"></span><span class="nav-label">KiwiSaver</span></a>
-    <a href="loan.html" data-module="loan"><span class="icon-slot" data-icon="handshake"></span><span class="nav-label">Loans</span></a>
+    <a href="loan.html" data-module="loan"><span class="icon-slot" data-icon="loan"></span><span class="nav-label">Loans</span></a>
     <a href="market.html" data-module="market"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
     <a href="store.html" data-module="store"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
     <a href="marketplace.html" data-module="marketplace"><span class="icon-slot" data-icon="swap"></span><span class="nav-label">Trade Centre</span></a>
@@ -101,7 +101,7 @@
     <a href="bigevents.html" data-module="bigevents"><span class="icon-slot" data-icon="bolt"></span><span class="nav-label">Big Events</span></a>
     <a href="life.html" data-module="life"><span class="icon-slot" data-icon="trophy"></span><span class="nav-label">Life</span></a>
     <a href="gambling.html" data-module="gambling"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
-    <a href="quizzes.html"><span class="icon-slot" data-icon="book"></span><span class="nav-label">Quizzes</span></a>
+    <a href="quizzes.html"><span class="icon-slot" data-icon="quiz"></span><span class="nav-label">Quizzes</span></a>
     <a href="reports.html"><span class="icon-slot" data-icon="idcard"></span><span class="nav-label">Reports</span></a>
     <span class="who" id="whoami"></span>
     <div class="topbar-actions">
@@ -115,7 +115,7 @@
   <div class="flex-between">
     <div>
       <h1 id="className">Class</h1>
-      <p>Class code: <span class="class-code-pill"><span class="icon" id="codeIcon" style="width:16px;height:16px;"></span><span id="classCode">-----</span></span> — share this with your students so they can join.</p>
+      <p class="class-code-line"><span>Class code:</span> <span class="class-code-pill"><span class="icon" id="codeIcon" style="width:16px;height:16px;"></span><span id="classCode">-----</span></span> <span>&mdash; share this with your students so they can join.</span></p>
     </div>
     <div>
       <button class="btn gold" onclick="runPayDay()" id="payDayBtn">Run Pay Day</button>
@@ -139,8 +139,8 @@
       <div class="value" id="statStudents">0 / 8</div>
     </div>
     <div class="stat gold">
-      <span class="icon" id="iconSavings"></span>
-      <div class="label">Total class savings</div>
+      <span class="icon" id="iconNetWorth"></span>
+      <div class="label">Total class net worth</div>
       <div class="value" id="statTotal">$0.00</div>
     </div>
     <div class="stat mint">
@@ -174,33 +174,6 @@
   </div>
 
   <div class="card">
-    <h2 id="hSideHustles">Side hustles</h2>
-    <p>Students each pick one hustle and a daily check-in hour (e.g. 1am, 2am, 3am...). They must check in within 15 minutes after that hour to get paid — the amount depends on which hour they picked. Once a student has picked one, any change needs your approval — that stops someone quietly retiming their check-in to match whenever they happen to be online.</p>
-
-    <div id="sideHustleRequestsWrap">
-      <h3 id="hSideHustleRequests" style="margin-top:0;">Pending change requests</h3>
-      <div id="sideHustleRequests"></div>
-      <p class="muted-small" id="noSideHustleRequests">No pending requests.</p>
-    </div>
-
-    <div id="sideHustleList" style="margin-top:16px;"></div>
-    <p class="muted-small" id="noSideHustlesTeacher">You haven't added any side hustles yet.</p>
-    <form onsubmit="return addSideHustleForm(event)">
-      <label for="shName" id="labShName">Side hustle name</label>
-      <input id="shName" placeholder="e.g. Dog walking" required>
-      <label for="shDesc" id="labShDesc">Description (optional)</label>
-      <input id="shDesc" placeholder="e.g. Walk the neighbourhood dogs">
-      <label for="shPayoutsArea" id="labShPayouts">Payout per check-in hour — one per line, as "hour | amount"</label>
-      <textarea id="shPayoutsArea" rows="4" placeholder="1am | 20
-3pm | 25
-7pm | 15" required></textarea>
-      <p class="muted-small">Only list the hours you want to offer a payout for (e.g. 12am, 1am, ... 11pm) — one "hour | amount" per line. Hours you leave out won't pay anything if a student somehow picks them.</p>
-      <button class="btn" type="submit" id="addSideHustleBtn">Add side hustle</button>
-    </form>
-    <div id="sideHustleMsg"></div>
-  </div>
-
-  <div class="card">
     <h2 id="hAdjust">Quick transactions</h2>
     <p>Adjust a single student's balance directly, with a note.</p>
     <form onsubmit="return giveAdjustment(event)">
@@ -215,73 +188,50 @@
     <div id="adjMsg"></div>
   </div>
 
-  <div class="card">
-    <div class="flex-between">
-      <h2 id="hSettings">Class settings</h2>
-    </div>
-    <div class="welcome-grant-box">
-      <label for="welcomeGrant" id="labWelcomeGrant">Welcome grant</label>
-      <div class="welcome-row">
-        <input id="welcomeGrant" type="number" min="0" max="100000" step="0.01" inputmode="decimal" style="max-width:160px;">
-        <button class="btn secondary small" onclick="saveWelcomeGrant()" id="saveWelcomeBtn">Save welcome grant</button>
-      </div>
-      <p class="muted-small">Given once to every student who joins this class &mdash; whether they sign up themselves or you add them. Students already in the class keep what they have. Restarting the class puts everyone back on this amount.</p>
-      <div id="welcomeGrantMsg"></div>
-    </div>
-    <p class="muted-small" id="savingsSettingsMoved">Savings interest rates and how often interest is paid now live on the <a href="bank.html">Bank</a> page. Loan settings live on the Loans page.</p>
+  <div class="card" id="classSettingsCard">
+    <h2 id="hSettings">Class settings</h2>
+    <p class="set-lead">These apply to the whole class. Settings for a single module &mdash; pay day, interest, loans, gambling and so on &mdash; live on that module&rsquo;s own page.</p>
 
-    <label for="payDaySelect" id="labPayDay" style="margin-top:24px;">Pay day (which day wages are due)</label>
-    <select id="payDaySelect" style="max-width:220px;">
-      <option value="Mon">Monday</option>
-      <option value="Tue">Tuesday</option>
-      <option value="Wed">Wednesday</option>
-      <option value="Thu">Thursday</option>
-      <option value="Fri">Friday</option>
-      <option value="Sat">Saturday</option>
-      <option value="Sun">Sunday</option>
-    </select>
-    <button class="btn secondary small" style="margin-top:12px;" onclick="savePayDay()" id="savePayDayBtn">Save pay day</button>
+    <div class="set-grid">
+      <section class="set-tile" aria-labelledby="hWelcome">
+        <h3 id="hWelcome">Welcome grant</h3>
+        <p>Given once to every student who joins this class, whether they sign up themselves or you add them. Students already in the class keep what they have. Restarting the class puts everyone back on this amount.</p>
+        <div class="set-controls">
+          <div class="cc-num money"><i>$</i><input id="welcomeGrant" type="number" min="0" max="100000" step="0.01" inputmode="decimal" aria-label="Welcome grant in dollars"></div>
+          <button class="btn secondary" onclick="saveWelcomeGrant()" id="saveWelcomeBtn">Save welcome grant</button>
+        </div>
+        <div id="welcomeGrantMsg"></div>
+      </section>
 
-    <p class="muted-small" id="mortgageSettingsMoved" style="margin-top:24px;">Mortgage due day and "mark due now" controls have moved to the <a href="property.html" data-module="property">Property</a> page.</p>
+      <section class="set-tile" aria-labelledby="hTimeLimit">
+        <h3 id="hTimeLimit">Daily time limit</h3>
+        <p>Minutes each student can spend on the site per day (0 = no limit). Only time with the site open, visible and in focus counts. At the limit, a student sees a &ldquo;come back tomorrow&rdquo; screen, which resets at NZ midnight &mdash; the same daily boundary as pay day and interest.</p>
+        <div class="set-controls">
+          <div class="cc-num unit"><input id="dailyTimeLimit" type="number" min="0" step="1" inputmode="numeric" placeholder="e.g. 30" aria-label="Daily time limit in minutes"><i>min</i></div>
+          <button class="btn secondary" onclick="saveDailyTimeLimit()" id="saveDailyTimeLimitBtn">Save time limit</button>
+        </div>
+        <div id="dailyTimeLimitMsg"></div>
+      </section>
 
-    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
-      <label style="display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" id="gamblingEnabled" style="width:20px;height:20px;min-height:auto;">
-        <span id="labGamblingEnabled">Allow the Gambling module (students can place bets)</span>
-      </label>
-      <p class="muted-small">Turn this off to temporarily pause gambling class-wide. Students will see a message if they try to bet while it's off.</p>
-      <button class="btn secondary small" style="margin-top:6px;" onclick="saveGamblingEnabled()" id="saveGamblingEnabledBtn">Save gambling setting</button>
-      <div id="gamblingMsg"></div>
-    </div>
+      <section class="set-tile" aria-labelledby="hExport">
+        <h3 id="hExport">Export this class</h3>
+        <p>Download everything in this class as one file: every setting, price and price history (with the chance of each going up or down), every wage, every student&rsquo;s full account, net worths, lifestyle ratings and the whole transaction log. Only you can see this. Login and sharing links are left out.</p>
+        <div class="set-controls">
+          <button class="btn gold export-class-btn" onclick="exportClassClick('pdf')" id="exportPdfBtn">Download as PDF</button>
+          <button class="btn secondary export-class-btn" onclick="exportClassClick('md')" id="exportMdBtn">Download as Markdown</button>
+        </div>
+        <div id="exportClassMsg"></div>
+      </section>
 
-    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
-      <label for="dailyTimeLimit" id="labDailyTimeLimit">Daily time limit per student (minutes on the site, 0 = no limit)</label>
-      <input id="dailyTimeLimit" type="number" min="0" step="1" placeholder="e.g. 30" style="max-width:160px;">
-      <p class="muted-small">Only counts time actually spent with the site open, visible, and in focus — a background or unfocused tab doesn't count against it. Once a student hits the limit for the day, they're shown a "come back tomorrow" screen; it resets automatically at NZ midnight, the same daily boundary the rest of the class (pay day, interest, etc.) uses.</p>
-      <button class="btn secondary small" style="margin-top:6px;" onclick="saveDailyTimeLimit()" id="saveDailyTimeLimitBtn">Save time limit</button>
-      <div id="dailyTimeLimitMsg"></div>
+      <section class="set-tile danger" aria-labelledby="hDanger">
+        <h3 id="hDanger">Restart class</h3>
+        <p>Start the class again as if it were brand new: every student goes back to the class&rsquo;s welcome grant and everything they own or have done is wiped. All your settings stay as they are, and so do student logins and the class code.</p>
+        <div class="set-controls">
+          <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>
+        </div>
+      </section>
     </div>
 
-    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
-      <h2 id="hCostBasis">Stock cost history</h2>
-      <p>The Market Snapshot on each student's homepage shows an all-time gain/loss per company, compared to what they actually paid. That only works for shares bought after this feature was added — anything bought before then has no recorded cost yet. This looks through the class's recent activity log and fills in whatever purchase history is still there. It's safe to run any time, including more than once: it only fills in gaps and never overwrites tracking that already exists. It can't recover a purchase old enough to have already scrolled out of the activity log — there's no way to reconstruct a cost that isn't stored anywhere.</p>
-      <button class="btn secondary" onclick="recoverStockCostHistory()" id="recoverCostBasisBtn">Recover stock cost history</button>
-      <div id="recoverCostBasisMsg"></div>
-    </div>
-
-    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
-      <h2 id="hExport">Export this class</h2>
-      <p>Download everything in this class as one file: every setting, price and price history (with the chance of each going up or down), every wage, every student's full account, net worths, lifestyle ratings and the whole transaction log. Only you can see this. Login and sharing links are left out.</p>
-      <button class="btn export-class-btn" onclick="exportClassClick('pdf')">Download as PDF</button>
-      <button class="btn secondary export-class-btn" onclick="exportClassClick('md')">Download as Markdown</button>
-      <div id="exportClassMsg"></div>
-    </div>
-
-    <div style="margin-top:24px;padding-top:20px;border-top:1.5px solid var(--line);">
-      <h2 id="hDanger" style="color:var(--coral);">Danger zone</h2>
-      <p>Start the class again as if it were brand new: every student goes back to the class&rsquo;s welcome grant and everything they own or have done is wiped. All your settings stay as they are, and so do student logins and the class code.</p>
-      <button class="btn coral" onclick="restartClass()" id="restartBtn">Restart class</button>
-    </div>
   </div>
 
   <div class="card">
@@ -323,6 +273,8 @@
     <button class="btn secondary small" onclick="runWeeklyEventsNow()" id="runEventsNowBtn" style="margin-bottom:12px;">Run this week's events now</button>
     <div id="eventList"></div>
     <p class="muted-small" id="noEvents">You haven't added any events yet.</p>
+    <details class="fold-sub" id="eventFold">
+    <summary><span class="fold-head"><span id="eventFoldTitle">Add an event</span><span class="fold-hint">Create a new random event for the class.</span></span></summary>
     <form onsubmit="return addEventForm(event)">
       <label for="evType" id="labEvType">Event type</label>
       <select id="evType" onchange="toggleEventType()">
@@ -378,7 +330,7 @@
         <div id="evCoverBox" class="hidden"></div>
       </div>
       <div id="evOptionsWrap" class="hidden">
-        <label for="evOptionsArea" id="labEvOptions">Choices — one per line, as "Label | amount | what happened (optional)"</label>
+        <label for="evOptionsArea" id="labEvOptions">Choices — one per line, as "Label | amount | what happened (optional)" — the amount can also be a percentage, like -20%</label>
         <textarea id="evOptionsArea" rows="4" placeholder="Pay for repairs | -10 | The plumber fixed it in an hour
 Ignore it and hope for the best | 0 | Nothing happened, you got lucky
 Do it yourself and save money | -3 | It mostly worked, but you had to buy some parts"></textarea>
@@ -392,6 +344,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
       <input id="evDesc" placeholder="e.g. Someone dropped some coins">
       <button class="btn" type="submit" id="addEventBtn">Add event</button>
     </form>
+    </details>
   </div>
 
   <div class="card">
@@ -522,22 +475,22 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 </div>
 
 <script type="module" src="firebase-init.js?v=aca5590e"></script>
-<script defer src="icons.js?v=1ae19049"></script>
+<script defer src="icons.js?v=c69a6a12"></script>
 <script defer src="settings-menu.js?v=8dde546c"></script>
 <script defer src="shortcuts.js?v=bcda2833"></script>
 <script defer src="data-core.js?v=1860738e"></script>
-<script defer src="data-money.js?v=b96e0737"></script>
+<script defer src="data-money.js?v=197f9cce"></script>
 <script defer src="data-life.js?v=d62c66a1"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=d6ba8dd6"></script>
-<script defer src="tour.js?v=777683bc"></script>
+<script defer src="tour.js?v=08eac342"></script>
 <script defer src="events-ui.js?v=d8c39f3b"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
-<script defer src="avatar.js?v=4cd2b2b6"></script>
-<script defer src="notifications.js?v=beececba"></script>
+<script defer src="avatar.js?v=f7f7ea37"></script>
+<script defer src="notifications.js?v=477a64fd"></script>
 <script defer src="pdf-report.js?v=9198db19"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
-<script defer src="teacher.js?v=58ee2f6a"></script>
+<script defer src="teacher.js?v=63fa10c2"></script>
 <script defer src="bulk-students.js?v=d5a9136f"></script>
 </body>
 </html>

@@ -1288,7 +1288,7 @@ async function setLoanLifestylePenalty(classCode, { enabled, perAmount, points }
   const desc = p => p.enabled && p.perAmount > 0 && p.points > 0 ? `lose ${p.points} lifestyle ${p.points === 1 ? "point" : "points"} for every ${fmtMoney(p.perAmount)} owing` : "no lifestyle penalty";
   if (!!old.enabled !== clean.enabled || (clean.enabled && (Number(old.perAmount) !== clean.perAmount || Number(old.points) !== clean.points))) {
     const borrowers = await t29StudentsWhere(classCode, s => (s.loans || []).some(l => l.status === "active"));
-    await t29NotifyStudents(classCode, { to: borrowers, icon: "handshake", tone: "gold",
+    await t29NotifyStudents(classCode, { to: borrowers, icon: "loan", tone: "gold",
       title: "Your teacher changed the loan lifestyle penalty", body: `Now: ${desc(clean)} (was: ${desc(old)}).`, href: "loan.html" });
   }
   return clean;
@@ -2663,81 +2663,6 @@ async function portfolioValue(username, classCode) {
   return Math.round(total * 100) / 100;
 }
 
-// One-time backfill for accounts that already held shares before the
-// all-time cost-basis feature existed — the reason most rows show
-// "$0.00*" today: those buys never got recorded because there was
-// nowhere to record them yet.
-//
-// This recovers whatever stock-buy history is STILL sitting in cls.txns
-// and uses it to seed co.costBasis for those students. It is safe to run
-// more than once (and safe to run while the class is live):
-//   - It NEVER overwrites a costBasis entry that already exists — any
-//     company a student has bought or sold since this feature shipped
-//     already has real, exact tracking, which always wins.
-//   - It only fills gaps for companies still held (0 shares = nothing to
-//     seed).
-//
-// What this can and can't do — same shared-log limitation as always:
-//   - CAN recover any stock-buy that's still in the (capped, class-wide)
-//     transaction log for that student/company — reconstructs shares and
-//     cost directly from it, no estimation involved.
-//   - CANNOT recover a buy that has already scrolled off that shared,
-//     200-entry log before this backfill ever ran. Those shares stay
-//     exactly as honestly "unknown" as they were before — this narrows
-//     how much of the roster is affected, it does not remove the
-//     underlying limitation described in stockAllTimeGain() above.
-//   - If the recovered buy total for a company is LESS than the shares
-//     currently held (meaning some purchase history has already aged
-//     out), only the recovered portion is seeded and stockAllTimeGain's
-//     existing "partial tracking" detection marks that row incomplete
-//     (*) exactly as it already does for any other partial case.
-async function backfillCostBasisFromTxns(classCode) {
-  const classRef = classesCol().doc(classCode);
-  let filled = 0, alreadyTracked = 0;
-  await fdb.runTransaction(async (t) => {
-    filled = 0; alreadyTracked = 0; // reset every attempt — this callback can be retried
-    const classSnap = await t.get(classRef);
-    if (!classSnap.exists) throw new Error("NOT_FOUND");
-    const cls = classSnap.data();
-    const txns = cls.txns || [];
-
-    // companyId -> username -> { shares, totalCost } from every
-    // still-present stock-buy txn.
-    const recovered = {};
-    txns.forEach(tx => {
-      if (tx.type !== "stock-buy" || !tx.companyId || !tx.from) return;
-      if (!(tx.shares > 0) || !(tx.pricePerShare > 0)) return;
-      recovered[tx.companyId] = recovered[tx.companyId] || {};
-      const bucket = recovered[tx.companyId][tx.from] || { shares: 0, totalCost: 0 };
-      bucket.shares += tx.shares;
-      bucket.totalCost = Math.round((bucket.totalCost + tx.shares * tx.pricePerShare) * 100) / 100;
-      recovered[tx.companyId][tx.from] = bucket;
-    });
-
-    cls.companies.forEach(co => {
-      co.costBasis = co.costBasis || {};
-      const byUser = recovered[co.id] || {};
-      Object.keys(byUser).forEach(username => {
-        if (co.costBasis[username]) { alreadyTracked++; return; } // real tracking always wins
-        const owned = co.holders[username] || 0;
-        if (owned <= 0) return; // nothing currently held — nothing to seed
-
-        const r = byUser[username];
-        // Can't attribute more recovered shares than are currently held
-        // (the gap, if any, is exactly the part that already rolled off
-        // the log — leave it as unknown rather than guess at it).
-        const shares = Math.min(r.shares, owned);
-        const totalCost = Math.round((r.totalCost * (shares / r.shares)) * 100) / 100;
-        co.costBasis[username] = { shares, totalCost, totalBought: totalCost };
-        filled++;
-      });
-    });
-
-    t.update(classRef, { companies: cls.companies });
-  });
-  return { ok: true, filled, alreadyTracked };
-}
-
 // All-time stock gain/loss, broken out per company plus a portfolio-wide
 // total: unrealized (current holdings vs what they cost) plus realized
 // (profit/loss already locked in from past sells/delistings).
@@ -3564,7 +3489,7 @@ function budgetWeekItems(cls, user, username) {
   (user.loans || []).forEach(l => {
     if (l.status !== "active" || !l.dueDate || l.dueDate > weekEndKey || !(l.owed > 0)) return;
     const overdue = l.dueDate < todayKey;
-    items.push({ key: "loan-" + l.id, dir: "out", icon: "handshake", label: "Loan to repay", amount: budgetRound(l.owed),
+    items.push({ key: "loan-" + l.id, dir: "out", icon: "loan", label: "Loan to repay", amount: budgetRound(l.owed),
       dayKey: overdue ? todayKey : l.dueDate, status: overdue ? "overdue" : budgetStatus(l.dueDate, todayKey, false), where: "Loans",
       note: overdue ? "Overdue — repay it on the Loans page" : "Due " + (l.dueDate === todayKey ? "today" : dayWord(l.dueDate)) + " — repay it on the Loans page" });
   });
@@ -3895,7 +3820,7 @@ function buildBudgetView(cls, user, username) {
   });
   loanGrowth = budgetRound(loanGrowth);
   if (loanGrowth > 0) {
-    notes.push({ tone: "warn", icon: "handshake", text: `Your loans grow by about ${fmtMoney(loanGrowth)} in interest every Monday until you pay them off.` });
+    notes.push({ tone: "warn", icon: "loan", text: `Your loans grow by about ${fmtMoney(loanGrowth)} in interest every Monday until you pay them off.` });
   }
   items.filter(i => i.cardOk && !i.viaCard && i.status === "today").forEach(i => {
     notes.push({ tone: "warn", icon: "creditcard", text: `Today is the day to pay ${i.label} (${fmtMoney(i.amount)}) on the ${i.where} page. You can put it on your credit card or pay cash.` });

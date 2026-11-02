@@ -2,26 +2,26 @@ let CURRENT, IS_TEACHER;
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("handshake", 26) + " Loans";
-  document.getElementById("hSettings").innerHTML = icon("handshake", 18) + " Loan settings";
+  document.getElementById("pageTitle").innerHTML = icon("loan", 26) + " Loans";
+  document.getElementById("hSettings").innerHTML = icon("loan", 18) + " Loan settings";
   document.getElementById("addTierBtn").innerHTML = icon("plus", 15) + " Add loan range";
   document.getElementById("labTierMin").innerHTML = icon("coin", 13) + " Minimum amount";
   document.getElementById("labTierMax").innerHTML = icon("coin", 13) + " Maximum amount";
   document.getElementById("labTierTerm").innerHTML = icon("calendar", 13) + " Term (weeks)";
   document.getElementById("labTierRate").innerHTML = icon("percent", 13) + " Interest rate (% per week, compounding)";
-  document.getElementById("labMaxLoan").innerHTML = icon("handshake", 13) + " Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
-  document.getElementById("labMaxLoanCount").innerHTML = icon("handshake", 13) + " Maximum number of loans a student can have open at once (0 = no limit)";
+  document.getElementById("labMaxLoan").innerHTML = icon("loan", 13) + " Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
+  document.getElementById("labMaxLoanCount").innerHTML = icon("loan", 13) + " Maximum number of loans a student can have open at once (0 = no limit)";
   document.getElementById("saveMaxLoanBtn").innerHTML = icon("save", 13) + " Save maximums";
   document.getElementById("hLoanLifestyle").innerHTML = icon("star", 18) + " Lifestyle rating penalty";
   document.getElementById("labLoanLifestyleEnabled").textContent = "Dock lifestyle points for outstanding loans";
   document.getElementById("labLoanLifestylePoints").innerHTML = icon("star", 13) + " Lifestyle points lost";
   document.getElementById("labLoanLifestylePerAmount").innerHTML = icon("coin", 13) + " Per this much owed";
   document.getElementById("saveLoanLifestyleBtn").innerHTML = icon("save", 13) + " Save penalty";
-  document.getElementById("hTake").innerHTML = icon("handshake", 18) + " Take out a loan";
+  document.getElementById("hTake").innerHTML = icon("loan", 18) + " Take out a loan";
   document.getElementById("labLoanAmount").innerHTML = icon("coin", 13) + " How much do you want to borrow?";
-  document.getElementById("takeLoanBtn").innerHTML = icon("handshake", 15) + " Borrow";
-  document.getElementById("hMyLoan").innerHTML = icon("handshake", 18) + " My loans";
-  document.getElementById("hPastLoans").innerHTML = icon("handshake", 18) + " Loan history";
+  document.getElementById("takeLoanBtn").innerHTML = icon("loan", 15) + " Borrow";
+  document.getElementById("hMyLoan").innerHTML = icon("loan", 18) + " My loans";
+  document.getElementById("hPastLoans").innerHTML = icon("loan", 18) + " Loan history";
 }
 
 async function init() {
@@ -91,7 +91,7 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${icon("handshake", 20)}${fmtMoney(t.min)} — ${fmtMoney(t.max)}</h4>
+            <h4>${icon("loan", 20)}${fmtMoney(t.min)} — ${fmtMoney(t.max)}</h4>
             <p>${termLabel(t.termWeeks)} term &middot; <strong>${t.rate}%</strong> interest per week (charged on take-out, then compounds every Monday until paid off)</p>
           </div>
           <div>

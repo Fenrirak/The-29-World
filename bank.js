@@ -271,7 +271,7 @@ async function render() {
       "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
     "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"], "account-fee": ["coral", "coin", "Account fee"],
     "card-cashback": ["mint", "cards", "Cashback"], "card-statement": ["gold", "cards", "Statement"],
-    "loan-interest": ["coral", "handshake", "Loan interest"], "side-hustle": ["mint", "briefcase", "Side hustle"],
+    "loan-interest": ["coral", "loan", "Loan interest"], "side-hustle": ["mint", "briefcase", "Side hustle"],
       "truck-drive": ["mint", "car", "Truck drive"], "truck-licence-buy": ["navy", "car", "Truck licence"],
       "property-rent": ["mint", "house", "Rent received"],
       "property-rent-pay": ["coral", "house", "Rent paid"], "property-rent-receive": ["mint", "house", "Rent received"],

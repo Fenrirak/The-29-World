@@ -1,4 +1,5 @@
 let CURRENT, IS_TEACHER, CLASS_CODE;
+let EDITING_SIDE_HUSTLE_ID = null;
 let JOBS_CACHE = [];
 
 /* ── Avatar helpers (also in teacher.js / student.js — duplicated here
@@ -86,8 +87,197 @@ async function render() {
    TEACHER VIEW
 ══════════════════════════════════════════════════════════════════════ */
 function renderTeacherView(cls, students) {
+  renderPayDay(cls);
+  renderSideHustles(cls, students);
   renderJobsGrid(cls, students);
   renderApplications(cls, students);
+}
+
+/* ── Pay day (teacher setting) ─────────────────────────────────────── */
+function renderPayDay(cls) {
+  const sel = document.getElementById("payDaySelect");
+  if (sel && document.activeElement !== sel) sel.value = cls.payDay || "Fri";
+}
+
+async function savePayDay() {
+  const btn = document.getElementById("savePayDayBtn");
+  const msg = document.getElementById("payDayMsg");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  msg.innerHTML = "";
+  try {
+    const day = document.getElementById("payDaySelect").value;
+    await setPayDay(CLASS_CODE, day);
+    await render();
+    flashMsg(msg, `<div class="success-msg">Saved — wages are now due every ${escapeHtml(DAY_FULL[day] || day)}, and are paid automatically when that day comes around.</div>`, 6000);
+  } catch (e) {
+    msg.innerHTML = `<div class="error-msg">Couldn't save the pay day — please try again.</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ── Side hustles (teacher) ────────────────────────────────────────── */
+function renderSideHustles(cls, students) {
+  const reqBox = document.getElementById("sideHustleRequests");
+  const pending = students.filter(s => s.sideHustleRequest && s.sideHustleRequest.status === "pending");
+  document.getElementById("noSideHustleRequests").classList.toggle("hidden", pending.length > 0);
+  reqBox.innerHTML = "";
+  pending.forEach(s => {
+    const req = s.sideHustleRequest;
+    const hustles = cls.sideHustles || [];
+    const from = hustles.find(h => h.id === (s.sideHustle || {}).hustleId);
+    const to = hustles.find(h => h.id === req.hustleId);
+    const row = document.createElement("div");
+    row.className = "auto-row";
+    row.innerHTML = `
+      <div class="auto-details"><strong>${escapeHtml(s.name)}</strong>
+        wants to switch ${from ? `from ${escapeHtml(from.name)} (${hourLabel((s.sideHustle || {}).checkinHour)})` : "(no current hustle)"}
+        to <strong>${to ? to.name : "—"}</strong> at ${hourLabel(req.checkinHour)}
+      </div>
+      <button class="btn small" onclick="approveSideHustleRequest('${escapeJsAttr(s.username)}')">Approve</button>
+      <button class="btn small coral" onclick="denySideHustleRequest('${escapeJsAttr(s.username)}')">Deny</button>
+    `;
+    reqBox.appendChild(row);
+  });
+
+  const shBox = document.getElementById("sideHustleList");
+  const hustles = cls.sideHustles || [];
+  document.getElementById("noSideHustlesTeacher").classList.toggle("hidden", hustles.length > 0);
+  shBox.innerHTML = "";
+  hustles.forEach(h => {
+    const row = document.createElement("div");
+    row.className = "auto-row";
+    const payoutSummary = Object.keys(h.payouts || {})
+      .map(Number).sort((a, b) => a - b)
+      .map(hr => `${hourLabel(hr)}: ${fmtMoney(h.payouts[hr])}`).join(", ") || "No payouts set";
+    row.innerHTML = `
+      <div class="auto-details">${icon("briefcase", 14)} <strong>${escapeHtml(h.name)}</strong>
+        <div class="muted-small">${payoutSummary}</div>
+        ${h.description ? `<div class="muted-small">${escapeHtml(h.description)}</div>` : ""}
+      </div>
+      <button class="btn small secondary" onclick="startEditSideHustle('${h.id}')">${icon("edit", 13)} Edit</button>
+      <button class="btn small coral" onclick="removeSideHustleClick('${h.id}')">${icon("trash", 13)} Remove</button>
+    `;
+    shBox.appendChild(row);
+  });
+}
+
+// Teachers naturally type amounts like "$10" or "1,000" in a money app —
+// plain Number() chokes on those and silently falls back to 0, which is
+// why a whole multi-choice event could end up worth +$0 across the board.
+// This strips currency symbols/commas/whitespace first so those work.
+function parseMoneyInput(str) {
+  if (str === undefined || str === null) return NaN;
+  const cleaned = String(str).replace(/[$,\s]/g, "");
+  if (cleaned === "" || cleaned === "-" || cleaned === "+") return NaN;
+  return Number(cleaned);
+}
+
+// "1am" / "12pm" -> 0-23, or null if unrecognized.
+function parseHourLabel(str) {
+  const m = String(str || "").trim().toLowerCase().match(/^(\d{1,2})\s*(am|pm)$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  if (h < 1 || h > 12) return null;
+  if (m[2] === "am") h = (h === 12) ? 0 : h;
+  else h = (h === 12) ? 12 : h + 12;
+  return h;
+}
+
+
+async function approveSideHustleRequest(username) {
+  const res = await approveSideHustleChange(username, CLASS_CODE);
+  if (!res.ok) alert(res.error || "Couldn't approve that request.");
+  await render();
+}
+
+async function denySideHustleRequest(username) {
+  const reason = await t29Prompt("Optional reason to show the student (leave blank to skip):", "", { confirmText: "Send", placeholder: "Reason (optional)" }) || "";
+  await denySideHustleChange(username, reason);
+  await render();
+}
+
+async function addSideHustleForm(e) {
+  e.preventDefault();
+  const name = document.getElementById("shName").value.trim();
+  const description = document.getElementById("shDesc").value.trim();
+  const lines = document.getElementById("shPayoutsArea").value.split("\n").map(l => l.trim()).filter(Boolean);
+  const payouts = {};
+  for (const line of lines) {
+    const [hourPart, amtPart] = line.split("|");
+    const hour = parseHourLabel(hourPart);
+    if (hour === null) {
+      alert(`Couldn't read the hour "${(hourPart || "").trim()}" — use a plain hour like "1am" or "3pm".`);
+      return false;
+    }
+    const amount = parseMoneyInput(amtPart);
+    if (Number.isNaN(amount)) {
+      alert(`Couldn't read the amount for "${(hourPart || "").trim()}" — enter a plain number like 20 (no currency symbols needed).`);
+      return false;
+    }
+    payouts[hour] = amount;
+  }
+  if (Object.keys(payouts).length === 0) {
+    alert('Add at least one payout, as "hour | amount" (e.g. "1am | 20").');
+    return false;
+  }
+
+  if (EDITING_SIDE_HUSTLE_ID) {
+    await editSideHustle(CLASS_CODE, EDITING_SIDE_HUSTLE_ID, { name, description, payouts });
+  } else {
+    await addSideHustle(CLASS_CODE, { name, description, payouts });
+  }
+  resetSideHustleForm();
+  await render();
+  return false;
+}
+
+function resetSideHustleForm() {
+  EDITING_SIDE_HUSTLE_ID = null;
+  document.getElementById("shName").value = "";
+  document.getElementById("shDesc").value = "";
+  document.getElementById("shPayoutsArea").value = "";
+  document.getElementById("addSideHustleBtn").innerHTML = icon("plus", 15) + " Add side hustle";
+  document.getElementById("hustleFoldTitle").textContent = "Add a side hustle";
+  document.getElementById("hustleFold").open = false;
+  const cancelBtn = document.getElementById("cancelEditSideHustleBtn");
+  if (cancelBtn) cancelBtn.remove();
+}
+
+function startEditSideHustle(id) {
+  getClassCached(CLASS_CODE).then(cls => {
+    const h = (cls.sideHustles || []).find(x => x.id === id);
+    if (!h) return;
+    EDITING_SIDE_HUSTLE_ID = id;
+    document.getElementById("shName").value = h.name;
+    document.getElementById("shDesc").value = h.description || "";
+    document.getElementById("shPayoutsArea").value = Object.keys(h.payouts || {})
+      .map(Number).sort((a, b) => a - b)
+      .map(hr => `${hourLabel(hr)} | ${h.payouts[hr]}`).join("\n");
+    document.getElementById("addSideHustleBtn").innerHTML = icon("save", 15) + " Save changes";
+    document.getElementById("hustleFoldTitle").textContent = "Edit side hustle";
+    document.getElementById("hustleFold").open = true;
+    if (!document.getElementById("cancelEditSideHustleBtn")) {
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.id = "cancelEditSideHustleBtn";
+      cancelBtn.className = "btn small secondary";
+      cancelBtn.style.marginLeft = "8px";
+      cancelBtn.textContent = "Cancel edit";
+      cancelBtn.onclick = resetSideHustleForm;
+      document.getElementById("addSideHustleBtn").insertAdjacentElement("afterend", cancelBtn);
+    }
+    document.getElementById("addSideHustleBtn").scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
+async function removeSideHustleClick(id) {
+  if (await t29Confirm("Remove this side hustle? Students currently using it will lose their check-in until they pick a new one.")) {
+    if (id === EDITING_SIDE_HUSTLE_ID) resetSideHustleForm();
+    await removeSideHustle(CLASS_CODE, id);
+    await render();
+  }
 }
 
 /* ── Jobs grid ─────────────────────────────────────────────────────── */
@@ -96,7 +286,7 @@ function renderJobsGrid(cls, students) {
   grid.innerHTML = "";
 
   if (!cls.jobs || cls.jobs.length === 0) {
-    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>No jobs yet. Students need a job to get paid.</p><button type="button" class="btn small secondary" onclick="t29Jump('addJobCard')">Create a job</button></div>`;
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>No jobs yet. Students need a job to get paid.</p><button type="button" class="btn small secondary" onclick="document.getElementById('addJobCard').open = true; t29Jump('addJobCard')">Create a job</button></div>`;
     return;
   }
 

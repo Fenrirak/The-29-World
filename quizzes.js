@@ -28,7 +28,7 @@ function moduleLabel(key) {
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("book", 26) + " Quizzes";
+  document.getElementById("pageTitle").innerHTML = icon("quiz", 26) + " Quizzes";
 }
 
 async function init() {
@@ -108,12 +108,12 @@ async function renderTeacher() {
     <div class="quiz-card${q.moduleKey ? " locking" : ""}">
       <div class="flex-between">
         <div style="flex:1;min-width:220px;">
-          <h3>${icon("book", 18)}${esc(q.title)}</h3>
+          <h3>${icon("quiz", 18)}${esc(q.title)}</h3>
           ${q.description ? `<p class="muted-small" style="margin:0 0 6px;">${esc(q.description)}</p>` : ""}
           <div class="quiz-meta">
             <span class="quiz-pill${q.moduleKey ? " coral" : ""}">${icon("lock", 12)}Unlocks: ${esc(moduleLabel(q.moduleKey))}</span>
             <span class="quiz-pill">${icon("check", 12)}Pass mark ${q.passMark}%</span>
-            <span class="quiz-pill">${icon("book", 12)}${q.questions.length} ${q.questions.length === 1 ? "question" : "questions"}</span>
+            <span class="quiz-pill">${icon("quiz", 12)}${q.questions.length} ${q.questions.length === 1 ? "question" : "questions"}</span>
             ${q.reward > 0 ? `<span class="quiz-pill gold">${icon("coin", 12)}${fmtMoney(q.reward)} bonus</span>` : ""}
             <span class="quiz-pill${q.active ? " mint" : ""}">${q.active ? "Active" : "Paused"}</span>
           </div>

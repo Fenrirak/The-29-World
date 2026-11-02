@@ -133,7 +133,7 @@ function notifLoanItems(me) {
     else if (days === 0) { tone = "coral"; title = "Loan due today"; }
     else { tone = "gold"; title = `Loan due in ${days} ${days === 1 ? "day" : "days"}`; }
     out.push({
-      id: "loan-" + l.id + "-" + today, ts: dayStart, icon: "handshake", tone,
+      id: "loan-" + l.id + "-" + today, ts: dayStart, icon: "loan", tone,
       title, body: `${fmtMoney(l.owed)} still owing. Interest keeps compounding every Monday until it's paid off.`,
       href: "loan.html", action: true
     });
@@ -442,7 +442,7 @@ function notifQuizItems(me, cls) {
     const r = quizResultFor(me, q.id);
     return !r || !r.passed;
   }).slice(0, 5).map(q => ({
-    id: "quiz-" + q.id + "-" + nzDateKey(), ts: dayStart, icon: "book", tone: "gold",
+    id: "quiz-" + q.id + "-" + nzDateKey(), ts: dayStart, icon: "quiz", tone: "gold",
     title: `Quiz to pass: ${q.title}`,
     body: `Passing this unlocks ${labelOf(q.moduleKey)}. You need ${q.passMark}% or better.`,
     // Students can't open the Quizzes page (it sends them home), so this

@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=1e23cf8f">
+<link rel="stylesheet" href="style.css?v=e62208eb">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -52,7 +52,7 @@
     <a href="budget.html" data-module="budget"><span class="icon-slot" data-icon="calendar"></span><span class="nav-label">Budget</span></a>
     <a href="termdeposit.html" data-module="termdeposit"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
     <a href="kiwisaver.html" data-module="kiwisaver"><span class="icon-slot" data-icon="kiwi"></span><span class="nav-label">KiwiSaver</span></a>
-    <a href="loan.html" data-module="loan"><span class="icon-slot" data-icon="handshake"></span><span class="nav-label">Loans</span></a>
+    <a href="loan.html" data-module="loan"><span class="icon-slot" data-icon="loan"></span><span class="nav-label">Loans</span></a>
     <a href="market.html" data-module="market"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
     <a href="store.html" data-module="store"><span class="icon-slot" data-icon="cart"></span><span class="nav-label">Store</span></a>
     <a href="marketplace.html" data-module="marketplace"><span class="icon-slot" data-icon="swap"></span><span class="nav-label">Trade Centre</span></a>
@@ -64,7 +64,7 @@
     <a href="bigevents.html" data-module="bigevents"><span class="icon-slot" data-icon="bolt"></span><span class="nav-label">Big Events</span></a>
     <a href="life.html" data-module="life"><span class="icon-slot" data-icon="trophy"></span><span class="nav-label">Life</span></a>
     <a href="gambling.html" data-module="gambling"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
-    <a href="quizzes.html"><span class="icon-slot" data-icon="book"></span><span class="nav-label">Quizzes</span></a>
+    <a href="quizzes.html"><span class="icon-slot" data-icon="quiz"></span><span class="nav-label">Quizzes</span></a>
     <a href="reports.html"><span class="icon-slot" data-icon="idcard"></span><span class="nav-label">Reports</span></a>
     <span class="who" id="whoami"></span>
     <div class="topbar-actions">
@@ -80,6 +80,29 @@
   <!-- ══════════════════════════ TEACHER VIEW ══════════════════════════ -->
   <div id="teacherView" class="hidden">
 
+    <!-- Pay day (moved here from the Dashboard's class settings) -->
+    <div class="card" id="payDayCard">
+      <div class="set-row">
+        <div class="set-row-text">
+          <h2 id="hPayDay">Pay day</h2>
+          <p class="muted-small">The day of the week wages are due. They&rsquo;re paid automatically whenever that day comes around, to students whose job task you&rsquo;ve ticked &mdash; or use <strong>Run Pay Day</strong> on your <a href="teacher.html">Dashboard</a> to pay early.</p>
+        </div>
+        <div class="set-inline">
+          <select id="payDaySelect" aria-label="Pay day">
+            <option value="Mon">Monday</option>
+            <option value="Tue">Tuesday</option>
+            <option value="Wed">Wednesday</option>
+            <option value="Thu">Thursday</option>
+            <option value="Fri">Friday</option>
+            <option value="Sat">Saturday</option>
+            <option value="Sun">Sunday</option>
+          </select>
+          <button class="btn secondary" type="button" onclick="savePayDay()" id="savePayDayBtn">Save pay day</button>
+        </div>
+      </div>
+      <div id="payDayMsg"></div>
+    </div>
+
     <!-- Jobs grid -->
     <div class="card">
       <div class="flex-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
@@ -92,9 +115,8 @@
     </div>
 
     <!-- Add new job -->
-    <div class="card" id="addJobCard">
-      <h2>Create new job</h2>
-      <p class="muted-small">Set up a job with as many tiers as you like. Each tier has its own name, pay, and description.</p>
+    <details class="card fold" id="addJobCard">
+      <summary><span class="fold-head"><h2>Create new job</h2><span class="fold-hint">Set up a job with as many tiers as you like. Each tier has its own name, pay, and description.</span></span></summary>
 
       <label for="addJobTitle">Job name</label>
       <input id="addJobTitle" data-enter="addJobBtn" placeholder="e.g. Librarian" style="max-width:360px;">
@@ -116,7 +138,7 @@
           + Add job
         </button>
       </div>
-    </div>
+    </details>
 
     <!-- Applications -->
     <div class="card">
@@ -125,6 +147,37 @@
       </div>
       <p class="muted-small">When students apply for a job, they always start at the entry tier.</p>
       <div id="applicationsBox"></div>
+    </div>
+
+    <!-- Side hustles (moved here from the Dashboard) -->
+    <div class="card" id="sideHustleCard">
+      <h2 id="hSideHustles">Side hustles</h2>
+      <p class="muted-small">Students each pick one hustle and a daily check-in hour (e.g. 1am, 2am, 3am...). They must check in within 15 minutes after that hour to get paid — the amount depends on which hour they picked. Once a student has picked one, any change needs your approval — that stops someone quietly retiming their check-in to match whenever they happen to be online.</p>
+
+      <div id="sideHustleRequestsWrap">
+        <h3 id="hSideHustleRequests" style="margin-top:0;">Pending change requests</h3>
+        <div id="sideHustleRequests"></div>
+        <p class="muted-small" id="noSideHustleRequests">No pending requests.</p>
+      </div>
+
+      <div id="sideHustleList" style="margin-top:16px;"></div>
+      <p class="muted-small" id="noSideHustlesTeacher">You haven't added any side hustles yet.</p>
+      <details class="fold-sub" id="hustleFold">
+      <summary><span class="fold-head"><span id="hustleFoldTitle">Add a side hustle</span><span class="fold-hint">Create a new hustle students can pick.</span></span></summary>
+      <form onsubmit="return addSideHustleForm(event)">
+        <label for="shName" id="labShName">Side hustle name</label>
+        <input id="shName" placeholder="e.g. Dog walking" required>
+        <label for="shDesc" id="labShDesc">Description (optional)</label>
+        <input id="shDesc" placeholder="e.g. Walk the neighbourhood dogs">
+        <label for="shPayoutsArea" id="labShPayouts">Payout per check-in hour — one per line, as "hour | amount"</label>
+        <textarea id="shPayoutsArea" rows="4" placeholder="1am | 20
+3pm | 25
+7pm | 15" required></textarea>
+        <p class="muted-small">Only list the hours you want to offer a payout for (e.g. 12am, 1am, ... 11pm) — one "hour | amount" per line. Hours you leave out won't pay anything if a student somehow picks them.</p>
+        <button class="btn" type="submit" id="addSideHustleBtn">Add side hustle</button>
+      </form>
+      </details>
+      <div id="sideHustleMsg"></div>
     </div>
 
   </div><!-- /teacherView -->
@@ -220,19 +273,19 @@
 </footer>
 
 <script type="module" src="firebase-init.js?v=aca5590e"></script>
-<script defer src="icons.js?v=1ae19049"></script>
+<script defer src="icons.js?v=c69a6a12"></script>
 <script defer src="settings-menu.js?v=8dde546c"></script>
 <script defer src="shortcuts.js?v=bcda2833"></script>
 <script defer src="data-core.js?v=1860738e"></script>
-<script defer src="data-money.js?v=b96e0737"></script>
+<script defer src="data-money.js?v=197f9cce"></script>
 <script defer src="data-life.js?v=d62c66a1"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=d6ba8dd6"></script>
 <script defer src="events-ui.js?v=d8c39f3b"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
-<script defer src="avatar.js?v=4cd2b2b6"></script>
-<script defer src="notifications.js?v=beececba"></script>
-<script defer src="jobs.js?v=721b829b"></script>
+<script defer src="avatar.js?v=f7f7ea37"></script>
+<script defer src="notifications.js?v=477a64fd"></script>
+<script defer src="jobs.js?v=42f0c6d2"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
 </body>
 </html>

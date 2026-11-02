@@ -43,7 +43,7 @@ function badgeType(type) {
     "property-occupancy": ["navy", "house", "Occupancy change"],
     "truck-drive": ["mint", "car", "Truck drive"],
     "truck-licence-buy": ["navy", "car", "Truck licence"],
-    "loan-interest": ["coral", "handshake", "Loan interest"],
+    "loan-interest": ["coral", "loan", "Loan interest"],
     "gambling-buyin": ["gold", "dice", "Gambling buy-in"], "gambling-cashout": ["mint", "dice", "Gambling cash-out"],
     "life-grant": ["gold", "trophy", "Life event"], "life-revoke": ["coral", "trophy", "Life event removed"],
     "life-allowance": ["mint", "trophy", "Life allowance"],
