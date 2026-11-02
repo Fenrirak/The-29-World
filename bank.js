@@ -11,25 +11,13 @@ function paintChrome() {
   document.getElementById("pageTitle").innerHTML = icon("piggy", 26) + " Bank Account";
   document.getElementById("iconBalance").innerHTML = icon("piggy", 30);
   document.getElementById("iconAuto").innerHTML = icon("repeat", 30);
-  document.getElementById("hSend").innerHTML = icon("send", 18) + " Send money";
-  document.getElementById("hNewAuto").innerHTML = icon("repeat", 18) + " Set up an automatic payment";
-  document.getElementById("hAutoList").innerHTML = icon("repeat", 18) + " My automatic payments";
   document.getElementById("hActivity").innerHTML = icon("bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 3 days)");
-  document.getElementById("labTo").innerHTML = icon("user", 13) + " Send to";
-  document.getElementById("labAmount").innerHTML = icon("coin", 13) + (IS_TEACHER ? " Amount (negative to deduct from a student)" : " Amount");
-  document.getElementById("labNote").innerHTML = icon("note", 13) + " What's it for?";
-  document.getElementById("sendBtn").innerHTML = icon("send", 15) + " Send";
+  if (IS_TEACHER) document.getElementById("labAmount").textContent = "Amount (negative to deduct from a student)";
   if (IS_TEACHER) {
     const amtInput = document.getElementById("amount");
     amtInput.removeAttribute("min");
     amtInput.step = "0.01";
   }
-  document.getElementById("labAutoDay").innerHTML = icon("calendar", 13) + " Day of the week";
-  document.getElementById("labAutoFreq").innerHTML = icon("repeat", 13) + " How often";
-  document.getElementById("labAutoAmount").innerHTML = icon("coin", 13) + " Amount";
-  document.getElementById("labAutoTo").innerHTML = icon("user", 13) + " Pay to";
-  document.getElementById("labAutoNote").innerHTML = icon("note", 13) + " Reference / what's it for?";
-  document.getElementById("addAutoBtn").innerHTML = icon("plus", 15) + " Create automatic payment";
   document.getElementById("hSavings").innerHTML = icon("piggy", 18) + " Savings account";
   document.getElementById("iconSavings").innerHTML = icon("piggy", 26);
   document.getElementById("iconSavingsRate").innerHTML = icon("percent", 26);
@@ -215,13 +203,13 @@ async function render() {
     if (a.type === "savings-transfer") {
       const dirLabel = a.direction === "toSavings" ? "Cash → Savings" : "Savings → Cash";
       row.innerHTML = `
-        <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> ${dirLabel}
+        <div class="auto-details"><strong>${fmtMoney(a.amount)}</strong> ${dirLabel}
           &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
           ${a.note ? `<div class="muted-small">${escapeHtml(a.note)}</div>` : ""}
           ${a.lastRun ? `<div class="muted-small">Last ran: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
         </div>
         <button class="btn small secondary" onclick='startEditSavAuto(${JSON.stringify(a).replace(/'/g, "&#39;")})'>Edit</button>
-        <button class="btn small coral" onclick="removeAuto('${a.id}')">${icon("trash", 13)} Remove</button>
+        <button class="btn small coral" onclick="removeAuto('${a.id}')">Remove</button>
       `;
       listBox.appendChild(row);
       continue;
@@ -234,13 +222,13 @@ async function render() {
       toLabel = escapeHtml(toUser ? toUser.name : a.toUser);
     }
     row.innerHTML = `
-      <div class="auto-details">${icon("repeat", 14)} <strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>${a.useCard ? ` <span class="badge lilac">Credit card</span>` : ""}
+      <div class="auto-details"><strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>${a.useCard ? ` <span class="badge lilac">Credit card</span>` : ""}
         &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
         ${a.note ? `<div class="muted-small">${escapeHtml(a.note)}</div>` : ""}
         ${a.lastRun ? `<div class="muted-small">Last paid: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
       </div>
       <button class="btn small secondary" onclick='startEditAuto(${JSON.stringify(a).replace(/'/g, "&#39;")})'>Edit</button>
-      <button class="btn small coral" onclick="removeAuto('${a.id}')">${icon("trash", 13)} Remove</button>
+      <button class="btn small coral" onclick="removeAuto('${a.id}')">Remove</button>
     `;
     listBox.appendChild(row);
   }
@@ -457,7 +445,7 @@ function startEditAuto(a) {
   document.getElementById("autoNote").value = a.note || "";
   { const c = document.getElementById("autoUseCard"); if (c) c.checked = !!a.useCard; }
   autoSyncCardRow();
-  document.getElementById("hNewAuto").innerHTML = icon("edit", 18) + " Edit automatic payment";
+  document.getElementById("hNewAuto").innerHTML = "Edit automatic payment";
   document.getElementById("addAutoBtn").innerHTML = "Save changes";
   document.getElementById("cancelAutoEditBtn").classList.remove("hidden");
   document.getElementById("autoMsg").innerHTML = "";
@@ -471,8 +459,8 @@ function cancelEditAuto() {
   document.getElementById("autoTo").value = "";
   { const c = document.getElementById("autoUseCard"); if (c) c.checked = false; }
   autoSyncCardRow();
-  document.getElementById("hNewAuto").innerHTML = icon("repeat", 18) + " Set up an automatic payment";
-  document.getElementById("addAutoBtn").innerHTML = icon("plus", 15) + " Create automatic payment";
+  document.getElementById("hNewAuto").innerHTML = "Set up an automatic payment";
+  document.getElementById("addAutoBtn").innerHTML = "Create automatic payment";
   document.getElementById("cancelAutoEditBtn").classList.add("hidden");
 }
 

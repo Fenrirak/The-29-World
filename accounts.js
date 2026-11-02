@@ -56,28 +56,14 @@ function acPresetPlan(cls, pr) {
 }
 
 /* ---------------- Little building blocks ---------------- */
-function acInjectCss() {
-  ccInjectThemeCss(); // the shared theme-picker CSS
-}
+function acInjectCss() {}
 function acPlural(n, w) { return ccPlural(n, w); }
 function acKindLabel(k) { return k === "savings" ? "Savings" : "Everyday"; }
-function acKindBadge(k) { return `<span class="badge ${k === "savings" ? "mint" : "navy"}">${icon(k === "savings" ? "piggy" : "wallet", 12)} ${acKindLabel(k)}</span>`; }
+function acKindBadge(k) { return `<span class="badge ${k === "savings" ? "mint" : "navy"}">${acKindLabel(k)}</span>`; }
 function acTierNeed(cls, rating) {
   if (!rating) return "";
   const t = ccTierForRating(cls, rating);
   return t ? `Needs the ${acEsc(t.label)} tier or higher` : `Needs lifestyle rating ${rating}+`;
-}
-// The coloured top of a tile: same look as the credit cards so the two sections feel like one family.
-function acVisual(plan, o) {
-  o = o || {};
-  const stat = o.balance !== undefined ? ["BALANCE", fmtMoney(o.balance)] : ["INTEREST", plan.rate > 0 ? `${plan.rate}%` : "None"];
-  return `<div class="cc-visual cc-t0 sm ac-visual ${o.pending ? "is-pending" : ""}" style="${ccThemeStyle(plan)}">
-    <div class="cc-v-top"><span class="cc-v-brand">THE 29 WORLD</span><span class="ac-v-kind">${plan.kind === "savings" ? "SAVER" : "EVERYDAY"}</span></div>
-    <div class="cc-v-chip" aria-hidden="true"></div>
-    <div class="cc-v-bottom">
-      <div class="cc-v-who"><small>${plan.kind === "savings" ? "SAVINGS ACCOUNT" : "EVERYDAY ACCOUNT"}</small><span>${acEsc(plan.name)}</span></div>
-      <div class="cc-v-limit"><small>${stat[0]}</small><span>${stat[1]}</span></div>
-    </div></div>`;
 }
 function acFacts(p) {
   const f = (k, v) => `<div class="cc-fact"><span>${k}</span><strong>${v}</strong></div>`;
@@ -141,7 +127,7 @@ function acRenderStudent(me, cls) {
   const held = new Set(list.map(a => a.planId));
   const countKind = k => list.filter(a => (a.status === "active" || a.status === "pending") && (acctPlanById(cls, a.planId) || {}).kind === k).length;
   const full = { everyday: countKind("everyday") >= st.maxEveryday, savings: countKind("savings") >= st.maxSavings };
-  const head = note => `<div class="flex-between cc-head"><h2 id="hAcct">${icon("wallet", 18)} Your accounts</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
+  const head = note => `<div class="flex-between cc-head"><h2 id="hAcct">Your accounts</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
 
   let html = head(off ? "Not open yet" : st.approval === "teacher" ? "Teacher approval needed" : "Open instantly");
   html += `<p class="cc-intro">Your cash balance and Savings Account above always stay put. Open extra <strong>everyday</strong> and <strong>savings</strong> accounts to organise your money — each one has its own interest, fees and rules. ${interestScheduleLabel(cls)}</p>`;
@@ -189,8 +175,8 @@ function acPlanTile(me, cls, p, off, full) {
   else if (atMax) action = `<div class="cc-lock">${icon("lock", 14)}<span>You've reached the limit of ${p.kind} accounts</span></div>`;
   else action = `<button class="btn gold" onclick="acOpen('${acEsc(p.id)}')">${instant ? "Open this account" : "Apply for this account"}</button>`;
   return `<div class="cc-plan ac-plan ${locked || off || atMax ? "locked" : ""}">
-    ${acVisual(p)}
     <div class="cc-plan-body">
+      <div class="ac-tile-head"><strong>${acEsc(p.name)}</strong>${acKindBadge(p.kind)}</div>
       ${p.blurb ? `<p class="ac-blurb">${acEsc(p.blurb)}</p>` : ""}
       ${acFacts(p)}
       <div class="cc-perks">${acPerks(p)}</div>
@@ -221,8 +207,8 @@ function acOwnedTile(a, cls) {
   }
   if (p.maxBalance > 0) rows.push(`<div class="ac-line"><span>Room left</span><strong>${fmtMoney(Math.max(0, p.maxBalance - bal))}</strong></div>`);
   return `<article class="ac-own">
-    ${acVisual(p, { balance: bal })}
     <div class="ac-own-body">
+      <div class="ac-tile-head"><strong>${acEsc(p.name)}</strong>${acKindBadge(p.kind)}</div>
       <div class="ac-bal"><span>Balance</span><strong>${fmtMoney(bal)}</strong></div>
       <div class="ac-rows">${rows.join("")}</div>
       <div class="ac-life">Earned so far <b>${fmtMoney(lt.interest || 0)}</b> · Fees paid <b>${fmtMoney(lt.fees || 0)}</b></div>
@@ -247,10 +233,10 @@ function acMovePanel(me, cls) {
   if (!ids.includes(AC_MOVE.to) || AC_MOVE.to === AC_MOVE.from) AC_MOVE.to = ids.find(i => i !== AC_MOVE.from && i !== "cash") || ids.find(i => i !== AC_MOVE.from);
   const opts = sel => ch.map(c => `<option value="${acEsc(c.id)}" ${c.id === sel ? "selected" : ""}>${acEsc(c.label)} — ${fmtMoney(c.bal)}</option>`).join("");
   return `<section class="cc-panel ac-move">
-    <div class="cc-panel-head"><h3>${icon("swap", 16)} Move money</h3><span class="muted-small">Between your cash, Savings Account and the accounts above</span></div>
+    <div class="cc-panel-head"><h3>Move money</h3><span class="muted-small">Between your cash, Savings Account and the accounts above</span></div>
     <form onsubmit="return acMove(event)" class="ac-move-form">
       <div><label for="acFrom">From</label><select id="acFrom" onchange="acMoveChanged()">${opts(AC_MOVE.from)}</select></div>
-      <button type="button" class="ac-swap" onclick="acSwap()" aria-label="Swap from and to" title="Swap">${icon("swap", 18)}</button>
+      <button type="button" class="ac-swap" onclick="acSwap()" aria-label="Swap from and to" title="Swap">Swap</button>
       <div><label for="acTo">To</label><select id="acTo" onchange="acMoveChanged()">${opts(AC_MOVE.to)}</select></div>
       <div><label for="acAmt">Amount</label><div class="cc-num money"><i>$</i><input id="acAmt" type="number" min="0.01" step="0.01" required inputmode="decimal"></div></div>
       <button class="btn gold" type="submit" id="acMoveBtn">Move money</button>
@@ -295,7 +281,7 @@ function acMoveHint() {
     if (sp.bonusRate > 0 && !(src.wd > 0)) notes.push(`Taking money out of ${acEsc(sp.name)} loses this period's +${sp.bonusRate}% bonus.`);
   }
   if (dp && dp.maxBalance > 0) notes.push(`${acEsc(dp.name)} can hold up to ${fmtMoney(dp.maxBalance)} — room for ${fmtMoney(Math.max(0, dp.maxBalance - (dst.balance || 0)))} more.`);
-  el.innerHTML = notes.length ? notes.map(n => `<span>${icon("bell", 13)} ${n}</span>`).join("") : "";
+  el.innerHTML = notes.length ? notes.map(n => `<span>${n}</span>`).join("") : "";
 }
 async function acMove(e) {
   e.preventDefault();
@@ -350,7 +336,6 @@ function acRenderTeacher(cls, students) {
   const planRows = live.length ? live.slice().sort((a, b) => (a.kind === b.kind ? b.rate - a.rate : a.kind === "everyday" ? -1 : 1)).map(p => {
     const n = countFor(p.id);
     return `<div class="cc-tplan">
-      ${acVisual(p)}
       <div class="cc-tplan-body">
         <div class="cc-tplan-top"><strong>${acEsc(p.name)}</strong><span class="badge navy">${acPlural(n, "holder")}</span></div>
         ${acKindBadge(p.kind)}
@@ -361,22 +346,30 @@ function acRenderTeacher(cls, students) {
         <div class="cc-tplan-actions"><button class="btn small" onclick="acEditPlan('${acEsc(p.id)}')">Edit</button>
           <button class="btn small coral" onclick="acRemovePlan('${acEsc(p.id)}')">${n > 0 ? "Retire" : "Delete"}</button></div>
       </div></div>`;
-  }).join("") : `<div class="empty-state"><p>No accounts yet. Add a few from the recommended list above, or build your own below.</p></div>`;
+  }).join("") : `<div class="empty-state"><p>No accounts yet. Add a few from the recommended accounts, or build your own below.</p></div>`;
 
   const liveNames = new Set(live.map(p => p.name.toLowerCase()));
   const reco = AC_PRESETS.map(pr => {
     const p = acPresetPlan(cls, pr), have = liveNames.has(pr.name.toLowerCase());
-    const bg = ccThemeBg(CC_THEMES.find(t => t.id === p.theme) || CC_THEMES[0]);
     const line = [p.rate > 0 ? `${p.rate}% interest` : "No interest", p.bonusRate > 0 ? `+${p.bonusRate}% bonus` : "",
       p.fee > 0 ? `${fmtMoney(p.fee)} fee` : "", p.withdrawFee > 0 ? `${fmtMoney(p.withdrawFee)} per withdrawal` : "", p.maxWithdrawals > 0 ? `${p.maxWithdrawals} withdrawal/period` : "", p.maxBalance > 0 ? `${fmtMoney(p.maxBalance)} cap` : ""].filter(Boolean).join(" · ");
     return `<div class="ac-reco-item ${have ? "have" : ""}">
-      ${ccMiniCard(`background:${bg};`, p.name, p.rate > 0 ? p.rate + "%" : "—")}
       <div class="ac-reco-body"><div class="ac-reco-top"><strong>${acEsc(pr.name)}</strong>${acKindBadge(pr.kind)}</div>
         <p>${acEsc(pr.blurb)}</p><div class="muted-small">${acEsc(line)}</div></div>
       <button class="btn small ${have ? "secondary" : "gold"}" ${have ? "disabled" : ""} onclick="acAddPreset('${pr.key}')">${have ? "Added" : "+ Add"}</button>
     </div>`;
   }).join("");
   const remaining = AC_PRESETS.filter(pr => !liveNames.has(pr.name.toLowerCase())).length;
+  // Gone once every recommended account has been added; a teacher can also dismiss it (and bring it back).
+  const recoPanel = !remaining ? "" : acRecoDismissed()
+    ? `<p class="muted-small ac-reco-show"><a href="#" onclick="acDismissReco(false);return false;">Show recommended accounts</a></p>`
+    : `<section class="cc-panel ac-reco-panel">
+      <div class="cc-panel-head"><h3>${icon("sparkle", 16)} Recommended accounts</h3>
+        <span class="ac-reco-actions"><button class="btn small gold" onclick="acAddAllPresets()">+ Add all ${remaining} remaining</button>
+        <button class="btn small secondary" onclick="acDismissReco(true)">Dismiss</button></span></div>
+      <p class="muted-small ac-reco-note">One click adds a ready-made account to your class. Rates are based on your class savings rate (${cls.interestRate || 0}%), and you can edit anything afterwards.</p>
+      <div class="ac-reco">${reco}</div>
+    </section>`;
 
   const pendRows = pending.length ? `<h3 class="cc-sub">${icon("history", 16)} Waiting for approval (${pending.length})</h3>
     <div class="table-scroll cc-tablewrap"><table><thead><tr><th>Student</th><th>Account</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(({ s, a, p }) => {
@@ -395,7 +388,7 @@ function acRenderTeacher(cls, students) {
     }).join("")}</tbody></table></div>` : "";
 
   el.innerHTML = `
-    <div class="flex-between cc-head"><h2 id="hAcctT">${icon("wallet", 18)} Bank accounts</h2>
+    <div class="flex-between cc-head"><h2 id="hAcctT">Bank accounts</h2>
       <label class="cc-switch"><input type="checkbox" id="acsEnabled" ${st.enabled ? "checked" : ""} onchange="acSaveSettings()"><span class="cc-switch-track"></span><span>${st.enabled ? "On for students" : "Off"}</span></label></div>
     <p class="cc-intro">Let students open extra <strong>everyday</strong> and <strong>savings</strong> accounts on top of their cash balance and Savings Account. You decide every rate, fee and limit. ${interestScheduleLabel(cls)} Your class Savings Account rate is ${cls.interestRate || 0}%.</p>
     <div class="cc-tstats">
@@ -416,12 +409,7 @@ function acRenderTeacher(cls, students) {
       </div>
     </section>
     <div id="acTMsg"></div>
-    <section class="cc-panel ac-reco-panel">
-      <div class="cc-panel-head"><h3>${icon("sparkle", 16)} Recommended accounts</h3>
-        ${remaining ? `<button class="btn small gold" onclick="acAddAllPresets()">+ Add all ${remaining} remaining</button>` : `<span class="muted-small">All recommended accounts added</span>`}</div>
-      <p class="muted-small ac-reco-note">One click adds a ready-made account to your class. Rates are based on your class savings rate (${cls.interestRate || 0}%), and you can edit anything afterwards.</p>
-      <div class="ac-reco">${reco}</div>
-    </section>
+    ${recoPanel}
     <h3 class="cc-sub">Your plans</h3>
     <div class="cc-tplans">${planRows}</div>
     ${archived.length ? `<p class="muted-small cc-archived">Retired: ${archived.map(p => `${acEsc(p.name)} <a href="#" onclick="acRestorePlan('${acEsc(p.id)}');return false;">restore</a>`).join(" · ")}</p>` : ""}
@@ -431,32 +419,8 @@ function acRenderTeacher(cls, students) {
 }
 
 /* ---------------- Plan form ---------------- */
-function acThemePickerHtml(p) {
-  ccInjectThemeCss();
-  const cur = (CC_THEMES.some(t => t.id === p.theme) ? p.theme : "random");
-  const name = p.name || "Account name", stat = p.rate > 0 ? p.rate + "%" : "—";
-  const tile = (id, label, bg, extra) => `<button type="button" role="radio" aria-checked="${cur === id}" class="cc-theme ${extra || ""} ${cur === id ? "on" : ""}" data-theme="${id}" onclick="acPickTheme('${id}')">${ccMiniCard(bg, name, stat)}<span class="cc-theme-label">${label}</span></button>`;
-  return `<div class="wide"><label>Colour</label>
-    <div class="cc-themes" id="acThemePicker" role="radiogroup" aria-label="Account colour">
-      ${tile("random", "Random", "", "random")}
-      ${CC_THEMES.map(t => tile(t.id, t.name, `background:${ccThemeBg(t)};`)).join("")}
-    </div>
-    <input type="hidden" id="acp-theme" value="${cur}">
-    <div class="muted-small">Random picks a colour no other account is using yet when you save, then keeps it.</div></div>`;
-}
-function acPickTheme(id) {
-  document.getElementById("acp-theme").value = id;
-  document.querySelectorAll("#acThemePicker .cc-theme").forEach(b => {
-    const on = b.dataset.theme === id;
-    b.classList.toggle("on", on);
-    b.setAttribute("aria-checked", on ? "true" : "false");
-  });
-}
 function acFormLive() {
   const g = id => document.getElementById("acp-" + id);
-  document.querySelectorAll("#acThemePicker .cc-mini-name").forEach(el => { el.textContent = (g("name").value.trim()) || "Account name"; });
-  const r = Number(g("rate").value) || 0;
-  document.querySelectorAll("#acThemePicker .cc-mini-limit").forEach(el => { el.textContent = r > 0 ? r + "%" : "—"; });
   acPlanPreview();
 }
 function acKindChanged() {
@@ -494,7 +458,6 @@ function acPlanFormHtml(p) {
       <div><label for="acp-kind">Type</label><select id="acp-kind" onchange="acKindChanged()"><option value="everyday" ${!sav ? "selected" : ""}>Everyday — for spending &amp; bills</option><option value="savings" ${sav ? "selected" : ""}>Savings — for growing money</option></select></div>
       <div><label for="acp-minls">Minimum lifestyle tier</label>${acTierSelectHtml(AC_CLS, p.minLifestyle)}<div class="muted-small">Students need at least this tier to open it</div></div>
       <div class="wide"><label for="acp-blurb">Short description <span class="muted-small">(optional — shown to students)</span></label><input id="acp-blurb" maxlength="90" value="${acEsc(p.blurb)}" placeholder="e.g. Save for something big — a small fee keeps you honest"></div>
-      ${acThemePickerHtml(p)}
       ${fld("rate", "Interest (% each payment)", p.rate, "0.01", "Paid on the class interest schedule")}
       ${fld("bonus", "No-withdrawal bonus (% extra)", p.bonusRate, "0.01", "Extra interest if nothing was taken out that period", "ac-sav-only " + (sav ? "" : "hidden"))}
       ${fld("minbal", "Balance needed to earn interest ($)", p.minBalance, "1", "0 = earns from the first dollar")}
@@ -528,7 +491,7 @@ async function acSavePlan(e) {
   const id = g("id");
   const old = id ? (AC_CLS.accountPlans || []).find(p => p.id === id) : null;
   const sav = g("kind") === "savings";
-  const theme = CC_THEMES.some(t => t.id === g("theme")) ? g("theme") : acRandomTheme(id);
+  const theme = (old && old.theme) || acRandomTheme(id); // colour is no longer shown, but plans keep one
   await saveAccountPlan(CURRENT.classCode, {
     id: id || undefined, name: g("name"), kind: g("kind"), blurb: g("blurb"), theme,
     rate: g("rate"), bonusRate: sav ? g("bonus") : 0, minBalance: g("minbal"), fee: g("fee"), feeWaiveAt: g("waive"),
@@ -538,6 +501,12 @@ async function acSavePlan(e) {
   await render();
   acMsg("acTMsg", `<div class="success-msg">Account saved. Interest and fee changes apply from the next interest payment; withdrawal and balance limits apply straight away.</div>`);
   return false;
+}
+const acRecoKey = () => "t29-ac-reco-dismissed:" + ((typeof CURRENT !== "undefined" && CURRENT && CURRENT.classCode) || "");
+function acRecoDismissed() { try { return localStorage.getItem(acRecoKey()) === "1"; } catch (e) { return false; } }
+async function acDismissReco(on) {
+  try { if (on) localStorage.setItem(acRecoKey(), "1"); else localStorage.removeItem(acRecoKey()); } catch (e) {}
+  await render();
 }
 async function acAddPreset(key) {
   const pr = AC_PRESETS.find(x => x.key === key); if (!pr) return;

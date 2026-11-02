@@ -3806,6 +3806,9 @@ html.dark-mode .stat .value.t29-up{animation-name:t29UpDark;}
 /* ================= Bank accounts (accounts.js) — builds on the credit card styles above ================= */
 .ac-v-kind{font-size:var(--fs-xs);font-weight:900;letter-spacing:.16em;padding:3px 9px;border:1.5px solid rgba(255,255,255,.55);border-radius:var(--r-pill);opacity:.95;}
 .ac-visual{min-height:112px;}
+.ac-tile-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:var(--fs-lg,1.1rem);}
+.ac-reco-actions{display:inline-flex;gap:8px;flex-wrap:wrap;}
+.ac-reco-show{margin:14px 0 0;}
 .ac-blurb{margin:0;color:var(--muted);font-size:var(--fs-md);line-height:1.45;}
 .cc-fact strong small{font-weight:600;color:var(--muted);}
 .btn.ghost{background:transparent;color:var(--muted);border:1.5px solid var(--line);box-shadow:none;}
@@ -3854,9 +3857,9 @@ html.dark-mode .stat .value.t29-up{animation-name:t29UpDark;}
 .ac-move-form select,.ac-move-form input{margin-bottom:0;}
 .ac-move-form .btn{margin-top:0;}
 .ac-move .cc-num.money input{padding-left:30px;}
-.ac-swap{appearance:none;width:44px;height:44px;border-radius:50%;border:1.5px solid var(--line);background:var(--card);color:var(--navy-900);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .2s,background .15s;}
+.ac-swap{appearance:none;height:44px;padding:0 18px;border-radius:var(--r-pill);border:1.5px solid var(--line);background:var(--card);color:var(--navy-900);font:inherit;font-weight:800;font-size:var(--fs-md);cursor:pointer;transition:background .15s;}
 html.dark-mode .ac-swap{color:var(--ink);}
-.ac-swap:hover{background:var(--cc-surface);transform:rotate(180deg);}
+.ac-swap:hover{background:var(--cc-surface);}
 .ac-swap:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
 .ac-move-hint{display:flex;flex-direction:column;gap:5px;margin-top:12px;font-size:var(--fs-sm);color:var(--muted);}
 .ac-move-hint:empty{display:none;}
@@ -3864,8 +3867,7 @@ html.dark-mode .ac-swap{color:var(--ink);}
 .ac-move-hint .icon{flex-shrink:0;margin-top:2px;color:var(--lilac);}
 @media(max-width:900px){
   .ac-move-form{grid-template-columns:minmax(0,1fr);}
-  .ac-swap{justify-self:center;transform:rotate(90deg);}
-  .ac-swap:hover{transform:rotate(270deg);}
+  .ac-swap{justify-self:center;}
   .ac-filter{display:flex;}
   .ac-filter button{flex:1;padding:8px 10px;}
 }
@@ -3874,7 +3876,7 @@ html.dark-mode .ac-swap{color:var(--ink);}
 .ac-reco-panel{margin-top:18px;}
 .ac-reco-note{margin:0 0 12px;}
 .ac-reco{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr));gap:12px;}
-.ac-reco-item{display:grid;grid-template-columns:128px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--card);border:1.5px solid var(--line);border-radius:var(--r-5);padding:12px 14px;transition:box-shadow .15s,transform .15s;}
+.ac-reco-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--card);border:1.5px solid var(--line);border-radius:var(--r-5);padding:12px 14px;transition:box-shadow .15s,transform .15s;}
 .ac-reco-item:hover{box-shadow:var(--shadow);transform:translateY(-1px);}
 .ac-reco-item.have{opacity:.62;}
 .ac-reco-item.have:hover{box-shadow:none;transform:none;}
@@ -3883,7 +3885,7 @@ html.dark-mode .ac-swap{color:var(--ink);}
 .ac-reco-body p{margin:0;font-size:var(--fs-sm);line-height:1.4;color:var(--muted);}
 .ac-reco-item .btn{margin-top:0;white-space:nowrap;}
 @media(max-width:520px){
-  .ac-reco-item{grid-template-columns:104px minmax(0,1fr);}
+  .ac-reco-item{grid-template-columns:minmax(0,1fr);}
   .ac-reco-item .btn{grid-column:1/-1;width:100%;}
 }
 .ac-prev{background:var(--cc-gold-bg);border:1.5px solid var(--cc-gold-line);color:var(--cc-gold-ink);border-radius:var(--r-4);padding:10px 12px;line-height:1.5;}
