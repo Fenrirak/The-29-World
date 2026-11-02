@@ -16,28 +16,28 @@ const acMsg = (id, html) => ccMsg(id, html);
 
 /* ---------------- Recommended accounts (teacher one-click add) ----------------
    Rates are a multiple of the class's own savings rate, so they make sense
-   whatever interest schedule the class runs. Dollar amounts are fixed. */
+   whatever interest schedule the class runs. Dollar amounts are fixed (sized for students who hold a few thousand dollars). */
 const AC_PRESETS = [
   { key: "everyday", kind: "everyday", name: "Everyday Account", theme: "ocean", blurb: "A simple account for day-to-day money. No fees, no fuss.",
     rateMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
   { key: "bills", kind: "everyday", name: "Bills Account", theme: "slate", blurb: "Park money for rent and bills here so it doesn't get spent.",
-    rateMul: 0.1, minBalance: 50, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
-  { key: "student", kind: "everyday", name: "Student Account", theme: "emerald", blurb: "Fee-free with a little interest once you have a few dollars in it.",
-    rateMul: 0.25, minBalance: 20, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
+    rateMul: 0.1, minBalance: 500, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
+  { key: "student", kind: "everyday", name: "Student Account", theme: "emerald", blurb: "Fee-free with a little interest once you have a bit saved.",
+    rateMul: 0.25, minBalance: 200, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
   { key: "gold", kind: "everyday", name: "Gold Everyday", theme: "gold", blurb: "Better interest for big balances. Fee is waived once you keep enough in it.",
-    rateMul: 0.5, minBalance: 0, fee: 3, feeWaiveAt: 500, withdrawFee: 0, maxBalance: 0, tier: 2 },
+    rateMul: 0.5, minBalance: 0, fee: 30, feeWaiveAt: 5000, withdrawFee: 0, maxBalance: 0, tier: 2 },
   { key: "regular", kind: "savings", name: "Regular Saver", theme: "teal", blurb: "Easy saving. Take your money out whenever you like.",
     rateMul: 1, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 0, tier: -1 },
   { key: "bonus", kind: "savings", name: "Bonus Saver", theme: "violet", blurb: "A small base rate, plus a big bonus if you leave it alone for the whole period.",
     rateMul: 0.5, bonusMul: 1.5, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 0, tier: -1 },
   { key: "notice", kind: "savings", name: "Notice Saver", theme: "midnight", blurb: "The best rate — but you can only take money out once, and it costs a fee.",
-    rateMul: 2, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 5, maxWithdrawals: 1, maxBalance: 0, tier: 1 },
-  { key: "youth", kind: "savings", name: "Youth Saver", theme: "sunset", blurb: "A boosted rate for beginners, up to a small balance limit.",
-    rateMul: 1.5, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 500, tier: -1 },
-  { key: "goal", kind: "savings", name: "Goal Saver", theme: "rose", blurb: "Save up for something big. A small fee each time you dip into it keeps you honest.",
-    rateMul: 1.25, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 2, maxWithdrawals: 0, maxBalance: 0, tier: -1 },
-  { key: "premium", kind: "savings", name: "Premium Saver", theme: "ruby", blurb: "Top interest for serious savers. Needs $200 to start earning; fee waived above $1,000.",
-    rateMul: 2.5, bonusMul: 0, minBalance: 200, fee: 2, feeWaiveAt: 1000, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 0, tier: 2 }
+    rateMul: 2, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 50, maxWithdrawals: 1, maxBalance: 0, tier: 1 },
+  { key: "youth", kind: "savings", name: "Youth Saver", theme: "sunset", blurb: "A boosted rate for beginners, up to a balance limit.",
+    rateMul: 1.5, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 5000, tier: -1 },
+  { key: "goal", kind: "savings", name: "Goal Saver", theme: "rose", blurb: "Save up for something big. A fee each time you dip into it keeps you honest.",
+    rateMul: 1.25, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 20, maxWithdrawals: 0, maxBalance: 0, tier: -1 },
+  { key: "premium", kind: "savings", name: "Premium Saver", theme: "ruby", blurb: "Top interest for serious savers. Needs $2,000 to start earning; fee waived above $10,000.",
+    rateMul: 2.5, bonusMul: 0, minBalance: 2000, fee: 20, feeWaiveAt: 10000, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 0, tier: 2 }
 ];
 function acTiers(cls) { return ((cls && cls.lifestyleThresholds) || []).slice().sort((a, b) => Number(a.min) - Number(b.min)); }
 function acPresetPlan(cls, pr) {
@@ -67,7 +67,7 @@ function acTierNeed(cls, rating) {
 }
 function acFacts(p) {
   const f = (k, v) => `<div class="cc-fact"><span>${k}</span><strong>${v}</strong></div>`;
-  const rows = [f("Interest", p.rate > 0 ? `${p.rate}% each payment` : "None")];
+  const rows = [f("Interest", p.rate > 0 ? `${p.rate}%` : "None")];
   if (p.bonusRate > 0) rows.push(f("No-withdrawal bonus", `+${p.bonusRate}%`));
   if (p.minBalance > 0) rows.push(f("Earns interest from", fmtMoney(p.minBalance)));
   rows.push(f("Account fee", p.fee > 0 ? `${fmtMoney(p.fee)}${p.feeWaiveAt > 0 ? ` <small>(free from ${fmtMoney(p.feeWaiveAt)})</small>` : ""}` : "None"));
@@ -129,7 +129,7 @@ function acRenderStudent(me, cls) {
   const full = { everyday: countKind("everyday") >= st.maxEveryday, savings: countKind("savings") >= st.maxSavings };
   const head = note => `<div class="flex-between cc-head"><h2 id="hAcct">Your accounts</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
 
-  let html = head(off ? "Not open yet" : st.approval === "teacher" ? "Teacher approval needed" : "Open instantly");
+  let html = head(off ? "Not open yet" : st.approval === "teacher" ? "Teacher approval needed" : "");
   html += `<p class="cc-intro">Your cash balance and Savings Account above always stay put. Open extra <strong>everyday</strong> and <strong>savings</strong> accounts to organise your money — each one has its own interest, fees and rules. ${interestScheduleLabel(cls)}</p>`;
 
   // ---- accounts I own ----
@@ -148,7 +148,7 @@ function acRenderStudent(me, cls) {
   // ---- accounts I could open ----
   const avail = plans.filter(p => !held.has(p.id)).sort((a, b) => (a.kind === b.kind ? b.rate - a.rate : a.kind === "everyday" ? -1 : 1));
   const shown = avail.filter(p => AC_FILTER === "all" || p.kind === AC_FILTER);
-  html += `<h3 class="cc-sub">${icon("plus", 16)} Open an account</h3>`;
+  html += `<h3 class="cc-sub">Open an account</h3>`;
   if (!plans.length) {
     html += `<div class="cc-off">${icon("lock", 22)}<div><strong>No accounts on offer yet</strong><span>${off ? "Your teacher hasn't switched extra accounts on." : "Your teacher hasn't set any up yet."} Check back soon.</span></div></div>`;
   } else {
@@ -434,7 +434,7 @@ function acPlanPreview() {
   const n = id => Number((document.getElementById("acp-" + id) || {}).value) || 0;
   const sav = document.getElementById("acp-kind").value === "savings";
   const rate = n("rate"), bonus = sav ? n("bonus") : 0, minB = n("minbal"), fee = n("fee"), waive = n("waive");
-  const ex = [100, 500, 1000].map(bal => {
+  const ex = [1000, 5000, 10000].map(bal => {
     const base = bal >= minB ? bal * rate / 100 : 0;
     const f = fee > 0 && !(waive > 0 && bal >= waive) ? Math.min(fee, bal) : 0;
     return `${fmtMoney(bal)} → ${base > 0 ? "+" + fmtMoney(base) : "$0.00"}${f > 0 ? ` − ${fmtMoney(f)} fee` : ""}`;
@@ -458,7 +458,7 @@ function acPlanFormHtml(p) {
       <div><label for="acp-kind">Type</label><select id="acp-kind" onchange="acKindChanged()"><option value="everyday" ${!sav ? "selected" : ""}>Everyday — for spending &amp; bills</option><option value="savings" ${sav ? "selected" : ""}>Savings — for growing money</option></select></div>
       <div><label for="acp-minls">Minimum lifestyle tier</label>${acTierSelectHtml(AC_CLS, p.minLifestyle)}<div class="muted-small">Students need at least this tier to open it</div></div>
       <div class="wide"><label for="acp-blurb">Short description <span class="muted-small">(optional — shown to students)</span></label><input id="acp-blurb" maxlength="90" value="${acEsc(p.blurb)}" placeholder="e.g. Save for something big — a small fee keeps you honest"></div>
-      ${fld("rate", "Interest (% each payment)", p.rate, "0.01", "Paid on the class interest schedule")}
+      ${fld("rate", "Interest rate (%)", p.rate, "0.01", "Paid on the class interest schedule")}
       ${fld("bonus", "No-withdrawal bonus (% extra)", p.bonusRate, "0.01", "Extra interest if nothing was taken out that period", "ac-sav-only " + (sav ? "" : "hidden"))}
       ${fld("minbal", "Balance needed to earn interest ($)", p.minBalance, "1", "0 = earns from the first dollar")}
       ${fld("fee", "Account fee ($)", p.fee, "0.01", "Taken each time interest is paid")}
