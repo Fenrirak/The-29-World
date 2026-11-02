@@ -45,16 +45,11 @@ function paintChrome() {
   document.getElementById("labAdjAmount").innerHTML = icon("coin", 13) + " Amount (negative for a fine)";
   document.getElementById("labAdjNote").innerHTML = icon("note", 13) + " Reason";
   document.getElementById("applyAdjBtn").innerHTML = icon("send", 15) + " Apply";
-  document.getElementById("labRate").innerHTML = icon("piggy", 13) + " Savings interest rate (%)";
-  document.getElementById("labCashRate").innerHTML = icon("percent", 13) + " Cash balance interest rate (%)";
-  document.getElementById("saveRateBtn").innerHTML = icon("save", 14) + " Save rate";
   document.getElementById("labWelcomeGrant").innerHTML = icon("coin", 13) + " Welcome grant ($ each new student starts with)";
   document.getElementById("saveWelcomeBtn").innerHTML = icon("save", 14) + " Save welcome grant";
-  document.getElementById("labInterestFreq").innerHTML = icon("repeat", 13) + " How often";
-  document.getElementById("labInterestDay").innerHTML = icon("calendar", 13) + " On which day";
-  document.getElementById("saveInterestAutoBtn").innerHTML = icon("save", 14) + " Save interest schedule";
   document.getElementById("labPayDay").innerHTML = icon("calendar", 13) + " Pay day (which day wages are due)";
   document.getElementById("savePayDayBtn").innerHTML = icon("save", 14) + " Save pay day";
+  document.getElementById("savingsSettingsMoved").innerHTML = icon("piggy", 13) + ` Savings interest rates and how often interest is paid now live on the <a href="bank.html">Bank</a> page. Loan settings live on the Loans page.`;
   document.getElementById("mortgageSettingsMoved").innerHTML = icon("house", 13) + ` Mortgage due day and "mark due now" controls have moved to the <a href="property.html">Property</a> page.`;
   document.getElementById("saveGamblingEnabledBtn").innerHTML = icon("save", 14) + " Save gambling setting";
   document.getElementById("hEvents").innerHTML = icon("sparkle", 18) + " Random weekly events";
@@ -136,14 +131,8 @@ async function render() {
   document.getElementById("className").textContent = cls.name;
   document.getElementById("classCode").textContent = cls.code;
   document.getElementById("classArchivedBanner").classList.toggle("hidden", !cls.archived);
-  document.getElementById("rate").value = cls.interestRate;
-  document.getElementById("cashRate").value = cls.cashInterestRate || 0;
   const welcomeEl = document.getElementById("welcomeGrant");
   if (document.activeElement !== welcomeEl) welcomeEl.value = t29WelcomeGrantOf(cls);
-  document.getElementById("interestAuto").checked = !!cls.interestAuto;
-  document.getElementById("interestFreq").value = cls.interestFrequency || "weekly";
-  document.getElementById("interestDay").value = cls.interestDay || "Fri";
-  document.getElementById("interestDayWrap").classList.toggle("hidden", (cls.interestFrequency || "weekly") === "daily");
   document.getElementById("payDaySelect").value = cls.payDay || "Fri";
   document.getElementById("gamblingEnabled").checked = cls.gambling ? cls.gambling.enabled !== false : true;
   document.getElementById("dailyTimeLimit").value = cls.dailyTimeLimitMinutes || "";
@@ -1062,10 +1051,6 @@ async function runWeeklyEventsNow() {
     btn.disabled = false;
   }
 }
-async function saveRate() {
-  await classesColUpdateRate(Number(document.getElementById("rate").value), Number(document.getElementById("cashRate").value));
-  await render();
-}
 async function saveWelcomeGrant() {
   const btn = document.getElementById("saveWelcomeBtn");
   const msg = document.getElementById("welcomeGrantMsg");
@@ -1082,31 +1067,6 @@ async function saveWelcomeGrant() {
   } finally {
     btn.disabled = false;
   }
-}
-async function saveInterestAuto() {
-  await saveInterestSettings(CLASS_CODE, {
-    rate: document.getElementById("rate").value,
-    cashRate: document.getElementById("cashRate").value,
-    auto: document.getElementById("interestAuto").checked,
-    frequency: document.getElementById("interestFreq").value,
-    day: document.getElementById("interestDay").value
-  });
-  alert("Interest schedule saved.");
-  await render();
-}
-document.addEventListener("change", (e) => {
-  if (e.target && e.target.id === "interestFreq") {
-    document.getElementById("interestDayWrap").classList.toggle("hidden", e.target.value === "daily");
-  }
-});
-
-async function classesColUpdateRate(rate, cashRate) {
-  // Goes through saveInterestSettings (keeping the schedule as it is) so students are told about a rate change.
-  const cls = await getClass(CLASS_CODE);
-  await saveInterestSettings(CLASS_CODE, {
-    rate, cashRate, auto: !!(cls && cls.interestAuto),
-    frequency: cls && cls.interestFrequency, day: cls && cls.interestDay
-  });
 }
 async function savePayDay() {
   await setPayDay(CLASS_CODE, document.getElementById("payDaySelect").value);

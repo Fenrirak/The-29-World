@@ -144,6 +144,7 @@ async function render() {
   // Credit card: the stat tile up top, and the card section (see creditcard.js).
   const showCardStat = !IS_TEACHER && cardIsActive(me);
   document.getElementById("cardStat").classList.toggle("hidden", !showCardStat);
+  renderSavingsSettings(cls); // teacher-only savings & interest settings (moved here from Class settings)
   renderBankAccounts(me, cls, allStudents); // extra bank accounts (see accounts.js) — sets the "other accounts" stat tile too
   // 2 tiles → 2 columns, 3 tiles → 3 columns, 4 tiles → a 2 x 2 grid
   const statCount = 2 + (showCardStat ? 1 : 0) + (acStatVisible() ? 1 : 0);
@@ -301,6 +302,105 @@ async function render() {
       <td class="${moneyClass(sign)}">${fmtSignedMoney(sign, amount)}</td>`;
     tbody.appendChild(tr);
   });
+}
+
+/* ---------------- Teacher: savings & interest settings ----------------
+   These used to sit under "Class settings" on the teacher dashboard. They live next to the savings accounts
+   they control now. One Save button writes everything through saveInterestSettings() (data-money.js), which
+   also tells students about rate / schedule changes. The accounts.js "recommended accounts" are sized from
+   this schedule (see acPeriod). While there are unsaved edits, render() leaves the form alone so a
+   background refresh can't wipe what the teacher is typing. */
+const BS_FREQS = [["daily", "Every day", 1, "Daily"], ["weekly", "Every week", 7, "Weekly"], ["fortnightly", "Every 2 weeks", 14, "Fortnightly"], ["monthly", "Every 4 weeks", 28, "Every 4 weeks"]];
+let BS_DIRTY = false;
+const bsFreq = f => BS_FREQS.find(x => x[0] === f) || BS_FREQS[1];
+
+function renderSavingsSettings(cls) {
+  const el = document.getElementById("savingsSettingsCard");
+  if (!el) return;
+  el.classList.toggle("hidden", !IS_TEACHER);
+  if (!IS_TEACHER || (BS_DIRTY && el.firstElementChild)) return;
+  if (typeof acInjectCss === "function") acInjectCss();
+  const auto = !!cls.interestAuto, freq = bsFreq(cls.interestFrequency)[0], day = cls.interestDay || "Fri";
+  const rate = Number(cls.interestRate) || 0, cash = Number(cls.cashInterestRate) || 0;
+  const num = (id, v) => `<div class="cc-num"><input id="${id}" type="number" min="0" max="20" step="0.1" inputmode="decimal" value="${v}" oninput="bsChanged()"></div>`;
+  el.innerHTML = `
+    <div class="flex-between cc-head"><h2 id="hSavingsSet">${icon("piggy", 18)} Savings &amp; interest</h2></div>
+    <p class="cc-intro">Set what students earn on their <strong>Savings Account</strong> and how often interest is paid. Rates are a percentage applied <strong>each time interest runs</strong>, so a 1% rate paid every week is far more generous than 1% paid every 4 weeks. The recommended accounts below are sized to match.</p>
+    <div class="cc-tstats bs-stats">
+      <div class="cc-tstat"><span>Savings rate</span><strong>${rate}%</strong></div>
+      <div class="cc-tstat"><span>Cash balance rate</span><strong>${cash}%</strong></div>
+      <div class="cc-tstat"><span>Interest paid</span><strong>${auto ? bsFreq(freq)[3] : "By hand"}</strong></div>
+    </div>
+    <section class="cc-panel">
+      <div class="cc-panel-head"><h3>${icon("percent", 16)} Interest rates</h3><span class="muted-small">Each time interest runs</span></div>
+      <div class="cc-settings bs-set2">
+        <div class="cc-set"><label for="bsRate">Savings interest rate (%)</label><p>Paid on every student's Savings Account.</p>
+          ${num("bsRate", rate)}<div class="muted-small bs-hint" id="bsRateHint"></div></div>
+        <div class="cc-set"><label for="bsCash">Cash balance interest rate (%)</label><p>Leave at 0 so only money moved into Savings earns interest.</p>
+          ${num("bsCash", cash)}<div class="muted-small bs-hint" id="bsCashHint"></div></div>
+      </div>
+    </section>
+    <section class="cc-panel">
+      <div class="cc-panel-head"><h3>${icon("calendar", 16)} Payout schedule</h3>
+        <label class="cc-switch"><input type="checkbox" id="bsAuto" ${auto ? "checked" : ""} onchange="bsChanged()"><span class="cc-switch-track"></span><span id="bsAutoText">${auto ? "Paid automatically" : "Applied by you"}</span></label></div>
+      <div class="cc-settings bs-set2 ${auto ? "" : "bs-off"}" id="bsSched">
+        <div class="cc-set"><label for="bsFreq">How often</label><p>How long between interest payments.</p>
+          <select id="bsFreq" onchange="bsChanged()" ${auto ? "" : "disabled"}>${BS_FREQS.map(f => `<option value="${f[0]}" ${f[0] === freq ? "selected" : ""}>${f[1]}</option>`).join("")}</select></div>
+        <div class="cc-set ${freq === "daily" ? "hidden" : ""}" id="bsDayWrap"><label for="bsDay">On which day</label><p>The day of the week interest is paid.</p>
+          <select id="bsDay" onchange="bsChanged()" ${auto ? "" : "disabled"}>${Object.keys(DAY_LABEL).map(d => `<option value="${d}" ${d === day ? "selected" : ""}>${DAY_LABEL[d]}</option>`).join("")}</select></div>
+      </div>
+      <p class="muted-small bs-tune">${icon("sparkle", 14)}<span>Accounts you add from the recommended list are personalised to this schedule: fees and withdrawal limits scale with how often interest is paid.</span></p>
+    </section>
+    <div class="bs-save"><button class="btn gold" id="bsSaveBtn" onclick="bsSave()">${icon("save", 15)} Save interest settings</button>
+      <span class="muted-small">Students are told when rates or the schedule change.</span></div>
+    <div id="bsMsg"></div>`;
+  bsHints();
+}
+function bsHints() {
+  const g = id => document.getElementById(id);
+  if (!g("bsFreq")) return;
+  const days = bsFreq(g("bsFreq").value)[2], auto = g("bsAuto").checked;
+  // What the rate works out to per week, so rates are easy to compare between schedules
+  const hint = id => {
+    const v = Number(g(id === "bsRateHint" ? "bsRate" : "bsCash").value);
+    g(id).textContent = auto && days !== 7 && v > 0 ? `About ${Math.round(v * 7 / days * 100) / 100}% a week.` : "";
+  };
+  hint("bsRateHint"); hint("bsCashHint");
+}
+function bsChanged() {
+  BS_DIRTY = true;
+  const g = id => document.getElementById(id);
+  const auto = g("bsAuto").checked;
+  g("bsAutoText").textContent = auto ? "Paid automatically" : "Applied by you";
+  g("bsFreq").disabled = g("bsDay").disabled = !auto;
+  g("bsSched").classList.toggle("bs-off", !auto);
+  g("bsDayWrap").classList.toggle("hidden", g("bsFreq").value === "daily");
+  bsHints();
+}
+async function bsSave() {
+  const g = id => document.getElementById(id);
+  const btn = g("bsSaveBtn");
+  if (!btn || btn.disabled) return;
+  const rateRaw = g("bsRate").value.trim(), cashRaw = g("bsCash").value.trim();
+  const rate = Number(rateRaw), cashRate = Number(cashRaw);
+  const bad = v => !isFinite(v) || v < 0 || v > 20;
+  if (rateRaw === "" || cashRaw === "" || bad(rate) || bad(cashRate)) { acMsg("bsMsg", `<div class="error-msg">Enter rates between 0% and 20% (0 is fine).</div>`); return; }
+  const next = { rate, cashRate, auto: g("bsAuto").checked, frequency: g("bsFreq").value, day: g("bsDay").value };
+  btn.disabled = true;
+  try {
+    const old = (await getClass(CURRENT.classCode)) || {};
+    await saveInterestSettings(CURRENT.classCode, next);
+    BS_DIRTY = false;
+    // Plans the teacher already added keep the fees they were created with — say so if the schedule changed
+    const rescale = acPeriod(old).key !== acPeriod({ interestAuto: next.auto, interestFrequency: next.frequency }).key
+      && (old.accountPlans || []).some(p => !p.archived && (p.fee > 0 || p.maxWithdrawals > 0));
+    await render();
+    acMsg("bsMsg", `<div class="success-msg">Saved.${rescale ? " Accounts you've already added keep their current fees and withdrawal limits — edit them below if they should change with the new schedule." : ""}</div>`);
+  } catch (e) {
+    acMsg("bsMsg", `<div class="error-msg">Couldn't save that — please try again.</div>`);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function sendMoney(e) {

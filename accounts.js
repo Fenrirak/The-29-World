@@ -15,48 +15,108 @@ const acEsc = s => ccEsc(s);
 const acMsg = (id, html) => ccMsg(id, html);
 
 /* ---------------- Recommended accounts (teacher one-click add) ----------------
-   Rates are a multiple of the class's own savings rate, so they make sense
-   whatever interest schedule the class runs. Dollar amounts are fixed (sized for students who hold a few thousand dollars). */
+   Personalised to the class. Two things are worked out from the class settings:
+   1. RATES are a multiple of the class's own savings rate. That rate is already "per interest payment", so
+      the recommended rates follow whatever the teacher chose. (A class on 0% falls back to a typical rate
+      for how often interest is paid.)
+   2. FEES and WITHDRAWAL LIMITS are per interest payment, so they are scaled to how often interest is paid.
+      Their numbers below are written for interest paid every week (feeWk, wdWk) and scaled by
+      "days between payments / 7": a $30 weekly fee becomes ~$4.25 when interest is paid daily and $120
+      when it's paid every 4 weeks, so the cost over time stays the same. Withdrawal limits scale the same way
+      (never below 1). Balances (minimum, fee-waiver, balance cap) and per-withdrawal fees don't depend on
+      how often interest is paid, so they stay as they are. */
 const AC_PRESETS = [
   { key: "everyday", kind: "everyday", name: "Everyday Account", theme: "ocean", blurb: "A simple account for day-to-day money. No fees, no fuss.",
-    rateMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
+    rateMul: 0, minBalance: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
   { key: "bills", kind: "everyday", name: "Bills Account", theme: "slate", blurb: "Park money for rent and bills here so it doesn't get spent.",
-    rateMul: 0.1, minBalance: 500, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
+    rateMul: 0.1, minBalance: 500, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
   { key: "student", kind: "everyday", name: "Student Account", theme: "emerald", blurb: "Fee-free with a little interest once you have a bit saved.",
-    rateMul: 0.25, minBalance: 200, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
+    rateMul: 0.25, minBalance: 200, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
   { key: "gold", kind: "everyday", name: "Gold Everyday", theme: "gold", blurb: "Better interest for big balances. Fee is waived once you keep enough in it.",
-    rateMul: 0.5, minBalance: 0, fee: 30, feeWaiveAt: 5000, withdrawFee: 0, maxBalance: 0, tier: 2 },
+    rateMul: 0.5, minBalance: 0, feeWk: 30, feeWaiveAt: 5000, withdrawFee: 0, maxBalance: 0, tier: 2 },
   { key: "regular", kind: "savings", name: "Regular Saver", theme: "teal", blurb: "Easy saving. Take your money out whenever you like.",
-    rateMul: 1, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 0, tier: -1 },
-  { key: "bonus", kind: "savings", name: "Bonus Saver", theme: "violet", blurb: "A small base rate, plus a big bonus if you leave it alone for the whole period.",
-    rateMul: 0.5, bonusMul: 1.5, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 0, tier: -1 },
-  { key: "notice", kind: "savings", name: "Notice Saver", theme: "midnight", blurb: "The best rate — but you can only take money out once, and it costs a fee.",
-    rateMul: 2, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 50, maxWithdrawals: 1, maxBalance: 0, tier: 1 },
+    rateMul: 1, bonusMul: 0, minBalance: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
+  { key: "bonus", kind: "savings", name: "Bonus Saver", theme: "violet",
+    blurb: (p, per) => `A small base rate, plus a big bonus if you leave it alone for the whole ${per.span}.`,
+    rateMul: 0.5, bonusMul: 1.5, minBalance: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
+  { key: "notice", kind: "savings", name: "Notice Saver", theme: "midnight",
+    blurb: (p, per) => `The best rate — but only ${acPlural(p.maxWithdrawals, "withdrawal")} per ${per.span}, and each one costs a fee.`,
+    rateMul: 2, bonusMul: 0, minBalance: 0, feeWaiveAt: 0, withdrawFee: 50, wdWk: 1, maxBalance: 0, tier: 1 },
   { key: "youth", kind: "savings", name: "Youth Saver", theme: "sunset", blurb: "A boosted rate for beginners, up to a balance limit.",
-    rateMul: 1.5, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 5000, tier: -1 },
+    rateMul: 1.5, bonusMul: 0, minBalance: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 5000, tier: -1 },
   { key: "goal", kind: "savings", name: "Goal Saver", theme: "rose", blurb: "Save up for something big. A fee each time you dip into it keeps you honest.",
-    rateMul: 1.25, bonusMul: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 20, maxWithdrawals: 0, maxBalance: 0, tier: -1 },
+    rateMul: 1.25, bonusMul: 0, minBalance: 0, feeWaiveAt: 0, withdrawFee: 20, maxBalance: 0, tier: -1 },
   { key: "premium", kind: "savings", name: "Premium Saver", theme: "ruby", blurb: "Top interest for serious savers. Needs $2,000 to start earning; fee waived above $10,000.",
-    rateMul: 2.5, bonusMul: 0, minBalance: 2000, fee: 20, feeWaiveAt: 10000, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 0, tier: 2 }
+    rateMul: 2.5, bonusMul: 0, minBalance: 2000, feeWk: 20, feeWaiveAt: 10000, withdrawFee: 0, maxBalance: 0, tier: 2 }
 ];
 function acTiers(cls) { return ((cls && cls.lifestyleThresholds) || []).slice().sort((a, b) => Number(a.min) - Number(b.min)); }
+
+// How often this class pays interest, in the words and numbers the screens need.
+// "scale" is the length of one payment period compared with a week (1 = weekly).
+// If interest is applied by hand there's no schedule, so it's treated as weekly.
+const AC_PERIODS = {
+  daily:       { days: 1,  every: "every day",     span: "day" },
+  weekly:      { days: 7,  every: "every week",    span: "week" },
+  fortnightly: { days: 14, every: "every 2 weeks", span: "fortnight" },
+  monthly:     { days: 28, every: "every 4 weeks", span: "4 weeks" }
+};
+function acPeriod(cls) {
+  const auto = !!(cls && cls.interestAuto);
+  const key = AC_PERIODS[cls && cls.interestFrequency] ? cls.interestFrequency : "weekly";
+  if (!auto) return { key: "manual", auto: false, days: 7, scale: 1, every: "whenever you apply interest", span: "interest period" };
+  const p = AC_PERIODS[key];
+  return { key, auto: true, days: p.days, scale: p.days / 7, every: p.every, span: p.span };
+}
+// A tidy dollar amount: $4.25, $30, $120, $1,200 — not $4.2857
+function acNiceMoney(v) {
+  if (!(v > 0)) return 0;
+  const step = v < 10 ? 0.25 : v < 100 ? 1 : v < 1000 ? 5 : 10;
+  return Math.max(step, Math.round(v / step) * step);
+}
+// The rate the recommended rates are built on (per interest payment)
+function acBaseRate(cls) {
+  const r = Number(cls && cls.interestRate) || 0;
+  if (r > 0) return { rate: r, fallback: false };
+  return { rate: Math.max(0.1, Math.round(acPeriod(cls).scale * 100) / 100), fallback: true };
+}
 function acPresetPlan(cls, pr) {
-  const base = Math.max(1, Number(cls.interestRate) || 0);
+  const per = acPeriod(cls), base = acBaseRate(cls).rate;
   const r2 = n => Math.round(n * 100) / 100;
+  const rateOf = mul => mul > 0 ? Math.max(0.01, r2(base * mul)) : 0;
   const th = acTiers(cls);
   const used = new Set((cls.accountPlans || []).filter(p => !p.archived).map(p => p.theme));
   const theme = !used.has(pr.theme) ? pr.theme : acRandomTheme("");
-  return {
-    name: pr.name, kind: pr.kind, blurb: pr.blurb, theme,
-    rate: r2(base * (pr.rateMul || 0)), bonusRate: r2(base * (pr.bonusMul || 0)),
-    minBalance: pr.minBalance, fee: pr.fee, feeWaiveAt: pr.feeWaiveAt, withdrawFee: pr.withdrawFee,
-    maxWithdrawals: pr.maxWithdrawals || 0, maxBalance: pr.maxBalance,
+  const plan = {
+    name: pr.name, kind: pr.kind, theme,
+    rate: rateOf(pr.rateMul), bonusRate: rateOf(pr.bonusMul),
+    minBalance: pr.minBalance, fee: acNiceMoney((pr.feeWk || 0) * per.scale), feeWaiveAt: pr.feeWaiveAt, withdrawFee: pr.withdrawFee,
+    maxWithdrawals: pr.wdWk ? Math.max(1, Math.round(pr.wdWk * per.scale)) : 0, maxBalance: pr.maxBalance,
     minLifestyle: pr.tier >= 0 && th.length ? Number((th[Math.min(pr.tier, th.length - 1)] || {}).min) || 0 : 0
   };
+  plan.blurb = typeof pr.blurb === "function" ? pr.blurb(plan, per) : pr.blurb;
+  return plan;
 }
 
 /* ---------------- Little building blocks ---------------- */
-function acInjectCss() {}
+function acInjectCss() {
+  if (document.getElementById("acExtraCss")) return;
+  const st = document.createElement("style"); st.id = "acExtraCss";
+  st.textContent = `.ac-tune{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 14px}
+.ac-tune a{margin-left:auto;font-size:.85rem;font-weight:700;white-space:nowrap}
+.ac-reco-line{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:2px}
+.ac-reco-line b{font-weight:700}
+.bs-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+.bs-stats .cc-tstat strong{font-size:1.45rem;overflow-wrap:anywhere}
+@media(max-width:560px){.bs-stats{grid-template-columns:minmax(0,1fr)}}
+.bs-set2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:640px){.bs-set2{grid-template-columns:minmax(0,1fr)}}
+#savingsSettingsCard .cc-panel + .cc-panel{margin-top:14px}
+.bs-hint{min-height:1.25em;margin-top:2px}
+.bs-off{opacity:.5;transition:opacity .15s}
+.bs-tune{display:flex;gap:8px;align-items:flex-start;margin:14px 0 0}
+.bs-save{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:16px}`;
+  document.head.appendChild(st);
+}
 function acPlural(n, w) { return ccPlural(n, w); }
 function acKindLabel(k) { return k === "savings" ? "Savings" : "Everyday"; }
 function acKindBadge(k) { return `<span class="badge ${k === "savings" ? "mint" : "navy"}">${acKindLabel(k)}</span>`; }
@@ -67,11 +127,12 @@ function acTierNeed(cls, rating) {
 }
 function acFacts(p) {
   const f = (k, v) => `<div class="cc-fact"><span>${k}</span><strong>${v}</strong></div>`;
-  const rows = [f("Interest", p.rate > 0 ? `${p.rate}%` : "None")];
+  const per = acPeriod(AC_CLS);
+  const rows = [f("Interest", p.rate > 0 ? `${p.rate}% <small>per ${per.span}</small>` : "None")];
   if (p.bonusRate > 0) rows.push(f("No-withdrawal bonus", `+${p.bonusRate}%`));
   if (p.minBalance > 0) rows.push(f("Earns interest from", fmtMoney(p.minBalance)));
-  rows.push(f("Account fee", p.fee > 0 ? `${fmtMoney(p.fee)}${p.feeWaiveAt > 0 ? ` <small>(free from ${fmtMoney(p.feeWaiveAt)})</small>` : ""}` : "None"));
-  rows.push(f("Withdrawals", `${p.maxWithdrawals > 0 ? `${p.maxWithdrawals} per period` : "Unlimited"}${p.withdrawFee > 0 ? ` · ${fmtMoney(p.withdrawFee)} each` : ""}`));
+  rows.push(f("Account fee", p.fee > 0 ? `${fmtMoney(p.fee)} <small>per ${per.span}${p.feeWaiveAt > 0 ? ` · free from ${fmtMoney(p.feeWaiveAt)}` : ""}</small>` : "None"));
+  rows.push(f("Withdrawals", `${p.maxWithdrawals > 0 ? `${p.maxWithdrawals} per ${per.span}` : "Unlimited"}${p.withdrawFee > 0 ? ` · ${fmtMoney(p.withdrawFee)} each` : ""}`));
   if (p.maxBalance > 0) rows.push(f("Balance limit", fmtMoney(p.maxBalance)));
   return `<div class="cc-facts">${rows.join("")}</div>`;
 }
@@ -80,7 +141,7 @@ function acPerks(p) {
   if (p.bonusRate > 0) out.push(`<span class="cc-chip mint">${icon("star", 12)}+${p.bonusRate}% bonus if untouched</span>`);
   if (!(p.fee > 0) && !(p.withdrawFee > 0)) out.push(`<span class="cc-chip mint">${icon("check", 12)}No fees</span>`);
   else if (p.fee > 0 && p.feeWaiveAt > 0) out.push(`<span class="cc-chip gold">${icon("coin", 12)}Fee-free from ${fmtMoney(p.feeWaiveAt)}</span>`);
-  if (p.maxWithdrawals > 0) out.push(`<span class="cc-chip lilac">${icon("lock", 12)}${acPlural(p.maxWithdrawals, "withdrawal")} per period</span>`);
+  if (p.maxWithdrawals > 0) out.push(`<span class="cc-chip lilac">${icon("lock", 12)}${acPlural(p.maxWithdrawals, "withdrawal")} per ${acPeriod(AC_CLS).span}</span>`);
   if (p.maxBalance > 0) out.push(`<span class="cc-chip plain">Up to ${fmtMoney(p.maxBalance)}</span>`);
   return out.join("");
 }
@@ -349,16 +410,29 @@ function acRenderTeacher(cls, students) {
   }).join("") : `<div class="empty-state"><p>No accounts yet. Add a few from the recommended accounts, or build your own below.</p></div>`;
 
   const liveNames = new Set(live.map(p => p.name.toLowerCase()));
+  const per = acPeriod(cls), br = acBaseRate(cls);
   const reco = AC_PRESETS.map(pr => {
     const p = acPresetPlan(cls, pr), have = liveNames.has(pr.name.toLowerCase());
-    const line = [p.rate > 0 ? `${p.rate}% interest` : "No interest", p.bonusRate > 0 ? `+${p.bonusRate}% bonus` : "",
-      p.fee > 0 ? `${fmtMoney(p.fee)} fee` : "", p.withdrawFee > 0 ? `${fmtMoney(p.withdrawFee)} per withdrawal` : "", p.maxWithdrawals > 0 ? `${p.maxWithdrawals} withdrawal/period` : "", p.maxBalance > 0 ? `${fmtMoney(p.maxBalance)} cap` : ""].filter(Boolean).join(" · ");
+    const bit = (v, rest) => `<span><b>${v}</b> ${rest}</span>`;
+    const line = [
+      p.rate > 0 ? bit(`${p.rate}%`, `interest per ${per.span}`) : `<span>No interest</span>`,
+      p.bonusRate > 0 ? bit(`+${p.bonusRate}%`, "bonus") : "",
+      p.fee > 0 ? bit(fmtMoney(p.fee), `fee per ${per.span}`) : "",
+      p.withdrawFee > 0 ? bit(fmtMoney(p.withdrawFee), "per withdrawal") : "",
+      p.maxWithdrawals > 0 ? bit(p.maxWithdrawals, `${p.maxWithdrawals === 1 ? "withdrawal" : "withdrawals"} per ${per.span}`) : "",
+      p.maxBalance > 0 ? bit(fmtMoney(p.maxBalance), "cap") : ""
+    ].filter(Boolean).join("");
     return `<div class="ac-reco-item ${have ? "have" : ""}">
       <div class="ac-reco-body"><div class="ac-reco-top"><strong>${acEsc(pr.name)}</strong>${acKindBadge(pr.kind)}</div>
-        <p>${acEsc(pr.blurb)}</p><div class="muted-small">${acEsc(line)}</div></div>
+        <p>${acEsc(p.blurb)}</p><div class="muted-small ac-reco-line">${line}</div></div>
       <button class="btn small ${have ? "secondary" : "gold"}" ${have ? "disabled" : ""} onclick="acAddPreset('${pr.key}')">${have ? "Added" : "+ Add"}</button>
     </div>`;
   }).join("");
+  const tune = `<div class="ac-tune">
+    <span class="cc-chip gold">${icon("repeat", 12)}${per.auto ? `Interest paid ${per.every}` : "Interest applied by hand"}</span>
+    <span class="cc-chip mint">${icon("percent", 12)}${br.fallback ? `Typical ${br.rate}% base rate (your savings rate is 0%)` : `Built on your ${br.rate}% savings rate`}</span>
+    <span class="cc-chip lilac">${icon("coin", 12)}${!per.auto ? "Fees and limits sized for weekly payments" : per.scale === 1 ? "Fees and limits set per weekly payment" : `Fees and limits scaled for ${per.every}`}</span>
+    <a href="#" onclick="t29Jump('hSavingsSet');return false;">Change interest settings</a></div>`;
   const remaining = AC_PRESETS.filter(pr => !liveNames.has(pr.name.toLowerCase())).length;
   // Gone once every recommended account has been added; a teacher can also dismiss it (and bring it back).
   const recoPanel = !remaining ? "" : acRecoDismissed()
@@ -367,7 +441,8 @@ function acRenderTeacher(cls, students) {
       <div class="cc-panel-head"><h3>${icon("sparkle", 16)} Recommended accounts</h3>
         <span class="ac-reco-actions"><button class="btn small gold" onclick="acAddAllPresets()">+ Add all ${remaining} remaining</button>
         <button class="btn small secondary" onclick="acDismissReco(true)">Dismiss</button></span></div>
-      <p class="muted-small ac-reco-note">One click adds a ready-made account to your class. Rates are based on your class savings rate (${cls.interestRate || 0}%), and you can edit anything afterwards.</p>
+      <p class="muted-small ac-reco-note">One click adds a ready-made account, personalised to how your class pays interest. You can edit anything afterwards.</p>
+      ${tune}
       <div class="ac-reco">${reco}</div>
     </section>`;
 
@@ -390,7 +465,7 @@ function acRenderTeacher(cls, students) {
   el.innerHTML = `
     <div class="flex-between cc-head"><h2 id="hAcctT">Bank accounts</h2>
       <label class="cc-switch"><input type="checkbox" id="acsEnabled" ${st.enabled ? "checked" : ""} onchange="acSaveSettings()"><span class="cc-switch-track"></span><span>${st.enabled ? "On for students" : "Off"}</span></label></div>
-    <p class="cc-intro">Let students open extra <strong>everyday</strong> and <strong>savings</strong> accounts on top of their cash balance and Savings Account. You decide every rate, fee and limit. ${interestScheduleLabel(cls)} Your class Savings Account rate is ${cls.interestRate || 0}%.</p>
+    <p class="cc-intro">Let students open extra <strong>everyday</strong> and <strong>savings</strong> accounts on top of their cash balance and Savings Account. You decide every rate, fee and limit. ${interestScheduleLabel(cls)} Your class Savings Account rate is ${cls.interestRate || 0}% — change it, and how often interest is paid, in <a href="#" onclick="t29Jump('hSavingsSet');return false;">Savings &amp; interest</a> above.</p>
     <div class="cc-tstats">
       <div class="cc-tstat"><span>Accounts open</span><strong>${active.length}</strong></div>
       <div class="cc-tstat ${pending.length ? "alert" : ""}"><span>Waiting for approval</span><strong>${pending.length}</strong></div>
@@ -458,7 +533,7 @@ function acPlanFormHtml(p) {
       <div><label for="acp-kind">Type</label><select id="acp-kind" onchange="acKindChanged()"><option value="everyday" ${!sav ? "selected" : ""}>Everyday — for spending &amp; bills</option><option value="savings" ${sav ? "selected" : ""}>Savings — for growing money</option></select></div>
       <div><label for="acp-minls">Minimum lifestyle tier</label>${acTierSelectHtml(AC_CLS, p.minLifestyle)}<div class="muted-small">Students need at least this tier to open it</div></div>
       <div class="wide"><label for="acp-blurb">Short description <span class="muted-small">(optional — shown to students)</span></label><input id="acp-blurb" maxlength="90" value="${acEsc(p.blurb)}" placeholder="e.g. Save for something big — a small fee keeps you honest"></div>
-      ${fld("rate", "Interest rate (%)", p.rate, "0.01", "Paid on the class interest schedule")}
+      ${fld("rate", "Interest rate (%)", p.rate, "0.01", `Paid ${acPeriod(AC_CLS).every}`)}
       ${fld("bonus", "No-withdrawal bonus (% extra)", p.bonusRate, "0.01", "Extra interest if nothing was taken out that period", "ac-sav-only " + (sav ? "" : "hidden"))}
       ${fld("minbal", "Balance needed to earn interest ($)", p.minBalance, "1", "0 = earns from the first dollar")}
       ${fld("fee", "Account fee ($)", p.fee, "0.01", "Taken each time interest is paid")}
@@ -472,7 +547,7 @@ function acPlanFormHtml(p) {
     <input type="hidden" id="acp-id" value="${acEsc(p.id || "")}">`;
 }
 function acEditPlan(id) {
-  const base = { id: "", name: "", kind: "savings", blurb: "", rate: Math.max(1, Number(AC_CLS.interestRate) || 1), bonusRate: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 0, minLifestyle: 0 };
+  const base = { id: "", name: "", kind: "savings", blurb: "", rate: acBaseRate(AC_CLS).rate, bonusRate: 0, minBalance: 0, fee: 0, feeWaiveAt: 0, withdrawFee: 0, maxWithdrawals: 0, maxBalance: 0, minLifestyle: 0 };
   const p = id ? ((AC_CLS.accountPlans || []).find(x => x.id === id) || base) : base;
   const f = document.getElementById("acPlanForm");
   f.innerHTML = acPlanFormHtml(p);

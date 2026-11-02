@@ -228,43 +228,7 @@
       <p class="muted-small">Given once to every student who joins this class &mdash; whether they sign up themselves or you add them. Students already in the class keep what they have. Restarting the class puts everyone back on this amount.</p>
       <div id="welcomeGrantMsg"></div>
     </div>
-    <label for="rate" id="labRate">Savings interest rate (% applied each time interest runs)</label>
-    <input id="rate" type="number" min="0" max="20" step="0.1" style="max-width:160px;">
-    <label for="cashRate" id="labCashRate">Cash balance interest rate (% applied each time interest runs)</label>
-    <input id="cashRate" type="number" min="0" max="20" step="0.1" style="max-width:160px;">
-    <p class="muted-small">Set these separately — e.g. reward saving with a higher Savings rate, or set the cash rate to 0 (default) so only money moved into Savings earns anything. Loan settings live on the new Loans page.</p>
-    <button class="btn secondary small" style="margin-top:12px;" onclick="saveRate()" id="saveRateBtn">Save rate</button>
-
-    <div style="margin-top:20px;">
-      <label style="display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" id="interestAuto" style="width:20px;height:20px;min-height:auto;">
-        <span id="labInterestAuto">Automatically pay interest on a schedule</span>
-      </label>
-      <div class="grid grid-2" style="margin-top:6px;">
-        <div>
-          <label for="interestFreq" id="labInterestFreq">How often</label>
-          <select id="interestFreq">
-            <option value="daily">Every day</option>
-            <option value="weekly">Every week</option>
-            <option value="fortnightly">Every 2 weeks</option>
-            <option value="monthly">Every 4 weeks</option>
-          </select>
-        </div>
-        <div id="interestDayWrap">
-          <label for="interestDay" id="labInterestDay">On which day</label>
-          <select id="interestDay">
-            <option value="Mon">Monday</option>
-            <option value="Tue">Tuesday</option>
-            <option value="Wed">Wednesday</option>
-            <option value="Thu">Thursday</option>
-            <option value="Fri">Friday</option>
-            <option value="Sat">Saturday</option>
-            <option value="Sun">Sunday</option>
-          </select>
-        </div>
-      </div>
-      <button class="btn secondary small" style="margin-top:12px;" onclick="saveInterestAuto()" id="saveInterestAutoBtn">Save interest schedule</button>
-    </div>
+    <p class="muted-small" id="savingsSettingsMoved">Savings interest rates and how often interest is paid now live on the <a href="bank.html">Bank</a> page. Loan settings live on the Loans page.</p>
 
     <label for="payDaySelect" id="labPayDay" style="margin-top:24px;">Pay day (which day wages are due)</label>
     <select id="payDaySelect" style="max-width:220px;">
@@ -573,7 +537,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="notifications.js?v=beececba"></script>
 <script defer src="pdf-report.js?v=9198db19"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
-<script defer src="teacher.js?v=def9e3da"></script>
+<script defer src="teacher.js?v=58ee2f6a"></script>
 <script defer src="bulk-students.js?v=d5a9136f"></script>
 </body>
 </html>
