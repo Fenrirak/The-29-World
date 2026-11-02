@@ -9,7 +9,7 @@ const DAY_LABEL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thurs
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("piggy", 26) + " Bank Account";
-  document.getElementById("iconBalance").innerHTML = icon("piggy", 30);
+  document.getElementById("iconBalance").innerHTML = icon("wallet", 30);
   document.getElementById("iconAuto").innerHTML = icon("repeat", 30);
   document.getElementById("hActivity").innerHTML = icon("bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 3 days)");
   if (IS_TEACHER) document.getElementById("labAmount").textContent = "Amount (negative to deduct from a student)";
@@ -18,19 +18,6 @@ function paintChrome() {
     amtInput.removeAttribute("min");
     amtInput.step = "0.01";
   }
-  document.getElementById("hSavings").innerHTML = icon("piggy", 18) + " Savings account";
-  document.getElementById("iconSavings").innerHTML = icon("piggy", 26);
-  document.getElementById("iconSavingsRate").innerHTML = icon("percent", 26);
-  document.getElementById("labDeposit").innerHTML = icon("piggy", 13) + " Deposit into savings";
-  document.getElementById("labWithdraw").innerHTML = icon("download", 13) + " Withdraw back to cash";
-  document.getElementById("depositBtn").innerHTML = icon("plus", 15) + " Deposit";
-  document.getElementById("withdrawBtn").innerHTML = icon("download", 15) + " Withdraw";
-  document.getElementById("labSavAutoDirection").innerHTML = icon("repeat", 13) + " Direction";
-  document.getElementById("labSavAutoDay").innerHTML = icon("calendar", 13) + " Day of the week";
-  document.getElementById("labSavAutoFreq").innerHTML = icon("repeat", 13) + " How often";
-  document.getElementById("labSavAutoAmount").innerHTML = icon("coin", 13) + " Amount";
-  document.getElementById("labSavAutoNote").innerHTML = icon("note", 13) + " Note (optional)";
-  document.getElementById("addSavAutoBtn").innerHTML = icon("plus", 15) + " Create automatic transfer";
 }
 
 async function init() {
@@ -122,17 +109,9 @@ async function render() {
   cashRateNote.classList.toggle("hidden", IS_TEACHER || cashRate <= 0);
   if (!IS_TEACHER && cashRate > 0) cashRateNote.textContent = `Earning ${cashRate}% interest. ${interestScheduleLabel(cls)}`;
 
-  document.getElementById("savingsCard").classList.toggle("hidden", IS_TEACHER);
   document.getElementById("goalsCard").classList.toggle("hidden", IS_TEACHER);
-  if (!IS_TEACHER) {
-    document.getElementById("savingsBalance").textContent = fmtMoney(me.savings || 0);
-    document.getElementById("savingsRateValue").textContent = (cls.interestRate || 0) + "%";
-    document.getElementById("savingsRateNote").textContent =
-      "Money in here earns interest at the rate below — it doesn't earn anything sitting in your cash balance unless your teacher has set a cash rate too. " + interestScheduleLabel(cls);
-    const intTax = t29TaxRate(cls, "interest");
-    document.getElementById("savingsTaxNote").innerHTML = t29TaxNoteHtml(intTax ? `Interest is taxed at <strong>${t29TaxPct(intTax)}</strong> before it is paid to you.` : "");
-    renderGoals(me); // see savings-goals.js
-  }
+  document.getElementById("xferCard").classList.toggle("hidden", IS_TEACHER);
+  if (!IS_TEACHER) renderGoals(me); // see savings-goals.js
 
   // Fetch the class roster once and reuse it for both the recipients
   // dropdown and the transaction-history name lookup below — these used
@@ -145,11 +124,7 @@ async function render() {
   const showCardStat = !IS_TEACHER && cardIsActive(me);
   document.getElementById("cardStat").classList.toggle("hidden", !showCardStat);
   renderSavingsSettings(cls); // teacher-only savings & interest settings (moved here from Class settings)
-  renderBankAccounts(me, cls, allStudents); // extra bank accounts (see accounts.js) — sets the "other accounts" stat tile too
-  // 2 tiles → 2 columns, 3 tiles → 3 columns, 4 tiles → a 2 x 2 grid
-  const statCount = 2 + (showCardStat ? 1 : 0) + (acStatVisible() ? 1 : 0);
-  document.getElementById("topStats").classList.toggle("grid-3", statCount === 3);
-  document.getElementById("topStats").classList.toggle("grid-2", statCount !== 3);
+  renderBankAccounts(me, cls, allStudents); // the account tiles at the top, "My accounts" and "Open an account" (see accounts.js)
   if (showCardStat) {
     const cp = cardPlanById(cls, me.creditCard.planId);
     document.getElementById("cardOwing").textContent = fmtMoney(me.creditCard.balance || 0);
@@ -161,6 +136,7 @@ async function render() {
   }
   renderCreditCard(me, cls, allStudents);
   AUTO_CARD_CTX = { me, cls };
+  renderXfer(me, cls); // the automatic-transfer menus
 
   const recipients = await payableRecipients(allStudents);
   const optsHtml = recipients.length
@@ -201,12 +177,15 @@ async function render() {
   for (const a of autos) {
     const row = document.createElement("div");
     row.className = "auto-row";
+    const accName = id => id === "cash" ? "Cash balance" : acctNameOf(cls, me, id);
     if (a.type === "savings-transfer") {
-      const dirLabel = a.direction === "toSavings" ? "Cash → Savings" : "Savings → Cash";
+      const e = autoEnds(a), fromN = accName(e.from), toN = accName(e.to);
       row.innerHTML = `
-        <div class="auto-details"><strong>${fmtMoney(a.amount)}</strong> ${dirLabel}
+        <div class="auto-details"><strong>${fmtMoney(a.amount)}</strong> ${escapeHtml(fromN || "Closed account")} → ${escapeHtml(toN || "Closed account")}
+          ${!fromN || !toN ? `<span class="badge coral">Account closed</span>` : ""}
           &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
           ${a.note ? `<div class="muted-small">${escapeHtml(a.note)}</div>` : ""}
+          ${!fromN || !toN ? `<div class="muted-small">This can't run any more. Edit it to use another account, or remove it.</div>` : ""}
           ${a.lastRun ? `<div class="muted-small">Last ran: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
         </div>
         <button class="btn small secondary" onclick='startEditSavAuto(${JSON.stringify(a).replace(/'/g, "&#39;")})'>Edit</button>
@@ -223,7 +202,7 @@ async function render() {
       toLabel = escapeHtml(toUser ? toUser.name : a.toUser);
     }
     row.innerHTML = `
-      <div class="auto-details"><strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>${a.useCard ? ` <span class="badge lilac">Credit card</span>` : ""}
+      <div class="auto-details"><strong>${fmtMoney(a.amount)}</strong> to <strong>${toLabel}</strong>${autoSrcBadge(a, accName)}
         &middot; ${DAY_LABEL[a.dayOfWeek] || a.dayOfWeek}, ${FREQ_LABEL[a.frequency] || a.frequency}
         ${a.note ? `<div class="muted-small">${escapeHtml(a.note)}</div>` : ""}
         ${a.lastRun ? `<div class="muted-small">Last paid: ${a.lastRun}</div>` : `<div class="muted-small">Not run yet</div>`}
@@ -426,9 +405,14 @@ async function sendMoney(e) {
     // teacher's side (their balance is unlimited), so this goes through the
     // same balance-adjustment path as the "Give a bonus or fine" tool
     // instead of the peer-to-peer transfer path.
+    // Students choose which account the money comes out of (cash, Savings Account, an extra account, or
+    // their credit card for payments to the teacher). A teacher's balance is unlimited, so they always send from it.
+    const src = IS_TEACHER ? "cash" : ((document.getElementById("sendFrom") || {}).value || "cash");
     const sendOne = (username, silent) => (IS_TEACHER && amount < 0)
       ? teacherAdjust(CURRENT.username, username, amount, note)
-      : transferMoney(CURRENT.username, username, amount, note, silent ? { silent: true } : undefined);
+      : IS_TEACHER
+        ? transferMoney(CURRENT.username, username, amount, note, silent ? { silent: true } : undefined)
+        : sendMoneyFrom(CURRENT.username, username, amount, note, src);
 
     if (IS_TEACHER && to === AUTOPAY_ALL_STUDENTS) {
       const targets = ALL_STUDENTS.slice();
@@ -468,7 +452,7 @@ async function sendMoney(e) {
     if (res.ok) {
       box.innerHTML = amount < 0
         ? `<div class="success-msg">Deducted ${fmtMoney(Math.abs(amount))}.</div>`
-        : `<div class="success-msg">Sent ${fmtMoney(amount)}!</div>`;
+        : `<div class="success-msg">Sent ${fmtMoney(amount)}!${res.fee > 0 ? ` ${escapeHtml(res.fromName)} charged a ${fmtMoney(res.fee)} withdrawal fee.` : ""}</div>`;
       document.getElementById("amount").value = "";
       document.getElementById("note").value = "";
       document.getElementById("toStudent").value = "";
@@ -498,13 +482,15 @@ async function addAuto(e) {
     const amount = document.getElementById("autoAmount").value;
     const to = document.getElementById("autoTo").value;
     const note = document.getElementById("autoNote").value.trim();
-    // A credit card can only pay the teacher, never another student.
-    const useCard = !!(document.getElementById("autoUseCard") && document.getElementById("autoUseCard").checked) && !!AUTO_CARD_CTX && to === AUTO_CARD_CTX.cls.teacher;
+    // Which account pays: "cash", "savings", an extra account's id, or "card" (credit cards only ever pay the teacher).
+    const from = IS_TEACHER ? "cash" : ((document.getElementById("autoFrom") || {}).value || "cash");
+    const useCard = from === "card";
     const box = document.getElementById("autoMsg");
     if (!to) { box.innerHTML = `<div class="error-msg">Choose who to pay.</div>`; return false; }
+    if (useCard && !(AUTO_CARD_CTX && to === AUTO_CARD_CTX.cls.teacher)) { box.innerHTML = `<div class="error-msg">A credit card can only pay your teacher. Pick one of your accounts to pay your classmate.</div>`; return false; }
     let res = EDITING_AUTO_ID
-      ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, false, useCard)
-      : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note, false, useCard);
+      ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, false, useCard, from)
+      : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note, false, useCard, from);
     if (!res.ok && res.needsConfirm) {
       // Same amount/recipient/day/frequency already exists, but with a
       // different reference note — not a hard block, just a "are you sure"
@@ -515,8 +501,8 @@ async function addAuto(e) {
       const goAhead = await t29Confirm(`You already have an automatic payment set up for the same amount, recipient and day.${already}\n\nSet up this one too?`);
       if (goAhead) {
         res = EDITING_AUTO_ID
-          ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, true, useCard)
-          : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note, true, useCard);
+          ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, true, useCard, from)
+          : await addAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, to, note, true, useCard, from);
       } else {
         box.innerHTML = "";
         await render();
@@ -543,8 +529,8 @@ function startEditAuto(a) {
   document.getElementById("autoAmount").value = a.amount;
   document.getElementById("autoTo").value = a.toUser;
   document.getElementById("autoNote").value = a.note || "";
-  { const c = document.getElementById("autoUseCard"); if (c) c.checked = !!a.useCard; }
   autoSyncCardRow();
+  { const f = document.getElementById("autoFrom"); if (f) { f.value = autoSource(a); payWithChanged("autoFrom"); } }
   document.getElementById("hNewAuto").innerHTML = "Edit automatic payment";
   document.getElementById("addAutoBtn").innerHTML = "Save changes";
   document.getElementById("cancelAutoEditBtn").classList.remove("hidden");
@@ -557,7 +543,7 @@ function cancelEditAuto() {
   document.getElementById("autoAmount").value = "";
   document.getElementById("autoNote").value = "";
   document.getElementById("autoTo").value = "";
-  { const c = document.getElementById("autoUseCard"); if (c) c.checked = false; }
+  { const f = document.getElementById("autoFrom"); if (f) f.value = "cash"; }
   autoSyncCardRow();
   document.getElementById("hNewAuto").innerHTML = "Set up an automatic payment";
   document.getElementById("addAutoBtn").innerHTML = "Create automatic payment";
@@ -573,44 +559,6 @@ async function removeAuto(id) {
   }
 }
 
-async function depositSavings(e) {
-  e.preventDefault();
-  // Same guard as sendMoney above.
-  const btn = document.getElementById("depositBtn");
-  if (btn.disabled) return false;
-  btn.disabled = true;
-  try {
-    const amount = Number(document.getElementById("depositAmount").value);
-    const box = document.getElementById("savingsMsg");
-    const res = await depositToSavings(CURRENT.username, amount);
-    box.innerHTML = res.ok ? `<div class="success-msg">Deposited ${fmtMoney(amount)} into savings!</div>` : `<div class="error-msg">${res.error}</div>`;
-    if (res.ok) document.getElementById("depositAmount").value = "";
-    await render();
-    return false;
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function withdrawSavings(e) {
-  e.preventDefault();
-  // Same guard as sendMoney above.
-  const btn = document.getElementById("withdrawBtn");
-  if (btn.disabled) return false;
-  btn.disabled = true;
-  try {
-    const amount = Number(document.getElementById("withdrawAmount").value);
-    const box = document.getElementById("savingsMsg");
-    const res = await withdrawFromSavings(CURRENT.username, amount);
-    box.innerHTML = res.ok ? `<div class="success-msg">Withdrew ${fmtMoney(amount)} back to cash.</div>` : `<div class="error-msg">${res.error}</div>`;
-    if (res.ok) document.getElementById("withdrawAmount").value = "";
-    await render();
-    return false;
-  } finally {
-    btn.disabled = false;
-  }
-}
-
 async function addSavingsAuto(e) {
   e.preventDefault();
   // Same double-submit guard as addAuto() above.
@@ -618,12 +566,13 @@ async function addSavingsAuto(e) {
   if (btn.disabled) return false;
   btn.disabled = true;
   try {
-    const direction = document.getElementById("savAutoDirection").value;
+    const direction = { from: document.getElementById("xferFrom").value, to: document.getElementById("xferTo").value };
     const day = document.getElementById("savAutoDay").value;
     const freq = document.getElementById("savAutoFreq").value;
     const amount = document.getElementById("savAutoAmount").value;
     const note = document.getElementById("savAutoNote").value.trim();
     const box = document.getElementById("savAutoMsg");
+    if (!direction.from || !direction.to || direction.from === direction.to) { box.innerHTML = `<div class="error-msg">Pick two different accounts.</div>`; return false; }
     let res = EDITING_SAV_AUTO_ID
       ? await editSavingsAutomation(CURRENT.classCode, EDITING_SAV_AUTO_ID, CURRENT.username, day, freq, amount, direction, note)
       : await addSavingsAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, direction, note);
@@ -633,7 +582,7 @@ async function addSavingsAuto(e) {
       const already = res.existingNote
         ? ` It's labelled "${res.existingNote}".`
         : " It doesn't have a note.";
-      const goAhead = await t29Confirm(`You already have an automatic transfer set up for the same amount, direction and day.${already}\n\nSet up this one too?`);
+      const goAhead = await t29Confirm(`You already have an automatic transfer set up for the same amount, accounts and day.${already}\n\nSet up this one too?`);
       if (goAhead) {
         res = EDITING_SAV_AUTO_ID
           ? await editSavingsAutomation(CURRENT.classCode, EDITING_SAV_AUTO_ID, CURRENT.username, day, freq, amount, direction, note, true)
@@ -659,7 +608,11 @@ async function addSavingsAuto(e) {
 
 function startEditSavAuto(a) {
   EDITING_SAV_AUTO_ID = a.id;
-  document.getElementById("savAutoDirection").value = a.direction;
+  { const e = autoEnds(a), f = document.getElementById("xferFrom"), t = document.getElementById("xferTo");
+    f.value = e.from; t.value = e.to;
+    if (!f.value) f.value = "cash"; // an account that has since been closed
+    if (!t.value || t.value === f.value) { const alt = [...t.options].find(o => o.value !== f.value); if (alt) t.value = alt.value; }
+    xferHint(); }
   document.getElementById("savAutoDay").value = a.dayOfWeek;
   document.getElementById("savAutoFreq").value = a.frequency;
   document.getElementById("savAutoAmount").value = a.amount;
@@ -676,20 +629,89 @@ function cancelEditSavAuto() {
   document.getElementById("savAutoAmount").value = "";
   document.getElementById("savAutoNote").value = "";
   document.getElementById("hSavingsAuto").innerHTML = "Automatic transfer";
-  document.getElementById("addSavAutoBtn").innerHTML = icon("plus", 15) + " Create automatic transfer";
+  document.getElementById("addSavAutoBtn").innerHTML = "Create automatic transfer";
   document.getElementById("cancelSavAutoEditBtn").classList.add("hidden");
 }
 
 document.addEventListener("DOMContentLoaded", init);
 
-// The "pay with my credit card" box on the automatic payment form only shows for
-// payments to the teacher; a card can never pay another student.
 var AUTO_CARD_CTX = null;
-function autoSyncCardRow() {
-  const row = document.getElementById("autoCardRow"), sel = document.getElementById("autoTo");
-  if (!row || !AUTO_CARD_CTX) return;
-  const { me, cls } = AUTO_CARD_CTX;
-  const ok = !IS_TEACHER && cardIsActive(me) && !!sel && sel.value === cls.teacher;
-  row.classList.toggle("hidden", !ok);
-  if (!ok) { const c = document.getElementById("autoUseCard"); if (c) c.checked = false; }
+
+/* ---------------- "Pay with" menus (Send money + automatic payments) ----------------
+   Grouped into Everyday / Savings / Credit card. A credit card only ever pays the teacher, so that option is
+   greyed out (with the reason) whenever someone else is picked, and the menu falls back to cash. */
+function payWithOptionsHtml(me, cls, toUser) {
+  const ch = acChoicesWithKind(me, cls);
+  const opt = c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)} — ${fmtMoney(c.bal)}</option>`;
+  const group = (label, items) => items.length ? `<optgroup label="${label}">${items.map(opt).join("")}</optgroup>` : "";
+  let html = group("Everyday", ch.filter(c => c.kind === "everyday")) + group("Savings", ch.filter(c => c.kind === "savings"));
+  if (cardIsActive(me)) {
+    const plan = cardPlanById(cls, me.creditCard.planId);
+    if (plan) {
+      const ok = toUser === cls.teacher;
+      html += `<optgroup label="Credit card"><option value="card" ${ok ? "" : "disabled"}>Credit card — ${fmtMoney(cardAvailable(me.creditCard, plan))} available${ok ? "" : " (teacher payments only)"}</option></optgroup>`;
+    }
+  }
+  return html;
+}
+function renderPayWith() {
+  const ctx = AUTO_CARD_CTX;
+  [["sendFrom", "toStudent"], ["autoFrom", "autoTo"]].forEach(([id, toId]) => {
+    const row = document.getElementById(id + "Row"), sel = document.getElementById(id), toSel = document.getElementById(toId);
+    if (!row || !sel) return;
+    row.classList.toggle("hidden", IS_TEACHER || !ctx);
+    if (IS_TEACHER || !ctx) return;
+    const prev = sel.value || "cash";
+    sel.innerHTML = payWithOptionsHtml(ctx.me, ctx.cls, toSel ? toSel.value : "");
+    const keep = [...sel.options].find(o => o.value === prev && !o.disabled);
+    sel.value = keep ? prev : "cash";
+    payWithChanged(id);
+  });
+}
+function payWithChanged(id) {
+  const hint = document.getElementById(id + "Hint"), sel = document.getElementById(id);
+  if (!hint || !sel || !AUTO_CARD_CTX) return;
+  const notes = typeof acSourceNotes === "function" ? acSourceNotes(AUTO_CARD_CTX.me, AUTO_CARD_CTX.cls, sel.value) : [];
+  hint.innerHTML = notes.join(" ");
+}
+// Kept under its old name: the recipient menus call this when someone different is picked.
+function autoSyncCardRow() { renderPayWith(); }
+
+// A small badge on an automatic payment saying which account it comes out of (nothing for plain cash).
+function autoSrcBadge(a, accName) {
+  if (a.useCard) return ` <span class="badge lilac">Credit card</span>`;
+  const src = autoSource(a);
+  if (src === "cash") return "";
+  const n = accName(src);
+  return n ? ` <span class="badge navy">From ${escapeHtml(n)}</span>` : ` <span class="badge coral">Account closed</span>`;
+}
+
+/* ---------------- Automatic transfer menus (From / To) ---------------- */
+function renderXfer(me, cls) {
+  const f = document.getElementById("xferFrom"), t = document.getElementById("xferTo");
+  if (!f || !t || IS_TEACHER) return;
+  const ch = acChoicesWithKind(me, cls);
+  const opts = ch.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)} — ${fmtMoney(c.bal)}</option>`).join("");
+  const prevF = f.value || "cash", prevT = t.value || "savings", has = id => ch.some(c => c.id === id);
+  f.innerHTML = opts; t.innerHTML = opts;
+  f.value = has(prevF) ? prevF : "cash";
+  t.value = has(prevT) && prevT !== f.value ? prevT : (ch.find(c => c.id !== f.value) || {}).id;
+  xferHint();
+}
+function xferChanged(which) {
+  const f = document.getElementById("xferFrom"), t = document.getElementById("xferTo");
+  if (f.value === t.value) { // the same account on both sides makes no sense — nudge the other menu
+    const moved = which === "from" ? t : f, kept = which === "from" ? f : t;
+    const alt = [...moved.options].find(o => o.value !== kept.value);
+    if (alt) moved.value = alt.value;
+  }
+  xferHint();
+}
+function xferHint() {
+  const el = document.getElementById("xferHint"), f = document.getElementById("xferFrom"), t = document.getElementById("xferTo");
+  if (!el || !f || !t || !AUTO_CARD_CTX || typeof acSourceNotes !== "function") return;
+  const { me, cls } = AUTO_CARD_CTX, notes = acSourceNotes(me, cls, f.value);
+  const dst = acctActiveOf(me).find(a => a.id === t.value), dp = dst && acctPlanById(cls, dst.planId);
+  if (dp && dp.maxBalance > 0) notes.push(`${escapeHtml(dp.name)} can hold up to ${fmtMoney(dp.maxBalance)}.`);
+  el.innerHTML = notes.map(n => `<span>${n}</span>`).join("");
 }

@@ -3962,3 +3962,38 @@ details.fold-sub > summary .fold-head{font-weight:800;font-size:1.05rem;color:va
 html.dark-mode details.fold-sub > summary .fold-head{color:var(--heading-text);}
 .fold-sub-btn{display:inline-flex;align-items:center;gap:7px;}
 @media (prefers-reduced-motion:reduce){details.fold > summary::after,details.fold-sub > summary::after{transition:none;}}
+
+/* =====================================================================
+   Bank page — account tiles, "My accounts", "Open an account", pay-with menus (bank.js / accounts.js)
+   ===================================================================== */
+/* one tile per account, flowing into as many columns as fit */
+.bk-tiles{grid-template-columns:repeat(auto-fill,minmax(min(235px,100%),1fr));}
+.bk-tiles .stat{transition:transform .15s,box-shadow .15s;}
+.bk-tiles .stat:hover{transform:translateY(-2px);}
+.bk-tiles .stat .muted-small{margin-top:6px;line-height:1.35;}
+
+/* every account card shares one look: a coloured edge for its kind */
+.ac-own{border-top:4px solid var(--line);}
+.ac-own.k-savings{border-top-color:var(--mint-fill);}
+.ac-own.k-everyday{border-top-color:var(--sky-fill);}
+.ac-line strong small{font-weight:600;color:var(--muted);}
+.ac-hint{margin-top:0;}
+
+/* Everyday | Savings switch */
+.ac-filter button{display:inline-flex;align-items:center;gap:8px;}
+.ac-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--r-pill);font-size:var(--fs-xs);font-weight:900;background:rgba(120,140,190,.18);color:inherit;}
+.ac-filter button.on .ac-count{background:rgba(31,43,68,.16);}
+
+/* "Open an account" sits on its own, away from the accounts you already hold */
+#acctOpenCard .cc-plans{margin-top:2px;}
+
+/* automatic transfer + pay-with */
+.xfer-ends{gap:0 20px;}
+.xfer-ends select{margin-bottom:0;}
+#xferCard .ac-move-hint{margin:10px 0 4px;}
+#xferCard .btn{margin-top:14px;}
+.pw-hint{margin-top:6px;line-height:1.4;}
+.pw-hint:empty{display:none;}
+.tax-note:not(:has(svg)){margin-top:2px;}
+
+@media (prefers-reduced-motion:reduce){ .bk-tiles .stat,.bk-tiles .stat:hover{transition:none;transform:none;} }

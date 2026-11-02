@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=e62208eb">
+<link rel="stylesheet" href="style.css?v=cd0373fe">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -77,23 +77,14 @@
 <main>
   <h1 id="pageTitle">Bank Account</h1>
 
-  <div class="grid grid-2" id="topStats">
+  <!-- One tile per account. The cash, credit card and automatic-payment tiles are fixed; bank.js / accounts.js slot a
+       tile in for the Savings Account and every extra account the student has open (before the credit card tile). -->
+  <div class="grid bk-tiles" id="topStats">
     <div class="stat gold">
       <span class="icon" id="iconBalance"></span>
       <div class="label">Cash balance</div>
       <div class="value" id="balance">$0.00</div>
       <div class="muted-small hidden" id="cashRateNote"></div>
-    </div>
-    <div class="stat sky">
-      <span class="icon" id="iconAuto"></span>
-      <div class="label">Active automatic payments</div>
-      <div class="value" id="autoCount">0</div>
-    </div>
-    <div class="stat mint hidden" id="acctStat">
-      <span class="icon" id="iconAcctStat"></span>
-      <div class="label">In my other accounts</div>
-      <div class="value" id="acctTotal">$0.00</div>
-      <div class="muted-small" id="acctStatNote"></div>
     </div>
     <div class="stat lilac hidden" id="cardStat">
       <span class="icon" id="iconCardStat"></span>
@@ -101,97 +92,84 @@
       <div class="value" id="cardOwing">$0.00</div>
       <div class="muted-small" id="cardStatNote"></div>
     </div>
+    <div class="stat">
+      <span class="icon" id="iconAuto"></span>
+      <div class="label">Active automatic payments</div>
+      <div class="value" id="autoCount">0</div>
+    </div>
   </div>
 
-<div class="card" id="savingsCard">
-    <h2 id="hSavings">Savings account</h2>
-    <p id="savingsRateNote">Money in here earns interest whenever your teacher applies it — it doesn't earn anything sitting in your cash balance.</p>
-<div id="savingsTaxNote"></div>
-<div class="grid grid-2">
-      <div class="stat mint">
-        <span class="icon" id="iconSavings"></span>
-        <div class="label">Savings balance</div>
-        <div class="value" id="savingsBalance">$0.00</div>
-      </div>
-      <div class="stat sky">
-        <span class="icon" id="iconSavingsRate"></span>
-        <div class="label">Current interest rate</div>
-        <div class="value" id="savingsRateValue">0%</div>
-      </div>
-    </div>
-    <div class="grid grid-2" style="margin-top:14px;">
-      <form onsubmit="return depositSavings(event)">
-        <label for="depositAmount" id="labDeposit">Deposit into savings</label>
-        <input id="depositAmount" type="number" min="0.01" step="0.01" required>
-        <button class="btn gold" type="submit" id="depositBtn">Deposit</button>
-      </form>
-      <form onsubmit="return withdrawSavings(event)">
-        <label for="withdrawAmount" id="labWithdraw">Withdraw back to cash</label>
-        <input id="withdrawAmount" type="number" min="0.01" step="0.01" required>
-        <button class="btn secondary" type="submit" id="withdrawBtn">Withdraw</button>
-      </form>
-    </div>
-    <div id="savingsMsg"></div>
+  <!-- ---------------- Student: my accounts (Savings Account + any extra accounts, and Move money) — drawn by accounts.js ---------------- -->
+  <div class="card cc-card ac-card hidden" id="acctCard"></div>
 
-    <div style="margin-top:20px;padding-top:16px;border-top:1.5px solid var(--line);">
-      <h3 id="hSavingsAuto" style="margin:0 0 10px;">Automatic transfer</h3>
-      <p class="muted-small">Move money between your cash and savings on a schedule, so you don't have to remember to do it yourself.</p>
-      <form onsubmit="return addSavingsAuto(event)">
-        <label for="savAutoDirection" id="labSavAutoDirection">Direction</label>
-        <select id="savAutoDirection">
-          <option value="toSavings">Cash → Savings</option>
-          <option value="toCash">Savings → Cash</option>
-        </select>
-        <div class="grid grid-3">
-          <div>
-            <label for="savAutoDay" id="labSavAutoDay">Day of the week</label>
-            <select id="savAutoDay">
-              <option value="Mon">Monday</option>
-              <option value="Tue">Tuesday</option>
-              <option value="Wed">Wednesday</option>
-              <option value="Thu">Thursday</option>
-              <option value="Fri">Friday</option>
-              <option value="Sat">Saturday</option>
-              <option value="Sun">Sunday</option>
-            </select>
-          </div>
-          <div>
-            <label for="savAutoFreq" id="labSavAutoFreq">How often</label>
-            <select id="savAutoFreq">
-              <option value="weekly">Every week</option>
-              <option value="fortnightly">Every 2 weeks</option>
-              <option value="monthly">Every 4 weeks</option>
-            </select>
-          </div>
-          <div>
-            <label for="savAutoAmount" id="labSavAutoAmount">Amount</label>
-            <input id="savAutoAmount" type="number" min="0.01" step="0.01" required>
-          </div>
+  <!-- ---------------- Student: automatic transfers between my own accounts ---------------- -->
+  <div class="card hidden" id="xferCard">
+    <h2 id="hSavingsAuto">Automatic transfer</h2>
+    <p class="muted-small">Move money between your own accounts on a schedule, so you don't have to remember to do it yourself.</p>
+    <form onsubmit="return addSavingsAuto(event)">
+      <div class="grid grid-2 xfer-ends">
+        <div>
+          <label for="xferFrom">From</label>
+          <select id="xferFrom" onchange="xferChanged('from')"></select>
         </div>
-        <label for="savAutoNote" id="labSavAutoNote">Note (optional)</label>
-        <input id="savAutoNote" placeholder="e.g. Weekly savings top-up">
-        <button class="btn secondary" type="submit" id="addSavAutoBtn">Create automatic transfer</button>
-        <button class="btn small secondary hidden" type="button" id="cancelSavAutoEditBtn" onclick="cancelEditSavAuto()">Cancel edit</button>
-      </form>
-      <div id="savAutoMsg"></div>
-    </div>
+        <div>
+          <label for="xferTo">To</label>
+          <select id="xferTo" onchange="xferChanged('to')"></select>
+        </div>
+      </div>
+      <div class="ac-move-hint" id="xferHint" aria-live="polite"></div>
+      <div class="grid grid-3">
+        <div>
+          <label for="savAutoDay">Day of the week</label>
+          <select id="savAutoDay">
+            <option value="Mon">Monday</option>
+            <option value="Tue">Tuesday</option>
+            <option value="Wed">Wednesday</option>
+            <option value="Thu">Thursday</option>
+            <option value="Fri">Friday</option>
+            <option value="Sat">Saturday</option>
+            <option value="Sun">Sunday</option>
+          </select>
+        </div>
+        <div>
+          <label for="savAutoFreq">How often</label>
+          <select id="savAutoFreq">
+            <option value="weekly">Every week</option>
+            <option value="fortnightly">Every 2 weeks</option>
+            <option value="monthly">Every 4 weeks</option>
+          </select>
+        </div>
+        <div>
+          <label for="savAutoAmount">Amount</label>
+          <input id="savAutoAmount" type="number" min="0.01" step="0.01" required>
+        </div>
+      </div>
+      <label for="savAutoNote">Note (optional)</label>
+      <input id="savAutoNote" placeholder="e.g. Weekly savings top-up">
+      <button class="btn secondary" type="submit" id="addSavAutoBtn">Create automatic transfer</button>
+      <button class="btn small secondary hidden" type="button" id="cancelSavAutoEditBtn" onclick="cancelEditSavAuto()">Cancel edit</button>
+    </form>
+    <div id="savAutoMsg"></div>
   </div>
-
 
   <!-- Teacher only: savings & interest settings (rates + interest schedule). Drawn by bank.js; moved here from Class settings. -->
   <div class="card cc-card hidden" id="savingsSettingsCard"></div>
 
-  <!-- ---------------- Extra bank accounts — screens are drawn by accounts.js, rules live in data-money.js ---------------- -->
-  <div class="card cc-card ac-card hidden" id="acctCard"></div>
+  <!-- ---------------- Teacher: bank account plans — drawn by accounts.js, rules live in data-money.js ---------------- -->
   <div class="card cc-card ac-card hidden" id="acctTeacherCard"></div>
 
-<div class="grid grid-2">
+  <div class="grid grid-2">
     <div class="card">
       <h2 id="hSend">Send money</h2>
       <p>Send some of your balance to a classmate or your teacher.</p>
       <form onsubmit="return sendMoney(event)">
         <label for="toStudent" id="labTo">Send to</label>
-        <select id="toStudent" required></select>
+        <select id="toStudent" required onchange="autoSyncCardRow()"></select>
+        <div id="sendFromRow" class="hidden">
+          <label for="sendFrom">Pay with</label>
+          <select id="sendFrom" onchange="payWithChanged('sendFrom')"></select>
+          <div class="muted-small pw-hint" id="sendFromHint" aria-live="polite"></div>
+        </div>
         <label for="amount" id="labAmount">Amount</label>
         <input id="amount" type="number" min="0.01" step="0.01" required>
         <label for="note" id="labNote">What's it for?</label>
@@ -225,9 +203,13 @@
         <input id="autoAmount" type="number" min="0.01" step="0.01" required>
         <label for="autoTo" id="labAutoTo">Pay to</label>
         <select id="autoTo" required onchange="autoSyncCardRow()"></select>
+        <div id="autoFromRow" class="hidden">
+          <label for="autoFrom">Pay with</label>
+          <select id="autoFrom" onchange="payWithChanged('autoFrom')"></select>
+          <div class="muted-small pw-hint" id="autoFromHint" aria-live="polite"></div>
+        </div>
         <label for="autoNote" id="labAutoNote">Reference / what's it for?</label>
         <input id="autoNote" placeholder="e.g. Weekly rent">
-        <label class="cc-paytoggle hidden" id="autoCardRow"><input type="checkbox" id="autoUseCard"> Pay this with my credit card <span class="muted-small">(payments to your teacher only)</span></label>
         <button class="btn" type="submit" id="addAutoBtn">Create automatic payment</button>
         <button class="btn small secondary hidden" type="button" id="cancelAutoEditBtn" onclick="cancelEditAuto()">Cancel edit</button>
       </form>
@@ -239,11 +221,14 @@
   <div class="card cc-card hidden" id="cardCard"></div>
   <div class="card cc-card hidden" id="cardTeacherCard"></div>
 
-<div class="card">
+  <div class="card">
     <h2 id="hAutoList">My automatic payments</h2>
     <div id="autoList"></div>
-    <div class="empty-state" id="noAuto"><p>You don't have any automatic payments yet. They pay a bill or move money into savings for you, on the same day each week.</p><button type="button" class="btn small secondary" onclick="t29Jump('hNewAuto')">Set one up</button></div>
+    <div class="empty-state" id="noAuto"><p>You don't have any automatic payments yet. They pay a bill or move money between your accounts for you, on the same day each week.</p><button type="button" class="btn small secondary" onclick="t29Jump('hNewAuto')">Set one up</button></div>
   </div>
+
+  <!-- ---------------- Student: open a new account — its own section, drawn by accounts.js ---------------- -->
+  <div class="card cc-card ac-card hidden" id="acctOpenCard"></div>
 
   <!-- ---------------- Savings goals (student) — filled in by savings-goals.js ---------------- -->
   <div class="card hidden" id="goalsCard"></div>
@@ -275,7 +260,7 @@
 <script defer src="settings-menu.js?v=8dde546c"></script>
 <script defer src="shortcuts.js?v=bcda2833"></script>
 <script defer src="data-core.js?v=1860738e"></script>
-<script defer src="data-money.js?v=197f9cce"></script>
+<script defer src="data-money.js?v=bea65215"></script>
 <script defer src="data-life.js?v=d62c66a1"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=d6ba8dd6"></script>
@@ -284,7 +269,7 @@
 <script defer src="notifications.js?v=477a64fd"></script>
 <script defer src="savings-goals.js?v=bea990fb"></script>
 <script defer src="creditcard.js?v=5bd1bfc9"></script>
-<script defer src="accounts.js?v=c0e582b0"></script>
-<script defer src="bank.js?v=dfc677d2"></script>
+<script defer src="accounts.js?v=60b7fd52"></script>
+<script defer src="bank.js?v=888a7394"></script>
 </body>
 </html>

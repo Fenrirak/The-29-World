@@ -8,7 +8,7 @@
    with creditcard.js (CC_THEMES, ccThemeBg, ccMiniCard...). */
 
 let AC_CLS = null, AC_ME = null, AC_STUDENTS = [];
-let AC_FILTER = "all";
+let AC_FILTER = "everyday";
 let AC_MOVE = { from: "", to: "" };
 
 const acEsc = s => ccEsc(s);
@@ -158,46 +158,52 @@ function acRandomTheme(planId) {
 /* ---------------- Entry point (called from bank.js render) ---------------- */
 function renderBankAccounts(me, cls, students) {
   AC_CLS = cls; AC_ME = me; AC_STUDENTS = students || [];
-  const sCard = document.getElementById("acctCard"), tCard = document.getElementById("acctTeacherCard");
+  const sCard = document.getElementById("acctCard"), tCard = document.getElementById("acctTeacherCard"), oCard = document.getElementById("acctOpenCard");
   if (!sCard || !tCard) return;
   acInjectCss();
   sCard.classList.toggle("hidden", IS_TEACHER);
+  if (oCard) oCard.classList.toggle("hidden", IS_TEACHER);
   tCard.classList.toggle("hidden", !IS_TEACHER);
-  const stat = document.getElementById("acctStat");
-  const mine = IS_TEACHER ? [] : acctActiveOf(me);
-  if (stat) {
-    stat.classList.toggle("hidden", !mine.length);
-    if (mine.length) {
-      document.getElementById("iconAcctStat").innerHTML = icon("wallet", 26);
-      document.getElementById("acctTotal").textContent = fmtMoney(acctTotalOf(me));
-      document.getElementById("acctStatNote").textContent = `Across ${acPlural(mine.length, "extra account")}`;
-    }
-  }
-  if (IS_TEACHER) acRenderTeacher(cls, AC_STUDENTS); else acRenderStudent(me, cls);
+  acPaintTiles(me, cls);
+  if (IS_TEACHER) acRenderTeacher(cls, AC_STUDENTS);
+  else { acRenderStudent(me, cls); acRenderOpen(me, cls); }
 }
-// How many stat tiles are showing up top (bank.js uses this to pick a 2- or 3-column grid)
-function acStatVisible() { const s = document.getElementById("acctStat"); return !!s && !s.classList.contains("hidden"); }
 
-/* ================= Student ================= */
+/* ---------------- Top tiles: one per account, same look as the cash balance tile ---------------- */
+function acRateText(cls, rate) {
+  const per = acPeriod(cls);
+  return rate > 0 ? `${rate}% interest${per.auto ? " " + per.every : ""}` : "No interest";
+}
+function acTilesHtml(me, cls) {
+  const tile = (variant, ic, name, bal, note) => `<div class="stat ${variant} bk-acct-tile"><span class="icon">${icon(ic, 30)}</span>
+    <div class="label">${acEsc(name)}</div><div class="value">${fmtMoney(bal)}</div><div class="muted-small">${note}</div></div>`;
+  let h = tile("mint", "piggy", "Savings Account", me.savings || 0, `Savings · ${acRateText(cls, Number(cls.interestRate) || 0)}`);
+  acctActiveOf(me).forEach(a => {
+    const p = acctPlanById(cls, a.planId);
+    if (!p) { h += tile("sky", "bank", "Account", a.balance || 0, "Plan removed by your teacher"); return; }
+    const sav = p.kind === "savings";
+    h += tile(sav ? "mint" : "sky", sav ? "piggy" : "bank", p.name, a.balance || 0, `${acKindLabel(p.kind)} · ${acRateText(cls, p.rate || 0)}`);
+  });
+  return h;
+}
+function acPaintTiles(me, cls) {
+  const grid = document.getElementById("topStats"); if (!grid) return;
+  grid.querySelectorAll(".bk-acct-tile").forEach(n => n.remove());
+  if (IS_TEACHER) return;
+  const anchor = document.getElementById("cardStat") || grid.lastElementChild;
+  if (anchor) anchor.insertAdjacentHTML("beforebegin", acTilesHtml(me, cls));
+}
+
+/* ================= Student: my accounts ================= */
 function acRenderStudent(me, cls) {
   const el = document.getElementById("acctCard");
-  const st = acctSettings(cls), plans = acctPlansOf(cls);
   const list = acctListOf(me);
   const active = list.filter(a => a.status === "active"), pending = list.filter(a => a.status === "pending");
-  const off = !st.enabled;
-  const held = new Set(list.map(a => a.planId));
-  const countKind = k => list.filter(a => (a.status === "active" || a.status === "pending") && (acctPlanById(cls, a.planId) || {}).kind === k).length;
-  const full = { everyday: countKind("everyday") >= st.maxEveryday, savings: countKind("savings") >= st.maxSavings };
-  const head = note => `<div class="flex-between cc-head"><h2 id="hAcct">Your accounts</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
-
-  let html = head(off ? "Not open yet" : st.approval === "teacher" ? "Teacher approval needed" : "");
-  html += `<p class="cc-intro">Your cash balance and Savings Account above always stay put. Open extra <strong>everyday</strong> and <strong>savings</strong> accounts to organise your money — each one has its own interest, fees and rules. ${interestScheduleLabel(cls)}</p>`;
-
-  // ---- accounts I own ----
-  if (active.length) {
-    html += `<h3 class="cc-sub">${icon("piggy", 16)} My accounts (${active.length})</h3><div class="ac-own-grid">${active.map(a => acOwnedTile(a, cls)).join("")}</div>`;
-    html += acMovePanel(me, cls);
-  }
+  const intTax = t29TaxRate(cls, "interest");
+  let html = `<div class="flex-between cc-head"><h2 id="hAcct">My accounts</h2><span class="cc-head-note">${acPlural(active.length + 1, "account")}</span></div>`;
+  html += `<p class="cc-intro">Your cash balance is in the tiles above. Each account here has its own interest, fees and rules, and you can move money between them any time. Cash doesn't earn interest unless your teacher has set a cash rate, so put money to work here. ${interestScheduleLabel(cls)}</p>`;
+  if (intTax) html += `<div class="tax-note"><span>Interest is taxed at <strong>${t29TaxPct(intTax)}</strong> before it is paid to you.</span></div>`;
+  html += `<div class="ac-own-grid">${acSavingsTile(me, cls)}${active.map(a => acOwnedTile(a, cls)).join("")}</div>`;
   if (pending.length) {
     html += `<h3 class="cc-sub">${icon("history", 16)} Waiting for approval</h3><div class="ac-pend">${pending.map(a => {
       const p = acctPlanById(cls, a.planId);
@@ -205,26 +211,99 @@ function acRenderStudent(me, cls) {
         <button class="btn small secondary" onclick="acCancelApp('${acEsc(a.id)}')">Withdraw</button></div>`;
     }).join("")}</div>`;
   }
+  html += acMovePanel(me, cls);
+  html += `<div id="acMsg"></div>`;
+  el.innerHTML = html;
+  acMoveHint();
+}
+// The class's original Savings Account, drawn exactly like the extra accounts so everything looks like one family.
+function acSavingsTile(me, cls) {
+  const bal = acctRound(me.savings || 0), rate = Number(cls.interestRate) || 0, per = acPeriod(cls);
+  const gross = bal > 0 && rate > 0 ? acctRound(bal * rate / 100) : 0;
+  return `<article class="ac-own k-savings is-default">
+    <div class="ac-own-body">
+      <div class="ac-tile-head"><strong>Savings Account</strong>${acKindBadge("savings")}</div>
+      <div class="ac-bal"><span>Balance</span><strong>${fmtMoney(bal)}</strong></div>
+      <div class="ac-rows">
+        <div class="ac-line"><span>Interest rate</span><strong>${rate > 0 ? `${rate}% <small>per ${per.span}</small>` : "None"}</strong></div>
+        <div class="ac-line"><span>Next interest</span><strong class="${gross > 0 ? "good" : ""}">${gross > 0 ? "≈ +" + fmtMoney(gross) : "$0.00"}</strong></div>
+        <div class="ac-line"><span>Withdrawals</span><strong>Unlimited</strong></div>
+        <div class="ac-hint">Included for everyone in your class — there's nothing to open.</div>
+      </div>
+      <div class="ac-own-actions">
+        <button class="btn small gold" onclick="acQuick('savings','in')">Add money</button>
+        <button class="btn small secondary" onclick="acQuick('savings','out')">Take out</button>
+      </div>
+    </div></article>`;
+}
+function acOwnedTile(a, cls) {
+  const p = acctPlanById(cls, a.planId);
+  if (!p) return `<article class="ac-own"><div class="ac-own-body"><strong>Account</strong><p class="muted-small">Your teacher removed this plan. You can still move your ${fmtMoney(a.balance || 0)} out below or close it.</p>
+      <div class="ac-own-actions"><button class="btn small secondary" onclick="acClose('${acEsc(a.id)}')">Close &amp; move to cash</button></div></div></article>`;
+  const bal = acctRound(a.balance || 0), wd = a.wd || 0, lt = a.lifetime || {};
+  const bonus = wd === 0 && p.bonusRate > 0 ? p.bonusRate : 0;
+  const rate = (p.rate || 0) + bonus;
+  const gross = bal > 0 && bal >= (p.minBalance || 0) && rate > 0 ? acctRound(bal * rate / 100) : 0;
+  const waived = p.feeWaiveAt > 0 && bal >= p.feeWaiveAt;
+  const feeDue = p.fee > 0 && bal > 0 && !waived ? Math.min(p.fee, bal) : 0;
+  const rows = [];
+  rows.push(`<div class="ac-line"><span>Interest rate</span><strong>${p.rate > 0 ? `${p.rate}% <small>per ${acPeriod(cls).span}</small>` : "None"}</strong></div>`);
+  rows.push(`<div class="ac-line"><span>Next interest</span><strong class="${gross > 0 ? "good" : ""}">${gross > 0 ? "≈ +" + fmtMoney(gross) : "$0.00"}</strong></div>`);
+  if (p.minBalance > 0 && bal < p.minBalance) rows.push(`<div class="ac-hint">Add ${fmtMoney(p.minBalance - bal)} more to start earning interest.</div>`);
+  if (p.fee > 0) rows.push(`<div class="ac-line"><span>Account fee</span><strong class="${feeDue > 0 ? "bad" : "good"}">${feeDue > 0 ? "−" + fmtMoney(feeDue) : waived ? "Waived" : "$0.00"}</strong></div>`);
+  if (p.fee > 0 && p.feeWaiveAt > 0 && !waived) rows.push(`<div class="ac-hint">Keep ${fmtMoney(p.feeWaiveAt)} in here and the fee is waived.</div>`);
+  if (p.bonusRate > 0) rows.push(wd === 0
+    ? `<div class="ac-badge good">${icon("star", 13)} Bonus on track — +${p.bonusRate}% if you leave it alone</div>`
+    : `<div class="ac-badge bad">${icon("history", 13)} Bonus missed this period — you've taken money out</div>`);
+  if (p.maxWithdrawals > 0) {
+    const used = Math.min(wd, p.maxWithdrawals), pct = Math.round(used / p.maxWithdrawals * 100);
+    rows.push(`<div class="ac-meter"><div class="ac-meter-top"><span>Withdrawals this period</span><strong>${used} of ${p.maxWithdrawals}</strong></div><div class="ac-meter-bar"><i class="${pct >= 100 ? "hot" : ""}" style="width:${pct}%"></i></div></div>`);
+  }
+  if (p.maxBalance > 0) rows.push(`<div class="ac-line"><span>Room left</span><strong>${fmtMoney(Math.max(0, p.maxBalance - bal))}</strong></div>`);
+  return `<article class="ac-own k-${p.kind}">
+    <div class="ac-own-body">
+      <div class="ac-tile-head"><strong>${acEsc(p.name)}</strong>${acKindBadge(p.kind)}</div>
+      <div class="ac-bal"><span>Balance</span><strong>${fmtMoney(bal)}</strong></div>
+      <div class="ac-rows">${rows.join("")}</div>
+      <div class="ac-life">Earned so far <b>${fmtMoney(lt.interest || 0)}</b> · Fees paid <b>${fmtMoney(lt.fees || 0)}</b></div>
+      <div class="ac-own-actions">
+        <button class="btn small gold" onclick="acQuick('${acEsc(a.id)}','in')">${icon("plus", 13)} Add money</button>
+        <button class="btn small secondary" onclick="acQuick('${acEsc(a.id)}','out')">${icon("download", 13)} Take out</button>
+        <button class="btn small ghost" onclick="acClose('${acEsc(a.id)}')" aria-label="Close ${acEsc(p.name)}">Close</button>
+      </div>
+    </div></article>`;
+}
 
-  // ---- accounts I could open ----
+/* ================= Student: open an account (its own section) ================= */
+function acRenderOpen(me, cls) {
+  const el = document.getElementById("acctOpenCard"); if (!el) return;
+  const st = acctSettings(cls), plans = acctPlansOf(cls), list = acctListOf(me);
+  const off = !st.enabled, held = new Set(list.map(a => a.planId));
+  const countKind = k => list.filter(a => (a.status === "active" || a.status === "pending") && (acctPlanById(cls, a.planId) || {}).kind === k).length;
+  const full = { everyday: countKind("everyday") >= st.maxEveryday, savings: countKind("savings") >= st.maxSavings };
   const avail = plans.filter(p => !held.has(p.id)).sort((a, b) => (a.kind === b.kind ? b.rate - a.rate : a.kind === "everyday" ? -1 : 1));
-  const shown = avail.filter(p => AC_FILTER === "all" || p.kind === AC_FILTER);
-  html += `<h3 class="cc-sub">Open an account</h3>`;
+  if (AC_FILTER !== "everyday" && AC_FILTER !== "savings") AC_FILTER = "everyday";
+  const count = k => avail.filter(p => p.kind === k).length;
+  const shown = avail.filter(p => p.kind === AC_FILTER);
+  const note = off ? "Not open yet" : st.approval === "teacher" ? "Teacher approval needed" : "";
+  let html = `<div class="flex-between cc-head"><h2 id="hOpenAcct">Open an account</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
+  html += `<p class="cc-intro">Saving for something, or want somewhere to keep your bill money? Open another account — each one has its own interest, fees and rules.</p>`;
   if (!plans.length) {
     html += `<div class="cc-off">${icon("lock", 22)}<div><strong>No accounts on offer yet</strong><span>${off ? "Your teacher hasn't switched extra accounts on." : "Your teacher hasn't set any up yet."} Check back soon.</span></div></div>`;
   } else {
     if (off) html += `<div class="cc-off">${icon("lock", 22)}<div><strong>Opening accounts isn't switched on yet</strong><span>Have a look below — your teacher will open applications soon.</span></div></div>`;
     if (!avail.length) html += `<div class="empty-state"><p>You've opened every account on offer. Nice.</p></div>`;
     else {
-      const kinds = ["all", "everyday", "savings"];
-      html += `<div class="ac-filter" role="tablist" aria-label="Account type">${kinds.map(k => `<button type="button" role="tab" aria-selected="${AC_FILTER === k}" class="${AC_FILTER === k ? "on" : ""}" onclick="acSetFilter('${k}')">${k === "all" ? "All" : acKindLabel(k)}</button>`).join("")}</div>`;
-      html += shown.length ? `<div class="cc-plans">${shown.map(p => acPlanTile(me, cls, p, off, full)).join("")}</div>` : `<div class="empty-state"><p>Nothing to show here.</p></div>`;
+      html += `<div class="ac-filter" role="tablist" aria-label="Account type">${["everyday", "savings"].map(k => `<button type="button" role="tab" aria-selected="${AC_FILTER === k}" class="${AC_FILTER === k ? "on" : ""}" onclick="acSetFilter('${k}')">${acKindLabel(k)}<span class="ac-count">${count(k)}</span></button>`).join("")}</div>`;
+      const other = AC_FILTER === "everyday" ? "savings" : "everyday";
+      html += shown.length ? `<div class="cc-plans">${shown.map(p => acPlanTile(me, cls, p, off, full)).join("")}</div>`
+        : `<div class="empty-state"><p>You've opened every ${AC_FILTER} account on offer.${count(other) ? ` Have a look at the ${acKindLabel(other)} tab.` : ""}</p></div>`;
     }
   }
-  html += `<div id="acMsg"></div>`;
+  html += `<div id="acOpenMsg"></div>`;
   el.innerHTML = html;
-  acMoveHint();
 }
+
 function acPlanTile(me, cls, p, off, full) {
   const score = lifestyleRatingFromData(cls, me, me.username);
   const locked = score < p.minLifestyle;
@@ -244,47 +323,26 @@ function acPlanTile(me, cls, p, off, full) {
       ${action}
     </div></div>`;
 }
-function acOwnedTile(a, cls) {
-  const p = acctPlanById(cls, a.planId);
-  if (!p) return `<article class="ac-own"><div class="ac-own-body"><strong>Account</strong><p class="muted-small">Your teacher removed this plan. You can still move your ${fmtMoney(a.balance || 0)} out below or close it.</p>
-      <div class="ac-own-actions"><button class="btn small secondary" onclick="acClose('${acEsc(a.id)}')">Close &amp; move to cash</button></div></div></article>`;
-  const bal = acctRound(a.balance || 0), wd = a.wd || 0, lt = a.lifetime || {};
-  const bonus = wd === 0 && p.bonusRate > 0 ? p.bonusRate : 0;
-  const rate = (p.rate || 0) + bonus;
-  const gross = bal > 0 && bal >= (p.minBalance || 0) && rate > 0 ? acctRound(bal * rate / 100) : 0;
-  const waived = p.feeWaiveAt > 0 && bal >= p.feeWaiveAt;
-  const feeDue = p.fee > 0 && bal > 0 && !waived ? Math.min(p.fee, bal) : 0;
-  const rows = [];
-  rows.push(`<div class="ac-line"><span>Next interest</span><strong class="${gross > 0 ? "good" : ""}">${gross > 0 ? "≈ +" + fmtMoney(gross) : "$0.00"}</strong></div>`);
-  if (p.minBalance > 0 && bal < p.minBalance) rows.push(`<div class="ac-hint">Add ${fmtMoney(p.minBalance - bal)} more to start earning interest.</div>`);
-  if (p.fee > 0) rows.push(`<div class="ac-line"><span>Account fee</span><strong class="${feeDue > 0 ? "bad" : "good"}">${feeDue > 0 ? "−" + fmtMoney(feeDue) : waived ? "Waived" : "$0.00"}</strong></div>`);
-  if (p.fee > 0 && p.feeWaiveAt > 0 && !waived) rows.push(`<div class="ac-hint">Keep ${fmtMoney(p.feeWaiveAt)} in here and the fee is waived.</div>`);
-  if (p.bonusRate > 0) rows.push(wd === 0
-    ? `<div class="ac-badge good">${icon("star", 13)} Bonus on track — +${p.bonusRate}% if you leave it alone</div>`
-    : `<div class="ac-badge bad">${icon("history", 13)} Bonus missed this period — you've taken money out</div>`);
-  if (p.maxWithdrawals > 0) {
-    const used = Math.min(wd, p.maxWithdrawals), pct = Math.round(used / p.maxWithdrawals * 100);
-    rows.push(`<div class="ac-meter"><div class="ac-meter-top"><span>Withdrawals this period</span><strong>${used} of ${p.maxWithdrawals}</strong></div><div class="ac-meter-bar"><i class="${pct >= 100 ? "hot" : ""}" style="width:${pct}%"></i></div></div>`);
-  }
-  if (p.maxBalance > 0) rows.push(`<div class="ac-line"><span>Room left</span><strong>${fmtMoney(Math.max(0, p.maxBalance - bal))}</strong></div>`);
-  return `<article class="ac-own">
-    <div class="ac-own-body">
-      <div class="ac-tile-head"><strong>${acEsc(p.name)}</strong>${acKindBadge(p.kind)}</div>
-      <div class="ac-bal"><span>Balance</span><strong>${fmtMoney(bal)}</strong></div>
-      <div class="ac-rows">${rows.join("")}</div>
-      <div class="ac-life">Earned so far <b>${fmtMoney(lt.interest || 0)}</b> · Fees paid <b>${fmtMoney(lt.fees || 0)}</b></div>
-      <div class="ac-own-actions">
-        <button class="btn small gold" onclick="acQuick('${acEsc(a.id)}','in')">${icon("plus", 13)} Add money</button>
-        <button class="btn small secondary" onclick="acQuick('${acEsc(a.id)}','out')">${icon("download", 13)} Take out</button>
-        <button class="btn small ghost" onclick="acClose('${acEsc(a.id)}')" aria-label="Close ${acEsc(p.name)}">Close</button>
-      </div>
-    </div></article>`;
-}
 
 /* ---------------- Moving money ---------------- */
 function acAccountChoices(me, cls) {
   const out = [{ id: "cash", label: "Cash balance", bal: me.balance || 0 }, { id: "savings", label: "Savings Account", bal: me.savings || 0 }];
   acctActiveOf(me).forEach(a => { const p = acctPlanById(cls, a.planId); out.push({ id: a.id, label: p ? p.name : "Account", bal: a.balance || 0 }); });
+  return out;
+}
+// Every account the student can move money in or out of, tagged with its kind (used by the transfer and pay-with menus).
+function acChoicesWithKind(me, cls) {
+  const out = [{ id: "cash", label: "Cash balance", bal: me.balance || 0, kind: "everyday" }, { id: "savings", label: "Savings Account", bal: me.savings || 0, kind: "savings" }];
+  acctActiveOf(me).forEach(a => { const p = acctPlanById(cls, a.planId); out.push({ id: a.id, label: p ? p.name : "Account", bal: a.balance || 0, kind: p ? p.kind : "everyday" }); });
+  return out;
+}
+// Rules worth knowing before money leaves an account (withdrawal cap, fee, lost bonus)
+function acSourceNotes(me, cls, id) {
+  const out = [], src = acctActiveOf(me).find(a => a.id === id), sp = src && acctPlanById(cls, src.planId);
+  if (!sp) return out;
+  if (sp.maxWithdrawals > 0) out.push(`${acEsc(sp.name)}: ${Math.min(src.wd || 0, sp.maxWithdrawals)} of ${sp.maxWithdrawals} withdrawals used this period.`);
+  if (sp.withdrawFee > 0) out.push(`${acEsc(sp.name)} charges ${fmtMoney(sp.withdrawFee)} for each withdrawal.`);
+  if (sp.bonusRate > 0 && !(src.wd > 0)) out.push(`Taking money out of ${acEsc(sp.name)} loses this period's +${sp.bonusRate}% bonus.`);
   return out;
 }
 function acMovePanel(me, cls) {
@@ -294,7 +352,7 @@ function acMovePanel(me, cls) {
   if (!ids.includes(AC_MOVE.to) || AC_MOVE.to === AC_MOVE.from) AC_MOVE.to = ids.find(i => i !== AC_MOVE.from && i !== "cash") || ids.find(i => i !== AC_MOVE.from);
   const opts = sel => ch.map(c => `<option value="${acEsc(c.id)}" ${c.id === sel ? "selected" : ""}>${acEsc(c.label)} — ${fmtMoney(c.bal)}</option>`).join("");
   return `<section class="cc-panel ac-move">
-    <div class="cc-panel-head"><h3>Move money</h3><span class="muted-small">Between your cash, Savings Account and the accounts above</span></div>
+    <div class="cc-panel-head"><h3>Move money</h3><span class="muted-small">Between your cash and the accounts above</span></div>
     <form onsubmit="return acMove(event)" class="ac-move-form">
       <div><label for="acFrom">From</label><select id="acFrom" onchange="acMoveChanged()">${opts(AC_MOVE.from)}</select></div>
       <button type="button" class="ac-swap" onclick="acSwap()" aria-label="Swap from and to" title="Swap">Swap</button>
@@ -359,13 +417,13 @@ async function acMove(e) {
 }
 
 /* ---------------- Student actions ---------------- */
-function acSetFilter(k) { AC_FILTER = k; acRenderStudent(AC_ME, AC_CLS); }
+function acSetFilter(k) { AC_FILTER = k; acRenderOpen(AC_ME, AC_CLS); }
 async function acOpen(planId) {
-  acMsg("acMsg", "");
+  acMsg("acOpenMsg", "");
   const res = await openBankAccount(CURRENT.username, CURRENT.classCode, planId);
-  if (!res.ok) { acMsg("acMsg", `<div class="error-msg">${acEsc(res.error)}</div>`); return; }
+  if (!res.ok) { acMsg("acOpenMsg", `<div class="error-msg">${acEsc(res.error)}</div>`); return; }
   await render();
-  acMsg("acMsg", `<div class="success-msg">${res.status === "active" ? "Your account is open! Move some money in to get started." : "Application sent to your teacher."}</div>`);
+  acMsg("acOpenMsg", `<div class="success-msg">${res.status === "active" ? "Your account is open! Move some money in to get started." : "Application sent to your teacher."}</div>`);
 }
 async function acCancelApp(id) {
   await cancelBankAccountApplication(CURRENT.username, id);

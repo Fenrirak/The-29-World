@@ -1488,7 +1488,20 @@ async function processLoanInterest(classCode) {
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FREQ_DAYS = { weekly: 7, fortnightly: 14, monthly: 28 };
 
-async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false, useCard = false) {
+// Which of the student's accounts an automatic payment comes out of: "cash", "card", "savings" or a bank account id.
+// Runs inside the caller's transaction (reads only). Credit cards stay teacher-only.
+async function autoResolveSource(t, studentUser, useCard, fromAcct, toUser, cls) {
+  if (useCard) { if (toUser !== cls.teacher) throw new Error("CARD_TEACHER_ONLY"); return "card"; }
+  if (!fromAcct || fromAcct === "cash") return "cash";
+  const us = await t.get(usersCol().doc(studentUser));
+  if (!us.exists || us.data().role === "teacher") throw new Error("BAD_ACCT");
+  if (fromAcct !== "savings" && !acctActiveOf(us.data()).some(x => x.id === fromAcct)) throw new Error("BAD_ACCT");
+  return fromAcct;
+}
+function autoSource(a) { return a && a.useCard ? "card" : ((a && a.fromAcct) || "cash"); }
+
+async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false, useCard = false, fromAcct = "cash") {
+  if (fromAcct === "card") useCard = true;
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   if (toUser === AUTOPAY_ALL_STUDENTS) {
     const owner = await getUser(studentUser);
@@ -1506,6 +1519,7 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
         throw new Error("TOO_MANY");
       }
       const noteTrimmed = (note || "").trim();
+      const src = await autoResolveSource(t, studentUser, useCard, fromAcct, toUser, cls); // which account it comes out of
       // Guards against the classic double-submit bug: a student double-taps
       // "Create automatic payment" (slow connection, no visual feedback yet)
       // and ends up with two — or more — otherwise-identical automations.
@@ -1534,7 +1548,7 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       // payment charging several times in a row. Frequency is dropped from
       // both checks below so this is now caught like any other duplicate.
       const exactDup = cls.automations.find(a =>
-        a.studentUser === studentUser && a.toUser === toUser && a.active &&
+        a.studentUser === studentUser && a.toUser === toUser && a.active && autoSource(a) === src &&
         a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount) &&
         (a.note || "") === noteTrimmed
       );
@@ -1549,7 +1563,7 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       // once the caller has confirmed and resubmitted.
       if (!confirmed) {
         const softDup = cls.automations.find(a =>
-          a.studentUser === studentUser && a.toUser === toUser && a.active &&
+          a.studentUser === studentUser && a.toUser === toUser && a.active && autoSource(a) === src &&
           a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount)
         );
         if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
@@ -1558,12 +1572,13 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
       if (useCard && toUser !== cls.teacher) throw new Error("CARD_TEACHER_ONLY");
       cls.automations.push({
         id: uid("auto"), studentUser, dayOfWeek, frequency,
-        amount: Number(amount), toUser, note: noteTrimmed, lastRun: null, active: true, useCard: !!useCard && toUser === cls.teacher
+        amount: Number(amount), toUser, note: noteTrimmed, lastRun: null, active: true, fromAcct: src, useCard: !!useCard && toUser === cls.teacher
       });
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
     if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
+    if (e.message === "BAD_ACCT") return { ok: false, error: "That account isn't available any more. Pick another one to pay with." };
     if (e.message === "CARD_TEACHER_ONLY") return { ok: false, error: "A credit card can only pay your teacher. Payments to other students have to come out of your cash." };
     if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day and reference message)." };
     if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic payment set up with the same amount, recipient and day." };
@@ -1572,13 +1587,32 @@ async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amoun
   return { ok: true };
 }
 
-// A recurring transfer between a student's own cash balance and their
-// Savings Account — same idea as a regular automatic payment, but both
-// sides belong to the same person, so it's stored distinctly (type:
-// "savings-transfer") and handled on a single user doc rather than two.
+// A recurring transfer between two of a student's OWN accounts: cash, the Savings Account or any extra bank
+// account. Stored distinctly (type: "savings-transfer", the original name) and handled on one user doc.
+// `direction` is either the old "toSavings" / "toCash" or { from, to } using the ids "cash", "savings" or a
+// bankAccounts id. Old automations only have `direction`; autoEnds() reads both kinds.
+function autoNormEnds(d) {
+  if (d === "toSavings") return { from: "cash", to: "savings" };
+  if (d === "toCash") return { from: "savings", to: "cash" };
+  if (d && typeof d === "object" && d.from && d.to && d.from !== d.to) return { from: String(d.from), to: String(d.to) };
+  return null;
+}
+function autoEnds(a) {
+  if (a && a.fromAcct && a.toAcct) return { from: a.fromAcct, to: a.toAcct };
+  return a && a.direction === "toCash" ? { from: "savings", to: "cash" } : { from: "cash", to: "savings" };
+}
+// Kept so older code that reads `direction` still makes sense: money leaving cash, entering cash, or neither.
+function autoDirectionOf(e) { return e.from === "cash" ? "toSavings" : e.to === "cash" ? "toCash" : "between"; }
+async function autoCheckEnds(t, studentUser, ends) {
+  const us = await t.get(usersCol().doc(studentUser));
+  if (!us.exists) throw new Error("NO_CLASS");
+  const ok = new Set(["cash", "savings"].concat(acctActiveOf(us.data()).map(x => x.id)));
+  if (!ok.has(ends.from) || !ok.has(ends.to)) throw new Error("BAD_ACCT");
+}
 async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency, amount, direction, note, confirmed = false) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
-  if (direction !== "toSavings" && direction !== "toCash") return { ok: false, error: "Invalid direction." };
+  const ends = autoNormEnds(direction);
+  if (!ends) return { ok: false, error: "Pick two different accounts." };
   const classRef = classesCol().doc(classCode);
   let confirmInfo = null;
   try {
@@ -1587,53 +1621,35 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
       if (!snap.exists) throw new Error("NO_CLASS");
       const cls = snap.data();
       cls.automations = cls.automations || [];
-      if (cls.automations.filter(a => a.studentUser === studentUser).length >= MAX_AUTOMATIONS_PER_STUDENT) {
-        throw new Error("TOO_MANY");
-      }
+      if (cls.automations.filter(a => a.studentUser === studentUser).length >= MAX_AUTOMATIONS_PER_STUDENT) throw new Error("TOO_MANY");
+      await autoCheckEnds(t, studentUser, ends);
       const noteTrimmed = (note || "").trim();
-      // BUGFIX: this used to hard-block on direction+day+amount ALONE —
-      // `frequency` was already dropped (same reasoning as
-      // addAutomation() above), but `note` was never part of the check at
-      // all, on either side. That's the mirror image of the peer-payment
-      // bug: instead of letting silent near-duplicates through, it made it
-      // impossible to ever have two genuinely different savings transfers
-      // that happen to share a direction/day/amount — e.g. "$20 to
-      // savings, book fund" and "$20 to savings, trip fund", both
-      // Mondays — even though the note field exists precisely to tell
-      // those apart (see _autoDedupeKey and the matching comment on
-      // addAutomation()'s softDup below). Split into the same two-tier
-      // check peer payments use: identical down to the note is blocked
-      // outright, same amount/direction/day but a different note asks for
-      // confirmation instead of refusing outright or sailing through
-      // silently.
-      const exactDup = cls.automations.find(a =>
-        a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
-        a.direction === direction && a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount) &&
-        (a.note || "") === noteTrimmed
-      );
-      if (exactDup) throw new Error("DUPLICATE");
+      // Same two-tier duplicate check as addAutomation(): identical down to the note is blocked, same
+      // accounts/day/amount with a different note asks "are you sure" first.
+      const same = a => a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
+        autoEnds(a).from === ends.from && autoEnds(a).to === ends.to && a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount);
+      if (cls.automations.find(a => same(a) && (a.note || "") === noteTrimmed)) throw new Error("DUPLICATE");
       if (!confirmed) {
-        const softDup = cls.automations.find(a =>
-          a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
-          a.direction === direction && a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount)
-        );
+        const softDup = cls.automations.find(same);
         if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
       }
       cls.automations.push({
-        id: uid("auto"), studentUser, dayOfWeek, frequency, type: "savings-transfer", direction,
+        id: uid("auto"), studentUser, dayOfWeek, frequency, type: "savings-transfer", direction: autoDirectionOf(ends), fromAcct: ends.from, toAcct: ends.to,
         amount: Number(amount), toUser: studentUser, note: noteTrimmed, lastRun: null, active: true
       });
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
     if (e.message === "TOO_MANY") return { ok: false, error: `You can only have up to ${MAX_AUTOMATIONS_PER_STUDENT} automatic payments set up at once.` };
-    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction, day and note)." };
-    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic transfer set up with the same amount, direction and day." };
+    if (e.message === "BAD_ACCT") return { ok: false, error: "One of those accounts isn't available any more. Pick again." };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, accounts, day and note)." };
+    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic transfer set up with the same amount, accounts and day." };
     return { ok: false, error: "Class not found." };
   }
   return { ok: true };
 }
-async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false, useCard = false) {
+async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false, useCard = false, fromAcct = "cash") {
+  if (fromAcct === "card") useCard = true;
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   if (toUser === AUTOPAY_ALL_STUDENTS) {
     const owner = await getUser(studentUser);
@@ -1651,6 +1667,7 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
       if (idx === -1) throw new Error("NOT_FOUND");
       const existing = cls.automations[idx];
       const noteTrimmed = (note || "").trim();
+      const src = await autoResolveSource(t, studentUser, useCard, fromAcct, toUser, cls);
       // Same de-dup guard as addAutomation() (including the BUGFIX there
       // dropping `frequency` from the comparison): without this, editing
       // one automation to match another already-active one (same amount,
@@ -1659,7 +1676,7 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
       // payments firing on the same day — indistinguishable from the same
       // automation firing twice.
       const exactDup = cls.automations.find(a =>
-        a.id !== id && a.studentUser === studentUser && a.toUser === toUser && a.active &&
+        a.id !== id && a.studentUser === studentUser && a.toUser === toUser && a.active && autoSource(a) === src &&
         a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount) &&
         (a.note || "") === noteTrimmed
       );
@@ -1670,18 +1687,19 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
       // one rather than create a second lookalike.
       if (!confirmed) {
         const softDup = cls.automations.find(a =>
-          a.id !== id && a.studentUser === studentUser && a.toUser === toUser && a.active &&
+          a.id !== id && a.studentUser === studentUser && a.toUser === toUser && a.active && autoSource(a) === src &&
           a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount)
         );
         if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
       }
       if (useCard && toUser !== cls.teacher) throw new Error("CARD_TEACHER_ONLY");
       cls.automations[idx] = {
-        ...existing, dayOfWeek, frequency, amount: Number(amount), toUser, note: noteTrimmed, useCard: !!useCard && toUser === cls.teacher
+        ...existing, dayOfWeek, frequency, amount: Number(amount), toUser, note: noteTrimmed, fromAcct: src, useCard: !!useCard && toUser === cls.teacher
       };
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
+    if (e.message === "BAD_ACCT") return { ok: false, error: "That account isn't available any more. Pick another one to pay with." };
     if (e.message === "CARD_TEACHER_ONLY") return { ok: false, error: "A credit card can only pay your teacher. Payments to other students have to come out of your cash." };
     if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic payment set up (same amount, recipient, day and reference message)." };
     if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic payment set up with the same amount, recipient and day." };
@@ -1691,7 +1709,8 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
 }
 async function editSavingsAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, direction, note, confirmed = false) {
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
-  if (direction !== "toSavings" && direction !== "toCash") return { ok: false, error: "Invalid direction." };
+  const ends = autoNormEnds(direction);
+  if (!ends) return { ok: false, error: "Pick two different accounts." };
   const classRef = classesCol().doc(classCode);
   let confirmInfo = null;
   try {
@@ -1702,36 +1721,26 @@ async function editSavingsAutomation(classCode, id, studentUser, dayOfWeek, freq
       cls.automations = cls.automations || [];
       const idx = cls.automations.findIndex(a => a.id === id && a.studentUser === studentUser);
       if (idx === -1) throw new Error("NOT_FOUND");
+      await autoCheckEnds(t, studentUser, ends);
       const existing = cls.automations[idx];
       const noteTrimmed = (note || "").trim();
-      // Same de-dup guard as addSavingsAutomation() (including the BUGFIX
-      // there splitting this into an exact-match hard block plus a
-      // same-amount/direction/day-but-different-note soft confirm, the
-      // same way addAutomation()/editAutomation() already work): without
-      // this, editing one transfer to exactly match another already-active
-      // one silently produces two identical transfers firing on the same
-      // day — indistinguishable from the same one firing twice.
-      const exactDup = cls.automations.find(a =>
-        a.id !== id && a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
-        a.direction === direction && a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount) &&
-        (a.note || "") === noteTrimmed
-      );
-      if (exactDup) throw new Error("DUPLICATE");
+      // Same de-dup guard as addSavingsAutomation(), ignoring the one being edited.
+      const same = a => a.id !== id && a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
+        autoEnds(a).from === ends.from && autoEnds(a).to === ends.to && a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount);
+      if (cls.automations.find(a => same(a) && (a.note || "") === noteTrimmed)) throw new Error("DUPLICATE");
       if (!confirmed) {
-        const softDup = cls.automations.find(a =>
-          a.id !== id && a.studentUser === studentUser && a.type === "savings-transfer" && a.active &&
-          a.direction === direction && a.dayOfWeek === dayOfWeek && Number(a.amount) === Number(amount)
-        );
+        const softDup = cls.automations.find(same);
         if (softDup) { confirmInfo = { note: softDup.note || "" }; throw new Error("CONFIRM"); }
       }
       cls.automations[idx] = {
-        ...existing, dayOfWeek, frequency, amount: Number(amount), direction, note: noteTrimmed
+        ...existing, dayOfWeek, frequency, amount: Number(amount), direction: autoDirectionOf(ends), fromAcct: ends.from, toAcct: ends.to, note: noteTrimmed
       };
       t.update(classRef, { automations: cls.automations });
     });
   } catch (e) {
-    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, direction, day and note)." };
-    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic transfer set up with the same amount, direction and day." };
+    if (e.message === "BAD_ACCT") return { ok: false, error: "One of those accounts isn't available any more. Pick again." };
+    if (e.message === "DUPLICATE") return { ok: false, error: "You already have an identical automatic transfer set up (same amount, accounts, day and note)." };
+    if (e.message === "CONFIRM") return { ok: false, needsConfirm: true, existingNote: confirmInfo.note, error: "You already have an automatic transfer set up with the same amount, accounts and day." };
     return { ok: false, error: e.message === "NOT_FOUND" ? "Automatic transfer not found." : "Class not found." };
   }
   return { ok: true };
@@ -1781,9 +1790,8 @@ async function getStudentAutomations(classCode, studentUser) {
 // recognised as the same recurring payment from here on — only one of them
 // pays out per day, and dedupeAutomations() below will fold the rest away.
 function _autoDedupeKey(a) {
-  return a.type === "savings-transfer"
-    ? ["sav", a.studentUser, a.direction, a.dayOfWeek, Number(a.amount), a.note || ""].join("|")
-    : ["pay", a.studentUser, a.toUser, a.dayOfWeek, Number(a.amount), a.note || ""].join("|");
+  if (a.type === "savings-transfer") { const e = autoEnds(a); return ["sav", a.studentUser, e.from, e.to, a.dayOfWeek, Number(a.amount), a.note || ""].join("|"); }
+  return ["pay", a.studentUser, a.toUser, a.dayOfWeek, Number(a.amount), a.note || "", autoSource(a)].join("|");
 }
 // Self-healing cleanup for automations created before the double-submit
 // guards existed: merges each group of exact duplicates down to a single
@@ -1994,23 +2002,22 @@ async function processAutomations(classCode) {
           if (g.status === "skip") return g;
           if (g.status === "covered") { t.update(classRef, { automations: liveCls.automations }); return g; }
           const amt = Number(g.liveAuto.amount);
-          const savings = user.savings || 0;
-          const fromCash = g.liveAuto.direction === "toSavings";
-          const available = fromCash ? user.balance : savings;
-          if (available < amt) return { status: "skip" }; // can't afford it this time
-          const newBalance = fromCash ? user.balance - amt : user.balance + amt;
-          const newSavings = fromCash ? savings + amt : savings - amt;
-          t.update(userRef, { balance: Math.round(newBalance * 100) / 100, savings: Math.round(newSavings * 100) / 100 });
+          const ends = autoEnds(g.liveAuto);
+          let mv;
+          try { mv = acctApplyMove(user, liveCls, ends.from, ends.to, amt); } // follows each account's own rules
+          catch (err) { return { status: "skip" }; } // can't afford it / withdrawal limit / balance cap — tries again next time
+          t.update(userRef, acctMoveFields(user, mv));
           g.liveAuto.lastRun = todayKey;
-          const entry = Object.assign({ id: _autoTxnId(a, todayKey), date: nowStr(), ts: Date.now() }, {
-            type: fromCash ? "savings-deposit" : "savings-withdraw",
-            [fromCash ? "from" : "to"]: a.studentUser,
-            amount: amt,
-            note: (g.liveAuto.note ? g.liveAuto.note + " — " : "") + "Automatic transfer"
-          });
-          _autoAppendTxns(liveCls, [entry]);
+          const base = _autoTxnId(a, todayKey), who = a.studentUser;
+          const label = (g.liveAuto.note ? g.liveAuto.note + " — " : "") + `Automatic transfer (${mv.fromName} → ${mv.toName})`;
+          const entries = [];
+          const mk = (suffix, e) => Object.assign({ id: suffix ? base + "-" + suffix : base, date: nowStr(), ts: Date.now() }, e);
+          if (ends.from !== "cash") entries.push(mk("", { type: "savings-withdraw", to: who, amount: amt, note: label }));
+          if (ends.to !== "cash") entries.push(mk(entries.length ? "d" : "", { type: "savings-deposit", from: who, amount: amt, note: label }));
+          if (mv.fee > 0) entries.push(mk("fee", { type: "account-fee", from: who, amount: mv.fee, note: `Withdrawal fee — ${mv.feeName}` }));
+          _autoAppendTxns(liveCls, entries);
           t.update(classRef, { automations: liveCls.automations, txns: liveCls.txns });
-          return { status: "ran", entries: [entry] };
+          return { status: "ran", entries };
         });
       } else if (a.toUser === AUTOPAY_ALL_STUDENTS) {
         // Teacher "pay all students": one record fans out to every student
@@ -2058,14 +2065,22 @@ async function processAutomations(classCode) {
           const amt = Number(g.liveAuto.amount);
           // Teachers have unlimited funds (same rule as transferMoney()).
           const fromIsTeacher = from.role === "teacher";
-          let paidByCard = false;
-          if (!fromIsTeacher && g.liveAuto.useCard && to.role === "teacher") {
+          let paidByCard = false, srcName = "", feeEntry = null;
+          const src = autoSource(g.liveAuto);
+          if (!fromIsTeacher && src === "card" && to.role === "teacher") {
             // Charged to the student's credit card instead of cash. Throws
             // (LIMIT / NOCARD) if the card can't take it — caught below, so
             // nothing moves and it tries again next load, like "can't afford".
             cardPayInTxn(from, liveCls, amt, { useCard: true }); // payments to the teacher earn cashback like any other card spending
             t.update(fromRef, { creditCard: from.creditCard });
             paidByCard = true;
+          } else if (!fromIsTeacher && src !== "cash" && src !== "card") {
+            // Paid out of the Savings Account or an extra bank account — follows that account's withdrawal rules.
+            let mv;
+            try { mv = acctApplyMove(from, liveCls, src, null, amt); } catch (err) { return { status: "skip" }; }
+            t.update(fromRef, acctMoveFields(from, mv));
+            srcName = mv.fromName;
+            if (mv.fee > 0) feeEntry = { type: "account-fee", from: a.studentUser, amount: mv.fee, note: `Withdrawal fee — ${mv.feeName}` };
           } else {
             if (!fromIsTeacher && from.balance < amt) return { status: "skip" }; // can't afford it
             if (!fromIsTeacher) t.update(fromRef, { balance: Math.round((from.balance - amt) * 100) / 100 });
@@ -2074,11 +2089,13 @@ async function processAutomations(classCode) {
           g.liveAuto.lastRun = todayKey;
           const entry = Object.assign({ id: _autoTxnId(a, todayKey), date: nowStr(), ts: Date.now() }, {
             type: "automation", from: a.studentUser, to: a.toUser, amount: amt,
-            note: (g.liveAuto.note ? g.liveAuto.note : "Automatic payment") + (paidByCard ? " (credit card)" : "")
+            note: (g.liveAuto.note ? g.liveAuto.note : "Automatic payment") + (paidByCard ? " (credit card)" : srcName ? ` (from ${srcName})` : "")
           });
-          _autoAppendTxns(liveCls, [entry]);
+          const entries = [entry];
+          if (feeEntry) entries.push(Object.assign({ id: _autoTxnId(a, todayKey, "fee"), date: nowStr(), ts: Date.now() }, feeEntry));
+          _autoAppendTxns(liveCls, entries);
           t.update(classRef, { automations: liveCls.automations, txns: liveCls.txns });
-          return { status: "ran", entries: [entry] };
+          return { status: "ran", entries };
         });
       }
     } catch (e) { outcome = { status: "skip" }; /* failed to commit — nothing ran; try again next load */ }
@@ -3513,10 +3530,11 @@ function budgetWeekItems(cls, user, username) {
     if (!when || !(Number(a.amount) > 0)) return;
     const status = budgetStatus(when.dayKey, todayKey, when.done);
     const autoCard = !!a.useCard && a.toUser === cls.teacher && cardIsActive(user);
+    const srcId = autoSource(a), viaAcct = !autoCard && srcId !== "cash" && srcId !== "card" ? acctNameOf(cls, user, srcId) : "";
     items.push({ key: "auto-" + a.id, dir: "out", icon: "repeat", label: a.note || "Automatic payment", amount: budgetRound(a.amount), dayKey: when.dayKey, status,
       viaCard: autoCard,
-      note: status === "done" ? "Paid" : status === "missed" ? (autoCard ? "Didn't go out — not enough room on your credit card" : "Didn't go out — not enough cash on the day")
-        : "Goes out by itself" + (a.toUser === cls.teacher ? ", to your teacher" : "") + (autoCard ? ", on your credit card" : "") });
+      note: status === "done" ? "Paid" : status === "missed" ? (autoCard ? "Didn't go out — not enough room on your credit card" : viaAcct ? `Didn't go out — not enough in your ${viaAcct}` : "Didn't go out — not enough cash on the day")
+        : "Goes out by itself" + (a.toUser === cls.teacher ? ", to your teacher" : "") + (autoCard ? ", on your credit card" : viaAcct ? `, from your ${viaAcct}` : "") });
   });
 
   /* ---- Automatic saving (not bills: it's their own money, moved) ---- */
@@ -3525,9 +3543,12 @@ function budgetWeekItems(cls, user, username) {
     const when = budgetAutoThisWeek(a, weekStartKey);
     if (!when || !(Number(a.amount) > 0)) return;
     const status = budgetStatus(when.dayKey, todayKey, when.done);
-    const toSavings = a.direction === "toSavings";
+    const ends = autoEnds(a);
+    if (ends.from !== "cash" && ends.to !== "cash") return; // moves between accounts only — cash doesn't change
+    const toSavings = ends.from === "cash";
+    const other = toSavings ? ends.to : ends.from, otherName = other === "savings" ? "savings" : acctNameOf(cls, user, other);
     items.push({ key: "save-" + a.id, dir: toSavings ? "save" : "unsave", icon: "piggy",
-      label: toSavings ? "Automatic transfer to savings" : "Automatic transfer from savings", amount: budgetRound(a.amount), dayKey: when.dayKey, status,
+      label: toSavings ? `Automatic transfer to ${otherName}` : `Automatic transfer from ${otherName}`, amount: budgetRound(a.amount), dayKey: when.dayKey, status,
       note: status === "done" ? "Done" : status === "missed" ? "Didn't happen — not enough money on the day" : "Happens by itself" });
   });
 
@@ -5127,6 +5148,65 @@ async function closeBankAccount(username, classCode, accountId) {
 // ids: "cash", "savings" (the original Savings Account) or a bankAccounts id.
 // Withdrawing from an account follows its plan: withdrawal cap, withdrawal fee.
 // Paying into one follows its balance cap.
+// Pure: works out what one move does to a copy of the student's balances — nothing is written.
+// toId may be null, meaning the money leaves the student (a payment to someone else).
+// Throws Error("CODE[:arg]"); acctMoveError() turns the code into words.
+function acctApplyMove(user, cls, fromId, toId, amount) {
+  let bal = user.balance || 0, sav = user.savings || 0;
+  const list = acctListOf(user).map(a => Object.assign({}, a));
+  const find = id => list.find(a => a.id === id && a.status === "active");
+  const nameOf = id => id === "cash" ? "Cash" : id === "savings" ? "Savings Account" : ((acctPlanById(cls, (find(id) || {}).planId) || {}).name || "account");
+  let fee = 0, feeName = "";
+  // --- take it out of the source ---
+  if (fromId === "cash") { if (bal < amount) throw new Error("BROKE_CASH"); bal -= amount; }
+  else if (fromId === "savings") { if (sav < amount) throw new Error("BROKE_SAV"); sav -= amount; }
+  else {
+    const a = find(fromId); if (!a) throw new Error("NOT_FOUND");
+    const plan = acctPlanById(cls, a.planId);
+    if (plan && plan.maxWithdrawals > 0 && (a.wd || 0) >= plan.maxWithdrawals) throw new Error("LIMIT:" + plan.maxWithdrawals);
+    fee = plan ? plan.withdrawFee || 0 : 0; feeName = plan ? plan.name : "";
+    if ((a.balance || 0) < amount + fee) throw new Error(fee > 0 && (a.balance || 0) >= amount ? "BROKE_FEE:" + fee : "BROKE_ACCT");
+    a.balance = acctRound((a.balance || 0) - amount - fee);
+    a.wd = (a.wd || 0) + 1;
+    if (fee > 0) a.lifetime = Object.assign({}, a.lifetime, { fees: acctRound(((a.lifetime || {}).fees || 0) + fee) });
+  }
+  // --- put it into the destination ---
+  if (!toId) { /* paid out to someone else */ }
+  else if (toId === "cash") bal += amount;
+  else if (toId === "savings") sav += amount;
+  else {
+    const a = find(toId); if (!a) throw new Error("NOT_FOUND");
+    const plan = acctPlanById(cls, a.planId);
+    if (plan && plan.maxBalance > 0 && (a.balance || 0) + amount > plan.maxBalance + 0.001) throw new Error("CAP:" + acctRound(Math.max(0, plan.maxBalance - (a.balance || 0))));
+    a.balance = acctRound((a.balance || 0) + amount);
+  }
+  return { bal: acctRound(bal), sav: acctRound(sav), list, fee, feeName, fromName: nameOf(fromId), toName: toId ? nameOf(toId) : "" };
+}
+// The user-doc fields to write after acctApplyMove() (bankAccounts only when they have any).
+function acctMoveFields(user, mv) {
+  const f = { balance: mv.bal, savings: mv.sav };
+  if (acctListOf(user).length) f.bankAccounts = mv.list;
+  return f;
+}
+function acctMoveError(e) {
+  const [code, arg] = String((e && e.message) || "").split(":");
+  const m = {
+    BROKE_CASH: "You don't have enough cash for that.", BROKE_SAV: "You don't have that much in your Savings Account.",
+    BROKE_ACCT: "There isn't that much in that account.",
+    BROKE_FEE: `That account charges a ${fmtMoney(Number(arg) || 0)} withdrawal fee, so it needs a little more than that in it.`,
+    LIMIT: `That account allows ${arg} withdrawal${arg === "1" ? "" : "s"} each interest period, and you've used ${arg === "1" ? "it" : "them"} up. It resets when interest is next paid.`,
+    CAP: `That account can only hold up to its balance cap — you can add ${fmtMoney(Number(arg) || 0)} more.`,
+    NOT_FOUND: "That account isn't available any more."
+  };
+  return m[code] || null;
+}
+// "Savings Account", "Bills Account", "Cash" — for any account id (used by the budget and the bank page).
+function acctNameOf(cls, user, id) {
+  if (id === "cash") return "Cash";
+  if (id === "savings") return "Savings Account";
+  const a = acctListOf(user).find(x => x.id === id);
+  return a ? ((acctPlanById(cls, a.planId) || {}).name || "account") : "";
+}
 async function moveBankMoney(username, classCode, fromId, toId, amount) {
   amount = cleanAmount(amount);
   if (!(amount > 0)) return { ok: false, error: "Enter an amount greater than zero." };
@@ -5139,54 +5219,65 @@ async function moveBankMoney(username, classCode, fromId, toId, amount) {
       const us = await t.get(userRef), cs = await t.get(classRef);
       if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
       const user = us.data(), cls = withNewModuleDefaults(cs.data());
-      let bal = user.balance || 0, sav = user.savings || 0;
-      const list = acctListOf(user).map(a => Object.assign({}, a));
-      const find = id => list.find(a => a.id === id && a.status === "active");
-      const nameOf = id => id === "cash" ? "Cash" : id === "savings" ? "Savings Account" : ((acctPlanById(cls, (find(id) || {}).planId) || {}).name || "account");
-      // --- take it out of the source ---
-      let fee = 0, feeName = "";
-      if (fromId === "cash") { if (bal < amount) throw new Error("BROKE_CASH"); bal -= amount; }
-      else if (fromId === "savings") { if (sav < amount) throw new Error("BROKE_SAV"); sav -= amount; }
-      else {
-        const a = find(fromId); if (!a) throw new Error("NOT_FOUND");
-        const plan = acctPlanById(cls, a.planId);
-        if (plan && plan.maxWithdrawals > 0 && (a.wd || 0) >= plan.maxWithdrawals) throw new Error("LIMIT:" + plan.maxWithdrawals);
-        fee = plan ? plan.withdrawFee || 0 : 0; feeName = plan ? plan.name : "";
-        if ((a.balance || 0) < amount + fee) throw new Error(fee > 0 && (a.balance || 0) >= amount ? "BROKE_FEE:" + fee : "BROKE_ACCT");
-        a.balance = acctRound((a.balance || 0) - amount - fee);
-        a.wd = (a.wd || 0) + 1;
-        if (fee > 0) a.lifetime = Object.assign({}, a.lifetime, { fees: acctRound(((a.lifetime || {}).fees || 0) + fee) });
-      }
-      // --- put it into the destination ---
-      if (toId === "cash") bal += amount;
-      else if (toId === "savings") sav += amount;
-      else {
-        const a = find(toId); if (!a) throw new Error("NOT_FOUND");
-        const plan = acctPlanById(cls, a.planId);
-        if (plan && plan.maxBalance > 0 && (a.balance || 0) + amount > plan.maxBalance + 0.001) throw new Error("CAP:" + acctRound(Math.max(0, plan.maxBalance - (a.balance || 0))));
-        a.balance = acctRound((a.balance || 0) + amount);
-      }
-      t.update(userRef, { balance: acctRound(bal), savings: acctRound(sav), bankAccounts: list });
+      const mv = acctApplyMove(user, cls, fromId, toId, amount);
+      t.update(userRef, acctMoveFields(user, mv));
       // --- what shows in the activity list ---
-      const note = `Moved from ${nameOf(fromId)} to ${nameOf(toId)}`;
+      const note = `Moved from ${mv.fromName} to ${mv.toName}`;
       if (fromId !== "cash") logs.push({ type: "savings-withdraw", to: username, amount, note });
       if (toId !== "cash") logs.push({ type: "savings-deposit", from: username, amount, note });
-      if (fee > 0) logs.push({ type: "account-fee", from: username, amount: fee, note: `Withdrawal fee — ${feeName}` });
+      if (mv.fee > 0) logs.push({ type: "account-fee", from: username, amount: mv.fee, note: `Withdrawal fee — ${mv.feeName}` });
     });
   } catch (e) {
-    const [code, arg] = String(e.message).split(":");
-    const m = {
-      BROKE_CASH: "You don't have enough cash for that.", BROKE_SAV: "You don't have that much in your Savings Account.",
-      BROKE_ACCT: "There isn't that much in that account.",
-      BROKE_FEE: `That account charges a ${fmtMoney(Number(arg) || 0)} withdrawal fee, so it needs a little more than that in it.`,
-      LIMIT: `That account allows ${arg} withdrawal${arg === "1" ? "" : "s"} each interest period, and you've used ${arg === "1" ? "it" : "them"} up. It resets when interest is next paid.`,
-      CAP: `That account can only hold up to its balance cap — you can add ${fmtMoney(Number(arg) || 0)} more.`,
-      NOT_FOUND: "That account isn't available any more."
-    };
-    return { ok: false, error: m[code] || "Something went wrong. Please try again." };
+    return { ok: false, error: acctMoveError(e) || "Something went wrong. Please try again." };
   }
   for (const l of logs) await logTxn(classCode, l);
   return { ok: true };
+}
+
+/* ---------------- Sending money from a chosen account ----------------
+   sourceId: "cash" (same as transferMoney), "savings", a bankAccounts id, or "card" (a credit card, which can
+   only ever pay the teacher). Paying from an account follows that account's rules: withdrawal cap and fee. */
+async function sendMoneyFrom(fromUser, toUser, amount, note, sourceId) {
+  if (!sourceId || sourceId === "cash") return transferMoney(fromUser, toUser, amount, note);
+  amount = acctRound(amount);
+  if (!(amount > 0) || !isFinite(amount)) return { ok: false, error: "Enter an amount greater than zero." };
+  if (fromUser === toUser) return { ok: false, error: "You can't send money to yourself." };
+  const fromRef = usersCol().doc(fromUser), toRef = usersCol().doc(toUser);
+  let classCode = "", via = "", fee = 0, feeName = "", fromName = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      fee = 0;
+      const fs = await t.get(fromRef), ts = await t.get(toRef);
+      if (!fs.exists || !ts.exists) throw new Error("NO_USER");
+      const from = fs.data(), to = ts.data();
+      if (from.classCode !== to.classCode) throw new Error("OTHER_CLASS");
+      if (from.role === "teacher") throw new Error("NO_USER"); // teachers only ever pay from their unlimited balance
+      classCode = from.classCode;
+      const cs = await t.get(classesCol().doc(classCode));
+      if (!cs.exists) throw new Error("NO_USER");
+      const cls = withNewModuleDefaults(cs.data());
+      if (sourceId === "card") {
+        if (toUser !== cls.teacher) throw new Error("CARD_TEACHER_ONLY");
+        cardPayInTxn(from, cls, amount, { useCard: true });
+        t.update(fromRef, { creditCard: from.creditCard });
+        via = "on credit card"; fromName = "Credit card";
+      } else {
+        const mv = acctApplyMove(from, cls, sourceId, null, amount);
+        t.update(fromRef, acctMoveFields(from, mv));
+        via = "from " + mv.fromName; fee = mv.fee; feeName = mv.feeName; fromName = mv.fromName;
+      }
+      t.update(toRef, { balance: acctRound((to.balance || 0) + amount) });
+    });
+  } catch (e) {
+    const m = acctMoveError(e) || cardPayError(e);
+    if (m) return { ok: false, error: m };
+    if (e.message === "CARD_TEACHER_ONLY") return { ok: false, error: "A credit card can only pay your teacher. Payments to other students have to come out of your accounts." };
+    if (e.message === "OTHER_CLASS") return { ok: false, error: "You can only send money within your own class." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await logTxn(classCode, { type: "transfer", from: fromUser, to: toUser, amount, note: (note ? note + " " : "") + `(paid ${via})` });
+  if (fee > 0) await logTxn(classCode, { type: "account-fee", from: fromUser, amount: fee, note: `Withdrawal fee — ${feeName}` });
+  return { ok: true, fee, fromName };
 }
 
 /* ---------------- Interest + fees (called from computeInterestCredit) ---------------- */

@@ -4,19 +4,19 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("loan", 26) + " Loans";
   document.getElementById("hSettings").innerHTML = icon("loan", 18) + " Loan settings";
-  document.getElementById("addTierBtn").innerHTML = icon("plus", 15) + " Add loan range";
-  document.getElementById("labTierMin").innerHTML = icon("coin", 13) + " Minimum amount";
-  document.getElementById("labTierMax").innerHTML = icon("coin", 13) + " Maximum amount";
-  document.getElementById("labTierTerm").innerHTML = icon("calendar", 13) + " Term (weeks)";
-  document.getElementById("labTierRate").innerHTML = icon("percent", 13) + " Interest rate (% per week, compounding)";
-  document.getElementById("labMaxLoan").innerHTML = icon("loan", 13) + " Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
-  document.getElementById("labMaxLoanCount").innerHTML = icon("loan", 13) + " Maximum number of loans a student can have open at once (0 = no limit)";
-  document.getElementById("saveMaxLoanBtn").innerHTML = icon("save", 13) + " Save maximums";
-  document.getElementById("hLoanLifestyle").innerHTML = icon("star", 18) + " Lifestyle rating penalty";
+  document.getElementById("addTierBtn").innerHTML = "Add loan range";
+  document.getElementById("labTierMin").innerHTML = "Minimum amount";
+  document.getElementById("labTierMax").innerHTML = "Maximum amount";
+  document.getElementById("labTierTerm").innerHTML = "Term (weeks)";
+  document.getElementById("labTierRate").innerHTML = "Interest rate (% per week, compounding)";
+  document.getElementById("labMaxLoan").innerHTML = "Overall maximum loan amount (0 = no extra cap beyond the ranges above)";
+  document.getElementById("labMaxLoanCount").innerHTML = "Maximum number of loans a student can have open at once (0 = no limit)";
+  document.getElementById("saveMaxLoanBtn").innerHTML = "Save maximums";
+  document.getElementById("hLoanLifestyle").innerHTML = "Lifestyle rating penalty";
   document.getElementById("labLoanLifestyleEnabled").textContent = "Dock lifestyle points for outstanding loans";
-  document.getElementById("labLoanLifestylePoints").innerHTML = icon("star", 13) + " Lifestyle points lost";
-  document.getElementById("labLoanLifestylePerAmount").innerHTML = icon("coin", 13) + " Per this much owed";
-  document.getElementById("saveLoanLifestyleBtn").innerHTML = icon("save", 13) + " Save penalty";
+  document.getElementById("labLoanLifestylePoints").innerHTML = "Lifestyle points lost";
+  document.getElementById("labLoanLifestylePerAmount").innerHTML = "Per this much owed";
+  document.getElementById("saveLoanLifestyleBtn").innerHTML = "Save penalty";
   document.getElementById("hTake").innerHTML = icon("loan", 18) + " Take out a loan";
   document.getElementById("labLoanAmount").innerHTML = icon("coin", 13) + " How much do you want to borrow?";
   document.getElementById("takeLoanBtn").innerHTML = icon("loan", 15) + " Borrow";
@@ -237,7 +237,7 @@ async function addTier(e) {
   if (editingId) {
     await updateLoanTier(CURRENT.classCode, editingId, tier);
     delete document.getElementById("addTierBtn").dataset.editingId;
-    document.getElementById("addTierBtn").innerHTML = icon("plus", 15) + " Add loan range";
+    document.getElementById("addTierBtn").innerHTML = "Add loan range";
   } else {
     await addLoanTier(CURRENT.classCode, tier);
   }
@@ -256,7 +256,7 @@ async function editTier(id) {
   document.getElementById("tierTerm").value = tier.termWeeks;
   document.getElementById("tierRate").value = tier.rate;
   document.getElementById("addTierBtn").dataset.editingId = id;
-  document.getElementById("addTierBtn").innerHTML = icon("save", 15) + " Save changes";
+  document.getElementById("addTierBtn").innerHTML = "Save changes";
   document.getElementById("addTierBtn").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
