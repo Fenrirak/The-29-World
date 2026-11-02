@@ -3895,3 +3895,9 @@ html.dark-mode .ac-swap{color:var(--ink);}
   .ac-own,.ac-own:hover,.ac-reco-item,.ac-reco-item:hover,.ac-swap,.ac-swap:hover{transition:none;transform:none;}
   .ac-meter-bar i{transition:none;}
 }
+
+/* Savings & interest settings: save button + note sit on one centred row */
+#savingsSettingsCard .bs-save{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;margin-top:14px;}
+#savingsSettingsCard .bs-save .btn{margin-top:0;flex:none;}
+#savingsSettingsCard .bs-save .muted-small{flex:1 1 240px;margin:0;line-height:1.45;}
+#savingsSettingsCard .bs-save .muted-small strong{color:var(--ink);font-weight:700;}

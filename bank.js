@@ -324,7 +324,7 @@ function renderSavingsSettings(cls) {
   const rate = Number(cls.interestRate) || 0, cash = Number(cls.cashInterestRate) || 0;
   const num = (id, v) => `<div class="cc-num"><input id="${id}" type="number" min="0" max="20" step="0.1" inputmode="decimal" value="${v}" oninput="bsChanged()"></div>`;
   el.innerHTML = `
-    <div class="flex-between cc-head"><h2 id="hSavingsSet">${icon("piggy", 18)} Savings &amp; interest</h2></div>
+    <div class="flex-between cc-head"><h2 id="hSavingsSet">Savings &amp; interest</h2></div>
     <p class="cc-intro">Set what students earn on their <strong>Savings Account</strong> and how often interest is paid. Rates are a percentage applied <strong>each time interest runs</strong>, so a 1% rate paid every week is far more generous than 1% paid every 4 weeks. The recommended accounts below are sized to match.</p>
     <div class="cc-tstats bs-stats">
       <div class="cc-tstat"><span>Savings rate</span><strong>${rate}%</strong></div>
@@ -341,7 +341,7 @@ function renderSavingsSettings(cls) {
       </div>
     </section>
     <section class="cc-panel">
-      <div class="cc-panel-head"><h3>${icon("calendar", 16)} Payout schedule</h3>
+      <div class="cc-panel-head"><h3>${icon("hourglass", 16)} Payout schedule</h3>
         <label class="cc-switch"><input type="checkbox" id="bsAuto" ${auto ? "checked" : ""} onchange="bsChanged()"><span class="cc-switch-track"></span><span id="bsAutoText">${auto ? "Paid automatically" : "Applied by you"}</span></label></div>
       <div class="cc-settings bs-set2 ${auto ? "" : "bs-off"}" id="bsSched">
         <div class="cc-set"><label for="bsFreq">How often</label><p>How long between interest payments.</p>
@@ -352,7 +352,7 @@ function renderSavingsSettings(cls) {
       <p class="muted-small bs-tune">${icon("sparkle", 14)}<span>Accounts you add from the recommended list are personalised to this schedule: fees and withdrawal limits scale with how often interest is paid.</span></p>
     </section>
     <div class="bs-save"><button class="btn gold" id="bsSaveBtn" onclick="bsSave()">${icon("save", 15)} Save interest settings</button>
-      <span class="muted-small">Students are told when rates or the schedule change.</span></div>
+      <span class="muted-small">These settings are for the <strong>Default everyday</strong> and <strong>savings</strong> accounts. Students are told when rates or the schedule change.</span></div>
     <div id="bsMsg"></div>`;
   bsHints();
 }
