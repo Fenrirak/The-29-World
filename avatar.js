@@ -1703,6 +1703,7 @@ html .student-avatar.av-img{background:none !important;padding:0;overflow:hidden
 .av-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;border-top:1.5px solid var(--line,#e3e7f0);}
 .av-foot .av-sum{flex:1;min-width:180px;font-weight:700;font-size:var(--fs-md);}
 .av-foot .av-msg{width:100%;font-weight:700;color:#b8402c;}
+.av-bad{color:#b8402c;}
 .av-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:450;background:#1f2b44;color:#fff;border-radius:14px;padding:12px 16px;font-weight:700;box-shadow:0 8px 28px rgba(0,0,0,.35);display:flex;gap:12px;align-items:center;max-width:calc(100vw - 24px);}
 .av-toast button{border:0;border-radius:10px;padding:6px 10px;font-weight:800;cursor:pointer;background:#f5b82e;color:#1f2b44;}
 .av-t-wrap details{border:1.5px solid var(--line,#e3e7f0);border-radius:12px;padding:8px 12px;margin:8px 0;}
@@ -1724,6 +1725,7 @@ html .student-avatar.av-img{background:none !important;padding:0;overflow:hidden
 html.dark-mode .av-t-wrap input[type="radio"],html.dark-mode .av-t-wrap input[type="checkbox"],html.dark-mode .av-left input[type="checkbox"]{accent-color:var(--gold);}
 html.dark-mode .av-t-cur label:has(input:checked){border-color:var(--gold);box-shadow:0 0 0 1.5px var(--gold) inset;}
 html.dark-mode .av-chip{background:#222b46;}
+html.dark-mode .av-foot .av-msg,html.dark-mode .av-bad{color:#ff9d87;}
 html.dark-mode .av-tile .av-t-price.own{color:#5be3a5;}
 html.dark-mode .av-self-btn .av-pen{border-color:#1a2036;}
 .av-img[data-av-user]{cursor:zoom-in;transition:transform .15s ease,box-shadow .15s ease;}
@@ -2003,7 +2005,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     const total = cart.reduce((a, i) => a + i.price, 0);
     const bal = E.shop.currency === "comets" ? (Number(E.me.comets) || 0) : (Number(E.me.balance) || 0);
     $("avWallet").innerHTML = E.shop.currency === "comets" ? `<span class="av-chip">${COMET}${bal} Comets</span>` : E.shop.currency === "money" ? `<span class="av-chip">${fmtPrice(E.shop, bal)} cash</span>` : "";
-    $("avSum").innerHTML = cart.length ? `Buying ${cart.length} new item${cart.length === 1 ? "" : "s"}: <b>${fmtPrice(E.shop, total)}</b>${total > bal ? ` <span style="color:#b8402c">(not enough)</span>` : ""}` : "Nothing to buy.";
+    $("avSum").innerHTML = cart.length ? `Buying ${cart.length} new item${cart.length === 1 ? "" : "s"}: <b>${fmtPrice(E.shop, total)}</b>${total > bal ? ` <span class="av-bad">(not enough)</span>` : ""}` : "Nothing to buy.";
     $("avSave").textContent = cart.length ? "Buy & save" : "Save";
   }
   async function saveEditor(close) {

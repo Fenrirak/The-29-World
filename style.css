@@ -4043,3 +4043,26 @@ html.dark-mode .ac-pick:focus-visible{outline-color:#fff;}
 .tax-note:not(:has(svg)){margin-top:2px;}
 
 @media (prefers-reduced-motion:reduce){ .bk-tiles .stat,.bk-tiles .stat:hover,.ac-pick{transition:none;transform:none;} }
+
+/* Dark-mode text fixes: these used navy/dark-fill colours that stay dark in
+   dark mode, so text was unreadable on the dark card/page surfaces. */
+@media screen{
+html.dark-mode .job-family-title,
+html.dark-mode .tier-rung-title,
+html.dark-mode .tier-progress-step.current .tier-progress-label,
+html.dark-mode .levelup-card-title,
+html.dark-mode .levelup-card-tier-name,
+html.dark-mode .ks-more summary,
+html.dark-mode .ga-limit-head,
+html.dark-mode .site-footer-links a:hover{color:var(--heading-text);}
+html.dark-mode .tier-rung-wage,
+html.dark-mode .job-board-tier-wage,
+html.dark-mode .levelup-card-tier-meta{color:var(--muted);}
+html.dark-mode .bulk-bad{color:var(--pastel-coral-text);}
+html.dark-mode .bulk-stat.good strong,
+html.dark-mode .nw-trend .ticker-up{color:var(--pastel-mint-text);}
+html.dark-mode .status-pending,
+html.dark-mode .link-btn:hover,
+html.dark-mode .cc-vouchers h3 .icon{color:var(--gold);}
+html.dark-mode .fin-sub .icon-slot{color:var(--accent-text);}
+}
