@@ -27,7 +27,7 @@ function badgeType(type) {
     "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
     "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
     "insurance-signup-fee": ["lilac", "shield", "Insurance sign-up"],
-    "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
+    "account-close": ["gold", "piggy", "Account closed"], "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
     "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
     "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"], "account-fee": ["coral", "coin", "Account fee"],
     "card-cashback": ["mint", "cards", "Cashback"], "card-statement": ["gold", "cards", "Statement"],
@@ -291,7 +291,7 @@ async function render() {
   document.getElementById("noTxns").classList.toggle("hidden", my.length > 0);
   const tbody = document.getElementById("txnTable");
   tbody.innerHTML = "";
-  const BANK_PREVIEW_TYPES = new Set(["transfer", "automation", "savings-deposit", "savings-withdraw", "interest", "cash-interest"]);
+  const BANK_PREVIEW_TYPES = new Set(["transfer", "automation", "savings-deposit", "savings-withdraw", "account-close", "interest", "cash-interest"]);
   const bankPreview = [];
   const nameCache = {};
   for (const s of allStudents) nameCache[s.username] = s.name;

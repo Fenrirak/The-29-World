@@ -361,6 +361,7 @@ function describeTxn(t, nameOf) {
     case "cash-interest": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "savings-deposit": return escapeHtml(`${nameOf(t.from)} — ${t.note || "Deposited into Savings Account"}`);
     case "savings-withdraw": return escapeHtml(`${nameOf(t.to)} — ${t.note || "Withdrew from Savings Account"}`);
+    case "account-close": return escapeHtml(`${nameOf(t.to)} — ${t.note || "Closed an account"}`);
     case "loan-taken": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
     case "loan-repayment": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
     case "loan-interest": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
@@ -415,7 +416,7 @@ function badge(type) {
     "big-event": ["coral", "star", "Big event"],
     "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
     "cash-interest": ["gold", "coin", "Cash interest"],
-    "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
+    "account-close": ["gold", "piggy", "Account closed"], "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
     "loan-taken": ["navy", "loan", "Loan"], "loan-repayment": ["mint", "loan", "Loan repayment"],
     "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
     "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"], "account-fee": ["coral", "coin", "Account fee"],

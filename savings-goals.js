@@ -27,7 +27,7 @@ function buildGoalsCard() {
       <h2 id="hGoals">${icon("target", 18)} My savings goals</h2>
       <button class="btn small gold" type="button" id="addGoalBtn" onclick="toggleGoalForm(true)">Add a goal</button>
     </div>
-    <p class="muted-small" style="margin-top:0;">Money in ${savingsRef} counts towards your goals — your top goal fills up first.</p>
+    <p class="muted-small" style="margin-top:0;">Money in ${savingsRef} counts towards your goals — your top goal fills up first.<span id="goalsClosedNote" class="hidden"> Your Savings Account is closed right now, so your goals can't fill up until you open it again on the Bank page.</span></p>
     <div id="goalList"></div>
     <p class="muted-small hidden" id="noGoals">No goals yet. What are you saving up for? A new bike, a phone, a house deposit…</p>
     <form id="goalForm" class="hidden" onsubmit="return submitGoal(event)">
@@ -56,6 +56,8 @@ function renderGoals(me) {
   const list = document.getElementById("goalList");
   if (!list) return;
   const goals = savingsGoalProgress(me);
+  const closedNote = document.getElementById("goalsClosedNote");
+  if (closedNote) closedNote.classList.toggle("hidden", !acctDefaultClosed(me, "savings"));
   document.getElementById("noGoals").classList.toggle("hidden", goals.length > 0);
   document.getElementById("addGoalBtn").classList.toggle("hidden", goals.length >= MAX_SAVINGS_GOALS);
   list.innerHTML = goals.map((g, i) => `

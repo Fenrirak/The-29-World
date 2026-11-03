@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=cd0373fe">
+<link rel="stylesheet" href="style.css?v=a02a70e1">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -42,7 +42,7 @@
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
 </head>
-<body>
+<body class="page-bank">
 
 <div class="topbar">
   <a class="brand" href="bank.html"><span class="icon-slot" id="brandCoin"></span> The 29 World</a>
@@ -77,15 +77,16 @@
 <main>
   <h1 id="pageTitle">Bank Account</h1>
 
-  <!-- One tile per account. The cash, credit card and automatic-payment tiles are fixed; bank.js / accounts.js slot a
-       tile in for the Savings Account and every extra account the student has open (before the credit card tile). -->
+  <!-- One tile per account. The balance, credit card and automatic-payment tiles are fixed; bank.js / accounts.js slot a
+       tile in for the Savings Account (while it's open) and every extra account the student has open (before the credit card tile). -->
   <div class="grid bk-tiles" id="topStats">
-    <div class="stat gold">
-      <span class="icon" id="iconBalance"></span>
-      <div class="label">Cash balance</div>
+    <!-- The balance tile: shows one account's balance (cash to start with). Students tap it to pick which account. -->
+    <button type="button" class="stat gold bk-balance" id="balanceStat" aria-haspopup="dialog" onclick="acOpenBalancePicker()">
+      <div class="label" id="balanceLabel">Cash balance</div>
       <div class="value" id="balance">$0.00</div>
       <div class="muted-small hidden" id="cashRateNote"></div>
-    </div>
+      <div class="muted-small bk-balance-hint" id="balanceHint">Tap to choose which account to show</div>
+    </button>
     <div class="stat lilac hidden" id="cardStat">
       <span class="icon" id="iconCardStat"></span>
       <div class="label">Credit card owing</div>
@@ -260,16 +261,16 @@
 <script defer src="settings-menu.js?v=8dde546c"></script>
 <script defer src="shortcuts.js?v=bcda2833"></script>
 <script defer src="data-core.js?v=1860738e"></script>
-<script defer src="data-money.js?v=bea65215"></script>
+<script defer src="data-money.js?v=02c9d748"></script>
 <script defer src="data-life.js?v=d62c66a1"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=d6ba8dd6"></script>
 <script defer src="events-ui.js?v=d8c39f3b"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="notifications.js?v=477a64fd"></script>
-<script defer src="savings-goals.js?v=bea990fb"></script>
+<script defer src="savings-goals.js?v=d0547604"></script>
 <script defer src="creditcard.js?v=5bd1bfc9"></script>
-<script defer src="accounts.js?v=60b7fd52"></script>
-<script defer src="bank.js?v=888a7394"></script>
+<script defer src="accounts.js?v=0641d512"></script>
+<script defer src="bank.js?v=4e8a52c0"></script>
 </body>
 </html>

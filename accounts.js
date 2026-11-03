@@ -10,6 +10,7 @@
 let AC_CLS = null, AC_ME = null, AC_STUDENTS = [];
 let AC_FILTER = "everyday";
 let AC_MOVE = { from: "", to: "" };
+let AC_NOTICE = ""; // a one-off message for "My accounts" (e.g. a closed account re-opened because money landed in it)
 
 const acEsc = s => ccEsc(s);
 const acMsg = (id, html) => ccMsg(id, html);
@@ -165,6 +166,7 @@ function renderBankAccounts(me, cls, students) {
   if (oCard) oCard.classList.toggle("hidden", IS_TEACHER);
   tCard.classList.toggle("hidden", !IS_TEACHER);
   acPaintTiles(me, cls);
+  acPaintBalanceWidget(me, cls);
   if (IS_TEACHER) acRenderTeacher(cls, AC_STUDENTS);
   else { acRenderStudent(me, cls); acRenderOpen(me, cls); }
 }
@@ -177,7 +179,7 @@ function acRateText(cls, rate) {
 function acTilesHtml(me, cls) {
   const tile = (variant, ic, name, bal, note) => `<div class="stat ${variant} bk-acct-tile"><span class="icon">${icon(ic, 30)}</span>
     <div class="label">${acEsc(name)}</div><div class="value">${fmtMoney(bal)}</div><div class="muted-small">${note}</div></div>`;
-  let h = tile("mint", "piggy", "Savings Account", me.savings || 0, `Savings · ${acRateText(cls, Number(cls.interestRate) || 0)}`);
+  let h = acctDefaultClosed(me, "savings") ? "" : tile("mint", "piggy", "Savings Account", me.savings || 0, `Savings · ${acRateText(cls, Number(cls.interestRate) || 0)}`);
   acctActiveOf(me).forEach(a => {
     const p = acctPlanById(cls, a.planId);
     if (!p) { h += tile("sky", "bank", "Account", a.balance || 0, "Plan removed by your teacher"); return; }
@@ -200,10 +202,13 @@ function acRenderStudent(me, cls) {
   const list = acctListOf(me);
   const active = list.filter(a => a.status === "active"), pending = list.filter(a => a.status === "pending");
   const intTax = t29TaxRate(cls, "interest");
-  let html = `<div class="flex-between cc-head"><h2 id="hAcct">My accounts</h2><span class="cc-head-note">${acPlural(active.length + 1, "account")}</span></div>`;
-  html += `<p class="cc-intro">Your cash balance is in the tiles above. Each account here has its own interest, fees and rules, and you can move money between them any time. Cash doesn't earn interest unless your teacher has set a cash rate, so put money to work here. ${interestScheduleLabel(cls)}</p>`;
+  const cashOpen = !acctDefaultClosed(me, "cash"), savOpen = !acctDefaultClosed(me, "savings");
+  const openCount = active.length + (cashOpen ? 1 : 0) + (savOpen ? 1 : 0);
+  const canMove = openCount > 1;
+  let html = `<div class="flex-between cc-head"><h2 id="hAcct">My accounts</h2><span class="cc-head-note">${acPlural(openCount, "account")}</span></div>`;
+  html += `<p class="cc-intro">Each account here has its own interest, fees and rules, and you can move money between them any time. Your cash balance is the account your pay and purchases go through. It doesn't earn interest unless your teacher has set a cash rate, so put money to work in the others. ${interestScheduleLabel(cls)}</p>`;
   if (intTax) html += `<div class="tax-note"><span>Interest is taxed at <strong>${t29TaxPct(intTax)}</strong> before it is paid to you.</span></div>`;
-  html += `<div class="ac-own-grid">${acSavingsTile(me, cls)}${active.map(a => acOwnedTile(a, cls)).join("")}</div>`;
+  html += `<div class="ac-own-grid">${cashOpen ? acCashTile(me, cls, canMove) : ""}${savOpen ? acSavingsTile(me, cls, canMove) : ""}${active.map(a => acOwnedTile(a, cls, canMove)).join("")}</div>`;
   if (pending.length) {
     html += `<h3 class="cc-sub">${icon("history", 16)} Waiting for approval</h3><div class="ac-pend">${pending.map(a => {
       const p = acctPlanById(cls, a.planId);
@@ -212,12 +217,42 @@ function acRenderStudent(me, cls) {
     }).join("")}</div>`;
   }
   html += acMovePanel(me, cls);
-  html += `<div id="acMsg"></div>`;
+  html += `<div id="acMsg">${AC_NOTICE}</div>`;
+  AC_NOTICE = "";
   el.innerHTML = html;
   acMoveHint();
 }
+// The "Close" button every open account has. `only` = it is the one account they have open, so it can't be closed.
+function acCloseBtn(id, name, only) {
+  return `<button class="btn small ghost" onclick="acClose('${acEsc(id)}')" aria-label="Close ${acEsc(name)}"${only ? ` title="You need at least one account open"` : ""}>Close</button>`;
+}
+function acMoveBtns(id, canMove) {
+  if (!canMove) return "";
+  return `<button class="btn small gold" onclick="acQuick('${acEsc(id)}','in')">${icon("plus", 13)} Add money</button>
+        <button class="btn small secondary" onclick="acQuick('${acEsc(id)}','out')">${icon("download", 13)} Take out</button>`;
+}
+// The class's original Cash balance (the default everyday account), drawn exactly like the extra accounts.
+function acCashTile(me, cls, canMove) {
+  const bal = acctRound(me.balance || 0), rate = Number(cls.cashInterestRate) || 0, per = acPeriod(cls);
+  const gross = bal > 0 && rate > 0 ? acctRound(bal * rate / 100) : 0;
+  return `<article class="ac-own k-everyday is-default">
+    <div class="ac-own-body">
+      <div class="ac-tile-head"><strong>Cash balance</strong>${acKindBadge("everyday")}</div>
+      <div class="ac-bal"><span>Balance</span><strong>${fmtMoney(bal)}</strong></div>
+      <div class="ac-rows">
+        <div class="ac-line"><span>Interest rate</span><strong>${rate > 0 ? `${rate}% <small>per ${per.span}</small>` : "None"}</strong></div>
+        <div class="ac-line"><span>Next interest</span><strong class="${gross > 0 ? "good" : ""}">${gross > 0 ? "≈ +" + fmtMoney(gross) : "$0.00"}</strong></div>
+        <div class="ac-line"><span>Withdrawals</span><strong>Unlimited</strong></div>
+        <div class="ac-hint">Included for everyone in your class. Your pay comes in here and your purchases come out of it.</div>
+      </div>
+      <div class="ac-own-actions">
+        ${acMoveBtns("cash", canMove)}
+        ${acCloseBtn("cash", "Cash balance", !canMove)}
+      </div>
+    </div></article>`;
+}
 // The class's original Savings Account, drawn exactly like the extra accounts so everything looks like one family.
-function acSavingsTile(me, cls) {
+function acSavingsTile(me, cls, canMove) {
   const bal = acctRound(me.savings || 0), rate = Number(cls.interestRate) || 0, per = acPeriod(cls);
   const gross = bal > 0 && rate > 0 ? acctRound(bal * rate / 100) : 0;
   return `<article class="ac-own k-savings is-default">
@@ -228,18 +263,18 @@ function acSavingsTile(me, cls) {
         <div class="ac-line"><span>Interest rate</span><strong>${rate > 0 ? `${rate}% <small>per ${per.span}</small>` : "None"}</strong></div>
         <div class="ac-line"><span>Next interest</span><strong class="${gross > 0 ? "good" : ""}">${gross > 0 ? "≈ +" + fmtMoney(gross) : "$0.00"}</strong></div>
         <div class="ac-line"><span>Withdrawals</span><strong>Unlimited</strong></div>
-        <div class="ac-hint">Included for everyone in your class — there's nothing to open.</div>
+        <div class="ac-hint">Included for everyone in your class.</div>
       </div>
       <div class="ac-own-actions">
-        <button class="btn small gold" onclick="acQuick('savings','in')">Add money</button>
-        <button class="btn small secondary" onclick="acQuick('savings','out')">Take out</button>
+        ${acMoveBtns("savings", canMove)}
+        ${acCloseBtn("savings", "Savings Account", !canMove)}
       </div>
     </div></article>`;
 }
-function acOwnedTile(a, cls) {
+function acOwnedTile(a, cls, canMove) {
   const p = acctPlanById(cls, a.planId);
   if (!p) return `<article class="ac-own"><div class="ac-own-body"><strong>Account</strong><p class="muted-small">Your teacher removed this plan. You can still move your ${fmtMoney(a.balance || 0)} out below or close it.</p>
-      <div class="ac-own-actions"><button class="btn small secondary" onclick="acClose('${acEsc(a.id)}')">Close &amp; move to cash</button></div></div></article>`;
+      <div class="ac-own-actions"><button class="btn small secondary" onclick="acClose('${acEsc(a.id)}')">Close &amp; move the money</button></div></div></article>`;
   const bal = acctRound(a.balance || 0), wd = a.wd || 0, lt = a.lifetime || {};
   const bonus = wd === 0 && p.bonusRate > 0 ? p.bonusRate : 0;
   const rate = (p.rate || 0) + bonus;
@@ -267,14 +302,20 @@ function acOwnedTile(a, cls) {
       <div class="ac-rows">${rows.join("")}</div>
       <div class="ac-life">Earned so far <b>${fmtMoney(lt.interest || 0)}</b> · Fees paid <b>${fmtMoney(lt.fees || 0)}</b></div>
       <div class="ac-own-actions">
-        <button class="btn small gold" onclick="acQuick('${acEsc(a.id)}','in')">${icon("plus", 13)} Add money</button>
-        <button class="btn small secondary" onclick="acQuick('${acEsc(a.id)}','out')">${icon("download", 13)} Take out</button>
-        <button class="btn small ghost" onclick="acClose('${acEsc(a.id)}')" aria-label="Close ${acEsc(p.name)}">Close</button>
+        ${acMoveBtns(a.id, canMove)}
+        ${acCloseBtn(a.id, p.name, !canMove)}
       </div>
     </div></article>`;
 }
 
 /* ================= Student: open an account (its own section) ================= */
+// The two original accounts, once a student has closed them, wait here to be opened again.
+function acClosedDefaults(me) {
+  const out = [];
+  if (acctDefaultClosed(me, "cash")) out.push({ id: "cash", kind: "everyday", name: "Cash balance" });
+  if (acctDefaultClosed(me, "savings")) out.push({ id: "savings", kind: "savings", name: "Savings Account" });
+  return out;
+}
 function acRenderOpen(me, cls) {
   const el = document.getElementById("acctOpenCard"); if (!el) return;
   const st = acctSettings(cls), plans = acctPlansOf(cls), list = acctListOf(me);
@@ -282,26 +323,42 @@ function acRenderOpen(me, cls) {
   const countKind = k => list.filter(a => (a.status === "active" || a.status === "pending") && (acctPlanById(cls, a.planId) || {}).kind === k).length;
   const full = { everyday: countKind("everyday") >= st.maxEveryday, savings: countKind("savings") >= st.maxSavings };
   const avail = plans.filter(p => !held.has(p.id)).sort((a, b) => (a.kind === b.kind ? b.rate - a.rate : a.kind === "everyday" ? -1 : 1));
+  const defs = acClosedDefaults(me);
   if (AC_FILTER !== "everyday" && AC_FILTER !== "savings") AC_FILTER = "everyday";
-  const count = k => avail.filter(p => p.kind === k).length;
-  const shown = avail.filter(p => p.kind === AC_FILTER);
+  const count = k => avail.filter(p => p.kind === k).length + defs.filter(d => d.kind === k).length;
+  const shown = avail.filter(p => p.kind === AC_FILTER), shownDefs = defs.filter(d => d.kind === AC_FILTER);
   const note = off ? "Not open yet" : st.approval === "teacher" ? "Teacher approval needed" : "";
   let html = `<div class="flex-between cc-head"><h2 id="hOpenAcct">Open an account</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
-  html += `<p class="cc-intro">Saving for something, or want somewhere to keep your bill money? Open another account — each one has its own interest, fees and rules.</p>`;
-  if (!plans.length) {
+  html += `<p class="cc-intro">Saving for something, or want somewhere to keep your bill money? Open another account — each one has its own interest, fees and rules.${defs.length ? " An account you've closed waits here, and it's free to open again any time." : ""}</p>`;
+  if (!plans.length && !defs.length) {
     html += `<div class="cc-off">${icon("lock", 22)}<div><strong>No accounts on offer yet</strong><span>${off ? "Your teacher hasn't switched extra accounts on." : "Your teacher hasn't set any up yet."} Check back soon.</span></div></div>`;
   } else {
-    if (off) html += `<div class="cc-off">${icon("lock", 22)}<div><strong>Opening accounts isn't switched on yet</strong><span>Have a look below — your teacher will open applications soon.</span></div></div>`;
-    if (!avail.length) html += `<div class="empty-state"><p>You've opened every account on offer. Nice.</p></div>`;
+    if (off && plans.length) html += `<div class="cc-off">${icon("lock", 22)}<div><strong>Opening accounts isn't switched on yet</strong><span>Have a look below — your teacher will open applications soon.</span></div></div>`;
+    if (!avail.length && !defs.length) html += `<div class="empty-state"><p>You've opened every account on offer. Nice.</p></div>`;
     else {
       html += `<div class="ac-filter" role="tablist" aria-label="Account type">${["everyday", "savings"].map(k => `<button type="button" role="tab" aria-selected="${AC_FILTER === k}" class="${AC_FILTER === k ? "on" : ""}" onclick="acSetFilter('${k}')">${acKindLabel(k)}<span class="ac-count">${count(k)}</span></button>`).join("")}</div>`;
       const other = AC_FILTER === "everyday" ? "savings" : "everyday";
-      html += shown.length ? `<div class="cc-plans">${shown.map(p => acPlanTile(me, cls, p, off, full)).join("")}</div>`
+      html += shown.length || shownDefs.length ? `<div class="cc-plans">${shownDefs.map(d => acDefaultOpenTile(cls, d)).join("")}${shown.map(p => acPlanTile(me, cls, p, off, full)).join("")}</div>`
         : `<div class="empty-state"><p>You've opened every ${AC_FILTER} account on offer.${count(other) ? ` Have a look at the ${acKindLabel(other)} tab.` : ""}</p></div>`;
     }
   }
   html += `<div id="acOpenMsg"></div>`;
   el.innerHTML = html;
+}
+// A closed original account, shown like any other account on offer. Opening it again is free and instant.
+function acDefaultOpenTile(cls, d) {
+  const per = acPeriod(cls), rate = Number(d.id === "cash" ? cls.cashInterestRate : cls.interestRate) || 0;
+  const f = (k, v) => `<div class="cc-fact"><span>${k}</span><strong>${v}</strong></div>`;
+  const blurb = d.id === "cash" ? "The account your pay comes into and your purchases come out of."
+    : "The class Savings Account, for money you want to set aside.";
+  return `<div class="cc-plan ac-plan">
+    <div class="cc-plan-body">
+      <div class="ac-tile-head"><strong>${acEsc(d.name)}</strong>${acKindBadge(d.kind)}</div>
+      <p class="ac-blurb">${blurb}</p>
+      <div class="cc-facts">${f("Interest", rate > 0 ? `${rate}% <small>per ${per.span}</small>` : "None")}${f("Account fee", "None")}${f("Withdrawals", "Unlimited")}</div>
+      <div class="cc-perks"><span class="cc-chip mint">${icon("check", 12)}No fees</span></div>
+      <button class="btn gold" onclick="acReopen('${d.id}')">Open this account</button>
+    </div></div>`;
 }
 
 function acPlanTile(me, cls, p, off, full) {
@@ -325,17 +382,16 @@ function acPlanTile(me, cls, p, off, full) {
 }
 
 /* ---------------- Moving money ---------------- */
-function acAccountChoices(me, cls) {
-  const out = [{ id: "cash", label: "Cash balance", bal: me.balance || 0 }, { id: "savings", label: "Savings Account", bal: me.savings || 0 }];
-  acctActiveOf(me).forEach(a => { const p = acctPlanById(cls, a.planId); out.push({ id: a.id, label: p ? p.name : "Account", bal: a.balance || 0 }); });
-  return out;
-}
-// Every account the student can move money in or out of, tagged with its kind (used by the transfer and pay-with menus).
+// Every account the student can move money in or out of, tagged with its kind (used by the move, transfer, pay-with and
+// balance-tile menus). The two original accounts only appear while they are open.
 function acChoicesWithKind(me, cls) {
-  const out = [{ id: "cash", label: "Cash balance", bal: me.balance || 0, kind: "everyday" }, { id: "savings", label: "Savings Account", bal: me.savings || 0, kind: "savings" }];
+  const out = [];
+  if (!acctDefaultClosed(me, "cash")) out.push({ id: "cash", label: "Cash balance", bal: me.balance || 0, kind: "everyday" });
+  if (!acctDefaultClosed(me, "savings")) out.push({ id: "savings", label: "Savings Account", bal: me.savings || 0, kind: "savings" });
   acctActiveOf(me).forEach(a => { const p = acctPlanById(cls, a.planId); out.push({ id: a.id, label: p ? p.name : "Account", bal: a.balance || 0, kind: p ? p.kind : "everyday" }); });
   return out;
 }
+function acAccountChoices(me, cls) { return acChoicesWithKind(me, cls).map(c => ({ id: c.id, label: c.label, bal: c.bal })); }
 // Rules worth knowing before money leaves an account (withdrawal cap, fee, lost bonus)
 function acSourceNotes(me, cls, id) {
   const out = [], src = acctActiveOf(me).find(a => a.id === id), sp = src && acctPlanById(cls, src.planId);
@@ -348,11 +404,16 @@ function acSourceNotes(me, cls, id) {
 function acMovePanel(me, cls) {
   const ch = acAccountChoices(me, cls);
   const ids = ch.map(c => c.id);
-  if (!ids.includes(AC_MOVE.from)) AC_MOVE.from = "cash";
+  if (ch.length < 2) return `<section class="cc-panel ac-move">
+    <div class="cc-panel-head"><h3>Move money</h3></div>
+    <p class="muted-small">You need two open accounts to move money between them. Open another account below.</p>
+    <div id="acMoveMsg"></div>
+  </section>`;
+  if (!ids.includes(AC_MOVE.from)) AC_MOVE.from = ids.includes("cash") ? "cash" : ids[0];
   if (!ids.includes(AC_MOVE.to) || AC_MOVE.to === AC_MOVE.from) AC_MOVE.to = ids.find(i => i !== AC_MOVE.from && i !== "cash") || ids.find(i => i !== AC_MOVE.from);
   const opts = sel => ch.map(c => `<option value="${acEsc(c.id)}" ${c.id === sel ? "selected" : ""}>${acEsc(c.label)} — ${fmtMoney(c.bal)}</option>`).join("");
   return `<section class="cc-panel ac-move">
-    <div class="cc-panel-head"><h3>Move money</h3><span class="muted-small">Between your cash and the accounts above</span></div>
+    <div class="cc-panel-head"><h3>Move money</h3><span class="muted-small">Between the accounts above</span></div>
     <form onsubmit="return acMove(event)" class="ac-move-form">
       <div><label for="acFrom">From</label><select id="acFrom" onchange="acMoveChanged()">${opts(AC_MOVE.from)}</select></div>
       <button type="button" class="ac-swap" onclick="acSwap()" aria-label="Swap from and to" title="Swap">Swap</button>
@@ -377,7 +438,10 @@ function acSwap() {
   acMoveChanged();
 }
 function acQuick(id, dir) {
-  AC_MOVE = dir === "in" ? { from: "cash", to: id } : { from: id, to: "cash" };
+  // The other end of the move: cash when it is open (and isn't this account), otherwise the first other open account.
+  const ids = acAccountChoices(AC_ME, AC_CLS).map(c => c.id);
+  const other = id !== "cash" && ids.includes("cash") ? "cash" : ids.find(i => i !== id) || "";
+  AC_MOVE = dir === "in" ? { from: other, to: id } : { from: id, to: other };
   const f = document.getElementById("acFrom"), t = document.getElementById("acTo");
   if (f && t) { f.value = AC_MOVE.from; t.value = AC_MOVE.to; }
   acMoveHint();
@@ -429,15 +493,130 @@ async function acCancelApp(id) {
   await cancelBankAccountApplication(CURRENT.username, id);
   await render();
 }
+async function acReopen(id) {
+  acMsg("acOpenMsg", "");
+  const res = await reopenDefaultAccount(CURRENT.username, id);
+  if (!res.ok) { acMsg("acOpenMsg", `<div class="error-msg">${acEsc(res.error)}</div>`); return; }
+  await render();
+  acMsg("acOpenMsg", `<div class="success-msg">Your ${id === "cash" ? "Cash balance" : "Savings Account"} is open again.${id === "cash" ? " Move some money in to start spending from it." : ""}</div>`);
+}
 async function acClose(id) {
-  const a = acctListOf(AC_ME).find(x => x.id === id);
-  const bal = a ? acctRound(a.balance || 0) : 0;
-  const ok = await t29Confirm(bal > 0 ? `Close this account? The ${fmtMoney(bal)} in it will move back to your cash balance.` : "Close this account?");
-  if (!ok) return;
-  const res = await closeBankAccount(CURRENT.username, CURRENT.classCode, id);
+  acMsg("acMsg", "");
+  const ch = acChoicesWithKind(AC_ME, AC_CLS);
+  const mine = ch.find(c => c.id === id), others = ch.filter(c => c.id !== id);
+  if (!mine) return;
+  if (!others.length) { acMsg("acMsg", `<div class="error-msg">You need at least one account open to keep your money in. Open another one first, then close this one.</div>`); return; }
+  const bal = acctRound(mine.bal || 0);
+  const cashNote = id === "cash" ? "Your pay comes into your cash balance and your purchases come out of it. While it's closed you'll need to open it again and move money in before you can pay for things, and if money lands in it (like your wages) it opens again by itself." : "";
+  let destId = "";
+  if (bal > 0) {
+    const def = others.find(c => c.id === "cash") || others.find(c => c.kind !== "savings") || others[0];
+    const r = await acDialog({
+      title: `Close ${mine.label}?`, okText: "Close account", danger: true,
+      html: `<p>The ${fmtMoney(bal)} in it has to move to another account. Where should it go?</p>
+        <label for="acCloseDest">Move it to</label>
+        <select id="acCloseDest">${others.map(c => `<option value="${acEsc(c.id)}" ${c.id === def.id ? "selected" : ""}>${acEsc(c.label)} — ${fmtMoney(c.bal)}</option>`).join("")}</select>
+        ${cashNote ? `<p class="muted-small">${acEsc(cashNote)}</p>` : ""}`,
+      collect: box => box.querySelector("#acCloseDest").value
+    });
+    if (!r) return;
+    destId = r;
+  } else {
+    const ok = await t29Confirm(`Close ${mine.label}? There's nothing in it, so no money needs to move.${cashNote ? "\n\n" + cashNote : ""}`, { confirmText: "Close account", danger: true });
+    if (!ok) return;
+  }
+  const res = await closeBankAccount(CURRENT.username, CURRENT.classCode, id, destId);
   if (!res.ok) { acMsg("acMsg", `<div class="error-msg">${acEsc(res.error)}</div>`); return; }
   await render();
-  acMsg("acMsg", `<div class="success-msg">Account closed${res.moved > 0 ? ` — ${fmtMoney(res.moved)} moved back to cash` : ""}.</div>`);
+  acMsg("acMsg", `<div class="success-msg">${acEsc(res.srcName || "Account")} closed${res.moved > 0 ? ` — ${fmtMoney(res.moved)} moved to ${acEsc(res.destName)}` : ""}. You can open it again from “Open an account” below.</div>`);
+}
+
+/* ---------------- Balance tile: pick which account it shows ---------------- */
+const acBalKey = u => "t29-bank-balance-view:" + u;
+function acGetBalView(u) { try { return localStorage.getItem(acBalKey(u)) || ""; } catch (e) { return ""; } }
+function acSetBalView(u, id) { try { localStorage.setItem(acBalKey(u), id); } catch (e) { /* the choice just won't be remembered */ } }
+// The account the tile shows: the one they picked if it's still open, otherwise cash, otherwise the first open account.
+function acBalanceChoice(me, cls) {
+  const ch = acChoicesWithKind(me, cls), want = acGetBalView(me.username);
+  return { ch, cur: ch.find(c => c.id === want) || ch.find(c => c.id === "cash") || ch[0] || null };
+}
+function acChoiceNote(me, cls, c) {
+  if (c.id === "cash") { const r = Number(cls.cashInterestRate) || 0; return r > 0 ? `Earning ${r}% interest. ${interestScheduleLabel(cls)}` : ""; }
+  if (c.id === "savings") return `Savings · ${acRateText(cls, Number(cls.interestRate) || 0)}`;
+  const a = acctActiveOf(me).find(x => x.id === c.id), p = a && acctPlanById(cls, a.planId);
+  return p ? `${acKindLabel(p.kind)} · ${acRateText(cls, p.rate || 0)}` : "";
+}
+function acPaintBalanceWidget(me, cls) {
+  const box = document.getElementById("balanceStat"); if (!box) return;
+  const label = document.getElementById("balanceLabel"), val = document.getElementById("balance");
+  const noteEl = document.getElementById("cashRateNote"), hint = document.getElementById("balanceHint");
+  const setStatic = on => { box.disabled = on; box.classList.toggle("is-static", on); if (hint) hint.classList.toggle("hidden", on); };
+  if (IS_TEACHER) { label.textContent = "Cash balance"; val.textContent = "Unlimited ∞"; noteEl.classList.add("hidden"); setStatic(true); return; }
+  const { ch, cur } = acBalanceChoice(me, cls);
+  if (!cur) { label.textContent = "Balance"; val.textContent = fmtMoney(0); noteEl.classList.add("hidden"); setStatic(true); return; }
+  label.textContent = cur.label;
+  val.textContent = fmtMoney(cur.bal);
+  const note = acChoiceNote(me, cls, cur);
+  noteEl.textContent = note; noteEl.classList.toggle("hidden", !note);
+  setStatic(ch.length < 2); // nothing to choose between
+  box.setAttribute("aria-label", `${cur.label} balance ${fmtMoney(cur.bal)}.${ch.length > 1 ? " Press to choose which account's balance to show." : ""}`);
+}
+async function acOpenBalancePicker() {
+  if (IS_TEACHER || !AC_ME) return;
+  const { ch, cur } = acBalanceChoice(AC_ME, AC_CLS);
+  if (ch.length < 2) return;
+  const html = `<p class="ac-dlg-sub">Choose which account's balance this tile shows.</p>
+    <div class="ac-pick-list" role="radiogroup" aria-label="Account to show">${ch.map(c => `<button type="button" role="radio" aria-checked="${c.id === cur.id}" class="ac-pick${c.id === cur.id ? " on" : ""}" data-pick="${acEsc(c.id)}">
+      <span class="ac-pick-main"><strong>${acEsc(c.label)}</strong>${acKindBadge(c.kind)}</span><span class="ac-pick-bal">${fmtMoney(c.bal)}</span></button>`).join("")}</div>`;
+  const pick = await acDialog({ title: "Show the balance of…", html });
+  if (!pick) return;
+  acSetBalView(AC_ME.username, pick);
+  acPaintBalanceWidget(AC_ME, AC_CLS);
+}
+
+/* ---------------- A small pop-up, built on the same look as the site's own dialogs ---------------- */
+// o: { title, html, okText?, cancelText?, danger?, collect?(box) }. Resolves with: null (cancelled), the id of a clicked
+// [data-pick] button, or whatever collect() returns (true if there is no collect) when OK is pressed.
+function acDialog(o) {
+  return new Promise(resolve => {
+    const returnFocus = document.activeElement;
+    const overlay = document.createElement("div");
+    overlay.className = "t29-dialog-overlay";
+    overlay.innerHTML = `<div class="t29-dialog t29-dialog-ask ac-dialog" role="dialog" aria-modal="true" aria-labelledby="acDlgTitle">
+      <h3 class="ac-dlg-title" id="acDlgTitle"></h3>
+      <div class="ac-dlg-body">${o.html || ""}</div>
+      <div class="t29-dialog-actions"><button type="button" class="btn secondary" data-ac="cancel"></button>${o.okText ? `<button type="button" class="btn ${o.danger ? "coral" : "gold"}" data-ac="ok"></button>` : ""}</div>
+    </div>`;
+    overlay.querySelector("#acDlgTitle").textContent = o.title || "";
+    const okBtn = overlay.querySelector('[data-ac="ok"]'), cancelBtn = overlay.querySelector('[data-ac="cancel"]');
+    cancelBtn.textContent = o.cancelText || (o.okText ? "Cancel" : "Close");
+    if (okBtn) okBtn.textContent = o.okText;
+    const onKey = e => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(null); return; }
+      if (e.key !== "Tab") return;
+      const f = Array.from(overlay.querySelectorAll("button, select, input")), i = f.indexOf(document.activeElement);
+      if (i === -1) { e.preventDefault(); f[0].focus(); }
+      else if (e.shiftKey && i === 0) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+      e.stopPropagation();
+    };
+    function finish(v) {
+      document.removeEventListener("keydown", onKey, true);
+      overlay.remove();
+      if (returnFocus && typeof returnFocus.focus === "function") { try { returnFocus.focus(); } catch (e) { /* ignore */ } }
+      resolve(v);
+    }
+    overlay.addEventListener("click", e => {
+      if (e.target === overlay) { finish(null); return; }
+      const pk = e.target.closest("[data-pick]");
+      if (pk) finish(pk.getAttribute("data-pick"));
+    });
+    cancelBtn.addEventListener("click", () => finish(null));
+    if (okBtn) okBtn.addEventListener("click", () => finish(o.collect ? o.collect(overlay) : true));
+    document.addEventListener("keydown", onKey, true);
+    document.body.appendChild(overlay);
+    (overlay.querySelector("[data-pick].on") || overlay.querySelector("select") || okBtn || cancelBtn).focus();
+  });
 }
 
 /* ================= Teacher ================= */

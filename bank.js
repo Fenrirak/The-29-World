@@ -9,7 +9,6 @@ const DAY_LABEL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thurs
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("piggy", 26) + " Bank Account";
-  document.getElementById("iconBalance").innerHTML = icon("wallet", 30);
   document.getElementById("iconAuto").innerHTML = icon("repeat", 30);
   document.getElementById("hActivity").innerHTML = icon("bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 3 days)");
   if (IS_TEACHER) document.getElementById("labAmount").textContent = "Amount (negative to deduct from a student)";
@@ -103,11 +102,12 @@ async function render() {
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
 
-  document.getElementById("balance").textContent = IS_TEACHER ? "Unlimited ∞" : fmtMoney(me.balance);
-  const cashRateNote = document.getElementById("cashRateNote");
-  const cashRate = cls.cashInterestRate || 0;
-  cashRateNote.classList.toggle("hidden", IS_TEACHER || cashRate <= 0);
-  if (!IS_TEACHER && cashRate > 0) cashRateNote.textContent = `Earning ${cashRate}% interest. ${interestScheduleLabel(cls)}`;
+  // The balance tile at the top (and which account it shows) is painted by acPaintBalanceWidget() in accounts.js.
+  // A closed Cash / Savings account that money has landed in (e.g. a wage) is open again — see acctDefaultClosed().
+  if (!IS_TEACHER && acctNeedsRevive(me)) {
+    const revived = await acctReviveDefaults(me.username);
+    if (revived.length) AC_NOTICE = `<div class="success-msg">Money arrived in your ${revived.map(id => id === "cash" ? "Cash balance" : "Savings Account").join(" and ")}, so ${revived.length > 1 ? "they are" : "it is"} open again.</div>`;
+  }
 
   document.getElementById("goalsCard").classList.toggle("hidden", IS_TEACHER);
   document.getElementById("xferCard").classList.toggle("hidden", IS_TEACHER);
@@ -177,7 +177,7 @@ async function render() {
   for (const a of autos) {
     const row = document.createElement("div");
     row.className = "auto-row";
-    const accName = id => id === "cash" ? "Cash balance" : acctNameOf(cls, me, id);
+    const accName = id => id === "cash" ? (acctDefaultClosed(me, "cash") ? "" : "Cash balance") : acctNameOf(cls, me, id);
     if (a.type === "savings-transfer") {
       const e = autoEnds(a), fromN = accName(e.from), toN = accName(e.to);
       row.innerHTML = `
@@ -245,7 +245,7 @@ async function render() {
       "gambling": ["gold", "dice", "Gambling"], "big-event": ["coral", "star", "Big event"],
       "insurance-claim": ["mint", "shield", "Insurance claim"], "insurance-premium": ["coral", "shield", "Premium"],
       "insurance-signup-fee": ["lilac", "shield", "Insurance sign-up"],
-      "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
+      "account-close": ["gold", "piggy", "Account closed"], "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
       "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"],
       "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
     "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"], "account-fee": ["coral", "coin", "Account fee"],
@@ -543,7 +543,7 @@ function cancelEditAuto() {
   document.getElementById("autoAmount").value = "";
   document.getElementById("autoNote").value = "";
   document.getElementById("autoTo").value = "";
-  { const f = document.getElementById("autoFrom"); if (f) f.value = "cash"; }
+  { const f = document.getElementById("autoFrom"); if (f) { f.value = "cash"; if (!f.value) f.selectedIndex = 0; } }
   autoSyncCardRow();
   document.getElementById("hNewAuto").innerHTML = "Set up an automatic payment";
   document.getElementById("addAutoBtn").innerHTML = "Create automatic payment";
@@ -610,7 +610,7 @@ function startEditSavAuto(a) {
   EDITING_SAV_AUTO_ID = a.id;
   { const e = autoEnds(a), f = document.getElementById("xferFrom"), t = document.getElementById("xferTo");
     f.value = e.from; t.value = e.to;
-    if (!f.value) f.value = "cash"; // an account that has since been closed
+    if (!f.value) f.selectedIndex = 0; // an account that has since been closed
     if (!t.value || t.value === f.value) { const alt = [...t.options].find(o => o.value !== f.value); if (alt) t.value = alt.value; }
     xferHint(); }
   document.getElementById("savAutoDay").value = a.dayOfWeek;
@@ -664,7 +664,9 @@ function renderPayWith() {
     const prev = sel.value || "cash";
     sel.innerHTML = payWithOptionsHtml(ctx.me, ctx.cls, toSel ? toSel.value : "");
     const keep = [...sel.options].find(o => o.value === prev && !o.disabled);
-    sel.value = keep ? prev : "cash";
+    // Back to cash when it's open, otherwise the first account that can pay (cash may be closed).
+    const fallback = [...sel.options].find(o => o.value === "cash") || [...sel.options].find(o => !o.disabled);
+    sel.value = keep ? prev : (fallback ? fallback.value : "");
     payWithChanged(id);
   });
 }
@@ -694,7 +696,7 @@ function renderXfer(me, cls) {
   const opts = ch.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)} — ${fmtMoney(c.bal)}</option>`).join("");
   const prevF = f.value || "cash", prevT = t.value || "savings", has = id => ch.some(c => c.id === id);
   f.innerHTML = opts; t.innerHTML = opts;
-  f.value = has(prevF) ? prevF : "cash";
+  f.value = has(prevF) ? prevF : (has("cash") ? "cash" : (ch[0] || {}).id);
   t.value = has(prevT) && prevT !== f.value ? prevT : (ch.find(c => c.id !== f.value) || {}).id;
   xferHint();
 }
@@ -711,6 +713,7 @@ function xferHint() {
   const el = document.getElementById("xferHint"), f = document.getElementById("xferFrom"), t = document.getElementById("xferTo");
   if (!el || !f || !t || !AUTO_CARD_CTX || typeof acSourceNotes !== "function") return;
   const { me, cls } = AUTO_CARD_CTX, notes = acSourceNotes(me, cls, f.value);
+  if (acChoicesWithKind(me, cls).length < 2) notes.push("You need two open accounts to set up an automatic transfer.");
   const dst = acctActiveOf(me).find(a => a.id === t.value), dp = dst && acctPlanById(cls, dst.planId);
   if (dp && dp.maxBalance > 0) notes.push(`${escapeHtml(dp.name)} can hold up to ${fmtMoney(dp.maxBalance)}.`);
   el.innerHTML = notes.map(n => `<span>${n}</span>`).join("");

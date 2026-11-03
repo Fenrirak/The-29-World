@@ -215,19 +215,20 @@ function renderBudgetStudent(me, cls) {
   // Safe to spend = cash + savings + rest of this week's income − rest of
   // this week's bills (worked out in buildBudgetView).
   const cashNow = Math.max(0, v.cash);
+  const othersWord = v.otherLabel === "Savings" ? "savings" : "other accounts";
   let safeWhy;
-  if (v.safeTotal <= 0.005) safeWhy = "Your cash and savings, plus the money still to come, don't cover the rest of this week's bills, so there's nothing safe to spend.";
+  if (v.safeTotal <= 0.005) safeWhy = `Your cash and ${othersWord}, plus the money still to come, don't cover the rest of this week's bills, so there's nothing safe to spend.`;
   else {
-    safeWhy = "Your cash and savings, plus the money still to come this week, minus the bills still to pay.";
+    safeWhy = `Your cash and ${othersWord}, plus the money still to come this week, minus the bills still to pay.`;
     if (v.safeTimed < v.safeNow - 0.005) safeWhy += ` Some of that money hasn't arrived yet, so only ${fmtMoney(v.safeTimed)} is safe until it does.`;
-    if (v.safeTimed > cashNow + 0.005) safeWhy += ` Only ${fmtMoney(cashNow)} of it is cash — spending more means moving savings into cash first.`;
+    if (v.safeTimed > cashNow + 0.005) safeWhy += ` Only ${fmtMoney(cashNow)} of it is cash — spending more means moving ${othersWord} into cash first.`;
     if (v.plan.hasPlan && v.spendLeft < v.safeNow - 0.005) safeWhy += v.spendLeft > 0.005 ? ` Your plan only has ${fmtMoney(v.spendLeft)} of spending money left.` : " You've already used all of your plan's spending money.";
   }
   document.getElementById("budSafe").innerHTML = `
     <div class="bud-safe-label">Safe to spend right now</div>
     <div class="bud-safe-value">${fmtMoney(v.safeNow)}</div>
     <div class="bud-safe-why">${budEsc(safeWhy)}</div>
-    <div class="bud-safe-have"><span>Cash <strong>${fmtSigned(v.cash)}</strong></span><span>Savings <strong>${fmtMoney(v.savings)}</strong></span><span>Still coming in <strong>+${fmtMoney(v.restIn)}</strong></span><span>Bills to pay <strong>−${fmtMoney(v.restBills)}</strong></span></div>`;
+    <div class="bud-safe-have"><span>Cash <strong>${fmtSigned(v.cash)}</strong></span><span>${budEsc(v.otherLabel || "Savings")} <strong>${fmtMoney(v.savings)}</strong></span><span>Still coming in <strong>+${fmtMoney(v.restIn)}</strong></span><span>Bills to pay <strong>−${fmtMoney(v.restBills)}</strong></span></div>`;
 
   /* ---- Day by day ---- */
   const itemRow = i => {

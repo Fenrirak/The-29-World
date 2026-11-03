@@ -1182,6 +1182,7 @@ async function depositToSavings(username, amount) {
       if (!snap.exists) throw new Error("NOT_FOUND");
       const user = snap.data();
       if (!(amount > 0)) throw new Error("BAD_AMOUNT");
+      if (acctDefaultClosed(user, "savings") || acctDefaultClosed(user, "cash")) throw new Error("CLOSED");
       if (user.balance < amount) throw new Error("BROKE");
       t.update(userRef, {
         balance: Math.round((user.balance - amount) * 100) / 100,
@@ -1191,6 +1192,7 @@ async function depositToSavings(username, amount) {
   } catch (e) {
     if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than zero." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for that." };
+    if (e.message === "CLOSED") return { ok: false, error: "That account is closed. Open it again from the Bank page first." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   const user = await getUser(username);
@@ -1208,6 +1210,7 @@ async function withdrawFromSavings(username, amount) {
       if (!snap.exists) throw new Error("NOT_FOUND");
       const user = snap.data();
       if (!(amount > 0)) throw new Error("BAD_AMOUNT");
+      if (acctDefaultClosed(user, "savings") || acctDefaultClosed(user, "cash")) throw new Error("CLOSED");
       if ((user.savings || 0) < amount) throw new Error("BROKE");
       t.update(userRef, {
         balance: Math.round((user.balance + amount) * 100) / 100,
@@ -1217,6 +1220,7 @@ async function withdrawFromSavings(username, amount) {
   } catch (e) {
     if (e.message === "BAD_AMOUNT") return { ok: false, error: "Enter an amount greater than zero." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have that much in savings." };
+    if (e.message === "CLOSED") return { ok: false, error: "That account is closed. Open it again from the Bank page first." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   const user = await getUser(username);
@@ -1495,7 +1499,7 @@ async function autoResolveSource(t, studentUser, useCard, fromAcct, toUser, cls)
   if (!fromAcct || fromAcct === "cash") return "cash";
   const us = await t.get(usersCol().doc(studentUser));
   if (!us.exists || us.data().role === "teacher") throw new Error("BAD_ACCT");
-  if (fromAcct !== "savings" && !acctActiveOf(us.data()).some(x => x.id === fromAcct)) throw new Error("BAD_ACCT");
+  if (!acctOpenIdsOf(us.data()).includes(fromAcct)) throw new Error("BAD_ACCT");
   return fromAcct;
 }
 function autoSource(a) { return a && a.useCard ? "card" : ((a && a.fromAcct) || "cash"); }
@@ -1606,7 +1610,7 @@ function autoDirectionOf(e) { return e.from === "cash" ? "toSavings" : e.to === 
 async function autoCheckEnds(t, studentUser, ends) {
   const us = await t.get(usersCol().doc(studentUser));
   if (!us.exists) throw new Error("NO_CLASS");
-  const ok = new Set(["cash", "savings"].concat(acctActiveOf(us.data()).map(x => x.id)));
+  const ok = new Set(acctOpenIdsOf(us.data()));
   if (!ok.has(ends.from) || !ok.has(ends.to)) throw new Error("BAD_ACCT");
 }
 async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency, amount, direction, note, confirmed = false) {
@@ -3376,6 +3380,21 @@ const BUDGET_COUNTED = ["done", "today", "upcoming", "overdue", "daily"];
    { key, dir: "in"|"out"|"save", label, icon, amount, dayKey (null = every
    day), status, note, where }. Built from the same functions that actually
    pay or charge each thing, so the amounts here are what really happens. */
+// Money held outside the cash balance: the Savings Account (unless closed) plus every extra account. `total` is all of
+// it; `movable` is what they could really move into cash (a withdrawal fee comes off, and an account whose
+// withdrawal limit is used up gives nothing).
+function budgetOtherMoney(cls, user) {
+  let total = 0, movable = 0;
+  if (!acctDefaultClosed(user, "savings")) { total = movable = Math.max(0, Number(user.savings) || 0); }
+  acctActiveOf(user).forEach(a => {
+    const bal = Math.max(0, Number(a.balance) || 0), p = acctPlanById(cls, a.planId);
+    total += bal;
+    if (!p) { movable += bal; return; }
+    if (p.maxWithdrawals > 0 && (a.wd || 0) >= p.maxWithdrawals) return;
+    movable += Math.max(0, bal - (p.withdrawFee || 0));
+  });
+  return { total: budgetRound(total), movable: budgetRound(movable) };
+}
 function budgetWeekItems(cls, user, username) {
   const items = [];
   const weekKey = isoWeekKey();
@@ -3532,7 +3551,7 @@ function budgetWeekItems(cls, user, username) {
     const autoCard = !!a.useCard && a.toUser === cls.teacher && cardIsActive(user);
     const srcId = autoSource(a), viaAcct = !autoCard && srcId !== "cash" && srcId !== "card" ? acctNameOf(cls, user, srcId) : "";
     items.push({ key: "auto-" + a.id, dir: "out", icon: "repeat", label: a.note || "Automatic payment", amount: budgetRound(a.amount), dayKey: when.dayKey, status,
-      viaCard: autoCard,
+      viaCard: autoCard, fromOther: !!viaAcct, // fromOther: comes out of another of their accounts, not their cash
       note: status === "done" ? "Paid" : status === "missed" ? (autoCard ? "Didn't go out — not enough room on your credit card" : viaAcct ? `Didn't go out — not enough in your ${viaAcct}` : "Didn't go out — not enough cash on the day")
         : "Goes out by itself" + (a.toUser === cls.teacher ? ", to your teacher" : "") + (autoCard ? ", on your credit card" : viaAcct ? `, from your ${viaAcct}` : "") });
   });
@@ -3545,6 +3564,7 @@ function budgetWeekItems(cls, user, username) {
     const status = budgetStatus(when.dayKey, todayKey, when.done);
     const ends = autoEnds(a);
     if (ends.from !== "cash" && ends.to !== "cash") return; // moves between accounts only — cash doesn't change
+    if (!acctNameOf(cls, user, ends.from) || !acctNameOf(cls, user, ends.to)) return; // one of the accounts is closed, so it can't run
     const toSavings = ends.from === "cash";
     const other = toSavings ? ends.to : ends.from, otherName = other === "savings" ? "savings" : acctNameOf(cls, user, other);
     items.push({ key: "save-" + a.id, dir: toSavings ? "save" : "unsave", icon: "piggy",
@@ -3627,6 +3647,9 @@ function budgetWeekActuals(cls, username, weekStartKey) {
       case "gambling-cashout": gambleOut += amt; break;
       case "savings-deposit": case "term-deposit-open": case "stock-buy": case "kiwisaver-in": saved += amt; break;
       case "savings-withdraw": case "term-deposit-early": case "stock-sell": case "stock-close": saved -= amt; break;
+      // Closing an account moves the money to another of their own accounts. It only counts as money taken back out
+      // of savings when it landed in cash (closing the Cash account itself, or a move between two non-cash accounts, is neutral).
+      case "account-close": if (t.cashDir === "in") saved -= amt; break;
       // KiwiSaver paid out to them (retired, hardship, or an opt-out
       // refund). What comes off their pay each week never reached their
       // cash, so money coming back out of it is new money for this week.
@@ -3714,9 +3737,16 @@ function buildBudgetView(cls, user, username) {
   const cash = budgetRound(user.balance);
   // Savings that can cover a gap — less anything an automatic transfer
   // already moves back into cash this week (that's counted as money in).
-  const savings = budgetRound(Math.max(0, Number(user.savings) || 0));
+  // "Other accounts" = the Savings Account (unless closed) plus every extra account they hold. The money in them is
+  // theirs to move into cash, so it all counts; what can actually be moved is less any withdrawal fee, and nothing
+  // from an account whose withdrawal limit is used up.
+  const other = budgetOtherMoney(cls, user);
+  const savings = other.total;
+  const hasExtras = acctActiveOf(user).length > 0;
+  const savWord = hasExtras ? "other accounts" : "savings";
+  const cashClosed = acctDefaultClosed(user, "cash");
   const unsaving = sum(items.filter(i => i.dir === "unsave" && ["today", "upcoming", "overdue"].includes(i.status)));
-  const savingsSpare = budgetRound(Math.max(0, savings - unsaving));
+  const savingsSpare = budgetRound(Math.max(0, other.movable - unsaving));
   // Which upcoming payments can go on the credit card instead of out of cash? Automatic
   // card payments always do; a manual bill (school rent, transport — never the mortgage) does when the
   // card has room. Those never need money moved from savings, so they're left out of the
@@ -3746,6 +3776,7 @@ function buildBudgetView(cls, user, username) {
       }
       if (i.dayKey !== dayKey || !["today", "upcoming", "overdue"].includes(i.status)) return;
       if (i.dir === "out" && (i.viaCard || i.cardOk)) return; // goes on the credit card, not out of cash
+      if (i.dir === "out" && i.fromOther) { restBills += i.amount; return; } // paid from another account: leaves their money, not their cash
       if (i.dir === "in") { dayIn += i.amount; restIn += i.amount; }
       else if (i.dir === "unsave") dayIn += i.amount;
       else if (i.dir === "save") daySave += i.amount;
@@ -3789,10 +3820,10 @@ function buildBudgetView(cls, user, username) {
     const when = shortfall.dayKey === todayKey ? "today" : "on " + dayWord(shortfall.dayKey);
     const start = `${when === "today" ? "Today" : "On " + dayWord(shortfall.dayKey)} you'll need ${fmtMoney(shortfall.need)} for bills, but you'll only have about ${fmtMoney(Math.max(0, shortfall.have))} in cash.`;
     verdict = shortfall.covered
-      ? { tone: "warn", icon: "piggy", text: `${start} Move ${fmtMoney(shortfall.gap)} from your savings into cash ${when === "today" ? "now" : "before then"} to cover this week's bills (you have ${fmtMoney(savings)} saved).` }
-      : { tone: "bad", icon: "shield", text: `Heads up: ${start} ${savingsSpare > 0 ? `Even with the ${fmtMoney(savingsSpare)} in your savings, you'll be` : "You have nothing in savings to cover it, so you'll be"} ${fmtMoney(shortfall.uncovered)} short this week. Spend as little as you can, and look for ways to earn extra.` };
+      ? { tone: "warn", icon: "piggy", text: `${start} Move ${fmtMoney(shortfall.gap)} from your ${savWord} into cash ${when === "today" ? "now" : "before then"} to cover this week's bills (you have ${fmtMoney(savings)} in ${hasExtras ? "them" : "savings"}).` }
+      : { tone: "bad", icon: "shield", text: `Heads up: ${start} ${savingsSpare > 0 ? `Even with the ${fmtMoney(savingsSpare)} in your ${savWord}, you'll be` : `You have nothing in ${hasExtras ? "your other accounts" : "savings"} to cover it, so you'll be`} ${fmtMoney(shortfall.uncovered)} short this week. Spend as little as you can, and look for ways to earn extra.` };
   } else if (billsTotal > inTotal + 0.005 && !shortfall) {
-    verdict = { tone: "bad", icon: "shield", text: `This week's bills (${fmtMoney(billsTotal)}) are more than the money coming in (${fmtMoney(inTotal)}). The other ${fmtMoney(budgetRound(billsTotal - inTotal))} has to come from cash you already have or your savings.` };
+    verdict = { tone: "bad", icon: "shield", text: `This week's bills (${fmtMoney(billsTotal)}) are more than the money coming in (${fmtMoney(inTotal)}). The other ${fmtMoney(budgetRound(billsTotal - inTotal))} has to come from cash you already have or your ${savWord}.` };
   } else if (plan.hasPlan && spendLeft < -0.005) {
     verdict = { tone: "bad", icon: "cart", text: `You've spent ${fmtMoney(-spendLeft)} more than your plan's spending money this week.` };
   } else if (!plan.hasPlan) {
@@ -3864,12 +3895,18 @@ function buildBudgetView(cls, user, username) {
     const total = budgetRound(maturing.reduce((s, d) => s + d.amount, 0));
     notes.push({ tone: "good", icon: "piggy", text: `Your term deposit${maturing.length > 1 ? "s" : ""} (${fmtMoney(total)} plus interest) pay${maturing.length > 1 ? "" : "s"} back into your cash this week — that's your savings coming back, so think before you spend it.` });
   }
+  // Most payments on the site (rent, transport, the mortgage, store checkouts) come out of the cash balance, which is
+  // empty while it's closed.
+  if (cashClosed) {
+    notes.push({ tone: "warn", icon: "piggy", text: "Your Cash balance account is closed. Rent, transport, mortgage and store payments come out of cash, so open it again on the Bank page and move some money in before you need to pay." });
+  }
 
   return {
     ...sched, actual, plan,
     inItems, outItems, scheduledIn, inTotal, billsTotal, billsPaid, billsLeft, left,
     saveTarget, autoSave, spendAllowed, spent, spendLeft,
     cash, savings, savingsSpare, restIn, restBills, safeTotal, safeNow, safeTimed, lowestDay, shortfall, verdict, notes, kiwi,
+    otherLabel: hasExtras ? "Other accounts" : "Savings", cashClosed,
     card: cardInfo
   };
 }
@@ -3953,6 +3990,8 @@ function txnDirection(t, username) {
   else if (t.type === "event" || t.type === "life-grant") sign = raw < 0 ? "-" : raw > 0 ? "+" : "";
   else if (t.type === "gambling") sign = (t.note || "").includes("WON") ? "+" : "-";
   else if (t.type === "big-event") sign = t.to === username ? "+" : t.from === username ? "-" : "";
+  // Closing an account: only a move into cash from another account changes the cash balance.
+  else if (t.type === "account-close") sign = t.cashDir === "in" ? "+" : t.cashDir === "out" ? "-" : "";
   // Only the "moved in and paid a moving cost" entries carry an amount.
   else if (t.type === "property-occupancy") sign = raw > 0 ? (t.from === username ? "-" : "+") : "";
   else if (TXN_MONEY_IN.has(t.type)) sign = raw < 0 ? "-" : "+"; // a sale can go negative when the mortgage left was more than the house fetched
@@ -4926,6 +4965,31 @@ function acctPlanById(cls, id) { return ((cls && cls.accountPlans) || []).find(p
 function acctListOf(user) { return Array.isArray(user && user.bankAccounts) ? user.bankAccounts : []; }
 function acctActiveOf(user) { return acctListOf(user).filter(a => a.status === "active"); }
 function acctTotalOf(user) { return acctRound(acctActiveOf(user).reduce((s, a) => s + (Number(a.balance) || 0), 0)); }
+
+/* ---- The two original accounts can be closed too ----
+   Every student starts with a Cash balance (id "cash", the everyday account the rest of the site pays into and
+   spends from) and a Savings Account (id "savings"). Closing either one sets a flag in `closedDefaults`
+   ({ cash: true } / { savings: true }) and moves its money to another open account.
+   A flagged account only counts as closed while it is EMPTY. The rest of the site pays wages, refunds and
+   classmates' payments straight into `balance` and spends straight out of it, so if money ever lands in a
+   closed account it simply counts as open again: nothing is ever hidden from the student, and no other page
+   needs to know about any of this. (acctReviveDefaults() tidies the flag the next time the Bank page loads.) */
+function acctClosedMap(user) { const c = user && user.closedDefaults; return c && typeof c === "object" ? c : {}; }
+function acctDefaultClosed(user, id) {
+  if (id !== "cash" && id !== "savings") return false;
+  if (!acctClosedMap(user)[id]) return false;
+  return !((Number(id === "cash" ? user.balance : user.savings) || 0) > 0.004);
+}
+// True when a closed original account has since had money land in it, so its closed flag is out of date.
+function acctNeedsRevive(user) { const m = acctClosedMap(user); return ["cash", "savings"].some(id => m[id] && !acctDefaultClosed(user, id)); }
+// Ids of every account the student can use right now: "cash", "savings" (unless closed) and each active extra account.
+function acctOpenIdsOf(user) {
+  const ids = [];
+  if (!acctDefaultClosed(user, "cash")) ids.push("cash");
+  if (!acctDefaultClosed(user, "savings")) ids.push("savings");
+  acctActiveOf(user).forEach(a => ids.push(a.id));
+  return ids;
+}
 function acctLast4(a) { // a stable, made-up last 4 digits from the account id
   let h = 0; String((a && a.id) || "0").split("").forEach(c => { h = (h * 31 + c.charCodeAt(0)) % 10000; });
   return String(h).padStart(4, "0");
@@ -5124,24 +5188,101 @@ async function cancelBankAccountApplication(username, accountId) {
   } catch (e) { return { ok: false, error: "Something went wrong. Please try again." }; }
   return { ok: true };
 }
-// Closing sends whatever is left back to the cash balance.
-async function closeBankAccount(username, classCode, accountId) {
-  const userRef = usersCol().doc(username);
-  let moved = 0, name = "account";
+// Closing an account moves whatever is left in it to another open account the student picks (cash by default).
+// accountId can be an extra account's id or one of the two original accounts, "cash" / "savings".
+// A student always keeps at least one account open, so there is somewhere for their money to be.
+async function closeBankAccount(username, classCode, accountId, destId) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let moved = 0, srcName = "", destName = "", cashDir = "";
   try {
     await fdb.runTransaction(async (t) => {
-      moved = 0;
+      moved = 0; srcName = ""; destName = ""; cashDir = "";
+      const us = await t.get(userRef), cs = await t.get(classRef);
+      if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
+      const user = us.data(), cls = withNewModuleDefaults(cs.data());
+      if (user.role === "teacher") throw new Error("NOT_FOUND");
+      const list = acctListOf(user).map(a => Object.assign({}, a));
+      const isDefault = accountId === "cash" || accountId === "savings";
+      const src = isDefault ? null : list.find(x => x.id === accountId && x.status === "active");
+      if (isDefault ? acctDefaultClosed(user, accountId) : !src) throw new Error("NOT_FOUND");
+      const open = acctOpenIdsOf(user).filter(id => id !== accountId);
+      if (!open.length) throw new Error("LAST");
+      let bal = acctRound(user.balance || 0), sav = acctRound(user.savings || 0);
+      moved = accountId === "cash" ? bal : accountId === "savings" ? sav : acctRound(src.balance || 0);
+      if (moved < 0) throw new Error("NEGATIVE");
+      srcName = accountId === "cash" ? "Cash balance" : accountId === "savings" ? "Savings Account" : ((acctPlanById(cls, src.planId) || {}).name || "account");
+      if (moved > 0) {
+        // Where the money goes: the one picked, otherwise cash, then an everyday account, then whatever is open.
+        let to = destId && open.includes(destId) ? destId : "";
+        if (!to) {
+          const everyday = open.find(id => id !== "cash" && id !== "savings" && ((acctPlanById(cls, (list.find(a => a.id === id) || {}).planId) || {}).kind !== "savings"));
+          to = open.includes("cash") ? "cash" : everyday || open[0];
+        }
+        if (to === "cash") bal = acctRound(bal + moved);
+        else if (to === "savings") sav = acctRound(sav + moved);
+        else {
+          const d = list.find(a => a.id === to), dp = acctPlanById(cls, d.planId);
+          if (dp && dp.maxBalance > 0 && (d.balance || 0) + moved > dp.maxBalance + 0.001) throw new Error("CAP:" + acctRound(Math.max(0, dp.maxBalance - (d.balance || 0))));
+          d.balance = acctRound((d.balance || 0) + moved);
+        }
+        destName = to === "cash" ? "Cash balance" : to === "savings" ? "Savings Account" : ((acctPlanById(cls, (list.find(a => a.id === to) || {}).planId) || {}).name || "account");
+        // Only a move into cash from a non-cash account changes the cash the budget tracks; closing Cash itself is neutral.
+        cashDir = accountId !== "cash" && to === "cash" ? "in" : "";
+      }
+      const upd = {};
+      if (accountId === "cash") bal = 0;
+      if (accountId === "savings") sav = 0;
+      upd.balance = bal; upd.savings = sav;
+      let nextList = list;
+      if (!isDefault) nextList = list.filter(x => x.id !== accountId);
+      if (acctListOf(user).length) upd.bankAccounts = nextList;
+      if (isDefault) upd.closedDefaults = Object.assign({}, acctClosedMap(user), { [accountId]: true });
+      t.update(userRef, upd);
+    });
+  } catch (e) {
+    const m = String((e && e.message) || "").split(":");
+    if (m[0] === "LAST") return { ok: false, error: "You need at least one account open to keep your money in. Open another one first, then close this one." };
+    if (m[0] === "CAP") return { ok: false, error: `That account can only hold up to its balance cap — it has room for ${fmtMoney(Number(m[1]) || 0)} more. Pick another account to move the money to.` };
+    if (m[0] === "NEGATIVE") return { ok: false, error: "You can't close an account that is overdrawn." };
+    return { ok: false, error: "Couldn't close that account. Refresh and try again." };
+  }
+  if (moved > 0) await logTxn(classCode, { type: "account-close", to: username, amount: moved, cashDir, note: `Closed ${srcName} — ${fmtMoney(moved)} moved to ${destName}` });
+  return { ok: true, moved, srcName, destName };
+}
+// Opens one of the two original accounts again. Free and instant — they are included for everyone in the class.
+async function reopenDefaultAccount(username, id) {
+  if (id !== "cash" && id !== "savings") return { ok: false, error: "That account isn't available any more." };
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
       const us = await t.get(userRef);
       if (!us.exists) throw new Error("NOT_FOUND");
-      const user = us.data(), list = acctListOf(user);
-      const a = list.find(x => x.id === accountId && x.status === "active");
-      if (!a) throw new Error("NOT_FOUND");
-      moved = acctRound(a.balance || 0);
-      t.update(userRef, { bankAccounts: list.filter(x => x.id !== accountId), balance: acctRound((user.balance || 0) + moved) });
+      const user = us.data();
+      if (user.role === "teacher") throw new Error("NOT_FOUND");
+      if (!acctClosedMap(user)[id]) return;
+      const next = Object.assign({}, acctClosedMap(user)); delete next[id];
+      t.update(userRef, { closedDefaults: next });
     });
-  } catch (e) { return { ok: false, error: "Couldn't close that account. Refresh and try again." }; }
-  if (moved > 0) await logTxn(classCode, { type: "savings-withdraw", to: username, amount: moved, note: "Closed an account — balance moved back to cash" });
-  return { ok: true, moved };
+  } catch (e) { return { ok: false, error: "Something went wrong. Please try again." }; }
+  return { ok: true };
+}
+// A closed original account that money has since landed in (a wage, a refund, a classmate's payment) counts as open
+// again — see acctDefaultClosed() — so this just clears its flag. Returns the ids it re-opened, e.g. ["cash"].
+async function acctReviveDefaults(username) {
+  const userRef = usersCol().doc(username);
+  let revived = [];
+  try {
+    await fdb.runTransaction(async (t) => {
+      revived = [];
+      const us = await t.get(userRef);
+      if (!us.exists) return;
+      const user = us.data(), map = acctClosedMap(user);
+      const next = Object.assign({}, map);
+      ["cash", "savings"].forEach(id => { if (map[id] && (Number(id === "cash" ? user.balance : user.savings) || 0) > 0.004) { delete next[id]; revived.push(id); } });
+      if (revived.length) t.update(userRef, { closedDefaults: next });
+    });
+  } catch (e) { return []; }
+  return revived;
 }
 
 /* ---------------- Moving money ---------------- */
@@ -5155,6 +5296,8 @@ function acctApplyMove(user, cls, fromId, toId, amount) {
   let bal = user.balance || 0, sav = user.savings || 0;
   const list = acctListOf(user).map(a => Object.assign({}, a));
   const find = id => list.find(a => a.id === id && a.status === "active");
+  if ((fromId === "cash" || fromId === "savings") && acctDefaultClosed(user, fromId)) throw new Error("NOT_FOUND");
+  if ((toId === "cash" || toId === "savings") && acctDefaultClosed(user, toId)) throw new Error("NOT_FOUND");
   const nameOf = id => id === "cash" ? "Cash" : id === "savings" ? "Savings Account" : ((acctPlanById(cls, (find(id) || {}).planId) || {}).name || "account");
   let fee = 0, feeName = "";
   // --- take it out of the source ---
@@ -5202,8 +5345,8 @@ function acctMoveError(e) {
 }
 // "Savings Account", "Bills Account", "Cash" — for any account id (used by the budget and the bank page).
 function acctNameOf(cls, user, id) {
-  if (id === "cash") return "Cash";
-  if (id === "savings") return "Savings Account";
+  if (id === "cash") return acctDefaultClosed(user, "cash") ? "" : "Cash";
+  if (id === "savings") return acctDefaultClosed(user, "savings") ? "" : "Savings Account";
   const a = acctListOf(user).find(x => x.id === id);
   return a ? ((acctPlanById(cls, a.planId) || {}).name || "account") : "";
 }
