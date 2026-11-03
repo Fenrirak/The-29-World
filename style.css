@@ -1033,7 +1033,16 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
   border-radius:var(--radius);
   padding:14px 18px;
   box-shadow:0 6px 18px rgba(201,154,46,0.2);
+  /* a button: tap it to choose which account's balance it shows */
+  border:0;margin:0;font:inherit;text-align:left;cursor:pointer;
+  transition:transform .15s,box-shadow .15s;
 }
+.anw-balance-widget:hover:not(:disabled){transform:translateY(-2px);box-shadow:var(--shadow-lift);}
+.anw-balance-widget:active:not(:disabled){transform:none;}
+.anw-balance-widget:focus-visible{outline:3px solid var(--navy-900);outline-offset:3px;}
+html.dark-mode .anw-balance-widget:focus-visible{outline-color:#fff;}
+.anw-balance-widget:disabled,.anw-balance-widget.is-static{cursor:default;}
+@media (prefers-reduced-motion:reduce){.anw-balance-widget{transition:none;}.anw-balance-widget:hover:not(:disabled){transform:none;}}
 .anw-balance-widget .anw-bw-label{
   color:#5a4415;font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.06em;font-weight:700;
   display:flex;align-items:center;gap:6px;

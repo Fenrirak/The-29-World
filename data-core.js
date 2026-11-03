@@ -3274,6 +3274,104 @@ function _anwWidgetLabelHtml() {
     : `${icon("coin", 14)} Cash balance`;
 }
 
+/* ---------------- Which account's balance to show (floating widget + the Bank page's balance tile) ----------------
+   Both read the same per-device choice, and both open the same pop-up, so picking an account in one updates the other.
+   Cash is the default; if the chosen account has been closed they fall back to cash, then the first open account. */
+const _anwBalKey = u => "t29-bank-balance-view:" + u;
+function anwGetBalView(u) { try { return localStorage.getItem(_anwBalKey(u)) || ""; } catch (e) { return ""; } }
+function anwSetBalView(u, id) { try { localStorage.setItem(_anwBalKey(u), id); } catch (e) { /* just won't be remembered */ } }
+// Every account the student can use right now, tagged with its kind: Cash and Savings (while open) then extra accounts.
+function anwOpenAccounts(me, cls) {
+  const out = [];
+  if (!acctDefaultClosed(me, "cash")) out.push({ id: "cash", label: "Cash balance", bal: me.balance || 0, kind: "everyday" });
+  if (!acctDefaultClosed(me, "savings")) out.push({ id: "savings", label: "Savings Account", bal: me.savings || 0, kind: "savings" });
+  acctActiveOf(me).forEach(a => { const p = acctPlanById(cls, a.planId); out.push({ id: a.id, label: p ? p.name : "Account", bal: a.balance || 0, kind: p ? p.kind : "everyday" }); });
+  return out;
+}
+function anwBalanceChoice(me, cls) {
+  const ch = anwOpenAccounts(me, cls), want = anwGetBalView(me.username);
+  return { ch, cur: ch.find(c => c.id === want) || ch.find(c => c.id === "cash") || ch[0] || null };
+}
+// A small pop-up on the same look as the site's own dialogs. o: { title, html, okText?, cancelText?, danger?, collect?(box) }.
+// Resolves with null (cancelled), the id of a clicked [data-pick] button, or collect()'s result (true if none) on OK.
+function anwDialog(o) {
+  return new Promise(resolve => {
+    const returnFocus = document.activeElement;
+    const overlay = document.createElement("div");
+    overlay.className = "t29-dialog-overlay";
+    overlay.innerHTML = `<div class="t29-dialog t29-dialog-ask ac-dialog" role="dialog" aria-modal="true" aria-labelledby="acDlgTitle">
+      <h3 class="ac-dlg-title" id="acDlgTitle"></h3>
+      <div class="ac-dlg-body">${o.html || ""}</div>
+      <div class="t29-dialog-actions"><button type="button" class="btn secondary" data-ac="cancel"></button>${o.okText ? `<button type="button" class="btn ${o.danger ? "coral" : "gold"}" data-ac="ok"></button>` : ""}</div>
+    </div>`;
+    overlay.querySelector("#acDlgTitle").textContent = o.title || "";
+    const okBtn = overlay.querySelector('[data-ac="ok"]'), cancelBtn = overlay.querySelector('[data-ac="cancel"]');
+    cancelBtn.textContent = o.cancelText || (o.okText ? "Cancel" : "Close");
+    if (okBtn) okBtn.textContent = o.okText;
+    const onKey = e => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(null); return; }
+      if (e.key !== "Tab") return;
+      const f = Array.from(overlay.querySelectorAll("button, select, input")), i = f.indexOf(document.activeElement);
+      if (i === -1) { e.preventDefault(); f[0].focus(); }
+      else if (e.shiftKey && i === 0) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+      e.stopPropagation();
+    };
+    function finish(v) {
+      document.removeEventListener("keydown", onKey, true);
+      overlay.remove();
+      if (returnFocus && typeof returnFocus.focus === "function") { try { returnFocus.focus(); } catch (e) { /* ignore */ } }
+      resolve(v);
+    }
+    overlay.addEventListener("click", e => {
+      if (e.target === overlay) { finish(null); return; }
+      const pk = e.target.closest("[data-pick]");
+      if (pk) finish(pk.getAttribute("data-pick"));
+    });
+    cancelBtn.addEventListener("click", () => finish(null));
+    if (okBtn) okBtn.addEventListener("click", () => finish(o.collect ? o.collect(overlay) : true));
+    document.addEventListener("keydown", onKey, true);
+    document.body.appendChild(overlay);
+    (overlay.querySelector("[data-pick].on") || overlay.querySelector("select") || okBtn || cancelBtn).focus();
+  });
+}
+// The "show the balance of…" pop-up. With no arguments it works out the student and class itself (the floating widget
+// does that); the Bank page passes the ones it already has.
+async function anwOpenBalancePicker(me, cls) {
+  try {
+    if (!me) me = await getUserCached(_anwWidgetUsername || (typeof CURRENT !== "undefined" && CURRENT && CURRENT.username));
+    if (!me || me.role === "teacher") return;
+    if (!cls) cls = await getClassCached(me.classCode);
+    const { ch, cur } = anwBalanceChoice(me, cls);
+    if (ch.length < 2) return;
+    const badge = k => `<span class="badge ${k === "savings" ? "mint" : "navy"}">${k === "savings" ? "Savings" : "Everyday"}</span>`;
+    const html = `<p class="ac-dlg-sub">Choose which account's balance is shown.</p>
+      <div class="ac-pick-list" role="radiogroup" aria-label="Account to show">${ch.map(c => `<button type="button" role="radio" aria-checked="${c.id === cur.id}" class="ac-pick${c.id === cur.id ? " on" : ""}" data-pick="${escapeHtml(c.id)}">
+        <span class="ac-pick-main"><strong>${escapeHtml(c.label)}</strong>${badge(c.kind)}</span><span class="ac-pick-bal">${fmtMoney(c.bal)}</span></button>`).join("")}</div>`;
+    const pick = await anwDialog({ title: "Show the balance of…", html });
+    if (!pick) return;
+    anwSetBalView(me.username, pick);
+    document.dispatchEvent(new CustomEvent("anw-balance-view")); // the Bank page's tile repaints on this
+    anwRefreshBalanceWidget();
+  } catch (e) { console.warn("Balance picker failed:", e); }
+}
+// Paints the floating widget: the chosen account's name and balance (chips on Roulette/Blackjack), and whether it can be tapped.
+function anwPaintBalanceWidget(user, cls) {
+  const box = document.getElementById("anwBalanceWidget"), valEl = document.getElementById("anwBalanceWidgetValue");
+  if (!box || !valEl || !user) return;
+  const labelEl = box.querySelector(".anw-bw-label");
+  let cur = null, n = 0;
+  if (!_anwShowsChips()) { try { const r = anwBalanceChoice(user, cls); cur = r.cur; n = r.ch.length; } catch (e) { /* show cash below */ } }
+  if (_anwShowsChips()) { labelEl.innerHTML = _anwWidgetLabelHtml(); valEl.textContent = fmtMoney(gamblingAccountToday(user).balance); }
+  else if (cur) { labelEl.innerHTML = `${icon("coin", 14)} ${escapeHtml(cur.label)}`; valEl.textContent = fmtMoney(cur.bal); }
+  else { labelEl.innerHTML = _anwWidgetLabelHtml(); valEl.textContent = fmtMoney(user.balance); }
+  const clickable = n > 1;
+  box.disabled = !clickable;
+  box.classList.toggle("is-static", !clickable);
+  box.title = clickable ? "Choose which account's balance to show" : "";
+  box.setAttribute("aria-label", `${labelEl.textContent.trim()} ${valEl.textContent}.${clickable ? " Press to choose which account to show." : ""}`);
+}
+
 // The one place that actually repaints the widget's number. Always an
 // uncached, fresh read — deliberately, since this only ever runs right
 // after a write we already know just happened (or, on Roulette/
@@ -3285,7 +3383,7 @@ async function anwRefreshBalanceWidget() {
   try {
     const fresh = await getUser(_anwWidgetUsername);
     if (!fresh) return;
-    el.textContent = _anwShowsChips() ? fmtMoney(gamblingAccountToday(fresh).balance) : fmtMoney(fresh.balance);
+    anwPaintBalanceWidget(fresh, await getClassCached(fresh.classCode));
   } catch (e) {
     console.warn("Balance widget refresh failed:", e);
   }
@@ -3319,10 +3417,7 @@ async function anwSetGamblingMode(mode) {
   if (!_anwWidgetUsername) return;
   try {
     const cached = await getUserCached(_anwWidgetUsername);
-    const el = document.getElementById("anwBalanceWidgetValue");
-    if (cached && el) {
-      el.textContent = _anwShowsChips() ? fmtMoney(gamblingAccountToday(cached).balance) : fmtMoney(cached.balance);
-    }
+    if (cached) anwPaintBalanceWidget(cached, await getClassCached(cached.classCode));
   } catch (e) {
     // The next cash-moving action (or the next tab switch) will pick it up.
   }
@@ -3330,9 +3425,14 @@ async function anwSetGamblingMode(mode) {
 
 async function mountBalanceWidget(username) {
   if (document.getElementById("anwBalanceWidget")) return;
-  const box = document.createElement("div");
+  // A button: tapping it opens the same "which account's balance to show" pop-up as the Bank page's balance tile.
+  const box = document.createElement("button");
+  box.type = "button";
   box.id = "anwBalanceWidget";
-  box.className = "anw-balance-widget";
+  box.className = "anw-balance-widget is-static";
+  box.disabled = true; // until we know there is more than one account to choose from
+  box.setAttribute("aria-haspopup", "dialog");
+  box.addEventListener("click", () => anwOpenBalancePicker());
   box.innerHTML = `
     <div class="anw-bw-label">${_anwWidgetLabelHtml()}</div>
     <div class="anw-bw-value" id="anwBalanceWidgetValue">—</div>
@@ -3341,14 +3441,9 @@ async function mountBalanceWidget(username) {
   positionBalanceWidget();
   window.addEventListener("resize", positionBalanceWidget);
 
-  const cached = await getUserCached(username);
-  if (cached) {
-    box.querySelector("#anwBalanceWidgetValue").textContent = _anwShowsChips()
-      ? fmtMoney(gamblingAccountToday(cached).balance)
-      : fmtMoney(cached.balance);
-  }
-
   _anwWidgetUsername = username;
+  const cached = await getUserCached(username);
+  if (cached) anwPaintBalanceWidget(cached, await getClassCached(cached.classCode));
 }
 
 // Sits just under the sticky top nav bar, on the left, rather than being

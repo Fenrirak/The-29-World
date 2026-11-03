@@ -384,13 +384,7 @@ function acPlanTile(me, cls, p, off, full) {
 /* ---------------- Moving money ---------------- */
 // Every account the student can move money in or out of, tagged with its kind (used by the move, transfer, pay-with and
 // balance-tile menus). The two original accounts only appear while they are open.
-function acChoicesWithKind(me, cls) {
-  const out = [];
-  if (!acctDefaultClosed(me, "cash")) out.push({ id: "cash", label: "Cash balance", bal: me.balance || 0, kind: "everyday" });
-  if (!acctDefaultClosed(me, "savings")) out.push({ id: "savings", label: "Savings Account", bal: me.savings || 0, kind: "savings" });
-  acctActiveOf(me).forEach(a => { const p = acctPlanById(cls, a.planId); out.push({ id: a.id, label: p ? p.name : "Account", bal: a.balance || 0, kind: p ? p.kind : "everyday" }); });
-  return out;
-}
+function acChoicesWithKind(me, cls) { return anwOpenAccounts(me, cls); }
 function acAccountChoices(me, cls) { return acChoicesWithKind(me, cls).map(c => ({ id: c.id, label: c.label, bal: c.bal })); }
 // Rules worth knowing before money leaves an account (withdrawal cap, fee, lost bonus)
 function acSourceNotes(me, cls, id) {
@@ -532,14 +526,9 @@ async function acClose(id) {
 }
 
 /* ---------------- Balance tile: pick which account it shows ---------------- */
-const acBalKey = u => "t29-bank-balance-view:" + u;
-function acGetBalView(u) { try { return localStorage.getItem(acBalKey(u)) || ""; } catch (e) { return ""; } }
-function acSetBalView(u, id) { try { localStorage.setItem(acBalKey(u), id); } catch (e) { /* the choice just won't be remembered */ } }
+const acGetBalView = anwGetBalView, acSetBalView = anwSetBalView; // shared with the floating widget (data-core.js)
 // The account the tile shows: the one they picked if it's still open, otherwise cash, otherwise the first open account.
-function acBalanceChoice(me, cls) {
-  const ch = acChoicesWithKind(me, cls), want = acGetBalView(me.username);
-  return { ch, cur: ch.find(c => c.id === want) || ch.find(c => c.id === "cash") || ch[0] || null };
-}
+function acBalanceChoice(me, cls) { return anwBalanceChoice(me, cls); }
 function acChoiceNote(me, cls, c) {
   if (c.id === "cash") { const r = Number(cls.cashInterestRate) || 0; return r > 0 ? `Earning ${r}% interest. ${interestScheduleLabel(cls)}` : ""; }
   if (c.id === "savings") return `Savings · ${acRateText(cls, Number(cls.interestRate) || 0)}`;
@@ -563,61 +552,12 @@ function acPaintBalanceWidget(me, cls) {
 }
 async function acOpenBalancePicker() {
   if (IS_TEACHER || !AC_ME) return;
-  const { ch, cur } = acBalanceChoice(AC_ME, AC_CLS);
-  if (ch.length < 2) return;
-  const html = `<p class="ac-dlg-sub">Choose which account's balance this tile shows.</p>
-    <div class="ac-pick-list" role="radiogroup" aria-label="Account to show">${ch.map(c => `<button type="button" role="radio" aria-checked="${c.id === cur.id}" class="ac-pick${c.id === cur.id ? " on" : ""}" data-pick="${acEsc(c.id)}">
-      <span class="ac-pick-main"><strong>${acEsc(c.label)}</strong>${acKindBadge(c.kind)}</span><span class="ac-pick-bal">${fmtMoney(c.bal)}</span></button>`).join("")}</div>`;
-  const pick = await acDialog({ title: "Show the balance of…", html });
-  if (!pick) return;
-  acSetBalView(AC_ME.username, pick);
-  acPaintBalanceWidget(AC_ME, AC_CLS);
+  await anwOpenBalancePicker(AC_ME, AC_CLS); // saves the choice and tells the tile to repaint (see the listener below)
 }
+document.addEventListener("anw-balance-view", () => { if (AC_ME && AC_CLS) acPaintBalanceWidget(AC_ME, AC_CLS); });
 
-/* ---------------- A small pop-up, built on the same look as the site's own dialogs ---------------- */
-// o: { title, html, okText?, cancelText?, danger?, collect?(box) }. Resolves with: null (cancelled), the id of a clicked
-// [data-pick] button, or whatever collect() returns (true if there is no collect) when OK is pressed.
-function acDialog(o) {
-  return new Promise(resolve => {
-    const returnFocus = document.activeElement;
-    const overlay = document.createElement("div");
-    overlay.className = "t29-dialog-overlay";
-    overlay.innerHTML = `<div class="t29-dialog t29-dialog-ask ac-dialog" role="dialog" aria-modal="true" aria-labelledby="acDlgTitle">
-      <h3 class="ac-dlg-title" id="acDlgTitle"></h3>
-      <div class="ac-dlg-body">${o.html || ""}</div>
-      <div class="t29-dialog-actions"><button type="button" class="btn secondary" data-ac="cancel"></button>${o.okText ? `<button type="button" class="btn ${o.danger ? "coral" : "gold"}" data-ac="ok"></button>` : ""}</div>
-    </div>`;
-    overlay.querySelector("#acDlgTitle").textContent = o.title || "";
-    const okBtn = overlay.querySelector('[data-ac="ok"]'), cancelBtn = overlay.querySelector('[data-ac="cancel"]');
-    cancelBtn.textContent = o.cancelText || (o.okText ? "Cancel" : "Close");
-    if (okBtn) okBtn.textContent = o.okText;
-    const onKey = e => {
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(null); return; }
-      if (e.key !== "Tab") return;
-      const f = Array.from(overlay.querySelectorAll("button, select, input")), i = f.indexOf(document.activeElement);
-      if (i === -1) { e.preventDefault(); f[0].focus(); }
-      else if (e.shiftKey && i === 0) { e.preventDefault(); f[f.length - 1].focus(); }
-      else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
-      e.stopPropagation();
-    };
-    function finish(v) {
-      document.removeEventListener("keydown", onKey, true);
-      overlay.remove();
-      if (returnFocus && typeof returnFocus.focus === "function") { try { returnFocus.focus(); } catch (e) { /* ignore */ } }
-      resolve(v);
-    }
-    overlay.addEventListener("click", e => {
-      if (e.target === overlay) { finish(null); return; }
-      const pk = e.target.closest("[data-pick]");
-      if (pk) finish(pk.getAttribute("data-pick"));
-    });
-    cancelBtn.addEventListener("click", () => finish(null));
-    if (okBtn) okBtn.addEventListener("click", () => finish(o.collect ? o.collect(overlay) : true));
-    document.addEventListener("keydown", onKey, true);
-    document.body.appendChild(overlay);
-    (overlay.querySelector("[data-pick].on") || overlay.querySelector("select") || okBtn || cancelBtn).focus();
-  });
-}
+// The small pop-up lives in data-core.js (anwDialog) so the floating balance widget can use it too.
+const acDialog = anwDialog;
 
 /* ================= Teacher ================= */
 function acRenderTeacher(cls, students) {
