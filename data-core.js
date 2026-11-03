@@ -2210,17 +2210,25 @@ async function t29NotifyRunPayments(classCode, sinceTs, kind) {
 }
 
 // Marks a bonus/fine txn as seen so its one-time popup doesn't show again.
+// Returns true ONLY for the one caller that actually flipped it from
+// unacknowledged to acknowledged — a second device/tab running this at the
+// same moment gets false, so a bonus/fine popup is only ever shown once
+// across every device the student is logged in on.
 async function acknowledgeTxn(classCode, txnId) {
   const classRef = classesCol().doc(classCode);
+  let won = false;
   await fdb.runTransaction(async (t) => {
+    won = false;
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
     const txn = (cls.txns || []).find(x => x.id === txnId);
-    if (!txn) return;
+    if (!txn || txn.acknowledged) return;
     txn.acknowledged = true;
     t.update(classRef, { txns: cls.txns });
+    won = true;
   });
+  return won;
 }
 
 /* ---------------- Remove a student ---------------- */

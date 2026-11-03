@@ -80,9 +80,17 @@ async function checkWeeklyEventPopup(username, classCode) {
   let state = getShownEventState(username);
   if (state.week !== weekKey) state = { week: weekKey, ids: [] };
   const shown = new Set(state.ids);
+  // CROSS-DEVICE: the "already shown" marker used to live only in this
+  // browser's localStorage, so logging in on another device/browser showed
+  // the same popup again. It now lives on the log entry in Firestore
+  // (popupShown, set atomically by claimEventPopup). Anything this device
+  // remembers showing but that has no server flag yet (shown before this
+  // fix) gets flagged now, quietly, so other devices don't show it either.
+  due.filter(l => l.type === "fixed" && l.status === "resolved" && shown.has(l.id) && !l.popupShown)
+    .forEach(l => { claimEventPopup(classCode, "weekly", l.id).catch(() => {}); });
   const candidates = due
     .filter(l => (l.status === "planned" && (l.manual || !revealedToday))
-      || (l.type === "fixed" && (l.status === "scheduled" || l.status === "resolved") && !shown.has(l.id)))
+      || (l.type === "fixed" && (l.status === "scheduled" || l.status === "resolved") && !shown.has(l.id) && !l.popupShown))
     .sort((a, b) => (a.revealAt || 0) - (b.revealAt || 0));
   let entry = null;
   for (const c of candidates) {
@@ -99,6 +107,21 @@ async function checkWeeklyEventPopup(username, classCode) {
     showChoiceEventPopup(entry, username, classCode);
     return;
   }
+
+  // Only ONE device/tab ever gets to show this popup: the claim is an atomic
+  // Firestore transaction, so if another device (or another tab racing this
+  // one) already showed it, this returns false and nothing is shown here.
+  // The event's money change already happened exactly once, in
+  // revealWeeklyEvent — this only decides who displays the message.
+  let firstToShow = false;
+  try {
+    firstToShow = await claimEventPopup(classCode, "weekly", entry.id);
+  } catch (e) {
+    return; // couldn't confirm — don't risk a duplicate; it's retried next load
+  }
+  state.ids = state.ids.concat([entry.id]);
+  saveShownEventState(username, state);
+  if (!firstToShow) return;
 
   // The plan that pays this student the most back for this event, if any —
   // plus, kept separate because claiming it gives their house away, an
@@ -121,9 +144,6 @@ async function checkWeeklyEventPopup(username, classCode) {
   }];
 
   showEventPopup(withDetails, username, classCode);
-
-  state.ids = state.ids.concat([entry.id]);
-  saveShownEventState(username, state);
 }
 
 // Multiple-choice weekly event popup. Has no close button and can't be
@@ -323,11 +343,15 @@ async function checkAdjustmentPopup(username, classCode) {
   // instead of paying for its own round trip.
   const cls = await getClassCached(classCode);
   if (!cls) return;
-  const pending = (cls.txns || []).find(t => t.announce && !t.acknowledged && t.to === username && (t.type === "bonus" || t.type === "fine"));
-  if (!pending) return;
-
-  showAdjustmentPopup(pending);
-  await acknowledgeTxn(classCode, pending.id);
+  const pendingList = (cls.txns || []).filter(t => t.announce && !t.acknowledged && t.to === username && (t.type === "bonus" || t.type === "fine"));
+  // Acknowledge FIRST, atomically: only the device that actually flips it
+  // from unacknowledged shows the popup, so a second device/tab (or one that
+  // read a slightly stale copy) never shows the same bonus/fine again.
+  for (const pending of pendingList) {
+    let won = false;
+    try { won = await acknowledgeTxn(classCode, pending.id); } catch (e) { return; }
+    if (won) { showAdjustmentPopup(pending); return; }
+  }
 }
 
 function showAdjustmentPopup(txn) {
@@ -422,13 +446,25 @@ async function checkBigEventPopup(username, classCode, onlyPending) {
   // regular weekly events.
   const state = getShownBigEventState(username);
   const shown = new Set(state.ids);
-  const unseenGood = (cls.bigEventLog || [])
-    .find(e => e.studentUser === username && e.status === "received" && !shown.has(e.id));
-  if (!unseenGood) return;
-
-  showGoodBigEventPopup(unseenGood);
-  state.ids = state.ids.concat([unseenGood.id]);
-  saveShownBigEventState(username, state);
+  const received = (cls.bigEventLog || []).filter(e => e.studentUser === username && e.status === "received");
+  // Shown on this device before the server flag existed — flag it quietly so
+  // other devices don't show it again either.
+  received.filter(e => shown.has(e.id) && !e.popupShown)
+    .forEach(e => { claimEventPopup(classCode, "big", e.id).catch(() => {}); });
+  // CROSS-DEVICE: skip any the server says has already been shown anywhere,
+  // and claim the one to show atomically (see claimEventPopup) so two
+  // devices opening at the same moment can't both show it. The windfall
+  // itself was paid once, in revealBigEvent.
+  for (const e of received.filter(e => !shown.has(e.id) && !e.popupShown)) {
+    let won = false;
+    try { won = await claimEventPopup(classCode, "big", e.id); } catch (err) { return; }
+    state.ids = state.ids.concat([e.id]);
+    saveShownBigEventState(username, state);
+    if (won) {
+      if (!document.getElementById("anwGoodBigEventModal")) showGoodBigEventPopup(e);
+      return;
+    }
+  }
 }
 
 function showGoodBigEventPopup(entry) {

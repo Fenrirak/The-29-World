@@ -3292,6 +3292,30 @@ function weeklyEventAssetStillFits(cls, username, coverage, incident, entry, all
 // weeks were planned ahead. Safe to call twice (e.g. two tabs): only the
 // call that moves it on does anything. Returns the entry as it now is, or
 // null if there's nothing to show.
+// Once-only "show the popup" claim, stored on the log entry in Firestore so
+// it holds across every device/browser/tab the student logs in on (the old
+// per-device localStorage marker couldn't). kind: "weekly" | "big".
+// Returns true ONLY to the single caller that flips popupShown from unset to
+// true — that caller (and nobody else) shows the popup. Everyone else, e.g.
+// a second device or a tab racing this one, gets false and shows nothing.
+async function claimEventPopup(classCode, kind, logId) {
+  const field = kind === "big" ? "bigEventLog" : "eventLog";
+  const classRef = classesCol().doc(classCode);
+  let won = false;
+  await fdb.runTransaction(async (t) => {
+    won = false;
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const log = snap.data()[field] || [];
+    const found = log.find(l => l.id === logId);
+    if (!found || found.popupShown) return;
+    found.popupShown = true;
+    t.update(classRef, { [field]: log });
+    won = true;
+  });
+  return won;
+}
+
 async function revealWeeklyEvent(classCode, eventLogId) {
   const classRef = classesCol().doc(classCode);
   let entry = null;
