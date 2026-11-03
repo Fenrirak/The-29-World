@@ -231,7 +231,14 @@ let SERVER_CLOCK_SYNCED = false;
 // short enough that a device clock jumping (sleep/wake) is caught quickly.
 const CLOCK_OFFSET_KEY = "t29_clock_offset";
 const CLOCK_OFFSET_TTL_MS = 10 * 60000;
-async function syncServerClock(classCode) {
+// One shared in-flight sync: anything that needs the corrected clock (the bell, the auto sims)
+// can await this without each starting its own probe write on the class doc.
+let _clockSyncPromise = null;
+function syncServerClock(classCode) {
+  if (SERVER_CLOCK_SYNCED || !classCode) return Promise.resolve();
+  return _clockSyncPromise || (_clockSyncPromise = _syncServerClockImpl(classCode));
+}
+async function _syncServerClockImpl(classCode) {
   if (SERVER_CLOCK_SYNCED || !classCode) return;
   try {
     const saved = JSON.parse(sessionStorage.getItem(CLOCK_OFFSET_KEY) || "null");
@@ -3200,8 +3207,13 @@ async function anwGlobalBootstrap() {
   const u = await getSessionUser();
   if (!u) return; // not logged in (e.g. on the login page) — nothing to do
   if (u.classCode) {
-    autoMarketDayIfDue(u.classCode).catch(() => {});
-    autoPropertyMarketDayIfDue(u.classCode).catch(() => {});
+    // BUGFIX: the auto market/property sims decide "today" via nzDateKey(), which uses the
+    // server-corrected clock. This bootstrap ran them BEFORE the clock had synced (market.js and
+    // most pages never sync it), so a device with a wrong clock stamped the wrong day into
+    // lastMarketDayRun/lastPropertyMarketDayRun — making the real day look "already run".
+    await syncServerClock(u.classCode).catch(() => {});
+    autoMarketDayIfDue(u.classCode).catch(e => console.error("Auto stock market day failed:", e));
+    autoPropertyMarketDayIfDue(u.classCode).catch(e => console.error("Auto property market day failed:", e));
     window.T29_RATES_READY = autoVariableRatesIfDue(u.classCode).catch(() => {});
     // Note down net worth for the report trend: every Monday, first thing.
     // A teacher's visit covers the whole class; a student's covers themselves.

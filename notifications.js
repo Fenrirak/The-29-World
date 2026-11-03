@@ -55,10 +55,29 @@ function notifReadKey(username) { return "t29-notif-read-" + username; }
 let NOTIF_REMOTE_READ = 0;
 let NOTIF_REMOTE_WRITE_OK = true; // flips off after a refused/failed write so we don't retry every poll
 
+// A watermark in the future can only come from a wrong clock. Because the
+// watermark never moves backwards and is shared via Firestore, one such value
+// would mark every new notification as already read on every device until
+// that future time arrives. So anything ahead of the trusted clock is ignored.
+function notifSaneTs(ts) {
+  ts = Number(ts) || 0;
+  let now;
+  try { now = trustedNow().getTime(); } catch (e) { now = Date.now(); }
+  return ts > now + 60000 ? 0 : ts;
+}
+// What "mark read" stamps: when the list on screen was built, NOT "now", so
+// anything that arrived since the last refresh isn't silently marked read.
+let NOTIF_BUILT_AT = 0;
+function notifReadStamp() {
+  let now;
+  try { now = trustedNow().getTime(); } catch (e) { now = Date.now(); }
+  return NOTIF_BUILT_AT ? Math.min(NOTIF_BUILT_AT, now) : now;
+}
+
 function notifGetLocalRead(username) {
   try {
     const raw = localStorage.getItem(notifReadKey(username));
-    return raw ? Number(raw) || 0 : 0;
+    return raw ? notifSaneTs(raw) : 0;
   } catch (e) {
     return 0;
   }
@@ -791,7 +810,7 @@ function notifSyncTabBadge(n) {
   if (document.title !== want) document.title = want;
   try {
     if (on && n > 0 && navigator.setAppBadge) { navigator.setAppBadge(n); NOTIF_BADGE_SET = true; }
-    else if (NOTIF_BADGE_SET && navigator.clearAppBadge) { navigator.clearAppBadge(); NOTIF_BADGE_SET = false; }
+    else if (navigator.clearAppBadge && (NOTIF_BADGE_SET || n === 0 || !on)) { navigator.clearAppBadge(); NOTIF_BADGE_SET = false; }
   } catch (e) { /* badge API is optional */ }
 }
 
@@ -975,7 +994,7 @@ function notifBuildPanel() {
   notifDeviceControl(panel.querySelector("#notifDevice"));
   panel.addEventListener("click", e => e.stopPropagation());
   panel.querySelector("#notifMarkRead").addEventListener("click", () => {
-    notifSetLastRead(NOTIF_USER, trustedNow().getTime());
+    notifSetLastRead(NOTIF_USER, notifReadStamp());
     notifPaint();
   });
   return panel;
@@ -1051,7 +1070,7 @@ function notifOpen() {
   // so stamping "read" from a different, uncorrected clock could leave a
   // slow device's last-read watermark behind the items it was just shown,
   // and they'd reappear as unread the moment the badge repainted.
-  notifSetLastRead(NOTIF_USER, trustedNow().getTime());
+  notifSetLastRead(NOTIF_USER, notifReadStamp());
   notifUpdateBadge();
 }
 
@@ -1135,16 +1154,21 @@ function notifPaint() {
 
 async function notifRefresh(username, classCode) {
   // A new week's variable mortgage rate must be in place before any payment amount is quoted.
+  // Every timestamp here comes from trustedNow(); until the server clock is synced it is just the
+  // device clock, which on a wrong-clocked device stamps a future "read" time that then sticks.
+  try { if (typeof syncServerClock === "function") await syncServerClock(classCode); } catch (e) {}
   try { if (window.T29_RATES_READY) await window.T29_RATES_READY; } catch (e) {}
   const [me, cls] = await Promise.all([getUserCached(username), getClassCached(classCode)]);
   if (!me || !cls) return;
   withNewModuleDefaults(cls);
   // Pick up a "mark read" done on another device/tab, and (one-off) push up
   // a watermark that so far only exists in this device's localStorage.
-  if (Number(me.notifLastRead) > NOTIF_REMOTE_READ) NOTIF_REMOTE_READ = Number(me.notifLastRead);
+  const remoteRead = notifSaneTs(me.notifLastRead);
+  if (remoteRead > NOTIF_REMOTE_READ) NOTIF_REMOTE_READ = remoteRead;
   const localRead = notifGetLocalRead(username);
   if (localRead > NOTIF_REMOTE_READ) notifPushRemoteRead(username, localRead);
   NOTIF_ITEMS = buildNotifications(Object.assign({ username }, me), cls);
+  NOTIF_BUILT_AT = trustedNow().getTime();
   try {
     const lock = await notifLockNotice(username);
     if (lock) {
