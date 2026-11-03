@@ -3289,16 +3289,20 @@ const _anwBalKey = u => "t29-bank-balance-view:" + u;
 function anwGetBalView(u) { try { return localStorage.getItem(_anwBalKey(u)) || ""; } catch (e) { return ""; } }
 function anwSetBalView(u, id) { try { localStorage.setItem(_anwBalKey(u), id); } catch (e) { /* just won't be remembered */ } }
 // Every account the student can use right now, tagged with its kind: Cash and Savings (while open) then extra accounts.
+// Works on the logical view (see "Main account" in data-money.js): "cash" is always the original Cash account.
+// Each choice says whether it is the student's main account (isMain).
 function anwOpenAccounts(me, cls) {
-  const out = [];
-  if (!acctDefaultClosed(me, "cash")) out.push({ id: "cash", label: "Cash balance", bal: me.balance || 0, kind: "everyday" });
-  if (!acctDefaultClosed(me, "savings")) out.push({ id: "savings", label: "Savings Account", bal: me.savings || 0, kind: "savings" });
-  acctActiveOf(me).forEach(a => { const p = acctPlanById(cls, a.planId); out.push({ id: a.id, label: p ? p.name : "Account", bal: a.balance || 0, kind: p ? p.kind : "everyday" }); });
+  const out = [], main = acctMainId(me), L = acctLogical(me);
+  if (!acctDefaultClosed(L, "cash")) out.push({ id: "cash", label: "Cash balance", bal: L.balance || 0, kind: "everyday" });
+  if (!acctDefaultClosed(L, "savings")) out.push({ id: "savings", label: "Savings Account", bal: L.savings || 0, kind: "savings" });
+  acctActiveOf(L).forEach(a => { const p = acctPlanById(cls, a.planId); out.push({ id: a.id, label: p ? p.name : "Account", bal: a.balance || 0, kind: p ? p.kind : "everyday" }); });
+  out.forEach(c => { c.isMain = c.id === main; });
   return out;
 }
+// The account shown by default is the main account (Cash unless they've picked another).
 function anwBalanceChoice(me, cls) {
   const ch = anwOpenAccounts(me, cls), want = anwGetBalView(me.username);
-  return { ch, cur: ch.find(c => c.id === want) || ch.find(c => c.id === "cash") || ch[0] || null };
+  return { ch, cur: ch.find(c => c.id === want) || ch.find(c => c.isMain) || ch.find(c => c.id === "cash") || ch[0] || null };
 }
 // A small pop-up on the same look as the site's own dialogs. o: { title, html, okText?, cancelText?, danger?, collect?(box) }.
 // Resolves with null (cancelled), the id of a clicked [data-pick] button, or collect()'s result (true if none) on OK.
@@ -3355,7 +3359,7 @@ async function anwOpenBalancePicker(me, cls) {
     const badge = k => `<span class="badge ${k === "savings" ? "mint" : "navy"}">${k === "savings" ? "Savings" : "Everyday"}</span>`;
     const html = `<p class="ac-dlg-sub">Choose which account's balance is shown.</p>
       <div class="ac-pick-list" role="radiogroup" aria-label="Account to show">${ch.map(c => `<button type="button" role="radio" aria-checked="${c.id === cur.id}" class="ac-pick${c.id === cur.id ? " on" : ""}" data-pick="${escapeHtml(c.id)}">
-        <span class="ac-pick-main"><strong>${escapeHtml(c.label)}</strong>${badge(c.kind)}</span><span class="ac-pick-bal">${fmtMoney(c.bal)}</span></button>`).join("")}</div>`;
+        <span class="ac-pick-main"><strong>${escapeHtml(c.label)}</strong>${badge(c.kind)}${c.isMain ? ` <span class="badge gold">Main</span>` : ""}</span><span class="ac-pick-bal">${fmtMoney(c.bal)}</span></button>`).join("")}</div>`;
     const pick = await anwDialog({ title: "Show the balance of…", html });
     if (!pick) return;
     anwSetBalView(me.username, pick);

@@ -177,7 +177,7 @@ async function render() {
   for (const a of autos) {
     const row = document.createElement("div");
     row.className = "auto-row";
-    const accName = id => id === "cash" ? (acctDefaultClosed(me, "cash") ? "" : "Cash balance") : acctNameOf(cls, me, id);
+    const accName = id => id === "cash" || id === "cashacct" ? (acctDefaultClosed(me, "cash") ? "" : "Cash balance") : acctNameOf(cls, me, id);
     if (a.type === "savings-transfer") {
       const e = autoEnds(a), fromN = accName(e.from), toN = accName(e.to);
       row.innerHTML = `
@@ -641,8 +641,9 @@ var AUTO_CARD_CTX = null;
    Grouped into Everyday / Savings / Credit card. A credit card only ever pays the teacher, so that option is
    greyed out (with the reason) whenever someone else is picked, and the menu falls back to cash. */
 function payWithOptionsHtml(me, cls, toUser) {
-  const ch = acChoicesWithKind(me, cls);
-  const opt = c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)} — ${fmtMoney(c.bal)}</option>`;
+  // Payment sources: "cash" is the student's MAIN account (the default), "cashacct" the real Cash account when another is main.
+  const ch = acctPaySources(me, cls);
+  const opt = c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}${c.isMain && ch.length > 1 ? " (main)" : ""} — ${fmtMoney(c.bal)}</option>`;
   const group = (label, items) => items.length ? `<optgroup label="${label}">${items.map(opt).join("")}</optgroup>` : "";
   let html = group("Everyday", ch.filter(c => c.kind === "everyday")) + group("Savings", ch.filter(c => c.kind === "savings"));
   if (cardIsActive(me)) {

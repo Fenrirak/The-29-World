@@ -158,6 +158,7 @@ function acRandomTheme(planId) {
 
 /* ---------------- Entry point (called from bank.js render) ---------------- */
 function renderBankAccounts(me, cls, students) {
+  me = acctLogical(me); // the account screens work on the logical view: "Cash" = the original Cash account (see data-money.js)
   AC_CLS = cls; AC_ME = me; AC_STUDENTS = students || [];
   const sCard = document.getElementById("acctCard"), tCard = document.getElementById("acctTeacherCard"), oCard = document.getElementById("acctOpenCard");
   if (!sCard || !tCard) return;
@@ -206,7 +207,7 @@ function acRenderStudent(me, cls) {
   const openCount = active.length + (cashOpen ? 1 : 0) + (savOpen ? 1 : 0);
   const canMove = openCount > 1;
   let html = `<div class="flex-between cc-head"><h2 id="hAcct">My accounts</h2><span class="cc-head-note">${acPlural(openCount, "account")}</span></div>`;
-  html += `<p class="cc-intro">Each account here has its own interest, fees and rules, and you can move money between them any time. Your cash balance is the account your pay and purchases go through. It doesn't earn interest unless your teacher has set a cash rate, so put money to work in the others. ${interestScheduleLabel(cls)}</p>`;
+  html += `<p class="cc-intro">Each account here has its own interest, fees and rules, and you can move money between them any time. Your <strong>main account</strong> is the one your pay comes into and your purchases and payments come out of. It starts as your Cash balance, but you can make any everyday account your main one. It doesn't earn interest unless your teacher has set a cash rate, so put money to work in the others. ${interestScheduleLabel(cls)}</p>`;
   if (intTax) html += `<div class="tax-note"><span>Interest is taxed at <strong>${t29TaxPct(intTax)}</strong> before it is paid to you.</span></div>`;
   html += `<div class="ac-own-grid">${cashOpen ? acCashTile(me, cls, canMove) : ""}${savOpen ? acSavingsTile(me, cls, canMove) : ""}${active.map(a => acOwnedTile(a, cls, canMove)).join("")}</div>`;
   if (pending.length) {
@@ -221,6 +222,24 @@ function acRenderStudent(me, cls) {
   AC_NOTICE = "";
   el.innerHTML = html;
   acMoveHint();
+}
+// "Main account" badge, or the button that makes an everyday account the main one (nothing for savings accounts).
+function acMainBadge(id) { return acctMainId(AC_ME) === id ? ` <span class="badge gold" title="Your pay comes in here and your payments come out of it">Main account</span>` : ""; }
+function acMainBtn(id, eligible) {
+  if (!eligible || acctMainId(AC_ME) === id) return "";
+  return `<button class="btn small secondary" onclick="acSetMain('${acEsc(id)}')" title="Make this the account your pay comes into and your payments come out of">${icon("star", 13)} Make main</button>`;
+}
+async function acSetMain(id) {
+  acMsg("acMsg", "");
+  const names = {}; acAccountChoices(AC_ME, AC_CLS).forEach(c => { names[c.id] = c.label; });
+  const name = names[id] || "this account";
+  const ok = await t29Confirm(`Make ${name} your main account?\n\nYour pay, refunds and money from classmates will come into ${name}, and your purchases, bills and payments will come out of it. Your money stays exactly where it is, and you can change this any time.`, { confirmText: "Make main" });
+  if (!ok) return;
+  const res = await setMainAccount(CURRENT.username, id);
+  if (!res.ok) { acMsg("acMsg", `<div class="error-msg">${acEsc(res.error)}</div>`); return; }
+  AC_NOTICE = `<div class="success-msg">${acEsc(res.name || name)} is now your main account. Your pay comes in here and your payments come out of it.</div>`;
+  await render();
+  try { if (typeof anwRefreshBalanceWidget === "function") anwRefreshBalanceWidget(); } catch (e) { /* the corner widget will catch up on the next change */ }
 }
 // The "Close" button every open account has. `only` = it is the one account they have open, so it can't be closed.
 function acCloseBtn(id, name, only) {
@@ -237,16 +256,17 @@ function acCashTile(me, cls, canMove) {
   const gross = bal > 0 && rate > 0 ? acctRound(bal * rate / 100) : 0;
   return `<article class="ac-own k-everyday is-default">
     <div class="ac-own-body">
-      <div class="ac-tile-head"><strong>Cash balance</strong>${acKindBadge("everyday")}</div>
+      <div class="ac-tile-head"><strong>Cash balance</strong>${acKindBadge("everyday")}${acMainBadge("cash")}</div>
       <div class="ac-bal"><span>Balance</span><strong>${fmtMoney(bal)}</strong></div>
       <div class="ac-rows">
         <div class="ac-line"><span>Interest rate</span><strong>${rate > 0 ? `${rate}% <small>per ${per.span}</small>` : "None"}</strong></div>
         <div class="ac-line"><span>Next interest</span><strong class="${gross > 0 ? "good" : ""}">${gross > 0 ? "≈ +" + fmtMoney(gross) : "$0.00"}</strong></div>
         <div class="ac-line"><span>Withdrawals</span><strong>Unlimited</strong></div>
-        <div class="ac-hint">Included for everyone in your class. Your pay comes in here and your purchases come out of it.</div>
+        <div class="ac-hint">${acctMainId(AC_ME) === "cash" ? "Included for everyone in your class. Your pay comes in here and your purchases come out of it." : "Included for everyone in your class. Your pay and payments use your main account instead."}</div>
       </div>
       <div class="ac-own-actions">
         ${acMoveBtns("cash", canMove)}
+        ${acMainBtn("cash", true)}
         ${acCloseBtn("cash", "Cash balance", !canMove)}
       </div>
     </div></article>`;
@@ -297,12 +317,13 @@ function acOwnedTile(a, cls, canMove) {
   if (p.maxBalance > 0) rows.push(`<div class="ac-line"><span>Room left</span><strong>${fmtMoney(Math.max(0, p.maxBalance - bal))}</strong></div>`);
   return `<article class="ac-own k-${p.kind}">
     <div class="ac-own-body">
-      <div class="ac-tile-head"><strong>${acEsc(p.name)}</strong>${acKindBadge(p.kind)}</div>
+      <div class="ac-tile-head"><strong>${acEsc(p.name)}</strong>${acKindBadge(p.kind)}${acMainBadge(a.id)}</div>
       <div class="ac-bal"><span>Balance</span><strong>${fmtMoney(bal)}</strong></div>
       <div class="ac-rows">${rows.join("")}</div>
       <div class="ac-life">Earned so far <b>${fmtMoney(lt.interest || 0)}</b> · Fees paid <b>${fmtMoney(lt.fees || 0)}</b></div>
       <div class="ac-own-actions">
         ${acMoveBtns(a.id, canMove)}
+        ${acMainBtn(a.id, p.kind === "everyday" && !(p.maxBalance > 0))}
         ${acCloseBtn(a.id, p.name, !canMove)}
       </div>
     </div></article>`;
@@ -501,10 +522,11 @@ async function acClose(id) {
   if (!mine) return;
   if (!others.length) { acMsg("acMsg", `<div class="error-msg">You need at least one account open to keep your money in. Open another one first, then close this one.</div>`); return; }
   const bal = acctRound(mine.bal || 0);
-  const cashNote = id === "cash" ? "Your pay comes into your cash balance and your purchases come out of it. While it's closed you'll need to open it again and move money in before you can pay for things, and if money lands in it (like your wages) it opens again by itself." : "";
+  const cashNote = id === "cash" && mine.isMain ? "Your pay comes into your cash balance and your purchases come out of it. While it's closed you'll need to open it again and move money in before you can pay for things, and if money lands in it (like your wages) it opens again by itself."
+    : mine.isMain ? "This is your main account, so your pay and payments will go back to your Cash balance (you can pick a new main account any time)." : "";
   let destId = "";
   if (bal > 0) {
-    const def = others.find(c => c.id === "cash") || others.find(c => c.kind !== "savings") || others[0];
+    const def = others.find(c => c.isMain) || others.find(c => c.id === "cash") || others.find(c => c.kind !== "savings") || others[0];
     const r = await acDialog({
       title: `Close ${mine.label}?`, okText: "Close account", danger: true,
       html: `<p>The ${fmtMoney(bal)} in it has to move to another account. Where should it go?</p>
@@ -565,7 +587,7 @@ function acRenderTeacher(cls, students) {
   const st = acctSettings(cls), all = cls.accountPlans || [];
   const live = all.filter(p => !p.archived), archived = all.filter(p => p.archived);
   const rows = []; // every account any student holds
-  students.forEach(s => acctListOf(s).forEach(a => rows.push({ s, a, p: acctPlanById(cls, a.planId) })));
+  students.forEach(s => acctListOf(acctLogical(s)).forEach(a => rows.push({ s, a, p: acctPlanById(cls, a.planId) }))); // logical view: each account shows its own money, not the swapped main-account balance
   const active = rows.filter(r => r.a.status === "active"), pending = rows.filter(r => r.a.status === "pending");
   const held = acctRound(active.reduce((n, r) => n + (r.a.balance || 0), 0));
   const countFor = id => rows.filter(r => r.a.planId === id).length;
