@@ -571,7 +571,7 @@ function _trimStoreListingsToOwned(cls, seller, assetId) {
       owned -= keep;
       if (keep <= 0) {
         l.status = "cancelled";
-        (l.offers || []).forEach(o => { if (o.status === "open") o.status = "declined"; });
+        (l.offers || []).forEach(o => { if ((o.status === "open" || o.status === "countered")) o.status = "declined"; });
       } else if (keep < qty) {
         l.quantity = keep;
       }
@@ -753,7 +753,7 @@ async function cancelListing(username, classCode, listingId) {
     if (l.seller !== username) { error = "That isn't your listing."; return; }
     if (!listingIsOpen(l)) { error = "That listing is already closed."; return; }
     l.status = "cancelled";
-    (l.offers || []).forEach(o => { if (o.status === "open") o.status = "declined"; });
+    (l.offers || []).forEach(o => { if ((o.status === "open" || o.status === "countered")) o.status = "declined"; });
     t.update(classRef, { listings: cls.listings });
   });
   return error ? { ok: false, error } : { ok: true };
@@ -787,7 +787,7 @@ async function teacherRemoveListing(classCode, listingId, reason) {
     if (!l || !listingIsOpen(l)) return;
     l.status = "rejected";
     l.rejectReason = String(reason || "Removed by your teacher").slice(0, 160);
-    (l.offers || []).forEach(o => { if (o.status === "open") o.status = "declined"; });
+    (l.offers || []).forEach(o => { if ((o.status === "open" || o.status === "countered")) o.status = "declined"; });
     t.update(classRef, { listings: cls.listings });
   });
   return { ok: true };
@@ -934,9 +934,9 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
         listing.quantity = qty - units;
         cls.listings.push(sale);
         // The buyer's own offer on it (if any) is done with.
-        (listing.offers || []).forEach(o => { if (o.status === "open" && o.buyer === buyerUsername) o.status = "withdrawn"; });
+        (listing.offers || []).forEach(o => { if ((o.status === "open" || o.status === "countered") && o.buyer === buyerUsername) o.status = "withdrawn"; });
       } else {
-        (listing.offers || []).forEach(o => { if (o.status === "open") o.status = "declined"; });
+        (listing.offers || []).forEach(o => { if ((o.status === "open" || o.status === "countered")) o.status = "declined"; });
       }
       sale.status = "sold";
       sale.soldTo = buyerUsername;
@@ -1055,7 +1055,7 @@ async function makeOffer(username, classCode, listingId, amount, note, quantity)
     l.offers = l.offers || [];
     // One live offer each — a new one replaces your old one, so a listing
     // can't be buried under a dozen offers from the same student.
-    l.offers.forEach(o => { if (o.buyer === username && o.status === "open") o.status = "withdrawn"; });
+    l.offers.forEach(o => { if (o.buyer === username && (o.status === "open" || o.status === "countered")) o.status = "withdrawn"; });
     const me = userSnap.exists ? userSnap.data() : {};
     made = {
       id: uid("off"), buyer: username, buyerName: String(me.name || "").slice(0, 60),
@@ -1078,14 +1078,73 @@ async function setOfferStatus(username, classCode, listingId, offerId, status) {
     const l = cls.listings.find(x => x.id === listingId);
     if (!l) { error = "That listing couldn't be found."; return; }
     const o = (l.offers || []).find(x => x.id === offerId);
-    if (!o || o.status !== "open") { error = "That offer is no longer open."; return; }
-    // A buyer may withdraw their own offer; only the seller may decline one.
+    if (!o || (o.status !== "open" && o.status !== "countered")) { error = "That offer is no longer open."; return; }
+    // A buyer may withdraw their own offer (or turn down the seller's counter); only the seller may decline an offer.
     if (status === "withdrawn" && o.buyer !== username) { error = "That isn't your offer."; return; }
-    if (status === "declined" && l.seller !== username) { error = "That isn't your listing."; return; }
+    if (status === "declined") {
+      if (l.seller === username) o.declinedBy = "seller";
+      else if (o.buyer === username && o.status === "countered") o.declinedBy = "buyer";
+      else { error = "That isn't your listing."; return; }
+      o.respondedTs = Date.now();
+    }
     o.status = status;
     t.update(classRef, { listings: cls.listings });
   });
   return error ? { ok: false, error } : { ok: true };
+}
+
+// The seller answers an open offer with a different price (per copy). The buyer then accepts or turns it down.
+async function counterOffer(username, classCode, listingId, offerId, amount, note) {
+  const classRef = classesCol().doc(classCode);
+  let error = null;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    if (!cls.marketplace.enabled) { error = "The Trade Centre is switched off for your class right now."; return; }
+    if (!cls.marketplace.allowOffers) { error = "Your teacher has turned offers off."; return; }
+    const l = cls.listings.find(x => x.id === listingId);
+    if (!l || l.status !== "active") { error = "That listing is no longer for sale."; return; }
+    if (l.seller !== username) { error = "That isn't your listing."; return; }
+    const o = (l.offers || []).find(x => x.id === offerId);
+    if (!o || o.status !== "open") { error = "That offer is no longer open."; return; }
+    const value = Math.round(Number(amount) * 100) / 100;
+    if (!(value > 0)) { error = "Enter a price greater than zero."; return; }
+    const bounds = marketplacePriceBounds(cls, l.refPrice);
+    if (value < bounds.min) { error = `Prices can't go below ${fmtMoney(bounds.min)} each for this item.`; return; }
+    if (bounds.max !== null && value > bounds.max) { error = `Prices can't go above ${fmtMoney(bounds.max)} each for this item.`; return; }
+    o.status = "countered";
+    o.counter = { amount: value, note: String(note || "").trim().slice(0, 160), ts: Date.now() };
+    t.update(classRef, { listings: cls.listings });
+  });
+  return error ? { ok: false, error } : { ok: true };
+}
+
+// The buyer accepts the seller's counter: a normal sale at the countered price, paid however the buyer chooses now.
+async function acceptCounter(username, classCode, listingId, offerId, pay) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const l = (cls.listings || []).find(x => x.id === listingId);
+  if (!l) return { ok: false, error: "That listing couldn't be found." };
+  if (l.status !== "active") return { ok: false, error: "That listing is no longer for sale." };
+  const o = (l.offers || []).find(x => x.id === offerId);
+  if (!o || o.status !== "countered" || !o.counter) return { ok: false, error: "That counter-offer is no longer open." };
+  if (o.buyer !== username) return { ok: false, error: "That isn't your offer." };
+  const wanted = offerQuantity(o);
+  if (wanted > listingQuantity(l)) return { ok: false, error: `This was for ${wanted}, but only ${listingQuantity(l)} ${listingQuantity(l) === 1 ? "is" : "are"} left — decline it and send a new offer.` };
+  const res = await _settleListing(classCode, listingId, username, o.counter.amount, pay || {}, wanted);
+  if (!res.ok) return res;
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const live = withNewModuleDefaults(snap.data());
+    const ll = live.listings.find(x => x.id === listingId);
+    const oo = ll && (ll.offers || []).find(x => x.id === offerId);
+    if (!oo) return;
+    oo.status = "accepted";
+    t.update(classRef, { listings: live.listings });
+  });
+  return res;
 }
 
 async function acceptOffer(username, classCode, listingId, offerId) {

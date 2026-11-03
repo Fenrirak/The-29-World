@@ -8,6 +8,7 @@ let CURRENT, IS_TEACHER;
 let CLS = null, ME = null;
 let NAMES = {};              // username -> display name, fetched once per page load
 let FILTER = "all";
+let COUNTERING = null;        // offer id the seller is typing a counter-offer into
 let OFFERING = null;         // listing id the student is currently typing an offer into
 
 function esc(s) {
@@ -279,7 +280,7 @@ async function listIt(assetType, assetId) {
 function listingCardHtml(l, opts) {
   const mine = !!opts.mine;
   const teacher = !!opts.teacher;
-  const openOffers = (l.offers || []).filter(o => o.status === "open");
+  const openOffers = (l.offers || []).filter(o => o.status === "open" || o.status === "countered");
   const myOffer = openOffers.find(o => o.buyer === (ME && ME.username));
   const diffPct = l.refPrice ? Math.round(((l.price - l.refPrice) / l.refPrice) * 100) : 0;
   const qty = listingQuantity(l);
@@ -292,7 +293,9 @@ function listingCardHtml(l, opts) {
   } else if (CLS.marketplace.enabled) {
     actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${icon("cart", 13)} ${qty > 1 ? "Buy 1" : "Buy"} for ${fmtMoney(l.price)}</button>`;
     if (CLS.marketplace.allowOffers) {
-      actions += myOffer
+      actions += (myOffer && myOffer.status === "countered")
+        ? `<button class="btn small mint" onclick="acceptCounterUi('${l.id}','${myOffer.id}')">Accept ${fmtMoney(myOffer.counter.amount)}${offerQuantity(myOffer) > 1 ? " each" : ""}</button><button class="btn small secondary" onclick="decline('${l.id}','${myOffer.id}')">Decline counter</button>`
+        : myOffer
         ? `<button class="btn small secondary" onclick="withdraw('${l.id}','${myOffer.id}')">Withdraw my ${fmtMoney(myOffer.amount)}${offerQuantity(myOffer) > 1 ? " × " + offerQuantity(myOffer) : ""} offer</button>`
         : `<button class="btn small secondary" onclick="toggleOffer('${l.id}')">${icon("swap", 13)} Make an offer</button>`;
     }
@@ -312,6 +315,12 @@ function listingCardHtml(l, opts) {
       </div>
     </div>` : "";
 
+  const counterBanner = (!mine && !teacher && myOffer && myOffer.status === "countered" && myOffer.counter) ? `
+    <div class="mkt-offer-list">
+      <p class="muted-small" style="margin:0;"><strong>The seller countered:</strong> <span class="mkt-offer-amt">${fmtMoney(myOffer.counter.amount)}${offerQuantity(myOffer) > 1 ? " each" : ""}</span> (you offered ${fmtMoney(myOffer.amount)})</p>
+      ${myOffer.counter.note ? `<span class="mkt-offer-note">"${esc(myOffer.counter.note)}"</span>` : ""}
+    </div>` : "";
+
   const offerList = (mine && openOffers.length) ? `
     <div class="mkt-offer-list">
       <p class="muted-small" style="margin:0 0 6px;"><strong>${openOffers.length} ${openOffers.length === 1 ? "offer" : "offers"}</strong></p>
@@ -319,15 +328,33 @@ function listingCardHtml(l, opts) {
         const oq = offerQuantity(o);
         const tooMany = oq > qty;
         const total = Math.round(o.amount * oq * 100) / 100;
+        if (o.status === "countered" && o.counter) return `
+        <div class="mkt-offer">
+          <span><span class="mkt-offer-amt">${fmtMoney(o.counter.amount)}${oq > 1 ? " each" : ""}</span> <span class="badge navy">Countered</span> <span class="muted-small">to ${esc(nameOf(o.buyer))} (they offered ${fmtMoney(o.amount)}) — waiting for their answer</span></span>
+          <span class="row-flex" style="gap:6px;"><button class="btn small secondary" onclick="decline('${l.id}','${o.id}')">Cancel</button></span>
+        </div>`;
+        const counterForm = COUNTERING === o.id ? `
+          <div style="flex-basis:100%;margin-top:6px;">
+            <label for="counter-${o.id}">Your counter-price${oq > 1 ? " for ONE" : ""} (allowed: ${bandText(l.refPrice)})</label>
+            <input id="counter-${o.id}" type="number" min="0" step="0.01" value="${Math.round((l.price + o.amount) / 2 * 100) / 100}">
+            <input id="counternote-${o.id}" type="text" placeholder="Message to the buyer (optional)" style="margin-top:6px;">
+            <div class="row-flex" style="gap:6px;margin-top:6px;">
+              <button class="btn small gold" onclick="sendCounter('${l.id}','${o.id}')">Send counter-offer</button>
+              <button class="btn small secondary" onclick="toggleCounter(null)">Cancel</button>
+            </div>
+            <div id="countermsg-${o.id}"></div>
+          </div>` : "";
         return `
         <div class="mkt-offer">
           <span><span class="mkt-offer-amt">${fmtMoney(o.amount)}${oq > 1 ? " each" : ""}</span>${oq > 1 ? ` <span class="badge navy">×${oq}</span> <span class="muted-small">= ${fmtMoney(total)}</span>` : ""} <span class="muted-small">from ${esc(nameOf(o.buyer))}</span></span>
           <span class="row-flex" style="gap:6px;">
             <button class="btn small mint" onclick="accept('${l.id}','${o.id}')" ${tooMany ? "disabled" : ""}>Accept</button>
+            <button class="btn small gold" onclick="toggleCounter('${o.id}')" ${tooMany ? "disabled" : ""}>Counter</button>
             <button class="btn small secondary" onclick="decline('${l.id}','${o.id}')">Decline</button>
           </span>
           ${tooMany ? `<span class="mkt-offer-note">Wants ${oq} but only ${qty} ${qty === 1 ? "is" : "are"} left — decline it and they can send a new one.</span>` : ""}
           ${o.note ? `<span class="mkt-offer-note">"${esc(o.note)}"</span>` : ""}
+          ${counterForm}
         </div>`;
       }).join("")}
     </div>` : "";
@@ -348,7 +375,7 @@ function listingCardHtml(l, opts) {
         ${teacher ? `<span class="muted-small">· ${esc(nameOf(l.seller))}</span>` : ""}
       </div>
       <div class="mkt-actions">${actions}</div>
-      ${offerForm}${offerList}
+      ${offerForm}${counterBanner}${offerList}
       <div id="msg-${l.id}"></div>
     </div>`;
 }
@@ -362,6 +389,7 @@ function offerTotal(id) {
   const q = qEl ? Math.floor(Number(qEl.value)) : 1;
   box.innerHTML = p > 0 && q >= 1 ? `Total: <strong>${fmtMoney(Math.round(p * q * 100) / 100)}</strong>${q > 1 ? ` for ${q}` : ""}` : "Total: —";
 }
+function toggleCounter(offerId) { COUNTERING = (COUNTERING === offerId) ? null : offerId; renderStudent(); }
 function toggleOffer(id) { OFFERING = (OFFERING === id) ? null : id; renderStudent(); }
 
 /* ---------------- "Pay with" bar: cash or credit card ----------------
@@ -481,6 +509,29 @@ async function accept(listingId, offerId) {
   const res = await acceptOffer(CURRENT.username, CURRENT.classCode, listingId, offerId);
   await render();
   if (!res.ok) alert(res.error);
+}
+async function sendCounter(listingId, offerId) {
+  const res = await counterOffer(CURRENT.username, CURRENT.classCode, listingId, offerId,
+    document.getElementById("counter-" + offerId).value, document.getElementById("counternote-" + offerId).value);
+  if (res.ok) { COUNTERING = null; await render(); return; }
+  const box = document.getElementById("countermsg-" + offerId);
+  if (box) box.innerHTML = `<div class="error-msg">${esc(res.error)}</div>`; else alert(res.error);
+}
+async function acceptCounterUi(listingId, offerId) {
+  const l = (CLS.listings || []).find(x => x.id === listingId);
+  const o = l && (l.offers || []).find(x => x.id === offerId);
+  if (!o || !o.counter) return;
+  const oq = offerQuantity(o);
+  const isHouse = l.assetType === "property";
+  const card = mktHasCard() && MP_PAY.useCard && !isHouse;
+  const how = card ? (MP_PAY.split ? "part on your credit card, the rest in cash" : "on your credit card") : "in cash";
+  const total = Math.round(o.counter.amount * oq * 100) / 100;
+  if (!await t29Confirm(`Accept ${nameOf(l.seller)}'s counter-offer and buy ${oq > 1 ? oq + " × " : ""}"${l.name}" for ${fmtMoney(o.counter.amount)}${oq > 1 ? " each (" + fmtMoney(total) + " in total)" : ""}, paid ${how}?`)) return;
+  const pay = card ? { useCard: true, split: MP_PAY.split, cardMax: MP_PAY.cardMax } : {};
+  const res = await acceptCounter(CURRENT.username, CURRENT.classCode, listingId, offerId, pay);
+  await render();
+  if (res.ok) flashMsg(document.getElementById("browseMsg"), `<div class="success-msg">Bought ${esc(l.name)} at the countered price! It's yours now.</div>`);
+  else alert(res.error);
 }
 async function cancelMine(id) {
   const l = (CLS.listings || []).find(x => x.id === id);

@@ -472,6 +472,26 @@ function notifMarketplaceItems(me, cls) {
         });
       });
     }
+    // Buyer side: the seller turned an offer down, or answered it with a counter-offer.
+    (l.offers || []).filter(o => o.buyer === me.username).forEach(o => {
+      const q = Math.max(1, Math.floor(Number(o.quantity) || 1));
+      if (o.status === "declined" && o.declinedBy === "seller" && trustedNow().getTime() - (o.respondedTs || 0) < 3 * 86400000) {
+        out.push({
+          id: "offer-declined-" + l.id + "-" + o.id, ts: o.respondedTs || dayStart, icon: "swap", tone: "coral",
+          title: `Your offer on ${l.name} was declined`,
+          body: `The seller didn't accept ${fmtMoney(o.amount)}${q > 1 ? " each for " + q : ""}. You can send a new offer or buy it at the asking price.`,
+          href: "marketplace.html"
+        });
+      }
+      if (o.status === "countered" && o.counter && l.status === "active") {
+        out.push({
+          id: "offer-counter-" + l.id + "-" + o.id, ts: Math.max(dayStart, o.counter.ts || 0), icon: "swap", tone: "gold",
+          title: `Counter-offer on ${l.name}: ${fmtMoney(o.counter.amount)}${q > 1 ? " each" : ""}`,
+          body: `You offered ${fmtMoney(o.amount)}. Open the Trade Centre to accept or decline.` + (o.counter.note ? ` “${String(o.counter.note).slice(0, 80)}”` : ""),
+          href: "marketplace.html", action: true
+        });
+      }
+    });
     if (l.seller === me.username && l.status === "pending") {
       out.push({
         id: "pending-" + l.id, ts: l.ts || dayStart, quiet: true, icon: "swap", tone: "navy",
