@@ -14,14 +14,14 @@ function paintChrome() {
   document.getElementById("pageTitle").innerHTML = icon("car", 26) + " Transport";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a vehicle";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add vehicle";
-  document.getElementById("hMyVehicles").innerHTML = icon("car", 18) + " My vehicles";
-  document.getElementById("hBrowse").innerHTML = icon("car", 18) + " Available vehicles";
-  document.getElementById("hLicenceSettings").innerHTML = icon("car", 18) + " Truck licence";
-  document.getElementById("hLicenceBuy").innerHTML = icon("car", 18) + " Truck licence";
-  document.getElementById("hSellBack").innerHTML = icon("car", 18) + " Sell-back rates";
-  document.getElementById("hTransportSettings").innerHTML = icon("car", 18) + " Weekly transport expenses";
-  document.getElementById("hTransportExpenses").innerHTML = icon("car", 18) + " Weekly transport expenses";
-  document.getElementById("hLifeFeeOverrides").innerHTML = icon("car", 18) + " Public transport fee by life event";
+  document.getElementById("hMyVehicles").innerHTML = "My vehicles";
+  document.getElementById("hBrowse").innerHTML = "Available vehicles";
+  document.getElementById("hLicenceSettings").innerHTML = "Truck licence";
+  document.getElementById("hLicenceBuy").innerHTML = "Truck licence";
+  document.getElementById("hSellBack").innerHTML = "Sell-back rates";
+  document.getElementById("hTransportSettings").innerHTML = "Weekly transport expenses";
+  document.getElementById("hTransportExpenses").innerHTML = "Weekly transport expenses";
+  document.getElementById("hLifeFeeOverrides").innerHTML = "Public transport fee by life event";
   document.getElementById("labStock").textContent = "Stock limit (leave blank for unlimited)";
 }
 
@@ -152,7 +152,7 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${icon("car", 20)}${escapeHtml(v.name)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span></h4>
+            <h4>${escapeHtml(v.name)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span></h4>
             <p>${escapeHtml(v.description) || "No description provided."}</p>
             <p>${comfortStars(v.comfort)} comfort</p>
             <p><strong>${fmtMoney(v.price)}</strong> paid</p>
@@ -201,7 +201,7 @@ async function render() {
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${icon("car", 20)}${escapeHtml(v.name)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span> ${isMine ? '<span class="badge mint">Yours</span>' : ""}</h4>
+          <h4>${escapeHtml(v.name)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span> ${isMine ? '<span class="badge mint">Yours</span>' : ""}</h4>
           <p>${escapeHtml(v.description) || "No description provided."}</p>
           <p>${comfortStars(v.comfort)} comfort</p>
           <p>${priceWithLifeDiscount(me, "transport", v.price)}${IS_TEACHER ? "" : t29TaxChip(cls, "transport")} &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
@@ -455,24 +455,24 @@ function renderTransportExpenses(me, cls) {
 
   let statusBadge, actionHtml;
   if (paidThisWeek) {
-    statusBadge = `<span class="badge mint">${icon("car", 12)}Paid this week</span>`;
+    statusBadge = `<span class="badge mint">Paid this week</span>`;
     actionHtml = `<p class="muted-small">All sorted — next payment due ${DAY_FULL[dueDay]}.</p>`;
   } else if (amt.total === 0 && isDueToday) {
     // Nothing owed this cycle — settle it in the background (see
     // autoSettleZeroTransport) instead of asking for a click on a $0 charge.
     autoSettleZeroTransport();
-    statusBadge = `<span class="badge mint">${icon("car", 12)}Paid this week</span>`;
+    statusBadge = `<span class="badge mint">Paid this week</span>`;
     actionHtml = `<p class="muted-small">Nothing owed this week — next check ${DAY_FULL[dueDay]}.</p>`;
   } else if (overdue) {
-    statusBadge = `<span class="badge coral">${icon("car", 12)}Overdue</span>`;
+    statusBadge = `<span class="badge coral">Overdue</span>`;
     actionHtml = isDueToday
       ? `<button class="btn gold" id="payTransportBtn" onclick="payTransport()">Pay now — ${fmtMoney(amt.total)}</button>`
       : `<p class="muted-small">A past payment was missed — check with your teacher. You can pay again on ${DAY_FULL[dueDay]}.</p>`;
   } else if (isDueToday) {
-    statusBadge = `<span class="badge gold">${icon("car", 12)}Due today</span>`;
+    statusBadge = `<span class="badge gold">Due today</span>`;
     actionHtml = `<button class="btn gold" id="payTransportBtn" onclick="payTransport()">Pay now — ${fmtMoney(amt.total)}</button>`;
   } else {
-    statusBadge = `<span class="badge navy">${icon("car", 12)}Not due yet</span>`;
+    statusBadge = `<span class="badge navy">Not due yet</span>`;
     actionHtml = `<p class="muted-small">Next payment due ${DAY_FULL[dueDay]}.</p>`;
   }
 

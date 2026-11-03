@@ -1374,7 +1374,7 @@ function renderStudentRentals(cls, props, me, nameOf) {
   }
   box.innerHTML = `
     <div class="card">
-      <div class="set-head"><h2>${icon("house", 18)} Available rentals</h2></div>
+      <div class="set-head"><h2>Available rentals</h2></div>
       <div style="margin-top:6px;">${movingCostNote(cls)}</div>
       ${alreadyHoused ? `<p class="muted-small">You're already living somewhere — move out first if you'd rather rent one of these instead.</p>` : ""}
       <div id="rentMsg"></div>

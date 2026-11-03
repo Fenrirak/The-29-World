@@ -17,7 +17,7 @@ function paintChrome() {
     hRetire: ["star", "Retirement"] };
   Object.entries(heads).forEach(([id, [ic, text]]) => {
     const el = document.getElementById(id);
-    if (el) el.innerHTML = icon(ic, 18) + " " + text;
+    if (el) el.textContent = text;
   });
 }
 
@@ -106,20 +106,20 @@ function renderJoinCard(me, cls, s, ks) {
   if (!s.enabled) {
     html = ks
       ? `<p class="ks-note-line">Your teacher has switched KiwiSaver off for now. Your money is safe, but nothing new goes in.</p>`
-      : `<h2>${icon("kiwi", 18)} KiwiSaver is switched off</h2><p class="ks-note-line">Your teacher has switched KiwiSaver off for your class.</p>`;
+      : `<h2>KiwiSaver is switched off</h2><p class="ks-note-line">Your teacher has switched KiwiSaver off for your class.</p>`;
   } else if (s.retired) {
-    html = ks ? "" : `<h2>${icon("kiwi", 18)} Your class has retired</h2><p class="ks-note-line">You weren't in KiwiSaver, so there's nothing to take out.</p>`;
+    html = ks ? "" : `<h2>Your class has retired</h2><p class="ks-note-line">You weren't in KiwiSaver, so there's nothing to take out.</p>`;
   } else if (!ks) {
     const job = me.jobId && (cls.jobs || []).some(j => j.id === me.jobId);
     html = `
-      <h2>${icon("kiwi", 18)} ${job ? "You're about to be signed up" : "Join KiwiSaver"}</h2>
+      <h2>${job ? "You're about to be signed up" : "Join KiwiSaver"}</h2>
       <p class="ks-note-line">${job
         ? `You have a job, so you'll be signed up on your next pay day. ${KS_DEFAULT_RATE}% of your pay goes in, and your employer and the government add more.`
         : `You'll be signed up when you get a job. You can also join now and put in extra money.`}</p>
       ${ksJoinChoicesHtml(job)}`;
   } else if (ks.status === "optedOut") {
     html = `
-      <h2>${icon("kiwi", 18)} You've opted out</h2>
+      <h2>You've opted out</h2>
       <p class="ks-note-line">You're not in KiwiSaver, so you're missing out on what your employer and the government would add. You can join again any time.</p>
       ${ksJoinChoicesHtml(false, true)}`;
   }
@@ -155,7 +155,7 @@ async function ksJoin() {
 function renderRetired(ks) {
   const card = document.getElementById("ksRetiredCard");
   card.innerHTML = `
-    <h2>${icon("kiwi", 18)} You've retired</h2>
+    <h2>You've retired</h2>
     <p class="ks-note-line">Your class has reached 65, so your KiwiSaver is unlocked. You can take out as much as you like, whenever you like. Whatever you leave in stays invested, so it can keep growing (or shrinking).</p>
     ${ks.balance > 0 ? `
       <form class="ks-inline-form" onsubmit="return ksWithdraw(event)">

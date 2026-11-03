@@ -36,7 +36,6 @@ async function init() {
   document.getElementById("studentPanel").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
   if (!IS_TEACHER) {
-    document.getElementById("iconListings").innerHTML = icon("cart", 30);
     document.getElementById("iconEarned").innerHTML = icon("coin", 30);
     document.getElementById("iconForSale").innerHTML = icon("swap", 30);
   }
@@ -115,7 +114,7 @@ function renderTeacher() {
   document.getElementById("approvalList").innerHTML = pending.map(l => `
     <div class="mkt-sell-row">
       <div class="grow">
-        <div class="mkt-sell-name">${icon(ASSET_ICON[l.assetType] || "cart", 15)} ${esc(l.name)}${listingQuantity(l) > 1 ? ` <span class="badge navy">×${listingQuantity(l)}</span>` : ""}</div>
+        <div class="mkt-sell-name">${esc(l.name)}${listingQuantity(l) > 1 ? ` <span class="badge navy">×${listingQuantity(l)}</span>` : ""}</div>
         <div class="muted-small">Listed by ${esc(nameOf(l.seller))} at <strong>${fmtMoney(l.price)}</strong>${listingQuantity(l) > 1 ? " each" : ""} — originally ${fmtMoney(l.refPrice)}${l.description ? ` · "${esc(l.description)}"` : ""}</div>
       </div>
       <button class="btn small mint" onclick="approve('${l.id}', true)">${icon("check", 13)} Approve</button>
@@ -202,7 +201,7 @@ function renderStudent() {
     const pct = l.refPrice ? Math.round((diff / l.refPrice) * 100) : 0;
     const q = listingQuantity(l);
     return `<tr>
-      <td>${icon(ASSET_ICON[l.assetType] || "cart", 13)} ${esc(l.name)}${q > 1 ? ` <span class="badge navy">×${q}</span>` : ""}<br><span class="muted-small">${esc(nameOf(l.seller))} → ${esc(nameOf(l.soldTo))}</span></td>
+      <td>${esc(l.name)}${q > 1 ? ` <span class="badge navy">×${q}</span>` : ""}<br><span class="muted-small">${esc(nameOf(l.seller))} → ${esc(nameOf(l.soldTo))}</span></td>
       <td>${fmtMoney(l.refPrice)}${q > 1 ? " each" : ""}</td>
       <td><strong>${fmtMoney(l.soldPrice)}</strong>${q > 1 ? ` each<br><span class="muted-small">${fmtMoney(Math.round(l.soldPrice * q * 100) / 100)} in total</span>` : ""}</td>
       <td class="${diff >= 0 ? "ticker-up" : "ticker-down"}">${diff >= 0 ? "+" : "−"}${fmtMoney(Math.abs(diff))} (${pct >= 0 ? "+" : ""}${pct}%)</td>
@@ -235,7 +234,7 @@ function renderSellList() {
     if (a.blocked) {
       return `<div class="mkt-sell-row">
         <div class="grow">
-          <div class="mkt-sell-name">${icon(ASSET_ICON[a.assetType], 15)} ${esc(a.name)}</div>
+          <div class="mkt-sell-name">${esc(a.name)}</div>
           <div class="muted-small">${esc(a.blocked)}</div>
         </div>
       </div>`;
@@ -244,7 +243,7 @@ function renderSellList() {
     const several = a.assetType === "store" && a.count > 1;
     return `<div class="mkt-sell-row">
       <div class="grow">
-        <div class="mkt-sell-name">${icon(ASSET_ICON[a.assetType], 15)} ${esc(a.name)}${a.count > 1 ? ` <span class="badge navy">You have ${a.count}</span>` : ""}</div>
+        <div class="mkt-sell-name">${esc(a.name)}${a.count > 1 ? ` <span class="badge navy">You have ${a.count}</span>` : ""}</div>
         <div class="muted-small">Originally ${fmtMoney(a.refPrice)}${a.note ? ` · ${esc(a.note)}` : ""}</div>
         <div class="mkt-band">Allowed price: ${bandText(a.refPrice)}</div>
       </div>
@@ -254,7 +253,7 @@ function renderSellList() {
         <input type="number" id="qty-${key}" min="1" max="${a.count}" step="1" value="1" aria-label="How many ${esc(a.name)} to list"></label>` : ""}
       <label class="mkt-field mkt-field-desc"><span>Note (optional)</span>
         <input type="text" id="desc-${key}" placeholder="Say something about it" aria-label="Description"></label>
-      <button class="btn small gold" onclick="listIt('${a.assetType}','${esc(a.assetId)}')" ${atCap ? "disabled" : ""}>${icon("cart", 13)} ${atCap ? "Listing limit reached" : "List it"}</button>
+      <button class="btn small gold" onclick="listIt('${a.assetType}','${esc(a.assetId)}')" ${atCap ? "disabled" : ""}>${atCap ? "Listing limit reached" : "List it"}</button>
     </div>`;
   }).join("");
 }
@@ -291,7 +290,7 @@ function listingCardHtml(l, opts) {
   } else if (mine) {
     actions = `<button class="btn small secondary" onclick="cancelMine('${l.id}')">${icon("trash", 13)} Cancel listing</button>`;
   } else if (CLS.marketplace.enabled) {
-    actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${icon("cart", 13)} ${qty > 1 ? "Buy 1" : "Buy"} for ${fmtMoney(l.price)}</button>`;
+    actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${qty > 1 ? "Buy 1" : "Buy"} for ${fmtMoney(l.price)}</button>`;
     if (CLS.marketplace.allowOffers) {
       actions += (myOffer && myOffer.status === "countered")
         ? `<button class="btn small mint" onclick="acceptCounterUi('${l.id}','${myOffer.id}')">Accept ${fmtMoney(myOffer.counter.amount)}${offerQuantity(myOffer) > 1 ? " each" : ""}</button><button class="btn small secondary" onclick="decline('${l.id}','${myOffer.id}')">Decline counter</button>`
@@ -361,7 +360,7 @@ function listingCardHtml(l, opts) {
 
   return `
     <div class="mkt-listing${mine ? " mine" : ""}" id="lst-${l.id}">
-      <h4>${icon(ASSET_ICON[l.assetType] || "cart", 19)}${esc(l.name)}${qty > 1 ? ` <span class="badge navy">×${qty}</span>` : ""}</h4>
+      <h4>${esc(l.name)}${qty > 1 ? ` <span class="badge navy">×${qty}</span>` : ""}</h4>
       ${l.description ? `<p class="mkt-desc">${esc(l.description)}</p>` : ""}
       <div class="mkt-price">
         <span class="now">${fmtMoney(l.price)}${qty > 1 ? `<span class="mkt-each"> each</span>` : ""}</span>

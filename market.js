@@ -197,7 +197,7 @@ async function render() {
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${icon("building", 20)}${escapeHtml(co.name)}</h4>
+          <h4>${escapeHtml(co.name)}</h4>
           <div class="${change > 0 ? 'ticker-up' : change < 0 ? 'ticker-down' : ''}">${fmtMoney(co.price)} ${hist.length > 1 ? `<span class="muted-small">(${change > 0 ? '+' : ''}${changePct}% today)</span>` : ""}</div>
         </div>
         ${sparkline(co.history)}
@@ -238,14 +238,14 @@ async function render() {
             <label>Buy shares</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="1" step="1" id="buy-${co.id}" placeholder="qty">
-              <button class="btn small gold" id="buyBtn-${co.id}" onclick="buy('${co.id}')">${icon("plus",13)} Buy</button>
+              <button class="btn small gold" id="buyBtn-${co.id}" onclick="buy('${co.id}')">Buy</button>
             </div>
           </div>
           <div>
             <label>Sell shares</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="1" step="1" id="sell-${co.id}" placeholder="qty">
-              <button class="btn small secondary" id="sellBtn-${co.id}" onclick="sell('${co.id}')">${icon("send",13)} Sell</button>
+              <button class="btn small secondary" id="sellBtn-${co.id}" onclick="sell('${co.id}')">Sell</button>
             </div>
           </div>
         </div>

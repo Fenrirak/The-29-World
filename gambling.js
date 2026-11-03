@@ -447,7 +447,7 @@ function renderRecentRoulette(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details">${icon("dice", 14)} ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details">${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);
@@ -480,7 +480,7 @@ function renderGamblingAccountRecent(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details">${icon(ic, 14)} ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details">${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);
@@ -517,7 +517,7 @@ async function renderTeacherGamblingRecent(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details">${icon(ic, 14)} <strong>${escapeHtml(who)}</strong> — ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details"><strong>${escapeHtml(who)}</strong> — ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);
@@ -1136,7 +1136,7 @@ function renderRecentBlackjack(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details">${icon("cards", 14)} ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details">${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);
@@ -1202,20 +1202,23 @@ function paintChrome() {
   document.getElementById("saveSettingsBtn").innerHTML = icon("save", 14) + " Save settings";
   document.getElementById("labEnabled").textContent = "Allow students to gamble";
   document.getElementById("hDisabled").innerHTML = icon("dice", 20) + " Gambling is paused";
-  document.getElementById("hBet").innerHTML = icon("dice", 18) + " Place a bet";
+  document.getElementById("hBet").textContent = "Place a bet";
   document.getElementById("hRecent").innerHTML = icon("history", 18) + " My recent bets";
 
   document.getElementById("bjHSettings").innerHTML = icon("cards", 18) + " Blackjack settings";
   document.getElementById("bjSaveSettingsBtn").innerHTML = icon("save", 14) + " Save settings";
   document.getElementById("bjLabEnabled").textContent = "Allow students to play Blackjack";
   document.getElementById("bjHDisabled").innerHTML = icon("cards", 20) + " Blackjack is paused";
-  document.getElementById("bjHTable").innerHTML = icon("cards", 18) + " Blackjack table";
+  document.getElementById("bjHTable").textContent = "Blackjack table";
   document.getElementById("bjHRecent").innerHTML = icon("history", 18) + " My recent bets";
 
   document.getElementById("hAccountSettings").innerHTML = icon("dice", 18) + " Gambling account settings";
   document.getElementById("acctSaveSettingsBtn").innerHTML = icon("save", 14) + " Save settings";
   document.getElementById("acctHDisabled").innerHTML = icon("dice", 20) + " Gambling is paused";
-  document.getElementById("hGamblingAccount").innerHTML = icon("dice", 18) + " Gambling account";
+  document.getElementById("hGamblingAccount").textContent = "Gambling account";
+  const actBox = document.getElementById("gAcctRecentTxns");
+  const actHead = actBox && [...document.querySelectorAll("h1,h2,h3,h4")].filter(h => /my gambling activity/i.test(h.textContent) && (h.compareDocumentPosition(actBox) & Node.DOCUMENT_POSITION_FOLLOWING)).pop();
+  if (actHead) actHead.innerHTML = icon("history", 18) + " My gambling activity";
 }
 
 async function init() {

@@ -3,7 +3,7 @@ let CURRENT, IS_TEACHER;
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("loan", 26) + " Loans";
-  document.getElementById("hSettings").innerHTML = icon("loan", 18) + " Loan settings";
+  document.getElementById("hSettings").innerHTML = "Loan settings";
   document.getElementById("addTierBtn").innerHTML = "Add loan range";
   document.getElementById("labTierMin").innerHTML = "Minimum amount";
   document.getElementById("labTierMax").innerHTML = "Maximum amount";
@@ -17,11 +17,11 @@ function paintChrome() {
   document.getElementById("labLoanLifestylePoints").innerHTML = "Lifestyle points lost";
   document.getElementById("labLoanLifestylePerAmount").innerHTML = "Per this much owed";
   document.getElementById("saveLoanLifestyleBtn").innerHTML = "Save penalty";
-  document.getElementById("hTake").innerHTML = icon("loan", 18) + " Take out a loan";
-  document.getElementById("labLoanAmount").innerHTML = icon("coin", 13) + " How much do you want to borrow?";
-  document.getElementById("takeLoanBtn").innerHTML = icon("loan", 15) + " Borrow";
-  document.getElementById("hMyLoan").innerHTML = icon("loan", 18) + " My loans";
-  document.getElementById("hPastLoans").innerHTML = icon("loan", 18) + " Loan history";
+  document.getElementById("hTake").innerHTML = "Take out a loan";
+  document.getElementById("labLoanAmount").innerHTML = "How much do you want to borrow?";
+  document.getElementById("takeLoanBtn").innerHTML = "Borrow";
+  document.getElementById("hMyLoan").innerHTML = "My loans";
+  document.getElementById("hPastLoans").innerHTML = "Loan history";
 }
 
 async function init() {
@@ -91,12 +91,12 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${icon("loan", 20)}${fmtMoney(t.min)} — ${fmtMoney(t.max)}</h4>
+            <h4>${fmtMoney(t.min)} — ${fmtMoney(t.max)}</h4>
             <p>${termLabel(t.termWeeks)} term &middot; <strong>${t.rate}%</strong> interest per week (charged on take-out, then compounds every Monday until paid off)</p>
           </div>
           <div>
-            <button class="btn small secondary" onclick="editTier('${t.id}')">${icon("edit", 13)} Edit</button>
-            <button class="btn small coral" onclick="removeTier('${t.id}')">${icon("trash", 13)} Remove</button>
+            <button class="btn small secondary" onclick="editTier('${t.id}')">Edit</button>
+            <button class="btn small coral" onclick="removeTier('${t.id}')">Remove</button>
           </div>
         </div>
       `;
@@ -139,8 +139,8 @@ async function render() {
       const pointsLost = Math.floor(currentOwed / lc.perAmount) * lc.points;
       noteEl.classList.remove("hidden");
       noteEl.innerHTML = pointsLost > 0
-        ? `${icon("star", 13)} Owing ${fmtMoney(currentOwed)} is currently costing you <strong>${pointsLost} lifestyle point${pointsLost === 1 ? "" : "s"}</strong> (${lc.points} point${lc.points === 1 ? "" : "s"} lost per ${fmtMoney(lc.perAmount)} owed).`
-        : `${icon("star", 13)} Loans here cost lifestyle points once you owe ${fmtMoney(lc.perAmount)} or more (${lc.points} point${lc.points === 1 ? "" : "s"} per ${fmtMoney(lc.perAmount)} owed).`;
+        ? `Owing ${fmtMoney(currentOwed)} is currently costing you <strong>${pointsLost} lifestyle point${pointsLost === 1 ? "" : "s"}</strong> (${lc.points} point${lc.points === 1 ? "" : "s"} lost per ${fmtMoney(lc.perAmount)} owed).`
+        : `Loans here cost lifestyle points once you owe ${fmtMoney(lc.perAmount)} or more (${lc.points} point${lc.points === 1 ? "" : "s"} per ${fmtMoney(lc.perAmount)} owed).`;
     } else {
       noteEl.classList.add("hidden");
     }

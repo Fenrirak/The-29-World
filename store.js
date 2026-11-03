@@ -149,7 +149,7 @@ async function render() {
             <button type="button" class="rc-btn rc-down" aria-label="Move ${escapeHtml(it.name)} down" title="Move down" onclick="moveItem('${it.id}', 1)">${DOWN_SVG}</button>
           </div>` : ""}
           <div class="store-info">
-          <h4>${icon("cart", 20)}${escapeHtml(it.name)} ${owned ? `<span class="badge mint">Owned ×${owned}</span>` : ""} ${IS_TEACHER ? "" : `<span class="badge gold ${CART[it.id] ? "" : "hidden"}" id="inCart-${it.id}">In cart ×${CART[it.id] || 0}</span>`}</h4>
+          <h4>${escapeHtml(it.name)} ${owned ? `<span class="badge mint">Owned ×${owned}</span>` : ""} ${IS_TEACHER ? "" : `<span class="badge gold ${CART[it.id] ? "" : "hidden"}" id="inCart-${it.id}">In cart ×${CART[it.id] || 0}</span>`}</h4>
           <p>${escapeHtml(it.description) || "No description provided."}</p>
           ${it.effect ? `<p class="muted-small">Does: ${it.effect}</p>` : ""}
           <p>${priceWithLifeDiscount(me, "store", it.price)} ${starsHtml(it.stars)}</p>
@@ -172,9 +172,9 @@ async function render() {
                        onkeydown="if(event.key==='Enter'){qtyNormalize('${it.id}');event.preventDefault();}">
                      <button type="button" class="qty-btn" aria-label="Increase quantity" onclick="qtyStep('${it.id}', 1)">+</button>
                    </div>
-                   <button class="btn small gold qty-buy-btn" id="buyBtn-${it.id}" onclick="addToCart('${it.id}')">${icon("cart", 13)} <span id="buyLabel-${it.id}">Add to cart</span></button>
+                   <button class="btn small gold qty-buy-btn" id="buyBtn-${it.id}" onclick="addToCart('${it.id}')"><span id="buyLabel-${it.id}">Add to cart</span></button>
                  </div>`}
-          ${(!IS_TEACHER && owned) ? `<button class="btn small secondary" onclick="sellItem('${it.id}')">${icon("download", 13)} Sell back (${storeRefundLabel(me, it)})</button>` : ""}
+          ${(!IS_TEACHER && owned) ? `<button class="btn small secondary" onclick="sellItem('${it.id}')">Sell back (${storeRefundLabel(me, it)})</button>` : ""}
         </div>
       </div>
       <div id="edit-${it.id}" class="hidden"></div>

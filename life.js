@@ -12,26 +12,26 @@ function lifeBenefitChips(b, frequency) {
   b = b || {};
   const chips = [];
   const num = k => Number(b[k]) || 0;
-  if (num("cashOnce")) chips.push(`<span class="badge gold">${icon("coin", 12)}${num("cashOnce") >= 0 ? "+" : ""}${fmtMoney(b.cashOnce)} one-time</span>`);
-  if (num("allowance")) chips.push(`<span class="badge mint">${icon("coin", 12)}+${fmtMoney(b.allowance)} ${frequency === "daily" ? "every day" : "every pay day"}</span>`);
-  if (num("incomePercent")) chips.push(`<span class="badge ${num("incomePercent") >= 0 ? "mint" : "coral"}">${icon("briefcase", 12)}${num("incomePercent") >= 0 ? "+" : ""}${b.incomePercent}% job income</span>`);
-  if (num("discountStore")) chips.push(`<span class="badge lilac">${icon("cart", 12)}${b.discountStore}% off Store, weekly voucher</span>`);
-  if (num("discountTransport")) chips.push(`<span class="badge lilac">${icon("car", 12)}${b.discountTransport}% off Transport, weekly voucher</span>`);
-  if (num("discountProperty")) chips.push(`<span class="badge lilac">${icon("house", 12)}${b.discountProperty}% off Property, weekly voucher</span>`);
-  if (num("discountInsurance")) chips.push(`<span class="badge lilac">${icon("shield", 12)}${b.discountInsurance}% off Insurance, weekly voucher</span>`);
-  if (num("lifestylePoints")) chips.push(`<span class="badge ${num("lifestylePoints") >= 0 ? "navy" : "coral"}">${icon("star", 12)}${num("lifestylePoints") >= 0 ? "+" : ""}${b.lifestylePoints} lifestyle pts</span>`);
-  if (num("taxCutPercent")) chips.push(`<span class="badge navy">${icon("percent", 12)}${b.taxCutPercent}% off tax bill</span>`);
+  if (num("cashOnce")) chips.push(`<span class="badge gold">${num("cashOnce") >= 0 ? "+" : ""}${fmtMoney(b.cashOnce)} one-time</span>`);
+  if (num("allowance")) chips.push(`<span class="badge mint">+${fmtMoney(b.allowance)} ${frequency === "daily" ? "every day" : "every pay day"}</span>`);
+  if (num("incomePercent")) chips.push(`<span class="badge ${num("incomePercent") >= 0 ? "mint" : "coral"}">${num("incomePercent") >= 0 ? "+" : ""}${b.incomePercent}% job income</span>`);
+  if (num("discountStore")) chips.push(`<span class="badge lilac">${b.discountStore}% off Store, weekly voucher</span>`);
+  if (num("discountTransport")) chips.push(`<span class="badge lilac">${b.discountTransport}% off Transport, weekly voucher</span>`);
+  if (num("discountProperty")) chips.push(`<span class="badge lilac">${b.discountProperty}% off Property, weekly voucher</span>`);
+  if (num("discountInsurance")) chips.push(`<span class="badge lilac">${b.discountInsurance}% off Insurance, weekly voucher</span>`);
+  if (num("lifestylePoints")) chips.push(`<span class="badge ${num("lifestylePoints") >= 0 ? "navy" : "coral"}">${num("lifestylePoints") >= 0 ? "+" : ""}${b.lifestylePoints} lifestyle pts</span>`);
+  if (num("taxCutPercent")) chips.push(`<span class="badge navy">${b.taxCutPercent}% off tax bill</span>`);
   return chips.length ? chips.join(" ") : `<span class="muted-small">No active benefits set</span>`;
 }
 
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("trophy", 26) + " Life";
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Create a family event";
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add family event";
-  document.getElementById("hDefs").innerHTML = icon("trophy", 18) + " Family events";
-  document.getElementById("hGranted").innerHTML = icon("users", 18) + " Who has what";
-  document.getElementById("hMyLife").innerHTML = icon("trophy", 18) + " My life";
+  document.getElementById("hAdd").innerHTML = "Create a family event";
+  document.getElementById("addBtn").innerHTML = "Add family event";
+  document.getElementById("hDefs").innerHTML = "Family events";
+  document.getElementById("hGranted").innerHTML = "Who has what";
+  document.getElementById("hMyLife").innerHTML = "My life";
 }
 
 async function init() {
@@ -93,18 +93,18 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${icon("trophy", 16)} ${escapeHtml(item.name)}</h4>
+            <h4>${escapeHtml(item.name)}</h4>
             <p>${escapeHtml(item.description) || "No description provided."}</p>
             <div style="margin-top:6px;">${lifeBenefitChips(item.benefits, item.frequency)}</div>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn small secondary" type="button" onclick="startEditLifeItem('${item.id}')">${icon("edit", 13)} Edit</button>
-            <button class="btn small coral" type="button" onclick="deleteLifeItem('${item.id}')">${icon("trash", 13)} Remove</button>
+            <button class="btn small secondary" type="button" onclick="startEditLifeItem('${item.id}')">Edit</button>
+            <button class="btn small coral" type="button" onclick="deleteLifeItem('${item.id}')">Remove</button>
           </div>
         </div>
         <div class="flex-row" style="align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;">
           <select id="give-${item.id}" style="max-width:220px;"></select>
-          <button class="btn small gold" type="button" onclick="giveLifeItem('${item.id}')">${icon("plus", 13)} Give to student</button>
+          <button class="btn small gold" type="button" onclick="giveLifeItem('${item.id}')">Give to student</button>
         </div>
         <div id="giveMsg-${item.id}"></div>
       `;
@@ -122,7 +122,7 @@ async function render() {
       row.className = "auto-row";
       const chips = (s.lifeItems || []).map(it => `
         <span class="badge navy" style="margin-right:6px;margin-bottom:4px;display:inline-flex;align-items:center;gap:4px;">
-          ${icon("trophy", 12)} ${escapeHtml(it.name)}
+          ${escapeHtml(it.name)}
           <button type="button" onclick="revokeLifeItemFor('${escapeJsAttr(s.username)}','${it.id}')" title="Revoke" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:800;padding:0 0 0 2px;line-height:1;">&times;</button>
         </span>
       `).join("");
@@ -139,7 +139,7 @@ async function render() {
       const div = document.createElement("div");
       div.className = "card company-card";
       div.innerHTML = `
-        <h4>${icon("trophy", 16)} ${escapeHtml(it.name)}</h4>
+        <h4>${escapeHtml(it.name)}</h4>
         <p>${escapeHtml(it.description) || ""}</p>
         <div>${lifeBenefitChips(it.benefits, it.frequency)}</div>
         <p class="muted-small" style="margin-top:8px;">Given ${it.grantedAt || ""}</p>
@@ -195,7 +195,7 @@ function resetLifeForm() {
   EDITING_ID = null;
   LIFE_FORM_IDS.forEach(id => document.getElementById(id).value = "");
   document.getElementById("liAllowanceFrequency").value = "weekly";
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add family event";
+  document.getElementById("addBtn").innerHTML = "Add family event";
   const cancelBtn = document.getElementById("cancelEditBtn");
   if (cancelBtn) cancelBtn.remove();
 }
@@ -218,7 +218,7 @@ function startEditLifeItem(id) {
     document.getElementById("liLifestyle").value = b.lifestylePoints || "";
     document.getElementById("liTaxCut").value = b.taxCutPercent || "";
     document.getElementById("liAllowanceFrequency").value = d.frequency === "daily" ? "daily" : "weekly";
-    document.getElementById("addBtn").innerHTML = icon("save", 15) + " Save changes";
+    document.getElementById("addBtn").innerHTML = "Save changes";
     if (!document.getElementById("cancelEditBtn")) {
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";

@@ -594,7 +594,7 @@ function renderWageTax(cls) {
   const bands = t29WageTaxBands(cls);
   card.classList.toggle("hidden", !bands.length);
   if (!bands.length) { box.innerHTML = ""; return; }
-  const h = document.getElementById("hWageTax"); if (h) h.innerHTML = icon("percent", 18) + " Tax on my pay";
+  const h = document.getElementById("hWageTax"); if (h) h.innerHTML = "Tax on my pay";
   // Whole dollars stay compact ("$1,000"); anything with cents is shown as "$12.50".
   const m = n => Number.isInteger(Number(n)) ? "$" + Number(n).toLocaleString("en-NZ") : fmtMoney(n);
   box.innerHTML = bands.map((b, i) => {

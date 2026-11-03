@@ -86,11 +86,11 @@ function coverageText(p) {
 function planButtonsHtml(p, me, owned) {
   if (IS_TEACHER) {
     return `<button class="btn small secondary" onclick="startEditPlan('${p.id}')">Edit</button>
-      <button class="btn small coral" onclick="deletePlan('${p.id}')">${icon("trash", 13)} Remove</button>`;
+      <button class="btn small coral" onclick="deletePlan('${p.id}')">Remove</button>`;
   }
   return owned
     ? `<button class="btn small secondary" id="cancelBtn-${p.id}" onclick="cancelPlan('${p.id}')">Cancel cover</button>`
-    : `<button class="btn small gold" id="buyBtn-${p.id}" onclick="buyPlan('${p.id}', ${Number(p.signupFee) || 0})">${icon("shield", 13)} Sign up</button>`;
+    : `<button class="btn small gold" id="buyBtn-${p.id}" onclick="buyPlan('${p.id}', ${Number(p.signupFee) || 0})">Sign up</button>`;
 }
 
 function planPriceHtml(p, me) {
@@ -109,7 +109,7 @@ function singlePlanCardHtml(p, me) {
     <div class="card company-card">
       <div class="flex-between">
         <div>
-          <h4>${icon("shield", 20)}${escapeHtml(p.name)} ${owned ? '<span class="badge mint">You have this</span>' : ""}</h4>
+          <h4>${escapeHtml(p.name)} ${owned ? '<span class="badge mint">You have this</span>' : ""}</h4>
           <p>${escapeHtml(p.description) || "No description provided."}</p>
           <p class="muted-small">Covers: ${escapeHtml(coverageText(p))}
             ${needsCompany ? `<span class="badge coral">Not in a company yet — click Edit to choose one</span>` : ""}</p>
@@ -133,7 +133,7 @@ function companyPlanRowHtml(p, me, owned) {
           ${IS_TEACHER && !typeLabel ? `<span class="badge coral">Type not set — click Edit</span>` : ""}
         </div>
         ${p.description ? `<div class="muted-small">${escapeHtml(p.description)}</div>` : ""}
-        ${insuranceTypeCoversText(p.coverage, p.insType) ? `<div class="ins-plan-covers">${icon("shield", 12)} ${escapeHtml(insuranceTypeCoversText(p.coverage, p.insType))}</div>` : ""}
+        ${insuranceTypeCoversText(p.coverage, p.insType) ? `<div class="ins-plan-covers">${escapeHtml(insuranceTypeCoversText(p.coverage, p.insType))}</div>` : ""}
         <div class="ins-plan-price">${planPriceHtml(p, me)}</div>
       </div>
       <div class="ins-plan-actions">${planButtonsHtml(p, me, owned)}</div>
@@ -153,7 +153,6 @@ function companyCardHtml(co, me) {
   return `
     <div class="card ins-co${open ? " open" : ""}" id="co-${co.id}">
       <button type="button" class="ins-co-head" aria-expanded="${open}" aria-controls="coBody-${co.id}" onclick="toggleCompany('${co.id}')">
-        <span class="ins-co-icon">${icon(kind.icon, 24)}</span>
         <span class="ins-co-main">
           <span class="ins-co-name">${escapeHtml(co.name)}
             ${ownedCount ? `<span class="badge mint">You have ${ownedCount === 1 ? "1 plan" : ownedCount + " plans"}</span>` : ""}</span>
@@ -168,9 +167,9 @@ function companyCardHtml(co, me) {
         ${plans.map(p => companyPlanRowHtml(p, me, mine.has(p.id))).join("")}
         ${IS_TEACHER ? `
         <div class="ins-co-actions">
-          <button class="btn small gold" onclick="startAddToCompany('${co.id}')">${icon("plus", 13)} Add a plan</button>
+          <button class="btn small gold" onclick="startAddToCompany('${co.id}')">Add a plan</button>
           <button class="btn small secondary" onclick="renameCompany('${co.id}')">Rename company</button>
-          <button class="btn small coral" onclick="deleteCompany('${co.id}')">${icon("trash", 13)} Remove company</button>
+          <button class="btn small coral" onclick="deleteCompany('${co.id}')">Remove company</button>
         </div>` : ""}
       </div>
     </div>`;
@@ -190,10 +189,10 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("shield", 26) + " Insurance";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add an insurance plan";
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add plan";
+  document.getElementById("addBtn").innerHTML = "Add plan";
   document.getElementById("hMine").innerHTML = icon("shield", 18) + " My cover";
   document.getElementById("hPayDay").innerHTML = icon("calendar", 18) + " Premium payment day";
-  document.getElementById("saveDayBtn").innerHTML = icon("save", 14) + " Save day";
+  document.getElementById("saveDayBtn").innerHTML = "Save day";
 }
 
 async function init() {
@@ -295,7 +294,7 @@ async function render() {
       }
       const typeLabel = insuranceTypeLabel(p.coverage, p.insType);
       const showType = typeLabel && typeLabel !== p.name;
-      row.innerHTML = `<div class="auto-details">${icon("shield", 14)} <strong>${escapeHtml(insurancePlanName(p))}</strong>${showType ? ` (${escapeHtml(typeLabel)})` : ""} &middot; ${fmtMoney(p.price)}/week &middot; ${fmtMoney(p.excess)} excess &middot; ${payText}</div>`;
+      row.innerHTML = `<div class="auto-details"><strong>${escapeHtml(insurancePlanName(p))}</strong>${showType ? ` (${escapeHtml(typeLabel)})` : ""} &middot; ${fmtMoney(p.price)}/week &middot; ${fmtMoney(p.excess)} excess &middot; ${payText}</div>`;
       box.appendChild(row);
     });
   }
@@ -397,7 +396,7 @@ function cancelEditPlan() {
   document.getElementById("pCoverage").value = "general";
   updatePlanFormForCoverage("", "");
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add an insurance plan";
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add plan";
+  document.getElementById("addBtn").innerHTML = "Add plan";
   document.getElementById("cancelEditBtn").classList.add("hidden");
 }
 
