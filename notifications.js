@@ -457,17 +457,20 @@ function notifMarketplaceItems(me, cls) {
   const out = [];
   (cls.listings || []).forEach(l => {
     if (l.seller === me.username && l.status === "active") {
-      const open = (l.offers || []).filter(o => o.status === "open");
-      if (open.length) {
-        const best = open.reduce((a, b) => (b.amount > a.amount ? b : a));
+      // One item per offer (not one per listing), so every new offer — even a lower one, or one
+      // that arrives after another was declined — is its own unread item and its own device alert.
+      (l.offers || []).filter(o => o.status === "open").forEach(o => {
+        const q = Math.max(1, Math.floor(Number(o.quantity) || 1));
+        const who = String(o.buyerName || "").trim() || "A classmate";
+        const total = Math.round(o.amount * q * 100) / 100;
         out.push({
-          id: "offers-" + l.id + "-" + open.length + "-" + Math.round(best.amount * 100),
-          ts: Math.max(dayStart, best.ts || 0), icon: "swap", tone: "gold",
-          title: `${open.length} ${open.length === 1 ? "offer" : "offers"} on ${l.name}`,
-          body: `Best offer so far is ${fmtMoney(best.amount)} against your ${fmtMoney(l.price)} asking price.`,
+          id: "offer-" + l.id + "-" + o.id,
+          ts: Math.max(dayStart, o.ts || 0), icon: "swap", tone: "gold",
+          title: `${who} offered ${fmtMoney(o.amount)}${q > 1 ? " each" : ""} for ${q > 1 ? q + " × " : ""}${l.name}`,
+          body: (q > 1 ? `${fmtMoney(total)} in total. ` : "") + `Your asking price is ${fmtMoney(l.price)}${q > 1 ? " each" : ""}. Open the Trade Centre to accept or decline.` + (o.note ? ` “${String(o.note).slice(0, 80)}”` : ""),
           href: "marketplace.html", action: true
         });
-      }
+      });
     }
     if (l.seller === me.username && l.status === "pending") {
       out.push({

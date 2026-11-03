@@ -543,6 +543,8 @@ function listingIsOpen(l) { return l.status === "active" || l.status === "pendin
 // How many copies a listing still has for sale (listings from before
 // quantities existed are one copy).
 function listingQuantity(l) { return Math.max(1, Math.floor(Number(l && l.quantity) || 1)); }
+// How many copies an offer is for, at its per-copy price (offers from before quantities existed were for one).
+function offerQuantity(o) { return Math.max(1, Math.floor(Number(o && o.quantity) || 1)); }
 
 // Keeps the class doc from growing forever — same idea as MAX_STORED_TXNS.
 // Only ever trims FINISHED listings, oldest first, so nothing still for
@@ -795,7 +797,9 @@ async function teacherRemoveListing(classCode, listingId, reason) {
    (at the listed price) and "Accept offer" (at the haggled price) route
    through here, so the money movement, the ownership transfer and the
    guards can never drift apart between the two paths. */
-async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, pay) {
+async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, pay, units) {
+  // units = how many copies change hands at agreedPrice EACH (Buy now is always 1; an accepted offer can be more).
+  units = Math.max(1, Math.floor(Number(units) || 1));
   const classRef = classesCol().doc(classCode);
   let receipt = null, buyPay = null;
   // pay.fromDefault = an accepted offer: the buyer isn't here to choose, so the
@@ -836,6 +840,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
       if (listing.status !== "active") throw new Error("CLOSED");
       if (listing.seller !== seller.username) throw new Error("NOT_FOUND");
       if (listing.seller === buyerUsername) throw new Error("OWN_LISTING");
+      if (units > listingQuantity(listing) || (listing.assetType !== "store" && units !== 1)) throw new Error("QTY");
       if (!_marketplaceStillOwns(cls, seller, listing)) throw new Error("GONE");
       // The seller has a big event waiting that puts this very thing at
       // risk — it can't change hands until they've answered it.
@@ -843,6 +848,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
 
       const price = Math.round(Number(agreedPrice) * 100) / 100;
       if (!(price > 0)) throw new Error("BAD_PRICE");
+      const total = Math.round(price * units * 100) / 100; // everything the buyer pays for all the copies
       const buyerIsTeacher = buyer.role === "teacher";
       // Paying by credit card works for things (store items, vehicles) — not for a
       // house, which in real life is settled by bank transfer. A part-payment is
@@ -853,8 +859,8 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
         pay = (!buyerIsTeacher && buyer.mpPayDefault === "card" && listing.assetType !== "property") ? { useCard: true } : {};
       }
       if (pay && pay.useCard && listing.assetType === "property") throw new Error("NOCARD_ITEM");
-      buyPay = { card: 0, cash: price };
-      if (!buyerIsTeacher) buyPay = cardPayInTxn(buyer, cls, price, pay);
+      buyPay = { card: 0, cash: total };
+      if (!buyerIsTeacher) buyPay = cardPayInTxn(buyer, cls, total, pay);
 
       // Asset-type-specific transfer + eligibility. Anything the normal
       // teacher-run store would refuse a buyer (no truck licence, already
@@ -863,6 +869,8 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
       let storePaidMoved = false;
       if (listing.assetType === "store") {
         seller.storeItems = seller.storeItems || [];
+        // One copy at a time, exactly as a single sale always did, so the cost records follow each copy.
+        for (let unit = 0; unit < units; unit++) {
         const idx = seller.storeItems.indexOf(listing.assetId);
         if (idx === -1) throw new Error("GONE");
         const carried = storePaidList(seller, listing.assetId); // before the splice, while the unit still counts as owned
@@ -880,6 +888,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
             storePaidSet(buyer, listing.assetId, theirs.sort((x, y) => x - y));
           }
           storePaidMoved = true;
+        }
         }
       } else if (listing.assetType === "vehicle") {
         const veh = cls.vehicles.find(v => v.id === listing.assetId);
@@ -912,17 +921,17 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
         throw new Error("NOT_FOUND");
       }
 
-      const fee = Math.round(price * ((mp.feePct || 0) / 100) * 100) / 100;
-      const proceeds = Math.round((price - fee) * 100) / 100;
+      const fee = Math.round(total * ((mp.feePct || 0) / 100) * 100) / 100;
+      const proceeds = Math.round((total - fee) * 100) / 100;
 
       // One copy of a listing of several: the sale gets its own "sold"
       // record and the listing stays up with one fewer. The last (or only)
       // copy closes the listing itself, as it always has.
       const qty = listingQuantity(listing);
       let sale = listing;
-      if (qty > 1) {
-        sale = Object.assign({}, listing, { id: uid("lst"), quantity: 1, offers: [], parentId: listing.id });
-        listing.quantity = qty - 1;
+      if (qty > units) {
+        sale = Object.assign({}, listing, { id: uid("lst"), quantity: units, offers: [], parentId: listing.id });
+        listing.quantity = qty - units;
         cls.listings.push(sale);
         // The buyer's own offer on it (if any) is done with.
         (listing.offers || []).forEach(o => { if (o.status === "open" && o.buyer === buyerUsername) o.status = "withdrawn"; });
@@ -970,7 +979,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
         properties: cls.properties
       });
 
-      receipt = { price, fee, proceeds, name: listing.name, seller: seller.username, assetType: listing.assetType,
+      receipt = { price, units, total, fee, proceeds, name: listing.name, seller: seller.username, assetType: listing.assetType,
         left: listing.status === "active" ? listingQuantity(listing) : 0 };
     });
   } catch (e) {
@@ -988,18 +997,19 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
     if (e.message === "NO_LICENCE") return { ok: false, error: "You need a truck licence before you can own that vehicle." };
     if (e.message === "TRUCK_LIMIT") return { ok: false, error: "You can only own one truck at a time." };
     if (e.message === "BAD_PRICE") return { ok: false, error: "That price isn't valid." };
+    if (e.message === "QTY") return { ok: false, error: "There aren't that many left any more — the listing has changed." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
 
   const label = MARKETPLACE_ASSET_LABEL[receipt.assetType] || "Item";
   await logPurchaseTxn(classCode, buyerUsername, buyPay, "Trade Centre", {
-    type: "p2p-buy", from: buyerUsername, to: receipt.seller, amount: receipt.price,
-    note: `Bought from a classmate: ${receipt.name} (${label})`
+    type: "p2p-buy", from: buyerUsername, to: receipt.seller, amount: receipt.total,
+    note: `Bought from a classmate: ${receipt.units > 1 ? receipt.units + " × " : ""}${receipt.name} (${label})` + (receipt.units > 1 ? ` at ${fmtMoney(receipt.price)} each` : "")
   });
   await logTxn(classCode, {
     type: "p2p-sell", to: receipt.seller, from: buyerUsername, amount: receipt.proceeds,
-    note: `Sold to a classmate: ${receipt.name}` + (receipt.fee > 0 ? ` (${fmtMoney(receipt.fee)} market fee deducted)` : "")
+    note: `Sold to a classmate: ${receipt.units > 1 ? receipt.units + " × " : ""}${receipt.name}` + (receipt.fee > 0 ? ` (${fmtMoney(receipt.fee)} market fee deducted)` : "")
   });
   return Object.assign({ ok: true }, receipt);
 }
@@ -1017,11 +1027,15 @@ async function buyListing(username, classCode, listingId, pay) {
   return await _settleListing(classCode, listingId, username, listing.price, pay);
 }
 
-async function makeOffer(username, classCode, listingId, amount, note) {
+// amount = the price for ONE copy; quantity = how many copies the offer is for (store items can be
+// more than one; a vehicle or a house is always one).
+async function makeOffer(username, classCode, listingId, amount, note, quantity) {
   const classRef = classesCol().doc(classCode);
+  const userRef = usersCol().doc(username);
   let error = null, made = null;
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
+    const userSnap = await t.get(userRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     if (!cls.marketplace.enabled) { error = "The Trade Centre is switched off for your class right now."; return; }
@@ -1030,15 +1044,23 @@ async function makeOffer(username, classCode, listingId, amount, note) {
     if (!l || l.status !== "active") { error = "That listing is no longer for sale."; return; }
     if (l.seller === username) { error = "You can't make an offer on your own listing."; return; }
     const value = Math.round(Number(amount) * 100) / 100;
-    if (!(value > 0)) { error = "Enter an offer greater than zero."; return; }
+    if (!(value > 0)) { error = "Enter a price greater than zero."; return; }
+    const qtyRaw = quantity === undefined || quantity === null || String(quantity).trim() === "" ? 1 : Number(quantity);
+    if (!Number.isInteger(qtyRaw) || qtyRaw < 1) { error = "Enter how many you want — a whole number, 1 or more."; return; }
+    const have = listingQuantity(l);
+    if (qtyRaw > have) { error = have === 1 ? "Only 1 is for sale." : `Only ${have} are for sale — you can't offer on more than that.`; return; }
     const bounds = marketplacePriceBounds(cls, l.refPrice);
-    if (value < bounds.min) { error = `Offers can't go below ${fmtMoney(bounds.min)} for this item.`; return; }
-    if (bounds.max !== null && value > bounds.max) { error = `Offers can't go above ${fmtMoney(bounds.max)} for this item.`; return; }
+    if (value < bounds.min) { error = `Offers can't go below ${fmtMoney(bounds.min)} each for this item.`; return; }
+    if (bounds.max !== null && value > bounds.max) { error = `Offers can't go above ${fmtMoney(bounds.max)} each for this item.`; return; }
     l.offers = l.offers || [];
     // One live offer each — a new one replaces your old one, so a listing
     // can't be buried under a dozen offers from the same student.
     l.offers.forEach(o => { if (o.buyer === username && o.status === "open") o.status = "withdrawn"; });
-    made = { id: uid("off"), buyer: username, amount: value, note: String(note || "").trim().slice(0, 160), status: "open", ts: Date.now() };
+    const me = userSnap.exists ? userSnap.data() : {};
+    made = {
+      id: uid("off"), buyer: username, buyerName: String(me.name || "").slice(0, 60),
+      amount: value, quantity: qtyRaw, note: String(note || "").trim().slice(0, 160), status: "open", ts: Date.now()
+    };
     l.offers.push(made);
     if (l.offers.length > 40) l.offers = l.offers.slice(-40);
     t.update(classRef, { listings: cls.listings });
@@ -1077,7 +1099,9 @@ async function acceptOffer(username, classCode, listingId, offerId) {
   // The sale itself re-validates everything (funds, ownership, the lot).
   // Marking the offer "accepted" only means anything once the sale has
   // actually gone through, so that write happens after it, never before.
-  const res = await _settleListing(classCode, listingId, o.buyer, o.amount, { fromDefault: true });
+  const wanted = offerQuantity(o);
+  if (wanted > listingQuantity(l)) return { ok: false, error: `This offer is for ${wanted}, but only ${listingQuantity(l)} ${listingQuantity(l) === 1 ? "is" : "are"} left — decline it and let them send a new one.` };
+  const res = await _settleListing(classCode, listingId, o.buyer, o.amount, { fromDefault: true }, wanted);
   if (!res.ok) return res;
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {

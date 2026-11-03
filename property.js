@@ -1280,7 +1280,8 @@ function rentedHomeCard(o) {
 function renderStudentHomes(cls, props, me, nameOf) {
   const box = document.getElementById("myHomes");
   const items = props.filter(p => p.owner === me.username).map(p => ({
-    rank: p.occupancy === "living" ? 0 : 1,
+    price: Number(p.price) || 0,
+    name: p.name || "",
     due: !!p.mortgage && mortgageStatus(p, cls).dueNow,
     html: ownedHomeCard(p, cls, nameOf)
   }));
@@ -1289,7 +1290,7 @@ function renderStudentHomes(cls, props, me, nameOf) {
   if (rentedProp) {
     const s = rentedProp.sublet;
     const t = tenantRentStatusLine(s.leaseStartWeekKey, s.rentLastWeekPaid, rentedProp.rentDay, s.price, isSubletRentOverdue(rentedProp, cls));
-    items.push({ rank: 0, due: t.canPay, html: rentedHomeCard({
+    items.push({ price: Number(s.price) || 0, name: rentedProp.name || "", due: t.canPay, html: rentedHomeCard({
       icon: "house", name: rentedProp.name, desc: `Renting from ${nameOf(rentedProp.owner)}`,
       badge: `<span class="badge navy">Classmate rental</span>`,
       price: s.price, status: t.status, canPay: t.canPay, why: t.why,
@@ -1298,7 +1299,7 @@ function renderStudentHomes(cls, props, me, nameOf) {
     }) });
   } else if (npcUnit) {
     const t = tenantRentStatusLine(npcUnit.leaseStartWeekKey, npcUnit.rentLastWeekPaid, npcUnit.rentDay, npcUnit.rentPerWeek, isNpcRentOverdue(npcUnit));
-    items.push({ rank: 0, due: t.canPay, html: rentedHomeCard({
+    items.push({ price: Number(npcUnit.rentPerWeek) || 0, name: npcUnit.name || "", due: t.canPay, html: rentedHomeCard({
       icon: "building", name: npcUnit.name, desc: npcUnit.description || "",
       badge: `<span class="badge lilac">School rental</span>`,
       price: npcUnit.rentPerWeek, status: t.status, canPay: t.canPay, why: t.why,
@@ -1307,7 +1308,8 @@ function renderStudentHomes(cls, props, me, nameOf) {
       canMoveOut: leaseMinWeeksElapsed(npcUnit), minWeeks: npcUnit.minWeeks, moveFn: `npcMoveOutClick('${npcUnit.id}')`
     }) });
   }
-  items.sort((a, b) => a.rank - b.rank);
+  // Lowest price first (a home you own by its current price, a rental by its rent), name as the tiebreak.
+  items.sort((a, b) => (a.price - b.price) || String(a.name).localeCompare(String(b.name)));
   box.innerHTML = items.length
     ? `<div class="prop-grid">${items.map(i => i.html).join("")}</div>`
     : `<div class="empty-state">

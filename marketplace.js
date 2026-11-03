@@ -172,7 +172,7 @@ function renderStudent() {
   const others = listings.filter(l => l.status === "active" && l.seller !== ME.username);
   const sold = listings.filter(l => l.status === "sold").sort((a, b) => (b.soldTs || 0) - (a.soldTs || 0));
   const earned = sold.filter(l => l.seller === ME.username)
-    .reduce((sum, l) => sum + (l.soldPrice - (l.fee || 0)), 0);
+    .reduce((sum, l) => sum + (l.soldPrice * listingQuantity(l) - (l.fee || 0)), 0);
 
   document.getElementById("statListings").textContent = String(mine.length);
   document.getElementById("statEarned").textContent = fmtMoney(earned);
@@ -199,10 +199,11 @@ function renderStudent() {
   document.getElementById("soldTable").innerHTML = sold.slice(0, 20).map(l => {
     const diff = l.soldPrice - l.refPrice;
     const pct = l.refPrice ? Math.round((diff / l.refPrice) * 100) : 0;
+    const q = listingQuantity(l);
     return `<tr>
-      <td>${icon(ASSET_ICON[l.assetType] || "cart", 13)} ${esc(l.name)}<br><span class="muted-small">${esc(nameOf(l.seller))} → ${esc(nameOf(l.soldTo))}</span></td>
-      <td>${fmtMoney(l.refPrice)}</td>
-      <td><strong>${fmtMoney(l.soldPrice)}</strong></td>
+      <td>${icon(ASSET_ICON[l.assetType] || "cart", 13)} ${esc(l.name)}${q > 1 ? ` <span class="badge navy">×${q}</span>` : ""}<br><span class="muted-small">${esc(nameOf(l.seller))} → ${esc(nameOf(l.soldTo))}</span></td>
+      <td>${fmtMoney(l.refPrice)}${q > 1 ? " each" : ""}</td>
+      <td><strong>${fmtMoney(l.soldPrice)}</strong>${q > 1 ? ` each<br><span class="muted-small">${fmtMoney(Math.round(l.soldPrice * q * 100) / 100)} in total</span>` : ""}</td>
       <td class="${diff >= 0 ? "ticker-up" : "ticker-down"}">${diff >= 0 ? "+" : "−"}${fmtMoney(Math.abs(diff))} (${pct >= 0 ? "+" : ""}${pct}%)</td>
     </tr>`;
   }).join("");
@@ -292,15 +293,18 @@ function listingCardHtml(l, opts) {
     actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${icon("cart", 13)} ${qty > 1 ? "Buy 1" : "Buy"} for ${fmtMoney(l.price)}</button>`;
     if (CLS.marketplace.allowOffers) {
       actions += myOffer
-        ? `<button class="btn small secondary" onclick="withdraw('${l.id}','${myOffer.id}')">Withdraw my ${fmtMoney(myOffer.amount)} offer</button>`
+        ? `<button class="btn small secondary" onclick="withdraw('${l.id}','${myOffer.id}')">Withdraw my ${fmtMoney(myOffer.amount)}${offerQuantity(myOffer) > 1 ? " × " + offerQuantity(myOffer) : ""} offer</button>`
         : `<button class="btn small secondary" onclick="toggleOffer('${l.id}')">${icon("swap", 13)} Make an offer</button>`;
     }
   }
 
   const offerForm = (!mine && !teacher && OFFERING === l.id) ? `
     <div class="mkt-offer-list">
-      <label for="offer-${l.id}">Your offer${qty > 1 ? " for one" : ""} (allowed: ${bandText(l.refPrice)})</label>
-      <input id="offer-${l.id}" type="number" min="0" step="0.5" value="${Math.round(l.price * 0.8 * 100) / 100}">
+      <label for="offer-${l.id}">Your price${qty > 1 ? " for ONE" : ""} (allowed: ${bandText(l.refPrice)})</label>
+      <input id="offer-${l.id}" type="number" min="0" step="0.01" value="${Math.round(l.price * 0.8 * 100) / 100}" oninput="offerTotal('${l.id}')">
+      ${qty > 1 ? `<label for="offerqty-${l.id}" style="margin-top:8px;display:block;">How many at that price (1–${qty})</label>
+      <input id="offerqty-${l.id}" type="number" min="1" max="${qty}" step="1" value="1" oninput="offerTotal('${l.id}')">` : ""}
+      <div class="muted-small" id="offertotal-${l.id}" style="margin:6px 0;">Total: <strong>${fmtMoney(Math.round(l.price * 0.8 * 100) / 100)}</strong></div>
       <input id="offernote-${l.id}" type="text" placeholder="Why should they take it? (optional)">
       <div class="row-flex" style="gap:8px;margin-top:10px;">
         <button class="btn small gold" onclick="sendOffer('${l.id}')">Send offer</button>
@@ -311,15 +315,21 @@ function listingCardHtml(l, opts) {
   const offerList = (mine && openOffers.length) ? `
     <div class="mkt-offer-list">
       <p class="muted-small" style="margin:0 0 6px;"><strong>${openOffers.length} ${openOffers.length === 1 ? "offer" : "offers"}</strong></p>
-      ${openOffers.sort((a, b) => b.amount - a.amount).map(o => `
+      ${openOffers.sort((a, b) => b.amount - a.amount || offerQuantity(b) - offerQuantity(a)).map(o => {
+        const oq = offerQuantity(o);
+        const tooMany = oq > qty;
+        const total = Math.round(o.amount * oq * 100) / 100;
+        return `
         <div class="mkt-offer">
-          <span><span class="mkt-offer-amt">${fmtMoney(o.amount)}</span> <span class="muted-small">from ${esc(nameOf(o.buyer))}</span></span>
+          <span><span class="mkt-offer-amt">${fmtMoney(o.amount)}${oq > 1 ? " each" : ""}</span>${oq > 1 ? ` <span class="badge navy">×${oq}</span> <span class="muted-small">= ${fmtMoney(total)}</span>` : ""} <span class="muted-small">from ${esc(nameOf(o.buyer))}</span></span>
           <span class="row-flex" style="gap:6px;">
-            <button class="btn small mint" onclick="accept('${l.id}','${o.id}')">Accept</button>
+            <button class="btn small mint" onclick="accept('${l.id}','${o.id}')" ${tooMany ? "disabled" : ""}>Accept</button>
             <button class="btn small secondary" onclick="decline('${l.id}','${o.id}')">Decline</button>
           </span>
+          ${tooMany ? `<span class="mkt-offer-note">Wants ${oq} but only ${qty} ${qty === 1 ? "is" : "are"} left — decline it and they can send a new one.</span>` : ""}
           ${o.note ? `<span class="mkt-offer-note">"${esc(o.note)}"</span>` : ""}
-        </div>`).join("")}
+        </div>`;
+      }).join("")}
     </div>` : "";
 
   return `
@@ -343,6 +353,15 @@ function listingCardHtml(l, opts) {
     </div>`;
 }
 
+// Live "Total" line under the offer boxes: price for one x how many.
+function offerTotal(id) {
+  const box = document.getElementById("offertotal-" + id);
+  if (!box) return;
+  const p = Number(document.getElementById("offer-" + id).value);
+  const qEl = document.getElementById("offerqty-" + id);
+  const q = qEl ? Math.floor(Number(qEl.value)) : 1;
+  box.innerHTML = p > 0 && q >= 1 ? `Total: <strong>${fmtMoney(Math.round(p * q * 100) / 100)}</strong>${q > 1 ? ` for ${q}` : ""}` : "Total: —";
+}
 function toggleOffer(id) { OFFERING = (OFFERING === id) ? null : id; renderStudent(); }
 
 /* ---------------- "Pay with" bar: cash or credit card ----------------
@@ -434,11 +453,12 @@ async function buyIt(id) {
 async function sendOffer(id) {
   const res = await makeOffer(CURRENT.username, CURRENT.classCode, id,
     document.getElementById("offer-" + id).value,
-    document.getElementById("offernote-" + id).value);
+    document.getElementById("offernote-" + id).value,
+    (document.getElementById("offerqty-" + id) || { value: 1 }).value);
   if (res.ok) OFFERING = null;
   await render();
   const box = document.getElementById("msg-" + id);
-  if (box) box.innerHTML = res.ok ? `<div class="success-msg">Offer sent — the seller will see it.</div>` : `<div class="error-msg">${esc(res.error)}</div>`;
+  if (box) box.innerHTML = res.ok ? `<div class="success-msg">Offer sent — the seller will be notified.</div>` : `<div class="error-msg">${esc(res.error)}</div>`;
   else if (!res.ok) alert(res.error);
 }
 
@@ -452,7 +472,12 @@ async function decline(listingId, offerId) {
 }
 async function accept(listingId, offerId) {
   const l = (CLS.listings || []).find(x => x.id === listingId);
-  if (!await t29Confirm(l && listingQuantity(l) > 1 ? "Accept this offer and hand one of them over?" : "Accept this offer and hand the item over?")) return;
+  const o = l && (l.offers || []).find(x => x.id === offerId);
+  const oq = o ? offerQuantity(o) : 1;
+  const ask = o && oq > 1
+    ? `Accept this offer and hand over ${oq} × "${l.name}" at ${fmtMoney(o.amount)} each (${fmtMoney(Math.round(o.amount * oq * 100) / 100)} in total)?`
+    : (l && listingQuantity(l) > 1 ? "Accept this offer and hand one of them over?" : "Accept this offer and hand the item over?");
+  if (!await t29Confirm(ask)) return;
   const res = await acceptOffer(CURRENT.username, CURRENT.classCode, listingId, offerId);
   await render();
   if (!res.ok) alert(res.error);
