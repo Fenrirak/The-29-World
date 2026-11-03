@@ -36,6 +36,7 @@ async function init() {
   document.getElementById("studentPanel").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
   if (!IS_TEACHER) {
+    document.getElementById("iconListings").innerHTML = icon("tag", 30);
     document.getElementById("iconEarned").innerHTML = icon("coin", 30);
     document.getElementById("iconForSale").innerHTML = icon("swap", 30);
   }
