@@ -4116,3 +4116,7 @@ html.dark-mode .fin-sub .icon-slot{color:var(--accent-text);}
   table.stack-table td .stack-val select{max-width:100%;}
 }
 #studentFilter{width:100%;}
+
+.student-id-cell{display:flex;align-items:center;gap:10px;}
+.student-id-cell .student-avatar{margin:0;flex-shrink:0;}
+.student-id-text{min-width:0;}

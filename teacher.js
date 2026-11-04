@@ -210,8 +210,8 @@ async function render() {
     const tr = document.createElement("tr");
     tr.dataset.search = ((s.name || "") + " " + (s.username || "")).toLowerCase();
     tr.innerHTML = `
-      <td><div class="stack-val">${avatarBadge(s)}${escapeHtml(s.name)}<div class="muted-small">@${escapeHtml(s.username)}</div></div></td>
-      <td><div class="stack-val">${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `${icon("check", 11)} Task ✓` : `Task ✗`}</div>`; })() : ""}</div></td>
+      <td><div class="stack-val student-id-cell">${avatarBadge(s)}<div class="student-id-text">${escapeHtml(s.name)}<div class="muted-small">@${escapeHtml(s.username)}</div></div></div></td>
+      <td><div class="stack-val">${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `Task ✓` : `Task ✗`}</div>`; })() : ""}</div></td>
       <td><div class="stack-val"><strong>${fmtMoney(s.balance)}</strong></div></td>
       <td><div class="stack-val">${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</div></td>
       <td><div class="stack-val">${fmtMoney(netByUser[s.username] || 0)}</div></td>
