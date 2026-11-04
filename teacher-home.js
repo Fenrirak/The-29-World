@@ -274,4 +274,49 @@ async function submitNewClass(e) {
   return false;
 }
 
+// Delete my account: explains what will be lost, then needs DELETE typed, the password, and a final yes.
+function openDeleteAccountModal() {
+  showMsg("");
+  const owned = ALL_CLASSES.filter(c => c.isOwner);
+  const students = owned.reduce((n, c) => n + (c.studentCount || 0), 0);
+  document.getElementById("daSummary").textContent = owned.length
+    ? `Right now that is ${owned.length} class${owned.length === 1 ? "" : "es"} and ${students} student account${students === 1 ? "" : "s"}.`
+    : "You don't own any classes right now, so only your account itself will be deleted.";
+  document.getElementById("daConfirm").value = "";
+  document.getElementById("daPassword").value = "";
+  document.getElementById("daMsg").innerHTML = "";
+  document.getElementById("deleteAccountModal").classList.remove("hidden");
+  document.getElementById("daConfirm").focus();
+}
+
+function closeDeleteAccountModal() {
+  document.getElementById("deleteAccountModal").classList.add("hidden");
+  document.getElementById("daPassword").value = "";
+}
+
+async function submitDeleteAccount(e) {
+  e.preventDefault();
+  const msg = document.getElementById("daMsg");
+  const btn = document.getElementById("daSubmitBtn");
+  if (document.getElementById("daConfirm").value.trim() !== "DELETE") {
+    msg.innerHTML = `<div class="error-msg">Type DELETE (in capitals) to confirm.</div>`;
+    return false;
+  }
+  const password = document.getElementById("daPassword").value;
+  if (!password) { msg.innerHTML = `<div class="error-msg">Enter your password to confirm.</div>`; return false; }
+  if (!await t29Confirm("Last chance: delete your account and everything in your classes forever? This cannot be undone.")) return false;
+  btn.disabled = true;
+  msg.innerHTML = `<p class="muted-small">Deleting… please keep this page open.</p>`;
+  try {
+    const res = await t29DeleteTeacherAccount(CURRENT.username, password);
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${res.error}</div>`; btn.disabled = false; return false; }
+    window.location.href = "index.html";
+  } catch (err) {
+    console.error("Account deletion failed:", err);
+    msg.innerHTML = `<div class="error-msg">Something went wrong. Please try again.</div>`;
+    btn.disabled = false;
+  }
+  return false;
+}
+
 document.addEventListener("DOMContentLoaded", init);

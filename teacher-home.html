@@ -66,6 +66,7 @@
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
     <button class="btn small secondary" type="button" onclick="joinCoTeachClick()">Join a class as co-teacher</button>
     <button class="btn small secondary" type="button" onclick="recoveryEmailClick()">Account recovery email</button>
+    <button class="btn small coral" type="button" onclick="openDeleteAccountModal()">Delete my account</button>
   </div>
 
   <div id="msg"></div>
@@ -150,17 +151,45 @@
   </div>
 </div>
 
+<!-- Delete-account modal -->
+<div id="deleteAccountModal" class="hidden t29-modal-backdrop" ondblclick="if(event.target===this)closeDeleteAccountModal()">
+  <div class="card" style="width:100%;max-width:480px;margin-top:0;">
+    <div class="flex-between">
+      <h2 style="margin-bottom:2px;">Delete my account</h2>
+      <button class="btn small secondary" type="button" onclick="closeDeleteAccountModal()">Close</button>
+    </div>
+    <div class="error-msg" style="margin-top:10px;"><strong>This is permanent and cannot be undone.</strong></div>
+    <p id="daSummary" class="muted-small"></p>
+    <p class="muted-small">If you continue, the following will be deleted straight away:</p>
+    <ul class="muted-small" style="margin:0 0 10px 18px;">
+      <li>Every class you own, including its settings, balances, transactions and all activity history</li>
+      <li>Every student account in those classes, and any family links and shared template links for them</li>
+      <li>Your recovery email, if you set one</li>
+      <li>Your teacher login. You won't be able to log in again, and your username becomes free for someone else to use</li>
+    </ul>
+    <p class="muted-small">Classes where you are only a co-teacher are not deleted; you'll simply stop being part of them. If you only want to pause a class, use Archive instead. Nobody, including the developer, can restore a deleted account.</p>
+    <form onsubmit="return submitDeleteAccount(event)">
+      <label for="daConfirm">Type <strong>DELETE</strong> to confirm</label>
+      <input id="daConfirm" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="DELETE">
+      <label for="daPassword">Your password</label>
+      <input id="daPassword" type="password" autocomplete="current-password" placeholder="Password">
+      <button class="btn coral" style="width:100%;justify-content:center;margin-top:10px;" type="submit" id="daSubmitBtn">Permanently delete my account</button>
+    </form>
+    <div id="daMsg"></div>
+  </div>
+</div>
+
 <script type="module" src="firebase-init.js?v=5d153c45"></script>
 <script defer src="icons.js?v=9f717a43"></script>
 <script defer src="settings-menu.js?v=8dde546c"></script>
 <script defer src="shortcuts.js?v=bcda2833"></script>
 <script defer src="offline.js?v=9819919b"></script>
-<script defer src="data-core.js?v=28a2acf1"></script>
+<script defer src="data-core.js?v=8835b1f1"></script>
 <script defer src="data-money.js?v=489fe5b4"></script>
 <script defer src="data-life.js?v=f45e1433"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=f6e1daf9"></script>
 <script defer src="base-template.js?v=1b26dc8b"></script>
-<script defer src="teacher-home.js?v=9974d530"></script>
+<script defer src="teacher-home.js?v=e4753fe4"></script>
 </body>
 </html>

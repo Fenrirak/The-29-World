@@ -2147,6 +2147,44 @@ async function t29CompleteRecovery(username, email, newPassword) {
   setSession(username, u.sessionVersion || 0);
   return { ok: true, user: u };
 }
+/* ---------------- Teacher deletes their own account ----------------
+   Needs the teacher's password (re-checked first). Permanently deletes every class they own
+   (with its students, family links and shared template), their recovery email + fingerprint,
+   their /users doc, their /uidIndex entry and finally their Firebase login. Classes they were
+   only a co-teacher on are left alone. Returns { ok, error? }. The page should confirm first,
+   then send the person back to index.html on success. */
+async function t29DeleteTeacherAccount(username, password) {
+  const user = firebase.auth().currentUser;
+  if (!user || !username) return { ok: false, error: "You need to be logged in to delete your account." };
+  if (!password) return { ok: false, error: "Enter your password to confirm." };
+  const me = await getUser(username).catch(() => null);
+  if (!me || me.role !== "teacher" || me.authUid !== user.uid) return { ok: false, error: "This isn't your teacher account." };
+  try {
+    await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, password));
+  } catch (e) {
+    if (e.code === "auth/network-request-failed") return { ok: false, error: t29AuthErrorMessage(e) };
+    return { ok: false, error: "That password isn't right." };
+  }
+  try {
+    const owned = await classesCol().where("teacher", "==", username).get();
+    for (const d of owned.docs) {
+      const r = await deleteClassPermanently(username, d.id);
+      if (!r.ok) return { ok: false, error: r.error };
+    }
+    await fdb.collection("recoveryCheck").doc(username).delete().catch(() => {});
+    await fdb.collection("teacherRecovery").doc(username).delete().catch(() => {});
+    await usersCol().doc(username).delete();
+    await fdb.collection("uidIndex").doc(user.uid).delete();
+  } catch (e) {
+    console.warn("Teacher account deletion failed:", e && (e.code || e.message), e);
+    return { ok: false, error: "Something went wrong deleting your account — some of it may not have been deleted. Please try again." };
+  }
+  try { await user.delete(); } catch (e) { console.warn("Auth user delete failed:", e); }
+  try { await firebase.auth().signOut(); } catch (e) { /* ignore */ }
+  try { clearSession(); } catch (e) { /* ignore */ }
+  return { ok: true };
+}
+
 // Teacher Home: see / change / remove the recovery email after signup.
 async function t29GetRecoveryEmail(username) {
   const snap = await fdb.collection("teacherRecovery").doc(username).get().catch(() => null);
