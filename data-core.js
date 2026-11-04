@@ -1749,9 +1749,61 @@ async function t29ClearLoginAttempts(username, status) {
     await ref.set({ count: 0, lockedAt: null, lastLockAt: prev.lastLockAt || null, updatedAt: FV.serverTimestamp() });
   } catch (e) { /* not important */ }
 }
+/* ---------------- Browser-wide + per-username lock (client side) ----------------
+   When an account hits the wrong-password limit, this browser is also locked
+   out of logging in to ANY account for the rest of the 30 minutes, and that
+   username's Log in button stays disabled. Stored in localStorage AND a
+   cookie, and each re-fills the other, so clearing just one doesn't lift it.
+   (Client-side only: clearing all site data / another browser / a private
+   window gets around it. The per-account lock in Firestore still applies.) */
+const T29_DEVICE_LOCK_KEY = "t29_device_lock";
+const T29_USER_LOCKS_KEY = "t29_user_locks";
+function _t29ReadCookie(name) {
+  const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function t29DeviceLockSet(until) {
+  try { localStorage.setItem(T29_DEVICE_LOCK_KEY, String(until)); } catch (e) {}
+  try { document.cookie = `${T29_DEVICE_LOCK_KEY}=${until}; expires=${new Date(until).toUTCString()}; path=/; SameSite=Lax`; } catch (e) {}
+}
+// ms timestamp the browser-wide lock ends, or 0 if not locked.
+function t29DeviceLockUntil() {
+  let until = 0;
+  try { until = Math.max(until, Number(localStorage.getItem(T29_DEVICE_LOCK_KEY)) || 0); } catch (e) {}
+  try { until = Math.max(until, Number(_t29ReadCookie(T29_DEVICE_LOCK_KEY)) || 0); } catch (e) {}
+  if (until <= Date.now()) return 0;
+  t29DeviceLockSet(until); // re-fill whichever copy was cleared
+  return until;
+}
+function _t29UserLocks() {
+  try { return JSON.parse(localStorage.getItem(T29_USER_LOCKS_KEY) || "{}") || {}; } catch (e) { return {}; }
+}
+function t29UserLockSet(username, until) {
+  const k = String(username || "").trim().toLowerCase();
+  if (!k) return;
+  const m = _t29UserLocks();
+  const now = Date.now();
+  for (const n in m) if (!(m[n] > now)) delete m[n];
+  m[k] = until;
+  try { localStorage.setItem(T29_USER_LOCKS_KEY, JSON.stringify(m)); } catch (e) {}
+}
+function t29UserLockUntil(username) {
+  const k = String(username || "").trim().toLowerCase();
+  const until = k ? Number(_t29UserLocks()[k]) || 0 : 0;
+  return until > Date.now() ? until : 0;
+}
+function t29DeviceLockedMessage(msLeft) {
+  const m = Math.max(1, Math.ceil((msLeft || T29_LOCK_MS) / 60000));
+  return `A password was entered incorrectly ${T29_LOCK_MAX} times, so this browser can't log in to any 29 World account for another ${m} minute${m === 1 ? "" : "s"}. Devices that are already signed in can keep being used.`;
+}
 async function login(username, password) {
+  const devUntil = t29DeviceLockUntil();
+  if (devUntil) return { ok: false, locked: true, deviceLocked: true, lockedUntil: devUntil, error: t29DeviceLockedMessage(devUntil - Date.now()) };
   const lock = await t29LoginLockStatus(username);
-  if (lock.locked) return { ok: false, locked: true, error: t29LockedMessage(lock.msLeft) };
+  if (lock.locked) {
+    t29UserLockSet(username, lock.lockedUntil);
+    return { ok: false, locked: true, lockedUntil: lock.lockedUntil, error: t29LockedMessage(lock.msLeft) };
+  }
   const res = await t29LoginCore(username, password);
   if (res.ok) {
     await t29ClearLoginAttempts(username, lock);
@@ -1759,7 +1811,12 @@ async function login(username, password) {
   }
   if (res.badCredentials) {
     const rec = await t29RecordFailedLogin(username);
-    if (rec.locked) return { ok: false, locked: true, error: t29LockedMessage(T29_LOCK_MS) };
+    if (rec.locked) {
+      const until = Date.now() + T29_LOCK_MS;
+      t29UserLockSet(username, until);
+      t29DeviceLockSet(until);
+      return { ok: false, locked: true, deviceLocked: true, lockedUntil: until, error: t29DeviceLockedMessage(T29_LOCK_MS) };
+    }
     if (rec.attemptsLeft > 0 && rec.attemptsLeft <= 2) {
       res.error += ` ${rec.attemptsLeft} attempt${rec.attemptsLeft === 1 ? "" : "s"} left before logging in is locked for 30 minutes.`;
     }

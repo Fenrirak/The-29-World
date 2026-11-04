@@ -192,7 +192,7 @@
      DOMContentLoaded — matching how every other page already does it. -->
 <script type="module" src="firebase-init.js?v=aca5590e"></script>
 <script defer src="icons.js?v=7c6ca02a"></script>
-<script defer src="data-core.js?v=aa30188b"></script>
+<script defer src="data-core.js?v=486a3ffc"></script>
 <script defer src="data-money.js?v=900f9859"></script>
 <script defer src="data-life.js?v=f45e1433"></script>
 <script defer src="data-property.js?v=233a9933"></script>
@@ -301,8 +301,50 @@ async function withBusyButton(form, busyText, fn) {
 
 async function doLogin(e) {
   e.preventDefault();
-  return withBusyButton(e.target, "Logging in…", () => doLoginInner(e));
+  const r = await withBusyButton(e.target, "Logging in…", () => doLoginInner(e));
+  refreshLoginLock(); // withBusyButton re-enables the button; re-apply any lock
+  return r;
 }
+
+// Keeps both Log in buttons disabled (with a countdown) while this browser
+// or the typed username is locked out.
+function refreshLoginLock() {
+  if (typeof t29DeviceLockUntil !== "function") return;
+  for (const [fid, uid] of [["panel-teacher-login", "l-username"], ["panel-student-login", "sl-username"]]) {
+    const form = document.getElementById(fid);
+    if (!form) continue;
+    const btn = form.querySelector('button[type="submit"]');
+    let note = form.querySelector(".lock-note");
+    if (!note) {
+      note = document.createElement("div");
+      note.className = "error-msg lock-note";
+      note.style.display = "none";
+      note.style.marginTop = "10px";
+      form.appendChild(note);
+    }
+    const dev = t29DeviceLockUntil();
+    const usr = t29UserLockUntil(document.getElementById(uid).value);
+    const until = Math.max(dev, usr);
+    if (until) {
+      const left = Math.max(0, until - Date.now());
+      const ss = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
+      btn.disabled = true;
+      form.dataset.locked = "1";
+      note.style.display = "";
+      note.textContent = (dev ? "This browser is locked out of logging in. " : "This account is locked. ") +
+        `Try again in ${Math.floor(left / 60000)}:${ss}.`;
+    } else if (form.dataset.locked) {
+      delete form.dataset.locked;
+      btn.disabled = false;
+      note.style.display = "none";
+    }
+  }
+}
+setInterval(refreshLoginLock, 1000);
+["l-username", "sl-username"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("input", refreshLoginLock);
+});
 
 async function doLoginInner(e) {
   const isTeacherForm = e.target.id === "panel-teacher-login";
@@ -425,6 +467,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   paintIcons();
   enablePasswordToggles();
   loadRememberedLogins();
+  refreshLoginLock();
   document.getElementById("t-title").addEventListener("change", updateTeacherNameHint);
   document.getElementById("t-last").addEventListener("input", updateTeacherNameHint);
   document.getElementById("s-first").addEventListener("input", suggestStudentUsername);
