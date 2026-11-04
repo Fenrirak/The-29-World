@@ -18,7 +18,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=47af172b">
+<link rel="stylesheet" href="style.css?v=8d92b16e">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -26,7 +26,7 @@
 <link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="firebase-init.js?v=aca5590e">
+<link rel="modulepreload" href="firebase-init.js?v=a2efb0fa">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
@@ -49,15 +49,15 @@
 
     <!-- ================= TEACHER SIDE ================= -->
     <div id="role-panel-teacher">
-      <div class="tabs subtabs">
+      <div class="tabs subtabs" id="teacher-subtabs">
         <button id="tab-teacher-login" class="active" onclick="showPanel('teacher-login')"><span class="icon-slot"></span> Log in</button>
         <button id="tab-teacher-new" onclick="showPanel('teacher-new')"><span class="icon-slot"></span> Create a class</button>
       </div>
 
       <!-- Teacher login -->
       <form id="panel-teacher-login" onsubmit="return doLogin(event)">
-        <label for="l-username"><span class="icon-slot"></span> Username</label>
-        <input id="l-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
+        <label for="l-username"><span class="icon-slot"></span> Username or email</label>
+        <input id="l-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username (or your recovery email)">
         <label for="l-password"><span class="icon-slot"></span> Password</label>
         <input id="l-password" type="password" required autocomplete="current-password" placeholder="Password">
         <div class="remember-row">
@@ -65,6 +65,32 @@
           <label for="l-remember">Remember my username on this device</label>
         </div>
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Log in</button>
+        <p class="muted-small" style="text-align:center;margin:10px 0 0;"><button type="button" class="link-btn" onclick="showTeacherSpecial('forgot')">Forgot your password?</button></p>
+      </form>
+
+      <!-- Teacher forgot password: emails a one-time link to the recovery email -->
+      <form id="panel-teacher-forgot" class="hidden" onsubmit="return doForgot(event)">
+        <p class="muted-small" style="margin-top:0;">Enter your username and the recovery email you gave when you created your account. We'll email you a link to set a new password.</p>
+        <label for="f-username"><span class="icon-slot"></span> Username</label>
+        <input id="f-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
+        <label for="f-email"><span class="icon-slot"></span> Recovery email</label>
+        <input id="f-email" type="email" required autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
+        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Email me a link</button>
+        <p class="field-hint" style="text-align:center;">No recovery email on your account? It's optional, so it may not have been set. A teacher can add one on Teacher Home once logged in.</p>
+        <p class="muted-small" style="text-align:center;margin:6px 0 0;"><button type="button" class="link-btn" onclick="showPanel('teacher-login')">Back to log in</button></p>
+      </form>
+
+      <!-- Teacher reset password: where the emailed link lands -->
+      <form id="panel-teacher-reset" class="hidden" onsubmit="return doReset(event)">
+        <p class="muted-small" style="margin-top:0;">Confirm your details and choose a new password.</p>
+        <label for="r-username"><span class="icon-slot"></span> Username</label>
+        <input id="r-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
+        <label for="r-email"><span class="icon-slot"></span> Recovery email</label>
+        <input id="r-email" type="email" required autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="The email the link was sent to">
+        <label for="r-password"><span class="icon-slot"></span> New password</label>
+        <input id="r-password" type="password" required autocomplete="new-password" placeholder="Choose a new password">
+        <p class="field-hint">At least 6 characters. After this you can log in with your recovery email and this password.</p>
+        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Set new password</button>
       </form>
 
       <!-- Teacher creates a class -->
@@ -90,6 +116,9 @@
           </div>
         </div>
         <p class="field-hint" id="t-name-hint">This is how your students will see you, e.g. Ms Smith.</p>
+        <label for="t-email"><span class="icon-slot"></span> Recovery email <span class="muted-small">(optional)</span></label>
+        <input id="t-email" type="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
+        <p class="field-hint">Only used to get you back into your account if you forget your password. Students can't see it. You can add or change it later.</p>
         <label for="t-class"><span class="icon-slot"></span> Class name</label>
         <input id="t-class" placeholder="Class name, e.g. Room 12" autocomplete="off" required>
         <label>How do you want to start?</label>
@@ -190,14 +219,14 @@
      lets the HTML parse and paint immediately while these load in the
      background, in the same relative order, still finishing before
      DOMContentLoaded — matching how every other page already does it. -->
-<script type="module" src="firebase-init.js?v=aca5590e"></script>
-<script defer src="icons.js?v=7c6ca02a"></script>
-<script defer src="data-core.js?v=486a3ffc"></script>
-<script defer src="data-money.js?v=900f9859"></script>
+<script type="module" src="firebase-init.js?v=a2efb0fa"></script>
+<script defer src="icons.js?v=9f717a43"></script>
+<script defer src="data-core.js?v=eebd40f2"></script>
+<script defer src="data-money.js?v=489fe5b4"></script>
 <script defer src="data-life.js?v=f45e1433"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=f6e1daf9"></script>
-<script defer src="base-template.js?v=196e2e13"></script>
+<script defer src="base-template.js?v=1b26dc8b"></script>
 <script>
 // Fill every .icon-slot next to its text with the matching icon. This is
 // purely decorative — every label/button already has real text, so the
@@ -211,7 +240,9 @@ function paintIcons() {
     ['label[for="l-username"]', "at"], ['label[for="l-password"]', "lock"],
     ['#panel-teacher-login button[type="submit"]', "send"],
     ['label[for="t-title"]', "user"], ['label[for="t-first"]', "user"], ['label[for="t-last"]', "user"],
-    ['label[for="t-class"]', "mortarboard"],
+    ['label[for="t-class"]', "mortarboard"], ['label[for="t-email"]', "at"],
+    ['label[for="f-username"]', "at"], ['label[for="f-email"]', "at"], ['#panel-teacher-forgot button[type="submit"]', "send"],
+    ['label[for="r-username"]', "at"], ['label[for="r-email"]', "at"], ['label[for="r-password"]', "lock"], ['#panel-teacher-reset button[type="submit"]', "lock"],
     ['label[for="t-username"]', "at"], ['label[for="t-password"]', "lock"],
     ['#panel-teacher-new button[type="submit"]', "plus"],
     ['label[for="sl-username"]', "at"], ['label[for="sl-password"]', "lock"],
@@ -247,8 +278,57 @@ function showRole(which) {
   focusFirstField(which === "teacher" ? "panel-teacher-login" : "panel-student-login");
 }
 
+// The "forgot password" and "reset password" screens replace the teacher
+// Log in / Create a class tabs until the teacher goes back.
+function showTeacherSpecial(which) {
+  ["teacher-login", "teacher-new", "teacher-forgot", "teacher-reset"].forEach(p => {
+    document.getElementById("panel-" + p).classList.toggle("hidden", p !== "teacher-" + which);
+  });
+  document.getElementById("teacher-subtabs").classList.add("hidden");
+  document.getElementById("msg").innerHTML = "";
+  if (which === "forgot") {
+    const pend = t29PendingRecovery();
+    const lu = document.getElementById("l-username").value.trim();
+    if (!document.getElementById("f-username").value) document.getElementById("f-username").value = (lu && !lu.includes("@")) ? lu : (pend.username || "");
+    if (!document.getElementById("f-email").value) document.getElementById("f-email").value = lu.includes("@") ? lu : (pend.email || "");
+  }
+  if (which === "reset") {
+    const pend = t29PendingRecovery();
+    document.getElementById("r-username").value = pend.username || "";
+    document.getElementById("r-email").value = pend.email || "";
+  }
+  focusFirstField("panel-teacher-" + which);
+}
+
+async function doForgot(e) {
+  e.preventDefault();
+  return withBusyButton(e.target, "Sending…", async () => {
+    const res = await t29SendRecoveryLink(document.getElementById("f-username").value, document.getElementById("f-email").value);
+    if (!res.ok) { showMsg(res.error, false); return false; }
+    showMsg("If that's the recovery email on this account, a link is on its way. Check your inbox (and spam), then open the link to choose a new password.", true);
+    return false;
+  });
+}
+
+async function doReset(e) {
+  e.preventDefault();
+  return withBusyButton(e.target, "Saving…", async () => {
+    const res = await t29CompleteRecovery(
+      document.getElementById("r-username").value,
+      document.getElementById("r-email").value,
+      document.getElementById("r-password").value);
+    if (!res.ok) { showMsg(res.error, false); return false; }
+    window.location.href = "teacher-home.html";
+    return false;
+  });
+}
+
 function showPanel(which) {
   const groups = which.startsWith("teacher") ? ["teacher-login", "teacher-new"] : ["student-login", "student-new"];
+  if (which.startsWith("teacher")) {
+    ["teacher-forgot", "teacher-reset"].forEach(p => document.getElementById("panel-" + p).classList.add("hidden"));
+    document.getElementById("teacher-subtabs").classList.remove("hidden");
+  }
   groups.forEach(p => {
     document.getElementById("panel-" + p).classList.toggle("hidden", p !== which);
     document.getElementById("tab-" + p).classList.toggle("active", p === which);
@@ -403,7 +483,8 @@ async function doTeacherSignupInner(e) {
   const username = document.getElementById("t-username").value.trim();
   const password = document.getElementById("t-password").value;
   if (/\s/.test(username)) { showMsg("Usernames can't have spaces. Try something like smith.m", false); return false; }
-  const res = await createTeacherAndClass(name, username, password, className, { title, lastName: last });
+  const email = document.getElementById("t-email").value.trim();
+  const res = await createTeacherAndClass(name, username, password, className, { title, lastName: last, email });
   if (!res.ok) { showMsg(res.error, false); return false; }
   const startChoice = (document.querySelector('input[name="t-start"]:checked') || {}).value;
   if (startChoice === "base" && typeof applyBaseTemplateToClass === "function") {
@@ -478,6 +559,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   // The link a teacher hands to students (index.html?role=student) opens
   // straight on the student tab instead of the teacher one.
   if (new URLSearchParams(window.location.search).get("role") === "student") showRole("student");
+
+  // The emailed "forgot password" link lands here: show the reset form (and
+  // don't bounce an already-logged-in browser to the dashboard before it's done).
+  if (t29IsRecoveryLink()) { showRole("teacher"); showTeacherSpecial("reset"); return; }
 
   // If already logged in, skip straight to dashboard
   const u = await getSessionUser();

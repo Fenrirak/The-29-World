@@ -899,6 +899,9 @@ async function requireLogin(opts) {
     }
     startTimeTracking(u);
   }
+  // Counts towards the class's 3-month inactivity clock (never blocks the page).
+  // Teacher Home passes skipActivity: just browsing the list isn't using a class.
+  if (!opts.skipActivity && !archivedReadOnly) t29TouchClassActivity(u).catch(() => {});
   return u;
 }
 // BUGFIX: logging out used to only forget the username in localStorage —
@@ -941,6 +944,13 @@ function defaultClassData(code, className, teacherUsername) {
     interestRate: 2, txns: [],
     createdAt: Date.now(), reportArchives: [],
     archived: false, archivedAt: null,
+    // Auto-archive: lastActivityAt is bumped whenever anyone (teacher, co-teacher
+    // or student) uses the class (see t29TouchClassActivity); a class nobody has
+    // touched for 3 months is archived by t29AutoArchiveStaleClasses().
+    lastActivityAt: Date.now(), autoArchived: false,
+    // Up to 2 other teacher accounts who can run the class with the owner.
+    // coTeacherCode is a single-use join code the owner hands to a co-teacher.
+    coTeachers: [], coTeacherCode: null,
     templateShareToken: null,
     payDay: "Fri",
     mortgageDay: "Fri",
@@ -965,7 +975,10 @@ function defaultClassData(code, className, teacherUsername) {
     interestAuto: false, interestFrequency: "weekly", interestDay: "Fri",
     insuranceDay: "Fri",
     gambling: {
-      enabled: true, minBet: 1, maxBet: 20,
+      // The casino starts OFF for every new class (and the base template).
+      // The teacher switches it on from the Gambling page; while it's off
+      // students don't see it in the top bar at all.
+      enabled: false, minBet: 1, maxBet: 20,
       // dailyBuyInLimit caps how much a student can move from cash into
       // their gambling account per NZ calendar day (null = no limit).
       // dailyWinLimit locks them out of gambling for the rest of the day
@@ -994,6 +1007,7 @@ function defaultClassData(code, className, teacherUsername) {
 // a plain Firestore field. See firebase-init.js for t29AuthEmail() and
 // firestore.rules for how /uidIndex maps the resulting Auth uid back to
 // this app's own username.
+const T29_EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 async function createTeacherAndClass(name, username, password, className, extra) {
   // Firebase itself already refuses to create an account with a password
   // under 6 characters (see t29AuthErrorMessage's "auth/weak-password"
@@ -1010,6 +1024,11 @@ async function createTeacherAndClass(name, username, password, className, extra)
   extra = extra || {};
   const title = T29_TEACHER_TITLES.includes(extra.title) ? extra.title : "";
   const lastName = sanitizeUserText(extra.lastName, 60);
+  // Optional recovery email (lets the teacher reset a forgotten password). Blank = none.
+  const recoveryEmail = String(extra.email || "").trim().toLowerCase();
+  if (recoveryEmail && !T29_EMAIL_RE.test(recoveryEmail)) {
+    return { ok: false, error: "That email address doesn't look right. Fix it, or leave it blank — it's optional." };
+  }
 
   // These two checks run before the visitor is signed in, which
   // firestore.rules can refuse. A refused check must not stop the signup
@@ -1041,6 +1060,8 @@ async function createTeacherAndClass(name, username, password, className, extra)
       t.set(fdb.collection("uidIndex").doc(cred.user.uid), { username });
       t.set(usersCol().doc(username), user);
       t.set(classesCol().doc(code), cls);
+      // Kept apart from the /users doc (which classmates can read): only this teacher can read it.
+      if (recoveryEmail) t.set(fdb.collection("teacherRecovery").doc(username), { email: recoveryEmail });
     });
   } catch (e) {
     console.warn("Teacher signup failed:", e && (e.code || e.message), e);
@@ -1083,18 +1104,32 @@ async function getTeacherClasses(username) {
   if (!username) return [];
   await T29_AUTH_READY; // firestore.rules requires request.auth != null
   const snap = await classesCol().where("teacher", "==", username).get();
+  // Classes the teacher was added to as a co-teacher. Best effort: if this
+  // second query is ever refused, their own classes must still load.
+  let coSnap = null;
+  try { coSnap = await classesCol().where("coTeachers", "array-contains", username).get(); } catch (e) { console.warn("Co-teacher classes unavailable:", e && e.code); }
   const list = [];
-  snap.forEach(doc => {
+  const seen = new Set();
+  const add = (doc, isOwner) => {
     const cls = withNewModuleDefaults(_cloneDoc(doc.data()));
+    if (seen.has(cls.code)) return;
+    seen.add(cls.code);
     list.push({
       code: cls.code,
       name: cls.name,
       createdAt: cls.createdAt || null,
       archived: !!cls.archived,
       archivedAt: cls.archivedAt || null,
-      studentCount: (cls.students || []).length
+      autoArchived: !!cls.autoArchived,
+      lastActivityAt: cls.lastActivityAt || null,
+      studentCount: (cls.students || []).length,
+      isOwner,
+      ownerUsername: cls.teacher,
+      coTeachers: cls.coTeachers || []
     });
-  });
+  };
+  snap.forEach(doc => add(doc, true));
+  if (coSnap) coSnap.forEach(doc => add(doc, false));
   list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   return list;
 }
@@ -1248,7 +1283,8 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
 function _templateSnapshot(cls) {
   const t = _classDataFromTemplate("", cls.name || "", cls.teacher || "", withNewModuleDefaults(_cloneDoc(cls)));
   ["code", "name", "teacher", "students", "txns", "createdAt", "reportArchives", "archived", "archivedAt",
-    "templateShareToken", "automations", "jobApplications", "eventLog", "bigEventLog"].forEach(k => { delete t[k]; });
+    "templateShareToken", "automations", "jobApplications", "eventLog", "bigEventLog",
+    "lastActivityAt", "autoArchived", "coTeachers", "coTeacherCode"].forEach(k => { delete t[k]; });
   return _cloneDoc(t);
 }
 
@@ -1383,7 +1419,7 @@ async function importSharedTemplate(importingTeacherUsername, token, className) 
 async function switchActiveClass(teacherUsername, classCode) {
   const cls = await getClass(classCode);
   if (!cls) return { ok: false, error: "Class not found." };
-  if (cls.teacher !== teacherUsername) return { ok: false, error: "You don't have permission to open this class." };
+  if (!t29CanTeachClass(cls, teacherUsername)) return { ok: false, error: "You don't have permission to open this class." };
   await usersCol().doc(teacherUsername).update({ classCode });
   return { ok: true };
 }
@@ -1392,10 +1428,111 @@ async function switchActiveClass(teacherUsername, classCode) {
 // archived.html) — nothing is deleted, and it can be reopened, or still
 // used as a "new class from template" source, at any time.
 async function setClassArchived(classCode, archived) {
+  // Reopening also restarts the 3-month inactivity clock — otherwise a class
+  // that was auto-archived would be archived again straight away.
   await classesCol().doc(classCode).update({
     archived: !!archived,
-    archivedAt: archived ? Date.now() : null
+    archivedAt: archived ? Date.now() : null,
+    autoArchived: false,
+    lastActivityAt: Date.now()
   });
+  return { ok: true };
+}
+
+/* ---------------- Auto-archive after 3 months of inactivity ----------------
+   "Activity" = anyone in the class (teacher, co-teacher or student) opening
+   any page: requireLogin() calls t29TouchClassActivity(), which stamps
+   cls.lastActivityAt (at most once every 6 hours, to keep writes few).
+   There's no server in this app, so the check itself runs when a teacher
+   opens Teacher Home (see teacher-home.js): any class there whose last
+   activity is more than 3 calendar months ago is archived, with a flag so
+   it can say it was archived automatically. Reopening it restarts the clock. */
+const T29_TOUCH_EVERY_MS = 6 * 60 * 60 * 1000;
+function t29InactiveCutoffMs(now) {
+  const d = new Date(now || Date.now());
+  d.setMonth(d.getMonth() - 3);
+  return d.getTime();
+}
+async function t29TouchClassActivity(u) {
+  if (!u || !u.classCode) return;
+  const cls = await getClassCached(u.classCode);
+  if (!cls || cls.archived) return;
+  if (Date.now() - (Number(cls.lastActivityAt) || 0) < T29_TOUCH_EVERY_MS) return;
+  await classesCol().doc(u.classCode).update({ lastActivityAt: Date.now() });
+}
+// Takes the list from getTeacherClasses(); returns it with any stale class now
+// marked archived. Classes with no activity stamp yet get one (clock starts now).
+async function t29AutoArchiveStaleClasses(classes) {
+  const cutoff = t29InactiveCutoffMs();
+  for (const c of classes) {
+    if (c.archived) continue;
+    try {
+      if (!c.lastActivityAt) {
+        await classesCol().doc(c.code).update({ lastActivityAt: Date.now() });
+        c.lastActivityAt = Date.now();
+      } else if (c.lastActivityAt < cutoff) {
+        const now = Date.now();
+        await classesCol().doc(c.code).update({ archived: true, archivedAt: now, autoArchived: true });
+        c.archived = true; c.archivedAt = now; c.autoArchived = true;
+      }
+    } catch (e) { console.warn("Auto-archive check failed for", c.code, e && e.code); }
+  }
+  return classes;
+}
+
+/* ---------------- Co-teachers (up to 2 per class) ----------------
+   The owner (cls.teacher) makes a single-use join code; another teacher
+   account enters it on Teacher Home and is added to cls.coTeachers. A
+   co-teacher can open and run the class like the owner, but can't delete it,
+   share it as a template, or change who the co-teachers are. */
+const T29_MAX_CO_TEACHERS = 2;
+function t29CanTeachClass(cls, username) {
+  return !!cls && !!username && (cls.teacher === username || (Array.isArray(cls.coTeachers) && cls.coTeachers.includes(username)));
+}
+async function t29CreateCoTeacherCode(classCode, ownerUsername) {
+  const cls = await getClass(classCode);
+  if (!cls || cls.teacher !== ownerUsername) return { ok: false, error: "Only the class owner can invite co-teachers." };
+  if ((cls.coTeachers || []).length >= T29_MAX_CO_TEACHERS) return { ok: false, error: "This class already has " + T29_MAX_CO_TEACHERS + " co-teachers." };
+  const secret = genCode(8);
+  await classesCol().doc(classCode).update({ coTeacherCode: secret });
+  return { ok: true, code: classCode + "-" + secret };
+}
+async function t29CancelCoTeacherCode(classCode, ownerUsername) {
+  const cls = await getClass(classCode);
+  if (!cls || cls.teacher !== ownerUsername) return { ok: false, error: "Only the class owner can do this." };
+  await classesCol().doc(classCode).update({ coTeacherCode: null });
+  return { ok: true };
+}
+// Run by the teacher who wants to join. The class is written to without being
+// read first (they aren't a member yet), and firestore.rules checks the code.
+async function t29JoinAsCoTeacher(teacherUsername, input) {
+  const m = String(input || "").trim().toUpperCase().replace(/\s+/g, "").match(/^([A-Z0-9]{5})-([A-Z0-9]{8})$/);
+  if (!m) return { ok: false, error: "That doesn't look like a co-teacher code. It looks like F7K2M-AB12CD34." };
+  const [, classCode, secret] = m;
+  try {
+    await classesCol().doc(classCode).update({
+      coTeachers: firebase.firestore.FieldValue.arrayUnion(teacherUsername),
+      coTeacherJoin: secret,
+      coTeacherCode: null
+    });
+  } catch (e) {
+    if (t29IsConnectionError(e)) throw e;
+    return { ok: false, error: "That code didn't work. It may have been used already, cancelled, or the class already has 2 co-teachers. Ask the class owner for a new one." };
+  }
+  return { ok: true, classCode };
+}
+async function t29RemoveCoTeacher(classCode, ownerUsername, coUsername) {
+  const cls = await getClass(classCode);
+  if (!cls || cls.teacher !== ownerUsername) return { ok: false, error: "Only the class owner can remove co-teachers." };
+  await classesCol().doc(classCode).update({ coTeachers: (cls.coTeachers || []).filter(n => n !== coUsername) });
+  // Best effort: stop their account pointing at this class (they may not have it open).
+  await usersCol().doc(coUsername).update({ classCode: "" }).catch(() => {});
+  return { ok: true };
+}
+async function t29LeaveAsCoTeacher(classCode, username) {
+  await classesCol().doc(classCode).update({ coTeachers: firebase.firestore.FieldValue.arrayRemove(username) });
+  const me = await getUser(username).catch(() => null);
+  if (me && me.classCode === classCode) await usersCol().doc(username).update({ classCode: "" }).catch(() => {});
   return { ok: true };
 }
 
@@ -1797,6 +1934,8 @@ function t29DeviceLockedMessage(msLeft) {
   return `A password was entered incorrectly ${T29_LOCK_MAX} times, so this browser can't log in to any 29 World account for another ${m} minute${m === 1 ? "" : "s"}. Devices that are already signed in can keep being used.`;
 }
 async function login(username, password) {
+  // A teacher who set a recovery email (and used "Forgot password") signs in with that email.
+  if (String(username).includes("@")) return t29LoginByEmail(String(username).trim().toLowerCase(), password);
   const devUntil = t29DeviceLockUntil();
   if (devUntil) return { ok: false, locked: true, deviceLocked: true, lockedUntil: devUntil, error: t29DeviceLockedMessage(devUntil - Date.now()) };
   const lock = await t29LoginLockStatus(username);
@@ -1822,6 +1961,119 @@ async function login(username, password) {
     }
   }
   return res;
+}
+
+// Sign-in with an email address instead of a username: the login a teacher ends up
+// with after recovering their account. Firebase Auth does the password check (and its
+// own too-many-attempts throttling); /uidIndex says which teacher that login belongs to.
+async function t29LoginByEmail(email, password) {
+  const devUntil = t29DeviceLockUntil();
+  if (devUntil) return { ok: false, locked: true, deviceLocked: true, lockedUntil: devUntil, error: t29DeviceLockedMessage(devUntil - Date.now()) };
+  const bad = { ok: false, badCredentials: true, error: "Incorrect email or password." };
+  try {
+    await firebase.auth().signInWithEmailAndPassword(email, password);
+  } catch (e) {
+    if (e.code === "auth/network-request-failed" || e.code === "auth/too-many-requests") return { ok: false, error: t29AuthErrorMessage(e) };
+    return bad;
+  }
+  const authUser = firebase.auth().currentUser;
+  const idx = authUser ? await fdb.collection("uidIndex").doc(authUser.uid).get().catch(() => null) : null;
+  const username = idx && idx.exists ? idx.data().username : null;
+  const u = username ? await getUser(username).catch(() => null) : null;
+  if (!u || u.role !== "teacher") {
+    await firebase.auth().signOut().catch(() => {});
+    return bad;
+  }
+  setSession(username, u.sessionVersion || 0);
+  return { ok: true, user: u };
+}
+
+/* ---------------- Teacher account recovery (forgot password) ----------------
+   1. t29SendRecoveryLink: emails a one-time sign-in link to the address typed.
+      It is sent whatever the address is (nothing here reveals whether a username
+      or email is registered); the link does nothing unless the address matches the
+      recovery email on that teacher's account.
+   2. The teacher opens the link (index.html?...), and t29CompleteRecovery signs in
+      with it — which proves they own the email — then takes over the teacher account
+      (rules: isRecoveryTakeover in firestore.rules) and sets a new password. The old
+      login stops working; from then on they can log in with the email + new password.
+   Needs "Email link (passwordless sign-in)" switched on under Firebase console →
+   Authentication → Sign-in method → Email/Password. */
+const T29_RECOVERY_KEY = "t29-recovery-pending";
+async function t29SendRecoveryLink(username, email) {
+  username = String(username || "").trim();
+  email = String(email || "").trim().toLowerCase();
+  if (!username || /\s/.test(username)) return { ok: false, error: "Enter your username." };
+  if (!T29_EMAIL_RE.test(email)) return { ok: false, error: "Enter the recovery email address you gave when you signed up." };
+  const base = location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, "");
+  try {
+    await firebase.auth().sendSignInLinkToEmail(email, { url: base + "index.html", handleCodeInApp: true });
+  } catch (e) {
+    if (e.code === "auth/network-request-failed" || e.code === "auth/too-many-requests") return { ok: false, error: t29AuthErrorMessage(e) };
+    if (e.code === "auth/operation-not-allowed") return { ok: false, error: "Account recovery isn't switched on yet. Ask whoever runs this site to enable email-link sign-in in Firebase." };
+    return { ok: false, error: "Couldn't send the email. Check the address and try again." };
+  }
+  try { localStorage.setItem(T29_RECOVERY_KEY, JSON.stringify({ username, email })); } catch (e) { /* link can still be finished by retyping these */ }
+  return { ok: true };
+}
+function t29IsRecoveryLink() {
+  try { return !!firebase.auth().isSignInWithEmailLink(location.href); } catch (e) { return false; }
+}
+function t29PendingRecovery() {
+  try { return JSON.parse(localStorage.getItem(T29_RECOVERY_KEY) || "null") || {}; } catch (e) { return {}; }
+}
+async function t29CompleteRecovery(username, email, newPassword) {
+  username = String(username || "").trim();
+  email = String(email || "").trim().toLowerCase();
+  if (!newPassword || newPassword.length < 6) return { ok: false, error: "Password must be at least 6 characters." };
+  let cred;
+  try {
+    cred = await firebase.auth().signInWithEmailLink(email, location.href);
+  } catch (e) {
+    if (e.code === "auth/network-request-failed") return { ok: false, error: t29AuthErrorMessage(e) };
+    return { ok: false, error: "That link has expired, was already used, or the email doesn't match. Go back and ask for a new link." };
+  }
+  const uid = cred.user.uid;
+  const undo = async () => { await cred.user.delete().catch(() => {}); await firebase.auth().signOut().catch(() => {}); };
+  try {
+    const idx = await fdb.collection("uidIndex").doc(uid).get().catch(() => null);
+    if (idx && idx.exists && idx.data().username !== username) {
+      // This email already recovered a different teacher account, and one login can only be one account.
+      await firebase.auth().signOut().catch(() => {});
+      return { ok: false, error: "This email has already been used to recover a different account." };
+    }
+    await fdb.runTransaction(async (t) => {
+      t.update(usersCol().doc(username), { authUid: uid });
+      if (!(idx && idx.exists)) t.set(fdb.collection("uidIndex").doc(uid), { username });
+    });
+  } catch (e) {
+    if (t29IsConnectionError(e)) { await firebase.auth().signOut().catch(() => {}); return { ok: false, error: t29AuthErrorMessage({ code: "auth/network-request-failed" }) }; }
+    await undo();
+    return { ok: false, error: "That email isn't the recovery email for this username. Check both and try again." };
+  }
+  try {
+    await cred.user.updatePassword(newPassword);
+  } catch (e) {
+    return { ok: false, error: "Your account is recovered, but the new password couldn't be saved. Use the link again to retry." };
+  }
+  const u = await getUser(username).catch(() => null);
+  if (!u) return { ok: false, error: "Something went wrong. Please try again." };
+  try { localStorage.removeItem(T29_RECOVERY_KEY); } catch (e) { /* ignore */ }
+  setSession(username, u.sessionVersion || 0);
+  return { ok: true, user: u };
+}
+// Teacher Home: see / change / remove the recovery email after signup.
+async function t29GetRecoveryEmail(username) {
+  const snap = await fdb.collection("teacherRecovery").doc(username).get().catch(() => null);
+  return snap && snap.exists ? (snap.data().email || "") : "";
+}
+async function t29SetRecoveryEmail(username, email) {
+  email = String(email || "").trim().toLowerCase();
+  const ref = fdb.collection("teacherRecovery").doc(username);
+  if (!email) { await ref.delete(); return { ok: true, email: "" }; }
+  if (!T29_EMAIL_RE.test(email)) return { ok: false, error: "That email address doesn't look right." };
+  await ref.set({ email });
+  return { ok: true, email };
 }
 
 /* ---------------- Login ----------------
@@ -1970,7 +2222,9 @@ async function changePassword(username, oldPassword, newPassword) {
   const authUser = firebase.auth().currentUser;
   if (!authUser) return { ok: false, error: "You need to be logged in." };
   try {
-    const cred = firebase.auth.EmailAuthProvider.credential(t29AuthEmail(username), oldPassword);
+    // After a recovery the login is the teacher's real email, not the username-based one.
+    const loginEmail = (authUser.email && !/@t29\.local$/i.test(authUser.email)) ? authUser.email : t29AuthEmail(username);
+    const cred = firebase.auth.EmailAuthProvider.credential(loginEmail, oldPassword);
     await authUser.reauthenticateWithCredential(cred);
     await authUser.updatePassword(newPassword);
   } catch (e) {
@@ -2939,6 +3193,11 @@ function withNewModuleDefaults(cls) {
   if (cls.welcomeGrant === undefined) cls.welcomeGrant = T29_DEFAULT_WELCOME_GRANT;
   if (cls.archivedAt === undefined) cls.archivedAt = null;
   if (cls.templateShareToken === undefined) cls.templateShareToken = null;
+  if (!Array.isArray(cls.coTeachers)) cls.coTeachers = [];
+  if (cls.coTeacherCode === undefined) cls.coTeacherCode = null;
+  if (cls.autoArchived === undefined) cls.autoArchived = false;
+  // lastActivityAt is deliberately left undefined on old classes: the auto-archive
+  // check starts their 3-month clock the first time it sees them.
   cls.reportArchives = cls.reportArchives || [];
   cls.insurancePlans = cls.insurancePlans || [];
   cls.storeItems = cls.storeItems || [];
@@ -3292,6 +3551,23 @@ async function anwGlobalBootstrap() {
   if (u.role === "student") {
     mountBalanceWidget(u.username);
     showKiwiSaverNavIfOn(u).catch(() => {});
+    showCasinoNavIfOn(u).catch(() => {});
+  }
+}
+
+// The Casino (gambling.html) menu link stays hidden from students (style.css)
+// unless their teacher has switched it on. One exception, so nobody's money
+// gets stranded: a student who still has chips in their gambling account
+// keeps the link, so they can cash out.
+async function showCasinoNavIfOn(u) {
+  if (!u.classCode) return;
+  const [cls, me] = await Promise.all([getClassCached(u.classCode), getUserCached(u.username)]);
+  if (!cls) return;
+  const on = !!(cls.gambling && cls.gambling.enabled === true);
+  const hasChips = typeof gamblingAccountToday === "function" && gamblingAccountToday(me).balance > 0;
+  if (on || hasChips) {
+    document.documentElement.classList.add("casino-on");
+    if (typeof fitTopbar === "function") fitTopbar();
   }
 }
 

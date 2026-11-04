@@ -22,6 +22,9 @@ async function init() {
     return;
   }
   document.getElementById("pageTitle").textContent = `"${CLASS.name}" has been archived`;
+  if (CLASS.autoArchived) {
+    document.getElementById("explainText").textContent = "This class was paused automatically because nobody had used it for 3 months. Nothing has been lost, and your teacher can reopen it any time.";
+  }
   t29PageReady();
 
   // Already chose memory lane earlier this session — skip straight in.

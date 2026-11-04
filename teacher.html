@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=47af172b">
+<link rel="stylesheet" href="style.css?v=8d92b16e">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -73,7 +73,7 @@
   }
 </style>
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="firebase-init.js?v=aca5590e">
+<link rel="modulepreload" href="firebase-init.js?v=a2efb0fa">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
@@ -203,6 +203,13 @@
         <div id="welcomeGrantMsg"></div>
       </section>
 
+      <section class="set-tile" aria-labelledby="hCoTeach">
+        <h3 id="hCoTeach">Co-teachers</h3>
+        <p>Share this class with up to 2 other teachers. They run it alongside you: same students, settings and reports. Only you, the owner, can delete it, share it as a template, restart it or change who the co-teachers are. They need their own teacher account.</p>
+        <div id="coTeacherBody"></div>
+        <div id="coTeacherMsg"></div>
+      </section>
+
       <section class="set-tile" aria-labelledby="hTimeLimit">
         <h3 id="hTimeLimit">Daily time limit</h3>
         <p>Minutes each student can spend on the site per day (0 = no limit). Only time with the site open, visible and in focus counts. At the limit, a student sees a &ldquo;come back tomorrow&rdquo; screen, which resets at NZ midnight &mdash; the same daily boundary as pay day and interest.</p>
@@ -223,7 +230,7 @@
         <div id="exportClassMsg"></div>
       </section>
 
-      <section class="set-tile danger" aria-labelledby="hDanger">
+      <section class="set-tile danger" id="restartTile" aria-labelledby="hDanger">
         <h3 id="hDanger">Restart class</h3>
         <p>Start the class again as if it were brand new: every student goes back to the class&rsquo;s welcome grant and everything they own or have done is wiped. All your settings stay as they are, and so do student logins and the class code.</p>
         <div class="set-controls">
@@ -474,12 +481,12 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
   </div>
 </div>
 
-<script type="module" src="firebase-init.js?v=aca5590e"></script>
-<script defer src="icons.js?v=7c6ca02a"></script>
+<script type="module" src="firebase-init.js?v=a2efb0fa"></script>
+<script defer src="icons.js?v=9f717a43"></script>
 <script defer src="settings-menu.js?v=8dde546c"></script>
 <script defer src="shortcuts.js?v=bcda2833"></script>
-<script defer src="data-core.js?v=486a3ffc"></script>
-<script defer src="data-money.js?v=900f9859"></script>
+<script defer src="data-core.js?v=eebd40f2"></script>
+<script defer src="data-money.js?v=489fe5b4"></script>
 <script defer src="data-life.js?v=f45e1433"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=f6e1daf9"></script>
@@ -490,7 +497,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="notifications.js?v=5b1e43a3"></script>
 <script defer src="pdf-report.js?v=9198db19"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
-<script defer src="teacher.js?v=45b34c2e"></script>
+<script defer src="teacher.js?v=5b3afaa2"></script>
 <script defer src="bulk-students.js?v=d5a9136f"></script>
 </body>
 </html>

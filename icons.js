@@ -247,6 +247,7 @@ function buildNavGroups() {
     if (!links.length) return;
     const wrap = document.createElement("div");
     wrap.className = "nav-group";
+    wrap.setAttribute("data-nav-group", group.label);
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "nav-group-btn";

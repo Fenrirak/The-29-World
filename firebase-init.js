@@ -28,12 +28,13 @@ import {
   getFirestore, doc, collection, query, where,
   getDoc, getDocFromServer, getDocs,
   setDoc, updateDoc, deleteDoc, runTransaction, writeBatch,
-  serverTimestamp, increment, deleteField
+  serverTimestamp, increment, deleteField, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
   getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signOut, signInAnonymously,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  EmailAuthProvider, reauthenticateWithCredential, updatePassword, deleteUser
+  EmailAuthProvider, reauthenticateWithCredential, updatePassword, deleteUser,
+  sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -190,6 +191,7 @@ function _wrapUser(u) {
   if (!u) return null;
   return {
     uid: u.uid,
+    email: u.email || null,
     isAnonymous: u.isAnonymous,
     delete() { return deleteUser(u); },
     reauthenticateWithCredential(cred) { return reauthenticateWithCredential(u, cred); },
@@ -210,6 +212,13 @@ const authShim = {
     const r = await createUserWithEmailAndPassword(_auth, email, password);
     return { user: _wrapUser(r.user) };
   },
+  // Teacher account recovery (see t29SendRecoveryLink / t29CompleteRecovery in data-core.js).
+  sendSignInLinkToEmail(email, settings) { return sendSignInLinkToEmail(_auth, email, settings); },
+  isSignInWithEmailLink(link) { return isSignInWithEmailLink(_auth, link); },
+  async signInWithEmailLink(email, link) {
+    const r = await signInWithEmailLink(_auth, email, link);
+    return { user: _wrapUser(r.user) };
+  },
   async signInWithEmailAndPassword(email, password) {
     const r = await signInWithEmailAndPassword(_auth, email, password);
     return { user: _wrapUser(r.user) };
@@ -225,7 +234,7 @@ function authFn() { return authShim; }
 authFn.EmailAuthProvider = EmailAuthProvider;
 
 function firestoreFn() { return fdb; }
-firestoreFn.FieldValue = { serverTimestamp, increment, delete: deleteField };
+firestoreFn.FieldValue = { serverTimestamp, increment, delete: deleteField, arrayUnion, arrayRemove };
 
 // Every other file in this app (the data-*.js files and beyond) is a plain classic
 // <script>, not a module, so it can only see these via window — a

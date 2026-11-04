@@ -465,9 +465,9 @@ function t29ApplyBaseTemplate(cls) {
     priceRange: { min: c[3], max: c[4] }
   }));
 
-  // ---- Gambling: on, but kept small ----
+  // ---- Gambling: OFF by default (the teacher can switch it on), limits kept small for when they do ----
   cls.gambling = Object.assign({}, cls.gambling, {
-    enabled: true, minBet: 1, maxBet: 10, dailyBuyInLimit: 20, dailyWinLimit: 40
+    enabled: false, minBet: 1, maxBet: 10, dailyBuyInLimit: 20, dailyWinLimit: 40
   });
   cls.blackjack = { enabled: true, minBet: 1, maxBet: 10 };
 
@@ -548,6 +548,7 @@ async function applyBaseTemplateToClass(classCode) {
   const cls = _cloneDoc(t29ApplyBaseTemplate(defaultClassData(classCode, existing.name, existing.teacher)));
   // Keep the things that were already true of this class.
   cls.createdAt = existing.createdAt || cls.createdAt;
+  cls.coTeachers = existing.coTeachers || []; cls.coTeacherCode = existing.coTeacherCode || null;
   await classesCol().doc(classCode).set(cls);
   return { ok: true };
 }

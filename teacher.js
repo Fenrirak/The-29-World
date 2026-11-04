@@ -114,6 +114,8 @@ async function render() {
   const welcomeEl = document.getElementById("welcomeGrant");
   if (document.activeElement !== welcomeEl) welcomeEl.value = t29WelcomeGrantOf(cls);
   document.getElementById("dailyTimeLimit").value = cls.dailyTimeLimitMinutes || "";
+  document.getElementById("restartTile").classList.toggle("hidden", cls.teacher !== CURRENT.username);
+  renderCoTeachers(cls).catch(e => console.warn("Co-teacher panel failed:", e));
 
   // Pass the class doc already in hand, so this doesn't read it again first.
   const students = await getClassStudents(CLASS_CODE, cls);
@@ -900,6 +902,78 @@ async function runWeeklyEventsNow() {
   } finally {
     btn.disabled = false;
   }
+}
+/* ---------------- Co-teachers (see "Co-teachers" in data-core.js) ---------------- */
+async function renderCoTeachers(cls) {
+  const box = document.getElementById("coTeacherBody");
+  if (!box) return;
+  const isOwner = cls.teacher === CURRENT.username;
+  const label = async (username) => {
+    // A co-teacher's account can only be read here while it has this class open; otherwise show the username.
+    const u = await getUserCached(username).catch(() => null);
+    return u && u.name ? `${escapeHtml(u.name)} <span class="muted-small">(${escapeHtml(username)})</span>` : escapeHtml(username);
+  };
+  const co = cls.coTeachers || [];
+  const rows = await Promise.all(co.map(async n => `
+    <div class="auto-row">
+      <div class="auto-details"><strong>${await label(n)}</strong><div class="muted-small">Co-teacher</div></div>
+      ${isOwner ? `<button class="btn small coral" onclick="removeCoTeacherClick('${escapeJsAttr(n)}')">Remove</button>` : ""}
+    </div>`));
+  let html = `<div class="auto-row"><div class="auto-details"><strong>${await label(cls.teacher)}</strong><div class="muted-small">Owner</div></div></div>${rows.join("")}`;
+  if (isOwner) {
+    if (co.length >= T29_MAX_CO_TEACHERS) {
+      html += `<p class="muted-small">This class has the maximum of ${T29_MAX_CO_TEACHERS} co-teachers. Remove one to invite someone else.</p>`;
+    } else if (cls.coTeacherCode) {
+      const code = `${cls.code}-${cls.coTeacherCode}`;
+      html += `
+        <label for="coTeacherCodeInput">Co-teacher code (works once)</label>
+        <input id="coTeacherCodeInput" readonly value="${escapeHtml(code)}" onclick="this.select()">
+        <p class="muted-small">Send this to the teacher. They choose <strong>Join a class as co-teacher</strong> on their Teacher Home page and enter it. You can still add ${T29_MAX_CO_TEACHERS - co.length} more.</p>
+        <div class="set-controls">
+          <button class="btn gold" onclick="copyCoTeacherCode()">Copy code</button>
+          <button class="btn secondary" onclick="cancelCoTeacherCodeClick()">Cancel this code</button>
+        </div>`;
+    } else {
+      html += `<div class="set-controls"><button class="btn gold" onclick="createCoTeacherCodeClick()">Invite a co-teacher</button></div>`;
+    }
+  } else {
+    html += `<div class="set-controls"><button class="btn secondary" onclick="leaveCoTeachingClick()">Leave this class</button></div>`;
+  }
+  box.innerHTML = html;
+}
+async function createCoTeacherCodeClick() {
+  const msg = document.getElementById("coTeacherMsg");
+  msg.innerHTML = "";
+  try {
+    const res = await t29CreateCoTeacherCode(CLASS_CODE, CURRENT.username);
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`; return; }
+    await render();
+  } catch (e) { msg.innerHTML = `<div class="error-msg">Couldn't make a code — please try again.</div>`; }
+}
+async function cancelCoTeacherCodeClick() {
+  try { await t29CancelCoTeacherCode(CLASS_CODE, CURRENT.username); await render(); }
+  catch (e) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">Couldn't cancel that — please try again.</div>`; }
+}
+async function copyCoTeacherCode() {
+  const input = document.getElementById("coTeacherCodeInput");
+  if (!input) return;
+  let copied = false;
+  try { await navigator.clipboard.writeText(input.value); copied = true; }
+  catch (e) { input.select(); try { copied = document.execCommand("copy"); } catch (e2) { copied = false; } }
+  t29Toast(copied ? "Code copied." : "Couldn't copy automatically — select the code and copy it.", { type: copied ? "success" : "info" });
+}
+async function removeCoTeacherClick(username) {
+  if (!await t29Confirm(`Remove ${username} as a co-teacher? They'll lose access to this class straight away.`)) return;
+  try {
+    const res = await t29RemoveCoTeacher(CLASS_CODE, CURRENT.username, username);
+    if (!res.ok) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`; return; }
+    await render();
+  } catch (e) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">Couldn't remove them — please try again.</div>`; }
+}
+async function leaveCoTeachingClick() {
+  if (!await t29Confirm("Leave this class? You'll stop being a co-teacher, and the owner would need to invite you again.")) return;
+  try { await t29LeaveAsCoTeacher(CLASS_CODE, CURRENT.username); window.location.href = "teacher-home.html"; }
+  catch (e) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">Couldn't leave — please try again.</div>`; }
 }
 async function saveWelcomeGrant() {
   const btn = document.getElementById("saveWelcomeBtn");

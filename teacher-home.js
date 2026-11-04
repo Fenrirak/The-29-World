@@ -11,7 +11,7 @@ function showMsg(text, ok) {
 }
 
 async function init() {
-  const u = await requireLogin();
+  const u = await requireLogin({ skipActivity: true });
   if (!u) return;
   if (u.role !== "teacher") { window.location.href = "student.html"; return; }
   CURRENT = u;
@@ -41,6 +41,8 @@ async function loanInterestForMyClasses() {
 
 async function render() {
   ALL_CLASSES = await getTeacherClasses(CURRENT.username);
+  // Archive any class nobody has used for 3 months (there's no server, so this is where it happens).
+  await t29AutoArchiveStaleClasses(ALL_CLASSES);
   const grid = document.getElementById("classGrid");
   const noClasses = document.getElementById("noClasses");
   noClasses.classList.toggle("hidden", ALL_CLASSES.length > 0);
@@ -53,6 +55,9 @@ async function render() {
       <div class="class-card-main">
         <h3>${icon("mortarboard", 18)} ${escapeHtml(cls.name)}</h3>
         ${cls.archived ? `<span class="badge coral">${icon("lock", 12)} Archived</span>` : ""}
+        ${cls.archived && cls.autoArchived ? `<span class="muted-small" style="display:block;margin-top:4px;">Archived automatically after 3 months with no activity. Reopen it any time.</span>` : ""}
+        ${cls.isOwner ? "" : `<span class="badge navy">${icon("users", 12)} Co-teacher</span> <span class="muted-small">Owner: ${escapeHtml(cls.ownerUsername)}</span>`}
+        ${cls.isOwner && cls.coTeachers.length ? `<span class="badge navy">${icon("users", 12)} ${cls.coTeachers.length} co-teacher${cls.coTeachers.length === 1 ? "" : "s"}</span>` : ""}
         <div class="class-card-meta">
           <span>${icon("users", 14)} ${cls.studentCount} student${cls.studentCount === 1 ? "" : "s"}</span>
           <span>${icon("calendar", 14)} Created ${fmtDate(cls.createdAt)}</span>
@@ -61,16 +66,22 @@ async function render() {
       </div>
       <div class="class-card-actions">
         <button class="btn small gold" type="button" data-open="${cls.code}">${icon("send", 12)} Open</button>
+        ${cls.isOwner ? `
         <button class="btn small secondary" type="button" data-share="${cls.code}">${icon("send", 12)} Share Template</button>
         <button class="btn small secondary" type="button" data-archive="${cls.code}">${cls.archived ? icon("repeat", 12) + " Reopen" : icon("lock", 12) + " Archive"}</button>
-        <button class="btn small coral" type="button" data-delete="${cls.code}">${icon("trash", 12)} Delete</button>
+        <button class="btn small coral" type="button" data-delete="${cls.code}">${icon("trash", 12)} Delete</button>` : `
+        <button class="btn small secondary" type="button" data-leave="${cls.code}">${icon("logout", 12)} Leave class</button>`}
       </div>
     `;
     card.addEventListener("click", () => openClass(cls.code));
     card.querySelector("[data-open]").addEventListener("click", (e) => { e.stopPropagation(); openClass(cls.code); });
-    card.querySelector("[data-share]").addEventListener("click", (e) => { e.stopPropagation(); openShareModal(cls.code, cls.name); });
-    card.querySelector("[data-archive]").addEventListener("click", (e) => { e.stopPropagation(); toggleArchive(cls.code, cls.archived, cls.name); });
-    card.querySelector("[data-delete]").addEventListener("click", (e) => { e.stopPropagation(); deleteClassClick(cls.code, cls.name); });
+    if (cls.isOwner) {
+      card.querySelector("[data-share]").addEventListener("click", (e) => { e.stopPropagation(); openShareModal(cls.code, cls.name); });
+      card.querySelector("[data-archive]").addEventListener("click", (e) => { e.stopPropagation(); toggleArchive(cls.code, cls.archived, cls.name); });
+      card.querySelector("[data-delete]").addEventListener("click", (e) => { e.stopPropagation(); deleteClassClick(cls.code, cls.name); });
+    } else {
+      card.querySelector("[data-leave]").addEventListener("click", (e) => { e.stopPropagation(); leaveCoTeachClick(cls.code, cls.name); });
+    }
     grid.appendChild(card);
   });
 
@@ -90,6 +101,37 @@ async function openClass(code) {
   if (!res.ok) { showMsg(res.error, false); return; }
   sessionStorage.setItem("t29-class-opened", "1");
   window.location.href = "teacher.html";
+}
+
+async function joinCoTeachClick() {
+  showMsg("");
+  const typed = await t29Prompt("Enter the co-teacher code the class owner gave you (it looks like F7K2M-AB12CD34).", "", { placeholder: "Co-teacher code", confirmText: "Join class" });
+  if (typed === null || !typed.trim()) return;
+  const res = await t29JoinAsCoTeacher(CURRENT.username, typed);
+  if (!res.ok) { showMsg(res.error, false); return; }
+  showMsg("You're now a co-teacher of that class. Open it below.", true);
+  await render();
+}
+
+async function leaveCoTeachClick(code, name) {
+  if (!await t29Confirm(`Leave "${name}"? You'll stop being a co-teacher and the owner would need to invite you again.`)) return;
+  try { await t29LeaveAsCoTeacher(code, CURRENT.username); } catch (e) { showMsg("Couldn't leave the class. Please try again.", false); return; }
+  await render();
+}
+
+// Optional recovery email: lets a teacher reset a forgotten password from the login page.
+async function recoveryEmailClick() {
+  showMsg("");
+  const current = await t29GetRecoveryEmail(CURRENT.username);
+  const typed = await t29Prompt(
+    (current ? `Your recovery email is ${current}.\n\nType a new one to change it, or clear the box to remove it.` : "You haven't set a recovery email.\n\nAdd one so you can reset your password if you ever forget it. Only you can see it.") ,
+    current, { placeholder: "you@example.com", confirmText: "Save" });
+  if (typed === null) return;
+  try {
+    const res = await t29SetRecoveryEmail(CURRENT.username, typed);
+    if (!res.ok) { showMsg(res.error, false); return; }
+    showMsg(res.email ? "Recovery email saved." : "Recovery email removed.", true);
+  } catch (e) { showMsg("Couldn't save that. Please try again.", false); }
 }
 
 async function toggleArchive(code, currentlyArchived, name) {
@@ -187,13 +229,13 @@ function openNewClassModal(mode) {
     document.getElementById("ncBaseDetails").open = false;
   }
   if (mode === "template") {
-    if (ALL_CLASSES.length === 0) {
+    if (ALL_CLASSES.filter(c => c.isOwner).length === 0) {
       alert("You don't have any classes yet to copy settings from — create a brand new class first.");
       return;
     }
     document.getElementById("newClassModalTitle").textContent = "New class from a template";
     templateWrap.classList.remove("hidden");
-    templateSelect.innerHTML = ALL_CLASSES.map(c => `<option value="${c.code}">${escapeHtml(c.name)}</option>`).join("");
+    templateSelect.innerHTML = ALL_CLASSES.filter(c => c.isOwner).map(c => `<option value="${c.code}">${escapeHtml(c.name)}</option>`).join("");
   } else {
     document.getElementById("newClassModalTitle").textContent = "Create a new class";
     templateWrap.classList.add("hidden");

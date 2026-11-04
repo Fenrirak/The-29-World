@@ -60,10 +60,14 @@ function pvShowError(title, text) {
   document.getElementById("parentError").classList.remove("hidden");
 }
 
-function pvRender(doc) {
+// Builds the family report's HTML from a /parentViews doc ({ view, updatedAt }).
+// Shared by the real page (pvRender, below) and by the teacher's "Preview" on the
+// Reports page, so what a teacher previews is exactly what a family opens.
+// opts.preview drops the Print button (it would print the teacher's own page).
+function pvBuildReportHtml(doc, opts) {
+  opts = opts || {};
   const v = doc.view || {};
   const first = String(v.name || "Your child").trim().split(/\s+/)[0];
-  document.title = `${v.name || "Report card"} — Family View — The 29 World`;
 
   // Everything in the summary was written by a browser, so text is always
   // escaped and numbers are always forced to be numbers before display.
@@ -104,7 +108,7 @@ function pvRender(doc) {
     </div>`;
   const tableRow = (label, amt, cls) => `<tr${cls ? ` class="${cls}"` : ""}><td>${label}</td><td>${amt}</td></tr>`;
 
-  document.getElementById("parentReport").innerHTML = `
+  return `
     <section class="card pv-hero">
       <div class="pv-hero-top">
         <div class="pv-hero-text">
@@ -113,7 +117,7 @@ function pvRender(doc) {
           ${meta.length ? `<div class="pv-meta">${meta.map(m => `<span>${m}</span>`).join("")}</div>` : ""}
           <p class="pv-updated">Last updated ${pvTimeAgo(doc.updatedAt)}</p>
         </div>
-        <button class="btn secondary no-print pv-print" onclick="window.print()">Print</button>
+        ${opts.preview ? "" : `<button class="btn secondary no-print pv-print" onclick="window.print()">Print</button>`}
       </div>
       <div class="pv-explainer">
         <span class="pv-explainer-icon">${pvIcon("star", 18)}</span>
@@ -184,6 +188,12 @@ function pvRender(doc) {
       </ul>
     </section>
   `;
+}
+
+function pvRender(doc) {
+  const v = doc.view || {};
+  document.title = `${v.name || "Report card"} — Family View — The 29 World`;
+  document.getElementById("parentReport").innerHTML = pvBuildReportHtml(doc);
   document.getElementById("parentLoading").classList.add("hidden");
   document.getElementById("parentReport").classList.remove("hidden");
 }
@@ -209,4 +219,6 @@ async function pvInit() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", pvInit);
+// parent.js is also loaded by the Reports page (for the teacher's preview) — only
+// run the page itself where the family-view markup exists.
+document.addEventListener("DOMContentLoaded", () => { if (document.getElementById("parentReport")) pvInit(); });

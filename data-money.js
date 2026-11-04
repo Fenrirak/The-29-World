@@ -2638,7 +2638,7 @@ async function resetClass(classCode, teacherUsername) {
   // The class's own identity, roster and saved report cards stay, and so
   // do today's market-day stamps (otherwise prices would move twice today).
   ["code", "name", "teacher", "students", "archived", "archivedAt", "templateShareToken", "reportArchives",
-    "lastPropertyMarketDayRun"].forEach(k => { delete fresh[k]; });
+    "lastPropertyMarketDayRun", "coTeachers", "coTeacherCode", "autoArchived"].forEach(k => { delete fresh[k]; });
   fresh.listings = [];
   fresh.teacherNotices = []; // old "your teacher changed..." notices belong to the last term
   fresh.lastTermDepositCheckDay = null;

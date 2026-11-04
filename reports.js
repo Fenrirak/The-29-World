@@ -341,6 +341,43 @@ async function showFamilyLinkFor(username, name) {
   document.getElementById("familyModalBody").innerHTML = familyLinkBoxHtml(res.url, username);
 }
 
+// Teacher: show exactly what a family would see for this student, built from the same
+// summary and the same page code as a real family link (see parent.js) — but
+// without making or saving anything, so it can be checked BEFORE sharing.
+async function previewFamilyViewFor(username) {
+  const modal = document.getElementById("familyPreviewModal");
+  const body = document.getElementById("familyPreviewBody");
+  document.getElementById("familyPreviewTitle").innerHTML = icon("users", 20) + " Family view preview";
+  document.getElementById("familyPreviewActions").innerHTML = "";
+  body.innerHTML = `<p class="muted-small"><span class="t29-spinner"></span> Building the preview…</p>`;
+  modal.classList.remove("hidden");
+  try {
+    const [cls, students] = await Promise.all([getClass(CLASS_CODE), getClassStudents(CLASS_CODE)]);
+    const student = students.find(s => s.username === username);
+    if (!cls || !student) throw new Error("not found");
+    const teacher = await getUserCached(cls.teacher).catch(() => null);
+    const doc = { view: _buildParentView(student, cls, teacher ? teacher.name : ""), updatedAt: Date.now() };
+    document.getElementById("familyPreviewTitle").innerHTML = icon("users", 20) + " Family view preview — " + escapeHtml(student.name || student.username);
+    body.innerHTML = pvBuildReportHtml(doc, { preview: true });
+    document.getElementById("familyPreviewActions").innerHTML = `
+      <button class="btn small gold" onclick="closeFamilyPreview();showFamilyLinkFor('${escapeJsAttr(student.username)}', '${escapeJsAttr(student.name || student.username)}')">Looks good — make the family link</button>`;
+    modal.scrollTop = 0;
+  } catch (e) {
+    console.error(e);
+    body.innerHTML = `<div class="error-msg">Couldn't build the preview. Please try again.</div>`;
+  }
+}
+
+function closeFamilyPreview() {
+  document.getElementById("familyPreviewModal").classList.add("hidden");
+  document.getElementById("familyPreviewBody").innerHTML = "";
+}
+
+function previewModalStudentFamilyView() {
+  if (!MODAL_STUDENT) return;
+  previewFamilyViewFor(MODAL_STUDENT.username);
+}
+
 function showMyFamilyLink() {
   showFamilyLinkFor(CURRENT.username, "my report card");
 }
@@ -384,6 +421,7 @@ async function openClassFamilyLinks() {
         <div class="auto-row">
           <div class="auto-details"><strong>${escapeHtml(s.name)}</strong>
             <div class="muted-small">${s.parentViewToken ? "Link is on" : "No link yet"}</div></div>
+          <button class="btn small secondary" onclick="previewFamilyViewFor('${escapeJsAttr(s.username)}')">Preview</button>
           ${s.parentViewToken
             ? `<button class="btn small secondary" onclick="copyFamilyLink(this, '${escapeJsAttr(parentViewUrl(s.parentViewToken))}')">Copy</button>
                <button class="btn small coral" onclick="turnOffFamilyLinkClick('${escapeJsAttr(s.username)}')">Turn off</button>`

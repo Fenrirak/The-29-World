@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=47af172b">
+<link rel="stylesheet" href="style.css?v=8d92b16e">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -37,7 +37,7 @@
 <link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="firebase-init.js?v=aca5590e">
+<link rel="modulepreload" href="firebase-init.js?v=a2efb0fa">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
@@ -140,6 +140,7 @@
         <p id="reportModalSubtitle" class="muted-small">@username</p>
       </div>
       <div style="display:flex; gap:8px;">
+        <button class="btn small secondary" onclick="previewModalStudentFamilyView()">Preview family view</button>
         <button class="btn small secondary" onclick="showModalStudentFamilyLink()">Family link</button>
         <button class="btn small secondary" onclick="printReport()">Print</button>
         <button class="btn small secondary" onclick="downloadReportPDF()">Download PDF</button>
@@ -161,12 +162,26 @@
   </div>
 </div>
 
-<script type="module" src="firebase-init.js?v=aca5590e"></script>
-<script defer src="icons.js?v=7c6ca02a"></script>
+<!-- Teacher's preview of the family view: shows exactly what a family member would
+     see, BEFORE any link exists. Nothing is saved or shared by opening it. -->
+<div id="familyPreviewModal" class="hidden no-print t29-modal-backdrop" onclick="if(event.target===this)closeFamilyPreview()">
+  <div class="card" style="width:100%;max-width:960px;max-height:92vh;overflow:auto;margin-top:0;">
+    <div class="flex-between">
+      <h2 id="familyPreviewTitle" style="margin-bottom:2px;">Family view preview</h2>
+      <button class="btn small secondary" onclick="closeFamilyPreview()">Close</button>
+    </div>
+    <p class="muted-small" style="margin-top:4px;">This is exactly what a family member would see if you shared a link. Nothing has been shared yet. Opening this preview makes no link.</p>
+    <div id="familyPreviewActions" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px;"></div>
+    <div class="parent-main" id="familyPreviewBody"></div>
+  </div>
+</div>
+
+<script type="module" src="firebase-init.js?v=a2efb0fa"></script>
+<script defer src="icons.js?v=9f717a43"></script>
 <script defer src="settings-menu.js?v=8dde546c"></script>
 <script defer src="shortcuts.js?v=bcda2833"></script>
-<script defer src="data-core.js?v=486a3ffc"></script>
-<script defer src="data-money.js?v=900f9859"></script>
+<script defer src="data-core.js?v=eebd40f2"></script>
+<script defer src="data-money.js?v=489fe5b4"></script>
 <script defer src="data-life.js?v=f45e1433"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=f6e1daf9"></script>
@@ -174,6 +189,7 @@
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="notifications.js?v=5b1e43a3"></script>
 <script defer src="pdf-report.js?v=9198db19"></script>
-<script defer src="reports.js?v=2d738510"></script>
+<script defer src="parent.js?v=c187a652"></script>
+<script defer src="reports.js?v=8b58d163"></script>
 </body>
 </html>

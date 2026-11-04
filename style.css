@@ -187,6 +187,13 @@ html.role-teacher .topbar nav a[href="tax.html"]{display:inline-flex;}
    teacher switches it off (data-core.js adds html.ks-on when it's on).
    Teachers always see it. */
 html:not(.role-teacher):not(.ks-on) .topbar nav a[href="kiwisaver.html"]:not(.active){display:none;}
+/* The casino (gambling.html) is OFF by default. It's hidden from students
+   unless their teacher has switched it on (data-core.js adds html.casino-on
+   when it's on, or when the student still holds chips and needs to cash out).
+   On phones the link lives in the "Games" dropdown group, so that group
+   button is hidden along with it. Teachers always see it. */
+html:not(.role-teacher):not(.casino-on) .topbar nav a[href="gambling.html"]:not(.active),
+html:not(.role-teacher):not(.casino-on) .topbar nav .nav-group[data-nav-group="Games"]:not(.has-active){display:none !important;}
 
 /* Student profile modal */
 #profileModal .card{max-width:680px;max-height:88vh;overflow:auto;}
