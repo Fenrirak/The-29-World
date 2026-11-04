@@ -164,7 +164,7 @@ async function render() {
   document.getElementById("greeting").textContent = "Hi, " + me.name + "!";
   document.getElementById("balance").textContent = fmtMoney(me.balance);
   document.getElementById("portfolio").textContent = fmtMoney(await portfolioValue(me.username, me.classCode));
-  bcLast = { me, cls };
+  bcLast = { me: acctLogical(me), cls };
   bcRenderAcct();
 
   const job = cls.jobs.find(j => j.id === me.jobId);
@@ -777,39 +777,39 @@ async function respondPromotionPopup(accept) {
   await render();
 }
 
-// ---- Dashboard bank preview: switch between Everyday and Savings ----
+// ---- Dashboard bank preview: shows whichever account the student picks ----
+// Uses the same account list and pop-up as the Bank page (anwBalanceChoice / anwOpenBalancePicker),
+// so the choice is shared with the Bank page and the floating balance widget.
 let bcLast = null;
-function bcGetAcct() {
-  try { return localStorage.getItem("t29-dash-bank-acct") === "everyday" ? "everyday" : "savings"; } catch (e) { return "savings"; }
+function bcRateFor(me, cls, id) {
+  if (id === "cash") return Number(cls.cashInterestRate) || 0;
+  if (id === "savings") return Number(cls.interestRate) || 0;
+  const a = acctActiveOf(me).find(x => x.id === id), p = a && acctPlanById(cls, a.planId);
+  return p ? (Number(p.rate) || 0) : 0;
 }
 function bcRenderAcct() {
   if (!bcLast) return;
   const { me, cls } = bcLast;
-  const acct = bcGetAcct();
-  const isSav = acct === "savings";
-  // Everyday account has no interest rate setting here, so it shows 0%.
-  document.getElementById("bcAcctLabel").textContent = isSav ? "Savings balance" : "Everyday balance";
-  document.getElementById("bcSavingsBalance").textContent = fmtMoney(isSav ? (me.savings || 0) : (me.balance || 0));
-  document.getElementById("bcSavingsRate").textContent = (isSav ? (cls.interestRate || 0) : 0) + "%";
-  document.querySelectorAll("#bcAcctMenu button").forEach(b => b.classList.toggle("active", b.dataset.acct === acct));
+  const { ch, cur } = anwBalanceChoice(me, cls);
+  const card = document.getElementById("bcAcctCard"), chev = card.querySelector(".bc-chev");
+  document.getElementById("bcAcctLabel").textContent = cur ? cur.label : "Balance";
+  document.getElementById("bcSavingsBalance").textContent = fmtMoney(cur ? cur.bal : 0);
+  document.getElementById("bcSavingsRate").textContent = (cur ? bcRateFor(me, cls, cur.id) : 0) + "%";
+  const multi = ch.length > 1;
+  card.style.cursor = multi ? "pointer" : "default";
+  if (chev) chev.classList.toggle("hidden", !multi);
 }
+async function bcOpenPicker() {
+  if (!bcLast || anwBalanceChoice(bcLast.me, bcLast.cls).ch.length < 2) return;
+  await anwOpenBalancePicker(bcLast.me, bcLast.cls); // saves the choice, then fires "anw-balance-view"
+}
+document.addEventListener("anw-balance-view", bcRenderAcct);
 (function bcInitAcctPicker() {
   const init = () => {
-    const card = document.getElementById("bcAcctCard"), menu = document.getElementById("bcAcctMenu");
-    if (!card || !menu) return;
-    const setOpen = open => { menu.classList.toggle("hidden", !open); card.setAttribute("aria-expanded", open); };
-    card.addEventListener("click", e => {
-      const b = e.target.closest("#bcAcctMenu button");
-      if (b) {
-        try { localStorage.setItem("t29-dash-bank-acct", b.dataset.acct); } catch (err) {}
-        bcRenderAcct(); setOpen(false);
-      } else setOpen(menu.classList.contains("hidden"));
-    });
-    card.addEventListener("keydown", e => {
-      if ((e.key === "Enter" || e.key === " ") && e.target === card) { e.preventDefault(); setOpen(menu.classList.contains("hidden")); }
-      if (e.key === "Escape") setOpen(false);
-    });
-    document.addEventListener("click", e => { if (!card.contains(e.target)) setOpen(false); });
+    const card = document.getElementById("bcAcctCard");
+    if (!card) return;
+    card.addEventListener("click", bcOpenPicker);
+    card.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); bcOpenPicker(); } });
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();

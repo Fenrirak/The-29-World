@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=b4a78c24">
+<link rel="stylesheet" href="style.css?v=5022f873">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -126,14 +126,10 @@
       </div>
       <p>Send money, set up automatic payments, and see your full transaction history.</p>
       <div class="grid grid-2" style="margin-top:10px;">
-        <div class="stat mint bc-acct" id="bcAcctCard" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" title="Tap to switch account">
+        <div class="stat mint bc-acct" id="bcAcctCard" role="button" tabindex="0" aria-haspopup="dialog" title="Tap to choose an account">
           <span class="icon" id="iconBcSavings"></span>
           <div class="label"><span id="bcAcctLabel">Savings balance</span><span class="bc-chev" aria-hidden="true">▾</span></div>
           <div class="value" id="bcSavingsBalance">$0.00</div>
-          <div class="bc-acct-menu hidden" id="bcAcctMenu" role="menu">
-            <button type="button" role="menuitemradio" data-acct="everyday">Everyday</button>
-            <button type="button" role="menuitemradio" data-acct="savings">Savings</button>
-          </div>
         </div>
         <div class="stat sky">
           <span class="icon" id="iconBcRate"></span>
@@ -283,6 +279,6 @@
 <script defer src="avatar.js?v=a080f42d"></script>
 <script defer src="notifications.js?v=5b1e43a3"></script>
 <script defer src="savings-goals.js?v=d0547604"></script>
-<script defer src="student.js?v=f490587a"></script>
+<script defer src="student.js?v=7fb8c91d"></script>
 </body>
 </html>

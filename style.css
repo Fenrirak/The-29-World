@@ -4083,11 +4083,6 @@ html.dark-mode .fin-sub .icon-slot{color:var(--accent-text);}
 /* ---- Dashboard bank preview: account switcher on the green balance card ---- */
 .stat.bc-acct{cursor:pointer;user-select:none;}
 .bc-chev{font-size:.85em;opacity:.85;}
-.bc-acct-menu{position:absolute;inset:0;z-index:2;display:flex;align-items:center;gap:10px;padding:16px;background:linear-gradient(135deg,var(--mint-fill),var(--mint-fill-dark));}
-.bc-acct-menu.hidden{display:none;}
-.bc-acct-menu button{flex:1;padding:12px 8px;border:2px solid rgba(255,255,255,.55);border-radius:12px;background:rgba(255,255,255,.15);color:#fff;font:inherit;font-weight:800;cursor:pointer;}
-.bc-acct-menu button:hover{background:rgba(255,255,255,.28);}
-.bc-acct-menu button.active{background:#fff;color:var(--navy-900);border-color:#fff;}
 
 /* ---- Dashboard "My classmates": card height follows the Bank card beside it (no extra white space) ---- */
 .card:has(#classmateTable){display:flex;flex-direction:column;}
