@@ -12,6 +12,16 @@ function showState(name) {
 }
 
 async function init() {
+  try {
+    await _init();
+  } catch (err) {
+    console.error("import page failed to load", err);
+    showState("stateError");
+    document.getElementById("errorMsg").textContent = "Couldn't load this link. Check your connection and try again.";
+  }
+}
+
+async function _init() {
   paintIconSlots();
   document.getElementById("errorIcon").innerHTML = icon("lock", 34);
   document.getElementById("wrongRoleIcon").innerHTML = icon("idcard", 34);
@@ -63,19 +73,30 @@ async function submitImport(e) {
   e.preventDefault();
   const btn = document.getElementById("importSubmitBtn");
   const name = document.getElementById("newClassName").value.trim();
+  const msgBox = document.getElementById("importMsg");
+  msgBox.innerHTML = "";
+  const showErr = text => {
+    const d = document.createElement("div");
+    d.className = "error-msg";
+    d.textContent = text;
+    msgBox.appendChild(d);
+  };
+  if (!name) { showErr("Enter a class name."); return false; }
   btn.disabled = true;
-  document.getElementById("importMsg").innerHTML = "";
   try {
     const res = await importSharedTemplate(CURRENT.username, TOKEN, name);
     if (!res.ok) {
-      document.getElementById("importMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
+      showErr(res.error);
       btn.disabled = false;
       return false;
     }
     sessionStorage.setItem("t29-class-opened", "1");
     window.location.href = "teacher.html";
   } catch (err) {
-    document.getElementById("importMsg").innerHTML = `<div class="error-msg">Something went wrong. Please try again.</div>`;
+    console.error("import failed", err.code, err.message, err);
+    showErr(err && err.code === "permission-denied"
+      ? "You don't have permission to create this class. Please log out, log back in, and try again."
+      : "Something went wrong. Please try again.");
     btn.disabled = false;
   }
   return false;

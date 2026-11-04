@@ -169,6 +169,15 @@ function genCode(len) {
   return out;
 }
 
+// A getClass() on a code that doesn't exist yet is DENIED by firestore.rules
+// for existing users (the rule reads resource.data on a missing doc), so treat
+// any failed lookup as "free" instead of letting it abort class creation.
+async function _freshClassCode() {
+  let code;
+  do { code = genCode(5); } while (await getClass(code).catch(() => null));
+  return code;
+}
+
 // Unique within a page (a counter, so ids made in the same millisecond - e.g.
 // inside a .map() - can never match) and very unlikely to match one made on
 // another device (random part). Fixed-width tail, so ids can't run together.
@@ -1097,8 +1106,7 @@ async function createClassForTeacher(teacherUsername, className) {
   if (!teacher || teacher.role !== "teacher") return { ok: false, error: "Teacher account not found." };
   if (!className || !className.trim()) return { ok: false, error: "Enter a class name." };
 
-  let code;
-  do { code = genCode(5); } while ((await getClass(code)));
+  const code = await _freshClassCode();
   const cls = defaultClassData(code, className.trim(), teacherUsername);
 
   await classesCol().doc(code).set(cls);
@@ -1222,6 +1230,11 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
   cls.movingCost = Math.max(0, Number(template.movingCost) || 0);
   cls.propertyRentals = _cloneDoc(template.propertyRentals || {});
   cls.storeSortMode = template.storeSortMode || "manual";
+  // Credit card / bank account plans + settings and the avatar shop setup are
+  // teacher configuration too, so they travel with the template (only when set).
+  ["cardPlans", "cardSettings", "accountPlans", "accountSettings", "avatarShop"].forEach(k => {
+    if (template[k] !== undefined && template[k] !== null) cls[k] = _cloneDoc(template[k]);
+  });
   // KiwiSaver settings carry over; a retired class's copy starts un-retired.
   if (template.kiwiSaver) cls.kiwiSaver = Object.assign(_cloneDoc(template.kiwiSaver), { retired: false, retiredAt: null });
 
@@ -1249,8 +1262,7 @@ async function createClassFromTemplate(teacherUsername, className, templateCode)
     return { ok: false, error: "That template class couldn't be found." };
   }
 
-  let code;
-  do { code = genCode(5); } while ((await getClass(code)));
+  const code = await _freshClassCode();
   const cls = _classDataFromTemplate(code, className.trim(), teacherUsername, template);
 
   await classesCol().doc(code).set(cls);
@@ -1358,8 +1370,7 @@ async function importSharedTemplate(importingTeacherUsername, token, className) 
   if (template === null) return { ok: false, error: "The shared class no longer exists." };
   if (!template) return { ok: false, error: "This link needs refreshing — ask the teacher who sent it to click Share Template on that class again, then use the link again." };
 
-  let code;
-  do { code = genCode(5); } while ((await getClass(code)));
+  const code = await _freshClassCode();
   const cls = _classDataFromTemplate(code, className.trim(), importingTeacherUsername, template);
 
   await classesCol().doc(code).set(cls);
