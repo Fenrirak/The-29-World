@@ -468,6 +468,7 @@ async function getClassStudents(code, precomputedCls) {
 let _readCacheInstalled = false;
 window._rcGet = function () { return undefined; };
 window._rcSet = function () {};
+window._rcDel = function () {};
 
 function installReadCache() {
   if (_readCacheInstalled) return;
@@ -483,9 +484,11 @@ function installReadCache() {
     if (hit) store.delete(cacheKey(col, id));
     return undefined;
   };
-  window._rcSet = function (col, id, value) {
-    store.set(cacheKey(col, id), { value, expires: Date.now() + CACHE_TTL_MS });
+  // ttlMs is optional: live listeners (t29WatchDoc, below) keep a doc fresh for longer.
+  window._rcSet = function (col, id, value, ttlMs) {
+    store.set(cacheKey(col, id), { value, expires: Date.now() + (ttlMs || CACHE_TTL_MS) });
   };
+  window._rcDel = function (col, id) { store.delete(cacheKey(col, id)); };
 
   // Wrap fdb.collection("users"/"classes") so any direct write — from this
   // file or (via classesColUpdateRate in teacher.js) elsewhere — clears
@@ -574,6 +577,70 @@ async function getClassCached(code) {
   })();
   _inflightClassFetch.set(code, promise);
   return promise;
+}
+/* ---------------- Live documents (Firestore listeners) ----------------
+   t29WatchDoc("users" | "classes", id, callback) replaces polling. One listener is
+   kept per document however many callers want it, and what it hears is also put in
+   the read cache above, so getUserCached()/getClassCached() answer from the live
+   copy without a Firestore read. Firestore bills one read when a listener starts and
+   one for each change after that, so a page left open and idle costs almost nothing.
+   The callback gets (data, info): data is a private copy of the document (null if
+   it doesn't exist); info.fromCache / info.hasPendingWrites describe the snapshot,
+   and info.error is set if the listener died (permissions, sign-out), which is the
+   caller's cue to fall back to its old timer. Returns a function that stops listening
+   (the listener itself is dropped once its last caller leaves).
+   Class docs also change whenever any session syncs its clock (_clockProbe), so the
+   callback is skipped for a change that touches only that field. */
+const LIVE_TTL_MS = 10 * 60000;
+const _liveDocs = new Map();
+function t29WatchDoc(col, id, cb) {
+  if (!id || (col !== "users" && col !== "classes") || typeof cb !== "function") return function () {};
+  installReadCache();
+  const key = col + "/" + id;
+  let w = _liveDocs.get(key);
+  if (!w) {
+    w = { subs: new Set(), has: false, data: null, sig: null, unsub: null, keep: null, dead: false };
+    _liveDocs.set(key, w);
+    const live = w;
+    const prime = () => { if (live.has && live.data) window._rcSet(col, id, _cloneDoc(live.data), LIVE_TTL_MS); };
+    const tell = (data, info) => live.subs.forEach(fn => {
+      try { fn(_cloneDoc(data), info); } catch (e) { console.warn("Live update handler failed:", e); }
+    });
+    live.keep = setInterval(prime, 4 * 60000); // the cache entry outlives quiet stretches
+    T29_AUTH_READY.then(() => {
+      if (live.dead) return;
+      const ref = (col === "users" ? usersCol() : classesCol()).doc(id);
+      live.unsub = ref.onSnapshot(snap => {
+        let data = snap.exists ? snap.data() : null;
+        if (data && col === "classes") data = withNewModuleDefaults(data);
+        const sig = JSON.stringify(data, (k, v) => (k === "_clockProbe" ? undefined : v));
+        const changed = !live.has || sig !== live.sig;
+        live.has = true; live.sig = sig; live.data = data;
+        prime();
+        if (changed) tell(data, snap.metadata || {});
+      }, err => {
+        // Listener ended: forget it so the next watch starts a fresh one, and let callers fall back.
+        clearInterval(live.keep);
+        window._rcDel(col, id);
+        if (_liveDocs.get(key) === live) _liveDocs.delete(key);
+        tell(undefined, { error: err || true });
+      });
+    }).catch(() => {});
+  }
+  w.subs.add(cb);
+  if (w.has) { // joining late: hand over the current copy straight away
+    const cur = w;
+    Promise.resolve().then(() => { if (cur.subs.has(cb)) { try { cb(_cloneDoc(cur.data), {}); } catch (e) { console.warn("Live update handler failed:", e); } } });
+  }
+  return function stopWatching() {
+    const cur = w;
+    if (!cur.subs.delete(cb) || cur.subs.size) return;
+    cur.dead = true;
+    clearInterval(cur.keep);
+    if (cur.unsub) { try { cur.unsub(); } catch (e) { /* already stopped */ } }
+    window._rcDel(col, id);
+    if (_liveDocs.get(key) === cur) _liveDocs.delete(key);
+  };
 }
 function initials(name) {
   if (!name) return "?";

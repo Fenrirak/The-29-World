@@ -28,19 +28,34 @@ async function init() {
   renderExemptionBox(u);
   t29PageReady();
 
-  // In case the student just leaves this tab open, notice when the day
-  // rolls over, the teacher lifts the limit, or a pending request gets
-  // resolved — without needing a manual refresh. getUserCached still
-  // costs a read once its 2s cache window expires, so this polls fairly
-  // often (15s) since a student waiting on a teacher's decision benefits
-  // from a snappier check — still far cheaper than the per-second
-  // tracking a normal page runs.
-  setInterval(async () => {
-    const fresh = await getUserCached(CURRENT.username);
+  // In case the student just leaves this tab open, notice when the teacher lifts the limit or
+  // answers a pending request. Both arrive as a change to this student's own document, so a live
+  // listener picks them up at once and costs nothing while nothing changes (it used to re-read
+  // the document every 15 seconds). The day rolling over is a clock event, not a data change, so
+  // that is re-checked against the document we already hold, once a minute, with no read at all.
+  let latest = u;
+  const recheck = () => {
+    if (!timeLimitStatus(latest).reached) { window.location.href = "student.html"; return; }
+  };
+  setInterval(recheck, 60000);
+  let fallbackTimer = null;
+  const startFallbackPoll = () => {
+    if (fallbackTimer) return;
+    fallbackTimer = setInterval(async () => {
+      const fresh = await getUserCached(CURRENT.username);
+      if (!fresh) return;
+      latest = fresh;
+      if (!timeLimitStatus(fresh).reached) { window.location.href = "student.html"; return; }
+      renderExemptionBox(fresh);
+    }, 15000);
+  };
+  t29WatchDoc("users", CURRENT.username, (fresh, info) => {
+    if (info && info.error) { startFallbackPoll(); return; } // listener unavailable: the old 15s check
     if (!fresh) return;
+    latest = fresh;
     if (!timeLimitStatus(fresh).reached) { window.location.href = "student.html"; return; }
     renderExemptionBox(fresh);
-  }, 15000);
+  });
 }
 
 function renderExemptionBox(u) {

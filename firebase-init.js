@@ -26,7 +26,7 @@ import { initializeApp, deleteApp }
   from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   getFirestore, doc, collection, query, where,
-  getDoc, getDocFromServer, getDocs,
+  getDoc, getDocFromServer, getDocs, onSnapshot,
   setDoc, updateDoc, deleteDoc, runTransaction, writeBatch,
   serverTimestamp, increment, deleteField, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -98,7 +98,10 @@ const _auth = getAuth(_app);
 
 function _wrapSnap(snap) {
   const exists = typeof snap.exists === "function" ? snap.exists() : !!snap.exists;
-  return { exists, data: () => (exists ? snap.data() : undefined) };
+  // metadata lets live listeners tell a local, not-yet-saved change from a confirmed one.
+  const md = snap.metadata || {};
+  return { exists, data: () => (exists ? snap.data() : undefined),
+           metadata: { fromCache: !!md.fromCache, hasPendingWrites: !!md.hasPendingWrites } };
 }
 
 function _wrapDocRef(realRef) {
@@ -109,6 +112,11 @@ function _wrapDocRef(realRef) {
         ? await getDocFromServer(realRef)
         : await getDoc(realRef);
       return _wrapSnap(snap);
+    },
+    // Live listener on this one document. Returns the function that stops it.
+    // Billed one read when it starts and one per change after that, instead of one per poll.
+    onSnapshot(next, error) {
+      return onSnapshot(realRef, snap => next(_wrapSnap(snap)), err => { if (error) error(err); });
     },
     set(data, options) {
       return options ? setDoc(realRef, data, options) : setDoc(realRef, data);

@@ -143,16 +143,63 @@ async function init() {
   // roster each time, which is real data and battery on a phone that
   // isn't even looking at the page. Same approach as the balance widget
   // in the data-*.js files, and it catches up with one render on the way back.
-  let refreshTimer = setInterval(render, 30000);
+  // The 30s redraw is clock-driven (side hustle window, "today" items) and now takes everything from
+  // the cache, so it costs almost no reads. Changes to this student's own account arrive through a
+  // live listener (instead of a re-read of the user, the class AND every classmate every 30 seconds).
+  // Both pause while the tab is hidden, as before, and catch up with one redraw on the way back.
+  const STUDENT_REFRESH_MS = 30000;
+  let refreshTimer = setInterval(render, STUDENT_REFRESH_MS);
+  let unwatchMe = null, watchDebounce = null, lastMeSig = null;
+  // The time-limit tracker rewrites these two fields every ~10s; they never need a redraw.
+  const meSig = d => JSON.stringify(d, (k, v) => (k === "timeSpentTodaySec" || k === "timeSpentDate" ? undefined : v));
+  const startWatching = () => {
+    if (unwatchMe || typeof t29WatchDoc !== "function") return;
+    if (u.dailyLimitMinutes > 0) return; // that tracker would bill a read per write; the timer's cached re-read is cheaper
+    let first = true;
+    unwatchMe = t29WatchDoc("users", u.username, (doc, info) => {
+      if (info && info.error) { unwatchMe = null; return; } // listener gone: timer redraws re-read as needed
+      if (!doc) return;
+      const sig = meSig(doc);
+      if (first) { first = false; lastMeSig = sig; return; } // the opening snapshot is what was just drawn
+      if (sig === lastMeSig) return;
+      lastMeSig = sig;
+      clearTimeout(watchDebounce);
+      watchDebounce = setTimeout(render, 400);
+    });
+  };
+  const stopWatching = () => {
+    if (unwatchMe) { unwatchMe(); unwatchMe = null; }
+    clearTimeout(watchDebounce);
+  };
+  startWatching();
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       clearInterval(refreshTimer);
       refreshTimer = null;
+      stopWatching();
     } else if (!refreshTimer) {
       render();
-      refreshTimer = setInterval(render, 30000);
+      refreshTimer = setInterval(render, STUDENT_REFRESH_MS);
+      startWatching();
     }
   });
+}
+
+// The ranking and classmates table need everyone's account, which costs one Firestore read per
+// classmate. They used to be re-read on every redraw (every 30s). Classmates' balances only matter
+// at a glance, so the list is kept for a few minutes; this student's own row is always the live one.
+const ROSTER_TTL_MS = 5 * 60000;
+const STUDENT_CLASS_TTL_MS = 2 * 60000;
+let ROSTER_CACHE = { at: 0, code: null, count: -1, list: null };
+async function getRosterForRender(me, cls) {
+  const count = (cls.students || []).length; // someone joining or leaving refreshes it straight away
+  const fresh = ROSTER_CACHE.list && ROSTER_CACHE.code === me.classCode && ROSTER_CACHE.count === count &&
+    (Date.now() - ROSTER_CACHE.at) < ROSTER_TTL_MS;
+  if (!fresh) {
+    const list = await getClassStudents(me.classCode, cls);
+    ROSTER_CACHE = { at: Date.now(), code: me.classCode, count, list };
+  }
+  return ROSTER_CACHE.list.map(s => (s.username === me.username ? Object.assign({}, s, me, { username: s.username }) : s));
 }
 
 async function render() {
@@ -160,6 +207,8 @@ async function render() {
   // is already known without needing `me` first, so fetch both at once
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+  // Events, locks and rates change rarely, so redraws don't need to re-read the class document every time.
+  if (cls && window._rcSet) window._rcSet("classes", CURRENT.classCode, cls, STUDENT_CLASS_TTL_MS);
 
   document.getElementById("greeting").textContent = "Hi, " + me.name + "!";
   document.getElementById("balance").textContent = fmtMoney(me.balance);
@@ -186,7 +235,7 @@ async function render() {
   // the classmates table below — these used to each independently call
   // getClassStudents(), which batches one Firestore read PER STUDENT, so
   // every render() was reading every student in the class twice over.
-  const allStudents = await getClassStudents(me.classCode, cls);
+  const allStudents = await getRosterForRender(me, cls);
 
   // net worth leaderboard
   const board = await classLeaderboard(me.classCode, me.username, allStudents);

@@ -208,19 +208,28 @@ async function render() {
   document.getElementById("noStudents").classList.toggle("hidden", students.length > 0);
   students.forEach(s => {
     const tr = document.createElement("tr");
+    tr.dataset.search = ((s.name || "") + " " + (s.username || "")).toLowerCase();
     tr.innerHTML = `
-      <td>${avatarBadge(s)}${escapeHtml(s.name)}<div class="muted-small">@${escapeHtml(s.username)}</div></td>
-      <td>${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `${icon("check", 11)} Task ✓` : `Task ✗`}</div>`; })() : ""}</td>
-      <td><strong>${fmtMoney(s.balance)}</strong></td>
-      <td>${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</td>
-      <td>${fmtMoney(netByUser[s.username] || 0)}</td>
-      <td>
+      <td><div class="stack-val">${avatarBadge(s)}${escapeHtml(s.name)}<div class="muted-small">@${escapeHtml(s.username)}</div></div></td>
+      <td><div class="stack-val">${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `${icon("check", 11)} Task ✓` : `Task ✗`}</div>`; })() : ""}</div></td>
+      <td><div class="stack-val"><strong>${fmtMoney(s.balance)}</strong></div></td>
+      <td><div class="stack-val">${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</div></td>
+      <td><div class="stack-val">${fmtMoney(netByUser[s.username] || 0)}</div></td>
+      <td class="stack-actions">
         <button class="btn small secondary" onclick="quickView('${escapeJsAttr(s.username)}')">View</button>
         <button class="btn small coral" onclick="removeStudentClick('${escapeJsAttr(s.username)}', '${escapeJsAttr(s.name)}')">${icon("trash", 13)}</button>
       </td>
     `;
     tbody.appendChild(tr);
   });
+
+  // Search box: only worth showing once the class is long enough to need scrolling.
+  const stuFilter = document.getElementById("studentFilter");
+  if (stuFilter) {
+    stuFilter.classList.toggle("hidden", students.length <= 8);
+    if (students.length <= 8) stuFilter.value = "";
+    filterStudentRows();
+  }
 
   // random events
   const evBox = document.getElementById("eventList");
@@ -1692,3 +1701,17 @@ async function restartClass() {
 
 
 document.addEventListener("DOMContentLoaded", init);
+
+// Hides student rows that don't match the search box (name or username).
+function filterStudentRows() {
+  const box = document.getElementById("studentFilter");
+  const q = box ? box.value.trim().toLowerCase() : "";
+  let shown = 0;
+  document.querySelectorAll("#studentTable tbody tr").forEach(tr => {
+    const match = !q || (tr.dataset.search || "").includes(q);
+    tr.classList.toggle("hidden", !match);
+    if (match) shown++;
+  });
+  const none = document.getElementById("noStudentMatch");
+  if (none) none.classList.toggle("hidden", !q || shown > 0);
+}

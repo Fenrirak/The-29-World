@@ -18,7 +18,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=8d92b16e">
+<link rel="stylesheet" href="style.css?v=2015d976">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -26,7 +26,7 @@
 <link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="firebase-init.js?v=a2efb0fa">
+<link rel="modulepreload" href="firebase-init.js?v=5d153c45">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
@@ -146,6 +146,7 @@
         <input id="t-password" type="password" required autocomplete="new-password" placeholder="Choose a password">
         <p class="field-hint">At least 6 characters.</p>
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Create my class</button>
+        <p class="muted-small" style="text-align:center;margin:10px 0 0;">By continuing you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
       </form>
     </div>
 
@@ -191,6 +192,7 @@
         <input id="s-password" type="password" required autocomplete="new-password" placeholder="Choose a password">
         <p class="field-hint">At least 6 characters.</p>
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Join class</button>
+        <p class="muted-small" style="text-align:center;margin:10px 0 0;">By continuing you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
         <p class="muted-small" style="text-align:center;margin-top:10px;">Ask your teacher for the class code.</p>
       </form>
     </div>
@@ -205,6 +207,7 @@
     <a href="about.html">About</a>
     <a href="mailto:Nathan.liu1211@gmail.com">Contact</a>
     <a href="privacy.html">Privacy Policy</a>
+    <a href="terms.html">Terms of Use</a>
   </nav>
   <div class="site-footer-copy">© 2026 The 29 World. All rights reserved.</div>
 </footer>
@@ -219,9 +222,10 @@
      lets the HTML parse and paint immediately while these load in the
      background, in the same relative order, still finishing before
      DOMContentLoaded — matching how every other page already does it. -->
-<script type="module" src="firebase-init.js?v=a2efb0fa"></script>
+<script type="module" src="firebase-init.js?v=5d153c45"></script>
 <script defer src="icons.js?v=9f717a43"></script>
-<script defer src="data-core.js?v=eebd40f2"></script>
+<script defer src="offline.js?v=9819919b"></script>
+<script defer src="data-core.js?v=ca4f6eb5"></script>
 <script defer src="data-money.js?v=489fe5b4"></script>
 <script defer src="data-life.js?v=f45e1433"></script>
 <script defer src="data-property.js?v=233a9933"></script>

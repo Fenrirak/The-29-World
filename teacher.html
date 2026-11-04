@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=8d92b16e">
+<link rel="stylesheet" href="style.css?v=2015d976">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -73,7 +73,7 @@
   }
 </style>
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="firebase-init.js?v=a2efb0fa">
+<link rel="modulepreload" href="firebase-init.js?v=5d153c45">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js">
@@ -164,12 +164,14 @@
         <button class="btn small mint" onclick="markAllJobTasksDone()" id="markAllJobsBtn">Mark all jobs done</button>
       </div>
     </div>
+    <input id="studentFilter" type="search" class="hidden" placeholder="Find a student…" aria-label="Find a student" oninput="filterStudentRows()" autocomplete="off" style="margin-top:12px;">
     <div class="table-scroll">
     <table id="studentTable" class="stack-table">
       <thead><tr><th>Student</th><th>Job</th><th>Balance</th><th>Lifestyle</th><th>Net worth</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     </table>
     </div>
+    <p class="muted-small hidden" id="noStudentMatch">No students match that search.</p>
     <p class="muted-small" id="noStudents">No students have joined yet. Share your class code, or use <strong>Add students</strong> to create their accounts for them.</p>
   </div>
 
@@ -371,6 +373,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
     <a href="about.html">About</a>
     <a href="mailto:Nathan.liu1211@gmail.com">Contact</a>
     <a href="privacy.html">Privacy Policy</a>
+    <a href="terms.html">Terms of Use</a>
   </nav>
   <div class="site-footer-copy">© 2026 The 29 World. All rights reserved.</div>
 </footer>
@@ -481,11 +484,12 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
   </div>
 </div>
 
-<script type="module" src="firebase-init.js?v=a2efb0fa"></script>
+<script type="module" src="firebase-init.js?v=5d153c45"></script>
 <script defer src="icons.js?v=9f717a43"></script>
 <script defer src="settings-menu.js?v=8dde546c"></script>
 <script defer src="shortcuts.js?v=bcda2833"></script>
-<script defer src="data-core.js?v=eebd40f2"></script>
+<script defer src="offline.js?v=9819919b"></script>
+<script defer src="data-core.js?v=ca4f6eb5"></script>
 <script defer src="data-money.js?v=489fe5b4"></script>
 <script defer src="data-life.js?v=f45e1433"></script>
 <script defer src="data-property.js?v=233a9933"></script>
@@ -494,10 +498,10 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="events-ui.js?v=f846128d"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="avatar.js?v=a080f42d"></script>
-<script defer src="notifications.js?v=5b1e43a3"></script>
+<script defer src="notifications.js?v=f57b1ec9"></script>
 <script defer src="pdf-report.js?v=9198db19"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
-<script defer src="teacher.js?v=5b3afaa2"></script>
+<script defer src="teacher.js?v=d701051e"></script>
 <script defer src="bulk-students.js?v=d5a9136f"></script>
 </body>
 </html>

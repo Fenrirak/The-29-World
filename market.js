@@ -104,24 +104,80 @@ async function init() {
   }
 }
 
-// Companies are shared, live data — other students/teachers can buy, sell,
-// open, close, or reprice a company at any moment. Firestore already saves
-// every change instantly, but this page only reads it on load, so without
-// polling you'd only ever see a snapshot from whenever you opened the tab.
-// Poll every 5s so prices/holdings stay in sync across devices. Only one
-// interval is ever running per page load.
+// Companies are shared, live data — other students/teachers can buy, sell, open, close, or reprice a
+// company at any moment, and Firestore saves each change instantly, but a page only reads it on load.
+// This used to re-read the user and the class document every 5 seconds per open tab. Now live
+// listeners on those two documents redraw the page the moment something actually changes, so an idle
+// tab costs nothing. (Every company lives in the one class document, so any trade by anyone in the
+// class reaches every open Market tab — that is the point.) If a listener can't be used it falls back
+// to the old 5-second redraw. Both pause while the tab is hidden and catch up with one redraw on return.
 let MARKET_REFRESH_TIMER = null;
+let MARKET_UNWATCH = [];
+let MARKET_DEBOUNCE = null;
+let MARKET_REDRAW_PENDING = false;
+
+function marketRedraw() {
+  // Don't refresh out from under someone mid-edit (typing a new price, a buy/sell quantity, etc) —
+  // wait until focus leaves the company list, then redraw once.
+  const active = document.activeElement;
+  const list = document.getElementById("companyList");
+  if (list && list.contains(active)) { MARKET_REDRAW_PENDING = true; return; }
+  MARKET_REDRAW_PENDING = false;
+  render();
+}
+function marketStopLive() {
+  MARKET_UNWATCH.forEach(stop => { try { stop(); } catch (e) { /* already stopped */ } });
+  MARKET_UNWATCH = [];
+  clearTimeout(MARKET_DEBOUNCE);
+}
+function marketStopAll() {
+  marketStopLive();
+  if (MARKET_REFRESH_TIMER) { clearInterval(MARKET_REFRESH_TIMER); MARKET_REFRESH_TIMER = null; }
+}
+function marketStartFallback() {
+  marketStopLive();
+  if (!MARKET_REFRESH_TIMER) MARKET_REFRESH_TIMER = setInterval(marketRedraw, 5000);
+}
+function marketStartLive() {
+  if (MARKET_REFRESH_TIMER || MARKET_UNWATCH.length) return;
+  if (typeof t29WatchDoc !== "function" || !CURRENT || !CLASS_CODE) { marketStartFallback(); return; }
+  // A student with a daily time limit has their own document rewritten every ~10s by the time
+  // tracker, which would bill a read each time, so only the class document is listened to for them
+  // and their own document is re-read on each redraw.
+  const timeTracked = CURRENT.dailyLimitMinutes > 0;
+  const schedule = () => {
+    clearTimeout(MARKET_DEBOUNCE);
+    MARKET_DEBOUNCE = setTimeout(marketRedraw, 300);
+  };
+  let firstClass = true, firstUser = true, userSig = null;
+  MARKET_UNWATCH.push(t29WatchDoc("classes", CLASS_CODE, (doc, info) => {
+    if (info && info.error) { marketStartFallback(); return; }
+    if (firstClass) { firstClass = false; return; } // the opening snapshot is what the page just drew
+    schedule();
+  }));
+  if (!timeTracked) {
+    MARKET_UNWATCH.push(t29WatchDoc("users", CURRENT.username, (doc, info) => {
+      if (info && info.error) { marketStartFallback(); return; }
+      if (!doc) return;
+      const sig = JSON.stringify(doc, (k, v) => (k === "timeSpentTodaySec" || k === "timeSpentDate" ? undefined : v));
+      if (firstUser) { firstUser = false; userSig = sig; return; }
+      if (sig === userSig) return;
+      userSig = sig;
+      schedule();
+    }));
+  }
+}
 function startAutoRefresh() {
-  if (MARKET_REFRESH_TIMER) return;
-  MARKET_REFRESH_TIMER = setInterval(() => {
-    // Don't refresh out from under someone mid-edit (typing a new price,
-    // a buy/sell quantity, etc) — only poll when nothing's focused inside
-    // the company list.
-    const active = document.activeElement;
-    const list = document.getElementById("companyList");
-    if (list && list.contains(active)) return;
+  marketStartLive();
+  // Redraw once focus leaves the list if a change arrived while someone was typing in it.
+  document.addEventListener("focusout", () => {
+    if (MARKET_REDRAW_PENDING) setTimeout(marketRedraw, 250);
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { marketStopAll(); return; }
     render();
-  }, 5000);
+    marketStartLive();
+  });
 }
 
 function sparkline(history) {

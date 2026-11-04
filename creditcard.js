@@ -427,7 +427,7 @@ function ccRenderTeacher(cls, students) {
   }).join("") : `<div class="empty-state"><p>No plans yet. Add your first one below — try a basic card with a low limit, then a premium one with better perks.</p></div>`;
 
   const pendRows = pending.length ? `<h3 class="cc-sub">${icon("history", 16)} Waiting for approval (${pending.length})</h3>
-    <div class="table-scroll cc-tablewrap"><table><thead><tr><th>Student</th><th>Card</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(s => {
+    <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Card</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(s => {
       const p = cardPlanById(cls, s.creditCard.planId); if (!p) return "";
       const sc = lifestyleRatingFromData(cls, s, s.username), ok = sc >= p.minLifestyle;
       return `<tr><td>${ccEsc(s.name)}</td><td>${ccEsc(p.name)} · ${fmtMoney(p.limit)}</td>
@@ -437,7 +437,7 @@ function ccRenderTeacher(cls, students) {
     }).join("")}</tbody></table></div>` : "";
 
   const cardRows = active.length ? `<h3 class="cc-sub">${icon("users", 16)} Cards in use (${active.length})</h3>
-    <div class="table-scroll cc-tablewrap"><table><thead><tr><th>Student</th><th>Card</th><th>Owing</th><th>Unpaid statement</th><th>Due</th><th>Status</th></tr></thead><tbody>${active.map(s => {
+    <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Card</th><th>Owing</th><th>Unpaid statement</th><th>Due</th><th>Status</th></tr></thead><tbody>${active.map(s => {
       const c = s.creditCard, p = cardPlanById(cls, c.planId), rem = cardStmtRemaining(c);
       let status = `<span class="badge mint">Clear</span>`, due = "—";
       if (c.stmt && rem > 0.004) {

@@ -46,7 +46,16 @@
 ================================================================================ */
 
 const NOTIF_MAX = 60;
-const NOTIF_POLL_MS = 120000; // see the balance widget in the data-*.js files for why this is a plain interval
+// Keeping the feed fresh. Normally a live listener on this student's own document does the work:
+// it fires the moment something about them changes (a payment, a teacher's decision, an event)
+// and costs nothing while nothing does. A slow timer still re-reads the class document now and
+// then (events, module locks, rates) and re-checks anything that depends on the clock.
+// NOTIF_POLL_MS is the old 2-minute re-read, kept only as the fallback when a listener can't be
+// used: the student has a daily time limit (the time tracker rewrites their document every ~10s,
+// which would bill a read each time) or the listener failed.
+const NOTIF_POLL_MS = 120000;
+const NOTIF_CLASS_REFRESH_MS = 4 * 60000;
+const NOTIF_LIVE_DEBOUNCE_MS = 500;
 
 /* ---------------- Read-state (per device, per student) ---------------- */
 function notifReadKey(username) { return "t29-notif-read-" + username; }
@@ -757,7 +766,7 @@ async function notifGetSwReg() {
   if (!("serviceWorker" in navigator)) return null;
   try {
     let reg = await navigator.serviceWorker.getRegistration();
-    if (!reg) reg = await navigator.serviceWorker.register("notif-sw.js?v=8d0012ee");
+    if (!reg) reg = await navigator.serviceWorker.register("notif-sw.js?v=ecb35b26");
     if (!reg.active) await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(r, 4000))]);
     return reg;
   } catch (e) { return null; }
@@ -1192,13 +1201,36 @@ async function notifRefresh(username, classCode) {
   }
 }
 
-function notifStartPoll(username, classCode) {
-  if (NOTIF_POLL_TIMER) return;
+let NOTIF_UNWATCH = null;
+let NOTIF_LIVE_DEBOUNCE = null;
+
+function notifStartTimer(username, classCode, ms) {
   NOTIF_POLL_TIMER = setInterval(() => {
     notifRefresh(username, classCode).catch(() => {});
-  }, NOTIF_POLL_MS);
+  }, ms);
+}
+// Time-limited students: the tracker writes to their document constantly, so poll instead.
+function notifLiveOk(doc) { return !(doc && doc.dailyLimitMinutes > 0); }
+
+function notifStartPoll(username, classCode) {
+  if (NOTIF_POLL_TIMER || NOTIF_UNWATCH) return;
+  getUserCached(username).then(me => {
+    if (NOTIF_POLL_TIMER || NOTIF_UNWATCH) return;
+    if (typeof t29WatchDoc !== "function" || !notifLiveOk(me)) { notifStartTimer(username, classCode, NOTIF_POLL_MS); return; }
+    let first = true; // the opening snapshot is what notifInit/visibility just refreshed from
+    NOTIF_UNWATCH = t29WatchDoc("users", username, (doc, info) => {
+      if (info && info.error) { notifStopPoll(); notifStartTimer(username, classCode, NOTIF_POLL_MS); return; }
+      if (!notifLiveOk(doc)) { notifStopPoll(); notifStartTimer(username, classCode, NOTIF_POLL_MS); return; }
+      if (first) { first = false; return; }
+      clearTimeout(NOTIF_LIVE_DEBOUNCE);
+      NOTIF_LIVE_DEBOUNCE = setTimeout(() => notifRefresh(username, classCode).catch(() => {}), NOTIF_LIVE_DEBOUNCE_MS);
+    });
+    notifStartTimer(username, classCode, NOTIF_CLASS_REFRESH_MS);
+  }).catch(() => notifStartTimer(username, classCode, NOTIF_POLL_MS));
 }
 function notifStopPoll() {
+  if (NOTIF_UNWATCH) { try { NOTIF_UNWATCH(); } catch (e) { /* already stopped */ } NOTIF_UNWATCH = null; }
+  clearTimeout(NOTIF_LIVE_DEBOUNCE);
   if (!NOTIF_POLL_TIMER) return;
   clearInterval(NOTIF_POLL_TIMER);
   NOTIF_POLL_TIMER = null;

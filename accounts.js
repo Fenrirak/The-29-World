@@ -646,7 +646,7 @@ function acRenderTeacher(cls, students) {
     </section>`;
 
   const pendRows = pending.length ? `<h3 class="cc-sub">${icon("history", 16)} Waiting for approval (${pending.length})</h3>
-    <div class="table-scroll cc-tablewrap"><table><thead><tr><th>Student</th><th>Account</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(({ s, a, p }) => {
+    <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Account</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(({ s, a, p }) => {
       if (!p) return "";
       const sc = lifestyleRatingFromData(cls, s, s.username), ok = sc >= p.minLifestyle;
       return `<tr><td>${acEsc(s.name)}</td><td>${acEsc(p.name)} ${acKindBadge(p.kind)}</td>
@@ -656,7 +656,7 @@ function acRenderTeacher(cls, students) {
     }).join("")}</tbody></table></div>` : "";
 
   const useRows = active.length ? `<h3 class="cc-sub">${icon("users", 16)} Accounts in use (${active.length})</h3>
-    <div class="table-scroll cc-tablewrap"><table><thead><tr><th>Student</th><th>Account</th><th>Balance</th><th>Interest earned</th><th>Fees paid</th><th>Opened</th></tr></thead><tbody>${active.slice().sort((x, y) => (y.a.balance || 0) - (x.a.balance || 0)).map(({ s, a, p }) => {
+    <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Account</th><th>Balance</th><th>Interest earned</th><th>Fees paid</th><th>Opened</th></tr></thead><tbody>${active.slice().sort((x, y) => (y.a.balance || 0) - (x.a.balance || 0)).map(({ s, a, p }) => {
       const lt = a.lifetime || {};
       return `<tr><td>${acEsc(s.name)}</td><td>${p ? acEsc(p.name) : "—"}</td><td><strong>${fmtMoney(a.balance || 0)}</strong></td><td>${fmtMoney(lt.interest || 0)}</td><td>${fmtMoney(lt.fees || 0)}</td><td>${a.openedKey ? acEsc(cardDateLabel(a.openedKey)) : "—"}</td></tr>`;
     }).join("")}</tbody></table></div>` : "";

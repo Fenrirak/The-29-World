@@ -103,11 +103,11 @@ function renderTeacher() {
   document.getElementById("noStudentsMsg").style.display = students.length ? "none" : "";
   rows.innerHTML = students.map(s => `
     <tr>
-      <td><span class="student-avatar ${avatarClass(s.username)}" style="width:26px;height:26px;font-size:var(--fs-xs);display:inline-flex;vertical-align:middle;margin-right:8px;">${initials(s.name)}</span>${escapeHtml(s.name)}</td>
-      <td>${fmtMoney(s.netWorth)}</td>
-      <td>${s.savingsRate === null ? "—" : s.savingsRate + "%"}</td>
-      <td>${s.topExpenseCategory ? `${s.topExpenseCategory.category} (${fmtMoney(s.topExpenseCategory.amount)})` : "—"}</td>
-      <td class="no-print"><button class="btn small secondary" onclick="openStudentReport('${escapeJsAttr(s.username)}')">View</button></td>
+      <td><div class="stack-val"><span class="student-avatar ${avatarClass(s.username)}" style="width:26px;height:26px;font-size:var(--fs-xs);display:inline-flex;vertical-align:middle;margin-right:8px;">${initials(s.name)}</span>${escapeHtml(s.name)}</div></td>
+      <td><div class="stack-val">${fmtMoney(s.netWorth)}</div></td>
+      <td><div class="stack-val">${s.savingsRate === null ? "—" : s.savingsRate + "%"}</div></td>
+      <td><div class="stack-val">${s.topExpenseCategory ? `${s.topExpenseCategory.category} (${fmtMoney(s.topExpenseCategory.amount)})` : "—"}</div></td>
+      <td class="no-print stack-actions"><button class="btn small secondary" onclick="openStudentReport('${escapeJsAttr(s.username)}')">View</button></td>
     </tr>
   `).join("");
 }
