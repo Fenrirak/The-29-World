@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=4a0224d9">
+<link rel="stylesheet" href="style.css?v=b4a78c24">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -90,6 +90,30 @@
     <form onsubmit="return submitNewClass(event)">
       <label for="ncName"><span class="icon-slot" data-icon="building"></span> Class name</label>
       <input id="ncName" required placeholder="Class name, e.g. Room 12">
+      <div id="ncStartWrap">
+        <label>How do you want to start?</label>
+        <div class="start-choice" role="radiogroup" aria-label="How do you want to start?">
+          <label class="start-option">
+            <input type="radio" name="ncStart" value="base" checked>
+            <span class="start-option-body">
+              <strong>Use the base template <span class="start-tag">Recommended</span></strong>
+              <span class="muted-small">Jobs, store, homes, cars, insurance, events, loans, quizzes and more, already set up and balanced for a school term to a full year.</span>
+            </span>
+          </label>
+          <label class="start-option">
+            <input type="radio" name="ncStart" value="scratch">
+            <span class="start-option-body">
+              <strong>Start from scratch</strong>
+              <span class="muted-small">A completely empty class. You add everything yourself.</span>
+            </span>
+          </label>
+        </div>
+        <details class="start-details" id="ncBaseDetails">
+          <summary>What's in the base template?</summary>
+          <ul id="ncBaseList"></ul>
+          <p class="muted-small">Everything can be changed or deleted after the class is created. Students, balances and history always start empty.</p>
+        </details>
+      </div>
       <div id="ncTemplateWrap" class="hidden">
         <label for="ncTemplate"><span class="icon-slot" data-icon="repeat"></span> Copy settings from</label>
         <select id="ncTemplate"></select>
@@ -129,6 +153,7 @@
 <script defer src="data-life.js?v=f45e1433"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=f6e1daf9"></script>
-<script defer src="teacher-home.js?v=f3c8a2a9"></script>
+<script defer src="base-template.js?v=196e2e13"></script>
+<script defer src="teacher-home.js?v=0c7787aa"></script>
 </body>
 </html>

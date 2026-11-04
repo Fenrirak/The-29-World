@@ -164,8 +164,8 @@ async function render() {
   document.getElementById("greeting").textContent = "Hi, " + me.name + "!";
   document.getElementById("balance").textContent = fmtMoney(me.balance);
   document.getElementById("portfolio").textContent = fmtMoney(await portfolioValue(me.username, me.classCode));
-  document.getElementById("bcSavingsBalance").textContent = fmtMoney(me.savings || 0);
-  document.getElementById("bcSavingsRate").textContent = (cls.interestRate || 0) + "%";
+  bcLast = { me, cls };
+  bcRenderAcct();
 
   const job = cls.jobs.find(j => j.id === me.jobId);
   const myTier = job ? getStudentTier(job, me) : null;
@@ -777,3 +777,39 @@ async function respondPromotionPopup(accept) {
   await render();
 }
 
+// ---- Dashboard bank preview: switch between Everyday and Savings ----
+let bcLast = null;
+function bcGetAcct() {
+  try { return localStorage.getItem("t29-dash-bank-acct") === "everyday" ? "everyday" : "savings"; } catch (e) { return "savings"; }
+}
+function bcRenderAcct() {
+  if (!bcLast) return;
+  const { me, cls } = bcLast;
+  const acct = bcGetAcct();
+  const isSav = acct === "savings";
+  // Everyday account has no interest rate setting here, so it shows 0%.
+  document.getElementById("bcAcctLabel").textContent = isSav ? "Savings balance" : "Everyday balance";
+  document.getElementById("bcSavingsBalance").textContent = fmtMoney(isSav ? (me.savings || 0) : (me.balance || 0));
+  document.getElementById("bcSavingsRate").textContent = (isSav ? (cls.interestRate || 0) : 0) + "%";
+  document.querySelectorAll("#bcAcctMenu button").forEach(b => b.classList.toggle("active", b.dataset.acct === acct));
+}
+(function bcInitAcctPicker() {
+  const init = () => {
+    const card = document.getElementById("bcAcctCard"), menu = document.getElementById("bcAcctMenu");
+    if (!card || !menu) return;
+    const setOpen = open => { menu.classList.toggle("hidden", !open); card.setAttribute("aria-expanded", open); };
+    card.addEventListener("click", e => {
+      const b = e.target.closest("#bcAcctMenu button");
+      if (b) {
+        try { localStorage.setItem("t29-dash-bank-acct", b.dataset.acct); } catch (err) {}
+        bcRenderAcct(); setOpen(false);
+      } else setOpen(menu.classList.contains("hidden"));
+    });
+    card.addEventListener("keydown", e => {
+      if ((e.key === "Enter" || e.key === " ") && e.target === card) { e.preventDefault(); setOpen(menu.classList.contains("hidden")); }
+      if (e.key === "Escape") setOpen(false);
+    });
+    document.addEventListener("click", e => { if (!card.contains(e.target)) setOpen(false); });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
+})();

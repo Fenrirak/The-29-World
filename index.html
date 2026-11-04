@@ -18,7 +18,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=4a0224d9">
+<link rel="stylesheet" href="style.css?v=b4a78c24">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -92,6 +92,24 @@
         <p class="field-hint" id="t-name-hint">This is how your students will see you, e.g. Ms Smith.</p>
         <label for="t-class"><span class="icon-slot"></span> Class name</label>
         <input id="t-class" placeholder="Class name, e.g. Room 12" autocomplete="off" required>
+        <label>How do you want to start?</label>
+        <div class="start-choice" role="radiogroup" aria-label="How do you want to start?">
+          <label class="start-option">
+            <input type="radio" name="t-start" value="base" checked>
+            <span class="start-option-body">
+              <strong>Use the base template <span class="start-tag">Recommended</span></strong>
+              <span class="muted-small">Jobs, store, homes, cars, insurance, events, loans and quizzes, already set up and balanced for a school term to a full year.</span>
+            </span>
+          </label>
+          <label class="start-option">
+            <input type="radio" name="t-start" value="scratch">
+            <span class="start-option-body">
+              <strong>Start from scratch</strong>
+              <span class="muted-small">A completely empty class. You add everything yourself.</span>
+            </span>
+          </label>
+        </div>
+        <p class="field-hint">You can change anything later.</p>
         <label for="t-username"><span class="icon-slot"></span> Choose a username</label>
         <input id="t-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
         <p class="field-hint">This is what you'll type to log in. Keep it simple, with no spaces.</p>
@@ -179,6 +197,7 @@
 <script defer src="data-life.js?v=f45e1433"></script>
 <script defer src="data-property.js?v=233a9933"></script>
 <script defer src="data-markets.js?v=f6e1daf9"></script>
+<script defer src="base-template.js?v=196e2e13"></script>
 <script>
 // Fill every .icon-slot next to its text with the matching icon. This is
 // purely decorative — every label/button already has real text, so the
@@ -344,6 +363,16 @@ async function doTeacherSignupInner(e) {
   if (/\s/.test(username)) { showMsg("Usernames can't have spaces. Try something like smith.m", false); return false; }
   const res = await createTeacherAndClass(name, username, password, className, { title, lastName: last });
   if (!res.ok) { showMsg(res.error, false); return false; }
+  const startChoice = (document.querySelector('input[name="t-start"]:checked') || {}).value;
+  if (startChoice === "base" && typeof applyBaseTemplateToClass === "function") {
+    try {
+      const applied = await applyBaseTemplateToClass(res.code);
+      if (!applied.ok) throw new Error(applied.error);
+    } catch (err) {
+      console.warn("Base template failed:", err);
+      alert("Your account and class were created, but the base template couldn't be added. You can create a new class from Teacher Home and pick the base template there.");
+    }
+  }
   setSession(username);
   window.location.href = getSafeReturnTo() || "teacher.html?welcome=1";
   return false;

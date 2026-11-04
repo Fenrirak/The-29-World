@@ -78,7 +78,7 @@ async function render() {
   newCard.className = "new-class-card";
   newCard.innerHTML = `
     <div>${icon("plus", 26)}</div>
-    <button class="btn small gold" type="button" onclick="openNewClassModal('new')">Create a brand new class</button>
+    <button class="btn small gold" type="button" onclick="openNewClassModal('new')">Create a new class</button>
     <button class="btn small secondary" type="button" onclick="openNewClassModal('template')">New class from a template</button>
   `;
   grid.appendChild(newCard);
@@ -176,6 +176,16 @@ function openNewClassModal(mode) {
   document.getElementById("ncName").value = "";
   const templateWrap = document.getElementById("ncTemplateWrap");
   const templateSelect = document.getElementById("ncTemplate");
+  const startWrap = document.getElementById("ncStartWrap");
+  startWrap.classList.toggle("hidden", mode === "template");
+  if (mode !== "template") {
+    document.querySelector('input[name="ncStart"][value="base"]').checked = true;
+    const list = document.getElementById("ncBaseList");
+    if (!list.children.length && typeof t29BaseTemplateSummary === "function") {
+      list.innerHTML = t29BaseTemplateSummary().map(t => `<li>${escapeHtml(t)}</li>`).join("");
+    }
+    document.getElementById("ncBaseDetails").open = false;
+  }
   if (mode === "template") {
     if (ALL_CLASSES.length === 0) {
       alert("You don't have any classes yet to copy settings from — create a brand new class first.");
@@ -185,7 +195,7 @@ function openNewClassModal(mode) {
     templateWrap.classList.remove("hidden");
     templateSelect.innerHTML = ALL_CLASSES.map(c => `<option value="${c.code}">${escapeHtml(c.name)}</option>`).join("");
   } else {
-    document.getElementById("newClassModalTitle").textContent = "Create a brand new class";
+    document.getElementById("newClassModalTitle").textContent = "Create a new class";
     templateWrap.classList.add("hidden");
   }
   document.getElementById("newClassModal").classList.remove("hidden");
@@ -202,9 +212,12 @@ async function submitNewClass(e) {
   const name = document.getElementById("ncName").value.trim();
   btn.disabled = true;
   try {
+    const startChoice = (document.querySelector('input[name="ncStart"]:checked') || {}).value;
     const res = NC_MODE === "template"
       ? await createClassFromTemplate(CURRENT.username, name, document.getElementById("ncTemplate").value)
-      : await createClassForTeacher(CURRENT.username, name);
+      : (startChoice === "base" && typeof createClassFromBaseTemplate === "function")
+        ? await createClassFromBaseTemplate(CURRENT.username, name)
+        : await createClassForTeacher(CURRENT.username, name);
     if (!res.ok) {
       document.getElementById("ncMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
       btn.disabled = false;

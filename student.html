@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=4a0224d9">
+<link rel="stylesheet" href="style.css?v=b4a78c24">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -126,10 +126,14 @@
       </div>
       <p>Send money, set up automatic payments, and see your full transaction history.</p>
       <div class="grid grid-2" style="margin-top:10px;">
-        <div class="stat mint">
+        <div class="stat mint bc-acct" id="bcAcctCard" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" title="Tap to switch account">
           <span class="icon" id="iconBcSavings"></span>
-          <div class="label">Savings balance</div>
+          <div class="label"><span id="bcAcctLabel">Savings balance</span><span class="bc-chev" aria-hidden="true">▾</span></div>
           <div class="value" id="bcSavingsBalance">$0.00</div>
+          <div class="bc-acct-menu hidden" id="bcAcctMenu" role="menu">
+            <button type="button" role="menuitemradio" data-acct="everyday">Everyday</button>
+            <button type="button" role="menuitemradio" data-acct="savings">Savings</button>
+          </div>
         </div>
         <div class="stat sky">
           <span class="icon" id="iconBcRate"></span>
@@ -146,12 +150,12 @@
 
     <div class="card">
       <h2 id="hClassmates">My classmates</h2>
-      <div style="max-height:320px;overflow-y:auto;">
+      <div class="cm-scroll"><div class="cm-scroll-inner">
       <table>
         <thead><tr><th>Name</th><th>Job</th></tr></thead>
         <tbody id="classmateTable"></tbody>
       </table>
-      </div>
+      </div></div>
     </div>
   </div>
 
@@ -279,6 +283,6 @@
 <script defer src="avatar.js?v=a080f42d"></script>
 <script defer src="notifications.js?v=5b1e43a3"></script>
 <script defer src="savings-goals.js?v=d0547604"></script>
-<script defer src="student.js?v=83bcf207"></script>
+<script defer src="student.js?v=f490587a"></script>
 </body>
 </html>

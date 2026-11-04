@@ -117,7 +117,7 @@ service cloud.firestore {
     // existing one to tolerate a fee and an optional item hand-off.
     //
     // storeItems is deliberately constrained beyond "allowed to change":
-    // whichever side is a store trade must change size by EXACTLY 1, in
+    // whichever side is a store trade must change size by the SAME number of items on both sides (1 or more), in
     // the direction that matches which side of the money this write is
     // (the side losing money gains an item; the side gaining money loses
     // one) — without this, the same collusion pair could use a
@@ -151,7 +151,11 @@ service cloud.firestore {
         && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems', 'storePaid'])
         && (
           !after.diff(before).affectedKeys().hasAny(['storeItems']) ||
-          after.storeItems.size() == before.get('storeItems', []).size() - 1
+          // One OR MORE copies (an accepted offer can be for several), but the seller's loss must equal
+          // the buyer's gain exactly, so items still can't be injected or duplicated.
+          (before.get('storeItems', []).size() - after.storeItems.size() >= 1
+            && before.get('storeItems', []).size() - after.storeItems.size()
+               == myAfter.get('storeItems', []).size() - myBefore.get('storeItems', []).size())
         );
     }
     function isPeerTradeDebit(username) {
@@ -180,7 +184,11 @@ service cloud.firestore {
         )
         && (
           !after.diff(before).affectedKeys().hasAny(['storeItems']) ||
-          after.storeItems.size() == before.get('storeItems', []).size() + 1
+          // Same conservation rule as isPeerTradeCredit: the buyer gains exactly what the seller (the
+          // caller) loses, and at least one.
+          (after.storeItems.size() - before.get('storeItems', []).size() >= 1
+            && after.storeItems.size() - before.get('storeItems', []).size()
+               == myBefore.get('storeItems', []).size() - myAfter.get('storeItems', []).size())
         );
     }
 
@@ -357,7 +365,15 @@ service cloud.firestore {
         // today" markers but still can't touch anyone else's.
         'balance', 'savings', 'lastInterestApplied',
         'lastWagePaid', 'lastLifeAllowanceWeeklyPaid', 'lastLifeAllowanceDailyPaid',
-        'loans', 'quizResults', 'gamblingAccount', 'creditCard',
+        'loans', 'quizResults', 'gamblingAccount', 'creditCard', 'bankAccounts',
+        // closedDefaults: which of the two original accounts (Cash balance / Savings Account) the student has closed,
+        // e.g. { cash: true }. Closing one moves its money in the SAME transaction as the balance/savings change;
+        // like bankAccounts, the values aren't checked here (see the note below).
+        'closedDefaults',
+        // mainAccount: which of the student's open everyday accounts ("cash" or a bankAccounts id) is their MAIN account.
+        // Picking one swaps what `balance` stands for with that account's entry in bankAccounts in the SAME write
+        // (see setMainAccount in data-money.js), so like bankAccounts the values aren't checked here (see the note below).
+        'mainAccount',
         // storePaid: what each owned store unit cost, so a sell-back can't refund more than was paid.
         'storeItems', 'storePaid', 'insurance', 'sideHustle', 'termDeposits', 'truckLicence',
         // lifeVoucherUsed: which weekly life-item vouchers this student has used this week.
@@ -770,7 +786,7 @@ service cloud.firestore {
         'name', 'teacher', 'code', 'createdAt',
         'interestRate', 'cashInterestRate', 'interestAuto', 'interestFrequency', 'interestDay',
         'taxRates', 'wageTaxBrackets',
-        'loanTiers', 'maxLoanAmount', 'maxLoanCount', 'termDepositPlans', 'cardPlans', 'cardSettings',
+        'loanTiers', 'maxLoanAmount', 'maxLoanCount', 'termDepositPlans', 'cardPlans', 'cardSettings', 'accountPlans', 'accountSettings',
         'jobs', 'quizzes', 'quizGate', 'insurancePlans', 'insuranceDay',
         'gambling', 'blackjack',
         'priceRange', 'propertyPriceRange',

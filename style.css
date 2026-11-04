@@ -4066,3 +4066,31 @@ html.dark-mode .link-btn:hover,
 html.dark-mode .cc-vouchers h3 .icon{color:var(--gold);}
 html.dark-mode .fin-sub .icon-slot{color:var(--accent-text);}
 }
+
+/* Base template choice (new class / teacher signup) */
+.start-choice{display:grid;gap:8px;margin:6px 0 4px;}
+.start-option{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:2px solid var(--line);border-radius:var(--radius);background:var(--card);cursor:pointer;margin:0;font-weight:inherit;}
+.start-option:hover{border-color:var(--gold);}
+.start-option:has(input:checked){border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset;}
+.start-option input[type=radio]{width:auto;margin:4px 0 0;flex:none;}
+.start-option-body{display:flex;flex-direction:column;gap:2px;text-align:left;}
+.start-option-body strong{color:var(--ink);}
+.start-tag{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:var(--r-pill);background:var(--gold);color:#fff;font-size:.72em;font-weight:700;vertical-align:middle;}
+.start-details{margin:6px 0 4px;font-size:var(--fs-sm);color:var(--muted);}
+.start-details summary{cursor:pointer;font-weight:600;color:var(--ink);}
+.start-details ul{margin:6px 0 6px 18px;padding:0;}
+
+/* ---- Dashboard bank preview: account switcher on the green balance card ---- */
+.stat.bc-acct{cursor:pointer;user-select:none;}
+.bc-chev{font-size:.85em;opacity:.85;}
+.bc-acct-menu{position:absolute;inset:0;z-index:2;display:flex;align-items:center;gap:10px;padding:16px;background:linear-gradient(135deg,var(--mint-fill),var(--mint-fill-dark));}
+.bc-acct-menu.hidden{display:none;}
+.bc-acct-menu button{flex:1;padding:12px 8px;border:2px solid rgba(255,255,255,.55);border-radius:12px;background:rgba(255,255,255,.15);color:#fff;font:inherit;font-weight:800;cursor:pointer;}
+.bc-acct-menu button:hover{background:rgba(255,255,255,.28);}
+.bc-acct-menu button.active{background:#fff;color:var(--navy-900);border-color:#fff;}
+
+/* ---- Dashboard "My classmates": card height follows the Bank card beside it (no extra white space) ---- */
+.card:has(#classmateTable){display:flex;flex-direction:column;}
+.cm-scroll{position:relative;flex:1 1 auto;min-height:240px;}
+.cm-scroll-inner{position:absolute;inset:0;overflow-y:auto;}
+@media(max-width:800px){.cm-scroll{flex:none;height:320px;min-height:0;}}
