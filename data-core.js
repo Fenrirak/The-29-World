@@ -1121,6 +1121,7 @@ async function createTeacherAndClass(name, username, password, className, extra)
   };
   if (title) { user.title = title; if (lastName) user.lastName = lastName; }
   const cls = defaultClassData(code, className, username);
+  const recoveryHash = recoveryEmail ? await t29RecoveryHash(username, recoveryEmail) : "";
 
   try {
     await fdb.runTransaction(async (t) => {
@@ -1129,6 +1130,7 @@ async function createTeacherAndClass(name, username, password, className, extra)
       t.set(classesCol().doc(code), cls);
       // Kept apart from the /users doc (which classmates can read): only this teacher can read it.
       if (recoveryEmail) t.set(fdb.collection("teacherRecovery").doc(username), { email: recoveryEmail });
+      if (recoveryHash) t.set(fdb.collection("recoveryCheck").doc(username), { hash: recoveryHash });
     });
   } catch (e) {
     console.warn("Teacher signup failed:", e && (e.code || e.message), e);
@@ -2067,11 +2069,27 @@ async function t29LoginByEmail(email, password) {
    Needs "Email link (passwordless sign-in)" switched on under Firebase console →
    Authentication → Sign-in method → Email/Password. */
 const T29_RECOVERY_KEY = "t29-recovery-pending";
+// Fingerprint of username+email. Stored in the public recoveryCheck doc so the forgot form can
+// verify a pair before sending, without the real email ever being readable.
+async function t29RecoveryHash(username, email) {
+  const data = new TextEncoder().encode("t29-recovery:" + String(username).trim().toLowerCase() + ":" + String(email).trim().toLowerCase());
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
 async function t29SendRecoveryLink(username, email) {
   username = String(username || "").trim();
   email = String(email || "").trim().toLowerCase();
   if (!username || /\s/.test(username)) return { ok: false, error: "Enter your username." };
   if (!T29_EMAIL_RE.test(email)) return { ok: false, error: "Enter the recovery email address you gave when you signed up." };
+  // Only send if this username + email pair matches. Silent success otherwise, so nothing reveals which usernames/emails exist.
+  try {
+    const snap = await fdb.collection("recoveryCheck").doc(username).get();
+    const want = snap.exists ? snap.data().hash : "";
+    if (!want || want !== await t29RecoveryHash(username, email)) return { ok: true };
+  } catch (e) {
+    if (t29IsConnectionError(e)) return { ok: false, error: t29AuthErrorMessage({ code: "auth/network-request-failed" }) };
+    return { ok: false, error: "Couldn't check that username and email right now. Please try again later." };
+  }
   const base = location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, "");
   try {
     await firebase.auth().sendSignInLinkToEmail(email, { url: base + "index.html", handleCodeInApp: true });
@@ -2132,14 +2150,19 @@ async function t29CompleteRecovery(username, email, newPassword) {
 // Teacher Home: see / change / remove the recovery email after signup.
 async function t29GetRecoveryEmail(username) {
   const snap = await fdb.collection("teacherRecovery").doc(username).get().catch(() => null);
-  return snap && snap.exists ? (snap.data().email || "") : "";
+  const em = snap && snap.exists ? (snap.data().email || "") : "";
+  // Backfill: accounts made before this check get their fingerprint when Teacher Home loads.
+  if (em) t29RecoveryHash(username, em).then(h => fdb.collection("recoveryCheck").doc(username).set({ hash: h })).catch(() => {});
+  return em;
 }
 async function t29SetRecoveryEmail(username, email) {
   email = String(email || "").trim().toLowerCase();
   const ref = fdb.collection("teacherRecovery").doc(username);
-  if (!email) { await ref.delete(); return { ok: true, email: "" }; }
+  const chk = fdb.collection("recoveryCheck").doc(username);
+  if (!email) { await ref.delete(); await chk.delete().catch(() => {}); return { ok: true, email: "" }; }
   if (!T29_EMAIL_RE.test(email)) return { ok: false, error: "That email address doesn't look right." };
   await ref.set({ email });
+  await chk.set({ hash: await t29RecoveryHash(username, email) });
   return { ok: true, email };
 }
 
