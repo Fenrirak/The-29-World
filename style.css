@@ -4089,3 +4089,7 @@ html.dark-mode .fin-sub .icon-slot{color:var(--accent-text);}
 .cm-scroll{position:relative;flex:1 1 auto;min-height:240px;}
 .cm-scroll-inner{position:absolute;inset:0;overflow-y:auto;}
 @media(max-width:800px){.cm-scroll{flex:none;height:320px;min-height:0;}}
+.bc-opts{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+.bc-opt{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:2px solid var(--line);border-radius:12px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;}
+.bc-opt:hover{border-color:var(--mint-fill-dark);}
+.bc-opt.active{border-color:var(--mint-fill-dark);background:rgba(46,152,115,.1);}

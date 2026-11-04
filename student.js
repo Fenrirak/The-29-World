@@ -778,32 +778,55 @@ async function respondPromotionPopup(accept) {
 }
 
 // ---- Dashboard bank preview: shows whichever account the student picks ----
-// Uses the same account list and pop-up as the Bank page (anwBalanceChoice / anwOpenBalancePicker),
-// so the choice is shared with the Bank page and the floating balance widget.
+// This choice is separate from the Bank page and the floating balance widget (its own storage key).
 let bcLast = null;
+const BC_KEY = "t29-dash-bank-acct";
 function bcRateFor(me, cls, id) {
   if (id === "cash") return Number(cls.cashInterestRate) || 0;
   if (id === "savings") return Number(cls.interestRate) || 0;
   const a = acctActiveOf(me).find(x => x.id === id), p = a && acctPlanById(cls, a.planId);
   return p ? (Number(p.rate) || 0) : 0;
 }
+function bcChoice() {
+  const { me, cls } = bcLast;
+  const ch = anwOpenAccounts(me, cls);
+  let saved = null;
+  try { saved = localStorage.getItem(BC_KEY); } catch (e) {}
+  const cur = ch.find(c => c.id === saved) || ch.find(c => c.id === "savings") || ch[0] || null;
+  return { ch, cur };
+}
 function bcRenderAcct() {
   if (!bcLast) return;
   const { me, cls } = bcLast;
-  const { ch, cur } = anwBalanceChoice(me, cls);
+  const { ch, cur } = bcChoice();
   const card = document.getElementById("bcAcctCard"), chev = card.querySelector(".bc-chev");
   document.getElementById("bcAcctLabel").textContent = cur ? cur.label : "Balance";
   document.getElementById("bcSavingsBalance").textContent = fmtMoney(cur ? cur.bal : 0);
   document.getElementById("bcSavingsRate").textContent = (cur ? bcRateFor(me, cls, cur.id) : 0) + "%";
-  const multi = ch.length > 1;
-  card.style.cursor = multi ? "pointer" : "default";
-  if (chev) chev.classList.toggle("hidden", !multi);
+  card.style.cursor = ch.length > 1 ? "pointer" : "default";
+  if (chev) chev.classList.toggle("hidden", ch.length < 2);
 }
-async function bcOpenPicker() {
-  if (!bcLast || anwBalanceChoice(bcLast.me, bcLast.cls).ch.length < 2) return;
-  await anwOpenBalancePicker(bcLast.me, bcLast.cls); // saves the choice, then fires "anw-balance-view"
+function bcOpenPicker() {
+  if (!bcLast) return;
+  const { me, cls } = bcLast;
+  const { ch, cur } = bcChoice();
+  if (ch.length < 2) return;
+  const wrap = document.createElement("div");
+  wrap.className = "t29-modal-backdrop";
+  const close = () => wrap.remove();
+  wrap.addEventListener("click", e => { if (e.target === wrap) close(); });
+  wrap.innerHTML = `<div class="card" style="width:100%;max-width:420px;margin-top:0;">
+    <div class="flex-between"><h2 style="margin-bottom:2px;">Choose an account</h2><button class="btn small secondary" type="button" data-close>Close</button></div>
+    <div class="bc-opts">${ch.map(c => `<button type="button" class="bc-opt${cur && c.id === cur.id ? " active" : ""}" data-id="${escapeHtml(String(c.id))}">
+      <span><strong>${escapeHtml(c.label)}</strong><span class="muted-small" style="display:block;">${bcRateFor(me, cls, c.id)}% interest</span></span>
+      <span>${fmtMoney(c.bal)}</span></button>`).join("")}</div></div>`;
+  wrap.querySelector("[data-close]").addEventListener("click", close);
+  wrap.querySelectorAll(".bc-opt").forEach(b => b.addEventListener("click", () => {
+    try { localStorage.setItem(BC_KEY, b.dataset.id); } catch (e) {}
+    bcRenderAcct(); close();
+  }));
+  document.body.appendChild(wrap);
 }
-document.addEventListener("anw-balance-view", bcRenderAcct);
 (function bcInitAcctPicker() {
   const init = () => {
     const card = document.getElementById("bcAcctCard");
