@@ -30,7 +30,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
 <link rel="stylesheet" href="style.css?v=81aa56cd">
-<link rel="stylesheet" href="blackjack.css?v=d3bb8e5c">
+<link rel="stylesheet" href="blackjack.css?v=495bb112">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -321,10 +321,14 @@
       </div>
 
       <div class="perf-toggle" id="perfControl" data-mode="auto">
+        <div class="perf-info">
         <div class="perf-head">
           <span class="perf-title" id="perfTitle">Effects quality</span>
           <span class="perf-value" id="perfValue">Auto</span>
         </div>
+        <span class="muted-small perf-hint" id="perfHint"></span>
+      </div>
+      <div class="perf-ctl">
         <div class="perf-slider">
           <div class="perf-track"><div class="perf-trail"></div><div class="perf-fill"></div></div>
           <div class="perf-stops" aria-hidden="true"><i style="--k:0"></i><i style="--k:.3333"></i><i style="--k:.6667"></i><i style="--k:1"></i></div>
@@ -338,7 +342,7 @@
             <button type="button" tabindex="-1" style="--k:.6667">Medium</button>
             <button type="button" tabindex="-1" style="--k:1">High</button>
         </div>
-        <span class="muted-small perf-hint" id="perfHint"></span>
+      </div>
       </div>
 
       <div class="card">

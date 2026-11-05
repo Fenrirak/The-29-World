@@ -382,19 +382,21 @@
   --t: 24px;            /* thumb size */
   --p: 0;
   --d: 1;
-  max-width: 460px;
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, 420px); /* full-width box; slider capped so it never over-stretches */
+  align-items: center;
+  gap: 8px 36px;
   margin: 16px 0;
-  padding: 9px 22px 8px;
+  padding: 12px 24px;
   border-radius: 14px;
   background: rgba(232,184,75,0.07);
   border: 1.5px solid rgba(212,162,76,0.35);
 }
 .perf-head {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 4px;
+  gap: 6px 12px;
 }
 .perf-title {
   font-weight: 800;
@@ -551,10 +553,10 @@
 .perf-labels button.active { color: #1f2b44; background: rgba(212,162,76,0.3); }
 .perf-labels button.detected:not(.active) { box-shadow: inset 0 0 0 1.5px rgba(194,143,46,0.75); color: #1f2b44; }
 
-.perf-hint { display: block; margin: 4px 0 0; line-height: 1.2; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.perf-hint { display: block; margin: 6px 0 0; line-height: 1.3; font-size: 12px; }
 
-@media (max-width: 520px) {
-  .perf-toggle { max-width: none; }
+@media (max-width: 640px) {
+  .perf-toggle { grid-template-columns: 1fr; padding: 10px 22px 8px; }
 }
 
 /* Hidden tab: don't burn CPU on infinite animations. */
