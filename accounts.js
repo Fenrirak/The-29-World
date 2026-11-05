@@ -115,7 +115,11 @@ function acInjectCss() {
 .bs-hint{min-height:1.25em;margin-top:2px}
 .bs-off{opacity:.5;transition:opacity .15s}
 .bs-tune{display:flex;gap:8px;align-items:flex-start;margin:14px 0 0}
-.bs-save{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:16px}`;
+.bs-save{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:16px}
+.ac-have-wrap{display:flex;flex-direction:column;gap:8px;margin-top:auto}
+.ac-have{display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);font-weight:700;color:var(--cc-mint-ink);background:var(--cc-mint-bg);border:1px solid var(--cc-mint-line);border-radius:var(--r-3);padding:8px 12px}
+.ac-have.pend{color:var(--cc-gold-ink);background:var(--cc-gold-bg);border-color:var(--cc-gold-line)}
+.ac-plan.ac-held{border-color:var(--cc-mint-line)}`;
   document.head.appendChild(st);
 }
 function acPlural(n, w) { return ccPlural(n, w); }
@@ -330,38 +334,42 @@ function acOwnedTile(a, cls, canMove) {
 }
 
 /* ================= Student: open an account (its own section) ================= */
-// The two original accounts, once a student has closed them, wait here to be opened again.
-function acClosedDefaults(me) {
-  const out = [];
-  if (acctDefaultClosed(me, "cash")) out.push({ id: "cash", kind: "everyday", name: "Cash balance" });
-  if (acctDefaultClosed(me, "savings")) out.push({ id: "savings", kind: "savings", name: "Savings Account" });
-  return out;
+// The two original accounts always stay on the list: open ones are marked "held" (note + greyed button), closed ones can be opened again.
+function acDefaultOptions(me) {
+  return [
+    { id: "cash", kind: "everyday", name: "Cash balance", held: !acctDefaultClosed(me, "cash") },
+    { id: "savings", kind: "savings", name: "Savings Account", held: !acctDefaultClosed(me, "savings") }
+  ];
+}
+// Shown in place of the open button on an account the student already has: a small note, and the button greyed out.
+function acHaveAction(pending, label) {
+  return `<div class="ac-have-wrap"><div class="ac-have${pending ? " pend" : ""}">${icon(pending ? "history" : "check", 14)}<span>${pending ? "Application sent — waiting for your teacher" : "You have this account"}</span></div>
+    <button class="btn gold" disabled>${label}</button></div>`;
 }
 function acRenderOpen(me, cls) {
   const el = document.getElementById("acctOpenCard"); if (!el) return;
   const st = acctSettings(cls), plans = acctPlansOf(cls), list = acctListOf(me);
-  const off = !st.enabled, held = new Set(list.map(a => a.planId));
+  const off = !st.enabled;
+  // Accounts the student already has (open, or waiting for approval) stay on the list, marked "You have this account".
+  const heldBy = {};
+  list.forEach(a => { if (a.status === "active" || a.status === "pending") heldBy[a.planId] = a.status; });
   const countKind = k => list.filter(a => (a.status === "active" || a.status === "pending") && (acctPlanById(cls, a.planId) || {}).kind === k).length;
   const full = { everyday: countKind("everyday") >= st.maxEveryday, savings: countKind("savings") >= st.maxSavings };
-  const avail = plans.filter(p => !held.has(p.id)).sort((a, b) => (a.kind === b.kind ? b.rate - a.rate : a.kind === "everyday" ? -1 : 1));
-  const defs = acClosedDefaults(me);
+  const offered = plans.slice().sort((a, b) => (a.kind === b.kind ? b.rate - a.rate : a.kind === "everyday" ? -1 : 1));
+  const defs = acDefaultOptions(me);
   if (AC_FILTER !== "everyday" && AC_FILTER !== "savings") AC_FILTER = "everyday";
-  const count = k => avail.filter(p => p.kind === k).length + defs.filter(d => d.kind === k).length;
-  const shown = avail.filter(p => p.kind === AC_FILTER), shownDefs = defs.filter(d => d.kind === AC_FILTER);
+  const count = k => offered.filter(p => p.kind === k).length + defs.filter(d => d.kind === k).length;
+  const shown = offered.filter(p => p.kind === AC_FILTER), shownDefs = defs.filter(d => d.kind === AC_FILTER);
   const note = off ? "Not open yet" : st.approval === "teacher" ? "Teacher approval needed" : "";
   let html = `<div class="flex-between cc-head"><h2 id="hOpenAcct">Open an account</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
-  html += `<p class="cc-intro">Saving for something, or want somewhere to keep your bill money? Open another account — each one has its own interest, fees and rules.${defs.length ? " An account you've closed waits here, and it's free to open again any time." : ""}</p>`;
-  if (!plans.length && !defs.length) {
+  html += `<p class="cc-intro">Saving for something, or want somewhere to keep your bill money? Open another account — each one has its own interest, fees and rules.${defs.some(d => !d.held) ? " An account you've closed waits here, and it's free to open again any time." : ""}</p>`;
+  if (!plans.length && defs.every(d => d.held)) {
     html += `<div class="cc-off">${icon("lock", 22)}<div><strong>No accounts on offer yet</strong><span>${off ? "Your teacher hasn't switched extra accounts on." : "Your teacher hasn't set any up yet."} Check back soon.</span></div></div>`;
   } else {
     if (off && plans.length) html += `<div class="cc-off">${icon("lock", 22)}<div><strong>Opening accounts isn't switched on yet</strong><span>Have a look below — your teacher will open applications soon.</span></div></div>`;
-    if (!avail.length && !defs.length) html += `<div class="empty-state"><p>You've opened every account on offer. Nice.</p></div>`;
-    else {
-      html += `<div class="ac-filter" role="tablist" aria-label="Account type">${["everyday", "savings"].map(k => `<button type="button" role="tab" aria-selected="${AC_FILTER === k}" class="${AC_FILTER === k ? "on" : ""}" onclick="acSetFilter('${k}')">${acKindLabel(k)}<span class="ac-count">${count(k)}</span></button>`).join("")}</div>`;
-      const other = AC_FILTER === "everyday" ? "savings" : "everyday";
-      html += shown.length || shownDefs.length ? `<div class="cc-plans">${shownDefs.map(d => acDefaultOpenTile(cls, d)).join("")}${shown.map(p => acPlanTile(me, cls, p, off, full)).join("")}</div>`
-        : `<div class="empty-state"><p>You've opened every ${AC_FILTER} account on offer.${count(other) ? ` Have a look at the ${acKindLabel(other)} tab.` : ""}</p></div>`;
-    }
+    if (!defs.some(d => !d.held) && !offered.some(p => !heldBy[p.id])) html += `<p class="muted-small">You've opened every account on offer. Nice.</p>`;
+    html += `<div class="ac-filter" role="tablist" aria-label="Account type">${["everyday", "savings"].map(k => `<button type="button" role="tab" aria-selected="${AC_FILTER === k}" class="${AC_FILTER === k ? "on" : ""}" onclick="acSetFilter('${k}')">${acKindLabel(k)}<span class="ac-count">${count(k)}</span></button>`).join("")}</div>`;
+    html += `<div class="cc-plans">${shownDefs.map(d => acDefaultOpenTile(cls, d)).join("")}${shown.map(p => acPlanTile(me, cls, p, off, full, heldBy[p.id])).join("")}</div>`;
   }
   html += `<div id="acOpenMsg"></div>`;
   el.innerHTML = html;
@@ -372,27 +380,28 @@ function acDefaultOpenTile(cls, d) {
   const f = (k, v) => `<div class="cc-fact"><span>${k}</span><strong>${v}</strong></div>`;
   const blurb = d.id === "cash" ? "The account your pay comes into and your purchases come out of."
     : "The class Savings Account, for money you want to set aside.";
-  return `<div class="cc-plan ac-plan">
+  return `<div class="cc-plan ac-plan${d.held ? " ac-held" : ""}">
     <div class="cc-plan-body">
       <div class="ac-tile-head"><strong>${acEsc(d.name)}</strong>${acKindBadge(d.kind)}</div>
       <p class="ac-blurb">${blurb}</p>
       <div class="cc-facts">${f("Interest", rate > 0 ? `${rate}% <small>per ${per.span}</small>` : "None")}${f("Account fee", "None")}${f("Withdrawals", "Unlimited")}</div>
       <div class="cc-perks"><span class="cc-chip mint">${icon("check", 12)}No fees</span></div>
-      <button class="btn gold" onclick="acReopen('${d.id}')">Open this account</button>
+      ${d.held ? acHaveAction(false, "Open this account") : `<button class="btn gold" onclick="acReopen('${d.id}')">Open this account</button>`}
     </div></div>`;
 }
 
-function acPlanTile(me, cls, p, off, full) {
+function acPlanTile(me, cls, p, off, full, heldStatus) {
   const score = lifestyleRatingFromData(cls, me, me.username);
   const locked = score < p.minLifestyle;
   const instant = acctSettings(cls).approval !== "teacher";
   const atMax = full[p.kind];
   let action;
-  if (off) action = `<div class="cc-lock">${icon("lock", 14)}<span>Not open yet</span></div>`;
+  if (heldStatus) action = acHaveAction(heldStatus === "pending", instant ? "Open this account" : "Apply for this account");
+  else if (off) action = `<div class="cc-lock">${icon("lock", 14)}<span>Not open yet</span></div>`;
   else if (locked) action = `<div class="cc-lock">${icon("lock", 14)}<span>${acTierNeed(cls, p.minLifestyle)} — yours is ${Math.floor(score * 10) / 10}</span></div>`;
   else if (atMax) action = `<div class="cc-lock">${icon("lock", 14)}<span>You've reached the limit of ${p.kind} accounts</span></div>`;
   else action = `<button class="btn gold" onclick="acOpen('${acEsc(p.id)}')">${instant ? "Open this account" : "Apply for this account"}</button>`;
-  return `<div class="cc-plan ac-plan ${locked || off || atMax ? "locked" : ""}">
+  return `<div class="cc-plan ac-plan ${heldStatus ? "ac-held" : locked || off || atMax ? "locked" : ""}">
     <div class="cc-plan-body">
       <div class="ac-tile-head"><strong>${acEsc(p.name)}</strong>${acKindBadge(p.kind)}</div>
       ${p.blurb ? `<p class="ac-blurb">${acEsc(p.blurb)}</p>` : ""}
