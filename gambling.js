@@ -1,7 +1,7 @@
 /* ===================== Performance tiers ===================== */
 // Sets <html data-perf="high|mid|low">. CSS reads it to strip effects;
 // JS reads PERF.tier / PERF.delayScale to cut timers and spin length.
-// Setting (saved in localStorage): Auto | Low | Medium | High. Manual
+// Setting: a 4-stop slider (saved in localStorage): Auto | Low | Medium | High. Manual
 // choices are fixed. Auto = OS reduced-motion / data-saver > hardware
 // hints > ~500ms frame-rate probe > a live monitor that can only downgrade.
 const PERF = {
@@ -16,15 +16,44 @@ const PERF = {
     this.tier = t;
     this.delayScale = this.SCALE[t];
     document.documentElement.dataset.perf = t;
-    this.updateHint();
+    this.updateUI();
   },
-  updateHint() {
-    const el = document.getElementById("perfHint");
-    if (!el) return;
-    const names = { high: "High", mid: "Medium", low: "Low" };
-    el.textContent = this.mode() === "auto"
-      ? "Auto is currently using " + names[this.tier] + " — adjusts to your device."
-      : "Lower settings use simpler animations & faster dealing — helps on slower devices.";
+  MODES: ["auto", "low", "mid", "high"], // slider stops, left to right
+  NAMES: { auto: "Auto", low: "Low", mid: "Medium", high: "High" },
+  HINTS: {
+    low: "Simplest animations and fastest dealing — best for slower devices.",
+    mid: "Lighter animations and slightly quicker dealing.",
+    high: "Full animations and effects."
+  },
+  // Syncs the slider (thumb, fill, labels, hint) with the current setting.
+  updateUI() {
+    const root = document.getElementById("perfControl");
+    if (!root) return;
+    const m = this.mode(), i = this.MODES.indexOf(m);
+    const tier = this.tier || "high", det = this.MODES.indexOf(tier);
+    const name = this.NAMES[m] + (m === "auto" ? " · " + this.NAMES[tier] : "");
+    root.dataset.mode = m;
+    root.style.setProperty("--p", i / 3);
+    root.style.setProperty("--d", det / 3);
+    document.getElementById("perfValue").textContent = name;
+    document.getElementById("perfHint").textContent = m === "auto"
+      ? "Picks the best quality for your device — currently " + this.NAMES[tier] + "."
+      : this.HINTS[m];
+    const sl = document.getElementById("perfSlider");
+    sl.value = i;
+    sl.setAttribute("aria-valuetext", name);
+    root.querySelectorAll(".perf-labels button").forEach((b, k) => {
+      b.classList.toggle("active", k === i);
+      b.classList.toggle("detected", m === "auto" && k === det);
+    });
+    root.querySelectorAll(".perf-stops i").forEach((s, k) => s.classList.toggle("on", k <= i));
+  },
+  choose(m) {
+    if (this.stored() === m) return this.updateUI();
+    this.save(m);
+    if (m === "auto") { this.tier = null; this.init(); } // re-detect from scratch
+    else this.set(m);
+    this.updateUI();
   },
   downgrade() {
     const i = this.ORDER.indexOf(this.tier);
@@ -56,9 +85,10 @@ const PERF = {
   // Measure real frame times for ~500ms, then keep watching: two
   // consecutive slow seconds (<40fps) drop one tier. Never upgrades.
   probe() {
+    const id = this._pid = (this._pid || 0) + 1; // newer probe cancels older
     let last = 0, n = 0, sum = 0, probing = true, frames = 0, winStart = 0, slow = 0;
     const tick = (t) => {
-      if (this.tier === "low" || this.mode() !== "auto") return; // done, or user took over
+      if (id !== this._pid || this.tier === "low" || this.mode() !== "auto") return; // done, or user took over
       if (document.hidden) { last = 0; winStart = 0; return requestAnimationFrame(tick); }
       if (last) {
         const dt = t - last;
@@ -86,16 +116,12 @@ const PERF = {
     requestAnimationFrame(tick);
   },
   wireToggle() {
-    const sel = document.getElementById("perfSelect");
-    if (!sel) return;
-    sel.value = this.mode();
-    this.updateHint();
-    sel.addEventListener("change", () => {
-      this.save(sel.value);
-      if (sel.value === "auto") { this.tier = null; this.init(); } // re-detect
-      else this.set(sel.value);
-      this.updateHint();
-    });
+    const sl = document.getElementById("perfSlider");
+    if (!sl) return;
+    this.updateUI();
+    sl.addEventListener("input", () => this.choose(this.MODES[+sl.value]));
+    document.querySelectorAll("#perfControl .perf-labels button").forEach((b, k) =>
+      b.addEventListener("click", () => this.choose(this.MODES[k])));
   }
 };
 PERF.init();
