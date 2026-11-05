@@ -35,7 +35,6 @@ const PERF = {
     root.dataset.mode = m;
     root.style.setProperty("--p", i / 3);
     root.style.setProperty("--d", det / 3);
-    document.getElementById("perfValue").textContent = name;
     document.getElementById("perfHint").textContent = m === "auto"
       ? "Picks for your device — now " + this.NAMES[tier] + "."
       : this.HINTS[m];
