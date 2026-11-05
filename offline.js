@@ -9,7 +9,7 @@
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
     window.addEventListener("load", function () {
       navigator.serviceWorker.getRegistration().then(function (reg) {
-        if (!reg) return navigator.serviceWorker.register("notif-sw.js?v=ecb35b26");
+        if (!reg) return navigator.serviceWorker.register("notif-sw.js?v=1819a5df");
       }).catch(function () { /* the app works fine without it */ });
     });
   }

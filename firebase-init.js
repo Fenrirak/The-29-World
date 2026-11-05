@@ -23,19 +23,19 @@
    easy, loud failure to spot (not a silent behavior change).
 ========================================================================= */
 import { initializeApp, deleteApp }
-  from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
 import {
   getFirestore, doc, collection, query, where,
   getDoc, getDocFromServer, getDocs, onSnapshot,
   setDoc, updateDoc, deleteDoc, runTransaction, writeBatch,
   serverTimestamp, increment, deleteField, arrayUnion, arrayRemove
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 import {
   getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signOut, signInAnonymously,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   EmailAuthProvider, reauthenticateWithCredential, updatePassword, deleteUser,
   sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAVr1PKkvy9fZ7P3hiQ-QImEe7sjfAhqFw",
@@ -67,7 +67,7 @@ async function _t29EnableAppCheck(app) {
     if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
       self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
     }
-    _appCheckMod = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app-check.js");
+    _appCheckMod = await import("https://www.gstatic.com/firebasejs/13.1.0/firebase-app-check.js");
     _appCheckMod.initializeAppCheck(app, {
       provider: new _appCheckMod.ReCaptchaV3Provider(T29_APPCHECK_SITE_KEY),
       isTokenAutoRefreshEnabled: true
