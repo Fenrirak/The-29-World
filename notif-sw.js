@@ -10,10 +10,11 @@
    No file list to maintain: install reads the core pages' own <script>/<link> tags
    (so the ?v=hash names always match), and everything else is cached as it is used.
    To wipe every old cache, change CACHE below. */
-const CACHE = "t29-cache-v2";
+const CACHE = "t29-cache-v3";
 const OFFLINE_URL = "offline.html";
 // Pages (and everything they load) saved at install. Other pages cache the first time they are opened.
-const CORE_PAGES = ["index.html", "student.html", "teacher-home.html", "teacher.html", OFFLINE_URL];
+const CORE_PAGES = ["index.html", "student.html", "teacher-home.html", "teacher.html", OFFLINE_URL,
+  "bank.html", "market.html", "loan.html", "transport.html", "property.html", "store.html", "marketplace.html"];
 const NAV_TIMEOUT_MS = 4000;
 
 self.addEventListener("install", e => {
