@@ -1,13 +1,14 @@
 /* ===================== Performance tiers ===================== */
 // Sets <html data-perf="high|mid|low">. CSS reads it to strip effects;
 // JS reads PERF.tier / PERF.delayScale to cut timers and spin length.
-// Order of precedence: the user's "Reduce effects" toggle (saved in
-// localStorage) > OS reduced-motion / data-saver > hardware hints >
-// a ~500ms frame-rate probe > a live monitor that can only downgrade.
+// Setting (saved in localStorage): Auto | Low | Medium | High. Manual
+// choices are fixed. Auto = OS reduced-motion / data-saver > hardware
+// hints > ~500ms frame-rate probe > a live monitor that can only downgrade.
 const PERF = {
   tier: "high",
   delayScale: 1,
-  KEY: "t29-reduce-effects", // "1" = always low, "0" = always full, unset = auto
+  KEY: "t29-perf-mode", // "auto" | "low" | "mid" | "high"
+  OLD_KEY: "t29-reduce-effects", // legacy checkbox: "1" = low, "0" = high
   ORDER: ["high", "mid", "low"],
   SCALE: { high: 1, mid: 0.75, low: 0.5 },
   set(t) {
@@ -15,19 +16,35 @@ const PERF = {
     this.tier = t;
     this.delayScale = this.SCALE[t];
     document.documentElement.dataset.perf = t;
-    const cb = document.getElementById("perfToggle");
-    if (cb) cb.checked = t === "low";
+    this.updateHint();
+  },
+  updateHint() {
+    const el = document.getElementById("perfHint");
+    if (!el) return;
+    const names = { high: "High", mid: "Medium", low: "Low" };
+    el.textContent = this.mode() === "auto"
+      ? "Auto is currently using " + names[this.tier] + " — adjusts to your device."
+      : "Lower settings use simpler animations & faster dealing — helps on slower devices.";
   },
   downgrade() {
     const i = this.ORDER.indexOf(this.tier);
     if (i < this.ORDER.length - 1) this.set(this.ORDER[i + 1]);
   },
   stored() { try { return localStorage.getItem(this.KEY); } catch (e) { return null; } },
+  mode() {
+    const s = this.stored();
+    if (["auto", "low", "mid", "high"].includes(s)) return s;
+    try { // migrate the old "Reduce effects" checkbox
+      const old = localStorage.getItem(this.OLD_KEY);
+      if (old === "1") return "low";
+      if (old === "0") return "high";
+    } catch (e) {}
+    return "auto";
+  },
   save(v) { try { localStorage.setItem(this.KEY, v); } catch (e) {} },
   init() {
-    const pref = this.stored();
-    if (pref === "1") return this.set("low");
-    if (pref === "0") return this.set("high"); // explicit opt-in to full effects: no auto-downgrade
+    const m = this.mode();
+    if (m !== "auto") return this.set(m); // manual choice: no auto-adjusting
     const mq = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)");
     const saveData = navigator.connection && navigator.connection.saveData;
     if ((mq && mq.matches) || saveData) return this.set("low");
@@ -41,7 +58,7 @@ const PERF = {
   probe() {
     let last = 0, n = 0, sum = 0, probing = true, frames = 0, winStart = 0, slow = 0;
     const tick = (t) => {
-      if (this.tier === "low" || this.stored() !== null) return; // done, or user took over
+      if (this.tier === "low" || this.mode() !== "auto") return; // done, or user took over
       if (document.hidden) { last = 0; winStart = 0; return requestAnimationFrame(tick); }
       if (last) {
         const dt = t - last;
@@ -69,12 +86,15 @@ const PERF = {
     requestAnimationFrame(tick);
   },
   wireToggle() {
-    const cb = document.getElementById("perfToggle");
-    if (!cb) return;
-    cb.checked = this.tier === "low";
-    cb.addEventListener("change", () => {
-      this.save(cb.checked ? "1" : "0");
-      this.set(cb.checked ? "low" : "high");
+    const sel = document.getElementById("perfSelect");
+    if (!sel) return;
+    sel.value = this.mode();
+    this.updateHint();
+    sel.addEventListener("change", () => {
+      this.save(sel.value);
+      if (sel.value === "auto") { this.tier = null; this.init(); } // re-detect
+      else this.set(sel.value);
+      this.updateHint();
     });
   }
 };
