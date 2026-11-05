@@ -181,17 +181,26 @@ function acRateText(cls, rate) {
   const per = acPeriod(cls);
   return rate > 0 ? `${rate}% interest${per.auto ? " " + per.every : ""}` : "No interest";
 }
+// Everyday accounts always come first, then savings (the class's Cash balance / Savings Account lead their own group), then any whose plan was removed.
+// `extras` = the student's open extra accounts. Used by the top tiles and by "My accounts" so both always agree.
+function acSortedAccounts(me, cls, extras) {
+  const items = [];
+  if (!acctDefaultClosed(me, "cash")) items.push({ kind: "everyday", def: "cash" });
+  if (!acctDefaultClosed(me, "savings")) items.push({ kind: "savings", def: "savings" });
+  extras.forEach(a => { const p = acctPlanById(cls, a.planId); items.push({ kind: p ? p.kind : "other", a, p }); });
+  const rank = { everyday: 0, savings: 1, other: 2 };
+  return items.map((it, i) => [it, i]).sort((x, y) => rank[x[0].kind] - rank[y[0].kind] || x[1] - y[1]).map(x => x[0]);
+}
 function acTilesHtml(me, cls) {
   const tile = (variant, ic, name, bal, note) => `<div class="stat ${variant} bk-acct-tile"><span class="icon">${icon(ic, 30)}</span>
     <div class="label">${acEsc(name)}</div><div class="value">${fmtMoney(bal)}</div><div class="muted-small">${note}</div></div>`;
-  let h = acctDefaultClosed(me, "savings") ? "" : tile("mint", "piggy", "Savings Account", me.savings || 0, `Savings · ${acRateText(cls, Number(cls.interestRate) || 0)}`);
-  acctActiveOf(me).forEach(a => {
-    const p = acctPlanById(cls, a.planId);
-    if (!p) { h += tile("sky", "bank", "Account", a.balance || 0, "Plan removed by your teacher"); return; }
-    const sav = p.kind === "savings";
-    h += tile(sav ? "mint" : "sky", sav ? "piggy" : "bank", p.name, a.balance || 0, `${acKindLabel(p.kind)} · ${acRateText(cls, p.rate || 0)}`);
-  });
-  return h;
+  return acSortedAccounts(me, cls, acctActiveOf(me)).map(it => {
+    if (it.def === "cash") return tile("gold", "coin", "Cash balance", acctRound(me.balance || 0), `Everyday · ${acRateText(cls, Number(cls.cashInterestRate) || 0)}`);
+    if (it.def === "savings") return tile("mint", "piggy", "Savings Account", me.savings || 0, `Savings · ${acRateText(cls, Number(cls.interestRate) || 0)}`);
+    if (!it.p) return tile("sky", "bank", "Account", it.a.balance || 0, "Plan removed by your teacher");
+    const sav = it.p.kind === "savings";
+    return tile(sav ? "mint" : "sky", sav ? "piggy" : "bank", it.p.name, it.a.balance || 0, `${acKindLabel(it.p.kind)} · ${acRateText(cls, it.p.rate || 0)}`);
+  }).join("");
 }
 function acPaintTiles(me, cls) {
   const grid = document.getElementById("topStats"); if (!grid) return;
@@ -213,7 +222,7 @@ function acRenderStudent(me, cls) {
   let html = `<div class="flex-between cc-head"><h2 id="hAcct">My accounts</h2><span class="cc-head-note">${acPlural(openCount, "account")}</span></div>`;
   html += `<p class="cc-intro">Each account here has its own interest, fees and rules, and you can move money between them any time. Your <strong>main account</strong> is the one your pay comes into and your purchases and payments come out of. It starts as your Cash balance, but you can make any everyday account your main one. It doesn't earn interest unless your teacher has set a cash rate, so put money to work in the others. ${interestScheduleLabel(cls)}</p>`;
   if (intTax) html += `<div class="tax-note"><span>Interest is taxed at <strong>${t29TaxPct(intTax)}</strong> before it is paid to you.</span></div>`;
-  html += `<div class="ac-own-grid">${cashOpen ? acCashTile(me, cls, canMove) : ""}${savOpen ? acSavingsTile(me, cls, canMove) : ""}${active.map(a => acOwnedTile(a, cls, canMove)).join("")}</div>`;
+  html += `<div class="ac-own-grid">${acSortedAccounts(me, cls, active).map(it => it.def === "cash" ? acCashTile(me, cls, canMove) : it.def === "savings" ? acSavingsTile(me, cls, canMove) : acOwnedTile(it.a, cls, canMove)).join("")}</div>`;
   if (pending.length) {
     html += `<h3 class="cc-sub">${icon("history", 16)} Waiting for approval</h3><div class="ac-pend">${pending.map(a => {
       const p = acctPlanById(cls, a.planId);
@@ -556,36 +565,19 @@ async function acClose(id) {
   acMsg("acMsg", `<div class="success-msg">${acEsc(res.srcName || "Account")} closed${res.moved > 0 ? ` — ${fmtMoney(res.moved)} moved to ${acEsc(res.destName)}` : ""}. You can open it again from “Open an account” below.</div>`);
 }
 
-/* ---------------- Balance tile: pick which account it shows ---------------- */
+/* ---------------- Balance tile (teacher only: students get one tile per account instead, see acTilesHtml) ---------------- */
 const acGetBalView = anwGetBalView, acSetBalView = anwSetBalView; // shared with the floating widget (data-core.js)
 // The account the tile shows: the one they picked if it's still open, otherwise cash, otherwise the first open account.
 function acBalanceChoice(me, cls) { return anwBalanceChoice(me, cls); }
-function acChoiceNote(me, cls, c) {
-  if (c.id === "cash") { const r = Number(cls.cashInterestRate) || 0; return r > 0 ? `Earning ${r}% interest. ${interestScheduleLabel(cls)}` : ""; }
-  if (c.id === "savings") return `Savings · ${acRateText(cls, Number(cls.interestRate) || 0)}`;
-  const a = acctActiveOf(me).find(x => x.id === c.id), p = a && acctPlanById(cls, a.planId);
-  return p ? `${acKindLabel(p.kind)} · ${acRateText(cls, p.rate || 0)}` : "";
-}
 function acPaintBalanceWidget(me, cls) {
   const box = document.getElementById("balanceStat"); if (!box) return;
-  const label = document.getElementById("balanceLabel"), val = document.getElementById("balance");
-  const noteEl = document.getElementById("cashRateNote"), hint = document.getElementById("balanceHint");
-  const setStatic = on => { box.disabled = on; box.classList.toggle("is-static", on); if (hint) hint.classList.toggle("hidden", on); };
-  if (IS_TEACHER) { label.textContent = "Cash balance"; val.textContent = "Unlimited ∞"; noteEl.classList.add("hidden"); setStatic(true); return; }
-  const { ch, cur } = acBalanceChoice(me, cls);
-  if (!cur) { label.textContent = "Balance"; val.textContent = fmtMoney(0); noteEl.classList.add("hidden"); setStatic(true); return; }
-  label.textContent = cur.label;
-  val.textContent = fmtMoney(cur.bal);
-  const note = acChoiceNote(me, cls, cur);
-  noteEl.textContent = note; noteEl.classList.toggle("hidden", !note);
-  setStatic(ch.length < 2); // nothing to choose between
-  box.setAttribute("aria-label", `${cur.label} balance ${fmtMoney(cur.bal)}.${ch.length > 1 ? " Press to choose which account's balance to show." : ""}`);
+  box.classList.toggle("hidden", !IS_TEACHER);
+  if (!IS_TEACHER) return;
+  document.getElementById("balanceLabel").textContent = "Cash balance";
+  document.getElementById("balance").textContent = "Unlimited ∞";
+  document.getElementById("cashRateNote").classList.add("hidden");
+  box.disabled = true; box.classList.add("is-static");
 }
-async function acOpenBalancePicker() {
-  if (IS_TEACHER || !AC_ME) return;
-  await anwOpenBalancePicker(AC_ME, AC_CLS); // saves the choice and tells the tile to repaint (see the listener below)
-}
-document.addEventListener("anw-balance-view", () => { if (AC_ME && AC_CLS) acPaintBalanceWidget(AC_ME, AC_CLS); });
 
 // The small pop-up lives in data-core.js (anwDialog) so the floating balance widget can use it too.
 const acDialog = anwDialog;

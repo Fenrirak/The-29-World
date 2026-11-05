@@ -10,6 +10,7 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("piggy", 26) + " Bank Account";
   document.getElementById("iconAuto").innerHTML = icon("repeat", 30);
+  document.getElementById("iconCardStat").innerHTML = icon("creditcard", 30); // credit card tile: its own card icon (not the wallet)
   document.getElementById("hActivity").innerHTML = icon("bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 3 days)");
   if (IS_TEACHER) document.getElementById("labAmount").textContent = "Amount (negative to deduct from a student)";
   if (IS_TEACHER) {
@@ -102,7 +103,7 @@ async function render() {
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
 
-  // The balance tile at the top (and which account it shows) is painted by acPaintBalanceWidget() in accounts.js.
+  // The top tiles (one per account for students, the "Unlimited" tile for teachers) are painted by accounts.js.
   // A closed Cash / Savings account that money has landed in (e.g. a wage) is open again — see acctDefaultClosed().
   if (!IS_TEACHER && acctNeedsRevive(me)) {
     const revived = await acctReviveDefaults(me.username);

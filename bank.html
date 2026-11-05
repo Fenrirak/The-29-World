@@ -80,12 +80,11 @@
   <!-- One tile per account. The balance, credit card and automatic-payment tiles are fixed; bank.js / accounts.js slot a
        tile in for the Savings Account (while it's open) and every extra account the student has open (before the credit card tile). -->
   <div class="grid bk-tiles" id="topStats">
-    <!-- The balance tile: shows one account's balance (cash to start with). Students tap it to pick which account. -->
-    <button type="button" class="stat gold bk-balance" id="balanceStat" aria-haspopup="dialog" onclick="acOpenBalancePicker()">
+    <!-- Teacher-only "Unlimited" balance tile. Students see one tile per account instead (drawn by accounts.js). -->
+    <button type="button" class="stat gold bk-balance hidden" id="balanceStat" disabled>
       <div class="label" id="balanceLabel">Cash balance</div>
       <div class="value" id="balance">$0.00</div>
       <div class="muted-small hidden" id="cashRateNote"></div>
-      <div class="muted-small bk-balance-hint" id="balanceHint">Tap to choose which account to show</div>
     </button>
     <div class="stat lilac hidden" id="cardStat">
       <span class="icon" id="iconCardStat"></span>
@@ -272,7 +271,7 @@
 <script defer src="notifications.js?v=35d46623"></script>
 <script defer src="savings-goals.js?v=d0547604"></script>
 <script defer src="creditcard.js?v=b663e79a"></script>
-<script defer src="accounts.js?v=7524bb31"></script>
-<script defer src="bank.js?v=aae2685a"></script>
+<script defer src="accounts.js?v=968c0b7b"></script>
+<script defer src="bank.js?v=100ccd34"></script>
 </body>
 </html>
