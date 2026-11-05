@@ -379,12 +379,12 @@
    positioned with calc() from --p (current stop) and --d (the stop Auto
    detected), both 0–1 and set by PERF.updateUI(), so no layout JS runs. */
 .perf-toggle {
-  --t: 28px;            /* thumb size */
+  --t: 24px;            /* thumb size */
   --p: 0;
   --d: 1;
   max-width: 460px;
-  margin: -6px 0 22px;
-  padding: 14px 24px 12px;
+  margin: 16px 0;
+  padding: 9px 22px 8px;
   border-radius: 14px;
   background: rgba(232,184,75,0.07);
   border: 1.5px solid rgba(212,162,76,0.35);
@@ -394,7 +394,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
 }
 .perf-title {
   font-weight: 800;
@@ -406,13 +406,12 @@
 }
 .perf-value {
   font-weight: 900;
-  font-size: 13px;
+  font-size: 12px;
   color: #1f2b44;
   background: linear-gradient(135deg, #e6bd66, #d4a24c);
-  padding: 4px 12px;
+  padding: 3px 11px;
   border-radius: 999px;
   white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(212,162,76,0.35);
 }
 
 .perf-slider { position: relative; height: var(--t); }
@@ -503,12 +502,12 @@
   border-radius: 50%;
   background: linear-gradient(135deg, #f0c96e 0%, #d4a24c 60%, #c28f2e 100%);
   border: 3px solid #fff;
-  box-shadow: 0 3px 10px rgba(178,132,42,0.55), 0 0 0 1px rgba(212,162,76,0.7);
+  box-shadow: 0 0 0 1px rgba(194,143,46,0.8);
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  transition: left .22s cubic-bezier(.4,0,.2,1), transform .15s ease, box-shadow .15s ease;
+  transition: left .22s cubic-bezier(.4,0,.2,1), transform .15s ease;
 }
 .perf-thumb::after {
   content: "";
@@ -526,12 +525,10 @@
   line-height: 1;
 }
 .perf-slider:hover .perf-thumb { transform: scale(1.08); }
-.perf-slider:active .perf-thumb { transform: scale(1.15); box-shadow: 0 4px 14px rgba(178,132,42,0.7), 0 0 0 1px rgba(212,162,76,0.7); }
-.perf-input:focus-visible + .perf-thumb {
-  box-shadow: 0 3px 10px rgba(178,132,42,0.55), 0 0 0 1px rgba(212,162,76,0.7), 0 0 0 5px rgba(212,162,76,0.35);
-}
+.perf-slider:active .perf-thumb { transform: scale(1.15); }
+.perf-input:focus-visible + .perf-thumb { outline: 2px solid #1f2b44; outline-offset: 2px; }
 
-.perf-labels { position: relative; height: 26px; margin-top: 6px; }
+.perf-labels { position: relative; height: 22px; margin-top: 2px; }
 .perf-labels button {
   all: unset;
   box-sizing: border-box;
@@ -539,7 +536,7 @@
   top: 0;
   left: calc(var(--t) / 2 + (100% - var(--t)) * var(--k));
   transform: translateX(-50%);
-  padding: 5px 9px;
+  padding: 4px 9px;
   border-radius: 999px;
   font-family: inherit;
   font-weight: 800;
@@ -554,10 +551,10 @@
 .perf-labels button.active { color: #1f2b44; background: rgba(212,162,76,0.3); }
 .perf-labels button.detected:not(.active) { box-shadow: inset 0 0 0 1.5px rgba(194,143,46,0.75); color: #1f2b44; }
 
-.perf-hint { display: block; margin-top: 8px; min-height: 2.6em; line-height: 1.3; }
+.perf-hint { display: block; margin: 4px 0 0; line-height: 1.2; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 520px) {
-  .perf-toggle { max-width: none; padding: 14px 22px 10px; }
+  .perf-toggle { max-width: none; }
 }
 
 /* Hidden tab: don't burn CPU on infinite animations. */

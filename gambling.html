@@ -30,7 +30,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
 <link rel="stylesheet" href="style.css?v=81aa56cd">
-<link rel="stylesheet" href="blackjack.css?v=e0fcfdde">
+<link rel="stylesheet" href="blackjack.css?v=d3bb8e5c">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -90,26 +90,6 @@
     <button class="mode-btn" id="modeBtnBlackjack" onclick="switchMode('blackjack')">
       <span class="icon-slot" data-icon="cards"></span> Blackjack
     </button>
-  </div>
-  <div class="perf-toggle" id="perfControl" data-mode="auto">
-    <div class="perf-head">
-      <span class="perf-title" id="perfTitle">Effects quality</span>
-      <span class="perf-value" id="perfValue">Auto</span>
-    </div>
-    <div class="perf-slider">
-      <div class="perf-track"><div class="perf-trail"></div><div class="perf-fill"></div></div>
-      <div class="perf-stops" aria-hidden="true"><i style="--k:0"></i><i style="--k:.3333"></i><i style="--k:.6667"></i><i style="--k:1"></i></div>
-      <div class="perf-detect" aria-hidden="true"></div>
-      <input type="range" class="perf-input" id="perfSlider" min="0" max="3" step="1" value="0" aria-labelledby="perfTitle" aria-valuetext="Auto">
-      <div class="perf-thumb" aria-hidden="true"></div>
-    </div>
-    <div class="perf-labels" aria-hidden="true">
-        <button type="button" tabindex="-1" style="--k:0">Auto</button>
-        <button type="button" tabindex="-1" style="--k:.3333">Low</button>
-        <button type="button" tabindex="-1" style="--k:.6667">Medium</button>
-        <button type="button" tabindex="-1" style="--k:1">High</button>
-    </div>
-    <span class="muted-small perf-hint" id="perfHint"></span>
   </div>
 
   <div id="teacherPanel" class="card hidden">
@@ -340,6 +320,27 @@
         </div>
       </div>
 
+      <div class="perf-toggle" id="perfControl" data-mode="auto">
+        <div class="perf-head">
+          <span class="perf-title" id="perfTitle">Effects quality</span>
+          <span class="perf-value" id="perfValue">Auto</span>
+        </div>
+        <div class="perf-slider">
+          <div class="perf-track"><div class="perf-trail"></div><div class="perf-fill"></div></div>
+          <div class="perf-stops" aria-hidden="true"><i style="--k:0"></i><i style="--k:.3333"></i><i style="--k:.6667"></i><i style="--k:1"></i></div>
+          <div class="perf-detect" aria-hidden="true"></div>
+          <input type="range" class="perf-input" id="perfSlider" min="0" max="3" step="1" value="0" aria-labelledby="perfTitle" aria-valuetext="Auto">
+          <div class="perf-thumb" aria-hidden="true"></div>
+        </div>
+        <div class="perf-labels" aria-hidden="true">
+            <button type="button" tabindex="-1" style="--k:0">Auto</button>
+            <button type="button" tabindex="-1" style="--k:.3333">Low</button>
+            <button type="button" tabindex="-1" style="--k:.6667">Medium</button>
+            <button type="button" tabindex="-1" style="--k:1">High</button>
+        </div>
+        <span class="muted-small perf-hint" id="perfHint"></span>
+      </div>
+
       <div class="card">
         <h2 id="hGamblingRecent"><span class="icon-slot" data-icon="bank"></span> My gambling activity</h2>
         <p class="muted-small">Every Roulette and Blackjack bet, plus every buy-in and cash-out, all in one place.</p>
@@ -375,6 +376,6 @@
 <script defer src="events-ui.js?v=f846128d"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="notifications.js?v=31b29004"></script>
-<script defer src="gambling.js?v=74c4a974"></script>
+<script defer src="gambling.js?v=b591ee37"></script>
 </body>
 </html>

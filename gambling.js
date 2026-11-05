@@ -21,8 +21,8 @@ const PERF = {
   MODES: ["auto", "low", "mid", "high"], // slider stops, left to right
   NAMES: { auto: "Auto", low: "Low", mid: "Medium", high: "High" },
   HINTS: {
-    low: "Simplest animations and fastest dealing — best for slower devices.",
-    mid: "Lighter animations and slightly quicker dealing.",
+    low: "Simplest animations, fastest dealing.",
+    mid: "Lighter animations, quicker dealing.",
     high: "Full animations and effects."
   },
   // Syncs the slider (thumb, fill, labels, hint) with the current setting.
@@ -37,7 +37,7 @@ const PERF = {
     root.style.setProperty("--d", det / 3);
     document.getElementById("perfValue").textContent = name;
     document.getElementById("perfHint").textContent = m === "auto"
-      ? "Picks the best quality for your device — currently " + this.NAMES[tier] + "."
+      ? "Picks for your device — now " + this.NAMES[tier] + "."
       : this.HINTS[m];
     const sl = document.getElementById("perfSlider");
     sl.value = i;
@@ -1341,7 +1341,31 @@ function switchMode(mode, auto) {
   document.getElementById("teacherRouletteSettings").classList.toggle("hidden", mode !== "roulette");
   document.getElementById("teacherBlackjackSettings").classList.toggle("hidden", mode !== "blackjack");
   document.getElementById("teacherAccountSettings").classList.toggle("hidden", mode !== "account");
+  placePerfControl(mode);
   if (mode === "account" && !IS_TEACHER) refreshGamblingAccountCard();
+}
+
+// The Effects-quality slider is one element that moves to sit just above the
+// activity / recent-bets card of whichever page (Account, Roulette,
+// Blackjack) is showing. Teachers have no recent-bets cards, so it goes
+// above the class activity on Account and under the settings elsewhere.
+function placePerfControl(mode) {
+  const ctrl = document.getElementById("perfControl");
+  const el = (id) => document.getElementById(id);
+  if (!ctrl) return;
+  if (IS_TEACHER) {
+    if (mode === "account") {
+      const act = el("hTeacherGamblingRecent");
+      if (act && act.parentElement) act.parentElement.parentNode.insertBefore(ctrl, act.parentElement);
+    } else {
+      const s = el(mode === "roulette" ? "teacherRouletteSettings" : "teacherBlackjackSettings");
+      if (s) s.after(ctrl);
+    }
+    return;
+  }
+  const h = el({ account: "hGamblingRecent", roulette: "hRecent", blackjack: "bjHRecent" }[mode]);
+  const card = h && h.closest(".card");
+  if (card) card.parentNode.insertBefore(ctrl, card);
 }
 
 function paintChrome() {
