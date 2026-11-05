@@ -372,3 +372,43 @@
   #bjRotatePrompt { display: flex; }
 }
 
+
+/* ===================== Performance tiers ===================== */
+/* <html data-perf="high|mid|low"> is set by gambling.js (PERF). */
+.perf-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -10px 0 18px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.perf-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--gold, #d4a24c); }
+.perf-toggle .muted-small { flex-basis: 100%; margin: 0 0 0 24px; font-weight: 400; }
+
+/* Hidden tab: don't burn CPU on infinite animations. */
+html.tab-hidden * { animation-play-state: paused !important; }
+
+[data-perf="mid"] .bj-card.bj-card-in { animation-duration: .6s; }
+[data-perf="mid"] .ga-balance-stat::before { opacity: .25; }
+
+[data-perf="low"] .bj-card.bj-card-in,
+[data-perf="low"] .bj-playing-tag,
+[data-perf="low"] .bj-rotate-icon { animation: none; }
+[data-perf="low"] .bj-card,
+[data-perf="low"] .bj-seat.is-active,
+[data-perf="low"] .bj-seat.is-human,
+[data-perf="low"] .ga-balance-stat,
+[data-perf="low"] .mode-btn.active { box-shadow: none; }
+[data-perf="low"] .bj-seat.is-active { outline: 2px solid #ffd778; outline-offset: -2px; }
+[data-perf="low"] .bj-table { background: #1a4a33; }
+[data-perf="low"] .ga-balance-stat { background: #d4a24c; }
+[data-perf="low"] .ga-balance-stat::before { display: none; }
+[data-perf="low"] .bj-seat,
+[data-perf="low"] .mode-btn { transition: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bj-card.bj-card-in, .bj-playing-tag, .bj-rotate-icon { animation: none; }
+}

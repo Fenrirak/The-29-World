@@ -1,3 +1,90 @@
+/* ===================== Performance tiers ===================== */
+// Sets <html data-perf="high|mid|low">. CSS reads it to strip effects;
+// JS reads PERF.tier / PERF.delayScale to cut timers and spin length.
+// Order of precedence: the user's "Reduce effects" toggle (saved in
+// localStorage) > OS reduced-motion / data-saver > hardware hints >
+// a ~500ms frame-rate probe > a live monitor that can only downgrade.
+const PERF = {
+  tier: "high",
+  delayScale: 1,
+  KEY: "t29-reduce-effects", // "1" = always low, "0" = always full, unset = auto
+  ORDER: ["high", "mid", "low"],
+  SCALE: { high: 1, mid: 0.75, low: 0.5 },
+  set(t) {
+    if (this.tier === t && document.documentElement.dataset.perf === t) return;
+    this.tier = t;
+    this.delayScale = this.SCALE[t];
+    document.documentElement.dataset.perf = t;
+    const cb = document.getElementById("perfToggle");
+    if (cb) cb.checked = t === "low";
+  },
+  downgrade() {
+    const i = this.ORDER.indexOf(this.tier);
+    if (i < this.ORDER.length - 1) this.set(this.ORDER[i + 1]);
+  },
+  stored() { try { return localStorage.getItem(this.KEY); } catch (e) { return null; } },
+  save(v) { try { localStorage.setItem(this.KEY, v); } catch (e) {} },
+  init() {
+    const pref = this.stored();
+    if (pref === "1") return this.set("low");
+    if (pref === "0") return this.set("high"); // explicit opt-in to full effects: no auto-downgrade
+    const mq = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)");
+    const saveData = navigator.connection && navigator.connection.saveData;
+    if ((mq && mq.matches) || saveData) return this.set("low");
+    const cores = navigator.hardwareConcurrency || 4;
+    const mem = navigator.deviceMemory || 4;
+    this.set(cores <= 2 || mem <= 2 ? "mid" : "high");
+    this.probe();
+  },
+  // Measure real frame times for ~500ms, then keep watching: two
+  // consecutive slow seconds (<40fps) drop one tier. Never upgrades.
+  probe() {
+    let last = 0, n = 0, sum = 0, probing = true, frames = 0, winStart = 0, slow = 0;
+    const tick = (t) => {
+      if (this.tier === "low" || this.stored() !== null) return; // done, or user took over
+      if (document.hidden) { last = 0; winStart = 0; return requestAnimationFrame(tick); }
+      if (last) {
+        const dt = t - last;
+        if (probing) {
+          if (++n > 3) sum += dt; // ignore warm-up frames
+          if (t - winStart > 500 && n > 8) {
+            probing = false;
+            const avg = sum / (n - 3);
+            if (avg > 28) this.set("low"); else if (avg > 20) this.downgrade();
+            winStart = t; frames = 0;
+          }
+        } else {
+          frames++;
+          if (t - winStart >= 1000) {
+            slow = frames < 40 ? slow + 1 : 0;
+            if (slow >= 2) { this.downgrade(); slow = 0; }
+            winStart = t; frames = 0;
+          }
+        }
+      }
+      if (!winStart) winStart = t;
+      last = t;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  },
+  wireToggle() {
+    const cb = document.getElementById("perfToggle");
+    if (!cb) return;
+    cb.checked = this.tier === "low";
+    cb.addEventListener("change", () => {
+      this.save(cb.checked ? "1" : "0");
+      this.set(cb.checked ? "low" : "high");
+    });
+  }
+};
+PERF.init();
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => PERF.wireToggle());
+else PERF.wireToggle();
+// Pause CSS animations while the tab is hidden.
+document.addEventListener("visibilitychange", () => document.documentElement.classList.toggle("tab-hidden", document.hidden));
+const bjDelay = (ms) => Math.round(ms * PERF.delayScale);
+
 let CURRENT, IS_TEACHER, CLS, MODE = "roulette";
 let USER_PICKED_MODE = false;  // true once the user taps a tab, so init() never yanks them back
 let BJ_DEAL_SEQ = 0;           // identifies the latest bjDeal() call so a stale one can't reset a newer deal's state
@@ -97,6 +184,8 @@ function showRouletteAnimation(number) {
     // It must NOT be offset by pocketAngle, or it lands somewhere else.
     const finalBallRotation = -(ballSpins * 360);
 
+    const spinMs = { high: 15000, mid: 10000, low: 6000 }[PERF.tier];
+    if (spinMs !== 15000) disc.style.transitionDuration = ballTrack.style.transitionDuration = spinMs + "ms";
     disc.style.transform = `rotate(${finalWheelRotation}deg)`;
     ballTrack.style.transform = `rotate(${finalBallRotation}deg)`;
 
@@ -108,7 +197,7 @@ function showRouletteAnimation(number) {
         overlay.remove();
         resolve();
       }, 1300);
-    }, 15000);
+    }, spinMs);
   });
 }
 
@@ -892,7 +981,7 @@ async function bjAnimateInitialDeal(round, token) {
 
   for (const step of steps) {
     if (token !== DEAL_TOKEN) return;
-    await sleep(BJ_CARD_DELAY);
+    await sleep(bjDelay(BJ_CARD_DELAY));
     if (token !== DEAL_TOKEN) return;
     if (step.seat === "dealer") {
       DISPLAY_DEALER.cards.push(round.dealer.cards[step.idx] || round.dealer.up);
@@ -919,7 +1008,7 @@ async function bjRunTurnSequence(round, fromSeat, token) {
     // after the human's own turn resolves, which previously had no gap
     // at all (bjRunRemainingSeats used to jump straight into the next
     // seat's card reveal the instant the human's action came back).
-    await sleep(BJ_SEAT_PAUSE);
+    await sleep(bjDelay(BJ_SEAT_PAUSE));
     if (token !== DEAL_TOKEN) return;
     if (seat === round.humanSeat) {
       DISPLAY_HUMAN_HANDS = null; // switch to live CURRENT_ROUND.hands from here on
@@ -934,14 +1023,14 @@ async function bjRunTurnSequence(round, fromSeat, token) {
       // Nothing to decide (e.g. an instant natural blackjack with no
       // insurance offered) — show it briefly, then move straight on.
       renderBlackjackRound(bjBuildDisplayRound());
-      await sleep(BJ_SEAT_PAUSE);
+      await sleep(bjDelay(BJ_SEAT_PAUSE));
       continue;
     }
     await bjAnimateBotTurn(round, seat, token);
     if (token !== DEAL_TOKEN) return;
   }
   ACTIVE_SEAT = "dealer";
-  await sleep(BJ_SEAT_PAUSE); // same slight pause before the dealer's turn
+  await sleep(bjDelay(BJ_SEAT_PAUSE)); // same slight pause before the dealer's turn
   if (token !== DEAL_TOKEN) return;
   await bjAnimateDealerTurn(round, token);
   if (token !== DEAL_TOKEN) return;
@@ -964,7 +1053,7 @@ async function bjAnimateBotTurn(round, seat, token) {
   // revealed. Without this, hand 1 kept showing the old pair and the
   // second hand's cards were appended on top of the wrong cards.
   if (finalBot.hands.length > 1 && DISPLAY_BOTS[seat].hands.length < 2) {
-    await sleep(BJ_CARD_DELAY);
+    await sleep(bjDelay(BJ_CARD_DELAY));
     if (token !== DEAL_TOKEN) return;
     _bjAnimatedCardKeys.delete(`seat${seat}-b0-1`); // slot now gets a new card, so let it fade in
     DISPLAY_BOTS[seat] = {
@@ -985,7 +1074,7 @@ async function bjAnimateBotTurn(round, seat, token) {
 
   for (const step of steps) {
     if (token !== DEAL_TOKEN) return;
-    await sleep(BJ_CARD_DELAY);
+    await sleep(bjDelay(BJ_CARD_DELAY));
     if (token !== DEAL_TOKEN) return;
     while (DISPLAY_BOTS[seat].hands.length <= step.hi) DISPLAY_BOTS[seat].hands.push({ cards: [], total: null, bust: false, doubled: false });
     DISPLAY_BOTS[seat].hands[step.hi].cards.push(finalBot.hands[step.hi].cards[step.ci]);
@@ -993,7 +1082,7 @@ async function bjAnimateBotTurn(round, seat, token) {
   }
   DISPLAY_BOTS[seat] = finalBot; // finalize with real totals/bust/doubled flags
   renderBlackjackRound(bjBuildDisplayRound());
-  await sleep(BJ_SEAT_PAUSE);
+  await sleep(bjDelay(BJ_SEAT_PAUSE));
 }
 
 // Reveals the dealer's hole card, then hits (one card at a time) until
@@ -1002,16 +1091,16 @@ async function bjAnimateDealerTurn(round, token) {
   if (token !== DEAL_TOKEN) return;
   DISPLAY_DEALER = { cards: [round.dealer.cards[0], round.dealer.cards[1]], revealed: true, total: null };
   renderBlackjackRound(bjBuildDisplayRound());
-  await sleep(BJ_CARD_DELAY);
+  await sleep(bjDelay(BJ_CARD_DELAY));
   for (let i = 2; i < round.dealer.cards.length; i++) {
     if (token !== DEAL_TOKEN) return;
     DISPLAY_DEALER.cards.push(round.dealer.cards[i]);
     renderBlackjackRound(bjBuildDisplayRound());
-    await sleep(BJ_CARD_DELAY);
+    await sleep(bjDelay(BJ_CARD_DELAY));
   }
   DISPLAY_DEALER = round.dealer; // finalize (adds the real total)
   renderBlackjackRound(bjBuildDisplayRound());
-  await sleep(BJ_SEAT_PAUSE);
+  await sleep(bjDelay(BJ_SEAT_PAUSE));
 }
 
 // Shows an already-in-progress round with no reveal animation — used only
@@ -1070,16 +1159,26 @@ function bjBuildDisplayRound() {
   };
 }
 
+// Only touches the DOM when the markup really changed (ignoring the
+// one-shot fade-in class), so unchanged cards aren't torn down and rebuilt
+// on every deal step and a card's fade-in can finish playing.
+function bjSetHtml(el, html) {
+  const strip = (h) => h.replace(/ bj-card-in/g, "");
+  if (el.dataset.h !== undefined && strip(el.dataset.h) === strip(html)) return;
+  el.innerHTML = html;
+  el.dataset.h = html;
+}
+
 function renderBlackjackRound(r) {
   // Dealer
   const dealerHidden = !r.dealer.revealed;
   const dealerHandEl = document.getElementById("bjDealerHand");
   if (dealerHandEl) {
-    dealerHandEl.innerHTML = r.dealer.cards.length
+    bjSetHtml(dealerHandEl, r.dealer.cards.length
       ? (dealerHidden
           ? bjCardHtml(r.dealer.cards[0], false, "dealer-0") + (r.dealer.cards.length > 1 || CURRENT_ROUND.dealer.revealed === false ? bjCardHtml(null, true, "dealer-hole") : "")
           : bjHandHtml(r.dealer.cards, 0, "dealer"))
-      : "";
+      : "");
   }
   const dealerTotalEl = document.getElementById("bjDealerTotal");
   if (dealerTotalEl) dealerTotalEl.textContent = r.dealer.revealed && r.dealer.total !== null ? `Total: ${r.dealer.total}` : "";
@@ -1087,7 +1186,6 @@ function renderBlackjackRound(r) {
   // Seats 1, 2, 3 in table order
   const seatsRow = document.getElementById("bjSeatsRow");
   if (seatsRow) {
-    seatsRow.innerHTML = "";
     for (let seat = 1; seat <= 3; seat++) {
       const isHuman = seat === r.humanSeat;
       const div = document.createElement("div");
@@ -1118,7 +1216,12 @@ function renderBlackjackRound(r) {
         });
         div.innerHTML = html;
       }
-      seatsRow.appendChild(div);
+      const existing = seatsRow.children[seat - 1];
+      if (!existing) seatsRow.appendChild(div);
+      else {
+        if (existing.className !== div.className) existing.className = div.className;
+        bjSetHtml(existing, div.innerHTML);
+      }
     }
   }
 
