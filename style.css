@@ -189,11 +189,17 @@ html.role-teacher .topbar nav a[href="tax.html"]{display:inline-flex;}
 html:not(.role-teacher):not(.ks-on) .topbar nav a[href="kiwisaver.html"]:not(.active){display:none;}
 /* The casino (gambling.html) is OFF by default. It's hidden from students
    unless their teacher has switched it on (data-core.js adds html.casino-on
-   when it's on, or when the student still holds chips and needs to cash out).
-   On phones the link lives in the "Games" dropdown group, so that group
-   button is hidden along with it. Teachers always see it. */
-html:not(.role-teacher):not(.casino-on) .topbar nav a[href="gambling.html"]:not(.active),
-html:not(.role-teacher):not(.casino-on) .topbar nav .nav-group[data-nav-group="Games"]:not(.has-active){display:none !important;}
+   while it's on and removes it again if the teacher switches it off). The same
+   rule hides it in the top bar, the side menu and the phone "Games" dropdown.
+   There is no exception for the page you're currently on, or for students who
+   still hold chips. Teachers always see it. */
+html:not(.role-teacher):not(.casino-on) .topbar nav a[href="gambling.html"],
+html:not(.role-teacher):not(.casino-on) .topbar nav .nav-group[data-nav-group="Games"]{display:none !important;}
+/* "On" replayed from the last visit but not yet confirmed (see top-bar boot
+   script): keep the link's space so the bar doesn't change size, but don't show
+   it until data-core.js has checked the class. */
+html.casino-unverified:not(.role-teacher) .topbar nav a[href="gambling.html"],
+html.casino-unverified:not(.role-teacher) .topbar nav .nav-group[data-nav-group="Games"]{visibility:hidden;pointer-events:none;}
 
 /* Student profile modal */
 #profileModal .card{max-width:680px;max-height:88vh;overflow:auto;}

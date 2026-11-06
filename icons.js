@@ -319,14 +319,22 @@ if ("ResizeObserver" in window) {
   else startTopbarWatch();
 }
 
-// Safety net: if the bell was reserved from the last visit but never shows
-// up (notifications unavailable for this user), release the reserved space.
+// Safety net for state replayed from the last visit: if the bell was reserved
+// but never shows up (notifications unavailable for this user), release the
+// reserved space; if the casino link was replayed as "on" but nothing has
+// confirmed it, treat it as off. (If confirmation arrives later it is added.)
 window.addEventListener("load", () => setTimeout(() => {
   const root = document.documentElement;
+  let changed = false;
   if (root.classList.contains("nav-bell-pre") && !document.getElementById("notifBell")) {
     root.classList.remove("nav-bell-pre");
-    fitTopbar();
+    changed = true;
   }
+  if (root.classList.contains("casino-unverified")) {
+    root.classList.remove("casino-unverified", "casino-on");
+    changed = true;
+  }
+  if (changed) fitTopbar();
 }, 6000));
 
 /* ===================== Phone top bar: grouped dropdowns =====================

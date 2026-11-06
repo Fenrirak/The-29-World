@@ -152,6 +152,7 @@
     if (f === pageFile() || teacher) return false;
     if (f === "tax.html") return true;
     if (f === "kiwisaver.html") return !root.classList.contains("ks-on");
+    if (f === "gambling.html") return !root.classList.contains("casino-on");
     return false;
   }
 

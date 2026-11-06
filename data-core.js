@@ -3683,21 +3683,44 @@ async function anwGlobalBootstrap() {
   }
 }
 
-// The Casino (gambling.html) menu link stays hidden from students (style.css)
-// unless their teacher has switched it on. One exception, so nobody's money
-// gets stranded: a student who still has chips in their gambling account
-// keeps the link, so they can cash out.
+// The Casino (gambling.html) menu link (top bar AND side menu share the same
+// markup, so one class drives both) is hidden from students (style.css)
+// unless their teacher has the casino switched on. It follows the teacher's
+// switch live: turn it off and the link disappears from students' menus (even
+// on pages they already have open), turn it back on and it returns. There is
+// deliberately no "still holds chips" exception any more.
+// html.casino-unverified is the "replayed from the last visit, not yet
+// confirmed" state set by the top-bar boot script: the link keeps its space
+// but stays invisible until this has checked, so a stale "on" never shows.
+function casinoOnFor(cls) {
+  // Same rule the Gambling page uses (enabled !== false), so a class that has
+  // never had the switch set behaves identically in the menu and on the page.
+  return !!cls && !(cls.gambling && cls.gambling.enabled === false);
+}
 async function showCasinoNavIfOn(u) {
-  if (!u.classCode) return;
-  const [cls, me] = await Promise.all([getClassCached(u.classCode), getUserCached(u.username)]);
-  if (!cls) return;
-  const on = !!(cls.gambling && cls.gambling.enabled === true);
-  const hasChips = typeof gamblingAccountToday === "function" && gamblingAccountToday(me).balance > 0;
-  // toggle (not just add) so a class replayed from the last visit is corrected
-  const want = on || hasChips;
-  if (document.documentElement.classList.contains("casino-on") !== want) {
-    document.documentElement.classList.toggle("casino-on", want);
-    if (typeof fitTopbar === "function") fitTopbar();
+  const root = document.documentElement;
+  const set = on => {
+    const changed = root.classList.contains("casino-on") !== on;
+    root.classList.remove("casino-unverified");
+    if (changed) {
+      root.classList.toggle("casino-on", on);
+      if (typeof fitTopbar === "function") fitTopbar();
+    }
+  };
+  if (!u.classCode) { set(false); return; }
+  try {
+    set(casinoOnFor(await getClassCached(u.classCode)));
+  } catch (e) {
+    set(false); // can't confirm it's on, so it stays off
+    return;
+  }
+  // Keep in step with the teacher's switch while this page stays open.
+  // Snapshots served from the local cache are skipped: they can be stale.
+  if (typeof t29WatchDoc === "function") {
+    t29WatchDoc("classes", u.classCode, (doc, info) => {
+      if (!doc || (info && (info.error || info.fromCache))) return;
+      set(casinoOnFor(doc));
+    });
   }
 }
 
