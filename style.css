@@ -56,7 +56,7 @@
   --warn-banner-text:#7a2f1f;
 }
 
-html{-webkit-text-size-adjust:100%;}
+html{-webkit-text-size-adjust:100%;scrollbar-gutter:stable;}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{margin:0;padding:0;touch-action:manipulation;}
 body{
@@ -219,6 +219,24 @@ html:not(.role-teacher):not(.casino-on) .topbar nav .nav-group[data-nav-group="G
 #profileBody .auto-row{margin-bottom:8px;}
 #profileBody .auto-row:last-child{margin-bottom:0;}
 .topbar .who{display:none;}
+
+/* ---- Top bar: hold the layout steady while it loads ----
+   The nav links' icons are painted by icons.js and the notification bell is
+   injected by notifications.js, both after first paint. Reserving their
+   footprint up front means the bar is the same size before and after, so it
+   no longer jumps as they arrive. 16px matches the size paintIconSlots() draws
+   nav/action icons at. */
+.topbar nav a > .icon-slot[data-icon]:empty,
+.topbar-actions .icon-slot[data-icon]:empty{width:16px;height:16px;}
+/* Stand-in for the bell (same footprint as .btn-icon-topbar) while it is
+   still being injected. topbar-boot sets html.nav-bell-pre from the last
+   visit; notifBuildBell() clears it as the real bell takes its place. */
+html.nav-bell-pre .topbar-actions::before{
+  content:"";flex-shrink:0;
+  width:max(calc(34px * var(--navscale)), calc(18px + 16px * var(--navscale)));
+  height:max(calc(34px * var(--navscale)), calc(18px + 16px * var(--navscale)));
+  background:rgba(255,255,255,0.08);border-radius:var(--r-2);
+}
 
 /* Wraps the settings icon + logout button so they scale and space
    themselves as one trailing block (see fitTopbar() in icons.js), and so
@@ -764,6 +782,11 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
   .stat .value{font-size:1.7rem;}
   .auth-card{padding:28px 22px;}
 }
+
+/* Added by guardTopbarOverflow() (icons.js) only when nothing else could make
+   the bar fit one row: wrap onto a second row, as portrait does. */
+.topbar.nav-wrap{flex-wrap:wrap;row-gap:6px;max-width:100%;}
+.topbar.nav-wrap nav{flex-wrap:wrap;row-gap:6px;max-width:100%;}
 
 /* Portrait orientation (phones and tablets held upright) — always show
    icon-only nav, regardless of width. The row is allowed to wrap onto a
@@ -3989,6 +4012,8 @@ html.dark-mode details.fold-sub > summary .fold-head{color:var(--heading-text);}
 /* one tile per account, flowing into as many columns as fit */
 .bk-tiles{grid-template-columns:repeat(auto-fill,minmax(min(235px,100%),1fr));}
 .bk-tiles .stat .muted-small{margin-top:6px;line-height:1.35;}
+/* teacher view: auto-fit collapses the empty columns so the tiles fill the whole row (students keep auto-fill) */
+.bk-tiles.bk-tiles-teacher{grid-template-columns:repeat(auto-fit,minmax(min(235px,100%),1fr));}
 
 /* The balance tile is a button: tap it to choose which account's balance it shows. It is the only tile on this page
    that can be clicked, so it is the only one that lifts when hovered. */

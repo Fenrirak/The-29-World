@@ -4188,6 +4188,12 @@ function applyNavRoleVisibility(role) {
   }
   const here = (window.location.pathname.split("/").pop() || "").toLowerCase();
   let removed = false;
+  // A role-teacher class replayed from the last visit must not outlive the role.
+  if (document.documentElement.classList.contains("role-teacher")) {
+    document.documentElement.classList.remove("role-teacher");
+    document.querySelectorAll('nav a[data-module="budget"] .nav-label').forEach(l => { l.textContent = "Budget"; });
+    removed = true;
+  }
   document.querySelectorAll("nav a[href]").forEach(a => {
     const href = (a.getAttribute("href") || "").split("/").pop();
     // Never strip the link to the page the student is actually on — one

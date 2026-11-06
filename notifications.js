@@ -967,6 +967,7 @@ function notifBuildBell() {
   btn.setAttribute("aria-label", "Notifications");
   btn.title = "Notifications";
   btn.innerHTML = `<span class="icon-slot">${notifIconFor("bell", 18)}</span><span class="notif-dot hidden" id="notifDot">0</span>`;
+  document.documentElement.classList.remove("nav-bell-pre"); // real bell replaces the reserved placeholder
   actions.insertBefore(btn, actions.firstChild);
 
   btn.addEventListener("click", e => {

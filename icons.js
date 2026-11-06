@@ -119,6 +119,90 @@ function paintIconSlots() {
    --navscale alone there. Runs on load, resize, and orientation change.
 ====================================================================== */
 function fitTopbar() {
+  _fitTopbarCore();
+  guardTopbarOverflow();
+  saveTopbarFit();
+}
+
+// Round DOWN to 3dp: toFixed() can round UP, which is enough to push the last
+// button a fraction of a pixel past the edge.
+function _ns(v) { return (Math.floor(v * 1000) / 1000).toFixed(3); }
+
+// How many px the bar's content runs past its right edge (<= 0 means it fits).
+function _topbarOverflow(tb) {
+  const cs = getComputedStyle(tb);
+  const limit = tb.getBoundingClientRect().left + tb.clientWidth - (parseFloat(cs.paddingRight) || 0);
+  const actions = tb.querySelector(".topbar-actions") || tb.querySelector(".btn-logout");
+  const aRight = actions ? actions.getBoundingClientRect().right : 0;
+  return Math.max(tb.scrollWidth - tb.clientWidth, aRight - limit);
+}
+
+/* Last line of defence. The fit above predicts widths from a measurement at
+   full size; if anything makes that prediction short (an unusual font or
+   text-zoom, a link added later, a very narrow window) this checks what was
+   ACTUALLY laid out and escalates until it fits: icon-only, then smaller
+   (never below 0.6 so icons stay tappable), then wrapping onto a second row
+   like portrait does. So the bar can never run off the screen. */
+function guardTopbarOverflow() {
+  const tb = document.querySelector(".topbar");
+  const nav = tb ? tb.querySelector("nav") : null;
+  if (!nav) return;
+  tb.classList.remove("nav-wrap");
+  if (document.documentElement.classList.contains("sidebar-nav")) return;
+  if (window.matchMedia("(orientation: portrait)").matches) return;
+  let over = _topbarOverflow(tb);
+  if (over <= 1) return;
+  if (!nav.classList.contains("force-icons")) {
+    nav.classList.add("force-icons");
+    over = _topbarOverflow(tb);
+  }
+  let sc = parseFloat(tb.style.getPropertyValue("--navscale")) || 1;
+  for (let i = 0; i < 4 && over > 1 && sc > 0.6; i++) {
+    const natural = nav.scrollWidth || 1;
+    const next = Math.max(0.6, sc * Math.max(0.5, (natural - over - 1) / natural));
+    sc = Math.min(sc, next);
+    tb.style.setProperty("--navscale", _ns(sc));
+    over = _topbarOverflow(tb);
+  }
+  if (over > 1) tb.classList.add("nav-wrap");
+}
+
+/* Remembers the last fit (scale, tight/icon-only mode, which role-based
+   links and the bell are showing) per window width and signed-in user. A tiny
+   inline script after the top bar on every page (topbar-boot) replays it
+   BEFORE first paint, so the bar opens at its final size instead of starting
+   at full size and re-shrinking each time something async arrives (icons,
+   bell, teacher/KiwiSaver/casino links). */
+const TOPBAR_FIT_KEY = "t29-topbar-fit";
+function saveTopbarFit() {
+  try {
+    const topbar = document.querySelector(".topbar");
+    const nav = topbar ? topbar.querySelector("nav") : null;
+    const root = document.documentElement;
+    if (!nav || root.classList.contains("sidebar-nav")) return;
+    const sess = JSON.parse(localStorage.getItem("anw_session") || "null");
+    const u = sess && sess.username;
+    if (!u) return;
+    const k = window.innerWidth + (window.matchMedia("(orientation: portrait)").matches ? "p" : "l");
+    let c = JSON.parse(localStorage.getItem(TOPBAR_FIT_KEY) || "null");
+    if (!c || c.u !== u || !c.f) c = { u: u, f: {} };
+    const sc = parseFloat(topbar.style.getPropertyValue("--navscale"));
+    delete c.f[k];
+    c.f[k] = {
+      s: isFinite(sc) ? sc : 0,
+      t: nav.classList.contains("nav-tight") ? 1 : 0,
+      i: nav.classList.contains("force-icons") ? 1 : 0,
+      w: topbar.classList.contains("nav-wrap") ? 1 : 0,
+      b: document.getElementById("notifBell") ? 1 : 0,
+      c: ["role-teacher", "ks-on", "casino-on"].filter(x => root.classList.contains(x))
+    };
+    const keys = Object.keys(c.f);
+    while (keys.length > 6) delete c.f[keys.shift()];
+    localStorage.setItem(TOPBAR_FIT_KEY, JSON.stringify(c));
+  } catch (e) { /* storage unavailable: just no pre-paint replay */ }
+}
+
+function _fitTopbarCore() {
   const topbar = document.querySelector(".topbar");
   const nav = topbar ? topbar.querySelector("nav") : null;
   if (!topbar || !nav) return;
@@ -180,7 +264,7 @@ function fitTopbar() {
     const neededTight = nav.scrollWidth;
     const tightScale = neededTight > 0 ? available / neededTight : 1;
     if (isFinite(tightScale) && tightScale >= MIN_TEXT_SCALE) {
-      topbar.style.setProperty("--navscale", Math.min(1, tightScale).toFixed(3));
+      topbar.style.setProperty("--navscale", _ns(Math.min(1, tightScale)));
       return;
     }
   }
@@ -195,7 +279,7 @@ function fitTopbar() {
     if (scale < 0.6) scale = 0.6; // hard floor so icons stay tappable
   }
 
-  topbar.style.setProperty("--navscale", scale.toFixed(3));
+  topbar.style.setProperty("--navscale", _ns(scale));
 }
 
 function debounce(fn, wait) {
@@ -209,6 +293,41 @@ function debounce(fn, wait) {
 window.addEventListener("resize", debounce(fitTopbar, 100));
 window.addEventListener("orientationchange", () => setTimeout(fitTopbar, 50));
 window.addEventListener("load", fitTopbar);
+
+// Re-check whenever the bar, its links or its buttons change size, not just on
+// window resize: a scrollbar appearing, a link added or relabelled, the bell
+// arriving. Callbacks run before paint, so there is no visible lag, and it
+// only refits on a width change or real overflow, so it can't loop.
+if ("ResizeObserver" in window) {
+  let _lastFitW = 0;
+  const startTopbarWatch = () => {
+    const tb = document.querySelector(".topbar");
+    if (!tb) return;
+    _lastFitW = tb.clientWidth;
+    const ro = new ResizeObserver(() => {
+      const w = tb.clientWidth;
+      if (w !== _lastFitW) { _lastFitW = w; fitTopbar(); }
+      else if (_topbarOverflow(tb) > 1) fitTopbar();
+    });
+    ro.observe(tb);
+    const nav = tb.querySelector("nav");
+    if (nav) ro.observe(nav);
+    const actions = tb.querySelector(".topbar-actions");
+    if (actions) ro.observe(actions);
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", startTopbarWatch);
+  else startTopbarWatch();
+}
+
+// Safety net: if the bell was reserved from the last visit but never shows
+// up (notifications unavailable for this user), release the reserved space.
+window.addEventListener("load", () => setTimeout(() => {
+  const root = document.documentElement;
+  if (root.classList.contains("nav-bell-pre") && !document.getElementById("notifBell")) {
+    root.classList.remove("nav-bell-pre");
+    fitTopbar();
+  }
+}, 6000));
 
 /* ===================== Phone top bar: grouped dropdowns =====================
    On phones using the top bar (side menu switched off), the 15+ icons are

@@ -3693,8 +3693,10 @@ async function showCasinoNavIfOn(u) {
   if (!cls) return;
   const on = !!(cls.gambling && cls.gambling.enabled === true);
   const hasChips = typeof gamblingAccountToday === "function" && gamblingAccountToday(me).balance > 0;
-  if (on || hasChips) {
-    document.documentElement.classList.add("casino-on");
+  // toggle (not just add) so a class replayed from the last visit is corrected
+  const want = on || hasChips;
+  if (document.documentElement.classList.contains("casino-on") !== want) {
+    document.documentElement.classList.toggle("casino-on", want);
     if (typeof fitTopbar === "function") fitTopbar();
   }
 }
@@ -3705,8 +3707,9 @@ async function showKiwiSaverNavIfOn(u) {
   if (!u.classCode || typeof kiwiSaverSettings !== "function") return;
   const [cls, me] = await Promise.all([getClassCached(u.classCode), getUserCached(u.username)]);
   if (!cls) return;
-  if (kiwiSaverSettings(cls).enabled || kiwiSaverOf(me)) {
-    document.documentElement.classList.add("ks-on");
+  const want = !!(kiwiSaverSettings(cls).enabled || kiwiSaverOf(me));
+  if (document.documentElement.classList.contains("ks-on") !== want) {
+    document.documentElement.classList.toggle("ks-on", want);
     if (typeof fitTopbar === "function") fitTopbar();
   }
 }
