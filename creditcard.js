@@ -71,7 +71,7 @@ function ccInjectThemeCss() {
 .cc-mini-bot{display:flex;justify-content:space-between;align-items:flex-end;gap:6px;font-size:8px;font-weight:800;text-transform:uppercase;line-height:1.1}
 .cc-mini-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .cc-mini-limit{white-space:nowrap}
-.cc-mini-tick{position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:#f0b429;color:#1f2b44;font-size:12px;font-weight:900;
+.cc-mini-tick{position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:#f0b429;color:#1f2b44;
   display:none;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .cc-theme.on .cc-mini-tick{display:flex}
 .cc-theme-label{display:block;font-size:12px;font-weight:700;margin-top:7px}

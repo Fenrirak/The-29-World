@@ -123,7 +123,7 @@ async function render() {
       const chips = (s.lifeItems || []).map(it => `
         <span class="badge navy" style="margin-right:6px;margin-bottom:4px;display:inline-flex;align-items:center;gap:4px;">
           ${escapeHtml(it.name)}
-          <button type="button" onclick="revokeLifeItemFor('${escapeJsAttr(s.username)}','${it.id}')" title="Revoke" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:800;padding:0 0 0 2px;line-height:1;">&times;</button>
+          <button type="button" onclick="revokeLifeItemFor('${escapeJsAttr(s.username)}','${it.id}')" title="Revoke" aria-label="Revoke" class="chip-x">&times;</button>
         </span>
       `).join("");
       row.innerHTML = `<div class="auto-details"><strong>${escapeHtml(s.name)}</strong><div style="margin-top:4px;">${chips}</div></div>`;

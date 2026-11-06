@@ -231,7 +231,7 @@ function paintBuilder() {
         <div class="qb-opt-row">
           <input type="radio" name="qb-ans-${i}" value="${j}" ${row.answer === j ? "checked" : ""} aria-label="Mark option ${j + 1} correct">
           <input type="text" id="qb-opt-${i}-${j}" value="${esc(opt)}" placeholder="Answer option ${j + 1}">
-          <button class="btn small secondary qb-del" type="button" onclick="removeOptionFrom(${i}, ${j})" ${row.options.length <= 2 ? "disabled" : ""}>×</button>
+          <button class="btn small secondary qb-del" type="button" onclick="removeOptionFrom(${i}, ${j})" aria-label="Remove option" ${row.options.length <= 2 ? "disabled" : ""}>×</button>
         </div>`).join("")}
       <button class="btn small secondary" type="button" onclick="addOptionTo(${i})" ${row.options.length >= 6 ? "disabled" : ""}>Add another option</button>
       <label for="qb-explain-${i}" style="margin-top:12px;">Explanation shown after answering (optional)</label>

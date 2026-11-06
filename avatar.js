@@ -1663,12 +1663,14 @@ html .student-avatar.av-img{background:none !important;padding:0;overflow:hidden
 .av-self-btn{position:relative;border:0;background:none;padding:0;cursor:pointer;border-radius:50%;flex-shrink:0;margin-right:12px;line-height:0;}
 .av-self-btn .student-avatar{margin:0;}
 .av-self-btn:hover{transform:scale(1.05);}
-.av-self-btn .av-pen{position:absolute;right:-3px;bottom:-3px;width:22px;height:22px;border-radius:50%;background:var(--gold,#f5b82e);color:#1f2b44;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;border:2px solid #fff;font-weight:900;}
+.av-self-btn .av-pen{position:absolute;right:-3px;bottom:-3px;width:22px;height:22px;border-radius:50%;background:var(--gold,#f5b82e);color:#1f2b44;display:flex;align-items:center;justify-content:center;line-height:0;border:2px solid #fff;}
+.av-self-btn .av-pen svg{display:block;flex:none;}
 .av-ov{position:fixed;inset:0;z-index:400;background:rgba(15,20,40,.55);display:flex;align-items:center;justify-content:center;padding:12px;}
 .av-card{background:var(--card,#fff);color:var(--ink,#1f2b44);border-radius:18px;width:min(940px,100%);max-height:calc(100vh - 24px);display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;}
 .av-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1.5px solid var(--line,#e3e7f0);}
 .av-head h3{margin:0;font-size:1.2rem;}
-.av-x{border:0;background:none;font-size:1.6rem;line-height:1;cursor:pointer;color:inherit;padding:2px 8px;}
+.av-x{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;color:inherit;--g-size:22px;}
+.av-x:hover{background:rgba(128,128,128,.16);}
 .av-body{display:flex;gap:18px;padding:16px 18px;overflow:auto;flex:1;min-height:0;}
 .av-left{flex:0 0 220px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
 .av-prev{width:200px;height:200px;min-width:200px;min-height:200px;flex:none;aspect-ratio:1/1;border-radius:50%;overflow:hidden;box-shadow:0 6px 20px rgba(0,0,0,.2);line-height:0;}
@@ -1706,6 +1708,8 @@ html .student-avatar.av-img{background:none !important;padding:0;overflow:hidden
 .av-bad{color:#b8402c;}
 .av-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:450;background:#1f2b44;color:#fff;border-radius:14px;padding:12px 16px;font-weight:700;box-shadow:0 8px 28px rgba(0,0,0,.35);display:flex;gap:12px;align-items:center;max-width:calc(100vw - 24px);}
 .av-toast button{border:0;border-radius:10px;padding:6px 10px;font-weight:800;cursor:pointer;background:#f5b82e;color:#1f2b44;}
+.av-toast .av-toast-x{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:28px;height:28px;margin:-4px -6px -4px -4px;padding:0;border-radius:50%;background:none;color:#fff;--g-size:20px;}
+.av-toast .av-toast-x:hover{background:rgba(255,255,255,.16);}
 .av-t-wrap details{border:1.5px solid var(--line,#e3e7f0);border-radius:12px;padding:8px 12px;margin:8px 0;}
 .av-t-wrap summary{cursor:pointer;font-weight:800;}
 .av-t-wrap table{width:100%;border-collapse:collapse;margin-top:8px;}
@@ -1741,7 +1745,7 @@ html.dark-mode .av-self-btn .av-pen{border-color:#1a2036;}
 .av-lb-t2 .av-lb-av{box-shadow:0 0 0 6px #3a8dff,0 0 30px 4px rgba(58,141,255,.45),0 14px 36px rgba(0,0,0,.4);}
 .av-lb-t3 .av-lb-av{box-shadow:0 0 0 6px #a45cff,0 0 38px 8px rgba(164,92,255,.55),0 14px 36px rgba(0,0,0,.4);}
 .av-lb-t4 .av-lb-av{box-shadow:0 0 0 6px #ffb020,0 0 46px 12px rgba(255,176,32,.6),0 14px 36px rgba(0,0,0,.4);}
-.av-lb-x{position:absolute;top:10px;right:10px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;font-size:1.5rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;}
+.av-lb-x{position:absolute;top:10px;right:10px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;}
 .av-lb-x:hover{background:rgba(255,255,255,.32);transform:scale(1.08);}
 .av-lb-x:focus-visible{outline:3px solid var(--gold,#f5b82e);outline-offset:2px;}
 .av-lb-info{padding:18px 22px 24px;text-align:center;}
@@ -1793,7 +1797,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     css();
     const old = document.getElementById("avToast"); if (old) old.remove();
     const t = document.createElement("div"); t.id = "avToast"; t.className = "av-toast";
-    t.innerHTML = `<span>${html}</span>${btnText ? `<button type="button">${btnText}</button>` : ""}<button type="button" aria-label="Close" style="background:none;color:#fff;font-size:1.2rem;padding:0 4px;">\u00d7</button>`;
+    t.innerHTML = `<span>${html}</span>${btnText ? `<button type="button">${btnText}</button>` : ""}<button type="button" class="av-toast-x" aria-label="Close">\u00d7</button>`;
     const bs = t.querySelectorAll("button");
     if (btnText) bs[0].onclick = () => { t.remove(); onBtn(); };
     bs[bs.length - 1].onclick = () => t.remove();
@@ -2171,7 +2175,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
         const me = await getUserCached(u.username).catch(() => null);
         const b = document.createElement("button");
         b.type = "button"; b.className = "av-self-btn"; b.title = "Edit my avatar"; b.setAttribute("aria-label", "Edit my avatar");
-        b.innerHTML = badge({ username: u.username, name: u.name, avatar: me && me.avatar }, { size: 56 }).replace('class="student-avatar', 'class="av-big student-avatar').replace(/ role="button" tabindex="0" aria-label="[^"]*"/, "") + `<span class="av-pen">\u270e</span>`;
+        b.innerHTML = badge({ username: u.username, name: u.name, avatar: me && me.avatar }, { size: 56 }).replace('class="student-avatar', 'class="av-big student-avatar').replace(/ role="button" tabindex="0" aria-label="[^"]*"/, "") + `<span class="av-pen"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" focusable="false"><path d="M9 17.5V6.2A1.7 1.7 0 0 1 10.7 4.5h2.6A1.7 1.7 0 0 1 15 6.2v11.3l-3 3.6z" fill="currentColor" transform="rotate(45 12 12)"/></svg></span>`;
         b.onclick = e => { e.stopPropagation(); openEditor(); };
         row.insertBefore(b, row.firstChild);
       }
