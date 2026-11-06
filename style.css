@@ -791,8 +791,17 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
 
 /* Added by guardTopbarOverflow() (icons.js) only when nothing else could make
    the bar fit one row: wrap onto a second row, as portrait does. */
-.topbar.nav-wrap{flex-wrap:wrap;row-gap:6px;max-width:100%;}
-.topbar.nav-wrap nav{flex-wrap:wrap;row-gap:6px;max-width:100%;flex:1 1 100%;}
+/* Non-phone: links + settings/logout are pinned to the right edge; any spare
+   room becomes a gap after the brand. */
+@media (min-width: 641px){
+  .topbar nav{margin-left:auto;}
+}
+/* Wrapped mode (links need more than one line): the brand stays top-left and
+   the links share the row beside it, wrapping into right-aligned rows with
+   settings/logout at the far right end. */
+.topbar.nav-wrap{flex-wrap:nowrap;align-items:flex-start;max-width:100%;}
+.topbar.nav-wrap nav{flex:1 1 0;min-width:0;max-width:100%;flex-wrap:wrap;row-gap:6px;justify-content:flex-end;}
+.topbar.nav-wrap .brand{padding-top:calc(6px * var(--navscale));}
 
 /* Phones only (viewport 640px wide or less, any orientation) — icon-only
    nav. Tablets and wider keep labels + icons (see fitTopbar() in icons.js). The row is allowed to wrap onto a
