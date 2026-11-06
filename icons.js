@@ -121,13 +121,14 @@ function paintIconSlots() {
 // One place for the fit limits. Phone = viewport 640px wide or less (same
 // breakpoint style.css uses); everything wider (tablet, laptop, desktop, in
 // either orientation) keeps labels AND icons.
-function _tbCfg() { return { phoneMax: 640, min: 0.75, max: 1.15 }; }
+function _tbCfg() { return { phoneMax: 640, min: 0.75, max: 1.15, squash: 0.8 }; }
 function _isPhoneBar() { return window.matchMedia("(max-width: " + _tbCfg().phoneMax + "px)").matches; }
 
 function fitTopbar() {
   _fitTopbarCore();
   guardTopbarOverflow();
   saveTopbarFit();
+  _scheduleSidebarHint();
 }
 
 // Round DOWN to 3dp: toFixed() can round UP, which is enough to push the last
@@ -407,3 +408,88 @@ function buildNavGroups() {
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", buildNavGroups);
 else buildNavGroups();
+
+
+/* ===================== Sidebar suggestion popup =====================
+   When the top bar has had to wrap onto a second line, tighten its spacing,
+   or shrink noticeably (non-phones only), a small card suggests the side
+   menu. It waits for the layout to settle, appears at most once per visit
+   ("Maybe later") and never again after "Don't show again". The switch itself
+   lives in Settings, so the button opens the Settings popover.
+==================================================================== */
+function _topbarSquashed() {
+  const tb = document.querySelector(".topbar");
+  const nav = tb ? tb.querySelector("nav") : null;
+  if (!nav || nav.offsetParent === null) return false;
+  if (document.documentElement.classList.contains("sidebar-nav")) return false;
+  if (_isPhoneBar()) return false;
+  const sc = parseFloat(tb.style.getPropertyValue("--navscale")) || 1;
+  return tb.classList.contains("nav-wrap") || nav.classList.contains("nav-tight") || sc < _tbCfg().squash;
+}
+function _sidebarHintSuppressed() {
+  try {
+    return localStorage.getItem("t29-sidebar-hint") === "never" || sessionStorage.getItem("t29-sidebar-hint") === "later";
+  } catch (e) { return false; }
+}
+function hideSidebarHint() {
+  const el = document.getElementById("sidebarHint");
+  if (el) el.remove();
+}
+function _placeSidebarHint(el) {
+  const tb = document.querySelector(".topbar");
+  if (tb) el.style.top = Math.round(tb.getBoundingClientRect().bottom + 8) + "px";
+}
+function showSidebarHint() {
+  const existing = document.getElementById("sidebarHint");
+  if (existing) { _placeSidebarHint(existing); return; }
+  const el = document.createElement("div");
+  el.id = "sidebarHint";
+  el.className = "sidebar-hint";
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-label", "Navigation suggestion");
+  el.innerHTML =
+    '<div class="sidebar-hint-title">Top bar feeling cramped?</div>' +
+    '<p>There are too many pages to fit comfortably across this screen width, so the top bar has to squeeze or wrap. ' +
+    'The side menu lists every page in a roomy column down the left and frees up the top of your screen.</p>' +
+    '<p>Turn on <strong>Sidebar Navigation</strong> in Settings to try it.</p>' +
+    '<div class="sidebar-hint-actions">' +
+      '<button type="button" class="sidebar-hint-primary" data-act="settings">Open settings</button>' +
+      '<button type="button" class="sidebar-hint-secondary" data-act="later">Maybe later</button>' +
+      '<button type="button" class="sidebar-hint-link" data-act="never">Don\'t show again</button>' +
+    '</div>';
+  el.addEventListener("click", e => {
+    const b = e.target.closest ? e.target.closest("button[data-act]") : null;
+    if (!b) return;
+    const act = b.getAttribute("data-act");
+    try {
+      if (act === "never") localStorage.setItem("t29-sidebar-hint", "never");
+      else sessionStorage.setItem("t29-sidebar-hint", "later");
+    } catch (err) { /* storage unavailable: just hides for now */ }
+    hideSidebarHint();
+    if (act === "settings") {
+      const s = document.getElementById("settingsBtn");
+      if (s) s.click();
+    }
+  });
+  _placeSidebarHint(el);
+  document.body.appendChild(el);
+  if (!window._t29HintEsc) {
+    window._t29HintEsc = true;
+    document.addEventListener("keydown", e => {
+      if (e.key !== "Escape" || !document.getElementById("sidebarHint")) return;
+      try { sessionStorage.setItem("t29-sidebar-hint", "later"); } catch (err) {}
+      hideSidebarHint();
+    });
+  }
+}
+function _scheduleSidebarHint() {
+  clearTimeout(window._t29HintTimer);
+  window._t29HintTimer = setTimeout(() => {
+    if (!_topbarSquashed()) { hideSidebarHint(); return; }
+    if (_sidebarHintSuppressed()) return;
+    showSidebarHint();
+  }, 1500);
+}
+new MutationObserver(() => {
+  if (document.documentElement.classList.contains("sidebar-nav")) hideSidebarHint();
+}).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });

@@ -4220,3 +4220,22 @@ html :is(.qty-btn,.cl-step){--g-size:20px;}
 
 /* Fixed-size round things must never squash into ovals when they sit in a flex row. */
 .ks-use input,.cc-paytoggle input,.t29-spinner,.ga-balance-stat .icon-slot,.cf-count,.notif-dot{flex-shrink:0;}
+
+
+/* ---------------- Sidebar suggestion popup (see icons.js) ---------------- */
+.sidebar-hint{
+  position:fixed;right:16px;z-index:70;
+  width:min(340px,calc(100vw - 32px));
+  background:var(--card);color:var(--ink);
+  border:1.5px solid var(--line);border-radius:var(--r-4);
+  box-shadow:var(--shadow-lg);padding:14px 16px;
+  animation:t29ToastIn .25s ease;
+}
+.sidebar-hint-title{font-weight:800;margin-bottom:6px;}
+.sidebar-hint p{margin:0 0 8px;font-size:var(--fs-md);line-height:1.45;}
+.sidebar-hint-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;}
+.sidebar-hint button{font:inherit;font-weight:700;font-size:var(--fs-md);cursor:pointer;border-radius:var(--r-2);}
+.sidebar-hint-primary{background:var(--gold);color:var(--navy-900);border:none;padding:8px 14px;}
+.sidebar-hint-secondary{background:transparent;color:var(--ink);border:1.5px solid var(--line);padding:7px 12px;}
+.sidebar-hint-link{background:none;border:none;color:var(--muted);text-decoration:underline;padding:6px 4px;font-weight:600;}
+@media print{.sidebar-hint{display:none !important;}}
