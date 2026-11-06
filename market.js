@@ -34,6 +34,9 @@ function applyCompanyMsg(id) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("chart", 26) + " Stock Market";
+  document.getElementById("pageIntro").textContent = IS_TEACHER
+    ? "Open companies for your class to invest in, move prices with a simulated market day, and set how far the daily price swings can go."
+    : "Buy and sell shares in companies your teacher has opened for the class.";
   document.getElementById("hOpen").innerHTML = icon("plus", 18) + " Open a new company";
   document.getElementById("labName").innerHTML = icon("building", 13) + " Company name";
   document.getElementById("labPrice").innerHTML = icon("coin", 13) + " Starting share price";

@@ -24,6 +24,9 @@ function avatarClass(username) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("idcard", 26) + " Reports";
+  document.getElementById("pageIntro").textContent = IS_TEACHER
+    ? "Report cards: net worth, savings rate, biggest expenses and loan history. Net worth is noted automatically every Monday, so each student's trend builds up on its own."
+    : "Your report card: net worth, savings rate, biggest expenses and loan history for this month, plus your entire history.";
   document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + " This month";
   document.getElementById("hMyReport").innerHTML = icon("idcard", 18) + " My report card";
 }
@@ -39,8 +42,6 @@ async function init() {
   document.getElementById("navHomeLabel").textContent = "Dashboard";
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
   document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
-  if (!IS_TEACHER) document.getElementById("pageIntro").textContent =
-    "Your report card: net worth, savings rate, biggest expenses and loan history for this month — plus your entire history.";
   paintChrome();
 
   // Same background jobs every other page runs on load, so visiting

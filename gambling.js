@@ -1361,6 +1361,9 @@ function placePerfControl(mode) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("dice", 26) + " Gambling";
+  document.getElementById("pageIntro").textContent = IS_TEACHER
+    ? "Set the limits for Roulette and Blackjack, including each student's daily buy-in and winning limits, and see every bet your students place."
+    : "Pick a game below. Only bet what you can afford to lose!";
   document.getElementById("hSettings").innerHTML = icon("dice", 18) + " Roulette settings";
   document.getElementById("saveSettingsBtn").innerHTML = icon("save", 14) + " Save settings";
   document.getElementById("labEnabled").textContent = "Allow students to gamble";

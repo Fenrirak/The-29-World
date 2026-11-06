@@ -903,6 +903,9 @@ function lifestyleChip(cls, p) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("house", 26) + " Property";
+  document.getElementById("pageIntro").textContent = IS_TEACHER
+    ? "List properties for your class to buy, finance or rent, and add school rentals of your own. Settings let you control classmate rentals, mortgage due days and how property prices move."
+    : "Buy a house outright, finance it with a weekly mortgage, or rent one from your teacher's listings or from a classmate.";
   setPropModalMode(false);
   setNpcModalMode(false);
 }

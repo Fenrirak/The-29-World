@@ -27,6 +27,9 @@ function lifeBenefitChips(b, frequency) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("trophy", 26) + " Life";
+  document.getElementById("pageIntro").textContent = IS_TEACHER
+    ? "Give a student a \"life event\" (got a job promotion, got married, had a kid, whatever fits your class) bundled with real in-game perks. Build each one once, then hand it out to as many students as you like. Students can hold more than one at a time and the perks stack."
+    : "Life events (like a job promotion, getting married or having a kid) come with real in-game perks. Your teacher hands them out, and you can hold more than one at a time. The perks from all of them stack, so see what you've got below.";
   document.getElementById("hAdd").innerHTML = "Create a family event";
   document.getElementById("addBtn").innerHTML = "Add family event";
   document.getElementById("hDefs").innerHTML = "Family events";

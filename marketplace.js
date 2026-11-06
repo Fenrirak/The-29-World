@@ -22,6 +22,9 @@ const ASSET_ICON = { store: "cart", vehicle: "car", property: "house" };
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("swap", 26) + " Trade Centre";
+  document.getElementById("pageIntro").textContent = IS_TEACHER
+    ? "Students trading with each other at prices they set: price discovery, negotiation, and everything you decide to allow."
+    : "Buy and sell with your classmates at whatever price you can agree on, not the fixed store price.";
 }
 
 async function init() {
@@ -96,8 +99,6 @@ function bandText(refPrice) {
 /* ================= Teacher ================= */
 function renderTeacher() {
   const mp = CLS.marketplace;
-  document.getElementById("pageIntro").textContent =
-    "Students trading with each other at prices they set — price discovery, negotiation, and everything you decide to allow.";
   document.getElementById("mpEnabled").checked = mp.enabled;
   document.getElementById("mpApproval").checked = mp.requireApproval;
   document.getElementById("mpOffers").checked = mp.allowOffers;

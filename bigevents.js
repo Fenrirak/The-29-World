@@ -71,6 +71,9 @@ function updateCoverBox(cover, incident) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("bolt", 26) + " Big Events";
+  document.getElementById("pageIntro").textContent = IS_TEACHER
+    ? "Rare, random events with high stakes. Each week every student has a 30% chance of being hit with one, on a random school day (Monday to Friday). When it happens they must choose to pay the cost, lose the associated thing, or claim matching insurance. If a student has matching insurance and enough cash for the excess, it's claimed for them automatically."
+    : "Big events are rare, random surprises with high stakes. Each week you have a 30% chance of being hit by one, on a random school day (Monday to Friday). When it happens, you choose to pay the cost, lose what it affects, or claim matching insurance. If you have matching insurance and enough cash for the excess, it's claimed for you automatically. Your history of big events is listed below.";
   document.getElementById("hAdd").innerHTML = "Add a big event";
   document.getElementById("addBtn").innerHTML = "Add event";
   document.getElementById("runBigEventsBtn").innerHTML = "Run this week's big events now";

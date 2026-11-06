@@ -64,6 +64,9 @@ function starsHtml(n) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("cart", 26) + " Class Store";
+  document.getElementById("pageIntro").textContent = IS_TEACHER
+    ? "Put items up for sale in your class store. Set each item's price, how many are in stock and any lifestyle stars it gives."
+    : "Spend your hard-earned cash on things your teacher has put up for sale.";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add an item";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add item";
 }

@@ -12,6 +12,9 @@ let KS_HARDSHIP_FOR = null;
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("kiwi", 26) + " KiwiSaver";
+  document.getElementById("pageIntro").textContent = IS_TEACHER
+    ? "Set the fund returns and first-home rules for your class's KiwiSaver, see what each student has saved, and release a hardship withdrawal when one is needed."
+    : "Savings for when you retire. Every pay day, money goes in from you, your employer and the government.";
   const heads = { hPay: ["calendar", "Every pay day"], hGrowth: ["chart", "How it's grown"], hChoices: ["settings", "My choices"],
     hHome: ["house", "Buying my first home"], hSettings: ["settings", "KiwiSaver settings"], hClass: ["users", "Class KiwiSaver"],
     hRetire: ["star", "Retirement"] };

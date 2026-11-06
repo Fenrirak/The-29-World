@@ -3,6 +3,9 @@ let CURRENT, IS_TEACHER;
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("loan", 26) + " Loans";
+  document.getElementById("pageIntro").textContent = IS_TEACHER
+    ? "Build the loan ranges your students can borrow from, each with its own amounts, term and weekly interest rate. You can also cap how much they can borrow and dock lifestyle points for money owed."
+    : "Borrow against your future income: pick an amount and a range decides your rate. Interest is charged the moment you borrow, then again every Monday until it's paid off, so the sooner you repay it, the less it costs you.";
   document.getElementById("hSettings").innerHTML = "Loan settings";
   document.getElementById("addTierBtn").innerHTML = "Add loan range";
   document.getElementById("labTierMin").innerHTML = "Minimum amount";
