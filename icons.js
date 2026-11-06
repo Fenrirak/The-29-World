@@ -118,6 +118,12 @@ function paintIconSlots() {
    takes over instead (icon-only nav, allowed to wrap), so this leaves
    --navscale alone there. Runs on load, resize, and orientation change.
 ====================================================================== */
+// One place for the fit limits. Phone = viewport 640px wide or less (same
+// breakpoint style.css uses); everything wider (tablet, laptop, desktop, in
+// either orientation) keeps labels AND icons.
+function _tbCfg() { return { phoneMax: 640, min: 0.75, max: 1.15 }; }
+function _isPhoneBar() { return window.matchMedia("(max-width: " + _tbCfg().phoneMax + "px)").matches; }
+
 function fitTopbar() {
   _fitTopbarCore();
   guardTopbarOverflow();
@@ -137,34 +143,35 @@ function _topbarOverflow(tb) {
   return Math.max(tb.scrollWidth - tb.clientWidth, aRight - limit);
 }
 
-/* Last line of defence. The fit above predicts widths from a measurement at
-   full size; if anything makes that prediction short (an unusual font or
-   text-zoom, a link added later, a very narrow window) this checks what was
-   ACTUALLY laid out and escalates until it fits: icon-only, then smaller
-   (never below 0.6 so icons stay tappable), then wrapping onto a second row
-   like portrait does. So the bar can never run off the screen. */
+/* Last line of defence. The fit predicts widths from a measurement at full
+   size; if that prediction comes up short (unusual font/text-zoom, a link
+   added later, a very narrow window) this checks what was ACTUALLY laid out
+   and escalates: shrink toward the smallest readable scale, then wrap the
+   links onto a second line. Labels are never dropped on non-phones, and the
+   bar never runs off the screen. */
 function guardTopbarOverflow() {
   const tb = document.querySelector(".topbar");
   const nav = tb ? tb.querySelector("nav") : null;
   if (!nav) return;
-  tb.classList.remove("nav-wrap");
   if (document.documentElement.classList.contains("sidebar-nav")) return;
-  if (window.matchMedia("(orientation: portrait)").matches) return;
+  if (_isPhoneBar()) return;
+  const cfg = _tbCfg();
   let over = _topbarOverflow(tb);
   if (over <= 1) return;
-  if (!nav.classList.contains("force-icons")) {
-    nav.classList.add("force-icons");
-    over = _topbarOverflow(tb);
-  }
   let sc = parseFloat(tb.style.getPropertyValue("--navscale")) || 1;
-  for (let i = 0; i < 4 && over > 1 && sc > 0.6; i++) {
-    const natural = nav.scrollWidth || 1;
-    const next = Math.max(0.6, sc * Math.max(0.5, (natural - over - 1) / natural));
-    sc = Math.min(sc, next);
-    tb.style.setProperty("--navscale", _ns(sc));
-    over = _topbarOverflow(tb);
+  if (!tb.classList.contains("nav-wrap")) {
+    for (let i = 0; i < 4 && over > 1 && sc > cfg.min; i++) {
+      const natural = nav.scrollWidth || 1;
+      const next = Math.max(cfg.min, sc * Math.max(0.5, (natural - over - 1) / natural));
+      sc = Math.min(sc, next);
+      tb.style.setProperty("--navscale", _ns(sc));
+      over = _topbarOverflow(tb);
+    }
+    if (over <= 1) return;
+    nav.classList.add("nav-tight");
+    tb.classList.add("nav-wrap");
   }
-  if (over > 1) tb.classList.add("nav-wrap");
+  tb.style.setProperty("--navscale", _ns(cfg.min));
 }
 
 /* Remembers the last fit (scale, tight/icon-only mode, which role-based
@@ -187,6 +194,8 @@ function saveTopbarFit() {
     let c = JSON.parse(localStorage.getItem(TOPBAR_FIT_KEY) || "null");
     if (!c || c.u !== u || !c.f) c = { u: u, f: {} };
     const sc = parseFloat(topbar.style.getPropertyValue("--navscale"));
+    // Drop entries saved by older versions that replayed icon-only mode.
+    Object.keys(c.f).forEach(x => { if (c.f[x] && c.f[x].i) delete c.f[x]; });
     delete c.f[k];
     c.f[k] = {
       s: isFinite(sc) ? sc : 0,
@@ -206,6 +215,7 @@ function _fitTopbarCore() {
   const topbar = document.querySelector(".topbar");
   const nav = topbar ? topbar.querySelector("nav") : null;
   if (!topbar || !nav) return;
+  topbar.classList.remove("nav-wrap");
 
   // Sidebar navigation (see sidebar-nav.js/.css) lays the nav out
   // vertically with its own sizing — the horizontal width-fit logic
@@ -216,70 +226,49 @@ function _fitTopbarCore() {
     return;
   }
 
-  const isPortrait = window.matchMedia("(orientation: portrait)").matches;
-  if (isPortrait) {
-    // Portrait handles itself via CSS (icon-only + wrapping); don't fight it.
+  // Phones (<= 640px wide) are handled by CSS: icon-only + wrapping.
+  if (_isPhoneBar()) {
     topbar.style.removeProperty("--navscale");
     nav.classList.remove("force-icons", "nav-tight");
     return;
   }
 
-  // Reset to full size and drop any icon-only fallback so we measure the
-  // nav's true "natural" width before deciding how much to shrink it.
+  const cfg = _tbCfg();
+  // Reset to full size so we measure the nav's true "natural" width.
   topbar.style.setProperty("--navscale", "1");
   nav.classList.remove("force-icons", "nav-tight");
-  // Force a reflow so the measurements below reflect the reset state.
   void topbar.offsetWidth;
 
   const brand = topbar.querySelector(".brand");
-  // .topbar-actions wraps the settings icon + logout button together, so
-  // both are measured (and scaled) as a single trailing block — falls back
-  // to just the logout button on any page that hasn't been updated with
-  // the wrapper yet.
-  const actionsEl = topbar.querySelector(".topbar-actions") || topbar.querySelector(".btn-logout");
-  const topbarStyle = getComputedStyle(topbar);
-  const paddingL = parseFloat(topbarStyle.paddingLeft) || 0;
-  const paddingR = parseFloat(topbarStyle.paddingRight) || 0;
-  const topbarGap = parseFloat(topbarStyle.columnGap || topbarStyle.gap) || 0;
-
+  const cs = getComputedStyle(topbar);
+  const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const gap = parseFloat(cs.columnGap || cs.gap) || 0;
   const brandW = brand ? brand.getBoundingClientRect().width : 0;
-  const actionsW = actionsEl ? actionsEl.getBoundingClientRect().width : 0;
-  // Two gaps: between brand<->nav and nav<->actions block.
-  const available = topbar.clientWidth - paddingL - paddingR - brandW - actionsW - (topbarGap * 2);
+  const avail = topbar.clientWidth - padX;
+  // nav.scrollWidth already includes the settings/logout block (it sits
+  // inside the nav). Brand, gaps and nav all scale with --navscale, so the
+  // row scales as one piece.
   const needed = nav.scrollWidth;
+  if (!(needed > 0) || !(avail > 0)) return;
+  const fixed = brandW + gap;
+  const set = s => topbar.style.setProperty("--navscale", _ns(s));
 
-  let scale = needed > 0 ? available / needed : 1;
-  if (!isFinite(scale) || scale > 1) scale = 1;
+  // 1. Fits on one line with labels: full size, or slightly larger on wide screens.
+  const scale = avail / (needed + fixed);
+  if (scale >= cfg.min) { set(Math.min(cfg.max, scale)); return; }
 
-  const MIN_TEXT_SCALE = 0.55; // below this, text stops being legible
-  // Before giving up on labels entirely, try trimming the CHROME instead of
-  // the text: "nav-tight" cuts each link's padding and the gaps between
-  // links right down while leaving the font at a legible size. With ~16
-  // items in the bar that alone is worth roughly two links' worth of
-  // width, which is the difference between a labelled nav and an
-  // icon-only one on a normal laptop screen.
-  if (scale < MIN_TEXT_SCALE) {
-    nav.classList.add("nav-tight");
-    void nav.offsetWidth;
-    const neededTight = nav.scrollWidth;
-    const tightScale = neededTight > 0 ? available / neededTight : 1;
-    if (isFinite(tightScale) && tightScale >= MIN_TEXT_SCALE) {
-      topbar.style.setProperty("--navscale", _ns(Math.min(1, tightScale)));
-      return;
-    }
-  }
-  if (scale < MIN_TEXT_SCALE) {
-    // Labels can't fit even tightened up at the smallest legible size —
-    // drop to icon-only, then re-measure and scale that instead.
-    nav.classList.add("force-icons");
-    void nav.offsetWidth;
-    const neededIcons = nav.scrollWidth;
-    scale = neededIcons > 0 ? available / neededIcons : 1;
-    if (!isFinite(scale) || scale > 1) scale = 1;
-    if (scale < 0.6) scale = 0.6; // hard floor so icons stay tappable
-  }
+  // 2. Trim padding/gaps (text stays readable), still one line.
+  nav.classList.add("nav-tight");
+  void nav.offsetWidth;
+  const neededTight = nav.scrollWidth;
+  const tightScale = avail / (neededTight + fixed);
+  if (tightScale >= cfg.min) { set(Math.min(1, tightScale)); return; }
 
-  topbar.style.setProperty("--navscale", _ns(scale));
+  // 3. Smallest readable text still doesn't fit one line: keep labels and
+  //    icons, put the links on a second line (brand on the first).
+  const wrapScale = Math.max(cfg.min, Math.min(1, avail / neededTight));
+  topbar.classList.add("nav-wrap");
+  set(wrapScale);
 }
 
 function debounce(fn, wait) {

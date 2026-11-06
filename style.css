@@ -792,14 +792,14 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
 /* Added by guardTopbarOverflow() (icons.js) only when nothing else could make
    the bar fit one row: wrap onto a second row, as portrait does. */
 .topbar.nav-wrap{flex-wrap:wrap;row-gap:6px;max-width:100%;}
-.topbar.nav-wrap nav{flex-wrap:wrap;row-gap:6px;max-width:100%;}
+.topbar.nav-wrap nav{flex-wrap:wrap;row-gap:6px;max-width:100%;flex:1 1 100%;}
 
-/* Portrait orientation (phones and tablets held upright) — always show
-   icon-only nav, regardless of width. The row is allowed to wrap onto a
+/* Phones only (viewport 640px wide or less, any orientation) — icon-only
+   nav. Tablets and wider keep labels + icons (see fitTopbar() in icons.js). The row is allowed to wrap onto a
    second line if it doesn't all fit, but must never overflow sideways:
    flex-wrap:wrap plus a hard max-width:100vw + overflow-x:hidden on the
    topbar keeps everything on-screen, just taller instead of wider. */
-@media (orientation: portrait){
+@media (max-width: 640px){
   .topbar{
     flex-wrap:wrap;
     max-width:100vw;
@@ -2898,7 +2898,7 @@ body:has(.t29-tour-offer) .t29-toasts{bottom:150px;}
 @media (max-width:640px){ body:has(.t29-tour-offer) .t29-toasts{bottom:220px;} }
 @media print{ .t29-tour, .t29-tour-offer, .t29-toasts, .t29-loadbar{display:none !important;} }
 
-/* ---------------- Phone top bar dropdowns ----------------
+/* ---------------- Phone top bar dropdowns (viewport <= 640px) ----------------
    icons.js wraps each group of nav links in a .nav-group. Outside phone
    top-bar view the wrapper vanishes from layout (display:contents) and
    its button is hidden, so nothing changes there. */
@@ -2906,7 +2906,7 @@ body:has(.t29-tour-offer) .t29-toasts{bottom:150px;}
 .nav-group-btn{display:none;}
 .nav-group-menu{display:contents;}
 
-@media (max-width: 900px){
+@media (max-width: 640px){
   html:not(.sidebar-nav) .topbar nav{flex-wrap:wrap;row-gap:6px;max-width:100%;}
   html:not(.sidebar-nav) .nav-group{display:block;position:static;}
   html:not(.sidebar-nav) .nav-group-btn{

@@ -6,14 +6,23 @@
    show their effect quickly.
 
    The rough economy, so the numbers below make sense together:
-     - Starting money ......... $50
-     - Weekly wage (gross) .... about $55 (first job) up to $150 (top tier)
-     - Weekly take-home ....... about $50 to $125 after tax
-     - Typical weekly costs ... transport ~$5 + insurance ~$5-10 + a mortgage
-                                or rent of $20-60 + a few random events
+     - Starting money ......... $100
+     - Weekly wage (gross) .... about $80 (first job) up to $165 (top tier)
+     - Weekly take-home ....... about $75 to $145 after tax
+     - Typical weekly costs ... transport ~$20 (a bike or car cuts it) + insurance
+                                ~$5-10 + a mortgage or rent of $30-60 + a few random
+                                events
      - So in one term a student can build savings, buy a few things, a bike
        or a cheap car, and try a loan or term deposit. Over a year they can
        realistically work toward a mortgage on a modest home.
+
+   TERM OPTIONS: the numbers below are the 1-term version. A teacher can
+   also pick 2 or 4 terms (T29_BASE_TEMPLATE_TERM_OPTIONS). Weekly money
+   (wages, rent, bills, weekly events, side hustles) stays the same, so a
+   week always feels the same. What scales is the big stuff: one-off prices,
+   balances and limits go x1 / x2 / x4, and time-based things (mortgage and
+   loan lengths, promotions, KiwiSaver wait) go x1 / x1.5 / x2.
+   See t29BaseTemplateScale and t29BaseTemplateData.
 
    Loaded after the data-*.js files, because it reuses their helpers (the
    same cleaners the teacher's own forms use), so everything here has the
@@ -24,41 +33,44 @@
 const T29_BASE_TEMPLATE_LABEL = "Balanced school-term starter";
 
 /* ---------------- The content ---------------- */
-// Jobs: weekly gross wage per tier. autoPromoteWeeks = weeks in a tier
-// before moving up automatically (4 = two promotions within a term).
+// Starting money each student gets (1-term version; scaled for 2 and 4 terms).
+const BT_WELCOME_GRANT = 100;
+
+// Jobs: classroom tasks a NZ high-school student can really do in class. Weekly gross wage per tier.
+// autoPromoteWeeks = weeks in a tier before moving up automatically (4 = two promotions within a term).
 const BT_JOBS = [
-  { title: "Café Worker", promote: 4, tiers: [
-    ["Kitchenhand", 55, "Washing up, prep and tidying."],
-    ["Barista", 72, "Makes the coffees and runs the machine."],
-    ["Café Manager", 98, "Runs the roster, orders and the team."] ] },
-  { title: "Retail Assistant", promote: 4, tiers: [
-    ["Shop Assistant", 55, "Serves customers and stocks shelves."],
-    ["Senior Assistant", 74, "Handles the till and trains new staff."],
-    ["Store Manager", 100, "Runs the whole shop."] ] },
-  { title: "Teacher Aide", promote: 5, tiers: [
-    ["Classroom Aide", 60, "Helps students in the classroom."],
-    ["Senior Aide", 80, "Leads small groups and supports teachers."],
-    ["Learning Support Lead", 102, "Plans support for the whole school."] ] },
-  { title: "Gardener", promote: 4, tiers: [
-    ["Garden Hand", 52, "Mowing, weeding and planting."],
-    ["Landscaper", 70, "Builds and maintains gardens."],
-    ["Landscape Designer", 94, "Designs gardens for clients."] ] },
-  { title: "Office Administrator", promote: 5, tiers: [
-    ["Receptionist", 62, "Answers phones and greets visitors."],
-    ["Admin Officer", 84, "Handles bookings, invoices and records."],
-    ["Office Manager", 112, "Manages the office and its staff."] ] },
-  { title: "Builder", promote: 6, tiers: [
-    ["Apprentice", 62, "Learning the trade on site."],
-    ["Qualified Builder", 98, "Builds and renovates."],
-    ["Site Manager", 135, "Runs the building site and the crew."] ] },
-  { title: "Nurse", promote: 6, tiers: [
-    ["Nursing Assistant", 70, "Supports patients and nurses."],
-    ["Registered Nurse", 104, "Cares for patients on the ward."],
-    ["Charge Nurse", 138, "Leads the ward."] ] },
-  { title: "IT Support", promote: 6, tiers: [
-    ["Helpdesk Assistant", 74, "Fixes everyday computer problems."],
-    ["Developer", 112, "Builds and tests software."],
-    ["Senior Developer", 150, "Leads software projects."] ] }
+  { title: "Classroom Tidy Crew", promote: 4, tiers: [
+    ["Desk Wiper", 80, "Wipes desks and the whiteboard and picks up rubbish at the end of the day."],
+    ["Room Monitor", 102, "Stacks chairs, sorts the recycling and keeps the room tidy."],
+    ["Tidy Crew Leader", 128, "Runs the weekly roster and checks the whole room is ready."] ] },
+  { title: "Plant & Garden Carer", promote: 4, tiers: [
+    ["Plant Waterer", 80, "Waters the classroom plants and wipes the leaves."],
+    ["Garden Monitor", 103, "Looks after the planter boxes and keeps a plant care chart."],
+    ["Garden Manager", 130, "Plans what to plant and leads the garden team."] ] },
+  { title: "Library Monitor", promote: 4, tiers: [
+    ["Book Returner", 82, "Collects and shelves the class books."],
+    ["Resource Librarian", 105, "Runs the borrowing log and tapes up torn covers."],
+    ["Head Librarian", 133, "Organises the reading corner and trains new monitors."] ] },
+  { title: "Event Setup Crew", promote: 5, tiers: [
+    ["Setup Helper", 85, "Arranges chairs and tables for assemblies and class events."],
+    ["Event Organiser", 110, "Writes the run sheet and hands out jobs for the day."],
+    ["Event Manager", 140, "Plans the whole event, from the budget to the pack-down."] ] },
+  { title: "Class Secretary", promote: 5, tiers: [
+    ["Notice Runner", 88, "Hands out notices and takes messages to the office."],
+    ["Roll Keeper", 115, "Keeps the class roll, homework list and calendar up to date."],
+    ["Head Secretary", 145, "Runs the class admin and checks the records are right."] ] },
+  { title: "Class Reporter", promote: 5, tiers: [
+    ["Notice Board Writer", 88, "Writes short news items for the class notice board."],
+    ["Class Reporter", 115, "Interviews classmates and writes articles for the class newsletter."],
+    ["Newsletter Editor", 148, "Checks the writing and layout and puts the newsletter together."] ] },
+  { title: "Tech Helper", promote: 6, tiers: [
+    ["Device Monitor", 92, "Hands out, charges and counts the class laptops and chargers."],
+    ["Tech Helper", 122, "Sets up the projector and helps classmates fix simple problems."],
+    ["Tech Team Lead", 158, "Leads the tech team and keeps a log of faults to report."] ] },
+  { title: "Peer Tutor", promote: 6, tiers: [
+    ["Homework Buddy", 95, "Helps a classmate check their homework and understand the task."],
+    ["Peer Tutor", 125, "Runs short tutoring sessions in maths or English."],
+    ["Lead Tutor", 165, "Plans sessions and coaches the other tutors."] ] }
 ];
 
 // Store: [name, price, stars (lifestyle), countsNetWorth, description, effect]
@@ -71,7 +83,7 @@ const BT_STORE = [
   ["Gaming Console", 85, 2, true, "A games console with a controller.", "Raises your lifestyle."],
   ["Smartphone", 110, 2, true, "A new smartphone.", "Raises your lifestyle."],
   ["Laptop", 150, 3, true, "A fast laptop for study and fun.", "Raises your lifestyle a lot."],
-  ["Home Entertainment System", 200, 3, true, "A big screen and surround sound.", "Raises your lifestyle a lot."]
+  ["Home Entertainment System", 200, 4, true, "A big screen and surround sound.", "Raises your lifestyle a lot."]
 ];
 
 // Properties for sale: price, comfort (1-5), weeks to pay off a mortgage,
@@ -93,10 +105,10 @@ const BT_PROPERTIES = [
 // Places students can rent (the school landlord): weekly rent, minimum
 // weeks, lifestyle points while living there, how many available.
 const BT_RENTALS = [
-  { name: "Shared Flat Room", rent: 15, min: 1, pts: 2, qty: 10, desc: "A room in a shared flat. Cheap and cheerful." },
-  { name: "One-Bedroom Flat", rent: 25, min: 2, pts: 5, qty: 8, desc: "Your own small flat." },
-  { name: "Two-Bedroom Unit", rent: 36, min: 2, pts: 8, qty: 6, desc: "Room to spread out, with a small yard." },
-  { name: "Family House (Rental)", rent: 50, min: 3, pts: 12, qty: 4, desc: "A comfortable family house to rent." }
+  { name: "Shared Flat Room", rent: 30, min: 1, pts: 2, qty: 10, desc: "A room in a shared flat. Cheap and cheerful." },
+  { name: "One-Bedroom Flat", rent: 40, min: 2, pts: 5, qty: 8, desc: "Your own small flat." },
+  { name: "Two-Bedroom Unit", rent: 50, min: 2, pts: 8, qty: 6, desc: "Room to spread out, with a small yard." },
+  { name: "Family House (Rental)", rent: 60, min: 3, pts: 12, qty: 4, desc: "A comfortable family house to rent." }
 ];
 
 // Vehicles: type, price, comfort, weekly running cost, % off the public
@@ -108,7 +120,7 @@ const BT_VEHICLES = [
   { name: "Family Sedan", type: "car", price: 700, comfort: 3, run: 12, off: 90, desc: "Comfortable, with room for the family." },
   { name: "SUV", type: "car", price: 1200, comfort: 4, run: 18, off: 100, desc: "Roomy, powerful and a smooth ride." },
   { name: "Sports Car", type: "car", price: 2200, comfort: 5, run: 28, off: 100, desc: "Fast, flashy and expensive to run." },
-  { name: "Delivery Truck", type: "truck", price: 900, comfort: 2, run: 15, off: 100, pay: 6,
+  { name: "Delivery Truck", type: "truck", price: 1000, comfort: 2, run: 30, off: 0, pay: 25,
     desc: "Earns money each time you check in to drive it. Needs a truck licence." }
 ];
 
@@ -167,7 +179,7 @@ const BT_EVENTS = [
   { type: "choice", name: "Concert Tickets", desc: "A band you love is playing this weekend.",
     options: [["Go to the concert", -25, "An amazing night."], ["Watch the highlights online", 0, "Not the same, but free."]] },
   { type: "choice", name: "Big Sale Weekend", desc: "Everything is half price at the mall.",
-    options: [["Treat yourself", -20, "You bought something you didn't need."], ["Save your money", 0, "You walked right past."]] }
+    options: [["Treat yourself", -20, "You bought something you didn't need, but you still feel quite happy."], ["Save your money", 0, "You walked right past."]] }
 ];
 
 // Big events: a library of bigger moments a teacher can launch for the class.
@@ -211,7 +223,6 @@ const BT_LIFE = [
   { name: "First Home Support", desc: "A discount on buying property.", b: { discountProperty: 10 } },
   { name: "Safe Driver Rewards", desc: "A discount on insurance.", b: { discountInsurance: 15 } },
   { name: "Healthy Lifestyle", desc: "Sport and good food make life better.", b: { lifestylePoints: 3 } },
-  { name: "Financial Mentor", desc: "Good advice cuts your tax bill.", b: { taxCutPercent: 10, lifestylePoints: 1 } },
   { name: "Long-term Illness", desc: "A tough time that cuts your income.", b: { incomePercent: -10, lifestylePoints: -2 } }
 ];
 
@@ -289,41 +300,80 @@ const BT_COMPANIES = [
 /* ---------------- Builder ---------------- */
 function _btMoney(n) { return Math.round(Number(n) * 100) / 100; }
 
-function t29ApplyBaseTemplate(cls) {
+// Term options the teacher can choose from when picking the base template.
+// Pass the chosen `terms` number to createClassFromBaseTemplate / applyBaseTemplateToClass
+// (and to t29BaseTemplateSummary for the "what's included" panel). Default is 1.
+const T29_BASE_TEMPLATE_TERM_OPTIONS = [
+  { terms: 1, label: "1 term", weeks: 10, blurb: "About 10 weeks. Small prices, quick results." },
+  { terms: 2, label: "2 terms", weeks: 20, blurb: "About 20 weeks. Big-ticket prices and limits are doubled." },
+  { terms: 4, label: "4 terms (full year)", weeks: 40, blurb: "About 40 weeks. Big-ticket prices and limits are 4x, with longer loans, mortgages and promotions." }
+];
+
+// Scale for a term choice. money: one-off prices, balances and limits (x1 / x2 / x4).
+// time: weeks-based things (x1 / x1.5 / x2). Weekly flows (wages, rent, bills, weekly events,
+// side hustles, interest and tax rates) are never scaled. M() and W() apply the scale.
+function t29BaseTemplateScale(terms) {
+  const t = [1, 2, 4].includes(Number(terms)) ? Number(terms) : 1;
+  const time = t === 1 ? 1 : t === 2 ? 1.5 : 2;
+  return { terms: t, money: t, time, M: n => _btMoney(Number(n) * t), W: n => Math.max(1, Math.round(Number(n) * time)) };
+}
+
+// The content tables with the term scale applied (1 term = the tables above, unchanged).
+function t29BaseTemplateData(terms) {
+  const S = t29BaseTemplateScale(terms), M = S.M, W = S.W;
+  return {
+    jobs: BT_JOBS.map(j => ({ ...j, promote: W(j.promote) })),
+    store: BT_STORE.map(s => s[3] ? [s[0], M(s[1]), ...s.slice(2)] : s), // lasting items only; treats stay small
+    properties: BT_PROPERTIES.map(p => ({ ...p, price: M(p.price), weeks: W(p.weeks) })),
+    vehicles: BT_VEHICLES.map(v => ({ ...v, price: M(v.price) })),
+    bigEvents: BT_BIG_EVENTS.map(e => ({
+      ...e,
+      ...(e.cost != null && e.costMode !== "percent" ? { cost: M(e.cost) } : {}),
+      ...(e.cover ? { cover: e.cover.map(c => [c[0], M(c[1])]) } : {})
+    })),
+    life: BT_LIFE.map(l => l.b.cashOnce ? { ...l, b: { ...l.b, cashOnce: M(l.b.cashOnce) } } : l),
+    cards: BT_CARD_PLANS.map(p => ({ ...p, limit: M(p.limit) })),
+    accounts: BT_ACCOUNT_PLANS.map(p => p.minBalance ? { ...p, minBalance: M(p.minBalance) } : p),
+    companies: BT_COMPANIES.map(c => [c[0], c[1], Math.round(c[2] * S.money), c[3], c[4]]) // more shares, same prices
+  };
+}
+
+function t29ApplyBaseTemplate(cls, terms) {
+  const S = t29BaseTemplateScale(terms), M = S.M, W = S.W, d = t29BaseTemplateData(terms);
   // ---- Core money settings ----
-  cls.welcomeGrant = 50;
-  cls.interestRate = 1.5;          // % a week on savings
-  cls.cashInterestRate = 0;
+  cls.welcomeGrant = M(BT_WELCOME_GRANT);
+  cls.interestRate = 1;            // % a week on savings
+  cls.cashInterestRate = 0.25;
   cls.interestAuto = true;
   cls.interestFrequency = "weekly";
-  cls.interestDay = "Fri";
+  cls.interestDay = "Thu";
   cls.payDay = "Fri";
-  cls.mortgageDay = "Fri";
-  cls.insuranceDay = "Fri";
+  cls.mortgageDay = "Mon";
+  cls.insuranceDay = "Tue";
   cls.transportDay = "Fri";
-  cls.dailyTimeLimitMinutes = null;
+  cls.dailyTimeLimitMinutes = 90;
   cls.storeSortMode = "manual";
 
   // ---- Taxes (kept light) ----
-  cls.taxRates = { property: 0, transport: 0, interest: 10, gambling: 10 };
+  cls.taxRates = { property: 0, transport: 0, interest: 10, gambling: 0 };
   cls.wageTaxBrackets = [ { upTo: 70, rate: 5 }, { upTo: 110, rate: 12 }, { upTo: null, rate: 20 } ];
 
   // ---- Jobs ----
-  cls.jobs = BT_JOBS.map(j => ({
+  cls.jobs = d.jobs.map(j => ({
     id: uid("j"), title: sanitizeUserText(j.title, 60),
     tiers: j.tiers.map(t => ({ id: uid("t"), name: sanitizeUserText(t[0], 60), wage: t[1], description: sanitizeUserText(t[2], 200) })),
     autoPromoteWeeks: j.promote
   }));
 
   // ---- Store ----
-  cls.storeItems = BT_STORE.map(s => ({
+  cls.storeItems = d.store.map(s => ({
     id: uid("item"), name: s[0], price: s[1], description: s[4], effect: s[5],
     stock: null, stockTotal: null, sold: 0, stars: s[2], countsNetWorth: s[3], archived: false
   }));
 
   // ---- Properties for sale (one entry per unit, grouped per listing) ----
   cls.properties = [];
-  BT_PROPERTIES.forEach(p => {
+  d.properties.forEach(p => {
     const groupId = uid("propgrp");
     for (let i = 0; i < p.qty; i++) {
       cls.properties.push({
@@ -339,8 +389,8 @@ function t29ApplyBaseTemplate(cls) {
     }
   });
   cls.propertyPriceRange = { min: 0.5, max: 2 };
-  cls.propertyBreakFee = 10;
-  cls.movingCost = 5;
+  cls.propertyBreakFee = M(50);
+  cls.movingCost = M(150);
 
   // ---- School rentals ----
   cls.npcProperties = [];
@@ -356,15 +406,15 @@ function t29ApplyBaseTemplate(cls) {
   });
 
   // ---- Transport ----
-  cls.vehicles = BT_VEHICLES.map(v => ({
+  cls.vehicles = d.vehicles.map(v => ({
     id: uid("veh"), name: v.name, price: v.price, comfort: v.comfort, description: v.desc, owners: [],
     type: normalizeVehicleType(v.type), drivePayout: v.pay || 0,
     weeklyExpense: v.run, publicTransportOffsetPct: v.off, stockLimit: null
   }));
-  cls.publicTransportFee = { amount: 5, description: "Weekly bus and train pass" };
+  cls.publicTransportFee = { amount: 20, description: "Weekly bus and train pass" };
   cls.publicTransportFeeOverrides = {};
-  cls.truckLicence = { price: 60, description: "You need a licence before you can buy or drive a truck." };
-  cls.sellBackRates = { car: 0.75, truck: 0.75, bike: 0.8 };
+  cls.truckLicence = { price: M(75), description: "You need a licence before you can buy or drive a truck." };
+  cls.sellBackRates = { car: 0.8, truck: 0.85, bike: 0.75 };
 
   // ---- Insurance ----
   cls.insurancePlans = [];
@@ -407,7 +457,7 @@ function t29ApplyBaseTemplate(cls) {
   });
 
   // ---- Big events ----
-  cls.bigEventDefs = BT_BIG_EVENTS.map(e => {
+  cls.bigEventDefs = d.bigEvents.map(e => {
     const kind = e.kind === "good" ? "good" : "bad";
     const module = resolveBigEventModule(e.module, kind);
     const coverage = MODULE_TO_COVERAGE[module];
@@ -422,7 +472,7 @@ function t29ApplyBaseTemplate(cls) {
   });
 
   // ---- Life events ----
-  cls.lifeItems = BT_LIFE.map(l => ({
+  cls.lifeItems = d.life.map(l => ({
     id: uid("life"), name: l.name, description: l.desc, benefits: sanitizeLifeBenefits(l.b), frequency: "weekly"
   }));
 
@@ -433,33 +483,33 @@ function t29ApplyBaseTemplate(cls) {
 
   // ---- Loans ----
   cls.loanTiers = [
-    { min: 10, max: 50, termWeeks: 3, rate: 3 },
-    { min: 51, max: 150, termWeeks: 6, rate: 2.5 },
-    { min: 151, max: 400, termWeeks: 10, rate: 2 },
-    { min: 401, max: 1000, termWeeks: 20, rate: 1.8 }
+    { min: M(10), max: M(50), termWeeks: W(3), rate: 3 },
+    { min: M(50) + 1, max: M(150), termWeeks: W(6), rate: 2.5 },
+    { min: M(150) + 1, max: M(400), termWeeks: W(10), rate: 2 },
+    { min: M(400) + 1, max: M(1000), termWeeks: W(20), rate: 1.8 }
   ].map(t => ({ id: uid("loantier"), ...t, active: true }));
-  cls.maxLoanAmount = 1000;
+  cls.maxLoanAmount = M(1000);
   cls.maxLoanCount = 2;
 
   // ---- Term deposits (rates are % a week, compounding; days = lock-in) ----
   cls.termDepositPlans = [
-    { name: "2-Week Saver", minAmount: 50, days: 14, rate: 1.8, earlyFeePct: 10 },
-    { name: "4-Week Saver", minAmount: 100, days: 28, rate: 2.2, earlyFeePct: 15 },
-    { name: "8-Week Saver", minAmount: 200, days: 56, rate: 2.6, earlyFeePct: 20 }
+    { name: "2-Week Saver", minAmount: M(50), days: 14, rate: 1.8, earlyFeePct: 10 },
+    { name: "4-Week Saver", minAmount: M(100), days: 28, rate: 2.2, earlyFeePct: 15 },
+    { name: "8-Week Saver", minAmount: M(200), days: 56, rate: 2.6, earlyFeePct: 20 }
   ].map(p => ({ id: uid("td"), ...p, active: true }));
 
   // ---- Credit cards and extra accounts ----
-  cls.cardSettings = { enabled: true, approval: "teacher", statementDay: "Fri", splitMin: 20 };
-  cls.cardPlans = BT_CARD_PLANS.map(p => cardCleanPlan(p));
+  cls.cardSettings = { enabled: true, approval: "teacher", statementDay: "Fri", splitMin: M(20) };
+  cls.cardPlans = d.cards.map(p => cardCleanPlan(p));
   cls.accountSettings = { enabled: true, approval: "instant", maxEveryday: 1, maxSavings: 2 };
-  cls.accountPlans = BT_ACCOUNT_PLANS.map(p => acctCleanPlan(p));
+  cls.accountPlans = d.accounts.map(p => acctCleanPlan(p));
 
   // ---- KiwiSaver ----
-  cls.kiwiSaver = { enabled: true, govt: true, firstHomeWeeks: 3, firstHomeKeep: 50, retired: false, retiredAt: null };
+  cls.kiwiSaver = { enabled: true, govt: true, firstHomeWeeks: W(3), firstHomeKeep: M(50), retired: false, retiredAt: null };
 
   // ---- Stock market ----
   cls.priceRange = { min: 1, max: 5 };
-  cls.companies = BT_COMPANIES.map(c => ({
+  cls.companies = d.companies.map(c => ({
     id: uid("co"), name: c[0], price: c[1], totalShares: c[2], availableShares: c[2],
     history: [c[1]], historyDates: [nzDateKey()], holders: {}, costBasis: {},
     priceRange: { min: c[3], max: c[4] }
@@ -467,9 +517,9 @@ function t29ApplyBaseTemplate(cls) {
 
   // ---- Gambling: OFF by default (the teacher can switch it on), limits kept small for when they do ----
   cls.gambling = Object.assign({}, cls.gambling, {
-    enabled: false, minBet: 1, maxBet: 10, dailyBuyInLimit: 20, dailyWinLimit: 40
+    enabled: false, minBet: 1, maxBet: M(10), dailyBuyInLimit: M(20), dailyWinLimit: M(40)
   });
-  cls.blackjack = { enabled: true, minBet: 1, maxBet: 10 };
+  cls.blackjack = { enabled: true, minBet: 1, maxBet: M(10) };
 
   // ---- Trade Centre and peer rentals ----
   cls.marketplace = {
@@ -482,37 +532,41 @@ function t29ApplyBaseTemplate(cls) {
   cls.lifestyleConfig = {
     property: { enabled: true, weight: 4 }, store: { enabled: true, weight: 2 },
     insurance: { enabled: true, weight: 2 }, transport: { enabled: true, weight: 3 },
-    loan: { enabled: true, perAmount: 100, points: 1 },
-    creditCard: { enabled: true, perAmount: 100, points: 1 }
+    loan: { enabled: true, perAmount: M(100), points: 1 },
+    creditCard: { enabled: true, perAmount: M(100), points: 1 }
   };
   cls.lifestyleThresholds = [
     { min: 0, max: 8, label: "Struggling", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
     { min: 8, max: 18, label: "Modest", minNetWorth: 0, minPropertyComfort: 0, minTransportComfort: 0 },
-    { min: 18, max: 32, label: "Comfortable", minNetWorth: 150, minPropertyComfort: 0, minTransportComfort: 0 },
-    { min: 32, max: 50, label: "Good", minNetWorth: 500, minPropertyComfort: 0, minTransportComfort: 0 },
-    { min: 50, max: 100, label: "Luxurious", minNetWorth: 1500, minPropertyComfort: 0, minTransportComfort: 0 }
+    { min: 18, max: 32, label: "Comfortable", minNetWorth: M(150), minPropertyComfort: 0, minTransportComfort: 0 },
+    { min: 32, max: 50, label: "Luxurious", minNetWorth: M(750), minPropertyComfort: 0, minTransportComfort: 0 },
+    { min: 50, max: 75, label: "Starlight Seeker", minNetWorth: M(1500), minPropertyComfort: 0, minTransportComfort: 1 },
+    { min: 75, max: 110, label: "Star Gazer", minNetWorth: M(2000), minPropertyComfort: 1, minTransportComfort: 1 },
+    { min: 110, max: 200, label: "Comet Catcher", minNetWorth: M(3000), minPropertyComfort: 2, minTransportComfort: 1 }
   ];
   cls.lifestyleLock = { threshold: 0, modules: [] };
 
   // ---- Quizzes: ready to use; locks stay off until the teacher turns them on ----
   cls.quizzes = BT_QUIZZES.map(q => normalizeQuiz({
-    title: q.title, description: q.description, moduleKey: q.moduleKey, passMark: 60, reward: 5, active: true,
+    title: q.title, description: q.description, moduleKey: q.moduleKey, passMark: 60, reward: M(5), active: true,
     questions: q.questions.map(x => ({ text: x[0], options: x[1], answer: x[2], explain: x[3] }))
   }));
   cls.quizGate = { enabled: false };
 
   cls.baseTemplate = T29_BASE_TEMPLATE_LABEL; // a small marker, so it's clear where the setup came from
+  cls.baseTemplateTerms = S.terms;            // which term option was chosen (1, 2 or 4)
   return cls;
 }
 
 // A short list of what's in the template, for the "what's included" panel.
-function t29BaseTemplateSummary() {
-  const propUnits = BT_PROPERTIES.reduce((a, p) => a + p.qty, 0);
+function t29BaseTemplateSummary(terms) {
+  const S = t29BaseTemplateScale(terms), d = t29BaseTemplateData(terms);
+  const propUnits = d.properties.reduce((a, p) => a + p.qty, 0);
   return [
-    `${BT_JOBS.length} jobs with 3 pay tiers each ($${BT_JOBS[0].tiers[0][1]}–$${Math.max(...BT_JOBS.map(j => j.tiers[2][1]))} a week)`,
-    `${BT_STORE.length} store items ($${BT_STORE[0][1]}–$${BT_STORE[BT_STORE.length - 1][1]})`,
-    `${BT_PROPERTIES.length} home listings (${propUnits} homes, $${BT_PROPERTIES[0].price}–$${BT_PROPERTIES[BT_PROPERTIES.length - 1].price}) and ${BT_RENTALS.length} rental types`,
-    `${BT_VEHICLES.length} vehicles (bikes, cars and a truck) and a weekly bus pass`,
+    `${d.jobs.length} jobs with 3 pay tiers each ($${d.jobs[0].tiers[0][1]}–$${Math.max(...d.jobs.map(j => j.tiers[2][1]))} a week)`,
+    `${d.store.length} store items ($${d.store[0][1]}–$${d.store[d.store.length - 1][1]})`,
+    `${d.properties.length} home listings (${propUnits} homes, $${d.properties[0].price}–$${d.properties[d.properties.length - 1].price}) and ${BT_RENTALS.length} rental types`,
+    `${d.vehicles.length} vehicles (bikes, cars and a truck) and a weekly bus pass`,
     `Insurance for cars, homes, income and everyday life`,
     `${BT_EVENTS.length} weekly random events and ${BT_BIG_EVENTS.length} big events`,
     `${BT_LIFE.length} life events and ${BT_HUSTLES.length} side hustles`,
@@ -520,19 +574,20 @@ function t29BaseTemplateSummary() {
     `KiwiSaver and a stock market with ${BT_COMPANIES.length} companies`,
     `${BT_QUIZZES.length} financial literacy quizzes (module locks off until you turn them on)`,
     `Light tax, a small gambling limit, and a trade centre for students`,
-    `Students start with $50`
+    `Paced for ${S.terms} term${S.terms > 1 ? "s" : ""} (about ${S.terms * 10} weeks)`,
+    `Students start with $${S.M(BT_WELCOME_GRANT)}`
   ];
 }
 
 /* ---------------- Creating a class from it ---------------- */
 // Teacher Home: a brand new class that starts from the base template.
-async function createClassFromBaseTemplate(teacherUsername, className) {
+async function createClassFromBaseTemplate(teacherUsername, className, terms) {
   const teacher = await getUser(teacherUsername);
   if (!teacher || teacher.role !== "teacher") return { ok: false, error: "Teacher account not found." };
   if (!className || !className.trim()) return { ok: false, error: "Enter a class name." };
 
   const code = await _freshClassCode();
-  const cls = _cloneDoc(t29ApplyBaseTemplate(defaultClassData(code, className.trim(), teacherUsername)));
+  const cls = _cloneDoc(t29ApplyBaseTemplate(defaultClassData(code, className.trim(), teacherUsername), terms));
 
   await classesCol().doc(code).set(cls);
   await usersCol().doc(teacherUsername).update({ classCode: code });
@@ -541,11 +596,11 @@ async function createClassFromBaseTemplate(teacherUsername, className) {
 
 // Signup: the class already exists (and is empty), so lay the template over it.
 // Only ever used on a class with no students, so nothing of anyone's is touched.
-async function applyBaseTemplateToClass(classCode) {
+async function applyBaseTemplateToClass(classCode, terms) {
   const existing = await getClass(classCode);
   if (!existing) return { ok: false, error: "Class not found." };
   if ((existing.students || []).length) return { ok: false, error: "The base template can only be added to a class with no students." };
-  const cls = _cloneDoc(t29ApplyBaseTemplate(defaultClassData(classCode, existing.name, existing.teacher)));
+  const cls = _cloneDoc(t29ApplyBaseTemplate(defaultClassData(classCode, existing.name, existing.teacher), terms));
   // Keep the things that were already true of this class.
   cls.createdAt = existing.createdAt || cls.createdAt;
   cls.coTeachers = existing.coTeachers || []; cls.coTeacherCode = existing.coTeacherCode || null;
