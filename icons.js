@@ -121,7 +121,7 @@ function paintIconSlots() {
 // One place for the fit limits. Phone = viewport 640px wide or less (same
 // breakpoint style.css uses); everything wider (tablet, laptop, desktop, in
 // either orientation) keeps labels AND icons.
-function _tbCfg() { return { phoneMax: 640, min: 0.75, max: 1.15, squash: 0.8 }; }
+function _tbCfg() { return { phoneMax: 640, min: 0.65, max: 1, squash: 0.7 }; }
 function _isPhoneBar() { return window.matchMedia("(max-width: " + _tbCfg().phoneMax + "px)").matches; }
 
 function fitTopbar() {
@@ -241,29 +241,40 @@ function _fitTopbarCore() {
   void topbar.offsetWidth;
 
   const brand = topbar.querySelector(".brand");
+  const actionsEl = topbar.querySelector(".topbar-actions") || topbar.querySelector(".btn-logout");
   const cs = getComputedStyle(topbar);
   const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
   const gap = parseFloat(cs.columnGap || cs.gap) || 0;
   const brandW = brand ? brand.getBoundingClientRect().width : 0;
+  const actionsW = actionsEl ? actionsEl.getBoundingClientRect().width : 0;
   const avail = topbar.clientWidth - padX;
-  // nav.scrollWidth already includes the settings/logout block (it sits
-  // inside the nav). Brand, gaps and nav all scale with --navscale, so the
-  // row scales as one piece.
+  // Size is chosen with the original, slightly generous-spacing formula (so
+  // normal screens keep the size they always had, never scaled UP). A
+  // stricter check using the true total width is only used to decide whether
+  // a smaller size still fits on one line, so we never wrap needlessly.
+  const availSized = avail - brandW - actionsW - gap * 2;
+  const fixed = brandW + gap;
   const needed = nav.scrollWidth;
   if (!(needed > 0) || !(avail > 0)) return;
-  const fixed = brandW + gap;
   const set = s => topbar.style.setProperty("--navscale", _ns(s));
+  // Returns a scale >= cfg.min that fits one line for a nav of width n, or 0.
+  const pick = n => {
+    const sized = Math.min(cfg.max, availSized / n);
+    if (sized >= cfg.min) return sized;
+    if (avail / (n + fixed) >= cfg.min) return cfg.min;
+    return 0;
+  };
 
-  // 1. Fits on one line with labels: full size, or slightly larger on wide screens.
-  const scale = avail / (needed + fixed);
-  if (scale >= cfg.min) { set(Math.min(cfg.max, scale)); return; }
+  // 1. One line with labels and normal spacing.
+  let s = pick(needed);
+  if (s) { set(s); return; }
 
   // 2. Trim padding/gaps (text stays readable), still one line.
   nav.classList.add("nav-tight");
   void nav.offsetWidth;
   const neededTight = nav.scrollWidth;
-  const tightScale = avail / (neededTight + fixed);
-  if (tightScale >= cfg.min) { set(Math.min(1, tightScale)); return; }
+  s = pick(neededTight);
+  if (s) { set(s); return; }
 
   // 3. Smallest readable text still doesn't fit one line: keep labels and
   //    icons, put the links on a second line (brand on the first).

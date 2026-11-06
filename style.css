@@ -115,7 +115,7 @@ p{color:var(--muted);line-height:1.5;}
   align-items:center;
   gap:calc(6px * var(--navscale));
   font-weight:800;
-  font-size:calc(1.15rem * var(--navscale));
+  font-size:calc(1.1rem * var(--navscale));
   color:#fff;
   text-decoration:none;
   flex-shrink:0;
@@ -137,7 +137,7 @@ p{color:var(--muted);line-height:1.5;}
 }
 .topbar nav a{
   color:#cfd8ea;text-decoration:none;font-weight:600;
-  font-size:calc(0.95rem * var(--navscale));
+  font-size:calc(0.9rem * var(--navscale));
   display:inline-flex;align-items:center;
   gap:calc(6px * var(--navscale));
   padding:calc(8px * var(--navscale)) calc(10px * var(--navscale));
