@@ -3972,7 +3972,7 @@ html.dark-mode .set-tile h3 .icon{color:var(--ink);}
 .set-controls .cc-num.unit input{padding-right:54px;}
 .set-controls select{margin:0;flex:0 1 220px;min-height:44px;font-weight:700;}
 .set-tile .success-msg,.set-tile .error-msg{margin:0;}
-.set-tile.danger{background:var(--cc-coral-bg);border-color:var(--cc-coral-line);}
+.set-tile.danger{grid-column:1/-1;background:var(--cc-coral-bg);border-color:var(--cc-coral-line);}
 .set-tile.danger h3,.set-tile.danger h3 .icon{color:var(--cc-coral-ink);}
 .set-tile.danger > p{color:var(--cc-coral-ink);}
 

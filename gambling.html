@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=d679e01c">
+<link rel="stylesheet" href="style.css?v=9b72047a">
 <link rel="stylesheet" href="blackjack.css?v=764e8aa1">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
@@ -161,6 +161,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <input type="checkbox" id="gEnabled" style="width:20px;height:20px;min-height:auto;">
         <span id="labEnabled">Allow students to gamble</span>
       </label>
+      <p class="muted-small" id="gEnabledNavNote">When this is off, students won't see Gambling on their top bar or side bar.</p>
       <p class="muted-small">Turn this off to pause BOTH games at once — students can still cash out, but can't buy in or place bets. Use the Blackjack tab's own switch to pause just Blackjack.</p>
 
       <div class="grid grid-2" style="margin-top:14px;">
@@ -177,9 +178,11 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <p class="muted-small" id="dailyWinLimitNote">Once a student's NET winnings for the day (total won minus total lost, across both games) reach this amount, they're locked out of buying in or betting until tomorrow, and shown the message below.</p>
 
       <label for="gWinLimitMessage" id="labWinLimitMessage" style="margin-top:14px;">Message shown when a student hits the winning limit</label>
-      <textarea id="gWinLimitMessage" rows="3" style="width:100%;max-width:480px;" placeholder="e.g. Nice work! You've hit today's winning limit — come back tomorrow."></textarea>
+      <textarea id="gWinLimitMessage" rows="3" style="display:block;width:100%;box-sizing:border-box;" placeholder="e.g. Nice work! You've hit today's winning limit — come back tomorrow."></textarea>
 
-      <button class="btn secondary" onclick="saveGamblingConfig('acctSettingsMsg')" id="acctSaveSettingsBtn">Save settings</button>
+      <div style="display:block;margin-top:16px;">
+        <button class="btn secondary" onclick="saveGamblingConfig('acctSettingsMsg')" id="acctSaveSettingsBtn">Save settings</button>
+      </div>
       <div id="acctSettingsMsg"></div>
 
       <div style="margin-top:24px;border-top:1.5px solid var(--line);padding-top:18px;">
@@ -393,6 +396,6 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="events-ui.js?v=f846128d"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="notifications.js?v=55edae20"></script>
-<script defer src="gambling.js?v=9822b6e4"></script>
+<script defer src="gambling.js?v=39a700cd"></script>
 </body>
 </html>

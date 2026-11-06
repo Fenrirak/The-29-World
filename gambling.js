@@ -1352,16 +1352,7 @@ function placePerfControl(mode) {
   const ctrl = document.getElementById("perfControl");
   const el = (id) => document.getElementById(id);
   if (!ctrl) return;
-  if (IS_TEACHER) {
-    if (mode === "account") {
-      const act = el("hTeacherGamblingRecent");
-      if (act && act.parentElement) act.parentElement.parentNode.insertBefore(ctrl, act.parentElement);
-    } else {
-      const s = el(mode === "roulette" ? "teacherRouletteSettings" : "teacherBlackjackSettings");
-      if (s) s.after(ctrl);
-    }
-    return;
-  }
+  if (IS_TEACHER) { ctrl.style.display = "none"; return; }
   const h = el({ account: "hGamblingRecent", roulette: "hRecent", blackjack: "bjHRecent" }[mode]);
   const card = h && h.closest(".card");
   if (card) card.parentNode.insertBefore(ctrl, card);

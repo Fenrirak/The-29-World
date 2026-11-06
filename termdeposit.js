@@ -3,10 +3,10 @@ let CURRENT, IS_TEACHER, PLANS = [];
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("vault", 26) + " Term Deposit";
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a term deposit plan";
-  document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add plan";
-  document.getElementById("hMine").innerHTML = icon("vault", 18) + " My term deposits";
-  document.getElementById("hEdit").innerHTML = icon("edit", 18) + " Edit term deposit plan";
+  document.getElementById("hAdd").innerHTML = "Add a term deposit plan";
+  document.getElementById("addBtn").innerHTML = "Add plan";
+  document.getElementById("hMine").innerHTML = "My term deposits";
+  document.getElementById("hEdit").innerHTML = "Edit term deposit plan";
 }
 
 async function init() {
@@ -75,18 +75,18 @@ async function render() {
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${icon("vault", 20)}${escapeHtml(p.name)}</h4>
+          <h4>${escapeHtml(p.name)}</h4>
           <p class="muted-small">Minimum ${fmtMoney(p.minAmount)} &middot; ${p.days} days &middot; ${p.rate}% interest/week (compounds to maturity) &middot; ${p.earlyFeePct}% fee if broken early</p>
         </div>
         <div>
           ${IS_TEACHER
             ? `<div class="row-flex" style="gap:8px;">
-                 <button class="btn small" onclick="openEditPlan('${p.id}')">${icon("edit", 13)} Edit</button>
-                 <button class="btn small coral" onclick="deletePlan('${p.id}')">${icon("trash", 13)} Remove</button>
+                 <button class="btn small" onclick="openEditPlan('${p.id}')">Edit</button>
+                 <button class="btn small coral" onclick="deletePlan('${p.id}')">Remove</button>
                </div>`
             : `<div class="row-flex" style="gap:8px;">
                  <input type="number" min="${p.minAmount}" step="0.01" id="amt-${p.id}" placeholder="Amount" style="max-width:140px;">
-                 <button class="btn small gold" id="depositBtn-${p.id}" onclick="openDeposit('${p.id}')">${icon("vault", 13)} Deposit</button>
+                 <button class="btn small gold" id="depositBtn-${p.id}" onclick="openDeposit('${p.id}')">Deposit</button>
                </div>`}
         </div>
       </div>
@@ -104,7 +104,7 @@ async function render() {
       const row = document.createElement("div");
       row.className = "auto-row";
       row.innerHTML = `
-        <div class="auto-details">${icon("vault", 14)} <strong>${fmtMoney(d.amount)}</strong> in ${escapeHtml(d.plan.name)}
+        <div class="auto-details"><strong>${fmtMoney(d.amount)}</strong> in ${escapeHtml(d.plan.name)}
           <div class="muted-small">Matures ${d.matureDate} &middot; ${d.plan.earlyFeePct}% fee if withdrawn early</div>
         </div>
         <button class="btn small coral" onclick="withdrawEarly('${d.id}')">Withdraw early</button>
