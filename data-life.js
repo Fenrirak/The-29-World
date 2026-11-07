@@ -608,7 +608,7 @@ async function setSellBackRates(classCode, rates) {
 // buying a different one without carrying over a stale check-in.
 async function checkinTruckDrive(username, classCode, vehId) {
   if (await isModuleLockedForStudent(username, classCode, "transport")) {
-    return { ok: false, error: "Transport is locked for you right now because of your lifestyle rating." };
+    return { ok: false, error: await moduleLockedError(username, classCode, "transport", "Transport") };
   }
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
@@ -1694,6 +1694,19 @@ async function cancelInsurance(username, planId) {
 }
 
 /* ===================== Class store ===================== */
+// Per-student buying limit. item.buyLimit = most units ONE student may ever buy from the store (null = no limit).
+// It counts purchases, not what they own: user.storeBought[itemId] goes up with every unit bought and never
+// comes back down, so selling an item back or trading it away doesn't free up more allowance.
+function storeLimitParse(v) { const n = Math.floor(Number(v)); return v !== "" && v !== null && v !== undefined && n > 0 ? n : null; }
+function storeBuyLimit(item) { const n = Math.floor(Number(item && item.buyLimit)); return n > 0 ? n : null; }
+function storeBoughtCount(user, itemId) { return Math.max(0, Math.floor(Number(user && user.storeBought && user.storeBought[itemId])) || 0); }
+function storeBuyRoom(user, item) { const lim = storeBuyLimit(item); return lim === null ? Infinity : Math.max(0, lim - storeBoughtCount(user, item.id)); }
+function storeBoughtAdd(user, itemId, qty) { user.storeBought = Object.assign({}, user.storeBought || {}); user.storeBought[itemId] = storeBoughtCount(user, itemId) + qty; }
+function storeLimitError(user, item) {
+  const lim = storeBuyLimit(item), had = storeBoughtCount(user, item.id), room = Math.max(0, lim - had);
+  return room <= 0 ? `You've already bought your limit of ${lim} ${item.name} (${lim} per student).`
+    : `Your teacher limits ${item.name} to ${lim} per student and you've bought ${had} already, so you can buy ${room} more.`;
+}
 async function addStoreItem(classCode, item) {
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
@@ -1712,6 +1725,7 @@ async function addStoreItem(classCode, item) {
       stock: stockTotal, stockTotal, sold: 0,
       stars: Math.max(0, Math.min(5, Number(item.stars) || 0)),
       countsNetWorth: item.countsNetWorth !== false,
+      buyLimit: storeLimitParse(item.buyLimit),
       archived: false
     });
     t.update(classRef, { storeItems: cls.storeItems });
@@ -1743,6 +1757,7 @@ async function updateStoreItem(classCode, itemId, item) {
     existing.stock = newStockTotal === null ? null : Math.max(0, newStockTotal - sold);
     existing.stars = Math.max(0, Math.min(5, Number(item.stars) || 0));
     existing.countsNetWorth = item.countsNetWorth !== false;
+    existing.buyLimit = storeLimitParse(item.buyLimit);
     t.update(classRef, { storeItems: cls.storeItems });
     after = { name: existing.name, price: existing.price, stars: existing.stars || 0, effect: existing.effect || "",
               description: existing.description || "", countsNetWorth: existing.countsNetWorth };
@@ -1867,7 +1882,7 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
   qty = Math.min(qty, 999); // each unit is pushed onto the user's doc, so an absurd qty could hang the tab or blow Firestore's 1 MB doc limit
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let itemName = "", usedCard = false, voucherNote = "", payRes = null;
+  let itemName = "", usedCard = false, voucherNote = "", payRes = null, limMsg = "";
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1879,6 +1894,7 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
       const item = cls.storeItems.find(i => i.id === itemId);
       if (!item || item.archived) throw new Error("NOT_FOUND");
       if (item.stock !== null && item.stock < qty) throw new Error("OUT");
+      if (user.role !== "teacher" && storeBuyRoom(user, item) < qty) { limMsg = storeLimitError(user, item); throw new Error("LIMITED"); }
       // No store tax — the price shown is what's paid.
       const isTeacher = user.role === "teacher";
       usedCard = !!opts.useCard && !isTeacher;
@@ -1897,12 +1913,14 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
       item.sold = (item.sold || 0) + qty;
       user.storeItems = user.storeItems || [];
       for (let i = 0; i < qty; i++) user.storeItems.push(itemId);
+      if (!isTeacher) storeBoughtAdd(user, itemId, qty);
       const paidTouched = storePaidAdd(user, itemId, total / qty, qty);
       if (!isTeacher) {
         const patch = { balance: Math.round((user.balance - payRes.cash) * 100) / 100, storeItems: user.storeItems };
         if (payRes.card > 0 || pr.voucher) patch.creditCard = user.creditCard;
         if (pr.lifeVoucher) patch.lifeVoucherUsed = user.lifeVoucherUsed;
         if (paidTouched) patch.storePaid = user.storePaid;
+        if (user.storeBought) patch.storeBought = user.storeBought;
         t.update(userRef, patch);
       }
       else t.update(userRef, { storeItems: user.storeItems });
@@ -1911,6 +1929,7 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
   } catch (e) {
     { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "OUT") return { ok: false, error: "Not enough stock left for that quantity." };
+    if (e.message === "LIMITED") return { ok: false, error: limMsg || "You've reached your limit for that item." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     if (e.message === "LIMIT") return { ok: false, error: "That would go over your credit card limit." };
     if (e.message === "NOCARD") return { ok: false, error: "Your credit card isn't available. Pay with cash instead." };
@@ -1935,7 +1954,7 @@ async function buyStoreCart(username, classCode, lines, opts) {
   if (!want.size) return { ok: false, error: "Your cart is empty." };
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let names = [], payRes = null, voucherNote = "", failName = "", totalQty = 0, paid = 0;
+  let names = [], payRes = null, voucherNote = "", failName = "", totalQty = 0, paid = 0, limMsg = "";
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1951,6 +1970,7 @@ async function buyStoreCart(username, classCode, lines, opts) {
         const item = cls.storeItems.find(i => i.id === id);
         if (!item || item.archived) throw new Error("NOT_FOUND");
         if (item.stock !== null && item.stock < qty) { failName = item.name; throw new Error("OUT"); }
+        if (user.role !== "teacher" && storeBuyRoom(user, item) < qty) { limMsg = storeLimitError(user, item) + " Nothing was bought."; throw new Error("LIMITED"); }
         picked.push({ item, qty });
         base += Number(item.price) * qty;
         names.push(`${item.name}${qty > 1 ? ` ×${qty}` : ""}`);
@@ -1975,6 +1995,7 @@ async function buyStoreCart(username, classCode, lines, opts) {
         if (item.stock !== null) item.stock -= qty;
         item.sold = (item.sold || 0) + qty;
         for (let i = 0; i < qty; i++) user.storeItems.push(item.id);
+        if (!isTeacher) storeBoughtAdd(user, item.id, qty);
         if (storePaidAdd(user, item.id, Number(item.price) * costShare, qty)) paidTouched = true;
       });
       paid = total;
@@ -1983,6 +2004,7 @@ async function buyStoreCart(username, classCode, lines, opts) {
         if (payRes.card > 0 || pr.voucher) patch.creditCard = user.creditCard;
         if (pr.lifeVoucher) patch.lifeVoucherUsed = user.lifeVoucherUsed;
         if (paidTouched) patch.storePaid = user.storePaid;
+        if (user.storeBought) patch.storeBought = user.storeBought;
         t.update(userRef, patch);
       } else t.update(userRef, { storeItems: user.storeItems });
       t.update(classRef, { storeItems: cls.storeItems });
@@ -1990,6 +2012,7 @@ async function buyStoreCart(username, classCode, lines, opts) {
   } catch (e) {
     { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "OUT") return { ok: false, error: `Not enough stock left for ${failName || "one of the items"}. Nothing was bought.` };
+    if (e.message === "LIMITED") return { ok: false, error: limMsg || "You've reached your limit for one of those items. Nothing was bought." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "One of those items isn't in the store any more. Nothing was bought." };
     if (e.message === "VOUCHER") return { ok: false, error: "That voucher isn't valid any more. Pick another or none." };
@@ -4140,6 +4163,17 @@ function _classHasAnyModuleLock(cls) {
   const lifestyleOn = !!(lock && lock.modules && lock.modules.length);
   const quizOn = !!(cls.quizGate && cls.quizGate.enabled && (cls.quizzes || []).some(q => q.active && q.moduleKey));
   return lifestyleOn || quizOn;
+}
+
+// A module can be locked by the lifestyle rating, an unpassed quiz, or both, so error messages
+// say which one it really is instead of always blaming the lifestyle rating.
+async function moduleLockedError(username, classCode, moduleKey, label) {
+  let reason = "lifestyle";
+  try { reason = (await getModuleLockReasons(username, classCode))[moduleKey] || "lifestyle"; } catch (e) { /* keep the default */ }
+  const why = reason === "quiz" ? "you haven't passed its quiz yet"
+    : reason === "both" ? "you haven't passed its quiz and your lifestyle rating is too low"
+    : "of your lifestyle rating";
+  return `${label} is locked for you right now because ${why}.`;
 }
 
 async function getModuleLockReasons(username, classCode) {

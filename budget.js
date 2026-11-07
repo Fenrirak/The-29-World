@@ -183,7 +183,7 @@ function renderBudgetStudent(me, cls) {
       v.saveTarget > 0 ? (v.actual.saved / v.saveTarget) * 100 : null, "save",
       v.actual.saved < 0 ? "You took more out of savings than you put in this week"
         : v.saveTarget <= 0 ? "You're not saving anything this week"
-        : savedOk ? "Goal reached for this week" : `${fmtMoney(v.saveTarget - v.actual.saved)} to go — move it into Savings in the Bank tab`));
+        : savedOk ? "Goal reached for this week" : `${fmtMoney(v.saveTarget - v.actual.saved)} to go — move it into Savings on the Bank page`));
   } else {
     rows.push(row("Spending", `<strong>${fmtMoney(v.spent)}</strong> so far`, null, "", spendSub));
     rows.push(row("Saved", `<strong>${fmtSigned(v.actual.saved)}</strong> so far`, null, "",
@@ -221,7 +221,7 @@ function renderBudgetStudent(me, cls) {
   else {
     safeWhy = `Your cash and ${othersWord}, plus the money still to come this week, minus the bills still to pay.`;
     if (v.safeTimed < v.safeNow - 0.005) safeWhy += ` Some of that money hasn't arrived yet, so only ${fmtMoney(v.safeTimed)} is safe until it does.`;
-    if (v.safeTimed > cashNow + 0.005) safeWhy += ` Only ${fmtMoney(cashNow)} of it is cash — spending more means moving ${othersWord} into cash first, in the Bank tab.`;
+    if (v.safeTimed > cashNow + 0.005) safeWhy += ` Only ${fmtMoney(cashNow)} of it is cash — spending more means moving ${othersWord} into cash first, on the Bank page.`;
     if (v.plan.hasPlan && v.spendLeft < v.safeNow - 0.005) safeWhy += v.spendLeft > 0.005 ? ` Your plan only has ${fmtMoney(v.spendLeft)} of spending money left.` : " You've already used all of your plan's spending money.";
   }
   document.getElementById("budSafe").innerHTML = `

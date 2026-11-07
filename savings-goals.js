@@ -19,7 +19,7 @@ function buildGoalsCard() {
   if (!card || document.getElementById("goalList")) return;
   // On the Bank page the Savings account is right there on the same page;
   // everywhere else, link to it.
-  const savingsRef = document.getElementById("savingsCard")
+  const savingsRef = document.getElementById("acctCard")
     ? "your Savings account (above)"
     : `your <a href="bank.html">Savings account</a>`;
   card.innerHTML = `

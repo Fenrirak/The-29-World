@@ -20,7 +20,7 @@
     var s = document.createElement('script'); s.src = js;
     document.head.appendChild(s);
   }
-  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=5b24fba0', 'sidebar-nav.js?v=8d951bc5');
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=637408d3', 'sidebar-nav.js?v=8d951bc5');
 })();
 </script>
 <title>Teacher Dashboard — The 29 World</title>
@@ -149,7 +149,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     <div class="stat sky">
       <span class="icon" id="iconStudents"></span>
       <div class="label">Students</div>
-      <div class="value" id="statStudents">0 / 8</div>
+      <div class="value" id="statStudents">0</div>
     </div>
     <div class="stat gold">
       <span class="icon" id="iconNetWorth"></span>
@@ -263,14 +263,14 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
   <div class="card">
     <h2 id="hLifestyle">Lifestyle rating settings</h2>
-    <p>The lifestyle rating (an uncapped score starting at 0, shown on every student's homepage) is built from stars: a property's comfort rating, and any stars you gave a store item or insurance plan. Set how many points each star is worth, and toggle sections on or off.</p>
+    <p>The lifestyle rating (an uncapped score starting at 0, shown on every student's homepage) is built from stars: the comfort rating of each property a student owns, their single comfiest vehicle, and any stars you gave a store item or insurance plan. Loans and credit card debt can take points off. While property scoring is on, a student with nowhere to live (no home of their own or rented) is always at 0. Set how many points each star is worth, and toggle sections on or off.</p>
     <div class="grid grid-3" id="lifestyleSettings"></div>
     <button class="btn secondary" style="margin-top:14px;" onclick="saveLifestyle()" id="saveLifestyleBtn">Save lifestyle settings</button>
     <div id="lifestyleMsg"></div>
 
     <div class="lifestyle-subsection">
       <h2 id="hThresholds">Lifestyle rating bands</h2>
-      <p>Give the 0-100 score meaningful names, e.g. "Poor" for 0-10, "Good" for 10-20. Bands should be ordered lowest to highest and cover the range you want labelled. You can also set extra requirements a student must meet to actually be shown a band — e.g. a minimum net worth, or owning a property/vehicle with at least a certain comfort rating — even if their score alone is high enough. Leave a requirement at 0 to not require it. If a student's score qualifies for a band but they don't meet its requirements, they'll be shown the next band down that they do qualify for.</p>
+      <p>Give ranges of the score meaningful names, e.g. "Poor" for 0-10, "Good" for 10-20. The score has no upper limit, so a student at or above the top of your last band still gets that last band. Bands should be ordered lowest to highest and cover the range you want labelled. You can also set extra requirements a student must meet to actually be shown a band — e.g. a minimum net worth, or owning a property/vehicle with at least a certain comfort rating — even if their score alone is high enough. Leave a requirement at 0 to not require it. If a student's score qualifies for a band but they don't meet its requirements, they'll be shown the next band down that they do qualify for.</p>
       <div id="thresholdList"></div>
       <button class="btn small secondary" onclick="addThresholdRow()" id="addThresholdBtn">Add band</button>
       <button class="btn secondary" style="margin-top:14px;" onclick="saveThresholds()" id="saveThresholdsBtn">Save bands</button>
@@ -499,14 +499,14 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 
 <script type="module" src="firebase-init.js?v=294b42b5"></script>
 <script defer src="icons.js?v=e1413a9c"></script>
-<script defer src="settings-menu.js?v=8dde546c"></script>
+<script defer src="settings-menu.js?v=e41d1075"></script>
 <script defer src="shortcuts.js?v=f7fd511f"></script>
 <script defer src="offline.js?v=067149c0"></script>
-<script defer src="data-core.js?v=11ff3fb8"></script>
-<script defer src="data-money.js?v=489fe5b4"></script>
-<script defer src="data-life.js?v=2e2a1c97"></script>
+<script defer src="data-core.js?v=cd54c0e6"></script>
+<script defer src="data-money.js?v=e9680bb4"></script>
+<script defer src="data-life.js?v=93db9eea"></script>
 <script defer src="data-property.js?v=233a9933"></script>
-<script defer src="data-markets.js?v=f6e1daf9"></script>
+<script defer src="data-markets.js?v=9e83f4cc"></script>
 <script defer src="tour.js?v=08eac342"></script>
 <script defer src="events-ui.js?v=f846128d"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>

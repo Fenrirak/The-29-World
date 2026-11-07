@@ -1512,6 +1512,7 @@ async function autoResolveSource(t, studentUser, useCard, fromAcct, toUser, cls)
 function autoSource(a) { return a && a.useCard ? "card" : ((a && a.fromAcct) || "cash"); }
 
 async function addAutomation(classCode, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false, useCard = false, fromAcct = "cash") {
+  { const g = await t29NoteGate(studentUser, note); if (g) return g; } // school-appropriate reasons only
   if (fromAcct === "card") useCard = true;
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   if (toUser === AUTOPAY_ALL_STUDENTS) {
@@ -1621,6 +1622,7 @@ async function autoCheckEnds(t, studentUser, ends) {
   if (!ok.has(ends.from) || !ok.has(ends.to)) throw new Error("BAD_ACCT");
 }
 async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency, amount, direction, note, confirmed = false) {
+  { const g = await t29NoteGate(studentUser, note); if (g) return g; } // school-appropriate reasons only
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   const ends = autoNormEnds(direction);
   if (!ends) return { ok: false, error: "Pick two different accounts." };
@@ -1660,6 +1662,7 @@ async function addSavingsAutomation(classCode, studentUser, dayOfWeek, frequency
   return { ok: true };
 }
 async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, toUser, note, confirmed = false, useCard = false, fromAcct = "cash") {
+  { const g = await t29NoteGate(studentUser, note); if (g) return g; } // school-appropriate reasons only
   if (fromAcct === "card") useCard = true;
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   if (toUser === AUTOPAY_ALL_STUDENTS) {
@@ -1719,6 +1722,7 @@ async function editAutomation(classCode, id, studentUser, dayOfWeek, frequency, 
   return { ok: true };
 }
 async function editSavingsAutomation(classCode, id, studentUser, dayOfWeek, frequency, amount, direction, note, confirmed = false) {
+  { const g = await t29NoteGate(studentUser, note); if (g) return g; } // school-appropriate reasons only
   if (!(Number(amount) > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   const ends = autoNormEnds(direction);
   if (!ends) return { ok: false, error: "Pick two different accounts." };
@@ -5507,6 +5511,7 @@ async function moveBankMoney(username, classCode, fromId, toId, amount) {
    only ever pay the teacher). Paying from an account follows that account's rules: withdrawal cap and fee. */
 async function sendMoneyFrom(fromUser, toUser, amount, note, sourceId) {
   if (!sourceId || sourceId === "cash") return transferMoney(fromUser, toUser, amount, note);
+  { const g = await t29NoteGate(fromUser, note); if (g) return g; } // school-appropriate reasons only
   amount = acctRound(amount);
   if (!(amount > 0) || !isFinite(amount)) return { ok: false, error: "Enter an amount greater than zero." };
   if (fromUser === toUser) return { ok: false, error: "You can't send money to yourself." };

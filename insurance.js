@@ -190,7 +190,7 @@ function paintChrome() {
   document.getElementById("pageTitle").innerHTML = icon("shield", 26) + " Insurance";
   document.getElementById("pageIntro").textContent = IS_TEACHER
     ? "Build insurance plans for your class by choosing the company, type of cover, price and excess, and set the day premiums are paid."
-    : "Protect yourself against the unexpected: pay a weekly-ish premium now, save on the excess later.";
+    : "Protect yourself against the unexpected: pay a small weekly premium now, save on the excess later.";
   document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add an insurance plan";
   document.getElementById("addBtn").innerHTML = "Add plan";
   document.getElementById("hMine").innerHTML = icon("shield", 18) + " My cover";
@@ -466,7 +466,7 @@ async function buyPlan(id, fee) {
     await render();
     const box = document.getElementById("msg-" + id);
     if (box) box.innerHTML = res.ok
-      ? `<div class="success-msg">You're covered! Premiums are due weekly — remember to set up an automatic payment to your teacher from the Bank tab so your cover doesn't lapse.</div>`
+      ? `<div class="success-msg">You're covered! Premiums are due weekly — remember to set up an automatic payment to your teacher on the Bank page so your cover doesn't lapse.</div>`
       : `<div class="error-msg">${res.error}</div>`;
   } finally {
     if (btn) btn.disabled = false;

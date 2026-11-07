@@ -399,7 +399,7 @@ function renderGamblingAccountCard(view) {
     buyInForm.classList.add("hidden");
     divider.classList.add("hidden");
     lockedMsg.classList.remove("hidden");
-    lockedMsg.innerHTML = `<div class="success-msg">${view.winLimitMessage || "You've hit today's winning limit — come back tomorrow."}</div>`;
+    lockedMsg.innerHTML = `<div class="success-msg">${escapeHtml(view.winLimitMessage || "You've hit today's winning limit — come back tomorrow.")}</div>`;
   } else if (view.gamblingEnabled === false) {
     buyInForm.classList.add("hidden");
     divider.classList.add("hidden");
@@ -552,7 +552,7 @@ async function spin() {
       ? `<div class="success-msg">Ball landed on ${res.spin}. You WON ${fmtMoney(res.netChange)}!</div>`
       : `<div class="error-msg">Ball landed on ${res.spin}. You lost ${fmtMoney(Math.abs(res.netChange))}.</div>`;
     if (res.hitWinLimit && res.winLimitMessage) {
-      box.innerHTML += `<div class="success-msg" style="margin-top:8px;">${res.winLimitMessage}</div>`;
+      box.innerHTML += `<div class="success-msg" style="margin-top:8px;">${escapeHtml(res.winLimitMessage)}</div>`;
     }
     // The chip balance already changed server-side the instant
     // placeRouletteBet() resolved, well before the wheel finished
@@ -918,7 +918,7 @@ async function bjFinalizeRound(round) {
     ? `<div class="success-msg">You WON ${fmtMoney(round.netChange)} this round!</div>`
     : `<div class="error-msg">You lost ${fmtMoney(Math.abs(round.netChange))} this round.</div>`;
   if (round.hitWinLimit && round.winLimitMessage) {
-    msg += `<div class="success-msg" style="margin-top:8px;">${round.winLimitMessage}</div>`;
+    msg += `<div class="success-msg" style="margin-top:8px;">${escapeHtml(round.winLimitMessage)}</div>`;
   }
   document.getElementById("bjRoundMsg").innerHTML = msg;
   // Same reasoning as spin() in Roulette: the chip balance already
@@ -1169,7 +1169,7 @@ function bjShowRoundStatic(round) {
       ? `<div class="success-msg">You WON ${fmtMoney(round.netChange)} this round!</div>`
       : `<div class="error-msg">You lost ${fmtMoney(Math.abs(round.netChange))} this round.</div>`;
     if (round.hitWinLimit && round.winLimitMessage) {
-      msg += `<div class="success-msg" style="margin-top:8px;">${round.winLimitMessage}</div>`;
+      msg += `<div class="success-msg" style="margin-top:8px;">${escapeHtml(round.winLimitMessage)}</div>`;
     }
     document.getElementById("bjRoundMsg").innerHTML = msg;
   }

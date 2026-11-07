@@ -8,7 +8,7 @@ const DAY_LABEL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thurs
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("piggy", 26) + " Bank Account";
+  document.getElementById("pageTitle").innerHTML = icon("piggy", 26) + " Bank";
   document.getElementById("iconAuto").innerHTML = icon("repeat", 30);
   document.getElementById("iconCardStat").innerHTML = icon("creditcard", 30); // credit card tile: its own card icon (not the wallet)
   document.getElementById("hActivity").innerHTML = icon("bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 3 days)");
@@ -28,6 +28,7 @@ async function init() {
   document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
+  document.getElementById("topStats").classList.toggle("bk-tiles-teacher", IS_TEACHER); // teacher: the 2 tiles stretch across the row
   paintChrome();
   enablePasswordToggles();
   // BUGFIX: get a server-trustworthy "now" before any of the day-gated

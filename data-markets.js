@@ -306,7 +306,7 @@ async function closeCompany(classCode, companyId) {
 
 async function buyShares(username, classCode, companyId, shares) {
   if (await isModuleLockedForStudent(username, classCode, "market")) {
-    return { ok: false, error: "The Stock Market is locked for you right now because of your lifestyle rating." };
+    return { ok: false, error: await moduleLockedError(username, classCode, "market", "The Stock Market") };
   }
   shares = Math.floor(Number(shares));
   if (!(shares > 0)) return { ok: false, error: "Enter a whole number of shares." };
@@ -386,7 +386,7 @@ async function buyShares(username, classCode, companyId, shares) {
 
 async function sellShares(username, classCode, companyId, shares) {
   if (await isModuleLockedForStudent(username, classCode, "market")) {
-    return { ok: false, error: "The Stock Market is locked for you right now because of your lifestyle rating." };
+    return { ok: false, error: await moduleLockedError(username, classCode, "market", "The Stock Market") };
   }
   shares = Math.floor(Number(shares));
   if (!(shares > 0)) return { ok: false, error: "Enter a whole number of shares." };
@@ -1186,7 +1186,7 @@ async function saveGamblingSettings(classCode, settings) {
       maxBet: Math.max(0, Number(settings.maxBet) || 0),
       dailyBuyInLimit: (settings.dailyBuyInLimit === "" || settings.dailyBuyInLimit === undefined || settings.dailyBuyInLimit === null) ? null : Math.max(0, Number(settings.dailyBuyInLimit) || 0),
       dailyWinLimit: (settings.dailyWinLimit === "" || settings.dailyWinLimit === undefined || settings.dailyWinLimit === null) ? null : Math.max(0, Number(settings.dailyWinLimit) || 0),
-      winLimitMessage: (settings.winLimitMessage || "").trim() || "You've hit your winning limit for today \u2014 nice work! Come back and play again tomorrow.",
+      winLimitMessage: sanitizeUserText(settings.winLimitMessage, 200) || "You've hit your winning limit for today \u2014 nice work! Come back and play again tomorrow.",
       payouts: {
         straightUp: Math.max(0, Number(settings.straightUp) || 0),
         split: Math.max(0, Number(settings.split) || 0),
@@ -1523,8 +1523,8 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
     });
   } catch (e) {
     if (e.message === "NO_USER") return { ok: false, error: "User not found." };
-    if (e.message === "LOCKED") return { ok: false, error: "Gambling is locked for you right now because of your lifestyle rating." };
-    if (e.message === "WIN_LIMIT") return { ok: false, error: g.winLimitMessage || "You've hit today's winning limit and can't gamble again until tomorrow." };
+    if (e.message === "LOCKED") return { ok: false, error: await moduleLockedError(username, classCode, "gambling", "Gambling") };
+    if (e.message === "WIN_LIMIT") return { ok: false, error: escapeHtml(g.winLimitMessage || "") || "You've hit today's winning limit and can't gamble again until tomorrow." };
     if (e.message === "INSUFFICIENT") return { ok: false, error: "You don't have enough in your gambling account for that bet — buy in first." };
     return { ok: false, error: "Something went wrong placing that bet. Please try again." };
   }
@@ -1857,7 +1857,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
   const cls = withNewModuleDefaults(clsRaw);
   if (!cls) return { ok: false, error: "Class not found." };
   if (isModuleLockedForStudentFromData(cls, user, username, "gambling")) {
-    return { ok: false, error: "Gambling is locked for you right now because of your lifestyle rating." };
+    return { ok: false, error: await moduleLockedError(username, classCode, "gambling", "Gambling") };
   }
   if (!cls.gambling.enabled) return { ok: false, error: "Your teacher has temporarily turned off gambling for this class." };
   const bj = cls.blackjack;
@@ -1869,7 +1869,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
   if (user.blackjackRound) return { ok: false, error: "You already have a Blackjack round in progress." };
   if (user.role !== "teacher") {
     const acc0 = gamblingAccountToday(user);
-    if (acc0.winLimitHit) return { ok: false, error: cls.gambling.winLimitMessage || "You've hit today's winning limit and can't gamble again until tomorrow." };
+    if (acc0.winLimitHit) return { ok: false, error: escapeHtml(cls.gambling.winLimitMessage || "") || "You've hit today's winning limit and can't gamble again until tomorrow." };
     if (acc0.balance < betAmount) return { ok: false, error: "You don't have enough in your gambling account for that bet — buy in first." };
   }
 

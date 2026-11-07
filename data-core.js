@@ -108,6 +108,16 @@ function sanitizeUserText(s, maxLen) {
     .slice(0, maxLen || 60);
 }
 
+// A username is used as a database document name, so a few characters can't be allowed. Returns a
+// friendly message when the username can't be used, or "" when it is fine.
+function t29UsernameProblem(username) {
+  const u = String(username === undefined || username === null ? "" : username).trim();
+  if (!u) return "Enter a username.";
+  if (/\s/.test(u)) return "Usernames can't have spaces. Try something like sam.lee";
+  if (/[\/\\]/.test(u) || u === "." || u === ".." || /^__.*__$/.test(u)) return "Usernames can't have slashes. Try letters, numbers, dots or dashes, like sam.lee";
+  return "";
+}
+
 // Name helpers shared by the signup page and the teacher's bulk "Add students" box, so a
 // student who joins themselves and one a teacher adds end up with the same kind of name
 // and username.
@@ -1008,7 +1018,7 @@ function defaultClassData(code, className, teacherUsername) {
   return {
     code, name: className || "Room " + code, teacher: teacherUsername,
     students: [], jobs: [], companies: [],
-    interestRate: 2, txns: [],
+    interestRate: 1, txns: [],
     createdAt: Date.now(), reportArchives: [],
     archived: false, archivedAt: null,
     // Auto-archive: lastActivityAt is bumped whenever anyone (teacher, co-teacher
@@ -1033,7 +1043,7 @@ function defaultClassData(code, className, teacherUsername) {
     eventDefs: [], eventLog: [], lastEventWeekRun: null,
     vehicles: [], termDepositPlans: [],
     truckLicence: { price: 0, description: "" },
-    sellBackRates: { car: 0.85, truck: 0.85, bike: 0.85 },
+    sellBackRates: { car: 0.8, truck: 0.85, bike: 0.75 },
     propertyBreakFee: 0,
     sideHustles: [],
     lifestyleLock: { threshold: 0, modules: [] },
@@ -1084,6 +1094,7 @@ async function createTeacherAndClass(name, username, password, className, extra)
   if (!password || password.length < 6) {
     return { ok: false, error: "Password must be at least 6 characters." };
   }
+  { const uProblem = t29UsernameProblem(username); if (uProblem) return { ok: false, error: uProblem }; }
 
   name = sanitizeUserText(name, 60);
   className = sanitizeUserText(className, 60);
@@ -1748,6 +1759,7 @@ async function createStudentAccount(name, username, password, classCode) {
   if (!password || password.length < 6) {
     return { ok: false, error: "Password must be at least 6 characters." };
   }
+  { const uProblem = t29UsernameProblem(username); if (uProblem) return { ok: false, error: uProblem }; }
 
   name = sanitizeUserText(name, 60);
 
@@ -2538,6 +2550,8 @@ async function transferMoney(fromUser, toUser, amount, note, opts) {
   const to = await getUser(toUser);
   if (!from || !to) return { ok: false, error: "User not found." };
   if (from.classCode !== to.classCode) return { ok: false, error: "You can only send money within your own class." };
+  // Reasons are read by classmates, so they have to be school-appropriate (teachers aren't filtered).
+  if (from.role !== "teacher") { const nc = t29TextCheck(note); if (!nc.ok) return { ok: false, error: nc.error }; }
   if (!(amount > 0) || !isFinite(amount)) return { ok: false, error: "Enter an amount greater than zero." };
   // Both writes below would hit the same doc and the second would win, leaving the
   // sender with MORE money instead of the same.
@@ -3987,3 +4001,132 @@ function positionBalanceWidget() {
 }
 
 document.addEventListener("DOMContentLoaded", anwGlobalBootstrap);
+
+/* ===================== School-safe text check =====================
+   t29TextCheck(text, opts) -> { ok, text, error? }
+   Used for free-text a student types that other people can read (payment
+   reasons, declined-offer reasons). It looks through disguises, not just
+   plain words: f*ck, sh1t, @ss, f.u.c.k, f u c k, fuuuuck, "sh it", look-alike
+   letters from other alphabets, zero-width characters, and so on. Words are
+   matched as whole words (plus common endings) so harmless words that merely
+   CONTAIN a bad one (class, assess, Scunthorpe, grape) are never blocked.
+   Only the generic message below is shown; the offending word is never echoed.
+   This runs in the browser, like the rest of the app's rules. */
+const T29_FILTER_MSG = "Please keep it school-appropriate \u2014 that message has language that isn't allowed here. Reword it and try again.";
+const T29_FILTER = (function () {
+  // Endings a word may take (fucking, shitty, bitches ...). Strong swears take all of them; the rest only plurals.
+  const END_ALL = ["", "s", "es", "ed", "er", "ers", "ing", "ings", "in", "y", "ie", "ies", "z", "head", "face"];
+  const END_PLAIN = ["", "s", "es", "z"];
+  const SWEAR = "fuck fucc fuk fck fuc fuq fcuk fvck phuck phuk shit sht shyt shite piss bitch biatch wank bugger".split(" ");
+  const PLAIN = ("pron ass arse arsehole arsewipe asshole asshat asswipe assface dumbass jackass smartass fatass dick dickhead dickwad cock cocksucker cunt twat prick pussy bollocks " +
+    "hell damn damned damnit dammit goddamn goddamned goddammit crap crappy dipshit douche douchebag scumbag idiot moron imbecile stupid dumb loser ugly " +
+    "retard retarded tard spaz spastic mong mongoloid sex sexy sexting porno horny boob tit titty titties penis vagina dildo boner jizz cum cumming cumshot " +
+    "blowjob handjob rimjob milf pedo paedo anal anus orgasm nudes onlyfans hentai xxx pornhub slut slutty skank thot tranny shemale dyke homo lesbo " +
+    "fag fagot faggot nigger nigga niggah niggaz nigguh nigra nigg negro darkie chink gook spic kike kyke yid wop dago honky wetback beaner coon paki raghead towelhead jap midget cripple " +
+    "rape raped raping rapist molest molester incest erotic bellend tosser knobhead " +
+    "nazi hitler heil kkk wtf stfu gtfo omfg lmfao ffs fml kys cocaine heroin meth lsd mdma").split(" ");
+  // Inside-a-word matches: long, distinctive stems that no everyday word contains.
+  const STEMS = "fuck shit bitch whore bastard cocksuck asshole asshat asswipe dickhead dickwad masturbat porn pedophil paedophil".split(" ");
+  // Can be spotted when split across words ("sh it", "fu ck").
+  const PAIRABLE = "fuck shit bitch cunt whore nigger nigga faggot bastard pussy wanker twat slut".split(" ");
+  const ALLOW_TOKENS = new Set(["shiitake", "shiitakes", "shiite", "shiites"]);
+  const ALLOW_PHRASES = /\bhell'?s? (?:pizza|kitchen)\b|\bdick smiths?\b/g;   // NZ brands that happen to contain a flagged word
+
+  const rx = w => w.replace(/(.)\1*/g, (m, c) => c + (m.length > 1 ? "{" + m.length + ",}" : "+"));   // fuuuck, asss
+  const anchored = (w, ends) => new RegExp("^(?:" + rx(w) + ")(?:" + ends.join("|") + ")$");
+  const WORDS = SWEAR.map(w => anchored(w, END_ALL)).concat(PLAIN.map(w => anchored(w, END_PLAIN)));
+  const INSIDE = STEMS.map(w => new RegExp(rx(w)));
+  const PAIRS = PAIRABLE.map(w => anchored(w, END_PLAIN));
+  const FORMS = {};   // length -> plain spellings, for masked words like f**k
+  SWEAR.forEach(w => END_ALL.forEach(e => { (FORMS[(w + e).length] = FORMS[(w + e).length] || []).push(w + e); }));
+  PLAIN.concat(STEMS).forEach(w => END_PLAIN.forEach(e => { (FORMS[(w + e).length] = FORMS[(w + e).length] || []).push(w + e); }));
+
+  const PHRASES = [
+    /\b(?:kill|hang|shoot|off|end|neck|hurt|harm|cut) (?:your ?self|ur ?self|yourselves)\b/,
+    /\bgo (?:and )?die\b/, /\bdrop dead\b/, /\bdie in a fire\b/,
+    /\b(?:hope|wish) (?:you|u|he|she|they) (?:die|dies|get cancer|rot|burn)\b/,
+    /\b(?:i|we|ll|will|gonna|going to|wanna|want to|should) (?:kill|murder|stab|shoot|strangle|beat up|bash) (?:you|u|ya|him|her|them|everyone|everybody|someone|somebody)\b/,
+    /\b(?:shoot up|blow up|bomb|burn down) (?:the |this |our |my )?(?:school|classroom|teachers?)\b/, /\bschool (?:shooter|shooting)\b/,
+    /\b(?:kill|hate|gas|burn|exterminate|death to) (?:all )?(?:the )?(?:jews|blacks|whites|asians|gays|muslims|christians|immigrants|indians|maori|mexicans|chinese)\b/,
+    /\b(?:white|aryan) (?:power|pride|supremacy|race)\b/,
+    /\b(?:that|this|it|so|you|ur|u) (?:s |re |is |are |r )?gay\b/
+  ];
+  const GLYPH = {};   // look-alike letters from Cyrillic / Greek and a few Latin extras
+  "\u0430:a \u0435:e \u043e:o \u0440:p \u0441:c \u0445:x \u0443:y \u0456:i \u0458:j \u0455:s \u043a:k \u043c:m \u043d:h \u0442:t \u0432:b \u03b1:a \u03b2:b \u03b5:e \u03b9:i \u03bf:o \u03c1:p \u03c5:u \u03bd:v \u03c4:t \u03ba:k \u00df:ss \u00f8:o \u00e6:ae \u0153:oe \u0111:d \u0142:l \u0131:i \u0127:h"
+    .split(" ").forEach(p => { GLYPH[p[0]] = p.slice(2); });
+
+  function norm(s) {
+    try { s = s.normalize("NFKD"); } catch (e) { /* very old browser: carry on */ }
+    s = s.replace(/[\u0300-\u036f\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00ad]/g, "")   // accents, zero-width and invisible characters
+      .toLowerCase().replace(/[\u2018\u2019\u02bc\u00b4`]/g, "'");
+    return s.replace(/[^\x00-\x7f]/g, ch => GLYPH[ch] !== undefined ? GLYPH[ch] : " ").replace(ALLOW_PHRASES, " ");
+  }
+  function leet(p, amb) {
+    const m = { "0": "o", "1": amb, "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "9": "g", "@": "a", "$": "s" };
+    return p.replace(/[01345789@$]/g, c => m[c])
+      .replace(/([a-z0-9])([!|(<+])(?=[a-z0-9])/g, (x, a, b) => a + (b === "!" || b === "|" ? amb : b === "+" ? "t" : "c"))
+      .replace(/[#%^]/g, "*").replace(/([a-z0-9])\?(?=[a-z0-9])/g, "$1*");
+  }
+  function masked(t) {
+    if (t.length < 3 || t.replace(/\*/g, "").length < 1) return false;
+    return (FORMS[t.length] || []).some(f => { for (let i = 0; i < t.length; i++) if (t[i] !== "*" && t[i] !== f[i]) return false; return true; });
+  }
+  function tokenHit(t) {
+    if (ALLOW_TOKENS.has(t)) return false;
+    if (t.indexOf("*") >= 0) return masked(t);
+    return INSIDE.some(r => r.test(t)) || WORDS.some(r => r.test(t));
+  }
+  function scan(raw, amb) {
+    const s = norm(raw);
+    if (/(^|[^0-9])1488([^0-9]|$)/.test(s)) return true;
+    const toks = [];   // br = may be joined onto the previous token (not across an apostrophe, so he'll / who're stay safe)
+    s.split(/\s+/).forEach(chunk => {
+      chunk = chunk.replace(/^#(?=[a-z0-9])/, "");
+      chunk.split(/'+/).forEach((part, pi) => {
+        if (/[a-z@$]/.test(part)) part = leet(part, amb);   // bare numbers (455, 2024) are never turned into letters
+        part.split(/[^a-z*]+/).filter(Boolean).forEach((t, k) => toks.push({ t, br: !(pi > 0 && k === 0) }));
+      });
+    });
+    if (toks.some(o => tokenHit(o.t))) return true;
+    const L2 = [];   // runs of single letters ("f u c k", "a.s.s") become one word
+    for (let i = 0; i < toks.length;) {
+      let j = i;
+      while (j + 1 < toks.length && toks[j].t.length === 1 && toks[j + 1].t.length === 1 && toks[j + 1].br) j++;
+      if (j > i && toks[j].t.length === 1) { L2.push({ t: toks.slice(i, j + 1).map(o => o.t).join(""), br: toks[i].br }); i = j + 1; }
+      else { L2.push(toks[i]); i++; }
+    }
+    if (L2.some(o => o.t.length > 2 && tokenHit(o.t))) return true;
+    for (let i = 0; i < L2.length; i++) {   // words split in two or three pieces ("sh it", "f uc k")
+      let cat = L2[i].t;
+      for (let j = 1; j <= 2 && i + j < L2.length && L2[i + j].br; j++) {
+        cat += L2[i + j].t;
+        if (cat.length <= 14 && PAIRS.some(r => r.test(cat))) return true;
+      }
+    }
+    const phrase = toks.map(o => o.t).join(" ");
+    return PHRASES.some(r => r.test(phrase));
+  }
+  function flag(raw) {
+    const s = String(raw == null ? "" : raw);
+    if (s.indexOf("\ud83d\udd95") >= 0) return true;
+    return scan(s, "i") || (/[1!|]/.test(s) && scan(s, "l"));
+  }
+  return { flag };
+})();
+
+function t29TextCheck(text, opts) {
+  opts = opts || {};
+  const clean = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
+  if (!clean) return { ok: true, text: "" };
+  if (opts.maxLen && clean.length > opts.maxLen) return { ok: false, text: clean, error: "Please keep it to " + opts.maxLen + " characters or fewer." };
+  if (T29_FILTER.flag(clean)) return { ok: false, text: clean, error: opts.error || T29_FILTER_MSG };
+  return { ok: true, text: clean };
+}
+// Teachers aren't filtered. Only looks the user up if the text was actually flagged, so normal sends cost no extra read.
+async function t29NoteGate(username, note) {
+  const c = t29TextCheck(note);
+  if (c.ok) return null;
+  let u = null;
+  try { u = await getUserCached(username); } catch (e) { /* treat as a student */ }
+  return (u && u.role === "teacher") ? null : { ok: false, error: c.error };
+}

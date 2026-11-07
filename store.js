@@ -63,7 +63,7 @@ function starsHtml(n) {
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("cart", 26) + " Class Store";
+  document.getElementById("pageTitle").innerHTML = icon("cart", 26) + " Store";
   document.getElementById("pageIntro").textContent = IS_TEACHER
     ? "Put items up for sale in your class store. Set each item's price, how many are in stock and any lifestyle stars it gives."
     : "Spend your hard-earned cash on things your teacher has put up for sale.";
@@ -124,6 +124,7 @@ async function render() {
   CLS_CACHE = cls;
   ccStoreBarRender(me, cls); // "Pay with: Cash / Credit card" bar (creditcard.js)
   lifeStoreBarRender(me);
+  invRender(me, cls); // "My inventory" bar (students)
   MANUAL_ITEMS = (cls.storeItems || []).filter(i => !i.archived);
   SORT_MODE = SORT_MODES.some(m => m.id === cls.storeSortMode) ? cls.storeSortMode : "manual";
   const items = sortStoreItems(MANUAL_ITEMS, SORT_MODE);
@@ -137,7 +138,11 @@ async function render() {
 
   items.forEach(it => {
     const outOfStock = it.stock !== null && it.stock <= 0;
-    const maxQty = it.stock !== null ? it.stock : null;
+    // Teacher's per-student buying limit: how many more THIS student may buy (stock still caps it too).
+    const lim = storeBuyLimit(it), room = IS_TEACHER ? Infinity : storeBuyRoom(me, it);
+    const limitHit = !IS_TEACHER && !outOfStock && room <= 0;
+    const cap = Math.min(it.stock !== null ? it.stock : Infinity, room);
+    const maxQty = cap === Infinity ? null : cap;
     const owned = ownedCounts[it.id] || 0;
     const div = document.createElement("div");
     div.className = "card company-card store-card";
@@ -156,7 +161,7 @@ async function render() {
           <p>${escapeHtml(it.description) || "No description provided."}</p>
           ${it.effect ? `<p class="muted-small">Does: ${it.effect}</p>` : ""}
           <p>${priceWithLifeDiscount(me, "store", it.price)} ${starsHtml(it.stars)}</p>
-          <p class="muted-small">${it.stock === null ? "Unlimited stock" : `${it.stock} left in stock`}${IS_TEACHER ? ` · ${it.sold || 0} sold` : ""}</p>
+          <p class="muted-small">${it.stock === null ? "Unlimited stock" : `${it.stock} left in stock`}${IS_TEACHER ? ` · ${it.sold || 0} sold` : ""}${lim ? ` · ${IS_TEACHER ? `Limit ${lim} per student` : (room <= 0 ? `You've reached the limit of ${lim}` : `Limit ${lim} per student, you can buy ${room} more`)}` : ""}</p>
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
@@ -165,6 +170,8 @@ async function render() {
                <button class="btn small coral" onclick="deleteItem('${it.id}')">${icon("trash", 13)} Remove</button>`
             : outOfStock
               ? `<button class="btn small gold" disabled>${icon("cart", 13)} Out of stock</button>`
+              : limitHit
+              ? `<button class="btn small gold" disabled title="Your teacher limits this item to ${lim} per student">${icon("cart", 13)} Limit reached</button>`
               : `<div class="qty-buy-block">
                    <div class="qty-stepper">
                      <button type="button" class="qty-btn" aria-label="Decrease quantity" onclick="qtyStep('${it.id}', -1)">−</button>
@@ -250,6 +257,7 @@ async function addItem(e) {
     name: document.getElementById("iName").value.trim(),
     price: document.getElementById("iPrice").value,
     stock: document.getElementById("iStock").value,
+    buyLimit: document.getElementById("iLimit").value,
     effect: document.getElementById("iEffect").value.trim(),
     description: document.getElementById("iDesc").value.trim(),
     stars: document.getElementById("iStars").value,
@@ -257,7 +265,7 @@ async function addItem(e) {
   };
   await addStoreItem(CURRENT.classCode, item);
   document.getElementById("addMsg").innerHTML = `<div class="success-msg">Item added!</div>`;
-  ["iName","iPrice","iStock","iEffect","iDesc"].forEach(id => document.getElementById(id).value = "");
+  ["iName","iPrice","iStock","iLimit","iEffect","iDesc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("iStars").value = 0;
   document.getElementById("iCountsNetWorth").checked = true;
   await render();
@@ -285,6 +293,8 @@ function editItem(id) {
         <input id="e-stock-${id}" type="number" min="0" step="1" value="${it.stockTotal === null || it.stockTotal === undefined ? "" : it.stockTotal}">
       </div>
     </div>
+    <label>Limit per student (blank = no limit)</label>
+    <input id="e-limit-${id}" type="number" min="1" step="1" value="${storeBuyLimit(it) || ""}" placeholder="e.g. 3">
     <label>What it does</label>
     <input id="e-effect-${id}" value="${(it.effect || "").replace(/"/g, "&quot;")}">
     <label>Description</label>
@@ -312,6 +322,7 @@ async function saveItemEdit(id) {
     name: document.getElementById("e-name-" + id).value.trim(),
     price: document.getElementById("e-price-" + id).value,
     stock: document.getElementById("e-stock-" + id).value,
+    buyLimit: document.getElementById("e-limit-" + id).value,
     effect: document.getElementById("e-effect-" + id).value.trim(),
     description: document.getElementById("e-desc-" + id).value.trim(),
     stars: document.getElementById("e-stars-" + id).value,
@@ -342,6 +353,93 @@ async function sellItem(id) {
   flashMsg(document.getElementById("msg-" + id), `<div class="success-msg">Sold back for ${fmtMoney(res.payout)}!</div>`);
 }
 
+/* ===================== Student: inventory ===================== */
+// A slim bar above the shop that opens into everything the student owns and how many of each.
+// Open/closed is remembered per student. Tiles can jump to the item in the store or sell one back
+// (which also covers items the teacher has since taken off the shelf).
+let INV_OPEN = null;
+const BOX_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
+const CHEV_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+const invKey = () => "anw_inv_open_" + CURRENT.username + "_" + CURRENT.classCode;
+
+function invRows(me, cls) {
+  const n = {};
+  (me.storeItems || []).forEach(id => { n[id] = (n[id] || 0) + 1; });
+  return (cls.storeItems || []).filter(it => n[it.id]).map(it => ({ it, n: n[it.id] }));
+}
+
+function invTile(me, it, n) {
+  const lim = storeBuyLimit(it);
+  return `<div class="inv-tile" id="inv-${it.id}">
+    <div class="inv-top"><span class="inv-name">${escapeHtml(it.name)}</span><span class="inv-qty" title="You own ${n}">×${n}</span></div>
+    <div class="inv-meta">${starsHtml(it.stars)} ${fmtMoney(it.price)} each${n > 1 ? ` · ${fmtMoney(Math.round(it.price * n * 100) / 100)} total` : ""}</div>
+    ${it.archived ? `<div class="inv-meta">No longer sold in the store</div>` : ""}
+    ${lim ? `<div class="inv-meta">Bought ${storeBoughtCount(me, it.id)} of ${lim} allowed</div>` : ""}
+    <div class="inv-acts">
+      ${it.archived ? "" : `<button type="button" class="btn small secondary" onclick="invGo('${it.id}')">View in store</button>`}
+      <button type="button" class="btn small secondary" onclick="invSell('${it.id}')">Sell back (${storeRefundLabel(me, it)})</button>
+    </div>
+  </div>`;
+}
+
+function invRender(me, cls) {
+  const box = $id("invPanel");
+  if (!box) return;
+  if (IS_TEACHER || !me || !cls) { box.classList.add("hidden"); return; }
+  if (INV_OPEN === null) { try { INV_OPEN = localStorage.getItem(invKey()) === "1"; } catch (e) { INV_OPEN = false; } }
+  const rows = invRows(me, cls), kinds = rows.length, units = rows.reduce((s, r) => s + r.n, 0);
+  if (!kinds) {
+    box.className = "card inv-card";
+    box.innerHTML = `<div class="inv-head static"><span class="inv-icon">${BOX_SVG}</span><span class="inv-text"><span class="inv-title">My inventory</span><span class="inv-sub">Nothing yet. What you buy from the store will show up here.</span></span></div>`;
+    return;
+  }
+  const open = INV_OPEN;
+  const preview = rows.slice(0, 3).map(r => `<span class="badge navy">${escapeHtml(r.it.name)} ×${r.n}</span>`).join("") + (kinds > 3 ? `<span class="badge navy">+${kinds - 3} more</span>` : "");
+  box.className = "card inv-card" + (open ? " open" : "");
+  box.innerHTML = `
+    <button type="button" class="inv-head" aria-expanded="${open}" aria-controls="invBody" onclick="invToggle()">
+      <span class="inv-icon">${BOX_SVG}</span>
+      <span class="inv-text"><span class="inv-title">My inventory</span><span class="inv-sub">${units} item${units === 1 ? "" : "s"} · ${kinds} kind${kinds === 1 ? "" : "s"}</span></span>
+      <span class="inv-preview">${open ? "" : preview}</span>
+      <span class="inv-chev">${CHEV_SVG}</span>
+    </button>
+    <div class="inv-body" id="invBody" ${open ? "" : "hidden"}>
+      <div id="invMsg"></div>
+      <div class="inv-grid">${rows.map(r => invTile(me, r.it, r.n)).join("")}</div>
+    </div>`;
+}
+
+function invToggle() {
+  INV_OPEN = !INV_OPEN;
+  try { localStorage.setItem(invKey(), INV_OPEN ? "1" : "0"); } catch (e) { /* ignore */ }
+  invRender(ME_CACHE, CLS_CACHE);
+  const h = document.querySelector("#invPanel .inv-head");
+  if (h) h.focus({ preventScroll: true });
+}
+
+function invGo(id) {
+  const card = $id("item-" + id);
+  if (!card) return;
+  const calm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  card.scrollIntoView({ block: "center", behavior: calm ? "auto" : "smooth" });
+  card.classList.remove("inv-flash"); void card.offsetWidth; card.classList.add("inv-flash");
+  setTimeout(() => card.classList.remove("inv-flash"), 1600);
+}
+
+async function invSell(id) {
+  const it = ((CLS_CACHE && CLS_CACHE.storeItems) || []).find(i => i.id === id);
+  if (!it || !ME_CACHE) return;
+  const label = storeRefundLabel(ME_CACHE, it);
+  if (!await t29Confirm(label === "80%"
+    ? `Sell one ${it.name} back to the store for an 80% refund?`
+    : `Sell one ${it.name} back to the store? You'll get ${label} — the most you can get back is what you paid for it.`)) return;
+  const res = await sellStoreItem(CURRENT.username, CURRENT.classCode, id);
+  if (!res.ok) { const m = $id("invMsg"); if (m) m.innerHTML = `<div class="error-msg" style="margin-top:12px;">${escapeHtml(res.error)}</div>`; return; }
+  await render();
+  const m = $id("invMsg");
+  if (m) flashMsg(m, `<div class="success-msg" style="margin-top:12px;">Sold ${escapeHtml(it.name)} back for ${fmtMoney(res.payout)}!</div>`);
+}
+
 /* ===================== Student: shopping cart ===================== */
 // Students add items to a cart, then pay for everything in one checkout.
 // Checkout calls buyStoreCart() (data-money.js) when it exists, so the whole cart is ONE transaction.
@@ -353,7 +451,10 @@ function cartLoad() { try { const o = JSON.parse(localStorage.getItem(cartKey())
 function cartSave() { try { localStorage.setItem(cartKey(), JSON.stringify(CART)); } catch (e) { /* ignore */ } }
 const cartCount = () => Object.values(CART).reduce((a, b) => a + b, 0);
 const cartLines = () => ITEMS_CACHE.filter(it => CART[it.id] > 0).map(it => ({ it, qty: CART[it.id] }));
-const cartStockMax = it => (it.stock === null || it.stock === undefined) ? Infinity : Math.max(0, it.stock);
+const cartStockLeft = it => (it.stock === null || it.stock === undefined) ? Infinity : Math.max(0, it.stock);
+// What this student can still add: what's in stock, capped by the teacher's per-student buying limit.
+const cartStockMax = it => Math.min(cartStockLeft(it), storeBuyRoom(ME_CACHE, it));
+const cartCapIsLimit = it => storeBuyRoom(ME_CACHE, it) < cartStockLeft(it);
 
 // Drop sold-out / removed items and cap quantities to the stock that's left.
 function cartClean() {
@@ -389,13 +490,13 @@ function addToCart(id) {
   const input = $id("qty-" + id), msg = $id("msg-" + id);
   const want = Math.max(1, parseInt(input && input.value, 10) || 1);
   const have = CART[id] || 0, max = cartStockMax(it), room = max - have;
-  if (room < 1) { if (msg) msg.innerHTML = `<div class="error-msg">You already have all ${max} in your cart.</div>`; return; }
+  if (room < 1) { if (msg) msg.innerHTML = `<div class="error-msg">You already have all ${max} in your cart${cartCapIsLimit(it) ? " (that's your limit for this item)" : ""}.</div>`; return; }
   const add = Math.min(want, room);
   CART[id] = have + add; cartSave(); CART_DONE = null; CART_MSG = "";
   if (input) input.value = 1;
   updateBuyLabel(id); updateCartBadge(id); renderCart();
   const fab = $id("cartFab"); if (fab) { fab.classList.remove("bump"); void fab.offsetWidth; fab.classList.add("bump"); }
-  if (msg) flashMsg(msg, `<div class="success-msg">Added${add > 1 ? ` ×${add}` : ""} to your cart${add < want ? ` (only ${max} in stock)` : ""}.</div>`);
+  if (msg) flashMsg(msg, `<div class="success-msg">Added${add > 1 ? ` ×${add}` : ""} to your cart${add < want ? (cartCapIsLimit(it) ? ` (limit is ${storeBuyLimit(it)} per student)` : ` (only ${max} in stock)`) : ""}.</div>`);
 }
 function updateCartBadge(id) {
   const b = $id("inCart-" + id); if (!b) return;
@@ -568,7 +669,7 @@ function renderCart() {
         <button type="button" class="cl-step" aria-label="Increase quantity" ${l.qty >= max ? "disabled" : ""} onclick="cartStep('${it.id}', 1)">+</button>
       </div>
       <button type="button" class="cl-rm" onclick="cartRemove('${it.id}')">Remove</button>
-      ${l.qty >= max && max !== Infinity ? `<div class="cl-note">That's all ${max} we have in stock.</div>` : ""}
+      ${l.qty >= max && max !== Infinity ? `<div class="cl-note">${cartCapIsLimit(it) ? `That's your limit of ${storeBuyLimit(it)} for this item.` : `That's all ${max} we have in stock.`}</div>` : ""}
     </div>`;
   }).join("");
 

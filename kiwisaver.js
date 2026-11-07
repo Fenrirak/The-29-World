@@ -383,6 +383,8 @@ async function renderTeacher(cls) {
     form.oninput = () => { form.dataset.dirty = "1"; };
   }
   document.getElementById("ksSavingsRate").textContent = ksPct(cls.interestRate || 0);
+  // The class's interest isn't always weekly, so say how often that rate is actually paid.
+  document.getElementById("ksSavingsPer").textContent = (cls.interestAuto && { daily: "a day", weekly: "a week", fortnightly: "a fortnight", monthly: "every 4 weeks" }[cls.interestFrequency || "weekly"]) || "each time interest is paid";
 
   const students = await getClassStudents(CURRENT.classCode, cls);
   const rows = students.map(st => ({ st, ks: kiwiSaverOf(st) })).sort((a, b) => (b.ks ? b.ks.balance : -1) - (a.ks ? a.ks.balance : -1));
