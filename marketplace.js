@@ -10,6 +10,8 @@ let NAMES = {};              // username -> display name, fetched once per page 
 let FILTER = "all";
 let COUNTERING = null;        // offer id the seller is typing a counter-offer into
 let OFFERING = null;         // listing id the student is currently typing an offer into
+let MKT_EDITING = null;          // listing id the seller is editing
+const MKT_RESPONSE_MS = 3 * 24 * 3600 * 1000;   // how long "your offer was declined" stays on the card
 
 function esc(s) {
   return String(s === undefined || s === null ? "" : s)
@@ -290,7 +292,7 @@ function listingCardHtml(l, opts) {
   if (teacher) {
     actions = `<button class="btn small coral" onclick="pullListing('${l.id}')">${icon("trash", 13)} Take down</button>`;
   } else if (mine) {
-    actions = `<button class="btn small secondary" onclick="cancelMine('${l.id}')">${icon("trash", 13)} Cancel listing</button>`;
+    actions = `<button class="btn small secondary" onclick="editMine('${l.id}')" aria-expanded="${MKT_EDITING === l.id}">${icon("edit", 13)} Edit</button><button class="btn small secondary" onclick="cancelMine('${l.id}')">${icon("trash", 13)} Cancel listing</button>`;
   } else if (CLS.marketplace.enabled) {
     actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${qty > 1 ? "Buy 1" : "Buy"} for ${fmtMoney(l.price)}</button>`;
     if (CLS.marketplace.allowOffers) {
@@ -321,6 +323,42 @@ function listingCardHtml(l, opts) {
       <p class="muted-small" style="margin:0;"><strong>The seller countered:</strong> <span class="mkt-offer-amt">${fmtMoney(myOffer.counter.amount)}${offerQuantity(myOffer) > 1 ? " each" : ""}</span> (you offered ${fmtMoney(myOffer.amount)})</p>
       ${myOffer.counter.note ? `<span class="mkt-offer-note">"${esc(myOffer.counter.note)}"</span>` : ""}
     </div>` : "";
+
+  // Seller: change price / description / how many are for sale.
+  let editForm = "";
+  if (mine && MKT_EDITING === l.id) {
+    const sa = (ME && CLS) ? getSellableAssets(CLS, ME).find(a => a.assetType === l.assetType && a.assetId === l.assetId) : null;
+    const maxQ = qty + (sa ? (sa.count || 0) : 0);
+    const enter = `onkeydown="if(event.key==='Enter'){event.preventDefault();saveEdit('${l.id}');}"`;
+    editForm = `
+    <div class="mkt-offer-list">
+      <label for="edprice-${l.id}">Price${qty > 1 ? " for ONE" : ""} (allowed: ${bandText(l.refPrice)})</label>
+      <input id="edprice-${l.id}" type="number" min="0" step="0.01" value="${l.price}" ${enter}>
+      ${l.assetType === "store" ? `<label for="edqty-${l.id}" style="margin-top:8px;display:block;">How many for sale (1–${maxQ})</label>
+      <input id="edqty-${l.id}" type="number" min="1" max="${maxQ}" step="1" value="${qty}" ${enter}>` : ""}
+      <label for="eddesc-${l.id}" style="margin-top:8px;display:block;">Description (optional)</label>
+      <input id="eddesc-${l.id}" type="text" maxlength="240" value="${esc(l.description || "")}" placeholder="Tell buyers about it" ${enter}>
+      ${CLS.marketplace.requireApproval ? `<p class="muted-small" style="margin:6px 0 0;">Changing the price or description sends it back to your teacher for approval.</p>` : ""}
+      <div class="row-flex" style="gap:8px;margin-top:10px;">
+        <button class="btn small gold" onclick="saveEdit('${l.id}')">Save changes</button>
+        <button class="btn small secondary" onclick="editMine(null)">Cancel</button>
+      </div>
+      <div id="editmsg-${l.id}"></div>
+    </div>`;
+  }
+
+  // What became of the last offer / counter, for a few days after the other side said no, with their reason if they gave one.
+  let responseNote = "";
+  if (!teacher && ME) {
+    const recent = (o, by) => o.status === "declined" && o.declinedBy === by && o.respondedTs && Date.now() - o.respondedTs < MKT_RESPONSE_MS;
+    const why = o => o.declineReason ? `<span class="mkt-offer-note">"${esc(o.declineReason)}"</span>` : "";
+    const rows = mine
+      ? (l.offers || []).filter(o => recent(o, "buyer")).sort((a, b) => b.respondedTs - a.respondedTs).slice(0, 3)
+          .map(o => `<p class="muted-small" style="margin:0 0 4px;"><strong>${esc(nameOf(o.buyer))}</strong> turned down your ${fmtMoney(o.counter ? o.counter.amount : o.amount)} counter-offer.</p>${why(o)}`)
+      : (myOffer ? [] : (l.offers || []).filter(o => o.buyer === ME.username && recent(o, "seller")).sort((a, b) => b.respondedTs - a.respondedTs).slice(0, 1)
+          .map(o => `<p class="muted-small" style="margin:0 0 4px;"><strong>${esc(nameOf(l.seller))}</strong> ${o.counter ? `took back their ${fmtMoney(o.counter.amount)} counter-offer.` : `declined your ${fmtMoney(o.amount)}${offerQuantity(o) > 1 ? " each" : ""} offer.`}</p>${why(o)}`));
+    if (rows.length) responseNote = `<div class="mkt-offer-list">${rows.join("")}</div>`;
+  }
 
   const offerList = (mine && openOffers.length) ? `
     <div class="mkt-offer-list">
@@ -376,7 +414,7 @@ function listingCardHtml(l, opts) {
         ${teacher ? `<span class="muted-small">· ${esc(nameOf(l.seller))}</span>` : ""}
       </div>
       <div class="mkt-actions">${actions}</div>
-      ${offerForm}${counterBanner}${offerList}
+      ${editForm}${offerForm}${counterBanner}${responseNote}${offerList}
       <div id="msg-${l.id}"></div>
     </div>`;
 }
@@ -466,7 +504,7 @@ async function buyIt(id) {
   const how = card ? (MP_PAY.split ? "part on your credit card, the rest in cash" : "on your credit card") : "in cash";
   if (!await t29Confirm(`Buy ${several ? "one " : ""}"${l.name}" from ${nameOf(l.seller)} for ${fmtMoney(l.price)}, paid ${how}?${isHouse && mktHasCard() && MP_PAY.useCard ? " (Houses are always paid in cash.)" : ""}`)) return;
   const pay = card ? { useCard: true, split: MP_PAY.split, cardMax: MP_PAY.cardMax } : {};
-  const res = await buyListing(CURRENT.username, CURRENT.classCode, id, pay);
+  const res = await buyListing(CURRENT.username, CURRENT.classCode, id, pay, l.price);
   await render();
   if (res.ok) {
     // The listing's card may be gone once it's sold, so the message goes
@@ -495,9 +533,34 @@ async function withdraw(listingId, offerId) {
   await setOfferStatus(CURRENT.username, CURRENT.classCode, listingId, offerId, "withdrawn");
   await render();
 }
+// Asks for an optional reason before an offer or counter is declined. Returns the reason ("" if they left it blank),
+// or null if they backed out. The reason has to be school-appropriate (the same check as payment reasons): if it isn't,
+// the box opens again with what they typed so they can reword it.
+async function askReason(message, confirmText) {
+  let text = "", warn = "";
+  for (;;) {
+    const v = await t29Prompt((warn ? warn + "\n\n" : "") + message, text, { confirmText, placeholder: "Reason (optional)" });
+    if (v === null || v === undefined) return null;
+    text = String(v).replace(/\s+/g, " ").trim();
+    const c = t29TextCheck(text, { maxLen: 140 });
+    if (c.ok) return c.text;
+    warn = c.error;
+  }
+}
 async function decline(listingId, offerId) {
-  await setOfferStatus(CURRENT.username, CURRENT.classCode, listingId, offerId, "declined");
+  const l = (CLS.listings || []).find(x => x.id === listingId);
+  const o = l && (l.offers || []).find(x => x.id === offerId);
+  if (!l || !o) return;
+  const iAmSeller = l.seller === CURRENT.username;
+  const reason = iAmSeller
+    ? (o.status === "countered"
+        ? await askReason(`Take back your counter-offer to ${nameOf(o.buyer)}? You can add a reason (optional).`, "Take it back")
+        : await askReason(`Decline ${nameOf(o.buyer)}'s offer of ${fmtMoney(o.amount)}${offerQuantity(o) > 1 ? " each" : ""}? You can tell them why (optional).`, "Decline offer"))
+    : await askReason(`Decline ${nameOf(l.seller)}'s counter-offer of ${fmtMoney(o.counter ? o.counter.amount : 0)}? You can tell them why (optional).`, "Decline counter");
+  if (reason === null) return;
+  const res = await setOfferStatus(CURRENT.username, CURRENT.classCode, listingId, offerId, "declined", reason);
   await render();
+  if (!res.ok) alert(res.error);
 }
 async function accept(listingId, offerId) {
   const l = (CLS.listings || []).find(x => x.id === listingId);
@@ -533,6 +596,30 @@ async function acceptCounterUi(listingId, offerId) {
   await render();
   if (res.ok) flashMsg(document.getElementById("browseMsg"), `<div class="success-msg">Bought ${esc(l.name)} at the countered price! It's yours now.</div>`);
   else alert(res.error);
+}
+function editMine(id) {
+  MKT_EDITING = (id && MKT_EDITING !== id) ? id : null;
+  renderStudent();
+  const el = MKT_EDITING && document.getElementById("edprice-" + MKT_EDITING);
+  if (el) el.focus();
+}
+async function saveEdit(id) {
+  const val = k => { const el = document.getElementById(k + "-" + id); return el ? el.value : undefined; };
+  const res = await updateListing(CURRENT.username, CURRENT.classCode, id, { price: val("edprice"), quantity: val("edqty"), description: val("eddesc") });
+  if (!res.ok) {
+    const box = document.getElementById("editmsg-" + id);
+    if (box) box.innerHTML = `<div class="error-msg">${esc(res.error)}</div>`; else alert(res.error);
+    return;
+  }
+  MKT_EDITING = null;
+  await render();
+  const box = document.getElementById("msg-" + id);
+  if (!box) return;
+  const note = res.unchanged ? "Nothing was changed."
+    : res.reapproval ? "Saved. Your teacher needs to approve the change before it goes live again."
+    : res.declined ? `Saved. ${res.declined} offer${res.declined === 1 ? "" : "s"} asking for more than you now have ${res.declined === 1 ? "was" : "were"} declined.`
+    : "Saved!";
+  flashMsg(box, `<div class="success-msg">${esc(note)}</div>`);
 }
 async function cancelMine(id) {
   const l = (CLS.listings || []).find(x => x.id === id);

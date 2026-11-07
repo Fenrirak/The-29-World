@@ -2550,8 +2550,6 @@ async function transferMoney(fromUser, toUser, amount, note, opts) {
   const to = await getUser(toUser);
   if (!from || !to) return { ok: false, error: "User not found." };
   if (from.classCode !== to.classCode) return { ok: false, error: "You can only send money within your own class." };
-  // Reasons are read by classmates, so they have to be school-appropriate (teachers aren't filtered).
-  if (from.role !== "teacher") { const nc = t29TextCheck(note); if (!nc.ok) return { ok: false, error: nc.error }; }
   if (!(amount > 0) || !isFinite(amount)) return { ok: false, error: "Enter an amount greater than zero." };
   // Both writes below would hit the same doc and the second would win, leaving the
   // sender with MORE money instead of the same.
@@ -4017,9 +4015,9 @@ const T29_FILTER = (function () {
   // Endings a word may take (fucking, shitty, bitches ...). Strong swears take all of them; the rest only plurals.
   const END_ALL = ["", "s", "es", "ed", "er", "ers", "ing", "ings", "in", "y", "ie", "ies", "z", "head", "face"];
   const END_PLAIN = ["", "s", "es", "z"];
-  const SWEAR = "fuck fucc fuk fck fuc fuq fcuk fvck phuck phuk shit sht shyt shite piss bitch biatch wank bugger".split(" ");
+  const SWEAR = "fuck fucc fuk fck fuc fuq fcuk fvck phuck phuk shit sht shyt shite piss bitch biatch wank".split(" ");
   const PLAIN = ("pron ass arse arsehole arsewipe asshole asshat asswipe assface dumbass jackass smartass fatass dick dickhead dickwad cock cocksucker cunt twat prick pussy bollocks " +
-    "hell damn damned damnit dammit goddamn goddamned goddammit crap crappy dipshit douche douchebag scumbag idiot moron imbecile stupid dumb loser ugly " +
+    "hell crap crappy dipshit douche douchebag scumbag moron imbecile " +
     "retard retarded tard spaz spastic mong mongoloid sex sexy sexting porno horny boob tit titty titties penis vagina dildo boner jizz cum cumming cumshot " +
     "blowjob handjob rimjob milf pedo paedo anal anus orgasm nudes onlyfans hentai xxx pornhub slut slutty skank thot tranny shemale dyke homo lesbo " +
     "fag fagot faggot nigger nigga niggah niggaz nigguh nigra nigg negro darkie chink gook spic kike kyke yid wop dago honky wetback beaner coon paki raghead towelhead jap midget cripple " +
@@ -4119,7 +4117,14 @@ function t29TextCheck(text, opts) {
   const clean = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
   if (!clean) return { ok: true, text: "" };
   if (opts.maxLen && clean.length > opts.maxLen) return { ok: false, text: clean, error: "Please keep it to " + opts.maxLen + " characters or fewer." };
-  if (T29_FILTER.flag(clean)) return { ok: false, text: clean, error: opts.error || T29_FILTER_MSG };
+  let flagged;
+  try { flagged = T29_FILTER.flag(clean); }
+  catch (e) {
+    // A bug in the filter must never take a payment down with it: say so plainly (blank reasons always work) and log it.
+    console.error("t29TextCheck: the text filter hit an error", e);
+    return { ok: false, text: clean, error: "We couldn't check that message just now. Leave the reason blank, or try again." };
+  }
+  if (flagged) return { ok: false, text: clean, error: opts.error || T29_FILTER_MSG };
   return { ok: true, text: clean };
 }
 // Teachers aren't filtered. Only looks the user up if the text was actually flagged, so normal sends cost no extra read.

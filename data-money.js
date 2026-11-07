@@ -5510,8 +5510,8 @@ async function moveBankMoney(username, classCode, fromId, toId, amount) {
    sourceId: "cash" (same as transferMoney), "savings", a bankAccounts id, or "card" (a credit card, which can
    only ever pay the teacher). Paying from an account follows that account's rules: withdrawal cap and fee. */
 async function sendMoneyFrom(fromUser, toUser, amount, note, sourceId) {
+  { const g = await t29NoteGate(fromUser, note); if (g) return g; } // school-appropriate reasons only (teachers aren't filtered)
   if (!sourceId || sourceId === "cash") return transferMoney(fromUser, toUser, amount, note);
-  { const g = await t29NoteGate(fromUser, note); if (g) return g; } // school-appropriate reasons only
   amount = acctRound(amount);
   if (!(amount > 0) || !isFinite(amount)) return { ok: false, error: "Enter an amount greater than zero." };
   if (fromUser === toUser) return { ok: false, error: "You can't send money to yourself." };

@@ -358,8 +358,8 @@ async function sellItem(id) {
 // Open/closed is remembered per student. Tiles can jump to the item in the store or sell one back
 // (which also covers items the teacher has since taken off the shelf).
 let INV_OPEN = null;
-const BOX_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
-const CHEV_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+const INV_BOX_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
+const INV_CHEV_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
 const invKey = () => "anw_inv_open_" + CURRENT.username + "_" + CURRENT.classCode;
 
 function invRows(me, cls) {
@@ -390,7 +390,7 @@ function invRender(me, cls) {
   const rows = invRows(me, cls), kinds = rows.length, units = rows.reduce((s, r) => s + r.n, 0);
   if (!kinds) {
     box.className = "card inv-card";
-    box.innerHTML = `<div class="inv-head static"><span class="inv-icon">${BOX_SVG}</span><span class="inv-text"><span class="inv-title">My inventory</span><span class="inv-sub">Nothing yet. What you buy from the store will show up here.</span></span></div>`;
+    box.innerHTML = `<div class="inv-head static"><span class="inv-icon">${INV_BOX_SVG}</span><span class="inv-text"><span class="inv-title">My inventory</span><span class="inv-sub">Nothing yet. What you buy from the store will show up here.</span></span></div>`;
     return;
   }
   const open = INV_OPEN;
@@ -398,10 +398,10 @@ function invRender(me, cls) {
   box.className = "card inv-card" + (open ? " open" : "");
   box.innerHTML = `
     <button type="button" class="inv-head" aria-expanded="${open}" aria-controls="invBody" onclick="invToggle()">
-      <span class="inv-icon">${BOX_SVG}</span>
+      <span class="inv-icon">${INV_BOX_SVG}</span>
       <span class="inv-text"><span class="inv-title">My inventory</span><span class="inv-sub">${units} item${units === 1 ? "" : "s"} · ${kinds} kind${kinds === 1 ? "" : "s"}</span></span>
       <span class="inv-preview">${open ? "" : preview}</span>
-      <span class="inv-chev">${CHEV_SVG}</span>
+      <span class="inv-chev">${INV_CHEV_SVG}</span>
     </button>
     <div class="inv-body" id="invBody" ${open ? "" : "hidden"}>
       <div id="invMsg"></div>
