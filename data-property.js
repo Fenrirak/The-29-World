@@ -1371,7 +1371,7 @@ function leaseMinWeeksElapsed(sublet) {
 // or passively rent out while they're trying to find a tenant for it.
 async function createSublet(username, classCode, propId, price, minWeeks) {
   const classRef = classesCol().doc(classCode);
-  let propName = "";
+  let propName = "", needsApproval = false, rentAmt = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(classRef);
@@ -1402,6 +1402,8 @@ async function createSublet(username, classCode, propId, price, minWeeks) {
         tenant: null, leaseStartTs: null, leaseStartWeekKey: null, rentLastWeekPaid: null,
         createdTs: Date.now()
       };
+      needsApproval = !!pr.requireApproval;
+      rentAmt = amount;
       t.update(classRef, { properties: cls.properties });
     });
   } catch (e) {
@@ -1416,6 +1418,7 @@ async function createSublet(username, classCode, propId, price, minWeeks) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "property-occupancy", from: username, note: `Listed for rent to classmates: ${propName}` });
+  if (needsApproval) await t29NotifyTeacher(classCode, "sublet", "req", `${propName} at ${fmtMoney(rentAmt)} a week`);
   return { ok: true };
 }
 
@@ -1426,7 +1429,7 @@ async function createSublet(username, classCode, propId, price, minWeeks) {
 // same as teacherEndRental does for the passive scheme.
 async function cancelSublet(username, classCode, propId) {
   const classRef = classesCol().doc(classCode);
-  let propName = "", hadTenant = false;
+  let propName = "", hadTenant = false, wasPending = false;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(classRef);
@@ -1440,6 +1443,7 @@ async function cancelSublet(username, classCode, propId) {
         if (!leaseMinWeeksElapsed(prop.sublet)) throw new Error("LOCKED_IN");
         hadTenant = true;
       }
+      wasPending = prop.sublet.status === "pending";
       prop.occupancy = null;
       prop.sublet = null;
       prop.rentLastWeekPaid = null;
@@ -1452,6 +1456,7 @@ async function cancelSublet(username, classCode, propId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "property-occupancy", from: username, note: hadTenant ? `Ended a classmate's lease: ${propName}` : `Withdrew rental listing: ${propName}` });
+  if (wasPending) await t29NotifyTeacher(classCode, "sublet", "cancel", propName);
   return { ok: true };
 }
 

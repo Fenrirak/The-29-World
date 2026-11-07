@@ -4512,7 +4512,7 @@ async function setCardLifestylePenalty(classCode, { enabled, perAmount, points }
 /* ---------------- Applying, approving, closing ---------------- */
 async function applyForCreditCard(username, classCode, planId) {
   const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
-  let status = "pending";
+  let status = "pending", planName = "";
   try {
     await fdb.runTransaction(async (t) => {
       const us = await t.get(userRef), cs = await t.get(classRef);
@@ -4523,6 +4523,7 @@ async function applyForCreditCard(username, classCode, planId) {
       if (!st.enabled) throw new Error("OFF");
       const plan = cardPlanById(cls, planId);
       if (!plan || plan.archived) throw new Error("NOT_FOUND");
+      planName = plan.name || "";
       const cur = user.creditCard;
       if (cur && (cur.status === "active" || cur.status === "pending")) throw new Error("HAS_CARD");
       if (lifestyleRatingFromData(cls, user, username) < plan.minLifestyle) throw new Error("LIFESTYLE");
@@ -4534,6 +4535,7 @@ async function applyForCreditCard(username, classCode, planId) {
       LIFESTYLE: "Your lifestyle rating isn't high enough for that card yet.", NOT_FOUND: "That card isn't available any more." };
     return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
   }
+  if (status === "pending") await t29NotifyTeacher(classCode, "card", "req", planName);
   return { ok: true, status };
 }
 async function approveCreditCard(classCode, username) {
@@ -4577,18 +4579,22 @@ async function declineCreditCard(classCode, username) {
 }
 async function cancelCreditCard(username, classCode) {
   const userRef = usersCol().doc(username);
+  let wasPending = false;
   try {
     await fdb.runTransaction(async (t) => {
+      wasPending = false; // reset every attempt: this callback can be retried
       const us = await t.get(userRef);
       if (!us.exists) throw new Error("NOT_FOUND");
       const c = us.data().creditCard;
       if (!c) return;
       if (c.status === "active" && (c.balance || 0) > 0.004) throw new Error("OWING");
+      wasPending = c.status === "pending";
       t.update(userRef, { creditCard: null });
     });
   } catch (e) {
     return { ok: false, error: e.message === "OWING" ? "You can only close your card once you owe nothing. Pay your closing balance, then close it after your next statement if you've spent more since." : "Something went wrong. Please try again." };
   }
+  if (wasPending) await t29NotifyTeacher(classCode, "card", "cancel", "");
   return { ok: true };
 }
 
@@ -5189,7 +5195,7 @@ async function removeAccountPlan(classCode, planId, archiveOnly) {
 /* ---------------- Student: open, approve, close ---------------- */
 async function openBankAccount(username, classCode, planId) {
   const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
-  let status = "pending";
+  let status = "pending", planName = "";
   try {
     await fdb.runTransaction(async (t) => {
       const us = await t.get(userRef), cs = await t.get(classRef);
@@ -5200,6 +5206,7 @@ async function openBankAccount(username, classCode, planId) {
       if (!st.enabled) throw new Error("OFF");
       const plan = acctPlanById(cls, planId);
       if (!plan || plan.archived) throw new Error("NOT_FOUND");
+      planName = plan.name || "";
       const list = acctListOf(user).slice();
       if (list.some(a => a.planId === planId && (a.status === "active" || a.status === "pending"))) throw new Error("HAS_IT");
       const sameKind = list.filter(a => (a.status === "active" || a.status === "pending") && (acctPlanById(cls, a.planId) || {}).kind === plan.kind).length;
@@ -5216,6 +5223,7 @@ async function openBankAccount(username, classCode, planId) {
       LIFESTYLE: "Your lifestyle rating isn't high enough for that account yet.", NOT_FOUND: "That account isn't available any more." };
     return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
   }
+  if (status === "pending") await t29NotifyTeacher(classCode, "account", "req", planName);
   return { ok: true, status };
 }
 async function approveBankAccount(classCode, username, accountId) {
@@ -5259,13 +5267,19 @@ async function declineBankAccount(classCode, username, accountId) {
 // Withdraw a waiting application (balance is always $0 while pending).
 async function cancelBankAccountApplication(username, accountId) {
   const userRef = usersCol().doc(username);
+  let wasPending = false, ccode = null;
   try {
     await fdb.runTransaction(async (t) => {
+      wasPending = false; // reset every attempt: this callback can be retried
       const us = await t.get(userRef);
       if (!us.exists) return;
-      t.update(userRef, { bankAccounts: acctListOf(us.data()).filter(x => !(x.id === accountId && x.status === "pending")) });
+      const list = acctListOf(us.data());
+      wasPending = list.some(x => x.id === accountId && x.status === "pending");
+      ccode = us.data().classCode;
+      t.update(userRef, { bankAccounts: list.filter(x => !(x.id === accountId && x.status === "pending")) });
     });
   } catch (e) { return { ok: false, error: "Something went wrong. Please try again." }; }
+  if (wasPending) await t29NotifyTeacher(ccode, "account", "cancel", "");
   return { ok: true };
 }
 // Closing an account moves whatever is left in it to another open account the student picks (cash by default).

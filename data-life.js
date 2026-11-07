@@ -1527,6 +1527,7 @@ async function requestSideHustleChange(username, classCode, hustleId, hour) {
     sideHustleRequest: { hustleId, checkinHour: h, status: "pending", requestedAt: nowStr() },
     sideHustleDenialNote: null
   });
+  await t29NotifyTeacher(classCode, "hustle", "req", `${hustle.name} at ${hourLabel(h)}`);
   return { ok: true, pending: true };
 }
 

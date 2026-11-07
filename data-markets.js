@@ -678,6 +678,7 @@ function _marketplaceStillOwns(cls, user, listing) {
 // quantity: how many copies to put up in this one listing — store items
 // only (a vehicle or property is always one).
 async function createListing(username, classCode, { assetType, assetId, price, description, quantity }) {
+  { const g = await t29NoteGate(username, description); if (g) return g; } // school-appropriate text only
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let created = null, availableCount = 0;
@@ -738,13 +739,15 @@ async function createListing(username, classCode, { assetType, assetId, price, d
     if (e.message === "OVER_MAX") return { ok: false, error: "That price is above the maximum your teacher allows for this item." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
+  if (created && created.status === "pending") await t29NotifyTeacher(classCode, "listing", "req", `${created.name} for ${fmtMoney(created.price)}`);
   return { ok: true, listing: created };
 }
 
 async function cancelListing(username, classCode, listingId) {
   const classRef = classesCol().doc(classCode);
-  let error = null;
+  let error = null, wasPending = false, listingName = "";
   await fdb.runTransaction(async (t) => {
+    wasPending = false; // reset every attempt: this callback can be retried
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
@@ -752,11 +755,101 @@ async function cancelListing(username, classCode, listingId) {
     if (!l) { error = "That listing couldn't be found."; return; }
     if (l.seller !== username) { error = "That isn't your listing."; return; }
     if (!listingIsOpen(l)) { error = "That listing is already closed."; return; }
+    wasPending = l.status === "pending";
+    listingName = l.name || "";
     l.status = "cancelled";
     (l.offers || []).forEach(o => { if ((o.status === "open" || o.status === "countered")) o.status = "declined"; });
     t.update(classRef, { listings: cls.listings });
   });
+  if (!error && wasPending) await t29NotifyTeacher(classCode, "listing", "cancel", listingName);
   return error ? { ok: false, error } : { ok: true };
+}
+
+// A seller changing their own open listing: price, description and (store items) how many are for sale.
+// Everything createListing checks is checked again here, so an edit can't be used to slip past the price band,
+// the teacher's approval, or to promise more copies than the seller actually owns.
+async function updateListing(username, classCode, listingId, { price, description, quantity }) {
+  { const g = await t29NoteGate(username, description); if (g) return g; } // school-appropriate text only
+  const classRef = classesCol().doc(classCode);
+  const userRef = usersCol().doc(username);
+  let out = null, availableCount = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      const classSnap = await t.get(classRef);
+      const userSnap = await t.get(userRef);
+      if (!classSnap.exists || !userSnap.exists) throw new Error("NOT_FOUND");
+      const user = Object.assign({ username }, userSnap.data());
+      const cls = withNewModuleDefaults(classSnap.data());
+      const mp = cls.marketplace;
+      if (!mp.enabled) throw new Error("OFF");
+      const l = cls.listings.find(x => x.id === listingId);
+      if (!l) throw new Error("NOT_FOUND");
+      if (l.seller !== username) throw new Error("NOT_YOURS");
+      if (!listingIsOpen(l)) throw new Error("CLOSED");
+      if ((l.assetType === "store" && !mp.allowStore) || (l.assetType === "vehicle" && !mp.allowVehicle) || (l.assetType === "property" && !mp.allowProperty)) throw new Error("TYPE_OFF");
+      if (!_marketplaceStillOwns(cls, user, l)) throw new Error("GONE");
+
+      const amount = Math.round(Number(price) * 100) / 100;
+      if (!(amount > 0)) throw new Error("BAD_PRICE");
+      const bounds = marketplacePriceBounds(cls, l.refPrice);
+      if (amount < bounds.min) throw new Error("UNDER_MIN");
+      if (bounds.max !== null && amount > bounds.max) throw new Error("OVER_MAX");
+
+      const oldQty = listingQuantity(l);
+      let qty = oldQty;
+      if (l.assetType === "store" && quantity !== undefined && quantity !== null && String(quantity).trim() !== "") {
+        qty = Number(quantity);
+        if (!Number.isInteger(qty) || qty < 1) throw new Error("BAD_QTY");
+        // Copies they own, less the ones already promised in their OTHER open listings of the same thing.
+        const owned = (user.storeItems || []).filter(id => id === l.assetId).length;
+        const elsewhere = cls.listings
+          .filter(x => x.id !== l.id && x.seller === username && x.assetType === "store" && x.assetId === l.assetId && listingIsOpen(x))
+          .reduce((n, x) => n + listingQuantity(x), 0);
+        availableCount = Math.max(0, owned - elsewhere);
+        if (qty > availableCount) throw new Error("TOO_FEW");
+      }
+      const desc = (description === undefined || description === null ? String(l.description || "") : String(description)).trim().slice(0, 240);
+
+      const priceChanged = Math.round(amount * 100) !== Math.round(Number(l.price) * 100);
+      const descChanged = desc !== String(l.description || "");
+      const qtyChanged = qty !== oldQty;
+      if (!priceChanged && !descChanged && !qtyChanged) { out = { unchanged: true, listing: l }; return; }
+
+      l.price = amount;
+      l.description = desc;
+      if (l.assetType === "store") l.quantity = qty;
+      l.editedTs = Date.now();
+      // Offers asking for more copies than are now for sale can't be honoured: they're declined, with the reason on record.
+      let declined = 0;
+      (l.offers || []).forEach(o => {
+        if ((o.status === "open" || o.status === "countered") && offerQuantity(o) > qty) {
+          o.status = "declined"; o.declinedBy = "seller"; o.declineReason = "The listing quantity changed"; o.respondedTs = Date.now();
+          declined++;
+        }
+      });
+      // With approval switched on, a new price or description has to be approved again (a quantity change doesn't).
+      const reapproval = l.status === "active" && !!mp.requireApproval && (priceChanged || descChanged);
+      if (reapproval) l.status = "pending";
+      t.update(classRef, { listings: cls.listings });
+      out = { listing: l, reapproval, declined };
+    });
+  } catch (e) {
+    if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };
+    if (e.message === "TYPE_OFF") return { ok: false, error: "Your teacher doesn't allow that kind of thing to be traded any more." };
+    if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
+    if (e.message === "NOT_YOURS") return { ok: false, error: "That isn't your listing." };
+    if (e.message === "CLOSED") return { ok: false, error: "That listing is already closed." };
+    if (e.message === "GONE") return { ok: false, error: "You don't own that any more, so it can't stay listed." };
+    if (e.message === "BAD_PRICE") return { ok: false, error: "Enter a price greater than zero." };
+    if (e.message === "UNDER_MIN") return { ok: false, error: "That price is below the minimum your teacher allows for this item." };
+    if (e.message === "OVER_MAX") return { ok: false, error: "That price is above the maximum your teacher allows for this item." };
+    if (e.message === "BAD_QTY") return { ok: false, error: "Enter how many you want to sell — a whole number, 1 or more." };
+    if (e.message === "TOO_FEW") return { ok: false, error: availableCount > 0 ? `You can only have ${availableCount} of those up for sale at once.` : "You don't have any more of those to put up for sale." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  // Editing an approved listing sends it back for approval: that's a new request for the teacher.
+  if (out && out.reapproval) await t29NotifyTeacher(classCode, "listing", "req", `${out.listing.name} for ${fmtMoney(out.listing.price)} (edited, needs approving again)`);
+  return Object.assign({ ok: true }, out);
 }
 
 // Teacher moderation, for classes running with requireApproval on.
@@ -797,7 +890,7 @@ async function teacherRemoveListing(classCode, listingId, reason) {
    (at the listed price) and "Accept offer" (at the haggled price) route
    through here, so the money movement, the ownership transfer and the
    guards can never drift apart between the two paths. */
-async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, pay, units) {
+async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, pay, units, lockPrice) {
   // units = how many copies change hands at agreedPrice EACH (Buy now is always 1; an accepted offer can be more).
   units = Math.max(1, Math.floor(Number(units) || 1));
   const classRef = classesCol().doc(classCode);
@@ -848,6 +941,8 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
 
       const price = Math.round(Number(agreedPrice) * 100) / 100;
       if (!(price > 0)) throw new Error("BAD_PRICE");
+      // Buy now: the listing must still be at the price the buyer was shown (the seller may have just edited it).
+      if (lockPrice && Math.round(Number(listing.price) * 100) !== Math.round(price * 100)) throw new Error("PRICE_CHANGED");
       const total = Math.round(price * units * 100) / 100; // everything the buyer pays for all the copies
       const buyerIsTeacher = buyer.role === "teacher";
       // Paying by credit card works for things (store items, vehicles) — not for a
@@ -997,6 +1092,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
     if (e.message === "NO_LICENCE") return { ok: false, error: "You need a truck licence before you can own that vehicle." };
     if (e.message === "TRUCK_LIMIT") return { ok: false, error: "You can only own one truck at a time." };
     if (e.message === "BAD_PRICE") return { ok: false, error: "That price isn't valid." };
+    if (e.message === "PRICE_CHANGED") return { ok: false, error: "The seller just changed the price. Have another look at the new price and try again." };
     if (e.message === "QTY") return { ok: false, error: "There aren't that many left any more — the listing has changed." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
@@ -1020,16 +1116,20 @@ async function setMarketplacePayDefault(username, useCard) {
   return { ok: true };
 }
 
-async function buyListing(username, classCode, listingId, pay) {
+// expectedPrice = the price the buyer was looking at. The sale only goes ahead if the listing is STILL at that
+// price, so a seller editing it a moment before someone taps "Buy" can't change what the buyer agreed to pay.
+async function buyListing(username, classCode, listingId, pay, expectedPrice) {
   const cls = withNewModuleDefaults(await getClassCached(classCode));
   const listing = (cls.listings || []).find(l => l.id === listingId);
   if (!listing) return { ok: false, error: "That listing couldn't be found." };
-  return await _settleListing(classCode, listingId, username, listing.price, pay);
+  const shown = expectedPrice === undefined || expectedPrice === null ? listing.price : Number(expectedPrice);
+  return await _settleListing(classCode, listingId, username, shown, pay, undefined, true);
 }
 
 // amount = the price for ONE copy; quantity = how many copies the offer is for (store items can be
 // more than one; a vehicle or a house is always one).
 async function makeOffer(username, classCode, listingId, amount, note, quantity) {
+  { const g = await t29NoteGate(username, note); if (g) return g; } // school-appropriate text only
   const classRef = classesCol().doc(classCode);
   const userRef = usersCol().doc(username);
   let error = null, made = null;
@@ -1068,7 +1168,12 @@ async function makeOffer(username, classCode, listingId, amount, note, quantity)
   return error ? { ok: false, error } : { ok: true, offer: made };
 }
 
-async function setOfferStatus(username, classCode, listingId, offerId, status) {
+// reason: optional, only kept when an offer/counter is declined, and shown to the other student. It gets the same
+// school-appropriate check as payment reasons (enforced here so it can't be skipped), and is capped at 140 characters.
+async function setOfferStatus(username, classCode, listingId, offerId, status, reason) {
+  const why = status === "declined" ? String(reason || "").replace(/\s+/g, " ").trim() : "";
+  if (why.length > 140) return { ok: false, error: "Please keep the reason to 140 characters or fewer." };
+  if (why) { const g = await t29NoteGate(username, why); if (g) return g; }
   const classRef = classesCol().doc(classCode);
   let error = null;
   await fdb.runTransaction(async (t) => {
@@ -1086,6 +1191,7 @@ async function setOfferStatus(username, classCode, listingId, offerId, status) {
       else if (o.buyer === username && o.status === "countered") o.declinedBy = "buyer";
       else { error = "That isn't your listing."; return; }
       o.respondedTs = Date.now();
+      if (why) o.declineReason = why; else delete o.declineReason;
     }
     o.status = status;
     t.update(classRef, { listings: cls.listings });
@@ -1095,6 +1201,7 @@ async function setOfferStatus(username, classCode, listingId, offerId, status) {
 
 // The seller answers an open offer with a different price (per copy). The buyer then accepts or turns it down.
 async function counterOffer(username, classCode, listingId, offerId, amount, note) {
+  { const g = await t29NoteGate(username, note); if (g) return g; } // school-appropriate text only
   const classRef = classesCol().doc(classCode);
   let error = null;
   await fdb.runTransaction(async (t) => {
@@ -1606,12 +1713,14 @@ async function setStudentTimeLimit(classCode, minutes) {
 //                  covers "accepted, then hit the new limit again".
 async function requestTimeExemption(username) {
   const userRef = usersCol().doc(username);
+  let ccode = null;
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(userRef);
       if (!snap.exists) throw new Error("NOT_FOUND");
       const u = snap.data();
       if (!timeLimitStatus(u).reached) throw new Error("NOT_LOCKED");
+      ccode = u.classCode;
       const state = timeExemptionState(u);
       if (state === "pending") throw new Error("ALREADY_PENDING");
       if (state === "declined") throw new Error("DECLINED_TODAY");
@@ -1623,6 +1732,7 @@ async function requestTimeExemption(username) {
     if (e.message === "NOT_LOCKED") return { ok: false, error: "You're not currently out of time." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
+  await t29NotifyTeacher(ccode, "time", "req", "They've used up today's time and are waiting for you to give them more.");
   return { ok: true };
 }
 

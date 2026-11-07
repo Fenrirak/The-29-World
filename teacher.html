@@ -37,6 +37,19 @@
 <link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <style>
+  /* Online now / last opened */
+  .online-pill { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; line-height: 1.4; vertical-align: middle; white-space: nowrap; background: rgba(128,128,128,0.14); }
+  .online-pill[hidden] { display: none; }
+  .online-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #b5b5b5; }
+  .online-pill.has-online { background: rgba(46,160,90,0.16); color: #23844a; }
+  .online-pill.has-online::before { background: #2ea05a; }
+  .presence-dot { display: inline-block; width: 8px; height: 8px; margin-left: 7px; border-radius: 50%; background: #c4c4c4; vertical-align: middle; }
+  .presence-dot.on { background: #2ea05a; box-shadow: 0 0 0 3px rgba(46,160,90,0.2); }
+  .profile-presence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-bottom: 14px; padding: 10px 14px; border: 1.5px solid var(--line); border-radius: 12px; }
+  .presence-badge { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 0.9rem; }
+  .presence-badge i { width: 9px; height: 9px; border-radius: 50%; background: #b5b5b5; }
+  .presence-badge.on { color: #23844a; }
+  .presence-badge.on i { background: #2ea05a; box-shadow: 0 0 0 3px rgba(46,160,90,0.2); }
   /* Extra breathing room for the lifestyle settings card, which packs in
      several distinct sub-sections (star weights, bands, module locks). */
   .lifestyle-subsection { margin-top: 32px; padding-top: 24px; border-top: 1.5px solid var(--line); }
@@ -502,19 +515,19 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="settings-menu.js?v=e41d1075"></script>
 <script defer src="shortcuts.js?v=f7fd511f"></script>
 <script defer src="offline.js?v=067149c0"></script>
-<script defer src="data-core.js?v=2697ecd7"></script>
-<script defer src="data-money.js?v=3420c462"></script>
-<script defer src="data-life.js?v=93db9eea"></script>
-<script defer src="data-property.js?v=233a9933"></script>
-<script defer src="data-markets.js?v=9e83f4cc"></script>
+<script defer src="data-core.js?v=ba6d9e97"></script>
+<script defer src="data-money.js?v=1eab66b8"></script>
+<script defer src="data-life.js?v=475992fa"></script>
+<script defer src="data-property.js?v=3723dbe7"></script>
+<script defer src="data-markets.js?v=948810b4"></script>
 <script defer src="tour.js?v=08eac342"></script>
 <script defer src="events-ui.js?v=f846128d"></script>
 <script defer src="quiz-gate.js?v=84606ca0"></script>
 <script defer src="avatar.js?v=aca3bcf4"></script>
-<script defer src="notifications.js?v=55edae20"></script>
+<script defer src="notifications.js?v=d00c5c1d"></script>
 <script defer src="pdf-report.js?v=9198db19"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
-<script defer src="teacher.js?v=1c5e3eba"></script>
+<script defer src="teacher.js?v=50f9ed73"></script>
 <script defer src="bulk-students.js?v=d5a9136f"></script>
 </body>
 </html>

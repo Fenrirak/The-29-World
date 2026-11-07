@@ -838,12 +838,14 @@ async function submitApplication() {
    UI trigger; the data layer call has the same spirit but a different name. */
 async function applyForJob_data(classCode, jobId, studentUser, letter) {
   const classRef = classesCol().doc(classCode);
+  let jobTitle = "";
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) throw new Error("Class not found.");
     const cls = snap.data();
     const job = (cls.jobs || []).find(j => j.id === jobId);
     if (!job) throw new Error("That job no longer exists.");
+    jobTitle = job.title || "";
     const existing = (cls.jobApplications || []).find(
       a => a.jobId === jobId && a.studentUser === studentUser && a.status === "pending"
     );
@@ -852,6 +854,8 @@ async function applyForJob_data(classCode, jobId, studentUser, letter) {
     apps.push({ id: uid("a"), jobId, studentUser, coverLetter: letter, status: "pending", date: nowStr() });
     t.update(classRef, { jobApplications: apps });
   });
+  // Tell the teacher (best-effort; the application itself is already saved).
+  await t29NotifyTeacher(classCode, "job", "req", jobTitle);
 }
 
 /* ── My applications (student) ─────────────────────────────────────── */

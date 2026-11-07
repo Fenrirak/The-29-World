@@ -875,6 +875,151 @@ function startTimeTracking(u) {
   window.addEventListener("blur", () => flush(false));
 }
 
+/* ---------------- Presence: "last opened" + "online now" (students -> teacher) ----
+   The teacher dashboard shows, for each student, whether they're on the site right
+   now and when they last opened it, plus an "N/M online" count beside the Students
+   header. It's built to cost almost nothing in Firestore reads and writes.
+
+   STORAGE: one small doc per CLASS, presence/{classCode}, holding a map
+     p: { <username>: { o: <visit start>, a: <last ping>, off: <signed out> } }
+   Every time is a SERVER timestamp, so a wrong device clock can't skew it, and
+   firestore.rules pins `a` to the real server time.
+
+   WRITES (student side):
+     - one blind merge write (no read, no transaction) of just that student's own
+       entry, about once per 2 minutes while they're actually looking at the site.
+       Nothing is written while the tab is hidden, or after 5 minutes with no
+       click / key / touch / scroll.
+     - the site is many separate pages, so the time of the last ping is kept in
+       localStorage and shared by every page and tab: moving between pages does NOT
+       write again until a ping is actually due.
+     - `o` (start of the visit = "last opened the site") is only written when a new
+       visit begins (no ping for 5 minutes, or the first load after a logout).
+     - logging out writes one final "off" so the teacher sees them leave at once;
+       just closing a tab times out instead ("online" = pinged in the last 3 min).
+
+   READS (teacher side): ONE document read covers the whole class, with no
+   per-student reads at all (see t29LoadPresence). The dashboard re-reads it about
+   once a minute, and only while its tab is visible.
+
+   Best-effort throughout: never throws, never blocks or breaks a page. If a write
+   is refused (e.g. the new rules aren't published yet) it stops trying for that
+   page view. */
+const T29_PRESENCE_BEAT_MS = 2 * 60 * 1000;       // ping this often while active
+const T29_PRESENCE_ONLINE_MS = 3 * 60 * 1000;     // pinged within this long ago = online now
+const T29_PRESENCE_VISIT_GAP_MS = 5 * 60 * 1000;  // no ping for this long = the next one starts a new visit
+const T29_PRESENCE_IDLE_MS = 5 * 60 * 1000;       // no interaction for this long = not "on" the site
+
+let _presenceCtx = null;            // { ref, username, storeKey } once running on this page
+let _presenceDead = false;
+let T29_PRESENCE_READ_DENIED = false;
+
+function startPresence(u) {
+  if (_presenceCtx || !u || u.role !== "student" || !u.username || !u.classCode) return;
+  const ctx = _presenceCtx = {
+    ref: fdb.collection("presence").doc(u.classCode),
+    username: u.username,
+    storeKey: "t29_presence_" + u.classCode + "_" + u.username
+  };
+  const sv = () => firebase.firestore.FieldValue.serverTimestamp();
+  let lastInteract = Date.now();
+  let memMark = 0;      // fallback when localStorage is unavailable (private mode)
+  let busy = false;
+
+  // Device time of the last successful ping, shared by every page/tab. Only ever used
+  // to decide WHEN to write; the stored times are server timestamps.
+  const readMark = () => {
+    let n = 0;
+    try { n = Number(localStorage.getItem(ctx.storeKey)) || 0; } catch (e) { /* ignore */ }
+    n = Math.max(n, memMark);
+    return n > 0 && n <= Date.now() + 60000 ? n : 0; // a mark from the "future" means the clock moved: ignore it
+  };
+
+  async function beat() {
+    if (_presenceDead || busy || document.visibilityState !== "visible") return;
+    const now = Date.now();
+    if (now - lastInteract > T29_PRESENCE_IDLE_MS) return;
+    const mark = readMark();
+    if (mark && now - mark < T29_PRESENCE_BEAT_MS - 5000) return; // another page/tab pinged recently
+    const newVisit = !mark || now - mark > T29_PRESENCE_VISIT_GAP_MS;
+    const entry = newVisit ? { o: sv(), a: sv(), off: false } : { a: sv(), off: false };
+    busy = true;
+    try {
+      await ctx.ref.set({ p: { [ctx.username]: entry } }, { merge: true });
+      memMark = Date.now();
+      try { localStorage.setItem(ctx.storeKey, String(memMark)); } catch (e) { /* ignore */ }
+    } catch (e) {
+      // Refused (rules not published yet / not allowed): stop for this page view.
+      // Anything else (offline, blip) just waits for the next scheduled ping.
+      if (e && e.code === "permission-denied") _presenceDead = true;
+    } finally {
+      busy = false;
+    }
+  }
+
+  const touch = () => {
+    const now = Date.now();
+    const gap = now - lastInteract;
+    if (gap < 1000) return;               // one gesture fires a burst of events: ignore the rest
+    lastInteract = now;
+    if (gap > T29_PRESENCE_IDLE_MS) beat(); // back from idle: show as online straight away
+  };
+  ["pointerdown", "pointermove", "keydown", "touchstart", "scroll", "wheel"].forEach(ev =>
+    window.addEventListener(ev, touch, { passive: true, capture: true }));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") { lastInteract = Date.now(); beat(); }
+  });
+
+  // The small random delay stops a whole class that opens the site at the same moment
+  // from all writing to the one class doc in the same instant.
+  setTimeout(beat, Math.random() * 3000);
+  setInterval(beat, T29_PRESENCE_BEAT_MS);
+}
+
+// Called by logout(): marks the student as offline and forgets the shared "last ping"
+// so the NEXT login starts a fresh visit (and its time is written immediately).
+async function t29PresenceOnLogout() {
+  const c = _presenceCtx;
+  if (!c) return;
+  _presenceDead = true;
+  try { localStorage.removeItem(c.storeKey); } catch (e) { /* ignore */ }
+  try {
+    await Promise.race([
+      c.ref.set({ p: { [c.username]: { a: firebase.firestore.FieldValue.serverTimestamp(), off: true } } }, { merge: true }),
+      new Promise(resolve => setTimeout(resolve, 1200))
+    ]);
+  } catch (e) { /* the 3-minute timeout covers it */ }
+}
+
+// Teacher side. ONE document read for the whole class, straight from the server (never
+// a stale cached copy). Returns { username: { opened, active, off } } (times in ms), or
+// null if it couldn't be loaded. Never throws.
+async function t29LoadPresence(classCode) {
+  try {
+    if (!classCode) return null;
+    const snap = await fdb.collection("presence").doc(classCode).get({ source: "server" });
+    const p = (snap.exists && snap.data() && snap.data().p) || {};
+    const ms = v => (v && typeof v.toMillis === "function") ? v.toMillis() : 0;
+    const out = {};
+    Object.keys(p).forEach(name => {
+      const e = p[name] || {};
+      out[name] = { opened: ms(e.o), active: ms(e.a), off: e.off === true };
+    });
+    T29_PRESENCE_READ_DENIED = false;
+    return out;
+  } catch (e) {
+    if (e && e.code === "permission-denied") T29_PRESENCE_READ_DENIED = true;
+    else console.warn("t29LoadPresence failed:", e);
+    return null;
+  }
+}
+
+// "On the site right now": signed in, and pinged within the last few minutes.
+function t29IsOnline(entry) {
+  if (!entry || entry.off || !entry.active) return false;
+  return trustedNow().getTime() - entry.active <= T29_PRESENCE_ONLINE_MS;
+}
+
 /* ---------------- Archived-class "memory lane" (students only) ----------
    An archived class blocks students from doing anything, but the teacher
    can still choose to let them browse it read-only ("stroll down memory
@@ -933,6 +1078,7 @@ async function requireLogin(opts) {
   }
   T29_SESSION_ROLE = u.role;
   T29_SESSION_USERNAME = u.username;
+  T29_SESSION_NAME = u.name || null;
   // Tracked locally rather than as a property on u — u is the shared
   // object cached by getUserCached()/getSessionUser() (same reference
   // returned on every cache hit for ~2s), so writing to it here would
@@ -976,6 +1122,8 @@ async function requireLogin(opts) {
     }
     startTimeTracking(u);
   }
+  // Teacher dashboard's "online now" / "last opened" (cheap, best-effort; see Presence above).
+  if (u.role === "student" && !archivedReadOnly) startPresence(u);
   // Counts towards the class's 3-month inactivity clock (never blocks the page).
   // Teacher Home passes skipActivity: just browsing the list isn't using a class.
   if (!opts.skipActivity && !archivedReadOnly) t29TouchClassActivity(u).catch(() => {});
@@ -987,6 +1135,7 @@ async function requireLogin(opts) {
 // account's database access. Now signs out of Firebase too (capped at a
 // couple of seconds so a slow connection can't trap anyone on the page).
 async function logout() {
+  await t29PresenceOnLogout(); // best-effort, capped at ~1s, needs the login still valid
   clearSession();
   try {
     await Promise.race([
@@ -1004,6 +1153,7 @@ async function logout() {
 // refusal still cost a full network round trip on every page load.
 let T29_SESSION_ROLE = null;
 let T29_SESSION_USERNAME = null;
+let T29_SESSION_NAME = null; // display name, so a request to the teacher can say who it's from without a read
 // The signed-in student's username, or null for a teacher / unknown.
 function t29SessionStudent() {
   return T29_SESSION_ROLE === "student" ? T29_SESSION_USERNAME : null;
@@ -2676,6 +2826,115 @@ async function t29NotifyRunPayments(classCode, sinceTs, kind) {
         : { to: u, icon: "coin", tone: "mint", title: `Your teacher ran pay day: you were paid ${fmtMoney(amt)}`, body: "It was added to your account.", href: "bank.html" };
     }));
   } catch (e) { console.warn("t29NotifyRunPayments failed:", e); }
+}
+
+/* ===================== Student requests -> the teacher's bell =====================
+   The mirror image of t29NotifyStudents. When a STUDENT asks for something that needs
+   the teacher (a job application, a side hustle change, more time on the site, a credit
+   card or bank account that needs approval, a Trade Centre listing or a rental waiting for
+   approval), or takes that request back, the teacher is told in the same bell, with the
+   same read/unread tracking and the same optional device alerts (see notifications.js).
+
+   It lives in its own tiny document on purpose: the class doc is rewritten constantly
+   (every bank transaction), so a live listener on it would bill a read each time.
+   teacherInbox/{classCode} only changes when a student asks for something, so the
+   teacher's bell can listen to it live for about one read per request.
+
+   Shape: n: { <username>: { <kind>: { ts, st: "req"|"cancel", title, body } } }
+   ONE slot per student per kind, written with a blind merge (no read, no transaction).
+   Asking again replaces that student's previous notice of that kind, and withdrawing a
+   request replaces the notice for the request it withdraws, so nothing piles up and the
+   document stays small. firestore.rules lets a student write only their OWN slots, with
+   the text length-capped; the bell never trusts the text as markup.
+
+   Best-effort: never throws, and never holds up the student's real action for more than
+   about 2 seconds (an offline write would otherwise wait for the connection). */
+// kind -> what the title says after the student's name. Kind names must match the list in
+// firestore.rules and NOTIF_INBOX_KINDS in notifications.js. `cancel: null` = can't be withdrawn.
+const T29_TEACHER_NOTICE_KINDS = {
+  time:    { req: "asked for more time on the site",                    cancel: null },
+  hustle:  { req: "asked to change their side hustle",                  cancel: null },
+  job:     { req: "applied for a job",                                  cancel: "withdrew their job application" },
+  card:    { req: "applied for a credit card",                          cancel: "withdrew their credit card application" },
+  account: { req: "applied for a bank account",                         cancel: "withdrew their bank account application" },
+  listing: { req: "listed something in the Trade Centre for approval",  cancel: "cancelled a Trade Centre listing that was waiting for approval" },
+  sublet:  { req: "asked to rent out a property to classmates",         cancel: "withdrew a request to rent out a property" }
+};
+let _teacherNoticeDead = false;
+let T29_TEACHER_INBOX_DENIED = false;
+
+// status: "req" (they asked) or "cancel" (they took it back). detail: one short line, e.g. the job's name.
+async function t29NotifyTeacher(classCode, kind, status, detail) {
+  try {
+    const me = t29SessionStudent();
+    const def = T29_TEACHER_NOTICE_KINDS[kind];
+    const st = status === "cancel" ? "cancel" : "req";
+    const phrase = def && def[st];
+    if (_teacherNoticeDead || !classCode || !me || !phrase) return false;
+    const who = t29NoticeClip(T29_SESSION_NAME || me, 40);
+    const slot = {
+      ts: firebase.firestore.FieldValue.serverTimestamp(), st,
+      title: t29NoticeClip(`${who} ${phrase}`, 120), body: t29NoticeClip(detail, 300)
+    };
+    const write = fdb.collection("teacherInbox").doc(classCode)
+      .set({ n: { [me]: { [kind]: slot } } }, { merge: true })
+      .then(() => true, e => {
+        if (e && e.code === "permission-denied") _teacherNoticeDead = true; // rules not published yet: stop trying
+        else console.warn("t29NotifyTeacher failed:", e);
+        return false;
+      });
+    return await Promise.race([write, new Promise(resolve => setTimeout(() => resolve(false), 2000))]);
+  } catch (e) {
+    console.warn("t29NotifyTeacher failed:", e);
+    return false;
+  }
+}
+
+// Flattens the inbox doc into [{ user, kind, st, ts (ms), title, body }]. Times are server
+// timestamps; anything that isn't one of the known kinds is ignored.
+function t29ParseTeacherInbox(snap) {
+  const out = [];
+  const n = (snap && snap.exists && snap.data() && snap.data().n) || {};
+  const ms = v => (v && typeof v.toMillis === "function") ? v.toMillis() : 0;
+  Object.keys(n).forEach(user => {
+    const slots = n[user];
+    if (!slots || typeof slots !== "object") return;
+    Object.keys(T29_TEACHER_NOTICE_KINDS).forEach(kind => {
+      const e = slots[kind];
+      const ts = e && typeof e === "object" ? ms(e.ts) : 0;
+      if (!ts) return;
+      out.push({ user, kind, st: e.st === "cancel" ? "cancel" : "req", ts, title: String(e.title || ""), body: String(e.body || "") });
+    });
+  });
+  return out;
+}
+
+// Teacher side, live: ONE read when it starts, then one per new request. cb(items) on every
+// change; cb(null, { error }) if the listener ends. Returns a function that stops it.
+function t29WatchTeacherInbox(classCode, cb) {
+  if (!classCode || typeof cb !== "function") return function () {};
+  let unsub = null, dead = false;
+  try {
+    unsub = fdb.collection("teacherInbox").doc(classCode).onSnapshot(
+      snap => { if (!dead) { T29_TEACHER_INBOX_DENIED = false; cb(t29ParseTeacherInbox(snap), {}); } },
+      err => {
+        if (err && err.code === "permission-denied") T29_TEACHER_INBOX_DENIED = true;
+        if (!dead) cb(null, { error: err || true });
+      }
+    );
+  } catch (e) { cb(null, { error: e }); }
+  return function () { dead = true; if (unsub) { try { unsub(); } catch (e) { /* already stopped */ } unsub = null; } };
+}
+
+// One-off read for the fallback poll. Returns the items, or null if it couldn't be read.
+async function t29LoadTeacherInbox(classCode) {
+  try {
+    if (!classCode) return null;
+    return t29ParseTeacherInbox(await fdb.collection("teacherInbox").doc(classCode).get({ source: "server" }));
+  } catch (e) {
+    if (e && e.code === "permission-denied") T29_TEACHER_INBOX_DENIED = true;
+    return null;
+  }
 }
 
 // Marks a bonus/fine txn as seen so its one-time popup doesn't show again.

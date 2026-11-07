@@ -1,4 +1,5 @@
 let CURRENT, CLASS_CODE, PROFILE_USER, EDITING_EVENT_ID = null;
+let PRESENCE = {}, PRESENCE_LOADED = false, PRESENCE_AT = 0, PRESENCE_INFLIGHT = null, PRESENCE_TIMER = null, PRESENCE_STUDENTS = [];
 let LAST_STUDENTS = []; // roster snapshot from the last render(), reused by "pay all" so it doesn't need its own fetch
 
 // Teachers naturally type amounts like "$10" or "1,000" in a money app —
@@ -22,7 +23,7 @@ function paintChrome() {
   document.getElementById("classArchivedIcon").innerHTML = icon("lock", 15);
   // Same icon as the Stock Market page and menu.
   document.getElementById("iconCompanies").innerHTML = icon("chart", 30);
-  document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students";
+  document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students" + '<span id="onlineCount" class="online-pill" hidden aria-live="polite"></span>';
   document.getElementById("hNetWorth").innerHTML = icon("medal", 18) + " Net worth ranking";
   document.getElementById("hAdjust").innerHTML = icon("coin", 18) + " Quick transactions";
   document.getElementById("hSettings").innerHTML = icon("settings", 18) + " Class settings";
@@ -103,6 +104,7 @@ async function init() {
   await checkBigEventPopup(CURRENT.username, CLASS_CODE);
   await checkAdjustmentPopup(CURRENT.username, CLASS_CODE);
   await render();
+  startPresencePolling();
   if (typeof t29MaybeStartTour === "function") t29MaybeStartTour("teacher", CURRENT);
 }
 
@@ -210,7 +212,7 @@ async function render() {
     const tr = document.createElement("tr");
     tr.dataset.search = ((s.name || "") + " " + (s.username || "")).toLowerCase();
     tr.innerHTML = `
-      <td><div class="stack-val student-id-cell">${avatarBadge(s)}<div class="student-id-text">${escapeHtml(s.name)}<div class="muted-small">@${escapeHtml(s.username)}</div></div></div></td>
+      <td><div class="stack-val student-id-cell">${avatarBadge(s)}<div class="student-id-text">${escapeHtml(s.name)}<span class="presence-dot" data-user="${escapeHtml(s.username)}" title="Offline"></span><div class="muted-small">@${escapeHtml(s.username)}</div></div></div></td>
       <td><div class="stack-val">${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `Task ✓` : `Task ✗`}</div>`; })() : ""}</div></td>
       <td><div class="stack-val"><strong>${fmtMoney(s.balance)}</strong></div></td>
       <td><div class="stack-val">${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</div></td>
@@ -222,6 +224,12 @@ async function render() {
     `;
     tbody.appendChild(tr);
   });
+
+  // Online now / last opened: paint what we already have, then refresh from the one presence
+  // doc (a no-op if it was read in the last 30s, so busy re-renders don't re-read it).
+  PRESENCE_STUDENTS = students;
+  paintPresence();
+  refreshPresence(false).then(paintPresence);
 
   // Search box: only worth showing once the class is long enough to need scrolling.
   const stuFilter = document.getElementById("studentFilter");
@@ -1119,6 +1127,8 @@ async function renderProfile(username) {
   document.getElementById("profileSubtitle").textContent = `@${s.username}${job ? ` · ${tier ? tier.name : job.title}` : " · No job assigned"}`;
 
   const rows = [];
+  // At the very top of the profile: online now + when they last opened the site.
+  rows.push(`<div class="profile-presence" id="profilePresence">${presenceProfileHtml(username)}</div>`);
   const isOverride = s.lifestyleOverride !== undefined && s.lifestyleOverride !== null;
   rows.push(`
     <div class="profile-summary">
@@ -1450,6 +1460,7 @@ async function renderProfile(username) {
     : `<p class="muted-small">No savings goals set.</p>`);
 
   document.getElementById("profileBody").innerHTML = rows.join("");
+  refreshPresence(false, 20000).then(paintProfilePresence); // fresh status when a profile opens (max one read per 20s)
 }
 
 async function profileSetJobTaskApproval(username, approved) {
@@ -1714,4 +1725,95 @@ function filterStudentRows() {
   });
   const none = document.getElementById("noStudentMatch");
   if (none) none.classList.toggle("hidden", !q || shown > 0);
+}
+
+/* ===================== Online now / last opened (see "Presence" in data-core.js) =====================
+   All of this runs off ONE small document (presence/{classCode}) that holds every
+   student's entry, so it costs a single read however big the class is: once with the
+   dashboard, then about once a minute while this tab is visible (and at most every 20s
+   when a profile is opened). The profile and the table dots both use that same loaded
+   copy, so they add no reads of their own. */
+function presenceWhen(ms) {
+  if (!ms) return "";
+  const d = new Date(ms), now = trustedNow();
+  const tz = { timeZone: "Pacific/Auckland" };
+  const time = d.toLocaleTimeString("en-NZ", Object.assign({ hour: "numeric", minute: "2-digit", hour12: true }, tz));
+  const key = nzDateKey(d), today = nzDateKey(now);
+  let day;
+  if (key === today) day = "Today";
+  else if (key === nzDateKey(new Date(now.getTime() - 86400000))) day = "Yesterday";
+  else day = d.toLocaleDateString("en-NZ", Object.assign({ weekday: "short", day: "numeric", month: "short" }, key.slice(0, 4) !== today.slice(0, 4) ? { year: "numeric" } : {}, tz));
+  const mins = Math.round((now.getTime() - ms) / 60000);
+  const rel = mins < 1 ? "just now" : mins < 60 ? `${mins} min ago` : "";
+  return `${day}, ${time}${rel ? ` (${rel})` : ""}`;
+}
+
+function presenceProfileHtml(username) {
+  if (!PRESENCE_LOADED) {
+    return `<span class="presence-badge"><i></i>Status unavailable</span><span class="muted-small">Online status couldn't be loaded just now.</span>`;
+  }
+  const e = PRESENCE[username];
+  const online = t29IsOnline(e);
+  const badge = `<span class="presence-badge${online ? " on" : ""}"><i></i>${online ? "Online now" : "Offline"}</span>`;
+  if (!e || (!e.opened && !e.active)) return `${badge}<span class="muted-small">No visits recorded yet</span>`;
+  const opened = e.opened
+    ? `<span class="muted-small">${online ? "Opened the site" : "Last opened the site"}: <strong>${escapeHtml(presenceWhen(e.opened))}</strong></span>` : "";
+  const active = (!online && e.active && e.active !== e.opened)
+    ? `<span class="muted-small">Last active: <strong>${escapeHtml(presenceWhen(e.active))}</strong></span>` : "";
+  return badge + opened + active;
+}
+
+function paintProfilePresence() {
+  const el = document.getElementById("profilePresence");
+  if (el && PROFILE_USER) el.innerHTML = presenceProfileHtml(PROFILE_USER);
+}
+
+// Updates everything that shows presence from the copy already in memory (no reads).
+function paintPresence() {
+  const total = PRESENCE_STUDENTS.length;
+  let online = 0;
+  PRESENCE_STUDENTS.forEach(s => { if (t29IsOnline(PRESENCE[s.username])) online++; });
+  const pill = document.getElementById("onlineCount");
+  if (pill) {
+    pill.hidden = total === 0;
+    pill.textContent = `${PRESENCE_LOADED ? online : "–"}/${total} online`;
+    pill.classList.toggle("has-online", PRESENCE_LOADED && online > 0);
+    pill.title = PRESENCE_LOADED
+      ? `${online} of ${total} student${total === 1 ? " is" : "s are"} on the site right now`
+      : "Online status couldn't be loaded just now";
+  }
+  document.querySelectorAll("#studentTable .presence-dot").forEach(dot => {
+    const on = t29IsOnline(PRESENCE[dot.dataset.user]);
+    dot.classList.toggle("on", on);
+    dot.title = on ? "Online now" : "Offline";
+  });
+  paintProfilePresence();
+}
+
+// One read of the presence doc. Skipped when the copy in memory is newer than maxAgeMs
+// (so the many re-renders that follow teacher actions never re-read it), and two callers
+// at once share one read.
+function refreshPresence(force, maxAgeMs) {
+  const maxAge = maxAgeMs === undefined ? 30000 : maxAgeMs;
+  if (!force && PRESENCE_LOADED && Date.now() - PRESENCE_AT < maxAge) return Promise.resolve();
+  if (!force && !PRESENCE_LOADED && T29_PRESENCE_READ_DENIED) return Promise.resolve();
+  if (PRESENCE_INFLIGHT) return PRESENCE_INFLIGHT;
+  PRESENCE_INFLIGHT = t29LoadPresence(CLASS_CODE).then(map => {
+    if (map) { PRESENCE = map; PRESENCE_LOADED = true; PRESENCE_AT = Date.now(); }
+  }).catch(() => {}).finally(() => { PRESENCE_INFLIGHT = null; });
+  return PRESENCE_INFLIGHT;
+}
+
+// Keeps the count live: one read a minute, only while this tab is on screen, and not at
+// all for an empty class or once the database has said the teacher can't read it.
+function startPresencePolling() {
+  if (PRESENCE_TIMER) return;
+  const tick = () => {
+    if (document.visibilityState !== "visible" || T29_PRESENCE_READ_DENIED || !PRESENCE_STUDENTS.length) return;
+    refreshPresence(true).then(paintPresence);
+  };
+  PRESENCE_TIMER = setInterval(tick, 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && Date.now() - PRESENCE_AT > 30000) tick();
+  });
 }

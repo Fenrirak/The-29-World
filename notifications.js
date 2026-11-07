@@ -39,6 +39,9 @@
    background. It needs the site open in a tab or installed app: there is no
    server to push to a closed browser (see the notes by notifDeviceAlertNew).
 
+   TEACHERS get the same bell, fed by the class's request inbox (t29NotifyTeacher in
+   data-core.js) instead of the derived builders below; see notifTeacherInboxItems.
+
    Loaded on every page (after the data-*.js files). It injects its own bell button
    into .topbar-actions, so pages don't need any markup for it — and it
    calls fitTopbar() straight after inserting, so the nav re-measures with
@@ -540,6 +543,34 @@ function notifMarketplaceItems(me, cls) {
   return out;
 }
 
+// ---- Teachers: requests from students (see t29NotifyTeacher in data-core.js) ----
+// Where each kind of request is dealt with, and its icon. These are fixed here, never taken
+// from the stored notice, because that text is written by students.
+const NOTIF_INBOX_TTL_MS = 14 * 24 * 3600 * 1000;
+const NOTIF_INBOX_KINDS = {
+  time:    { icon: "hourglass", href: "teacher.html" },
+  hustle:  { icon: "briefcase", href: "teacher.html" },
+  job:     { icon: "briefcase", href: "jobs.html" },
+  card:    { icon: "wallet",    href: "bank.html" },
+  account: { icon: "piggy",     href: "bank.html" },
+  listing: { icon: "swap",      href: "marketplace.html" },
+  sublet:  { icon: "house",     href: "property.html" }
+};
+function notifTeacherInboxItems(inbox) {
+  const cutoff = trustedNow().getTime() - NOTIF_INBOX_TTL_MS;
+  const out = [];
+  (Array.isArray(inbox) ? inbox : []).forEach(n => {
+    const k = n && NOTIF_INBOX_KINDS[n.kind];
+    if (!k || !n.title || (n.ts || 0) < cutoff) return;
+    out.push({
+      id: "ti-" + n.user + "-" + n.kind + "-" + n.ts, ts: n.ts, icon: k.icon,
+      tone: n.st === "cancel" ? "coral" : "gold", title: n.title, body: n.body || "", href: k.href
+    });
+  });
+  out.sort((a, b) => b.ts - a.ts);
+  return out;
+}
+
 /* Builds the whole feed. `action: true` items — the things that actually
    need the student to do something — always sort above the informational
    market moves, and within each group it's newest first. */
@@ -932,6 +963,9 @@ function notifDeviceRender(host) {
 /* ================= UI ================= */
 let NOTIF_USER = null;
 let NOTIF_ITEMS = [];
+// Teachers get the same bell, fed by the class's request inbox instead (see notifTeacherInboxItems).
+let NOTIF_IS_TEACHER = false;
+let NOTIF_INBOX = null; // parsed inbox; null until the listener's first snapshot
 let NOTIF_POLL_TIMER = null;
 
 // The panel opens showing the top NOTIF_INITIAL_SHOW rows — since
@@ -1115,6 +1149,10 @@ function notifRenderList() {
   if (!list) return;
   const lastRead = notifGetLastRead(NOTIF_USER);
   if (!NOTIF_ITEMS.length) {
+    if (NOTIF_IS_TEACHER) {
+      list.innerHTML = `<div class="notif-empty"><p>No requests from students.</p><p class="muted-small">When a student asks for something (more time, a job, a side hustle change, a card or bank account, a Trade Centre listing or a rental) it will show up here.</p></div>`;
+      return;
+    }
     list.innerHTML = `<div class="notif-empty"><p>You're all caught up.</p><p class="muted-small">Anything due, any decision waiting on you, and how your shares moved will show up here.</p></div>`;
     return;
   }
@@ -1162,7 +1200,46 @@ function notifPaint() {
   if (panel && !panel.classList.contains("hidden")) notifRenderList();
 }
 
+// Teachers: the feed is just the class's request inbox (t29NotifyTeacher in data-core.js).
+// The live listener below fills NOTIF_INBOX, so this never re-reads the inbox itself: it only
+// picks up the shared "read up to" stamp and rebuilds the list.
+async function notifRefreshTeacher(username, classCode) {
+  try { if (typeof syncServerClock === "function") await syncServerClock(classCode); } catch (e) {}
+  const me = await getUserCached(username);
+  if (!me) return;
+  const remoteRead = notifSaneTs(me.notifLastRead);
+  if (remoteRead > NOTIF_REMOTE_READ) NOTIF_REMOTE_READ = remoteRead;
+  const localRead = notifGetLocalRead(username);
+  if (localRead > NOTIF_REMOTE_READ) notifPushRemoteRead(username, localRead);
+  if (NOTIF_INBOX === null) return; // the listener's first snapshot hasn't arrived yet
+  NOTIF_ITEMS = notifTeacherInboxItems(NOTIF_INBOX);
+  NOTIF_BUILT_AT = trustedNow().getTime();
+  notifPaint();
+  notifDeviceAlertNew();
+}
+
+// Live listener on the class's request inbox: one read to start, then one per new request.
+function notifStartTeacherWatch(username, classCode) {
+  if (typeof t29WatchTeacherInbox !== "function") return;
+  NOTIF_UNWATCH = t29WatchTeacherInbox(classCode, (inbox, info) => {
+    if (info && info.error) {
+      notifStopPoll();
+      // Refused (rules not published yet): stay quiet. Anything else: fall back to a slow re-read.
+      if (!(info.error && info.error.code === "permission-denied")) {
+        NOTIF_POLL_TIMER = setInterval(async () => {
+          const items = await t29LoadTeacherInbox(classCode);
+          if (items) { NOTIF_INBOX = items; notifRefreshTeacher(username, classCode).catch(() => {}); }
+        }, NOTIF_POLL_MS);
+      }
+      return;
+    }
+    NOTIF_INBOX = inbox;
+    notifRefreshTeacher(username, classCode).catch(() => {});
+  });
+}
+
 async function notifRefresh(username, classCode) {
+  if (NOTIF_IS_TEACHER) return notifRefreshTeacher(username, classCode);
   // A new week's variable mortgage rate must be in place before any payment amount is quoted.
   // Every timestamp here comes from trustedNow(); until the server clock is synced it is just the
   // device clock, which on a wrong-clocked device stamps a future "read" time that then sticks.
@@ -1215,6 +1292,7 @@ function notifLiveOk(doc) { return !(doc && doc.dailyLimitMinutes > 0); }
 
 function notifStartPoll(username, classCode) {
   if (NOTIF_POLL_TIMER || NOTIF_UNWATCH) return;
+  if (NOTIF_IS_TEACHER) { notifStartTeacherWatch(username, classCode); return; }
   getUserCached(username).then(me => {
     if (NOTIF_POLL_TIMER || NOTIF_UNWATCH) return;
     if (typeof t29WatchDoc !== "function" || !notifLiveOk(me)) { notifStartTimer(username, classCode, NOTIF_POLL_MS); return; }
@@ -1241,10 +1319,11 @@ async function notifInit() {
   notifEnsureManifest();
   let u = null;
   try { u = await getSessionUser(); } catch (e) { return; }
-  // Teachers get their own dashboards for all of this; the feed is a
-  // student-facing "what happened to ME" view.
-  if (u && u.role === "teacher") { notifInjectLockCss(); notifLockBootTeacher(u).catch(() => {}); return; }
-  if (!u || u.role !== "student" || !u.classCode) return;
+  // Teachers get the lock banner, plus the same bell for requests from their students.
+  const isTeacher = !!u && u.role === "teacher";
+  if (isTeacher) { notifInjectLockCss(); notifLockBootTeacher(u).catch(() => {}); }
+  if (!u || (u.role !== "student" && !isTeacher) || !u.classCode) return;
+  NOTIF_IS_TEACHER = isTeacher;
   NOTIF_USER = u.username;
   NOTIF_CLASS = u.classCode;
   notifDeviceRepaintAll(); // a settings control may have been drawn before we knew who this was
