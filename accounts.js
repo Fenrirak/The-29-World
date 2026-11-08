@@ -424,6 +424,11 @@ function acPlanTile(me, cls, p, off, full, heldStatus) {
 // Every account the student can move money in or out of, tagged with its kind (used by the move, transfer, pay-with and
 // balance-tile menus). The two original accounts only appear while they are open.
 function acChoicesWithKind(me, cls) { return anwOpenAccounts(me, cls); }
+// The student's main account (the default "leaving" account): the one flagged main, else Cash; "" if neither is open.
+function acMainId(me, cls) {
+  const ch = acChoicesWithKind(me, cls);
+  return (ch.find(c => c.isMain) || ch.find(c => c.id === "cash") || {}).id || "";
+}
 function acAccountChoices(me, cls) { return acChoicesWithKind(me, cls).map(c => ({ id: c.id, label: c.label, bal: c.bal })); }
 // Rules worth knowing before money leaves an account (withdrawal cap, fee, lost bonus)
 function acSourceNotes(me, cls, id) {
@@ -442,9 +447,10 @@ function acMovePanel(me, cls) {
     <p class="muted-small">You need two open accounts to move money between them. Open another account below.</p>
     <div id="acMoveMsg"></div>
   </section>`;
-  if (!ids.includes(AC_MOVE.from)) AC_MOVE.from = ids.includes("cash") ? "cash" : ids[0];
-  if (!ids.includes(AC_MOVE.to) || AC_MOVE.to === AC_MOVE.from) AC_MOVE.to = ids.find(i => i !== AC_MOVE.from && i !== "cash") || ids.find(i => i !== AC_MOVE.from);
-  const opts = sel => ch.map(c => `<option value="${acEsc(c.id)}" ${c.id === sel ? "selected" : ""}>${acEsc(c.label)} — ${fmtMoney(c.bal)}</option>`).join("");
+  // "From" defaults to the main account; "To" starts blank. A different pick stays while it's still valid.
+  if (!ids.includes(AC_MOVE.from)) AC_MOVE.from = acMainId(me, cls);
+  if (!ids.includes(AC_MOVE.to) || AC_MOVE.to === AC_MOVE.from) AC_MOVE.to = "";
+  const opts = sel => `<option value="" disabled ${sel ? "" : "selected"}>Choose an account…</option>` + ch.map(c => `<option value="${acEsc(c.id)}" ${c.id === sel ? "selected" : ""}>${acEsc(c.label)} — ${fmtMoney(c.bal)}</option>`).join("");
   return `<section class="cc-panel ac-move">
     <div class="cc-panel-head"><h3>Move money</h3><span class="muted-small">Between the accounts above</span></div>
     <form onsubmit="return acMove(event)" class="ac-move-form">
@@ -471,10 +477,10 @@ function acSwap() {
   acMoveChanged();
 }
 function acQuick(id, dir) {
-  // The other end of the move: cash when it is open (and isn't this account), otherwise the first other open account.
-  const ids = acAccountChoices(AC_ME, AC_CLS).map(c => c.id);
-  const other = id !== "cash" && ids.includes("cash") ? "cash" : ids.find(i => i !== id) || "";
-  AC_MOVE = dir === "in" ? { from: other, to: id } : { from: id, to: other };
+  // The clicked account is the known end. Add money: it's the "To", and "From" is the main account (blank if this IS the
+  // main account). Take out: it's the "From", and "To" is left blank for the student to choose.
+  const main = acMainId(AC_ME, AC_CLS);
+  AC_MOVE = dir === "in" ? { from: id === main ? "" : main, to: id } : { from: id, to: "" };
   const f = document.getElementById("acFrom"), t = document.getElementById("acTo");
   if (f && t) { f.value = AC_MOVE.from; t.value = AC_MOVE.to; }
   acMoveHint();
@@ -488,7 +494,7 @@ function acMoveHint() {
   const f = document.getElementById("acFrom"), t = document.getElementById("acTo");
   const notes = [];
   const acct = id => acctActiveOf(AC_ME).find(a => a.id === id);
-  if (f && t && f.value === t.value) notes.push("Pick two different accounts.");
+  if (f && t && f.value && f.value === t.value) notes.push("Pick two different accounts.");
   const src = f && acct(f.value), dst = t && acct(t.value);
   const sp = src && acctPlanById(AC_CLS, src.planId), dp = dst && acctPlanById(AC_CLS, dst.planId);
   if (sp) {
@@ -502,12 +508,14 @@ function acMoveHint() {
 async function acMove(e) {
   e.preventDefault();
   const from = document.getElementById("acFrom").value, to = document.getElementById("acTo").value, amt = document.getElementById("acAmt").value;
+  if (!from || !to) { acMsg("acMoveMsg", `<div class="error-msg">Choose an account for both From and To.</div>`); return false; }
   const btn = document.getElementById("acMoveBtn"); btn.disabled = true;
   const names = {}; acAccountChoices(AC_ME, AC_CLS).forEach(c => { names[c.id] = c.label; });
   const res = await moveBankMoney(CURRENT.username, CURRENT.classCode, from, to, amt);
   btn.disabled = false;
   if (!res.ok) { acMsg("acMoveMsg", `<div class="error-msg">${acEsc(res.error)}</div>`); return false; }
   const done = `Moved ${fmtMoney(Number(amt))} from ${names[from]} to ${names[to]}.`;
+  AC_MOVE = { from: "", to: "" }; // back to the defaults: main account / nothing chosen
   await render();
   acMsg("acMoveMsg", `<div class="success-msg">${acEsc(done)}</div>`);
   return false;

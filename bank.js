@@ -399,6 +399,7 @@ async function sendMoney(e) {
     const note = document.getElementById("note").value.trim();
     const box = document.getElementById("sendMsg");
     if (!to) { box.innerHTML = `<div class="error-msg">Choose who to send the money to.</div>`; return false; }
+    if (!IS_TEACHER && !(document.getElementById("sendFrom") || {}).value) { box.innerHTML = `<div class="error-msg">Choose which account to pay with.</div>`; return false; }
     if (Number.isNaN(amount) || amount === 0) { box.innerHTML = `<div class="error-msg">Enter an amount.</div>`; return false; }
     if (!IS_TEACHER && amount < 0) { box.innerHTML = `<div class="error-msg">Enter an amount greater than zero.</div>`; return false; }
 
@@ -409,7 +410,7 @@ async function sendMoney(e) {
     // instead of the peer-to-peer transfer path.
     // Students choose which account the money comes out of (cash, Savings Account, an extra account, or
     // their credit card for payments to the teacher). A teacher's balance is unlimited, so they always send from it.
-    const src = IS_TEACHER ? "cash" : ((document.getElementById("sendFrom") || {}).value || "cash");
+    const src = IS_TEACHER ? "cash" : document.getElementById("sendFrom").value;
     const sendOne = (username, silent) => (IS_TEACHER && amount < 0)
       ? teacherAdjust(CURRENT.username, username, amount, note)
       : IS_TEACHER
@@ -458,6 +459,7 @@ async function sendMoney(e) {
       document.getElementById("amount").value = "";
       document.getElementById("note").value = "";
       document.getElementById("toStudent").value = "";
+      { const sf = document.getElementById("sendFrom"); if (sf) sf.value = ""; }
     } else {
       box.innerHTML = `<div class="error-msg">${res.error}</div>`;
     }
@@ -485,10 +487,11 @@ async function addAuto(e) {
     const to = document.getElementById("autoTo").value;
     const note = document.getElementById("autoNote").value.trim();
     // Which account pays: "cash", "savings", an extra account's id, or "card" (credit cards only ever pay the teacher).
-    const from = IS_TEACHER ? "cash" : ((document.getElementById("autoFrom") || {}).value || "cash");
+    const from = IS_TEACHER ? "cash" : ((document.getElementById("autoFrom") || {}).value || "");
     const useCard = from === "card";
     const box = document.getElementById("autoMsg");
     if (!to) { box.innerHTML = `<div class="error-msg">Choose who to pay.</div>`; return false; }
+    if (!from) { box.innerHTML = `<div class="error-msg">Choose which account to pay with.</div>`; return false; }
     if (useCard && !(AUTO_CARD_CTX && to === AUTO_CARD_CTX.cls.teacher)) { box.innerHTML = `<div class="error-msg">A credit card can only pay your teacher. Pick one of your accounts to pay your classmate.</div>`; return false; }
     let res = EDITING_AUTO_ID
       ? await editAutomation(CURRENT.classCode, EDITING_AUTO_ID, CURRENT.username, day, freq, amount, to, note, false, useCard, from)
@@ -545,7 +548,7 @@ function cancelEditAuto() {
   document.getElementById("autoAmount").value = "";
   document.getElementById("autoNote").value = "";
   document.getElementById("autoTo").value = "";
-  { const f = document.getElementById("autoFrom"); if (f) { f.value = "cash"; if (!f.value) f.selectedIndex = 0; } }
+  { const f = document.getElementById("autoFrom"); if (f) f.value = ""; }
   autoSyncCardRow();
   document.getElementById("hNewAuto").innerHTML = "Set up an automatic payment";
   document.getElementById("addAutoBtn").innerHTML = "Create automatic payment";
@@ -574,7 +577,8 @@ async function addSavingsAuto(e) {
     const amount = document.getElementById("savAutoAmount").value;
     const note = document.getElementById("savAutoNote").value.trim();
     const box = document.getElementById("savAutoMsg");
-    if (!direction.from || !direction.to || direction.from === direction.to) { box.innerHTML = `<div class="error-msg">Pick two different accounts.</div>`; return false; }
+    if (!direction.from || !direction.to) { box.innerHTML = `<div class="error-msg">Choose an account for both From and To.</div>`; return false; }
+    if (direction.from === direction.to) { box.innerHTML = `<div class="error-msg">Pick two different accounts.</div>`; return false; }
     let res = EDITING_SAV_AUTO_ID
       ? await editSavingsAutomation(CURRENT.classCode, EDITING_SAV_AUTO_ID, CURRENT.username, day, freq, amount, direction, note)
       : await addSavingsAutomation(CURRENT.classCode, CURRENT.username, day, freq, amount, direction, note);
@@ -612,8 +616,8 @@ function startEditSavAuto(a) {
   EDITING_SAV_AUTO_ID = a.id;
   { const e = autoEnds(a), f = document.getElementById("xferFrom"), t = document.getElementById("xferTo");
     f.value = e.from; t.value = e.to;
-    if (!f.value) f.selectedIndex = 0; // an account that has since been closed
-    if (!t.value || t.value === f.value) { const alt = [...t.options].find(o => o.value !== f.value); if (alt) t.value = alt.value; }
+    if (!f.value) f.value = ""; // an account that has since been closed stays blank
+    if (t.value && t.value === f.value) t.value = "";
     xferHint(); }
   document.getElementById("savAutoDay").value = a.dayOfWeek;
   document.getElementById("savAutoFreq").value = a.frequency;
@@ -630,6 +634,8 @@ function cancelEditSavAuto() {
   EDITING_SAV_AUTO_ID = null;
   document.getElementById("savAutoAmount").value = "";
   document.getElementById("savAutoNote").value = "";
+  { const f = document.getElementById("xferFrom"), t = document.getElementById("xferTo");
+    if (f && t) { f.value = ""; t.value = ""; if (AUTO_CARD_CTX) renderXfer(AUTO_CARD_CTX.me, AUTO_CARD_CTX.cls); } } // back to main account / blank
   document.getElementById("hSavingsAuto").innerHTML = "Automatic transfer";
   document.getElementById("addSavAutoBtn").innerHTML = "Create automatic transfer";
   document.getElementById("cancelSavAutoEditBtn").classList.add("hidden");
@@ -664,18 +670,22 @@ function renderPayWith() {
     if (!row || !sel) return;
     row.classList.toggle("hidden", IS_TEACHER || !ctx);
     if (IS_TEACHER || !ctx) return;
-    const prev = sel.value || "cash";
-    sel.innerHTML = payWithOptionsHtml(ctx.me, ctx.cls, toSel ? toSel.value : "");
-    const keep = [...sel.options].find(o => o.value === prev && !o.disabled);
-    // Back to cash when it's open, otherwise the first account that can pay (cash may be closed).
-    const fallback = [...sel.options].find(o => o.value === "cash") || [...sel.options].find(o => !o.disabled);
-    sel.value = keep ? prev : (fallback ? fallback.value : "");
+    const prev = sel.value;
+    // Default is the student's MAIN account ("cash" is always the main account's id here). A different pick
+    // survives a re-render while it's still valid. Only if there is no main account to default to does it start blank.
+    const opts = payWithOptionsHtml(ctx.me, ctx.cls, toSel ? toSel.value : "");
+    sel.innerHTML = opts;
+    const keep = prev && [...sel.options].find(o => o.value === prev && !o.disabled);
+    const main = [...sel.options].find(o => o.value === "cash" && !o.disabled);
+    if (!keep && !main) sel.innerHTML = `<option value="" disabled selected>Choose an account…</option>` + opts;
+    sel.value = keep ? prev : (main ? "cash" : "");
     payWithChanged(id);
   });
 }
 function payWithChanged(id) {
   const hint = document.getElementById(id + "Hint"), sel = document.getElementById(id);
   if (!hint || !sel || !AUTO_CARD_CTX) return;
+  if (!sel.value) { hint.innerHTML = ""; return; }
   const notes = typeof acSourceNotes === "function" ? acSourceNotes(AUTO_CARD_CTX.me, AUTO_CARD_CTX.cls, sel.value) : [];
   hint.innerHTML = notes.join(" ");
 }
@@ -697,18 +707,19 @@ function renderXfer(me, cls) {
   if (!f || !t || IS_TEACHER) return;
   const ch = acChoicesWithKind(me, cls);
   const opts = ch.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)} — ${fmtMoney(c.bal)}</option>`).join("");
-  const prevF = f.value || "cash", prevT = t.value || "savings", has = id => ch.some(c => c.id === id);
-  f.innerHTML = opts; t.innerHTML = opts;
-  f.value = has(prevF) ? prevF : (has("cash") ? "cash" : (ch[0] || {}).id);
-  t.value = has(prevT) && prevT !== f.value ? prevT : (ch.find(c => c.id !== f.value) || {}).id;
+  const prevF = f.value, prevT = t.value, has = id => id && ch.some(c => c.id === id);
+  // "From" defaults to the student's main account; "To" starts blank. Earlier picks survive a re-render while still valid.
+  const blank = `<option value="" disabled selected>Choose an account…</option>`;
+  const mainId = (ch.find(c => c.isMain) || ch.find(c => c.id === "cash") || {}).id || "";
+  f.innerHTML = (mainId ? "" : blank) + opts; t.innerHTML = blank + opts;
+  f.value = has(prevF) ? prevF : mainId;
+  t.value = has(prevT) && prevT !== f.value ? prevT : "";
   xferHint();
 }
 function xferChanged(which) {
   const f = document.getElementById("xferFrom"), t = document.getElementById("xferTo");
-  if (f.value === t.value) { // the same account on both sides makes no sense — nudge the other menu
-    const moved = which === "from" ? t : f, kept = which === "from" ? f : t;
-    const alt = [...moved.options].find(o => o.value !== kept.value);
-    if (alt) moved.value = alt.value;
+  if (f.value && f.value === t.value) { // the same account on both sides makes no sense — clear the other menu
+    (which === "from" ? t : f).value = "";
   }
   xferHint();
 }
