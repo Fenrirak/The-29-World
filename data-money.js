@@ -3468,7 +3468,8 @@ function budgetWeekItems(cls, user, username) {
         kiwiNext: ksLine(credit.kiwi, credit.gross),
         note: status === "done" ? "Paid" + (off ? ` (${off} taken off)` : "")
           : status === "missed" ? (att ? "Not paid this week — no days were logged" : "Not paid this week — your job task wasn't approved by pay day")
-          : (att ? `Pay day — paid automatically: ${att.done} of ${att.expected} logged so far = ${att.done}/${att.expected} of your wage`
+          : (att && att.expected > 0 ? `Pay day — paid automatically: ${att.done} of ${att.expected} logged so far = ${att.done}/${att.expected} of your wage`
+             : att ? "Pay day — no check-in is due this cycle, so paid in full"
              : approved ? "Pay day" : "Pay day — only once your teacher approves this week's job task")
             + (off ? ` (${off} already taken off)` : "")
       });

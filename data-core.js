@@ -3139,7 +3139,7 @@ function isJobTaskApprovedThisWeek(user, cls) {
   const job = user && user.jobId && cls ? (cls.jobs || []).find(j => j.id === user.jobId) : null;
   // Check-in / questionnaire jobs are paid automatically by days logged (the
   // teacher's tick plays no part); they are payable once at least one day is logged.
-  if (job && jobLogType(job) !== "tasks") return jobLogStatus(user, job, cls, true).done > 0;
+  if (job && jobLogType(job) !== "tasks") { const st = jobLogStatus(user, job, cls, true); return st.done > 0 || st.expected === 0; }
   return jobTaskTicked(user, cls);
 }
 
@@ -3167,7 +3167,9 @@ function jobLogSettings(job) {
   const questions = Array.isArray(l.questions) ? l.questions : [];
   return {
     days, startMin, questions,
-    freq: l.freq === "weekly" ? "weekly" : "daily",
+    freq: l.freq === "weekly" ? "weekly" : l.freq === "interval" ? "interval" : "daily",
+    every: _jlInt(l.every, 2, 6, 2),
+    startKey: /^\d{4}-\d{2}-\d{2}$/.test(l.startKey || "") ? l.startKey : nzDateKey(),
     winMins: _jlInt(l.winMins, 5, Math.min(240, 1440 - startMin), 15),
     windowOn: jobLogType(job) === "checkin" ? true : !!l.windowOn,
     attempts: _jlInt(l.attempts, 1, 5, 2),
@@ -3189,6 +3191,17 @@ function jobLogDateAdd(key, n) {
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
 }
 function jobLogDayOf(key) { return JOB_LOG_JS_DAY[new Date(dateKeyToUTC(key)).getUTCDay()]; }
+// Is the log due on this date? "interval" = every Nth school day (a school day is
+// one of the job's days) counting from the first school day on/after startKey,
+// e.g. every 2nd day to fit a 6-day timetable into a 5-day week.
+function jobLogDayActive(s, key) {
+  if (!s.days.includes(jobLogDayOf(key))) return false;
+  if (s.freq !== "interval") return true;
+  if (key < s.startKey) return false;
+  let n = 0;
+  for (let k = s.startKey; k < key; k = jobLogDateAdd(k, 1)) if (s.days.includes(jobLogDayOf(k))) n++;
+  return n % s.every === 0;
+}
 // The 7 dates (oldest first) a pay day pays for. They end the DAY BEFORE pay day
 // so every logged day is settled before wages are worked out. `payout` = true
 // always gives the cycle the coming pay day pays; otherwise, on pay day itself,
@@ -3201,7 +3214,7 @@ function jobLogCycleKeys(cls, payout) {
 // Where "now" sits against the job's window today: off | early | open | closed
 function jobLogWindowState(job, d) {
   const s = jobLogSettings(job);
-  if (!s.days.includes(nzDayName(d))) return { state: "off" };
+  if (!jobLogDayActive(s, nzDateKey(d))) return { state: "off" };
   if (!s.windowOn) return { state: "open", closesIn: null };
   const hm = nzHourMinute(d), now = hm.hour * 60 + hm.minute, end = s.startMin + s.winMins;
   if (now < s.startMin) return { state: "early", opensIn: s.startMin - now };
@@ -3221,13 +3234,13 @@ function jobLogStatus(user, job, cls, payout) {
   const days = jobLogCycleKeys(cls, payout).map(k => {
     const e = log[k] && log[k].j === job.id ? log[k] : null;
     const day = jobLogDayOf(k);
-    return { key: k, day, active: s.days.includes(day), done: !!(e && e.ok), at: e && e.ok ? (e.at || "") : "",
+    return { key: k, day, active: jobLogDayActive(s, k), done: !!(e && e.ok), at: e && e.ok ? (e.at || "") : "",
              tries: e ? (e.tries || 0) : 0, today: k === todayKey, past: k < todayKey };
   });
-  const expected = weekly ? 1 : s.days.length;
+  const expected = weekly ? 1 : days.filter(d => d.active).length; // daily/interval: check-ins due this cycle (can be 0)
   const done = Math.min(expected, days.filter(d => d.active && d.done).length);
   const chances = days.filter(d => d.active && !d.done && !d.past).length;
-  return { type, ticked: false, weekly, expected, done, fraction: done / expected, days, today: days.find(d => d.today) || null,
+  return { type, ticked: false, weekly, expected, done, fraction: expected ? done / expected : 1, days, today: days.find(d => d.today) || null,
            met: done >= expected, reachable: done + chances >= expected };
 }
 

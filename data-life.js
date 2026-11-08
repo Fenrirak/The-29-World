@@ -1445,7 +1445,9 @@ function cleanJobLog(logType, log) {
   const startMin = _jlInt(l.startMin, 0, 1435, 540);
   const out = {
     days: safeDays, startMin,
-    freq: l.freq === "weekly" ? "weekly" : "daily",
+    freq: ["weekly", "interval"].includes(l.freq) ? l.freq : "daily",
+    every: _jlInt(l.every, 2, 6, 2),
+    startKey: /^\d{4}-\d{2}-\d{2}$/.test(l.startKey || "") ? l.startKey : nzDateKey(),
     winMins: _jlInt(l.winMins, 5, Math.min(240, 1440 - startMin), 15),
     windowOn: type === "checkin" ? true : !!l.windowOn
   };

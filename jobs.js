@@ -374,7 +374,6 @@ function buildTierRow(t, i, prefix) {
   div.dataset.idx = i;
   div.innerHTML = `
     <div class="tier-form-row-header">
-      <span class="tier-form-badge">${i + 1}</span>
       <span class="tier-form-label">Tier ${i + 1}</span>
       <button type="button" class="btn small coral tier-form-remove"
         onclick="removeTierRow('${prefix}', ${i})"
@@ -716,7 +715,7 @@ function payslipHtml(p, latest = false) {
     <section class="ps-breakdown" style="padding-top:20px" aria-label="Pay breakdown">
       <h3>How your pay adds up</h3>
       <div class="ps-section">Earnings</div>
-      ${p.attendance ? line(`Wage ${fmtMoney(p.fullWage)} × ${p.attendance.done}/${p.attendance.expected} days logged`, "", "sub") : ""}
+      ${p.attendance && p.attendance.expected > 0 ? line(`Wage ${fmtMoney(p.fullWage)} × ${p.attendance.done}/${p.attendance.expected} days logged`, "", "sub") : ""}
       ${line("Pay before tax", fmtMoney(p.gross))}
       <div class="ps-section">Deductions</div>
       ${line("Income tax (PAYE)", p.tax > 0 ? "−" + fmtMoney(p.tax) : fmtMoney(0), p.tax > 0 ? "ps-debit" : "")}
@@ -739,6 +738,7 @@ function renderPayslips(me, cls) {
     const est = wageCreditEstimate(cls, me, att);
     const approved = isJobTaskApprovedThisWeek(me, cls);
     const payNote = lt === "tasks" ? (approved ? "This week's job task is approved." : "Your teacher still needs to approve this week's job task.")
+      : att.expected === 0 ? "No check-in is due this pay cycle, so you'd be paid in full."
       : `Paid automatically: your wage (${fmtMoney(est.fullWage)}) × days logged ÷ days possible. You've logged ${att.done} of ${att.expected} so far, so ${att.done}/${att.expected} of your wage.`;
     const paidToday = me.lastWagePaid === nzDateKey();
     if ((est.gross > 0 || att) && !paidToday) {
@@ -953,6 +953,7 @@ const LOG_TYPE_INFO = [
 const jlPlural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 function jlDur(m) { return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? " " + (m % 60) + "m" : ""}` : `${m} min`; }
 function jobLogDateLabel(key) { return new Date(dateKeyToUTC(key)).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }); }
+function jlNextDay(s) { let k = nzDateKey(); for (let i = 0; i < 21; i++) { k = jobLogDateAdd(k, 1); if (jobLogDayActive(s, k)) return k; } return null; }
 function mins2time(m) { return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); }
 function time2mins(v) { const m = /^(\d{1,2}):(\d{2})/.exec(v || ""); return m ? Math.min(1435, (+m[1]) * 60 + (+m[2])) : null; }
 
@@ -960,11 +961,12 @@ function jobLogSummary(job) {
   const type = jobLogType(job), s = jobLogSettings(job);
   if (type === "tasks") return "The teacher ticks off the job task each pay cycle.";
   const win = s.windowOn ? `${jobLogTimeLabel(s.startMin)} to ${jobLogTimeLabel(s.startMin + s.winMins)}` : "";
-  const weekly = s.freq === "weekly", dl = jobLogDaysLabel(s.days);
-  const need = weekly ? "Paid in full once done that week." : `Paid automatically for the days logged (3 of ${s.days.length} days = 3/${s.days.length} of the wage).`;
-  if (type === "checkin") return `Check in ${weekly ? "once a week, on any of " + dl : dl}${win ? `, ${win}` : ""}. ${need}`;
+  const weekly = s.freq === "weekly", every = s.freq === "interval", dl = jobLogDaysLabel(s.days);
+  const need = weekly ? "Paid in full once done that week." : every ? "Paid automatically for the check-ins done (e.g. 1 of 2 due = half the wage)." : `Paid automatically for the days logged (3 of ${s.days.length} days = 3/${s.days.length} of the wage).`;
+  const when = weekly ? `once a week, on any of ${dl}` : every ? `every ${s.every} school days (${dl}), starting ${jobLogDateLabel(s.startKey)}` : dl;
+  if (type === "checkin") return `Check in ${when}${win ? `, ${win}` : ""}. ${need}`;
   const n = s.questions.length, asked = s.perDay > 0 && s.perDay < n ? s.perDay : n;
-  return `${jlPlural(asked, "question")} ${weekly ? "once a week" : "a day"}${n > asked ? ` from a pool of ${n}` : ""}, ${weekly ? "any of " : ""}${dl}${win ? `, ${win}` : ""}. ${need}`;
+  return `${jlPlural(asked, "question")} each time${n > asked ? ` from a pool of ${n}` : ""}, ${when}${win ? `, ${win}` : ""}. ${need}`;
 }
 
 /* The week at a glance: one small box per day of the pay cycle. */
@@ -981,7 +983,7 @@ function logState(prefix) { return prefix === "add" ? ADD_LOG : EDIT_LOG; }
 function newLogState(job) {
   const s = jobLogSettings(job || {});
   return {
-    type: jobLogType(job), days: s.days.slice(), freq: s.freq, startMin: s.startMin, winMins: s.winMins,
+    type: jobLogType(job), days: s.days.slice(), freq: s.freq, every: s.every, startKey: s.startKey, startMin: s.startMin, winMins: s.winMins,
     windowOn: s.windowOn, attempts: s.attempts, perDay: s.perDay,
     questions: s.questions.map(q => q.type === "text"
       ? { id: q.id, type: "text", prompt: q.prompt, options: ["", ""], correct: 0, answersText: (q.answers || []).join("\n") }
@@ -1002,7 +1004,7 @@ function renderLogBox(prefix) {
 }
 
 function logSettingsHtml(prefix, st) {
-  const p = `'${prefix}'`, isQuiz = st.type === "quiz", weekly = st.freq === "weekly";
+  const p = `'${prefix}'`, isQuiz = st.type === "quiz", weekly = st.freq === "weekly", every = st.freq === "interval";
   const chip1 = (on, label, f) => `<button type="button" class="jl-chip${on ? " on" : ""}" aria-pressed="${on}" onclick="setLogFreq(${p},'${f}')">${label}</button>`;
   const chips = JOB_LOG_DAY_KEYS.map(d => `<button type="button" class="jl-chip${st.days.includes(d) ? " on" : ""}" aria-pressed="${st.days.includes(d)}" title="${JOB_LOG_DAY_FULL[d]}" onclick="toggleLogDay(${p},'${d}')">${d}</button>`).join("");
   const num = (label, field, min, max, val, hint) => `<div><label>${label}</label><input type="number" min="${min}" max="${max}" step="1" value="${val}" oninput="setLogNum(${p},'${field}',this.value)">${hint ? `<span class="muted-small">${hint}</span>` : ""}</div>`;
@@ -1011,9 +1013,11 @@ function logSettingsHtml(prefix, st) {
       ${num("Open for (minutes)", "winMins", 5, 240, st.winMins, "")}
     </div>` : "";
   return `<div class="jl-grid">
-      <div class="jl-span"><label>${weekly ? "Days students can log on (they pick one)" : "Days it runs"}</label><div class="jl-chips">${chips}</div></div>
-      <div class="jl-span"><label>How often</label><div class="jl-chips">${chip1(!weekly, "Every day it runs", "daily")}${chip1(weekly, "Once a week", "weekly")}</div>
-        <span class="muted-small">${weekly ? "Students log once per pay cycle, on any one of the days above, and are paid in full for it." : "Pay is automatic on pay day: wage × days logged ÷ days it runs (e.g. 3 of 5 days = 3/5 of the wage). No teacher tick needed."}</span></div>
+      <div class="jl-span"><label>${weekly ? "Days students can log on (they pick one)" : every ? "School days (only these count)" : "Days it runs"}</label><div class="jl-chips">${chips}</div></div>
+      <div class="jl-span"><label>How often</label><div class="jl-chips">${chip1(!weekly, "Every day it runs", "daily")}${chip1(every, "Every few school days", "interval")}${chip1(weekly, "Once a week", "weekly")}</div>
+        <span class="muted-small">${weekly ? "Students log once per pay cycle, on any one of the days above, and are paid in full for it." : every ? "Students log on every 2nd (or 3rd…) school day from the start date, so a 6-day timetable fits a 5-day week. Pay is automatic: check-ins done ÷ check-ins due that week." : "Pay is automatic on pay day: wage × days logged ÷ days it runs (e.g. 3 of 5 days = 3/5 of the wage). No teacher tick needed."}</span></div>
+      ${every ? `<div><label>Log every (school days)</label><input type="number" min="2" max="6" step="1" value="${st.every}" oninput="setLogNum(${p},'every',this.value)"><span class="muted-small">2 = every second school day.</span></div>
+      <div><label>Starting on</label><input type="date" value="${st.startKey}" onchange="setLogStart(${p},this.value)"><span class="muted-small">Day 1 is the first school day on or after this date.</span></div>` : ""}
       ${isQuiz ? num("Attempts per day", "attempts", 1, 5, st.attempts, "Tries a student gets to answer everything right.") : ""}
       ${isQuiz ? num("Questions asked per day", "perDay", 0, 30, st.perDay, "0 asks every question. Otherwise each student gets a random set from your pool.") : ""}
     </div>
@@ -1033,7 +1037,7 @@ function questionsHtml(prefix, st) {
       <textarea rows="3" placeholder="e.g. Wellington" oninput="setQuestionField(${p},${i},'answersText',this.value)">${escapeHtml(q.answersText)}</textarea>
       <p class="muted-small" style="margin:6px 0 0;">Capital letters, punctuation and extra spaces are ignored. List any other spellings you would accept.</p>`;
     return `<div class="tier-form-row">
-      <div class="tier-form-row-header"><span class="tier-form-badge">${i + 1}</span><span class="tier-form-label">Question ${i + 1}</span>
+      <div class="tier-form-row-header"><span class="tier-form-label">Question ${i + 1}</span>
         <select class="jl-qtype" aria-label="Question type" onchange="setQuestionType(${p},${i},this.value)"><option value="choice"${q.type === "choice" ? " selected" : ""}>Multiple choice</option><option value="text"${q.type === "text" ? " selected" : ""}>Short answer</option></select>
         <button type="button" class="btn small coral" onclick="removeQuestion(${p},${i})">Remove</button></div>
       <label style="margin-top:0;">Question</label>
@@ -1045,7 +1049,8 @@ function questionsHtml(prefix, st) {
 }
 
 function setLogType(prefix, type) { const st = logState(prefix); st.type = type; if (type === "quiz" && !st.questions.length) st.questions.push(blankQuestion()); renderLogBox(prefix); }
-function setLogFreq(prefix, f) { logState(prefix).freq = f === "weekly" ? "weekly" : "daily"; renderLogBox(prefix); }
+function setLogFreq(prefix, f) { logState(prefix).freq = ["weekly", "interval"].includes(f) ? f : "daily"; renderLogBox(prefix); }
+function setLogStart(prefix, v) { if (/^\d{4}-\d{2}-\d{2}$/.test(v || "")) logState(prefix).startKey = v; }
 function toggleLogDay(prefix, d) {
   const st = logState(prefix), has = st.days.includes(d);
   if (has && st.days.length === 1) return;
@@ -1074,7 +1079,7 @@ function readLogForm(prefix) {
   const st = logState(prefix);
   if (!st || st.type === "tasks") return { logType: "tasks", log: null };
   const days = JOB_LOG_DAY_KEYS.filter(d => st.days.includes(d));
-  const log = { days, freq: st.freq === "weekly" ? "weekly" : "daily", startMin: _jlInt(st.startMin, 0, 1435, 540),
+  const log = { days, freq: ["weekly", "interval"].includes(st.freq) ? st.freq : "daily", every: _jlInt(st.every, 2, 6, 2), startKey: /^\d{4}-\d{2}-\d{2}$/.test(st.startKey || "") ? st.startKey : nzDateKey(), startMin: _jlInt(st.startMin, 0, 1435, 540),
                 winMins: _jlInt(st.winMins, 5, 240, 15), windowOn: st.type === "checkin" ? true : !!st.windowOn };
   if (st.type === "quiz") {
     if (!st.questions.length) throw new Error("Add at least one question.");
@@ -1150,14 +1155,15 @@ function paintJobLog() {
     return;
   }
   const w = jobLogWindowState(job), t = st.today, weekly = s.freq === "weekly";
+  const whenTxt = weekly ? `once a week, on any of ${jobLogDaysLabel(s.days)}` : s.freq === "interval" ? `every ${s.every} school days from ${jobLogDateLabel(s.startKey)}` : jobLogDaysLabel(s.days);
   const winTxt = s.windowOn ? ` between ${jobLogTimeLabel(s.startMin)} and ${jobLogTimeLabel(s.startMin + s.winMins)}` : "";
-  const intro = type === "checkin" ? `Check in${winTxt}, ${weekly ? "once a week, on any of " : ""}${jobLogDaysLabel(s.days)}.`
-    : `Answer ${s.perDay > 0 && s.perDay < s.questions.length ? jlPlural(s.perDay, "question") : "all the questions"} correctly${winTxt}, ${weekly ? "once a week, on any of " : ""}${jobLogDaysLabel(s.days)}.`;
+  const intro = type === "checkin" ? `Check in${winTxt}, ${whenTxt}.`
+    : `Answer ${s.perDay > 0 && s.perDay < s.questions.length ? jlPlural(s.perDay, "question") : "all the questions"} correctly${winTxt}, ${whenTxt}.`;
   const triesLeft = Math.max(0, s.attempts - (t ? t.tries : 0));
   let head, sub = "", btn = "";
   if (t && t.done) { head = type === "checkin" ? "You've checked in today" : "Today's questions are done"; sub = t.at ? `Counted at ${t.at}.` : "Counted for today."; }
   else if (weekly && st.done > 0) { head = "You're done for this week"; sub = "Your weekly log is counted."; }
-  else if (w.state === "off") { head = "Nothing to do today"; sub = `The log runs ${jobLogDaysLabel(s.days)}.`; }
+  else if (w.state === "off") { head = "Nothing to do today"; { const nk = s.freq === "interval" ? jlNextDay(s) : null; sub = nk ? `Your next check-in is ${jobLogDateLabel(nk)}.` : `The log runs ${jobLogDaysLabel(s.days)}.`; } }
   else if (w.state === "early") { head = `Opens at ${jobLogTimeLabel(s.startMin)}`; sub = `In ${jlDur(w.opensIn)}.`; }
   else if (w.state === "closed") { head = "Today's window has closed"; sub = type === "checkin" ? "You missed today's check-in." : "Today wasn't completed in time."; }
   else if (type === "checkin") { head = "Check-in is open"; sub = w.closesIn != null ? `Closes in ${jlDur(w.closesIn)}.` : ""; btn = `<button class="btn gold" type="button" onclick="doLogCheckin(this)">Check in now</button>`; }
@@ -1165,7 +1171,8 @@ function paintJobLog() {
   else if (!triesLeft) { head = "No attempts left today"; sub = "Come back tomorrow for a fresh set."; }
   else { head = "Today's questions are ready"; sub = `${jlPlural(triesLeft, "attempt")} left${w.closesIn != null ? `, closes in ${jlDur(w.closesIn)}` : ""}.`; btn = `<button class="btn gold" type="button" onclick="openLogQuiz()">${t && t.tries ? "Try again" : "Start questions"}</button>`; }
   const unit = type === "checkin" ? "check-ins" : "days", pct = Math.round(st.fraction * 100);
-  const req = weekly
+  const req = !weekly && st.expected === 0 ? `No check-in is due this pay cycle, so you'll be paid in full on ${payDayName}.`
+    : weekly
     ? (st.done ? `Your weekly log is done, so you'll be paid in full on ${payDayName}.` : `Log once this pay cycle to be paid on ${payDayName}. No log means no pay.` + (st.reachable ? "" : " There are no log days left this cycle."))
     : `${st.done} of ${st.expected} ${unit} logged this pay cycle. You're paid automatically on ${payDayName}: your wage × days logged ÷ ${st.expected} (${st.done}/${st.expected} = ${pct}% so far). Days you miss aren't paid. No teacher tick needed.`;
   box.innerHTML = `<p class="muted-small" style="margin:0;">${escapeHtml(intro)}</p>

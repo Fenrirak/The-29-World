@@ -1198,7 +1198,7 @@ async function renderProfile(username) {
     rows.push(`<p class="muted-small">No job assigned — nothing to approve.</p>`);
   } else if (jobLogType(job) !== "tasks") {
     const a = wageAttendance(cls, s);
-    rows.push(`<p>Paid automatically on pay day by days logged: <strong>${a.done} of ${a.expected}</strong> so far (${Math.round(a.done / a.expected * 100)}% of the wage). No tick needed.</p>`);
+    rows.push(`<p>Paid automatically on pay day by days logged: <strong>${a.done} of ${a.expected}</strong> so far (${a.expected ? Math.round(a.done / a.expected * 100) : 100}% of the wage). No tick needed.</p>`);
   } else {
     const tierName = tier ? tier.name : job.title;
     rows.push(`
