@@ -2858,7 +2858,8 @@ const T29_TEACHER_NOTICE_KINDS = {
   card:    { req: "applied for a credit card",                          cancel: "withdrew their credit card application" },
   account: { req: "applied for a bank account",                         cancel: "withdrew their bank account application" },
   listing: { req: "listed something in the Trade Centre for approval",  cancel: "cancelled a Trade Centre listing that was waiting for approval" },
-  sublet:  { req: "asked to rent out a property to classmates",         cancel: "withdrew a request to rent out a property" }
+  sublet:  { req: "asked to rent out a property to classmates",         cancel: "withdrew a request to rent out a property" },
+  tick:    { req: "asked for their job to be ticked off",               cancel: null }
 };
 let _teacherNoticeDead = false;
 let T29_TEACHER_INBOX_DENIED = false;

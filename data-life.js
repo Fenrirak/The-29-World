@@ -1469,7 +1469,8 @@ const JOB_LOG_ERRORS = {
   NO_JOB: "You don't have a job right now.", WRONG_TYPE: "Your job doesn't use this kind of log.",
   OFF_DAY: "There's no log today.", EARLY: "It isn't time yet.", CLOSED: "Today's window has closed.",
   ALREADY: "You've already done today's log.", ALREADY_WEEK: "You've already done this week's log.", NO_TRIES: "You're out of attempts for today.",
-  NO_QUESTIONS: "Your teacher hasn't added any questions yet."
+  NO_QUESTIONS: "Your teacher hasn't added any questions yet.",
+  TICKED: "Your job is already ticked off for this pay cycle.", TICK_LIMIT: "You've used all 3 tick-off requests for today. Try again tomorrow."
 };
 function _jobLogFail(e) { return { ok: false, error: JOB_LOG_ERRORS[e && e.message] || "Something went wrong. Please try again." }; }
 function _jobLogNowLabel() { const hm = nzHourMinute(); return jobLogTimeLabel(hm.hour * 60 + hm.minute); }
@@ -1569,6 +1570,35 @@ async function jobQuizSubmit(username, classCode, answers) {
     });
   } catch (e) { return _jobLogFail(e); }
   return res || { ok: false, error: "Something went wrong. Please try again." };
+}
+
+/* Tasks jobs: the student asks the teacher to tick their job off. Max 3 requests a day. */
+const JOB_TICK_REQ_MAX = 3;
+function jobTickRequestsLeft(user) {
+  const r = user && user.jobTickReq;
+  return Math.max(0, JOB_TICK_REQ_MAX - (r && r.date === nzDateKey() ? (r.n || 0) : 0));
+}
+async function requestJobTick(username, classCode) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let n = 0, title = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef), classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NO_JOB");
+      const user = userSnap.data(), cls = classSnap.data();
+      const job = (cls.jobs || []).find(j => j.id === user.jobId);
+      if (!job) throw new Error("NO_JOB");
+      if (jobLogType(job) !== "tasks") throw new Error("WRONG_TYPE");
+      if (jobTaskTicked(user, cls)) throw new Error("TICKED");
+      const today = nzDateKey(), r = user.jobTickReq;
+      n = (r && r.date === today ? (r.n || 0) : 0) + 1;
+      if (n > JOB_TICK_REQ_MAX) throw new Error("TICK_LIMIT");
+      title = job.title || "their job";
+      t.update(userRef, { jobTickReq: { date: today, n } });
+    });
+  } catch (e) { return _jobLogFail(e); }
+  await t29NotifyTeacher(classCode, "tick", "req", `${title}: request ${n} of ${JOB_TICK_REQ_MAX} today`);
+  return { ok: true, n, left: JOB_TICK_REQ_MAX - n };
 }
 
 /* ===================== Side hustles =====================

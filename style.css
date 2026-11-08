@@ -2398,14 +2398,9 @@ html.dark-mode .notif-dot{
   border-radius: var(--r-5);
   padding: 18px;
   background: var(--bg);
-  transition: box-shadow .2s, border-color .2s;
   display: flex;
   flex-direction: column;
   gap: 0;
-}
-.job-board-card:hover {
-  box-shadow: var(--shadow);
-  border-color: var(--navy-200, #c8d0e0);
 }
 .job-board-card.is-mine {
   border-color: var(--gold);

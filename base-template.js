@@ -36,43 +36,116 @@ const T29_BASE_TEMPLATE_LABEL = "Balanced school-term starter";
 // Starting money each student gets (1-term version; scaled for 2 and 4 terms).
 const BT_WELCOME_GRANT = 100;
 
-// Jobs: classroom tasks a NZ high-school student can really do in class. Weekly gross wage per tier.
-// autoPromoteWeeks = weeks in a tier before moving up automatically (4 = two promotions within a term).
+// Jobs: every default job is a daily Questionnaire job. Each has 3 pay tiers (weekly gross wage) and a pool of
+// questions about the job's subject. Students answer 3 of the 8 each school day (Mon-Fri) to earn their wage.
+// autoPromoteWeeks = weeks in a tier before moving up automatically.
+// qs: [question, [options], index of the correct option]
 const BT_JOBS = [
-  { title: "Classroom Tidy Crew", promote: 4, tiers: [
-    ["Desk Wiper", 80, "Wipes desks and the whiteboard and picks up rubbish at the end of the day."],
-    ["Room Monitor", 102, "Stacks chairs, sorts the recycling and keeps the room tidy."],
-    ["Tidy Crew Leader", 128, "Runs the weekly roster and checks the whole room is ready."] ] },
-  { title: "Plant & Garden Carer", promote: 4, tiers: [
-    ["Plant Waterer", 80, "Waters the classroom plants and wipes the leaves."],
-    ["Garden Monitor", 103, "Looks after the planter boxes and keeps a plant care chart."],
-    ["Garden Manager", 130, "Plans what to plant and leads the garden team."] ] },
-  { title: "Library Monitor", promote: 4, tiers: [
-    ["Book Returner", 82, "Collects and shelves the class books."],
-    ["Resource Librarian", 105, "Runs the borrowing log and tapes up torn covers."],
-    ["Head Librarian", 133, "Organises the reading corner and trains new monitors."] ] },
-  { title: "Event Setup Crew", promote: 5, tiers: [
-    ["Setup Helper", 85, "Arranges chairs and tables for assemblies and class events."],
-    ["Event Organiser", 110, "Writes the run sheet and hands out jobs for the day."],
-    ["Event Manager", 140, "Plans the whole event, from the budget to the pack-down."] ] },
-  { title: "Class Secretary", promote: 5, tiers: [
-    ["Notice Runner", 88, "Hands out notices and takes messages to the office."],
-    ["Roll Keeper", 115, "Keeps the class roll, homework list and calendar up to date."],
-    ["Head Secretary", 145, "Runs the class admin and checks the records are right."] ] },
-  { title: "Class Reporter", promote: 5, tiers: [
-    ["Notice Board Writer", 88, "Writes short news items for the class notice board."],
-    ["Class Reporter", 115, "Interviews classmates and writes articles for the class newsletter."],
-    ["Newsletter Editor", 148, "Checks the writing and layout and puts the newsletter together."] ] },
-  { title: "Tech Helper", promote: 6, tiers: [
-    ["Device Monitor", 92, "Hands out, charges and counts the class laptops and chargers."],
-    ["Tech Helper", 122, "Sets up the projector and helps classmates fix simple problems."],
-    ["Tech Team Lead", 158, "Leads the tech team and keeps a log of faults to report."] ] },
-  { title: "Peer Tutor", promote: 6, tiers: [
-    ["Homework Buddy", 95, "Helps a classmate check their homework and understand the task."],
-    ["Peer Tutor", 125, "Runs short tutoring sessions in maths or English."],
-    ["Lead Tutor", 165, "Plans sessions and coaches the other tutors."] ] }
+  { title: "Mathematician", promote: 4, tiers: [
+    ["Number Cruncher", 80, "Solves daily maths puzzles and checks the class's sums."],
+    ["Mathematician", 105, "Works through algebra, geometry and statistics problems."],
+    ["Head Mathematician", 135, "Sets the hardest problems and explains the answers."] ],
+    qs: [
+    ["What is 12 × 8?", ["86", "96", "88", "108"], 1],
+    ["What is 25% of 240?", ["50", "60", "80", "120"], 1],
+    ["Solve: 3x + 5 = 20. What is x?", ["3", "5", "15", "25"], 1],
+    ["What is the area of a rectangle that is 7 m by 6 m?", ["13 m²", "26 m²", "42 m²", "49 m²"], 2],
+    ["Which of these is a prime number?", ["21", "27", "29", "33"], 2],
+    ["What is the mean of 4, 8, 10 and 18?", ["8", "10", "12", "40"], 1],
+    ["The angles in a triangle add up to how many degrees?", ["90", "180", "270", "360"], 1],
+    ["What is 3/4 as a decimal?", ["0.34", "0.5", "0.75", "0.8"], 2] ] },
+  { title: "Scientist", promote: 4, tiers: [
+    ["Lab Assistant", 82, "Helps with experiments and records the results."],
+    ["Scientist", 107, "Plans fair tests and explains what the results show."],
+    ["Lead Scientist", 138, "Leads the research team and checks the conclusions."] ],
+    qs: [
+    ["Which gas do plants take in for photosynthesis?", ["Oxygen", "Nitrogen", "Carbon dioxide", "Hydrogen"], 2],
+    ["What is the chemical formula for water?", ["CO2", "H2O", "O2", "NaCl"], 1],
+    ["Which planet is closest to the Sun?", ["Venus", "Earth", "Mars", "Mercury"], 3],
+    ["What is the SI unit of force?", ["Joule", "Watt", "Newton", "Volt"], 2],
+    ["Which part of a cell contains its DNA?", ["Nucleus", "Cell wall", "Vacuole", "Cell membrane"], 0],
+    ["At sea level, water boils at what temperature?", ["50 °C", "90 °C", "100 °C", "120 °C"], 2],
+    ["Which of these animals is a mammal?", ["Shark", "Lizard", "Eel", "Dolphin"], 3],
+    ["Which force pulls objects towards the Earth?", ["Friction", "Magnetism", "Gravity", "Tension"], 2] ] },
+  { title: "Historian", promote: 4, tiers: [
+    ["Archive Helper", 85, "Looks up facts and dates for the class timeline."],
+    ["Historian", 110, "Researches events and explains why they mattered."],
+    ["Chief Historian", 142, "Leads the research and decides what goes in the record."] ],
+    qs: [
+    ["In what year was the Treaty of Waitangi first signed?", ["1769", "1840", "1893", "1907"], 1],
+    ["Who charted the New Zealand coastline in 1769?", ["Abel Tasman", "Edmund Hillary", "James Cook", "Ernest Rutherford"], 2],
+    ["In 1893, New Zealand became the first self-governing country to let women do what?", ["Drive cars", "Vote in national elections", "Join the army", "Own land"], 1],
+    ["Who were the first people to settle Aotearoa New Zealand?", ["Dutch explorers", "British settlers", "Vikings", "Polynesian ancestors of Māori"], 3],
+    ["In what year did the Second World War end?", ["1918", "1939", "1945", "1950"], 2],
+    ["Which ancient Egyptian structures were built as tombs for pharaohs?", ["Pyramids", "Colosseum", "Parthenon", "Great Wall"], 0],
+    ["Anzac Day, on 25 April, remembers the landings at which place in 1915?", ["Normandy", "Crete", "Singapore", "Gallipoli"], 3],
+    ["Which ancient civilisation built the Colosseum?", ["Greeks", "Romans", "Egyptians", "Aztecs"], 1] ] },
+  { title: "Geographer", promote: 4, tiers: [
+    ["Map Reader", 85, "Reads maps and finds places for the class."],
+    ["Geographer", 110, "Studies landforms, climate and how people use the land."],
+    ["Chief Cartographer", 140, "Draws the maps and leads the geography team."] ],
+    qs: [
+    ["What is the capital city of New Zealand?", ["Auckland", "Wellington", "Christchurch", "Dunedin"], 1],
+    ["Which is the longest river in New Zealand?", ["Waikato", "Clutha", "Whanganui", "Waitaki"], 0],
+    ["What is the highest mountain in New Zealand?", ["Mount Ruapehu", "Aoraki Mount Cook", "Mount Taranaki", "Mount Tasman"], 1],
+    ["Which ocean lies between New Zealand and South America?", ["Atlantic", "Indian", "Arctic", "Pacific"], 3],
+    ["Which is the largest continent?", ["Africa", "Asia", "Europe", "North America"], 1],
+    ["What is the imaginary line at 0° latitude called?", ["Prime Meridian", "Tropic of Cancer", "Equator", "Date Line"], 2],
+    ["What is the capital city of Australia?", ["Sydney", "Melbourne", "Perth", "Canberra"], 3],
+    ["What do contour lines on a map show?", ["Roads", "Height of the land", "Rainfall", "Borders"], 1] ] },
+  { title: "Author", promote: 5, tiers: [
+    ["Story Starter", 88, "Writes short stories and checks spelling and punctuation."],
+    ["Author", 115, "Writes longer pieces and uses language to create effect."],
+    ["Head Editor", 148, "Edits other writers' work and polishes the final version."] ],
+    qs: [
+    ["Which of these words is a noun?", ["Run", "Quickly", "Table", "Beautiful"], 2],
+    ["Which word is spelled correctly?", ["Definately", "Definitely", "Definitly", "Defanitely"], 1],
+    ["A simile compares two things using which pair of words?", ["\"like\" or \"as\"", "\"but\" or \"so\"", "\"if\" or \"then\"", "\"and\" or \"or\""], 0],
+    ["What is the past tense of \"swim\"?", ["Swimmed", "Swum", "Swimming", "Swam"], 3],
+    ["What do we call the main character in a story?", ["Antagonist", "Protagonist", "Narrator", "Editor"], 1],
+    ["Which word is a synonym for \"happy\"?", ["Gloomy", "Angry", "Joyful", "Tired"], 2],
+    ["In \"Mia's bag\", what does the apostrophe show?", ["A plural", "A question", "Speech", "Possession"], 3],
+    ["Which of these is a complete sentence?", ["Running down the road.", "Because it was late.", "After the game.", "The dog barked loudly."], 3] ] },
+  { title: "Software Developer", promote: 6, tiers: [
+    ["Junior Coder", 92, "Fixes small bugs and writes simple programs."],
+    ["Software Developer", 122, "Builds features and tests them properly."],
+    ["Tech Team Lead", 158, "Leads the team and reviews everyone's code."] ],
+    qs: [
+    ["What does HTML stand for?", ["HyperText Markup Language", "High Tech Modern Language", "Home Tool Markup Language", "HyperTransfer Machine Link"], 0],
+    ["Which language is mainly used to style web pages?", ["SQL", "CSS", "Python", "C++"], 1],
+    ["In programming, what is a loop used for?", ["Stopping the program", "Deleting files", "Repeating instructions", "Drawing a picture"], 2],
+    ["What is a \"bug\" in a program?", ["A fast computer", "A keyboard shortcut", "A type of virus scanner", "An error in the code"], 3],
+    ["What is the binary number 101 in decimal?", ["3", "5", "6", "10"], 1],
+    ["Which of these is the strongest password?", ["password123", "12345678", "A long mix of random words, numbers and symbols", "Your birthday"], 2],
+    ["What does CPU stand for?", ["Central Processing Unit", "Computer Personal Unit", "Central Program Utility", "Core Power Unit"], 0],
+    ["What is a variable used for in code?", ["Printing on paper", "Storing a value", "Connecting to wifi", "Speeding up the screen"], 1] ] },
+  { title: "Accountant", promote: 6, tiers: [
+    ["Bookkeeper", 95, "Keeps track of money coming in and going out."],
+    ["Accountant", 125, "Prepares budgets and works out tax and profit."],
+    ["Chief Financial Officer", 165, "Plans how the whole class economy spends and saves."] ],
+    qs: [
+    ["Which of these is a need rather than a want?", ["Gaming console", "Rent", "Concert ticket", "Designer sneakers"], 1],
+    ["You earn $500 and spend $350. How much did you save?", ["$100", "$150", "$200", "$850"], 1],
+    ["What is interest?", ["A type of tax", "A bank holiday", "Money paid for borrowing, or earned from saving", "A kind of insurance"], 2],
+    ["What does GST stand for in New Zealand?", ["General Savings Tax", "Goods and Services Tax", "Government Spending Total", "Gross Salary Tax"], 1],
+    ["What is a budget?", ["A plan for how you will spend and save money", "A type of bank account", "A loan from a friend", "A shop receipt"], 0],
+    ["An $80 jacket is 25% off. What is the sale price?", ["$20", "$55", "$60", "$65"], 2],
+    ["What is KiwiSaver?", ["A bird sanctuary fund", "A student loan", "A voluntary retirement savings scheme", "A type of car insurance"], 2],
+    ["What is \"net pay\"?", ["Pay before tax", "Pay after tax and deductions", "A yearly bonus", "Overtime pay"], 1] ] },
+  { title: "Te Reo Māori Translator", promote: 5, tiers: [
+    ["Kupu Helper", 88, "Learns and shares everyday Māori words and greetings."],
+    ["Translator", 115, "Translates short phrases and labels around the room."],
+    ["Head Translator", 150, "Leads te reo Māori in class and coaches the team."] ],
+    qs: [
+    ["What does \"Kia ora\" mean?", ["Goodbye", "Sorry", "Hello", "Good night"], 2],
+    ["What number is \"rima\"?", ["3", "5", "7", "10"], 1],
+    ["What does \"whānau\" mean?", ["Friend", "Teacher", "School", "Family"], 3],
+    ["What does \"Haere mai\" mean?", ["Goodbye", "Thank you", "Welcome", "Good luck"], 2],
+    ["What does \"whenua\" mean?", ["Water", "Land", "Sky", "Fire"], 1],
+    ["\"Aotearoa\" is often translated as...", ["Land of the long white cloud", "Land of the rising sun", "Place of many birds", "The southern isles"], 0],
+    ["What does \"kai\" mean?", ["Sleep", "Run", "Book", "Food"], 3],
+    ["What is the Māori word for \"school\"?", ["Whare", "Waka", "Kura", "Marae"], 2] ] }
 ];
-
 // Store: [name, price, stars (lifestyle), countsNetWorth, description, effect]
 const BT_STORE = [
   ["Bubble Tea", 5, 0, false, "A cold drink after school.", "A small treat — no lasting effect."],
@@ -362,7 +435,10 @@ function t29ApplyBaseTemplate(cls, terms) {
   cls.jobs = d.jobs.map(j => ({
     id: uid("j"), title: sanitizeUserText(j.title, 60),
     tiers: j.tiers.map(t => ({ id: uid("t"), name: sanitizeUserText(t[0], 60), wage: t[1], description: sanitizeUserText(t[2], 200) })),
-    autoPromoteWeeks: j.promote
+    autoPromoteWeeks: j.promote,
+    // Every default job is a daily questionnaire: 3 questions from the pool, every school day (Mon-Fri).
+    ...(() => { const c = cleanJobLog("quiz", { days: ["Mon", "Tue", "Wed", "Thu", "Fri"], freq: "daily", windowOn: false, attempts: 2, perDay: 3,
+      questions: j.qs.map(q => ({ prompt: q[0], options: q[1], correct: q[2] })) }); return { logType: c.type, log: c.log }; })()
   }));
 
   // ---- Store ----
@@ -563,7 +639,7 @@ function t29BaseTemplateSummary(terms) {
   const S = t29BaseTemplateScale(terms), d = t29BaseTemplateData(terms);
   const propUnits = d.properties.reduce((a, p) => a + p.qty, 0);
   return [
-    `${d.jobs.length} jobs with 3 pay tiers each ($${d.jobs[0].tiers[0][1]}–$${Math.max(...d.jobs.map(j => j.tiers[2][1]))} a week)`,
+    `${d.jobs.length} daily-questionnaire jobs (maths, science, history and more) with 3 pay tiers each ($${d.jobs[0].tiers[0][1]}–$${Math.max(...d.jobs.map(j => j.tiers[2][1]))} a week)`,
     `${d.store.length} store items ($${d.store[0][1]}–$${d.store[d.store.length - 1][1]})`,
     `${d.properties.length} home listings (${propUnits} homes, $${d.properties[0].price}–$${d.properties[d.properties.length - 1].price}) and ${BT_RENTALS.length} rental types`,
     `${d.vehicles.length} vehicles (bikes, cars and a truck) and a weekly bus pass`,

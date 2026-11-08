@@ -554,7 +554,8 @@ const NOTIF_INBOX_KINDS = {
   card:    { icon: "wallet",    href: "bank.html" },
   account: { icon: "piggy",     href: "bank.html" },
   listing: { icon: "swap",      href: "marketplace.html" },
-  sublet:  { icon: "house",     href: "property.html" }
+  sublet:  { icon: "house",     href: "property.html" },
+  tick:    { icon: "briefcase", href: "jobs.html" }
 };
 function notifTeacherInboxItems(inbox) {
   const cutoff = trustedNow().getTime() - NOTIF_INBOX_TTL_MS;

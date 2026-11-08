@@ -1152,6 +1152,11 @@ function paintJobLog() {
   if (type === "tasks") {
     box.innerHTML = `<p class="muted-small" style="margin:0 0 12px;">Your teacher ticks off your job task once each pay cycle. Your wage is paid on ${payDayName} once it has been ticked off.</p>
       <span class="badge ${st.ticked ? "mint" : "navy"}">${st.ticked ? "Ticked off for this pay cycle" : "Not ticked off yet"}</span>`;
+    if (!st.ticked) {
+      const left = jobTickRequestsLeft(me);
+      box.innerHTML += `<div class="jl-now" style="margin-top:12px;"><div class="jl-now-text"><strong>Finished your task?</strong><span class="muted-small">${left ? `Ask your teacher to tick it off. ${jlPlural(left, "request")} left today (max 3 a day).` : "You've used all 3 requests for today. Try again tomorrow."}</span></div>
+        <button class="btn gold" type="button" ${left ? "" : "disabled"} onclick="doRequestTick(this)">Request tick-off</button></div>`;
+    }
     return;
   }
   const w = jobLogWindowState(job), t = st.today, weekly = s.freq === "weekly";
@@ -1178,6 +1183,15 @@ function paintJobLog() {
   box.innerHTML = `<p class="muted-small" style="margin:0;">${escapeHtml(intro)}</p>
     <div class="jl-now"><div class="jl-now-text"><strong>${escapeHtml(head)}</strong>${sub ? `<span class="muted-small">${escapeHtml(sub)}</span>` : ""}</div>${btn}</div>
     ${jlDotsHtml(st)}<p class="muted-small jl-req">${escapeHtml(req)}</p>`;
+}
+
+async function doRequestTick(btn) {
+  if (btn) btn.disabled = true;
+  const msg = document.getElementById("jobLogMsg");
+  const res = await requestJobTick(CURRENT.username, CLASS_CODE);
+  if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`; await render(); return; }
+  await render();
+  flashMsg(msg, `<div class="success-msg">Request sent. Your teacher has been notified.</div>`, 6000);
 }
 
 async function doLogCheckin(btn) {
