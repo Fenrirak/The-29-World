@@ -202,18 +202,19 @@ html.casino-unverified:not(.role-teacher) .topbar nav a[href="gambling.html"],
 html.casino-unverified:not(.role-teacher) .topbar nav .nav-group[data-nav-group="Games"]{visibility:hidden;pointer-events:none;}
 
 /* Student profile modal */
-#profileModal .card{max-width:680px;max-height:88vh;overflow:auto;}
-#profileName{display:flex;align-items:center;gap:12px;margin-bottom:8px !important;}
+#profileModal .card{max-width:800px;max-height:88vh;overflow:auto;padding:32px 36px;}
+@media (max-width:520px){#profileModal .card{padding:22px 18px;}}
+#profileName{display:flex;align-items:center;gap:14px;margin-bottom:10px !important;}
 #profileSubtitle{color:var(--muted);font-size:var(--fs-lg);margin:0;}
-.profile-summary{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px;}
-.profile-chip{flex:1;min-width:110px;background:#f6f8fc;border:1.5px solid var(--line);border-radius:var(--r-3);padding:8px 12px;}
-.profile-chip .label{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:800;margin-bottom:3px;}
-.profile-chip .value{font-size:1.05rem;font-weight:800;color:var(--navy-900);line-height:1.25;}
+.profile-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:18px 0 8px;}
+.profile-chip{flex:1;min-width:0;background:#f6f8fc;border:1.5px solid var(--line);border-radius:var(--r-3);padding:14px 18px;box-shadow:0 1px 2px rgba(31,43,68,.05);}
+.profile-chip .label{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:800;margin-bottom:6px;}
+.profile-chip .value{font-size:1.3rem;font-weight:800;color:var(--navy-900);line-height:1.25;}
 .profile-chip .value .muted-small{font-weight:600;}
 #profileBody h4{
   display:flex;align-items:center;gap:8px;
-  margin:24px 0 10px;
-  padding-top:20px;
+  margin:34px 0 16px;
+  padding-top:28px;
   border-top:1.5px solid var(--line);
   font-size:var(--fs-sm);
   letter-spacing:.06em;
@@ -223,7 +224,7 @@ html.casino-unverified:not(.role-teacher) .topbar nav .nav-group[data-nav-group=
 }
 #profileBody h4:first-of-type{margin-top:0;padding-top:0;border-top:none;}
 #profileBody h4 .icon{color:var(--navy-700);flex-shrink:0;}
-#profileBody .auto-row{margin-bottom:8px;}
+#profileBody .auto-row{margin-bottom:12px;padding:14px 18px;}
 #profileBody .auto-row:last-child{margin-bottom:0;}
 .topbar .who{display:none;}
 
@@ -2198,7 +2199,8 @@ html.dark-mode .notif-dot{
 }
 
 /* Profile modal tier ladder variant */
-.profile-tier-ladder .tier-rung { padding: 8px 10px; }
+.profile-tier-ladder{gap:10px;}
+.profile-tier-ladder .tier-rung { padding: 12px 16px; }
 .profile-tier-ladder .tier-rung-badge { width: 30px; height: 30px; font-size: var(--fs-sm); }
 
 /* ── Tier form rows (add / edit) ────────────────────────────────── */
