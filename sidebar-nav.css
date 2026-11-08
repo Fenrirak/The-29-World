@@ -60,7 +60,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    padding: 22px 14px 26px;
+    padding: 22px 14px 0;
     gap: 2px;
     overflow-y: auto;
     overflow-x: hidden;
@@ -84,7 +84,9 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
     min-height: 0;
     gap: 3px;
     max-width: none;
+    flex-shrink: 0;
   }
+  html.sidebar-nav .topbar nav > *{ flex-shrink: 0; }
   html.sidebar-nav .topbar nav a{
     width: 100%;
     font-size: var(--fs-lg);
@@ -100,12 +102,19 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
   html.sidebar-nav .topbar-actions{
     flex-direction: column;
     align-items: stretch;
-    width: 100%;
-    margin-left: 0;
-    margin-top: 10px;
-    padding-top: 14px;
-    /* breathing room under Log out so it doesn't sit hard against the bottom edge */
-    padding-bottom: 26px;
+    /* Pinned to the bottom of the rail (like the phone drawer) so Settings and Log out stay reachable on short
+       screens and when a long list of links (the teacher's) scrolls. The gradient is the rail's own, fixed to the
+       rail's box, so there is no visible seam. */
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    flex-shrink: 0;
+    width: auto;
+    margin: 10px -14px 0;
+    padding: 14px 14px 26px;
+    background: linear-gradient(120deg, var(--navy-900) 0%, var(--navy-800) 55%, var(--navy-700) 100%) fixed;
+    background-size: var(--sb-width) 100vh;
+    background-position: 0 0;
     border-top: 1px solid rgba(255,255,255,.14);
     gap: 6px;
   }
@@ -158,6 +167,16 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
   }
   html.sidebar-nav .anw-balance-widget .anw-bw-label{ font-size: var(--fs-xs); }
   html.sidebar-nav .anw-balance-widget .anw-bw-value{ font-size: 1.35rem; }
+}
+/* Narrower desktops: the top-right spot lands on the first row of cards, so use the compact pill in the
+   bottom-left of the content area instead. */
+@media (min-width: 901px) and (max-width: 1480px){
+  html.sidebar-nav .anw-balance-widget{
+    top: auto !important; right: auto; bottom: 14px; left: calc(var(--sb-width) + 14px);
+    min-width: 0; padding: 7px 13px; border-radius: var(--r-pill);
+    display: flex; align-items: center; gap: 8px;
+  }
+  html.sidebar-nav .anw-balance-widget .anw-bw-value{ font-size: 1.1rem; margin-top: 0; }
 }
 
 /* --------------------------------------------------------------------

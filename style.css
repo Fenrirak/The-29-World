@@ -447,6 +447,10 @@ html.dark-mode .legal-main .about-card .about-lead{color:var(--heading-text);}
 .card h2 .icon{color:var(--navy-900);flex-shrink:0;}
 .grid{display:grid;gap:20px;}
 .grid>*{min-width:0;}
+/* A grid has no bottom margin (cards have 20px), so a grid sitting directly above a card or another
+   grid used to touch it. Give the thing below it the same 20px rhythm cards have between each other. */
+.grid + .card,.grid + .grid{margin-top:20px;}
+.xfer-ends ~ .grid{margin-top:14px;}
 .grid-2{grid-template-columns:repeat(2,minmax(0,1fr));}
 .grid-3{grid-template-columns:repeat(3,minmax(0,1fr));}
 .grid-4{grid-template-columns:repeat(4,minmax(0,1fr));}
@@ -1095,6 +1099,16 @@ html.dark-mode .anw-balance-widget:focus-visible{outline-color:#fff;}
   display:flex;align-items:center;gap:6px;
 }
 .anw-balance-widget .anw-bw-value{font-size:1.7rem;font-weight:900;margin-top:4px;line-height:1.1;}
+/* Laptops and tablets: the full-size widget is fixed in the left gutter, which is only wide enough to
+   hold it when the window is wider than ~1480px. Below that it sat on top of the page content, so use
+   the same compact bottom-corner pill the phone layout uses (and leave room so the last thing on the
+   page can scroll clear of it). */
+@media (min-width:641px) and (max-width:1480px){
+  .anw-balance-widget{left:14px;top:auto !important;bottom:14px;padding:7px 13px;min-width:0;border-radius:var(--r-pill);display:flex;align-items:center;gap:8px;}
+  .anw-balance-widget .anw-bw-label{font-size:var(--fs-xs);}
+  .anw-balance-widget .anw-bw-value{font-size:1.1rem;margin-top:0;}
+  body:has(.anw-balance-widget){padding-bottom:60px;}
+}
 @media (max-width:640px){
   /* Phones: a small pill in the bottom corner, so it covers as little of
      the page as possible, and room at the bottom of the page so the last
