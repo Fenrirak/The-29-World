@@ -1139,19 +1139,6 @@ async function renderProfile(username) {
     </div>
   `);
 
-  /* ---- Avatar body type (students choose their own; teacher can override) ---- */
-  const curGender = (s.avatar && s.avatar.look && s.avatar.look.gender) || "neutral";
-  rows.push(`<h4>Avatar body type</h4>
-    <div class="auto-row gender-row">
-      <div class="auto-details">Students pick this themselves in their avatar editor. You can change it here.</div>
-      <div class="gender-controls">
-        <select id="profileGenderSelect" aria-label="Avatar body type">
-          ${[["neutral", "Neutral"], ["boy", "Boy"], ["girl", "Girl"]].map(g => `<option value="${g[0]}"${g[0] === curGender ? " selected" : ""}>${g[1]}</option>`).join("")}
-        </select>
-        <button class="btn small" onclick="applyProfileGender('${escapeJsAttr(username)}')">Save</button>
-      </div>
-    </div>`);
-
   /* ---- Job & tier management ---- */
   rows.push(`<h4>${icon("briefcase", 16)} Job & tier</h4>`);
   if (!job) {
@@ -1450,6 +1437,19 @@ async function renderProfile(username) {
   rows.push(heldShares.length
     ? heldShares.map(h => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(h.name)}</strong></div><div class="auto-details">${h.qty} share${h.qty === 1 ? "" : "s"}</div></div>`).join("")
     : `<p class="muted-small">No shares owned.</p>`);
+
+  /* ---- Avatar body type (students choose their own; teacher can override) ---- */
+  const curGender = (s.avatar && s.avatar.look && s.avatar.look.gender) || "neutral";
+  rows.push(`<h4>Avatar body type</h4>
+    <div class="auto-row gender-row">
+      <div class="auto-details">Students pick this themselves in their avatar editor. You can change it here.</div>
+      <div class="gender-controls">
+        <select id="profileGenderSelect" aria-label="Avatar body type">
+          ${[["neutral", "Neutral"], ["boy", "Boy"], ["girl", "Girl"]].map(g => `<option value="${g[0]}"${g[0] === curGender ? " selected" : ""}>${g[1]}</option>`).join("")}
+        </select>
+        <button class="btn small" onclick="applyProfileGender('${escapeJsAttr(username)}')">Save</button>
+      </div>
+    </div>`);
 
   // Read-only — goals are the student's own (see "Savings goals" in data-money.js).
   const goals = savingsGoalProgress(s);
