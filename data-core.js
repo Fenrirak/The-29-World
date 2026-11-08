@@ -3127,10 +3127,108 @@ async function setJobTaskApproval(classCode, username, approved, opts) {
     body: approved ? "Your wage for this pay cycle is approved." : "Your wage for this pay cycle is on hold until the task is done.", href: "jobs.html" });
   return { ok: true };
 }
-function isJobTaskApprovedThisWeek(user, cls) {
+function jobTaskTicked(user, cls) {
   const weekKey = payCycleKey(cls && cls.payDay);
   const approval = user && user.jobTaskApproval;
   return !!(approval && approval.weekKey === weekKey && approval.approved);
+}
+// A job's wage gate. "Tasks" jobs need the teacher's tick. "Check-in" and
+// "Questionnaire" jobs pass once the student has logged enough days this pay
+// cycle. A teacher tick always counts too, so it works as an excuse.
+function isJobTaskApprovedThisWeek(user, cls) {
+  const job = user && user.jobId && cls ? (cls.jobs || []).find(j => j.id === user.jobId) : null;
+  // Check-in / questionnaire jobs are paid automatically by days logged (the
+  // teacher's tick plays no part); they are payable once at least one day is logged.
+  if (job && jobLogType(job) !== "tasks") return jobLogStatus(user, job, cls, true).done > 0;
+  return jobTaskTicked(user, cls);
+}
+
+/* ---------------- Job logs: tasks / check-ins / questionnaire ----------------
+   Every job has a log type (job.logType, "tasks" when missing) and, for the two
+   student-driven types, settings in job.log. Students' completed days are kept
+   on their user doc as jobLog.days[dateKey] = { j: jobId, ok, at, tries }. */
+const JOB_LOG_TYPES = { tasks: "Tasks", checkin: "Check-ins", quiz: "Questionnaire" };
+const JOB_LOG_DAY_KEYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const JOB_LOG_DAY_FULL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
+const JOB_LOG_JS_DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function _jlInt(v, lo, hi, def) {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def;
+}
+function jobLogType(job) { return job && JOB_LOG_TYPES[job.logType] ? job.logType : "tasks"; }
+
+// Always returns a complete, safe settings object, whatever is stored.
+function jobLogSettings(job) {
+  const l = (job && job.log) || {};
+  const picked = JOB_LOG_DAY_KEYS.filter(d => Array.isArray(l.days) ? l.days.includes(d) : ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(d));
+  const days = picked.length ? picked : ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const startMin = _jlInt(l.startMin, 0, 1435, 540);
+  const questions = Array.isArray(l.questions) ? l.questions : [];
+  return {
+    days, startMin, questions,
+    freq: l.freq === "weekly" ? "weekly" : "daily",
+    winMins: _jlInt(l.winMins, 5, Math.min(240, 1440 - startMin), 15),
+    windowOn: jobLogType(job) === "checkin" ? true : !!l.windowOn,
+    attempts: _jlInt(l.attempts, 1, 5, 2),
+    perDay: _jlInt(l.perDay, 0, questions.length, 0)
+  };
+}
+function jobLogTimeLabel(min) {
+  const h = Math.floor(min / 60) % 24, m = min % 60;
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")}${h < 12 ? "am" : "pm"}`;
+}
+function jobLogDaysLabel(days) {
+  const k = JOB_LOG_DAY_KEYS.filter(d => days.includes(d)).join(",");
+  if (k === "Mon,Tue,Wed,Thu,Fri") return "Mon\u2013Fri";
+  if (days.length === 7) return "every day";
+  return JOB_LOG_DAY_KEYS.filter(d => days.includes(d)).join(", ");
+}
+function jobLogDateAdd(key, n) {
+  const dt = new Date(dateKeyToUTC(key) + n * 86400000);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+function jobLogDayOf(key) { return JOB_LOG_JS_DAY[new Date(dateKeyToUTC(key)).getUTCDay()]; }
+// The 7 dates (oldest first) a pay day pays for. They end the DAY BEFORE pay day
+// so every logged day is settled before wages are worked out. `payout` = true
+// always gives the cycle the coming pay day pays; otherwise, on pay day itself,
+// this gives the NEXT cycle (which starts today) so students can keep logging.
+function jobLogCycleKeys(cls, payout) {
+  const pk = payCycleKey(cls && cls.payDay);
+  const end = !payout && pk === nzDateKey() ? jobLogDateAdd(pk, 6) : jobLogDateAdd(pk, -1);
+  return [6, 5, 4, 3, 2, 1, 0].map(n => jobLogDateAdd(end, -n));
+}
+// Where "now" sits against the job's window today: off | early | open | closed
+function jobLogWindowState(job, d) {
+  const s = jobLogSettings(job);
+  if (!s.days.includes(nzDayName(d))) return { state: "off" };
+  if (!s.windowOn) return { state: "open", closesIn: null };
+  const hm = nzHourMinute(d), now = hm.hour * 60 + hm.minute, end = s.startMin + s.winMins;
+  if (now < s.startMin) return { state: "early", opensIn: s.startMin - now };
+  if (now >= end) return { state: "closed" };
+  return { state: "open", closesIn: end - now };
+}
+function jobLogStatus(user, job, cls, payout) {
+  const type = jobLogType(job);
+  if (type === "tasks") {
+    const ticked = jobTaskTicked(user, cls);
+    return { type, ticked, met: ticked, done: ticked ? 1 : 0, expected: 1, fraction: ticked ? 1 : 0, weekly: false, days: [], today: null, reachable: true };
+  }
+  // Pay = wage x done / expected. Daily: expected = days the log runs. Weekly: expected = 1.
+  const s = jobLogSettings(job), weekly = s.freq === "weekly";
+  const todayKey = nzDateKey();
+  const log = (user && user.jobLog && user.jobLog.days) || {};
+  const days = jobLogCycleKeys(cls, payout).map(k => {
+    const e = log[k] && log[k].j === job.id ? log[k] : null;
+    const day = jobLogDayOf(k);
+    return { key: k, day, active: s.days.includes(day), done: !!(e && e.ok), at: e && e.ok ? (e.at || "") : "",
+             tries: e ? (e.tries || 0) : 0, today: k === todayKey, past: k < todayKey };
+  });
+  const expected = weekly ? 1 : s.days.length;
+  const done = Math.min(expected, days.filter(d => d.active && d.done).length);
+  const chances = days.filter(d => d.active && !d.done && !d.past).length;
+  return { type, ticked: false, weekly, expected, done, fraction: done / expected, days, today: days.find(d => d.today) || null,
+           met: done >= expected, reachable: done + chances >= expected };
 }
 
 /* ---------------- Safe background-job wrapper ----------------

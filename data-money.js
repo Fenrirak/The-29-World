@@ -64,7 +64,15 @@ function computeWageCredit(cls, student) {
   const job = (cls.jobs || []).find(j => j.id === student.jobId);
   if (!job) return null;
   if (!isJobTaskApprovedThisWeek(student, cls)) return null;
-  return wageCreditEstimate(cls, student);
+  return wageCreditEstimate(cls, student, wageAttendance(cls, student));
+}
+// { done, expected } days logged for a check-in / questionnaire job (null for task jobs).
+// The wage is paid as done / expected of the full wage, e.g. 3 of 5 days = 3/5.
+function wageAttendance(cls, student) {
+  const job = student && student.jobId ? (cls.jobs || []).find(j => j.id === student.jobId) : null;
+  if (!job || jobLogType(job) === "tasks") return null;
+  const st = jobLogStatus(student, job, cls, true);
+  return { done: st.done, expected: st.expected };
 }
 // What this student's wage comes to after tax, life-event benefits and
 // KiwiSaver, whether or not this week's job task has been approved yet —
@@ -76,10 +84,12 @@ function computeWageCredit(cls, student) {
 // (the normal bracket tax), `taxRefund` (the life-event tax cut), `boost`
 // (the life-event pay change, can be negative) and `kiwi` (KiwiSaver, or
 // null). net = gross - bracketTax + boost + taxRefund - kiwi.you, exactly.
-function wageCreditEstimate(cls, student) {
+function wageCreditEstimate(cls, student, att) {
   const job = (cls.jobs || []).find(j => j.id === student.jobId) || {};
   const tier = getStudentTier(job, student);
-  const wage = tier ? Number(tier.wage) || 0 : 0;
+  const fullWage = tier ? Number(tier.wage) || 0 : 0;
+  const frac = att && att.expected > 0 ? Math.min(1, att.done / att.expected) : 1;
+  const wage = Math.round(fullWage * frac * 100) / 100;
   let { net, taxAmount } = applyWageTax(cls, wage);
   const bracketTax = taxAmount;
   // Life items can boost/cut take-home wage (incomePercent) and knock a
@@ -104,7 +114,8 @@ function wageCreditEstimate(cls, student) {
   const kiwi = kiwiSaverPayBreakdown(cls, student, wage, net, nzDateKey());
   if (kiwi && kiwi.you > 0) net = Math.round((net - kiwi.you) * 100) / 100;
   const tierLabel = tier ? tier.name : job.title;
-  return { net, taxAmount, tierLabel, jobTitle: job.title || "", gross: Math.round(wage * 100) / 100, bracketTax, taxRefund, boost, kiwi };
+  return { net, taxAmount, tierLabel, jobTitle: job.title || "", gross: Math.round(wage * 100) / 100, bracketTax, taxRefund, boost, kiwi,
+           fullWage: Math.round(fullWage * 100) / 100, attendance: att ? { done: att.done, expected: att.expected } : null };
 }
 
 // PERF FIX: quick checks on the student doc the caller ALREADY read, used
@@ -178,7 +189,7 @@ async function _payStudentWage(classCode, username, dateKey, { force = false, cl
         // Has a job, just isn't ticked yet — leave unstamped (same as the
         // old design) so ticking it later THIS SAME cycle still catches
         // them on the next run, rather than being locked out for the week.
-        result = { skippedUnapproved: true };
+        result = jobLogType(job) === "tasks" ? { skippedUnapproved: true } : { skippedNoLogs: true };
         return;
       }
       const credit = computeWageCredit(cls, user);
@@ -385,6 +396,7 @@ async function _runPayDayForClass(classCode, dateKey, { force = false, cls: prec
   let paidCount = 0;
   let newlyPaid = 0;
   let unapprovedCount = 0;
+  let noLogCount = 0; // check-in / questionnaire jobs with no days logged: earned nothing
   const toPay = [];
   for (const student of students) {
     if (student.jobId && (cls.jobs || []).find(j => j.id === student.jobId)) hasJobs = true;
@@ -393,7 +405,10 @@ async function _runPayDayForClass(classCode, dateKey, { force = false, cls: prec
       // Same answer _payStudentWage's transaction would give, without the
       // two round trips: no job means nothing to pay, and a job whose task
       // isn't ticked yet is reported as unapproved.
-      if (_hasRecognisedJob(cls, student) && !cls.archived) unapprovedCount++;
+      if (_hasRecognisedJob(cls, student) && !cls.archived) {
+        const _j = (cls.jobs || []).find(j => j.id === student.jobId);
+        if (jobLogType(_j) === "tasks") unapprovedCount++; else noLogCount++;
+      }
       continue;
     }
     toPay.push(student);
@@ -403,6 +418,7 @@ async function _runPayDayForClass(classCode, dateKey, { force = false, cls: prec
     const r = await _payStudentWage(classCode, student.username, dateKey, { force, cls, logSink: sink });
     if (r && r.credited) { newlyPaid++; paidCount++; }
     else if (r && r.skippedUnapproved) { unapprovedCount++; }
+    else if (r && r.skippedNoLogs) { noLogCount++; }
   });
   // Life-item recurring allowances: independent of having a job, so this
   // runs for every student, not just the ones the loop above touched.
@@ -411,7 +427,7 @@ async function _runPayDayForClass(classCode, dateKey, { force = false, cls: prec
   await t29RunLimited(allowanceDue, SWEEP_PARALLEL, student =>
     _payStudentWeeklyLifeAllowance(classCode, student.username, dateKey, { cls, logSink: sink }));
   await _flushTxnSink(classCode, sink);
-  return { paidCount, newlyPaid, hasJobs, unapprovedCount };
+  return { paidCount, newlyPaid, hasJobs, unapprovedCount, noLogCount };
 }
 
 // Teacher-triggered entry point (auto, on page load) for the DAILY
@@ -496,7 +512,9 @@ function buildPayslip(cls, credit, dateKey) {
       employerGross: k.employerGross, esctRate: k.esctRate, esct: k.esct,
       employerNet: k.employerNet, govt: k.govt
     } : null,
-    net: credit.net
+    net: credit.net,
+    // For check-in / questionnaire jobs: days logged out of days possible, and the full wage before scaling.
+    attendance: credit.attendance || null, fullWage: credit.fullWage || credit.gross
   };
 }
 
@@ -3425,7 +3443,8 @@ function budgetWeekItems(cls, user, username) {
   /* ---- Money coming in ---- */
   const job = user.jobId ? (cls.jobs || []).find(j => j.id === user.jobId) : null;
   if (job && cls.payDay) {
-    const credit = wageCreditEstimate(cls, user);
+    const att = wageAttendance(cls, user);
+    const credit = wageCreditEstimate(cls, user, att);
     const dayKey = dayOf(cls.payDay);
     const paid = inWeek(user.lastWagePaid);
     const status = budgetStatus(dayKey, todayKey, paid);
@@ -3448,8 +3467,9 @@ function budgetWeekItems(cls, user, username) {
         kiwi: ksLine(k, slip ? slip.gross : credit.gross),
         kiwiNext: ksLine(credit.kiwi, credit.gross),
         note: status === "done" ? "Paid" + (off ? ` (${off} taken off)` : "")
-          : status === "missed" ? "Not paid this week — your job task wasn't approved by pay day"
-          : (approved ? "Pay day" : "Pay day — only once your teacher approves this week's job task")
+          : status === "missed" ? (att ? "Not paid this week — no days were logged" : "Not paid this week — your job task wasn't approved by pay day")
+          : (att ? `Pay day — paid automatically: ${att.done} of ${att.expected} logged so far = ${att.done}/${att.expected} of your wage`
+             : approved ? "Pay day" : "Pay day — only once your teacher approves this week's job task")
             + (off ? ` (${off} already taken off)` : "")
       });
     }

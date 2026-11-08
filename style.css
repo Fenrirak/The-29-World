@@ -4265,3 +4265,49 @@ html :is(.qty-btn,.cl-step){--g-size:20px;}
 .sidebar-hint-secondary{background:transparent;color:var(--ink);border:1.5px solid var(--line);padding:7px 12px;}
 .sidebar-hint-link{background:none;border:none;color:var(--muted);text-decoration:underline;padding:6px 4px;font-weight:600;}
 @media print{.sidebar-hint{display:none !important;}}
+
+/* ---------------- Job logs: type picker, settings, check-ins and questionnaire ---------------- */
+.jl-box{margin-top:20px;padding-top:18px;border-top:1.5px solid var(--line);}
+.jl-title{font-size:var(--fs-lg);font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.jl-types{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+.jl-type{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:12px 14px;border:1.5px solid var(--line);border-radius:var(--r-4);background:var(--card);color:var(--ink);font:inherit;cursor:pointer;transition:border-color .12s ease, background .12s ease;}
+.jl-type strong{color:var(--navy-900);font-size:var(--fs-lg);}
+.jl-type span{color:var(--muted);font-size:var(--fs-sm);font-weight:500;line-height:1.4;}
+.jl-type:hover{border-color:var(--navy-500);}
+.jl-type.on{border-color:var(--navy-900);background:var(--bg);box-shadow:0 0 0 1px var(--navy-900) inset;}
+.jl-type:focus-visible,.jl-chip:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.jl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px;margin-top:6px;}
+.jl-grid label{display:block;margin:10px 0 4px;font-size:var(--fs-sm);}
+.jl-grid .muted-small{display:block;margin-top:4px;font-size:var(--fs-xs);line-height:1.4;}
+.jl-span{grid-column:1 / -1;}
+.jl-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.jl-chip{min-width:52px;padding:8px 12px;border:1.5px solid var(--line);border-radius:var(--r-pill);background:var(--card);color:var(--ink);font:inherit;font-size:var(--fs-sm);font-weight:700;cursor:pointer;}
+.jl-chip.on{background:var(--navy-900);border-color:var(--navy-900);color:#fff;}
+.jl-check{display:flex;align-items:center;gap:10px;margin:16px 0 0;font-weight:600;cursor:pointer;}
+.jl-check input{width:18px;height:18px;min-height:auto;margin:0;flex-shrink:0;accent-color:var(--navy-900);}
+.jl-opt{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.jl-opt input[type=radio]{width:18px;height:18px;min-height:auto;margin:0;flex:none;accent-color:var(--navy-900);}
+.jl-opt input[type=text]{flex:1;min-width:0;}
+.jl-qtype{width:auto;min-height:38px;padding:6px 10px;font-size:var(--fs-md);}
+.job-family-log{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.jl-track-right{display:flex;align-items:center;flex-wrap:wrap;gap:10px;}
+.jl-dots{display:flex;flex-wrap:wrap;gap:6px;}
+.jl-dot{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:28px;padding:0 6px;border:1.5px solid var(--line);border-radius:var(--r-1);background:var(--card);color:var(--muted);font-size:var(--fs-xs);font-weight:800;}
+.jl-dot.done{background:var(--mint-fill);border-color:var(--mint-fill);color:#fff;}
+.jl-dot.missed{background:var(--pastel-coral-bg,#fceae7);border-color:var(--pastel-coral-border,#f3ccc3);color:var(--pastel-coral-text,#b8402c);}
+.jl-dot.off{border-style:dashed;opacity:.6;}
+.jl-dot.today{border-color:var(--gold-dark);box-shadow:0 0 0 1px var(--gold-dark) inset;}
+.jl-now{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;margin:14px 0;padding:16px 18px;border:1.5px solid var(--line);border-radius:var(--r-4);background:var(--bg);}
+.jl-now-text{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.jl-now-text strong{color:var(--navy-900);font-size:1.05rem;}
+.jl-now .btn{margin-top:0;}
+.jl-req{margin:12px 0 0;}
+.jl-q-note{margin:8px 0 0;color:#b8402c;font-size:var(--fs-md);font-weight:700;}
+.quiz-question.jl-wrong{border-color:var(--coral);}
+.jl-quiz-card{width:100%;max-width:640px;margin:auto;}
+html.dark-mode .jl-type strong,html.dark-mode .jl-now-text strong{color:var(--heading-text);}
+html.dark-mode .jl-type.on{border-color:var(--accent-text);background:var(--surface-2);box-shadow:0 0 0 1px var(--accent-text) inset;}
+html.dark-mode .jl-chip.on{background:var(--surface-2);border-color:var(--accent-text);color:var(--heading-text);}
+html.dark-mode .jl-q-note{color:var(--pastel-coral-text);}
+@media (max-width:900px){.jl-types{grid-template-columns:1fr;}}
+@media (max-width:600px){.jl-grid{grid-template-columns:1fr;}.jl-now .btn{width:100%;}}

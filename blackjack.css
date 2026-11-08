@@ -579,3 +579,52 @@ html.tab-hidden * { animation-play-state: paused !important; }
   .bj-card.bj-card-in, .bj-playing-tag, .bj-rotate-icon { animation: none; }
   .perf-thumb, .perf-fill, .perf-trail, .perf-detect, .perf-labels button { transition: none; }
 }
+
+
+/* ===================== Quick-bet chips + repeat bet ===================== */
+/* Input and chips share one row (wraps on narrow screens); colours come from
+   theme variables so dark mode follows automatically. */
+.bet-amount-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+.bet-amount-row .bet-amount-input { flex: 0 0 160px; width: 160px; max-width: 100%; }
+.bet-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.bet-chip {
+  font: inherit;
+  font-size: var(--fs-lg);
+  font-weight: 800;
+  line-height: 1;
+  min-width: 64px;
+  min-height: 46px; /* matches the amount input beside it */
+  padding: 0 16px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-pill, 999px);
+  background: var(--card, #fff);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, transform .12s ease;
+}
+.bet-chip:hover:not(:disabled) { border-color: var(--gold); transform: translateY(-1px); }
+.bet-chip:active:not(:disabled) { transform: none; }
+.bet-chip.active {
+  border-color: var(--gold);
+  background: rgba(232, 184, 75, 0.2);
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+.bet-chip:disabled { opacity: .4; cursor: not-allowed; }
+
+.bet-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.bet-actions .btn { margin-top: 0; }
+
+@media (max-width: 520px) {
+  .bet-amount-row .bet-amount-input { flex: 1 1 100%; width: 100%; }
+  .bet-chips { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; }
+  .bet-chip { min-width: 0; padding: 0 4px; }
+  .bet-actions .btn { flex: 1 1 100%; }
+}
+
+[data-perf="low"] .bet-chip { transition: none; }
+@media (prefers-reduced-motion: reduce) { .bet-chip { transition: none; } }

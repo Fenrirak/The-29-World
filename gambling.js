@@ -334,6 +334,89 @@ function toggleNumber(n, need) {
   lastSelection = [...selection];
 }
 
+/* ===================== Quick-bet chips + "Repeat bet" ===================== */
+// Edit this list to change the quick-select amounts shown under both bet boxes.
+const QUICK_BETS = [10, 20, 50, 100];
+// Per-game wiring: the amount <input>, the chip row, the repeat button, and where that game's min/max bet live.
+const BET_GAMES = {
+  roulette:  { input: "betAmount",   chips: "betChips",   repeat: "repeatBetBtn",   limits: () => CLS && CLS.gambling },
+  blackjack: { input: "bjBetAmount", chips: "bjBetChips", repeat: "bjRepeatBetBtn", limits: () => CLS && CLS.blackjack }
+};
+// The last bet the server actually accepted, per game. In memory only, so (like the number picker) it resets on page reload.
+const LAST_BET = { roulette: null, blackjack: null };
+
+function mountBetChips() {
+  Object.keys(BET_GAMES).forEach(game => {
+    const box = document.getElementById(BET_GAMES[game].chips);
+    if (!box || box.children.length) return;
+    box.innerHTML = QUICK_BETS.map(a => `<button type="button" class="bet-chip" data-amt="${a}" aria-pressed="false">$${a}</button>`).join("");
+  });
+}
+
+// Highlights the chip matching the typed amount, and greys out chips outside the teacher's min/max bet.
+function syncBetChips(game) {
+  const cfg = BET_GAMES[game];
+  const box = document.getElementById(cfg.chips), inp = document.getElementById(cfg.input);
+  if (!box || !inp) return;
+  const val = inp.value.trim() === "" ? NaN : Number(inp.value);
+  const lim = cfg.limits() || {};
+  const min = Number(lim.minBet), max = Number(lim.maxBet);
+  box.querySelectorAll(".bet-chip").forEach(c => {
+    const amt = Number(c.dataset.amt);
+    c.disabled = (min > 0 && amt < min) || (max > 0 && amt > max);
+    c.title = c.disabled ? "Outside the allowed bet range" : "";
+    const on = amt === val;
+    c.classList.toggle("active", on);
+    c.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+
+// Keeps the Repeat button's label/enabled state in step: disabled until a bet has been placed, and while one is in flight.
+function syncRepeatBtn(game, busy) {
+  const btn = document.getElementById(BET_GAMES[game].repeat);
+  if (!btn) return;
+  const last = LAST_BET[game];
+  btn.disabled = !!busy || !last;
+  const lab = btn.querySelector(".bet-repeat-label");
+  if (lab) lab.textContent = last ? `Repeat bet · ${fmtMoney(last.amount)}` : "Repeat last bet";
+  btn.title = last ? "Place the same bet again" : "Place a bet first, then you can repeat it";
+}
+
+// Re-applies the last Roulette bet (type, numbers and amount) and spins straight away.
+function repeatRouletteBet() {
+  const last = LAST_BET.roulette, spinBtn = document.getElementById("spinBtn");
+  if (!last || !spinBtn || spinBtn.disabled) return;
+  document.getElementById("betType").value = last.type;
+  lastBetType = last.type; // renderPicker() restores lastSelection when the type matches
+  lastSelection = [...last.selection];
+  renderPicker();
+  document.getElementById("betAmount").value = last.amount;
+  syncBetChips("roulette");
+  spin();
+}
+
+// Re-deals Blackjack with the last accepted bet amount.
+function repeatBlackjackBet() {
+  const last = LAST_BET.blackjack, dealBtn = document.getElementById("bjDealBtn");
+  if (!last || BJ_DEAL_PENDING || !dealBtn || dealBtn.disabled) return;
+  document.getElementById("bjBetAmount").value = last.amount;
+  syncBetChips("blackjack");
+  bjDeal();
+}
+
+document.addEventListener("click", (e) => {
+  const chip = e.target.closest && e.target.closest(".bet-chip");
+  if (!chip || chip.disabled) return;
+  const cfg = BET_GAMES[chip.parentElement.dataset.game];
+  if (!cfg) return;
+  document.getElementById(cfg.input).value = chip.dataset.amt;
+  syncBetChips(chip.parentElement.dataset.game);
+});
+document.addEventListener("input", (e) => {
+  const game = e.target && Object.keys(BET_GAMES).find(g => BET_GAMES[g].input === e.target.id);
+  if (game) syncBetChips(game);
+});
+
 /* ===================== Gambling account (shared buy-in/cash-out) ===================== */
 
 function renderGamblingAccountCard(view) {
@@ -519,6 +602,7 @@ async function spin() {
   box.innerHTML = "";
   spinBtn.disabled = true;
   spinBtn.textContent = "Spinning...";
+  syncRepeatBtn("roulette", true);
 
   // Wrapped so ANY unexpected error (network hiccup, animation glitch,
   // etc.) still leaves the Spin button clickable again, instead of stuck
@@ -530,6 +614,7 @@ async function spin() {
       box.innerHTML = `<div class="error-msg">${res.error}</div>`;
       return;
     }
+    LAST_BET.roulette = { type, amount: Number(amount), selection: [...selection] };
 
     // render() re-fetches the class doc, lock state, etc. — several
     // network round-trips that used to happen AFTER the ~16s wheel
@@ -568,6 +653,8 @@ async function spin() {
   } finally {
     spinBtn.disabled = false;
     spinBtn.innerHTML = "Spin the wheel";
+    syncRepeatBtn("roulette");
+    syncBetChips("roulette");
   }
 }
 
@@ -717,6 +804,7 @@ function bjClearTableDisplay(round) {
 function bjResetDealBtn() {
   const b = document.getElementById("bjDealBtn");
   if (b) { b.disabled = false; b.innerHTML = "Deal"; }
+  syncRepeatBtn("blackjack");
 }
 
 async function bjDeal() {
@@ -736,6 +824,7 @@ async function bjDeal() {
     if (box) box.innerHTML = "";
     BJ_DEAL_PENDING = true;
     if (btn) { btn.disabled = true; btn.textContent = "Dealing..."; }
+    syncRepeatBtn("blackjack", true);
 
     const res = await startBlackjackRound(CURRENT.username, CURRENT.classCode, amount);
     if (!res.ok) {
@@ -744,6 +833,7 @@ async function bjDeal() {
       if (box) box.innerHTML = `<div class="error-msg">${res.error}</div>`;
       return;
     }
+    LAST_BET.blackjack = { amount: Number(amount) };
     CURRENT_ROUND = res.round;
     BJ_DEAL_PENDING = false;
     // The button only needs to say "Dealing..." while waiting on the server; the
@@ -951,6 +1041,7 @@ async function bjResetTable() {
   bjResetDealBtn();
   bjSetButtonsDisabled(BJ_ACTION_BTN_IDS, false);
   document.getElementById("bjBetAmount").value = "";
+  syncBetChips("blackjack");
   document.getElementById("bjBetForm").classList.remove("hidden");
   document.getElementById("bjTableArea").classList.add("hidden");
   document.getElementById("bjNewRoundBtn").classList.add("hidden");
@@ -1399,6 +1490,7 @@ async function init() {
   document.getElementById("studentView").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
   mountBjRotatePrompt();
+  mountBetChips();
   // These 8 jobs are all independent of each other (each is its own
   // guarded, self-contained check-and-maybe-write), so running them one
   // at a time — 8 separate sequential network round-trips — was a big
@@ -1532,6 +1624,8 @@ async function render() {
     }
     renderRecentBlackjack(CLS);
   }
+  syncBetChips("roulette");
+  syncBetChips("blackjack");
 }
 
 document.addEventListener("DOMContentLoaded", init);

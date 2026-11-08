@@ -18,8 +18,9 @@ function getStudentTier(job, student) {
   return job.tiers[0]; // entry-level fallback
 }
 
-async function addJob(classCode, title, tiers, autoPromoteWeeks) {
+async function addJob(classCode, title, tiers, autoPromoteWeeks, logType, log) {
   const classRef = classesCol().doc(classCode);
+  const clean = cleanJobLog(logType, log);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
@@ -30,7 +31,8 @@ async function addJob(classCode, title, tiers, autoPromoteWeeks) {
         id: uid("t"), name: sanitizeUserText(tier.name, 60) || "Tier 1",
         wage: Math.max(0, Number(tier.wage) || 0), description: sanitizeUserText(tier.description, 200)
       })),
-      autoPromoteWeeks: Math.max(0, Number(autoPromoteWeeks) || 0)
+      autoPromoteWeeks: Math.max(0, Number(autoPromoteWeeks) || 0),
+      logType: clean.type, log: clean.log
     });
     t.update(classRef, { jobs: cls.jobs });
   });
@@ -56,6 +58,7 @@ async function updateJob(classCode, jobId, updates) {
       }));
     }
     job.autoPromoteWeeks = Math.max(0, Number(updates.autoPromoteWeeks) || 0);
+    if (updates.logType !== undefined) { const c = cleanJobLog(updates.logType, updates.log); job.logType = c.type; job.log = c.log; }
     t.update(classRef, { jobs: cls.jobs });
     after = { title: job.title, autoPromoteWeeks: job.autoPromoteWeeks, tiers: (job.tiers || []).map(x => ({ id: x.id, name: x.name, wage: x.wage })) };
   });
@@ -1410,6 +1413,160 @@ async function removeInsuranceCompany(classCode, companyId) {
       title: `Your teacher removed the insurance company ${removed[0].company || ""}`.trim(),
       body: "Its plans are gone, so you are no longer covered by them. You may want to pick another plan.", href: "insurance.html" });
   }
+}
+
+/* ---------------- Job logs: saving, check-ins and the daily questionnaire ---------------- */
+function cleanJobQuestion(q) {
+  const prompt = sanitizeUserText(q && q.prompt, 200);
+  if (!prompt) return null;
+  const id = (q && q.id) || uid("q");
+  if (q.type === "text") {
+    const raw = Array.isArray(q.answers) ? q.answers : String(q.answers || "").split("\n");
+    const answers = raw.map(a => sanitizeUserText(a, 80)).filter(Boolean).slice(0, 10);
+    return answers.length ? { id, type: "text", prompt, answers } : null;
+  }
+  const options = [];
+  let correct = -1;
+  (q.options || []).forEach((o, i) => {
+    const text = sanitizeUserText(o, 100);
+    if (!text) return;
+    if (i === Number(q.correct)) correct = options.length;
+    options.push(text);
+  });
+  return options.length >= 2 && options.length <= 6 && correct >= 0 ? { id, type: "choice", prompt, options, correct } : null;
+}
+// Turns whatever the form sends into what gets stored on the job.
+function cleanJobLog(logType, log) {
+  const type = JOB_LOG_TYPES[logType] ? logType : "tasks";
+  if (type === "tasks") return { type, log: null };
+  const l = log || {};
+  const days = JOB_LOG_DAY_KEYS.filter(d => (l.days || []).includes(d));
+  const safeDays = days.length ? days : ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const startMin = _jlInt(l.startMin, 0, 1435, 540);
+  const out = {
+    days: safeDays, startMin,
+    freq: l.freq === "weekly" ? "weekly" : "daily",
+    winMins: _jlInt(l.winMins, 5, Math.min(240, 1440 - startMin), 15),
+    windowOn: type === "checkin" ? true : !!l.windowOn
+  };
+  if (type === "quiz") {
+    out.questions = (l.questions || []).map(cleanJobQuestion).filter(Boolean).slice(0, 30);
+    out.attempts = _jlInt(l.attempts, 1, 5, 2);
+    out.perDay = _jlInt(l.perDay, 0, out.questions.length, 0);
+  }
+  return { type, log: out };
+}
+
+const JOB_LOG_KEEP_DAYS = 28;
+function _jobLogPrune(days, todayKey) {
+  const out = {};
+  Object.keys(days || {}).forEach(k => { if (daysBetweenKeys(k, todayKey) <= JOB_LOG_KEEP_DAYS) out[k] = days[k]; });
+  return out;
+}
+const JOB_LOG_ERRORS = {
+  NO_JOB: "You don't have a job right now.", WRONG_TYPE: "Your job doesn't use this kind of log.",
+  OFF_DAY: "There's no log today.", EARLY: "It isn't time yet.", CLOSED: "Today's window has closed.",
+  ALREADY: "You've already done today's log.", ALREADY_WEEK: "You've already done this week's log.", NO_TRIES: "You're out of attempts for today.",
+  NO_QUESTIONS: "Your teacher hasn't added any questions yet."
+};
+function _jobLogFail(e) { return { ok: false, error: JOB_LOG_ERRORS[e && e.message] || "Something went wrong. Please try again." }; }
+function _jobLogNowLabel() { const hm = nzHourMinute(); return jobLogTimeLabel(hm.hour * 60 + hm.minute); }
+function _jobLogGate(job, type) {
+  if (!job) throw new Error("NO_JOB");
+  if (jobLogType(job) !== type) throw new Error("WRONG_TYPE");
+  const w = jobLogWindowState(job);
+  if (w.state === "off") throw new Error("OFF_DAY");
+  if (w.state === "early") throw new Error("EARLY");
+  if (w.state === "closed") throw new Error("CLOSED");
+}
+
+// Check-in jobs: counts today if the student is inside the window.
+async function jobLogCheckin(username, classCode) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let at = "";
+  try {
+    await fdb.runTransaction(async (t) => {
+      const userSnap = await t.get(userRef), classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NO_JOB");
+      const user = userSnap.data(), cls = classSnap.data();
+      const job = (cls.jobs || []).find(j => j.id === user.jobId);
+      _jobLogGate(job, "checkin");
+      const today = nzDateKey();
+      const days = _jobLogPrune(user.jobLog && user.jobLog.days, today);
+      if (days[today] && days[today].j === job.id && days[today].ok) throw new Error("ALREADY");
+      if (jobLogSettings(job).freq === "weekly" && jobLogStatus(user, job, cls).done > 0) throw new Error("ALREADY_WEEK");
+      at = _jobLogNowLabel();
+      days[today] = { j: job.id, ok: true, at };
+      t.update(userRef, { jobLog: { days } });
+    });
+  } catch (e) { return _jobLogFail(e); }
+  return { ok: true, at };
+}
+
+/* Questionnaire jobs. A student gets the same questions all day (picked by a
+   seeded shuffle, so a refresh doesn't change them) and different ones the
+   next day. The answer key is never put in what the page shows. */
+function _jlSeed(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function _jlRng(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function _jlShuffle(arr, rnd) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+function jobQuizToday(job, username, dateKey) {
+  const s = jobLogSettings(job);
+  if (!s.questions.length) return [];
+  if (s.perDay > 0 && s.perDay < s.questions.length) return _jlShuffle(s.questions, _jlRng(_jlSeed(`q|${job.id}|${username}|${dateKey}`))).slice(0, s.perDay);
+  return s.questions;
+}
+// What the student sees: no answers, and choices in a different order per student per day.
+function jobQuizView(job, username, dateKey) {
+  const rnd = _jlRng(_jlSeed(`o|${job.id}|${username}|${dateKey}`));
+  return jobQuizToday(job, username, dateKey).map(q => q.type === "text"
+    ? { id: q.id, type: "text", prompt: q.prompt }
+    : { id: q.id, type: "choice", prompt: q.prompt, options: _jlShuffle(q.options.map((text, i) => ({ i, text })), rnd) });
+}
+function _jlNorm(s) { return String(s == null ? "" : s).toLowerCase().replace(/[^\p{L}\p{N}\s.\-]/gu, " ").replace(/\s+/g, " ").trim().replace(/\.+$/, ""); }
+function jobQuizGradeOne(q, a) {
+  if (q.type === "text") { const n = _jlNorm(a); return n !== "" && (q.answers || []).some(x => _jlNorm(x) === n); }
+  return a !== undefined && a !== null && a !== "" && Number(a) === q.correct;
+}
+// answers = { [questionId]: chosen option number (as first created) or typed text }
+async function jobQuizSubmit(username, classCode, answers) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let res = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      res = null; // this callback can be retried
+      const userSnap = await t.get(userRef), classSnap = await t.get(classRef);
+      if (!userSnap.exists || !classSnap.exists) throw new Error("NO_JOB");
+      const user = userSnap.data(), cls = classSnap.data();
+      const job = (cls.jobs || []).find(j => j.id === user.jobId);
+      _jobLogGate(job, "quiz");
+      const s = jobLogSettings(job), today = nzDateKey();
+      const days = _jobLogPrune(user.jobLog && user.jobLog.days, today);
+      const prev = days[today] && days[today].j === job.id ? days[today] : { tries: 0, ok: false };
+      if (prev.ok) throw new Error("ALREADY");
+      if (s.freq === "weekly" && jobLogStatus(user, job, cls).done > 0) throw new Error("ALREADY_WEEK");
+      if ((prev.tries || 0) >= s.attempts) throw new Error("NO_TRIES");
+      const qs = jobQuizToday(job, username, today);
+      if (!qs.length) throw new Error("NO_QUESTIONS");
+      const wrong = qs.filter(q => !jobQuizGradeOne(q, answers && answers[q.id])).map(q => q.id);
+      const passed = wrong.length === 0, tries = (prev.tries || 0) + 1;
+      days[today] = { j: job.id, ok: passed, tries, score: qs.length - wrong.length, of: qs.length };
+      if (passed) days[today].at = _jobLogNowLabel();
+      t.update(userRef, { jobLog: { days } });
+      res = { ok: true, passed, wrong, total: qs.length, tries, triesLeft: Math.max(0, s.attempts - tries), at: days[today].at || "" };
+    });
+  } catch (e) { return _jobLogFail(e); }
+  return res || { ok: false, error: "Something went wrong. Please try again." };
 }
 
 /* ===================== Side hustles =====================

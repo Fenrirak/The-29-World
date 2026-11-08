@@ -1,6 +1,9 @@
 let CURRENT, IS_TEACHER, CLASS_CODE;
 let EDITING_SIDE_HUSTLE_ID = null;
 let JOBS_CACHE = [];
+let ADD_LOG = null, EDIT_LOG = null; // log-type settings held by the create / edit forms
+let LOG_CTX = null;                  // student's latest { me, cls }, repainted as the check-in window moves
+let QUIZ = null;                     // the open daily-questions dialog
 
 /* ── Avatar helpers (also in teacher.js / student.js — duplicated here
       since jobs.html loads only the data-*.js files + jobs.js) ────────────────── */
@@ -90,6 +93,7 @@ function renderTeacherView(cls, students) {
   renderPayDay(cls);
   renderSideHustles(cls, students);
   renderJobsGrid(cls, students);
+  renderLogTracker(cls, students);
   renderApplications(cls, students);
 }
 
@@ -309,6 +313,7 @@ function buildJobCard(j, jobStudents) {
       <div>
         <h3 class="job-family-title">${icon("briefcase", 16)} ${escapeHtml(j.title)}</h3>
         <div class="job-family-auto muted-small">${autoLabel}</div>
+        <div class="job-family-log"><span class="badge navy">${JOB_LOG_TYPES[jobLogType(j)]}</span><span class="muted-small">${escapeHtml(jobLogSummary(j))}</span></div>
       </div>
       <div class="job-family-actions">
         <button class="btn small secondary" onclick="openEditModal('${j.id}')">Edit</button>
@@ -350,6 +355,8 @@ let ADD_TIERS = [{ id: "", name: "", wage: "", description: "" }];
 function initAddForm() {
   ADD_TIERS = [{ id: "", name: "", wage: "", description: "" }];
   renderAddTiers();
+  ADD_LOG = newLogState(null);
+  renderLogBox("add");
 }
 
 function renderAddTiers() {
@@ -429,12 +436,14 @@ async function submitAddJob() {
 
   const validTiers = ADD_TIERS.filter(t => t.name.trim());
   if (validTiers.length === 0) { alert("Please name at least one tier."); return; }
+  let logData;
+  try { logData = readLogForm("add"); } catch (e) { alert(e.message); return; }
 
   const btn = document.getElementById("addJobBtn");
   btn.disabled = true;
   btn.textContent = "Adding…";
   try {
-    await addJob(CLASS_CODE, title, validTiers, weeks);
+    await addJob(CLASS_CODE, title, validTiers, weeks, logData.logType, logData.log);
     document.getElementById("addJobTitle").value     = "";
     document.getElementById("addJobAutoWeeks").value = "0";
     initAddForm();
@@ -459,6 +468,8 @@ function openEditModal(jobId) {
   document.getElementById("editJobTitle").value     = j.title;
   document.getElementById("editJobAutoWeeks").value = j.autoPromoteWeeks || 0;
   renderEditTiers();
+  EDIT_LOG = newLogState(j);
+  renderLogBox("edit");
   document.getElementById("editModal").classList.remove("hidden");
   document.getElementById("editModalMsg").textContent = "";
 }
@@ -501,12 +512,14 @@ async function saveEditJob() {
     description: t.description || ""
   }));
   if (validTiers.length === 0) { showEditMsg("Need at least one named tier.", "error"); return; }
+  let logData;
+  try { logData = readLogForm("edit"); } catch (e) { showEditMsg(e.message, "error"); return; }
 
   const btn = document.getElementById("saveEditBtn");
   btn.disabled    = true;
   btn.textContent = "Saving…";
   try {
-    await updateJob(CLASS_CODE, EDIT_JOB_ID, { title, tiers: validTiers, autoPromoteWeeks: weeks });
+    await updateJob(CLASS_CODE, EDIT_JOB_ID, { title, tiers: validTiers, autoPromoteWeeks: weeks, logType: logData.logType, log: logData.log });
     showEditMsg("Saved!", "success");
     setTimeout(closeEditModal, 900);
     await render();
@@ -581,6 +594,7 @@ async function declineApp(appId) {
 ══════════════════════════════════════════════════════════════════════ */
 async function renderStudentView(me, cls) {
   renderMyJob(me, cls);
+  renderJobLog(me, cls);
   renderWageTax(cls);
   renderPayslips(me, cls);
   renderJobBoard(me, cls);
@@ -702,6 +716,7 @@ function payslipHtml(p, latest = false) {
     <section class="ps-breakdown" style="padding-top:20px" aria-label="Pay breakdown">
       <h3>How your pay adds up</h3>
       <div class="ps-section">Earnings</div>
+      ${p.attendance ? line(`Wage ${fmtMoney(p.fullWage)} × ${p.attendance.done}/${p.attendance.expected} days logged`, "", "sub") : ""}
       ${line("Pay before tax", fmtMoney(p.gross))}
       <div class="ps-section">Deductions</div>
       ${line("Income tax (PAYE)", p.tax > 0 ? "−" + fmtMoney(p.tax) : fmtMoney(0), p.tax > 0 ? "ps-debit" : "")}
@@ -720,14 +735,17 @@ function renderPayslips(me, cls) {
   let next = "";
   const job = me.jobId ? (cls.jobs || []).find(j => j.id === me.jobId) : null;
   if (job && cls.payDay) {
-    const est = wageCreditEstimate(cls, me);
+    const lt = jobLogType(job), att = wageAttendance(cls, me);
+    const est = wageCreditEstimate(cls, me, att);
     const approved = isJobTaskApprovedThisWeek(me, cls);
+    const payNote = lt === "tasks" ? (approved ? "This week's job task is approved." : "Your teacher still needs to approve this week's job task.")
+      : `Paid automatically: your wage (${fmtMoney(est.fullWage)}) × days logged ÷ days possible. You've logged ${att.done} of ${att.expected} so far, so ${att.done}/${att.expected} of your wage.`;
     const paidToday = me.lastWagePaid === nzDateKey();
-    if (est.gross > 0 && !paidToday) {
+    if ((est.gross > 0 || att) && !paidToday) {
       next = `<aside class="ps-upcoming" aria-label="Next pay estimate">
         <div class="ps-upcoming-main"><div><span class="ps-kicker">Next pay estimate</span><strong>${escapeHtml(DAY_FULL[cls.payDay] || cls.payDay)}</strong></div>
         <div class="ps-upcoming-amount"><strong>${fmtMoney(est.net)}</strong><span>estimated take-home</span></div></div>
-        <p>${fmtMoney(est.gross)} before tax. ${approved ? "This week's job task is approved." : "Your teacher still needs to approve this week's job task."}</p>
+        <p>${fmtMoney(est.gross)} before tax. ${payNote}</p>
       </aside>`;
     }
   }
@@ -783,6 +801,7 @@ function renderJobBoard(me, cls) {
         `).join("")}
       </div>
       ${j.autoPromoteWeeks > 0 ? `<p class="muted-small" style="margin:10px 0 0;">${icon("repeat", 11)} Auto-promotes every ${j.autoPromoteWeeks} week${j.autoPromoteWeeks === 1 ? "" : "s"}</p>` : ""}
+      <p class="muted-small" style="margin:10px 0 0;">${escapeHtml(jobLogSummary(j))}</p>
       <div class="job-board-footer">
         ${isMine
           ? `<span class="muted-small">You work here — starting pay: ${fmtMoney(tiers[0] ? tiers[0].wage : 0)}/pay day</span>`
@@ -922,5 +941,302 @@ async function respondPromotionPopup(accept) {
   if (overlay) overlay.remove();
   await render();
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   JOB LOGS: teacher settings, pay-cycle tracker, student check-in / questionnaire
+══════════════════════════════════════════════════════════════════════ */
+const LOG_TYPE_INFO = [
+  { key: "tasks",   name: "Tasks",         desc: "You tick off each student's job task once per pay cycle." },
+  { key: "checkin", name: "Check-ins",     desc: "Students check in during a time window you set." },
+  { key: "quiz",    name: "Questionnaire", desc: "Students answer your questions correctly once a day." }
+];
+const jlPlural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+function jlDur(m) { return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? " " + (m % 60) + "m" : ""}` : `${m} min`; }
+function jobLogDateLabel(key) { return new Date(dateKeyToUTC(key)).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }); }
+function mins2time(m) { return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); }
+function time2mins(v) { const m = /^(\d{1,2}):(\d{2})/.exec(v || ""); return m ? Math.min(1435, (+m[1]) * 60 + (+m[2])) : null; }
+
+function jobLogSummary(job) {
+  const type = jobLogType(job), s = jobLogSettings(job);
+  if (type === "tasks") return "The teacher ticks off the job task each pay cycle.";
+  const win = s.windowOn ? `${jobLogTimeLabel(s.startMin)} to ${jobLogTimeLabel(s.startMin + s.winMins)}` : "";
+  const weekly = s.freq === "weekly", dl = jobLogDaysLabel(s.days);
+  const need = weekly ? "Paid in full once done that week." : `Paid automatically for the days logged (3 of ${s.days.length} days = 3/${s.days.length} of the wage).`;
+  if (type === "checkin") return `Check in ${weekly ? "once a week, on any of " + dl : dl}${win ? `, ${win}` : ""}. ${need}`;
+  const n = s.questions.length, asked = s.perDay > 0 && s.perDay < n ? s.perDay : n;
+  return `${jlPlural(asked, "question")} ${weekly ? "once a week" : "a day"}${n > asked ? ` from a pool of ${n}` : ""}, ${weekly ? "any of " : ""}${dl}${win ? `, ${win}` : ""}. ${need}`;
+}
+
+/* The week at a glance: one small box per day of the pay cycle. */
+function jlDotsHtml(st) {
+  return `<div class="jl-dots" role="list" aria-label="This pay cycle">${st.days.map(d => {
+    const cl = [d.done ? "done" : "", !d.active && !d.done ? "off" : "", d.active && d.past && !d.done ? "missed" : "", d.today ? "today" : ""].filter(Boolean).join(" ");
+    const lab = JOB_LOG_DAY_FULL[d.day] + (d.done ? ", done" : !d.active ? ", no log" : d.past ? ", missed" : d.today ? ", today" : "");
+    return `<span class="jl-dot ${cl}" role="listitem" title="${lab}" aria-label="${lab}">${d.day.slice(0, 2)}</span>`;
+  }).join("")}</div>`;
+}
+
+/* ── Teacher: log settings inside the create / edit forms ──────────── */
+function logState(prefix) { return prefix === "add" ? ADD_LOG : EDIT_LOG; }
+function newLogState(job) {
+  const s = jobLogSettings(job || {});
+  return {
+    type: jobLogType(job), days: s.days.slice(), freq: s.freq, startMin: s.startMin, winMins: s.winMins,
+    windowOn: s.windowOn, attempts: s.attempts, perDay: s.perDay,
+    questions: s.questions.map(q => q.type === "text"
+      ? { id: q.id, type: "text", prompt: q.prompt, options: ["", ""], correct: 0, answersText: (q.answers || []).join("\n") }
+      : { id: q.id, type: "choice", prompt: q.prompt, options: q.options.slice(), correct: q.correct, answersText: "" })
+  };
+}
+function blankQuestion() { return { id: "", type: "choice", prompt: "", options: ["", "", ""], correct: 0, answersText: "" }; }
+
+function renderLogBox(prefix) {
+  const el = document.getElementById(prefix === "add" ? "addLogBox" : "editLogBox"), st = logState(prefix);
+  if (!el || !st) return;
+  const p = `'${prefix}'`;
+  const types = LOG_TYPE_INFO.map(t => `<button type="button" class="jl-type${st.type === t.key ? " on" : ""}" role="radio" aria-checked="${st.type === t.key}" onclick="setLogType(${p},'${t.key}')"><strong>${t.name}</strong><span>${t.desc}</span></button>`).join("");
+  const body = st.type === "tasks"
+    ? `<p class="muted-small" style="margin:12px 0 0;">Each pay cycle you tick off the student's job task, on your Dashboard or in the pay cycle list on this page. Students have nothing to log.</p>`
+    : logSettingsHtml(prefix, st);
+  el.innerHTML = `<div class="jl-box"><div class="jl-title">How students log their work</div><div class="jl-types" role="radiogroup" aria-label="Log type">${types}</div>${body}</div>`;
+}
+
+function logSettingsHtml(prefix, st) {
+  const p = `'${prefix}'`, isQuiz = st.type === "quiz", weekly = st.freq === "weekly";
+  const chip1 = (on, label, f) => `<button type="button" class="jl-chip${on ? " on" : ""}" aria-pressed="${on}" onclick="setLogFreq(${p},'${f}')">${label}</button>`;
+  const chips = JOB_LOG_DAY_KEYS.map(d => `<button type="button" class="jl-chip${st.days.includes(d) ? " on" : ""}" aria-pressed="${st.days.includes(d)}" title="${JOB_LOG_DAY_FULL[d]}" onclick="toggleLogDay(${p},'${d}')">${d}</button>`).join("");
+  const num = (label, field, min, max, val, hint) => `<div><label>${label}</label><input type="number" min="${min}" max="${max}" step="1" value="${val}" oninput="setLogNum(${p},'${field}',this.value)">${hint ? `<span class="muted-small">${hint}</span>` : ""}</div>`;
+  const windowFields = (!isQuiz || st.windowOn) ? `<div class="jl-grid">
+      <div><label>${isQuiz ? "Opens at" : "Check-in opens at"}</label><input type="time" value="${mins2time(st.startMin)}" oninput="setLogTime(${p},this.value)"></div>
+      ${num("Open for (minutes)", "winMins", 5, 240, st.winMins, "")}
+    </div>` : "";
+  return `<div class="jl-grid">
+      <div class="jl-span"><label>${weekly ? "Days students can log on (they pick one)" : "Days it runs"}</label><div class="jl-chips">${chips}</div></div>
+      <div class="jl-span"><label>How often</label><div class="jl-chips">${chip1(!weekly, "Every day it runs", "daily")}${chip1(weekly, "Once a week", "weekly")}</div>
+        <span class="muted-small">${weekly ? "Students log once per pay cycle, on any one of the days above, and are paid in full for it." : "Pay is automatic on pay day: wage × days logged ÷ days it runs (e.g. 3 of 5 days = 3/5 of the wage). No teacher tick needed."}</span></div>
+      ${isQuiz ? num("Attempts per day", "attempts", 1, 5, st.attempts, "Tries a student gets to answer everything right.") : ""}
+      ${isQuiz ? num("Questions asked per day", "perDay", 0, 30, st.perDay, "0 asks every question. Otherwise each student gets a random set from your pool.") : ""}
+    </div>
+    ${isQuiz ? `<label class="jl-check"><input type="checkbox" ${st.windowOn ? "checked" : ""} onchange="setLogWindowOn(${p},this.checked)"> Only allow the questionnaire within a time window</label>` : ""}
+    ${windowFields}
+    ${isQuiz ? questionsHtml(prefix, st) : `<p class="muted-small" style="margin:12px 0 0;">Students check in on the Jobs page. A check-in only counts inside the window, in New Zealand time.</p>`}`;
+}
+
+function questionsHtml(prefix, st) {
+  const p = `'${prefix}'`;
+  const rows = st.questions.map((q, i) => {
+    const detail = q.type === "choice" ? `
+      <label>Answer choices. Select the correct one.</label>
+      ${q.options.map((o, oi) => `<div class="jl-opt"><input type="radio" name="jlq-${prefix}-${i}" ${q.correct === oi ? "checked" : ""} aria-label="Correct answer" onchange="setQuestionCorrect(${p},${i},${oi})"><input type="text" maxlength="100" value="${escapeHtml(o)}" placeholder="Choice ${oi + 1}" oninput="setQuestionOption(${p},${i},${oi},this.value)">${q.options.length > 2 ? `<button type="button" class="btn small secondary" onclick="removeQuestionOption(${p},${i},${oi})">Remove</button>` : ""}</div>`).join("")}
+      ${q.options.length < 6 ? `<button type="button" class="btn small secondary" onclick="addQuestionOption(${p},${i})">Add choice</button>` : ""}`
+      : `<label>Accepted answers, one per line</label>
+      <textarea rows="3" placeholder="e.g. Wellington" oninput="setQuestionField(${p},${i},'answersText',this.value)">${escapeHtml(q.answersText)}</textarea>
+      <p class="muted-small" style="margin:6px 0 0;">Capital letters, punctuation and extra spaces are ignored. List any other spellings you would accept.</p>`;
+    return `<div class="tier-form-row">
+      <div class="tier-form-row-header"><span class="tier-form-badge">${i + 1}</span><span class="tier-form-label">Question ${i + 1}</span>
+        <select class="jl-qtype" aria-label="Question type" onchange="setQuestionType(${p},${i},this.value)"><option value="choice"${q.type === "choice" ? " selected" : ""}>Multiple choice</option><option value="text"${q.type === "text" ? " selected" : ""}>Short answer</option></select>
+        <button type="button" class="btn small coral" onclick="removeQuestion(${p},${i})">Remove</button></div>
+      <label style="margin-top:0;">Question</label>
+      <input type="text" maxlength="200" value="${escapeHtml(q.prompt)}" placeholder="e.g. What is the capital of New Zealand?" oninput="setQuestionField(${p},${i},'prompt',this.value)">
+      ${detail}</div>`;
+  }).join("");
+  return `<div class="jl-title" style="margin-top:22px;">Questions</div>${rows}
+    <button type="button" class="btn small secondary" onclick="addQuestion(${p})">Add question</button>`;
+}
+
+function setLogType(prefix, type) { const st = logState(prefix); st.type = type; if (type === "quiz" && !st.questions.length) st.questions.push(blankQuestion()); renderLogBox(prefix); }
+function setLogFreq(prefix, f) { logState(prefix).freq = f === "weekly" ? "weekly" : "daily"; renderLogBox(prefix); }
+function toggleLogDay(prefix, d) {
+  const st = logState(prefix), has = st.days.includes(d);
+  if (has && st.days.length === 1) return;
+  st.days = JOB_LOG_DAY_KEYS.filter(x => x === d ? !has : st.days.includes(x));
+  renderLogBox(prefix);
+}
+function setLogNum(prefix, field, v) { logState(prefix)[field] = v; }
+function setLogTime(prefix, v) { const m = time2mins(v); if (m !== null) logState(prefix).startMin = m; }
+function setLogWindowOn(prefix, on) { logState(prefix).windowOn = !!on; renderLogBox(prefix); }
+function addQuestion(prefix) { logState(prefix).questions.push(blankQuestion()); renderLogBox(prefix); }
+function removeQuestion(prefix, i) { logState(prefix).questions.splice(i, 1); renderLogBox(prefix); }
+function setQuestionField(prefix, i, f, v) { logState(prefix).questions[i][f] = v; }
+function setQuestionType(prefix, i, v) { logState(prefix).questions[i].type = v; renderLogBox(prefix); }
+function setQuestionOption(prefix, i, oi, v) { logState(prefix).questions[i].options[oi] = v; }
+function setQuestionCorrect(prefix, i, oi) { logState(prefix).questions[i].correct = oi; }
+function addQuestionOption(prefix, i) { logState(prefix).questions[i].options.push(""); renderLogBox(prefix); }
+function removeQuestionOption(prefix, i, oi) {
+  const q = logState(prefix).questions[i];
+  q.options.splice(oi, 1);
+  if (q.correct === oi) q.correct = 0; else if (q.correct > oi) q.correct--;
+  renderLogBox(prefix);
+}
+
+// Checks the form and returns what addJob / updateJob expect. Throws a readable message if something's missing.
+function readLogForm(prefix) {
+  const st = logState(prefix);
+  if (!st || st.type === "tasks") return { logType: "tasks", log: null };
+  const days = JOB_LOG_DAY_KEYS.filter(d => st.days.includes(d));
+  const log = { days, freq: st.freq === "weekly" ? "weekly" : "daily", startMin: _jlInt(st.startMin, 0, 1435, 540),
+                winMins: _jlInt(st.winMins, 5, 240, 15), windowOn: st.type === "checkin" ? true : !!st.windowOn };
+  if (st.type === "quiz") {
+    if (!st.questions.length) throw new Error("Add at least one question.");
+    log.questions = st.questions.map((q, i) => {
+      const n = i + 1, prompt = q.prompt.trim();
+      if (!prompt) throw new Error(`Question ${n} needs some text.`);
+      if (q.type === "text") {
+        const answers = q.answersText.split("\n").map(a => a.trim()).filter(Boolean);
+        if (!answers.length) throw new Error(`Question ${n} needs at least one accepted answer.`);
+        return { id: q.id || uid("q"), type: "text", prompt, answers };
+      }
+      const options = q.options.map(o => o.trim());
+      if (options.filter(Boolean).length < 2) throw new Error(`Question ${n} needs at least two answer choices.`);
+      if (!options[q.correct]) throw new Error(`Question ${n}: select which choice is correct.`);
+      return { id: q.id || uid("q"), type: "choice", prompt, options, correct: q.correct };
+    });
+    log.attempts = _jlInt(st.attempts, 1, 5, 2);
+    log.perDay = _jlInt(st.perDay, 0, log.questions.length, 0);
+  }
+  return { logType: st.type, log };
+}
+
+/* ── Teacher: who has met their requirement this pay cycle ─────────── */
+function renderLogTracker(cls, students) {
+  const box = document.getElementById("logTrackerBox"), hint = document.getElementById("logTrackerHint");
+  if (!box) return;
+  const keys = jobLogCycleKeys(cls), jobs = cls.jobs || [];
+  if (hint) hint.textContent = `${jobLogDateLabel(keys[0])} to ${jobLogDateLabel(keys[6])}. Pay day is ${JOB_LOG_DAY_FULL[cls.payDay || "Fri"] || "set above"}.`;
+  const rows = students.filter(s => s.role !== "teacher" && jobs.some(j => j.id === s.jobId))
+    .sort((a, b) => jobs.findIndex(j => j.id === a.jobId) - jobs.findIndex(j => j.id === b.jobId) || String(a.name || a.username).localeCompare(String(b.name || b.username)));
+  box.innerHTML = rows.length ? rows.map(s => trackerRowHtml(s, jobs.find(j => j.id === s.jobId), cls)).join("")
+    : `<p class="muted-small">No students have a job yet.</p>`;
+}
+function trackerRowHtml(s, job, cls) {
+  const type = jobLogType(job), st = jobLogStatus(s, job, cls), u = escapeJsAttr(s.username);
+  let line, badge = "", action = "", dots = "";
+  if (type === "tasks") {
+    line = st.ticked ? "Job task ticked off" : "Job task not ticked off yet";
+    badge = st.ticked ? `<span class="badge mint">Done</span>` : "";
+    action = `<button class="btn small ${st.ticked ? "secondary" : "mint"}" onclick="setTaskTick('${u}', ${!st.ticked})">${st.ticked ? "Undo" : "Tick off"}</button>`;
+  } else {
+    const t = st.today, unit = type === "checkin" ? "check-ins" : "days passed";
+    const todayTxt = !t || !t.active ? "no log today"
+      : t.done ? (type === "checkin" ? `checked in ${t.at}` : "passed today")
+      : type === "checkin" ? "not checked in yet today"
+      : t.tries ? `not passed today (${jlPlural(t.tries, "attempt")})` : "not attempted yet today";
+    line = `${st.done} of ${st.expected} ${unit} (${Math.round(st.fraction * 100)}% of wage), ${todayTxt}`;
+    dots = jlDotsHtml(st);
+    badge = st.met ? `<span class="badge mint">Full pay</span>` : !st.reachable ? `<span class="badge coral">${st.done ? "Part pay" : "Missed"}</span>` : "";
+  }
+  return `<div class="auto-row">
+    <div class="auto-details"><strong>${escapeHtml(s.name || s.username)}</strong> <span class="muted-small">${escapeHtml(job.title)}</span>
+      <div class="muted-small">${escapeHtml(line)}</div></div>
+    <div class="jl-track-right">${dots}${badge}${action}</div></div>`;
+}
+async function setTaskTick(username, on) { await setJobTaskApproval(CLASS_CODE, username, on); await render(); }
+
+/* ── Student: check-in / questionnaire card ────────────────────────── */
+function renderJobLog(me, cls) { LOG_CTX = { me, cls }; paintJobLog(); }
+function paintJobLog() {
+  const card = document.getElementById("jobLogCard"), box = document.getElementById("jobLogBox");
+  if (!card || !box || !LOG_CTX) return;
+  const { me, cls } = LOG_CTX;
+  const job = me.jobId ? (cls.jobs || []).find(j => j.id === me.jobId) : null;
+  card.classList.toggle("hidden", !job);
+  if (!job) return;
+  const type = jobLogType(job), st = jobLogStatus(me, job, cls), s = jobLogSettings(job);
+  const payDayName = JOB_LOG_DAY_FULL[cls.payDay || "Fri"] || "pay day";
+  document.getElementById("hJobLog").textContent = type === "checkin" ? "Daily check-in" : type === "quiz" ? "Daily questions" : "Job log";
+  if (type === "tasks") {
+    box.innerHTML = `<p class="muted-small" style="margin:0 0 12px;">Your teacher ticks off your job task once each pay cycle. Your wage is paid on ${payDayName} once it has been ticked off.</p>
+      <span class="badge ${st.ticked ? "mint" : "navy"}">${st.ticked ? "Ticked off for this pay cycle" : "Not ticked off yet"}</span>`;
+    return;
+  }
+  const w = jobLogWindowState(job), t = st.today, weekly = s.freq === "weekly";
+  const winTxt = s.windowOn ? ` between ${jobLogTimeLabel(s.startMin)} and ${jobLogTimeLabel(s.startMin + s.winMins)}` : "";
+  const intro = type === "checkin" ? `Check in${winTxt}, ${weekly ? "once a week, on any of " : ""}${jobLogDaysLabel(s.days)}.`
+    : `Answer ${s.perDay > 0 && s.perDay < s.questions.length ? jlPlural(s.perDay, "question") : "all the questions"} correctly${winTxt}, ${weekly ? "once a week, on any of " : ""}${jobLogDaysLabel(s.days)}.`;
+  const triesLeft = Math.max(0, s.attempts - (t ? t.tries : 0));
+  let head, sub = "", btn = "";
+  if (t && t.done) { head = type === "checkin" ? "You've checked in today" : "Today's questions are done"; sub = t.at ? `Counted at ${t.at}.` : "Counted for today."; }
+  else if (weekly && st.done > 0) { head = "You're done for this week"; sub = "Your weekly log is counted."; }
+  else if (w.state === "off") { head = "Nothing to do today"; sub = `The log runs ${jobLogDaysLabel(s.days)}.`; }
+  else if (w.state === "early") { head = `Opens at ${jobLogTimeLabel(s.startMin)}`; sub = `In ${jlDur(w.opensIn)}.`; }
+  else if (w.state === "closed") { head = "Today's window has closed"; sub = type === "checkin" ? "You missed today's check-in." : "Today wasn't completed in time."; }
+  else if (type === "checkin") { head = "Check-in is open"; sub = w.closesIn != null ? `Closes in ${jlDur(w.closesIn)}.` : ""; btn = `<button class="btn gold" type="button" onclick="doLogCheckin(this)">Check in now</button>`; }
+  else if (!s.questions.length) { head = "No questions yet"; sub = "Your teacher hasn't added any questions."; }
+  else if (!triesLeft) { head = "No attempts left today"; sub = "Come back tomorrow for a fresh set."; }
+  else { head = "Today's questions are ready"; sub = `${jlPlural(triesLeft, "attempt")} left${w.closesIn != null ? `, closes in ${jlDur(w.closesIn)}` : ""}.`; btn = `<button class="btn gold" type="button" onclick="openLogQuiz()">${t && t.tries ? "Try again" : "Start questions"}</button>`; }
+  const unit = type === "checkin" ? "check-ins" : "days", pct = Math.round(st.fraction * 100);
+  const req = weekly
+    ? (st.done ? `Your weekly log is done, so you'll be paid in full on ${payDayName}.` : `Log once this pay cycle to be paid on ${payDayName}. No log means no pay.` + (st.reachable ? "" : " There are no log days left this cycle."))
+    : `${st.done} of ${st.expected} ${unit} logged this pay cycle. You're paid automatically on ${payDayName}: your wage × days logged ÷ ${st.expected} (${st.done}/${st.expected} = ${pct}% so far). Days you miss aren't paid. No teacher tick needed.`;
+  box.innerHTML = `<p class="muted-small" style="margin:0;">${escapeHtml(intro)}</p>
+    <div class="jl-now"><div class="jl-now-text"><strong>${escapeHtml(head)}</strong>${sub ? `<span class="muted-small">${escapeHtml(sub)}</span>` : ""}</div>${btn}</div>
+    ${jlDotsHtml(st)}<p class="muted-small jl-req">${escapeHtml(req)}</p>`;
+}
+
+async function doLogCheckin(btn) {
+  if (btn) btn.disabled = true;
+  const msg = document.getElementById("jobLogMsg");
+  const res = await jobLogCheckin(CURRENT.username, CLASS_CODE);
+  if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`; await render(); return; }
+  await render();
+  flashMsg(msg, `<div class="success-msg">You're checked in at ${escapeHtml(res.at)}.</div>`, 6000);
+}
+
+/* Questionnaire dialog */
+function openLogQuiz() {
+  if (!LOG_CTX) return;
+  const { me, cls } = LOG_CTX, job = (cls.jobs || []).find(j => j.id === me.jobId);
+  if (!job) return;
+  const view = jobQuizView(job, CURRENT.username, nzDateKey());
+  if (!view.length) return;
+  const st = jobLogStatus(me, job, cls), s = jobLogSettings(job);
+  QUIZ = { view, answers: {}, wrong: [], msg: "", done: false, busy: false, triesLeft: Math.max(0, s.attempts - (st.today ? st.today.tries : 0)) };
+  document.getElementById("logQuizModal").classList.remove("hidden");
+  renderLogQuiz();
+}
+function closeLogQuiz() { document.getElementById("logQuizModal").classList.add("hidden"); QUIZ = null; }
+function setQuizAnswer(id, val, el) {
+  if (!QUIZ) return;
+  QUIZ.answers[id] = val;
+  if (el && el.type === "radio") el.closest(".quiz-question").querySelectorAll(".quiz-option").forEach(o => o.classList.toggle("chosen", o.querySelector("input").checked));
+}
+function renderLogQuiz() {
+  const body = document.getElementById("logQuizBody");
+  if (!body || !QUIZ) return;
+  const q = QUIZ;
+  const qs = q.view.map((item, n) => {
+    const bad = q.wrong.includes(item.id), id = escapeJsAttr(item.id), cur = q.answers[item.id];
+    const input = item.type === "text"
+      ? `<input type="text" maxlength="120" autocomplete="off" placeholder="Type your answer" value="${escapeHtml(cur || "")}" ${q.done ? "disabled" : ""} oninput="setQuizAnswer('${id}', this.value, this)">`
+      : item.options.map(o => { const on = cur !== undefined && String(cur) === String(o.i);
+          return `<label class="quiz-option${on ? " chosen" : ""}"><input type="radio" name="lq-${escapeHtml(item.id)}" ${on ? "checked" : ""} ${q.done ? "disabled" : ""} onchange="setQuizAnswer('${id}', ${o.i}, this)"><span>${escapeHtml(o.text)}</span></label>`; }).join("");
+    return `<div class="quiz-question${bad ? " jl-wrong" : ""}"><p class="qtext">${n + 1}. ${escapeHtml(item.prompt)}</p>${input}${bad ? `<p class="jl-q-note">Not quite. Have another look.</p>` : ""}</div>`;
+  }).join("");
+  body.innerHTML = `${q.done ? "" : `<p class="muted-small" style="margin:0 0 14px;">Answer every question correctly to count today. ${jlPlural(q.triesLeft, "attempt")} left.</p>`}${qs}${q.msg}
+    <div style="margin-top:14px;">${q.done ? `<button class="btn" type="button" onclick="closeLogQuiz()">Close</button>` : `<button class="btn gold" type="button" onclick="submitLogQuiz()"${q.busy ? " disabled" : ""}>Submit answers</button>`}</div>`;
+}
+async function submitLogQuiz() {
+  const q = QUIZ;
+  if (!q || q.busy) return;
+  if (q.view.some(item => { const a = q.answers[item.id]; return a === undefined || String(a).trim() === ""; })) {
+    q.msg = `<div class="error-msg">Answer every question before you submit.</div>`; renderLogQuiz(); return;
+  }
+  q.busy = true; q.msg = ""; renderLogQuiz();
+  const res = await jobQuizSubmit(CURRENT.username, CLASS_CODE, q.answers);
+  q.busy = false;
+  if (!res.ok) { q.msg = `<div class="error-msg">${escapeHtml(res.error)}</div>`; renderLogQuiz(); return; }
+  q.wrong = res.wrong; q.triesLeft = res.triesLeft;
+  if (res.passed) { q.done = true; q.msg = `<div class="success-msg">All ${res.total} correct. Today's log is counted.</div>`; }
+  else {
+    res.wrong.forEach(id => { delete q.answers[id]; });
+    const got = `${res.total - res.wrong.length} of ${res.total} correct.`;
+    if (res.triesLeft > 0) q.msg = `<div class="error-msg">${got} Fix the marked ${res.wrong.length === 1 ? "question" : "questions"} and submit again. ${jlPlural(res.triesLeft, "attempt")} left.</div>`;
+    else { q.done = true; q.msg = `<div class="error-msg">${got} You're out of attempts for today. Try again tomorrow.</div>`; }
+  }
+  renderLogQuiz();
+  await render();
+}
+// The check-in window moves with the clock, so keep the card current without a reload.
+setInterval(() => { if (!document.hidden && LOG_CTX) paintJobLog(); }, 20000);
 
 document.addEventListener("DOMContentLoaded", init);

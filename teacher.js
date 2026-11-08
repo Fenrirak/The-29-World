@@ -213,7 +213,7 @@ async function render() {
     tr.dataset.search = ((s.name || "") + " " + (s.username || "")).toLowerCase();
     tr.innerHTML = `
       <td><div class="stack-val student-id-cell">${avatarBadge(s)}<div class="student-id-text">${escapeHtml(s.name)}<span class="presence-dot" data-user="${escapeHtml(s.username)}" title="Offline"></span><div class="muted-small">@${escapeHtml(s.username)}</div></div></div></td>
-      <td><div class="stack-val">${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${isJobTaskApprovedThisWeek(s, cls) ? `Task ✓` : `Task ✗`}</div>`; })() : ""}</div></td>
+      <td><div class="stack-val">${jobSelectHtml(cls, s)}${s.jobId ? (() => { const _j = (cls.jobs || []).find(jj => jj.id === s.jobId); const _t = _j ? getStudentTier(_j, s) : null; return `<div class="muted-small">${_t ? `<span class="tier-micro-badge">${escapeHtml(_t.name)}</span> ` : ""}${_j && jobLogType(_j) !== "tasks" ? (a => `Logged ${a.done}/${a.expected}`)(wageAttendance(cls, s)) : isJobTaskApprovedThisWeek(s, cls) ? `Task ✓` : `Task ✗`}</div>`; })() : ""}</div></td>
       <td><div class="stack-val"><strong>${fmtMoney(s.balance)}</strong></div></td>
       <td><div class="stack-val">${lifestyleByUser[s.username]}${lifestyleBandByUser[s.username] ? `<div class="muted-small">${lifestyleBandByUser[s.username]}</div>` : ""}</div></td>
       <td><div class="stack-val">${fmtMoney(netByUser[s.username] || 0)}</div></td>
@@ -858,18 +858,19 @@ async function saveLifestyle() {
 
 async function runPayDay() {
   const runStart = Date.now() - 1000;
-  const { newlyPaid, hasJobs, unapprovedCount } = await payDay(CLASS_CODE);
+  const { newlyPaid, hasJobs, unapprovedCount, noLogCount = 0 } = await payDay(CLASS_CODE);
+  const noLogNote = noLogCount ? ` ${noLogCount} student(s) logged no days this pay cycle, so earned no pay.` : "";
   if (newlyPaid > 0) await t29NotifyRunPayments(CLASS_CODE, runStart, "payday");
   if (!hasJobs) {
     alert("No students have a job assigned yet.");
   } else if (newlyPaid > 0 && unapprovedCount > 0) {
     alert(`Pay day complete — ${newlyPaid} student(s) paid. ${unapprovedCount} still aren't ticked as having done their job task, so they weren't paid.`);
   } else if (newlyPaid > 0) {
-    alert(`Pay day complete — ${newlyPaid} student(s) paid.`);
+    alert(`Pay day complete — ${newlyPaid} student(s) paid.${noLogNote}`);
   } else if (unapprovedCount > 0) {
     alert(`Nobody was paid — ${unapprovedCount} student(s) with a job aren't ticked as having done their job task yet. Tick their box on the student's profile, then run pay day again.`);
   } else {
-    alert("Everyone with a job has already been paid for today.");
+    alert(noLogCount ? `Everyone who earned pay has been paid.${noLogNote}` : "Everyone with a job has already been paid for today.");
   }
   await render();
 }
@@ -879,9 +880,11 @@ async function markAllJobTasksDone() {
   const btn = document.getElementById("markAllJobsBtn");
   if (btn.disabled) return;
   const cls = await getClassCached(CLASS_CODE);
-  const targets = LAST_STUDENTS.filter(s => s.jobId && !isJobTaskApprovedThisWeek(s, cls));
-  const withJobs = LAST_STUDENTS.filter(s => s.jobId).length;
-  if (!withJobs) { alert("No students have a job assigned yet."); return; }
+  // Check-in and questionnaire jobs are paid automatically by days logged, so only task jobs get a tick.
+  const isTaskJob = s => { const j = (cls.jobs || []).find(x => x.id === s.jobId); return !!j && jobLogType(j) === "tasks"; };
+  const targets = LAST_STUDENTS.filter(s => isTaskJob(s) && !isJobTaskApprovedThisWeek(s, cls));
+  const withJobs = LAST_STUDENTS.filter(isTaskJob).length;
+  if (!withJobs) { alert("No students have a task-based job. Check-in and questionnaire jobs are paid automatically."); return; }
   if (!targets.length) { alert("Everyone with a job is already ticked as done for this pay cycle."); return; }
   if (!await t29Confirm(`Mark this week's job task as done for ${targets.length} student${targets.length === 1 ? "" : "s"}?`)) return;
   btn.disabled = true;
@@ -1193,6 +1196,9 @@ async function renderProfile(username) {
   rows.push(`<h4>${icon("briefcase", 16)} This week\'s job task</h4>`);
   if (!job) {
     rows.push(`<p class="muted-small">No job assigned — nothing to approve.</p>`);
+  } else if (jobLogType(job) !== "tasks") {
+    const a = wageAttendance(cls, s);
+    rows.push(`<p>Paid automatically on pay day by days logged: <strong>${a.done} of ${a.expected}</strong> so far (${Math.round(a.done / a.expected * 100)}% of the wage). No tick needed.</p>`);
   } else {
     const tierName = tier ? tier.name : job.title;
     rows.push(`
