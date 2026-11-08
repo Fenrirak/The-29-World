@@ -203,7 +203,8 @@ html.casino-unverified:not(.role-teacher) .topbar nav .nav-group[data-nav-group=
 
 /* Student profile modal */
 #profileModal .card{max-width:680px;max-height:88vh;overflow:auto;}
-#profileSubtitle{color:var(--muted);font-size:var(--fs-lg);margin:-6px 0 0;}
+#profileName{display:flex;align-items:center;gap:12px;margin-bottom:8px !important;}
+#profileSubtitle{color:var(--muted);font-size:var(--fs-lg);margin:0;}
 .profile-summary{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px;}
 .profile-chip{flex:1;min-width:110px;background:#f6f8fc;border:1.5px solid var(--line);border-radius:var(--r-3);padding:8px 12px;}
 .profile-chip .label{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:800;margin-bottom:3px;}
