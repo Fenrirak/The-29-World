@@ -99,7 +99,8 @@ function buildModuleSelect() {
 }
 
 async function renderTeacher() {
-  document.getElementById("gateToggle").checked = !!(CLS.quizGate && CLS.quizGate.enabled);
+  paintGateSummary();
+  paintReco();
 
   const quizzes = CLS.quizzes || [];
   const list = document.getElementById("teacherQuizList");
@@ -111,7 +112,8 @@ async function renderTeacher() {
           <h3>${icon("quiz", 18)}${esc(q.title)}</h3>
           ${q.description ? `<p class="muted-small" style="margin:0 0 6px;">${esc(q.description)}</p>` : ""}
           <div class="quiz-meta">
-            <span class="quiz-pill${q.moduleKey ? " coral" : ""}">${icon("lock", 12)}Unlocks: ${esc(moduleLabel(q.moduleKey))}</span>
+            <span class="quiz-pill${q.moduleKey && q.active ? " coral" : ""}">${icon("lock", 12)}${q.moduleKey ? (q.active ? "Locks: " : "Would lock: ") : ""}${esc(moduleLabel(q.moduleKey))}</span>
+            ${q.deadline ? `<span class="quiz-pill${quizDeadlineState(q) === "overdue" ? " coral" : ""}">${icon("hourglass", 12)}Due ${esc(quizDeadlineLabel(q.deadline))}${quizDeadlineState(q) === "overdue" ? " (overdue)" : ""}</span>` : ""}
             <span class="quiz-pill">${icon("check", 12)}Pass mark ${q.passMark}%</span>
             <span class="quiz-pill">${icon("quiz", 12)}${q.questions.length} ${q.questions.length === 1 ? "question" : "questions"}</span>
             ${q.reward > 0 ? `<span class="quiz-pill gold">${icon("coin", 12)}${fmtMoney(q.reward)} bonus</span>` : ""}
@@ -129,6 +131,7 @@ async function renderTeacher() {
 
   // Results table — one row per student, one column per quiz.
   STUDENTS = await getClassStudents(CURRENT.classCode, CLS);
+  paintOverdue();
   const wrap = document.getElementById("resultsWrap");
   const show = quizzes.length > 0 && STUDENTS.length > 0;
   document.getElementById("noResults").classList.toggle("hidden", show);
@@ -141,7 +144,7 @@ async function renderTeacher() {
           <td><strong>${esc(s.name)}</strong></td>
           ${quizzes.map(q => {
             const r = quizResultFor(s, q.id);
-            if (!r) return `<td class="muted-small">Not tried</td>`;
+            if (!r) return `<td class="${quizDeadlineState(q) === "overdue" && q.active ? "ticker-down" : "muted-small"}">${quizDeadlineState(q) === "overdue" && q.active ? "Overdue · not tried" : "Not tried"}</td>`;
             const tone = r.passed ? "ticker-up" : "ticker-down";
             return `<td>
               <span class="${tone}">${r.passed ? "Passed" : "Not yet"} · ${r.bestPct}%</span>
@@ -154,12 +157,105 @@ async function renderTeacher() {
     </table>`;
 }
 
-async function saveGate() {
-  const on = document.getElementById("gateToggle").checked;
-  await setQuizGateEnabled(CURRENT.classCode, on);
-  document.getElementById("gateMsg").innerHTML =
-    `<div class="success-msg">${on ? "Quiz gates are on — modules stay locked until their quiz is passed." : "Quiz gates are off — quizzes are practice only."}</div>`;
+/* ---------------- Unlock gates: summary, bulk switch, overdue ---------------- */
+function paintGateSummary() {
+  const quizzes = CLS.quizzes || [];
+  const locking = quizzes.filter(q => q.active && q.moduleKey);
+  const paused = quizzes.filter(q => !q.active && q.moduleKey);
+  const names = locking.map(q => moduleLabel(q.moduleKey)).join(", ");
+  document.getElementById("gateSummary").innerHTML = quizzes.length ? `
+    <span class="quiz-pill${locking.length ? " coral" : ""}">${icon("lock", 12)}${locking.length} ${locking.length === 1 ? "module" : "modules"} locked by a quiz</span>
+    <span class="quiz-pill">${icon("quiz", 12)}${paused.length} paused</span>
+    ${locking.length ? `<span class="muted-small" style="align-self:center;">${esc(names)}</span>` : ""}` : `<span class="muted-small">No quizzes yet.</span>`;
+  document.getElementById("activateAllBtn").classList.toggle("hidden", !quizzes.some(q => !q.active));
+  document.getElementById("pauseAllBtn").classList.toggle("hidden", !quizzes.some(q => q.active));
+}
+
+async function activateAllQuizzes(on) {
+  const n = (CLS.quizzes || []).filter(q => q.active !== on && q.moduleKey).length;
+  if (on && n && !await t29Confirm(`Activate every quiz? ${n} ${n === 1 ? "module" : "modules"} will lock for students until they pass the quiz attached to it.`)) return;
+  await setAllQuizzesActive(CURRENT.classCode, on);
+  document.getElementById("gateMsg").innerHTML = `<div class="success-msg">${on ? "All quizzes are active — their modules are locked until passed." : "All quizzes are paused — nothing is locked by a quiz."}</div>`;
   await render();
+}
+
+function paintOverdue() {
+  const rows = quizOverdueRows(CLS, STUDENTS);
+  document.getElementById("overdueWrap").innerHTML = rows.map(r => {
+    const n = r.students.length, names = r.students.slice(0, 6).map(s => esc(s.name)).join(", ");
+    return `<div class="qz-overdue">
+      <p><strong>${icon("hourglass", 14)} ${esc(r.quiz.title)}</strong> was due ${esc(quizDeadlineLabel(r.quiz.deadline))}. ${n} ${n === 1 ? "student hasn't" : "students haven't"} passed: ${names}${n > 6 ? ` and ${n - 6} more` : ""}.</p>
+      <button class="btn small coral" type="button" onclick="remindQuiz('${r.quiz.id}')">Remind ${n === 1 ? "them" : "all " + n}</button>
+    </div>`;
+  }).join("");
+}
+
+async function remindQuiz(id) {
+  const res = await remindQuizStudents(CURRENT.classCode, id);
+  document.getElementById("gateMsg").innerHTML = res.ok
+    ? `<div class="success-msg">Reminder sent to ${res.count} ${res.count === 1 ? "student" : "students"}.</div>`
+    : `<div class="error-msg">That quiz couldn't be found.</div>`;
+}
+
+/* ---------------- Recommended quizzes ----------------
+   For a class built from scratch: the same ready-made set the base template ships (one per
+   module), scaled for a full year (4 terms), offered like the recommended bank accounts.
+   Added ones are ordinary quizzes the teacher can edit, pause or remove. Gone once every one has
+   been added; can be dismissed (remembered on this device) and brought back. */
+const QZ_RECO_TERMS = 4;
+const qzRecoKey = () => "t29-qz-reco-dismissed:" + ((CURRENT && CURRENT.classCode) || "");
+function qzRecoDismissed() { try { return localStorage.getItem(qzRecoKey()) === "1"; } catch (e) { return false; } }
+function qzDismissReco(on) {
+  try { if (on) localStorage.setItem(qzRecoKey(), "1"); else localStorage.removeItem(qzRecoKey()); } catch (e) { /* ignore */ }
+  paintReco();
+}
+function qzRecoRemaining() {
+  const have = new Set((CLS.quizzes || []).map(q => String(q.title || "").trim().toLowerCase()));
+  return t29BaseTemplateQuizzes(QZ_RECO_TERMS).filter(r => !have.has(r.title.toLowerCase()));
+}
+function paintReco() {
+  const wrap = document.getElementById("recoWrap");
+  const left = qzRecoRemaining();
+  if (!left.length) { wrap.innerHTML = ""; return; }
+  if (qzRecoDismissed()) {
+    wrap.innerHTML = `<p class="muted-small"><a href="#" onclick="qzDismissReco(false);return false;">Show recommended quizzes</a></p>`;
+    return;
+  }
+  wrap.innerHTML = `<div class="card qz-reco-panel">
+    <div class="qz-reco-head">
+      <h2>${icon("sparkle", 18)} Recommended quizzes</h2>
+      <span class="qz-reco-actions">
+        <button class="btn small gold" type="button" onclick="qzAddAllReco()">+ Add all ${left.length} remaining</button>
+        <button class="btn small secondary" type="button" onclick="qzDismissReco(true)">Dismiss</button>
+      </span>
+    </div>
+    <p class="muted-small">A ready-made financial-literacy quiz for each module, sized for a full year. Add one and it locks that module until students pass it, with a cash bonus for passing. You can edit every question afterwards.</p>
+    <div class="qz-reco-grid">${left.map(r => `
+      <div class="qz-reco-item">
+        <div><strong>${esc(r.title)}</strong><span class="muted-small">${esc(r.description)}</span></div>
+        <div class="quiz-meta" style="margin:0;">
+          <span class="quiz-pill coral">${icon("lock", 12)}${esc(moduleLabel(r.moduleKey))}</span>
+          <span class="quiz-pill">${r.questions.length} questions</span>
+          <span class="quiz-pill gold">${icon("coin", 12)}${fmtMoney(r.reward)} bonus</span>
+        </div>
+        <button class="btn small gold" type="button" onclick="qzAddReco('${esc(r.recoKey)}')">+ Add</button>
+      </div>`).join("")}
+    </div></div>`;
+}
+async function qzAddReco(key) {
+  const r = qzRecoRemaining().find(x => x.recoKey === key);
+  if (!r) return;
+  await addQuizzes(CURRENT.classCode, [Object.assign({}, r, { active: true })]);
+  await render();
+  document.getElementById("gateMsg").innerHTML = `<div class="success-msg">Added <strong>${esc(r.title)}</strong> — ${esc(moduleLabel(r.moduleKey))} is now locked until students pass it. Edit it any time below.</div>`;
+}
+async function qzAddAllReco() {
+  const left = qzRecoRemaining();
+  if (!left.length) return;
+  if (!await t29Confirm(`Add ${left.length} quizzes? Each one locks its module until students pass it. (You can pause any of them afterwards.)`)) return;
+  await addQuizzes(CURRENT.classCode, left.map(r => Object.assign({}, r, { active: true })));
+  await render();
+  document.getElementById("gateMsg").innerHTML = `<div class="success-msg">Added ${left.length} quizzes. Edit, pause or remove any of them below.</div>`;
 }
 
 /* ---------------- Question builder ---------------- */
@@ -252,6 +348,7 @@ function collectQuizFromForm() {
     moduleKey: document.getElementById("qModule").value,
     passMark: document.getElementById("qPass").value,
     reward: document.getElementById("qReward").value,
+    deadline: document.getElementById("qDeadline").value,
     active: true,
     questions: BUILDER_ROWS.map(r => ({ id: r.id, text: r.text, options: r.options, answer: r.answer, explain: r.explain }))
   };
@@ -285,6 +382,7 @@ function startEditQuiz(id) {
   document.getElementById("qModule").value = q.moduleKey || "";
   document.getElementById("qPass").value = q.passMark;
   document.getElementById("qReward").value = q.reward || 0;
+  document.getElementById("qDeadline").value = q.deadline || "";
   BUILDER_ROWS = q.questions.map(qq => ({
     id: qq.id, text: qq.text, options: qq.options.slice(), answer: qq.answer, explain: qq.explain || ""
   }));
@@ -301,6 +399,7 @@ function cancelEdit() {
   document.getElementById("qModule").value = "";
   document.getElementById("qPass").value = 70;
   document.getElementById("qReward").value = 0;
+  document.getElementById("qDeadline").value = "";
   BUILDER_ROWS = [];
   addQuestionRow();
   addQuestionRow();
@@ -336,6 +435,7 @@ function loadStarterQuiz() {
   document.getElementById("qModule").value = "termdeposit";
   document.getElementById("qPass").value = 70;
   document.getElementById("qReward").value = 0;
+  document.getElementById("qDeadline").value = "";
   BUILDER_ROWS = [
     {
       id: null,

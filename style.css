@@ -4306,3 +4306,23 @@ html.dark-mode .jl-chip.on{background:var(--surface-2);border-color:var(--accent
 html.dark-mode .jl-q-note{color:var(--pastel-coral-text);}
 @media (max-width:900px){.jl-types{grid-template-columns:1fr;}}
 @media (max-width:600px){.jl-grid{grid-template-columns:1fr;}.jl-now .btn{width:100%;}}
+
+/* ---------------- Quiz-locked modules ----------------
+   A quiz-locked nav link stays clickable (the page opens with the quiz over it), so it is only
+   dimmed a little; lifestyle locks keep the full "not allowed" look. While the page is covered
+   by its quiz, everything under the cover is hidden and can't be scrolled to. */
+.topbar nav a.nav-locked.nav-quiz{opacity:.75;cursor:pointer;}
+body.t29-page-locked{overflow:hidden;}
+body.t29-page-locked main,body.t29-page-locked .site-footer{visibility:hidden;}
+
+/* ---------------- Recommended quizzes (teacher) ---------------- */
+.qz-reco-panel{border:2px dashed #eddcb4;background:linear-gradient(180deg,#fffaf0,var(--card) 70%);}
+.qz-reco-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;}
+.qz-reco-head h2{margin:0;display:flex;align-items:center;gap:8px;}
+.qz-reco-actions{display:flex;flex-wrap:wrap;gap:8px;}
+.qz-reco-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:14px;}
+.qz-reco-item{border:1px solid var(--border,#e3e8f0);border-radius:12px;padding:12px;background:var(--card);display:flex;flex-direction:column;gap:6px;}
+.qz-reco-item strong{display:block;}
+.qz-reco-item .btn{margin-top:auto;align-self:flex-start;}
+.qz-overdue{border:1px solid #f0c3b8;background:#fdf1ee;border-radius:12px;padding:12px 14px;margin-top:12px;}
+.qz-overdue p{margin:0 0 6px;}

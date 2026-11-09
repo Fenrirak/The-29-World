@@ -78,7 +78,7 @@ async function t29OpenQuizGate(moduleKey, opts) {
       </div>
       <button class="btn small secondary" type="button" onclick="qgCloseGate()">Close</button>
     </div>
-    <p class="qg-meta">${quiz.questions.length} ${quiz.questions.length === 1 ? "question" : "questions"} · you need ${quiz.passMark}% to unlock ${qgEsc(qgModuleLabel(moduleKey))}${quiz.reward > 0 ? ` · ${fmtMoney(quiz.reward)} bonus the first time you pass` : ""}</p>
+    <p class="qg-meta">${quiz.questions.length} ${quiz.questions.length === 1 ? "question" : "questions"} · you need ${quiz.passMark}% to unlock ${qgEsc(qgModuleLabel(moduleKey))}${quiz.deadline ? ` · due ${qgEsc(quizDeadlineLabel(quiz.deadline))}${quizDeadlineState(quiz) === "overdue" ? " (overdue)" : ""}` : ""}${quiz.reward > 0 ? ` · ${fmtMoney(quiz.reward)} bonus the first time you pass` : ""}</p>
     <div id="qgResult"></div>
     <div id="qgBody">${qgQuestionsHtml(quiz)}</div>
     <div id="qgMsg"></div>
@@ -149,6 +149,7 @@ function qgContinue() {
   if (!ctx) return;
   if (ctx.alsoLifestyleLocked) {
     alert("Quiz passed. This module is still locked by your lifestyle rating, though — ask your teacher what's needed to raise it.");
+    if (document.getElementById("t29PageLock")) window.location.reload(); // refresh the cover so it says the right thing
     return;
   }
   if (ctx.href) window.location.href = ctx.href;
@@ -227,7 +228,8 @@ async function qgSubmit() {
    covers the page while it's locked (with the quiz on top, when a quiz is
    what locks it). Stock Market and Gambling already lock their own page
    with a banner, so they're left to that. */
-const QG_PAGES_WITH_OWN_LOCK = ["market", "gambling"];
+// (Market and Gambling used to be skipped here because they show their own banner. A banner
+// isn't a lock, so they get the same cover as every other module now.)
 
 // Which module this page is, from its own menu link (every module page's
 // menu has a link to itself with a data-module key).
@@ -241,7 +243,7 @@ function qgCurrentModuleKey() {
 
 async function qgGuardModulePage() {
   const moduleKey = qgCurrentModuleKey();
-  if (!moduleKey || QG_PAGES_WITH_OWN_LOCK.includes(moduleKey)) return;
+  if (!moduleKey) return;
   const session = await getSessionUser();
   if (!session || session.role !== "student" || !session.classCode) return;
   const raw = await getClassCached(session.classCode);
@@ -255,6 +257,10 @@ async function qgGuardModulePage() {
 
 function qgShowPageLock(moduleKey, reason) {
   if (document.getElementById("t29PageLock")) return;
+  // Nothing on the page underneath can be seen, tabbed to or clicked until the lock is gone.
+  document.body.classList.add("t29-page-locked");
+  const mainEl = document.querySelector("main");
+  if (mainEl) { mainEl.inert = true; mainEl.setAttribute("aria-hidden", "true"); }
   const canQuiz = reason === "quiz" || reason === "both";
   const quizOpts = `{ alsoLifestyleLocked: ${reason === "both"} }`;
   const overlay = document.createElement("div");

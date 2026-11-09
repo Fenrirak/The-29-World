@@ -310,7 +310,7 @@ const BT_HUSTLES = [
 
 // Quizzes (practice and optional module locks). [question, [options], correct index, explanation]
 const BT_QUIZZES = [
-  { title: "Budgeting Basics", moduleKey: "", description: "Needs, wants and making a plan for your money.", questions: [
+  { title: "Budgeting Basics", moduleKey: "budget", description: "Needs, wants and making a plan for your money.", questions: [
     ["Which of these is a NEED?", ["Video game subscription", "Food and a place to live", "Designer shoes", "Concert tickets"], 1, "Needs are things you must have to live, like food and shelter."],
     ["What is a budget?", ["A bank loan", "A plan for how you'll earn, spend and save money", "A type of insurance", "A tax form"], 1, "A budget is a plan that compares what comes in with what goes out."],
     ["Your wage is $100 a week and your costs are $110. What does that mean?", ["You're saving well", "You're spending more than you earn", "You're earning interest", "Nothing, it's normal"], 1, "Spending more than you earn means going into debt or running out of cash."],
@@ -347,6 +347,87 @@ const BT_QUIZZES = [
     ["Which fund usually grows the most over a long time, with the most ups and downs?", ["Conservative", "Balanced", "Growth", "They're all the same"], 2, "Growth funds hold more shares, so they swing more."],
     ["Joining KiwiSaver early helps because...", ["Money has longer to grow", "You pay less tax", "It's free money", "You get more holidays"], 0, "More time means more growth through compounding."] ] }
 ];
+// The other ten modules, so EVERY lockable module has a ready-made quiz (see BT_ALL_QUIZZES).
+const BT_QUIZZES_MORE = [
+  { title: "Banking Basics", moduleKey: "bank", description: "Savings accounts, fees and keeping your money safe.", questions: [
+    ["What is a savings account mainly for?", ["Everyday shopping", "Keeping money safe while it earns interest", "Borrowing money", "Paying tax"], 1, "Savings accounts hold money you don't need right now and pay you interest for it."],
+    ["A bank fee is...", ["Money the bank pays you", "A charge for using a bank service", "A gift", "Interest"], 1, "Fees are charges, so it pays to know which ones your account has."],
+    ["Why check your balance regularly?", ["To spot mistakes and avoid overspending", "To earn extra interest", "The bank requires it", "There's no reason"], 0, "Knowing your balance helps you stay in control of your money."],
+    ["You should share your PIN or password with...", ["Friends", "Nobody", "Classmates you trust", "Anyone who asks nicely"], 1, "Keep passwords and PINs private, always."],
+    ["An account with a higher interest rate will usually...", ["Grow your savings faster", "Cost you more fees", "Shrink your savings", "Close on its own"], 0, "A higher rate means more interest each time it is paid."] ] },
+  { title: "Smart Shopping", moduleKey: "store", description: "Needs, wants and getting good value.", questions: [
+    ["Before buying something, a smart first question is...", ["Does everyone have one?", "Do I need it, and can I afford it?", "Is it on sale?", "Is it expensive?"], 1, "Need and affordability come before price or popularity."],
+    ["A sale price is only a good deal if...", ["It's really cheap", "You actually needed the item", "It's popular", "It's limited stock"], 1, "A bargain on something you didn't need is still money spent."],
+    ["Impulse buying means...", ["Planning a purchase carefully", "Buying on a sudden urge without thinking", "Saving for something", "Returning an item"], 1, "Pausing before you buy beats impulse spending."],
+    ["Which is most likely to keep its value?", ["A snack", "A lasting item like a bike", "A movie ticket", "A drink"], 1, "Things that last hold value; things you use up don't."],
+    ["Comparing prices before you buy helps you...", ["Spend more", "Find better value", "Waste time", "Avoid saving"], 1, "A little comparing can save real money."] ] },
+  { title: "Work & Wages", moduleKey: "jobs", description: "Gross pay, take-home pay, tax and promotions.", questions: [
+    ["Gross wage is...", ["Pay after tax", "Pay before tax is taken out", "A bonus", "Your savings"], 1, "Gross is the headline figure before anything is deducted."],
+    ["Net (take-home) pay is...", ["Pay before tax", "Pay after tax and deductions", "Total yearly pay", "Interest earned"], 1, "Net pay is what actually lands in your account."],
+    ["Why does tax come out of your pay?", ["It funds public services like schools and hospitals", "It's a punishment", "It's an employer fee", "It's a bank rule"], 0, "Tax pays for things we all share."],
+    ["A promotion usually means...", ["Less pay", "More responsibility and often higher pay", "Losing your job", "No change at all"], 1, "Taking on more usually earns more."],
+    ["Turning up reliably and doing good work helps you...", ["Get promoted and keep your job", "Avoid tax", "Earn interest", "Nothing"], 0, "Reliability is how people move up."] ] },
+  { title: "Getting Around", moduleKey: "transport", description: "What vehicles really cost to own and run.", questions: [
+    ["Owning a car costs more than its price because of...", ["Nothing, the price is all", "Running costs like fuel, insurance and repairs", "Discounts", "Free servicing"], 1, "Running costs keep coming after you buy."],
+    ["Compared with a car, a bike usually has...", ["Higher running costs", "Lower running costs", "The same running costs", "Fuel costs"], 1, "Bikes are cheap to run."],
+    ["Public transport can save money when...", ["You travel rarely", "It replaces regular trips you'd drive and pay running costs for", "Never", "It is always dearer"], 1, "Regular trips are where a pass pays off."],
+    ["Depreciation means...", ["A vehicle gains value", "A vehicle loses value over time", "An insurance payout", "A fuel price rise"], 1, "Most vehicles are worth less each year."],
+    ["Before buying a vehicle, work out...", ["Only the colour", "If you can afford the price AND the weekly running costs", "What your friends think", "Nothing"], 1, "Count the running costs, not just the price."] ] },
+  { title: "Renting & Buying a Home", moduleKey: "property", description: "Mortgages, deposits and the cost of owning.", questions: [
+    ["A mortgage is...", ["A gift", "A loan used to buy a home", "A tax", "A rental"], 1, "A mortgage is a loan secured on the home."],
+    ["A deposit on a home is...", ["Money paid up front, which reduces what you borrow", "Monthly rent", "Insurance", "A fee"], 0, "A bigger deposit means a smaller loan."],
+    ["Compared with owning, renting means you...", ["Own the property", "Pay the landlord and don't build ownership", "Pay nothing", "Pay a mortgage"], 1, "Rent buys you a place to live, not ownership."],
+    ["Over a whole mortgage you repay...", ["Less than you borrowed", "More than you borrowed, because of interest", "Exactly what you borrowed", "Nothing"], 1, "Interest is the cost of borrowing."],
+    ["Besides the mortgage, owning a home also costs...", ["Maintenance, insurance and rates", "Nothing", "Only tax", "Only the deposit"], 0, "Ownership has ongoing costs."] ] },
+  { title: "Handling Big Surprises", moduleKey: "bigevents", description: "Emergency savings and being ready for the unexpected.", questions: [
+    ["An emergency fund is...", ["Money for a holiday", "Savings set aside for unexpected costs", "A loan", "A share"], 1, "It's your cushion for surprises."],
+    ["What helps most when something unexpected costs a lot?", ["Savings and insurance", "Having spent everything", "Ignoring it", "Borrowing without a plan"], 0, "Being prepared makes surprises manageable."],
+    ["Why is insurance helpful for big events?", ["It pays part of big unexpected costs", "It stops events happening", "It makes you rich", "It's free"], 0, "Insurance shares the cost of a big loss."],
+    ["With a big bill and no savings, you may have to...", ["Borrow, which adds interest", "Ignore it", "Earn it back instantly", "Nothing"], 0, "Borrowing for emergencies makes them cost more."],
+    ["The best time to build an emergency fund is...", ["After the emergency", "Before you need it", "Never", "When you're broke"], 1, "Start before the surprise arrives."] ] },
+  { title: "Lifestyle & Wellbeing", moduleKey: "life", description: "Balancing enjoyment, needs and the future.", questions: [
+    ["A good money balance includes...", ["Only working", "Needs, some enjoyment, and saving for later", "Only spending", "Only saving"], 1, "Balance beats going to either extreme."],
+    ["Spending to keep up with friends can...", ["Always help you", "Push you to spend more than you can afford", "Save you money", "Earn interest"], 1, "Your budget is yours, not your friends'."],
+    ["Lifestyle inflation means...", ["Prices falling", "Spending more every time your income rises", "Saving more", "A type of tax"], 1, "If spending rises with income, nothing is left to save."],
+    ["A sign of living within your means is...", ["Spending more than you earn", "Spending less than you earn", "Always borrowing", "Skipping bills"], 1, "Less out than in leaves room to save."],
+    ["Buying things mainly for status often...", ["Builds wealth", "Leaves less to save", "Earns interest", "Lowers tax"], 1, "Status spending uses up money you could save."] ] },
+  { title: "Gambling & Risk", moduleKey: "gambling", description: "How odds work and why the house wins.", questions: [
+    ["Over time, the odds in gambling are set so the house...", ["Loses", "Wins", "Breaks even", "Pays you"], 1, "The odds always favour the house in the long run."],
+    ["Which statement is true?", ["After many losses a win is 'due'", "Every play is independent of the last one", "You can learn a system to always win", "Betting more makes winning certain"], 1, "Past results don't change the next one."],
+    ["'Chasing losses' means...", ["Betting more to win back what you lost", "Saving", "Stopping", "Budgeting"], 0, "Chasing losses usually makes them bigger."],
+    ["A sensible rule about gambling money is to...", ["Use your rent money", "Only risk what you can afford to lose entirely", "Borrow to play", "Bet everything"], 1, "Never risk money you need."],
+    ["Compared with saving, gambling is...", ["Guaranteed", "Not a reliable way to grow money", "Safer", "Taxed less"], 1, "Saving is reliable; gambling isn't."] ] },
+  { title: "Buying & Selling Fairly", moduleKey: "marketplace", description: "Fair prices, fees and negotiating.", questions: [
+    ["A fair price for a used item is usually...", ["More than new", "Less than new, because of wear", "Zero", "Random"], 1, "Used items are worth less than new ones."],
+    ["A marketplace fee means...", ["The seller keeps everything", "A share of the sale goes to the marketplace", "The buyer is paid", "It's free"], 1, "Fees come out of what the seller receives."],
+    ["Before accepting an offer, check...", ["That it covers what you paid and the fees", "Nothing", "Only the buyer's name", "The time"], 0, "Work out what you'll actually take home."],
+    ["Making an offer is...", ["Never allowed", "Negotiating a price both sides agree on", "Cheating", "Stealing"], 1, "Negotiation is a normal part of buying and selling."],
+    ["Selling something you no longer need can...", ["Always lose money", "Free up cash for other goals", "Only cost tax", "Be illegal"], 1, "Unused things can become useful cash."] ] },
+  { title: "Side Hustles", moduleKey: "sidehustle", description: "Earning extra, and managing it well.", questions: [
+    ["A side hustle is...", ["Your main job", "Extra work for extra income", "A loan", "A hobby with no pay"], 1, "It's income on top of your main job."],
+    ["Extra income from a side hustle is best...", ["Ignored", "Planned into your budget, with some saved", "Spent immediately", "Hidden"], 1, "Plan extra income instead of letting it vanish."],
+    ["Before taking a side hustle, consider...", ["The time it takes and the effect on school or your main job", "Nothing", "Only the pay", "Only the colour"], 0, "Extra work has a cost in time and energy."],
+    ["Having more than one income source helps because...", ["You lose everything if one stops", "If one dries up you still have others", "Tax disappears", "Prices fall"], 1, "More sources means less risk."],
+    ["Income from a side job is...", ["Never taxed", "Often still taxable income", "Not real money", "Free of rules"], 1, "Side income usually counts as income too."] ] }
+];
+const BT_ALL_QUIZZES = BT_QUIZZES.concat(BT_QUIZZES_MORE);
+
+// Set to true to hand teachers the quizzes already switched on (locking their modules from day one).
+// Off by default: a new class shouldn't have 16 locked modules before its first lesson.
+const BT_QUIZZES_START_ACTIVE = false;
+
+// The quiz set for a term choice, as plain quiz objects (not yet saved). The bonus for passing is
+// $5 for 1 term, $10 for 2 and $20 for 4 (a full year), like the other big-ticket amounts.
+// Also used by the Quizzes page as the "recommended quizzes" (1 year = 4 terms).
+function t29BaseTemplateQuizzes(terms) {
+  const S = t29BaseTemplateScale(terms);
+  return BT_ALL_QUIZZES.map(q => ({
+    recoKey: q.moduleKey, title: q.title, description: q.description, moduleKey: q.moduleKey,
+    passMark: 60, reward: S.M(5), active: BT_QUIZZES_START_ACTIVE, deadline: "",
+    questions: q.questions.map(x => ({ text: x[0], options: x[1].slice(), answer: x[2], explain: x[3] }))
+  }));
+}
+
 
 // Credit cards (the class's card plans) and extra bank accounts.
 const BT_CARD_PLANS = [
@@ -622,12 +703,9 @@ function t29ApplyBaseTemplate(cls, terms) {
   ];
   cls.lifestyleLock = { threshold: 0, modules: [] };
 
-  // ---- Quizzes: ready to use; locks stay off until the teacher turns them on ----
-  cls.quizzes = BT_QUIZZES.map(q => normalizeQuiz({
-    title: q.title, description: q.description, moduleKey: q.moduleKey, passMark: 60, reward: M(5), active: true,
-    questions: q.questions.map(x => ({ text: x[0], options: x[1], answer: x[2], explain: x[3] }))
-  }));
-  cls.quizGate = { enabled: false };
+  // ---- Quizzes: one per module, bonus scaled by term. Paused until the teacher activates them (BT_QUIZZES_START_ACTIVE) ----
+  cls.quizzes = t29BaseTemplateQuizzes(terms).map(q => normalizeQuiz(q));
+  cls.quizGate = { enabled: false }; // legacy field, no longer used (a quiz locks its module when active)
 
   cls.baseTemplate = T29_BASE_TEMPLATE_LABEL; // a small marker, so it's clear where the setup came from
   cls.baseTemplateTerms = S.terms;            // which term option was chosen (1, 2 or 4)
@@ -648,7 +726,7 @@ function t29BaseTemplateSummary(terms) {
     `${BT_LIFE.length} life events and ${BT_HUSTLES.length} side hustles`,
     `Loans, term deposits, credit cards and extra bank accounts`,
     `KiwiSaver and a stock market with ${BT_COMPANIES.length} companies`,
-    `${BT_QUIZZES.length} financial literacy quizzes (module locks off until you turn them on)`,
+    `${BT_ALL_QUIZZES.length} financial literacy quizzes, one for every module, with a $${S.M(5)} bonus for passing (ready to switch on as unlock gates)`,
     `Light tax, a small gambling limit, and a trade centre for students`,
     `Paced for ${S.terms} term${S.terms > 1 ? "s" : ""} (about ${S.terms * 10} weeks)`,
     `Students start with $${S.M(BT_WELCOME_GRANT)}`

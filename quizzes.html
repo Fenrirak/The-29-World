@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=35d078ec">
+<link rel="stylesheet" href="style.css?v=6402ed18">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -95,14 +95,17 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
   <div id="teacherPanel" class="hidden">
     <div class="card">
       <h2 id="hGate">Unlock gates</h2>
-      <p>With this on, a module stays locked for a student until they pass the quiz attached to it — the same greyed-out nav link the lifestyle lock already uses. With it off, every quiz below is still there to take, it just doesn't lock anything. Quizzes with no module attached are always practice only.</p>
-      <label style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-        <input type="checkbox" id="gateToggle" style="width:20px;height:20px;min-height:auto;flex-shrink:0;">
-        <span id="labGateToggle">Require students to pass a quiz before its module unlocks</span>
-      </label>
-      <button class="btn secondary small" style="margin-top:14px;" onclick="saveGate()" id="saveGateBtn">Save quiz gate setting</button>
+      <p>Attach a quiz to a module and, while the quiz is <strong>Active</strong>, that module is locked: a student can open it, but a quiz shows instead and nothing in the module is usable until they pass. <strong>Paused</strong> quizzes lock nothing. Quizzes with no module attached are practice only. Set a <strong>deadline</strong> on a quiz and you'll be notified when students miss it.</p>
+      <div id="gateSummary" class="quiz-meta"></div>
+      <div class="row-flex" style="gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <button class="btn gold small" type="button" onclick="activateAllQuizzes(true)" id="activateAllBtn">Activate all quizzes</button>
+        <button class="btn secondary small" type="button" onclick="activateAllQuizzes(false)" id="pauseAllBtn">Pause all quizzes</button>
+      </div>
       <div id="gateMsg"></div>
+      <div id="overdueWrap"></div>
     </div>
+
+    <div id="recoWrap"></div>
 
     <div class="card">
       <div class="flex-between">
@@ -129,6 +132,13 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <div>
           <label for="qReward" id="labQReward">Cash bonus for passing (first time only, 0 for none)</label>
           <input id="qReward" type="number" min="0" step="0.5" value="0">
+        </div>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label for="qDeadline" id="labQDeadline">Deadline (optional)</label>
+          <input id="qDeadline" type="date">
+          <p class="muted-small" style="margin:4px 0 0;">After this date you're notified about students who haven't passed.</p>
         </div>
       </div>
       <label for="qDesc" id="labQDesc">Description (shown to students)</label>
@@ -177,12 +187,13 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="offline.js?v=067149c0"></script>
 <script defer src="data-core.js?v=07214fc7"></script>
 <script defer src="data-money.js?v=88ad60cd"></script>
-<script defer src="data-life.js?v=74895637"></script>
+<script defer src="data-life.js?v=008cf0e4"></script>
 <script defer src="data-property.js?v=3723dbe7"></script>
 <script defer src="data-markets.js?v=948810b4"></script>
 <script defer src="events-ui.js?v=f846128d"></script>
-<script defer src="quiz-gate.js?v=84606ca0"></script>
-<script defer src="notifications.js?v=11931153"></script>
-<script defer src="quizzes.js?v=14bb4f2a"></script>
+<script defer src="quiz-gate.js?v=b67a2a0d"></script>
+<script defer src="notifications.js?v=21b60e65"></script>
+<script defer src="base-template.js?v=af63b11e"></script>
+<script defer src="quizzes.js?v=0439cc1a"></script>
 </body>
 </html>

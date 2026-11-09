@@ -4309,7 +4309,8 @@ function getLifestyleLockedModulesFromData(cls, user, username) {
 // off, quizzes are still there to take, they just don't lock anything.
 // See the Quizzes section for the quiz/result shapes.
 function getQuizLockedModulesFromData(cls, user) {
-  if (!cls.quizGate || !cls.quizGate.enabled) return [];
+  // A quiz locks its module as soon as it is attached to one and active. (There used to be a
+  // separate master switch that defaulted to OFF, so quizzes set on a module silently locked nothing.)
   if (!user || user.role === "teacher") return [];
   const results = user.quizResults || {};
   const locked = [];
@@ -4351,7 +4352,7 @@ function isModuleLockedForStudentFromData(cls, user, username, moduleKey) {
 function _classHasAnyModuleLock(cls) {
   const lock = cls.lifestyleLock;
   const lifestyleOn = !!(lock && lock.modules && lock.modules.length);
-  const quizOn = !!(cls.quizGate && cls.quizGate.enabled && (cls.quizzes || []).some(q => q.active && q.moduleKey));
+  const quizOn = !!(cls.quizzes || []).some(q => q.active && q.moduleKey);
   return lifestyleOn || quizOn;
 }
 
@@ -4441,17 +4442,14 @@ function applyNavModuleLocks(lockedModules) {
     const key = a.dataset.module;
     const reason = reasons[key];
     a.classList.toggle("nav-locked", !!reason);
-    if (reason) {
+    a.classList.toggle("nav-quiz", reason === "quiz" || reason === "both");
+    if (reason === "quiz" || reason === "both") {
+      // A quiz lock can be cleared by the student, so the link still works: they go INTO the
+      // module and its page shows the quiz over everything (qgGuardModulePage in quiz-gate.js).
+      a.onclick = null;
+    } else if (reason) {
       a.onclick = (e) => {
         e.preventDefault();
-        // A quiz lock is the one kind a student can clear on the spot, so
-        // open the quiz right here instead of sending them somewhere else
-        // (see quiz-gate.js). Anything the quiz can't fix falls through
-        // to the plain explanation.
-        if ((reason === "quiz" || reason === "both") && typeof t29OpenQuizGate === "function") {
-          t29OpenQuizGate(key, { alsoLifestyleLocked: reason === "both", href: a.getAttribute("href") });
-          return;
-        }
         alert(MODULE_LOCK_MESSAGE[reason] || MODULE_LOCK_MESSAGE.lifestyle);
       };
     } else {
@@ -4528,8 +4526,15 @@ function normalizeQuiz(q, existing) {
     passMark: Math.max(0, Math.min(100, quizPassMarkOrDefault(q.passMark))),
     reward: Math.max(0, Math.round((Number(q.reward) || 0) * 100) / 100),
     active: q.active === undefined ? true : !!q.active,
+    // Optional due date (NZ date, "YYYY-MM-DD"). Past it, the teacher is told who hasn't passed.
+    deadline: quizCleanDeadline(q.deadline),
     questions
   };
+}
+
+function quizCleanDeadline(v) {
+  const s = String(v || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s + "T00:00:00Z")) ? s : "";
 }
 
 async function setQuizGateEnabled(classCode, enabled) {
@@ -4566,7 +4571,8 @@ async function updateQuiz(classCode, quizId, quiz) {
     const cls = withNewModuleDefaults(snap.data());
     const idx = cls.quizzes.findIndex(q => q.id === quizId);
     if (idx === -1) { error = "That quiz couldn't be found."; return; }
-    const clean = normalizeQuiz(quiz, cls.quizzes[idx]);
+    // Editing a quiz must not flip it on or off: Active/Paused is its own switch.
+    const clean = normalizeQuiz(Object.assign({}, quiz, { active: cls.quizzes[idx].active }), cls.quizzes[idx]);
     if (!clean.questions.length) { error = "Add at least one question with two or more answer options."; return; }
     cls.quizzes[idx] = clean;
     t.update(classRef, { quizzes: cls.quizzes });
@@ -4595,6 +4601,71 @@ async function setQuizActive(classCode, quizId, active) {
     const q = cls.quizzes.find(x => x.id === quizId);
     if (!q) return;
     q.active = !!active;
+    t.update(classRef, { quizzes: cls.quizzes });
+  });
+  return { ok: true };
+}
+
+// "overdue" (past the due date), "today", "upcoming" or null (no deadline).
+function quizDeadlineState(q, todayKey) {
+  if (!q || !q.deadline) return null;
+  const t = todayKey || nzDateKey();
+  return q.deadline < t ? "overdue" : q.deadline === t ? "today" : "upcoming";
+}
+function quizDaysUntil(deadline, todayKey) {
+  const a = Date.parse((todayKey || nzDateKey()) + "T00:00:00Z"), b = Date.parse(deadline + "T00:00:00Z");
+  return Math.round((b - a) / 86400000);
+}
+function quizDeadlineLabel(deadline) {
+  const d = new Date(deadline + "T00:00:00Z");
+  return d.toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+}
+// Students who haven't passed a quiz whose deadline has gone by:
+// [{ quiz, students: [{ username, name }] }]. Pure; pass in the class and its students.
+function quizOverdueRows(cls, students, todayKey) {
+  const t = todayKey || nzDateKey();
+  return (cls.quizzes || []).filter(q => q.active && q.deadline && q.deadline < t).map(q => ({
+    quiz: q,
+    students: (students || []).filter(s => s && s.username && s.role !== "teacher" && !(quizResultFor(s, q.id) || {}).passed)
+      .map(s => ({ username: s.username, name: s.name || s.username }))
+  })).filter(r => r.students.length);
+}
+// Teacher: nudge everyone who still hasn't passed this quiz.
+async function remindQuizStudents(classCode, quizId) {
+  const cls = withNewModuleDefaults(await getClass(classCode));
+  const q = cls && cls.quizzes.find(x => x.id === quizId);
+  if (!q) return { ok: false, count: 0 };
+  const todo = await t29StudentsWhere(classCode, s => !(quizResultFor(s, q.id) || {}).passed);
+  const label = (LIFESTYLE_LOCKABLE_MODULES.find(m => m.key === q.moduleKey) || {}).label;
+  await t29NotifyStudents(classCode, { to: todo, icon: "quiz", tone: "coral",
+    title: `Reminder: pass the quiz "${q.title}"`,
+    body: q.deadline ? `It was due ${quizDeadlineLabel(q.deadline)}.${label ? " " + label + " stays locked until you pass." : ""}` : (label ? label + " stays locked until you pass." : ""),
+    href: label ? (LIFESTYLE_NAV_HREF[q.moduleKey] || "student.html") : "student.html" });
+  return { ok: true, count: todo.length };
+}
+const LIFESTYLE_NAV_HREF = { bank: "bank.html", budget: "budget.html", termdeposit: "termdeposit.html", kiwisaver: "kiwisaver.html", loan: "loan.html", market: "market.html", store: "store.html", jobs: "jobs.html", transport: "transport.html", property: "property.html", insurance: "insurance.html", bigevents: "bigevents.html", life: "life.html", gambling: "gambling.html", marketplace: "marketplace.html", sidehustle: "student.html" };
+
+// Teacher: add several quizzes at once (the recommended set).
+async function addQuizzes(classCode, quizzes) {
+  const clean = (quizzes || []).map(q => normalizeQuiz(q)).filter(q => q.questions.length);
+  if (!clean.length) return { ok: false, error: "Nothing to add." };
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    t.update(classRef, { quizzes: cls.quizzes.concat(clean) });
+  });
+  return { ok: true, count: clean.length };
+}
+// Teacher: switch every quiz on (locking its module) or off at once.
+async function setAllQuizzesActive(classCode, active) {
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    cls.quizzes.forEach(q => { q.active = !!active; });
     t.update(classRef, { quizzes: cls.quizzes });
   });
   return { ok: true };

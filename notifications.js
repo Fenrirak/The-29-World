@@ -464,22 +464,55 @@ function notifSideHustleRequestItems(me, cls) {
 }
 
 function notifQuizItems(me, cls) {
-  if (!cls.quizGate || !cls.quizGate.enabled) return [];
   const dayStart = notifTodayStartMs();
+  const today = nzDateKey();
   const labelOf = key => (LIFESTYLE_LOCKABLE_MODULES.find(m => m.key === key) || {}).label || key;
   return (cls.quizzes || []).filter(q => {
     if (!q.active || !q.moduleKey) return false;
     if (!LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === q.moduleKey)) return false;
     const r = quizResultFor(me, q.id);
     return !r || !r.passed;
-  }).slice(0, 5).map(q => ({
-    id: "quiz-" + q.id + "-" + nzDateKey(), ts: dayStart, icon: "quiz", tone: "gold",
-    title: `Quiz to pass: ${q.title}`,
-    body: `Passing this unlocks ${labelOf(q.moduleKey)}. You need ${q.passMark}% or better.`,
+  }).sort((a, b) => (quizDeadlineState(b, today) === "overdue") - (quizDeadlineState(a, today) === "overdue")).slice(0, 5).map(q => {
+    const st = quizDeadlineState(q, today);
+    const due = st === "overdue" ? ` It was due ${quizDeadlineLabel(q.deadline)}.`
+      : st === "today" ? " It's due today."
+      : st === "upcoming" ? ` Due ${quizDeadlineLabel(q.deadline)}.` : "";
+    return {
+    id: "quiz-" + q.id + "-" + nzDateKey(), ts: dayStart, icon: "quiz", tone: st === "overdue" || st === "today" ? "coral" : "gold",
+    title: st === "overdue" ? `Overdue quiz: ${q.title}` : `Quiz to pass: ${q.title}`,
+    body: `Passing this unlocks ${labelOf(q.moduleKey)}. You need ${q.passMark}% or better.${due}`,
     // Students can't open the Quizzes page (it sends them home), so this
     // opens the quiz popup right here instead (see quiz-gate.js).
     onClick: `t29OpenQuizForModule('${q.moduleKey}')`, action: true
-  }));
+    };
+  });
+}
+
+// Teachers: students who haven't passed a quiz whose deadline has gone by. Derived from the class
+// and its students (nothing is written), and re-read at most every 10 minutes because it needs the
+// whole class's results. The count is part of the id, so one more late student shows as new.
+let NOTIF_TQ = { at: 0, items: [] };
+async function notifTeacherQuizItems(classCode) {
+  const now = Date.now();
+  if (now - NOTIF_TQ.at < 10 * 60 * 1000) return NOTIF_TQ.items;
+  NOTIF_TQ.at = now;
+  NOTIF_TQ.items = [];
+  try {
+    const cls = withNewModuleDefaults(await getClassCached(classCode));
+    const today = nzDateKey();
+    if (!cls || !(cls.quizzes || []).some(q => q.active && q.deadline && q.deadline < today)) return NOTIF_TQ.items;
+    const rows = quizOverdueRows(cls, await getClassStudents(classCode, cls), today);
+    NOTIF_TQ.items = rows.map(r => {
+      const n = r.students.length, names = r.students.slice(0, 4).map(s => s.name).join(", ");
+      return {
+        id: "tq-" + r.quiz.id + "-" + today + "-" + n, ts: notifTodayStartMs(), icon: "quiz", tone: "coral",
+        title: `${n} ${n === 1 ? "student hasn't" : "students haven't"} passed "${r.quiz.title}"`,
+        body: `Due ${quizDeadlineLabel(r.quiz.deadline)}. ${names}${n > 4 ? ` and ${n - 4} more` : ""}.`,
+        href: "quizzes.html"
+      };
+    });
+  } catch (e) { NOTIF_TQ.items = []; }
+  return NOTIF_TQ.items;
 }
 
 function notifMarketplaceItems(me, cls) {
@@ -1213,7 +1246,7 @@ async function notifRefreshTeacher(username, classCode) {
   const localRead = notifGetLocalRead(username);
   if (localRead > NOTIF_REMOTE_READ) notifPushRemoteRead(username, localRead);
   if (NOTIF_INBOX === null) return; // the listener's first snapshot hasn't arrived yet
-  NOTIF_ITEMS = notifTeacherInboxItems(NOTIF_INBOX);
+  NOTIF_ITEMS = (await notifTeacherQuizItems(classCode)).concat(notifTeacherInboxItems(NOTIF_INBOX));
   NOTIF_BUILT_AT = trustedNow().getTime();
   notifPaint();
   notifDeviceAlertNew();
