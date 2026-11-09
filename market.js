@@ -102,7 +102,7 @@ async function init() {
     console.error("Stock Market failed to load:", err);
     const list = document.getElementById("companyList");
     if (list) {
-      list.innerHTML = `<div class="card"><p class="error-msg" style="margin:0;">Something went wrong loading the Stock Market page: ${(err && err.message) || err}. Try refreshing — if it keeps happening, open the browser console (F12) and check for a red error, then share it so it can be fixed.</p></div>`;
+      list.innerHTML = `<div class="card"><p class="error-msg" style="margin:0;">Something went wrong loading the Stock Market page: ${(err && err.message) || err}. Try refreshing, if it keeps happening, open the browser console (F12) and check for a red error, then share it so it can be fixed.</p></div>`;
     }
   }
 }
@@ -399,7 +399,7 @@ async function saveRange() {
   const min = document.getElementById("rangeMin").value;
   const max = document.getElementById("rangeMax").value;
   await setPriceRange(CLASS_CODE, min, max);
-  document.getElementById("rangeMsg").innerHTML = `<div class="success-msg">Saved — companies will move between ${min}% and ${max}% per simulated day.</div>`;
+  document.getElementById("rangeMsg").innerHTML = `<div class="success-msg">Saved. Companies will move between ${min}% and ${max}% per simulated day.</div>`;
   await render();
 }
 

@@ -41,7 +41,7 @@ const AC_PRESETS = [
     blurb: (p, per) => `A small base rate, plus a big bonus if you leave it alone for the whole ${per.span}.`,
     rateMul: 0.5, bonusMul: 1.5, minBalance: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 0, tier: -1 },
   { key: "notice", kind: "savings", name: "Notice Saver", theme: "midnight",
-    blurb: (p, per) => `The best rate — but only ${acPlural(p.maxWithdrawals, "withdrawal")} per ${per.span}, and each one costs a fee.`,
+    blurb: (p, per) => `The best rate, but only ${acPlural(p.maxWithdrawals, "withdrawal")} per ${per.span}, and each one costs a fee.`,
     rateMul: 2, bonusMul: 0, minBalance: 0, feeWaiveAt: 0, withdrawFee: 50, wdWk: 1, maxBalance: 0, tier: 1 },
   { key: "youth", kind: "savings", name: "Youth Saver", theme: "sunset", blurb: "A boosted rate for beginners, up to a balance limit.",
     rateMul: 1.5, bonusMul: 0, minBalance: 0, feeWaiveAt: 0, withdrawFee: 0, maxBalance: 5000, tier: -1 },
@@ -226,7 +226,7 @@ function acRenderStudent(me, cls) {
   if (pending.length) {
     html += `<h3 class="cc-sub">${icon("history", 16)} Waiting for approval</h3><div class="ac-pend">${pending.map(a => {
       const p = acctPlanById(cls, a.planId);
-      return `<div class="ac-pend-row"><div>${p ? `<strong>${acEsc(p.name)}</strong> ${acKindBadge(p.kind)}` : `<strong>Account</strong>`}<div class="muted-small">Your teacher will approve it soon — nothing else to do.</div></div>
+      return `<div class="ac-pend-row"><div>${p ? `<strong>${acEsc(p.name)}</strong> ${acKindBadge(p.kind)}` : `<strong>Account</strong>`}<div class="muted-small">Your teacher will approve it soon. Nothing else to do.</div></div>
         <button class="btn small secondary" onclick="acCancelApp('${acEsc(a.id)}')">Withdraw</button></div>`;
     }).join("")}</div>`;
   }
@@ -321,8 +321,8 @@ function acOwnedTile(a, cls, canMove) {
   if (p.fee > 0) rows.push(`<div class="ac-line"><span>Account fee</span><strong class="${feeDue > 0 ? "bad" : "good"}">${feeDue > 0 ? "−" + fmtMoney(feeDue) : waived ? "Waived" : "$0.00"}</strong></div>`);
   if (p.fee > 0 && p.feeWaiveAt > 0 && !waived) rows.push(`<div class="ac-hint">Keep ${fmtMoney(p.feeWaiveAt)} in here and the fee is waived.</div>`);
   if (p.bonusRate > 0) rows.push(wd === 0
-    ? `<div class="ac-badge good">${icon("star", 13)} Bonus on track — +${p.bonusRate}% if you leave it alone</div>`
-    : `<div class="ac-badge bad">${icon("history", 13)} Bonus missed this period — you've taken money out</div>`);
+    ? `<div class="ac-badge good">${icon("star", 13)} Bonus on track: +${p.bonusRate}% if you leave it alone</div>`
+    : `<div class="ac-badge bad">${icon("history", 13)} Bonus missed this period. You've taken money out</div>`);
   if (p.maxWithdrawals > 0) {
     const used = Math.min(wd, p.maxWithdrawals), pct = Math.round(used / p.maxWithdrawals * 100);
     rows.push(`<div class="ac-meter"><div class="ac-meter-top"><span>Withdrawals this period</span><strong>${used} of ${p.maxWithdrawals}</strong></div><div class="ac-meter-bar"><i class="${pct >= 100 ? "hot" : ""}" style="width:${pct}%"></i></div></div>`);
@@ -352,7 +352,7 @@ function acDefaultOptions(me) {
 }
 // Shown in place of the open button on an account the student already has: a small note, and the button greyed out.
 function acHaveAction(pending, label) {
-  return `<div class="ac-have-wrap"><div class="ac-have${pending ? " pend" : ""}">${icon(pending ? "history" : "check", 14)}<span>${pending ? "Application sent — waiting for your teacher" : "You have this account"}</span></div>
+  return `<div class="ac-have-wrap"><div class="ac-have${pending ? " pend" : ""}">${icon(pending ? "history" : "check", 14)}<span>${pending ? "Application sent. Waiting for your teacher" : "You have this account"}</span></div>
     <button class="btn gold" disabled>${label}</button></div>`;
 }
 function acRenderOpen(me, cls) {
@@ -371,11 +371,11 @@ function acRenderOpen(me, cls) {
   const shown = offered.filter(p => p.kind === AC_FILTER), shownDefs = defs.filter(d => d.kind === AC_FILTER);
   const note = off ? "Not open yet" : st.approval === "teacher" ? "Teacher approval needed" : "";
   let html = `<div class="flex-between cc-head"><h2 id="hOpenAcct">Open an account</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
-  html += `<p class="cc-intro">Saving for something, or want somewhere to keep your bill money? Open another account — each one has its own interest, fees and rules.${defs.some(d => !d.held) ? " An account you've closed waits here, and it's free to open again any time." : ""}</p>`;
+  html += `<p class="cc-intro">Saving for something, or want somewhere to keep your bill money? Open another account. Each one has its own interest, fees and rules.${defs.some(d => !d.held) ? " An account you've closed waits here, and it's free to open again any time." : ""}</p>`;
   if (!plans.length && defs.every(d => d.held)) {
     html += `<div class="cc-off">${icon("lock", 22)}<div><strong>No accounts on offer yet</strong><span>${off ? "Your teacher hasn't switched extra accounts on." : "Your teacher hasn't set any up yet."} Check back soon.</span></div></div>`;
   } else {
-    if (off && plans.length) html += `<div class="cc-off">${icon("lock", 22)}<div><strong>Opening accounts isn't switched on yet</strong><span>Have a look below — your teacher will open applications soon.</span></div></div>`;
+    if (off && plans.length) html += `<div class="cc-off">${icon("lock", 22)}<div><strong>Opening accounts isn't switched on yet</strong><span>Have a look below. Your teacher will open applications soon.</span></div></div>`;
     if (!defs.some(d => !d.held) && !offered.some(p => !heldBy[p.id])) html += `<p class="muted-small">You've opened every account on offer. Nice.</p>`;
     html += `<div class="ac-filter" role="tablist" aria-label="Account type">${["everyday", "savings"].map(k => `<button type="button" role="tab" aria-selected="${AC_FILTER === k}" class="${AC_FILTER === k ? "on" : ""}" onclick="acSetFilter('${k}')">${acKindLabel(k)}<span class="ac-count">${count(k)}</span></button>`).join("")}</div>`;
     html += `<div class="cc-plans">${shownDefs.map(d => acDefaultOpenTile(cls, d)).join("")}${shown.map(p => acPlanTile(me, cls, p, off, full, heldBy[p.id])).join("")}</div>`;
@@ -407,7 +407,7 @@ function acPlanTile(me, cls, p, off, full, heldStatus) {
   let action;
   if (heldStatus) action = acHaveAction(heldStatus === "pending", instant ? "Open this account" : "Apply for this account");
   else if (off) action = `<div class="cc-lock">${icon("lock", 14)}<span>Not open yet</span></div>`;
-  else if (locked) action = `<div class="cc-lock">${icon("lock", 14)}<span>${acTierNeed(cls, p.minLifestyle)} — yours is ${Math.floor(score * 10) / 10}</span></div>`;
+  else if (locked) action = `<div class="cc-lock">${icon("lock", 14)}<span>${acTierNeed(cls, p.minLifestyle)}. Yours is ${Math.floor(score * 10) / 10}</span></div>`;
   else if (atMax) action = `<div class="cc-lock">${icon("lock", 14)}<span>You've reached the limit of ${p.kind} accounts</span></div>`;
   else action = `<button class="btn gold" onclick="acOpen('${acEsc(p.id)}')">${instant ? "Open this account" : "Apply for this account"}</button>`;
   return `<div class="cc-plan ac-plan ${heldStatus ? "ac-held" : locked || off || atMax ? "locked" : ""}">
@@ -450,7 +450,7 @@ function acMovePanel(me, cls) {
   // "From" defaults to the main account; "To" starts blank. A different pick stays while it's still valid.
   if (!ids.includes(AC_MOVE.from)) AC_MOVE.from = acMainId(me, cls);
   if (!ids.includes(AC_MOVE.to) || AC_MOVE.to === AC_MOVE.from) AC_MOVE.to = "";
-  const opts = sel => `<option value="" disabled ${sel ? "" : "selected"}>Choose an account…</option>` + ch.map(c => `<option value="${acEsc(c.id)}" ${c.id === sel ? "selected" : ""}>${acEsc(c.label)} — ${fmtMoney(c.bal)}</option>`).join("");
+  const opts = sel => `<option value="" disabled ${sel ? "" : "selected"}>Choose an account…</option>` + ch.map(c => `<option value="${acEsc(c.id)}" ${c.id === sel ? "selected" : ""}>${acEsc(c.label)}: ${fmtMoney(c.bal)}</option>`).join("");
   return `<section class="cc-panel ac-move">
     <div class="cc-panel-head"><h3>Move money</h3><span class="muted-small">Between the accounts above</span></div>
     <form onsubmit="return acMove(event)" class="ac-move-form">
@@ -502,7 +502,7 @@ function acMoveHint() {
     if (sp.withdrawFee > 0) notes.push(`${acEsc(sp.name)} charges ${fmtMoney(sp.withdrawFee)} for each withdrawal.`);
     if (sp.bonusRate > 0 && !(src.wd > 0)) notes.push(`Taking money out of ${acEsc(sp.name)} loses this period's +${sp.bonusRate}% bonus.`);
   }
-  if (dp && dp.maxBalance > 0) notes.push(`${acEsc(dp.name)} can hold up to ${fmtMoney(dp.maxBalance)} — room for ${fmtMoney(Math.max(0, dp.maxBalance - (dst.balance || 0)))} more.`);
+  if (dp && dp.maxBalance > 0) notes.push(`${acEsc(dp.name)} can hold up to ${fmtMoney(dp.maxBalance)}. Room for ${fmtMoney(Math.max(0, dp.maxBalance - (dst.balance || 0)))} more.`);
   el.innerHTML = notes.length ? notes.map(n => `<span>${n}</span>`).join("") : "";
 }
 async function acMove(e) {
@@ -557,7 +557,7 @@ async function acClose(id) {
       title: `Close ${mine.label}?`, okText: "Close account", danger: true,
       html: `<p>The ${fmtMoney(bal)} in it has to move to another account. Where should it go?</p>
         <label for="acCloseDest">Move it to</label>
-        <select id="acCloseDest">${others.map(c => `<option value="${acEsc(c.id)}" ${c.id === def.id ? "selected" : ""}>${acEsc(c.label)} — ${fmtMoney(c.bal)}</option>`).join("")}</select>
+        <select id="acCloseDest">${others.map(c => `<option value="${acEsc(c.id)}" ${c.id === def.id ? "selected" : ""}>${acEsc(c.label)}: ${fmtMoney(c.bal)}</option>`).join("")}</select>
         ${cashNote ? `<p class="muted-small">${acEsc(cashNote)}</p>` : ""}`,
       collect: box => box.querySelector("#acCloseDest").value
     });
@@ -570,7 +570,7 @@ async function acClose(id) {
   const res = await closeBankAccount(CURRENT.username, CURRENT.classCode, id, destId);
   if (!res.ok) { acMsg("acMsg", `<div class="error-msg">${acEsc(res.error)}</div>`); return; }
   await render();
-  acMsg("acMsg", `<div class="success-msg">${acEsc(res.srcName || "Account")} closed${res.moved > 0 ? ` — ${fmtMoney(res.moved)} moved to ${acEsc(res.destName)}` : ""}. You can open it again from “Open an account” below.</div>`);
+  acMsg("acMsg", `<div class="success-msg">${acEsc(res.srcName || "Account")} closed${res.moved > 0 ? `: ${fmtMoney(res.moved)} moved to ${acEsc(res.destName)}` : ""}. You can open it again from “Open an account” below.</div>`);
 }
 
 /* ---------------- Balance tile (teacher only: students get one tile per account instead, see acTilesHtml) ---------------- */
@@ -673,7 +673,7 @@ function acRenderTeacher(cls, students) {
   el.innerHTML = `
     <div class="flex-between cc-head"><h2 id="hAcctT">Bank accounts</h2>
       <label class="cc-switch"><input type="checkbox" id="acsEnabled" ${st.enabled ? "checked" : ""} onchange="acSaveSettings()"><span class="cc-switch-track"></span><span>${st.enabled ? "On for students" : "Off"}</span></label></div>
-    <p class="cc-intro">Let students open extra <strong>everyday</strong> and <strong>savings</strong> accounts on top of their cash balance and Savings Account. You decide every rate, fee and limit. ${interestScheduleLabel(cls)} Your class Savings Account rate is ${cls.interestRate || 0}% — change it, and how often interest is paid, in <a href="#" onclick="t29Jump('hSavingsSet');return false;">Savings &amp; interest</a> above.</p>
+    <p class="cc-intro">Let students open extra <strong>everyday</strong> and <strong>savings</strong> accounts on top of their cash balance and Savings Account. You decide every rate, fee and limit. ${interestScheduleLabel(cls)} Your class Savings Account rate is ${cls.interestRate || 0}%. Change it, and how often interest is paid, in <a href="#" onclick="t29Jump('hSavingsSet');return false;">Savings &amp; interest</a> above.</p>
     <div class="cc-tstats">
       <div class="cc-tstat"><span>Accounts open</span><strong>${active.length}</strong></div>
       <div class="cc-tstat ${pending.length ? "alert" : ""}"><span>Waiting for approval</span><strong>${pending.length}</strong></div>
@@ -728,7 +728,7 @@ function acTierSelectHtml(cls, rating) {
   const th = acTiers(cls), cur = Number(rating) || 0;
   const opts = th.map(x => `<option value="${x.min}" ${Number(x.min) === cur ? "selected" : ""}>${acEsc(x.label)} (rating ${x.min}+)</option>`);
   if (!opts.length || !th.some(x => Number(x.min) === 0)) opts.unshift(`<option value="0" ${cur === 0 ? "selected" : ""}>No minimum</option>`);
-  if (cur !== 0 && !th.some(x => Number(x.min) === cur)) opts.push(`<option value="${cur}" selected>Custom — rating ${cur}+</option>`);
+  if (cur !== 0 && !th.some(x => Number(x.min) === cur)) opts.push(`<option value="${cur}" selected>Custom. Rating ${cur}+</option>`);
   return `<select id="acp-minls">${opts.join("")}</select>`;
 }
 function acPlanFormHtml(p) {
@@ -738,9 +738,9 @@ function acPlanFormHtml(p) {
     <h3>${p.id ? "Edit account" : "New account"}</h3>
     <div class="cc-form-grid">
       <div><label for="acp-name">Account name</label><input id="acp-name" maxlength="40" value="${acEsc(p.name)}" placeholder="e.g. Holiday Saver" required oninput="acFormLive()"></div>
-      <div><label for="acp-kind">Type</label><select id="acp-kind" onchange="acKindChanged()"><option value="everyday" ${!sav ? "selected" : ""}>Everyday — for spending &amp; bills</option><option value="savings" ${sav ? "selected" : ""}>Savings — for growing money</option></select></div>
+      <div><label for="acp-kind">Type</label><select id="acp-kind" onchange="acKindChanged()"><option value="everyday" ${!sav ? "selected" : ""}>Everyday, for spending &amp; bills</option><option value="savings" ${sav ? "selected" : ""}>Savings, for growing money</option></select></div>
       <div><label for="acp-minls">Minimum lifestyle tier</label>${acTierSelectHtml(AC_CLS, p.minLifestyle)}<div class="muted-small">Students need at least this tier to open it</div></div>
-      <div class="wide"><label for="acp-blurb">Short description <span class="muted-small">(optional — shown to students)</span></label><input id="acp-blurb" maxlength="90" value="${acEsc(p.blurb)}" placeholder="e.g. Save for something big — a small fee keeps you honest"></div>
+      <div class="wide"><label for="acp-blurb">Short description <span class="muted-small">(optional, shown to students)</span></label><input id="acp-blurb" maxlength="90" value="${acEsc(p.blurb)}" placeholder="e.g. Save for something big, a small fee keeps you honest"></div>
       ${fld("rate", "Interest rate (%)", p.rate, "0.01", `Paid ${acPeriod(AC_CLS).every}`)}
       ${fld("bonus", "No-withdrawal bonus (% extra)", p.bonusRate, "0.01", "Extra interest if nothing was taken out that period", "ac-sav-only " + (sav ? "" : "hidden"))}
       ${fld("minbal", "Balance needed to earn interest ($)", p.minBalance, "1", "0 = earns from the first dollar")}

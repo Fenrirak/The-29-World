@@ -97,7 +97,7 @@ function smWireToggle(cb, name, storageKey) {
 function smKeysDesc() {
   const off = typeof t29ShortcutsOn === "function" && !t29ShortcutsOn();
   return off ? "See every key. Shortcuts are switched off right now."
-    : 'See every key — or press <kbd class="t29-kbd">?</kbd> or <kbd class="t29-kbd">/</kbd> any time.';
+    : 'See every key, or press <kbd class="t29-kbd">?</kbd> or <kbd class="t29-kbd">/</kbd> any time.';
 }
 
 function smInjectCss() {
@@ -126,7 +126,7 @@ function smBuildPopover() {
     `<div class="settings-popover-row">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Dark mode</div>
-        <div class="settings-popover-desc">Switch to a dark theme — easier on the eyes in low light.</div>
+        <div class="settings-popover-desc">Switch to a dark theme. Easier on the eyes in low light.</div>
       </div>
       <label class="lg-switch">
         <input type="checkbox" id="t29DarkModeToggle">
@@ -136,7 +136,7 @@ function smBuildPopover() {
     smHasSidebar() ? `<div class="settings-popover-row">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Sidebar navigation</div>
-        <div class="settings-popover-desc">Show the menu as a side panel instead of the top bar — a slide-out menu on phones (on by default there).</div>
+        <div class="settings-popover-desc">Show the menu as a side panel instead of the top bar. A slide-out menu on phones (on by default there).</div>
       </div>
       <label class="lg-switch">
         <input type="checkbox" id="t29SidebarNavToggle">
@@ -173,7 +173,7 @@ function smBuildPopover() {
     `<div class="settings-popover-row" id="t29ChangePasswordRow" role="button" tabindex="0" style="cursor:pointer;">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Change password</div>
-        <div class="settings-popover-desc">You'll stay signed in here — any other device you're logged in on will need to sign back in.</div>
+        <div class="settings-popover-desc">You'll stay signed in here. Any other device you're logged in on will need to sign back in.</div>
       </div>
       <span aria-hidden="true" style="color:var(--muted);font-size:1.1rem;">›</span>
     </div>`

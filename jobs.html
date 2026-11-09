@@ -23,13 +23,13 @@
   loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=c69a1fa3', 'sidebar-nav.js?v=8d951bc5');
 })();
 </script>
-<title>Jobs — The 29 World</title>
+<title>Jobs | The 29 World</title>
 <link rel="icon" type="image/png" href="Favicon.png">
 <link rel="shortcut icon" href="favicon.ico">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=e07ba65b">
+<link rel="stylesheet" href="style.css?v=38fff18f">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -98,7 +98,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div class="set-row">
         <div class="set-row-text">
           <h2 id="hPayDay">Pay day</h2>
-          <p class="muted-small">The day of the week wages are due. They&rsquo;re paid automatically whenever that day comes around, to every student with a job. Task jobs need your tick; check-in and questionnaire jobs pay automatically, in proportion to the days logged (3 of 5 days = 3/5 of the wage) &mdash; or use <strong>Run Pay Day</strong> on your <a href="teacher.html">Dashboard</a> to pay early.</p>
+          <p class="muted-small">The day of the week wages are due. They&rsquo;re paid automatically whenever that day comes around, to every student with a job. Task jobs need your tick; check-in and questionnaire jobs pay automatically, in proportion to the days logged (3 of 5 days = 3/5 of the wage), or use <strong>Run Pay Day</strong> on your <a href="teacher.html">Dashboard</a> to pay early.</p>
         </div>
         <div class="set-inline">
           <select id="payDaySelect" aria-label="Pay day">
@@ -121,7 +121,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div class="flex-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
         <div>
           <h2>Job roles</h2>
-          <p class="muted-small" style="margin:0;">Each job has a tier ladder — students start at the bottom and can be promoted up.</p>
+          <p class="muted-small" style="margin:0;">Each job has a tier ladder. Students start at the bottom and can be promoted up.</p>
         </div>
       </div>
       <div id="jobsGrid" class="jobs-family-grid" style="margin-top:20px;"></div>
@@ -145,7 +145,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         Auto-promote every
         <input id="addJobAutoWeeks" data-enter="addJobBtn" type="number" min="0" step="1" value="0"
           style="width:70px;display:inline-block;margin:0 6px;vertical-align:middle;">
-        weeks &nbsp;<span class="muted-small">(0 = off — you promote manually)</span>
+        weeks &nbsp;<span class="muted-small">(0 = off. You promote manually)</span>
       </label>
 
       <div id="addLogBox"></div>
@@ -174,7 +174,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     <!-- Side hustles (moved here from the Dashboard) -->
     <div class="card" id="sideHustleCard">
       <h2 id="hSideHustles">Side hustles</h2>
-      <p class="muted-small">Students each pick one hustle and a daily check-in hour (e.g. 1am, 2am, 3am...). They must check in within 15 minutes after that hour to get paid — the amount depends on which hour they picked. Once a student has picked one, any change needs your approval — that stops someone quietly retiming their check-in to match whenever they happen to be online.</p>
+      <p class="muted-small">Students each pick one hustle and a daily check-in hour (e.g. 1am, 2am, 3am...). They must check in within 15 minutes after that hour to get paid, the amount depends on which hour they picked. Once a student has picked one, any change needs your approval, that stops someone quietly retiming their check-in to match whenever they happen to be online.</p>
 
       <div id="sideHustleRequestsWrap">
         <h3 id="hSideHustleRequests" style="margin-top:0;">Pending change requests</h3>
@@ -191,11 +191,11 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <input id="shName" placeholder="e.g. Dog walking" required>
         <label for="shDesc" id="labShDesc">Description (optional)</label>
         <input id="shDesc" placeholder="e.g. Walk the neighbourhood dogs">
-        <label for="shPayoutsArea" id="labShPayouts">Payout per check-in hour — one per line, as "hour | amount"</label>
+        <label for="shPayoutsArea" id="labShPayouts">Payout per check-in hour, one per line, as "hour | amount"</label>
         <textarea id="shPayoutsArea" rows="4" placeholder="1am | 20
 3pm | 25
 7pm | 15" required></textarea>
-        <p class="muted-small">Only list the hours you want to offer a payout for (e.g. 12am, 1am, ... 11pm) — one "hour | amount" per line. Hours you leave out won't pay anything if a student somehow picks them.</p>
+        <p class="muted-small">Only list the hours you want to offer a payout for (e.g. 12am, 1am, ... 11pm), one "hour | amount" per line. Hours you leave out won't pay anything if a student somehow picks them.</p>
         <button class="btn" type="submit" id="addSideHustleBtn">Add side hustle</button>
       </form>
       </details>
@@ -231,7 +231,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
     <div class="card">
       <h2>Job board</h2>
-      <p class="muted-small">Each job has a progression of tiers — you start at the bottom and work your way up.</p>
+      <p class="muted-small">Each job has a progression of tiers. You start at the bottom and work your way up.</p>
       <div id="jobBoardGrid" class="job-board-grid" style="margin-top:16px;"></div>
       <p class="muted-small hidden" id="noJobs">Your teacher hasn't posted any jobs yet.</p>
     </div>
@@ -259,7 +259,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       Auto-promote every
       <input id="editJobAutoWeeks" data-enter="saveEditBtn" type="number" min="0" step="1" value="0"
         style="width:70px;display:inline-block;margin:0 6px;vertical-align:middle;">
-      weeks &nbsp;<span class="muted-small">(0 = off — you promote manually)</span>
+      weeks &nbsp;<span class="muted-small">(0 = off. You promote manually)</span>
     </label>
 
     <div id="editLogBox"></div>
@@ -316,19 +316,19 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
 <script type="module" src="firebase-init.js?v=294b42b5"></script>
 <script defer src="icons.js?v=e1413a9c"></script>
-<script defer src="settings-menu.js?v=918f78f6"></script>
-<script defer src="shortcuts.js?v=f7fd511f"></script>
-<script defer src="offline.js?v=067149c0"></script>
-<script defer src="data-core.js?v=07214fc7"></script>
-<script defer src="data-money.js?v=88ad60cd"></script>
-<script defer src="data-life.js?v=36a834af"></script>
-<script defer src="data-property.js?v=3723dbe7"></script>
-<script defer src="data-markets.js?v=948810b4"></script>
-<script defer src="events-ui.js?v=f846128d"></script>
-<script defer src="quiz-gate.js?v=b67a2a0d"></script>
+<script defer src="settings-menu.js?v=5370c578"></script>
+<script defer src="shortcuts.js?v=7b02398d"></script>
+<script defer src="offline.js?v=ac2cbd82"></script>
+<script defer src="data-core.js?v=535ce0cf"></script>
+<script defer src="data-money.js?v=cc5dc36e"></script>
+<script defer src="data-life.js?v=3c43769a"></script>
+<script defer src="data-property.js?v=84d847c7"></script>
+<script defer src="data-markets.js?v=c76e3587"></script>
+<script defer src="events-ui.js?v=9b6e825f"></script>
+<script defer src="quiz-gate.js?v=f9002445"></script>
 <script defer src="avatar.js?v=aca3bcf4"></script>
-<script defer src="notifications.js?v=1e1147ea"></script>
-<script defer src="jobs.js?v=ec19bb2c"></script>
+<script defer src="notifications.js?v=d8884f52"></script>
+<script defer src="jobs.js?v=e096670c"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
 </body>
 </html>

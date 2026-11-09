@@ -215,7 +215,7 @@ async function render() {
     listBox.appendChild(row);
   }
 
-  // txns — students see the last 3 days only; the teacher's own bank
+  // txns. Students see the last 3 days only; the teacher's own bank
   // activity (rare, since their balance is unlimited) keeps full history.
   const activityCutoff = Date.now() - 3 * 24 * 3600 * 1000;
   const my = cls.txns
@@ -271,10 +271,10 @@ async function render() {
   my.forEach(t => {
     let detail = escapeHtml(t.note || "");
     if (t.type === "transfer" || t.type === "automation") {
-      if (t.from === me.username) detail = "To " + escapeHtml(nameOf(t.to)) + (t.note ? " — " + escapeHtml(t.note) : (t.type === "automation" ? " — automatic payment" : ""));
-      else detail = "From " + escapeHtml(nameOf(t.from)) + (t.note ? " — " + escapeHtml(t.note) : (t.type === "automation" ? " — automatic payment" : ""));
+      if (t.from === me.username) detail = "To " + escapeHtml(nameOf(t.to)) + (t.note ? ": " + escapeHtml(t.note) : (t.type === "automation" ? ", automatic payment" : ""));
+      else detail = "From " + escapeHtml(nameOf(t.from)) + (t.note ? ": " + escapeHtml(t.note) : (t.type === "automation" ? ", automatic payment" : ""));
     }
-    // Which way the money went — one shared answer for every page (see
+    // Which way the money went, one shared answer for every page (see
     // txnDirection in data-money.js): green "+" in, red "−" out, plain when
     // it only moved between the student's own pockets.
     const { sign, amount } = txnDirection(t, me.username);
@@ -372,13 +372,13 @@ async function bsSave() {
     const old = (await getClass(CURRENT.classCode)) || {};
     await saveInterestSettings(CURRENT.classCode, next);
     BS_DIRTY = false;
-    // Plans the teacher already added keep the fees they were created with — say so if the schedule changed
+    // Plans the teacher already added keep the fees they were created with. Say so if the schedule changed
     const rescale = acPeriod(old).key !== acPeriod({ interestAuto: next.auto, interestFrequency: next.frequency }).key
       && (old.accountPlans || []).some(p => !p.archived && (p.fee > 0 || p.maxWithdrawals > 0));
     await render();
-    acMsg("bsMsg", `<div class="success-msg">Saved.${rescale ? " Accounts you've already added keep their current fees and withdrawal limits — edit them below if they should change with the new schedule." : ""}</div>`);
+    acMsg("bsMsg", `<div class="success-msg">Saved.${rescale ? " Accounts you've already added keep their current fees and withdrawal limits. Edit them below if they should change with the new schedule." : ""}</div>`);
   } catch (e) {
-    acMsg("bsMsg", `<div class="error-msg">Couldn't save that — please try again.</div>`);
+    acMsg("bsMsg", `<div class="error-msg">Couldn't save that. Please try again.</div>`);
   } finally {
     btn.disabled = false;
   }
@@ -444,7 +444,7 @@ async function sendMoney(e) {
       } else if (okCount > 0) {
         box.innerHTML = `<div class="error-msg">${verb} ${fmtMoney(Math.abs(amount))} for ${okCount} of ${targets.length} students. It didn't go through for: ${failedNames.map(escapeHtml).join(", ")}.</div>`;
       } else {
-        box.innerHTML = `<div class="error-msg">That didn't go through for any students — please try again.</div>`;
+        box.innerHTML = `<div class="error-msg">That didn't go through for any students. Please try again.</div>`;
       }
       await render();
       return false;
@@ -651,14 +651,14 @@ var AUTO_CARD_CTX = null;
 function payWithOptionsHtml(me, cls, toUser) {
   // Payment sources: "cash" is the student's MAIN account (the default), "cashacct" the real Cash account when another is main.
   const ch = acctPaySources(me, cls);
-  const opt = c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}${c.isMain && ch.length > 1 ? " (main)" : ""} — ${fmtMoney(c.bal)}</option>`;
+  const opt = c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}${c.isMain && ch.length > 1 ? " (main)" : ""}: ${fmtMoney(c.bal)}</option>`;
   const group = (label, items) => items.length ? `<optgroup label="${label}">${items.map(opt).join("")}</optgroup>` : "";
   let html = group("Everyday", ch.filter(c => c.kind === "everyday")) + group("Savings", ch.filter(c => c.kind === "savings"));
   if (cardIsActive(me)) {
     const plan = cardPlanById(cls, me.creditCard.planId);
     if (plan) {
       const ok = toUser === cls.teacher;
-      html += `<optgroup label="Credit card"><option value="card" ${ok ? "" : "disabled"}>Credit card — ${fmtMoney(cardAvailable(me.creditCard, plan))} available${ok ? "" : " (teacher payments only)"}</option></optgroup>`;
+      html += `<optgroup label="Credit card"><option value="card" ${ok ? "" : "disabled"}>Credit card: ${fmtMoney(cardAvailable(me.creditCard, plan))} available${ok ? "" : " (teacher payments only)"}</option></optgroup>`;
     }
   }
   return html;
@@ -706,7 +706,7 @@ function renderXfer(me, cls) {
   const f = document.getElementById("xferFrom"), t = document.getElementById("xferTo");
   if (!f || !t || IS_TEACHER) return;
   const ch = acChoicesWithKind(me, cls);
-  const opts = ch.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)} — ${fmtMoney(c.bal)}</option>`).join("");
+  const opts = ch.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}: ${fmtMoney(c.bal)}</option>`).join("");
   const prevF = f.value, prevT = t.value, has = id => id && ch.some(c => c.id === id);
   // "From" defaults to the student's main account; "To" starts blank. Earlier picks survive a re-render while still valid.
   const blank = `<option value="" disabled selected>Choose an account…</option>`;

@@ -30,7 +30,7 @@ async function _init() {
   TOKEN = new URLSearchParams(window.location.search).get("token");
   if (!TOKEN) {
     showState("stateError");
-    document.getElementById("errorMsg").textContent = "This link is missing its code — check you copied the whole thing.";
+    document.getElementById("errorMsg").textContent = "This link is missing its code. Check you copied the whole thing.";
     return;
   }
 
@@ -53,12 +53,12 @@ async function _init() {
   const info = await getTemplateShareInfo(TOKEN);
   if (!info) {
     showState("stateError");
-    document.getElementById("errorMsg").textContent = "This share link is invalid or has been revoked — ask for a fresh one.";
+    document.getElementById("errorMsg").textContent = "This share link is invalid or has been revoked. Ask for a fresh one.";
     return;
   }
   if (info.needsRefresh) {
     showState("stateError");
-    document.getElementById("errorMsg").textContent = "This link was made with an older version of The 29 World. Ask the teacher who sent it to click Share Template on that class again — then this same link will work.";
+    document.getElementById("errorMsg").textContent = "This link was made with an older version of The 29 World. Ask the teacher who sent it to click Share Template on that class again, then this same link will work.";
     return;
   }
   SHARE = info;

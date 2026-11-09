@@ -305,7 +305,7 @@ function notifTermDepositItems(me) {
     return {
       id: "td-" + d.id + "-" + today, ts: dayStart, icon: "vault", tone: "lilac",
       title: days === 0 ? "Term deposit matures today" : `Term deposit matures in ${days} ${days === 1 ? "day" : "days"}`,
-      body: `${d.plan.name} — ${fmtMoney(d.amount)} locked in at ${d.plan.rate}%.`,
+      body: `${d.plan.name}: ${fmtMoney(d.amount)} locked in at ${d.plan.rate}%.`,
       href: "termdeposit.html"
     };
   }).filter(Boolean);
@@ -334,7 +334,7 @@ function notifMarketItems(me, cls) {
     out.push({
       id: "mkt-" + m.co.id + "-" + nzDateKey(), ts: dayStart, quiet: true, icon: "chart", tone: up ? "mint" : "coral",
       title: `${m.co.name} share price ${up ? "rose" : "fell"} ${Math.abs(m.pct).toFixed(1)}%`,
-      body: `Now ${fmtMoney(m.co.price)} a share. You hold ${m.shares} ${m.shares === 1 ? "share" : "shares"} — ${fmtMoney(m.shares * m.co.price)}.`,
+      body: `Now ${fmtMoney(m.co.price)} a share. You hold ${m.shares} ${m.shares === 1 ? "share" : "shares"}: ${fmtMoney(m.shares * m.co.price)}.`,
       href: "market.html"
     });
   });
@@ -383,7 +383,7 @@ function notifEventItems(me, cls) {
     out.push({
       id: "bigev-" + e.id, ts: dayStart, icon: "bolt", tone: "coral",
       title: "Big event needs a decision",
-      body: `${e.name} — ${fmtMoney(e.cost)}. ${e.takesAsset === false ? "Pay it or claim on insurance." : "Pay it, claim on insurance, or lose the asset."}`,
+      body: `${e.name}: ${fmtMoney(e.cost)}. ${e.takesAsset === false ? "Pay it or claim on insurance." : "Pay it, claim on insurance, or lose the asset."}`,
       href: "bigevents.html", action: true
     });
   });
@@ -404,7 +404,7 @@ function notifPromotionItems(me) {
   return [{
     id: "promo-" + promo.jobId + "-" + promo.tierId, ts: notifTodayStartMs(), icon: "briefcase", tone: "gold",
     title: `Promotion offer: ${promo.tierName}`,
-    body: `${promo.jobTitle} — accept to move up to ${fmtMoney(promo.wage)} a week.`,
+    body: `${promo.jobTitle}. Accept to move up to ${fmtMoney(promo.wage)} a week.`,
     href: "student.html", action: true
   }];
 }
@@ -422,7 +422,7 @@ function notifSideHustleItems(me, cls) {
     id: "sh-" + today, ts: notifTodayStartMs(), icon: "briefcase", tone: "mint",
     title: "Side hustle check-in is open right now",
     // e.g. "until 4:15pm" (hourLabel gives "4pm", so the minutes go in the middle)
-    body: `${hustle.name} — you have until ${(sh.checkinHour % 12) || 12}:15${sh.checkinHour < 12 ? "am" : "pm"} to check in and get paid ${fmtMoney(Number(hustle.payouts[sh.checkinHour]) || 0)}.`,
+    body: `${hustle.name}. You have until ${(sh.checkinHour % 12) || 12}:15${sh.checkinHour < 12 ? "am" : "pm"} to check in and get paid ${fmtMoney(Number(hustle.payouts[sh.checkinHour]) || 0)}.`,
     href: "student.html", action: true
   }];
 }

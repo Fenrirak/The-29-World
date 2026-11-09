@@ -137,6 +137,7 @@ async function render() {
 
   if (IS_TEACHER) {
     const defs = cls.bigEventDefs || [];
+    paintBigReco(cls);
     const list = document.getElementById("defList");
     list.innerHTML = "";
     document.getElementById("noDefs").classList.toggle("hidden", defs.length > 0);
@@ -163,8 +164,8 @@ async function render() {
               ? `<strong>${isGood ? "+" : ""}${Number(d.costPercent)}%</strong> of ${PERCENT_BASE_TEXT[d.module] || "the item's present cost"}, ${isGood ? "paid to the student" : "to pay"}`
               : `<strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay"}`}</p>
             ${insLine ? `<p class="muted-small">${insLine}</p>` : ""}
-            ${!isGood ? `<p class="muted-small">${takesAsset ? "Not paying costs the student the related job/property/vehicle." : "Cost only — the student can't lose the asset over this."}</p>` : ""}
-            ${isGood && isGeneral ? `<p class="muted-small">Open to everyone — not tied to any job, property, or vehicle.</p>` : ""}
+            ${!isGood ? `<p class="muted-small">${takesAsset ? "Not paying costs the student the related job/property/vehicle." : "Cost only. The student can't lose the asset over this."}</p>` : ""}
+            ${isGood && isGeneral ? `<p class="muted-small">Open to everyone, not tied to any job, property, or vehicle.</p>` : ""}
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn small secondary" onclick="startEditEvent('${d.id}')">Edit</button>
@@ -189,10 +190,10 @@ async function render() {
       row.className = "auto-row";
       const isGood = e.kind === "good";
       row.innerHTML = `
-        <div class="auto-details"><strong>${escapeHtml(e.name)}</strong> (${MODULE_LABEL[e.module]}) ${e.assetName ? `<span class="status-pending" style="white-space:nowrap">${escapeHtml(e.assetName)}</span> ` : ""}— <span class="${isGood ? "ticker-up" : ""}">${isGood ? "+" : ""}${e.autoClaimed ? fmtMoney(e.insurancePaid) : fmtMoney(e.cost)}</span>${e.autoClaimed ? ` <span class="muted-small">(cost ${fmtMoney(e.originalCost != null ? e.originalCost : e.cost)})</span>` : ""}
-          <div class="muted-small">${e.date}${e.basisNote ? " — " + escapeHtml(e.basisNote) : ""}${e.autoClaimed && e.insuranceNote ? " — " + escapeHtml(e.insuranceNote) : ""}</div>
+        <div class="auto-details"><strong>${escapeHtml(e.name)}</strong> (${MODULE_LABEL[e.module]}) ${e.assetName ? `<span class="status-pending" style="white-space:nowrap">${escapeHtml(e.assetName)}</span> ` : ""} <span class="${isGood ? "ticker-up" : ""}">${isGood ? "+" : ""}${e.autoClaimed ? fmtMoney(e.insurancePaid) : fmtMoney(e.cost)}</span>${e.autoClaimed ? ` <span class="muted-small">(cost ${fmtMoney(e.originalCost != null ? e.originalCost : e.cost)})</span>` : ""}
+          <div class="muted-small">${e.date}${e.basisNote ? ": " + escapeHtml(e.basisNote) : ""}${e.autoClaimed && e.insuranceNote ? ": " + escapeHtml(e.insuranceNote) : ""}</div>
         </div>
-        <span class="${e.lostVehicle ? "status-declined" : STATUS_CLASS[e.status]}">${STATUS_LABEL[e.status]}${e.lostVehicle ? " — lost the vehicle" : ""}</span>
+        <span class="${e.lostVehicle ? "status-declined" : STATUS_CLASS[e.status]}">${STATUS_LABEL[e.status]}${e.lostVehicle ? ", lost the vehicle" : ""}</span>
       `;
       box.appendChild(row);
     });
@@ -278,6 +279,85 @@ function startEditEvent(id) {
   });
 }
 
+/* ---------------- Recommended big events ----------------
+   For a class built from scratch: the same big events the base template ships (losing a job, a home or
+   a vehicle, and good surprises), with the insurance payouts already set. Sized for the term choice.
+   Added ones are ordinary big events the teacher can edit or remove. The panel is gone once every one
+   has been added; it can be dismissed (remembered on this device) and brought back. */
+let BIG_RECO_TERMS = 4;
+const bigRecoKey = () => "t29-big-reco-dismissed:" + ((CURRENT && CURRENT.classCode) || "");
+function bigRecoDismissed() { try { return localStorage.getItem(bigRecoKey()) === "1"; } catch (e) { return false; } }
+function bigDismissReco(on) {
+  try { if (on) localStorage.setItem(bigRecoKey(), "1"); else localStorage.removeItem(bigRecoKey()); } catch (e) { /* ignore */ }
+  getClassCached(CURRENT.classCode).then(paintBigReco);
+}
+function bigSetRecoTerms(v) {
+  BIG_RECO_TERMS = [1, 2, 4].includes(Number(v)) ? Number(v) : 4;
+  getClassCached(CURRENT.classCode).then(paintBigReco);
+}
+function bigRecoRemaining(cls) {
+  const have = new Set((cls.bigEventDefs || []).map(e => String(e.name || "").trim().toLowerCase()));
+  return t29BaseTemplateBigEventInputs(BIG_RECO_TERMS).filter(r => !have.has(r.name.toLowerCase()));
+}
+function bigRecoCostText(r) {
+  const good = r.kind === "good";
+  if (r.costMode === "percent") return `${good ? "+" : ""}${Number(r.costPercent)}% of weekly wage`;
+  return `${good ? "+" : ""}${fmtMoney(r.cost)}`;
+}
+function paintBigReco(cls) {
+  const wrap = document.getElementById("bigRecoWrap");
+  if (!wrap) return;
+  const left = bigRecoRemaining(cls);
+  if (!left.length) { wrap.innerHTML = ""; return; }
+  if (bigRecoDismissed()) {
+    wrap.innerHTML = `<p class="muted-small"><a href="#" onclick="bigDismissReco(false);return false;">Show recommended big events</a></p>`;
+    return;
+  }
+  wrap.innerHTML = `<div class="card qz-reco-panel">
+    <div class="qz-reco-head">
+      <h2>${icon("sparkle", 18)} Recommended big events</h2>
+      <span class="qz-reco-actions">
+        <select onchange="bigSetRecoTerms(this.value)" aria-label="Size the amounts for" style="width:auto;margin:0;">
+          <option value="1" ${BIG_RECO_TERMS === 1 ? "selected" : ""}>Sized for 1 term</option>
+          <option value="2" ${BIG_RECO_TERMS === 2 ? "selected" : ""}>Sized for 2 terms</option>
+          <option value="4" ${BIG_RECO_TERMS === 4 ? "selected" : ""}>Sized for a full year</option>
+        </select>
+        <button class="btn small gold" type="button" onclick="bigAddAllReco()">+ Add all ${left.length} remaining</button>
+        <button class="btn small secondary" type="button" onclick="bigDismissReco(true)">Dismiss</button>
+      </span>
+    </div>
+    <p class="muted-small">Major life moments such as losing a job, a home or a vehicle, plus good surprises. Insurance payouts are already set up. Add the ones you like and edit anything afterwards.</p>
+    <div class="qz-reco-grid" style="max-height:460px;overflow:auto;padding-right:4px;">${left.map(r => `
+      <div class="qz-reco-item">
+        <div><strong>${escapeHtml(r.name)}</strong><span class="muted-small">${escapeHtml(r.description)}</span></div>
+        <div class="quiz-meta" style="margin:0;">
+          <span class="badge navy">${MODULE_LABEL[r.module] || r.module}</span>
+          <span class="badge ${r.kind === "good" ? "gold" : "coral"}">${r.kind === "good" ? "Good" : "Bad"}</span>
+          <span class="muted-small">${escapeHtml(bigRecoCostText(r))}</span>
+        </div>
+        <button class="btn small gold" type="button" onclick="bigAddReco('${encodeURIComponent(r.name)}')">+ Add</button>
+      </div>`).join("")}
+    </div></div>`;
+}
+async function bigAddReco(nameEnc) {
+  const name = decodeURIComponent(nameEnc);
+  const cls = await getClassCached(CURRENT.classCode);
+  const r = bigRecoRemaining(cls).find(x => x.name === name);
+  if (!r) return;
+  await addBigEventDefs(CURRENT.classCode, [r]);
+  await render();
+  t29Toast(`Added ${r.name}.`);
+}
+async function bigAddAllReco() {
+  const cls = await getClassCached(CURRENT.classCode);
+  const left = bigRecoRemaining(cls);
+  if (!left.length) return;
+  if (!await t29Confirm(`Add ${left.length} big events? You can edit or remove any of them afterwards.`)) return;
+  await addBigEventDefs(CURRENT.classCode, left);
+  await render();
+  t29Toast(`Added ${left.length} big events.`);
+}
+
 async function deleteEvent(id) {
   if (await t29Confirm("Remove this big event? It won't be handed out anymore.")) {
     if (id === EDITING_ID) resetEventForm();
@@ -293,8 +373,8 @@ async function runBigEventsNow() {
   try {
     const count = await forceWeeklyBigEvents(CURRENT.classCode);
     document.getElementById("runBigEventsMsg").innerHTML = count > 0
-      ? `<div class="success-msg">Done — ${count} student(s) got a big event just now.</div>`
-      : `<div class="error-msg">No eligible students right now — for "bad" events, make sure at least one active event has students with a matching job/property/vehicle. "Good" events are open to everyone. (Anyone who already has a big event queued for this week is skipped.)</div>`;
+      ? `<div class="success-msg">Done: ${count} student(s) got a big event just now.</div>`
+      : `<div class="error-msg">No eligible students right now, for "bad" events, make sure at least one active event has students with a matching job/property/vehicle. "Good" events are open to everyone. (Anyone who already has a big event queued for this week is skipped.)</div>`;
     await render();
   } finally {
     btn.disabled = false;

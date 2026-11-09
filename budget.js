@@ -169,7 +169,7 @@ function renderBudgetStudent(me, cls) {
   rows.push(v.billsTotal > 0
     ? row("Bills paid", `<strong>${fmtMoney(v.billsPaid)}</strong> of ${fmtMoney(v.billsTotal)}`,
         (v.billsPaid / v.billsTotal) * 100, "bills",
-        v.billsLeft > 0 ? `${fmtMoney(v.billsLeft)} still to pay this week` : "Every bill is paid — nice work")
+        v.billsLeft > 0 ? `${fmtMoney(v.billsLeft)} still to pay this week` : "Every bill is paid. Nice work")
     : row("Bills", "None this week", null, "", ""));
   const spendParts = v.actual.purchases.concat(v.actual.surprises);
   const spendSub = spendParts.length ? spendParts.map(p => `${budEsc(p.label)} ${fmtMoney(p.amount)}`).join(" · ") : "Nothing spent yet this week";
@@ -183,7 +183,7 @@ function renderBudgetStudent(me, cls) {
       v.saveTarget > 0 ? (v.actual.saved / v.saveTarget) * 100 : null, "save",
       v.actual.saved < 0 ? "You took more out of savings than you put in this week"
         : v.saveTarget <= 0 ? "You're not saving anything this week"
-        : savedOk ? "Goal reached for this week" : `${fmtMoney(v.saveTarget - v.actual.saved)} to go — move it into Savings on the Bank page`));
+        : savedOk ? "Goal reached for this week" : `${fmtMoney(v.saveTarget - v.actual.saved)} to go. Move it into Savings on the Bank page`));
   } else {
     rows.push(row("Spending", `<strong>${fmtMoney(v.spent)}</strong> so far`, null, "", spendSub));
     rows.push(row("Saved", `<strong>${fmtSigned(v.actual.saved)}</strong> so far`, null, "",
@@ -221,7 +221,7 @@ function renderBudgetStudent(me, cls) {
   else {
     safeWhy = `Your cash and ${othersWord}, plus the money still to come this week, minus the bills still to pay.`;
     if (v.safeTimed < v.safeNow - 0.005) safeWhy += ` Some of that money hasn't arrived yet, so only ${fmtMoney(v.safeTimed)} is safe until it does.`;
-    if (v.safeTimed > cashNow + 0.005) safeWhy += ` Only ${fmtMoney(cashNow)} of it is cash — spending more means moving ${othersWord} into cash first, on the Bank page.`;
+    if (v.safeTimed > cashNow + 0.005) safeWhy += ` Only ${fmtMoney(cashNow)} of it is cash. Spending more means moving ${othersWord} into cash first, on the Bank page.`;
     if (v.plan.hasPlan && v.spendLeft < v.safeNow - 0.005) safeWhy += v.spendLeft > 0.005 ? ` Your plan only has ${fmtMoney(v.spendLeft)} of spending money left.` : " You've already used all of your plan's spending money.";
   }
   document.getElementById("budSafe").innerHTML = `
@@ -328,7 +328,7 @@ function budgetRecalc() {
   } else if (left <= 0) {
     html = `<span class="bud-warn">Your bills already use up everything coming in this week, so ${s > 0 ? "anything you save" : "your spending"} would come from cash you already have.</span>`;
   } else if (s > left + 0.005) {
-    html = `<span class="bud-warn">That's ${fmtMoney(s - left)} more than you have left after bills — it would have to come from cash you already have, leaving nothing to spend.</span>`;
+    html = `<span class="bud-warn">That's ${fmtMoney(s - left)} more than you have left after bills. It would have to come from cash you already have, leaving nothing to spend.</span>`;
   } else {
     html = `<span class="bud-result-line">Spending money this week: <strong>${fmtMoney(spend)}</strong></span>
             <span class="muted-small">${left > 0 ? `Saving ${Math.round((s / left) * 100)}% of what's left after bills.` : ""}</span>`;
@@ -367,7 +367,7 @@ async function saveBudgetPlan(e) {
   const res = await saveBudget(CURRENT.username, document.getElementById("budSave").value);
   btn.disabled = false;
   if (res.ok) {
-    flashMsg(box, `<div class="success-msg">Plan saved — it keeps going every week until you change it.</div>`);
+    flashMsg(box, `<div class="success-msg">Plan saved. It keeps going every week until you change it.</div>`);
     await render();
   } else {
     box.innerHTML = `<div class="error-msg">${budEsc(res.error)}</div>`;

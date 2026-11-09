@@ -23,13 +23,13 @@
   loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=c69a1fa3', 'sidebar-nav.js?v=8d951bc5');
 })();
 </script>
-<title>Property — The 29 World</title>
+<title>Property | The 29 World</title>
 <link rel="icon" type="image/png" href="Favicon.png">
 <link rel="shortcut icon" href="favicon.ico">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=e07ba65b">
+<link rel="stylesheet" href="style.css?v=38fff18f">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -381,7 +381,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <h2>School rentals</h2>
       <button type="button" class="btn small gold" onclick="openNpcModal()"><span class="icon-slot" data-icon="plus"></span> Add school rental</button>
     </div>
-    <p class="muted-small p-note">Rentals with no student owner — the school is the landlord. Students move straight in at the terms you set here.</p>
+    <p class="muted-small p-note">Rentals with no student owner, the school is the landlord. Students move straight in at the terms you set here.</p>
     <div id="npcPropList" class="prop-grid"></div>
     <div class="empty-state hidden" id="noNpcProps">
       <p>No school rentals are listed yet.</p>
@@ -399,7 +399,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div class="set-row">
         <div class="set-text">
           <strong>Allow renting to classmates</strong>
-          <span class="muted-small">When off, students can still buy, live in, or rent out properties for passive income — just not lease to a specific classmate.</span>
+          <span class="muted-small">When off, students can still buy, live in, or rent out properties for passive income, just not lease to a specific classmate.</span>
         </div>
         <label class="p-toggle" for="rentalEnabled" aria-label="Allow renting to classmates"><input type="checkbox" id="rentalEnabled"><span class="p-switch-track"><span class="p-switch-thumb"></span></span></label>
       </div>
@@ -441,7 +441,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <div class="set-row">
           <div class="set-text">
             <strong>Weekly due day</strong>
-            <span class="muted-small">Financed properties owe their weekly payment on this day (the week of purchase is free). Students pay it themselves — if it's still unpaid once the day passes, a red "payment overdue" warning shows on their profile.</span>
+            <span class="muted-small">Financed properties owe their weekly payment on this day (the week of purchase is free). Students pay it themselves, if it's still unpaid once the day passes, a red "payment overdue" warning shows on their profile.</span>
           </div>
           <div class="set-ctl">
             <select id="mortgageDaySelect" aria-label="Mortgage due day">
@@ -497,7 +497,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <div class="set-row">
           <div class="set-text">
             <strong>Variable rates</strong>
-            <span class="muted-small">Each listing with a variable range has a floating rate that moves by itself once a week (the first page load of the week triggers it) and stays inside that range. Set the range in the listing's Financing section. Use this to move every rate one step right now — handy for showing the class what a rate change does to repayments.</span>
+            <span class="muted-small">Each listing with a variable range has a floating rate that moves by itself once a week (the first page load of the week triggers it) and stays inside that range. Set the range in the listing's Financing section. Use this to move every rate one step right now, handy for showing the class what a rate change does to repayments.</span>
           </div>
           <div class="set-ctl">
             <button class="btn small gold" onclick="changeVariableRatesNow()" id="changeVarRatesBtn"><span class="icon-slot" data-icon="repeat"></span> Change rates now</button>
@@ -588,7 +588,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
             <input id="hMortgageRate" type="number" min="0" step="0.1" value="0">
           </div>
         </div>
-        <span class="muted-small">0 weeks = cash purchase only. 0% interest = interest-free. This is the <strong>fixed</strong> mortgage — the rate is locked in for the whole term.</span>
+        <span class="muted-small">0 weeks = cash purchase only. 0% interest = interest-free. This is the <strong>fixed</strong> mortgage, the rate is locked in for the whole term.</span>
         <div class="fin-sub"><span class="icon-slot" data-icon="chart"></span> Variable rate range <span class="fin-opt">optional</span></div>
         <div class="grid grid-2">
           <div>
@@ -684,7 +684,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         </div>
         <label for="npcLifestylePoints">Lifestyle rating bonus (points)</label>
         <input id="npcLifestylePoints" type="number" min="0" step="1" value="0" style="max-width:200px;">
-        <span class="muted-small" id="pNpcLifestylePoints">Added straight to a tenant's lifestyle score while they live here — set in points, not stars, so the property category's points-per-star weight doesn't affect it.</span>
+        <span class="muted-small" id="pNpcLifestylePoints">Added straight to a tenant's lifestyle score while they live here, set in points, not stars, so the property category's points-per-star weight doesn't affect it.</span>
       </div>
 
       <div id="addNpcMsg"></div>
@@ -719,17 +719,17 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
 <script type="module" src="firebase-init.js?v=294b42b5"></script>
 <script defer src="icons.js?v=e1413a9c"></script>
-<script defer src="settings-menu.js?v=918f78f6"></script>
-<script defer src="shortcuts.js?v=f7fd511f"></script>
-<script defer src="offline.js?v=067149c0"></script>
-<script defer src="data-core.js?v=07214fc7"></script>
-<script defer src="data-money.js?v=88ad60cd"></script>
-<script defer src="data-life.js?v=36a834af"></script>
-<script defer src="data-property.js?v=3723dbe7"></script>
-<script defer src="data-markets.js?v=948810b4"></script>
-<script defer src="events-ui.js?v=f846128d"></script>
-<script defer src="quiz-gate.js?v=b67a2a0d"></script>
-<script defer src="notifications.js?v=1e1147ea"></script>
-<script defer src="property.js?v=5475747b"></script>
+<script defer src="settings-menu.js?v=5370c578"></script>
+<script defer src="shortcuts.js?v=7b02398d"></script>
+<script defer src="offline.js?v=ac2cbd82"></script>
+<script defer src="data-core.js?v=535ce0cf"></script>
+<script defer src="data-money.js?v=cc5dc36e"></script>
+<script defer src="data-life.js?v=3c43769a"></script>
+<script defer src="data-property.js?v=84d847c7"></script>
+<script defer src="data-markets.js?v=c76e3587"></script>
+<script defer src="events-ui.js?v=9b6e825f"></script>
+<script defer src="quiz-gate.js?v=f9002445"></script>
+<script defer src="notifications.js?v=d8884f52"></script>
+<script defer src="property.js?v=ca68bae0"></script>
 </body>
 </html>

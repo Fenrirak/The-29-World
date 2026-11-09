@@ -297,7 +297,7 @@ async function closeCompany(classCode, companyId) {
   for (const p of payouts) {
     await adjustBalance(p.uname, p.payout);
     await logTxn(classCode, {
-      type: "stock-close", to: p.uname, amount: p.payout, note: p.coName + " delisted — shares cashed out",
+      type: "stock-close", to: p.uname, amount: p.payout, note: p.coName + " delisted. Shares cashed out",
       companyId: p.companyId, shares: p.shares, pricePerShare: p.pricePerShare,
       costBasisSold: p.costBasisSold, realizedGain: Math.round((p.payout - p.costBasisSold) * 100) / 100
     });
@@ -373,7 +373,7 @@ async function buyShares(username, classCode, companyId, shares) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "Not found." };
     if (e.message === "NO_SHARES") return { ok: false, error: "Not enough shares available." };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
-    if (e.message === "BAD_PRICE") return { ok: false, error: "This company's price is invalid — ask your teacher to set a new price before buying." };
+    if (e.message === "BAD_PRICE") return { ok: false, error: "This company's price is invalid. Ask your teacher to set a new price before buying." };
     console.error("buyShares failed:", e);
     return { ok: false, error: "Something went wrong. Please try again. (" + (e.code || e.message || "unknown") + ")" };
   }
@@ -456,7 +456,7 @@ async function sellShares(username, classCode, companyId, shares) {
   } catch (e) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "Not found." };
     if (e.message === "TOO_MANY") return { ok: false, error: "You don't own that many shares." };
-    if (e.message === "BAD_PRICE") return { ok: false, error: "This company's price is invalid — ask your teacher to set a new price before selling." };
+    if (e.message === "BAD_PRICE") return { ok: false, error: "This company's price is invalid. Ask your teacher to set a new price before selling." };
     console.error("sellShares failed:", e);
     return { ok: false, error: "Something went wrong. Please try again. (" + (e.code || e.message || "unknown") + ")" };
   }
@@ -635,7 +635,7 @@ function getSellableAssets(cls, user) {
       if (p.mortgage && p.mortgage.weeksLeft > 0) {
         out.push({
           assetType: "property", assetId: p.id, name: p.name, refPrice: p.price, count: 1,
-          blocked: "Still on a mortgage — pay it off before you can sell it on."
+          blocked: "Still on a mortgage. Pay it off before you can sell it on."
         });
         return;
       }
@@ -645,7 +645,7 @@ function getSellableAssets(cls, user) {
       if (p.sublet) {
         out.push({
           assetType: "property", assetId: p.id, name: p.name, refPrice: p.price, count: 1,
-          blocked: "Currently listed for rent to classmates — cancel that first."
+          blocked: "Currently listed for rent to classmates. Cancel that first."
         });
         return;
       }
@@ -730,7 +730,7 @@ async function createListing(username, classCode, { assetType, assetId, price, d
     if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };
     if (e.message === "TYPE_OFF") return { ok: false, error: "Your teacher doesn't allow that kind of thing to be traded." };
     if (e.message === "NOT_OWNED") return { ok: false, error: "You don't own that (or it's already listed)." };
-    if (e.message === "BAD_QTY") return { ok: false, error: "Enter how many you want to sell — a whole number, 1 or more." };
+    if (e.message === "BAD_QTY") return { ok: false, error: "Enter how many you want to sell. A whole number, 1 or more." };
     if (e.message === "TOO_FEW") return { ok: false, error: `You only have ${availableCount} of those that aren't already listed.` };
     if (e.message === "BIG_EVENT") return { ok: false, error: BIG_EVENT_BLOCK_MESSAGE };
     if (e.message === "TOO_MANY") return { ok: false, error: "You already have the maximum number of listings up at once." };
@@ -843,7 +843,7 @@ async function updateListing(username, classCode, listingId, { price, descriptio
     if (e.message === "BAD_PRICE") return { ok: false, error: "Enter a price greater than zero." };
     if (e.message === "UNDER_MIN") return { ok: false, error: "That price is below the minimum your teacher allows for this item." };
     if (e.message === "OVER_MAX") return { ok: false, error: "That price is above the maximum your teacher allows for this item." };
-    if (e.message === "BAD_QTY") return { ok: false, error: "Enter how many you want to sell — a whole number, 1 or more." };
+    if (e.message === "BAD_QTY") return { ok: false, error: "Enter how many you want to sell. A whole number, 1 or more." };
     if (e.message === "TOO_FEW") return { ok: false, error: availableCount > 0 ? `You can only have ${availableCount} of those up for sale at once.` : "You don't have any more of those to put up for sale." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -1083,9 +1083,9 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
     }
     { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "OFF") return { ok: false, error: "The Trade Centre is switched off for your class right now." };
-    if (e.message === "CLOSED") return { ok: false, error: "Someone got there first — that listing is no longer for sale." };
+    if (e.message === "CLOSED") return { ok: false, error: "Someone got there first. That listing is no longer for sale." };
     if (e.message === "GONE") return { ok: false, error: "The seller doesn't own that any more, so the listing has expired." };
-    if (e.message === "SELLER_BIG_EVENT") return { ok: false, error: buyerUsername === t29SessionStudent() ? "The seller can't sell this right now — try again later." : BIG_EVENT_BLOCK_MESSAGE };
+    if (e.message === "SELLER_BIG_EVENT") return { ok: false, error: buyerUsername === t29SessionStudent() ? "The seller can't sell this right now. Try again later." : BIG_EVENT_BLOCK_MESSAGE };
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough money for that." };
     if (e.message === "OWN_LISTING") return { ok: false, error: "You can't buy your own listing." };
     if (e.message === "ALREADY_OWN") return { ok: false, error: "You already own that vehicle." };
@@ -1093,7 +1093,7 @@ async function _settleListing(classCode, listingId, buyerUsername, agreedPrice, 
     if (e.message === "TRUCK_LIMIT") return { ok: false, error: "You can only own one truck at a time." };
     if (e.message === "BAD_PRICE") return { ok: false, error: "That price isn't valid." };
     if (e.message === "PRICE_CHANGED") return { ok: false, error: "The seller just changed the price. Have another look at the new price and try again." };
-    if (e.message === "QTY") return { ok: false, error: "There aren't that many left any more — the listing has changed." };
+    if (e.message === "QTY") return { ok: false, error: "There aren't that many left any more. The listing has changed." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -1139,16 +1139,16 @@ async function makeOffer(username, classCode, listingId, amount, note, quantity)
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
     if (!cls.marketplace.enabled) { error = "The Trade Centre is switched off for your class right now."; return; }
-    if (!cls.marketplace.allowOffers) { error = "Your teacher has turned offers off — listings are buy-at-the-asking-price only."; return; }
+    if (!cls.marketplace.allowOffers) { error = "Your teacher has turned offers off. Listings are buy-at-the-asking-price only."; return; }
     const l = cls.listings.find(x => x.id === listingId);
     if (!l || l.status !== "active") { error = "That listing is no longer for sale."; return; }
     if (l.seller === username) { error = "You can't make an offer on your own listing."; return; }
     const value = Math.round(Number(amount) * 100) / 100;
     if (!(value > 0)) { error = "Enter a price greater than zero."; return; }
     const qtyRaw = quantity === undefined || quantity === null || String(quantity).trim() === "" ? 1 : Number(quantity);
-    if (!Number.isInteger(qtyRaw) || qtyRaw < 1) { error = "Enter how many you want — a whole number, 1 or more."; return; }
+    if (!Number.isInteger(qtyRaw) || qtyRaw < 1) { error = "Enter how many you want. A whole number, 1 or more."; return; }
     const have = listingQuantity(l);
-    if (qtyRaw > have) { error = have === 1 ? "Only 1 is for sale." : `Only ${have} are for sale — you can't offer on more than that.`; return; }
+    if (qtyRaw > have) { error = have === 1 ? "Only 1 is for sale." : `Only ${have} are for sale. You can't offer on more than that.`; return; }
     const bounds = marketplacePriceBounds(cls, l.refPrice);
     if (value < bounds.min) { error = `Offers can't go below ${fmtMoney(bounds.min)} each for this item.`; return; }
     if (bounds.max !== null && value > bounds.max) { error = `Offers can't go above ${fmtMoney(bounds.max)} each for this item.`; return; }
@@ -1237,7 +1237,7 @@ async function acceptCounter(username, classCode, listingId, offerId, pay) {
   if (!o || o.status !== "countered" || !o.counter) return { ok: false, error: "That counter-offer is no longer open." };
   if (o.buyer !== username) return { ok: false, error: "That isn't your offer." };
   const wanted = offerQuantity(o);
-  if (wanted > listingQuantity(l)) return { ok: false, error: `This was for ${wanted}, but only ${listingQuantity(l)} ${listingQuantity(l) === 1 ? "is" : "are"} left — decline it and send a new offer.` };
+  if (wanted > listingQuantity(l)) return { ok: false, error: `This was for ${wanted}, but only ${listingQuantity(l)} ${listingQuantity(l) === 1 ? "is" : "are"} left. Decline it and send a new offer.` };
   const res = await _settleListing(classCode, listingId, username, o.counter.amount, pay || {}, wanted);
   if (!res.ok) return res;
   const classRef = classesCol().doc(classCode);
@@ -1266,7 +1266,7 @@ async function acceptOffer(username, classCode, listingId, offerId) {
   // Marking the offer "accepted" only means anything once the sale has
   // actually gone through, so that write happens after it, never before.
   const wanted = offerQuantity(o);
-  if (wanted > listingQuantity(l)) return { ok: false, error: `This offer is for ${wanted}, but only ${listingQuantity(l)} ${listingQuantity(l) === 1 ? "is" : "are"} left — decline it and let them send a new one.` };
+  if (wanted > listingQuantity(l)) return { ok: false, error: `This offer is for ${wanted}, but only ${listingQuantity(l)} ${listingQuantity(l) === 1 ? "is" : "are"} left. Decline it and let them send a new one.` };
   const res = await _settleListing(classCode, listingId, o.buyer, o.amount, { fromDefault: true }, wanted);
   if (!res.ok) return res;
   const classRef = classesCol().doc(classCode);
@@ -1293,7 +1293,7 @@ async function saveGamblingSettings(classCode, settings) {
       maxBet: Math.max(0, Number(settings.maxBet) || 0),
       dailyBuyInLimit: (settings.dailyBuyInLimit === "" || settings.dailyBuyInLimit === undefined || settings.dailyBuyInLimit === null) ? null : Math.max(0, Number(settings.dailyBuyInLimit) || 0),
       dailyWinLimit: (settings.dailyWinLimit === "" || settings.dailyWinLimit === undefined || settings.dailyWinLimit === null) ? null : Math.max(0, Number(settings.dailyWinLimit) || 0),
-      winLimitMessage: sanitizeUserText(settings.winLimitMessage, 200) || "You've hit your winning limit for today \u2014 nice work! Come back and play again tomorrow.",
+      winLimitMessage: sanitizeUserText(settings.winLimitMessage, 200) || "You've hit your winning limit for today. Nice work! Come back and play again tomorrow.",
       payouts: {
         straightUp: Math.max(0, Number(settings.straightUp) || 0),
         split: Math.max(0, Number(settings.split) || 0),
@@ -1600,7 +1600,7 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
   // student's rolling report totals - one transaction instead of a second one on the same doc after the log write.
   const logBody = {
     type: "gambling", from: username, amount: Math.abs(netChange), bet: betAmount,
-    note: `Roulette (${betTypeLabel(betType)}): ${win ? "WON" : "lost"} — ball landed on ${spin}` + (win && taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "")
+    note: `Roulette (${betTypeLabel(betType)}): ${win ? "WON" : "lost"}. Ball landed on ${spin}` + (win && taxAmount > 0 ? ` (${fmtMoney(taxAmount)} tax withheld)` : "")
   };
   const logEntry = buildLedgerEntry(logBody);
   let reported = false;
@@ -1632,7 +1632,7 @@ async function placeRouletteBet(username, classCode, betType, betAmount, selecti
     if (e.message === "NO_USER") return { ok: false, error: "User not found." };
     if (e.message === "LOCKED") return { ok: false, error: await moduleLockedError(username, classCode, "gambling", "Gambling") };
     if (e.message === "WIN_LIMIT") return { ok: false, error: escapeHtml(g.winLimitMessage || "") || "You've hit today's winning limit and can't gamble again until tomorrow." };
-    if (e.message === "INSUFFICIENT") return { ok: false, error: "You don't have enough in your gambling account for that bet — buy in first." };
+    if (e.message === "INSUFFICIENT") return { ok: false, error: "You don't have enough in your gambling account for that bet. Buy in first." };
     return { ok: false, error: "Something went wrong placing that bet. Please try again." };
   }
   // The log entry is written in the background while the wheel spins (see queueGamblingLog).
@@ -1727,7 +1727,7 @@ async function requestTimeExemption(username) {
       t.update(userRef, { timeExemptionStatus: "pending", timeExemptionDate: nzDateKey(), timeExemptionRequestedAt: nowStr() });
     });
   } catch (e) {
-    if (e.message === "ALREADY_PENDING") return { ok: false, error: "You've already sent a request — waiting on your teacher." };
+    if (e.message === "ALREADY_PENDING") return { ok: false, error: "You've already sent a request. Waiting on your teacher." };
     if (e.message === "DECLINED_TODAY") return { ok: false, error: "Your teacher already declined a request today. Try again tomorrow." };
     if (e.message === "NOT_LOCKED") return { ok: false, error: "You're not currently out of time." };
     return { ok: false, error: "Something went wrong. Please try again." };
@@ -1980,7 +1980,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
   if (user.role !== "teacher") {
     const acc0 = gamblingAccountToday(user);
     if (acc0.winLimitHit) return { ok: false, error: escapeHtml(cls.gambling.winLimitMessage || "") || "You've hit today's winning limit and can't gamble again until tomorrow." };
-    if (acc0.balance < betAmount) return { ok: false, error: "You don't have enough in your gambling account for that bet — buy in first." };
+    if (acc0.balance < betAmount) return { ok: false, error: "You don't have enough in your gambling account for that bet. Buy in first." };
   }
 
   // Build and deal the whole round in memory FIRST, before any money moves.
@@ -2049,7 +2049,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
   // check above and now) — the round was only ever built in memory, so
   // bail out cleanly rather than dealing a round nothing was staked on.
   if (!debitResult.ok) {
-    return { ok: false, error: "Your gambling balance changed before this bet could be placed — please try again." };
+    return { ok: false, error: "Your gambling balance changed before this bet could be placed. Please try again." };
   }
 
   // From here on the bet is escrowed, so any failure must refund it rather
@@ -2063,7 +2063,7 @@ async function startBlackjackRound(username, classCode, betAmount) {
     return { ok: true, round: bjClientView(round) };
   } catch (e) {
     await adjustGamblingAccount(username, betAmount, cls.gambling.dailyWinLimit);
-    return { ok: false, error: "Something went wrong starting that round — your bet has been refunded. Please try again." };
+    return { ok: false, error: "Something went wrong starting that round. Your bet has been refunded. Please try again." };
   }
 }
 
@@ -2089,7 +2089,7 @@ async function blackjackInsurance(username, classCode, takeInsurance) {
     const r = await adjustGamblingAccount(username, -insAmount, dailyWinLimit);
     // Same re-validation-can-fail case as everywhere else adjustGamblingAccount
     // is called — the check above is a stale read, this is the real one.
-    if (!r.ok) return { ok: false, error: "Your gambling balance changed before insurance could be taken — please try again." };
+    if (!r.ok) return { ok: false, error: "Your gambling balance changed before insurance could be taken. Please try again." };
     round.insurance.taken = true;
     round.insurance.amount = insAmount;
   }
@@ -2124,7 +2124,7 @@ async function blackjackInsurance(username, classCode, takeInsurance) {
     return { ok: true, round: bjClientView(round) };
   } catch (e) {
     if (insAmount > 0) await adjustGamblingAccount(username, insAmount, dailyWinLimit);
-    return { ok: false, error: "Something went wrong resolving insurance — any insurance stake has been refunded. Please try again." };
+    return { ok: false, error: "Something went wrong resolving insurance. Any insurance stake has been refunded. Please try again." };
   }
 }
 
@@ -2184,7 +2184,7 @@ async function blackjackAction(username, classCode, action) {
       if (!eligible) return { ok: false, error: "You can only double on your first two cards, and not if either card is an Ace." };
       if (!isTeacher && gamblingAccountToday(user).balance < hand.bet) return { ok: false, error: "You don't have enough in your gambling account to double down." };
       const debit = await adjustGamblingAccount(username, -hand.bet, dailyWinLimit);
-      if (!debit.ok) return { ok: false, error: "Your gambling balance changed before you could double down — please try again." };
+      if (!debit.ok) return { ok: false, error: "Your gambling balance changed before you could double down. Please try again." };
       try {
         hand.doubled = true;
         hand.bet *= 2;
@@ -2193,7 +2193,7 @@ async function blackjackAction(username, classCode, action) {
         return await bjAdvance(username, classCode, round);
       } catch (e) {
         await adjustGamblingAccount(username, hand.bet / 2, dailyWinLimit); // undo the doubled stake just taken
-        return { ok: false, error: "Something went wrong doubling down — your extra stake has been refunded. Please try again." };
+        return { ok: false, error: "Something went wrong doubling down. Your extra stake has been refunded. Please try again." };
       }
     }
 
@@ -2204,7 +2204,7 @@ async function blackjackAction(username, classCode, action) {
       if (!isTeacher && gamblingAccountToday(user).balance < hand.bet) return { ok: false, error: "You don't have enough in your gambling account to split." };
       const splitStake = hand.bet;
       const debit = await adjustGamblingAccount(username, -splitStake, dailyWinLimit);
-      if (!debit.ok) return { ok: false, error: "Your gambling balance changed before you could split — please try again." };
+      if (!debit.ok) return { ok: false, error: "Your gambling balance changed before you could split. Please try again." };
       try {
         const isAces = hand.cards[0].r === "A";
         const otherCard = hand.cards.pop();
@@ -2220,7 +2220,7 @@ async function blackjackAction(username, classCode, action) {
         return await bjAdvance(username, classCode, round);
       } catch (e) {
         await adjustGamblingAccount(username, splitStake, dailyWinLimit); // undo the split stake just taken
-        return { ok: false, error: "Something went wrong splitting that hand — your stake has been refunded. Please try again." };
+        return { ok: false, error: "Something went wrong splitting that hand. Your stake has been refunded. Please try again." };
       }
     }
 
@@ -2340,7 +2340,7 @@ async function bjSettle(username, classCode, round) {
   let handsDesc;
   if (round.hands.length === 1) {
     const only = results[0];
-    handsDesc = `you had ${bjHandValue(only.hand.cards).total}${only.hand.status === "bust" ? " (bust)" : ""} — ${outcomeWord[only.outcome]}`;
+    handsDesc = `you had ${bjHandValue(only.hand.cards).total}${only.hand.status === "bust" ? " (bust)" : ""}: ${outcomeWord[only.outcome]}`;
   } else {
     handsDesc = results.map((r, i) => `hand ${i + 1}: ${bjHandValue(r.hand.cards).total}${r.hand.status === "bust" ? " (bust)" : ""} (${outcomeWord[r.outcome]})`).join(", ");
   }
@@ -2352,7 +2352,7 @@ async function bjSettle(username, classCode, round) {
       // it's no longer summed anywhere for a daily cap (that's now enforced
       // at buy-in time — see startBlackjackRound/buyIntoGamblingAccount).
       type: "gambling", from: username, amount: Math.abs(netForTxn), bet: round.betAmount,
-      note: `Blackjack: ${handsDesc}; ${dealerDesc} — ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${protectedRefund > 0 ? ` ${fmtMoney(protectedRefund)} of doubled/split bets returned (dealer blackjack).` : ""}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
+      note: `Blackjack: ${handsDesc}; ${dealerDesc}: ${netForTxn >= 0 ? "WON" : "lost"} ${fmtMoney(Math.abs(netForTxn))} overall.${insuranceNote}${protectedRefund > 0 ? ` ${fmtMoney(protectedRefund)} of doubled/split bets returned (dealer blackjack).` : ""}${taxTotal > 0 ? ` (${fmtMoney(taxTotal)} tax withheld)` : ""}`
   };
   const ledgerEntry = buildLedgerEntry(ledgerBody);
 

@@ -36,7 +36,7 @@ const PERF = {
     root.style.setProperty("--p", i / 3);
     root.style.setProperty("--d", det / 3);
     document.getElementById("perfHint").textContent = m === "auto"
-      ? "Picks for your device — now " + this.NAMES[tier] + "."
+      ? "Picks for your device. Now " + this.NAMES[tier] + "."
       : this.HINTS[m];
     const sl = document.getElementById("perfSlider");
     sl.value = i;
@@ -191,7 +191,7 @@ function showRouletteAnimation(number) {
           <div class="wheel-ball-track" id="wheelBallTrack"><div class="wheel-ball"></div></div>
           <div class="wheel-hub"></div>
         </div>
-        <p class="muted-small" id="wheelStatus">No peeking — the ball is rolling...</p>
+        <p class="muted-small" id="wheelStatus">No peeking. The ball is rolling...</p>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -274,7 +274,7 @@ function renderPicker() {
   const need = neededCount(type);
   const layoutNote = type === "straightUp"
     ? "Tap 0, or any number 1-36."
-    : "Numbers are laid out in a horizontal table, just like a real roulette table — pick cells that are actually next to each other (above/below in the same column, or left/right) for a valid bet.";
+    : "Numbers are laid out in a horizontal table, just like a real roulette table. Pick cells that are actually next to each other (above/below in the same column, or left/right) for a valid bet.";
   area.innerHTML = `
     <p class="muted-small">Pick ${need} number${need === 1 ? "" : "s"}. ${layoutNote} Selected: <span id="pickCount">0</span>/${need}</p>
     <div class="number-table-wrap">
@@ -449,7 +449,7 @@ function renderGamblingAccountCard(view) {
     buyInBlock.classList.toggle("over", pct >= 100);
     buyInNote.textContent = view.remainingBuyIn > 0
       ? `${fmtMoney(view.remainingBuyIn)} left to buy in today.`
-      : "You've reached today's buy-in limit — you can still play with what's in your account.";
+      : "You've reached today's buy-in limit. You can still play with what's in your account.";
   } else {
     buyInBar.style.width = "0%";
     buyInBar.className = "";
@@ -482,7 +482,7 @@ function renderGamblingAccountCard(view) {
     buyInForm.classList.add("hidden");
     divider.classList.add("hidden");
     lockedMsg.classList.remove("hidden");
-    lockedMsg.innerHTML = `<div class="success-msg">${escapeHtml(view.winLimitMessage || "You've hit today's winning limit — come back tomorrow.")}</div>`;
+    lockedMsg.innerHTML = `<div class="success-msg">${escapeHtml(view.winLimitMessage || "You've hit today's winning limit. Come back tomorrow.")}</div>`;
   } else if (view.gamblingEnabled === false) {
     buyInForm.classList.add("hidden");
     divider.classList.add("hidden");
@@ -738,7 +738,7 @@ async function renderTeacherGamblingRecent(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details"><strong>${escapeHtml(who)}</strong> — ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details"><strong>${escapeHtml(who)}</strong>: ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);
@@ -887,7 +887,7 @@ async function bjDeal() {
     BJ_DEAL_PENDING = false;
     bjResetDealBtn(); // before the awaited reset below, which does a network render()
     const betMsgBox = document.getElementById("bjBetMsg");
-    if (betMsgBox) betMsgBox.innerHTML = `<div class="error-msg">Something went wrong dealing that round. If your balance looks off, refresh the page — any escrowed bet is automatically refunded on failure.</div>`;
+    if (betMsgBox) betMsgBox.innerHTML = `<div class="error-msg">Something went wrong dealing that round. If your balance looks off, refresh the page. Any escrowed bet is automatically refunded on failure.</div>`;
     await bjResetTable();
   } finally {
     // Only the newest deal may reset shared state — an older bjDeal() can still be
@@ -985,7 +985,7 @@ async function bjDoAction(action) {
     // errors, so a slow read must not keep Hit/Stand disabled.
     refreshGamblingAccountCardIfVisible();
   } catch (e) {
-    document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong with that action. Please refresh the page — any stake taken for it is automatically refunded on failure.</div>`;
+    document.getElementById("bjRoundMsg").innerHTML = `<div class="error-msg">Something went wrong with that action. Please refresh the page. Any stake taken for it is automatically refunded on failure.</div>`;
   } finally {
     bjSetButtonsDisabled(BJ_ACTION_BTN_IDS, false);
   }
@@ -1336,7 +1336,7 @@ function renderBlackjackRound(r) {
           const active = r.phase === "playing" && r.activeSeat === seat && i === r.activeHandIndex;
           html += `<div class="bj-hand-group" style="${active ? 'outline:2px dashed #ffd778;border-radius:8px;padding:4px;' : ''}">
             <div class="bj-hand">${bjHandHtml(h.cards, 0, `human-${i}`)}</div>
-            ${h.cards.length ? `<div class="bj-total">${fmtMoney(h.bet)} — Total: ${h.total}${h.doubled ? " (doubled)" : ""}</div>` : ""}
+            ${h.cards.length ? `<div class="bj-total">${fmtMoney(h.bet)}. Total: ${h.total}${h.doubled ? " (doubled)" : ""}</div>` : ""}
             ${h.status !== "playing" && r.results ? `<span class="bj-outcome ${bjOutcomeClass(r.results[i])}">${bjOutcomeLabel(r.results[i])}</span>` : ""}
           </div>`;
         });

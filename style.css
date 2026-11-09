@@ -201,6 +201,14 @@ html:not(.role-teacher):not(.casino-on) .topbar nav .nav-group[data-nav-group="G
 html.casino-unverified:not(.role-teacher) .topbar nav a[href="gambling.html"],
 html.casino-unverified:not(.role-teacher) .topbar nav .nav-group[data-nav-group="Games"]{visibility:hidden;pointer-events:none;}
 
+/* A module the teacher has switched off (data-core.js sets .mod-off on its menu links, and on the
+   phone dropdown group when every link in it is off). Students only; teachers always see everything. */
+html:not(.role-teacher) .topbar nav a.mod-off,
+html:not(.role-teacher) .topbar nav .nav-group.mod-off-group{display:none !important;}
+/* A student who opens a switched-off module sees only the notice. */
+main.mod-off-page > :not(#modOffNotice){display:none !important;}
+.mod-switch{margin-bottom:16px;}
+
 /* Student profile modal */
 #profileModal .card{max-width:800px;max-height:88vh;overflow:auto;padding:32px 36px;}
 @media (max-width:520px){#profileModal .card{padding:22px 18px;}}

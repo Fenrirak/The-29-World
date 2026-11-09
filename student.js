@@ -219,7 +219,7 @@ async function render() {
   const job = cls.jobs.find(j => j.id === me.jobId);
   const myTier = job ? getStudentTier(job, me) : null;
   document.getElementById("jobLabel").textContent = job
-    ? (myTier ? `${myTier.name} — ${fmtMoney(myTier.wage)}/payday` : `${job.title}/payday`)
+    ? (myTier ? `${myTier.name}: ${fmtMoney(myTier.wage)}/payday` : `${job.title}/payday`)
     : "No job assigned";
 
   renderGoals(me);
@@ -250,7 +250,7 @@ async function render() {
     const label = await lifestyleBandForStudent(me.username, me.classCode, board);
     const isOverride = me.lifestyleOverride !== undefined && me.lifestyleOverride !== null;
     document.getElementById("lifestyleValue").textContent =
-      score + (label ? " — " + label : "") + (isOverride ? " (set by teacher)" : "");
+      score + (label ? ": " + label : "") + (isOverride ? " (set by teacher)" : "");
   }
   const avById = {}; allStudents.forEach(s => { avById[s.username] = s; });
   const medalClass = i => (i === 0 ? "gold" : i === 1 ? "silver" : i === 2 ? "bronze" : "");
@@ -350,8 +350,8 @@ async function render() {
   my.forEach(t => {
     let detail = t.note || "";
     if (t.type === "transfer" || t.type === "automation") {
-      if (t.from === me.username) detail = "To " + nameOf(t.to) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : ""));
-      else detail = "From " + nameOf(t.from) + (t.note ? " — " + t.note : (t.type === "automation" ? " — automatic payment" : ""));
+      if (t.from === me.username) detail = "To " + nameOf(t.to) + (t.note ? ": " + t.note : (t.type === "automation" ? ". Automatic payment" : ""));
+      else detail = "From " + nameOf(t.from) + (t.note ? ": " + t.note : (t.type === "automation" ? ". Automatic payment" : ""));
     }
     // Which way the money went — one shared answer for every page (see
     // txnDirection in data-money.js): green "+" in, red "−" out, plain when
@@ -565,7 +565,7 @@ async function renderSideHustle(me, cls, lockedModules) {
     const intro = sh("shPickIntro");
     if (intro) intro.textContent = state === "pick"
       ? "Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid."
-      : "Request a new side hustle or check-in hour. Your teacher has to approve the change before it applies — your current hustle keeps working until they do.";
+      : "Request a new side hustle or check-in hour. Your teacher has to approve the change before it applies. Your current hustle keeps working until they do.";
     const saveBtn = sh("shSaveBtn");
     if (saveBtn) saveBtn.textContent = state === "pick" ? "Save my side hustle" : "Request this change";
     const cancelBtn = sh("shCancelBtn");
@@ -610,7 +610,7 @@ async function renderSideHustle(me, cls, lockedModules) {
   const statusEl = sh("shStatus");
   if (statusEl) {
     if (already) statusEl.textContent = `You've checked in today. Streak: ${myHustle.streak || 0} day${(myHustle.streak || 0) === 1 ? "" : "s"}.`;
-    else if (inWindow) statusEl.textContent = "You're in your check-in window — go ahead!";
+    else if (inWindow) statusEl.textContent = "You're in your check-in window. Go ahead!";
     else statusEl.textContent = `Come back at ${hourLabel(myHustle.checkinHour)} to check in.`;
   }
   const changeBtn = sh("shChangeBtn");
@@ -651,7 +651,7 @@ async function shSaveChoice() {
   if (msg) msg.textContent = "Saving...";
   const res = await requestSideHustleChange(CURRENT.username, CURRENT.classCode, hustleId, hour);
   if (!res.ok) { if (msg) msg.textContent = res.error; return; }
-  if (msg) msg.textContent = res.pending ? "Request sent — waiting on your teacher to approve it." : "";
+  if (msg) msg.textContent = res.pending ? "Request sent. Waiting on your teacher to approve it." : "";
   SH_MODE_REQUEST = false;
   await render();
 }
@@ -682,15 +682,15 @@ async function openLifestyleBreakdown() {
   ]);
 
   document.getElementById("lifestyleModalTitle").innerHTML =
-    icon("star", 20) + ` Lifestyle rating: ${breakdown.total}${label ? " — " + label : ""}`;
+    icon("star", 20) + ` Lifestyle rating: ${breakdown.total}${label ? ": " + label : ""}`;
 
   if (breakdown.overridden) {
-    body.innerHTML = `<p class="muted-small">Your teacher has set this score manually, so it isn't calculated from what you own — it's fixed at <strong>${breakdown.total}</strong> until they change or clear it.</p>`;
+    body.innerHTML = `<p class="muted-small">Your teacher has set this score manually, so it isn't calculated from what you own. It's fixed at <strong>${breakdown.total}</strong> until they change or clear it.</p>`;
     return;
   }
 
   if (breakdown.items.length === 0) {
-    body.innerHTML = nextTierHtml(tier) + `<p class="muted-small">Nothing is affecting your score yet — property, a vehicle, store items, or insurance can raise it.</p>`;
+    body.innerHTML = nextTierHtml(tier) + `<p class="muted-small">Nothing is affecting your score yet. Property, a vehicle, store items, or insurance can raise it.</p>`;
     return;
   }
 
@@ -751,7 +751,7 @@ function nextTierHtml(tier) {
     return `
       <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1.5px solid var(--line);">
         <h4>${icon("briefcase", 14)} Next tier</h4>
-        <p class="muted-small">You're already at the top tier${tier.currentLabel ? ` — <strong>${tier.currentLabel}</strong>` : ""}. Nothing more needed!</p>
+        <p class="muted-small">You're already at the top tier${tier.currentLabel ? `: <strong>${tier.currentLabel}</strong>` : ""}. Nothing more needed!</p>
       </div>
     `;
   }
@@ -766,7 +766,7 @@ function nextTierHtml(tier) {
       <p class="muted-small">To reach <strong>${tier.nextLabel}</strong>${tier.currentLabel ? ` from ${tier.currentLabel}` : ""}, you still need:</p>
       ${needs.length
         ? `<ul style="margin:6px 0 0 18px;padding:0;">${needs.map(n => `<li class="muted-small">${n}</li>`).join("")}</ul>`
-        : `<p class="muted-small">You already meet the requirements — your rating should update shortly.</p>`}
+        : `<p class="muted-small">You already meet the requirements. Your rating should update shortly.</p>`}
     </div>
   `;
 }

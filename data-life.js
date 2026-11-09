@@ -646,7 +646,7 @@ async function checkinTruckDrive(username, classCode, vehId) {
     if (e.message === "ALREADY") return { ok: false, error: "You've already driven this truck today." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "truck-drive", to: username, amount, note: `Drove truck — ${vehName}` });
+  await logTxn(classCode, { type: "truck-drive", to: username, amount, note: `Drove truck: ${vehName}` });
   return { ok: true, amount };
 }
 
@@ -930,9 +930,9 @@ const INSURANCE_TYPES = {
     { key: "comprehensive", label: "Comprehensive Insurance", covers: ALL_TRANSPORT_INCIDENTS, vehicles: "cars",
       coversText: "Covers accidents, fire, theft, vandalism, storms, floods and damage to other people's property. Cars and bikes only." },
     { key: "third-party", label: "Third-Party Only", covers: ["third-party"], vehicles: "cars",
-      coversText: "Covers damage you cause to other people's property only — not your own vehicle, so if a big event damages yours too, you still lose it. Cars and bikes only." },
+      coversText: "Covers damage you cause to other people's property only, not your own vehicle, so if a big event damages yours too, you still lose it. Cars and bikes only." },
     { key: "tpft", label: "Third-Party, Fire, and Theft", covers: ["third-party", "fire", "theft"], vehicles: "cars",
-      coversText: "Covers damage to other people's property, plus fire and theft. Not accidents, vandalism or storms — if a big event damages your own vehicle one of those ways, you still lose it. Cars and bikes only." },
+      coversText: "Covers damage to other people's property, plus fire and theft. Not accidents, vandalism or storms, if a big event damages your own vehicle one of those ways, you still lose it. Cars and bikes only." },
     { key: "truck", label: "Truck Insurance", covers: ALL_TRANSPORT_INCIDENTS, vehicles: "trucks",
       coversText: "Covers anything that happens to your truck. Trucks only." }
   ],
@@ -1035,7 +1035,7 @@ function cleanInsuranceType(coverage, type) {
 // and show on their own, exactly as before.
 function insurancePlanName(p) {
   if (!p) return "";
-  return p.company ? `${p.company} — ${p.name}` : p.name;
+  return p.company ? `${p.company}: ${p.name}` : p.name;
 }
 
 // [{ id, name, coverage, plans: [...] }], in the order first seen.
@@ -1817,7 +1817,7 @@ async function checkinSideHustle(username, classCode) {
     if (e.message === "ALREADY") return { ok: false, error: "You've already checked in today." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "side-hustle", to: username, amount, note: `Side hustle check-in — ${hustleName}` });
+  await logTxn(classCode, { type: "side-hustle", to: username, amount, note: `Side hustle check-in: ${hustleName}` });
   return { ok: true, amount, streak };
 }
 
@@ -1869,7 +1869,7 @@ async function buyInsurance(username, classCode, planId, opts) {
   if (fee > 0) {
     await logPurchaseTxn(classCode, username, payRes, "Insurance", { type: "insurance-signup-fee", from: username, amount: fee, note: `Sign-up fee for insurance: ${planName}` });
   }
-  await logTxn(classCode, { type: "insurance-buy", from: username, amount: 0, note: `Signed up for insurance: ${planName} — premiums due weekly` });
+  await logTxn(classCode, { type: "insurance-buy", from: username, amount: 0, note: `Signed up for insurance: ${planName}. Premiums due weekly` });
   return { ok: true };
 }
 async function cancelInsurance(username, planId) {
@@ -2672,7 +2672,7 @@ function pendingBigEventFor(cls, username, kind, assetId) {
 function hasPendingBigEvent(cls, username) {
   return (cls.bigEventLog || []).some(e => e.studentUser === username && e.status === "pending");
 }
-const BIG_EVENT_BLOCK_MESSAGE = "Answer your big event first — you can't do that while it's waiting for you.";
+const BIG_EVENT_BLOCK_MESSAGE = "Answer your big event first. You can't do that while it's waiting for you.";
 
 // "general" is only a legal module for "good" events — a "bad" event
 // always needs a real asset to threaten/insure, so it silently falls back
@@ -2762,38 +2762,45 @@ function bigEventIsPercent(def) {
   return def.costMode === "percent" && Number(def.costPercent) > 0 && EVENT_PERCENT_BASES.includes(def.module);
 }
 
+// One big event def from the teacher's form fields (or a ready-made one). Shared by addBigEventDef,
+// addBigEventDefs and the base template.
+function buildBigEventDef(ev) {
+  const kind = ev.kind === "good" ? "good" : "bad";
+  const module = resolveBigEventModule(ev.module, kind);
+  return {
+    id: uid("big"), name: ev.name,
+    module,
+    kind,
+    // What happened (fire, theft, house damage...) decides which insurance types can cover it.
+    // Only for bad property/transport events.
+    incident: kind === "bad" ? cleanIncident(MODULE_TO_COVERAGE[module], ev.incident) : null,
+    // Which property/transport insurance types cover this event and how much each pays out
+    // (see insuranceClaimOptions). Empty = any plan of the matching coverage covers the whole cost.
+    insuranceCover: kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[module],
+      ev.insuranceCover, cleanIncident(MODULE_TO_COVERAGE[module], ev.incident)) : [],
+    ...cleanBigEventCost(ev, module), description: ev.description || "", active: true,
+    // Whether NOT paying this event costs the student the related job/property/vehicle. Defaults
+    // to true so existing "bad" events keep behaving as before. When false the student only owes
+    // the amount (covered by insurance if they have a matching plan). Ignored for "general" events.
+    takesAsset: ev.takesAsset === false ? false : true
+  };
+}
 async function addBigEventDef(classCode, ev) {
+  return addBigEventDefs(classCode, [ev]);
+}
+// Teacher: add several big events at once (the recommended set).
+async function addBigEventDefs(classCode, evs) {
+  const list = (evs || []).filter(e => e && String(e.name || "").trim());
+  if (!list.length) return { ok: false, error: "Nothing to add." };
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
-    const kind = ev.kind === "good" ? "good" : "bad";
-    const module = resolveBigEventModule(ev.module, kind);
-    cls.bigEventDefs.push({
-      id: uid("big"), name: ev.name,
-      module,
-      kind,
-      // What happened (fire, theft, house damage...) — decides which
-      // insurance types can cover it. Only for bad property/transport events.
-      incident: kind === "bad" ? cleanIncident(MODULE_TO_COVERAGE[module], ev.incident) : null,
-      // Which property/transport insurance types cover this event and how
-      // much each pays out (see insuranceClaimOptions). Empty = any plan of
-      // the matching coverage covers the whole cost, same as before.
-      insuranceCover: kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[module],
-        ev.insuranceCover, cleanIncident(MODULE_TO_COVERAGE[module], ev.incident)) : [],
-      ...cleanBigEventCost(ev, module), description: ev.description || "", active: true,
-      // Whether NOT paying this event costs the student the related
-      // job/property/vehicle. Defaults true so existing "bad" events keep
-      // behaving exactly as before. When false, the event is still tied to
-      // the module (for eligibility + insurance matching) but the student
-      // never loses the asset over it — they just owe the amount, covered
-      // by insurance if they have a matching plan. Meaningless (and
-      // ignored) for "general" events since there's no asset either way.
-      takesAsset: ev.takesAsset === false ? false : true
-    });
+    list.forEach(ev => cls.bigEventDefs.push(buildBigEventDef(ev)));
     t.update(classRef, { bigEventDefs: cls.bigEventDefs });
   });
+  return { ok: true, count: list.length };
 }
 async function removeBigEventDef(classCode, defId) {
   const classRef = classesCol().doc(classCode);
@@ -3053,7 +3060,7 @@ async function revealBigEvent(classCode, logId) {
   // telling the student why is shown straight after (checkBigEventPopup).
   if (entry && entry.kind === "good") {
     await adjustBalance(entry.studentUser, entry.cost);
-    await logTxn(classCode, { type: "big-event", to: entry.studentUser, amount: entry.cost, note: `Big event windfall: "${entry.name}"` + bigEventAssetTag(entry) + (entry.description ? " — " + entry.description : "") + (entry.basisNote ? ` (${entry.basisNote})` : "") });
+    await logTxn(classCode, { type: "big-event", to: entry.studentUser, amount: entry.cost, note: `Big event windfall: "${entry.name}"` + bigEventAssetTag(entry) + (entry.description ? ": " + entry.description : "") + (entry.basisNote ? ` (${entry.basisNote})` : "") });
   }
   return entry;
 }
@@ -3087,7 +3094,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         // the client alone.
         if (entry.takesAsset === false) throw new Error("NO_FORFEIT");
         entry.status = "lost";
-        outcomeNote = `Didn't pay for "${entry.name}" — lost the associated ${entry.module}`;
+        outcomeNote = `Didn't pay for "${entry.name}". Lost the associated ${entry.module}`;
         if (entry.module === "income") {
           t.update(userRef, { jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null });
         } else if (entry.module === "property") {
@@ -3153,7 +3160,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
           entry.status = "claimed";
           entry.writtenOff = true;
           writeOffNet = option.net;
-          outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — ${writeOffText(option)}`;
+          outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}": ${writeOffText(option)}`;
           if (!isTeacher && option.net !== 0) t.update(userRef, { balance: Math.round((cash + option.net) * 100) / 100 });
           t.update(classRef, { properties: cls.properties, bigEventLog: cls.bigEventLog });
           return;
@@ -3187,13 +3194,13 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
           const veh = eventAssetNow(cls, username, "transport", entry).vehicle;
           if (veh) veh.owners = veh.owners.filter(o => o !== username);
           entry.lostVehicle = true;
-          outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess; `
+          outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}". Paid ${fmtMoney(option.excess)} excess; `
             + `the insurer covered the damage to someone else's property, but not their own vehicle${veh && veh.name ? ` (${veh.name})` : ""}, so they lost it`;
           if (!isTeacher && (toPay > 0 || bigCard > 0 || savPay > 0)) t.update(userRef, claimUpd());
           t.update(classRef, { vehicles: cls.vehicles, bigEventLog: cls.bigEventLog });
           return;
         }
-        outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}" — paid ${fmtMoney(option.excess)} excess`
+        outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}". Paid ${fmtMoney(option.excess)} excess`
           + (option.uncovered > 0 ? ` + ${fmtMoney(option.uncovered)} not covered` : "")
           + (savPay > 0 ? " (from savings)" : "");
         if (!isTeacher && (toPay > 0 || bigCard > 0 || savPay > 0)) t.update(userRef, claimUpd());
@@ -3208,7 +3215,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
     if (e.message === "BROKE_SAVINGS") return { ok: false, error: "You don't have enough in savings to pay that." };
     if (e.message === "BROKE_EXCESS") return { ok: false, error: "You don't have enough cash to pay for this claim." };
     if (e.message === "NO_PLAN") return { ok: false, error: "You don't have an insurance plan that covers this." };
-    if (e.message === "NO_FORFEIT") return { ok: false, error: "This event doesn't allow losing the asset — you need to pay or claim insurance." };
+    if (e.message === "NO_FORFEIT") return { ok: false, error: "This event doesn't allow losing the asset. You need to pay or claim insurance." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That event is no longer pending." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -3295,25 +3302,37 @@ function cleanEventOptions(options) {
   });
 }
 
+// One weekly event def from the teacher's form fields (or a ready-made one). Shared by addEventDef,
+// addEventDefs and the base template, so every route saves exactly the same shape.
+function buildEventDef(ev) {
+  const isChoice = ev.type === "choice";
+  const amt = weeklyEventAmountFields(ev);
+  return {
+    id: uid("ev"), name: ev.name, amount: amt.amountMode === "percent" ? 0 : Number(ev.amount) || 0,
+    description: ev.description || "", repeatable: !!ev.repeatable,
+    severity: ev.severity === "bad" ? "bad" : "neutral", active: true,
+    ...weeklyEventInsurance(ev),
+    ...amt,
+    type: isChoice ? "choice" : "fixed",
+    options: isChoice ? cleanEventOptions(ev.options) : []
+  };
+}
 async function addEventDef(classCode, ev) {
+  return addEventDefs(classCode, [ev]);
+}
+// Teacher: add several weekly events at once (the recommended set).
+async function addEventDefs(classCode, evs) {
+  const list = (evs || []).filter(e => e && String(e.name || "").trim());
+  if (!list.length) return { ok: false, error: "Nothing to add." };
   const classRef = classesCol().doc(classCode);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
-    const isChoice = ev.type === "choice";
-    const amt = weeklyEventAmountFields(ev);
-    cls.eventDefs.push({
-      id: uid("ev"), name: ev.name, amount: amt.amountMode === "percent" ? 0 : Number(ev.amount) || 0,
-      description: ev.description || "", repeatable: !!ev.repeatable,
-      severity: ev.severity === "bad" ? "bad" : "neutral", active: true,
-      ...weeklyEventInsurance(ev),
-      ...amt,
-      type: isChoice ? "choice" : "fixed",
-      options: isChoice ? cleanEventOptions(ev.options) : []
-    });
+    list.forEach(ev => cls.eventDefs.push(buildEventDef(ev)));
     t.update(classRef, { eventDefs: cls.eventDefs });
   });
+  return { ok: true, count: list.length };
 }
 async function removeEventDef(classCode, evId) {
   const classRef = classesCol().doc(classCode);
@@ -3611,7 +3630,7 @@ async function revealWeeklyEvent(classCode, eventLogId) {
           found.originalAmount = found.amount;
           found.amount = -opt.studentPays;
           found.insurancePlanId = opt.plan.id;
-          insNote = ` (insurance: ${insurancePlanName(opt.plan)} — you paid ${fmtMoney(opt.studentPays)} instead of ${fmtMoney(loss)})`;
+          insNote = ` (insurance: ${insurancePlanName(opt.plan)}. You paid ${fmtMoney(opt.studentPays)} instead of ${fmtMoney(loss)})`;
           found.insuranceNote = insNote.trim();
         }
       }
@@ -3625,12 +3644,12 @@ async function revealWeeklyEvent(classCode, eventLogId) {
     let evCard = 0;
     if (entry.amount < 0) evCard = (await takeEventCost(entry.studentUser, classCode, -entry.amount)).card;
     else await adjustBalance(entry.studentUser, entry.amount);
-    const evNote = entry.name + (entry.description ? " — " + entry.description : "") + (entry.basisNote ? " (" + entry.basisNote + ")" : "") + (entry.insuranceNote ? " " + entry.insuranceNote : "");
+    const evNote = entry.name + (entry.description ? ": " + entry.description : "") + (entry.basisNote ? " (" + entry.basisNote + ")" : "") + (entry.insuranceNote ? " " + entry.insuranceNote : "");
     if (evCard > 0) {
       const cashPart = Math.round((entry.amount + evCard) * 100) / 100; // still negative, or 0 if it all went on the card
       if (cashPart < 0) await logTxn(classCode, { type: "event", to: entry.studentUser, amount: cashPart, note: evNote + ` (${fmtMoney(evCard)} went on the credit card)` });
       await logTxn(classCode, { type: "card-purchase", cat: "Random events", surprise: true, from: entry.studentUser, amount: evCard, note: evNote + " (credit card)" });
-    } else await logTxn(classCode, { type: "event", to: entry.studentUser, amount: entry.amount, note: entry.name + (entry.description ? " — " + entry.description : "") + (entry.basisNote ? " (" + entry.basisNote + ")" : "") + (entry.insuranceNote ? " " + entry.insuranceNote : "") });
+    } else await logTxn(classCode, { type: "event", to: entry.studentUser, amount: entry.amount, note: entry.name + (entry.description ? ": " + entry.description : "") + (entry.basisNote ? " (" + entry.basisNote + ")" : "") + (entry.insuranceNote ? " " + entry.insuranceNote : "") });
   }
   return entry;
 }
@@ -3692,7 +3711,7 @@ async function claimInsuranceForEvent(username, classCode, eventLogId, planId) {
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash to cover what's still owed on the mortgage." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  const note = `Insurance claim (${planName})` + (eventName ? ` for "${eventName}"` : "") + (writeOffNote ? ` — ${writeOffNote}` : "");
+  const note = `Insurance claim (${planName})` + (eventName ? ` for "${eventName}"` : "") + (writeOffNote ? `: ${writeOffNote}` : "");
   // A write-off with a big mortgage can leave the student owing money —
   // logged the same way a sale that went negative is.
   await logTxn(classCode, payout >= 0
@@ -3742,7 +3761,7 @@ async function resolveChoiceEvent(username, classCode, logId, optionId) {
       entry.chosenOptionId = optionId;
       entry.amount = amount;
       entry.outcome = outcome;
-      note = `${entry.name} — chose "${option.label}"` + (option.outcome ? `: ${option.outcome}` : "")
+      note = `${entry.name}. Chose "${option.label}"` + (option.outcome ? `: ${option.outcome}` : "")
         + (option.percent && entry.basisLabel ? ` (${eventPercentText(option.percent)} of ${entry.basisLabel})` : "");
       const isTeacher = user.role === "teacher";
       evCard = 0;
@@ -4134,14 +4153,14 @@ async function lifestyleRatingBreakdown(username, classCode) {
     const tenantHome = cls.properties.find(p => p.sublet && p.sublet.tenant === username);
     if (tenantHome) {
       score += TENANT_LIVING_BONUS;
-      items.push({ type: "gain", label: "Renting a home from a classmate", detail: `${tenantHome.name} — flat bonus for having somewhere to live (comfort rating not counted, since you don't own it)`, points: TENANT_LIVING_BONUS });
+      items.push({ type: "gain", label: "Renting a home from a classmate", detail: `${tenantHome.name}. Flat bonus for having somewhere to live (comfort rating not counted, since you don't own it)`, points: TENANT_LIVING_BONUS });
     }
     const npcHome = (cls.npcProperties || []).find(p => p.tenant === username);
     if (npcHome) {
       const pts = Number(npcHome.lifestylePoints) || 0;
       if (pts) {
         score += pts;
-        items.push({ type: "gain", label: `Renting ${npcHome.name || "a school listing"}`, detail: "Renting directly from the school — bonus set by your teacher for this listing", points: pts });
+        items.push({ type: "gain", label: `Renting ${npcHome.name || "a school listing"}`, detail: "Renting directly from the school. Bonus set by your teacher for this listing", points: pts });
       }
     }
   }
@@ -4160,7 +4179,7 @@ async function lifestyleRatingBreakdown(username, classCode) {
         label: v.name || "Vehicle",
         detail: isBest
           ? `${v.comfort || 0} comfort × ${cfg.transport.weight || 0} pts/star (your comfiest vehicle)`
-          : `${v.comfort || 0} comfort — not counted, since only your comfiest vehicle scores points`,
+          : `${v.comfort || 0} comfort, not counted, since only your comfiest vehicle scores points`,
         points: pts
       });
     });
@@ -4221,7 +4240,7 @@ async function lifestyleRatingBreakdown(username, classCode) {
   let total = rawTotal;
   if (cfg.property && cfg.property.enabled && !currentHomeOf(cls, username)) {
     if (rawTotal > 0) {
-      items.push({ type: "loss", label: "No stable home", detail: "You're not living anywhere right now — not a property you own, a classmate's rental, or a school rental. Everything above is worth 0 until you move in somewhere.", points: rawTotal });
+      items.push({ type: "loss", label: "No stable home", detail: "You're not living anywhere right now, not a property you own, a classmate's rental, or a school rental. Everything above is worth 0 until you move in somewhere.", points: rawTotal });
     }
     total = 0;
   }

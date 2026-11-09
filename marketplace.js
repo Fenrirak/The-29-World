@@ -119,7 +119,7 @@ function renderTeacher() {
     <div class="mkt-sell-row">
       <div class="grow">
         <div class="mkt-sell-name">${esc(l.name)}${listingQuantity(l) > 1 ? ` <span class="badge navy">×${listingQuantity(l)}</span>` : ""}</div>
-        <div class="muted-small">Listed by ${esc(nameOf(l.seller))} at <strong>${fmtMoney(l.price)}</strong>${listingQuantity(l) > 1 ? " each" : ""} — originally ${fmtMoney(l.refPrice)}${l.description ? ` · "${esc(l.description)}"` : ""}</div>
+        <div class="muted-small">Listed by ${esc(nameOf(l.seller))} at <strong>${fmtMoney(l.price)}</strong>${listingQuantity(l) > 1 ? " each" : ""}. Originally ${fmtMoney(l.refPrice)}${l.description ? ` · "${esc(l.description)}"` : ""}</div>
       </div>
       <button class="btn small mint" onclick="approve('${l.id}', true)">${icon("check", 13)} Approve</button>
       <button class="btn small coral" onclick="approve('${l.id}', false)">Reject</button>
@@ -230,7 +230,7 @@ function renderSellList() {
     (mp.maxActiveListings > 0 ? ` You can have ${mp.maxActiveListings} listing${mp.maxActiveListings === 1 ? "" : "s"} open at a time (${openMine} used).` : "") +
     (mp.feePct > 0 ? ` A ${mp.feePct}% market fee comes off whatever you sell for.` : "") +
     (mp.requireApproval ? " Your teacher approves each listing before it goes live." : "") +
-    (mp.allowStore ? " Got several of the same store item? Put them all up in one listing — buyers take one at a time." : "");
+    (mp.allowStore ? " Got several of the same store item? Put them all up in one listing. Buyers take one at a time." : "");
 
   empty.classList.toggle("hidden", assets.length > 0);
   box.innerHTML = assets.map(a => {
@@ -274,7 +274,7 @@ async function listIt(assetType, assetId) {
   const qty = res.ok ? listingQuantity(res.listing) : 1;
   const what = res.ok && qty > 1 ? `${qty} × ${esc(res.listing.name)}` : "It";
   document.getElementById("sellMsg").innerHTML = res.ok
-    ? `<div class="success-msg">Listed${CLS.marketplace.requireApproval ? ` — ${qty > 1 ? `${what} are` : "it's"} waiting for your teacher to approve.` : `! ${what} ${qty > 1 ? "are" : "is"} live in the Trade Centre now.`}</div>`
+    ? `<div class="success-msg">Listed${CLS.marketplace.requireApproval ? `: ${qty > 1 ? `${what} are` : "it's"} waiting for your teacher to approve.` : `! ${what} ${qty > 1 ? "are" : "is"} live in the Trade Centre now.`}</div>`
     : `<div class="error-msg">${esc(res.error)}</div>`;
   await render();
 }
@@ -369,7 +369,7 @@ function listingCardHtml(l, opts) {
         const total = Math.round(o.amount * oq * 100) / 100;
         if (o.status === "countered" && o.counter) return `
         <div class="mkt-offer">
-          <span><span class="mkt-offer-amt">${fmtMoney(o.counter.amount)}${oq > 1 ? " each" : ""}</span> <span class="badge navy">Countered</span> <span class="muted-small">to ${esc(nameOf(o.buyer))} (they offered ${fmtMoney(o.amount)}) — waiting for their answer</span></span>
+          <span><span class="mkt-offer-amt">${fmtMoney(o.counter.amount)}${oq > 1 ? " each" : ""}</span> <span class="badge navy">Countered</span> <span class="muted-small">to ${esc(nameOf(o.buyer))} (they offered ${fmtMoney(o.amount)}). Waiting for their answer</span></span>
           <span class="row-flex" style="gap:6px;"><button class="btn small secondary" onclick="decline('${l.id}','${o.id}')">Cancel</button></span>
         </div>`;
         const counterForm = COUNTERING === o.id ? `
@@ -391,7 +391,7 @@ function listingCardHtml(l, opts) {
             <button class="btn small gold" onclick="toggleCounter('${o.id}')" ${tooMany ? "disabled" : ""}>Counter</button>
             <button class="btn small secondary" onclick="decline('${l.id}','${o.id}')">Decline</button>
           </span>
-          ${tooMany ? `<span class="mkt-offer-note">Wants ${oq} but only ${qty} ${qty === 1 ? "is" : "are"} left — decline it and they can send a new one.</span>` : ""}
+          ${tooMany ? `<span class="mkt-offer-note">Wants ${oq} but only ${qty} ${qty === 1 ? "is" : "are"} left. Decline it and they can send a new one.</span>` : ""}
           ${o.note ? `<span class="mkt-offer-note">"${esc(o.note)}"</span>` : ""}
           ${counterForm}
         </div>`;
@@ -525,7 +525,7 @@ async function sendOffer(id) {
   if (res.ok) OFFERING = null;
   await render();
   const box = document.getElementById("msg-" + id);
-  if (box) box.innerHTML = res.ok ? `<div class="success-msg">Offer sent — the seller will be notified.</div>` : `<div class="error-msg">${esc(res.error)}</div>`;
+  if (box) box.innerHTML = res.ok ? `<div class="success-msg">Offer sent. The seller will be notified.</div>` : `<div class="error-msg">${esc(res.error)}</div>`;
   else if (!res.ok) alert(res.error);
 }
 

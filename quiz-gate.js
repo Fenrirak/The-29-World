@@ -148,7 +148,7 @@ function qgContinue() {
   qgCloseGate();
   if (!ctx) return;
   if (ctx.alsoLifestyleLocked) {
-    alert("Quiz passed. This module is still locked by your lifestyle rating, though — ask your teacher what's needed to raise it.");
+    alert("Quiz passed. This module is still locked by your lifestyle rating, though. Ask your teacher what's needed to raise it.");
     if (document.getElementById("t29PageLock")) window.location.reload(); // refresh the cover so it says the right thing
     return;
   }
@@ -168,7 +168,7 @@ async function qgSubmit() {
     if (checked) answers[q.id] = Number(checked.value);
     else unanswered++;
   });
-  if (unanswered > 0 && !await t29Confirm(`${unanswered} ${unanswered === 1 ? "question is" : "questions are"} still blank — they'll be marked wrong. Submit anyway?`)) return;
+  if (unanswered > 0 && !await t29Confirm(`${unanswered} ${unanswered === 1 ? "question is" : "questions are"} still blank. They'll be marked wrong. Submit anyway?`)) return;
 
   QG_SUBMITTING = true;
   const btn = document.getElementById("qgSubmit");
@@ -186,10 +186,10 @@ async function qgSubmit() {
     <div class="quiz-score ${res.passed ? "pass" : "fail"}">
       <span class="big">${res.pct}%</span>
       <span class="txt">
-        ${res.correct} out of ${res.total} correct — ${res.passed ? `${qgEsc(moduleName)} is unlocked!` : `you need ${res.passMark}% to unlock ${qgEsc(moduleName)}.`}<br>
+        ${res.correct} out of ${res.total} correct: ${res.passed ? `${qgEsc(moduleName)} is unlocked!` : `you need ${res.passMark}% to unlock ${qgEsc(moduleName)}.`}<br>
         ${res.passed
           ? (res.reward > 0 ? `${fmtMoney(res.reward)} bonus paid into your account.` : "Have a look at the explanations below if you like, then carry on.")
-          : "Read the explanations below — then have another go, as many times as you need."}
+          : "Read the explanations below, then have another go, as many times as you need."}
       </span>
     </div>`;
 

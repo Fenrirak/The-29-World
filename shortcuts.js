@@ -153,6 +153,7 @@
     if (f === "tax.html") return true;
     if (f === "kiwisaver.html") return !root.classList.contains("ks-on");
     if (f === "gambling.html") return !root.classList.contains("casino-on");
+    if (/\.html$/.test(f) && root.classList.contains("mod-off-" + f.replace(/\.html$/, ""))) return true;
     return false;
   }
 
@@ -619,7 +620,7 @@
     if (pageFile() === "gambling.html") page.push(row(kbd("Enter"), "Blackjack: start a new round"));
     var items = moduleItems();
     var go = items.map(function (it) {
-      return '<div class="t29-keys-row"><span class="t29-keys-label">' + esc(it.label + (it.here ? " \u2014 you\u2019re here" : "")) + "</span></div>";
+      return '<div class="t29-keys-row"><span class="t29-keys-label">' + esc(it.label + (it.here ? ". You\u2019re here" : "")) + "</span></div>";
     });
     var goIntro = go.length ? '<p class="t29-keys-intro">Tap ' + kbd("Shift") + ", type part of a name or its number, then press " + kbd("Enter") + ".<br>Forgives typos, learns your favourites, and runs actions: " + kbd("dark") + " " + kbd("settings") + " " + kbd("notifications") + " " + kbd("help") + ".<br>" + kbd("Shift") + " then " + kbd("Enter") + " returns to your last module.</p>" : "";
     var offNote = keysOn ? "" : '<p class="t29-keys-intro"><strong>Shortcuts are switched off.</strong> Turn them back on in Settings.</p>';
@@ -836,7 +837,7 @@
         return;
       }
       if (a.title && !mine) return; // the page set its own tooltip
-      a.title = it.label + " \u2014 tap Shift, then type \u201C" + shortestPrefix(it, items) + "\u201D or \u201C" + it.num + "\u201D";
+      a.title = it.label + ". Tap Shift, then type \u201C" + shortestPrefix(it, items) + "\u201D or \u201C" + it.num + "\u201D";
       a.setAttribute("data-t29-hint", "1");
     });
     hintButtons();

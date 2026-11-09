@@ -210,7 +210,7 @@ async function render() {
           <p>${priceWithLifeDiscount(me, "transport", v.price)}${IS_TEACHER ? "" : t29TaxChip(cls, "transport")} &middot; cash purchase only, ${stockLabel.toLowerCase()}</p>
           <p class="muted-small">${ownedLabel}</p>
           ${(v.weeklyExpense > 0 || v.publicTransportOffsetPct > 0) ? `<p class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffsetPct > 0 ? " &middot; " : ""}${v.publicTransportOffsetPct > 0 ? `knocks ${v.publicTransportOffsetPct}% off public transport` : ""}</p>` : ""}
-          ${needsLicence ? `<p class="muted-small">Requires a truck licence — see above.</p>` : ""}
+          ${needsLicence ? `<p class="muted-small">Requires a truck licence. See above.</p>` : ""}
           ${truckLimitReached ? `<p class="muted-small">You can only own one truck at a time.</p>` : ""}
           ${ownerRows}
         </div>
@@ -459,21 +459,21 @@ function renderTransportExpenses(me, cls) {
   let statusBadge, actionHtml;
   if (paidThisWeek) {
     statusBadge = `<span class="badge mint">Paid this week</span>`;
-    actionHtml = `<p class="muted-small">All sorted — next payment due ${DAY_FULL[dueDay]}.</p>`;
+    actionHtml = `<p class="muted-small">All sorted. Next payment due ${DAY_FULL[dueDay]}.</p>`;
   } else if (amt.total === 0 && isDueToday) {
     // Nothing owed this cycle — settle it in the background (see
     // autoSettleZeroTransport) instead of asking for a click on a $0 charge.
     autoSettleZeroTransport();
     statusBadge = `<span class="badge mint">Paid this week</span>`;
-    actionHtml = `<p class="muted-small">Nothing owed this week — next check ${DAY_FULL[dueDay]}.</p>`;
+    actionHtml = `<p class="muted-small">Nothing owed this week. Next check ${DAY_FULL[dueDay]}.</p>`;
   } else if (overdue) {
     statusBadge = `<span class="badge coral">Overdue</span>`;
     actionHtml = isDueToday
-      ? `<button class="btn gold" id="payTransportBtn" onclick="payTransport()">Pay now — ${fmtMoney(amt.total)}</button>`
-      : `<p class="muted-small">A past payment was missed — check with your teacher. You can pay again on ${DAY_FULL[dueDay]}.</p>`;
+      ? `<button class="btn gold" id="payTransportBtn" onclick="payTransport()">Pay now: ${fmtMoney(amt.total)}</button>`
+      : `<p class="muted-small">A past payment was missed. Check with your teacher. You can pay again on ${DAY_FULL[dueDay]}.</p>`;
   } else if (isDueToday) {
     statusBadge = `<span class="badge gold">Due today</span>`;
-    actionHtml = `<button class="btn gold" id="payTransportBtn" onclick="payTransport()">Pay now — ${fmtMoney(amt.total)}</button>`;
+    actionHtml = `<button class="btn gold" id="payTransportBtn" onclick="payTransport()">Pay now: ${fmtMoney(amt.total)}</button>`;
   } else {
     statusBadge = `<span class="badge navy">Not due yet</span>`;
     actionHtml = `<p class="muted-small">Next payment due ${DAY_FULL[dueDay]}.</p>`;

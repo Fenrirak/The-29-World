@@ -113,9 +113,9 @@ async function savePayDay() {
     const day = document.getElementById("payDaySelect").value;
     await setPayDay(CLASS_CODE, day);
     await render();
-    flashMsg(msg, `<div class="success-msg">Saved — wages are now due every ${escapeHtml(DAY_FULL[day] || day)}, and are paid automatically when that day comes around.</div>`, 6000);
+    flashMsg(msg, `<div class="success-msg">Saved. Wages are now due every ${escapeHtml(DAY_FULL[day] || day)}, and are paid automatically when that day comes around.</div>`, 6000);
   } catch (e) {
-    msg.innerHTML = `<div class="error-msg">Couldn't save the pay day — please try again.</div>`;
+    msg.innerHTML = `<div class="error-msg">Couldn't save the pay day. Please try again.</div>`;
   } finally {
     btn.disabled = false;
   }
@@ -212,12 +212,12 @@ async function addSideHustleForm(e) {
     const [hourPart, amtPart] = line.split("|");
     const hour = parseHourLabel(hourPart);
     if (hour === null) {
-      alert(`Couldn't read the hour "${(hourPart || "").trim()}" — use a plain hour like "1am" or "3pm".`);
+      alert(`Couldn't read the hour "${(hourPart || "").trim()}". Use a plain hour like "1am" or "3pm".`);
       return false;
     }
     const amount = parseMoneyInput(amtPart);
     if (Number.isNaN(amount)) {
-      alert(`Couldn't read the amount for "${(hourPart || "").trim()}" — enter a plain number like 20 (no currency symbols needed).`);
+      alert(`Couldn't read the amount for "${(hourPart || "").trim()}". Enter a plain number like 20 (no currency symbols needed).`);
       return false;
     }
     payouts[hour] = amount;
@@ -450,7 +450,7 @@ async function submitAddJob() {
     setTimeout(() => document.getElementById("addJobSuccess").classList.add("hidden"), 3000);
     await render();
   } catch (e) {
-    alert("Couldn't add job — " + e.message);
+    alert("Couldn't add job: " + e.message);
   } finally {
     btn.disabled = false;
     btn.innerHTML = icon("plus", 15) + " Add job";
@@ -523,7 +523,7 @@ async function saveEditJob() {
     setTimeout(closeEditModal, 900);
     await render();
   } catch (e) {
-    showEditMsg("Couldn't save — " + e.message, "error");
+    showEditMsg("Couldn't save: " + e.message, "error");
   } finally {
     btn.disabled = false;
     btn.textContent = "Save changes";
@@ -566,7 +566,7 @@ function renderApplications(cls, students) {
     row.innerHTML = `
       <div class="auto-details">
         <strong>${s ? escapeHtml(s.name) : escapeHtml(a.studentUser)}</strong> applied for <strong>${j ? escapeHtml(j.title) : "Unknown job"}</strong>
-        ${j && j.tiers && j.tiers.length ? `<div class="muted-small">Starting at: ${escapeHtml(j.tiers[0].name)} — ${fmtMoney(j.tiers[0].wage)}/pay day</div>` : ""}
+        ${j && j.tiers && j.tiers.length ? `<div class="muted-small">Starting at: ${escapeHtml(j.tiers[0].name)}: ${fmtMoney(j.tiers[0].wage)}/pay day</div>` : ""}
         <div class="muted-small">${a.coverLetter ? `"${escapeHtml(a.coverLetter)}"` : "No cover letter."}</div>
       </div>
       <div class="row-flex" style="gap:8px;">
@@ -666,8 +666,8 @@ function renderMyJob(me, cls) {
           </div>
         </div>
         ${!isTop && job.autoPromoteWeeks > 0
-          ? `<p class="muted-small tier-auto-note">${icon("repeat", 12)} Auto-promotes every ${job.autoPromoteWeeks} week${job.autoPromoteWeeks === 1 ? "" : "s"} — next tier: <strong>${escapeHtml(tiers[tierIdx + 1].name)}</strong> (${fmtMoney(tiers[tierIdx + 1].wage)}/pay day)</p>`
-          : isTop ? `<p class="muted-small tier-auto-note">🏆 Top tier — you've reached the highest level!</p>` : ""}
+          ? `<p class="muted-small tier-auto-note">${icon("repeat", 12)} Auto-promotes every ${job.autoPromoteWeeks} week${job.autoPromoteWeeks === 1 ? "" : "s"}. Next tier: <strong>${escapeHtml(tiers[tierIdx + 1].name)}</strong> (${fmtMoney(tiers[tierIdx + 1].wage)}/pay day)</p>`
+          : isTop ? `<p class="muted-small tier-auto-note">🏆 Top tier. You've reached the highest level!</p>` : ""}
       ` : ""}
     </div>
   `;
@@ -793,7 +793,7 @@ function renderJobBoard(me, cls) {
             <span class="job-board-tier-num">${i + 1}</span>
             <div class="job-board-tier-info">
               <strong>${escapeHtml(t.name)}</strong>
-              ${t.description ? `<span class="muted-small"> — ${escapeHtml(t.description)}</span>` : ""}
+              ${t.description ? `<span class="muted-small">: ${escapeHtml(t.description)}</span>` : ""}
             </div>
             <span class="job-board-tier-wage">${fmtMoney(t.wage)}</span>
             ${isMine && myTier && t.id === myTier.id ? `<span class="badge gold" style="flex-shrink:0;">You</span>` : ""}
@@ -804,7 +804,7 @@ function renderJobBoard(me, cls) {
       <p class="muted-small" style="margin:10px 0 0;">${escapeHtml(jobLogSummary(j))}</p>
       <div class="job-board-footer">
         ${isMine
-          ? `<span class="muted-small">You work here — starting pay: ${fmtMoney(tiers[0] ? tiers[0].wage : 0)}/pay day</span>`
+          ? `<span class="muted-small">You work here. Starting pay: ${fmtMoney(tiers[0] ? tiers[0].wage : 0)}/pay day</span>`
           : myApp
             ? `<span class="status-pending">Application pending</span>`
             : me.jobId
@@ -846,7 +846,7 @@ async function submitApplication() {
     setTimeout(closeApplyModal, 1200);
     await render();
   } catch (e) {
-    document.getElementById("applyModalMsg").textContent = e.message || "Couldn't submit — try again.";
+    document.getElementById("applyModalMsg").textContent = e.message || "Couldn't submit. Try again.";
     document.getElementById("applyModalMsg").className   = "error-msg";
   } finally {
     btn.disabled = false;

@@ -137,7 +137,7 @@ async function recoveryEmailClick() {
 async function toggleArchive(code, currentlyArchived, name) {
   const question = currentlyArchived
     ? `Reopen "${name}"? Students will be able to use it again right away.`
-    : `Archive "${name}"? Students won't be able to do anything in this class until it's reopened — they'll be able to view it read-only if you let them, but nothing will be lost. You can reopen it any time.`;
+    : `Archive "${name}"? Students won't be able to do anything in this class until it's reopened. They'll be able to view it read-only if you let them, but nothing will be lost. You can reopen it any time.`;
   if (!await t29Confirm(question)) return;
   await setClassArchived(code, !currentlyArchived);
   await render();
@@ -145,7 +145,7 @@ async function toggleArchive(code, currentlyArchived, name) {
 
 async function deleteClassClick(code, name) {
   const typed = await t29Prompt(
-    `This will PERMANENTLY delete "${name}" — every student account in it, all balances, and all activity history. This cannot be undone.\n\nIf you just want to pause the class instead, use Archive.\n\nType the class name exactly to confirm deletion:`, "", { placeholder: "Class name", confirmText: "Delete class", danger: true }
+    `This will PERMANENTLY delete "${name}". Every student account in it, all balances, and all activity history. This cannot be undone.\n\nIf you just want to pause the class instead, use Archive.\n\nType the class name exactly to confirm deletion:`, "", { placeholder: "Class name", confirmText: "Delete class", danger: true }
   );
   if (typed === null) return;
   if (typed.trim() !== name) {
@@ -200,13 +200,13 @@ async function copyShareLink() {
     // Clipboard API unavailable/blocked — the link is already selected
     // in the input, so the teacher can just press Ctrl/Cmd+C themselves.
     document.getElementById("shareModalMsg").innerHTML =
-      `<div class="error-msg">Couldn't copy automatically — the link is selected, so press Ctrl/Cmd+C to copy it.</div>`;
+      `<div class="error-msg">Couldn't copy automatically. The link is selected, so press Ctrl/Cmd+C to copy it.</div>`;
   }
 }
 
 async function stopSharing() {
   if (!SHARE_CODE) return;
-  if (!await t29Confirm("Stop sharing this class? The current link will stop working — you can share it again anytime, which creates a brand new link.")) return;
+  if (!await t29Confirm("Stop sharing this class? The current link will stop working. You can share it again anytime, which creates a brand new link.")) return;
   await revokeTemplateShare(SHARE_CODE, CURRENT.username);
   closeShareModal();
 }
@@ -230,7 +230,7 @@ function openNewClassModal(mode) {
   }
   if (mode === "template") {
     if (ALL_CLASSES.filter(c => c.isOwner).length === 0) {
-      alert("You don't have any classes yet to copy settings from — create a brand new class first.");
+      alert("You don't have any classes yet to copy settings from. Create a brand new class first.");
       return;
     }
     document.getElementById("newClassModalTitle").textContent = "New class from a template";

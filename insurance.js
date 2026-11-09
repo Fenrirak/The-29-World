@@ -67,7 +67,7 @@ function updatePlanFormForCoverage(companyId, insType) {
     + `<option value="new">+ New company…</option>`;
   sel.value = (keep === "new" || companies.some(c => c.id === keep)) ? keep : (companies.length ? "" : "new");
   updateCompanyNameField();
-  document.getElementById("labName").textContent = hasCompanies ? "Plan name (optional — blank uses the type)" : "Plan name";
+  document.getElementById("labName").textContent = hasCompanies ? "Plan name (optional. Blank uses the type)" : "Plan name";
   document.getElementById("pName").placeholder = hasCompanies ? "e.g. Premium Cover" : "e.g. Basic Cover";
 }
 
@@ -79,7 +79,7 @@ function updateCompanyNameField() {
 // "Transport — Comprehensive Insurance", or just "Transport" with no type.
 function coverageText(p) {
   const typeLabel = insuranceTypeLabel(p.coverage, p.insType);
-  return (COVERAGE_LABEL[p.coverage] || "—") + (typeLabel ? ` — ${typeLabel}` : "");
+  return (COVERAGE_LABEL[p.coverage] || "—") + (typeLabel ? `: ${typeLabel}` : "");
 }
 
 // Sign up / cancel for students, edit / remove for the teacher.
@@ -112,7 +112,7 @@ function singlePlanCardHtml(p, me) {
           <h4>${escapeHtml(p.name)} ${owned ? '<span class="badge mint">You have this</span>' : ""}</h4>
           <p>${escapeHtml(p.description) || "No description provided."}</p>
           <p class="muted-small">Covers: ${escapeHtml(coverageText(p))}
-            ${needsCompany ? `<span class="badge coral">Not in a company yet — click Edit to choose one</span>` : ""}</p>
+            ${needsCompany ? `<span class="badge coral">Not in a company yet. Click Edit to choose one</span>` : ""}</p>
           <p>${planPriceHtml(p, me)}</p>
         </div>
         <div>${planButtonsHtml(p, me, owned)}</div>
@@ -130,7 +130,7 @@ function companyPlanRowHtml(p, me, owned) {
         <div class="ins-plan-name"><strong>${escapeHtml(p.name)}</strong>
           ${typeLabel && typeLabel !== p.name ? `<span class="badge navy">${escapeHtml(typeLabel)}</span>` : ""}
           ${owned ? `<span class="badge mint">You have this</span>` : ""}
-          ${IS_TEACHER && !typeLabel ? `<span class="badge coral">Type not set — click Edit</span>` : ""}
+          ${IS_TEACHER && !typeLabel ? `<span class="badge coral">Type not set. Click Edit</span>` : ""}
         </div>
         ${p.description ? `<div class="muted-small">${escapeHtml(p.description)}</div>` : ""}
         ${insuranceTypeCoversText(p.coverage, p.insType) ? `<div class="ins-plan-covers">${escapeHtml(insuranceTypeCoversText(p.coverage, p.insType))}</div>` : ""}
@@ -466,7 +466,7 @@ async function buyPlan(id, fee) {
     await render();
     const box = document.getElementById("msg-" + id);
     if (box) box.innerHTML = res.ok
-      ? `<div class="success-msg">You're covered! Premiums are due weekly — remember to set up an automatic payment to your teacher on the Bank page so your cover doesn't lapse.</div>`
+      ? `<div class="success-msg">You're covered! Premiums are due weekly. Remember to set up an automatic payment to your teacher on the Bank page so your cover doesn't lapse.</div>`
       : `<div class="error-msg">${res.error}</div>`;
   } finally {
     if (btn) btn.disabled = false;

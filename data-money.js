@@ -891,7 +891,7 @@ async function kiwiSaverOptOut(username) {
     const refund = ksRound(Math.max(0, ks.you - ks.withdrawn));
     const next = Object.assign(ksNewMember(todayKey, false), { status: "optedOut", joinedKey: ks.joinedKey, optOutUntil: null });
     const out = { kiwiSaver: next, balance: ksRound((user.balance || 0) + refund) };
-    if (refund > 0) out._log = { type: "kiwisaver-refund", to: username, amount: refund, note: "Opted out of KiwiSaver — your contributions refunded" };
+    if (refund > 0) out._log = { type: "kiwisaver-refund", to: username, amount: refund, note: "Opted out of KiwiSaver. Your contributions refunded" };
     out._result = { refund };
     return out;
   });
@@ -1036,7 +1036,7 @@ async function kiwiSaverHardshipRelease(classCode, username, amount, reason) {
     return { ok: false, error: KS_ERRORS[e.message] || "Something went wrong. Please try again." };
   }
   const why = sanitizeUserText(reason || "", 120);
-  await logTxn(classCode, { type: "kiwisaver-out", to: username, amount, note: "KiwiSaver hardship withdrawal" + (why ? " — " + why : "") });
+  await logTxn(classCode, { type: "kiwisaver-out", to: username, amount, note: "KiwiSaver hardship withdrawal" + (why ? ": " + why : "") });
   await t29NotifyStudents(classCode, { to: username, icon: "kiwi", tone: "mint",
     title: `Your teacher released ${fmtMoney(amount)} from your KiwiSaver`, body: "It was added to your cash balance." + (why ? ` Reason: ${why}` : ""), href: "kiwisaver.html" });
   return { ok: true };
@@ -1092,7 +1092,7 @@ const INTEREST_FREQ_LABEL = { daily: "every day", weekly: "every week", fortnigh
 const DAY_FULL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
 function interestScheduleLabel(cls) {
   if (!cls || !cls.interestAuto) {
-    return "Your teacher applies interest manually — there's no fixed schedule.";
+    return "Your teacher applies interest manually. There's no fixed schedule.";
   }
   const freq = cls.interestFrequency || "weekly";
   if (freq === "daily") return "Interest is paid automatically every day.";
@@ -1162,7 +1162,7 @@ async function _creditStudentInterest(classCode, username, dateKey, { force = fa
   }
   for (const l of credited.acct.lines) {
     if (l.kind === "interest") await log({ type: "interest", to: username, amount: l.net, note: `${l.name} interest${l.bonus ? " (incl. no-withdrawal bonus)" : ""}` + (l.tax > 0 ? ` (${fmtMoney(l.tax)} tax withheld)` : "") });
-    else await log({ type: "account-fee", from: username, amount: l.amount, note: `Account fee — ${l.name}` });
+    else await log({ type: "account-fee", from: username, amount: l.amount, note: `Account fee: ${l.name}` });
   }
   if (credited.cashNet > 0) {
     await log({ type: "cash-interest", to: username, amount: credited.cashNet, note: "Cash balance interest" + (credited.cashTaxAmount > 0 ? ` (${fmtMoney(credited.cashTaxAmount)} tax withheld)` : "") });
@@ -1395,7 +1395,7 @@ async function takeLoan(username, classCode, amount) {
   }
   await logTxn(classCode, {
     type: "loan-taken", to: username, amount,
-    note: `Loan taken — ${fmtMoney(owed)} owed so far (${tierSnapshot.rate}%/week, compounding every Monday until paid off)`
+    note: `Loan taken: ${fmtMoney(owed)} owed so far (${tierSnapshot.rate}%/week, compounding every Monday until paid off)`
   });
   return { ok: true, owed };
 }
@@ -1499,7 +1499,7 @@ async function processLoanInterest(classCode) {
     for (const c of charged) {
       await logTxn(classCode, {
         type: "loan-interest", to: student.username, amount: c.interest,
-        note: (c.weeks > 1 ? `${c.weeks} weeks of loan interest` : "Weekly loan interest") + ` — now owe ${fmtMoney(c.owedAfter)}`
+        note: (c.weeks > 1 ? `${c.weeks} weeks of loan interest` : "Weekly loan interest") + `. Now owe ${fmtMoney(c.owedAfter)}`
       });
       count++;
     }
@@ -2042,13 +2042,13 @@ async function processAutomations(classCode) {
           t.update(userRef, acctMoveFields(user, mv));
           g.liveAuto.lastRun = todayKey;
           const base = _autoTxnId(a, todayKey), who = a.studentUser;
-          const label = (g.liveAuto.note ? g.liveAuto.note + " — " : "") + `Automatic transfer (${mv.fromName} → ${mv.toName})`;
+          const label = (g.liveAuto.note ? g.liveAuto.note + ": " : "") + `Automatic transfer (${mv.fromName} → ${mv.toName})`;
           const entries = [];
           const mk = (suffix, e) => Object.assign({ id: suffix ? base + "-" + suffix : base, date: nowStr(), ts: Date.now() }, e);
           const mainL = acctMainId(user);
           if (ends.from !== mainL) entries.push(mk("", { type: "savings-withdraw", to: who, amount: amt, note: label }));
           if (ends.to !== mainL) entries.push(mk(entries.length ? "d" : "", { type: "savings-deposit", from: who, amount: amt, note: label }));
-          if (mv.fee > 0) entries.push(mk("fee", { type: "account-fee", from: who, amount: mv.fee, note: `Withdrawal fee — ${mv.feeName}` }));
+          if (mv.fee > 0) entries.push(mk("fee", { type: "account-fee", from: who, amount: mv.fee, note: `Withdrawal fee: ${mv.feeName}` }));
           _autoAppendTxns(liveCls, entries);
           t.update(classRef, { automations: liveCls.automations, txns: liveCls.txns });
           return { status: "ran", entries };
@@ -2114,7 +2114,7 @@ async function processAutomations(classCode) {
             try { mv = acctApplyMove(from, liveCls, acctSrcToLogical(src), null, amt); } catch (err) { return { status: "skip" }; }
             t.update(fromRef, acctMoveFields(from, mv));
             srcName = mv.fromName;
-            if (mv.fee > 0) feeEntry = { type: "account-fee", from: a.studentUser, amount: mv.fee, note: `Withdrawal fee — ${mv.feeName}` };
+            if (mv.fee > 0) feeEntry = { type: "account-fee", from: a.studentUser, amount: mv.fee, note: `Withdrawal fee: ${mv.feeName}` };
           } else {
             if (!fromIsTeacher && from.balance < amt) return { status: "skip" }; // can't afford it
             if (!fromIsTeacher) t.update(fromRef, { balance: Math.round((from.balance - amt) * 100) / 100 });
@@ -3224,7 +3224,7 @@ async function recordReportActivity(username, txn) {
       t.update(userRef, { reportMonth: month, reportLifetime: lifetime });
     });
   } catch (e) {
-    console.warn("recordReportActivity failed (rolling report totals only — money already moved):", e);
+    console.warn("recordReportActivity failed (rolling report totals only. Money already moved):", e);
   }
 }
 
@@ -3461,16 +3461,16 @@ function budgetWeekItems(cls, user, username) {
     const ksLine = (kk, gross) => kk ? { rate: kk.rate, paused: !!kk.paused, you: kk.you || 0, employerNet: kk.employerNet || 0, govt: kk.govt || 0, gross: Number(gross) || 0 } : null;
     if (pay.net > 0) {
       items.push({
-        key: "wage", dir: "in", icon: "briefcase", label: "Wages — " + pay.tier, amount: pay.net, dayKey, status,
+        key: "wage", dir: "in", icon: "briefcase", label: "Wages: " + pay.tier, amount: pay.net, dayKey, status,
         // KiwiSaver from this week's pay (already left out of `amount`), and
         // from their next pay with the choices they have now.
         kiwi: ksLine(k, slip ? slip.gross : credit.gross),
         kiwiNext: ksLine(credit.kiwi, credit.gross),
         note: status === "done" ? "Paid" + (off ? ` (${off} taken off)` : "")
-          : status === "missed" ? (att ? "Not paid this week — no days were logged" : "Not paid this week — your job task wasn't approved by pay day")
-          : (att && att.expected > 0 ? `Pay day — paid automatically: ${att.done} of ${att.expected} logged so far = ${att.done}/${att.expected} of your wage`
-             : att ? "Pay day — no check-in is due this cycle, so paid in full"
-             : approved ? "Pay day" : "Pay day — only once your teacher approves this week's job task")
+          : status === "missed" ? (att ? "Not paid this week. No days were logged" : "Not paid this week. Your job task wasn't approved by pay day")
+          : (att && att.expected > 0 ? `Pay day. Paid automatically: ${att.done} of ${att.expected} logged so far = ${att.done}/${att.expected} of your wage`
+             : att ? "Pay day. No check-in is due this cycle, so paid in full"
+             : approved ? "Pay day" : "Pay day, only once your teacher approves this week's job task")
             + (off ? ` (${off} already taken off)` : "")
       });
     }
@@ -3499,7 +3499,7 @@ function budgetWeekItems(cls, user, username) {
       const dayKey = dayOf(p.rentDay);
       const free = p.sublet.leaseStartWeekKey === weekKey;
       const status = free ? "free" : budgetStatus(dayKey, todayKey, p.sublet.rentLastWeekPaid === weekKey);
-      items.push({ key: "sublet-in-" + p.id, dir: "in", icon: "house", label: "Rent from your tenant — " + p.name, amount: budgetRound(p.sublet.price), dayKey, status,
+      items.push({ key: "sublet-in-" + p.id, dir: "in", icon: "house", label: "Rent from your tenant: " + p.name, amount: budgetRound(p.sublet.price), dayKey, status,
         note: free ? "Their first week is free" : status === "done" ? "Paid" : status === "missed" ? "Your tenant didn't pay this week" : "Your tenant pays this on " + dayWord(dayKey) });
     }
   });
@@ -3512,7 +3512,7 @@ function budgetWeekItems(cls, user, username) {
     if (!when || !(Number(a.amount) > 0)) return;
     const status = budgetStatus(when.dayKey, todayKey, when.done);
     items.push({ key: "auto-in-" + a.id, dir: "in", icon: "repeat", label: a.note || "Automatic payment", amount: budgetRound(a.amount), dayKey: when.dayKey, status,
-      note: (fromTeacher ? "From your teacher" : "From a classmate (if they have the money)") + (status === "missed" ? " — didn't arrive this week" : "") });
+      note: (fromTeacher ? "From your teacher" : "From a classmate (if they have the money)") + (status === "missed" ? ". Didn't arrive this week" : "") });
   });
 
   /* ---- Bills ---- */
@@ -3523,14 +3523,14 @@ function budgetWeekItems(cls, user, username) {
     const free = p.mortgage.purchaseWeekKey === weekKey;
     const dayKey = forced && !done ? todayKey : dayOf(cls.mortgageDay);
     const status = free ? "free" : budgetStatus(dayKey, todayKey, done);
-    items.push({ key: "mortgage-" + p.id, dir: "out", icon: "house", label: "Mortgage — " + p.name, amount: mortgageWeekAmount(p.mortgage).total, dayKey, status,
+    items.push({ key: "mortgage-" + p.id, dir: "out", icon: "house", label: "Mortgage: " + p.name, amount: mortgageWeekAmount(p.mortgage).total, dayKey, status,
       where: "Property", cardable: false /* mortgages are cash-only */,
       note: free ? "The week you bought it is free" : status === "done" ? "Paid"
-        : status === "missed" ? "Missed — it can only be paid on its day"
+        : status === "missed" ? "Missed. It can only be paid on its day"
         : (forced ? "Your teacher has made it due now" : "You pay it on the Property page") });
     // A floating-rate bill can change from week to week — say so on any unpaid bill.
     if (isVariableMortgage(p.mortgage) && !free && status !== "done") {
-      items[items.length - 1].note += ` — variable rate (${p.mortgage.interestRate}%/wk), so it can change if the rate moves`;
+      items[items.length - 1].note += `. Variable rate (${p.mortgage.interestRate}%/wk), so it can change if the rate moves`;
     }
   });
   const tenancies = [];
@@ -3545,23 +3545,23 @@ function budgetWeekItems(cls, user, username) {
     const dayKey = dayOf(r.rentDay);
     const free = r.start === weekKey;
     const status = free ? "free" : budgetStatus(dayKey, todayKey, r.paid === weekKey);
-    items.push({ key: "rent-" + r.id, dir: "out", icon: "house", label: "Rent — " + r.name, amount: budgetRound(r.amount), dayKey, status, where: "Property", cardable: !!r.npc, // rent to a classmate can't go on a card
+    items.push({ key: "rent-" + r.id, dir: "out", icon: "house", label: "Rent: " + r.name, amount: budgetRound(r.amount), dayKey, status, where: "Property", cardable: !!r.npc, // rent to a classmate can't go on a card
       note: free ? "The week you moved in is free" : status === "done" ? "Paid"
-        : status === "missed" ? "Missed — rent can only be paid on its day" : "You pay it on the Property page" });
+        : status === "missed" ? "Missed. Rent can only be paid on its day" : "You pay it on the Property page" });
   });
   const transport = transportWeeklyAmount(cls, me);
   if (transport.total > 0) {
     const dayKey = dayOf(cls.transportDay);
     const status = budgetStatus(dayKey, todayKey, user.transportLastWeekPaid === weekKey);
     items.push({ key: "transport", dir: "out", icon: "car", label: "Transport", amount: transport.total, dayKey, status, where: "Transport", cardable: true,
-      note: status === "done" ? "Paid" : status === "missed" ? "Missed — it can only be paid on its day" : "You pay it on the Transport page" });
+      note: status === "done" ? "Paid" : status === "missed" ? "Missed. It can only be paid on its day" : "You pay it on the Transport page" });
   }
   (user.loans || []).forEach(l => {
     if (l.status !== "active" || !l.dueDate || l.dueDate > weekEndKey || !(l.owed > 0)) return;
     const overdue = l.dueDate < todayKey;
     items.push({ key: "loan-" + l.id, dir: "out", icon: "loan", label: "Loan to repay", amount: budgetRound(l.owed),
       dayKey: overdue ? todayKey : l.dueDate, status: overdue ? "overdue" : budgetStatus(l.dueDate, todayKey, false), where: "Loans",
-      note: overdue ? "Overdue — repay it on the Loans page" : "Due " + (l.dueDate === todayKey ? "today" : dayWord(l.dueDate)) + " — repay it on the Loans page" });
+      note: overdue ? "Overdue. Repay it on the Loans page" : "Due " + (l.dueDate === todayKey ? "today" : dayWord(l.dueDate)) + ". Repay it on the Loans page" });
   });
   // Credit card: the last statement's closing balance is a bill on its due
   // date (still showing, as overdue, until it's paid).
@@ -3573,7 +3573,7 @@ function budgetWeekItems(cls, user, username) {
       // only matters for cash timing, never for the week's bills or spending plan.
       items.push({ key: "card-stmt", dir: "out", repay: true, icon: "creditcard", label: "Credit card statement", amount: owe,
         dayKey: overdue ? todayKey : cs.dueKey, status: overdue ? "overdue" : budgetStatus(cs.dueKey, todayKey, false), where: "Bank",
-        note: (overdue ? "Overdue — pay it on the Bank page" : "Due " + (cs.dueKey === todayKey ? "today" : dayWord(cs.dueKey)) + " — pay it on the Bank page")
+        note: (overdue ? "Overdue. Pay it on the Bank page" : "Due " + (cs.dueKey === todayKey ? "today" : dayWord(cs.dueKey)) + ". Pay it on the Bank page")
           + " (pay it all by the due date to avoid interest). It pays off card spending already counted in your plan, so it isn't counted again" });
     }
   }
@@ -3586,7 +3586,7 @@ function budgetWeekItems(cls, user, username) {
     const srcId = autoSource(a), viaAcct = !autoCard && srcId !== "cash" && srcId !== "card" ? acctSrcName(cls, user, srcId) : "";
     items.push({ key: "auto-" + a.id, dir: "out", icon: "repeat", label: a.note || "Automatic payment", amount: budgetRound(a.amount), dayKey: when.dayKey, status,
       viaCard: autoCard, fromOther: !!viaAcct, // fromOther: comes out of another of their accounts, not their cash
-      note: status === "done" ? "Paid" : status === "missed" ? (autoCard ? "Didn't go out — not enough room on your credit card" : viaAcct ? `Didn't go out — not enough in your ${viaAcct}` : "Didn't go out — not enough cash on the day")
+      note: status === "done" ? "Paid" : status === "missed" ? (autoCard ? "Didn't go out, not enough room on your credit card" : viaAcct ? `Didn't go out, not enough in your ${viaAcct}` : "Didn't go out, not enough cash on the day")
         : "Goes out by itself" + (a.toUser === cls.teacher ? ", to your teacher" : "") + (autoCard ? ", on your credit card" : viaAcct ? `, from your ${viaAcct}` : "") });
   });
 
@@ -3604,7 +3604,7 @@ function budgetWeekItems(cls, user, username) {
     const other = toSavings ? ends.to : ends.from, otherName = other === "savings" ? "savings" : acctNameOf(cls, user, other);
     items.push({ key: "save-" + a.id, dir: toSavings ? "save" : "unsave", icon: "piggy",
       label: toSavings ? `Automatic transfer to ${otherName}` : `Automatic transfer from ${otherName}`, amount: budgetRound(a.amount), dayKey: when.dayKey, status,
-      note: status === "done" ? "Done" : status === "missed" ? "Didn't happen — not enough money on the day" : "Happens by itself" });
+      note: status === "done" ? "Done" : status === "missed" ? "Didn't happen, not enough money on the day" : "Happens by itself" });
   });
 
   return { items, weekKey, weekStartKey, weekEndKey, todayKey };
@@ -3721,8 +3721,8 @@ const MAX_BUDGET_SAVE = 1000000;
 async function saveBudget(username, saveAmount) {
   const raw = String(saveAmount === undefined || saveAmount === null ? "" : saveAmount).trim();
   const save = budgetRound(raw);
-  if (raw === "" || !Number.isFinite(Number(raw)) || Number(raw) < 0) return { ok: false, error: "Enter how much you'll save each week — 0 or more." };
-  if (save > MAX_BUDGET_SAVE) return { ok: false, error: `That's more than ${fmtMoney(MAX_BUDGET_SAVE)} — try a smaller amount.` };
+  if (raw === "" || !Number.isFinite(Number(raw)) || Number(raw) < 0) return { ok: false, error: "Enter how much you'll save each week: 0 or more." };
+  if (save > MAX_BUDGET_SAVE) return { ok: false, error: `That's more than ${fmtMoney(MAX_BUDGET_SAVE)}. Try a smaller amount.` };
   await usersCol().doc(username).update({
     budget: { saveAmount: save, weekKey: isoWeekKey(), updatedAt: Date.now() }
   });
@@ -3793,7 +3793,7 @@ function buildBudgetView(cls, user, username) {
     .forEach(i => {
       if (cardNow && i.amount <= cardRoom + 0.005) {
         i.cardOk = true; cardRoom = budgetRound(cardRoom - i.amount);
-        if (!i.viaCard) i.note += " — you can put it on your credit card";
+        if (!i.viaCard) i.note += ". You can put it on your credit card";
       }
     });
   const todayIdx = budgetDayIndex(nzDayName());
@@ -3863,7 +3863,7 @@ function buildBudgetView(cls, user, username) {
     verdict = { tone: "bad", icon: "cart", text: `You've spent ${fmtMoney(-spendLeft)} more than your plan's spending money this week.` };
   } else if (!plan.hasPlan) {
     verdict = inTotal <= 0 && billsTotal <= 0
-      ? { tone: "warn", icon: "calendar", text: "Nothing is coming in or going out this week yet. A job or a side hustle gets money coming in — then come back and plan it." }
+      ? { tone: "warn", icon: "calendar", text: "Nothing is coming in or going out this week yet. A job or a side hustle gets money coming in, then come back and plan it." }
       : { tone: "warn", icon: "calendar", text: `You have ${fmtMoney(Math.max(0, left))} left after this week's bills. Choose how much of it to save below.` };
   } else {
     verdict = { tone: "good", icon: "trophy", text: billsTotal > 0
@@ -3928,7 +3928,7 @@ function buildBudgetView(cls, user, username) {
   const maturing = (user.termDeposits || []).filter(d => d.matureDate >= todayKey && d.matureDate <= sched.weekEndKey);
   if (maturing.length) {
     const total = budgetRound(maturing.reduce((s, d) => s + d.amount, 0));
-    notes.push({ tone: "good", icon: "piggy", text: `Your term deposit${maturing.length > 1 ? "s" : ""} (${fmtMoney(total)} plus interest) pay${maturing.length > 1 ? "" : "s"} back into your cash this week — that's your savings coming back, so think before you spend it.` });
+    notes.push({ tone: "good", icon: "piggy", text: `Your term deposit${maturing.length > 1 ? "s" : ""} (${fmtMoney(total)} plus interest) pay${maturing.length > 1 ? "" : "s"} back into your cash this week. That's your savings coming back, so think before you spend it.` });
   }
   // Most payments on the site (rent, transport, the mortgage, store checkouts) come out of the cash balance, which is
   // empty while it's closed.
@@ -4085,7 +4085,7 @@ async function _updateSavingsGoals(username, change) {
     if (e && !e.code && e.message) return { ok: false, error: e.message };
     console.error("Saving savings goals failed:", e);
     return { ok: false, error: t29IsConnectionError(e)
-      ? "Couldn't save — check your internet connection and try again."
+      ? "Couldn't save. Check your internet connection and try again."
       : "Couldn't save your goal. Please try again." };
   }
 }
@@ -4095,7 +4095,7 @@ async function addSavingsGoal(username, name, target) {
   const amount = cleanAmount(target);
   if (!cleanName) return { ok: false, error: "Give your goal a name." };
   if (!(amount > 0)) return { ok: false, error: "Enter how much you need, more than $0." };
-  if (amount > MAX_SAVINGS_GOAL_AMOUNT) return { ok: false, error: `That's a bit much — keep it under ${fmtMoney(MAX_SAVINGS_GOAL_AMOUNT)}.` };
+  if (amount > MAX_SAVINGS_GOAL_AMOUNT) return { ok: false, error: `That's a bit much. Keep it under ${fmtMoney(MAX_SAVINGS_GOAL_AMOUNT)}.` };
   return _updateSavingsGoals(username, goals => {
     if (goals.length >= MAX_SAVINGS_GOALS) throw new Error(`You can have up to ${MAX_SAVINGS_GOALS} goals at a time. Remove one first.`);
     goals.push({ id: uid("goal"), name: cleanName, target: amount, createdAt: Date.now() });
@@ -4213,7 +4213,7 @@ async function createParentLink(username) {
   } catch (e) {
     console.error("Creating family link failed:", e);
     return { ok: false, error: t29IsConnectionError(e)
-      ? "Couldn't make the link — check your internet connection and try again."
+      ? "Couldn't make the link. Check your internet connection and try again."
       : "Couldn't make the link right now. Please try again in a moment." };
   }
 }
@@ -4574,7 +4574,7 @@ async function approveCreditCard(classCode, username) {
       t.update(userRef, { creditCard: cardMakeActive(plan, cls, nzDateKey()) });
       approvedPlan = plan;
     });
-  } catch (e) { return { ok: false, error: "Couldn't approve that card — it may have changed. Refresh and try again." }; }
+  } catch (e) { return { ok: false, error: "Couldn't approve that card. It may have changed. Refresh and try again." }; }
   if (approvedPlan) {
     await t29NotifyStudents(classCode, { to: username, icon: "creditcard", tone: "mint",
       title: `Your teacher approved your ${approvedPlan.name} card`,
@@ -4592,7 +4592,7 @@ async function declineCreditCard(classCode, username) {
       if (!c || c.status !== "pending") throw new Error("NOT_PENDING");
       t.update(userRef, { creditCard: { status: "denied", planId: c.planId, deniedTs: Date.now() } });
     });
-  } catch (e) { return { ok: false, error: "Couldn't decline that — it may have changed. Refresh and try again." }; }
+  } catch (e) { return { ok: false, error: "Couldn't decline that. It may have changed. Refresh and try again." }; }
   await t29NotifyStudents(classCode, { to: username, icon: "creditcard", tone: "coral",
     title: "Your teacher declined your credit card application",
     body: "You can ask your teacher why, or apply again later.", href: "bank.html#cardCard" });
@@ -4654,7 +4654,7 @@ async function payCreditCard(username, classCode, amount) {
     return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "card-payment", from: username, amount,
-    note: owingAfter <= 0.004 ? "Credit card paid off" : `Credit card payment — ${fmtMoney(owingAfter)} still owing` });
+    note: owingAfter <= 0.004 ? "Credit card paid off" : `Credit card payment: ${fmtMoney(owingAfter)} still owing` });
   return { ok: true, owingAfter, clearedStmt };
 }
 
@@ -4795,7 +4795,7 @@ async function logPurchaseTxn(classCode, username, pay, cat, txn) {
   const card = (pay && pay.card) || 0, cash = pay ? pay.cash : (Number(txn.amount) || 0);
   if (!(card > 0.004)) { await logTxn(classCode, Object.assign({ from: username }, txn, { amount: cash })); return; }
   const split = cash > 0.004;
-  if (split) await logTxn(classCode, Object.assign({ from: username }, txn, { amount: cash, note: `${txn.note} (cash part — ${fmtMoney(card)} went on the credit card)` }));
+  if (split) await logTxn(classCode, Object.assign({ from: username }, txn, { amount: cash, note: `${txn.note} (cash part: ${fmtMoney(card)} went on the credit card)` }));
   await logTxn(classCode, { type: "card-purchase", cat, surprise: !!txn.surprise, scheduled: !!txn.scheduled, from: username, amount: card,
     note: `${txn.note} (credit card${split ? `, ${fmtMoney(cash)} paid in cash` : ""})` });
 }
@@ -4846,7 +4846,7 @@ function cardLateCheck(card, plan, asOfKey, logs) {
     card.balance = cardRound(card.balance + plan.lateFee);
     card.lifetime.fees = cardRound((card.lifetime.fees || 0) + plan.lateFee);
     s.lateFee = plan.lateFee;
-    logs.push({ type: "card-fee", amount: plan.lateFee, note: `Late payment fee — the ${fmtMoney(s.minDue)} minimum wasn't paid by ${cardDateLabel(s.dueKey)}` });
+    logs.push({ type: "card-fee", amount: plan.lateFee, note: `Late payment fee. The ${fmtMoney(s.minDue)} minimum wasn't paid by ${cardDateLabel(s.dueKey)}` });
   }
   return true;
 }
@@ -4865,7 +4865,7 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     interest = cardRound(interestBase * plan.rate / 100);
     card.balance = cardRound(card.balance + interest);
     card.lifetime.interest = cardRound(card.lifetime.interest + interest);
-    logs.push({ type: "card-interest", amount: interest, note: `Interest on unpaid statement (${fmtMoney(interestBase)} still owing) — ${plan.rate}% for 2 weeks` });
+    logs.push({ type: "card-interest", amount: interest, note: `Interest on unpaid statement (${fmtMoney(interestBase)} still owing): ${plan.rate}% for 2 weeks` });
   }
   card.cycles = (card.cycles || 0) + 1;
   let fee = 0;
@@ -4873,7 +4873,7 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     fee = plan.monthlyFee;
     card.balance = cardRound(card.balance + fee);
     card.lifetime.fees = cardRound(card.lifetime.fees + fee);
-    logs.push({ type: "card-fee", amount: fee, note: `Monthly card fee — ${plan.name}` });
+    logs.push({ type: "card-fee", amount: fee, note: `Monthly card fee: ${plan.name}` });
   }
   // Cashback + spend-and-earn reward for the period just ended. It is a
   // STATEMENT CREDIT: it comes straight off the closing balance below. Only
@@ -4889,7 +4889,7 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     const parts = [];
     if (rw.pct > 0) parts.push(`${plan.cashbackPct}% cashback ${fmtMoney(rw.pct)}`);
     if (rw.fixed > 0) parts.push(`${fmtMoney(rw.back)} back for every ${fmtMoney(rw.every)} in a single purchase × ${rw.steps} = ${fmtMoney(rw.fixed)}`);
-    logs.push({ type: "card-cashback", amount: cashback, note: `Cashback ${fmtMoney(cashback)} on ${fmtMoney(card.periodSpend)} spent — ${parts.join(" + ")}` });
+    logs.push({ type: "card-cashback", amount: cashback, note: `Cashback ${fmtMoney(cashback)} on ${fmtMoney(card.periodSpend)} spent: ${parts.join(" + ")}` });
   }
   const nextClose = dateKeyPlusDays(closeKey, CARD_CYCLE_DAYS);
   card.vouchers = (card.vouchers || []).filter(v => v.expiryKey > closeKey).concat(cardIssueVouchers(plan, nextClose));
@@ -4901,7 +4901,7 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     spend: cardRound(card.periodSpend || 0), rate: plan.rate
   };
   logs.push({ type: "card-statement", amount,
-    note: amount > 0.004 ? `Statement closed — pay ${fmtMoney(amount)} by ${cardDateLabel(card.stmt.dueKey)} to avoid interest` : "Statement closed — nothing to pay" });
+    note: amount > 0.004 ? `Statement closed. Pay ${fmtMoney(amount)} by ${cardDateLabel(card.stmt.dueKey)} to avoid interest` : "Statement closed. Nothing to pay" });
   card.periodSpend = 0; card.periodFixed = 0; card.periodSteps = 0;
   card.nextCloseKey = nextClose;
   user.balance = cardRound((user.balance || 0) + cashLeft);
@@ -5264,9 +5264,9 @@ async function approveBankAccount(classCode, username, accountId) {
       a.status = "active"; a.openedKey = nzDateKey();
       t.update(userRef, { bankAccounts: list });
     });
-  } catch (e) { return { ok: false, error: "Couldn't approve that account — it may have changed. Refresh and try again." }; }
+  } catch (e) { return { ok: false, error: "Couldn't approve that account. It may have changed. Refresh and try again." }; }
   if (plan) await t29NotifyStudents(classCode, { to: username, icon: "piggy", tone: "mint",
-    title: `Your teacher approved your ${plan.name} account`, body: "It's open now — find it on the Bank page and move some money in.", href: "bank.html#acctCard" });
+    title: `Your teacher approved your ${plan.name} account`, body: "It's open now. Find it on the Bank page and move some money in.", href: "bank.html#acctCard" });
   return { ok: true };
 }
 async function declineBankAccount(classCode, username, accountId) {
@@ -5280,7 +5280,7 @@ async function declineBankAccount(classCode, username, accountId) {
       if (!list.some(x => x.id === accountId && x.status === "pending")) throw new Error("NOT_PENDING");
       t.update(userRef, { bankAccounts: list.filter(x => x.id !== accountId) });
     });
-  } catch (e) { return { ok: false, error: "Couldn't decline that — it may have changed. Refresh and try again." }; }
+  } catch (e) { return { ok: false, error: "Couldn't decline that. It may have changed. Refresh and try again." }; }
   await t29NotifyStudents(classCode, { to: username, icon: "piggy", tone: "coral",
     title: "Your teacher declined an account application", body: "You can ask your teacher why, or apply for a different account.", href: "bank.html#acctCard" });
   return { ok: true };
@@ -5358,11 +5358,11 @@ async function closeBankAccount(username, classCode, accountId, destId) {
   } catch (e) {
     const m = String((e && e.message) || "").split(":");
     if (m[0] === "LAST") return { ok: false, error: "You need at least one account open to keep your money in. Open another one first, then close this one." };
-    if (m[0] === "CAP") return { ok: false, error: `That account can only hold up to its balance cap — it has room for ${fmtMoney(Number(m[1]) || 0)} more. Pick another account to move the money to.` };
+    if (m[0] === "CAP") return { ok: false, error: `That account can only hold up to its balance cap. It has room for ${fmtMoney(Number(m[1]) || 0)} more. Pick another account to move the money to.` };
     if (m[0] === "NEGATIVE") return { ok: false, error: "You can't close an account that is overdrawn." };
     return { ok: false, error: "Couldn't close that account. Refresh and try again." };
   }
-  if (moved > 0) await logTxn(classCode, { type: "account-close", to: username, amount: moved, cashDir, note: `Closed ${srcName} — ${fmtMoney(moved)} moved to ${destName}` });
+  if (moved > 0) await logTxn(classCode, { type: "account-close", to: username, amount: moved, cashDir, note: `Closed ${srcName}: ${fmtMoney(moved)} moved to ${destName}` });
   return { ok: true, moved, srcName, destName };
 }
 // Opens one of the two original accounts again. Free and instant — they are included for everyone in the class.
@@ -5501,7 +5501,7 @@ function acctMoveError(e) {
     BROKE_ACCT: "There isn't that much in that account.",
     BROKE_FEE: `That account charges a ${fmtMoney(Number(arg) || 0)} withdrawal fee, so it needs a little more than that in it.`,
     LIMIT: `That account allows ${arg} withdrawal${arg === "1" ? "" : "s"} each interest period, and you've used ${arg === "1" ? "it" : "them"} up. It resets when interest is next paid.`,
-    CAP: `That account can only hold up to its balance cap — you can add ${fmtMoney(Number(arg) || 0)} more.`,
+    CAP: `That account can only hold up to its balance cap. You can add ${fmtMoney(Number(arg) || 0)} more.`,
     NOT_FOUND: "That account isn't available any more."
   };
   return m[code] || null;
@@ -5532,7 +5532,7 @@ async function moveBankMoney(username, classCode, fromId, toId, amount) {
       const mainL = acctMainId(user);
       if (fromId !== mainL) logs.push({ type: "savings-withdraw", to: username, amount, note });
       if (toId !== mainL) logs.push({ type: "savings-deposit", from: username, amount, note });
-      if (mv.fee > 0) logs.push({ type: "account-fee", from: username, amount: mv.fee, note: `Withdrawal fee — ${mv.feeName}` });
+      if (mv.fee > 0) logs.push({ type: "account-fee", from: username, amount: mv.fee, note: `Withdrawal fee: ${mv.feeName}` });
     });
   } catch (e) {
     return { ok: false, error: acctMoveError(e) || "Something went wrong. Please try again." };
@@ -5584,7 +5584,7 @@ async function sendMoneyFrom(fromUser, toUser, amount, note, sourceId) {
     return { ok: false, error: "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "transfer", from: fromUser, to: toUser, amount, note: (note ? note + " " : "") + `(paid ${via})` });
-  if (fee > 0) await logTxn(classCode, { type: "account-fee", from: fromUser, amount: fee, note: `Withdrawal fee — ${feeName}` });
+  if (fee > 0) await logTxn(classCode, { type: "account-fee", from: fromUser, amount: fee, note: `Withdrawal fee: ${feeName}` });
   return { ok: true, fee, fromName };
 }
 

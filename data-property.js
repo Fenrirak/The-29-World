@@ -552,7 +552,7 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
   // doesn't offer one buys it outright, and is logged as that. The amount
   // is the CASH that left their account; KiwiSaver's part is in the note.
   const kiwiNote = fromKiwi > 0 ? ` (${fmtMoney(fromKiwi)} from KiwiSaver)` : "";
-  await logTxn(classCode, { type: "property-buy", from: username, amount: mortgaged ? Math.round((deposit - fromKiwi) * 100) / 100 : cashPaid, note: (mortgaged ? `Bought (mortgaged${boughtVariable ? ", variable rate" : ""}): ${propName} — ${fmtMoney(deposit)} deposit${kiwiNote}` : `Bought outright: ${propName}${kiwiNote}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
+  await logTxn(classCode, { type: "property-buy", from: username, amount: mortgaged ? Math.round((deposit - fromKiwi) * 100) / 100 : cashPaid, note: (mortgaged ? `Bought (mortgaged${boughtVariable ? ", variable rate" : ""}): ${propName}: ${fmtMoney(deposit)} deposit${kiwiNote}` : `Bought outright: ${propName}${kiwiNote}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true, fromKiwi, mortgageType: boughtVariable ? "variable" : "fixed" };
 }
 // Sells a property back to the class. The owner is paid whatever the
@@ -697,14 +697,14 @@ async function payMortgage(username, classCode, propId, useCard) {
     });
   } catch (e) {
     if (e.message === "WRONG_DAY") return { ok: false, error: "You can pay your mortgage from its due day until the end of that week." };
-    if (e.message === "PURCHASE_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you bought is free." };
+    if (e.message === "PURCHASE_WEEK") return { ok: false, error: "Your first payment isn't due yet. The week you bought is free." };
     if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's payment has already gone through." };
     { const ce = cardPayError(e); if (ce) return { ok: false, error: ce }; }
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's payment." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That mortgage couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "mortgage", from: username, amount: amt, note: `Mortgage payment: ${propName}` + (payRes.card > 0 ? " (credit card)" : "") + (remainingAfter <= 0 ? " — paid off!" : "") });
+  await logTxn(classCode, { type: "mortgage", from: username, amount: amt, note: `Mortgage payment: ${propName}` + (payRes.card > 0 ? " (credit card)" : "") + (remainingAfter <= 0 ? ". Paid off!" : "") });
   return { ok: true, amount: amt, fullyPaid: remainingAfter <= 0 };
 }
 
@@ -847,7 +847,7 @@ async function notifyVariableRateChanges(classCode, changes) {
     const up = c.to > c.from;
     notices.push({ to: c.owners, icon: "house", tone: up ? "coral" : "mint",
       title: `The variable rate on ${c.name} ${up ? "went up" : "came down"}`,
-      body: `Your variable mortgage rate moved from ${c.from}% to ${c.to}% per week — your next payment will be ${up ? "a bit higher" : "a bit lower"}.`, href: "property.html" });
+      body: `Your variable mortgage rate moved from ${c.from}% to ${c.to}% per week. Your next payment will be ${up ? "a bit higher" : "a bit lower"}.`, href: "property.html" });
   });
   if (notices.length) await t29NotifyStudents(classCode, notices);
 }
@@ -937,7 +937,7 @@ async function payExtraMortgage(username, classCode, propId, amount, payOff) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "That mortgage couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "mortgage-extra", from: username, amount: paid, note: `Extra mortgage repayment (variable): ${propName}` + (cleared ? " — paid off!" : "") });
+  await logTxn(classCode, { type: "mortgage-extra", from: username, amount: paid, note: `Extra mortgage repayment (variable): ${propName}` + (cleared ? ". Paid off!" : "") });
   return { ok: true, amount: paid, fullyPaid: cleared, balanceAfter, weeksLeft: weeksLeftAfter };
 }
 
@@ -1054,7 +1054,7 @@ async function resolveMortgageOverdue(classCode, propId) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "That mortgage couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "mortgage", from: ownerUsername, note: `Mortgage payment marked as resolved by teacher, no charge: ${propName}` + (remainingAfter <= 0 ? " — paid off!" : "") });
+  await logTxn(classCode, { type: "mortgage", from: ownerUsername, note: `Mortgage payment marked as resolved by teacher, no charge: ${propName}` + (remainingAfter <= 0 ? ". Paid off!" : "") });
   await t29NotifyStudents(classCode, { to: ownerUsername, icon: "house", tone: "mint",
     title: `Your teacher cleared your overdue mortgage payment for ${propName}`,
     body: remainingAfter <= 0 ? "No money was taken, and your mortgage is now fully paid off." : "No money was taken from you for that payment.", href: "property.html" });
@@ -1132,8 +1132,8 @@ async function setPropertyOccupancy(username, classCode, propId, occupancy) {
     });
   } catch (e) {
     if (e.message === "NOT_OWNER") return { ok: false, error: "You don't own that property." };
-    if (e.message === "ALREADY_HOUSED") return { ok: false, error: "You're already living somewhere else — move out of that first." };
-    if (e.message === "MOVED_TODAY") return { ok: false, error: "You've already moved house today — try again tomorrow." };
+    if (e.message === "ALREADY_HOUSED") return { ok: false, error: "You're already living somewhere else. Move out of that first." };
+    if (e.message === "MOVED_TODAY") return { ok: false, error: "You've already moved house today. Try again tomorrow." };
     if (e.message === "BROKE_MOVE") return { ok: false, error: "You can't afford the moving cost right now." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -1410,7 +1410,7 @@ async function createSublet(username, classCode, propId, price, minWeeks) {
     if (e.message === "OFF") return { ok: false, error: "Renting to classmates is switched off for your class right now." };
     if (e.message === "NOT_OWNER") return { ok: false, error: "You don't own that property." };
     if (e.message === "NO_REF_PRICE") return { ok: false, error: "Your teacher hasn't set a rent amount for this property yet." };
-    if (e.message === "HAS_TENANT") return { ok: false, error: "This property already has a tenant — end that lease first." };
+    if (e.message === "HAS_TENANT") return { ok: false, error: "This property already has a tenant. End that lease first." };
     if (e.message === "BAD_PRICE") return { ok: false, error: "Enter a price greater than zero." };
     if (e.message === "UNDER_MIN") return { ok: false, error: "That price is below the minimum your teacher allows." };
     if (e.message === "OVER_MAX") return { ok: false, error: "That price is above the maximum your teacher allows." };
@@ -1451,7 +1451,7 @@ async function cancelSublet(username, classCode, propId) {
     });
   } catch (e) {
     if (e.message === "NOT_OWNER") return { ok: false, error: "You don't own that property." };
-    if (e.message === "LOCKED_IN") return { ok: false, error: "You agreed to a minimum lease length for this tenant — you can't end it yet." };
+    if (e.message === "LOCKED_IN") return { ok: false, error: "You agreed to a minimum lease length for this tenant. You can't end it yet." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -1499,13 +1499,13 @@ async function claimSublet(username, classCode, propId) {
     if (e.message === "OWN_PROPERTY") return { ok: false, error: "You can't rent your own property." };
     if (e.message === "NOT_AVAILABLE") return { ok: false, error: "That listing isn't available right now." };
     if (e.message === "TAKEN") return { ok: false, error: "Someone already moved in." };
-    if (e.message === "ALREADY_HOUSED") return { ok: false, error: "You're already living somewhere else — move out of that first." };
-    if (e.message === "MOVED_TODAY") return { ok: false, error: "You've already moved house today — try again tomorrow." };
+    if (e.message === "ALREADY_HOUSED") return { ok: false, error: "You're already living somewhere else. Move out of that first." };
+    if (e.message === "MOVED_TODAY") return { ok: false, error: "You've already moved house today. Try again tomorrow." };
     if (e.message === "BROKE_MOVE") return { ok: false, error: "You can't afford the moving cost right now." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "property-occupancy", to: username, amount: moveCost, note: `Moved in as a tenant: ${propName} (renting from ${ownerUsername})` + (moveCost > 0 ? ` — paid ${fmtMoney(moveCost)} moving cost` : "") });
+  await logTxn(classCode, { type: "property-occupancy", to: username, amount: moveCost, note: `Moved in as a tenant: ${propName} (renting from ${ownerUsername})` + (moveCost > 0 ? `. Paid ${fmtMoney(moveCost)} moving cost` : "") });
   return { ok: true };
 }
 
@@ -1530,7 +1530,7 @@ async function tenantMoveOut(username, classCode, propId) {
     });
   } catch (e) {
     if (e.message === "NOT_TENANT") return { ok: false, error: "You're not renting that property." };
-    if (e.message === "LOCKED_IN") return { ok: false, error: "You agreed to a minimum lease length — you can't move out yet." };
+    if (e.message === "LOCKED_IN") return { ok: false, error: "You agreed to a minimum lease length. You can't move out yet." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -1690,7 +1690,7 @@ async function payTenantRent(username, classCode, propId, useCard) {
     });
   } catch (e) {
     if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay rent on its due day." };
-    if (e.message === "MOVE_IN_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you moved in is free." };
+    if (e.message === "MOVE_IN_WEEK") return { ok: false, error: "Your first payment isn't due yet. The week you moved in is free." };
     if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's rent has already been paid." };
     { const ce = cardPayError(e); if (ce) return { ok: false, error: ce }; }
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's rent." };
@@ -1903,13 +1903,13 @@ async function rentNpcProperty(username, classCode, unitId) {
     });
   } catch (e) {
     if (e.message === "TAKEN") return { ok: false, error: "Someone already moved in." };
-    if (e.message === "ALREADY_HOUSED") return { ok: false, error: "You're already living somewhere else — move out of that first." };
-    if (e.message === "MOVED_TODAY") return { ok: false, error: "You've already moved house today — try again tomorrow." };
+    if (e.message === "ALREADY_HOUSED") return { ok: false, error: "You're already living somewhere else. Move out of that first." };
+    if (e.message === "MOVED_TODAY") return { ok: false, error: "You've already moved house today. Try again tomorrow." };
     if (e.message === "BROKE_MOVE") return { ok: false, error: "You can't afford the moving cost right now." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That listing couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "property-occupancy", to: username, amount: moveCost, note: `Moved in as a tenant: ${propName} (renting from the school)` + (moveCost > 0 ? ` — paid ${fmtMoney(moveCost)} moving cost` : "") });
+  await logTxn(classCode, { type: "property-occupancy", to: username, amount: moveCost, note: `Moved in as a tenant: ${propName} (renting from the school)` + (moveCost > 0 ? `. Paid ${fmtMoney(moveCost)} moving cost` : "") });
   return { ok: true };
 }
 
@@ -1938,7 +1938,7 @@ async function moveOutNpcProperty(username, classCode, unitId) {
     });
   } catch (e) {
     if (e.message === "NOT_TENANT") return { ok: false, error: "You're not renting that property." };
-    if (e.message === "LOCKED_IN") return { ok: false, error: "You agreed to a minimum lease length — you can't move out yet." };
+    if (e.message === "LOCKED_IN") return { ok: false, error: "You agreed to a minimum lease length. You can't move out yet." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That rental couldn't be found." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -2034,7 +2034,7 @@ async function payNpcRent(username, classCode, unitId, useCard) {
     });
   } catch (e) {
     if (e.message === "WRONG_DAY") return { ok: false, error: "You can only pay rent on its due day." };
-    if (e.message === "MOVE_IN_WEEK") return { ok: false, error: "Your first payment isn't due yet — the week you moved in is free." };
+    if (e.message === "MOVE_IN_WEEK") return { ok: false, error: "Your first payment isn't due yet. The week you moved in is free." };
     if (e.message === "ALREADY_PAID") return { ok: false, error: "This week's rent has already been paid." };
     { const ce = cardPayError(e); if (ce) return { ok: false, error: ce }; }
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash for this week's rent." };

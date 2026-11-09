@@ -137,7 +137,7 @@ async function render() {
     const row = document.createElement("div");
     row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;";
     row.innerHTML = `
-      <div>${icon("bell", 15)} <strong>${escapeHtml(s.name)}</strong> has requested more time — they're out for today.</div>
+      <div>${icon("bell", 15)} <strong>${escapeHtml(s.name)}</strong> has requested more time. They're out for today.</div>
       <div class="row-flex" style="gap:8px;">
         <button class="btn small gold" onclick="approveTimeExemptionRequest('${escapeJsAttr(s.username)}')">Accept</button>
         <button class="btn small coral" onclick="declineTimeExemptionRequest('${escapeJsAttr(s.username)}')">Decline</button>
@@ -248,7 +248,7 @@ async function render() {
     const row = document.createElement("div");
     row.className = "auto-row";
     const middle = ev.type === "choice"
-      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${escapeHtml(o.label)} (${eventAmountText(o.amount, o.percent, ev.amountBase)})${o.outcome ? ` — ${escapeHtml(o.outcome)}` : ""}`).join(", ")}`
+      ? `&middot; <span class="badge lilac">Multiple choice</span> &middot; ${(ev.options || []).map(o => `${escapeHtml(o.label)} (${eventAmountText(o.amount, o.percent, ev.amountBase)})${o.outcome ? `: ${escapeHtml(o.outcome)}` : ""}`).join(", ")}`
       : `&middot; ${eventAmountText(ev.amount, ev.amountMode === "percent" ? ev.amountPercent : 0, ev.amountBase)}`;
     row.innerHTML = `
       <div class="auto-details">${icon("sparkle", 14)} <strong>${escapeHtml(ev.name)}</strong>
@@ -263,6 +263,7 @@ async function render() {
     `;
     evBox.appendChild(row);
   });
+  paintEventReco(cls);
 
   // lifestyle settings
   const cfg = cls.lifestyleConfig || {
@@ -339,7 +340,7 @@ async function render() {
 }
 
 function jobSelectHtml(cls, student) {
-  let opts = `<option value="">— no job —</option>`;
+  let opts = `<option value="">No job</option>`;
   (cls.jobs || []).forEach(j => {
     opts += `<option value="${j.id}" ${student.jobId === j.id ? "selected" : ""}>${escapeHtml(j.title)}</option>`;
   });
@@ -349,60 +350,60 @@ function jobSelectHtml(cls, student) {
 function describeTxn(t, nameOf) {
   switch (t.type) {
     case "welcome": return escapeHtml(`${nameOf(t.to)} joined the class`);
-    case "wage": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "interest": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "bonus": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "fine": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "transfer": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)} ${t.note ? "— " + t.note : ""}`);
-    case "automation": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)} — ${t.note || "Automatic payment"}`);
-    case "stock-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "stock-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "stock-close": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "insurance-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "store-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "store-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "property-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "property-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "mortgage": case "mortgage-extra": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "event": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "vehicle-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "vehicle-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "transport-expense": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "term-deposit-open": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "term-deposit-early": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "term-deposit-mature": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "gambling": return escapeHtml(`${nameOf(t.to || t.from)} — ${t.note}`);
-    case "gambling-buyin": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "gambling-cashout": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "big-event": return escapeHtml(`${nameOf(t.to || t.from)} — ${t.note}`);
-    case "insurance-claim": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "insurance-premium": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "cash-interest": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "savings-deposit": return escapeHtml(`${nameOf(t.from)} — ${t.note || "Deposited into Savings Account"}`);
-    case "savings-withdraw": return escapeHtml(`${nameOf(t.to)} — ${t.note || "Withdrew from Savings Account"}`);
-    case "account-close": return escapeHtml(`${nameOf(t.to)} — ${t.note || "Closed an account"}`);
-    case "loan-taken": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "loan-repayment": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "loan-interest": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "card-purchase": case "card-payment": case "card-interest": case "card-fee": case "account-fee": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "card-cashback": case "card-statement": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "side-hustle": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "truck-drive": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "store-gift": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "quiz-reward": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "property-rent": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "property-rent-pay": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "property-rent-receive": return escapeHtml(`${nameOf(t.to)} ← ${nameOf(t.from)} — ${t.note}`);
-    case "p2p-buy": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)} — ${t.note}`);
-    case "p2p-sell": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "truck-licence-buy": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "insurance-signup-fee": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "property-occupancy": return escapeHtml(`${nameOf(t.to || t.from)} — ${t.note}`);
-    case "life-grant": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "life-revoke": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "life-allowance": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
-    case "kiwisaver-in": return escapeHtml(`${nameOf(t.from)} — ${t.note}`);
-    case "kiwisaver-out": case "kiwisaver-refund": return escapeHtml(`${nameOf(t.to)} — ${t.note}`);
+    case "wage": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "interest": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "bonus": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "fine": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "transfer": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)} ${t.note ? ": " + t.note : ""}`);
+    case "automation": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)}: ${t.note || "Automatic payment"}`);
+    case "stock-buy": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "stock-sell": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "stock-close": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "insurance-buy": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "store-buy": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "store-sell": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "property-buy": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "property-sell": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "mortgage": case "mortgage-extra": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "event": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "vehicle-buy": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "vehicle-sell": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "transport-expense": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "term-deposit-open": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "term-deposit-early": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "term-deposit-mature": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "gambling": return escapeHtml(`${nameOf(t.to || t.from)}: ${t.note}`);
+    case "gambling-buyin": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "gambling-cashout": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "big-event": return escapeHtml(`${nameOf(t.to || t.from)}: ${t.note}`);
+    case "insurance-claim": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "insurance-premium": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "cash-interest": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "savings-deposit": return escapeHtml(`${nameOf(t.from)}: ${t.note || "Deposited into Savings Account"}`);
+    case "savings-withdraw": return escapeHtml(`${nameOf(t.to)}: ${t.note || "Withdrew from Savings Account"}`);
+    case "account-close": return escapeHtml(`${nameOf(t.to)}: ${t.note || "Closed an account"}`);
+    case "loan-taken": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "loan-repayment": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "loan-interest": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "card-purchase": case "card-payment": case "card-interest": case "card-fee": case "account-fee": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "card-cashback": case "card-statement": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "side-hustle": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "truck-drive": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "store-gift": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "quiz-reward": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "property-rent": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "property-rent-pay": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "property-rent-receive": return escapeHtml(`${nameOf(t.to)} ← ${nameOf(t.from)}: ${t.note}`);
+    case "p2p-buy": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)}: ${t.note}`);
+    case "p2p-sell": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "truck-licence-buy": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "insurance-signup-fee": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "property-occupancy": return escapeHtml(`${nameOf(t.to || t.from)}: ${t.note}`);
+    case "life-grant": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "life-revoke": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "life-allowance": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "kiwisaver-in": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "kiwisaver-out": case "kiwisaver-refund": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
     default: return escapeHtml(t.note || "");
   }
 }
@@ -514,20 +515,20 @@ async function giveAdjustment(e) {
         if (res.ok) okCount++; else failedNames.push(s.name);
       }
       if (okCount === targets.length) {
-        box.innerHTML = `<div class="success-msg">Done — ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} all ${okCount} students.</div>`;
+        box.innerHTML = `<div class="success-msg">Done: ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} all ${okCount} students.</div>`;
         document.getElementById("adjAmount").value = "";
         document.getElementById("adjNote").value = "";
         document.getElementById("adjStudent").value = "";
       } else if (okCount > 0) {
         box.innerHTML = `<div class="error-msg">${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${okCount} of ${targets.length} students. Failed for: ${failedNames.map(escapeHtml).join(", ")}.</div>`;
       } else {
-        box.innerHTML = `<div class="error-msg">Couldn't apply this to any students — please try again.</div>`;
+        box.innerHTML = `<div class="error-msg">Couldn't apply this to any students. Please try again.</div>`;
       }
     } else {
       const res = await teacherAdjust(CURRENT.username, student, amount, note);
       if (res.ok) {
         const who = (LAST_STUDENTS.find(x => x.username === student) || {}).name || student;
-        box.innerHTML = `<div class="success-msg">Done — ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${escapeHtml(who)}.</div>`;
+        box.innerHTML = `<div class="success-msg">Done: ${fmtMoney(Math.abs(amount))} ${amount >= 0 ? "given to" : "taken from"} ${escapeHtml(who)}.</div>`;
         document.getElementById("adjAmount").value = "";
         document.getElementById("adjNote").value = "";
         document.getElementById("adjStudent").value = "";
@@ -609,7 +610,7 @@ async function addEventForm(e) {
       if (amtText.endsWith("%")) {
         const pct = parseMoneyInput(amtText.slice(0, -1));
         if (!Number.isFinite(pct) || pct === 0 || Math.abs(pct) > 1000) {
-          alert(`Couldn't read the percentage for "${(label || "").trim()}" — enter something like -20% or 15% (between -1000% and 1000%, not 0).`);
+          alert(`Couldn't read the percentage for "${(label || "").trim()}". Enter something like -20% or 15% (between -1000% and 1000%, not 0).`);
           return false;
         }
         options.push({ label: label.trim(), amount: 0, percent: pct, outcome: (outcome || "").trim() });
@@ -617,7 +618,7 @@ async function addEventForm(e) {
       }
       const parsed = parseMoneyInput(amt);
       if (Number.isNaN(parsed)) {
-        alert(`Couldn't read the amount for "${(label || "").trim()}" — enter a plain number like -10 or 5 (no currency symbols needed).`);
+        alert(`Couldn't read the amount for "${(label || "").trim()}". Enter a plain number like -10 or 5 (no currency symbols needed).`);
         return false;
       }
       options.push({ label: label.trim(), amount: parsed, outcome: (outcome || "").trim() });
@@ -633,7 +634,7 @@ async function addEventForm(e) {
     const rawPct = document.getElementById("evPercent").value.trim();
     const pct = Number(rawPct);
     if (rawPct === "" || !Number.isFinite(pct) || pct === 0 || Math.abs(pct) > 1000) {
-      alert("Enter a percentage between -1000 and 1000 (not 0) — negative for a cost, like -20.");
+      alert("Enter a percentage between -1000 and 1000 (not 0). Negative for a cost, like -20.");
       return false;
     }
     ev.amountMode = "percent";
@@ -648,7 +649,7 @@ async function addEventForm(e) {
     }
     const parsed = parseMoneyInput(rawAmt);
     if (Number.isNaN(parsed)) {
-      alert("Couldn't read that amount — enter a plain number like -10 or 5 (no currency symbols needed).");
+      alert("Couldn't read that amount. Enter a plain number like -10 or 5 (no currency symbols needed).");
       return false;
     }
     ev.amount = parsed;
@@ -764,6 +765,88 @@ function updateEventBaseBox() {
     + "It's worked out when the event happens, from what that is worth at that moment, so only students who have one can get this event.";
 }
 
+/* ---------------- Recommended random events ----------------
+   For a class built from scratch: the same real-life events the base template ships, offered to add one
+   at a time or all at once. Amounts are sized for the term choice (scaled like the base template).
+   Added ones are ordinary events the teacher can edit, pause or remove. The panel is gone once every
+   one has been added; it can be dismissed (remembered on this device) and brought back. */
+let EV_RECO_TERMS = 4;
+const evRecoKey = () => "t29-ev-reco-dismissed:" + (CLASS_CODE || "");
+function evRecoDismissed() { try { return localStorage.getItem(evRecoKey()) === "1"; } catch (e) { return false; } }
+function evDismissReco(on) {
+  try { if (on) localStorage.setItem(evRecoKey(), "1"); else localStorage.removeItem(evRecoKey()); } catch (e) { /* ignore */ }
+  getClassCached(CLASS_CODE).then(paintEventReco);
+}
+function evSetRecoTerms(v) {
+  EV_RECO_TERMS = [1, 2, 4].includes(Number(v)) ? Number(v) : 4;
+  getClassCached(CLASS_CODE).then(paintEventReco);
+}
+function evRecoRemaining(cls) {
+  const have = new Set((cls.eventDefs || []).map(e => String(e.name || "").trim().toLowerCase()));
+  return t29BaseTemplateEventInputs(EV_RECO_TERMS).filter(r => !have.has(r.name.toLowerCase()));
+}
+function evRecoWhoText(r) {
+  if (r.severity !== "bad") return "";
+  if (r.coverage === "transport") return "Vehicle owners only";
+  if (r.coverage === "property") return "Home owners and renters only";
+  return "";
+}
+function paintEventReco(cls) {
+  const wrap = document.getElementById("eventRecoWrap");
+  if (!wrap) return;
+  const left = evRecoRemaining(cls);
+  if (!left.length) { wrap.innerHTML = ""; return; }
+  if (evRecoDismissed()) {
+    wrap.innerHTML = `<p class="muted-small"><a href="#" onclick="evDismissReco(false);return false;">Show recommended events</a></p>`;
+    return;
+  }
+  wrap.innerHTML = `<div class="card qz-reco-panel">
+    <div class="qz-reco-head">
+      <h2>${icon("sparkle", 18)} Recommended events</h2>
+      <span class="qz-reco-actions">
+        <select onchange="evSetRecoTerms(this.value)" aria-label="Size the amounts for" style="width:auto;margin:0;">
+          <option value="1" ${EV_RECO_TERMS === 1 ? "selected" : ""}>Sized for 1 term</option>
+          <option value="2" ${EV_RECO_TERMS === 2 ? "selected" : ""}>Sized for 2 terms</option>
+          <option value="4" ${EV_RECO_TERMS === 4 ? "selected" : ""}>Sized for a full year</option>
+        </select>
+        <button class="btn small gold" type="button" onclick="evAddAllReco()">+ Add all ${left.length} remaining</button>
+        <button class="btn small secondary" type="button" onclick="evDismissReco(true)">Dismiss</button>
+      </span>
+    </div>
+    <p class="muted-small">Real-life events students can run into, from small wins to everyday costs, with insurance claims already set up. Add the ones you like and edit anything afterwards.</p>
+    <div class="qz-reco-grid" style="max-height:460px;overflow:auto;padding-right:4px;">${left.map(r => `
+      <div class="qz-reco-item">
+        <div><strong>${escapeHtml(r.name)}</strong><span class="muted-small">${escapeHtml(r.description)}</span></div>
+        <div class="quiz-meta" style="margin:0;">
+          ${r.type === "choice"
+            ? `<span class="badge lilac">Multiple choice</span>`
+            : `<span class="badge ${r.severity === "bad" ? "coral" : "navy"}">${escapeHtml(eventAmountText(r.amount, 0, null))}</span>`}
+          <span class="badge ${r.severity === "bad" ? "coral" : "navy"}">${r.severity === "bad" ? "Bad" : "Neutral"}</span>
+          ${evRecoWhoText(r) ? `<span class="muted-small">${escapeHtml(evRecoWhoText(r))}</span>` : ""}
+        </div>
+        <button class="btn small gold" type="button" onclick="evAddReco('${encodeURIComponent(r.name)}')">+ Add</button>
+      </div>`).join("")}
+    </div></div>`;
+}
+async function evAddReco(nameEnc) {
+  const name = decodeURIComponent(nameEnc);
+  const cls = await getClassCached(CLASS_CODE);
+  const r = evRecoRemaining(cls).find(x => x.name === name);
+  if (!r) return;
+  await addEventDefs(CLASS_CODE, [r]);
+  await render();
+  t29Toast(`Added ${r.name}.`);
+}
+async function evAddAllReco() {
+  const cls = await getClassCached(CLASS_CODE);
+  const left = evRecoRemaining(cls);
+  if (!left.length) return;
+  if (!await t29Confirm(`Add ${left.length} events? You can edit or remove any of them afterwards.`)) return;
+  await addEventDefs(CLASS_CODE, left);
+  await render();
+  t29Toast(`Added ${left.length} events.`);
+}
+
 async function removeEvent(id) {
   if (await t29Confirm("Remove this event? It will no longer be handed out.")) {
     if (id === EDITING_EVENT_ID) resetEventForm();
@@ -782,7 +865,7 @@ function thresholdRowHtml(t) {
       <button class="btn small coral" type="button" onclick="this.closest('.threshold-row').remove()" style="flex-shrink:0;">${icon("trash", 13)} Remove</button>
     </div>
     <div class="threshold-reqs">
-      <p class="muted-small threshold-reqs-label">Optional requirements — a student must also meet these to be shown this band, even if their score qualifies. Leave at 0 for no requirement.</p>
+      <p class="muted-small threshold-reqs-label">Optional requirements. A student must also meet these to be shown this band, even if their score qualifies. Leave at 0 for no requirement.</p>
       <div class="grid grid-3">
         <div><label>Min net worth</label><input class="th-min-networth" type="number" min="0" step="1" value="${t.minNetWorth || 0}"></div>
         <div><label>Min property comfort (base comfort + living-in bonus stars)</label><input class="th-min-property" type="number" min="0" step="1" value="${t.minPropertyComfort || 0}"></div>
@@ -864,11 +947,11 @@ async function runPayDay() {
   if (!hasJobs) {
     alert("No students have a job assigned yet.");
   } else if (newlyPaid > 0 && unapprovedCount > 0) {
-    alert(`Pay day complete — ${newlyPaid} student(s) paid. ${unapprovedCount} still aren't ticked as having done their job task, so they weren't paid.`);
+    alert(`Pay day complete: ${newlyPaid} student(s) paid. ${unapprovedCount} still aren't ticked as having done their job task, so they weren't paid.`);
   } else if (newlyPaid > 0) {
-    alert(`Pay day complete — ${newlyPaid} student(s) paid.${noLogNote}`);
+    alert(`Pay day complete: ${newlyPaid} student(s) paid.${noLogNote}`);
   } else if (unapprovedCount > 0) {
-    alert(`Nobody was paid — ${unapprovedCount} student(s) with a job aren't ticked as having done their job task yet. Tick their box on the student's profile, then run pay day again.`);
+    alert(`Nobody was paid: ${unapprovedCount} student(s) with a job aren't ticked as having done their job task yet. Tick their box on the student's profile, then run pay day again.`);
   } else {
     alert(noLogCount ? `Everyone who earned pay has been paid.${noLogNote}` : "Everyone with a job has already been paid for today.");
   }
@@ -895,7 +978,7 @@ async function markAllJobTasksDone() {
     // One notice for everyone that worked (not one class write per student).
     await t29NotifyStudents(CLASS_CODE, { to: targets.filter((s, i) => results[i].status === "fulfilled").map(s => s.username), icon: "briefcase", tone: "mint",
       title: "Your teacher ticked off your job task for this week", body: "Your wage for this pay cycle is approved.", href: "jobs.html" });
-    if (failed) alert(`Marked ${targets.length - failed} of ${targets.length} as done. ${failed} failed — please try again.`);
+    if (failed) alert(`Marked ${targets.length - failed} of ${targets.length} as done. ${failed} failed. Please try again.`);
     await render();
   } finally {
     btn.disabled = false;
@@ -908,7 +991,7 @@ async function runInterest() {
   // count only reflects students who HADN'T already been paid today —
   // anyone already covered (their own visit, or an earlier automatic
   // sweep today) is correctly skipped rather than paid twice.
-  alert(count > 0 ? `Interest applied to ${count} student(s).` : "No one was due interest just now — either balances/rates are zero, or everyone's already been paid today.");
+  alert(count > 0 ? `Interest applied to ${count} student(s).` : "No one was due interest just now. Either balances/rates are zero, or everyone's already been paid today.");
   await render();
 }
 async function runWeeklyEventsNow() {
@@ -917,7 +1000,7 @@ async function runWeeklyEventsNow() {
   btn.disabled = true;
   try {
     const count = await forceWeeklyEvents(CLASS_CODE);
-    alert(count > 0 ? `Done — ${count} event(s) assigned across the class. They'll pop up within the next 20 minutes as students use the site.` : "No active events are set up yet.");
+    alert(count > 0 ? `Done: ${count} event(s) assigned across the class. They'll pop up within the next 20 minutes as students use the site.` : "No active events are set up yet.");
     await render();
   } finally {
     btn.disabled = false;
@@ -968,11 +1051,11 @@ async function createCoTeacherCodeClick() {
     const res = await t29CreateCoTeacherCode(CLASS_CODE, CURRENT.username);
     if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`; return; }
     await render();
-  } catch (e) { msg.innerHTML = `<div class="error-msg">Couldn't make a code — please try again.</div>`; }
+  } catch (e) { msg.innerHTML = `<div class="error-msg">Couldn't make a code. Please try again.</div>`; }
 }
 async function cancelCoTeacherCodeClick() {
   try { await t29CancelCoTeacherCode(CLASS_CODE, CURRENT.username); await render(); }
-  catch (e) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">Couldn't cancel that — please try again.</div>`; }
+  catch (e) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">Couldn't cancel that. Please try again.</div>`; }
 }
 async function copyCoTeacherCode() {
   const input = document.getElementById("coTeacherCodeInput");
@@ -980,7 +1063,7 @@ async function copyCoTeacherCode() {
   let copied = false;
   try { await navigator.clipboard.writeText(input.value); copied = true; }
   catch (e) { input.select(); try { copied = document.execCommand("copy"); } catch (e2) { copied = false; } }
-  t29Toast(copied ? "Code copied." : "Couldn't copy automatically — select the code and copy it.", { type: copied ? "success" : "info" });
+  t29Toast(copied ? "Code copied." : "Couldn't copy automatically. Select the code and copy it.", { type: copied ? "success" : "info" });
 }
 async function removeCoTeacherClick(username) {
   if (!await t29Confirm(`Remove ${username} as a co-teacher? They'll lose access to this class straight away.`)) return;
@@ -988,12 +1071,12 @@ async function removeCoTeacherClick(username) {
     const res = await t29RemoveCoTeacher(CLASS_CODE, CURRENT.username, username);
     if (!res.ok) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`; return; }
     await render();
-  } catch (e) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">Couldn't remove them — please try again.</div>`; }
+  } catch (e) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">Couldn't remove them. Please try again.</div>`; }
 }
 async function leaveCoTeachingClick() {
   if (!await t29Confirm("Leave this class? You'll stop being a co-teacher, and the owner would need to invite you again.")) return;
   try { await t29LeaveAsCoTeacher(CLASS_CODE, CURRENT.username); window.location.href = "teacher-home.html"; }
-  catch (e) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">Couldn't leave — please try again.</div>`; }
+  catch (e) { document.getElementById("coTeacherMsg").innerHTML = `<div class="error-msg">Couldn't leave. Please try again.</div>`; }
 }
 async function saveWelcomeGrant() {
   const btn = document.getElementById("saveWelcomeBtn");
@@ -1005,9 +1088,9 @@ async function saveWelcomeGrant() {
     const res = await setClassWelcomeGrant(CLASS_CODE, document.getElementById("welcomeGrant").value);
     if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`; return; }
     await render();
-    flashMsg(msg, `<div class="success-msg">Saved — new students will start with ${fmtMoney(res.amount)}.</div>`, 4000);
+    flashMsg(msg, `<div class="success-msg">Saved. New students will start with ${fmtMoney(res.amount)}.</div>`, 4000);
   } catch (e) {
-    msg.innerHTML = `<div class="error-msg">Couldn't save that — please try again.</div>`;
+    msg.innerHTML = `<div class="error-msg">Couldn't save that. Please try again.</div>`;
   } finally {
     btn.disabled = false;
   }
@@ -1035,10 +1118,10 @@ async function saveDailyTimeLimit() {
   btn.disabled = true;
   try {
     await setStudentTimeLimit(CLASS_CODE, minutes);
-    document.getElementById("dailyTimeLimitMsg").innerHTML = `<div class="success-msg">${minutes > 0 ? `Daily time limit set to ${minutes} minute${minutes === 1 ? "" : "s"} per student.` : "Daily time limit removed — students have unlimited time on the site again."}</div>`;
+    document.getElementById("dailyTimeLimitMsg").innerHTML = `<div class="success-msg">${minutes > 0 ? `Daily time limit set to ${minutes} minute${minutes === 1 ? "" : "s"} per student.` : "Daily time limit removed. Students have unlimited time on the site again."}</div>`;
     await render();
   } catch (e) {
-    document.getElementById("dailyTimeLimitMsg").innerHTML = `<div class="error-msg">Couldn't save the time limit — please try again.</div>`;
+    document.getElementById("dailyTimeLimitMsg").innerHTML = `<div class="error-msg">Couldn't save the time limit. Please try again.</div>`;
   } finally {
     btn.disabled = false;
   }
@@ -1145,12 +1228,12 @@ async function renderProfile(username) {
   /* ---- Job & tier management ---- */
   rows.push(`<h4>${icon("briefcase", 16)} Job & tier</h4>`);
   if (!job) {
-    rows.push(`<p class="muted-small">No job assigned — assign one using the job dropdown in the Students table.</p>`);
+    rows.push(`<p class="muted-small">No job assigned. Assign one using the job dropdown in the Students table.</p>`);
   } else {
     const tiers = job.tiers || [];
     const pendingPromo = s.pendingPromotion && s.pendingPromotion.jobId === job.id ? s.pendingPromotion : null;
     const tierOpts = tiers.map((t, i) =>
-      `<option value="${t.id}" ${tier && t.id === tier.id ? "selected" : ""}>${i + 1}. ${escapeHtml(t.name)} — ${fmtMoney(t.wage)}/pay day</option>`
+      `<option value="${t.id}" ${tier && t.id === tier.id ? "selected" : ""}>${i + 1}. ${escapeHtml(t.name)}: ${fmtMoney(t.wage)}/pay day</option>`
     ).join("");
     rows.push(`
       <div class="tier-ladder profile-tier-ladder">
@@ -1172,7 +1255,7 @@ async function renderProfile(username) {
         <div class="auto-row" style="margin-top:12px;">
           <div class="auto-details">
             <strong>Promotion offered:</strong> ${escapeHtml(pendingPromo.tierName)} (${fmtMoney(pendingPromo.wage)}/pay day)
-            <div class="muted-small">Waiting on ${escapeHtml(s.name.split(" ")[0])} to accept or decline — their tier won't change until they respond.</div>
+            <div class="muted-small">Waiting on ${escapeHtml(s.name.split(" ")[0])} to accept or decline. Their tier won't change until they respond.</div>
           </div>
           <button class="btn small coral" onclick="cancelPendingPromotionClick('${escapeJsAttr(username)}')">Cancel offer</button>
         </div>
@@ -1195,7 +1278,7 @@ async function renderProfile(username) {
   /* ---- This week's job task ---- */
   rows.push(`<h4>${icon("briefcase", 16)} This week\'s job task</h4>`);
   if (!job) {
-    rows.push(`<p class="muted-small">No job assigned — nothing to approve.</p>`);
+    rows.push(`<p class="muted-small">No job assigned. Nothing to approve.</p>`);
   } else if (jobLogType(job) !== "tasks") {
     const a = wageAttendance(cls, s);
     rows.push(`<p>Paid automatically on pay day by days logged: <strong>${a.done} of ${a.expected}</strong> so far (${a.expected ? Math.round(a.done / a.expected * 100) : 100}% of the wage). No tick needed.</p>`);
@@ -1204,9 +1287,9 @@ async function renderProfile(username) {
     rows.push(`
       <label style="display:flex;align-items:center;gap:8px;">
         <input type="checkbox" id="profileJobTaskCheck" ${taskApproved ? "checked" : ""} onchange="profileSetJobTaskApproval(\'${escapeJsAttr(username)}\', this.checked)" style="width:20px;height:20px;min-height:auto;">
-        <span>Completed this week\'s task for <strong>${escapeHtml(tierName)}</strong> — pay day will pay them once this is ticked</span>
+        <span>Completed this week\'s task for <strong>${escapeHtml(tierName)}</strong>, pay day will pay them once this is ticked</span>
       </label>
-      <p class="muted-small">Resets automatically the moment pay day (${DAY_FULL[cls.payDay || "Fri"]}) begins — you\'ll need to tick it again for next cycle. If it\'s unticked on pay day, ${escapeHtml(s.name.split(" ")[0])} won\'t be paid until you tick it and re-run pay day.</p>
+      <p class="muted-small">Resets automatically the moment pay day (${DAY_FULL[cls.payDay || "Fri"]}) begins, you\'ll need to tick it again for next cycle. If it\'s unticked on pay day, ${escapeHtml(s.name.split(" ")[0])} won\'t be paid until you tick it and re-run pay day.</p>
     `);
   }
 
@@ -1231,7 +1314,7 @@ async function renderProfile(username) {
   }
   if (s.sideHustleRequest && s.sideHustleRequest.status === "pending") {
     const reqHustle = (cls.sideHustles || []).find(h => h.id === s.sideHustleRequest.hustleId);
-    rows.push(`<p class="muted-small">Pending change request: ${reqHustle ? reqHustle.name : "Unknown"} at ${hourLabel(s.sideHustleRequest.checkinHour)} — approve or deny it from the Side hustles section below.</p>`);
+    rows.push(`<p class="muted-small">Pending change request: ${reqHustle ? reqHustle.name : "Unknown"} at ${hourLabel(s.sideHustleRequest.checkinHour)}. Approve or deny it from the Side hustles section below.</p>`);
   }
 
   if (s.dailyLimitMinutes > 0) {
@@ -1242,7 +1325,7 @@ async function renderProfile(username) {
     rows.push(`<p class="muted-small">${usedMin} of ${totalMin} minute${totalMin === 1 ? "" : "s"} used today${tStatus.extraMin ? ` (includes +${tStatus.extraMin} granted today)` : ""}.</p>`);
     const exState = timeExemptionState(s);
     if (exState === "pending") {
-      rows.push(`<p class="muted-small">Has a pending request for more time — approve or decline it from the banner at the top of the dashboard.</p>`);
+      rows.push(`<p class="muted-small">Has a pending request for more time. Approve or decline it from the banner at the top of the dashboard.</p>`);
     } else if (exState === "declined") {
       rows.push(`<p class="muted-small">Their last request for more time today was declined.</p>`);
     }
@@ -1251,7 +1334,7 @@ async function renderProfile(username) {
   rows.push(`<h4>${icon("star", 16)} Lifestyle rating override</h4>`);
   if (isOverride) {
     rows.push(`
-      <p class="muted-small">This student's lifestyle rating is locked at <strong>${s.lifestyleOverride}</strong> — nothing they buy, sell, or do will change it until you remove the override.</p>
+      <p class="muted-small">This student's lifestyle rating is locked at <strong>${s.lifestyleOverride}</strong>. Nothing they buy, sell, or do will change it until you remove the override.</p>
       <div class="auto-row">
         <div class="auto-details">Locked at ${s.lifestyleOverride}</div>
         <button class="btn small secondary" onclick="removeProfileLifestyleOverride('${escapeJsAttr(username)}')">Remove override</button>
@@ -1276,7 +1359,7 @@ async function renderProfile(username) {
     rows.push(`
       <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;">
         <div class="auto-details">
-          <strong>${icon("house", 14)} Mortgage payment overdue — ${escapeHtml(p.name)}</strong>
+          <strong>${icon("house", 14)} Mortgage payment overdue: ${escapeHtml(p.name)}</strong>
           <div class="muted-small">This week's payment (due ${DAY_FULL[cls.mortgageDay || "Fri"]}) hasn't been paid yet.</div>
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
@@ -1291,16 +1374,16 @@ async function renderProfile(username) {
   rows.push(ownedProps.length
     ? ownedProps.map(p => {
         const occupancyLine = p.occupancy === "living" ? "Living in it (lifestyle bonus applied)"
-          : p.occupancy === "rented" ? `Rented out — earning ${fmtMoney(p.rentPerWeek || 0)}/week, paid ${DAY_FULL[p.rentDay || "Fri"]}`
+          : p.occupancy === "rented" ? `Rented out. Earning ${fmtMoney(p.rentPerWeek || 0)}/week, paid ${DAY_FULL[p.rentDay || "Fri"]}`
           : p.occupancy === "sublet" && p.sublet
             ? (p.sublet.status === "pending" ? `Waiting for approval to rent to a classmate at ${fmtMoney(p.sublet.price)}/week`
               : p.sublet.status === "rejected" ? `Rental listing declined${p.sublet.rejectReason ? `: ${p.sublet.rejectReason}` : ""}`
               : p.sublet.tenant ? `Rented to a classmate (@${escapeHtml(p.sublet.tenant)}) at ${fmtMoney(p.sublet.price)}/week`
-              : `Listed for rent to classmates at ${fmtMoney(p.sublet.price)}/week — no tenant yet`)
+              : `Listed for rent to classmates at ${fmtMoney(p.sublet.price)}/week. No tenant yet`)
             : "Hasn't chosen to live in it, rent it out, or rent it to a classmate yet";
-        return `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(p.name)}</strong> — ${fmtMoney(p.price)}
+        return `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(p.name)}</strong>: ${fmtMoney(p.price)}
           <div class="muted-small">${occupancyLine}</div>
-          ${p.mortgage ? `<div class="muted-small">${isVariableMortgage(p.mortgage) ? "Variable" : "Fixed"} mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance owed` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]} — this week's payment is ${fmtMoney(mortgageWeekAmount(p.mortgage).total)}</div>` : ""}</div>
+          ${p.mortgage ? `<div class="muted-small">${isVariableMortgage(p.mortgage) ? "Variable" : "Fixed"} mortgage: ${fmtMoney(p.mortgage.weeklyPayment)}/week base${p.mortgage.interestRate > 0 ? ` + ${p.mortgage.interestRate}% interest on the balance owed` : ""}, ${p.mortgage.weeksLeft} week${p.mortgage.weeksLeft === 1 ? "" : "s"} left, due ${DAY_FULL[cls.mortgageDay || "Fri"]}. This week's payment is ${fmtMoney(mortgageWeekAmount(p.mortgage).total)}</div>` : ""}</div>
           <div class="row-flex" style="gap:8px;">
             ${p.occupancy === "rented" ? `<button class="btn small secondary" onclick="profileEndRental('${p.id}')">Stop renting / kick out tenants</button>` : ""}
             ${p.occupancy === "sublet" ? `<button class="btn small secondary" onclick="profileEndSublet('${p.id}')">End classmate rental</button>` : ""}
@@ -1315,7 +1398,7 @@ async function renderProfile(username) {
     rows.push(`
       <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;"' : ""}>
         <div class="auto-details">
-          <strong>Renting from a classmate:</strong> ${escapeHtml(rh.name)} — ${fmtMoney(rh.sublet.price)}/week from @${escapeHtml(rh.owner)}
+          <strong>Renting from a classmate:</strong> ${escapeHtml(rh.name)}: ${fmtMoney(rh.sublet.price)}/week from @${escapeHtml(rh.owner)}
           <div class="muted-small">${overdue ? "This week's rent hasn't been paid yet. " : ""}Minimum lease: ${rh.sublet.minWeeks} week${rh.sublet.minWeeks === 1 ? "" : "s"}.</div>
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
@@ -1330,7 +1413,7 @@ async function renderProfile(username) {
     rows.push(`
       <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;"' : ""}>
         <div class="auto-details">
-          <strong>Renting a school property:</strong> ${escapeHtml(rn.name)} — ${fmtMoney(rn.rentPerWeek)}/week
+          <strong>Renting a school property:</strong> ${escapeHtml(rn.name)}: ${fmtMoney(rn.rentPerWeek)}/week
           <div class="muted-small">${overdue ? "This week's rent hasn't been paid yet. " : ""}Minimum lease: ${rn.minWeeks} week${rn.minWeeks === 1 ? "" : "s"}.</div>
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
@@ -1356,10 +1439,10 @@ async function renderProfile(username) {
   }
   const transportAmt = transportWeeklyAmount(cls, s);
   rows.push(`<p class="muted-small">Weekly transport expenses: ${fmtMoney(transportAmt.total)}
-    (${transportAmt.vehicleExpense > 0 ? `${fmtMoney(transportAmt.vehicleExpense)} vehicle upkeep + ` : ""}${fmtMoney(transportAmt.publicFeeDue)} public transport${transportAmt.lifeFeeName ? ` — ${escapeHtml(transportAmt.lifeFeeName)} rate` : ""}),
+    (${transportAmt.vehicleExpense > 0 ? `${fmtMoney(transportAmt.vehicleExpense)} vehicle upkeep + ` : ""}${fmtMoney(transportAmt.publicFeeDue)} public transport${transportAmt.lifeFeeName ? `: ${escapeHtml(transportAmt.lifeFeeName)} rate` : ""}),
     due ${DAY_FULL[cls.transportDay || "Fri"]} &middot; ${(s.transportLastWeekPaid === isoWeekKey()) ? "paid this week" : "not yet paid this week"}</p>`);
   rows.push(poss.vehicles && poss.vehicles.length
-    ? poss.vehicles.map(v => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(v.name)}</strong> — ${fmtMoney(v.price)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span>
+    ? poss.vehicles.map(v => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(v.name)}</strong>: ${fmtMoney(v.price)} <span class="muted-small">(${vehicleTypeLabel(v.type)})</span>
         ${(v.weeklyExpense > 0 || v.publicTransportOffsetPct > 0) ? `<div class="muted-small">${v.weeklyExpense > 0 ? `${fmtMoney(v.weeklyExpense)}/week upkeep` : ""}${v.weeklyExpense > 0 && v.publicTransportOffsetPct > 0 ? " &middot; " : ""}${v.publicTransportOffsetPct > 0 ? `knocks ${v.publicTransportOffsetPct}% off public transport` : ""}</div>` : ""}</div>
         <button class="btn small coral" onclick="profileRemoveVehicle('${v.id}','${escapeJsAttr(username)}')">Repossess</button></div>`).join("")
     : `<p class="muted-small">No vehicles owned.</p>`);
@@ -1400,18 +1483,18 @@ async function renderProfile(username) {
         <div style="flex:1;">
           <label for="profileGiftItemSelect" style="margin-top:0;">Give a store item for free</label>
           <select id="profileGiftItemSelect">
-            ${giftableItems.map(it => `<option value="${it.id}">${escapeHtml(it.name)} — ${fmtMoney(it.price)}${it.stock !== null && it.stock <= 0 ? " (out of stock)" : ""}</option>`).join("")}
+            ${giftableItems.map(it => `<option value="${it.id}">${escapeHtml(it.name)}: ${fmtMoney(it.price)}${it.stock !== null && it.stock <= 0 ? " (out of stock)" : ""}</option>`).join("")}
           </select>
         </div>
         <button class="btn small" onclick="profileGiveStoreItem('${escapeJsAttr(username)}')">Give free</button>
       </div>
-      <p class="muted-small">Doesn't cost the student anything and ignores stock — works even if the item shows 0 left.</p>
+      <p class="muted-small">Doesn't cost the student anything and ignores stock. Works even if the item shows 0 left.</p>
     `);
   }
 
   rows.push(`<h4>${icon("shield", 16)} Insurance</h4>`);
   rows.push(poss.insurance.length
-    ? poss.insurance.map(p => `<div class="auto-row"><div class="auto-details">${escapeHtml(insurancePlanName(p))} — ${fmtMoney(p.price)}/week</div>
+    ? poss.insurance.map(p => `<div class="auto-row"><div class="auto-details">${escapeHtml(insurancePlanName(p))}: ${fmtMoney(p.price)}/week</div>
         <button class="btn small coral" onclick="profileRemoveInsurance('${escapeJsAttr(username)}','${p.id}')">Cancel</button></div>`).join("")
     : `<p class="muted-small">No insurance plans.</p>`);
 
@@ -1424,7 +1507,7 @@ async function renderProfile(username) {
         return `<div class="auto-row">
           <div class="auto-details">
             <strong>${fmtMoney(l.principal)}</strong> borrowed &middot; ${l.rate}%/week over ${l.termWeeks} week${l.termWeeks === 1 ? "" : "s"}
-            <div class="muted-small">Due ${l.dueDate}${overdue ? " — overdue" : ""}</div>
+            <div class="muted-small">Due ${l.dueDate}${overdue ? ". Overdue" : ""}</div>
           </div>
           <div class="${overdue ? 'status-declined' : 'status-pending'}">${fmtMoney(l.owed)} owed</div>
         </div>`;
@@ -1457,11 +1540,11 @@ async function renderProfile(username) {
       </div>
     </div>`);
 
-  // Read-only — goals are the student's own (see "Savings goals" in data-money.js).
+  // Read-only. Goals are the student's own (see "Savings goals" in data-money.js).
   const goals = savingsGoalProgress(s);
   rows.push(`<h4>${icon("target", 16)} Savings goals</h4>`);
   rows.push(goals.length
-    ? goals.map(g => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(g.name)}</strong>${g.reached ? " — reached!" : ""}</div>
+    ? goals.map(g => `<div class="auto-row"><div class="auto-details"><strong>${escapeHtml(g.name)}</strong>${g.reached ? ". Reached!" : ""}</div>
         <div class="auto-details">${fmtMoney(g.saved)} of ${fmtMoney(g.target)}</div></div>`).join("")
     : `<p class="muted-small">No savings goals set.</p>`);
 
@@ -1507,11 +1590,11 @@ async function confirmRefundRate(removeQuestion, defaultPct) {
 // BUGFIX: this used to run confirmRefundRate() and pass the resulting
 // percentage to sellProperty() as a third argument. sellProperty() takes
 // only (classCode, propId) and always pays out the property's CURRENT
-// market price — deliberately, since property prices move every market
+// market price, deliberately, since property prices move every market
 // day, so a fixed percentage of a moving price would be meaningless (and
 // would quietly under- or over-pay depending on which way the market had
 // drifted since purchase). The percentage the teacher typed was silently
-// discarded and the student was paid full market price regardless — so
+// discarded and the student was paid full market price regardless, so
 // the prompt promised a refund rate that nothing honoured. Vehicles and
 // store items DO take a rate (their prices are fixed), which is why
 // profileRemoveVehicle/profileRemoveStoreItem below still use
@@ -1522,12 +1605,12 @@ async function profileRemoveProperty(propId) {
     "Repossess this property?\n\n" +
     "It goes back on the market and the student is paid its CURRENT market price " +
     "(property prices move on every market day, so this won't necessarily match what they paid). " +
-    "Any mortgage still owing — plus the class's break fee, if one is set — comes out of that payout first, " +
+    "Any mortgage still owing, plus the class's break fee, if one is set, comes out of that payout first, " +
     "so the student can end up receiving nothing, or going backwards, on a heavily mortgaged property."
   )) return;
   const propName = (((await getClassCached(CLASS_CODE)).properties || []).find(p => p.id === propId) || {}).name || "your property";
   const res = await sellProperty(CLASS_CODE, propId);
-  if (!res.ok) { alert("That property couldn't be repossessed — it may have already been sold."); return; }
+  if (!res.ok) { alert("That property couldn't be repossessed, it may have already been sold."); return; }
   await t29NotifyStudents(CLASS_CODE, { to: PROFILE_USER, icon: "house", tone: "coral",
     title: `Your teacher repossessed your property ${propName}`,
     body: `You were paid ${fmtMoney(res.payout)}: the market price of ${fmtMoney(res.marketPrice)}${res.mortgagePayoff > 0 ? `, less ${fmtMoney(res.mortgagePayoff)} mortgage payoff` : ""}${res.breakFee > 0 ? `, less ${fmtMoney(res.breakFee)} break fee` : ""}.`, href: "property.html" });
@@ -1574,7 +1657,7 @@ async function profileResolveNpcOverdue(unitId) {
   await renderProfile(PROFILE_USER);
 }
 async function profileResolveMortgageOverdue(propId) {
-  if (!await t29Confirm("Mark this week's mortgage payment as resolved? It'll count as paid — the payment schedule moves on as normal — but no money will be taken from the student.")) return;
+  if (!await t29Confirm("Mark this week's mortgage payment as resolved? It'll count as paid, the payment schedule moves on as normal, but no money will be taken from the student.")) return;
   const res = await resolveMortgageOverdue(CLASS_CODE, propId);
   if (!res.ok) { alert(res.error); return; }
   await render();
@@ -1698,7 +1781,7 @@ async function reopenThisClass() {
 async function restartClass() {
   const cls = await getClassCached(CLASS_CODE);
   const typed = await t29Prompt(
-    `This will start "${cls.name}" again as if it were a brand-new class: every student goes back to the ${fmtMoney(t29WelcomeGrantOf(cls))} welcome grant, and everything they own or have done is wiped (jobs, houses, vehicles, shares, insurance, loans, savings, store items, events, activity and so on). Your settings — jobs, store, properties, companies, events, tax and everything else — stay exactly as they are.\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`, "", { placeholder: "Class name", confirmText: "Restart class", danger: true }
+    `This will start "${cls.name}" again as if it were a brand-new class: every student goes back to the ${fmtMoney(t29WelcomeGrantOf(cls))} welcome grant, and everything they own or have done is wiped (jobs, houses, vehicles, shares, insurance, loans, savings, store items, events, activity and so on). Your settings, jobs, store, properties, companies, events, tax and everything else, stay exactly as they are.\n\nA report card snapshot of this term will be saved to the Reports page first, so nobody's progress is lost.\n\nThis cannot be undone. Type the class name exactly to confirm:`, "", { placeholder: "Class name", confirmText: "Restart class", danger: true }
   );
   if (typed === null) return;
   if (typed.trim() !== cls.name) {
@@ -1707,11 +1790,11 @@ async function restartClass() {
   }
   const res = await resetClass(CLASS_CODE, CURRENT.username);
   if (!res.ok) {
-    alert("Something went wrong — the class couldn't be restarted. Please try again.");
+    alert("Something went wrong. The class couldn't be restarted. Please try again.");
   } else if (res.failed.length) {
     alert(`Class restarted, but these students' accounts couldn't be reset: ${res.failed.join(", ")}. Run Restart class again to finish them.`);
   } else {
-    alert(`Class restarted — everyone is back to the ${fmtMoney(t29WelcomeGrantOf(cls))} welcome grant, with all your settings kept. This term's report cards were saved to the Reports page.`);
+    alert(`Class restarted. Everyone is back to the ${fmtMoney(t29WelcomeGrantOf(cls))} welcome grant, with all your settings kept. This term's report cards were saved to the Reports page.`);
   }
   await render();
 }

@@ -28,7 +28,7 @@ function ccTierSelectHtml(cls, rating) {
   const th = (cls && cls.lifestyleThresholds) || [];
   const cur = Number(rating) || 0;
   const opts = th.map(x => `<option value="${x.min}" ${Number(x.min) === cur ? "selected" : ""}>${ccEsc(x.label)} (rating ${x.min}+)</option>`);
-  if (!th.some(x => Number(x.min) === cur)) opts.unshift(`<option value="${cur}" selected>${cur > 0 ? "Custom — rating " + cur + "+" : "No minimum"}</option>`);
+  if (!th.some(x => Number(x.min) === cur)) opts.unshift(`<option value="${cur}" selected>${cur > 0 ? "Custom. Rating " + cur + "+" : "No minimum"}</option>`);
   return `<select id="ccp-minls">${opts.join("")}</select>`;
 }
 function ccPlural(n, w) { return `${n} ${w}${n === 1 ? "" : "s"}`; }
@@ -223,7 +223,7 @@ function ccRenderStudent(me, cls) {
   if (!plans.length) {
     body = `<div class="cc-off">${icon("lock", 22)}<div><strong>${off ? "Credit cards aren't open yet" : "No cards on offer yet"}</strong><span>${off ? "Your teacher hasn't switched credit cards on for the class." : "Your teacher hasn't set up any cards yet."} Check back soon.</span></div></div>`;
   } else {
-    body = (off ? `<div class="cc-off">${icon("lock", 22)}<div><strong>Applications aren't open yet</strong><span>Have a look at the cards below — your teacher will open applications soon.</span></div></div>` : "")
+    body = (off ? `<div class="cc-off">${icon("lock", 22)}<div><strong>Applications aren't open yet</strong><span>Have a look at the cards below. Your teacher will open applications soon.</span></div></div>` : "")
       + `<div class="cc-plans">${tiles}</div>`;
   }
   el.innerHTML = head(off ? "Not open yet" : (st.approval === "instant" ? "Instant approval" : "Teacher approval needed"))
@@ -242,7 +242,7 @@ function ccPlanTile(me, cls, p, score, off) {
       ${off
         ? `<div class="cc-lock">${icon("lock", 14)}<span>Applications aren't open yet</span></div>`
         : locked
-        ? `<div class="cc-lock">${icon("lock", 14)}<span>Needs ${ccTierNeedText(cls, p.minLifestyle)} — yours is ${Math.floor(score * 10) / 10}</span></div>`
+        ? `<div class="cc-lock">${icon("lock", 14)}<span>Needs ${ccTierNeedText(cls, p.minLifestyle)}. Yours is ${Math.floor(score * 10) / 10}</span></div>`
         : `<button class="btn gold" onclick="ccApply('${ccEsc(p.id)}')">${instant ? "Get this card" : "Apply for this card"}</button>`}
     </div>
   </div>`;
@@ -268,7 +268,7 @@ function ccActiveHtml(me, cls) {
     banner = `<div class="cc-stmt ${cls2}">
       <div class="cc-stmt-top">
         <div>
-          <div class="cc-stmt-label">${icon("coin", 14)} Closing balance${late ? " — overdue" : ""}</div>
+          <div class="cc-stmt-label">${icon("coin", 14)} Closing balance${late ? ". Overdue" : ""}</div>
           <div class="cc-stmt-value">${fmtMoney(rem)}</div>
           ${rem < s.amount - 0.004 ? `<div class="cc-stmt-sub">${fmtMoney(s.amount)} statement · ${fmtMoney(s.paid)} paid so far</div>` : `<div class="cc-stmt-sub">Statement closed ${ccEsc(cardDateLabel(s.closeKey))}</div>`}
         </div>
@@ -356,7 +356,7 @@ function ccActiveHtml(me, cls) {
     </div>
     <ul class="cc-rules">
       <li>Your statement closes every 2 weeks (on a ${ccEsc(DAY_FULL[cardSettings(cls).statementDay] || "Friday")}). Whatever you owe then becomes the <strong>closing balance</strong>.</li>
-      <li>Pay it <strong>in full</strong> by the due date and there's no interest. If you don't, interest is added at the next statement — only on the part you still owe from this one, never on new spending.</li>
+      <li>Pay it <strong>in full</strong> by the due date and there's no interest. If you don't, interest is added at the next statement, only on the part you still owe from this one, never on new spending.</li>
       <li>The monthly fee is charged every 4 weeks. Cashback is added up when each statement closes, and spend-and-earn rewards are earned one purchase at a time. Both are taken <strong>off your closing balance</strong> (so your bill is smaller). They aren't paid into your cash, unless you owe less than you earned.</li>
       <li>Use it wherever a real card works: the <a href="store.html">Store</a> (card perks apply there), Transport, insurance sign-up fees, the Trade Centre (not houses), school rentals, and big or random events. Automatic payments can go on it too, but only to your teacher. It can't pay mortgages, another student (except for Trade Centre purchases), loans, savings, shares or gambling.</li>
       <li>On a big purchase (or one your card can't cover) you can split the payment between card and cash.</li>
@@ -384,7 +384,7 @@ async function ccPay() {
   const res = await payCreditCard(CURRENT.username, CURRENT.classCode, amt);
   if (!res.ok) { ccMsg("ccMsg", `<div class="error-msg">${ccEsc(res.error)}</div>`); return; }
   await render();
-  ccMsg("ccMsg", `<div class="success-msg">Paid ${fmtMoney(amt)}.${res.clearedStmt ? " Your closing balance is cleared — no interest!" : ""}</div>`);
+  ccMsg("ccMsg", `<div class="success-msg">Paid ${fmtMoney(amt)}.${res.clearedStmt ? " Your closing balance is cleared. No interest!" : ""}</div>`);
 }
 async function ccSetEventsPref(on) {
   await setCardEventsPref(CURRENT.username, on);
@@ -424,7 +424,7 @@ function ccRenderTeacher(cls, students) {
         <div class="cc-tplan-actions"><button class="btn small" onclick="ccEditPlan('${ccEsc(p.id)}')">Edit</button>
           <button class="btn small coral" onclick="ccRemovePlan('${ccEsc(p.id)}')">${n > 0 ? "Retire" : "Delete"}</button></div>
       </div></div>`;
-  }).join("") : `<div class="empty-state"><p>No plans yet. Add your first one below — try a basic card with a low limit, then a premium one with better perks.</p></div>`;
+  }).join("") : `<div class="empty-state"><p>No plans yet. Add your first one below. Try a basic card with a low limit, then a premium one with better perks.</p></div>`;
 
   const pendRows = pending.length ? `<h3 class="cc-sub">${icon("history", 16)} Waiting for approval (${pending.length})</h3>
     <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Card</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(s => {
@@ -569,7 +569,7 @@ async function ccSavePlan(e) {
   await render();
   const saved = (CC_CLS.cardPlans || []).slice().reverse().find(p => id ? p.id === id : p.name === g0name);
   if (theme && saved && saved.theme !== theme) {
-    ccMsg("ccTMsg", `<div class="error-msg">Plan saved, but the card colour wasn't kept — saveCardPlan() in data-money.js needs to store the <code>theme</code> field.</div>`);
+    ccMsg("ccTMsg", `<div class="error-msg">Plan saved, but the card colour wasn't kept. SaveCardPlan() in data-money.js needs to store the <code>theme</code> field.</div>`);
     return false;
   }
   ccMsg("ccTMsg", `<div class="success-msg">Plan saved. Changes apply to existing cards at their next statement and in the store straight away.</div>`);

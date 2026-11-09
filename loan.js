@@ -94,7 +94,7 @@ async function render() {
       div.innerHTML = `
         <div class="flex-between">
           <div>
-            <h4>${fmtMoney(t.min)} — ${fmtMoney(t.max)}</h4>
+            <h4>${fmtMoney(t.min)}: ${fmtMoney(t.max)}</h4>
             <p>${termLabel(t.termWeeks)} term &middot; <strong>${t.rate}%</strong> interest per week (charged on take-out, then compounds every Monday until paid off)</p>
           </div>
           <div>
@@ -132,7 +132,7 @@ async function render() {
     document.getElementById("loanLimitReached").classList.toggle("hidden", !atCountLimit);
     if (atCountLimit) {
       document.getElementById("loanLimitReached").textContent =
-        `You have ${cls.maxLoanCount} loan${cls.maxLoanCount === 1 ? "" : "s"} open — that's the max your teacher allows at once. Pay one off to borrow again.`;
+        `You have ${cls.maxLoanCount} loan${cls.maxLoanCount === 1 ? "" : "s"} open. That's the max your teacher allows at once. Pay one off to borrow again.`;
     }
 
     const lc = cls.lifestyleConfig.loan;
@@ -161,7 +161,7 @@ async function render() {
         <div class="auto-row">
           <div class="auto-details">
             <strong>${fmtMoney(loan.principal)}</strong> borrowed &middot; ${loan.rate}%/week over ${termLabel(loan.termWeeks)}
-            <div class="muted-small">Due ${loan.dueDate}${overdue ? " — overdue" : ""}</div>
+            <div class="muted-small">Due ${loan.dueDate}${overdue ? ". Overdue" : ""}</div>
           </div>
           <div class="${overdue ? 'status-declined' : 'status-pending'}">${fmtMoney(loan.owed)} owed</div>
         </div>
@@ -208,7 +208,7 @@ async function updateLoanPreview() {
   // live (first charge the moment you borrow, then again every Monday
   // until it's paid off), so there's no single "total you'll owe" to
   // calculate in advance. Just flag the rate and let them reason about it.
-  let msg = `This falls in the ${tier.rate}%/week range. Interest is charged as soon as you borrow, then again every Monday until it's paid off — the longer it takes you to pay it back, the more you'll end up owing.`;
+  let msg = `This falls in the ${tier.rate}%/week range. Interest is charged as soon as you borrow, then again every Monday until it's paid off. The longer it takes you to pay it back, the more you'll end up owing.`;
   // maxLoanAmount is a TOTAL cap across every active loan a student is
   // carrying at once (see takeLoan in data-money.js), so warn here using what's
   // already borrowed, not just this one amount, to match what the server
@@ -218,7 +218,7 @@ async function updateLoanPreview() {
     const activePrincipal = (me.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.principal, 0);
     const remaining = Math.max(0, cls.maxLoanAmount - activePrincipal);
     if (amount > remaining) {
-      msg += ` <span class="ticker-down">You've already borrowed ${fmtMoney(activePrincipal)} — your teacher's overall cap of ${fmtMoney(cls.maxLoanAmount)} leaves you ${fmtMoney(remaining)} of room, so this amount would be rejected.</span>`;
+      msg += ` <span class="ticker-down">You've already borrowed ${fmtMoney(activePrincipal)}. Your teacher's overall cap of ${fmtMoney(cls.maxLoanAmount)} leaves you ${fmtMoney(remaining)} of room, so this amount would be rejected.</span>`;
     }
   }
   preview.innerHTML = msg;
@@ -307,7 +307,7 @@ async function takeLoanForm(e) {
     const amount = document.getElementById("loanAmount").value;
     const res = await takeLoan(CURRENT.username, CURRENT.classCode, amount);
     const box = document.getElementById("takeLoanMsg");
-    box.innerHTML = res.ok ? `<div class="success-msg">Loan approved — you owe ${fmtMoney(res.owed)} right now (more will be added every Monday until it's paid off).</div>` : `<div class="error-msg">${res.error}</div>`;
+    box.innerHTML = res.ok ? `<div class="success-msg">Loan approved. You owe ${fmtMoney(res.owed)} right now (more will be added every Monday until it's paid off).</div>` : `<div class="error-msg">${res.error}</div>`;
     if (res.ok) document.getElementById("loanAmount").value = "";
     await render();
     return false;

@@ -247,7 +247,7 @@ function updateBuyLabel(id) {
   // The card discount needs the whole bill on the card, so a split is priced like cash (same as the checkout).
   const pr = cardStorePricing(ME_CACHE, CLS_CACHE, it.price, qty, CC_STORE_PAY.useCard && !CC_STORE_PAY.split, CC_STORE_PAY.voucherId, nzDateKey(), LIFE_STORE_VID);
   const how = CC_STORE_PAY.useCard && cardIsActive(ME_CACHE) ? (CC_STORE_PAY.split ? " (card + cash)" : " on card") : "";
-  label.textContent = (qty > 1 ? `Add ×${qty}` : "Add to cart") + ` — ${fmtMoney(pr.total)}${how}`;
+  label.textContent = (qty > 1 ? `Add ×${qty}` : "Add to cart") + `: ${fmtMoney(pr.total)}${how}`;
 }
 function updateAllBuyLabels() { ITEMS_CACHE.forEach(it => updateBuyLabel(it.id)); renderCart(); }
 
@@ -344,7 +344,7 @@ async function sellItem(id) {
   const refundLabel = sellItemObj && ME_CACHE ? storeRefundLabel(ME_CACHE, sellItemObj) : "80%";
   if (!await t29Confirm(refundLabel === "80%"
     ? "Sell this item back to the store for an 80% refund?"
-    : `Sell this item back to the store? You'll get ${refundLabel} — the most you can get back is what you paid for it.`)) return;
+    : `Sell this item back to the store? You'll get ${refundLabel}. The most you can get back is what you paid for it.`)) return;
   const res = await sellStoreItem(CURRENT.username, CURRENT.classCode, id);
   if (!res.ok) { document.getElementById("msg-" + id).innerHTML = `<div class="error-msg">${res.error}</div>`; return; }
   await render();
@@ -431,7 +431,7 @@ async function invSell(id) {
   const label = storeRefundLabel(ME_CACHE, it);
   if (!await t29Confirm(label === "80%"
     ? `Sell one ${it.name} back to the store for an 80% refund?`
-    : `Sell one ${it.name} back to the store? You'll get ${label} — the most you can get back is what you paid for it.`)) return;
+    : `Sell one ${it.name} back to the store? You'll get ${label}. The most you can get back is what you paid for it.`)) return;
   const res = await sellStoreItem(CURRENT.username, CURRENT.classCode, id);
   if (!res.ok) { const m = $id("invMsg"); if (m) m.innerHTML = `<div class="error-msg" style="margin-top:12px;">${escapeHtml(res.error)}</div>`; return; }
   await render();
@@ -707,7 +707,7 @@ function setSortStatus(state) {
   const el = $id("sortStatus");
   if (!el) return;
   el.className = "sort-status" + (state === "saved" ? " ok" : state === "error" ? " err" : "");
-  el.textContent = state === "saving" ? "Saving…" : state === "saved" ? "Order saved ✓" : state === "error" ? "Couldn't save — reloaded the saved order" : "";
+  el.textContent = state === "saving" ? "Saving…" : state === "saved" ? "Order saved ✓" : state === "error" ? "Couldn't save. Reloaded the saved order" : "";
   if (state === "saved") setTimeout(() => { if (SORT_STATUS === "saved") setSortStatus(""); }, 2200);
 }
 
@@ -729,7 +729,7 @@ function paintSortBar(count) {
       <span class="sort-row-label">Auto-sort</span>${SORT_MODES.slice(1).map(chip).join("")}
     </div>
     <p class="muted-small sort-hint">${auto
-      ? `Sorted automatically by <b>${label}</b> — new and edited items slot into place by themselves. Want to fine-tune it by hand?`
+      ? `Sorted automatically by <b>${label}</b>. New and edited items slot into place by themselves. Want to fine-tune it by hand?`
       : `Drag the <b>⠿</b> handle (or use the ▲ ▼ buttons) to put items in any order. Students see exactly this order, and it saves automatically.`}</p>
     ${auto ? `<button type="button" class="btn small gold sort-keep" onclick="saveAutoAsCustom()">Keep this order as my custom order</button>` : ""}`;
   setSortStatus(SORT_STATUS);

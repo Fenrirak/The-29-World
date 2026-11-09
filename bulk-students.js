@@ -297,7 +297,7 @@
     $("bulkNames").value = rows.filter((r, i) => !madeIdx.has(i)).map((r) => r.raw).join("\n");
 
     const problems = [];
-    failed.forEach((r) => problems.push(`<li><strong>${esc(r.name)}</strong> — ${esc(r.error || "couldn't be created")}</li>`));
+    failed.forEach((r) => problems.push(`<li><strong>${esc(r.name)}</strong>: ${esc(r.error || "couldn't be created")}</li>`));
 
     if (!made.length) {
       // Nothing worked this time: stay on the list so they can fix it and retry.
@@ -311,7 +311,7 @@
       note = `<div class="error-msg">
         ${problems.length ? `<div>${problems.length} account${problems.length === 1 ? "" : "s"} couldn't be created:</div><ul class="bulk-fail-list">${problems.join("")}</ul>` : ""}
         ${untried > 0 ? `<div>${untried} more ${untried === 1 ? "wasn't" : "weren't"} tried${out.stopReason ? ": " + esc(out.stopReason) : "."}</div>` : ""}
-        <div>They're still in your list — use <strong>Add more students</strong> to try them again.</div>
+        <div>They're still in your list. Use <strong>Add more students</strong> to try them again.</div>
       </div>`;
     }
     $("bulkFailures").innerHTML = note;
@@ -362,7 +362,7 @@
   }
 
   function templateChanged() {
-    try { localStorage.setItem(TEMPLATE_KEY, JSON.stringify(currentTemplate())); } catch (e) { /* storage blocked — fine */ }
+    try { localStorage.setItem(TEMPLATE_KEY, JSON.stringify(currentTemplate())); } catch (e) { /* storage blocked, fine */ }
     renderEmailPreview();
   }
 
@@ -407,7 +407,7 @@
   async function copyAndTell(text, what) {
     const ok = await copyText(text);
     if (ok) { markSaved(); t29Toast(what + " copied"); }
-    else t29Toast("Couldn't copy — try the Download button instead.");
+    else t29Toast("Couldn't copy, try the Download button instead.");
   }
 
   function mailtoFor(st) {
@@ -524,7 +524,7 @@
   async function openBulkAdd() {
     const cls = await getClassCached(CLASS_CODE);
     if (!cls) return;
-    if (cls.archived) { t29Toast("This class is archived — reopen it to add students."); return; }
+    if (cls.archived) { t29Toast("This class is archived, reopen it to add students."); return; }
     S.className = cls.name;
     S.classGrant = t29WelcomeGrantOf(cls);
     S.grant = S.classGrant;
@@ -539,16 +539,16 @@
   }
 
   async function closeBulkAdd() {
-    if (S.busy) { t29Toast("Still creating accounts — please wait."); return; }
+    if (S.busy) { t29Toast("Still creating accounts, please wait."); return; }
     if (S.created.length && !S.saved) {
       const go = await t29Confirm(
-        "These passwords are only shown here — they can't be looked up again later, and you haven't copied, downloaded or printed them yet.\n\nClose anyway?",
+        "These passwords are only shown here, they can't be looked up again later, and you haven't copied, downloaded or printed them yet.\n\nClose anyway?",
         { confirmText: "Close anyway", cancelText: "Go back", danger: true }
       );
       if (!go) return;
     }
     $("bulkAddModal").classList.add("hidden");
-    // Forget everything — the passwords don't stay in the page.
+    // Forget everything, the passwords don't stay in the page.
     S.created = [];
     S.saved = false;
     $("bulkNames").value = "";

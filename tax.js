@@ -28,7 +28,7 @@ function renderWageBracketRows() {
       <span>%</span>
       <button type="button" class="btn small" onclick="removeBracket(${i})">Remove</button>
     </div>
-  `).join("") || `<p>No wage tax brackets yet — wages aren't taxed. Add a bracket below.</p>`;
+  `).join("") || `<p>No wage tax brackets yet. Wages aren't taxed. Add a bracket below.</p>`;
   const lastBr = wageBrackets[wageBrackets.length - 1];
   if (lastBr && lastBr.upTo !== null && lastBr.upTo !== "") {
     rows.innerHTML += `<p class="muted-small">Wages above $${Number(lastBr.upTo)} won't be taxed, because the last row has a limit. Leave the last row's limit blank to tax everything above the earlier rows.</p>`;

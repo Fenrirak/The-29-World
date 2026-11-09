@@ -23,13 +23,13 @@
   loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=c69a1fa3', 'sidebar-nav.js?v=8d951bc5');
 })();
 </script>
-<title>Teacher Dashboard — The 29 World</title>
+<title>Teacher Dashboard | The 29 World</title>
 <link rel="icon" type="image/png" href="Favicon.png">
 <link rel="shortcut icon" href="favicon.ico">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=e07ba65b">
+<link rel="stylesheet" href="style.css?v=38fff18f">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -141,7 +141,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
   <div class="flex-between">
     <div>
       <h1 id="className">Class</h1>
-      <p class="class-code-line"><span>Class code:</span> <span class="class-code-pill"><span class="icon" id="codeIcon" style="width:16px;height:16px;"></span><span id="classCode">-----</span></span> <span>&mdash; share this with your students so they can join.</span></p>
+      <p class="class-code-line"><span>Class code:</span> <span class="class-code-pill"><span class="icon" id="codeIcon" style="width:16px;height:16px;"></span><span id="classCode">-----</span></span> <span> share this with your students so they can join.</span></p>
     </div>
     <div>
       <button class="btn gold" onclick="runPayDay()" id="payDayBtn">Run Pay Day</button>
@@ -150,7 +150,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
   </div>
 
   <div id="classArchivedBanner" class="hidden" style="margin-top:16px;padding:14px 18px;border-radius:12px;background:linear-gradient(135deg,var(--warn-banner-grad-start),var(--warn-banner-grad-end));border:1.5px solid var(--coral);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;color:var(--warn-banner-text);">
-    <span><span id="classArchivedIcon" style="vertical-align:middle;margin-right:6px;"></span>This class is archived — students can't do anything in it until you reopen it.</span>
+    <span><span id="classArchivedIcon" style="vertical-align:middle;margin-right:6px;"></span>This class is archived, students can't do anything in it until you reopen it.</span>
     <button class="btn small gold" onclick="reopenThisClass()" id="reopenClassBtn">Reopen this class</button>
   </div>
 
@@ -218,7 +218,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
   <div class="card" id="classSettingsCard">
     <h2 id="hSettings">Class settings</h2>
-    <p class="set-lead">These apply to the whole class. Settings for a single module &mdash; pay day, interest, loans, gambling and so on &mdash; live on that module&rsquo;s own page.</p>
+    <p class="set-lead">These apply to the whole class. Settings for a single module, pay day, interest, loans, gambling and so on, live on that module&rsquo;s own page.</p>
 
     <div class="set-grid">
       <section class="set-tile" aria-labelledby="hWelcome">
@@ -240,7 +240,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
       <section class="set-tile" aria-labelledby="hTimeLimit">
         <h3 id="hTimeLimit">Daily time limit</h3>
-        <p>Minutes each student can spend on the site per day (0 = no limit). Only time with the site open, visible and in focus counts. At the limit, a student sees a &ldquo;come back tomorrow&rdquo; screen, which resets at NZ midnight &mdash; the same daily boundary as pay day and interest.</p>
+        <p>Minutes each student can spend on the site per day (0 = no limit). Only time with the site open, visible and in focus counts. At the limit, a student sees a &ldquo;come back tomorrow&rdquo; screen, which resets at NZ midnight, the same daily boundary as pay day and interest.</p>
         <div class="set-controls">
           <div class="cc-num unit"><input id="dailyTimeLimit" type="number" min="0" step="1" inputmode="numeric" placeholder="e.g. 30" aria-label="Daily time limit in minutes"><i>min</i></div>
           <button class="btn secondary" onclick="saveDailyTimeLimit()" id="saveDailyTimeLimitBtn">Save time limit</button>
@@ -283,7 +283,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
     <div class="lifestyle-subsection">
       <h2 id="hThresholds">Lifestyle rating bands</h2>
-      <p>Give ranges of the score meaningful names, e.g. "Poor" for 0-10, "Good" for 10-20. The score has no upper limit, so a student at or above the top of your last band still gets that last band. Bands should be ordered lowest to highest and cover the range you want labelled. You can also set extra requirements a student must meet to actually be shown a band — e.g. a minimum net worth, or owning a property/vehicle with at least a certain comfort rating — even if their score alone is high enough. Leave a requirement at 0 to not require it. If a student's score qualifies for a band but they don't meet its requirements, they'll be shown the next band down that they do qualify for.</p>
+      <p>Give ranges of the score meaningful names, e.g. "Poor" for 0-10, "Good" for 10-20. The score has no upper limit, so a student at or above the top of your last band still gets that last band. Bands should be ordered lowest to highest and cover the range you want labelled. You can also set extra requirements a student must meet to actually be shown a band, e.g. a minimum net worth, or owning a property/vehicle with at least a certain comfort rating, even if their score alone is high enough. Leave a requirement at 0 to not require it. If a student's score qualifies for a band but they don't meet its requirements, they'll be shown the next band down that they do qualify for.</p>
       <div id="thresholdList"></div>
       <button class="btn small secondary" onclick="addThresholdRow()" id="addThresholdBtn">Add band</button>
       <button class="btn secondary" style="margin-top:14px;" onclick="saveThresholds()" id="saveThresholdsBtn">Save bands</button>
@@ -293,7 +293,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     <div class="lifestyle-subsection">
       <h2 id="hLifestyleLock">Lock modules by lifestyle rating</h2>
       <p>Stop students from using certain modules while their lifestyle rating is low. Pick a cutoff and tick which modules should be locked when a student is at or below it.</p>
-      <p class="muted-small">There's a second, independent way to lock a module: set a short quiz a student has to pass first. That lives on the <a href="quizzes.html">Quizzes</a> page, along with its own on/off switch — a module locked by either system stays locked until both are satisfied.</p>
+      <p class="muted-small">There's a second, independent way to lock a module: set a short quiz a student has to pass first. That lives on the <a href="quizzes.html">Quizzes</a> page, along with its own on/off switch, a module locked by either system stays locked until both are satisfied.</p>
       <label for="lifestyleLockThreshold" id="labLifestyleLockThreshold">Lock when lifestyle rating is at or below</label>
       <input id="lifestyleLockThreshold" type="number" min="0" step="1" style="max-width:160px;">
       <div class="grid grid-3" id="lifestyleLockModules" style="margin-top:14px;"></div>
@@ -306,6 +306,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     <h2 id="hEvents">Random weekly events</h2>
     <p>Every week, each student gets 2 to 5 of the active events below, each on a different school day (Monday to Friday, never two on the same day). The week is planned the first time you open the site that week, so opening it on Monday gives the full spread. Events without "Can repeat" are only ever given once to each student, so add plenty of events or tick "Can repeat".</p>
     <button class="btn secondary small" onclick="runWeeklyEventsNow()" id="runEventsNowBtn" style="margin-bottom:12px;">Run this week's events now</button>
+    <div id="eventRecoWrap"></div>
     <div id="eventList"></div>
     <p class="muted-small" id="noEvents">You haven't added any events yet.</p>
     <details class="fold-sub" id="eventFold">
@@ -365,11 +366,11 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <div id="evCoverBox" class="hidden"></div>
       </div>
       <div id="evOptionsWrap" class="hidden">
-        <label for="evOptionsArea" id="labEvOptions">Choices — one per line, as "Label | amount | what happened (optional)" — the amount can also be a percentage, like -20%</label>
+        <label for="evOptionsArea" id="labEvOptions">Choices, one per line, as "Label | amount | what happened (optional)", the amount can also be a percentage, like -20%</label>
         <textarea id="evOptionsArea" rows="4" placeholder="Pay for repairs | -10 | The plumber fixed it in an hour
 Ignore it and hope for the best | 0 | Nothing happened, you got lucky
 Do it yourself and save money | -3 | It mostly worked, but you had to buy some parts"></textarea>
-        <p class="muted-small">The student will be shown this scenario and must pick one of these choices — each choice's amount is applied to their balance (negative for a cost, positive for a gain, 0 for no effect). The third part is optional — a short line explaining what happened, shown to the student after they choose.</p>
+        <p class="muted-small">The student will be shown this scenario and must pick one of these choices, each choice's amount is applied to their balance (negative for a cost, positive for a gain, 0 for no effect). The third part is optional, a short line explaining what happened, shown to the student after they choose.</p>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:12px;">
         <input type="checkbox" id="evRepeat" style="width:20px;height:20px;min-height:auto;flex-shrink:0;">
@@ -434,7 +435,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
         <span class="bulk-counter" id="bulkCounter">0 students</span>
       </div>
       <textarea id="bulkNames" rows="8" data-enter="bulkCreateBtn" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Aroha Smith&#10;Liam Chen&#10;Sofia Rodriguez"></textarea>
-      <p class="muted-small bulk-hint">One student per line, first name then last name &mdash; paste straight from a spreadsheet or class list. Every student also gets a random 6-letter password.</p>
+      <p class="muted-small bulk-hint">One student per line, first name then last name, paste straight from a spreadsheet or class list. Every student also gets a random 6-letter password.</p>
       <div class="bulk-settings">
         <div>
           <label for="bulkStyle">Username style</label>
@@ -477,7 +478,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
     <div id="bulkStepResults" class="hidden">
       <div id="bulkStats" class="bulk-stats"></div>
       <div id="bulkFailures"></div>
-      <div class="bulk-warn">Passwords are only shown on this screen &mdash; they aren&rsquo;t saved anywhere, so they can&rsquo;t be looked up later. Copy, download or print them before you close it.</div>
+      <div class="bulk-warn">Passwords are only shown on this screen, they aren&rsquo;t saved anywhere, so they can&rsquo;t be looked up later. Copy, download or print them before you close it.</div>
       <div class="bulk-toolbar">
         <button class="btn small secondary" onclick="bulkCopyAllMessages()">Copy all messages</button>
         <button class="btn small secondary" onclick="bulkCopyList()">Copy list</button>
@@ -512,22 +513,23 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 
 <script type="module" src="firebase-init.js?v=294b42b5"></script>
 <script defer src="icons.js?v=e1413a9c"></script>
-<script defer src="settings-menu.js?v=918f78f6"></script>
-<script defer src="shortcuts.js?v=f7fd511f"></script>
-<script defer src="offline.js?v=067149c0"></script>
-<script defer src="data-core.js?v=07214fc7"></script>
-<script defer src="data-money.js?v=88ad60cd"></script>
-<script defer src="data-life.js?v=36a834af"></script>
-<script defer src="data-property.js?v=3723dbe7"></script>
-<script defer src="data-markets.js?v=948810b4"></script>
-<script defer src="tour.js?v=08eac342"></script>
-<script defer src="events-ui.js?v=f846128d"></script>
-<script defer src="quiz-gate.js?v=b67a2a0d"></script>
+<script defer src="settings-menu.js?v=5370c578"></script>
+<script defer src="shortcuts.js?v=7b02398d"></script>
+<script defer src="offline.js?v=ac2cbd82"></script>
+<script defer src="data-core.js?v=535ce0cf"></script>
+<script defer src="data-money.js?v=cc5dc36e"></script>
+<script defer src="data-life.js?v=3c43769a"></script>
+<script defer src="data-property.js?v=84d847c7"></script>
+<script defer src="data-markets.js?v=c76e3587"></script>
+<script defer src="tour.js?v=1470e256"></script>
+<script defer src="events-ui.js?v=9b6e825f"></script>
+<script defer src="base-template.js?v=f0d00d4a"></script>
+<script defer src="quiz-gate.js?v=f9002445"></script>
 <script defer src="avatar.js?v=aca3bcf4"></script>
-<script defer src="notifications.js?v=1e1147ea"></script>
+<script defer src="notifications.js?v=d8884f52"></script>
 <script defer src="pdf-report.js?v=9198db19"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
-<script defer src="teacher.js?v=9551deeb"></script>
-<script defer src="bulk-students.js?v=d5a9136f"></script>
+<script defer src="teacher.js?v=e4bf2327"></script>
+<script defer src="bulk-students.js?v=cb0b3603"></script>
 </body>
 </html>

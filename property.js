@@ -119,7 +119,7 @@ async function savePropRange() {
   const min = document.getElementById("propRangeMin").value;
   const max = document.getElementById("propRangeMax").value;
   await setPropertyPriceRange(CURRENT.classCode, min, max);
-  setMsg("propRangeMsg", `<div class="success-msg">Saved — listings without their own custom range will move between ${min}% and ${max}% per simulated day.</div>`);
+  setMsg("propRangeMsg", `<div class="success-msg">Saved. Listings without their own custom range will move between ${min}% and ${max}% per simulated day.</div>`);
   await render();
 }
 async function runPropertyMarketDay() {
@@ -234,9 +234,9 @@ function tenantRentStatusLine(leaseStartWeekKey, rentLastWeekPaid, rentDay, pric
   const moveInWeek = leaseStartWeekKey === weekKey;
   const alreadyPaid = rentLastWeekPaid === weekKey;
   const isDueToday = (rentDay || "Fri") === nzDayName();
-  if (moveInWeek) return { status: `Your first payment isn't due yet — the week you moved in is free. It'll be ${fmtMoney(price)}, due ${DAY_FULL[rentDay || "Fri"]}.`, canPay: false, why: "The week you moved in is free" };
+  if (moveInWeek) return { status: `Your first payment isn't due yet. The week you moved in is free. It'll be ${fmtMoney(price)}, due ${DAY_FULL[rentDay || "Fri"]}.`, canPay: false, why: "The week you moved in is free" };
   if (alreadyPaid) return { status: `This week's rent of ${fmtMoney(price)} is already sorted.`, canPay: false, why: "Already paid this week" };
-  if (!isDueToday) return { status: `Rent is due every ${DAY_FULL[rentDay || "Fri"]}. This week's will be ${fmtMoney(price)} — come back then to pay it yourself.`, canPay: false, why: `Rent can only be paid on ${DAY_FULL[rentDay || "Fri"]}s` };
+  if (!isDueToday) return { status: `Rent is due every ${DAY_FULL[rentDay || "Fri"]}. This week's will be ${fmtMoney(price)}. Come back then to pay it yourself.`, canPay: false, why: `Rent can only be paid on ${DAY_FULL[rentDay || "Fri"]}s` };
   return { status: `${overdue ? "This week's rent is overdue. " : "Rent is due today. "}<strong>${fmtMoney(price)}</strong>.`, canPay: true };
 }
 
@@ -338,7 +338,7 @@ function mortgageStatusBadges(cls, previewForceDue) {
   let badges = `<span class="badge navy">Due every ${DAY_FULL[day]}</span>`;
   if (dueToday) badges += `<span class="badge mint">Due today</span>`;
   if (forceDue && !dueToday) badges += `<span class="badge gold">This week: due now (override)</span>`;
-  if (forceDue !== storedForceDue) badges += `<span class="badge lilac">Unsaved change — click Save below</span>`;
+  if (forceDue !== storedForceDue) badges += `<span class="badge lilac">Unsaved change. Click Save below</span>`;
   return badges;
 }
 
@@ -354,7 +354,7 @@ function populateMortgageSettings(cls) {
 async function saveMovingCostClick() {
   const val = document.getElementById("movingCostInput").value;
   await setMovingCost(CURRENT.classCode, val);
-  setMsg("movingCostMsg", `<div class="success-msg">Moving cost saved. Students are charged this the moment they move into a new home (buying and choosing to live in it, or moving in as a classmate's tenant) — capped at one move per student per day.</div>`);
+  setMsg("movingCostMsg", `<div class="success-msg">Moving cost saved. Students are charged this the moment they move into a new home (buying and choosing to live in it, or moving in as a classmate's tenant). Capped at one move per student per day.</div>`);
   await render();
 }
 
@@ -372,10 +372,10 @@ async function changeVariableRatesNow() {
   try {
     const changes = await runVariableRateRefresh(CURRENT.classCode, true);
     const lines = changes.map(c => `${escapeHtml(c.name)}: ${c.from}% &rarr; ${c.to}%`);
-    setMsg("variableRatesMsg", `<div class="success-msg">${lines.length ? "Rates moved &mdash; " + lines.join("; ") + ". Students with a variable mortgage on those were told." : "Rates are already as far as they can go in their range."}</div>`, 9000);
+    setMsg("variableRatesMsg", `<div class="success-msg">${lines.length ? "Rates moved: " + lines.join("; ") + ". Students with a variable mortgage on those were told." : "Rates are already as far as they can go in their range."}</div>`, 9000);
     await render();
   } catch (err) {
-    setMsg("variableRatesMsg", `<div class="error-msg">Couldn't change the rates — please try again.</div>`, 6000);
+    setMsg("variableRatesMsg", `<div class="error-msg">Couldn't change the rates. Please try again.</div>`, 6000);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -405,7 +405,7 @@ async function saveMortgageDayClick() {
 async function saveMortgageForceDue() {
   const active = document.getElementById("mortgageForceDue").checked;
   await setMortgageDueOverride(CURRENT.classCode, active);
-  setMsg("mortgageForceDueMsg", `<div class="success-msg">${active ? "This week's mortgage payments are now marked as due — students can pay below." : "Manual override turned off."}</div>`);
+  setMsg("mortgageForceDueMsg", `<div class="success-msg">${active ? "This week's mortgage payments are now marked as due. Students can pay below." : "Manual override turned off."}</div>`);
   await render();
 }
 
@@ -420,7 +420,7 @@ async function chooseOccupancy(id, choice) {
     : "";
   const msg = choice === "living"
     ? `Live in this property?\n\nYou'll get a +${bonus} bonus to your lifestyle rating (property category) while you live here, but you won't receive any rent. You can switch to renting it out again at any time, for free.${movingNote}`
-    : `Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +${bonus} lifestyle bonus for living in it — only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.`;
+    : `Rent this property out?\n\nYou'll receive weekly rent instead of living here, but you will NOT get the +${bonus} lifestyle bonus for living in it, only the property's base comfort rating will count toward your lifestyle rating. You can move back in at any time.`;
   if (!await t29Confirm(msg)) return;
   const res = await setPropertyOccupancy(CURRENT.username, CURRENT.classCode, id, choice);
   if (!res.ok) { alert(res.error); return; }
@@ -499,10 +499,10 @@ async function openSellModal(id, isTeacherSelling) {
   if (prop.mortgage) {
     body += `<p>This property still has a mortgage on it. <strong>${fmtMoney(mortgagePayoff)}</strong> will be deducted from the sale to pay off the remaining mortgage`;
     body += breakFee > 0 ? `, plus a <strong>${fmtMoney(breakFee)}</strong> break fee for selling with financing still owing.</p>` : `.</p>`;
-    if (breakFeeWaived) body += `<p class="muted-small">No break fee — it's a variable-rate mortgage, which can be cleared at any time.</p>`;
+    if (breakFeeWaived) body += `<p class="muted-small">No break fee. It's a variable-rate mortgage, which can be cleared at any time.</p>`;
   }
   const who = isTeacherSelling ? "The owner" : "You";
-  body += `<p class="muted-small">${who} will receive <strong>${fmtMoney(payout)}</strong>${payout < 0 ? " — this will come out of their balance instead, since what's owed is more than the sale is worth" : ""}.</p>`;
+  body += `<p class="muted-small">${who} will receive <strong>${fmtMoney(payout)}</strong>${payout < 0 ? ". This will come out of their balance instead, since what's owed is more than the sale is worth" : ""}.</p>`;
   document.getElementById("sellModalBody").innerHTML = body;
   const confirmBtn = document.getElementById("sellModalConfirmBtn");
   confirmBtn.onclick = async () => {
@@ -624,7 +624,7 @@ async function completeFinancedPurchase(gid, depositAmt, useKs, mortgageType) {
     // Mortgage payments are never taken automatically — the student pays
     // each one themselves on the class's mortgage day (see payMortgage).
     const cls = await getClassCached(CURRENT.classCode);
-    showPurchaseResult(`<div class="success-msg">Mortgaged (${mortgageType === "variable" ? "variable" : "fixed"} rate) with a ${fmtMoney(depositAmt)} deposit${res.fromKiwi > 0 ? ` (${fmtMoney(res.fromKiwi)} of it from your KiwiSaver)` : ""}! Payments aren't taken automatically — come back every ${DAY_FULL[cls.mortgageDay || "Fri"]} to pay them yourself (the week you bought is free).${mortgageType === "variable" ? " Because it's variable, you can make extra repayments any time from My homes." : ""}</div>`);
+    showPurchaseResult(`<div class="success-msg">Mortgaged (${mortgageType === "variable" ? "variable" : "fixed"} rate) with a ${fmtMoney(depositAmt)} deposit${res.fromKiwi > 0 ? ` (${fmtMoney(res.fromKiwi)} of it from your KiwiSaver)` : ""}! Payments aren't taken automatically. Come back every ${DAY_FULL[cls.mortgageDay || "Fri"]} to pay them yourself (the week you bought is free).${mortgageType === "variable" ? " Because it's variable, you can make extra repayments any time from My homes." : ""}</div>`);
   } finally {
     if (btn) btn.disabled = false;
     if (btn2) btn2.disabled = false;
@@ -717,7 +717,7 @@ async function openMortgageChoiceModal(gid, depositAmt, useKs) {
       </section>
       ${varCard}
     </div>
-    <p class="muted-small mc-note">Payment figures are estimates. Either way, nothing comes out automatically &mdash; you pay each week yourself on ${day}s, and the week you buy is free.</p>`;
+    <p class="muted-small mc-note">Payment figures are estimates. Either way, nothing comes out automatically. You pay each week yourself on ${day}s, and the week you buy is free.</p>`;
   const pick = (type) => {
     closeMortgageChoiceModal();
     completeFinancedPurchase(gid, deposit, useKs, type);
@@ -755,10 +755,10 @@ async function payExtraMortgageClick(id, payOff) {
     await render();
     // render() rebuilds the card, so the message goes in afterwards.
     if (res.fullyPaid) {
-      setMsg("pageMsg", `<div class="success-msg">Mortgage paid off with ${fmtMoney(res.amount)} &mdash; no break fee. The property is all yours!</div>`, 10000);
+      setMsg("pageMsg", `<div class="success-msg">Mortgage paid off with ${fmtMoney(res.amount)}. No break fee. The property is all yours!</div>`, 10000);
       try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
     } else {
-      setMsg("extraMsg-" + id, `<div class="success-msg">${fmtMoney(res.amount)} paid off your mortgage. You now owe ${fmtMoney(res.balanceAfter)} &mdash; about ${res.weeksLeft} week${res.weeksLeft === 1 ? "" : "s"} to go.</div>`, 8000);
+      setMsg("extraMsg-" + id, `<div class="success-msg">${fmtMoney(res.amount)} paid off your mortgage. You now owe ${fmtMoney(res.balanceAfter)}, about ${res.weeksLeft} week${res.weeksLeft === 1 ? "" : "s"} to go.</div>`, 8000);
     }
   } finally {
     const b1 = document.getElementById("extraBtn-" + id), b2 = document.getElementById("payoffBtn-" + id);
@@ -1078,18 +1078,18 @@ function mortgageStatus(p, cls) {
     : `${fmtMoney(amt.principal)}, no interest owing`;
   let status, canPay = false;
   if (purchaseWeek) {
-    status = `Your first payment isn't due yet — the week you bought is free. It'll be ${fmtMoney(amt.total)} (${breakdown}).`;
+    status = `Your first payment isn't due yet. The week you bought is free. It'll be ${fmtMoney(amt.total)} (${breakdown}).`;
   } else if (alreadyPaid) {
     status = `This week's payment of ${fmtMoney(amt.total)} is already sorted.`;
   } else if (!isDueToday) {
-    status = `Due every ${mortgageDayName}. This week's would be ${fmtMoney(amt.total)} (${breakdown}) — come back then to pay it yourself.`;
+    status = `Due every ${mortgageDayName}. This week's would be ${fmtMoney(amt.total)} (${breakdown}). Come back then to pay it yourself.`;
   } else {
     const onDueDay = (cls.mortgageDay || "Fri") === nzDayName();
     const dueLine = onDueDay ? `This week's payment is due today.`
       : (variable && !dueNow) ? `This week's payment is open: variable mortgages can be paid any day.`
       : (forcedDue && !isMortgagePayableNow(cls)) ? `Your teacher has marked this week's payment as due now.`
       : `This week's payment was due ${mortgageDayName} and is still open until the end of the week.`;
-    status = `${dueLine} <strong>${fmtMoney(amt.total)}</strong> — ${breakdown}.`;
+    status = `${dueLine} <strong>${fmtMoney(amt.total)}</strong>: ${breakdown}.`;
     canPay = true;
   }
   const reason = purchaseWeek ? "Your first payment isn't due yet" : alreadyPaid ? "Already paid this week" : !isDueToday ? `Opens on ${mortgageDayName}` : "";
@@ -1148,7 +1148,7 @@ function mortgageSection(p, cls) {
         </div>
         <button class="btn small gold pay-btn" id="payMortgageBtn-${p.id}" ${st.canPay ? `onclick="payMortgageClick('${p.id}')"` : `disabled aria-disabled="true" title="${st.reason}"`}>${icon("send", 13)} Pay ${fmtMoney(st.amt.total)}</button>
       </div>
-      <p class="muted-small">Mortgage payments come out of your cash — a credit card can't be used.</p>
+      <p class="muted-small">Mortgage payments come out of your cash. A credit card can't be used.</p>
       <div id="mortgageMsg-${p.id}"></div>${extra}
     </div>`;
 }
@@ -1169,7 +1169,7 @@ function studentOccupancySection(p, cls, nameOf) {
       `${p.rentPerWeek > 0 ? btn("Rent it out", `chooseOccupancy('${p.id}','rented')`) : ""}${canSublet ? sublet : ""}`)
       + (!p.rentPerWeek ? `<p class="muted-small">Your teacher hasn't set a rent amount for this property, so it can't be rented out yet.</p>` : "");
   } else if (p.occupancy === "rented") {
-    inner = choiceRow(`Rented out — ${fmtMoney(p.rentPerWeek)}/week`,
+    inner = choiceRow(`Rented out: ${fmtMoney(p.rentPerWeek)}/week`,
       `Paid every ${dayFull(p.rentDay)}. You're not getting the living-in lifestyle bonus.`,
       `${btn("Move in instead", `chooseOccupancy('${p.id}','living')`)}${canSublet ? sublet : ""}`)
       + movingCostNote(cls);
@@ -1177,10 +1177,10 @@ function studentOccupancySection(p, cls, nameOf) {
     inner = studentSubletRows(p, cls, nameOf);
   } else {
     // Owned but no choice made yet — spell out each option before they pick.
-    inner = `<p class="muted-small" style="margin:0 0 4px;">Choose how to use it — you can change your mind at any time.</p>`
+    inner = `<p class="muted-small" style="margin:0 0 4px;">Choose how to use it. You can change your mind at any time.</p>`
       + choiceRow("Live in it", `No rent income, but +${bonus} to your lifestyle rating (property category) while you live there.`, btn("Live here", `chooseOccupancy('${p.id}','living')`, "gold"))
       + (p.rentPerWeek > 0
-          ? choiceRow("Rent it out", `${fmtMoney(p.rentPerWeek)}/week, paid every ${dayFull(p.rentDay)}. No lifestyle bonus — only the base comfort rating counts.`, btn("Rent it out", `chooseOccupancy('${p.id}','rented')`))
+          ? choiceRow("Rent it out", `${fmtMoney(p.rentPerWeek)}/week, paid every ${dayFull(p.rentDay)}. No lifestyle bonus, only the base comfort rating counts.`, btn("Rent it out", `chooseOccupancy('${p.id}','rented')`))
           : choiceRow("Rent it out", "Your teacher hasn't set a rent amount yet.", ""))
       + (canSublet ? choiceRow("Rent to a classmate", "You set the price and minimum lease, and get real weekly rent from whoever moves in. No living-in bonus for you.", sublet) : "")
       + movingCostNote(cls);
@@ -1208,7 +1208,7 @@ function studentSubletRows(p, cls, nameOf) {
   }
   const canEnd = leaseMinWeeksElapsed(s);
   return choiceRow(`Rented to ${escapeHtml(nameOf(s.tenant))}`,
-    `${fmtMoney(s.price)}/week, paid every ${dayFull(p.rentDay)}. Minimum ${s.minWeeks}-week lease${canEnd ? " (met — you can end it any time now)" : " (still running)"}.`,
+    `${fmtMoney(s.price)}/week, paid every ${dayFull(p.rentDay)}. Minimum ${s.minWeeks}-week lease${canEnd ? " (met. You can end it any time now)" : " (still running)"}.`,
     canEnd ? withdraw("End lease") : "");
 }
 
@@ -1372,21 +1372,21 @@ function renderStudentRentals(cls, props, me, nameOf) {
       </div>`);
   });
   if (!rows.length) {
-    box.innerHTML = `<div class="empty-state"><p>No rentals are available right now. Check back later — your teacher or a classmate may list one.</p></div>`;
+    box.innerHTML = `<div class="empty-state"><p>No rentals are available right now. Check back later. Your teacher or a classmate may list one.</p></div>`;
     return { count: 0 };
   }
   box.innerHTML = `
     <div class="card">
       <div class="set-head"><h2>Available rentals</h2></div>
       <div style="margin-top:6px;">${movingCostNote(cls)}</div>
-      ${alreadyHoused ? `<p class="muted-small">You're already living somewhere — move out first if you'd rather rent one of these instead.</p>` : ""}
+      ${alreadyHoused ? `<p class="muted-small">You're already living somewhere. Move out first if you'd rather rent one of these instead.</p>` : ""}
       <div id="rentMsg"></div>
       ${rows.join("")}
     </div>`;
   return { count: rows.length };
 }
 
-/* Inline "list it for rent" form — price + minimum lease length, both
+/* Inline "list it for rent" form. Price + minimum lease length, both
    bounded by the teacher's settings. Shown on demand rather than always,
    so the plain living/rented choice isn't crowded out. */
 async function showSubletForm(id) {
@@ -1476,7 +1476,7 @@ async function toggleOwners(gid) {
   await render();
 }
 // One owned unit as a flat row: who, what it's worth vs what they paid,
-// mortgage, how it's being used — plus the teacher's override buttons.
+// mortgage, how it's being used, plus the teacher's override buttons.
 function ownerRowTeacher(u, cls, nameOf) {
   const gain = propertyGainSinceBought(u);
   const bits = [];
@@ -1489,7 +1489,7 @@ function ownerRowTeacher(u, cls, nameOf) {
   let note = "", action = "";
   const s = u.occupancy === "sublet" ? u.sublet : null;
   if (s) {
-    if (s.status === "pending") note = `Wants to rent to classmates at ${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum — see Classmate rentals.`;
+    if (s.status === "pending") note = `Wants to rent to classmates at ${fmtMoney(s.price)}/week, ${s.minWeeks}-week minimum. See Classmate rentals.`;
     else if (s.status === "rejected") note = `Rental listing declined${s.rejectReason ? `: ${escapeHtml(s.rejectReason)}` : "."}`;
     else if (!s.tenant) { note = `Listed at ${fmtMoney(s.price)}/week, no tenant yet.`; action = `<button class="btn small coral" onclick="teacherEndSubletClick('${u.id}')">End listing</button>`; }
     else { note = `Rented to ${escapeHtml(nameOf(s.tenant))} at ${fmtMoney(s.price)}/week.`; action = `<button class="btn small coral" onclick="teacherEndSubletClick('${u.id}')">End rental</button>`; }
@@ -1512,7 +1512,7 @@ async function openPricingModal(id) {
   if (!p) return;
   const dflt = cls.propertyPriceRange || { min: 0.5, max: 2 };
   const range = p.priceRange || dflt;
-  document.getElementById("pricingTitle").textContent = "Pricing \u2014 " + p.name;
+  document.getElementById("pricingTitle").textContent = "Pricing: " + p.name;
   document.getElementById("pricingBody").innerHTML = `
     <div class="form-sec">
       <div class="form-sec-title">Set a new price</div>
@@ -1644,7 +1644,7 @@ async function addProp(e) {
       setMsg("pageMsg", `<div class="success-msg">Property added!</div>`, 4000);
     }
   } catch (err) {
-    document.getElementById("addMsg").innerHTML = `<div class="error-msg">${escapeHtml(err && err.message ? err.message : "Something went wrong — please try again.")}</div>`;
+    document.getElementById("addMsg").innerHTML = `<div class="error-msg">${escapeHtml(err && err.message ? err.message : "Something went wrong. Please try again.")}</div>`;
   } finally {
     btn.disabled = false;
   }
@@ -1787,7 +1787,7 @@ async function addNpcProp(e) {
       setMsg("pageMsg", `<div class="success-msg">School rental added!</div>`, 4000);
     }
   } catch (err) {
-    document.getElementById("addNpcMsg").innerHTML = `<div class="error-msg">${escapeHtml(err && err.message ? err.message : "Something went wrong — please try again.")}</div>`;
+    document.getElementById("addNpcMsg").innerHTML = `<div class="error-msg">${escapeHtml(err && err.message ? err.message : "Something went wrong. Please try again.")}</div>`;
   } finally {
     btn.disabled = false;
   }

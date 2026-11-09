@@ -36,7 +36,7 @@
   }
   function goOffline() {
     document.documentElement.classList.add("t29-offline");
-    show("You're offline — changes can't be saved until you're back online.", "#9a3b2e");
+    show("You're offline. Changes can't be saved until you're back online.", "#9a3b2e");
   }
   function goOnline() {
     document.documentElement.classList.remove("t29-offline");

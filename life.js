@@ -183,7 +183,7 @@ async function saveLifeItemForm(e) {
     } else if (res.failed.length) {
       box.innerHTML = `<div class="error-msg">Family event updated, but these students still have the old version: ${res.failed.map(escapeHtml).join(", ")}. Save it again to retry.</div>`;
     } else {
-      box.innerHTML = `<div class="success-msg">Family event updated${res.updated ? ` — and for the ${res.updated} student${res.updated === 1 ? " who has" : "s who have"} it` : ""}!</div>`;
+      box.innerHTML = `<div class="success-msg">Family event updated${res.updated ? `, and for the ${res.updated} student${res.updated === 1 ? " who has" : "s who have"} it` : ""}!</div>`;
     }
   } else {
     await addLifeItem(CURRENT.classCode, item);
@@ -237,7 +237,7 @@ function startEditLifeItem(id) {
 }
 
 async function deleteLifeItem(id) {
-  if (await t29Confirm("Remove this family event? Students who already have it keep their benefits — this only stops it being given out again.")) {
+  if (await t29Confirm("Remove this family event? Students who already have it keep their benefits. This only stops it being given out again.")) {
     if (id === EDITING_ID) resetLifeForm();
     await removeLifeItem(CURRENT.classCode, id);
     await render();

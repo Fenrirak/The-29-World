@@ -95,7 +95,7 @@ async function render() {
 /* ================= Teacher ================= */
 function buildModuleSelect() {
   const sel = document.getElementById("qModule");
-  sel.innerHTML = `<option value="">Nothing — practice only</option>` +
+  sel.innerHTML = `<option value="">Nothing. Practice only</option>` +
     QUIZ_UNLOCKABLE_MODULES.map(m => `<option value="${m.key}">${esc(m.label)}</option>`).join("");
 }
 
@@ -194,7 +194,7 @@ async function activateAllQuizzes(on) {
   const n = (CLS.quizzes || []).filter(q => q.active !== on && quizModuleKey(q)).length;
   if (on && n && !await t29Confirm(`Activate every quiz? ${n} ${n === 1 ? "module" : "modules"} will lock for students until they pass the quiz attached to it.`)) return;
   await setAllQuizzesActive(CURRENT.classCode, on);
-  document.getElementById("gateMsg").innerHTML = `<div class="success-msg">${on ? "All quizzes are active — their modules are locked until passed." : "All quizzes are paused — nothing is locked by a quiz."}</div>`;
+  document.getElementById("gateMsg").innerHTML = `<div class="success-msg">${on ? "All quizzes are active, their modules are locked until passed." : "All quizzes are paused, nothing is locked by a quiz."}</div>`;
   await render();
 }
 
@@ -266,7 +266,7 @@ async function qzAddReco(key) {
   if (!r) return;
   await addQuizzes(CURRENT.classCode, [Object.assign({}, r, { active: true })]);
   await render();
-  document.getElementById("gateMsg").innerHTML = `<div class="success-msg">Added <strong>${esc(r.title)}</strong> — ${esc(moduleLabel(r.moduleKey))} is now locked until students pass it. Edit it any time below.</div>`;
+  document.getElementById("gateMsg").innerHTML = `<div class="success-msg">Added <strong>${esc(r.title)}</strong>: ${esc(moduleLabel(r.moduleKey))} is now locked until students pass it. Edit it any time below.</div>`;
 }
 async function qzAddAllReco() {
   const left = qzRecoRemaining();
@@ -350,7 +350,7 @@ function paintBuilder() {
         </div>`).join("")}
       <button class="btn small secondary" type="button" onclick="addOptionTo(${i})" ${row.options.length >= 6 ? "disabled" : ""}>Add another option</button>
       <label for="qb-explain-${i}" style="margin-top:12px;">Explanation shown after answering (optional)</label>
-      <input id="qb-explain-${i}" value="${esc(row.explain)}" placeholder="e.g. $110 after year one, then 10% of $110 — interest earns interest.">
+      <input id="qb-explain-${i}" value="${esc(row.explain)}" placeholder="e.g. $110 after year one, then 10% of $110. Interest earns interest.">
     </div>
   `).join("");
   // The "Add question" button in the markup calls the un-synced version, so
@@ -468,14 +468,14 @@ function loadStarterQuiz() {
       text: "You put $100 into an account paying 10% interest a year. What is it worth after 2 years?",
       options: ["$110", "$120", "$121", "$200"],
       answer: 2,
-      explain: "Year one adds $10 (10% of $100). Year two adds 10% of $110, which is $11 — so $121. The interest itself earns interest."
+      explain: "Year one adds $10 (10% of $100). Year two adds 10% of $110, which is $11, so $121. The interest itself earns interest."
     },
     {
       id: null,
       text: "Two people both save $1,000 at the same rate. One starts 5 years earlier. Who ends up with more?",
       options: ["The one who started earlier", "The one who started later", "They end up the same", "It depends on their job"],
       answer: 0,
-      explain: "Time is the ingredient compound interest needs most — starting earlier beats saving harder later."
+      explain: "Time is the ingredient compound interest needs most. Starting earlier beats saving harder later."
     },
     {
       id: null,
@@ -487,7 +487,7 @@ function loadStarterQuiz() {
   ];
   paintBuilder();
   document.getElementById("builderMsg").innerHTML =
-    `<div class="success-msg">Starter quiz loaded into the form — edit anything you like, then press Save quiz.</div>`;
+    `<div class="success-msg">Starter quiz loaded into the form. Edit anything you like, then press Save quiz.</div>`;
 }
 
 document.addEventListener("DOMContentLoaded", init);

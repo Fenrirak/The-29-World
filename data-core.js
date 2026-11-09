@@ -1058,7 +1058,7 @@ function applyArchivedReadOnlyLock(className) {
     banner.id = "t29ArchivedBanner";
     banner.className = "t29-archived-banner";
     banner.innerHTML = (typeof icon === "function" ? icon("lock", 14) : "") +
-      ` <strong>${className ? String(className).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])) + " — " : ""}Archived class.</strong> You're strolling down memory lane — everything here is view-only.`;
+      ` <strong>${className ? String(className).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])) + ": " : ""}Archived class.</strong> You're strolling down memory lane, everything here is view-only.`;
     document.body.prepend(banner);
     document.body.classList.add("t29-archived-readonly");
     lockField();
@@ -1212,7 +1212,7 @@ function defaultClassData(code, className, teacherUsername) {
       // once their NET winnings (wins minus losses) reach it, and shows
       // winLimitMessage when that happens.
       dailyBuyInLimit: null, dailyWinLimit: null,
-      winLimitMessage: "You've hit your winning limit for today \u2014 nice work! Come back and play again tomorrow.",
+      winLimitMessage: "You've hit your winning limit for today. Nice work! Come back and play again tomorrow.",
       payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 }
     },
     taxRates: { property: 0, transport: 0, interest: 0, gambling: 0 },
@@ -1255,7 +1255,7 @@ async function createTeacherAndClass(name, username, password, className, extra)
   // Optional recovery email (lets the teacher reset a forgotten password). Blank = none.
   const recoveryEmail = String(extra.email || "").trim().toLowerCase();
   if (recoveryEmail && !T29_EMAIL_RE.test(recoveryEmail)) {
-    return { ok: false, error: "That email address doesn't look right. Fix it, or leave it blank — it's optional." };
+    return { ok: false, error: "That email address doesn't look right. Fix it, or leave it blank. It's optional." };
   }
 
   // These two checks run before the visitor is signed in, which
@@ -1264,7 +1264,7 @@ async function createTeacherAndClass(name, username, password, className, extra)
   // a taken username is still caught further down, by Firebase Auth
   // ("email-already-in-use") and by the /users create rule.
   const existing = await getUser(username).catch(() => null);
-  if (existing) return { ok: false, error: "That username is already taken — try adding a number to the end." };
+  if (existing) return { ok: false, error: "That username is already taken. Try adding a number to the end." };
 
   let code;
   do { code = genCode(5); } while ((await getClass(code).catch(() => null)));
@@ -1308,10 +1308,10 @@ async function createTeacherAndClass(name, username, password, className, extra)
 // message this app already shows for every other form error.
 function t29AuthErrorMessage(e) {
   switch (e && e.code) {
-    case "auth/email-already-in-use": return "That username is already taken — try adding a number to the end.";
+    case "auth/email-already-in-use": return "That username is already taken. Try adding a number to the end.";
     case "auth/weak-password": return "Password must be at least 6 characters.";
-    case "auth/invalid-email": return "That username can't be used — try letters and numbers only.";
-    case "auth/network-request-failed": return "Can't connect right now — check your internet connection and try again.";
+    case "auth/invalid-email": return "That username can't be used. Try letters and numbers only.";
+    case "auth/network-request-failed": return "Can't connect right now. Check your internet connection and try again.";
     case "auth/too-many-requests": return "Too many attempts in a row. Wait a minute, then try again.";
     case "auth/operation-not-allowed": return "New accounts are switched off right now. Ask your teacher (or check Firebase → Authentication → Sign-in method: Email/Password).";
     default: return "Something went wrong. Please try again.";
@@ -1634,7 +1634,7 @@ async function importSharedTemplate(importingTeacherUsername, token, className) 
   // who made them (nobody else may read their class).
   const template = share.template || await getClass(share.classCode).catch(() => undefined);
   if (template === null) return { ok: false, error: "The shared class no longer exists." };
-  if (!template) return { ok: false, error: "This link needs refreshing — ask the teacher who sent it to click Share Template on that class again, then use the link again." };
+  if (!template) return { ok: false, error: "This link needs refreshing. Ask the teacher who sent it to click Share Template on that class again, then use the link again." };
 
   const code = await _freshClassCode();
   const cls = _classDataFromTemplate(code, className.trim(), importingTeacherUsername, template);
@@ -1797,7 +1797,7 @@ async function deleteClassPermanently(teacherUsername, classCode) {
   } catch (e) {
     console.warn("deleteClassPermanently failed:", e);
     if (previousOpen !== classCode) await usersCol().doc(teacherUsername).update({ classCode: previousOpen }).catch(() => {});
-    return { ok: false, error: "Something went wrong deleting the class — some of it may not have been deleted. Please try again." };
+    return { ok: false, error: "Something went wrong deleting the class. Some of it may not have been deleted. Please try again." };
   }
 
   await usersCol().doc(teacherUsername).update({ classCode: backTo });
@@ -1838,7 +1838,7 @@ async function setClassWelcomeGrant(classCode, amount) {
     await classesCol().doc(classCode).update({ welcomeGrant: value });
   } catch (e) {
     console.warn("Saving the welcome grant failed:", e);
-    return { ok: false, error: "Couldn't save that — please try again." };
+    return { ok: false, error: "Couldn't save that. Please try again." };
   }
   return { ok: true, amount: value };
 }
@@ -1915,7 +1915,7 @@ async function createStudentAccount(name, username, password, classCode) {
 
   // See the matching note in createTeacherAndClass above.
   const existing = await getUser(username).catch(() => null);
-  if (existing) return { ok: false, error: "That username is already taken — try adding a number to the end." };
+  if (existing) return { ok: false, error: "That username is already taken. Try adding a number to the end." };
 
   let cred;
   try {
@@ -2018,7 +2018,7 @@ async function _t29BulkCreateOne(session, classCode, entry) {
     } else if (e && e.code === "permission-denied") {
       res.error = "Firestore refused the sign-up (permission denied). Check that the latest firestore.rules are published."; res.fatal = true;
     } else if (e && (e.code === "unavailable" || e.code === "failed-precondition")) {
-      res.error = "Can't connect right now — check your internet connection and try again."; res.fatal = true;
+      res.error = "Can't connect right now. Check your internet connection and try again."; res.fatal = true;
     } else {
       res.error = "Something went wrong saving this account.";
     }
@@ -2339,7 +2339,7 @@ async function t29DeleteTeacherAccount(username, password) {
     await fdb.collection("uidIndex").doc(user.uid).delete();
   } catch (e) {
     console.warn("Teacher account deletion failed:", e && (e.code || e.message), e);
-    return { ok: false, error: "Something went wrong deleting your account — some of it may not have been deleted. Please try again." };
+    return { ok: false, error: "Something went wrong deleting your account. Some of it may not have been deleted. Please try again." };
   }
   try { await user.delete(); } catch (e) { console.warn("Auth user delete failed:", e); }
   try { await firebase.auth().signOut(); } catch (e) { /* ignore */ }
@@ -2619,7 +2619,7 @@ async function submitPasswordChange() {
   if (newPw !== confirmPw) { msg.textContent = "New passwords don't match."; return; }
 
   const me = await getSessionUser();
-  if (!me) { msg.textContent = "You've been signed out — please log back in."; return; }
+  if (!me) { msg.textContent = "You've been signed out. Please log back in."; return; }
 
   btn.disabled = true;
   msg.textContent = "Updating...";
@@ -2631,7 +2631,7 @@ async function submitPasswordChange() {
   overlay.querySelector("#t29PwCurrent").value = "";
   overlay.querySelector("#t29PwNew").value = "";
   overlay.querySelector("#t29PwConfirm").value = "";
-  msg.textContent = "Password updated — you're still signed in here. Any other device you were logged in on will need to sign back in.";
+  msg.textContent = "Password updated. You're still signed in here. Any other device you were logged in on will need to sign back in.";
 }
 
 /* ---------------- Money movement ---------------- */
@@ -3270,7 +3270,7 @@ async function t29FirstPaint(renderFn) {
   } catch (e) {
     console.warn("First paint failed (page will re-render after background jobs):", e);
     if (t29IsConnectionError(e)) {
-      t29Toast("Couldn't load everything on this page — check your internet connection.", { type: "error", duration: 7000 });
+      t29Toast("Couldn't load everything on this page. Check your internet connection.", { type: "error", duration: 7000 });
     }
   }
   t29PageReady();
@@ -3332,8 +3332,8 @@ function t29StartPageLoading() {
   _t29SlowLoadTimer = setTimeout(() => {
     if (_t29PageIsReady) return;
     t29Toast(navigator.onLine === false
-      ? "You're offline — this page will finish loading once you're back online."
-      : "Still loading — this is taking longer than usual. A slow connection can do this.", { type: "info", duration: 7000 });
+      ? "You're offline. This page will finish loading once you're back online."
+      : "Still loading. This is taking longer than usual. A slow connection can do this.", { type: "info", duration: 7000 });
   }, 8000);
   // Never leave the placeholders up forever, whatever happens.
   setTimeout(t29PageReady, 20000);
@@ -3664,7 +3664,7 @@ function _t29ReportUnexpectedError(err) {
     msg = "Couldn't reach the server, so that may not have saved. Check your internet connection and try again.";
   } else if (err && typeof err.code === "string" && now - _t29LastUserAction < 10000) {
     msg = err.code === "permission-denied"
-      ? "That didn't go through. Try refreshing the page — if it keeps happening, log out and back in."
+      ? "That didn't go through. Try refreshing the page, if it keeps happening, log out and back in."
       : "Something went wrong and that didn't save. Please try again.";
   }
   if (!msg) return;
@@ -3905,7 +3905,7 @@ function withNewModuleDefaults(cls) {
   }
   if (cls.gambling.dailyWinLimit === undefined) cls.gambling.dailyWinLimit = null;
   if (cls.gambling.winLimitMessage === undefined) {
-    cls.gambling.winLimitMessage = "You've hit your winning limit for today \u2014 nice work! Come back and play again tomorrow.";
+    cls.gambling.winLimitMessage = "You've hit your winning limit for today. Nice work! Come back and play again tomorrow.";
   }
   cls.blackjack = cls.blackjack || { enabled: true, minBet: 1, maxBet: 20 };
   if (cls.blackjack.enabled === undefined) cls.blackjack.enabled = true;
@@ -4063,6 +4063,9 @@ async function anwGlobalBootstrap() {
     mountBalanceWidget(u.username);
     showKiwiSaverNavIfOn(u).catch(() => {});
     showCasinoNavIfOn(u).catch(() => {});
+    showModuleNavIfOn(u).catch(() => {});
+  } else if (u.role === "teacher") {
+    mountModuleSwitch(u).catch(() => {});
   }
 }
 
@@ -4118,6 +4121,156 @@ async function showKiwiSaverNavIfOn(u) {
     document.documentElement.classList.toggle("ks-on", want);
     if (typeof fitTopbar === "function") fitTopbar();
   }
+}
+
+/* ---------------- Module on/off (teacher switch at the top of every module page) ----------------
+   A teacher can switch any module off for the class. Off means: its link disappears from students'
+   top bar and side menu (the same markup drives both, and the phone dropdowns), and a student who
+   opens the page anyway sees a short "switched off" notice instead of the page. The state lives on the
+   class doc as moduleOff: { bank: true, ... } (a missing key means on). Gambling keeps its own
+   existing switch (gambling.enabled) and its own menu rule, so the switch at the top of that page just
+   drives the same setting. Teachers always see every module. */
+const T29_MODULES = {
+  bank: "Bank", budget: "Budget", termdeposit: "Term Deposit", kiwisaver: "KiwiSaver", loan: "Loans",
+  market: "Stock Market", store: "Store", marketplace: "Trade Centre", jobs: "Jobs", transport: "Transport",
+  property: "Property", insurance: "Insurance", tax: "Tax", bigevents: "Big Events", life: "Life", gambling: "Gambling"
+};
+function moduleKeyOfPage() {
+  const file = (location.pathname.split("/").pop() || "").split("?")[0];
+  const key = file.replace(/\.html$/, "");
+  return T29_MODULES[key] ? key : null;
+}
+function moduleIsOff(cls, key) {
+  if (!cls || !T29_MODULES[key]) return false;
+  if (key === "gambling") return !casinoOnFor(cls);
+  return !!(cls.moduleOff && cls.moduleOff[key]);
+}
+const t29ModOffCacheKey = code => "t29-mod-off:" + code;
+// Sets the menu links, the phone dropdown groups and the current page for a student.
+function paintModuleOff(offKeys) {
+  const root = document.documentElement;
+  const off = new Set(offKeys || []);
+  let changed = false;
+  Object.keys(T29_MODULES).forEach(key => {
+    if (key === "gambling") return; // its own menu rule (casino-on) hides it
+    const isOff = off.has(key);
+    document.querySelectorAll(`.topbar nav a[href="${key}.html"]`).forEach(a => {
+      if (a.classList.contains("mod-off") !== isOff) { a.classList.toggle("mod-off", isOff); changed = true; }
+    });
+    if (root.classList.contains("mod-off-" + key) !== isOff) root.classList.toggle("mod-off-" + key, isOff);
+  });
+  document.querySelectorAll(".topbar nav .nav-group").forEach(g => {
+    const links = [...g.querySelectorAll("a[href]")];
+    const allOff = links.length > 0 && links.every(a => a.classList.contains("mod-off"));
+    if (g.classList.contains("mod-off-group") !== allOff) { g.classList.toggle("mod-off-group", allOff); changed = true; }
+  });
+  if (changed && typeof fitTopbar === "function") fitTopbar();
+}
+// The page itself, when a student lands on a module that is off.
+function paintModulePageOff(isOff) {
+  const key = moduleKeyOfPage();
+  const main = document.querySelector("main");
+  if (!key || !main) return;
+  let note = document.getElementById("modOffNotice");
+  if (isOff) {
+    main.classList.add("mod-off-page");
+    if (!note) {
+      note = document.createElement("div");
+      note.id = "modOffNotice";
+      note.className = "card";
+      note.innerHTML = `<h2>${T29_MODULES[key]} is switched off</h2><p>Your teacher has turned this off for your class for now. It will come back to your menu when they switch it on again.</p>`;
+      main.prepend(note);
+    }
+  } else {
+    main.classList.remove("mod-off-page");
+    if (note) note.remove();
+  }
+}
+async function showModuleNavIfOn(u) {
+  if (!u.classCode) return;
+  // Replay the last known state straight away so a hidden module doesn't flash in the menu.
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(t29ModOffCacheKey(u.classCode)) || "null"); } catch (e) { /* ignore */ }
+  if (Array.isArray(cached)) paintModuleOff(cached);
+  const apply = cls => {
+    const keys = Object.keys(T29_MODULES).filter(k => k !== "gambling" && moduleIsOff(cls, k));
+    try { localStorage.setItem(t29ModOffCacheKey(u.classCode), JSON.stringify(keys)); } catch (e) { /* ignore */ }
+    paintModuleOff(keys);
+    const here = moduleKeyOfPage();
+    paintModulePageOff(!!here && here !== "gambling" && keys.includes(here));
+  };
+  try { apply(await getClassCached(u.classCode)); } catch (e) { return; }
+  if (typeof t29WatchDoc === "function") {
+    t29WatchDoc("classes", u.classCode, (doc, info) => {
+      if (!doc || (info && (info.error || info.fromCache))) return;
+      apply(doc);
+    });
+  }
+}
+
+// Teacher: switch a module on or off for the class (students are told).
+async function setModuleEnabled(classCode, key, enabled) {
+  if (!T29_MODULES[key]) return { ok: false, error: "Unknown module." };
+  if (key === "gambling") { await setGamblingEnabled(classCode, enabled); return { ok: true }; }
+  const classRef = classesCol().doc(classCode);
+  let was = true;
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = snap.data();
+    const moduleOff = Object.assign({}, cls.moduleOff || {});
+    was = !moduleOff[key];
+    if (enabled) delete moduleOff[key]; else moduleOff[key] = true;
+    t.update(classRef, { moduleOff });
+  });
+  if (was !== !!enabled && typeof t29NotifyStudents === "function") {
+    const name = T29_MODULES[key];
+    await t29NotifyStudents(classCode, { to: "all", icon: "sparkle", tone: enabled ? "mint" : "coral",
+      title: enabled ? `Your teacher switched ${name} on` : `Your teacher switched ${name} off`,
+      body: enabled ? `You can use ${name} again.` : `${name} is hidden until your teacher switches it back on.`, href: key + ".html" });
+  }
+  return { ok: true };
+}
+// Teacher: the on/off switch at the top of a module page.
+async function mountModuleSwitch(u) {
+  const key = moduleKeyOfPage();
+  const main = document.querySelector("main");
+  if (!key || !main || !u.classCode || document.getElementById("modSwitch")) return;
+  const cls = await getClassCached(u.classCode);
+  if (!cls) return;
+  const name = T29_MODULES[key];
+  const box = document.createElement("div");
+  box.className = "card mod-switch";
+  box.id = "modSwitch";
+  box.innerHTML = `<label style="display:flex;align-items:center;gap:10px;margin:0;cursor:pointer;">
+      <input type="checkbox" id="modSwitchBox" style="width:20px;height:20px;min-height:auto;flex-shrink:0;">
+      <strong>${name} is on for students</strong>
+    </label>
+    <p class="muted-small" id="modSwitchNote" style="margin:6px 0 0;"></p>`;
+  const h1 = main.querySelector("h1");
+  if (h1 && h1.parentNode === main) h1.after(box); else main.prepend(box);
+  const cb = box.querySelector("#modSwitchBox"), note = box.querySelector("#modSwitchNote");
+  const show = on => {
+    cb.checked = on;
+    note.textContent = on
+      ? `Switch this off to hide ${name} from students' top bar and side bar. Teachers always see it.`
+      : `${name} is hidden from students' top bar and side bar. Anyone who opens the page sees that it is switched off.`;
+  };
+  show(!moduleIsOff(cls, key));
+  cb.addEventListener("change", async () => {
+    const on = cb.checked;
+    cb.disabled = true;
+    try {
+      await setModuleEnabled(u.classCode, key, on);
+      show(on);
+      const g = document.getElementById("gEnabled");
+      if (key === "gambling" && g) g.checked = on;
+    } catch (e) {
+      show(!on);
+      if (typeof t29Toast === "function") t29Toast("Couldn't change that. Please try again.", { type: "error" });
+    }
+    cb.disabled = false;
+  });
 }
 
 /* ---------------- Balance widget: refresh on actual cash movement ----------------
@@ -4381,7 +4534,7 @@ document.addEventListener("DOMContentLoaded", anwGlobalBootstrap);
    CONTAIN a bad one (class, assess, Scunthorpe, grape) are never blocked.
    Only the generic message below is shown; the offending word is never echoed.
    This runs in the browser, like the rest of the app's rules. */
-const T29_FILTER_MSG = "Please keep it school-appropriate \u2014 that message has language that isn't allowed here. Reword it and try again.";
+const T29_FILTER_MSG = "Please keep it school-appropriate. That message has language that isn't allowed here. Reword it and try again.";
 const T29_FILTER = (function () {
   // Endings a word may take (fucking, shitty, bitches ...). Strong swears take all of them; the rest only plurals.
   const END_ALL = ["", "s", "es", "ed", "er", "ers", "ing", "ings", "in", "y", "ie", "ies", "z", "head", "face"];

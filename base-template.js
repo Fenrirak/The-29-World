@@ -18,10 +18,11 @@
 
    TERM OPTIONS: the numbers below are the 1-term version. A teacher can
    also pick 2 or 4 terms (T29_BASE_TEMPLATE_TERM_OPTIONS). Weekly money
-   (wages, rent, bills, weekly events, side hustles) stays the same, so a
+   (wages, rent, bills, side hustles) stays the same, so a
    week always feels the same. What scales is the big stuff: one-off prices,
-   balances and limits go x1 / x2 / x4, and time-based things (mortgage and
-   loan lengths, promotions, KiwiSaver wait) go x1 / x1.5 / x2.
+   balances, limits and big events go x1 / x2 / x4, and time-based things (mortgage and
+   loan lengths, promotions, KiwiSaver wait) go x1 / x1.5 / x2. Weekly random events happen
+   several times a week, so they scale gently with the time factor (x1 / x1.5 / x2).
    See t29BaseTemplateScale and t29BaseTemplateData.
 
    Loaded after the data-*.js files, because it reuses their helpers (the
@@ -148,9 +149,9 @@ const BT_JOBS = [
 ];
 // Store: [name, price, stars (lifestyle), countsNetWorth, description, effect]
 const BT_STORE = [
-  ["Bubble Tea", 5, 0, false, "A cold drink after school.", "A small treat — no lasting effect."],
-  ["Movie Night", 12, 0, false, "Tickets and popcorn with friends.", "A fun night out — no lasting effect."],
-  ["Dinner Out", 20, 0, false, "A meal at a restaurant.", "A nice treat — no lasting effect."],
+  ["Bubble Tea", 5, 0, false, "A cold drink after school.", "A small treat. No lasting effect."],
+  ["Movie Night", 12, 0, false, "Tickets and popcorn with friends.", "A fun night out. No lasting effect."],
+  ["Dinner Out", 20, 0, false, "A meal at a restaurant.", "A nice treat. No lasting effect."],
   ["Headphones", 30, 1, true, "Good quality headphones.", "Raises your lifestyle a little."],
   ["Trainers", 45, 1, true, "A solid pair of trainers.", "Raises your lifestyle a little."],
   ["Gaming Console", 85, 2, true, "A games console with a controller.", "Raises your lifestyle."],
@@ -217,73 +218,173 @@ const BT_INSURANCE_OTHER = [
     desc: "Helps with everyday surprises like doctor and dentist bills." }
 ];
 
-// Weekly random events. Everyone gets 2-5 a week, so amounts stay small.
-// amount: + you receive, - you pay.  cover: insurance payouts (bad property/transport only).
+// Weekly random events: everyday things that really happen. Everyone gets 2-5 a week, so base
+// amounts stay small (they are scaled up a little for 2 or 4 terms, see _btScaleEvent).
+// amount: + you receive, - you pay.  bad: true = an insurable setback (claimable on general insurance,
+// or on property / transport insurance when coverage + incident + cover are set).
+// Setbacks nobody can insure (fines, fees, treats gone wrong) are left as plain negative amounts.
 const BT_EVENTS = [
-  // good news
-  { name: "Found Money on the Footpath", amount: 5, repeatable: true, desc: "You spot a few coins and a note on your way home." },
-  { name: "Birthday Money from Family", amount: 20, desc: "A relative sends you a birthday card with cash inside." },
-  { name: "Sold Old Clothes Online", amount: 12, repeatable: true, desc: "Someone bought the jacket you never wear." },
-  { name: "Won the School Raffle", amount: 15, desc: "Your ticket was drawn out of the bucket." },
-  { name: "Helped a Neighbour", amount: 8, repeatable: true, desc: "You helped carry in the groceries and got a thank-you." },
-  { name: "Cash-in-Hand Odd Job", amount: 10, repeatable: true, desc: "A quick job washing cars paid cash." },
-  { name: "Tutored a Younger Student", amount: 14, repeatable: true, desc: "Your help with maths was worth a few dollars." },
-  { name: "Pocket Money Bonus", amount: 6, repeatable: true, desc: "Your family gave you a little extra this week." },
-  // bad news (anyone)
-  { name: "Library Late Fee", amount: -4, bad: true, repeatable: true, desc: "You forgot to return a book on time." },
-  { name: "Lost Your Wallet", amount: -10, bad: true, desc: "You left it on the bus and had to replace your cards." },
-  { name: "Cracked Phone Screen", amount: -15, bad: true, desc: "Oops. It slipped out of your hand." },
-  { name: "Doctor's Visit", amount: -12, bad: true, repeatable: true, desc: "You came down with the flu and needed a check-up." },
-  { name: "Dentist Emergency", amount: -20, bad: true, desc: "A toothache that couldn't wait." },
-  // bad news (only students who have the asset)
-  { name: "Scratched Car Door", amount: -15, bad: true, coverage: "transport", incident: ["vandalism"], repeatable: true,
-    cover: [["comprehensive", 15], ["truck", 15]], desc: "Someone keyed your vehicle in the car park." },
-  { name: "Minor Fender Bender", amount: -30, bad: true, coverage: "transport", incident: ["accident", "third-party"],
-    cover: [["comprehensive", 30], ["tpft", 12], ["third-party", 12], ["truck", 30]], desc: "A small bump at the traffic lights." },
-  { name: "Burglary: Things Stolen", amount: -20, bad: true, coverage: "property", incident: "contents", repeatable: true,
-    cover: [["contents", 20], ["sum-insured", 20], ["indemnity", 20]], desc: "Someone broke in and took some belongings." },
-  // choices
-  { type: "choice", name: "A Friend's Birthday", desc: "Your friend has a birthday this week. What will you do?",
-    options: [["Buy a nice gift", -10, "They loved it!"], ["Make a card", -2, "Thoughtful and cheap."], ["Do nothing", 0, "They didn't say anything, but it was a bit awkward."]] },
-  { type: "choice", name: "Gold Coin Donation Day", desc: "The school is raising money for charity.",
-    options: [["Donate a gold coin", -2, "You helped others."], ["Donate more", -5, "You were really generous."], ["Don't donate", 0, "You kept your money."]] },
-  { type: "choice", name: "Lunch Order", desc: "It's lunch time. What do you do?",
-    options: [["Buy lunch from the canteen", -6, "Tasty, but pricey."], ["Bring lunch from home", 0, "Cheap and healthy."]] },
-  { type: "choice", name: "Concert Tickets", desc: "A band you love is playing this weekend.",
-    options: [["Go to the concert", -25, "An amazing night."], ["Watch the highlights online", 0, "Not the same, but free."]] },
-  { type: "choice", name: "Big Sale Weekend", desc: "Everything is half price at the mall.",
-    options: [["Treat yourself", -20, "You bought something you didn't need, but you still feel quite happy."], ["Save your money", 0, "You walked right past."]] }
+  // ---- good news ----
+  { name: "Sold Your Old Textbooks", amount: 14, desc: "A younger student bought last year's textbooks off you." },
+  { name: "Babysitting Gig", amount: 18, repeatable: true, desc: "A neighbour paid you to watch their kids for an evening." },
+  { name: "Dog Returned Safely", amount: 10, desc: "You brought a lost dog home and the owner gave you a reward." },
+  { name: "Garage Sale Success", amount: 16, repeatable: true, desc: "You sold some old things from your room at the weekend sale." },
+  { name: "Cashback on Groceries", amount: 6, repeatable: true, desc: "Your bank paid you cashback on this week's grocery shop." },
+  { name: "Friend Referral Reward", amount: 10, desc: "A friend signed up to a service you recommended and you both got a bonus." },
+  { name: "Photo Competition Prize", amount: 20, desc: "Your photo placed third in a local competition." },
+  { name: "Work Expenses Paid Back", amount: 12, repeatable: true, desc: "Your employer reimbursed you for supplies you bought for work." },
+  { name: "Loyalty Card Full", amount: 5, repeatable: true, desc: "Your coffee stamp card filled up and earned store credit." },
+  { name: "Petrol Money from a Mate", amount: 7, repeatable: true, desc: "A classmate chipped in after you gave them a lift to school." },
+  { name: "Late Delivery Credit", amount: 6, repeatable: true, desc: "A courier company apologised for a late parcel with some credit." },
+  { name: "Lost Property Reward", amount: 8, repeatable: true, desc: "You handed in a lost phone and the owner said thanks with some cash." },
+  { name: "Lawn Mowing for Grandad", amount: 9, repeatable: true, desc: "Grandad slipped you some pocket money after you did his lawn." },
+  { name: "Sold a Handmade Craft", amount: 13, repeatable: true, desc: "Someone bought one of your handmade bracelets at the school fair." },
+  // ---- everyday costs (not insurable) ----
+  { name: "Fare Evasion Fine", amount: -12, repeatable: true, desc: "You forgot to tag off the bus and got a small fine." },
+  { name: "Free Trial Trap", amount: -9, repeatable: true, desc: "You forgot to cancel a free trial and it charged you." },
+  { name: "School Trip Contribution", amount: -15, desc: "The class is going on a trip and everyone pays a share." },
+  { name: "Late Phone Bill Fee", amount: -6, repeatable: true, desc: "You paid your phone bill a few days late." },
+  { name: "Time for a Haircut", amount: -14, repeatable: true, desc: "Your hair needed a trim before the school photos." },
+  { name: "Worn-Out School Shoes", amount: -24, desc: "Your old shoes finally fell apart and you needed a new pair." },
+  { name: "Broken Bag Zip", amount: -8, repeatable: true, desc: "The zip on your school bag broke and you paid for a repair." },
+  { name: "Phone Charger Died", amount: -7, repeatable: true, desc: "Your charger stopped working so you bought a new one." },
+  { name: "Sports Team Fees", amount: -16, desc: "Your sports team needed the season registration paid." },
+  { name: "Slept In, Took a Taxi", amount: -13, repeatable: true, desc: "You slept in and had to take a taxi to get to work on time." },
+  { name: "Bank Card Replacement Fee", amount: -4, repeatable: true, desc: "Your bank charged a small fee to send you a new card." },
+  // ---- health and belongings (claimable on general insurance) ----
+  { name: "Sprained Ankle", amount: -18, bad: true, repeatable: true, desc: "You rolled your ankle at sport and needed strapping and a check-up." },
+  { name: "Filling at the Dentist", amount: -22, bad: true, desc: "A toothache turned out to need a filling." },
+  { name: "Prescription Medicine", amount: -8, bad: true, repeatable: true, desc: "The doctor prescribed medicine for a bad chest infection." },
+  { name: "New Glasses", amount: -30, bad: true, desc: "Your eyesight changed and you needed a new pair of glasses." },
+  { name: "Emergency Vet Visit", amount: -26, bad: true, desc: "Your pet ate something it shouldn't and needed treatment." },
+  { name: "Stomach Bug Sick Day", amount: -14, bad: true, repeatable: true, desc: "You were too sick to work and needed a doctor's certificate." },
+  { name: "Broken Headphones", amount: -12, bad: true, repeatable: true, desc: "You sat on your headphones and heard a loud crunch." },
+  { name: "Allergic Reaction", amount: -15, bad: true, repeatable: true, desc: "A bad allergic reaction meant a trip to the after-hours clinic." },
+  // ---- vehicle setbacks (only go to students who own a vehicle) ----
+  { name: "Hailstorm Dents", amount: -35, bad: true, coverage: "transport", incident: ["storm"], repeatable: true,
+    cover: [["comprehensive", 35], ["truck", 35]], desc: "A sudden hailstorm left dents all over your vehicle." },
+  { name: "Chipped Windscreen", amount: -20, bad: true, coverage: "transport", incident: ["accident"], repeatable: true,
+    cover: [["comprehensive", 20], ["truck", 20]], desc: "A stone flicked up on the motorway and chipped your windscreen." },
+  { name: "Runaway Shopping Trolley", amount: -22, bad: true, coverage: "transport", incident: ["accident"], repeatable: true,
+    cover: [["comprehensive", 22], ["truck", 22]], desc: "A runaway trolley rolled into your parked vehicle." },
+  { name: "Vehicle Broken Into", amount: -28, bad: true, coverage: "transport", incident: ["theft"], repeatable: true,
+    cover: [["comprehensive", 28], ["tpft", 28], ["truck", 28]], desc: "Someone smashed a window and took things from your vehicle." },
+  { name: "Graffiti on Your Vehicle", amount: -25, bad: true, coverage: "transport", incident: ["vandalism"], repeatable: true,
+    cover: [["comprehensive", 25], ["truck", 25]], desc: "Someone sprayed paint along the side of your vehicle overnight." },
+  { name: "Reversed Into a Fence", amount: -30, bad: true, coverage: "transport", incident: ["accident", "third-party"], repeatable: true,
+    cover: [["comprehensive", 30], ["tpft", 12], ["third-party", 12], ["truck", 30]], desc: "You backed out of a driveway and clipped a neighbour's fence." },
+  // ---- home setbacks (only go to students with a home) ----
+  { name: "Power Surge Fried the TV", amount: -35, bad: true, coverage: "property", incident: "contents",
+    cover: [["contents", 35], ["sum-insured", 35], ["indemnity", 35]], desc: "A power surge during a storm destroyed your television." },
+  { name: "Break-In While You Were Out", amount: -40, bad: true, coverage: "property", incident: "contents",
+    cover: [["contents", 40], ["sum-insured", 40], ["indemnity", 40]], desc: "Someone broke in and took some of your belongings." },
+  { name: "Fridge Gave Up", amount: -28, bad: true, coverage: "property", incident: "contents",
+    cover: [["contents", 28], ["sum-insured", 28], ["indemnity", 28]], desc: "Your fridge broke down and all the food inside was ruined." },
+  { name: "Storm Blew Down the Fence", amount: -22, bad: true, coverage: "property", incident: "house", repeatable: true,
+    cover: [["sum-insured", 22]], desc: "A strong wind flattened part of your fence." },
+  { name: "Smashed Window", amount: -26, bad: true, coverage: "property", incident: "house", repeatable: true,
+    cover: [["sum-insured", 26]], desc: "A stray cricket ball smashed one of your windows." },
+  // ---- choices ----
+  { type: "choice", name: "Farewell Gift Collection", desc: "Your class is chipping in for a teacher's farewell gift. What will you do?",
+    options: [["Chip in generously", -8, "The teacher was really touched."], ["Chip in a little", -3, "Every bit helped."], ["Skip it", 0, "You kept your money, but felt a little guilty."]] },
+  { type: "choice", name: "Gym Sign-Up Offer", desc: "A gym is offering a month of membership for a sign-up fee.",
+    options: [["Sign up", -20, "You felt fitter and more energetic."], ["Not this time", 0, "You saved your money and stayed on the couch."]] },
+  { type: "choice", name: "Extended Warranty Pitch", desc: "The shop assistant tries to sell you an extended warranty on your new gadget.",
+    options: [["Buy the warranty", -12, "Nothing broke, so it was not needed."], ["Say no thanks", 0, "You kept your money in your pocket."]] },
+  { type: "choice", name: "Flash Sale on Trainers", desc: "A limited-time sale pops up on your favourite trainers.",
+    options: [["Grab a pair", -25, "Great shoes, but they were a want, not a need."], ["Scroll past", 0, "You stuck to your budget."]] },
+  { type: "choice", name: "Cousin Needs a Loan", desc: "Your cousin asks to borrow some money for the bus.",
+    options: [["Lend it", -10, "They promised to pay you back soon."], ["Say no politely", 0, "They understood."]] },
+  { type: "choice", name: "Group Dinner Bill", desc: "Your friends ordered a lot and want to split the bill evenly, but you only had a small meal.",
+    options: [["Split it evenly", -18, "Fair is fair, but it stung a little."], ["Pay only for your meal", -10, "A bit awkward, but they agreed."]] },
+  { type: "choice", name: "Coffee Habit", desc: "Your friends grab a coffee every morning before school.",
+    options: [["Join them every day", -15, "Tasty, but it adds up quickly."], ["Make coffee at home", -3, "Cheap and just as good."]] },
+  { type: "choice", name: "Weekend Moving Help", desc: "A neighbour offers to pay you for helping them move house.",
+    options: [["Accept the job", 20, "Hard work, but you earned it."], ["Decline", 0, "You had a lazy weekend."]] },
+  { type: "choice", name: "Op Shop Find", desc: "You spot a great jacket in the op shop window.",
+    options: [["Buy it", -9, "A bargain you wear all the time."], ["Leave it", 0, "You walked out empty-handed."]] },
+  { type: "choice", name: "Fun Run Fundraiser", desc: "Your school is holding a charity fun run.",
+    options: [["Enter and fundraise", -10, "You finished the course and helped a good cause."], ["Sponsor a friend", -5, "Your friend was grateful."], ["Skip it", 0, "You cheered from the sidelines."]] },
+  { type: "choice", name: "Takeaway Temptation", desc: "You are tired after work and your favourite takeaway shop is on the way home.",
+    options: [["Order dinner out", -15, "Delicious, but pricey."], ["Cook at home", -4, "Healthy and cheap."]] }
 ];
 
-// Big events: a library of bigger moments a teacher can launch for the class.
-// cost: set dollars (or percent of wage for income events). takes = student loses the
-// job / property / vehicle if they can't pay and aren't insured.
+// Big events: major life moments a teacher can launch for the class (losing a job, a home or a vehicle,
+// and the good surprises too). cost: set dollars, or percent of the weekly wage for income events.
+// takes = the student loses the job / property / vehicle if they can't pay and aren't insured.
+// Costs and payouts are scaled by the term choice (x1 / x2 / x4).
 const BT_BIG_EVENTS = [
-  { name: "Workplace Injury", module: "income", kind: "bad", cost: 60, takes: false,
-    desc: "You hurt your back at work and need treatment. Income Protection can help." },
-  { name: "Job Retraining Course", module: "income", kind: "bad", cost: 80, takes: true,
-    desc: "Your role is changing. Pay for a retraining course or lose your job." },
-  { name: "Employee of the Month Bonus", module: "income", kind: "good", costMode: "percent", costPercent: 50,
-    desc: "Your boss rewards your hard work with half a week's pay." },
-  { name: "Major House Fire", module: "property", kind: "bad", incident: "both", cost: 400, takes: true,
+  // ---- income ----
+  { name: "Made Redundant", module: "income", kind: "bad", cost: 120, takes: true,
+    desc: "Your company is cutting jobs and your role is on the list. Cover the costs of the change or lose your job." },
+  { name: "Employer Goes Bust", module: "income", kind: "bad", cost: 130, takes: true,
+    desc: "Your employer has gone out of business. Cover your costs while you find new work, or lose your job." },
+  { name: "Licence Lapsed", module: "income", kind: "bad", cost: 60, takes: true,
+    desc: "A certificate you need for work has run out. Pay for the renewal course or lose your job." },
+  { name: "Serious Illness", module: "income", kind: "bad", cost: 100, takes: false,
+    desc: "You were off work for weeks and your savings took a hit. Income Protection can help." },
+  { name: "Workplace Accident", module: "income", kind: "bad", cost: 90, takes: false,
+    desc: "You hurt yourself on the job and needed time off and treatment. Income Protection can help." },
+  { name: "Burnout Recovery", module: "income", kind: "bad", cost: 70, takes: false,
+    desc: "Too many long shifts left you worn out and you needed time to recover. Income Protection can help." },
+  { name: "Promotion Bonus", module: "income", kind: "good", costMode: "percent", costPercent: 75,
+    desc: "Your boss was so impressed that you were handed a bonus on top of your wage." },
+  { name: "Profit Share Payout", module: "income", kind: "good", costMode: "percent", costPercent: 40,
+    desc: "The business had a great quarter and shared some of the profit with staff." },
+  { name: "Overtime Windfall", module: "income", kind: "good", costMode: "percent", costPercent: 30,
+    desc: "A busy period meant plenty of extra paid shifts." },
+  // ---- property ----
+  { name: "House Fire", module: "property", kind: "bad", incident: "both", cost: 400, takes: true,
     cover: [["sum-insured", 400], ["indemnity", 60], ["contents", 60]],
     desc: "A fire has badly damaged your home and everything in it." },
-  { name: "Burst Water Pipes", module: "property", kind: "bad", incident: "house", cost: 120, takes: false,
-    cover: [["sum-insured", 120]], desc: "A pipe burst in the night and flooded the house." },
+  { name: "Flooded Home", module: "property", kind: "bad", incident: "both", cost: 300, takes: true,
+    cover: [["sum-insured", 300], ["indemnity", 50], ["contents", 50]],
+    desc: "Heavy rain flooded your home and ruined your belongings." },
+  { name: "Earthquake Damage", module: "property", kind: "bad", incident: "house", cost: 350, takes: true,
+    cover: [["sum-insured", 350], ["indemnity", 0]],
+    desc: "A big earthquake cracked the foundations of your house." },
+  { name: "Storm Rips Off the Roof", module: "property", kind: "bad", incident: "house", cost: 200, takes: false,
+    cover: [["sum-insured", 200]], desc: "A fierce storm tore part of your roof away." },
+  { name: "Fallen Tree on the House", module: "property", kind: "bad", incident: "house", cost: 220, takes: false,
+    cover: [["sum-insured", 220]], desc: "A big tree came down on your house during a storm." },
+  { name: "Burglary: Valuables Stolen", module: "property", kind: "bad", incident: "contents", cost: 150, takes: false,
+    cover: [["contents", 150], ["sum-insured", 150], ["indemnity", 150]],
+    desc: "Burglars cleared out your valuables while you were away." },
+  { name: "Home Insulation Grant", module: "property", kind: "good", cost: 80,
+    desc: "The government helped pay for insulating your home." },
   { name: "Council Rates Rebate", module: "property", kind: "good", cost: 30,
     desc: "The council refunds part of your yearly rates." },
-  { name: "Car Accident", module: "transport", kind: "bad", incident: ["accident", "third-party"], cost: 150, takes: true,
-    cover: [["comprehensive", 150], ["tpft", 60], ["third-party", 60], ["truck", 150]],
-    desc: "You crashed your vehicle and damaged someone else's car too." },
-  { name: "Vehicle Stolen", module: "transport", kind: "bad", incident: ["theft"], cost: 120, takes: false,
-    cover: [["comprehensive", 120], ["tpft", 120], ["truck", 120]], desc: "Someone broke in and stole parts from your vehicle." },
-  { name: "Storm Damage", module: "transport", kind: "bad", incident: ["storm"], cost: 80, takes: false,
-    cover: [["comprehensive", 80], ["truck", 80]], desc: "A tree fell on your vehicle in a storm." },
+  // ---- transport ----
+  { name: "Major Crash", module: "transport", kind: "bad", incident: ["accident", "third-party"], cost: 220, takes: true,
+    cover: [["comprehensive", 220], ["tpft", 80], ["third-party", 80], ["truck", 220]],
+    desc: "You crashed your vehicle and damaged someone else's property too." },
+  { name: "Vehicle Stolen", module: "transport", kind: "bad", incident: ["theft"], cost: 220, takes: true,
+    cover: [["comprehensive", 220], ["tpft", 220], ["truck", 220]],
+    desc: "Thieves stole your vehicle from outside your home." },
+  { name: "Vehicle Fire", module: "transport", kind: "bad", incident: ["fire"], cost: 200, takes: true,
+    cover: [["comprehensive", 200], ["tpft", 200], ["truck", 200]],
+    desc: "An electrical fault set your vehicle on fire." },
+  { name: "Flash Flood", module: "transport", kind: "bad", incident: ["storm"], cost: 160, takes: true,
+    cover: [["comprehensive", 160], ["truck", 160]],
+    desc: "A flash flood swept through the car park and ruined your vehicle." },
+  { name: "Hit and Run", module: "transport", kind: "bad", incident: ["accident"], cost: 100, takes: false,
+    cover: [["comprehensive", 100], ["truck", 100]],
+    desc: "A driver hit your parked vehicle and drove off." },
+  { name: "Slashed Tyres", module: "transport", kind: "bad", incident: ["vandalism"], cost: 80, takes: false,
+    cover: [["comprehensive", 80], ["truck", 80]],
+    desc: "Vandals slashed all four of your tyres overnight." },
+  { name: "Fuel Voucher Win", module: "transport", kind: "good", cost: 25,
+    desc: "You won a fuel voucher in a local prize draw." },
   { name: "Free Warrant of Fitness", module: "transport", kind: "good", cost: 20,
     desc: "A garage gave you a free safety check." },
+  { name: "Road Charges Refund", module: "transport", kind: "good", cost: 40,
+    desc: "You were refunded for road charges you overpaid." },
+  // ---- general (open to everyone) ----
   { name: "Scholarship Award", module: "general", kind: "good", cost: 80, desc: "You won a scholarship for good grades." },
   { name: "Tax Refund", module: "general", kind: "good", cost: 35, desc: "You overpaid your tax and got some back." },
-  { name: "Surprise Inheritance", module: "general", kind: "good", cost: 100, desc: "A distant relative left you a little money." }
+  { name: "Surprise Inheritance", module: "general", kind: "good", cost: 100, desc: "A distant relative left you a little money." },
+  { name: "Competition Prize", module: "general", kind: "good", cost: 60, desc: "You won a big prize in a community competition." },
+  { name: "Cost-of-Living Payment", module: "general", kind: "good", cost: 50, desc: "The government paid out a support grant to help with everyday costs." }
 ];
 
 // Life events a teacher can give to students (benefits last while it is held).
@@ -458,12 +559,44 @@ const T29_BASE_TEMPLATE_TERM_OPTIONS = [
 ];
 
 // Scale for a term choice. money: one-off prices, balances and limits (x1 / x2 / x4).
-// time: weeks-based things (x1 / x1.5 / x2). Weekly flows (wages, rent, bills, weekly events,
-// side hustles, interest and tax rates) are never scaled. M() and W() apply the scale.
+// time: weeks-based things (x1 / x1.5 / x2). Weekly flows (wages, rent, bills,
+// side hustles, interest and tax rates) are never scaled; weekly events scale gently (see _btScaleEvent). M() and W() apply the scale.
 function t29BaseTemplateScale(terms) {
   const t = [1, 2, 4].includes(Number(terms)) ? Number(terms) : 1;
   const time = t === 1 ? 1 : t === 2 ? 1.5 : 2;
   return { terms: t, money: t, time, M: n => _btMoney(Number(n) * t), W: n => Math.max(1, Math.round(Number(n) * time)) };
+}
+
+// A weekly random event with the scale applied. Weekly events happen 2-5 times a week, so they scale
+// gently (x1 / x1.5 / x2, the same as time-based things) rather than with the big x1 / x2 / x4 prices.
+// Insurance payouts and every choice amount scale with it, so a claim still pays what it should.
+function _btScaleEvent(e, S) {
+  const E = n => Math.round(Number(n) * S.time);
+  return {
+    ...e,
+    ...(e.amount != null ? { amount: E(e.amount) } : {}),
+    ...(e.cover ? { cover: e.cover.map(c => [c[0], E(c[1])]) } : {}),
+    ...(e.options ? { options: e.options.map(o => [o[0], E(o[1]), o[2]]) } : {})
+  };
+}
+// The shapes addEventDef / addBigEventDef (and the builders behind them) take.
+function _btEventInput(e) {
+  const isChoice = e.type === "choice";
+  return {
+    type: isChoice ? "choice" : "fixed", name: e.name, amount: e.amount || 0, description: e.desc,
+    repeatable: !!e.repeatable, severity: e.bad ? "bad" : "neutral",
+    coverage: e.coverage || "general", incident: e.incident || null,
+    insuranceCover: (e.cover || []).map(c => ({ type: c[0], payout: c[1] })),
+    options: (e.options || []).map(o => ({ label: o[0], amount: o[1], outcome: o[2] }))
+  };
+}
+function _btBigEventInput(e) {
+  return {
+    name: e.name, module: e.module, kind: e.kind === "good" ? "good" : "bad", incident: e.incident || null,
+    insuranceCover: (e.cover || []).map(c => ({ type: c[0], payout: c[1] })),
+    cost: e.cost, costMode: e.costMode, costPercent: e.costPercent,
+    description: e.desc, takesAsset: e.takes !== false
+  };
 }
 
 // The content tables with the term scale applied (1 term = the tables above, unchanged).
@@ -479,11 +612,21 @@ function t29BaseTemplateData(terms) {
       ...(e.cost != null && e.costMode !== "percent" ? { cost: M(e.cost) } : {}),
       ...(e.cover ? { cover: e.cover.map(c => [c[0], M(c[1])]) } : {})
     })),
+    events: BT_EVENTS.map(e => _btScaleEvent(e, S)),
     life: BT_LIFE.map(l => l.b.cashOnce ? { ...l, b: { ...l.b, cashOnce: M(l.b.cashOnce) } } : l),
     cards: BT_CARD_PLANS.map(p => ({ ...p, limit: M(p.limit) })),
     accounts: BT_ACCOUNT_PLANS.map(p => p.minBalance ? { ...p, minBalance: M(p.minBalance) } : p),
     companies: BT_COMPANIES.map(c => [c[0], c[1], Math.round(c[2] * S.money), c[3], c[4]]) // more shares, same prices
   };
+}
+
+// The ready-made random events and big events for a term choice, as plain inputs (not yet saved).
+// Used by the Teacher and Big Events pages as the "recommended events" for a class built from scratch.
+function t29BaseTemplateEventInputs(terms) {
+  return t29BaseTemplateData(terms).events.map(_btEventInput);
+}
+function t29BaseTemplateBigEventInputs(terms) {
+  return t29BaseTemplateData(terms).bigEvents.map(_btBigEventInput);
 }
 
 function t29ApplyBaseTemplate(cls, terms) {
@@ -587,40 +730,9 @@ function t29ApplyBaseTemplate(cls, terms) {
     });
   });
 
-  // ---- Weekly random events ----
-  cls.eventDefs = BT_EVENTS.map(e => {
-    const isChoice = e.type === "choice";
-    const input = {
-      type: isChoice ? "choice" : "fixed", name: e.name, amount: e.amount || 0, description: e.desc,
-      repeatable: !!e.repeatable, severity: e.bad ? "bad" : "neutral",
-      coverage: e.coverage || "general", incident: e.incident || null,
-      insuranceCover: (e.cover || []).map(c => ({ type: c[0], payout: c[1] })),
-      options: (e.options || []).map(o => ({ label: o[0], amount: o[1], outcome: o[2] }))
-    };
-    const amt = weeklyEventAmountFields(input);
-    return {
-      id: uid("ev"), name: input.name, amount: amt.amountMode === "percent" ? 0 : Number(input.amount) || 0,
-      description: input.description, repeatable: input.repeatable,
-      severity: input.severity === "bad" ? "bad" : "neutral", active: true,
-      ...weeklyEventInsurance(input), ...amt,
-      type: isChoice ? "choice" : "fixed", options: isChoice ? cleanEventOptions(input.options) : []
-    };
-  });
-
-  // ---- Big events ----
-  cls.bigEventDefs = d.bigEvents.map(e => {
-    const kind = e.kind === "good" ? "good" : "bad";
-    const module = resolveBigEventModule(e.module, kind);
-    const coverage = MODULE_TO_COVERAGE[module];
-    const incident = kind === "bad" ? cleanIncident(coverage, e.incident || null) : null;
-    return {
-      id: uid("big"), name: e.name, module, kind, incident,
-      insuranceCover: kind === "bad"
-        ? cleanInsuranceCover(coverage, (e.cover || []).map(c => ({ type: c[0], payout: c[1] })), incident) : [],
-      ...cleanBigEventCost({ cost: e.cost, costMode: e.costMode, costPercent: e.costPercent }, module),
-      description: e.desc, active: true, takesAsset: e.takes === false ? false : true
-    };
-  });
+  // ---- Weekly random events and big events (built the same way the teacher's own forms build them) ----
+  cls.eventDefs = d.events.map(e => buildEventDef(_btEventInput(e)));
+  cls.bigEventDefs = d.bigEvents.map(e => buildBigEventDef(_btBigEventInput(e)));
 
   // ---- Life events ----
   cls.lifeItems = d.life.map(l => ({
@@ -716,7 +828,7 @@ function t29BaseTemplateSummary(terms) {
     `${d.properties.length} home listings (${propUnits} homes, $${d.properties[0].price}–$${d.properties[d.properties.length - 1].price}) and ${BT_RENTALS.length} rental types`,
     `${d.vehicles.length} vehicles (bikes, cars and a truck) and a weekly bus pass`,
     `Insurance for cars, homes, income and everyday life`,
-    `${BT_EVENTS.length} weekly random events and ${BT_BIG_EVENTS.length} big events`,
+    `${BT_EVENTS.length} real-life weekly random events and ${BT_BIG_EVENTS.length} big events (job loss, house and vehicle disasters, windfalls), scaled to the term`,
     `${BT_LIFE.length} life events and ${BT_HUSTLES.length} side hustles`,
     `Loans, term deposits, credit cards and extra bank accounts`,
     `KiwiSaver and a stock market with ${BT_COMPANIES.length} companies`,

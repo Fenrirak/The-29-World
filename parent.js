@@ -192,7 +192,7 @@ function pvBuildReportHtml(doc, opts) {
 
 function pvRender(doc) {
   const v = doc.view || {};
-  document.title = `${v.name || "Report card"} — Family View — The 29 World`;
+  document.title = `${v.name || "Report card"}, Family View | The 29 World`;
   document.getElementById("parentReport").innerHTML = pvBuildReportHtml(doc);
   document.getElementById("parentLoading").classList.add("hidden");
   document.getElementById("parentReport").classList.remove("hidden");

@@ -122,7 +122,7 @@ function openStudentReport(username) {
   document.getElementById("reportModalName").innerHTML =
     `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${escapeHtml(s.name)}`;
   document.getElementById("reportModalSubtitle").textContent =
-    `@${s.username} — this month, covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
+    `@${s.username}. This month, covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
   // The modal's own heading isn't printed (it sits with the buttons), so
   // the printout gets the name and dates here instead.
   document.getElementById("reportModalBody").innerHTML =
@@ -142,7 +142,7 @@ function renderStudent() {
   document.getElementById("myPeriodRange").textContent = `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)} (updates automatically)`;
   const body = document.getElementById("myReportBody");
   if (!s) {
-    body.innerHTML = `<p class="muted-small">No data yet — get started with a job, some savings, or a purchase and check back here.</p>`;
+    body.innerHTML = `<p class="muted-small">No data yet. Get started with a job, some savings, or a purchase and check back here.</p>`;
     return;
   }
   body.innerHTML = `
@@ -173,7 +173,7 @@ function netWorthChartHTML(s) {
   const pts = netWorthSeries(s);
   const head = `<div class="nw-trend-head"><h3>${icon("medal", 16)} Net worth over time</h3><span class="muted-small">Noted automatically every Monday</span></div>`;
   if (pts.length < 2) {
-    return `<section class="nw-trend">${head}<p class="muted-small">Your trend starts building once your net worth has been noted for a Monday &mdash; check back soon.</p></section>`;
+    return `<section class="nw-trend">${head}<p class="muted-small">Your trend starts building once your net worth has been noted for a Monday. Check back soon.</p></section>`;
   }
   const W = 640, H = 230, L = 64, R = 18, T = 16, B = 34, pw = W - L - R, ph = H - T - B;
   let max = Math.max(...pts.map(p => p.v)), min = Math.min(...pts.map(p => p.v));
@@ -210,7 +210,7 @@ function netWorthChartHTML(s) {
 }
 
 /* ---------------- Shared per-student breakdown ---------------- */
-const REPORT_LIFETIME_NOTE = "Everything since the account was made, or since the class was last restarted — it doesn't reset when the month rolls over.";
+const REPORT_LIFETIME_NOTE = "Everything since the account was made, or since the class was last restarted. It doesn't reset when the month rolls over.";
 function renderBars(map, colorClass) {
   const entries = Object.entries(map || {}).sort((a, b) => b[1] - a[1]);
   if (!entries.length) return `<p class="muted-small">Nothing here yet.</p>`;
@@ -230,7 +230,7 @@ function renderLoanHistory(loans) {
     ${loans.map(l => `<tr>
       <td>${l.takenDate || "—"}</td><td>${fmtMoney(l.principal)}</td><td>${l.rate}%/wk</td><td>${l.termWeeks} wk</td><td>${l.dueDate || "—"}</td>
       <td>${l.status === "active"
-        ? `Active — ${fmtMoney(l.owed)} owed`
+        ? `Active: ${fmtMoney(l.owed)} owed`
         : (l.onTime === null ? "Paid off" : l.onTime ? "Paid off on time" : "Paid off late")}</td>
     </tr>`).join("")}
   </tbody></table></div>`;
@@ -302,7 +302,7 @@ function closeFamilyModal() {
   document.getElementById("familyModal").classList.add("hidden");
 }
 
-const FAMILY_LINK_EXPLAINER = `<p class="muted-small">Anyone with this link can see this report card — no login needed, and they can't change anything. It updates whenever the student or their teacher uses the site. Only share it with family.</p>`;
+const FAMILY_LINK_EXPLAINER = `<p class="muted-small">Anyone with this link can see this report card. No login needed, and they can't change anything. It updates whenever the student or their teacher uses the site. Only share it with family.</p>`;
 
 function familyLinkBoxHtml(url, username) {
   return `
@@ -329,11 +329,11 @@ async function copyFamilyLink(btn, text) {
       try { copied = document.execCommand("copy"); } catch (e2) { copied = false; }
     }
   }
-  t29Toast(copied ? "Link copied — paste it into a message or email." : "Couldn't copy automatically — select the link and copy it.", { type: copied ? "success" : "info" });
+  t29Toast(copied ? "Link copied. Paste it into a message or email." : "Couldn't copy automatically. Select the link and copy it.", { type: copied ? "success" : "info" });
 }
 
 async function showFamilyLinkFor(username, name) {
-  openFamilyModal(`Family link — ${name}`, `<p class="muted-small"><span class="t29-spinner"></span> Making the link…</p>`);
+  openFamilyModal(`Family link: ${name}`, `<p class="muted-small"><span class="t29-spinner"></span> Making the link…</p>`);
   const res = await createParentLink(username);
   if (!res.ok) {
     document.getElementById("familyModalBody").innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`;
@@ -358,10 +358,10 @@ async function previewFamilyViewFor(username) {
     if (!cls || !student) throw new Error("not found");
     const teacher = await getUserCached(cls.teacher).catch(() => null);
     const doc = { view: _buildParentView(student, cls, teacher ? teacher.name : ""), updatedAt: Date.now() };
-    document.getElementById("familyPreviewTitle").innerHTML = icon("users", 20) + " Family view preview — " + escapeHtml(student.name || student.username);
+    document.getElementById("familyPreviewTitle").innerHTML = icon("users", 20) + " Family view preview: " + escapeHtml(student.name || student.username);
     body.innerHTML = pvBuildReportHtml(doc, { preview: true });
     document.getElementById("familyPreviewActions").innerHTML = `
-      <button class="btn small gold" onclick="closeFamilyPreview();showFamilyLinkFor('${escapeJsAttr(student.username)}', '${escapeJsAttr(student.name || student.username)}')">Looks good — make the family link</button>`;
+      <button class="btn small gold" onclick="closeFamilyPreview();showFamilyLinkFor('${escapeJsAttr(student.username)}', '${escapeJsAttr(student.name || student.username)}')">Looks good. Make the family link</button>`;
     modal.scrollTop = 0;
   } catch (e) {
     console.error(e);
@@ -459,7 +459,7 @@ async function copyAllFamilyLinks() {
   const text = students.map(s => `${s.name}: ${parentViewUrl(s.parentViewToken)}`).join("\n");
   try {
     await navigator.clipboard.writeText(text);
-    t29Toast(`Copied ${students.length} link${students.length === 1 ? "" : "s"} — one per line, with each student's name.`, { type: "success" });
+    t29Toast(`Copied ${students.length} link${students.length === 1 ? "" : "s"}. One per line, with each student's name.`, { type: "success" });
   } catch (e) {
     alert(text);
   }

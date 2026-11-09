@@ -62,12 +62,12 @@ function renderExemptionBox(u) {
   const limitMin = u.dailyLimitMinutes;
   document.getElementById("explainText").textContent =
     `Your teacher has set a daily limit of ${limitMin} minute${limitMin === 1 ? "" : "s"} on The 29 World, and you've used it all up for today.`;
-  document.getElementById("resetNote").textContent = "Your time resets at midnight — come back tomorrow.";
+  document.getElementById("resetNote").textContent = "Your time resets at midnight. Come back tomorrow.";
 
   const box = document.getElementById("exemptionBox");
   const state = timeExemptionState(u);
   if (state === "pending") {
-    box.innerHTML = `<p class="muted-small">${icon("send", 13)} Your request for more time has been sent — waiting on your teacher.</p>`;
+    box.innerHTML = `<p class="muted-small">${icon("send", 13)} Your request for more time has been sent. Waiting on your teacher.</p>`;
   } else if (state === "declined") {
     box.innerHTML = `<p class="muted-small">Your teacher declined your request for more time today. You can ask again tomorrow.</p>`;
   } else {
