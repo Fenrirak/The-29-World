@@ -468,8 +468,7 @@ function notifQuizItems(me, cls) {
   const today = nzDateKey();
   const labelOf = key => (LIFESTYLE_LOCKABLE_MODULES.find(m => m.key === key) || {}).label || key;
   return (cls.quizzes || []).filter(q => {
-    if (!q.active || !q.moduleKey) return false;
-    if (!LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === q.moduleKey)) return false;
+    if (!q.active || !quizModuleKey(q)) return false;
     const r = quizResultFor(me, q.id);
     return !r || !r.passed;
   }).sort((a, b) => (quizDeadlineState(b, today) === "overdue") - (quizDeadlineState(a, today) === "overdue")).slice(0, 5).map(q => {

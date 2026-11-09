@@ -347,7 +347,7 @@ const BT_QUIZZES = [
     ["Which fund usually grows the most over a long time, with the most ups and downs?", ["Conservative", "Balanced", "Growth", "They're all the same"], 2, "Growth funds hold more shares, so they swing more."],
     ["Joining KiwiSaver early helps because...", ["Money has longer to grow", "You pay less tax", "It's free money", "You get more holidays"], 0, "More time means more growth through compounding."] ] }
 ];
-// The other ten modules, so EVERY lockable module has a ready-made quiz (see BT_ALL_QUIZZES).
+// The other nine modules, so every other lockable module has a ready-made quiz (see BT_ALL_QUIZZES).
 const BT_QUIZZES_MORE = [
   { title: "Banking Basics", moduleKey: "bank", description: "Savings accounts, fees and keeping your money safe.", questions: [
     ["What is a savings account mainly for?", ["Everyday shopping", "Keeping money safe while it earns interest", "Borrowing money", "Paying tax"], 1, "Savings accounts hold money you don't need right now and pay you interest for it."],
@@ -402,13 +402,7 @@ const BT_QUIZZES_MORE = [
     ["A marketplace fee means...", ["The seller keeps everything", "A share of the sale goes to the marketplace", "The buyer is paid", "It's free"], 1, "Fees come out of what the seller receives."],
     ["Before accepting an offer, check...", ["That it covers what you paid and the fees", "Nothing", "Only the buyer's name", "The time"], 0, "Work out what you'll actually take home."],
     ["Making an offer is...", ["Never allowed", "Negotiating a price both sides agree on", "Cheating", "Stealing"], 1, "Negotiation is a normal part of buying and selling."],
-    ["Selling something you no longer need can...", ["Always lose money", "Free up cash for other goals", "Only cost tax", "Be illegal"], 1, "Unused things can become useful cash."] ] },
-  { title: "Side Hustles", moduleKey: "sidehustle", description: "Earning extra, and managing it well.", questions: [
-    ["A side hustle is...", ["Your main job", "Extra work for extra income", "A loan", "A hobby with no pay"], 1, "It's income on top of your main job."],
-    ["Extra income from a side hustle is best...", ["Ignored", "Planned into your budget, with some saved", "Spent immediately", "Hidden"], 1, "Plan extra income instead of letting it vanish."],
-    ["Before taking a side hustle, consider...", ["The time it takes and the effect on school or your main job", "Nothing", "Only the pay", "Only the colour"], 0, "Extra work has a cost in time and energy."],
-    ["Having more than one income source helps because...", ["You lose everything if one stops", "If one dries up you still have others", "Tax disappears", "Prices fall"], 1, "More sources means less risk."],
-    ["Income from a side job is...", ["Never taxed", "Often still taxable income", "Not real money", "Free of rules"], 1, "Side income usually counts as income too."] ] }
+    ["Selling something you no longer need can...", ["Always lose money", "Free up cash for other goals", "Only cost tax", "Be illegal"], 1, "Unused things can become useful cash."] ] }
 ];
 const BT_ALL_QUIZZES = BT_QUIZZES.concat(BT_QUIZZES_MORE);
 

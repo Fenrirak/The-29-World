@@ -4273,6 +4273,14 @@ const LIFESTYLE_LOCKABLE_MODULES = [
   { key: "sidehustle", label: "Side hustle" }
 ];
 
+// Modules a quiz can be attached to. Side hustle isn't one: it has no page of its own to put a
+// quiz over (it can still be locked by lifestyle rating).
+const QUIZ_UNLOCKABLE_MODULES = LIFESTYLE_LOCKABLE_MODULES.filter(m => m.key !== "sidehustle");
+// The module a quiz really locks ("" for practice-only quizzes, including any old side hustle one).
+function quizModuleKey(q) {
+  return q && QUIZ_UNLOCKABLE_MODULES.some(m => m.key === q.moduleKey) ? q.moduleKey : "";
+}
+
 async function saveLifestyleLock(classCode, threshold, modules) {
   const clean = {
     // Uncapped to match the now-uncapped lifestyle score — a teacher may
@@ -4315,8 +4323,7 @@ function getQuizLockedModulesFromData(cls, user) {
   const results = user.quizResults || {};
   const locked = [];
   (cls.quizzes || []).forEach(q => {
-    if (!q.active || !q.moduleKey) return;
-    if (!LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === q.moduleKey)) return;
+    if (!q.active || !quizModuleKey(q)) return;
     const r = results[q.id];
     if (!r || !r.passed) {
       if (!locked.includes(q.moduleKey)) locked.push(q.moduleKey);
@@ -4352,7 +4359,7 @@ function isModuleLockedForStudentFromData(cls, user, username, moduleKey) {
 function _classHasAnyModuleLock(cls) {
   const lock = cls.lifestyleLock;
   const lifestyleOn = !!(lock && lock.modules && lock.modules.length);
-  const quizOn = !!(cls.quizzes || []).some(q => q.active && q.moduleKey);
+  const quizOn = !!(cls.quizzes || []).some(q => q.active && quizModuleKey(q));
   return lifestyleOn || quizOn;
 }
 
@@ -4520,7 +4527,7 @@ function normalizeQuiz(q, existing) {
     id: (existing && existing.id) || q.id || uid("quiz"),
     title: String(q.title || "Untitled quiz").trim(),
     description: String(q.description || "").trim(),
-    moduleKey: LIFESTYLE_LOCKABLE_MODULES.some(m => m.key === q.moduleKey) ? q.moduleKey : "",
+    moduleKey: quizModuleKey(q),
     // A pass mark of 0 is allowed (anyone who finishes passes) — only a
     // missing one falls back to the default.
     passMark: Math.max(0, Math.min(100, quizPassMarkOrDefault(q.passMark))),

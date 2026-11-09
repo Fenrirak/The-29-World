@@ -22,7 +22,8 @@ function esc(s) {
 
 function moduleLabel(key) {
   if (!key) return "Practice only";
-  const m = LIFESTYLE_LOCKABLE_MODULES.find(x => x.key === key);
+  const m = QUIZ_UNLOCKABLE_MODULES.find(x => x.key === key);
+  if (!m) return "Practice only";
   return m ? m.label : key;
 }
 
@@ -95,7 +96,7 @@ async function render() {
 function buildModuleSelect() {
   const sel = document.getElementById("qModule");
   sel.innerHTML = `<option value="">Nothing — practice only</option>` +
-    LIFESTYLE_LOCKABLE_MODULES.map(m => `<option value="${m.key}">${esc(m.label)}</option>`).join("");
+    QUIZ_UNLOCKABLE_MODULES.map(m => `<option value="${m.key}">${esc(m.label)}</option>`).join("");
 }
 
 async function renderTeacher() {
@@ -106,17 +107,17 @@ async function renderTeacher() {
   const list = document.getElementById("teacherQuizList");
   document.getElementById("noTeacherQuizzes").classList.toggle("hidden", quizzes.length > 0);
   list.innerHTML = quizzes.map(q => `
-    <div class="quiz-card${q.moduleKey ? " locking" : ""}">
+    <div class="quiz-card${quizModuleKey(q) ? " locking" : ""}">
       <div class="flex-between">
         <div style="flex:1;min-width:220px;">
-          <h3>${icon("quiz", 18)}${esc(q.title)}</h3>
+          <h3>${esc(q.title)}</h3>
           ${q.description ? `<p class="muted-small" style="margin:0 0 6px;">${esc(q.description)}</p>` : ""}
           <div class="quiz-meta">
-            <span class="quiz-pill${q.moduleKey && q.active ? " coral" : ""}">${icon("lock", 12)}${q.moduleKey ? (q.active ? "Locks: " : "Would lock: ") : ""}${esc(moduleLabel(q.moduleKey))}</span>
-            ${q.deadline ? `<span class="quiz-pill${quizDeadlineState(q) === "overdue" ? " coral" : ""}">${icon("hourglass", 12)}Due ${esc(quizDeadlineLabel(q.deadline))}${quizDeadlineState(q) === "overdue" ? " (overdue)" : ""}</span>` : ""}
-            <span class="quiz-pill">${icon("check", 12)}Pass mark ${q.passMark}%</span>
-            <span class="quiz-pill">${icon("quiz", 12)}${q.questions.length} ${q.questions.length === 1 ? "question" : "questions"}</span>
-            ${q.reward > 0 ? `<span class="quiz-pill gold">${icon("coin", 12)}${fmtMoney(q.reward)} bonus</span>` : ""}
+            <span class="quiz-pill${quizModuleKey(q) && q.active ? " coral" : ""}">${quizModuleKey(q) ? (q.active ? "Locks: " : "Would lock: ") : ""}${esc(moduleLabel(q.moduleKey))}</span>
+            ${q.deadline ? `<span class="quiz-pill${quizDeadlineState(q) === "overdue" ? " coral" : ""}">Due ${esc(quizDeadlineLabel(q.deadline))}${quizDeadlineState(q) === "overdue" ? " (overdue)" : ""}</span>` : ""}
+            <span class="quiz-pill">Pass mark ${q.passMark}%</span>
+            <span class="quiz-pill">${q.questions.length} ${q.questions.length === 1 ? "question" : "questions"}</span>
+            ${q.reward > 0 ? `<span class="quiz-pill gold">${fmtMoney(q.reward)} bonus</span>` : ""}
             <span class="quiz-pill${q.active ? " mint" : ""}">${q.active ? "Active" : "Paused"}</span>
           </div>
         </div>
@@ -136,43 +137,61 @@ async function renderTeacher() {
   const show = quizzes.length > 0 && STUDENTS.length > 0;
   document.getElementById("noResults").classList.toggle("hidden", show);
   if (!show) { wrap.innerHTML = ""; return; }
+  const passedOf = s => quizzes.filter(q => (quizResultFor(s, q.id) || {}).passed).length;
+  const cell = (s, q) => {
+    const r = quizResultFor(s, q.id), od = q.active && quizDeadlineState(q) === "overdue";
+    const tries = r ? `${r.attempts} ${r.attempts === 1 ? "try" : "tries"}` : "";
+    if (!r) return { cls: od ? "od" : "none", txt: od ? "Overdue" : "—", tip: "Not tried" + (od ? " (overdue)" : ""), has: false };
+    return { cls: r.passed ? "pass" : od ? "od" : "fail", txt: r.bestPct + "%", tip: `${r.passed ? "Passed" : "Not passed yet"} · best ${r.bestPct}% · ${tries}`, has: true };
+  };
+  const reset = (s, q) => `<button class="qr-reset" type="button" onclick="resetResult('${escapeJsAttr(s.username)}','${q.id}')">Reset</button>`;
+  const bar = (n) => `<span class="qr-bar" aria-hidden="true"><i style="width:${Math.round(n / quizzes.length * 100)}%"></i></span>`;
   wrap.innerHTML = `
-    <table class="stack-table">
-      <thead><tr><th>Student</th>${quizzes.map(q => `<th>${esc(q.title)}</th>`).join("")}</tr></thead>
-      <tbody>
-        ${STUDENTS.map(s => `<tr>
-          <td><strong>${esc(s.name)}</strong></td>
-          ${quizzes.map(q => {
-            const r = quizResultFor(s, q.id);
-            if (!r) return `<td class="${quizDeadlineState(q) === "overdue" && q.active ? "ticker-down" : "muted-small"}">${quizDeadlineState(q) === "overdue" && q.active ? "Overdue · not tried" : "Not tried"}</td>`;
-            const tone = r.passed ? "ticker-up" : "ticker-down";
-            return `<td>
-              <span class="${tone}">${r.passed ? "Passed" : "Not yet"} · ${r.bestPct}%</span>
-              <span class="muted-small"> (${r.attempts} ${r.attempts === 1 ? "try" : "tries"})</span><br>
-              <button class="btn small secondary" style="margin-top:5px;" onclick="resetResult('${escapeJsAttr(s.username)}','${q.id}')">Reset</button>
-            </td>`;
-          }).join("")}
-        </tr>`).join("")}
-      </tbody>
-    </table>`;
+    <div class="qr-desktop table-scroll">
+      <table class="qr-table">
+        <thead>
+          <tr><th class="qr-name">Student</th><th>Passed</th>${quizzes.map(q => `<th title="${esc(q.title)}">${esc(q.title)}</th>`).join("")}</tr>
+          <tr class="qr-sum"><td class="qr-name">Class passed</td><td></td>${quizzes.map(q => {
+            const n = STUDENTS.filter(s => (quizResultFor(s, q.id) || {}).passed).length;
+            return `<td>${n}/${STUDENTS.length}</td>`;
+          }).join("")}</tr>
+        </thead>
+        <tbody>
+          ${STUDENTS.map(s => `<tr>
+            <td class="qr-name">${esc(s.name)}</td>
+            <td><strong>${passedOf(s)}/${quizzes.length}</strong>${bar(passedOf(s))}</td>
+            ${quizzes.map(q => { const c = cell(s, q); return `<td title="${esc(c.tip)}"><span class="qr-chip ${c.cls}">${c.txt}</span>${c.has ? reset(s, q) : ""}</td>`; }).join("")}
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div class="qr-mobile">
+      ${STUDENTS.map(s => `<details class="qr-card">
+        <summary><span class="qr-card-name">${esc(s.name)}</span><span class="qr-card-count">${passedOf(s)}/${quizzes.length} passed</span>${bar(passedOf(s))}</summary>
+        <ul class="qr-list">${quizzes.map(q => { const c = cell(s, q); return `<li>
+          <span class="qr-list-title">${esc(q.title)}<small>${esc(c.tip)}</small></span>
+          <span class="qr-list-end"><span class="qr-chip ${c.cls}">${c.txt}</span>${c.has ? reset(s, q) : ""}</span>
+        </li>`; }).join("")}</ul>
+      </details>`).join("")}
+    </div>`;
 }
 
 /* ---------------- Unlock gates: summary, bulk switch, overdue ---------------- */
 function paintGateSummary() {
   const quizzes = CLS.quizzes || [];
-  const locking = quizzes.filter(q => q.active && q.moduleKey);
-  const paused = quizzes.filter(q => !q.active && q.moduleKey);
+  const locking = quizzes.filter(q => q.active && quizModuleKey(q));
+  const paused = quizzes.filter(q => !q.active && quizModuleKey(q));
   const names = locking.map(q => moduleLabel(q.moduleKey)).join(", ");
   document.getElementById("gateSummary").innerHTML = quizzes.length ? `
-    <span class="quiz-pill${locking.length ? " coral" : ""}">${icon("lock", 12)}${locking.length} ${locking.length === 1 ? "module" : "modules"} locked by a quiz</span>
-    <span class="quiz-pill">${icon("quiz", 12)}${paused.length} paused</span>
+    <span class="quiz-pill${locking.length ? " coral" : ""}">${locking.length} ${locking.length === 1 ? "module" : "modules"} locked by a quiz</span>
+    <span class="quiz-pill">${paused.length} paused</span>
     ${locking.length ? `<span class="muted-small" style="align-self:center;">${esc(names)}</span>` : ""}` : `<span class="muted-small">No quizzes yet.</span>`;
   document.getElementById("activateAllBtn").classList.toggle("hidden", !quizzes.some(q => !q.active));
   document.getElementById("pauseAllBtn").classList.toggle("hidden", !quizzes.some(q => q.active));
 }
 
 async function activateAllQuizzes(on) {
-  const n = (CLS.quizzes || []).filter(q => q.active !== on && q.moduleKey).length;
+  const n = (CLS.quizzes || []).filter(q => q.active !== on && quizModuleKey(q)).length;
   if (on && n && !await t29Confirm(`Activate every quiz? ${n} ${n === 1 ? "module" : "modules"} will lock for students until they pass the quiz attached to it.`)) return;
   await setAllQuizzesActive(CURRENT.classCode, on);
   document.getElementById("gateMsg").innerHTML = `<div class="success-msg">${on ? "All quizzes are active — their modules are locked until passed." : "All quizzes are paused — nothing is locked by a quiz."}</div>`;
@@ -234,9 +253,9 @@ function paintReco() {
       <div class="qz-reco-item">
         <div><strong>${esc(r.title)}</strong><span class="muted-small">${esc(r.description)}</span></div>
         <div class="quiz-meta" style="margin:0;">
-          <span class="quiz-pill coral">${icon("lock", 12)}${esc(moduleLabel(r.moduleKey))}</span>
+          <span class="quiz-pill coral">${esc(moduleLabel(r.moduleKey))}</span>
           <span class="quiz-pill">${r.questions.length} questions</span>
-          <span class="quiz-pill gold">${icon("coin", 12)}${fmtMoney(r.reward)} bonus</span>
+          <span class="quiz-pill gold">${fmtMoney(r.reward)} bonus</span>
         </div>
         <button class="btn small gold" type="button" onclick="qzAddReco('${esc(r.recoKey)}')">+ Add</button>
       </div>`).join("")}
@@ -373,6 +392,12 @@ async function saveQuiz() {
   await render();
 }
 
+function openBuilder() {
+  const d = document.getElementById("builderCard");
+  d.open = true;
+  document.getElementById("hBuilder").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function startEditQuiz(id) {
   const q = (CLS.quizzes || []).find(x => x.id === id);
   if (!q) return;
@@ -390,7 +415,7 @@ function startEditQuiz(id) {
   document.getElementById("hBuilder").innerHTML = icon("edit", 18) + " Edit quiz";
   document.getElementById("saveQuizBtn").innerHTML = "Save changes";
   document.getElementById("cancelEditBtn").classList.remove("hidden");
-  document.getElementById("hBuilder").scrollIntoView({ behavior: "smooth", block: "start" });
+  openBuilder();
 }
 
 function cancelEdit() {
@@ -430,6 +455,7 @@ async function resetResult(username, quizId) {
 // so it can be edited freely (or the title changed) before saving.
 function loadStarterQuiz() {
   EDITING_QUIZ_ID = null;
+  document.getElementById("builderCard").open = true;
   document.getElementById("qTitle").value = "How compound interest works";
   document.getElementById("qDesc").value = "Why money left alone grows faster and faster.";
   document.getElementById("qModule").value = "termdeposit";
