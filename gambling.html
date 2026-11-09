@@ -29,7 +29,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=38fff18f">
+<link rel="stylesheet" href="style.css?v=3a5c3835">
 <link rel="stylesheet" href="blackjack.css?v=3b71058a">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
@@ -42,6 +42,13 @@
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js">
+<script>/* modoff-boot: replay which modules the teacher switched off BEFORE first paint, so a hidden module never flashes into the top bar or the page and the bar never changes size afterwards (saved by t29SaveModOffBoot in data-core.js) */
+(function(){try{var h=document.documentElement,se=JSON.parse(localStorage.getItem('anw_session')||'null'),u=se&&se.username;if(!u)return;
+var m=JSON.parse(localStorage.getItem('t29-mod-off-boot')||'null'),pg=(location.pathname.split('/').pop()||'').split('?')[0].replace(/\.html$/,'').toLowerCase(),
+here=/^(bank|budget|termdeposit|kiwisaver|loan|market|store|marketplace|jobs|transport|property|insurance|tax|bigevents|life)$/.test(pg);
+if(m&&m.u===u&&Array.isArray(m.k)){for(var i=0;i<m.k.length;i++)h.classList.add('mod-off-'+m.k[i]);if(here&&m.k.indexOf(pg)>-1)h.classList.add('mod-off-here');}
+else if(here){h.classList.add('mod-hold');setTimeout(function(){h.classList.remove('mod-hold');},4000);}
+}catch(_){}})();</script>
 </head>
 <body>
 
@@ -67,6 +74,7 @@
     <a href="gambling.html" class="active" data-module="gambling"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
     <a href="quizzes.html"><span class="icon-slot" data-icon="quiz"></span><span class="nav-label">Quizzes</span></a>
     <a href="reports.html"><span class="icon-slot" data-icon="idcard"></span><span class="nav-label">Reports</span></a>
+    <a href="worksheets.html"><span class="icon-slot" data-icon="worksheet"></span><span class="nav-label">Worksheets</span></a>
     <span class="who" id="whoami"></span>
     <div class="topbar-actions">
       <button class="btn-icon-topbar" id="settingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Settings" title="Settings"><span class="icon-slot" data-icon="settings"></span></button>
@@ -396,13 +404,13 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 </footer>
 
 <script type="module" src="firebase-init.js?v=294b42b5"></script>
-<script defer src="icons.js?v=e1413a9c"></script>
+<script defer src="icons.js?v=469f6f2f"></script>
 <script defer src="settings-menu.js?v=5370c578"></script>
-<script defer src="shortcuts.js?v=7b02398d"></script>
+<script defer src="shortcuts.js?v=5c3b32dc"></script>
 <script defer src="offline.js?v=ac2cbd82"></script>
-<script defer src="data-core.js?v=535ce0cf"></script>
-<script defer src="data-money.js?v=cc5dc36e"></script>
-<script defer src="data-life.js?v=3c43769a"></script>
+<script defer src="data-core.js?v=608d165f"></script>
+<script defer src="data-money.js?v=b8fa211e"></script>
+<script defer src="data-life.js?v=50a36872"></script>
 <script defer src="data-property.js?v=84d847c7"></script>
 <script defer src="data-markets.js?v=c76e3587"></script>
 <script defer src="events-ui.js?v=9b6e825f"></script>

@@ -157,7 +157,7 @@ function pdfDoc() {
       this.text(d(t0), x0, base - 10, 8, { color: PDF_COLORS.muted });
       this.text(d(t1), x0 + w, base - 10, 8, { color: PDF_COLORS.muted, align: "right" });
       const tx = x0 + w + 24;
-      this.text("First noted", tx, base + h - 12, 8.5, { color: PDF_COLORS.muted });
+      this.text("Earliest shown", tx, base + h - 12, 8.5, { color: PDF_COLORS.muted });
       this.text(fmtMoney(vals[0]), tx, base + h - 25, 11, { bold: true, color: PDF_COLORS.navy });
       this.text("Now", tx, base + h - 44, 8.5, { color: PDF_COLORS.muted });
       this.text(fmtMoney(vals[vals.length - 1]), tx, base + h - 57, 11, { bold: true, color: PDF_COLORS.navy });
@@ -302,11 +302,12 @@ function pdfBarsSection(doc, title, map, colorName, total) {
 
 // The same sections, in the same order, as the printed report card
 // (studentReportHTML in reports.js). The net worth trend is the figure noted
-// every Monday (see netWorthSeries in data-money.js), ending with right now.
+// every 3 days (see netWorthSeries in data-money.js), ending with right now.
+// Like the report page's default view, it shows the last month.
 function pdfStudentReport(doc, s, report) {
-  const trendPts = netWorthSeries(s);
-  doc.heading("Net worth over time");
-  if (trendPts.length < 2) doc.para("Net worth is noted every Monday - the trend will appear here once it has been noted for a Monday.");
+  const trendPts = netWorthMonthPoints(netWorthSeries(s));
+  doc.heading("Net worth over time (last month)");
+  if (trendPts.length < 2) doc.para("Net worth is noted every 3 days - the trend will appear here once it has been noted a couple of times.");
   else doc.trend(trendPts);
   doc.chips([
     { label: "Net worth", value: fmtMoney(s.netWorth), color: "navy" },

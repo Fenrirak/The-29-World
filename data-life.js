@@ -4421,7 +4421,7 @@ const MODULE_LOCK_MESSAGE = {
    them as a popup the moment they open a module that needs one — so
    neither earns a permanent tab in a nav bar that is already full.
    Removed rather than hidden so fitTopbar() measures the real row. */
-const NAV_TEACHER_ONLY = ["reports.html", "quizzes.html", "tax.html"];
+const NAV_TEACHER_ONLY = ["reports.html", "quizzes.html", "tax.html", "worksheets.html"];
 function applyNavRoleVisibility(role) {
   if (role === "teacher") {
     // The budget tab is "Budget" for students but a class-wide overview

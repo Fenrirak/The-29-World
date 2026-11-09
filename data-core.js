@@ -4065,6 +4065,8 @@ async function anwGlobalBootstrap() {
     showCasinoNavIfOn(u).catch(() => {});
     showModuleNavIfOn(u).catch(() => {});
   } else if (u.role === "teacher") {
+    t29SaveModOffBoot(u.username, []); // teachers always see every module
+    document.documentElement.classList.remove("mod-hold");
     mountModuleSwitch(u).catch(() => {});
   }
 }
@@ -4168,6 +4170,10 @@ function paintModuleOff(offKeys) {
 }
 // The page itself, when a student lands on a module that is off.
 function paintModulePageOff(isOff) {
+  // Now known either way: release the blank page held by the modoff-boot script, and keep its
+  // "this page is off" marker in step.
+  document.documentElement.classList.remove("mod-hold");
+  document.documentElement.classList.toggle("mod-off-here", !!isOff);
   const key = moduleKeyOfPage();
   const main = document.querySelector("main");
   if (!key || !main) return;
@@ -4186,8 +4192,14 @@ function paintModulePageOff(isOff) {
     if (note) note.remove();
   }
 }
+// Remembers which modules are off for this person, so the modoff-boot script (in every page's <head>)
+// can hide them before the first paint next time. Without it the links showed for a moment, the top bar
+// sized itself for them, then jumped when they were hidden.
+function t29SaveModOffBoot(username, keys) {
+  try { localStorage.setItem("t29-mod-off-boot", JSON.stringify({ u: username, k: keys })); } catch (e) { /* ignore */ }
+}
 async function showModuleNavIfOn(u) {
-  if (!u.classCode) return;
+  if (!u.classCode) { document.documentElement.classList.remove("mod-hold"); return; }
   // Replay the last known state straight away so a hidden module doesn't flash in the menu.
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(t29ModOffCacheKey(u.classCode)) || "null"); } catch (e) { /* ignore */ }
@@ -4195,11 +4207,12 @@ async function showModuleNavIfOn(u) {
   const apply = cls => {
     const keys = Object.keys(T29_MODULES).filter(k => k !== "gambling" && moduleIsOff(cls, k));
     try { localStorage.setItem(t29ModOffCacheKey(u.classCode), JSON.stringify(keys)); } catch (e) { /* ignore */ }
+    t29SaveModOffBoot(u.username, keys);
     paintModuleOff(keys);
     const here = moduleKeyOfPage();
     paintModulePageOff(!!here && here !== "gambling" && keys.includes(here));
   };
-  try { apply(await getClassCached(u.classCode)); } catch (e) { return; }
+  try { apply(await getClassCached(u.classCode)); } catch (e) { document.documentElement.classList.remove("mod-hold"); return; }
   if (typeof t29WatchDoc === "function") {
     t29WatchDoc("classes", u.classCode, (doc, info) => {
       if (!doc || (info && (info.error || info.fromCache))) return;

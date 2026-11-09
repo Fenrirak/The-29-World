@@ -2637,7 +2637,7 @@ const RESTART_KEEP_USER_FIELDS = [
   "dailyLimitMinutes", "timeSpentTodaySec", "timeSpentDate",
   "timeExemptionStatus", "timeExemptionDate", "timeExemptionRequestedAt",
   "extraMinutesToday", "extraMinutesDate", "parentViewToken",
-  "netWorthLog" // the weekly Monday net-worth notes — the trend carries on across a restart
+  "netWorthLog" // the 3-day net-worth notes — the trend carries on across a restart
 ];
 // (Each student restarts at the class's own welcome grant — see t29WelcomeGrantOf.)
 
@@ -2836,8 +2836,12 @@ async function storeItemsValue(username, classCode) {
 }
 
 /* ===================== Reports ===================== */
-// Weekly net-worth notes kept per student (about 10 years of Mondays).
-const NET_WORTH_LOG_MAX = 520;
+// Net-worth notes kept per student: one every 3 days, so about 10 years' worth.
+const NET_WORTH_LOG_MAX = 1220;
+// How often a student's net worth is noted, in days.
+const NET_WORTH_NOTE_DAYS = 3;
+// How much history the report chart shows by default ("Last month").
+const NET_WORTH_MONTH_DAYS = 30;
 
 // Maps a transaction to a report-card bucket + human category label.
 // Independent from bank.js's own statement rendering (which needs a
@@ -3037,7 +3041,7 @@ function buildStudentReportData(student, cls) {
     lifetimeIncome: lifetime.income, lifetimeSaved: lifetime.saved, lifetimeSpent: lifetime.spent,
     lifetimeIncomeTotal: lifetime.incomeTotal, lifetimeSavedTotal: lifetime.savedTotal,
     lifetimeSpentTotal: lifetime.spentTotal, lifetimeBorrowedTotal: lifetime.borrowedTotal,
-    // Net worth noted every Monday (plus any older saved report cards) — see netWorthTrendPoints.
+    // Net worth noted every 3 days (plus any older saved report cards) — see netWorthTrendPoints.
     netWorthTrend: netWorthTrendPoints(student, cls)
   };
 }
@@ -3056,14 +3060,23 @@ async function generateClassReport(classCode) {
   };
 }
 
-/* ---------------- Net worth trend (noted every Monday) ----------------
-   Each student's own doc keeps netWorthLog: one { d, v, t } per week —
-   d the NZ date of that week's Monday, v their net worth, t when it was
-   actually noted. The first page load on or after Monday morning notes it
-   (a teacher's visit notes the whole class at once; a student's own visit
-   notes just them), so nobody has to save anything. Old report cards a
-   teacher saved before this existed (cls.reportArchives) still feed the
+/* ---------------- Net worth trend (noted every 3 days) ----------------
+   Each student's own doc keeps netWorthLog: one { d, v, t } per 3-day
+   period — d the NZ date the period started, v their net worth, t when it
+   was actually noted. Periods are fixed 3-day blocks counted from 1 Jan 1970
+   (NZ dates), so every student and every device agrees on where one ends and
+   the next begins. The first page load in a new period notes it (a teacher's
+   visit notes the whole class at once; a student's own visit notes just
+   them), so nobody has to save anything. Notes made weekly (on Mondays)
+   before this change are still in the log and still drawn. Old report cards
+   a teacher saved before this existed (cls.reportArchives) still feed the
    trend as extra points, so the history reaches back as far as possible. */
+// The NZ date key on which the current 3-day note period started.
+function netWorthPeriodKey(d) {
+  const key = nzDateKey(d);
+  const dayNo = Math.floor(dateKeyToUTC(key) / 86400000);
+  return dateKeyPlusDays(key, -(dayNo % NET_WORTH_NOTE_DAYS));
+}
 function netWorthTrendPoints(student, cls) {
   const byDay = new Map();
   (cls.reportArchives || []).forEach(a => {
@@ -3079,7 +3092,7 @@ function netWorthTrendPoints(student, cls) {
   return Array.from(byDay.values()).sort((x, y) => x.t - y.t);
 }
 
-// The points to draw for one student's report: everything noted so far,
+// Every point known for one student's report: everything noted so far,
 // then "now" (their live net worth) on the end.
 function netWorthSeries(s) {
   const pts = (s.netWorthTrend || []).slice();
@@ -3088,49 +3101,82 @@ function netWorthSeries(s) {
   return pts;
 }
 
-async function _appendNetWorthNote(username, monday, value) {
+// The same points, trimmed to the last month (30 days back from "now").
+function netWorthMonthPoints(pts) {
+  if (!pts.length) return [];
+  const cutoff = pts[pts.length - 1].t - NET_WORTH_MONTH_DAYS * 86400000;
+  return pts.filter(p => p.t >= cutoff);
+}
+
+// All-time view: the points averaged one Monday-to-Sunday week at a time, so
+// a long history stays readable. Each result is { t, v, day, week, n, now? }:
+// v the week's average, t the average time of its points, n how many points
+// went into it. The week containing "now" is flagged now:true.
+function netWorthWeeklyAverages(pts) {
+  const weeks = new Map();
+  pts.forEach(p => {
+    const wk = budgetWeekStartKey(new Date(p.t));
+    let w = weeks.get(wk);
+    if (!w) { w = { week: wk, sumV: 0, sumT: 0, n: 0, now: false }; weeks.set(wk, w); }
+    w.sumV += p.v; w.sumT += p.t; w.n++;
+    if (p.now) w.now = true;
+  });
+  return Array.from(weeks.values()).map(w => ({
+    t: Math.round(w.sumT / w.n), v: Math.round((w.sumV / w.n) * 100) / 100,
+    day: w.week, week: w.week, n: w.n, now: w.now
+  })).sort((a, b) => a.t - b.t);
+}
+
+// What the report draws for a range: "month" (default) or "all".
+function netWorthView(s, range) {
+  const all = netWorthSeries(s);
+  return range === "all" ? netWorthWeeklyAverages(all) : netWorthMonthPoints(all);
+}
+
+async function _appendNetWorthNote(username, period, value) {
   const ref = usersCol().doc(username);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(ref);
     if (!snap.exists) return;
     const log = Array.isArray(snap.data().netWorthLog) ? snap.data().netWorthLog.slice() : [];
-    if (log.length && log[log.length - 1].d >= monday) return; // already noted this week
-    log.push({ d: monday, v: Math.round(value * 100) / 100, t: Date.now() });
+    if (log.length && log[log.length - 1].d >= period) return; // already noted this period
+    log.push({ d: period, v: Math.round(value * 100) / 100, t: Date.now() });
     if (log.length > NET_WORTH_LOG_MAX) log.splice(0, log.length - NET_WORTH_LOG_MAX);
     t.update(ref, { netWorthLog: log });
   });
 }
 
-// A student's own session: note their net worth for this week if it hasn't
-// been noted yet.
+// A student's own session: note their net worth for this 3-day period if it
+// hasn't been noted yet.
 async function recordMyNetWorthIfDue(username) {
   const me = await getUserCached(username);
   if (!me || me.role === "teacher" || !me.classCode) return;
-  await syncServerClock(me.classCode); // "Monday" must come from the server's clock, not a drifted device
-  const monday = budgetWeekStartKey();
+  await syncServerClock(me.classCode); // the period must come from the server's clock, not a drifted device
+  const period = netWorthPeriodKey();
   const lastNote = (me.netWorthLog || [])[(me.netWorthLog || []).length - 1];
-  if (lastNote && lastNote.d >= monday) return;
+  if (lastNote && lastNote.d >= period) return;
   const cls = await getClassCached(me.classCode);
   if (!cls || cls.archived) return;
-  await _appendNetWorthNote(username, monday, buildStudentReportData(me, withNewModuleDefaults(cls)).netWorth);
+  await _appendNetWorthNote(username, period, buildStudentReportData(me, withNewModuleDefaults(cls)).netWorth);
 }
 
-// A teacher's session: note everyone who hasn't been noted this week yet.
-// The class doc remembers which Monday it last did this for, so a teacher
-// opening pages all week doesn't re-read every student each time.
+// A teacher's session: note everyone who hasn't been noted this period yet.
+// The class doc remembers which period it last did this for (the field is
+// still called netWorthLogWeek from when notes were weekly), so a teacher
+// opening pages all day doesn't re-read every student each time.
 async function recordClassNetWorthIfDue(classCode) {
   await syncServerClock(classCode);
-  const monday = budgetWeekStartKey();
+  const period = netWorthPeriodKey();
   const cls0 = await getClassCached(classCode);
-  if (!cls0 || cls0.archived || cls0.netWorthLogWeek === monday) return;
+  if (!cls0 || cls0.archived || cls0.netWorthLogWeek === period) return;
   const cls = withNewModuleDefaults(await getClass(classCode));
   const students = await getClassStudents(classCode, cls);
-  const due = students.filter(st => { const l = (st.netWorthLog || [])[(st.netWorthLog || []).length - 1]; return !(l && l.d >= monday); });
+  const due = students.filter(st => { const l = (st.netWorthLog || [])[(st.netWorthLog || []).length - 1]; return !(l && l.d >= period); });
   for (let i = 0; i < due.length; i += 8) {
     await Promise.all(due.slice(i, i + 8).map(st =>
-      _appendNetWorthNote(st.username, monday, buildStudentReportData(st, cls).netWorth).catch(e => console.warn("net worth note failed for " + st.username, e))));
+      _appendNetWorthNote(st.username, period, buildStudentReportData(st, cls).netWorth).catch(e => console.warn("net worth note failed for " + st.username, e))));
   }
-  await classesCol().doc(classCode).update({ netWorthLogWeek: monday });
+  await classesCol().doc(classCode).update({ netWorthLogWeek: period });
 }
 
 /* ---------------- Rolling per-student report totals ----------------

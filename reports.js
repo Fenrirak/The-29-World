@@ -2,7 +2,7 @@
    Teacher side: a live "this month" report for the whole class (net
    worth, savings rate, biggest expense category, loan history per
    student). Each student's report card carries a net-worth trend built from
-   the figure noted every Monday (see recordMyNetWorthIfDue() in
+   the figure noted every 3 days (see recordMyNetWorthIfDue() in
    data-money.js), so nobody has to save anything.
    Student side: the same breakdown, but scoped to just their own numbers,
    plus an "entire history" breakdown that only starts again when the
@@ -25,7 +25,7 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("idcard", 26) + " Reports";
   document.getElementById("pageIntro").textContent = IS_TEACHER
-    ? "Report cards: net worth, savings rate, biggest expenses and loan history. Net worth is noted automatically every Monday, so each student's trend builds up on its own."
+    ? "Report cards: net worth, savings rate, biggest expenses and loan history. Net worth is noted automatically every 3 days, so each student's trend builds up on its own."
     : "Your report card: net worth, savings rate, biggest expenses and loan history for this month, plus your entire history.";
   document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + " This month";
   document.getElementById("hMyReport").innerHTML = icon("idcard", 18) + " My report card";
@@ -165,15 +165,40 @@ function nwShort(v, span) {
   return `${sign}$${Math.round(a)}`;
 }
 
-// The student's net worth over time, on its own full-width row: one point for
-// each Monday it was noted (plus any older saved report cards), then now.
-// Green where it rose, red where it fell. Drawn by time, so a gap in the
-// history is a gap on the chart rather than being squashed together.
+// Which range the net worth chart shows: "month" (the last 30 days, the
+// default) or "all" (the whole history, averaged one week at a time).
+let NW_RANGE = "month";
+const NW_STUDENTS = {}; // username -> report data, so a click can redraw the chart
+
+// Same pill buttons as the quick-bet amounts in Gambling (.bet-chip).
+function nwRangeBar(range) {
+  const chip = (r, label) => `<button type="button" class="nw-range-chip${range === r ? " active" : ""}" data-range="${r}" aria-pressed="${range === r}">${label}</button>`;
+  return `<div class="nw-range" role="group" aria-label="Net worth time range">${chip("month", "Last month")}${chip("all", "All time")}</div>`;
+}
+
+// The student's net worth over time, on its own full-width row. Net worth is
+// noted every 3 days. By default the chart shows the last month, one point
+// per note, then now; "All time" shows the whole history with each point the
+// average of one week. Green where it rose, red where it fell. Drawn by time,
+// so a gap in the history is a gap on the chart rather than being squashed.
 function netWorthChartHTML(s) {
-  const pts = netWorthSeries(s);
-  const head = `<div class="nw-trend-head"><h3>${icon("medal", 16)} Net worth over time</h3><span class="muted-small">Noted automatically every Monday</span></div>`;
+  NW_STUDENTS[s.username] = s;
+  const range = NW_RANGE === "all" ? "all" : "month";
+  const allPts = netWorthSeries(s);
+  const open = `<section class="nw-trend" data-user="${escapeHtml(s.username)}">`;
+  const title = `<h3>${icon("medal", 16)} Net worth over time</h3>`;
+  if (allPts.length < 2) {
+    return `${open}<div class="nw-trend-head">${title}</div><p class="muted-small">Your trend starts building once your net worth has been noted. It's noted automatically every 3 days, so check back soon.</p></section>`;
+  }
+  const caption = range === "all"
+    ? "Each point is the average of one week, from figures noted every 3 days"
+    : "Noted automatically every 3 days, showing the last month";
+  const head = `<div class="nw-trend-head">${title}${nwRangeBar(range)}</div><p class="muted-small nw-trend-note">${caption}</p>`;
+  const pts = range === "all" ? netWorthWeeklyAverages(allPts) : netWorthMonthPoints(allPts);
   if (pts.length < 2) {
-    return `<section class="nw-trend">${head}<p class="muted-small">Your trend starts building once your net worth has been noted for a Monday. Check back soon.</p></section>`;
+    return `${open}${head}<p class="muted-small">${range === "all"
+      ? "All time needs at least two weeks of history. Switch to Last month to see each 3-day note."
+      : "There aren't enough notes in the last month yet. Try All time to see the whole history."}</p></section>`;
   }
   const W = 640, H = 230, L = 64, R = 18, T = 16, B = 34, pw = W - L - R, ph = H - T - B;
   let max = Math.max(...pts.map(p => p.v)), min = Math.min(...pts.map(p => p.v));
@@ -189,25 +214,56 @@ function netWorthChartHTML(s) {
     const q = pts[i];
     return `<line x1="${X(q.t).toFixed(1)}" y1="${Y(q.v).toFixed(1)}" x2="${X(p.t).toFixed(1)}" y2="${Y(p.v).toFixed(1)}" stroke="${p.v >= q.v ? "#3fbf8f" : "#e8735f"}" stroke-width="2.5" stroke-linecap="round"/>`;
   }).join("");
+  const dotLabel = p => {
+    if (range === "all") {
+      const base = p.now ? "This week so far" : "Week of " + nwDay(dateKeyToUTC(p.week));
+      return `${base} (average of ${p.n} ${p.n === 1 ? "note" : "notes"})`;
+    }
+    return p.now ? "Now" : (p.saved ? "Saved report, " : "Noted ") + nwDay(dateKeyToUTC(p.day));
+  };
   const dots = pts.map(p => {
-    const label = p.now ? "Now" : (p.saved ? "Saved report, " : "Monday ") + nwDay(dateKeyToUTC(p.day));
-    return `<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="${p.now ? 5 : 3.4}" fill="${p.now ? "var(--card, #fff)" : "currentColor"}" ${p.now ? 'stroke="currentColor" stroke-width="2.5"' : ""}><title>${label}: ${fmtMoney(p.v)}</title></circle>`;
+    const hollow = p.now;
+    return `<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="${hollow ? 5 : 3.4}" fill="${hollow ? "var(--card, #fff)" : "currentColor"}" ${hollow ? 'stroke="currentColor" stroke-width="2.5"' : ""}><title>${dotLabel(p)}: ${fmtMoney(p.v)}</title></circle>`;
   }).join("");
   const yearDiffers = new Date(t0).getFullYear() !== new Date(t1).getFullYear();
   const xlabels = `<text x="${L}" y="${H - 8}" text-anchor="start" class="nw-axis">${nwDay(t0, yearDiffers)}</text>` +
     `<text x="${W - R}" y="${H - 8}" text-anchor="end" class="nw-axis">${nwDay(t1, yearDiffers)}</text>`;
-  const first = pts[0], now = pts[pts.length - 1], diff = Math.round((now.v - first.v) * 100) / 100;
+  // The figures beside the chart use real notes, not the weekly averages.
+  const now = allPts[allPts.length - 1];
+  const first = range === "all" ? allPts[0] : pts[0];
+  const diff = Math.round((now.v - first.v) * 100) / 100;
   const pct = first.v !== 0 ? ` (${diff >= 0 ? "+" : ""}${Math.round((diff / Math.abs(first.v)) * 1000) / 10}%)` : "";
-  return `<section class="nw-trend">${head}
-    <svg viewBox="0 0 ${W} ${H}" class="nw-chart" role="img" aria-label="Net worth over time, from ${fmtMoney(first.v)} to ${fmtMoney(now.v)}" style="color:var(--ink);">${grid}${segs}${dots}${xlabels}</svg>
+  const span = range === "all"
+    ? `<div class="label">Weeks tracked</div><div class="value">${Math.max(1, Math.round((now.t - first.t) / 604800000))}</div>`
+    : `<div class="label">Days shown</div><div class="value">${Math.max(1, Math.round((now.t - first.t) / 86400000))}</div>`;
+  return `${open}${head}
+    <svg viewBox="0 0 ${W} ${H}" class="nw-chart" role="img" aria-label="Net worth over time (${range === "all" ? "all time, weekly averages" : "last month"}), from ${fmtMoney(first.v)} to ${fmtMoney(now.v)}" style="color:var(--ink);">${grid}${segs}${dots}${xlabels}</svg>
     <div class="profile-summary nw-trend-stats">
-      <div class="profile-chip"><div class="label">First noted</div><div class="value">${fmtMoney(first.v)}</div><div class="muted-small">${nwDay(first.t, true)}</div></div>
+      <div class="profile-chip"><div class="label">${range === "all" ? "First noted" : "Earliest shown"}</div><div class="value">${fmtMoney(first.v)}</div><div class="muted-small">${nwDay(first.t, true)}</div></div>
       <div class="profile-chip"><div class="label">Now</div><div class="value">${fmtMoney(now.v)}</div></div>
       <div class="profile-chip"><div class="label">Change</div><div class="value ${diff >= 0 ? "ticker-up" : "ticker-down"}">${diff >= 0 ? "+" : "-"}${fmtMoney(Math.abs(diff))}</div><div class="muted-small">${pct.trim()}</div></div>
-      <div class="profile-chip"><div class="label">Weeks tracked</div><div class="value">${Math.max(1, Math.round((now.t - first.t) / 604800000))}</div></div>
+      <div class="profile-chip">${span}</div>
     </div>
   </section>`;
 }
+
+// Last month / All time buttons: redraw the charts on screen in place.
+document.addEventListener("click", e => {
+  const btn = e.target.closest && e.target.closest(".nw-range-chip");
+  if (!btn) return;
+  const sec = btn.closest(".nw-trend");
+  const who = sec && sec.dataset.user;
+  const next = btn.dataset.range === "all" ? "all" : "month";
+  if (!who || !NW_STUDENTS[who] || next === NW_RANGE) return;
+  NW_RANGE = next;
+  document.querySelectorAll(".nw-trend[data-user]").forEach(el => {
+    const st = NW_STUDENTS[el.dataset.user];
+    if (st) el.outerHTML = netWorthChartHTML(st);
+  });
+  const again = [...document.querySelectorAll(".nw-trend[data-user]")].find(el => el.dataset.user === who);
+  const nb = again && again.querySelector(`.nw-range-chip[data-range="${next}"]`);
+  if (nb) nb.focus();
+});
 
 /* ---------------- Shared per-student breakdown ---------------- */
 const REPORT_LIFETIME_NOTE = "Everything since the account was made, or since the class was last restarted. It doesn't reset when the month rolls over.";

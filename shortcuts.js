@@ -63,7 +63,7 @@
     "student.html", "teacher.html", "teacher-home.html", "bank.html", "budget.html",
     "termdeposit.html", "kiwisaver.html", "loan.html", "market.html", "store.html",
     "marketplace.html", "jobs.html", "transport.html", "property.html", "insurance.html",
-    "tax.html", "bigevents.html", "life.html", "gambling.html", "quizzes.html", "reports.html"
+    "tax.html", "bigevents.html", "life.html", "gambling.html", "quizzes.html", "reports.html", "worksheets.html"
   ];
 
   var FINE_POINTER = !!(window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches);
