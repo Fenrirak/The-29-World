@@ -262,9 +262,9 @@
         `</div>` +
         (S.mode === "preview" ? `<label class="ws-check"><input type="checkbox" data-act="toggle-ans" ${S.showAnswers ? "checked" : ""}><span>Show answers</span></label>` : "") +
         `<span class="ws-pill">${origin}</span>` +
+        `<span class="ws-status${S.statusWarn ? " warn" : ""}" id="wsStatus" role="status" aria-live="polite">${e(S.status)}</span>` +
       `</div>` +
       `<div class="ws-tb-right">` +
-        `<span class="ws-status${S.statusWarn ? " warn" : ""}" id="wsStatus" role="status" aria-live="polite">${e(S.status)}</span>` +
         `<button type="button" class="btn small secondary${S.syncInfo?.error ? "" : " hidden"}" data-act="sync-retry">Retry sync</button>` +
         `<div class="ws-popwrap"><button type="button" class="btn small secondary" data-act="pop" data-pop="layout" aria-expanded="false" aria-haspopup="true">Layout</button>` +
           `<div class="ws-pop" role="dialog" aria-label="Layout options">` +

@@ -8,6 +8,15 @@
   const safeId = id => typeof id === "string" && /^[a-zA-Z0-9_-]{1,180}$/.test(id);
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+  // Firestore forbids arrays directly inside arrays. Keep the editor/local
+  // backup format intact, and wrap table rows only at the network boundary.
+  function cloudRecord(value, encode) {
+    if (value?.kind !== "sheet" || !Array.isArray(value.sheet?.blocks)) return value;
+    return { ...value, sheet: { ...value.sheet, blocks: value.sheet.blocks.map(block =>
+      block?.type !== "table" || !Array.isArray(block.rows) ? block : { ...block, rows: block.rows.map(row =>
+        encode ? { cells: row } : Array.isArray(row) ? row : row?.cells) }) } };
+  }
+
   function create(options) {
     const { db, username, storage, key, normalizeSheet, defaultIds, onChange, serverTimestamp } = options;
     const col = db.collection("teacherWorksheets/" + username + "/sheets");
@@ -33,7 +42,7 @@
       return { kind: "sheet", sheet };
     }
     function record(value, id) {
-      const p = payload(value, id);
+      const p = payload(cloudRecord(value, false), id);
       return p && Number.isSafeInteger(value.revision) && value.revision > 0
         ? { ...p, revision: value.revision, mutationId: String(value.mutationId || "") } : null;
     }
@@ -148,11 +157,11 @@
           sheet.id = forkId;
           sheet.title = (sheet.title || "Untitled worksheet") + (op.migration ? " (recovered from this device)" : " (conflict copy)");
           const fork = existing || { kind: "sheet", sheet, revision: 1, mutationId: op.mutationId };
-          if (!existing) tx.set(forkRef, { ...fork, v: 1, updatedAt: serverTimestamp() });
+          if (!existing) tx.set(forkRef, { ...cloudRecord(fork, true), v: 1, updatedAt: serverTimestamp() });
           return { id, saved: remote, forkId, fork, conflict: true };
         }
         const saved = { ...payload(op, id), revision: (remote?.revision || 0) + 1, mutationId: op.mutationId };
-        tx.set(ref, { ...saved, v: 1, updatedAt: serverTimestamp() });
+        tx.set(ref, { ...cloudRecord(saved, true), v: 1, updatedAt: serverTimestamp() });
         return { id, saved };
       });
     }

@@ -28,10 +28,10 @@
 })();
 </script>
 <title>Worksheets | The 29 World</title>
-<link rel="icon" type="image/png" href="Favicons/Favicon.png">
-<link rel="shortcut icon" href="Favicons/favicon.ico">
+<link rel="icon" type="image/png" href="Favicon.png">
+<link rel="shortcut icon" href="favicon.ico">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="Favicons/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
 <link rel="stylesheet" href="style.css?v=bf0f80a3">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
@@ -45,7 +45,7 @@
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js">
-<link rel="stylesheet" href="worksheets.css?v=7657a293">
+<link rel="stylesheet" href="worksheets.css?v=50dbd02e">
 <script>/* modoff-boot: replay which modules the teacher switched off BEFORE first paint, so a hidden module never flashes into the top bar or the page and the bar never changes size afterwards (saved by t29SaveModOffBoot in data-core.js) */
 (function(){try{var h=document.documentElement,se=JSON.parse(localStorage.getItem('anw_session')||'null'),u=se&&se.username;if(!u)return;
 var m=JSON.parse(localStorage.getItem('t29-mod-off-boot')||'null'),pg=(location.pathname.split('/').pop()||'').split('?')[0].replace(/\.html$/,'').toLowerCase(),
@@ -102,16 +102,15 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
 <main class="ws-page" id="wsApp">
   <header class="ws-hero">
-    <p class="ws-eyebrow">Teacher resources</p>
     <h1>Worksheets</h1>
     <p class="ws-lede">Choose a module, adjust its worksheet, then print it for your class. Changes save automatically to your teacher account and sync across devices. Offline edits stay on this device until you're back online.</p>
   </header>
   <p class="ws-notice" id="wsNotice" hidden></p>
   <div class="ws-shell">
-    <div class="ws-rail" id="wsRail" role="navigation" aria-label="Modules"></div>
+    <div class="card ws-rail" id="wsRail" role="navigation" aria-label="Modules"></div>
     <section class="ws-work" aria-label="Worksheet editor">
-      <div class="ws-modulebar" id="wsModuleBar"></div>
-      <div class="ws-toolbar hidden" id="wsToolbar"></div>
+      <div class="card ws-modulebar" id="wsModuleBar"></div>
+      <div class="card ws-toolbar hidden" id="wsToolbar"></div>
       <div class="ws-stage" id="wsPaperHost"></div>
     </section>
   </div>
@@ -143,7 +142,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=327fe0d2"></script>
 <script defer src="worksheets-data.js?v=8f1edfd0"></script>
-<script defer src="worksheets-sync.js?v=25be6055"></script>
-<script defer src="worksheets.js?v=e2ef239b"></script>
+<script defer src="worksheets-sync.js?v=a2ce4319"></script>
+<script defer src="worksheets.js?v=debadacb"></script>
 </body>
 </html>
