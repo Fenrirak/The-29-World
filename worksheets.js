@@ -237,7 +237,7 @@
     $("wsModuleBar").innerHTML =
       `<div class="ws-modhead"><h2>${e(mod.name)}</h2>${mod.blurb ? `<p>${e(mod.blurb)}</p>` : ""}</div>` +
       `<div class="ws-tabs" role="tablist" aria-label="${e(mod.name)} worksheets">` +
-      list.map(s => `<button type="button" role="tab" class="ws-tab${S.sheet && s.id === S.sheet.id ? " active" : ""}" aria-selected="${!!(S.sheet && s.id === S.sheet.id)}" data-act="sheet" data-id="${e(s.id)}"><span class="ws-tab-t">${e(s.title || "Untitled worksheet")}</span></button>`).join("") +
+      list.map(s => { const on = !!(S.sheet && s.id === S.sheet.id), nm = e(s.title || "Untitled worksheet"); return `<span class="ws-tabbox${on ? " active" : ""}" role="presentation"><button type="button" role="tab" class="ws-tab${on ? " active" : ""}" aria-selected="${on}" data-act="sheet" data-id="${e(s.id)}"><span class="ws-tab-t">${nm}</span></button><button type="button" class="ws-tab-x" data-act="del-tab" data-id="${e(s.id)}" aria-label="${S.defaultIds.has(s.id) ? "Remove" : "Delete"} ${nm}" title="${S.defaultIds.has(s.id) ? "Remove" : "Delete"} worksheet">&times;</button></span>`; }).join("") +
       `<button type="button" class="ws-tab ws-tab-new" data-act="new-sheet">New worksheet</button></div>` +
       (hidden ? `<p class="ws-restore">${hidden} built-in worksheet${hidden === 1 ? " is" : "s are"} removed. <button type="button" data-act="restore">Restore ${hidden === 1 ? "it" : "them"}</button></p>` : "");
   }
@@ -394,7 +394,7 @@
 
     host.innerHTML =
       `<article class="ws-paper ${edit ? "is-edit" : "is-preview"}${S.showAnswers ? " show-ans" : ""} fs-${st.size} ff-${st.font} pp-${st.paper}" style="--acc:${e(mod.accent)}">` +
-        `<header class="ws-ph"><div class="ws-ph-top"><span class="ws-ph-mod">${e(mod.name)}</span><span class="ws-ph-total" ${st.marks && total ? "" : "hidden"}>${total ? "Total: " + marksLabel(total) : ""}</span></div>` +
+        `<header class="ws-ph"><div class="ws-ph-top"><span class="ws-ph-total" ${st.marks && total ? "" : "hidden"}>${total ? "Total: " + marksLabel(total) : ""}</span></div>` +
           ed("h1", "ws-title", "", "title", sh.title, "Worksheet title", false) +
           ed("p", "ws-sub", "", "subtitle", sh.subtitle, "Instructions for students (optional)", true) +
           nameLine +
@@ -597,16 +597,16 @@
     render();
   }
 
-  async function deleteSheet() {
-    if (!S.sheet) return;
-    const id = S.sheet.id, moduleKey = S.moduleKey;
+  async function deleteSheet(id) {
+    id = id || (S.sheet && S.sheet.id);
+    if (!id) return;
+    const moduleKey = S.moduleKey, isActive = !!S.sheet && S.sheet.id === id;
     const builtIn = S.defaultIds.has(id);
     if (!await ask(builtIn ? "Remove this built-in worksheet? You can restore it later from this module." : "Delete this worksheet? This can't be undone.", builtIn ? "Remove" : "Delete")) return;
     if (builtIn && !S.data.hidden.includes(id)) S.data.hidden.push(id);
     delete S.data.sheets[id];
     S.sync.mark(id, builtIn ? "hidden" : "deleted");
-    delete S.data.prefs.sheet[moduleKey];
-    selectModule(moduleKey);
+    if (isActive) { delete S.data.prefs.sheet[moduleKey]; selectModule(moduleKey); }
     saveSoon();
     render();
   }
@@ -720,6 +720,7 @@
       case "dup-sheet": closePops(); dupSheet(); break;
       case "reset-sheet": closePops(); resetSheet(); break;
       case "del-sheet": closePops(); deleteSheet(); break;
+      case "del-tab": deleteSheet(t.dataset.id); break;
       case "export": closePops(); exportBackup(); break;
       case "import": closePops(); $("wsImportFile").click(); break;
       case "sync-retry": S.sync.retry(); break;
