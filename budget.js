@@ -48,6 +48,7 @@ async function init() {
     safeBgJob(processLoanInterest(u.classCode), "processLoanInterest"),
     safeBgJob(processCreditCards(u.classCode), "processCreditCards"),
     safeBgJob(processTermDeposits(u.classCode), "processTermDeposits"),
+    safeBgJob(processPropertyRent(u.classCode), "processPropertyRent"),
     // Teacher sessions can write every student's doc, so they still run
     // the full class-wide sweep (and act as a safety net for anyone who
     // hasn't opened anything yet). A student session only ever pays
@@ -217,18 +218,20 @@ function renderBudgetStudent(me, cls) {
   const cashNow = Math.max(0, v.cash);
   const othersWord = v.otherLabel === "Savings" ? "savings" : "other accounts";
   let safeWhy;
-  if (v.safeTotal <= 0.005) safeWhy = `Your cash and ${othersWord}, plus the money still to come, don't cover the rest of this week's bills, so there's nothing safe to spend.`;
+  if (v.historyIncomplete) safeWhy = "The full week's activity is unavailable, so this amount cannot be verified. Check the warning above.";
+  else if (v.paymentIssues.length) safeWhy = "An automatic payment has a funding problem. Check the warning above before spending.";
+  else if (v.safeTotal <= 0.005) safeWhy = `Your main account and withdrawable ${othersWord}, plus the money still to come, don't cover the rest of this week's bills, so there's nothing safe to spend.`;
   else {
-    safeWhy = `Your cash and ${othersWord}, plus the money still to come this week, minus the bills still to pay.`;
-    if (v.safeTimed < v.safeNow - 0.005) safeWhy += ` Some of that money hasn't arrived yet, so only ${fmtMoney(v.safeTimed)} is safe until it does.`;
-    if (v.safeTimed > cashNow + 0.005) safeWhy += ` Only ${fmtMoney(cashNow)} of it is cash. Spending more means moving ${othersWord} into cash first, on the Bank page.`;
-    if (v.plan.hasPlan && v.spendLeft < v.safeNow - 0.005) safeWhy += v.spendLeft > 0.005 ? ` Your plan only has ${fmtMoney(v.spendLeft)} of spending money left.` : " You've already used all of your plan's spending money.";
+    safeWhy = `Reserves money for bills on each remaining day, using only withdrawable accounts and excluding conditional income. Automatic saving is reserved too.`;
+    if (v.safeTimed < v.safeTotal - 0.005) safeWhy += ` Some money hasn't arrived yet or is reserved for saving, so the timing limit is ${fmtMoney(v.safeTimed)}.`;
+    if (v.safeNow > cashNow + 0.005) safeWhy += ` Only ${fmtMoney(cashNow)} is in your main account. Spending more means moving ${othersWord} into it first, on the Bank page.`;
+    if (v.plan.hasPlan && v.spendLeft < v.safeTimed - 0.005) safeWhy += v.spendLeft > 0.005 ? ` Your plan limits spending to ${fmtMoney(v.spendLeft)} more.` : " You've already used all of your plan's spending money.";
   }
   document.getElementById("budSafe").innerHTML = `
     <div class="bud-safe-label">Safe to spend right now</div>
     <div class="bud-safe-value">${fmtMoney(v.safeNow)}</div>
     <div class="bud-safe-why">${budEsc(safeWhy)}</div>
-    <div class="bud-safe-have"><span>Cash <strong>${fmtSigned(v.cash)}</strong></span><span>${budEsc(v.otherLabel || "Savings")} <strong>${fmtMoney(v.savings)}</strong></span><span>Still coming in <strong>+${fmtMoney(v.restIn)}</strong></span><span>Bills to pay <strong>−${fmtMoney(v.restBills)}</strong></span></div>`;
+    <div class="bud-safe-have"><span>${budEsc(v.mainLabel)} <strong>${fmtSigned(v.cash)}</strong></span><span>${budEsc(v.otherLabel || "Savings")} <strong>${fmtMoney(v.savings)}</strong></span><span>Expected income <strong>+${fmtMoney(v.restIn)}</strong></span>${v.restReturns > 0 ? `<span>Deposits returning <strong>+${fmtMoney(v.restReturns)}</strong></span>` : ""}<span>Bills to pay <strong>−${fmtMoney(v.restBills)}</strong></span></div>`;
 
   /* ---- Day by day ---- */
   const itemRow = i => {
@@ -364,13 +367,18 @@ async function saveBudgetPlan(e) {
   const box = document.getElementById("budMsg");
   const btn = document.getElementById("budSaveBtn");
   btn.disabled = true;
-  const res = await saveBudget(CURRENT.username, document.getElementById("budSave").value);
-  btn.disabled = false;
-  if (res.ok) {
-    flashMsg(box, `<div class="success-msg">Plan saved. It keeps going every week until you change it.</div>`);
-    await render();
-  } else {
-    box.innerHTML = `<div class="error-msg">${budEsc(res.error)}</div>`;
+  try {
+    const res = await saveBudget(CURRENT.username, document.getElementById("budSave").value);
+    if (res.ok) {
+      flashMsg(box, `<div class="success-msg">Plan saved. It keeps going every week until you change it.</div>`);
+      await render();
+    } else {
+      box.innerHTML = `<div class="error-msg">${budEsc(res.error)}</div>`;
+    }
+  } catch (err) {
+    box.innerHTML = `<div class="error-msg">Your plan couldn't be saved. Check your connection and try again.</div>`;
+  } finally {
+    btn.disabled = false;
   }
   return false;
 }
@@ -391,7 +399,7 @@ function renderBudgetTeacher(cls, students) {
 
   const planned = rows.filter(r => r.planned);
   const onTrack = rows.filter(r => r.status === "ok");
-  const needHelp = rows.filter(r => r.status === "bounce" || r.status === "move" || r.status === "short" || r.status === "over");
+  const needHelp = rows.filter(r => ["unknown", "bounce", "move", "short", "over"].includes(r.status));
   const stat = (tone, ic, label, value, of) => `
     <div class="stat ${tone}"><span class="icon">${icon(ic, 26)}</span>
       <div class="label">${label}</div>
@@ -402,6 +410,7 @@ function renderBudgetTeacher(cls, students) {
     stat(needHelp.length ? "gold" : "mint", "shield", "Might need a hand", needHelp.length, rows.length);
 
   const FLAG = {
+    unknown: `<span class="bud-flag warn">Incomplete activity history</span>`,
     bounce: `<span class="bud-flag short">A bill could bounce</span>`,
     move: `<span class="bud-flag warn">Needs money from savings</span>`,
     short: `<span class="bud-flag short">Bills more than money in</span>`,
