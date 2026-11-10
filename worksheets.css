@@ -33,7 +33,7 @@ main.ws-page{max-width:1280px;container:ws / inline-size;}
 .ws-count{min-width:22px;padding:1px 7px;border-radius:999px;background:var(--line);color:var(--muted);font-size:.72rem;font-weight:800;text-align:center;}
 
 /* module header + worksheet tabs */
-.ws-modulebar{padding:18px 20px 16px;background:var(--card);border:1.5px solid var(--line);border-top:4px solid var(--acc);border-radius:16px;box-shadow:var(--shadow);}
+.ws-modulebar{padding:18px 20px 16px;background:var(--card);border:1.5px solid var(--line);border-radius:16px;box-shadow:var(--shadow);}
 .ws-modhead h2{margin:0;font-size:1.45rem;letter-spacing:-.01em;line-height:1.2;}
 .ws-modhead p{margin:4px 0 0;color:var(--muted);font-size:.94rem;}
 .ws-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
