@@ -4214,6 +4214,13 @@ function t29SaveModOffBoot(username, keys) {
 }
 async function showModuleNavIfOn(u) {
   if (!u.classCode) { document.documentElement.classList.remove("mod-hold"); return; }
+  // Student view: nothing is hidden or switched off. Every module stays in the menu and opens; the page
+  // shows a popup saying the teacher switched it off (see qgSvLockNotice in quiz-gate.js).
+  if (u._studentView) {
+    paintModuleOff([]);
+    paintModulePageOff(false);
+    return;
+  }
   // Replay the last known state straight away so a hidden module doesn't flash in the menu.
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(t29ModOffCacheKey(u.classCode)) || "null"); } catch (e) { /* ignore */ }

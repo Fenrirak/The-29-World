@@ -761,11 +761,19 @@
     if (!S.storageOK) { const n = $("wsNotice"); n.hidden = false; n.textContent = "This browser is blocking local storage, so edits can't be saved. Print or export before you leave."; }
 
     // Sticky bits sit just under the top bar, whatever height it ends up at (it wraps on mid-width screens).
+    // With the sidebar on a computer screen the "bar" is a fixed full-height column down the left, so there's nothing to clear.
     const bar = document.querySelector(".topbar");
-    const syncTop = () => { if (bar) document.documentElement.style.setProperty("--ws-top", Math.round(bar.getBoundingClientRect().height + 8) + "px"); };
+    const syncTop = () => {
+      if (!bar) return;
+      const isRail = getComputedStyle(bar).position === "fixed" && bar.getBoundingClientRect().width < window.innerWidth * 0.6;
+      const top = isRail ? 12 : Math.round(bar.getBoundingClientRect().height + 8);
+      document.documentElement.style.setProperty("--ws-top", top + "px");
+    };
     syncTop();
     if (bar && window.ResizeObserver) new ResizeObserver(syncTop).observe(bar);
     window.addEventListener("resize", syncTop);
+    // Settings can flip the sidebar on/off without a resize.
+    new MutationObserver(syncTop).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
     selectModule(S.data.prefs.module, true);
     render();

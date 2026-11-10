@@ -107,7 +107,14 @@ function smInjectCss() {
   st.textContent = `
 .sm-divider{height:1px;background:var(--line);margin:14px 0;} /* same rhythm as style.css's adjacent-row rule */
 #t29DeviceAlertsHost:empty{display:none;}
-.sm-divider:has(+ #t29DeviceAlertsHost:empty){display:none;}`;
+.sm-divider:has(+ #t29DeviceAlertsHost:empty){display:none;}
+/* Spotlight: draws the eye to the one switch a prompt is asking for */
+.settings-popover-row.sm-spot{border-radius:12px;outline:3px solid var(--gold);outline-offset:6px;animation:smSpotRing .9s ease-in-out 3;}
+.sm-spot .lg-switch-track{animation:smSpotTrack .9s ease-in-out 3;}
+.sm-spot-tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--gold);color:var(--navy-900);font-size:.68rem;font-weight:800;letter-spacing:.04em;vertical-align:middle;white-space:nowrap;}
+@keyframes smSpotRing{0%,100%{outline-color:var(--gold);outline-offset:6px;}50%{outline-color:transparent;outline-offset:11px;}}
+@keyframes smSpotTrack{0%,100%{box-shadow:0 0 0 0 rgba(240,180,41,.0);}50%{box-shadow:0 0 0 6px rgba(240,180,41,.55);}}
+@media (prefers-reduced-motion:reduce){.settings-popover-row.sm-spot,.sm-spot .lg-switch-track{animation:none;}}`;
   document.head.appendChild(st);
 }
 
@@ -249,7 +256,9 @@ function smBuildPopover() {
 }
 
 function smPositionPopover(pop, btn) {
-  const rect = btn.getBoundingClientRect();
+  let rect = btn.getBoundingClientRect();
+  // Button not on screen (e.g. tucked in a closed menu): anchor to the top-right corner instead.
+  if (!rect.width && !rect.height) rect = { right: window.innerWidth - 10, bottom: 56, top: 56, left: window.innerWidth - 10 };
   const margin = 10;
   pop.style.visibility = "hidden";
   pop.classList.remove("hidden");
@@ -272,7 +281,41 @@ function smClosePopover() {
   const btn = document.getElementById("settingsBtn");
   if (pop) pop.classList.add("hidden");
   if (btn) btn.setAttribute("aria-expanded", "false");
+  smClearSpotlight();
 }
+
+// Flashes the row for one switch so people can see what to flip. Clears itself
+// after a few seconds, when the switch is used, or when the popover closes.
+function smClearSpotlight() {
+  document.querySelectorAll("#t29SettingsPopover .sm-spot").forEach(el => el.classList.remove("sm-spot"));
+  document.querySelectorAll("#t29SettingsPopover .sm-spot-tag").forEach(el => el.remove());
+  clearTimeout(window._t29SpotTimer);
+}
+function smSpotlight(inputId) {
+  const pop = document.getElementById("t29SettingsPopover");
+  const input = pop && pop.querySelector("#" + inputId);
+  const row = input && input.closest(".settings-popover-row");
+  if (!row) return;
+  smClearSpotlight();
+  row.classList.add("sm-spot");
+  const title = row.querySelector(".settings-popover-title");
+  if (title) title.insertAdjacentHTML("beforeend", '<span class="sm-spot-tag">Turn this on</span>');
+  input.addEventListener("change", smClearSpotlight, { once: true });
+  window._t29SpotTimer = setTimeout(smClearSpotlight, 3200);
+}
+
+// Public: open Settings from anywhere (e.g. the "top bar feeling cramped" prompt).
+// Call it AFTER the triggering click finishes (setTimeout 0), otherwise that same
+// click bubbles to the outside-click handler below and shuts the popover again.
+function t29OpenSettings(opts) {
+  const btn = document.getElementById("settingsBtn");
+  if (!btn) return false;
+  const pop = document.getElementById("t29SettingsPopover");
+  if (!pop || pop.classList.contains("hidden")) smOpenPopover(btn);
+  if (opts && opts.spotlight === "sidebar") smSpotlight("t29SidebarNavToggle");
+  return true;
+}
+window.t29OpenSettings = t29OpenSettings;
 
 function smOpenPopover(btn) {
   const pop = smBuildPopover();
@@ -307,6 +350,8 @@ function smInit() {
     const pop = document.getElementById("t29SettingsPopover");
     if (!pop || pop.classList.contains("hidden")) return;
     if (pop.contains(e.target) || e.target === btn || btn.contains(e.target)) return;
+    // A click on something that was removed mid-click (a dismissed prompt) isn't "outside".
+    if (!document.contains(e.target)) return;
     smClosePopover();
   });
 

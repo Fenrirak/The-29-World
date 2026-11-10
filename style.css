@@ -4018,6 +4018,20 @@ html.dark-mode .ac-swap{color:var(--ink);}
 /* letter-spacing leaves a gap after the last character, which pulls the code off-centre in its pill */
 .class-code-pill > span:last-child{margin-right:-.12em;}
 
+/* Teacher dashboard header: title + class code on the left, quick actions on the right. Gives the code pill
+   room to breathe (it used to sit hard against the stat cards below) and a smaller, calmer size. */
+.class-head{align-items:flex-end;gap:18px 28px;margin-bottom:28px;}
+.class-head h1{margin:0 0 12px;}
+.class-head .class-code-line{margin:0;gap:8px 14px;}
+.class-head .class-code-pill{gap:7px;padding:6px 14px;font-size:.95rem;letter-spacing:.1em;border-radius:var(--r-2);}
+.class-head .class-code-pill .icon{width:14px !important;height:14px !important;}
+.class-head-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
+@media (max-width:640px){
+  .class-head{gap:16px;margin-bottom:22px;}
+  .class-head-actions{width:100%;}
+  .class-head-actions .btn{flex:1 1 auto;}
+}
+
 .set-lead{margin:2px 0 0;max-width:70ch;}
 .set-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px;}
 .set-tile{display:flex;flex-direction:column;gap:10px;min-width:0;background:var(--cc-surface);border:1.5px solid var(--line);border-radius:var(--r-5);padding:18px 20px;}

@@ -245,7 +245,9 @@ async function qgGuardModulePage() {
   const moduleKey = qgCurrentModuleKey();
   if (!moduleKey) return;
   const session = await getSessionUser();
-  if (!session || session.role !== "student" || session._studentView || !session.classCode) return;
+  if (!session || session.role !== "student" || !session.classCode) return;
+  // Student view is never locked: it gets a notice explaining what would lock this module instead.
+  if (session._studentView) { await qgSvLockNotice(moduleKey, session); return; }
   const raw = await getClassCached(session.classCode);
   if (!raw) return;
   const cls = withNewModuleDefaults(raw);
@@ -277,6 +279,55 @@ function qgShowPageLock(moduleKey, reason) {
   // Passing reloads the page (no href given — see qgContinue), which runs
   // this check again and finds it unlocked.
   if (canQuiz) t29OpenQuizGate(moduleKey, { alsoLifestyleLocked: reason === "both" });
+}
+
+/* ---------------- Student view: "this would be locked" notice ----------------
+   A teacher previewing as a student can open every module. For one that a real student could not
+   open, this explains why (lifestyle rating, an unpassed quiz, or the teacher having switched it off)
+   with a button to carry on into the module. The page stays covered until they press it, the same way
+   a real lock covers it, so nothing about the module is skipped past by accident. */
+async function qgSvLockNotice(moduleKey, session) {
+  const raw = await getClassCached(session.classCode);
+  if (!raw) return;
+  const cls = withNewModuleDefaults(raw);
+  const me = Object.assign({ username: session.username }, await getUserCached(session.username));
+  const would = t29SvWouldBeLockedFromData(cls, me, session.username)[moduleKey] || {};
+  const lines = [];
+  if (would.lifestyle) {
+    lines.push(`This would be locked for a normal student if their lifestyle rating is at yours (${would.lifestyle.score}). The lock applies at ${would.lifestyle.threshold} or below.`);
+  }
+  if (would.quiz) lines.push("This would be locked for a normal student until they pass the quiz you set for this module.");
+  // The Casino has its own on/off switch and page notices, so it isn't repeated here.
+  if (moduleKey !== "gambling" && typeof moduleIsOff === "function" && moduleIsOff(cls, moduleKey)) {
+    lines.push("This module has been switched off by you (the teacher), so students can't see or open it.");
+  }
+  if (lines.length) qgShowSvNotice(moduleKey, lines);
+}
+
+function qgShowSvNotice(moduleKey, lines) {
+  if (document.getElementById("t29SvLockNote")) return;
+  document.body.classList.add("t29-page-locked");
+  const mainEl = document.querySelector("main");
+  if (mainEl) { mainEl.inert = true; mainEl.setAttribute("aria-hidden", "true"); }
+  const overlay = document.createElement("div");
+  overlay.id = "t29SvLockNote";
+  overlay.className = "anw-modal-overlay";
+  overlay.innerHTML = qgOverlayHtml(`
+    <p class="qg-kicker">${icon("lock", 12)} ${qgEsc(qgModuleLabel(moduleKey))} would be locked</p>
+    ${lines.map(l => `<p>${qgEsc(l)}</p>`).join("")}
+    <p class="muted-small">Student view lets you in anyway, so nothing here is locked for you.</p>
+    <div class="qg-actions"><button class="btn gold" type="button" id="t29SvLockGo">Continue to module</button></div>`);
+  const close = () => {
+    overlay.remove();
+    document.body.classList.remove("t29-page-locked");
+    if (mainEl) { mainEl.inert = false; mainEl.removeAttribute("aria-hidden"); }
+    document.removeEventListener("keydown", onKey);
+  };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  overlay.querySelector("#t29SvLockGo").addEventListener("click", close);
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(overlay);
+  overlay.querySelector("#t29SvLockGo").focus();
 }
 
 document.addEventListener("DOMContentLoaded", () => {

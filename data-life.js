@@ -4356,13 +4356,42 @@ function getQuizLockedModulesFromData(cls, user) {
 // moduleKey -> "lifestyle" | "quiz" | "both" rather than a bare list. The
 // UI uses it to explain the RIGHT thing to a student — "your rating is too
 // low" and "you need to pass a quiz first" need very different next steps.
+// Student view (a teacher previewing the app as a student): NOTHING is locked. Every module opens, and
+// the page shows a popup explaining what would lock it for a real student (see qgSvLockNotice in
+// quiz-gate.js). Because every lock check below goes through getModuleLockReasonsFromData, this one
+// switch covers the menu greying, the page covers, the dashboard banners and the action checks.
+function t29SvLocksOff(username) {
+  try {
+    const st = typeof t29SvState === "function" ? t29SvState() : null;
+    return !!st && (!username || st.u === username);
+  } catch (e) { return false; }
+}
+
 function getModuleLockReasonsFromData(cls, user, username) {
+  if (t29SvLocksOff(username)) return {};
   const reasons = {};
   getLifestyleLockedModulesFromData(cls, user, username).forEach(k => { reasons[k] = "lifestyle"; });
   getQuizLockedModulesFromData(cls, user).forEach(k => {
     reasons[k] = reasons[k] ? "both" : "quiz";
   });
   return reasons;
+}
+
+// What WOULD lock each module for a normal student, judged from the teacher's own account in student
+// view: { moduleKey: { lifestyle: { score, threshold }, quiz: true } }. Display only, never enforced.
+// "score" is the teacher's rating in student view: a student whose rating is at that level is locked
+// out of the module whenever score <= threshold.
+function t29SvWouldBeLockedFromData(cls, user, username) {
+  const out = {};
+  if (!cls) return out;
+  const lock = cls.lifestyleLock;
+  if (lock && lock.modules && lock.modules.length) {
+    const score = lifestyleRatingFromData(cls, user, username);
+    if (score <= lock.threshold) lock.modules.forEach(k => { out[k] = { lifestyle: { score, threshold: lock.threshold } }; });
+  }
+  // A student who hasn't passed anything yet is stopped by every active quiz that is attached to a module.
+  getQuizLockedModulesFromData(cls, { role: "student", quizResults: {} }).forEach(k => { (out[k] = out[k] || {}).quiz = true; });
+  return out;
 }
 
 function getLockedModulesForStudentFromData(cls, user, username) {
