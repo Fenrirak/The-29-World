@@ -58,7 +58,13 @@ html.dark-mode .ws-seg{background:rgba(255,255,255,.08);}
 .ws-seg button:focus-visible{outline:2px solid var(--sky);outline-offset:1px;}
 .ws-seg.sm button{padding:5px 11px;font-size:.78rem;}
 .ws-pill{padding:3px 10px;border-radius:999px;background:var(--line);color:var(--muted);font-size:.72rem;font-weight:800;letter-spacing:.04em;}
-.ws-check{display:inline-flex;align-items:center;gap:7px;font-size:.85rem;font-weight:600;cursor:pointer;}
+.ws-check{display:inline-flex;align-items:center;gap:10px;margin:0;font-size:.85rem;font-weight:700;white-space:nowrap;cursor:pointer;}
+/* Edit/Preview: same pill switcher as Gambling's mode-switch */
+.ws-mode{display:inline-flex;gap:4px;padding:4px;border-radius:999px;background:rgba(212,162,76,.07);border:1px solid rgba(212,162,76,.35);}
+.ws-mode button{padding:8px 20px;border:0;border-radius:999px;background:transparent;color:var(--gold-dark,#c99a2e);font:inherit;font-size:.85rem;font-weight:800;line-height:1;cursor:pointer;transition:background .18s ease,color .18s ease,box-shadow .18s ease;}
+.ws-mode button:hover:not(.on){background:rgba(212,162,76,.14);}
+.ws-mode button.on{background:var(--gold,#d4a24c);color:#1f2b44;box-shadow:0 2px 8px rgba(212,162,76,.4);}
+.ws-mode button:focus-visible{outline:2px solid var(--gold,#d4a24c);outline-offset:2px;}
 .ws-status{min-width:3ch;font-size:.78rem;font-weight:600;color:var(--muted);}
 .ws-status.warn{color:#c4402c;}
 

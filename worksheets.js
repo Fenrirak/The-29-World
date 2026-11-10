@@ -256,11 +256,11 @@
     const canReset = S.defaultIds.has(S.sheet.id) && isEdited(S.sheet);
     host.innerHTML =
       `<div class="ws-tb-left">` +
-        `<div class="ws-seg" role="group" aria-label="View">` +
+        `<div class="ws-mode" role="group" aria-label="View">` +
           `<button type="button" class="${S.mode === "edit" ? "on" : ""}" data-act="mode" data-mode="edit" aria-pressed="${S.mode === "edit"}">Edit</button>` +
           `<button type="button" class="${S.mode === "preview" ? "on" : ""}" data-act="mode" data-mode="preview" aria-pressed="${S.mode === "preview"}">Preview</button>` +
         `</div>` +
-        (S.mode === "preview" ? `<label class="ws-check"><input type="checkbox" data-act="toggle-ans" ${S.showAnswers ? "checked" : ""}><span>Show answers</span></label>` : "") +
+        (S.mode === "preview" ? `<label class="ws-check"><span class="lg-switch"><input type="checkbox" data-act="toggle-ans" ${S.showAnswers ? "checked" : ""}><span class="lg-switch-track"><span class="lg-switch-thumb"></span></span></span><span>Show answers</span></label>` : "") +
         `<span class="ws-pill">${origin}</span>` +
         `<span class="ws-status${S.statusWarn ? " warn" : ""}" id="wsStatus" role="status" aria-live="polite">${e(S.status)}</span>` +
       `</div>` +
