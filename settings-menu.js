@@ -44,7 +44,7 @@ function dmSetOn(on) {
 }
 
 const SM_BUNDLES = {
-  sb: { css: "sidebar-nav.css?v=c69a1fa3", js: "sidebar-nav.js?v=8d951bc5", setter: "sbSetOn" }
+  sb: { css: "sidebar-nav.css?v=c69a1fa3", js: "sidebar-nav.js?v=d620d750", setter: "sbSetOn" }
 };
 
 // Loads a feature's CSS+JS the first time it's needed (idempotent — safe to
@@ -75,6 +75,10 @@ function smLoadFeature(name) {
 // The sidebar is on by default on phones/small tablets until someone
 // switches it off (see sbIsOn() in sidebar-nav.js and the loader in each
 // page's <head>) — so "is it on" isn't just "is the flag 1" for it.
+function smIsTeacher() {
+  try { return window.T29_TEACHER_PAGE === true || localStorage.getItem("t29-role") === "teacher"; }
+  catch (e) { return window.T29_TEACHER_PAGE === true; }
+}
 function smSidebarIsOn() {
   try {
     const flag = localStorage.getItem(SB_STORAGE_KEY);
@@ -82,7 +86,7 @@ function smSidebarIsOn() {
   } catch (e) {
     return document.documentElement.classList.contains("sidebar-nav");
   }
-  return !!window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
+  return smIsTeacher() || (!!window.matchMedia && window.matchMedia("(max-width: 900px)").matches);
 }
 
 function smWireToggle(cb, name, storageKey) {
@@ -90,7 +94,11 @@ function smWireToggle(cb, name, storageKey) {
   cb.checked = name === "sb" ? smSidebarIsOn() : smReadFlag(storageKey);
   cb.addEventListener("change", () => {
     const on = cb.checked;
-    smLoadFeature(name).then(() => window[SM_BUNDLES[name].setter](on));
+    smLoadFeature(name).then(() => {
+      window[SM_BUNDLES[name].setter](on);
+      const pop = document.getElementById("t29SettingsPopover"), gear = document.getElementById("settingsBtn");
+      if (pop && gear && !pop.classList.contains("hidden")) smPositionPopover(pop, gear);
+    });
   });
 }
 
@@ -111,7 +119,7 @@ function smInjectCss() {
 /* Spotlight: draws the eye to the one switch a prompt is asking for */
 .settings-popover-row.sm-spot{border-radius:12px;outline:3px solid var(--gold);outline-offset:6px;animation:smSpotRing .9s ease-in-out 3;}
 .sm-spot .lg-switch-track{animation:smSpotTrack .9s ease-in-out 3;}
-.sm-spot-tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--gold);color:var(--navy-900);font-size:.68rem;font-weight:800;letter-spacing:.04em;vertical-align:middle;white-space:nowrap;}
+.sm-spot-tag{display:block;width:fit-content;margin:5px 0 1px;padding:1px 8px;border-radius:999px;background:var(--gold);color:var(--navy-900);font-size:.68rem;font-weight:800;letter-spacing:.04em;vertical-align:middle;white-space:nowrap;}
 @keyframes smSpotRing{0%,100%{outline-color:var(--gold);outline-offset:6px;}50%{outline-color:transparent;outline-offset:11px;}}
 @keyframes smSpotTrack{0%,100%{box-shadow:0 0 0 0 rgba(240,180,41,.0);}50%{box-shadow:0 0 0 6px rgba(240,180,41,.55);}}
 @media (prefers-reduced-motion:reduce){.settings-popover-row.sm-spot,.sm-spot .lg-switch-track{animation:none;}}`;
@@ -143,7 +151,7 @@ function smBuildPopover() {
     smHasSidebar() ? `<div class="settings-popover-row">
       <div class="settings-popover-text">
         <div class="settings-popover-title">Sidebar navigation</div>
-        <div class="settings-popover-desc">Show the menu as a side panel instead of the top bar. A slide-out menu on phones (on by default there).</div>
+        <div class="settings-popover-desc">Show the menu as a side panel instead of the top bar. A slide-out menu on phones (${smIsTeacher() ? "on by default for teachers too" : "on by default there"}).</div>
       </div>
       <label class="lg-switch">
         <input type="checkbox" id="t29SidebarNavToggle">
@@ -284,12 +292,11 @@ function smClosePopover() {
   smClearSpotlight();
 }
 
-// Flashes the row for one switch so people can see what to flip. Clears itself
-// after a few seconds, when the switch is used, or when the popover closes.
+// Flashes the row for one switch so people can see what to flip: it pulses at once, then
+// stays ringed until the switch is used or the popover closes.
 function smClearSpotlight() {
   document.querySelectorAll("#t29SettingsPopover .sm-spot").forEach(el => el.classList.remove("sm-spot"));
   document.querySelectorAll("#t29SettingsPopover .sm-spot-tag").forEach(el => el.remove());
-  clearTimeout(window._t29SpotTimer);
 }
 function smSpotlight(inputId) {
   const pop = document.getElementById("t29SettingsPopover");
@@ -301,7 +308,6 @@ function smSpotlight(inputId) {
   const title = row.querySelector(".settings-popover-title");
   if (title) title.insertAdjacentHTML("beforeend", '<span class="sm-spot-tag">Turn this on</span>');
   input.addEventListener("change", smClearSpotlight, { once: true });
-  window._t29SpotTimer = setTimeout(smClearSpotlight, 3200);
 }
 
 // Public: open Settings from anywhere (e.g. the "top bar feeling cramped" prompt).
@@ -312,6 +318,7 @@ function t29OpenSettings(opts) {
   if (!btn) return false;
   const pop = document.getElementById("t29SettingsPopover");
   if (!pop || pop.classList.contains("hidden")) smOpenPopover(btn);
+  window._t29SettingsOpenedAt = Date.now();
   if (opts && opts.spotlight === "sidebar") smSpotlight("t29SidebarNavToggle");
   return true;
 }
@@ -352,6 +359,8 @@ function smInit() {
     if (pop.contains(e.target) || e.target === btn || btn.contains(e.target)) return;
     // A click on something that was removed mid-click (a dismissed prompt) isn't "outside".
     if (!document.contains(e.target)) return;
+    // Just opened from a prompt: ignore clicks still landing from that same tap.
+    if (Date.now() - (window._t29SettingsOpenedAt || 0) < 350) return;
     smClosePopover();
   });
 

@@ -24,15 +24,20 @@
 var SB_STORAGE_KEY = typeof SB_STORAGE_KEY !== "undefined" ? SB_STORAGE_KEY : "t29-sidebar-nav";
 var SB_DESKTOP_QUERY = "(min-width: 901px)";
 
-// On by default on phones and small tablets (a row of 15+ icons doesn't
-// fit there), off by default on bigger screens — and whatever someone
-// picks in Settings always wins after that. Must match the loader in each
-// page's <head>, which makes the same decision before the page is drawn.
+// On by default for teachers and on phones / small tablets (a row of 15+
+// icons doesn't fit there), off by default for students on bigger screens —
+// and whatever someone picks in Settings always wins after that. Must match
+// the loader in each page's <head>, which makes the same decision before
+// the page is drawn.
+function sbIsTeacher() {
+  try { return window.T29_TEACHER_PAGE === true || localStorage.getItem("t29-role") === "teacher"; }
+  catch (e) { return window.T29_TEACHER_PAGE === true; }
+}
 function sbIsOn() {
   try {
     const flag = localStorage.getItem(SB_STORAGE_KEY);
     if (flag !== null) return flag === "1";
-    return window.matchMedia("(max-width: 900px)").matches;
+    return sbIsTeacher() || window.matchMedia("(max-width: 900px)").matches;
   } catch (e) {
     return document.documentElement.classList.contains("sidebar-nav");
   }

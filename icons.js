@@ -479,8 +479,16 @@ function showSidebarHint() {
     } catch (err) { /* storage unavailable: just hides for now */ }
     hideSidebarHint();
     if (act === "settings") {
-      const s = document.getElementById("settingsBtn");
-      if (s) s.click();
+      // Wait until this click has finished bubbling: Settings closes itself on any
+      // outside click, so opening it mid-click made it flash open and shut again.
+      // settings-menu.js is deferred, so retry briefly if it hasn't run yet.
+      const openIt = tries => {
+        if (typeof t29OpenSettings === "function" && t29OpenSettings({ spotlight: "sidebar" })) return;
+        if (tries > 0) { setTimeout(() => openIt(tries - 1), 100); return; }
+        const s = document.getElementById("settingsBtn");
+        if (s) s.click();
+      };
+      setTimeout(() => openIt(10), 0);
     }
   });
   _placeSidebarHint(el);

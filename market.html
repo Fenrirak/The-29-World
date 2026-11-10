@@ -11,8 +11,11 @@
   function loadIfOn(flagKey, cls, css, js){
     var flag = null;
     try { flag = localStorage.getItem(flagKey); } catch(e) {}
-    // Phones and small tablets get the slide-out menu unless it was switched off in Settings.
-    var on = flag === '1' || (flag === null && !!window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+    // Phones, small tablets and teachers get the side menu unless it was switched off in Settings.
+    // Teachers: teacher-only pages say so inline; shared pages use the role remembered from the last sign-in.
+    var teacher = window.T29_TEACHER_PAGE === true;
+    try { teacher = teacher || localStorage.getItem('t29-role') === 'teacher'; } catch(e) {}
+    var on = flag === '1' || (flag === null && (teacher || (!!window.matchMedia && window.matchMedia('(max-width: 900px)').matches)));
     if (!on) return;
     document.documentElement.classList.add(cls);
     var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = css;
@@ -20,7 +23,7 @@
     var s = document.createElement('script'); s.src = js;
     document.head.appendChild(s);
   }
-  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=c69a1fa3', 'sidebar-nav.js?v=8d951bc5');
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=c69a1fa3', 'sidebar-nav.js?v=d620d750');
 })();
 </script>
 <title>Stock Market | The 29 World</title>
@@ -164,11 +167,11 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 </footer>
 
 <script type="module" src="firebase-init.js?v=3042b252"></script>
-<script defer src="icons.js?v=69609e06"></script>
-<script defer src="settings-menu.js?v=68568ae0"></script>
+<script defer src="icons.js?v=bb820ab3"></script>
+<script defer src="settings-menu.js?v=372f044a"></script>
 <script defer src="shortcuts.js?v=5c3b32dc"></script>
 <script defer src="offline.js?v=ac2cbd82"></script>
-<script defer src="data-core.js?v=8aae56af"></script>
+<script defer src="data-core.js?v=694704db"></script>
 <script defer src="data-money.js?v=b8fa211e"></script>
 <script defer src="data-life.js?v=64c874f6"></script>
 <script defer src="data-property.js?v=84d847c7"></script>

@@ -678,6 +678,12 @@ function initials(name) {
 // that actually changed the password re-stamps its own session with the
 // new version immediately, so it stays logged in.
 function setSession(username, sessionVersion) {
+  // A different person signing in: forget the remembered role (it only drives first-paint defaults,
+  // e.g. the teacher side menu) until requireLogin() confirms the new one.
+  try {
+    const prev = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    if (!prev || prev.username !== username) localStorage.removeItem("t29-role");
+  } catch (e) { /* ignore */ }
   localStorage.setItem(SESSION_KEY, JSON.stringify({ username, sv: sessionVersion || 0 }));
 }
 function _parseSession() {
@@ -733,6 +739,7 @@ async function getSessionUser() {
 }
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
+  try { localStorage.removeItem("t29-role"); } catch (e) { /* ignore */ }
 }
 
 /* ---------------- Daily time limit (teacher-settable, per student) ----
@@ -1081,6 +1088,8 @@ async function requireLogin(opts) {
     return null;
   }
   T29_SESSION_ROLE = u.role;
+  // Remembered so every page can pick the right navigation default before it draws (a teacher viewing as a student doesn't change it).
+  if (!u._studentView) { try { localStorage.setItem("t29-role", u.role); } catch (e) { /* ignore */ } }
   T29_SESSION_USERNAME = u.username;
   T29_SESSION_NAME = u.name || null;
   // Tracked locally rather than as a property on u — u is the shared
