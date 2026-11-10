@@ -78,21 +78,26 @@ html.dark-mode .ws-seg{background:rgba(255,255,255,.08);}
 .ws-status{min-width:3ch;font-size:.78rem;font-weight:600;color:var(--muted);}
 .ws-status.warn{color:#c4402c;}
 
-/* popovers + menu */
-.ws-popwrap{position:relative;}
-.ws-pop{display:none;position:absolute;right:0;top:calc(100% + 8px);z-index:50;width:min(330px,88vw);width:min(330px,calc(100cqw - 16px));padding:14px 16px 16px;background:var(--card);border:1.5px solid var(--line);border-radius:14px;box-shadow:var(--shadow-lg);}
-.ws-popwrap.open .ws-pop{display:block;}
-.ws-pop-row{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-top:14px;}
-.ws-pop-note{font-size:.76rem;font-weight:600;line-height:1.4;color:var(--muted);}
 .ws-pop-lbl{font-size:.7rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
 .ws-input{width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;font-size:.9rem;}
 .ws-input:focus{outline:2px solid var(--sky);outline-offset:1px;}
-.ws-menu{width:min(250px,88vw);width:min(250px,calc(100cqw - 16px));padding:6px;}
-.ws-menu button{display:block;width:100%;padding:9px 12px;border:0;border-radius:8px;background:transparent;color:var(--ink);font:inherit;font-size:.88rem;font-weight:600;text-align:left;cursor:pointer;}
-.ws-menu button:hover:not(:disabled){background:rgba(91,141,239,.1);}
+/* Layout / More panel: docks inside the toolbar and pushes the worksheet down instead of floating over it */
+.ws-tb-right [data-act="pop"]::after{content:"";display:inline-block;width:6px;height:6px;margin:0 0 3px 9px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform .15s;}
+.ws-tb-right [data-act="pop"][aria-expanded="true"]{border-color:var(--sky);background:rgba(91,141,239,.12);}
+.ws-tb-right [data-act="pop"][aria-expanded="true"]::after{transform:translateY(3px) rotate(225deg);}
+.ws-panel{width:100%;max-height:max(120px,min(340px,calc(100vh - var(--ws-top,76px) - 240px)));overflow-y:auto;padding-top:16px;border-top:1.5px solid var(--line);}
+.ws-panel[hidden],.ws-panel-body[hidden]{display:none;}
+.ws-panel-body{display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px 32px;}
+.ws-pop-col{display:flex;flex-direction:column;gap:2px;}
+.ws-pop-row{display:flex;flex-direction:column;align-items:flex-start;gap:6px;}
+.ws-pop-row.grow{flex:1 1 240px;min-width:200px;}
+.ws-pop-note{max-width:230px;font-size:.76rem;font-weight:600;line-height:1.4;color:var(--muted);}
+.ws-menu{align-items:center;gap:8px;}
+.ws-menu button{padding:8px 14px;border:1.5px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;font-size:.86rem;font-weight:600;cursor:pointer;}
+.ws-menu button:hover:not(:disabled){background:rgba(91,141,239,.1);border-color:var(--sky);}
 .ws-menu button:disabled{opacity:.4;cursor:not-allowed;}
 .ws-menu .danger{color:#c4402c;}
-.ws-menu hr{margin:6px 4px;border:0;border-top:1px solid var(--line);}
+.ws-vr{align-self:stretch;width:1px;margin:0 4px;background:var(--line);}
 .ws-switch{position:relative;display:flex;align-items:center;gap:11px;padding:7px 0;font-size:.9rem;font-weight:600;cursor:pointer;}
 .ws-switch input{position:absolute;opacity:0;pointer-events:none;}
 .ws-track{position:relative;flex:none;width:38px;height:22px;border-radius:999px;background:#c3cbdb;transition:background .15s;}
@@ -260,8 +265,9 @@ html.dark-mode .ws-stage{background:rgba(255,255,255,.045);}
   .ws-tb-left,.ws-tb-right{width:100%;}
   .ws-tb-left .ws-status{flex:1 0 100%;margin-left:0;}
   .ws-tb-right > .btn{flex:1 1 auto;}
-  .ws-popwrap{position:static;}
-  .ws-pop{left:0;right:0;width:auto;}
+  .ws-vr{display:none;}
+  .ws-panel{max-height:none;}
+  .ws-panel-body{gap:14px 22px;}
   .ws-paper .ws-name{flex-wrap:wrap;gap:12px;}
   .ws-paper .ws-name-f,.ws-paper .ws-name-f:first-child{flex:1 1 100%;}
   .ws-paper .ws-ctrl-type{display:none;}

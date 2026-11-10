@@ -266,26 +266,30 @@
       `</div>` +
       `<div class="ws-tb-right">` +
         `<button type="button" class="btn small secondary${S.syncInfo?.error ? "" : " hidden"}" data-act="sync-retry">Retry sync</button>` +
-        `<div class="ws-popwrap"><button type="button" class="btn small secondary" data-act="pop" data-pop="layout" aria-expanded="false" aria-haspopup="true">Layout</button>` +
-          `<div class="ws-pop" role="dialog" aria-label="Layout options">` +
+        `<button type="button" class="btn small secondary" data-act="pop" data-pop="layout" aria-expanded="${S.pop === "layout"}" aria-controls="wsPanel">Layout</button>` +
+        `<button type="button" class="btn small secondary" data-act="pop" data-pop="more" aria-expanded="${S.pop === "more"}" aria-controls="wsPanel">More</button>` +
+        `<button type="button" class="btn small secondary" data-act="print-key">Print answer key</button>` +
+        `<button type="button" class="btn small gold" data-act="print">Print worksheet</button>` +
+      `</div>` +
+      `<div class="ws-panel" id="wsPanel"${S.pop ? "" : " hidden"}>` +
+        `<div class="ws-panel-body" data-panel="layout" role="group" aria-label="Layout options"${S.pop === "layout" ? "" : " hidden"}>` +
+          `<div class="ws-pop-col">` +
             `<label class="ws-switch"><input type="checkbox" data-set="nameLine" ${st.nameLine ? "checked" : ""}><span class="ws-track"></span><span>Name, class and date line</span></label>` +
             `<label class="ws-switch"><input type="checkbox" data-set="marks" ${st.marks ? "checked" : ""}><span class="ws-track"></span><span>Show marks</span></label>` +
+          `</div>` +
             `<div class="ws-pop-row"><span class="ws-pop-lbl">Font</span>${segHTML("font", FONT_LABEL, st.font)}</div>` +
             `<div class="ws-pop-row"><span class="ws-pop-lbl">Text size</span>${segHTML("size", SIZE_LABEL, st.size)}</div>` +
             `<div class="ws-pop-row"><span class="ws-pop-lbl">Paper</span>${segHTML("paper", PAPER_LABEL, st.paper)}<span class="ws-pop-note" id="wsA5Note" ${st.paper === "a5" ? "" : "hidden"}>Prints two copies side by side on landscape A4. Cut the sheet in half.</span></div>` +
-            `<div class="ws-pop-row"><label class="ws-pop-lbl" for="wsFooterIn">Footer text</label><input id="wsFooterIn" class="ws-input" type="text" maxlength="160" data-set="footer" value="${e(st.footer)}" placeholder="Leave blank for no footer"></div>` +
-          `</div></div>` +
-        `<div class="ws-popwrap"><button type="button" class="btn small secondary" data-act="pop" data-pop="more" aria-expanded="false" aria-haspopup="true">More</button>` +
-          `<div class="ws-pop ws-menu" role="menu">` +
+            `<div class="ws-pop-row grow"><label class="ws-pop-lbl" for="wsFooterIn">Footer text</label><input id="wsFooterIn" class="ws-input" type="text" maxlength="160" data-set="footer" value="${e(st.footer)}" placeholder="Leave blank for no footer"></div>` +
+        `</div>` +
+        `<div class="ws-panel-body ws-menu" data-panel="more" role="menu"${S.pop === "more" ? "" : " hidden"}>` +
             `<button type="button" role="menuitem" data-act="dup-sheet">Duplicate worksheet</button>` +
             `<button type="button" role="menuitem" data-act="reset-sheet" ${canReset ? "" : "disabled"}>Reset to built-in version</button>` +
             `<button type="button" role="menuitem" class="danger" data-act="del-sheet">${S.defaultIds.has(S.sheet.id) ? "Remove worksheet" : "Delete worksheet"}</button>` +
-            `<hr>` +
+            `<span class="ws-vr" aria-hidden="true"></span>` +
             `<button type="button" role="menuitem" data-act="export">Export backup</button>` +
             `<button type="button" role="menuitem" data-act="import">Import backup…</button>` +
-          `</div></div>` +
-        `<button type="button" class="btn small secondary" data-act="print-key">Print answer key</button>` +
-        `<button type="button" class="btn small gold" data-act="print">Print worksheet</button>` +
+        `</div>` +
       `</div>`;
   }
 
@@ -688,25 +692,17 @@
     window.print();
   }
 
-  // Keep an open popover inside the worksheet column, so it never slides under the side menu or off the screen.
-  function placePop(w) {
-    const pop = w.querySelector(".ws-pop");
-    if (!pop) return;
-    pop.style.transform = "";
-    if (getComputedStyle(w).position === "static") return; // narrow layout already spans the toolbar
-    const b = (document.querySelector(".ws-work") || $("wsApp")).getBoundingClientRect(), r = pop.getBoundingClientRect(), pad = 8;
-    let dx = 0;
-    if (r.right > b.right - pad) dx = b.right - pad - r.right;
-    if (r.left + dx < b.left + pad) dx = b.left + pad - r.left;
-    if (dx) pop.style.transform = "translateX(" + Math.round(dx) + "px)";
+  // The Layout / More panel docks inside the toolbar (it pushes the worksheet down rather than floating over it).
+  function syncPanel() {
+    const p = $("wsPanel"); if (!p) return;
+    p.hidden = !S.pop;
+    p.querySelectorAll("[data-panel]").forEach(el => { el.hidden = el.dataset.panel !== S.pop; });
+    document.querySelectorAll("#wsToolbar [data-act='pop']").forEach(b => b.setAttribute("aria-expanded", String(b.dataset.pop === S.pop)));
   }
-
-  function closePops(except) {
-    document.querySelectorAll(".ws-popwrap.open").forEach(w => {
-      if (w === except) return;
-      w.classList.remove("open");
-      const b = w.querySelector("[data-act='pop']"); if (b) b.setAttribute("aria-expanded", "false");
-    });
+  // menuOnly: an outside click closes the More menu but leaves Layout open so changes can be watched live.
+  function closePops(menuOnly) {
+    if (!S.pop || (menuOnly && S.pop !== "more")) return;
+    S.pop = null; syncPanel();
   }
   function closeAddMenus(except) {
     document.querySelectorAll(".ws-add.open").forEach(a => { if (a !== except) { a.classList.remove("open"); const b = a.querySelector(".ws-add-btn"); if (b) b.setAttribute("aria-expanded", "false"); } });
@@ -715,7 +711,7 @@
   /* ---------------------------------- events ---------------------------------- */
   function onClick(ev) {
     const t = ev.target.closest ? ev.target.closest("[data-act]") : null;
-    if (!ev.target.closest(".ws-popwrap")) closePops();
+    if (!ev.target.closest("#wsPanel, [data-act='pop']")) closePops(true);
     if (!ev.target.closest(".ws-add")) closeAddMenus();
     if (!t) return;
     const act = t.dataset.act, bid = t.dataset.bid;
@@ -730,9 +726,7 @@
       case "print": doPrint(false); break;
       case "print-key": doPrint(true); break;
       case "pop": {
-        const w = t.closest(".ws-popwrap"), open = !w.classList.contains("open");
-        closePops(w); w.classList.toggle("open", open); t.setAttribute("aria-expanded", String(open));
-        if (open) placePop(w);
+        S.pop = S.pop === t.dataset.pop ? null : t.dataset.pop; syncPanel();
         break;
       }
       case "set": {
@@ -859,9 +853,9 @@
     // With the sidebar on a computer screen the "bar" is a fixed full-height column down the left, so there's nothing to clear.
     const bar = document.querySelector(".topbar");
     const syncTop = () => {
-      // Centre of the worksheet area (the side menu shifts it off the screen centre) for the toast; re-fit any open popover.
+      // Centre of the worksheet area (the side menu shifts it off the screen centre) for the toast; 
       const appEl = $("wsApp");
-      if (appEl) { const r = appEl.getBoundingClientRect(); document.documentElement.style.setProperty("--ws-cx", Math.round(r.left + r.width / 2) + "px"); document.querySelectorAll(".ws-popwrap.open").forEach(placePop); }
+      if (appEl) { const r = appEl.getBoundingClientRect(); document.documentElement.style.setProperty("--ws-cx", Math.round(r.left + r.width / 2) + "px"); }
       if (!bar) return;
       const isRail = getComputedStyle(bar).position === "fixed" && bar.getBoundingClientRect().width < window.innerWidth * 0.6;
       const top = isRail ? 12 : Math.round(bar.getBoundingClientRect().height + 8);
@@ -879,7 +873,7 @@
 
     const app = $("wsApp");
     app.addEventListener("click", onClick);
-    document.addEventListener("click", ev => { if (!app.contains(ev.target)) { closePops(); closeAddMenus(); } });
+    document.addEventListener("click", ev => { if (!app.contains(ev.target)) { closePops(true); closeAddMenus(); } });
     app.addEventListener("input", onInput);
     app.addEventListener("change", onChange);
     app.addEventListener("keydown", onKeydown);
