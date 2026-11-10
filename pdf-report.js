@@ -37,19 +37,44 @@ const PDF_COLORS = {
   white: [1, 1, 1]
 };
 
-/* Helvetica advance widths (per 1000 units) for the characters that turn up
-   in money and percentages. Those are the only strings that get
-   right-aligned, so they're the only ones that need exact measurement;
-   everything else uses the average below, which is only ever used to
-   decide where to wrap. */
-const PDF_W = { "0": 556, "1": 556, "2": 556, "3": 556, "4": 556, "5": 556, "6": 556, "7": 556,
-  "8": 556, "9": 556, "$": 556, ".": 278, ",": 278, "-": 333, " ": 278, "%": 889, "/": 278 };
+/* Standard Helvetica advance widths, in 1/1000 em, for printable ASCII
+   (character codes 32 through 126), from the font's AFM metrics. Measuring
+   letters too prevents wide names and category labels overlapping values. */
+const PDF_W = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+const PDF_W_BOLD = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
 const PDF_AVG_W = 512;
+const PDF_MACRONS = "ĀĒĪŌŪāēīōū";
+// Base-14 fonts support named glyphs outside WinAnsi. Reserve ten otherwise
+// unused bytes for Māori vowels rather than replacing students' names with '?'.
+const PDF_ENCODING = "<< /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [128 /Amacron /Emacron /Imacron /Omacron /Umacron /amacron /emacron /imacron /omacron /umacron] >>";
 
-function pdfTextWidth(str, size) {
+function pdfTextWidth(str, size, bold) {
   let total = 0;
-  for (const ch of String(str)) total += (PDF_W[ch] !== undefined ? PDF_W[ch] : PDF_AVG_W);
+  const widths = bold ? PDF_W_BOLD : PDF_W;
+  for (const ch of String(str)) {
+    const plain = PDF_MACRONS.includes(ch) ? ch.normalize("NFD")[0] : ch;
+    const index = plain.charCodeAt(0) - 32;
+    total += index >= 0 && index < widths.length ? widths[index] : PDF_AVG_W;
+  }
   return (total / 1000) * size;
+}
+
+function pdfWrapText(str, size, width, bold) {
+  const lines = [];
+  let line = "";
+  for (const word of String(str).split(/\s+/)) {
+    if (!word) continue;
+    const next = line ? line + " " + word : word;
+    if (pdfTextWidth(next, size, bold) <= width) { line = next; continue; }
+    if (line) { lines.push(line); line = ""; }
+    // Long names and unbroken labels need a break within the word too.
+    for (const ch of word) {
+      if (line && pdfTextWidth(line + ch, size, bold) > width) { lines.push(line); line = ""; }
+      line += ch;
+    }
+  }
+  if (line || !lines.length) lines.push(line);
+  return lines;
 }
 
 // Folds the app's typography down to Latin-1, then escapes the three
@@ -62,6 +87,8 @@ function pdfAscii(str) {
   };
   let out = "";
   for (const ch of String(str === undefined || str === null ? "" : str)) {
+    const macron = PDF_MACRONS.indexOf(ch);
+    if (macron >= 0) { out += String.fromCharCode(128 + macron); continue; }
     const mapped = map[ch] !== undefined ? map[ch] : ch;
     for (const c of mapped) {
       const code = c.charCodeAt(0);
@@ -102,13 +129,15 @@ function pdfDoc() {
       const font = opts.bold ? "/F2" : "/F1";
       const c = opts.color || PDF_COLORS.ink;
       let tx = x;
-      if (opts.align === "right") tx = x - pdfTextWidth(str, size);
+      if (opts.align === "right") tx = x - pdfTextWidth(str, size, opts.bold);
       this.stream += `BT ${this.color(c)} rg ${font} ${size} Tf ${tx.toFixed(2)} ${y.toFixed(2)} Td (${pdfAscii(str)}) Tj ET\n`;
     },
 
     /* ---- higher-level pieces ---- */
-    heading(str) {
-      this.need(46);
+    heading(str, followingHeight) {
+      // Keep the heading with the first row or two lines of explanation.
+      // Reserving only the heading stranded empty-section text on the next page.
+      this.need(42 + (followingHeight || 36));
       this.y -= 24;
       this.rect(PDF_MARGIN, this.y + 15, PDF_CONTENT_W, 1, PDF_COLORS.line);
       this.y -= 2;
@@ -119,14 +148,7 @@ function pdfDoc() {
     para(str, opts) {
       opts = opts || {};
       const size = opts.size || 9.5;
-      const lines = [];
-      let line = "";
-      String(str).split(/\s+/).forEach(word => {
-        const next = line ? line + " " + word : word;
-        if (line && pdfTextWidth(next, size) > PDF_CONTENT_W) { lines.push(line); line = word; }
-        else line = next;
-      });
-      if (line) lines.push(line);
+      const lines = pdfWrapText(str, size, PDF_CONTENT_W);
       lines.forEach(l => {
         this.need(size + 6);
         this.y -= size + 2;
@@ -167,28 +189,34 @@ function pdfDoc() {
     // in the report, which keeps the whole document on one grid.
     row(label, value, opts) {
       opts = opts || {};
-      this.need(19);
+      const indent = opts.indent || 0;
+      const hasValue = value !== undefined && value !== null && value !== "";
+      const labelWidth = PDF_CONTENT_W - indent - (hasValue ? pdfTextWidth(value, 10, opts.bold) + 20 : 0);
+      const lines = pdfWrapText(label, 10, labelWidth, opts.bold);
+      this.need(19 + (lines.length - 1) * 14);
       this.y -= 14;
-      this.text(label, PDF_MARGIN + (opts.indent || 0), this.y, 10, { bold: !!opts.bold, color: opts.color || PDF_COLORS.ink });
-      if (value !== undefined && value !== null && value !== "") {
+      lines.forEach((text, i) => this.text(text, PDF_MARGIN + indent, this.y - i * 14, 10, { bold: !!opts.bold, color: opts.color || PDF_COLORS.ink }));
+      if (hasValue) {
         this.text(value, PDF_PAGE_W - PDF_MARGIN, this.y, 10, { bold: !!opts.bold, align: "right", color: opts.color || PDF_COLORS.ink });
       }
-      this.y -= 4;
+      this.y -= 4 + (lines.length - 1) * 14;
       if (opts.rule) this.rect(PDF_MARGIN, this.y + 2, PDF_CONTENT_W, 0.6, PDF_COLORS.line);
     },
     // Horizontal bar with its label and amount, mirroring .rpt-bar-row.
     bar(label, amount, max, colorName) {
-      this.need(24);
-      this.y -= 15;
       const labelW = 150, amountW = 74;
+      const lines = pdfWrapText(label, 9.5, labelW - 4);
+      const extra = (lines.length - 1) * 12;
+      this.need(24 + extra);
+      this.y -= 15;
       const trackX = PDF_MARGIN + labelW + 8;
       const trackW = PDF_CONTENT_W - labelW - amountW - 16;
-      this.text(label, PDF_MARGIN, this.y, 9.5, { color: PDF_COLORS.ink });
+      lines.forEach((text, i) => this.text(text, PDF_MARGIN, this.y - i * 12, 9.5, { color: PDF_COLORS.ink }));
       this.rect(trackX, this.y - 2, trackW, 8, PDF_COLORS.line);
-      const pct = max > 0 ? Math.max(0.01, amount / max) : 0;
-      this.rect(trackX, this.y - 2, trackW * pct, 8, PDF_COLORS[colorName] || PDF_COLORS.gold);
+      const pct = max > 0 ? Math.max(0.01, Math.min(1, Math.abs(amount) / max)) : 0;
+      this.rect(trackX, this.y - 2, trackW * pct, 8, amount < 0 ? PDF_COLORS.coral : (PDF_COLORS[colorName] || PDF_COLORS.gold));
       this.text(fmtMoney(amount), PDF_PAGE_W - PDF_MARGIN, this.y, 9.5, { align: "right", bold: true });
-      this.y -= 5;
+      this.y -= 5 + extra;
     },
     // Four summary tiles across the top, same figures as the on-screen chips.
     chips(items) {
@@ -201,7 +229,8 @@ function pdfDoc() {
         this.rect(x, this.y, w, 50, [0.965, 0.973, 0.988]);
         this.rect(x, this.y, w, 2.5, PDF_COLORS[it.color] || PDF_COLORS.navy);
         this.text(it.label.toUpperCase(), x + 9, this.y + 34, 6.8, { bold: true, color: PDF_COLORS.muted });
-        this.text(it.value, x + 9, this.y + 17, 13, { bold: true, color: PDF_COLORS.navy });
+        const valueSize = Math.min(13, (w - 18) * 0.94 / Math.max(1, pdfTextWidth(it.value, 1, true)));
+        this.text(it.value, x + 9, this.y + 17, valueSize, { bold: true, color: PDF_COLORS.navy });
         if (it.sub) this.text(it.sub, x + 9, this.y + 7, 7.2, { color: PDF_COLORS.muted });
       });
       this.y -= 6;
@@ -210,7 +239,8 @@ function pdfDoc() {
       this._startPage();
       this.rect(0, PDF_PAGE_H - 92, PDF_PAGE_W, 92, PDF_COLORS.navy);
       this.text("The 29 World", PDF_MARGIN, PDF_PAGE_H - 36, 11, { bold: true, color: PDF_COLORS.gold });
-      this.text(title, PDF_MARGIN, PDF_PAGE_H - 60, 19, { bold: true, color: PDF_COLORS.white });
+      const titleSize = Math.min(19, PDF_CONTENT_W * 0.94 / Math.max(1, pdfTextWidth(title, 1, true)));
+      this.text(title, PDF_MARGIN, PDF_PAGE_H - 60, titleSize, { bold: true, color: PDF_COLORS.white });
       if (subtitle) this.text(subtitle, PDF_MARGIN, PDF_PAGE_H - 78, 9.5, { color: [0.78, 0.82, 0.89] });
       if (meta) this.text(meta, PDF_PAGE_W - PDF_MARGIN, PDF_PAGE_H - 36, 8.5, { align: "right", color: [0.78, 0.82, 0.89] });
       this.y = PDF_PAGE_H - 112;
@@ -230,8 +260,8 @@ function pdfDoc() {
 
       objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
       objects[2] = `<< /Type /Pages /Kids [${kids.join(" ")}] /Count ${pageCount} >>`;
-      objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
-      objects[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>";
+      objects[3] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding ${PDF_ENCODING} >>`;
+      objects[4] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding ${PDF_ENCODING} >>`;
 
       this.pages.forEach((content, i) => {
         const pageObj = firstPageObj + i * 2;
@@ -289,14 +319,15 @@ function pdfEntries(map) {
   if (Array.isArray(map)) return map;
   return Object.entries(map && typeof map === "object" ? map : {})
     .map(([category, amount]) => ({ category, amount: Number(amount) || 0 }))
-    .filter(e => e.amount > 0)
-    .sort((a, b) => b.amount - a.amount);
+    .filter(e => Number.isFinite(e.amount) && e.amount !== 0)
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
 }
 function pdfBarsSection(doc, title, map, colorName, total) {
-  doc.heading(`${title}  ${fmtMoney(total || 0)}`);
   const list = pdfEntries(map);
+  const firstHeight = list.length ? 24 + (pdfWrapText(list[0].category, 9.5, 146).length - 1) * 12 : 16;
+  doc.heading(`${title}  ${fmtMoney(total || 0)}`, firstHeight);
   if (!list.length) { doc.para("Nothing here yet."); return; }
-  const max = Math.max(...list.map(e => e.amount));
+  const max = Math.max(...list.map(e => Math.abs(e.amount)));
   list.forEach(e => doc.bar(e.category, e.amount, max, colorName));
 }
 
@@ -305,8 +336,10 @@ function pdfBarsSection(doc, title, map, colorName, total) {
 // every 3 days (see netWorthSeries in data-money.js), ending with right now.
 // Like the report page's default view, it shows the last month.
 function pdfStudentReport(doc, s, report) {
+  doc.para(reportAccountingNote(s));
+  const savedLabel = s.accountingVersion === 2 ? "Net saved & invested" : "Deposited & invested (legacy)";
   const trendPts = netWorthMonthPoints(netWorthSeries(s));
-  doc.heading("Net worth over time (last month)");
+  doc.heading("Net worth over time (last month)", trendPts.length < 2 ? 36 : 100);
   if (trendPts.length < 2) doc.para("Net worth is noted every 3 days - the trend will appear here once it has been noted a couple of times.");
   else doc.trend(trendPts);
   doc.chips([
@@ -322,15 +355,16 @@ function pdfStudentReport(doc, s, report) {
   doc.row("Savings account", fmtMoney(s.savings), { rule: true });
   doc.row("Term deposits", fmtMoney(s.termDeposits), { rule: true });
   if (s.kiwiSaver) doc.row("KiwiSaver", fmtMoney(s.kiwiSaver), { rule: true });
+  if (s.gamblingBalance) doc.row("Gambling account", fmtMoney(s.gamblingBalance), { rule: true });
   doc.row("Stock portfolio", fmtMoney(s.invested), { rule: true });
   doc.row("Property", fmtMoney(s.propertyValue), { rule: true });
   doc.row("Vehicles", fmtMoney(s.vehicleValue), { rule: true });
   doc.row("Store items", fmtMoney(s.storeValue), { rule: true });
-  doc.row("Owed (loans + mortgage)", "-" + fmtMoney(s.owed), { rule: true, color: PDF_COLORS.coral });
+  doc.row("Owed (loans, mortgage and credit card)", (s.owed > 0 ? "-" : "") + fmtMoney(s.owed), { rule: true, color: PDF_COLORS.coral });
   doc.row("Net worth", fmtMoney(s.netWorth), { bold: true });
 
   pdfBarsSection(doc, "Income this month", s.income, "gold", s.incomeTotal);
-  pdfBarsSection(doc, "Saved & invested this month", s.saved, "mint", s.savedTotal);
+  pdfBarsSection(doc, savedLabel + " this month", s.saved, "mint", s.savedTotal);
   if (s.borrowedTotal) {
     doc.para(`Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this month (not counted as income).`);
   }
@@ -339,11 +373,12 @@ function pdfStudentReport(doc, s, report) {
   doc.heading("Entire history");
   doc.para(typeof REPORT_LIFETIME_NOTE === "string" ? REPORT_LIFETIME_NOTE : "Everything since the account was made, or since the class was last restarted.");
   pdfBarsSection(doc, "All-time income", s.lifetimeIncome, "gold", s.lifetimeIncomeTotal);
-  pdfBarsSection(doc, "All-time saved & invested", s.lifetimeSaved, "mint", s.lifetimeSavedTotal);
+  pdfBarsSection(doc, "All-time " + savedLabel.toLowerCase(), s.lifetimeSaved, "mint", s.lifetimeSavedTotal);
   if (s.lifetimeBorrowedTotal) {
     doc.para(`Also borrowed ${fmtMoney(s.lifetimeBorrowedTotal)} in loans in total (not counted as income).`);
   }
   pdfBarsSection(doc, "All-time spent", s.lifetimeSpent, "coral", s.lifetimeSpentTotal);
+  if (s.returnedTotal) pdfBarsSection(doc, "Returned money & sale proceeds this month", s.returned, "gold", s.returnedTotal);
 
   doc.heading("Loan history");
   if (!s.loans || !s.loans.length) {
@@ -410,7 +445,8 @@ function downloadClassReportPDF(report, className) {
   // complete set of report cards rather than just a league table.
   students.forEach(s => {
     doc._startPage();
-    doc.text(s.name, PDF_MARGIN, PDF_PAGE_H - PDF_MARGIN - 6, 16, { bold: true, color: PDF_COLORS.navy });
+    const nameSize = Math.min(16, PDF_CONTENT_W * 0.94 / Math.max(1, pdfTextWidth(s.name, 1, true)));
+    doc.text(s.name, PDF_MARGIN, PDF_PAGE_H - PDF_MARGIN - 6, nameSize, { bold: true, color: PDF_COLORS.navy });
     doc.y = PDF_PAGE_H - PDF_MARGIN - 26;
     pdfStudentReport(doc, s, report);
   });

@@ -159,12 +159,12 @@ async function render() {
           <div class="store-info">
           <h4>${escapeHtml(it.name)} ${owned ? `<span class="badge mint">Owned ×${owned}</span>` : ""} ${IS_TEACHER ? "" : `<span class="badge gold ${CART[it.id] ? "" : "hidden"}" id="inCart-${it.id}">In cart ×${CART[it.id] || 0}</span>`}</h4>
           <p>${escapeHtml(it.description) || "No description provided."}</p>
-          ${it.effect ? `<p class="muted-small">Does: ${it.effect}</p>` : ""}
+          ${it.effect ? `<p class="muted-small">Does: ${escapeHtml(it.effect)}</p>` : ""}
           <p>${priceWithLifeDiscount(me, "store", it.price)} ${starsHtml(it.stars)}</p>
           <p class="muted-small">${it.stock === null ? "Unlimited stock" : `${it.stock} left in stock`}${IS_TEACHER ? ` · ${it.sold || 0} sold` : ""}${lim ? ` · ${IS_TEACHER ? `Limit ${lim} per student` : (room <= 0 ? `You've reached the limit of ${lim}` : `Limit ${lim} per student, you can buy ${room} more`)}` : ""}</p>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+        <div class="store-actions">
           ${IS_TEACHER
             ? `<button class="btn small secondary" onclick="editItem('${it.id}')">${icon("edit", 13)} Edit</button>
                <button class="btn small coral" onclick="deleteItem('${it.id}')">${icon("trash", 13)} Remove</button>`
@@ -282,7 +282,7 @@ function editItem(id) {
     <div class="grid grid-3">
       <div>
         <label>Item name</label>
-        <input id="e-name-${id}" value="${it.name.replace(/"/g, "&quot;")}">
+        <input id="e-name-${id}" value="${escapeHtml(it.name)}">
       </div>
       <div>
         <label>Price</label>
@@ -296,9 +296,9 @@ function editItem(id) {
     <label>Limit per student (blank = no limit)</label>
     <input id="e-limit-${id}" type="number" min="1" step="1" value="${storeBuyLimit(it) || ""}" placeholder="e.g. 3">
     <label>What it does</label>
-    <input id="e-effect-${id}" value="${(it.effect || "").replace(/"/g, "&quot;")}">
+    <input id="e-effect-${id}" value="${escapeHtml(it.effect || "")}">
     <label>Description</label>
-    <input id="e-desc-${id}" value="${(it.description || "").replace(/"/g, "&quot;")}">
+    <input id="e-desc-${id}" value="${escapeHtml(it.description || "")}">
     <label>Lifestyle stars (0-5)</label>
     <input id="e-stars-${id}" type="number" min="0" max="5" step="1" value="${it.stars || 0}">
     <label style="display:flex;align-items:center;gap:8px;">

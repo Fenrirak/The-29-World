@@ -1069,9 +1069,8 @@ function mortgageStatus(p, cls) {
   // week only — if the teacher has manually marked mortgages as due (see
   // setMortgageDueOverride).
   const forcedDue = cls.mortgageForceDueWeek === weekKey;
-  const variable = isVariableMortgage(p.mortgage);
   const dueNow = isMortgagePayableNow(cls) || forcedDue; // due day, or any later day that week
-  const isDueToday = variable || dueNow; // variable mortgages can be paid any day
+  const isDueToday = dueNow;
   const amt = mortgageWeekAmount(p.mortgage);
   const breakdown = amt.interest > 0
     ? `${fmtMoney(amt.principal)} + ${fmtMoney(amt.interest)} interest on the ${fmtMoney(amt.balanceBefore)} still owed`
@@ -1086,7 +1085,6 @@ function mortgageStatus(p, cls) {
   } else {
     const onDueDay = (cls.mortgageDay || "Fri") === nzDayName();
     const dueLine = onDueDay ? `This week's payment is due today.`
-      : (variable && !dueNow) ? `This week's payment is open: variable mortgages can be paid any day.`
       : (forcedDue && !isMortgagePayableNow(cls)) ? `Your teacher has marked this week's payment as due now.`
       : `This week's payment was due ${mortgageDayName} and is still open until the end of the week.`;
     status = `${dueLine} <strong>${fmtMoney(amt.total)}</strong>: ${breakdown}.`;

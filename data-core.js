@@ -270,6 +270,10 @@ async function _syncServerClockImpl(classCode) {
     }
   } catch (e) { /* no storage — measure below */ }
   try {
+    // A merge write on an unread document can create a local snapshot with
+    // only _clockProbe. Prime it first, so first paint cannot see an empty
+    // class. This read coalesces with the page's own in-flight class read.
+    await getClass(classCode);
     const ref = classesCol().doc(classCode);
     const sentAt = Date.now();
     await ref.set({ _clockProbe: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
@@ -1092,6 +1096,12 @@ async function requireLogin(opts) {
   if (!u._studentView) { try { localStorage.setItem("t29-role", u.role); } catch (e) { /* ignore */ } }
   T29_SESSION_USERNAME = u.username;
   T29_SESSION_NAME = u.name || null;
+  // Teachers may sign up before creating/joining a class. Module pages
+  // need an open class; Teacher Home (skipActivity) works without one.
+  if (u.role === "teacher" && !u.classCode && !opts.skipActivity) {
+    window.location.href = "teacher-home.html";
+    return null;
+  }
   // Tracked locally rather than as a property on u — u is the shared
   // object cached by getUserCached()/getSessionUser() (same reference
   // returned on every cache hit for ~2s), so writing to it here would
@@ -1262,8 +1272,15 @@ async function createTeacherAndClass(name, username, password, className, extra)
 
   name = sanitizeUserText(name, 60);
   className = sanitizeUserText(className, 60);
-  // extra = { title, lastName } from the signup form. An unknown title is dropped rather than stored.
+  // A teacher can create a class now, join with a co-teacher code, or
+  // leave class setup until later. Existing callers still create a class.
   extra = extra || {};
+  const classMode = extra.classMode || "create";
+  if (!["create", "join", "later"].includes(classMode)) return { ok: false, error: "Choose how to set up your class." };
+  if (classMode === "create" && !className) return { ok: false, error: "Enter a class name." };
+  if (classMode === "join" && !t29ParseCoTeacherCode(extra.coTeacherCode)) {
+    return { ok: false, error: "Enter the co-teacher code from the class owner, e.g. F7K2M-AB12CD34." };
+  }
   const title = T29_TEACHER_TITLES.includes(extra.title) ? extra.title : "";
   const lastName = sanitizeUserText(extra.lastName, 60);
   // Optional recovery email (lets the teacher reset a forgotten password). Blank = none.
@@ -1280,8 +1297,8 @@ async function createTeacherAndClass(name, username, password, className, extra)
   const existing = await getUser(username).catch(() => null);
   if (existing) return { ok: false, error: "That username is already taken. Try adding a number to the end." };
 
-  let code;
-  do { code = genCode(5); } while ((await getClass(code).catch(() => null)));
+  let code = null;
+  if (classMode === "create") code = await _freshClassCode();
 
   let cred;
   try {
@@ -1295,14 +1312,14 @@ async function createTeacherAndClass(name, username, password, className, extra)
     classCode: code, balance: 0, sessionVersion: 0
   };
   if (title) { user.title = title; if (lastName) user.lastName = lastName; }
-  const cls = defaultClassData(code, className, username);
-  const recoveryHash = recoveryEmail ? await t29RecoveryHash(username, recoveryEmail) : "";
+  const cls = code ? defaultClassData(code, className, username) : null;
 
   try {
+    const recoveryHash = recoveryEmail ? await t29RecoveryHash(username, recoveryEmail) : "";
     await fdb.runTransaction(async (t) => {
       t.set(fdb.collection("uidIndex").doc(cred.user.uid), { username });
       t.set(usersCol().doc(username), user);
-      t.set(classesCol().doc(code), cls);
+      if (cls) t.set(classesCol().doc(code), cls);
       // Kept apart from the /users doc (which classmates can read): only this teacher can read it.
       if (recoveryEmail) t.set(fdb.collection("teacherRecovery").doc(username), { email: recoveryEmail });
       if (recoveryHash) t.set(fdb.collection("recoveryCheck").doc(username), { hash: recoveryHash });
@@ -1315,6 +1332,20 @@ async function createTeacherAndClass(name, username, password, className, extra)
   }
 
   setSession(username, 0);
+  if (classMode === "join") {
+    // The new teacher identity must be committed before the existing
+    // co-teacher join rule can check it. A failed/used code leaves a usable
+    // account on Teacher Home, never an unwanted empty class.
+    try {
+      const joined = await t29JoinAsCoTeacher(username, extra.coTeacherCode);
+      if (!joined.ok) return { ok: true, code: null, joinError: joined.error };
+      const opened = await switchActiveClass(username, joined.classCode);
+      if (!opened.ok) return { ok: true, code: null, joinError: opened.error };
+      code = joined.classCode;
+    } catch (e) {
+      return { ok: true, code: null, joinError: "Check your connection and try joining or opening the class again." };
+    }
+  }
   return { ok: true, code };
 }
 
@@ -1749,8 +1780,11 @@ async function t29CancelCoTeacherCode(classCode, ownerUsername) {
 }
 // Run by the teacher who wants to join. The class is written to without being
 // read first (they aren't a member yet), and firestore.rules checks the code.
+function t29ParseCoTeacherCode(input) {
+  return String(input || "").trim().toUpperCase().replace(/\s+/g, "").match(/^([A-Z0-9]{5})-([A-Z0-9]{8})$/);
+}
 async function t29JoinAsCoTeacher(teacherUsername, input) {
-  const m = String(input || "").trim().toUpperCase().replace(/\s+/g, "").match(/^([A-Z0-9]{5})-([A-Z0-9]{8})$/);
+  const m = t29ParseCoTeacherCode(input);
   if (!m) return { ok: false, error: "That doesn't look like a co-teacher code. It looks like F7K2M-AB12CD34." };
   const [, classCode, secret] = m;
   try {
@@ -1882,7 +1916,7 @@ async function t29JoinClassAsNewStudent(db, cred, name, username, classCode) {
     // brand-new student doc — add any new one there too, or signup will be refused.
     const user = {
       username, authUid: cred.user.uid, role: "student", name,
-      classCode, balance: welcome, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
+      classCode, joinedAt: Date.now(), balance: welcome, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
       sessionVersion: 0,
       // Denormalized copy of the class's daily time limit (see
       // setStudentTimeLimit below). Kept on the user doc itself so
@@ -2347,18 +2381,35 @@ async function t29DeleteTeacherAccount(username, password) {
       const r = await deleteClassPermanently(username, d.id);
       if (!r.ok) return { ok: false, error: r.error };
     }
-    await fdb.collection("recoveryCheck").doc(username).delete().catch(() => {});
-    await fdb.collection("teacherRecovery").doc(username).delete().catch(() => {});
-    await usersCol().doc(username).delete();
-    await fdb.collection("uidIndex").doc(user.uid).delete();
+    // Free the co-teacher slots before removing the account. Otherwise
+    // these classes keep a member who no longer exists.
+    const shared = await classesCol().where("coTeachers", "array-contains", username).get();
+    for (const d of shared.docs) await t29LeaveAsCoTeacher(d.id, username);
+    const worksheets = fdb.collection("teacherWorksheets/" + username + "/sheets");
+    const worksheetDocs = await worksheets.get();
+    for (const d of worksheetDocs.docs) await worksheets.doc(d.id).delete();
+    // A failed cleanup must stop here while this identity can still retry;
+    // orphaned recovery records must not survive a reusable username.
+    await fdb.collection("recoveryCheck").doc(username).delete();
+    await fdb.collection("teacherRecovery").doc(username).delete();
+    // The mapping and app account must disappear together: a failure of
+    // either write must leave the teacher able to log in and retry.
+    await fdb.runTransaction(async t => {
+      t.delete(usersCol().doc(username));
+      t.delete(fdb.collection("uidIndex").doc(user.uid));
+    });
   } catch (e) {
     console.warn("Teacher account deletion failed:", e && (e.code || e.message), e);
     return { ok: false, error: "Something went wrong deleting your account. Some of it may not have been deleted. Please try again." };
   }
-  try { await user.delete(); } catch (e) { console.warn("Auth user delete failed:", e); }
+  let warning = null;
+  try { await user.delete(); } catch (e) {
+    console.warn("Auth user delete failed:", e);
+    warning = "Your app data was deleted, but the sign-in record couldn't be removed. Contact Nathan.liu1211@gmail.com to finish deleting that record.";
+  }
   try { await firebase.auth().signOut(); } catch (e) { /* ignore */ }
   try { clearSession(); } catch (e) { /* ignore */ }
-  return { ok: true };
+  return { ok: true, warning };
 }
 
 // Teacher Home: see / change / remove the recovery email after signup.
@@ -3710,6 +3761,11 @@ if (typeof window !== "undefined") {
 /* ===================== Class defaults for new modules ===================== */
 function withNewModuleDefaults(cls) {
   if (!cls) return cls;
+  // An initial cached snapshot can contain only a pending merged clock probe.
+  // Keep first paint safe until the complete server document arrives.
+  for (const key of ["students", "jobs", "companies", "txns", "automations"]) {
+    if (!Array.isArray(cls[key])) cls[key] = [];
+  }
   // Classes created before report cards existed have no createdAt — leave
   // it unset (null) rather than backdating to "now", since generateClassReport
   // already falls back sensibly (recent txn history, or a 7-day window)

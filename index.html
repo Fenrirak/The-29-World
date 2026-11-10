@@ -9,7 +9,7 @@
 <meta property="og:title" content="The 29 World, Classroom Economy">
 <meta property="og:description" content="A classroom life simulation, like living a second life: students run their own money with jobs, banking, loans, KiwiSaver, shares and property.">
 <meta property="og:url" content="https://fenrirak.github.io/The-29-World/index.html">
-<meta property="og:image" content="https://fenrirak.github.io/The-29-World/og-image.png">
+<meta property="og:image" content="https://fenrirak.github.io/The-29-World/Favicons/og-image.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -18,17 +18,17 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="The 29 World, Classroom Economy">
 <meta name="twitter:description" content="A classroom life simulation, like living a second life: students run their own money with jobs, banking, loans, KiwiSaver, shares and property.">
-<meta name="twitter:image" content="https://fenrirak.github.io/The-29-World/og-image.png">
+<meta name="twitter:image" content="https://fenrirak.github.io/The-29-World/Favicons/og-image.png">
 <meta name="twitter:image:alt" content="The 29 World logo, a gold dollar coin, beside the title The 29 World">
 <link rel="canonical" href="https://fenrirak.github.io/The-29-World/index.html">
 <script>try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}</script>
 <title>The 29 World. Classroom Economy</title>
-<link rel="icon" type="image/png" href="Favicon.png">
-<link rel="shortcut icon" href="favicon.ico">
+<link rel="icon" type="image/png" href="Favicons/Favicon.png">
+<link rel="shortcut icon" href="Favicons/favicon.ico">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" href="Favicons/apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=8cb7738d">
+<link rel="stylesheet" href="style.css?v=bf0f80a3">
 <style>.start-option input[type="radio"]{flex:0 0 20px;width:20px;min-width:20px;height:20px;min-height:20px;max-width:20px;aspect-ratio:1/1;padding:0;margin:2px 0 0;align-self:flex-start;border-radius:50%}</style>
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
@@ -37,7 +37,7 @@
 <link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="firebase-init.js?v=3042b252">
+<link rel="modulepreload" href="firebase-init.js?v=3d78568a">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js">
@@ -61,7 +61,7 @@
       "applicationCategory": "EducationalApplication",
       "operatingSystem": "Any (web browser)",
       "browserRequirements": "Requires JavaScript",
-      "image": "https://fenrirak.github.io/The-29-World/og-image.png",
+      "image": "https://fenrirak.github.io/The-29-World/Favicons/og-image.png",
       "inLanguage": "en-NZ",
       "isAccessibleForFree": true,
       "offers": {
@@ -104,7 +104,7 @@
     <div id="role-panel-teacher">
       <div class="tabs subtabs" id="teacher-subtabs">
         <button id="tab-teacher-login" class="active" onclick="showPanel('teacher-login')"><span class="icon-slot"></span> Log in</button>
-        <button id="tab-teacher-new" onclick="showPanel('teacher-new')"><span class="icon-slot"></span> Create a class</button>
+        <button id="tab-teacher-new" onclick="showPanel('teacher-new')"><span class="icon-slot"></span> Sign up</button>
       </div>
 
       <!-- Teacher login -->
@@ -146,9 +146,9 @@
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Set new password</button>
       </form>
 
-      <!-- Teacher creates a class -->
+      <!-- Teacher signs up, with optional class setup -->
       <form id="panel-teacher-new" class="hidden" onsubmit="return doTeacherSignup(event)">
-        <p class="muted-small" style="margin-top:0;">Set up your classroom. You'll get a unique class code straight away so students can join.</p>
+        <p class="muted-small" style="margin-top:0;">Create your teacher account, then start a class, join a colleague's class or set up your classes later.</p>
         <label for="t-title"><span class="icon-slot"></span> Title</label>
         <select id="t-title" required autocomplete="honorific-prefix">
           <option value="" disabled selected>Choose a title</option>
@@ -172,6 +172,13 @@
         <label for="t-email"><span class="icon-slot"></span> Recovery email <span class="muted-small">(optional)</span></label>
         <input id="t-email" type="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
         <p class="field-hint">Only used to get you back into your account if you forget your password. Students can't see it. You can add or change it later.</p>
+        <label for="t-class-mode">Class setup</label>
+        <select id="t-class-mode" onchange="updateTeacherClassSetup()">
+          <option value="create">Create a new class</option>
+          <option value="join">Join as co-teacher</option>
+          <option value="later">Skip for now</option>
+        </select>
+        <div id="t-create-fields">
         <label for="t-class"><span class="icon-slot"></span> Class name</label>
         <input id="t-class" placeholder="Class name, e.g. Room 12" autocomplete="off" required>
         <label>How do you want to start?</label>
@@ -192,13 +199,20 @@
           </label>
         </div>
         <p class="field-hint">You can change anything later.</p>
+        </div>
+        <div id="t-join-fields" class="hidden">
+          <label for="t-co-code">Co-teacher code</label>
+          <input id="t-co-code" disabled autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="e.g. F7K2M-AB12CD34" style="text-transform:uppercase;" aria-describedby="t-co-code-hint">
+          <p class="field-hint" id="t-co-code-hint">Ask the class owner for their co-teacher code. This is longer than the code students use.</p>
+        </div>
+        <p id="t-later-hint" class="field-hint hidden">You can create or join a class from My Classes whenever you're ready.</p>
         <label for="t-username"><span class="icon-slot"></span> Choose a username</label>
         <input id="t-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
         <p class="field-hint">This is what you'll type to log in. Keep it simple, with no spaces.</p>
         <label for="t-password"><span class="icon-slot"></span> Choose a password</label>
         <input id="t-password" type="password" required autocomplete="new-password" placeholder="Choose a password">
         <p class="field-hint">At least 6 characters.</p>
-        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Create my class</button>
+        <button id="t-signup-submit" class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Create account &amp; class</button>
         <p class="muted-small" style="text-align:center;margin:10px 0 0;">By continuing you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
       </form>
     </div>
@@ -275,14 +289,14 @@
      lets the HTML parse and paint immediately while these load in the
      background, in the same relative order, still finishing before
      DOMContentLoaded — matching how every other page already does it. -->
-<script type="module" src="firebase-init.js?v=3042b252"></script>
+<script type="module" src="firebase-init.js?v=3d78568a"></script>
 <script defer src="icons.js?v=bb820ab3"></script>
 <script defer src="offline.js?v=ac2cbd82"></script>
-<script defer src="data-core.js?v=694704db"></script>
-<script defer src="data-money.js?v=1cf60de7"></script>
-<script defer src="data-life.js?v=f4316f98"></script>
-<script defer src="data-property.js?v=84d847c7"></script>
-<script defer src="data-markets.js?v=c76e3587"></script>
+<script defer src="data-core.js?v=f4d4ec34"></script>
+<script defer src="data-money.js?v=b5cd9b4d"></script>
+<script defer src="data-life.js?v=00c27be6"></script>
+<script defer src="data-property.js?v=9ee91f2c"></script>
+<script defer src="data-markets.js?v=020ca9ef"></script>
 <script defer src="base-template.js?v=f0d00d4a"></script>
 <script>
 // Fill every .icon-slot next to its text with the matching icon. This is
@@ -528,7 +542,21 @@ function loadRememberedLogins() {
 
 async function doTeacherSignup(e) {
   e.preventDefault();
-  return withBusyButton(e.target, "Creating your class…", () => doTeacherSignupInner(e));
+  return withBusyButton(e.target, "Creating your account…", () => doTeacherSignupInner(e));
+}
+
+function updateTeacherClassSetup() {
+  const mode = document.getElementById("t-class-mode").value;
+  document.getElementById("t-create-fields").classList.toggle("hidden", mode !== "create");
+  document.querySelectorAll("#t-create-fields input").forEach(input => { input.disabled = mode !== "create"; });
+  document.getElementById("t-class").required = mode === "create";
+  document.getElementById("t-join-fields").classList.toggle("hidden", mode !== "join");
+  const code = document.getElementById("t-co-code");
+  code.disabled = mode !== "join";
+  code.required = mode === "join";
+  document.getElementById("t-later-hint").classList.toggle("hidden", mode !== "later");
+  document.getElementById("t-signup-submit").textContent = mode === "create"
+    ? "Create account & class" : mode === "join" ? "Create account & join class" : "Create teacher account";
 }
 
 async function doTeacherSignupInner(e) {
@@ -539,12 +567,14 @@ async function doTeacherSignupInner(e) {
   const className = document.getElementById("t-class").value.trim();
   const username = document.getElementById("t-username").value.trim();
   const password = document.getElementById("t-password").value;
+  const classMode = document.getElementById("t-class-mode").value;
+  const coTeacherCode = document.getElementById("t-co-code").value;
   if (/\s/.test(username)) { showMsg("Usernames can't have spaces. Try something like smith.m", false); return false; }
   const email = document.getElementById("t-email").value.trim();
-  const res = await createTeacherAndClass(name, username, password, className, { title, lastName: last, email });
+  const res = await createTeacherAndClass(name, username, password, className, { title, lastName: last, email, classMode, coTeacherCode });
   if (!res.ok) { showMsg(res.error, false); return false; }
   const startChoice = (document.querySelector('input[name="t-start"]:checked') || {}).value;
-  if (startChoice === "base" && typeof applyBaseTemplateToClass === "function") {
+  if (classMode === "create" && startChoice === "base" && typeof applyBaseTemplateToClass === "function") {
     try {
       const applied = await applyBaseTemplateToClass(res.code);
       if (!applied.ok) throw new Error(applied.error);
@@ -553,8 +583,9 @@ async function doTeacherSignupInner(e) {
       alert("Your account and class were created, but the base template couldn't be added. You can create a new class from Teacher Home and pick the base template there.");
     }
   }
+  if (res.joinError) alert("Your teacher account was created, but the class couldn't be opened. " + res.joinError + " You can try again from My Classes; you don't need to sign up again.");
   setSession(username);
-  window.location.href = getSafeReturnTo() || "teacher.html?welcome=1";
+  window.location.href = getSafeReturnTo() || (res.code ? (classMode === "create" ? "teacher.html?welcome=1" : "teacher.html") : "teacher-home.html");
   return false;
 }
 
@@ -603,6 +634,7 @@ async function doStudentSignupInner(e) {
 // script tags to guarantee that.
 document.addEventListener("DOMContentLoaded", async () => {
   paintIcons();
+  updateTeacherClassSetup();
   enablePasswordToggles();
   loadRememberedLogins();
   refreshLoginLock();

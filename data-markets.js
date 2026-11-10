@@ -278,12 +278,21 @@ async function closeCompany(classCode, companyId) {
     const cls = snap.data();
     const co = cls.companies.find(c => c.id === companyId);
     if (!co) return;
-    Object.keys(co.holders).forEach(uname => {
+    const holders = Object.keys(co.holders || {}).filter(uname => co.holders[uname] > 0);
+    const ownerRefs = holders.map(uname => usersCol().doc(uname));
+    const ownerSnaps = await Promise.all(ownerRefs.map(ref => t.get(ref)));
+    holders.forEach((uname, i) => {
+      if (!ownerSnaps[i].exists) return;
+      const owner = ownerSnaps[i].data();
       const shares = co.holders[uname];
       const payout = Math.round(shares * co.price * 100) / 100;
       const basis = (co.costBasis && co.costBasis[uname]) || null;
-      const costBasisSold = basis ? Math.round((basis.totalCost / basis.shares) * shares * 100) / 100 : payout;
+      const costBasisSold = basis && basis.shares > 0 && Number.isFinite(basis.totalCost)
+        ? Math.round((basis.totalCost / basis.shares) * shares * 100) / 100 : payout;
       payouts.push({ uname, payout, coName: co.name, companyId: co.id, shares, pricePerShare: co.price, costBasisSold });
+      if (owner.role !== "teacher" || payout > 0) {
+        t.update(ownerRefs[i], { balance: Math.round(((Number(owner.balance) || 0) + payout) * 100) / 100 });
+      }
     });
     cls.companies = cls.companies.filter(c => c.id !== companyId);
     t.update(classRef, { companies: cls.companies });
@@ -295,7 +304,6 @@ async function closeCompany(classCode, companyId) {
     href: "market.html"
   })));
   for (const p of payouts) {
-    await adjustBalance(p.uname, p.payout);
     await logTxn(classCode, {
       type: "stock-close", to: p.uname, amount: p.payout, note: p.coName + " delisted. Shares cashed out",
       companyId: p.companyId, shares: p.shares, pricePerShare: p.pricePerShare,
@@ -1502,21 +1510,19 @@ function gamblingLedgerSettled() { return Promise.all([_gamblingLedgerPending, _
 function buildLedgerEntry(txn) { return Object.assign({ id: uid("t"), date: nowStr(), ts: Date.now() }, txn); }
 
 // recordReportActivity()'s maths, for a user doc the caller has ALREADY read inside its own transaction. Returns the
-// extra fields ({reportMonth, reportLifetime}) to add to that transaction's update, or null when there is nothing to
+// reportAccounting field to add to that transaction's update, or null when there is nothing to
 // record (or anything goes wrong - the caller then simply lets logTxn() run the old separate recordReportActivity()).
 function reportFieldsForTxn(userData, username, entry) {
   try {
     if (!username || !txnBelongsTo(entry, username)) return null;
-    const c = classifyTxnForReport(entry, username);
-    if (!c) return null;
-    const monthKey = nzMonthKey();
-    const month = (userData.reportMonth && userData.reportMonth.monthKey === monthKey)
-      ? userData.reportMonth
-      : Object.assign(emptyReportBucket(), { monthKey });
-    const lifetime = userData.reportLifetime || emptyReportBucket();
-    addClassificationToBucket(month, c);
-    addClassificationToBucket(lifetime, c);
-    return { reportMonth: month, reportLifetime: lifetime };
+    // Initial migration also needs the class ledger, so use the normal fallback
+    // once. Later gambling results can keep totals in the money transaction.
+    if (!userData.reportAccounting || userData.reportAccounting.version !== 2) return null;
+    if (!reportClassifications(entry, username).length) return null;
+    const accounting = reportAccountingView(Object.assign({ username }, userData), []);
+    reportAccountingApply(accounting, entry, username);
+    accounting.seen = accounting.seen.slice(-(MAX_STORED_TXNS + 20));
+    return { reportAccounting: accounting };
   } catch (e) { return null; }
 }
 

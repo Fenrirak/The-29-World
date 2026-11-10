@@ -1927,7 +1927,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
           <label class="muted-small" style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="avInitials"> Show my initials instead</label>
           <div id="avGuide" style="width:100%;"></div>
           <div id="avLog" class="muted-small"></div></div>
-        <div class="av-right"><div class="av-tabs" id="avTabs" role="tablist"></div><div class="av-hint" id="avHint"></div><div class="av-grid" id="avGrid"></div></div>
+        <div class="av-right"><div class="av-tabs" id="avTabs" role="tablist" aria-label="Avatar categories"></div><div class="av-hint" id="avHint"></div><div class="av-grid" id="avGrid" role="tabpanel"></div></div>
       </div>
       <div class="av-foot"><div class="av-sum" id="avSum"></div><button class="btn secondary" type="button" id="avCancel">Cancel</button><button class="btn gold" type="button" id="avSave">Save</button><div class="av-msg" id="avMsg" aria-live="polite"></div></div>
     </div>`;
@@ -1942,7 +1942,7 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     const chk = ov.querySelector("#avInitials");
     chk.checked = !ED.on;
     chk.onchange = () => { ED.on = !chk.checked; paintEditor(); };
-    ov.querySelector("#avTabs").innerHTML = CATS.map(c => `<button type="button" class="av-tab" role="tab" data-cat="${c.id}">${c.label}</button>`).join("");
+    ov.querySelector("#avTabs").innerHTML = CATS.map(c => `<button type="button" class="av-tab" role="tab" id="av-tab-${c.id}" aria-controls="avGrid" data-cat="${c.id}">${c.label}</button>`).join("");
     ov.querySelector("#avTabs").onclick = e => { const b = e.target.closest("[data-cat]"); if (b) { ED.cat = b.dataset.cat; paintEditor(); } };
     ov.querySelector("#avGrid").onclick = e => {
       const b = e.target.closest("[data-id]"); if (!b) return;
@@ -1986,7 +1986,12 @@ html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(
     const prev = $("avPrev");
     if (E.on) { prev.className = "av-prev"; prev.innerHTML = renderSvg(E.look, { size: 200 }); }
     else { prev.className = "av-prev av-initials"; prev.textContent = (typeof initials === "function" ? initials(E.me.name) : "?").replace(/&amp;/g, "&"); }
-    document.querySelectorAll("#avTabs .av-tab").forEach(b => b.classList.toggle("on", b.dataset.cat === E.cat));
+    document.querySelectorAll("#avTabs .av-tab").forEach(b => {
+      const selected = b.dataset.cat === E.cat;
+      b.classList.toggle("on", selected);
+      b.setAttribute("aria-selected", String(selected));
+    });
+    $("avGrid").setAttribute("aria-labelledby", "av-tab-" + E.cat);
     const cat = E.cat, list = visible(cat);
     const paintBox = $("avPaintBox");
     if (paintBox) {

@@ -197,7 +197,7 @@ async function render() {
       ${avatarBadge(avById[row.username] || row)}
       <div style="flex:1;">
         <div class="leaderboard-name">${escapeHtml(row.name)}</div>
-        <div class="leaderboard-sub">${fmtMoney(row.balance)} cash${row.savings ? ` + ${fmtMoney(row.savings)} savings` : ""}${row.termDeposits ? ` + ${fmtMoney(row.termDeposits)} term deposits` : ""} + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.vehicleValue ? ` + ${fmtMoney(row.vehicleValue)} vehicles` : ""}${row.kiwiSaver ? ` + ${fmtMoney(row.kiwiSaver)} KiwiSaver` : ""}${row.owed ? ` - ${fmtMoney(row.owed)} owed` : ""}</div>
+        <div class="leaderboard-sub">${fmtMoney(row.balance)} cash${row.savings ? ` + ${fmtMoney(row.savings)} savings` : ""}${row.termDeposits ? ` + ${fmtMoney(row.termDeposits)} term deposits` : ""} + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.propertyValue ? ` + ${fmtMoney(row.propertyValue)} property` : ""}${row.gamblingBalance ? ` + ${fmtMoney(row.gamblingBalance)} gambling account` : ""}${row.vehicleValue ? ` + ${fmtMoney(row.vehicleValue)} vehicles` : ""}${row.kiwiSaver ? ` + ${fmtMoney(row.kiwiSaver)} KiwiSaver` : ""}${row.owed ? ` - ${fmtMoney(row.owed)} owed` : ""}</div>
       </div>
       <div class="leaderboard-net">${fmtMoney(row.net)}</div>
     `;
@@ -221,7 +221,7 @@ async function render() {
       <td><div class="stack-val">${fmtMoney(netByUser[s.username] || 0)}</div></td>
       <td class="stack-actions">
         <button class="btn small secondary" onclick="quickView('${escapeJsAttr(s.username)}')">View</button>
-        <button class="btn small coral" onclick="removeStudentClick('${escapeJsAttr(s.username)}', '${escapeJsAttr(s.name)}')">${icon("trash", 13)}</button>
+        <button class="btn small coral" aria-label="Remove ${escapeHtml(s.name)}" title="Remove student" onclick="removeStudentClick('${escapeJsAttr(s.username)}', '${escapeJsAttr(s.name)}')">${icon("trash", 13)}</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -276,7 +276,7 @@ async function render() {
   lsBox.className = "grid grid-4";
   const lsSections = [
     { key: "property", label: "Property (house comfort)" },
-    { key: "transport", label: "Transport (stacked vehicle comfort)" },
+    { key: "transport", label: "Transport (comfiest vehicle)" },
     { key: "store", label: "Store items owned" },
     { key: "insurance", label: "Insurance plans owned" }
   ];
@@ -1154,10 +1154,10 @@ function closeProfile() {
   document.getElementById("profileModal").classList.add("hidden");
 }
 
-async function applyProfileGender(username) {
+async function applyProfileGender(username, e) {
   const sel = document.getElementById("profileGenderSelect");
   if (!sel || !window.T29Avatar) return;
-  const btn = event && event.target;
+  const btn = e && e.currentTarget;
   if (btn) btn.disabled = true;
   const res = await T29Avatar.setGender(username, sel.value);
   if (!res.ok) { alert(res.error || "Couldn't update the body type."); if (btn) btn.disabled = false; return; }
@@ -1172,11 +1172,11 @@ async function applyProfileGender(username) {
   await renderProfile(username);
 }
 
-async function applyProfileTierChange(username) {
+async function applyProfileTierChange(username, e) {
   const sel = document.getElementById("profileTierSelect");
   if (!sel) return;
   const tierId = sel.value;
-  const btn = event && event.target;
+  const btn = e && e.currentTarget;
   if (btn) btn.disabled = true;
   const res = await setStudentJobTier(CLASS_CODE, username, tierId);
   if (!res.ok) { alert(res.error || "Couldn't update tier."); if (btn) btn.disabled = false; return; }
@@ -1184,8 +1184,8 @@ async function applyProfileTierChange(username) {
   await renderProfile(username);
 }
 
-async function promoteProfileStudent(username) {
-  const btn = event && event.target;
+async function promoteProfileStudent(username, e) {
+  const btn = e && e.currentTarget;
   if (btn) btn.disabled = true;
   const [cls, student] = await Promise.all([getClassCached(CLASS_CODE), getUserCached(username)]);
   if (!cls || !student || !student.jobId) { if (btn) btn.disabled = false; return; }
@@ -1201,8 +1201,8 @@ async function promoteProfileStudent(username) {
   await renderProfile(username);
 }
 
-async function cancelPendingPromotionClick(username) {
-  const btn = event && event.target;
+async function cancelPendingPromotionClick(username, e) {
+  const btn = e && e.currentTarget;
   if (btn) btn.disabled = true;
   await cancelPendingPromotion(username);
   await render();
@@ -1276,7 +1276,7 @@ async function renderProfile(username) {
             <strong>Promotion offered:</strong> ${escapeHtml(pendingPromo.tierName)} (${fmtMoney(pendingPromo.wage)}/pay day)
             <div class="muted-small">Waiting on ${escapeHtml(s.name.split(" ")[0])} to accept or decline. Their tier won't change until they respond.</div>
           </div>
-          <button class="btn small coral" onclick="cancelPendingPromotionClick('${escapeJsAttr(username)}')">Cancel offer</button>
+          <button class="btn small coral" onclick="cancelPendingPromotionClick('${escapeJsAttr(username)}', event)">Cancel offer</button>
         </div>
       ` : tiers.length > 1 ? `
         <div style="display:flex;gap:8px;align-items:flex-end;margin-top:14px;flex-wrap:wrap;">
@@ -1284,9 +1284,9 @@ async function renderProfile(username) {
             <label for="profileTierSelect" style="margin-top:0;">Move to tier</label>
             <select id="profileTierSelect">${tierOpts}</select>
           </div>
-          <button class="btn small" onclick="applyProfileTierChange('${escapeJsAttr(username)}')">Save</button>
+          <button class="btn small" onclick="applyProfileTierChange('${escapeJsAttr(username)}', event)">Save</button>
           ${tierIdx >= 0 && tierIdx < tiers.length - 1
-            ? `<button class="btn small mint" onclick="promoteProfileStudent('${escapeJsAttr(username)}')">⬆ Offer promotion to ${escapeHtml(tiers[tierIdx + 1].name)}</button>`
+            ? `<button class="btn small mint" onclick="promoteProfileStudent('${escapeJsAttr(username)}', event)">⬆ Offer promotion to ${escapeHtml(tiers[tierIdx + 1].name)}</button>`
             : `<span class="badge mint" style="align-self:flex-end;">At top tier</span>`}
         </div>
         <p class="muted-small" style="margin-top:6px;">Moving up requires ${escapeHtml(s.name.split(" ")[0])} to accept the offer first; moving down applies right away.</p>
@@ -1333,7 +1333,7 @@ async function renderProfile(username) {
   }
   if (s.sideHustleRequest && s.sideHustleRequest.status === "pending") {
     const reqHustle = (cls.sideHustles || []).find(h => h.id === s.sideHustleRequest.hustleId);
-    rows.push(`<p class="muted-small">Pending change request: ${reqHustle ? reqHustle.name : "Unknown"} at ${hourLabel(s.sideHustleRequest.checkinHour)}. Approve or deny it from the Side hustles section below.</p>`);
+    rows.push(`<p class="muted-small">Pending change request: ${reqHustle ? escapeHtml(reqHustle.name) : "Unknown"} at ${hourLabel(s.sideHustleRequest.checkinHour)}. Approve or deny it from the Side hustles section below.</p>`);
   }
 
   if (s.dailyLimitMinutes > 0) {
@@ -1448,7 +1448,7 @@ async function renderProfile(username) {
       <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;">
         <div class="auto-details">
           <strong>${icon("car", 14)} Transport payment overdue</strong>
-          <div class="muted-small">This week's transport expenses (due ${DAY_FULL[cls.transportDay || "Fri"]}) haven't been paid yet.</div>
+          <div class="muted-small">A transport payment due on ${DAY_FULL[cls.transportDay || "Fri"]} was missed and hasn't been cleared.</div>
         </div>
         <div class="row-flex" style="gap:8px;align-items:center;">
           <div class="status-declined">Unpaid</div>
@@ -1555,7 +1555,7 @@ async function renderProfile(username) {
         <select id="profileGenderSelect" aria-label="Avatar body type">
           ${[["neutral", "Neutral"], ["boy", "Boy"], ["girl", "Girl"]].map(g => `<option value="${g[0]}"${g[0] === curGender ? " selected" : ""}>${g[1]}</option>`).join("")}
         </select>
-        <button class="btn small" onclick="applyProfileGender('${escapeJsAttr(username)}')">Save</button>
+        <button class="btn small" onclick="applyProfileGender('${escapeJsAttr(username)}', event)">Save</button>
       </div>
     </div>`);
 

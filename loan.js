@@ -193,8 +193,7 @@ async function render() {
 // Same NZ-calendar date key format used server-side, computed client-side
 // just for the "is this overdue" comparison in the UI.
 function nzDateKeyLocal() {
-  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Pacific/Auckland" });
-  return fmt.format(new Date());
+  return nzDateKey();
 }
 
 async function updateLoanPreview() {

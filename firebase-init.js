@@ -14,8 +14,8 @@
    unchanged. Nothing outside this file needed to change for this switch.
 
    The shim only covers the exact surface this app actually calls (traced
-   through every *.js file): collection/doc get/set/update/delete, one
-   `.where()` query, runTransaction, batch, FieldValue.serverTimestamp/
+   through every *.js file): collection/query get and live snapshots, document
+   get/set/update/delete, single-filter `.where()`, runTransaction, batch, FieldValue.serverTimestamp/
    increment/delete, and the handful of Auth methods used by login/signup/
    the legacy-migration bridge/change-password. If a future page starts
    using some other Firestore/Auth method, it needs a matching addition
@@ -117,8 +117,25 @@ function _wrapSnap(snap) {
   const exists = typeof snap.exists === "function" ? snap.exists() : !!snap.exists;
   // metadata lets live listeners tell a local, not-yet-saved change from a confirmed one.
   const md = snap.metadata || {};
-  return { exists, data: () => (exists ? snap.data() : undefined),
+  return { id: snap.id, exists, data: () => (exists ? snap.data() : undefined),
            metadata: { fromCache: !!md.fromCache, hasPendingWrites: !!md.hasPendingWrites } };
+}
+
+function _wrapQuerySnap(snap) {
+  const docs = snap.docs.map(_wrapSnap);
+  return { docs, empty: docs.length === 0, size: docs.length,
+    forEach(cb) { docs.forEach(cb); },
+    metadata: { fromCache: !!snap.metadata?.fromCache, hasPendingWrites: !!snap.metadata?.hasPendingWrites } };
+}
+
+function _wrapQueryRef(ref) {
+  return {
+    async get() { return _wrapQuerySnap(await getDocs(ref)); },
+    onSnapshot(next, error) {
+      return onSnapshot(ref, { includeMetadataChanges: true },
+        snap => next(_wrapQuerySnap(snap)), err => { if (error) error(err); });
+    }
+  };
 }
 
 function _wrapDocRef(realRef) {
@@ -146,22 +163,12 @@ function _wrapDocRef(realRef) {
 function _wrapCollectionRef(name, db = _db) {
   const realCol = collection(db, name);
   return {
+    ..._wrapQueryRef(realCol),
     doc(id) { return _wrapDocRef(doc(realCol, id)); },
-    // Only ever used as classesCol().where("teacher","==",username).get()
-    // (see getTeacherClasses in data-core.js) — a single equality filter, so
-    // this only needs to support one where() clause, not general chaining.
+    // Class ownership/co-teacher queries use one filter; no chaining is needed.
     where(field, op, value) {
       const q = query(realCol, where(field, op, value));
-      return {
-        // Only ever consumed via .forEach() (see getTeacherClasses in
-        // the data-*.js files) — .docs/.empty/.size aren't used anywhere, so this
-        // doesn't bother exposing them.
-        async get() {
-          const snap = await getDocs(q);
-          const wrapped = snap.docs.map(_wrapSnap);
-          return { forEach(cb) { wrapped.forEach(cb); } };
-        }
-      };
+      return _wrapQueryRef(q);
     }
   };
 }

@@ -311,6 +311,7 @@ async function submitDeleteAccount(e) {
   try {
     const res = await t29DeleteTeacherAccount(CURRENT.username, password);
     if (!res.ok) { msg.innerHTML = `<div class="error-msg">${res.error}</div>`; btn.disabled = false; return false; }
+    if (res.warning) alert(res.warning);
     window.location.href = "index.html";
   } catch (err) {
     console.error("Account deletion failed:", err);

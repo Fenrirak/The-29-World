@@ -2,10 +2,8 @@
    Pick a module, edit its worksheet straight on the page, print it. Content and layout
    defaults come from worksheets-data.js; this file is only the editor.
 
-   Saving: each teacher's edits live in this browser (localStorage), keyed by username, and
-   only for worksheets they've actually changed — untouched worksheets always show whatever
-   is currently in worksheets-data.js. "Export backup" / "Import backup" (More menu) moves
-   everything between devices.
+   Saving: private per-teacher records sync through worksheets-sync.js. Local
+   drafts survive offline work; untouched built-ins still use worksheets-data.js.
 ========================================================================================= */
 (function () {
   "use strict";
@@ -27,7 +25,7 @@
     user: null, data: null, moduleKey: "", sheet: null,
     mode: "edit", showAnswers: false,
     storageOK: true, dirty: false, saveTimer: 0, status: "", statusWarn: false,
-    undo: null, snackTimer: 0, defaultIds: new Set()
+    undo: null, snackTimer: 0, defaultIds: new Set(), sync: null, syncInfo: null, heldId: null
   };
 
   const $ = id => document.getElementById(id);
@@ -38,19 +36,23 @@
   function storageKey() { return "t29-worksheets-v1:" + ((S.user && S.user.username) || "teacher"); }
 
   function normalizeData(d) {
-    const out = { v: 1, sheets: {}, hidden: [], prefs: { module: "", sheet: {} } };
+    const out = { v: 1, sheets: Object.create(null), hidden: [], prefs: { module: "", sheet: Object.create(null) } };
+    const renamed = Object.create(null);
     if (d && d.sheets && typeof d.sheets === "object") {
       Object.keys(d.sheets).forEach(id => {
         const s = wsNormalizeSheet(d.sheets[id]);
         if (!wsModule(s.moduleKey)) return;
-        s.id = id;
-        out.sheets[id] = s;
+        s.id = /^[a-zA-Z0-9_-]{1,180}$/.test(id) ? id : "c-" + wsUid();
+        renamed[id] = s.id;
+        out.sheets[s.id] = s;
       });
     }
     if (d && Array.isArray(d.hidden)) out.hidden = d.hidden.filter(x => typeof x === "string");
     if (d && d.prefs && typeof d.prefs === "object") {
       out.prefs.module = typeof d.prefs.module === "string" ? d.prefs.module : "";
-      if (d.prefs.sheet && typeof d.prefs.sheet === "object") out.prefs.sheet = Object.assign({}, d.prefs.sheet);
+      if (d.prefs.sheet && typeof d.prefs.sheet === "object") {
+        Object.entries(d.prefs.sheet).forEach(([key, id]) => { out.prefs.sheet[key] = renamed[id] || id; });
+      }
     }
     return out;
   }
@@ -71,15 +73,9 @@
   function saveNow() {
     clearTimeout(S.saveTimer);
     S.saveTimer = 0;
-    try {
-      localStorage.setItem(storageKey(), JSON.stringify(S.data));
-      S.storageOK = true;
-      if (S.dirty) setStatus("Saved");
-      S.dirty = false;
-    } catch (_) {
-      S.storageOK = false;
-      setStatus("Not saved: this browser is blocking storage", true);
-    }
+    S.sync.setPrefs(S.data.prefs);
+    S.sync.persist();
+    S.sync.flush();
   }
 
   function saveSoon(silent) {
@@ -92,6 +88,57 @@
     S.status = text; S.statusWarn = !!warn;
     const el = $("wsStatus");
     if (el) { el.textContent = text; el.classList.toggle("warn", !!warn); }
+  }
+
+  function syncChanged(data, info) {
+    S.syncInfo = info;
+    S.storageOK = info.localOK;
+    S.dirty = info.pending > 0;
+    const previous = JSON.stringify(S.sheet);
+    const previousNavigation = navigationState();
+    const oldId = S.sheet && S.sheet.id;
+    const selected = info.redirect && info.redirect.from === oldId ? info.redirect.to : oldId;
+    if (info.redirect && S.heldId === info.redirect.from) S.heldId = info.redirect.to;
+    // Selection belongs to this device; a snapshot arriving during the
+    // preference-save debounce must not put it back on the old module.
+    data.prefs = S.data.prefs;
+    S.data = data;
+    const list = sheetsFor(S.moduleKey);
+    S.sheet = list.find(sh => sh.id === selected) || list[0] || null;
+    if (S.sheet) S.data.prefs.sheet[S.moduleKey] = S.sheet.id;
+    // A save acknowledgement must not replace a button between pointer
+    // down and click, or interrupt the editor's focus/caret.
+    if (navigationState() !== previousNavigation) { renderRail(); renderModuleBar(); }
+    if (JSON.stringify(S.sheet) !== previous) { renderToolbar(); renderPaper(); }
+    let text = info.ready ? "Saved to your account" : "Connecting to your account…";
+    let warn = false;
+    if (info.pending) text = info.saving ? "Saving to your account…" : "Saved on this device · waiting to sync";
+    if (!info.online) text = info.localOK ? "Offline · saved on this device" : info.pending ? "Offline · changes not saved" : "Offline · local saving unavailable";
+    if (info.error) { text = info.localOK ? "Saved on this device · sync unavailable" : "Changes not saved"; warn = true; }
+    if (!info.localOK && info.pending) { text = info.saving ? "Saving to your account…" : "Changes not saved · keep this page open"; warn = true; }
+    setStatus(text, warn);
+    const retry = document.querySelector('[data-act="sync-retry"]');
+    if (retry) retry.classList.toggle("hidden", !info.error);
+    const notice = $("wsNotice");
+    notice.hidden = !info.error && info.localOK;
+    notice.textContent = info.error
+      ? (info.localOK ? "Account sync is unavailable. Changes are saved on this device. Use More to export a backup, or retry sync."
+        : "Account sync and local saving are unavailable. Keep this page open and export a backup from More.")
+      : !info.localOK ? "This browser is blocking local saving. Keep this page open until changes are saved to your account, or export a backup from More." : "";
+    if (info.conflict) notify(info.redirect
+      ? "Another device changed this worksheet. Both versions were kept; you're editing a separate copy."
+      : "Another device changed this worksheet. Its latest version was kept; your removal or reset wasn't applied.");
+  }
+
+  function navigationState() {
+    return JSON.stringify([S.moduleKey, S.sheet && S.sheet.id,
+      wsModuleList().map(m => [m.key, sheetsFor(m.key).map(sh => [sh.id, sh.title]), hiddenCount(m.key)])]);
+  }
+  function editingField(el) { return el && el.closest && el.closest('#wsPaperHost, [data-set], [data-act="set"]'); }
+  function releaseEditHold() {
+    if (!editingField(document.activeElement) && S.heldId) {
+      const id = S.heldId; S.heldId = null; S.sync.release(id);
+    }
   }
 
   /* ---------------------------------- model ---------------------------------- */
@@ -126,6 +173,7 @@
     if (!S.sheet) return;
     S.sheet.updatedAt = Date.now();
     S.data.sheets[S.sheet.id] = S.sheet;
+    S.sync.put(S.sheet);
     saveSoon();
   }
 
@@ -217,6 +265,7 @@
       `</div>` +
       `<div class="ws-tb-right">` +
         `<span class="ws-status${S.statusWarn ? " warn" : ""}" id="wsStatus" role="status" aria-live="polite">${e(S.status)}</span>` +
+        `<button type="button" class="btn small secondary${S.syncInfo?.error ? "" : " hidden"}" data-act="sync-retry">Retry sync</button>` +
         `<div class="ws-popwrap"><button type="button" class="btn small secondary" data-act="pop" data-pop="layout" aria-expanded="false" aria-haspopup="true">Layout</button>` +
           `<div class="ws-pop" role="dialog" aria-label="Layout options">` +
             `<label class="ws-switch"><input type="checkbox" data-set="nameLine" ${st.nameLine ? "checked" : ""}><span class="ws-track"></span><span>Name, class and date line</span></label>` +
@@ -516,6 +565,7 @@
     S.data.sheets[sh.id] = sh;
     S.sheet = sh; S.mode = "edit"; S.undo = null;
     S.data.prefs.sheet[S.moduleKey] = sh.id;
+    S.sync.put(sh);
     saveSoon();
     render();
     renderPaper({ focusTitle: true });
@@ -530,6 +580,7 @@
     S.data.sheets[copy.id] = copy;
     S.sheet = copy; S.undo = null;
     S.data.prefs.sheet[S.moduleKey] = copy.id;
+    S.sync.put(copy);
     saveSoon();
     render();
     t29ToastSafe("Duplicated. You're now editing the copy.");
@@ -537,21 +588,25 @@
 
   async function resetSheet() {
     if (!S.sheet || !S.defaultIds.has(S.sheet.id) || !isEdited(S.sheet)) return;
+    const id = S.sheet.id, moduleKey = S.moduleKey;
     if (!await ask("Reset this worksheet to the built-in version? Your changes to it will be lost.", "Reset")) return;
-    delete S.data.sheets[S.sheet.id];
-    selectModule(S.moduleKey);
+    delete S.data.sheets[id];
+    S.sync.mark(id, "default");
+    selectModule(moduleKey);
     saveSoon();
     render();
   }
 
   async function deleteSheet() {
     if (!S.sheet) return;
-    const builtIn = S.defaultIds.has(S.sheet.id);
+    const id = S.sheet.id, moduleKey = S.moduleKey;
+    const builtIn = S.defaultIds.has(id);
     if (!await ask(builtIn ? "Remove this built-in worksheet? You can restore it later from this module." : "Delete this worksheet? This can't be undone.", builtIn ? "Remove" : "Delete")) return;
-    if (builtIn && !S.data.hidden.includes(S.sheet.id)) S.data.hidden.push(S.sheet.id);
-    delete S.data.sheets[S.sheet.id];
-    delete S.data.prefs.sheet[S.moduleKey];
-    selectModule(S.moduleKey);
+    if (builtIn && !S.data.hidden.includes(id)) S.data.hidden.push(id);
+    delete S.data.sheets[id];
+    S.sync.mark(id, builtIn ? "hidden" : "deleted");
+    delete S.data.prefs.sheet[moduleKey];
+    selectModule(moduleKey);
     saveSoon();
     render();
   }
@@ -559,6 +614,7 @@
   function restoreBuiltIns() {
     const ids = wsDefaultsFor(S.moduleKey).map(d => d.id);
     S.data.hidden = S.data.hidden.filter(id => !ids.includes(id));
+    ids.forEach(id => { if (!S.data.sheets[id]) S.sync.mark(id, "default"); });
     selectModule(S.moduleKey);
     saveSoon();
     render();
@@ -580,8 +636,12 @@
       let parsed;
       try { parsed = JSON.parse(String(reader.result)); } catch (_) { parsed = null; }
       if (!parsed || parsed.app !== "t29-worksheets" || !parsed.data) { notify("That file isn't a worksheets backup.", true); return; }
-      if (!await ask("Import this backup? It replaces all the worksheet changes currently saved in this browser.", "Import")) return;
+      if (!S.sync.status().loaded || navigator.onLine === false || S.sync.status().error) {
+        notify("Connect to your account before importing a backup, so your whole worksheet library can be replaced safely.", true); return;
+      }
+      if (!await ask("Import this backup? It replaces the worksheets in your account and syncs those changes to your other devices.", "Import")) return;
       S.data = normalizeData(parsed.data);
+      S.sync.replace(S.data);
       selectModule(S.data.prefs.module || S.moduleKey, true);
       saveNow();
       render();
@@ -662,6 +722,7 @@
       case "del-sheet": closePops(); deleteSheet(); break;
       case "export": closePops(); exportBackup(); break;
       case "import": closePops(); $("wsImportFile").click(); break;
+      case "sync-retry": S.sync.retry(); break;
       case "up": moveBlock(bid, -1); break;
       case "down": moveBlock(bid, 1); break;
       case "dup": dupBlock(bid); break;
@@ -677,6 +738,7 @@
       case "opt-del": delOption(bid, +t.dataset.i); break;
       case "lines+": case "lines-": case "opt-add": case "row+": case "row-": case "col+": case "col-": blockEdit(bid, act); break;
     }
+    releaseEditHold();
   }
 
   function onInput(ev) {
@@ -746,19 +808,26 @@
   }
 
   async function init() {
-    const u = await requireLogin();
+    const u = await requireLogin({ skipActivity: true });
     if (!u) return;
     if (u.role !== "teacher") { window.location.href = "student.html"; return; }
     S.user = u;
     $("whoami").textContent = t29DisplayName(u);
-    $("navHome").href = "teacher.html";
+    $("navHome").href = u.classCode ? "teacher.html" : "teacher-home.html";
     paintIconSlots();
 
     wsModuleList().forEach(m => wsDefaultsFor(m.key).forEach(d => S.defaultIds.add(d.id)));
     WS_MODULES.forEach(m => { if (!m.enabled) wsDefaultsFor(m.key).forEach(d => S.defaultIds.add(d.id)); });
     S.storageOK = probeStorage();
     S.data = loadData();
-    if (!S.storageOK) { const n = $("wsNotice"); n.hidden = false; n.textContent = "This browser is blocking local storage, so edits can't be saved. Print or export before you leave."; }
+    S.sync = T29WorksheetSync.create({ db: fdb, username: u.username,
+      storage: { getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value),
+        removeItem: key => localStorage.removeItem(key), key: i => localStorage.key(i), get length() { return localStorage.length; } },
+      key: "t29-worksheets-sync-v1:" + u.username + ":" + u.authUid,
+      legacy: S.data, defaultIds: S.defaultIds,
+      normalizeSheet: raw => { const sh = wsNormalizeSheet(raw); return wsModule(sh.moduleKey) ? sh : null; },
+      serverTimestamp: () => firebase.firestore.FieldValue.serverTimestamp(), onChange: syncChanged });
+    S.data = S.sync.view();
 
     // Sticky bits sit just under the top bar, whatever height it ends up at (it wraps on mid-width screens).
     // With the sidebar on a computer screen the "bar" is a fixed full-height column down the left, so there's nothing to clear.
@@ -785,13 +854,34 @@
     app.addEventListener("change", onChange);
     app.addEventListener("keydown", onKeydown);
     app.addEventListener("paste", onPaste);
+    app.addEventListener("focusin", ev => {
+      if (S.sheet && editingField(ev.target)) {
+        if (S.heldId && S.heldId !== S.sheet.id) S.sync.release(S.heldId);
+        S.heldId = S.sheet.id; S.sync.hold(S.heldId);
+      }
+    });
+    app.addEventListener("focusout", ev => {
+      // Let the delegated click act on its existing target before a
+      // deferred remote edit can repaint navigation or the paper.
+      if (ev.relatedTarget?.closest('[data-act]')) return;
+      setTimeout(releaseEditHold, 0);
+    });
     app.addEventListener("drop", ev => { if (ev.target.closest && ev.target.closest("[contenteditable]")) ev.preventDefault(); });
     document.addEventListener("keydown", ev => { if (ev.key === "Escape") { closePops(); closeAddMenus(); } });
     $("wsSnack").addEventListener("click", onClick);
     $("wsImportFile").addEventListener("change", onChange);
-    window.addEventListener("pagehide", () => { if (S.dirty) saveNow(); });
+    window.addEventListener("pagehide", () => { saveNow(); S.sync.stop(); });
+    window.addEventListener("pageshow", ev => { if (ev.persisted) S.sync.start(); });
+    window.addEventListener("online", () => S.sync.retry());
+    window.addEventListener("offline", () => S.sync.flush());
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && S.dirty) saveNow(); });
     window.addEventListener("beforeprint", () => { if (S.dirty) saveNow(); });
+    window.addEventListener("beforeunload", ev => {
+      const status = S.sync.status();
+      if (status.pending && !status.localOK) { ev.preventDefault(); ev.returnValue = ""; }
+    });
+    S.sync.start();
+    t29PageReady();
   }
 
   document.addEventListener("DOMContentLoaded", init);

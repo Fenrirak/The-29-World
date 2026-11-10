@@ -502,6 +502,10 @@ async function sellVehicle(classCode, vehId, username, rate) {
     // A teacher repossessing it is never blocked — only the student
     // selling their own while a big event has it at risk.
     if (t29SessionStudent() === username && pendingBigEventFor(cls, username, "vehicle", vehId)) { blocked = true; return; }
+    const ownerRef = usersCol().doc(username);
+    const ownerSnap = await t.get(ownerRef);
+    if (!ownerSnap.exists) throw new Error("OWNER_NOT_FOUND");
+    const ownerData = ownerSnap.data();
     owner = username;
     vehName = veh.name;
     // An explicit rate (e.g. the teacher's flat 90% forced-repossession
@@ -510,14 +514,16 @@ async function sellVehicle(classCode, vehId, username, rate) {
     const effectiveRate = rate !== undefined ? rate : (cls.sellBackRates[normalizeVehicleType(veh.type)] !== undefined ? cls.sellBackRates[normalizeVehicleType(veh.type)] : 0.85);
     payout = Math.round(veh.price * effectiveRate * 100) / 100;
     veh.owners = veh.owners.filter(o => o !== username);
+    if (ownerData.role !== "teacher" || payout > 0) {
+      t.update(ownerRef, { balance: Math.round(((Number(ownerData.balance) || 0) + payout) * 100) / 100 });
+    }
     t.update(classRef, { vehicles: cls.vehicles });
   });
   if (blocked) return { ok: false, error: BIG_EVENT_BLOCK_MESSAGE };
   if (owner) {
-    await adjustBalance(owner, payout);
     await logTxn(classCode, { type: "vehicle-sell", to: owner, amount: payout, note: `Sold back: ${vehName}` });
   }
-  return { ok: true };
+  return { ok: !!owner };
 }
 
 // Teacher-set price/description for the class-wide truck licence. Students
@@ -779,21 +785,23 @@ function transportWeeklyAmount(cls, user) {
 
 // Which ISO week the most recently-passed transport due day falls in —
 // same logic as lastMortgageDueWeekKey, just keyed off cls.transportDay.
-function lastTransportDueWeekKey(cls) {
+function lastTransportDueDateKey(cls) {
   const isoIdx = day => (DAY_NAMES.indexOf(day) + 6) % 7;
   const dueIdx = isoIdx(cls.transportDay || "Fri");
   const todayIdx = isoIdx(nzDayName());
   let daysSinceDue = todayIdx - dueIdx;
   if (daysSinceDue <= 0) daysSinceDue += 7;
-  const lastDueDateKey = dateKeyPlusDays(nzDateKey(), -daysSinceDue);
-  return isoWeekKey(new Date(dateKeyToUTC(lastDueDateKey)));
+  return dateKeyPlusDays(nzDateKey(), -daysSinceDue);
+}
+function lastTransportDueWeekKey(cls) {
+  return isoWeekKey(new Date(dateKeyToUTC(lastTransportDueDateKey(cls))));
 }
 
 // The ISO week key of this student's currently-unpaid transport cycle, or
 // null if there isn't one — mirrors overdueMortgageWeekKey. There's no
 // "first week is free" exemption here (unlike a mortgage's purchase week):
-// the public transport fee applies to every student from the moment the
-// teacher sets one, whether or not they own a vehicle.
+// the public transport fee applies to every student whether or not they
+// own a vehicle, but never for a due day before they joined the class.
 function overdueTransportWeekKey(user, cls) {
   const weekKey = isoWeekKey();
   if ((user.transportLastWeekPaid || null) === weekKey) return null; // already paid this week
@@ -801,6 +809,14 @@ function overdueTransportWeekKey(user, cls) {
   // means nothing can be overdue — a $0 week is only left unmarked because
   // the student didn't open Transport on the due day to settle it.
   if (transportWeeklyAmount(cls, user).total <= 0) return null;
+  const startTimes = [cls.createdAt, user.joinedAt];
+  // Older accounts have no joinedAt. A retained welcome record still
+  // identifies their start; a restart also starts a fresh billing period.
+  (cls.txns || []).forEach(t => {
+    if (t.type === "welcome" && t.to === user.username) startTimes.push(t.ts);
+  });
+  const starts = startTimes.filter(t => Number.isFinite(t) && t > 0);
+  if (starts.length && lastTransportDueDateKey(cls) < nzDateKey(new Date(Math.max(...starts)))) return null;
   const lastDueWeekKey = lastTransportDueWeekKey(cls);
   if (lastDueWeekKey === weekKey) return weekKey; // this week's due day already passed
   if ((user.transportLastWeekPaid || null) === lastDueWeekKey) return null; // that earlier cycle was paid
@@ -1237,7 +1253,7 @@ function insuranceClaimOptions(cls, user, coverage, cover, cost, entry) {
       let covered = loss;
       if (typed) covered = Math.min(loss, Math.max(0, Number(row.payout) || 0));
       const uncovered = r2(loss - covered);
-      return { plan, covered: r2(covered), excess, uncovered, studentPays: r2(excess + uncovered), payout: r2(Math.max(0, covered - excess)) };
+      return { plan, covered: r2(covered), excess, uncovered, studentPays: r2(Math.min(loss, excess + uncovered)), payout: r2(Math.max(0, covered - excess)) };
     })
     .filter(Boolean)
     .sort((a, b) => a.studentPays - b.studentPays);
@@ -3021,6 +3037,7 @@ async function revealBigEvent(classCode, logId) {
     const found = (liveCls.bigEventLog || []).find(e => e.id === logId);
     if (!found || found.status !== "scheduled") return;
     const userSnap = await t.get(usersCol().doc(found.studentUser));
+    if (!userSnap.exists) return;
     const student = Object.assign({}, userSnap.exists ? userSnap.data() : {}, { username: found.studentUser });
     const activeDefs = (liveCls.bigEventDefs || []).filter(d => d.active);
     let def = activeDefs.find(d => d.id === found.defId);
@@ -3054,12 +3071,14 @@ async function revealBigEvent(classCode, logId) {
       found.basisNote = `${eventPercentText(def.costPercent)} of ${priced.label}`;
     }
     entry = Object.assign({}, found);
+    if (entry.kind === "good") {
+      t.update(usersCol().doc(found.studentUser), { balance: Math.round(((Number(student.balance) || 0) + entry.cost) * 100) / 100 });
+    }
     t.update(classRef, { bigEventLog: liveCls.bigEventLog });
   });
   // A good event's money arrives the moment it happens — the popup
   // telling the student why is shown straight after (checkBigEventPopup).
   if (entry && entry.kind === "good") {
-    await adjustBalance(entry.studentUser, entry.cost);
     await logTxn(classCode, { type: "big-event", to: entry.studentUser, amount: entry.cost, note: `Big event windfall: "${entry.name}"` + bigEventAssetTag(entry) + (entry.description ? ": " + entry.description : "") + (entry.basisNote ? ` (${entry.basisNote})` : "") });
   }
   return entry;
@@ -3550,9 +3569,9 @@ async function claimEventPopup(classCode, kind, logId) {
 
 async function revealWeeklyEvent(classCode, eventLogId) {
   const classRef = classesCol().doc(classCode);
-  let entry = null;
+  let entry = null, evCard = 0;
   await fdb.runTransaction(async (t) => {
-    entry = null;
+    entry = null; evCard = 0;
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const liveCls = withNewModuleDefaults(snap.data());
@@ -3561,6 +3580,10 @@ async function revealWeeklyEvent(classCode, eventLogId) {
     const planned = found.status === "planned";
     const legacy = found.status === "scheduled" && found.type === "fixed";
     if (!planned && !legacy) return;
+    const userRef = usersCol().doc(found.studentUser);
+    const userSnap = await t.get(userRef);
+    if (!userSnap.exists) return;
+    const user = userSnap.data();
     if (planned) {
       const ev = (liveCls.eventDefs || []).find(d => d.id === found.eventId && d.active);
       const insurance = ev ? weeklyEventInsurance(ev) : null;
@@ -3568,7 +3591,6 @@ async function revealWeeklyEvent(classCode, eventLogId) {
       // now (see eventBaseValue) — read them first, before anything is written.
       const base = ev ? weeklyEventBase(ev) : null;
       const assetCoverage = ev ? weeklyEventAssetCoverage(insurance, base) : null;
-      const sSnap = base ? await t.get(usersCol().doc(found.studentUser)) : null;
       let asset = { assetId: null, assetName: null, assetType: null };
       if (ev && assetCoverage) {
         const assetIncident = assetCoverage === insurance.coverage ? insurance.incident : null;
@@ -3578,7 +3600,7 @@ async function revealWeeklyEvent(classCode, eventLogId) {
       }
       let priced = null;
       if (ev && base && asset) {
-        const student = Object.assign({}, sSnap && sSnap.exists ? sSnap.data() : {}, { username: found.studentUser });
+        const student = Object.assign({}, user, { username: found.studentUser });
         priced = eventBaseValue(liveCls, student, base, asset);
       }
       if (!ev || !asset || (base && !priced)) {
@@ -3612,14 +3634,23 @@ async function revealWeeklyEvent(classCode, eventLogId) {
     // Charge the event in full. Insurance is optional: the student can
     // choose a claim in the popup afterwards, including any write-off.
     entry = Object.assign({}, found);
+    // The outcome and its money commit together. A failed charge leaves the
+    // event available to retry instead of permanently marking it resolved.
+    if (entry.type === "fixed" && (user.role !== "teacher" || entry.amount > 0)) {
+      let update;
+      if (entry.amount < 0) {
+        const pay = cardTakeEventCost(user, liveCls, -entry.amount);
+        evCard = pay.card;
+        update = { balance: Math.round(((Number(user.balance) || 0) - pay.cash) * 100) / 100 };
+        if (pay.card > 0) update.creditCard = user.creditCard;
+      } else update = { balance: Math.round(((Number(user.balance) || 0) + entry.amount) * 100) / 100 };
+      t.update(userRef, update);
+    }
     t.update(classRef, { eventLog: liveCls.eventLog });
   });
   if (!entry) return null;
   if (entry.type === "fixed") {
     // A cost goes on the student's card first if they switched that on (see cardTakeEventCost).
-    let evCard = 0;
-    if (entry.amount < 0) evCard = (await takeEventCost(entry.studentUser, classCode, -entry.amount)).card;
-    else await adjustBalance(entry.studentUser, entry.amount);
     const evNote = entry.name + (entry.description ? ": " + entry.description : "") + (entry.basisNote ? " (" + entry.basisNote + ")" : "") + (entry.insuranceNote ? " " + entry.insuranceNote : "");
     if (evCard > 0) {
       const cashPart = Math.round((entry.amount + evCard) * 100) / 100; // still negative, or 0 if it all went on the card

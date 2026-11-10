@@ -42,13 +42,13 @@ function pvTimeAgo(ts) {
 // biggest — the same chart the student sees on their Reports page.
 function pvBars(map, colorClass, emptyText) {
   const entries = Object.entries(map && typeof map === "object" ? map : {})
-    .map(([label, amt]) => [label, Number(amt) || 0]).filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]);
+    .map(([label, amt]) => [label, Number(amt) || 0]).filter(e => Number.isFinite(e[1]) && e[1] !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   if (!entries.length) return `<p class="pv-empty">${emptyText}</p>`;
-  const max = Math.max(...entries.map(e => e[1]));
+  const max = Math.max(...entries.map(e => Math.abs(e[1])));
   return `<div class="pv-bars">${entries.map(([label, amt]) => `
     <div class="pv-bar">
       <div class="pv-bar-label">${pvEscape(label)}</div>
-      <div class="pv-bar-track"><div class="pv-bar-fill ${colorClass}" style="width:${max ? Math.max(2, Math.round((amt / max) * 100)) : 0}%"></div></div>
+      <div class="pv-bar-track"><div class="pv-bar-fill ${amt < 0 ? "coral" : colorClass}" style="width:${max ? Math.max(2, Math.round((Math.abs(amt) / max) * 100)) : 0}%"></div></div>
       <div class="pv-bar-amount">${pvMoney(amt)}</div>
     </div>`).join("")}</div>`;
 }
@@ -67,6 +67,7 @@ function pvShowError(title, text) {
 function pvBuildReportHtml(doc, opts) {
   opts = opts || {};
   const v = doc.view || {};
+  const savedLabel = v.accountingVersion === 2 ? "Net saved &amp; invested" : "Deposited &amp; invested (legacy)";
   const first = String(v.name || "Your child").trim().split(/\s+/)[0];
 
   // Everything in the summary was written by a browser, so text is always
@@ -92,7 +93,7 @@ function pvBuildReportHtml(doc, opts) {
 
   const owns = [
     ["Cash", v.balance], ["Savings account", v.savings], ["Term deposits", v.termDeposits], ["KiwiSaver", v.kiwiSaver],
-    ["Shares", v.invested], ["Property", v.propertyValue], ["Vehicles", v.vehicleValue], ["Store items", v.storeValue]
+    ["Gambling account", v.gamblingBalance], ["Shares", v.invested], ["Property", v.propertyValue], ["Vehicles", v.vehicleValue], ["Store items", v.storeValue]
   ].filter(([, amt]) => Number(amt));
   const rate = Number.isFinite(Number(v.savingsRate)) && v.savingsRate !== null ? Number(v.savingsRate) + "%" : "—";
   const meta = [
@@ -130,7 +131,7 @@ function pvBuildReportHtml(doc, opts) {
       ${tile("navy", "medal", "Net worth", pvMoney(v.netWorth), "Everything they have, minus what they owe")}
       ${tile("mint", "piggy", "Savings account", pvMoney(v.savings), "")}
       ${tile("gold", "coin", "Cash", pvMoney(v.balance), "Ready to spend")}
-      ${tile("sky", "percent", "Savings rate", rate, "Of this month's income")}
+      ${tile("sky", "percent", "Savings rate", rate, "Net saved as a share of this month's income")}
     </section>
 
     <section class="card pv-card">
@@ -142,7 +143,7 @@ function pvBuildReportHtml(doc, opts) {
       <h2>${pvIcon("calendar", 20)} ${pvEscape(v.monthLabel || "This month")}</h2>
       <div class="pv-month-sum">
         <div class="pv-sum gold"><div class="pv-sum-label">Earned</div><div class="pv-sum-value">${pvMoney(v.incomeTotal)}</div></div>
-        <div class="pv-sum mint"><div class="pv-sum-label">Saved &amp; invested</div><div class="pv-sum-value">${pvMoney(v.savedTotal)}</div></div>
+        <div class="pv-sum mint"><div class="pv-sum-label">${savedLabel}</div><div class="pv-sum-value">${pvMoney(v.savedTotal)}</div></div>
         <div class="pv-sum coral"><div class="pv-sum-label">Spent</div><div class="pv-sum-value">${pvMoney(v.spentTotal)}</div></div>
       </div>
       <div class="pv-section">
@@ -150,13 +151,15 @@ function pvBuildReportHtml(doc, opts) {
         ${pvBars(v.income, "gold", "Nothing earned yet this month.")}
       </div>
       <div class="pv-section">
-        <h3>${pvIcon("piggy", 16)} Saved &amp; invested</h3>
+        <h3>${pvIcon("piggy", 16)} ${savedLabel}</h3>
         ${pvBars(v.saved, "mint", "Nothing set aside yet this month.")}
       </div>
       <div class="pv-section">
         <h3>${pvIcon("cart", 16)} Spent on</h3>
         ${pvBars(v.spent, "coral", "Nothing spent yet this month.")}
       </div>
+      ${v.returnedTotal ? `<div class="pv-section"><h3>Returned money &amp; sale proceeds</h3>${pvBars(v.returned, "gold", "")}</div>` : ""}
+      <p class="pv-note">${v.accountingVersion === 2 ? "Income excludes returned capital. Net saving subtracts withdrawals. Sale proceeds with no recorded original cost are shown separately." : "This summary uses the earlier cash-flow figures, including returned money in income and counting deposits before withdrawals."}${v.historyComplete === false ? " Earlier activity is incomplete; totals cover the records that can still be verified." : ""}${v.earningsComplete === false ? " Income is a verified subtotal; the savings-rate percentage is not shown." : ""}</p>
     </section>
 
     <div class="pv-two">
@@ -164,7 +167,7 @@ function pvBuildReportHtml(doc, opts) {
         <h2>${pvIcon("bank", 20)} What ${pvEscape(first)} has</h2>
         ${owns.length || Number(v.owed) ? `<table class="pv-table"><tbody>
           ${owns.map(([label, amt]) => tableRow(label, pvMoney(amt))).join("")}
-          ${Number(v.owed) ? tableRow("Owes (loans and mortgage)", "-" + pvMoney(v.owed), "pv-owed") : ""}
+          ${Number(v.owed) ? tableRow("Owes (loans, mortgage and credit card)", "-" + pvMoney(v.owed), "pv-owed") : ""}
           ${tableRow("Net worth", pvMoney(v.netWorth), "pv-total")}
         </tbody></table>` : `<p class="pv-empty">Nothing yet.</p>`}
         ${loanCount ? `<p class="pv-note">${loanCount} loan${loanCount === 1 ? "" : "s"} still being paid off.</p>` : ""}
@@ -173,7 +176,7 @@ function pvBuildReportHtml(doc, opts) {
         <h2>${pvIcon("star", 20)} Since joining</h2>
         <table class="pv-table"><tbody>
           ${tableRow("Earned in total", pvMoney(v.lifetimeIncomeTotal))}
-          ${tableRow("Saved &amp; invested in total", pvMoney(v.lifetimeSavedTotal))}
+          ${tableRow(savedLabel + " in total", pvMoney(v.lifetimeSavedTotal))}
           ${tableRow("Spent in total", pvMoney(v.lifetimeSpentTotal))}
         </tbody></table>
       </section>

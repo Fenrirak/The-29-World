@@ -584,6 +584,10 @@ async function sellProperty(classCode, propId) {
     // A teacher repossessing it is never blocked — only the student
     // selling their own while a big event has it at risk.
     if (t29SessionStudent() === prop.owner && pendingBigEventFor(cls, prop.owner, "property", prop.id)) { blocked = true; return; }
+    const ownerRef = usersCol().doc(prop.owner);
+    const ownerSnap = await t.get(ownerRef);
+    if (!ownerSnap.exists) throw new Error("OWNER_NOT_FOUND");
+    const ownerData = ownerSnap.data();
     owner = prop.owner;
     propName = prop.name;
     marketPrice = prop.price;
@@ -602,11 +606,13 @@ async function sellProperty(classCode, propId) {
     // Repossession/sell-back also ends any classmate rental in progress —
     // there's no owner left for the tenant to be renting from.
     prop.sublet = null;
+    if (ownerData.role !== "teacher" || payout > 0) {
+      t.update(ownerRef, { balance: Math.round(((Number(ownerData.balance) || 0) + payout) * 100) / 100 });
+    }
     t.update(classRef, { properties: cls.properties });
   });
   if (blocked) return { ok: false, error: BIG_EVENT_BLOCK_MESSAGE };
   if (!owner) return { ok: false };
-  await adjustBalance(owner, payout);
   const breakdown = mortgagePayoff > 0
     ? ` (market price ${fmtMoney(marketPrice)} minus ${fmtMoney(mortgagePayoff)} mortgage payoff${breakFee > 0 ? ` and ${fmtMoney(breakFee)} break fee` : ""})`
     : "";
@@ -620,7 +626,7 @@ async function sellProperty(classCode, propId) {
 // principal) is fixed by the mortgage itself, so students can't pay extra,
 // pay early against a future week, or pay a custom amount here.
 // Guards on the normal weekly payment:
-//   - it only works on the class's mortgageDay (teacher-set), or for this
+//   - it works from the class's mortgageDay through Sunday, or for this
 //     ISO week only if the teacher has marked payments due now (see
 //     setMortgageDueOverride); and
 //   - it's blocked during the ISO week the property was purchased (that
@@ -679,8 +685,9 @@ async function payMortgage(username, classCode, propId, useCard) {
       const forcedDue = cls.mortgageForceDueWeek === weekKey;
       propName = prop.name;
 
-      // Variable mortgages can be paid any day; fixed ones from the due day to the end of that week.
-      if (!isVariableMortgage(prop.mortgage) && !isMortgagePayableNow(cls) && !forcedDue) throw new Error("WRONG_DAY");
+      // Both rate types share the class's weekly due day. Variable-rate
+      // owners can still make separate extra repayments whenever they like.
+      if (!isMortgagePayableNow(cls) && !forcedDue) throw new Error("WRONG_DAY");
       if (prop.mortgage.purchaseWeekKey === weekKey) throw new Error("PURCHASE_WEEK");
       if (prop.mortgage.lastWeekPaid === weekKey) throw new Error("ALREADY_PAID");
       // Interest is charged on the principal still remaining.
@@ -1171,7 +1178,6 @@ async function processPropertyRent(classCode) {
     // rentLastPaidDate is never reset by a move, so it still remembers.
     if (prop.rentLastPaidDate === todayKey) continue;
     const classRef = classesCol().doc(classCode);
-    const ownerRef = usersCol().doc(prop.owner);
     let didRun = false, amt = 0, owner = "";
     try {
       // Owner credit + the "paid" stamp now happen in ONE transaction (same
@@ -1180,14 +1186,17 @@ async function processPropertyRent(classCode) {
       // gets marked paid and logged as a success, which is exactly the
       // "rent paid but never arrived" bug this replaces.
       await fdb.runTransaction(async (t) => {
+        didRun = false;
         const classSnap = await t.get(classRef);
-        const ownerSnap = await t.get(ownerRef); // all reads before any writes
-        if (!classSnap.exists || !ownerSnap.exists) return;
+        if (!classSnap.exists) return;
         const liveCls = withNewModuleDefaults(classSnap.data());
         const liveProp = liveCls.properties.find(p => p.id === prop.id);
         if (!liveProp || !liveProp.owner || liveProp.occupancy !== "rented") return;
         if (liveProp.rentLastWeekPaid === weekKey) return;
         if (liveProp.rentLastPaidDate === todayKey) return;
+        const ownerRef = usersCol().doc(liveProp.owner);
+        const ownerSnap = await t.get(ownerRef); // ownership may have changed since the first attempt
+        if (!ownerSnap.exists) return;
         const ownerData = ownerSnap.data();
         amt = liveProp.rentPerWeek;
         owner = liveProp.owner;

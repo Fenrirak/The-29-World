@@ -114,13 +114,14 @@ function wsClamp(n, lo, hi, fallback) {
   return Math.max(lo, Math.min(hi, n));
 }
 function wsStr(v) { return typeof v === "string" ? v : (v === null || v === undefined ? "" : String(v)); }
+function wsSafeId(v) { return typeof v === "string" && /^[a-zA-Z0-9_-]{1,180}$/.test(v) ? v : ""; }
 
 /* Fills in anything missing so the editor never has to second-guess a worksheet's shape.
    Used for built-in content, saved edits and imported backups alike. */
 function wsNormalizeSheet(raw, fallbackModule) {
   const s = raw && typeof raw === "object" ? raw : {};
   const sheet = {
-    id: wsStr(s.id) || wsUid(),
+    id: wsSafeId(s.id) || wsUid(),
     moduleKey: wsStr(s.moduleKey) || fallbackModule || "",
     title: wsStr(s.title),
     subtitle: wsStr(s.subtitle),
@@ -129,9 +130,12 @@ function wsNormalizeSheet(raw, fallbackModule) {
     updatedAt: Number(s.updatedAt) || 0,
     blocks: []
   };
+  const usedIds = new Set();
   (Array.isArray(s.blocks) ? s.blocks : []).forEach((b, i) => {
     if (!b || typeof b !== "object") return;
-    const id = wsStr(b.id) || (sheet.id + "-b" + i);
+    let id = wsSafeId(b.id) || (sheet.id + "-b" + i);
+    while (usedIds.has(id)) id = wsUid();
+    usedIds.add(id);
     switch (b.type) {
       case "heading":
       case "text":

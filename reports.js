@@ -107,7 +107,7 @@ function renderTeacher() {
       <td><div class="stack-val"><span class="student-avatar ${avatarClass(s.username)}" style="width:26px;height:26px;font-size:var(--fs-xs);display:inline-flex;vertical-align:middle;margin-right:8px;">${initials(s.name)}</span>${escapeHtml(s.name)}</div></td>
       <td><div class="stack-val">${fmtMoney(s.netWorth)}</div></td>
       <td><div class="stack-val">${s.savingsRate === null ? "—" : s.savingsRate + "%"}</div></td>
-      <td><div class="stack-val">${s.topExpenseCategory ? `${s.topExpenseCategory.category} (${fmtMoney(s.topExpenseCategory.amount)})` : "—"}</div></td>
+      <td><div class="stack-val">${s.topExpenseCategory ? `${escapeHtml(s.topExpenseCategory.category)} (${fmtMoney(s.topExpenseCategory.amount)})` : "—"}</div></td>
       <td class="no-print stack-actions"><button class="btn small secondary" onclick="openStudentReport('${escapeJsAttr(s.username)}')">View</button></td>
     </tr>
   `).join("");
@@ -268,13 +268,13 @@ document.addEventListener("click", e => {
 /* ---------------- Shared per-student breakdown ---------------- */
 const REPORT_LIFETIME_NOTE = "Everything since the account was made, or since the class was last restarted. It doesn't reset when the month rolls over.";
 function renderBars(map, colorClass) {
-  const entries = Object.entries(map || {}).sort((a, b) => b[1] - a[1]);
+  const entries = Object.entries(map || {}).filter(([,v]) => Number.isFinite(v) && v !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   if (!entries.length) return `<p class="muted-small">Nothing here yet.</p>`;
-  const max = Math.max(...entries.map(e => e[1]));
+  const max = Math.max(...entries.map(e => Math.abs(e[1])));
   return entries.map(([label, amt]) => `
     <div class="rpt-bar-row">
-      <div class="rpt-bar-label">${label}</div>
-      <div class="rpt-bar-track"><div class="rpt-bar-fill ${colorClass}" style="width:${max ? Math.round((amt / max) * 100) : 0}%"></div></div>
+      <div class="rpt-bar-label">${escapeHtml(label)}</div>
+      <div class="rpt-bar-track"><div class="rpt-bar-fill ${amt < 0 ? "coral" : colorClass}" style="width:${max ? Math.round((Math.abs(amt) / max) * 100) : 0}%"></div></div>
       <div class="rpt-bar-amount">${fmtMoney(amt)}</div>
     </div>
   `).join("");
@@ -293,12 +293,14 @@ function renderLoanHistory(loans) {
 }
 
 function studentReportHTML(s) {
+  const savedLabel = s.accountingVersion === 2 ? "Net saved &amp; invested" : "Deposited &amp; invested (legacy)";
   return `
+    <p class="muted-small">${escapeHtml(reportAccountingNote(s))}</p>
     <div class="profile-summary">
       <div class="profile-chip"><div class="label">Net worth</div><div class="value">${fmtMoney(s.netWorth)}</div></div>
       <div class="profile-chip"><div class="label">Savings rate</div><div class="value">${s.savingsRate === null ? "—" : s.savingsRate + "%"}</div></div>
       <div class="profile-chip"><div class="label">Income this month</div><div class="value">${fmtMoney(s.incomeTotal)}</div></div>
-      <div class="profile-chip"><div class="label">Biggest expense</div><div class="value">${s.topExpenseCategory ? s.topExpenseCategory.category : "—"}</div>${s.topExpenseCategory ? `<div class="muted-small">${fmtMoney(s.topExpenseCategory.amount)}</div>` : ""}</div>
+      <div class="profile-chip"><div class="label">Biggest expense</div><div class="value">${s.topExpenseCategory ? escapeHtml(s.topExpenseCategory.category) : "—"}</div>${s.topExpenseCategory ? `<div class="muted-small">${fmtMoney(s.topExpenseCategory.amount)}</div>` : ""}</div>
     </div>
 
     ${netWorthChartHTML(s)}
@@ -309,17 +311,18 @@ function studentReportHTML(s) {
       <tr><td>Savings account</td><td>${fmtMoney(s.savings)}</td></tr>
       <tr><td>Term deposits</td><td>${fmtMoney(s.termDeposits)}</td></tr>
       ${s.kiwiSaver ? `<tr><td>KiwiSaver</td><td>${fmtMoney(s.kiwiSaver)}</td></tr>` : ""}
+      ${s.gamblingBalance ? `<tr><td>Gambling account</td><td>${fmtMoney(s.gamblingBalance)}</td></tr>` : ""}
       <tr><td>Stock portfolio</td><td>${fmtMoney(s.invested)}</td></tr>
       <tr><td>Property</td><td>${fmtMoney(s.propertyValue)}</td></tr>
       <tr><td>Vehicles</td><td>${fmtMoney(s.vehicleValue)}</td></tr>
       <tr><td>Store items</td><td>${fmtMoney(s.storeValue)}</td></tr>
-      <tr><td>Owed (loans + mortgage)</td><td>-${fmtMoney(s.owed)}</td></tr>
+      <tr><td>Owed (loans, mortgage and credit card)</td><td>${s.owed > 0 ? "-" : ""}${fmtMoney(s.owed)}</td></tr>
     </tbody></table></div>
 
     <h4>${icon("download", 16)} Income this month ${fmtMoney(s.incomeTotal)}</h4>
     ${renderBars(s.income, "gold")}
 
-    <h4>${icon("piggy", 16)} Saved &amp; invested this month ${fmtMoney(s.savedTotal)}</h4>
+    <h4>${icon("piggy", 16)} ${savedLabel} this month ${fmtMoney(s.savedTotal)}</h4>
     ${renderBars(s.saved, "mint")}
     ${s.borrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this month (not counted as income).</p>` : ""}
 
@@ -332,12 +335,14 @@ function studentReportHTML(s) {
     <h4>${icon("download", 16)} All-time income ${fmtMoney(s.lifetimeIncomeTotal)}</h4>
     ${renderBars(s.lifetimeIncome, "gold")}
 
-    <h4>${icon("piggy", 16)} All-time saved &amp; invested ${fmtMoney(s.lifetimeSavedTotal)}</h4>
+    <h4>${icon("piggy", 16)} All-time ${savedLabel.toLowerCase()} ${fmtMoney(s.lifetimeSavedTotal)}</h4>
     ${renderBars(s.lifetimeSaved, "mint")}
     ${s.lifetimeBorrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.lifetimeBorrowedTotal)} in loans in total (not counted as income).</p>` : ""}
 
     <h4>${icon("send", 16)} All-time spent ${fmtMoney(s.lifetimeSpentTotal)}</h4>
     ${renderBars(s.lifetimeSpent, "coral")}
+
+    ${s.returnedTotal ? `<h4>Returned money &amp; sale proceeds this month ${fmtMoney(s.returnedTotal)}</h4>${renderBars(s.returned, "gold")}` : ""}
 
     <h4>${icon("loan", 16)} Loan history</h4>
     ${renderLoanHistory(s.loans)}
@@ -556,21 +561,26 @@ async function downloadReportPDF() {
 }
 
 function reportToRows(report) {
-  const rows = [["Name", "Username", "Net worth", "Cash", "Savings", "Term deposits", "KiwiSaver", "Invested", "Property", "Vehicles", "Store items",
-    "Owed", "Income (this month)", "Saved/invested (this month)", "Spent (this month)", "Borrowed (this month)", "Savings rate %", "Top expense category", "Top expense amount",
-    "Income (all-time)", "Saved/invested (all-time)", "Spent (all-time)", "Borrowed (all-time)"]];
+  const rows = [["Name", "Username", "Net worth", "Cash", "Savings", "Term deposits", "KiwiSaver", "Gambling account", "Invested", "Property", "Vehicles", "Store items",
+    "Owed", "Income (this month)", "Saved/invested (see accounting version; net in v2)", "Spent (this month)", "Borrowed (this month)", "Savings rate %", "Top expense category", "Top expense amount",
+    "Income (all-time)", "Saved/invested (all-time; net in v2)", "Spent (all-time)", "Borrowed (all-time)", "Returned money/sale proceeds (this month)", "Accounting version", "Earlier history complete"]];
   (report.students || []).forEach(s => rows.push([
-    s.name, s.username, s.netWorth, s.balance, s.savings, s.termDeposits, s.kiwiSaver || 0, s.invested, s.propertyValue, s.vehicleValue, s.storeValue,
+    s.name, s.username, s.netWorth, s.balance, s.savings, s.termDeposits, s.kiwiSaver || 0, s.gamblingBalance || 0, s.invested, s.propertyValue, s.vehicleValue, s.storeValue,
     s.owed, s.incomeTotal, s.savedTotal, s.spentTotal, s.borrowedTotal, s.savingsRate === null ? "" : s.savingsRate,
     s.topExpenseCategory ? s.topExpenseCategory.category : "", s.topExpenseCategory ? s.topExpenseCategory.amount : "",
-    s.lifetimeIncomeTotal, s.lifetimeSavedTotal, s.lifetimeSpentTotal, s.lifetimeBorrowedTotal
+    s.lifetimeIncomeTotal, s.lifetimeSavedTotal, s.lifetimeSpentTotal, s.lifetimeBorrowedTotal,
+    s.returnedTotal ?? "", s.accountingVersion || 1, s.historyComplete === false ? "No" : s.accountingVersion === 2 ? "Yes" : "Unknown"
   ]));
   return rows;
 }
 
 function downloadCSV(rows, filename) {
-  const csv = rows.map(r => r.map(v => `"${String(v === undefined || v === null ? "" : v).replace(/"/g, '""')}"`).join(",")).join("\r\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const csv = rows.map(r => r.map(v => {
+    let text = String(v === undefined || v === null ? "" : v);
+    if (typeof v === "string" && /^\s*[=+\-@]/.test(text)) text = "'" + text;
+    return `"${text.replace(/"/g, '""')}"`;
+  }).join(",")).join("\r\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

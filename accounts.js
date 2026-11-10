@@ -267,13 +267,14 @@ function acMoveBtns(id, canMove) {
 function acCashTile(me, cls, canMove) {
   const bal = acctRound(me.balance || 0), rate = Number(cls.cashInterestRate) || 0, per = acPeriod(cls);
   const gross = bal > 0 && rate > 0 ? acctRound(bal * rate / 100) : 0;
+  const net = applyTaxToIncome(cls, "interest", gross).net;
   return `<article class="ac-own k-everyday is-default">
     <div class="ac-own-body">
       <div class="ac-tile-head"><strong>Cash balance</strong>${acKindBadge("everyday")}${acMainBadge("cash")}</div>
       <div class="ac-bal"><span>Balance</span><strong>${t29SvActive() ? "Unlimited ∞" : fmtMoney(bal)}</strong></div>
       <div class="ac-rows">
         <div class="ac-line"><span>Interest rate</span><strong>${rate > 0 ? `${rate}% <small>per ${per.span}</small>` : "None"}</strong></div>
-        <div class="ac-line"><span>Next interest</span><strong class="${gross > 0 ? "good" : ""}">${gross > 0 ? "≈ +" + fmtMoney(gross) : "$0.00"}</strong></div>
+        <div class="ac-line"><span>Next interest (after tax)</span><strong class="${net > 0 ? "good" : ""}">${net > 0 ? "≈ +" + fmtMoney(net) : "$0.00"}</strong></div>
         <div class="ac-line"><span>Withdrawals</span><strong>Unlimited</strong></div>
         <div class="ac-hint">${acctMainId(AC_ME) === "cash" ? "Included for everyone in your class. Your pay comes in here and your purchases come out of it." : "Included for everyone in your class. Your pay and payments use your main account instead."}</div>
       </div>
@@ -288,13 +289,14 @@ function acCashTile(me, cls, canMove) {
 function acSavingsTile(me, cls, canMove) {
   const bal = acctRound(me.savings || 0), rate = Number(cls.interestRate) || 0, per = acPeriod(cls);
   const gross = bal > 0 && rate > 0 ? acctRound(bal * rate / 100) : 0;
+  const net = applyTaxToIncome(cls, "interest", gross).net;
   return `<article class="ac-own k-savings is-default">
     <div class="ac-own-body">
       <div class="ac-tile-head"><strong>Savings Account</strong>${acKindBadge("savings")}</div>
       <div class="ac-bal"><span>Balance</span><strong>${fmtMoney(bal)}</strong></div>
       <div class="ac-rows">
         <div class="ac-line"><span>Interest rate</span><strong>${rate > 0 ? `${rate}% <small>per ${per.span}</small>` : "None"}</strong></div>
-        <div class="ac-line"><span>Next interest</span><strong class="${gross > 0 ? "good" : ""}">${gross > 0 ? "≈ +" + fmtMoney(gross) : "$0.00"}</strong></div>
+        <div class="ac-line"><span>Next interest (after tax)</span><strong class="${net > 0 ? "good" : ""}">${net > 0 ? "≈ +" + fmtMoney(net) : "$0.00"}</strong></div>
         <div class="ac-line"><span>Withdrawals</span><strong>Unlimited</strong></div>
         <div class="ac-hint">Included for everyone in your class.</div>
       </div>
@@ -312,11 +314,12 @@ function acOwnedTile(a, cls, canMove) {
   const bonus = wd === 0 && p.bonusRate > 0 ? p.bonusRate : 0;
   const rate = (p.rate || 0) + bonus;
   const gross = bal > 0 && bal >= (p.minBalance || 0) && rate > 0 ? acctRound(bal * rate / 100) : 0;
+  const net = applyTaxToIncome(cls, "interest", gross).net;
   const waived = p.feeWaiveAt > 0 && bal >= p.feeWaiveAt;
-  const feeDue = p.fee > 0 && bal > 0 && !waived ? Math.min(p.fee, bal) : 0;
+  const feeDue = p.fee > 0 && bal + net > 0 && !waived ? acctRound(Math.min(p.fee, bal + net)) : 0;
   const rows = [];
   rows.push(`<div class="ac-line"><span>Interest rate</span><strong>${p.rate > 0 ? `${p.rate}% <small>per ${acPeriod(cls).span}</small>` : "None"}</strong></div>`);
-  rows.push(`<div class="ac-line"><span>Next interest</span><strong class="${gross > 0 ? "good" : ""}">${gross > 0 ? "≈ +" + fmtMoney(gross) : "$0.00"}</strong></div>`);
+  rows.push(`<div class="ac-line"><span>Next interest (after tax)</span><strong class="${net > 0 ? "good" : ""}">${net > 0 ? "≈ +" + fmtMoney(net) : "$0.00"}</strong></div>`);
   if (p.minBalance > 0 && bal < p.minBalance) rows.push(`<div class="ac-hint">Add ${fmtMoney(p.minBalance - bal)} more to start earning interest.</div>`);
   if (p.fee > 0) rows.push(`<div class="ac-line"><span>Account fee</span><strong class="${feeDue > 0 ? "bad" : "good"}">${feeDue > 0 ? "−" + fmtMoney(feeDue) : waived ? "Waived" : "$0.00"}</strong></div>`);
   if (p.fee > 0 && p.feeWaiveAt > 0 && !waived) rows.push(`<div class="ac-hint">Keep ${fmtMoney(p.feeWaiveAt)} in here and the fee is waived.</div>`);
@@ -660,8 +663,8 @@ function acRenderTeacher(cls, students) {
       const sc = lifestyleRatingFromData(cls, s, s.username), ok = sc >= p.minLifestyle;
       return `<tr><td>${acEsc(s.name)}</td><td>${acEsc(p.name)} ${acKindBadge(p.kind)}</td>
         <td><span class="badge ${ok ? "mint" : "coral"}">${Math.floor(sc * 10) / 10} / ${p.minLifestyle} needed</span></td>
-        <td class="cc-row-actions"><button class="btn small mint" onclick="acApprove('${acEsc(s.username)}','${acEsc(a.id)}',${ok})">Approve</button>
-          <button class="btn small coral" onclick="acDecline('${acEsc(s.username)}','${acEsc(a.id)}')">Decline</button></td></tr>`;
+        <td class="cc-row-actions"><button class="btn small mint" onclick="acApprove('${escapeJsAttr(s.username)}','${acEsc(a.id)}',${ok})">Approve</button>
+          <button class="btn small coral" onclick="acDecline('${escapeJsAttr(s.username)}','${acEsc(a.id)}')">Decline</button></td></tr>`;
     }).join("")}</tbody></table></div>` : "";
 
   const useRows = active.length ? `<h3 class="cc-sub">${icon("users", 16)} Accounts in use (${active.length})</h3>

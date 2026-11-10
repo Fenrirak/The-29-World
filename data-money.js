@@ -216,7 +216,7 @@ async function _payStudentWage(classCode, username, dateKey, { force = false, cl
     const extras = [];
     if (c.taxAmount > 0) extras.push(`${fmtMoney(c.taxAmount)} tax withheld`);
     if (c.kiwi && c.kiwi.you > 0) extras.push(`${fmtMoney(c.kiwi.you)} to KiwiSaver`);
-    const entry = { type: "wage", to: username, amount: c.net, note: "Pay day: " + c.tierLabel + (extras.length ? ` (${extras.join(", ")})` : "") };
+    const entry = { type: "wage", to: username, amount: c.net, kiwi: c.kiwi || null, note: "Pay day: " + c.tierLabel + (extras.length ? ` (${extras.join(", ")})` : "") };
     if (logSink) logSink.push(entry);
     else await logTxn(classCode, entry);
   }
@@ -230,6 +230,7 @@ async function _payStudentWeeklyLifeAllowance(classCode, username, dateKey, { cl
   let credited = null;
   try {
     await fdb.runTransaction(async (t) => {
+      credited = null; // discard the result of an attempt Firestore retried
       const snap = await t.get(userRef);
       if (!snap.exists) return;
       const user = snap.data();
@@ -259,6 +260,7 @@ async function _payStudentDailyLifeAllowance(classCode, username, dateKey, { log
   let credited = null;
   try {
     await fdb.runTransaction(async (t) => {
+      credited = null; // only the committed attempt may add a ledger entry
       const snap = await t.get(userRef);
       if (!snap.exists) return;
       const user = snap.data();
@@ -1136,6 +1138,7 @@ async function _creditStudentInterest(classCode, username, dateKey, { force = fa
   let credited = null;
   try {
     await fdb.runTransaction(async (t) => {
+      credited = null; // another device may have paid it before this retry
       const snap = await t.get(userRef);
       if (!snap.exists) return;
       const user = snap.data();
@@ -2603,10 +2606,7 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
     const savings = Math.round(((s.savings || 0) + acctTotalOf(s)) * 100) / 100; // Savings Account + any extra bank accounts
     const owed = (s.loans || []).filter(l => l.status === "active").reduce((sum, l) => sum + l.owed, 0) + mortgageOwed + cardOwed(s);
     const termDeposits = (s.termDeposits || []).reduce((sum, d) => sum + d.amount, 0);
-    // Gambling account balance counts toward net worth like any other
-    // place a student can hold value, but it isn't a line in the
-    // breakdown shown on the leaderboard/report — it's folded silently
-    // into `net` via gamblingBalance below.
+    // Keep the gambling account in both the total and the breakdown.
     const gamblingBalance = gamblingAccountToday(s).balance;
     // KiwiSaver is locked away, but it's still the student's money — real
     // net worth counts retirement savings too.
@@ -2614,7 +2614,7 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
     const kiwiSaver = ks ? ks.balance : 0;
     return {
       username: s.username, name: s.name,
-      balance: s.balance, invested, storeValue, propertyValue, vehicleValue, savings, owed, termDeposits, kiwiSaver,
+      balance: s.balance, invested, storeValue, propertyValue, vehicleValue, savings, owed, termDeposits, kiwiSaver, gamblingBalance,
       net: Math.round((s.balance + invested + storeValue + propertyValue + vehicleValue + savings + termDeposits + kiwiSaver + gamblingBalance - owed) * 100) / 100
     };
   });
@@ -2630,7 +2630,7 @@ async function classLeaderboard(classCode, viewerUsername, precomputedStudents) 
 // — and so survive "Restart class". Everything else on the account is
 // wiped back to how a brand-new student starts (see createStudentAccount).
 const RESTART_KEEP_USER_FIELDS = [
-  "username", "authUid", "role", "name", "classCode", "sessionVersion", "password",
+  "username", "authUid", "role", "name", "classCode", "joinedAt", "sessionVersion", "password",
   "dailyLimitMinutes", "timeSpentTodaySec", "timeSpentDate",
   "timeExemptionStatus", "timeExemptionDate", "timeExemptionRequestedAt",
   "extraMinutesToday", "extraMinutesDate", "parentViewToken",
@@ -2890,7 +2890,7 @@ const REPORT_SPENT_TYPES = {
 
 function classifyTxnForReport(t, username) {
   const amt = Math.round(Math.abs(Number(t.amount) || 0) * 100) / 100;
-  if (!amt) return null; // $0 txns (store-gift, unclaimed insurance signup, etc.)
+  if (!Number.isFinite(amt) || !amt) return null; // $0 or invalid transactions
   // A sale (or an insurance write-off) that left the student owing — the
   // mortgage still to pay off was more than the house fetched — is money
   // out, not income.
@@ -2901,6 +2901,7 @@ function classifyTxnForReport(t, username) {
   if (REPORT_SAVED_TYPES[t.type]) return { bucket: "saved", category: REPORT_SAVED_TYPES[t.type], amount: amt };
   if (REPORT_SPENT_TYPES[t.type]) return { bucket: "spent", category: REPORT_SPENT_TYPES[t.type], amount: amt };
   if (t.type === "loan-taken") return { bucket: "borrowed", category: "Loans taken", amount: amt };
+  if (t.type === "property-occupancy" && t.from === username) return { bucket: "spent", category: "Housing", amount: amt };
 
   // Gambling always logs `from: username` regardless of outcome (see
   // placeRouletteBet/bjSettle) — win/loss only lives in the note text.
@@ -2944,6 +2945,126 @@ function classifyTxnForReport(t, username) {
   return null;
 }
 
+// Version 2 reports distinguish earnings from returned capital and measure net
+// saving. Separate storage avoids mixing these definitions with old pages'
+// cash-flow counters while an update is being rolled out.
+function reportClassifications(t, username) {
+  if (!t || !txnBelongsTo(t, username)) return [];
+  const amount = Math.abs(Number(t.amount));
+  if (!Number.isFinite(amount)) return [];
+  const out = [];
+  const add = (bucket, category, value) => {
+    value = budgetRound(value);
+    if (Number.isFinite(value) && value) out.push({ bucket, category, amount: value });
+  };
+  const profit = (gain, category) => add(gain >= 0 ? "income" : "spent", category, Math.abs(gain));
+  const value = v => v != null && Number.isFinite(Number(v)) ? Number(v) : null;
+  if (t.type === "term-deposit-mature" || t.type === "term-deposit-early") {
+    const legacy = /matured:.*?([\d,]+\.\d{2})\s*\+/.exec(t.note || "");
+    const principal = value(t.principal) ?? (legacy ? Number(legacy[1].replace(/,/g, "")) : null);
+    if (principal != null) {
+      add("saved", "Term deposits", -principal);
+      add("returned", "Term deposit principal", Math.min(principal, amount));
+      if (t.type === "term-deposit-mature") profit(amount - principal, "Term deposit interest");
+      else add("spent", "Term deposit withdrawal fees", Math.max(0, principal - amount));
+    } else {
+      add("returned", "Term deposit returns (original amount unknown)", amount);
+      add("saved", "Term deposits", -amount);
+    }
+    return out;
+  }
+  if (t.type === "stock-sell" || t.type === "stock-close") {
+    const basis = value(t.costBasisSold) ?? (value(t.realizedGain) != null ? amount - Number(t.realizedGain) : null);
+    add("saved", "Stocks", -(basis ?? amount));
+    add("returned", basis == null ? "Share proceeds (original cost unknown)" : "Share capital returned", Math.min(amount, basis ?? amount));
+    if (basis != null) profit(amount - basis, "Realised share gains/losses");
+    return out;
+  }
+  if (["property-sell", "vehicle-sell", "store-sell", "p2p-sell"].includes(t.type)) {
+    const basis = value(t.costBasisSold);
+    if (Number(t.amount) < 0) add("spent", "Asset sale shortfall", amount);
+    else if (basis != null) {
+      add("returned", "Asset capital returned", Math.min(basis, amount));
+      profit(amount - basis, "Asset sale gains/losses");
+    } else add("returned", "Asset proceeds (original cost unknown)", amount);
+    return out;
+  }
+  if (t.type === "savings-withdraw") { add("saved", "Savings account", -amount); return out; }
+  if (t.type === "account-close") {
+    if (t.cashDir === "in") add("saved", "Savings account", -amount);
+    else if (t.cashDir === "out") add("saved", "Savings account", amount);
+    return out;
+  }
+  if (t.type === "kiwisaver-out" || t.type === "kiwisaver-refund") {
+    add("saved", "KiwiSaver", -amount); add("returned", "KiwiSaver withdrawals", amount); return out;
+  }
+  const original = classifyTxnForReport(t, username);
+  if (original) out.push(original);
+  if (t.type === "wage") {
+    const legacy = /([\d,]+\.\d{2})\s+to KiwiSaver/.exec(t.note || "");
+    const own = value(t.kiwi && t.kiwi.you) ?? (legacy ? Number(legacy[1].replace(/,/g, "")) : 0);
+    const extra = (value(t.kiwi && t.kiwi.employerNet) || 0) + (value(t.kiwi && t.kiwi.govt) || 0);
+    add("income", "Wages", own);
+    add("income", "KiwiSaver employer/government additions", extra);
+    add("saved", "KiwiSaver", own + extra);
+  }
+  return out;
+}
+function emptyAccountingBucket() {
+  return Object.assign(emptyReportBucket(), { returned: {}, returnedTotal: 0 });
+}
+function reportEntryKey(t) {
+  return String(t.id || "legacy:" + JSON.stringify([t.type,t.from,t.to,t.amount,t.ts,t.date,t.note]));
+}
+function reportAccountingApply(accounting, t, username) {
+  if (!t || !txnBelongsTo(t, username)) return;
+  const key = reportEntryKey(t);
+  if (accounting.seen.includes(key)) return;
+  const lines = reportClassifications(t, username);
+  const stamp = t.ts == null ? NaN : Number(t.ts);
+  const inMonth = Number.isFinite(stamp) && Number.isFinite(new Date(stamp).getTime()) && nzMonthKey(new Date(stamp)) === accounting.monthKey;
+  for (const line of lines) {
+    addClassificationToBucket(accounting.lifetime, line);
+    if (inMonth) addClassificationToBucket(accounting.month, line);
+  }
+  accounting.seen.push(key);
+}
+function reportAccountingView(student, txns) {
+  const monthKey = nzMonthKey();
+  const stored = student.reportAccounting;
+  const fresh = !stored || stored.version !== 2;
+  const accounting = fresh ? { version: 2, monthKey, month: emptyAccountingBucket(), lifetime: emptyAccountingBucket(), seen: [], historyComplete: true }
+    : _cloneDoc(stored);
+  if (accounting.monthKey !== monthKey) { accounting.monthKey = monthKey; accounting.month = emptyAccountingBucket(); }
+  const recent = (txns || []).filter(Boolean);
+  // Compare old counters with the same old classification of retained history.
+  // If an older transaction is gone, its new meaning cannot be reconstructed.
+  if (fresh) {
+    const oldScan = emptyReportBucket();
+    const oldSeen = new Set();
+    for (const t of recent) {
+      const key = reportEntryKey(t);
+      if (!txnBelongsTo(t, student.username) || oldSeen.has(key)) continue;
+      oldSeen.add(key);
+      const line = classifyTxnForReport(t, student.username);
+      if (line) addClassificationToBucket(oldScan, line);
+    }
+    const old = student.reportLifetime || {};
+    accounting.historyComplete = !["incomeTotal","savedTotal","spentTotal","borrowedTotal"].some(k => (Number(old[k]) || 0) > (oldScan[k] || 0) + 0.005)
+      && !(recent.length >= MAX_STORED_TXNS && !student.reportLifetime);
+  }
+  // Scan newest first, then retain the newest IDs. Reads never alter stored totals.
+  for (const t of recent.slice().reverse()) reportAccountingApply(accounting, t, student.username);
+  accounting.seen = accounting.seen.slice(-(MAX_STORED_TXNS + 20));
+  return accounting;
+}
+function reportAccountingNote(report) {
+  if (report.accountingVersion !== 2) return "This archived report uses the earlier cash-flow figures: income includes asset-sale proceeds and returned deposits, and savings counts deposits before withdrawals.";
+  return "Income excludes returned capital. Net saving subtracts withdrawals from money put away. Sale proceeds with no recorded original cost are shown separately, without guessing a profit."
+    + (report.historyComplete === false ? " Earlier activity is incomplete: only retained transactions and the new earnings records can be verified." : "")
+    + (report.earningsComplete === false ? " Income is a verified subtotal, so a savings-rate percentage is not shown." : "");
+}
+
 // Builds one student's report-card data. Net worth fields are a live
 // snapshot (a point in time). Income/saved/spent fields cover THIS NZ
 // CALENDAR MONTH, read from the rolling totals recordReportActivity() keeps
@@ -2955,26 +3076,9 @@ function classifyTxnForReport(t, username) {
 // it starts filling in from their next transaction.
 function buildStudentReportData(student, cls) {
   const username = student.username;
-  const monthKey = nzMonthKey();
-  const storedMonth = (student.reportMonth && student.reportMonth.monthKey === monthKey)
-    ? student.reportMonth : emptyReportBucket();
-  const storedLifetime = student.reportLifetime || emptyReportBucket();
-  // The rolling totals only count forward from when they shipped, so any
-  // activity from before that (or a recordReportActivity that failed) is
-  // missing from them. cls.txns still holds whatever recent history wasn't
-  // capped off, so rebuild buckets from it too and take the larger figure
-  // per category — both are undercounts of the truth, so the max never
-  // double-counts, and it's a pure read (nothing is written back).
-  const scanMonth = emptyReportBucket(), scanLifetime = emptyReportBucket();
-  (cls.txns || []).forEach(t => {
-    if (!txnBelongsTo(t, username)) return;
-    const c = classifyTxnForReport(t, username);
-    if (!c) return;
-    addClassificationToBucket(scanLifetime, c);
-    if (t.ts && nzMonthKey(new Date(t.ts)) === monthKey) addClassificationToBucket(scanMonth, c);
-  });
-  const month = mergeReportBuckets(storedMonth, scanMonth);
-  const lifetime = mergeReportBuckets(storedLifetime, scanLifetime);
+  const accounting = reportAccountingView(student, cls.txns || []);
+  const month = accounting.month, lifetime = accounting.lifetime;
+  const earningsComplete = accounting.historyComplete !== false && !Object.keys(month.returned).some(k => /unknown/.test(k));
 
   const income = month.income, saved = month.saved, spent = month.spent;
   const incomeTotal = month.incomeTotal, savedTotal = month.savedTotal,
@@ -3019,10 +3123,11 @@ function buildStudentReportData(student, cls) {
 
   return {
     username, name: student.name,
+    accountingVersion: 2, historyComplete: accounting.historyComplete, earningsComplete,
     netWorth, balance: Math.round(student.balance * 100) / 100, savings: Math.round(savings * 100) / 100,
     invested: Math.round(invested * 100) / 100, storeValue: Math.round(storeValue * 100) / 100,
     propertyValue: Math.round(propertyValue * 100) / 100, vehicleValue: Math.round(vehicleValue * 100) / 100,
-    termDeposits: Math.round(termDeposits * 100) / 100, kiwiSaver, owed,
+    termDeposits: Math.round(termDeposits * 100) / 100, kiwiSaver, gamblingBalance, owed,
     incomeTotal: Math.round(incomeTotal * 100) / 100,
     savedTotal: Math.round(savedTotal * 100) / 100,
     spentTotal: Math.round(spentTotal * 100) / 100,
@@ -3030,12 +3135,14 @@ function buildStudentReportData(student, cls) {
     // Percent of income that got saved/invested rather than spent, to 1dp.
     // Null (not 0) when there was no income at all this period, so the UI
     // can show "—" instead of a misleading 0%.
-    savingsRate: incomeTotal > 0 ? Math.round((savedTotal / incomeTotal) * 1000) / 10 : null,
+    savingsRate: earningsComplete && incomeTotal > 0 ? Math.round((savedTotal / incomeTotal) * 1000) / 10 : null,
     income, saved, spent,
+    returned: month.returned, returnedTotal: month.returnedTotal,
     topExpenseCategory: topExpense ? { category: topExpense[0], amount: topExpense[1] } : null,
     loans,
     // Entire history — never reset, see recordReportActivity above.
     lifetimeIncome: lifetime.income, lifetimeSaved: lifetime.saved, lifetimeSpent: lifetime.spent,
+    lifetimeReturned: lifetime.returned, lifetimeReturnedTotal: lifetime.returnedTotal,
     lifetimeIncomeTotal: lifetime.incomeTotal, lifetimeSavedTotal: lifetime.savedTotal,
     lifetimeSpentTotal: lifetime.spentTotal, lifetimeBorrowedTotal: lifetime.borrowedTotal,
     // Net worth noted every 3 days (plus any older saved report cards) — see netWorthTrendPoints.
@@ -3231,7 +3338,9 @@ function addClassificationToBucket(bucket, c) {
     return;
   }
   const map = bucket[c.bucket]; // "income" | "saved" | "spent"
-  map[c.category] = Math.round(((map[c.category] || 0) + c.amount) * 100) / 100;
+  const previous = Object.prototype.hasOwnProperty.call(map, c.category) ? Number(map[c.category]) || 0 : 0;
+  Object.defineProperty(map, c.category, { value: Math.round((previous + c.amount) * 100) / 100,
+    enumerable: true, writable: true, configurable: true });
   const totalKey = c.bucket + "Total";
   bucket[totalKey] = Math.round(((bucket[totalKey] || 0) + c.amount) * 100) / 100;
 }
@@ -3249,22 +3358,22 @@ function nzMonthKey(d) { const p = nzParts(d); return `${p.year}-${p.month}`; }
 // already committed in logTxn before this runs.
 async function recordReportActivity(username, txn) {
   if (!username || !txnBelongsTo(txn, username)) return;
-  const c = classifyTxnForReport(txn, username);
-  if (!c) return;
+  if (!reportClassifications(txn, username).length) return;
   const userRef = usersCol().doc(username);
-  const monthKey = nzMonthKey();
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(userRef);
       if (!snap.exists) return; // e.g. student removed mid-flight — nothing to update
       const u = snap.data();
-      const month = (u.reportMonth && u.reportMonth.monthKey === monthKey)
-        ? u.reportMonth
-        : Object.assign(emptyReportBucket(), { monthKey });
-      const lifetime = u.reportLifetime || emptyReportBucket();
-      addClassificationToBucket(month, c);
-      addClassificationToBucket(lifetime, c);
-      t.update(userRef, { reportMonth: month, reportLifetime: lifetime });
+      let recent = [];
+      if (!u.reportAccounting || u.reportAccounting.version !== 2) {
+        const cs = await t.get(classesCol().doc(u.classCode));
+        if (cs.exists) recent = cs.data().txns || [];
+      }
+      const accounting = reportAccountingView(Object.assign({ username }, u), recent);
+      reportAccountingApply(accounting, txn, username);
+      accounting.seen = accounting.seen.slice(-(MAX_STORED_TXNS + 20));
+      t.update(userRef, { reportAccounting: accounting });
     });
   } catch (e) {
     console.warn("recordReportActivity failed (rolling report totals only. Money already moved):", e);
@@ -3605,13 +3714,13 @@ function budgetWeekItems(cls, user, username) {
     const done = p.mortgage.lastWeekPaid === weekKey;
     const free = p.mortgage.purchaseWeekKey === weekKey;
     const dueKey = dayOf(cls.mortgageDay);
-    const dayKey = !done && (forced || isVariableMortgage(p.mortgage) || dueKey < todayKey) ? todayKey : dueKey;
+    const dayKey = !done && (forced || dueKey < todayKey) ? todayKey : dueKey;
     const status = free ? "free" : !done && dueKey < todayKey ? "overdue" : budgetStatus(dayKey, todayKey, done);
     items.push({ key: "mortgage-" + p.id, dir: "out", icon: "house", label: "Mortgage: " + p.name, amount: mortgageWeekAmount(p.mortgage).total, dayKey, status,
       where: "Property", cardable: false /* mortgages are cash-only */,
       note: free ? "The week you bought it is free" : status === "done" ? "Paid"
         : status === "overdue" ? "Still payable on the Property page until Sunday"
-        : (forced ? "Your teacher has made it due now" : isVariableMortgage(p.mortgage) ? "Variable mortgage: payable any day this week on the Property page" : "Pay on the Property page, from the due day until Sunday") });
+        : (forced ? "Your teacher has made it due now" : "Pay on the Property page, from the due day until Sunday") });
     // A floating-rate bill can change from week to week — say so on any unpaid bill.
     if (isVariableMortgage(p.mortgage) && !free && status !== "done") {
       items[items.length - 1].note += `. Variable rate (${p.mortgage.interestRate}%/wk), so it can change if the rate moves`;
@@ -4412,14 +4521,15 @@ function _buildParentView(student, cls, teacherName) {
     className: cls.name || "",
     teacherName: teacherName || "",
     monthLabel,
+    accountingVersion: r.accountingVersion, historyComplete: r.historyComplete, earningsComplete: r.earningsComplete,
     job: job ? (tier ? tier.name : job.title) : null,
     netWorth: r.netWorth, balance: r.balance, savings: r.savings,
-    termDeposits: r.termDeposits, kiwiSaver: r.kiwiSaver || 0, invested: r.invested,
+    termDeposits: r.termDeposits, kiwiSaver: r.kiwiSaver || 0, gamblingBalance: r.gamblingBalance || 0, invested: r.invested,
     propertyValue: r.propertyValue, vehicleValue: r.vehicleValue, storeValue: r.storeValue,
     owed: r.owed,
     incomeTotal: r.incomeTotal, savedTotal: r.savedTotal, spentTotal: r.spentTotal,
     savingsRate: r.savingsRate,
-    income: r.income, saved: r.saved, spent: r.spent,
+    income: r.income, saved: r.saved, spent: r.spent, returned: r.returned, returnedTotal: r.returnedTotal,
     topExpenseCategory: r.topExpenseCategory,
     lifetimeIncomeTotal: r.lifetimeIncomeTotal, lifetimeSavedTotal: r.lifetimeSavedTotal,
     lifetimeSpentTotal: r.lifetimeSpentTotal,

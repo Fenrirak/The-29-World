@@ -19,7 +19,7 @@ function renderWageBracketRows() {
   if (!rows) return;
   rows.innerHTML = wageBrackets.map((b, i) => `
     <div class="bracket-row" style="display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
-      <span>From ${fmtBracketFloor(i)} up to and including</span>
+      <span>${fmtBracketFloor(i)} up to and including</span>
       <input type="number" min="0" step="1" placeholder="no limit" value="${b.upTo === null ? "" : b.upTo}"
         style="width:110px" onchange="updateBracket(${i}, 'upTo', this.value)">
       <span>tax</span>
@@ -36,9 +36,9 @@ function renderWageBracketRows() {
 }
 
 function fmtBracketFloor(index) {
-  if (index === 0) return "$0 (inclusive)";
+  if (index === 0) return "From $0";
   const prevTop = wageBrackets[index - 1].upTo;
-  return prevTop === null || prevTop === "" ? "$0" : "$" + (Number(prevTop) + 1);
+  return prevTop === null || prevTop === "" ? "From $0" : "Above " + fmtMoney(Number(prevTop));
 }
 
 function updateBracket(i, field, value) {

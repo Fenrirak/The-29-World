@@ -432,8 +432,8 @@ function ccRenderTeacher(cls, students) {
       const sc = lifestyleRatingFromData(cls, s, s.username), ok = sc >= p.minLifestyle;
       return `<tr><td>${ccEsc(s.name)}</td><td>${ccEsc(p.name)} · ${fmtMoney(p.limit)}</td>
         <td><span class="badge ${ok ? "mint" : "coral"}">${Math.floor(sc * 10) / 10} / ${p.minLifestyle} needed${ccTierForRating(cls, p.minLifestyle) ? " (" + ccEsc(ccTierForRating(cls, p.minLifestyle).label) + ")" : ""}</span></td>
-        <td class="cc-row-actions"><button class="btn small mint" onclick="ccApprove('${ccEsc(s.username)}', ${ok})">Approve</button>
-          <button class="btn small coral" onclick="ccDecline('${ccEsc(s.username)}')">Decline</button></td></tr>`;
+        <td class="cc-row-actions"><button class="btn small mint" onclick="ccApprove('${escapeJsAttr(s.username)}', ${ok})">Approve</button>
+          <button class="btn small coral" onclick="ccDecline('${escapeJsAttr(s.username)}')">Decline</button></td></tr>`;
     }).join("")}</tbody></table></div>` : "";
 
   const cardRows = active.length ? `<h3 class="cc-sub">${icon("users", 16)} Cards in use (${active.length})</h3>

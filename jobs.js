@@ -137,7 +137,7 @@ function renderSideHustles(cls, students) {
     row.innerHTML = `
       <div class="auto-details"><strong>${escapeHtml(s.name)}</strong>
         wants to switch ${from ? `from ${escapeHtml(from.name)} (${hourLabel((s.sideHustle || {}).checkinHour)})` : "(no current hustle)"}
-        to <strong>${to ? to.name : "—"}</strong> at ${hourLabel(req.checkinHour)}
+        to <strong>${to ? escapeHtml(to.name) : "—"}</strong> at ${hourLabel(req.checkinHour)}
       </div>
       <button class="btn small" onclick="approveSideHustleRequest('${escapeJsAttr(s.username)}')">Approve</button>
       <button class="btn small coral" onclick="denySideHustleRequest('${escapeJsAttr(s.username)}')">Deny</button>
