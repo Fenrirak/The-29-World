@@ -23,7 +23,7 @@
 ============================================================================================ */
 
 const WS_LAYOUT = {
-  paper: "a4",                          // "a4" | "letter"
+  paper: "a4",                          // "a3" | "a4" | "a5"  (a5 prints 2-up on landscape A4)
   font: "sans",                         // "sans" | "serif"
   size: "m",                            // "s" | "m" | "l"
   nameLine: true,                       // Name / Class / Date line under the title

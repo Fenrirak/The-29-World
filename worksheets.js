@@ -13,7 +13,7 @@
   const LETTERS = "ABCDEFGH";
   const FONT_LABEL = { sans: "Clean", serif: "Classic" };
   const SIZE_LABEL = { s: "Small", m: "Medium", l: "Large" };
-  const PAPER_LABEL = { a4: "A4", letter: "US Letter" };
+  const PAPER_LABEL = { a3: "A3", a4: "A4", a5: "A5" };
 
   // Browsers that support it keep pasted/typed text plain; others get the same via handlers below.
   const CE = (() => {
@@ -272,7 +272,7 @@
             `<label class="ws-switch"><input type="checkbox" data-set="marks" ${st.marks ? "checked" : ""}><span class="ws-track"></span><span>Show marks</span></label>` +
             `<div class="ws-pop-row"><span class="ws-pop-lbl">Font</span>${segHTML("font", FONT_LABEL, st.font)}</div>` +
             `<div class="ws-pop-row"><span class="ws-pop-lbl">Text size</span>${segHTML("size", SIZE_LABEL, st.size)}</div>` +
-            `<div class="ws-pop-row"><span class="ws-pop-lbl">Paper</span>${segHTML("paper", PAPER_LABEL, st.paper)}</div>` +
+            `<div class="ws-pop-row"><span class="ws-pop-lbl">Paper</span>${segHTML("paper", PAPER_LABEL, st.paper)}<span class="ws-pop-note" id="wsA5Note" ${st.paper === "a5" ? "" : "hidden"}>Prints two copies side by side on landscape A4. Cut the sheet in half.</span></div>` +
             `<div class="ws-pop-row"><label class="ws-pop-lbl" for="wsFooterIn">Footer text</label><input id="wsFooterIn" class="ws-input" type="text" maxlength="160" data-set="footer" value="${e(st.footer)}" placeholder="Leave blank for no footer"></div>` +
           `</div></div>` +
         `<div class="ws-popwrap"><button type="button" class="btn small secondary" data-act="pop" data-pop="more" aria-expanded="false" aria-haspopup="true">More</button>` +
@@ -404,7 +404,8 @@
         ((edit || st.footer) ? `<footer class="ws-pf">${ed("div", "ws-pf-t", "", "footer", st.footer, "Footer text (optional)", false)}</footer>` : "") +
       `</article>`;
 
-    $("wsPageStyle").textContent = `@page{size:${st.paper === "letter" ? "letter" : "A4"};margin:14mm}`;
+    // A5 prints two copies side by side on a landscape A4 sheet (cut it in half); A3 and A4 print one page per sheet.
+    $("wsPageStyle").textContent = st.paper === "a5" ? "@page{size:A4 landscape;margin:12mm 0}" : `@page{size:${st.paper === "a3" ? "A3" : "A4"};margin:14mm}`;
     window.scrollTo(0, y);
 
     if (opts.focus) {
@@ -665,11 +666,20 @@
     const mod = wsModule(S.moduleKey);
     const oldTitle = document.title;
     paper.classList.toggle("print-key", !!withKey);
+    // A5: lay the page out in the left half of a landscape A4 sheet; the student copy is doubled into the right half too.
+    const host = $("wsPaperHost"), a5 = paper.classList.contains("pp-a5");
+    let copy = null;
+    if (a5) {
+      host.classList.add("ws-a5");
+      if (!withKey) { copy = paper.cloneNode(true); copy.setAttribute("aria-hidden", "true"); copy.setAttribute("inert", ""); host.appendChild(copy); host.classList.add("ws-2up"); }
+    }
     document.title = (mod ? mod.name + " – " : "") + (S.sheet.title || "Worksheet") + (withKey ? " (answer key)" : "");
     let done = false;
     const cleanup = () => {
       if (done) return; done = true;
       paper.classList.remove("print-key");
+      host.classList.remove("ws-a5", "ws-2up");
+      if (copy) copy.remove();
       document.title = oldTitle;
       window.removeEventListener("afterprint", cleanup);
     };
@@ -728,6 +738,7 @@
       case "set": {
         S.sheet.settings[t.dataset.k] = t.dataset.v;
         t.parentElement.querySelectorAll("button").forEach(b => { const on = b === t; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
+        if (t.dataset.k === "paper") { const n = $("wsA5Note"); if (n) n.hidden = t.dataset.v !== "a5"; }
         touch(); renderPaper();
         break;
       }

@@ -83,6 +83,7 @@ html.dark-mode .ws-seg{background:rgba(255,255,255,.08);}
 .ws-pop{display:none;position:absolute;right:0;top:calc(100% + 8px);z-index:50;width:min(330px,88vw);width:min(330px,calc(100cqw - 16px));padding:14px 16px 16px;background:var(--card);border:1.5px solid var(--line);border-radius:14px;box-shadow:var(--shadow-lg);}
 .ws-popwrap.open .ws-pop{display:block;}
 .ws-pop-row{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-top:14px;}
+.ws-pop-note{font-size:.76rem;font-weight:600;line-height:1.4;color:var(--muted);}
 .ws-pop-lbl{font-size:.7rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
 .ws-input{width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;font-size:.9rem;}
 .ws-input:focus{outline:2px solid var(--sky);outline-offset:1px;}
@@ -117,7 +118,8 @@ html.dark-mode .ws-stage{background:rgba(255,255,255,.045);}
 
 /* ---------- 2. The paper ---------- */
 .ws-paper{--pw:210mm;position:relative;width:100%;max-width:var(--pw);min-height:297mm;margin:0 auto;padding:15mm 16mm 14mm;background:#fff;color:#18202f;border-radius:4px;box-shadow:0 2px 4px rgba(31,43,68,.12),0 20px 54px rgba(31,43,68,.22);line-height:1.5;text-align:left;}
-.ws-paper.pp-letter{--pw:8.5in;min-height:11in;}
+.ws-paper.pp-a3{--pw:297mm;min-height:420mm;}
+.ws-paper.pp-a5{--pw:148mm;min-height:210mm;padding:12mm;}
 .ws-paper *{box-sizing:border-box;}
 .ws-paper.ff-sans{font-family:"Segoe UI","Trebuchet MS",Verdana,sans-serif;}
 .ws-paper.ff-serif{font-family:Georgia,"Times New Roman",serif;}
@@ -250,7 +252,7 @@ html.dark-mode .ws-stage{background:rgba(255,255,255,.045);}
 }
 @container ws (max-width:700px){
   .ws-stage{padding:14px 8px;}
-  .ws-paper,.ws-paper.pp-letter{min-height:0;padding:20px 18px;}
+  .ws-paper,.ws-paper.pp-a3,.ws-paper.pp-a5{min-height:0;padding:20px 18px;}
   .ws-modulebar{padding:14px 14px 12px;}
 }
 @container ws (max-width:640px){
@@ -274,7 +276,13 @@ html.dark-mode .ws-stage{background:rgba(255,255,255,.045);}
   .ws-hero,.ws-notice,.ws-rail,.ws-modulebar,.ws-toolbar,.ws-snack,.ws-edit-only,.ws-empty-actions{display:none !important;}
   .ws-shell{display:block;}
   .ws-stage{display:block;margin:0;padding:0;overflow:visible;border-radius:0;background:none !important;}
-  .ws-paper,.ws-paper.pp-letter{width:100%;max-width:none;min-height:0;margin:0;padding:0;border-radius:0;box-shadow:none;}
+  .ws-paper,.ws-paper.pp-a3,.ws-paper.pp-a5{width:100%;max-width:none;min-height:0;margin:0;padding:0;border-radius:0;box-shadow:none;}
+  /* A5: the page fills the left half of a landscape A4 sheet; 2-up puts an identical copy in the right half.
+     Both halves hold the same content, so they break onto new sheets at the same points. */
+  .ws-stage.ws-a5 > .ws-paper{box-sizing:border-box;width:148.5mm;max-width:none;padding:0 12mm;}
+  .ws-stage.ws-2up{display:table;table-layout:fixed;width:100%;}
+  .ws-stage.ws-2up > .ws-paper{display:table-cell;width:50%;vertical-align:top;}
+  .ws-stage.ws-2up > .ws-paper + .ws-paper{border-left:1px dashed #9aa3b5;}
   .ws-paper .ws-ed,.ws-paper .ws-ed:hover,.ws-paper .ws-ed:focus,
   .ws-paper.is-edit .ws-b:hover,.ws-paper.is-edit .ws-b:focus-within{background:none !important;box-shadow:none !important;}
   .ws-paper .ws-ed:empty::before{content:none !important;}
