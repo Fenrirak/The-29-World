@@ -678,6 +678,19 @@
     window.print();
   }
 
+  // Keep an open popover inside the worksheet column, so it never slides under the side menu or off the screen.
+  function placePop(w) {
+    const pop = w.querySelector(".ws-pop");
+    if (!pop) return;
+    pop.style.transform = "";
+    if (getComputedStyle(w).position === "static") return; // narrow layout already spans the toolbar
+    const b = (document.querySelector(".ws-work") || $("wsApp")).getBoundingClientRect(), r = pop.getBoundingClientRect(), pad = 8;
+    let dx = 0;
+    if (r.right > b.right - pad) dx = b.right - pad - r.right;
+    if (r.left + dx < b.left + pad) dx = b.left + pad - r.left;
+    if (dx) pop.style.transform = "translateX(" + Math.round(dx) + "px)";
+  }
+
   function closePops(except) {
     document.querySelectorAll(".ws-popwrap.open").forEach(w => {
       if (w === except) return;
@@ -709,6 +722,7 @@
       case "pop": {
         const w = t.closest(".ws-popwrap"), open = !w.classList.contains("open");
         closePops(w); w.classList.toggle("open", open); t.setAttribute("aria-expanded", String(open));
+        if (open) placePop(w);
         break;
       }
       case "set": {
@@ -834,6 +848,9 @@
     // With the sidebar on a computer screen the "bar" is a fixed full-height column down the left, so there's nothing to clear.
     const bar = document.querySelector(".topbar");
     const syncTop = () => {
+      // Centre of the worksheet area (the side menu shifts it off the screen centre) for the toast; re-fit any open popover.
+      const appEl = $("wsApp");
+      if (appEl) { const r = appEl.getBoundingClientRect(); document.documentElement.style.setProperty("--ws-cx", Math.round(r.left + r.width / 2) + "px"); document.querySelectorAll(".ws-popwrap.open").forEach(placePop); }
       if (!bar) return;
       const isRail = getComputedStyle(bar).position === "fixed" && bar.getBoundingClientRect().width < window.innerWidth * 0.6;
       const top = isRail ? 12 : Math.round(bar.getBoundingClientRect().height + 8);
@@ -842,6 +859,7 @@
     syncTop();
     if (bar && window.ResizeObserver) new ResizeObserver(syncTop).observe(bar);
     window.addEventListener("resize", syncTop);
+    if (window.ResizeObserver && $("wsApp")) new ResizeObserver(syncTop).observe($("wsApp"));
     // Settings can flip the sidebar on/off without a resize.
     new MutationObserver(syncTop).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
