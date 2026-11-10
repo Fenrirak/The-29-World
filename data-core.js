@@ -421,6 +421,22 @@ async function getClass(code) {
   );
   return _cloneDoc(data);
 }
+
+// Display-only identity: pages must not fail after a successful action
+// because the teacher's optional display name cannot be read. Older
+// published rules deny this read when the teacher opens a different class.
+// Never use this partial object for balances, permissions or payments.
+async function getClassTeacherDisplay(cls) {
+  if (!cls || !cls.teacher) return null;
+  const fallback = { username: cls.teacher, name: cls.teacher };
+  try {
+    const teacher = await getUserCached(cls.teacher);
+    return teacher ? { username: cls.teacher, name: teacher.name || cls.teacher } : fallback;
+  } catch (e) {
+    if (e && e.code === "permission-denied") return fallback;
+    throw e;
+  }
+}
 async function getClassStudents(code, precomputedCls) {
   const cls = precomputedCls || await getClass(code);
   if (!cls || !cls.students || cls.students.length === 0) return [];

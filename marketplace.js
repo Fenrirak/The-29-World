@@ -78,7 +78,7 @@ async function init() {
   const cls = await getClassCached(u.classCode);
   const roster = await getClassStudents(u.classCode, cls);
   roster.forEach(s => { NAMES[s.username] = s.name; });
-  const teacher = await getUserCached(cls.teacher);
+  const teacher = await getClassTeacherDisplay(cls);
   if (teacher) NAMES[teacher.username] = teacher.name;
 
   await render();

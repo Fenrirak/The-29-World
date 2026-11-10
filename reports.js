@@ -417,7 +417,7 @@ async function previewFamilyViewFor(username) {
     const [cls, students] = await Promise.all([getClass(CLASS_CODE), getClassStudents(CLASS_CODE)]);
     const student = students.find(s => s.username === username);
     if (!cls || !student) throw new Error("not found");
-    const teacher = await getUserCached(cls.teacher).catch(() => null);
+    const teacher = await getClassTeacherDisplay(cls).catch(() => null);
     const doc = { view: _buildParentView(student, cls, teacher ? teacher.name : ""), updatedAt: Date.now() };
     document.getElementById("familyPreviewTitle").innerHTML = icon("users", 20) + " Family view preview: " + escapeHtml(student.name || student.username);
     body.innerHTML = pvBuildReportHtml(doc, { preview: true });

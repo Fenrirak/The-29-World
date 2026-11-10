@@ -4541,7 +4541,7 @@ function _buildParentView(student, cls, teacherName) {
 async function _writeParentView(token, student, cls) {
   let teacherName = "";
   try {
-    const teacher = await getUserCached(cls.teacher);
+    const teacher = await getClassTeacherDisplay(cls);
     teacherName = teacher ? teacher.name : "";
   } catch (e) { /* the teacher's name is optional on the parent page */ }
   await parentViewsCol().doc(token).set({

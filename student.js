@@ -344,7 +344,7 @@ async function render() {
   const bankPreview = [];
   const nameCache = {};
   for (const s of allStudents) nameCache[s.username] = s.name;
-  const teacher = await getUserCached(cls.teacher);
+  const teacher = await getClassTeacherDisplay(cls);
   if (teacher) nameCache[teacher.username] = teacher.name;
   const nameOf = u => nameCache[u] || u;
   my.forEach(t => {

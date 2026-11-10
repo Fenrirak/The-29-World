@@ -151,7 +151,7 @@ async function render() {
   // name lookup cache for describeTxn / applications
   const nameCache = {};
   students.forEach(s => { nameCache[s.username] = s.name; });
-  const teacher = await getUserCached(cls.teacher);
+  const teacher = await getClassTeacherDisplay(cls);
   if (teacher) nameCache[teacher.username] = teacher.name;
 
   // net worth ranking (also gives us each student's lifestyle rating for the table below)

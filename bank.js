@@ -92,7 +92,7 @@ async function payableRecipients(precomputedStudents) {
     options.push({ username: s.username, label: s.name });
   });
   if (CURRENT.role !== "teacher") {
-    const t = await getUserCached(cls.teacher);
+    const t = await getClassTeacherDisplay(cls);
     if (t && t.username !== CURRENT.username) options.push({ username: t.username, label: t.name + " (Teacher)" }); // (in student view the teacher is you)
   }
   return options;
@@ -200,7 +200,9 @@ async function render() {
     if (a.toUser === AUTOPAY_ALL_STUDENTS) {
       toLabel = `All students (${allStudents.length})`;
     } else {
-      const toUser = await getUserCached(a.toUser);
+      const toUser = a.toUser === cls.teacher
+        ? await getClassTeacherDisplay(cls)
+        : await getUserCached(a.toUser);
       toLabel = escapeHtml(toUser ? toUser.name : a.toUser);
     }
     row.innerHTML = `
@@ -227,7 +229,7 @@ async function render() {
   tbody.innerHTML = "";
   const nameCache = {};
   allStudents.forEach(s => { nameCache[s.username] = s.name; });
-  const teacher = await getUserCached(cls.teacher);
+  const teacher = await getClassTeacherDisplay(cls);
   if (teacher) nameCache[teacher.username] = teacher.name;
   const nameOf = u => nameCache[u] || u;
   const badgeType = type => {
