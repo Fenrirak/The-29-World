@@ -247,10 +247,21 @@
       `<button type="button" class="${v === current ? "on" : ""}" data-act="set" data-k="${key}" data-v="${v}" aria-pressed="${v === current}">${labels[v]}</button>`).join("") + `</div>`;
   }
 
+  // Pinned = the toolbar sticks under the top bar while scrolling. The choice is remembered per device.
+  const PIN_KEY = "t29-ws-pinned";
+  function readPin() { try { return localStorage.getItem(PIN_KEY) !== "0"; } catch (_) { return true; } }
+  function togglePin() {
+    S.pinned = !S.pinned;
+    try { localStorage.setItem(PIN_KEY, S.pinned ? "1" : "0"); } catch (_) {}
+    renderToolbar();
+  }
+
   function renderToolbar() {
     const host = $("wsToolbar");
     if (!S.sheet) { host.innerHTML = ""; host.classList.add("hidden"); return; }
     host.classList.remove("hidden");
+    if (S.pinned === undefined) S.pinned = readPin();
+    host.classList.toggle("unpinned", !S.pinned);
     const st = cfg(S.sheet);
     const origin = S.defaultIds.has(S.sheet.id) ? (isEdited(S.sheet) ? "Built-in · edited" : "Built-in") : "Custom";
     const canReset = S.defaultIds.has(S.sheet.id) && isEdited(S.sheet);
@@ -263,6 +274,7 @@
         (S.mode === "preview" ? `<label class="ws-check"><span class="lg-switch"><input type="checkbox" data-act="toggle-ans" ${S.showAnswers ? "checked" : ""}><span class="lg-switch-track"><span class="lg-switch-thumb"></span></span></span><span>Show answers</span></label>` : "") +
         `<span class="ws-pill">${origin}</span>` +
         `<span class="ws-status${S.statusWarn ? " warn" : ""}" id="wsStatus" role="status" aria-live="polite">${e(S.status)}</span>` +
+        `<button type="button" class="ws-pin${S.pinned ? " on" : ""}" data-act="pin" aria-pressed="${S.pinned}" aria-label="Pin toolbar to the top" title="${S.pinned ? "Unpin: let the toolbar scroll away" : "Pin the toolbar to the top"}">${typeof icon === "function" ? icon("pin", 16) : ""}</button>` +
       `</div>` +
       `<div class="ws-tb-right">` +
         `<button type="button" class="btn small secondary${S.syncInfo?.error ? "" : " hidden"}" data-act="sync-retry">Retry sync</button>` +
@@ -723,6 +735,7 @@
       case "restore": restoreBuiltIns(); break;
       case "mode": S.mode = t.dataset.mode; renderToolbar(); renderPaper(); break;
       case "toggle-ans": S.showAnswers = t.checked; { const p = document.querySelector(".ws-paper"); if (p) p.classList.toggle("show-ans", S.showAnswers); } break;
+      case "pin": togglePin(); break;
       case "print": doPrint(false); break;
       case "print-key": doPrint(true); break;
       case "pop": {
