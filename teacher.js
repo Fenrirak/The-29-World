@@ -18,6 +18,7 @@ function paintChrome() {
   document.getElementById("codeIcon").innerHTML = icon("key", 15);
   document.getElementById("payDayBtn").innerHTML = icon("briefcase", 15) + " Run Pay Day";
   document.getElementById("interestBtn").innerHTML = icon("percent", 15) + " Apply Interest";
+  document.getElementById("studentViewBtn").innerHTML = icon("eye", 15) + " View as student";
   document.getElementById("iconStudents").innerHTML = icon("users", 30);
   document.getElementById("iconNetWorth").innerHTML = icon("wallet", 30);
   document.getElementById("classArchivedIcon").innerHTML = icon("lock", 15);
@@ -58,6 +59,7 @@ async function init() {
   if (u.role !== "teacher") { window.location.href = "student.html"; return; }
   CURRENT = u;
   CLASS_CODE = u.classCode;
+  await t29SvRecoverStale(u); // clears what a student view left behind if its tab was closed without exiting
   // A teacher with no active class (e.g. they just deleted it, or their
   // account somehow has no classCode set) should land on Home to pick or
   // create one, instead of this page crashing on a null class doc.
@@ -982,6 +984,23 @@ async function markAllJobTasksDone() {
     await render();
   } finally {
     btn.disabled = false;
+  }
+}
+// "View as student": use the whole app exactly as one of this class's students would (see data-core.js, "Student view").
+async function startStudentView() {
+  const btn = document.getElementById("studentViewBtn");
+  if (btn && btn.disabled) return;
+  const ok = await t29Confirm(
+    "View this class as a student?\n\n" +
+    "You'll see and use everything exactly as one of your students does. Money still comes from your own unlimited teacher bank, and you can send money to students as usual.\n\n" +
+    "Nothing you do there is kept: when you leave student view, everything you changed is cleared. Anything that would change the real class (buying, selling, applying for jobs, trading, quizzes) is switched off.",
+    { confirmText: "Start student view", cancelText: "Not now", danger: false });
+  if (!ok) return;
+  if (btn) btn.disabled = true;
+  const res = await t29SvEnter();
+  if (res && !res.ok) {
+    if (btn) btn.disabled = false;
+    t29Alert(res.error || "Couldn't start student view.");
   }
 }
 async function runInterest() {

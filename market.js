@@ -208,7 +208,7 @@ async function render() {
   // cls are independent reads — fetch both together instead of waiting on
   // one before starting the other (this page polls every 5s, so it's worth it).
   const [freshMe, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CLASS_CODE)]);
-  if (freshMe) IS_TEACHER = freshMe.role === "teacher";
+  if (freshMe) IS_TEACHER = t29EffRole(freshMe) === "teacher"; // (student view counts as a student)
   document.getElementById("teacherPanel").classList.toggle("hidden", !IS_TEACHER);
 
   const banner = document.getElementById("marketLockedBanner");

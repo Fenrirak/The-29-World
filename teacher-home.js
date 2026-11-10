@@ -15,6 +15,7 @@ async function init() {
   if (!u) return;
   if (u.role !== "teacher") { window.location.href = "student.html"; return; }
   CURRENT = u;
+  await t29SvRecoverStale(u); // clears what a student view left behind if its tab was closed without exiting
   document.getElementById("whoami").textContent = t29DisplayName(u);
   paintIconSlots();
   await t29FirstPaint(render);

@@ -96,6 +96,23 @@ const _auth = getAuth(_app);
    and hand the genuine modular ref to the real transaction/batch — those
    only work with real refs, not shim objects. */
 
+/* ---------------- Write guard (used by "student view") ----------------
+   While a teacher is previewing the app as a student, data-core.js installs
+   window.__t29WriteGuard. Every write that goes through this shim (single
+   writes, transaction writes and batch writes) is shown to it first with the
+   document path, the kind of write, and the data. It throws to refuse the write.
+   With nothing installed (every normal session) this does nothing at all. */
+function _t29GuardCheck(ref, op, data) {
+  const g = window.__t29WriteGuard;
+  if (typeof g === "function") g(ref && ref.path, op, data);
+}
+// Promise-returning writes must REJECT (not throw synchronously), so
+// `ref.set(...).catch(...)` keeps working for callers that use that form.
+function _t29Guarded(ref, op, data, run) {
+  try { _t29GuardCheck(ref, op, data); } catch (e) { return Promise.reject(e); }
+  return run();
+}
+
 function _wrapSnap(snap) {
   const exists = typeof snap.exists === "function" ? snap.exists() : !!snap.exists;
   // metadata lets live listeners tell a local, not-yet-saved change from a confirmed one.
@@ -119,10 +136,10 @@ function _wrapDocRef(realRef) {
       return onSnapshot(realRef, snap => next(_wrapSnap(snap)), err => { if (error) error(err); });
     },
     set(data, options) {
-      return options ? setDoc(realRef, data, options) : setDoc(realRef, data);
+      return _t29Guarded(realRef, "set", data, () => options ? setDoc(realRef, data, options) : setDoc(realRef, data));
     },
-    update(data) { return updateDoc(realRef, data); },
-    delete() { return deleteDoc(realRef); }
+    update(data) { return _t29Guarded(realRef, "update", data, () => updateDoc(realRef, data)); },
+    delete() { return _t29Guarded(realRef, "delete", null, () => deleteDoc(realRef)); }
   };
 }
 
@@ -163,9 +180,9 @@ function _makeFdb(db) { return {
         },
         // Every t.set() call site in the data-*.js files passes only (ref, data), so
         // this doesn't bother threading through a third options argument.
-        set(docRefShim, data) { return transaction.set(docRefShim._ref, data); },
-        update(docRefShim, data) { return transaction.update(docRefShim._ref, data); },
-        delete(docRefShim) { return transaction.delete(docRefShim._ref); }
+        set(docRefShim, data) { _t29GuardCheck(docRefShim._ref, "set", data); return transaction.set(docRefShim._ref, data); },
+        update(docRefShim, data) { _t29GuardCheck(docRefShim._ref, "update", data); return transaction.update(docRefShim._ref, data); },
+        delete(docRefShim) { _t29GuardCheck(docRefShim._ref, "delete", null); return transaction.delete(docRefShim._ref); }
       };
       return updateFn(t);
     });
@@ -177,6 +194,7 @@ function _makeFdb(db) { return {
     const b = writeBatch(db);
     const shimBatch = {
       set(docRefShim, data, options) {
+        _t29GuardCheck(docRefShim._ref, "set", data);
         options ? b.set(docRefShim._ref, data, options) : b.set(docRefShim._ref, data);
         return shimBatch;
       },

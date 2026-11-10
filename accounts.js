@@ -193,9 +193,9 @@ function acSortedAccounts(me, cls, extras) {
 }
 function acTilesHtml(me, cls) {
   const tile = (variant, ic, name, bal, note) => `<div class="stat ${variant} bk-acct-tile"><span class="icon">${icon(ic, 30)}</span>
-    <div class="label">${acEsc(name)}</div><div class="value">${fmtMoney(bal)}</div><div class="muted-small">${note}</div></div>`;
+    <div class="label">${acEsc(name)}</div><div class="value">${typeof bal === "string" ? bal : fmtMoney(bal)}</div><div class="muted-small">${note}</div></div>`;
   return acSortedAccounts(me, cls, acctActiveOf(me)).map(it => {
-    if (it.def === "cash") return tile("gold", "coin", "Cash balance", acctRound(me.balance || 0), `Everyday · ${acRateText(cls, Number(cls.cashInterestRate) || 0)}`);
+    if (it.def === "cash") return tile("gold", "coin", "Cash balance", t29SvActive() ? "Unlimited ∞" : acctRound(me.balance || 0), `Everyday · ${acRateText(cls, Number(cls.cashInterestRate) || 0)}`);
     if (it.def === "savings") return tile("mint", "piggy", "Savings Account", me.savings || 0, `Savings · ${acRateText(cls, Number(cls.interestRate) || 0)}`);
     if (!it.p) return tile("sky", "bank", "Account", it.a.balance || 0, "Plan removed by your teacher");
     const sav = it.p.kind === "savings";
@@ -270,7 +270,7 @@ function acCashTile(me, cls, canMove) {
   return `<article class="ac-own k-everyday is-default">
     <div class="ac-own-body">
       <div class="ac-tile-head"><strong>Cash balance</strong>${acKindBadge("everyday")}${acMainBadge("cash")}</div>
-      <div class="ac-bal"><span>Balance</span><strong>${fmtMoney(bal)}</strong></div>
+      <div class="ac-bal"><span>Balance</span><strong>${t29SvActive() ? "Unlimited ∞" : fmtMoney(bal)}</strong></div>
       <div class="ac-rows">
         <div class="ac-line"><span>Interest rate</span><strong>${rate > 0 ? `${rate}% <small>per ${per.span}</small>` : "None"}</strong></div>
         <div class="ac-line"><span>Next interest</span><strong class="${gross > 0 ? "good" : ""}">${gross > 0 ? "≈ +" + fmtMoney(gross) : "$0.00"}</strong></div>

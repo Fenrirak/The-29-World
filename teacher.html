@@ -86,7 +86,7 @@
   }
 </style>
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="firebase-init.js?v=294b42b5">
+<link rel="modulepreload" href="firebase-init.js?v=3042b252">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js">
@@ -154,6 +154,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     <div>
       <button class="btn gold" onclick="runPayDay()" id="payDayBtn">Run Pay Day</button>
       <button class="btn secondary" onclick="runInterest()" id="interestBtn">Apply Interest</button>
+      <button class="btn secondary" onclick="startStudentView()" id="studentViewBtn" title="Use the app exactly as one of your students would. Nothing you do there is kept.">View as student</button>
     </div>
   </div>
 
@@ -519,12 +520,12 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
   </div>
 </div>
 
-<script type="module" src="firebase-init.js?v=294b42b5"></script>
+<script type="module" src="firebase-init.js?v=3042b252"></script>
 <script defer src="icons.js?v=469f6f2f"></script>
 <script defer src="settings-menu.js?v=5370c578"></script>
 <script defer src="shortcuts.js?v=5c3b32dc"></script>
 <script defer src="offline.js?v=ac2cbd82"></script>
-<script defer src="data-core.js?v=608d165f"></script>
+<script defer src="data-core.js?v=018fa067"></script>
 <script defer src="data-money.js?v=b8fa211e"></script>
 <script defer src="data-life.js?v=50a36872"></script>
 <script defer src="data-property.js?v=84d847c7"></script>
@@ -532,12 +533,12 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="tour.js?v=1470e256"></script>
 <script defer src="events-ui.js?v=9b6e825f"></script>
 <script defer src="base-template.js?v=f0d00d4a"></script>
-<script defer src="quiz-gate.js?v=f9002445"></script>
+<script defer src="quiz-gate.js?v=a8494e00"></script>
 <script defer src="avatar.js?v=aca3bcf4"></script>
-<script defer src="notifications.js?v=d8884f52"></script>
+<script defer src="notifications.js?v=327fe0d2"></script>
 <script defer src="pdf-report.js?v=ef42b987"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
-<script defer src="teacher.js?v=e4bf2327"></script>
+<script defer src="teacher.js?v=0f227eb2"></script>
 <script defer src="bulk-students.js?v=cb0b3603"></script>
 </body>
 </html>

@@ -1302,12 +1302,12 @@ async function notifRefresh(username, classCode) {
   // Every page now gets the module locks applied to its nav, not just the
   // three that happened to call this themselves — this file is the only
   // thing loaded absolutely everywhere that already has `cls` and `me`.
-  if (me.role === "student" && typeof applyNavModuleLocks === "function") {
+  if (t29EffRole(me) === "student" && typeof applyNavModuleLocks === "function") {
     applyNavModuleLocks(getModuleLockReasonsFromData(cls, Object.assign({ username }, me), username));
   }
   // A big event handed out while this page was already open still has to
   // be answered before anything else (see checkBigEventPopup).
-  if (me.role === "student" && typeof checkBigEventPopup === "function") {
+  if (t29EffRole(me) === "student" && typeof checkBigEventPopup === "function") {
     checkBigEventPopup(username, classCode, true).catch(() => {});
   }
 }

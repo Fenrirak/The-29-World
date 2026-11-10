@@ -93,7 +93,7 @@ async function payableRecipients(precomputedStudents) {
   });
   if (CURRENT.role !== "teacher") {
     const t = await getUserCached(cls.teacher);
-    if (t) options.push({ username: t.username, label: t.name + " (Teacher)" });
+    if (t && t.username !== CURRENT.username) options.push({ username: t.username, label: t.name + " (Teacher)" }); // (in student view the teacher is you)
   }
   return options;
 }
@@ -399,7 +399,7 @@ async function sendMoney(e) {
     const note = document.getElementById("note").value.trim();
     const box = document.getElementById("sendMsg");
     if (!to) { box.innerHTML = `<div class="error-msg">Choose who to send the money to.</div>`; return false; }
-    if (!IS_TEACHER && !(document.getElementById("sendFrom") || {}).value) { box.innerHTML = `<div class="error-msg">Choose which account to pay with.</div>`; return false; }
+    if (!IS_TEACHER && !t29SvActive() && !(document.getElementById("sendFrom") || {}).value) { box.innerHTML = `<div class="error-msg">Choose which account to pay with.</div>`; return false; }
     if (Number.isNaN(amount) || amount === 0) { box.innerHTML = `<div class="error-msg">Enter an amount.</div>`; return false; }
     if (!IS_TEACHER && amount < 0) { box.innerHTML = `<div class="error-msg">Enter an amount greater than zero.</div>`; return false; }
 
@@ -410,7 +410,8 @@ async function sendMoney(e) {
     // instead of the peer-to-peer transfer path.
     // Students choose which account the money comes out of (cash, Savings Account, an extra account, or
     // their credit card for payments to the teacher). A teacher's balance is unlimited, so they always send from it.
-    const src = IS_TEACHER ? "cash" : document.getElementById("sendFrom").value;
+    // Student view: the money comes from the teacher's own unlimited bank (sendMoneyFrom is routed to transferMoney there).
+    const src = (IS_TEACHER || t29SvActive()) ? "cash" : document.getElementById("sendFrom").value;
     const sendOne = (username, silent) => (IS_TEACHER && amount < 0)
       ? teacherAdjust(CURRENT.username, username, amount, note)
       : IS_TEACHER

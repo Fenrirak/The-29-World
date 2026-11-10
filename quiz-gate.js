@@ -51,7 +51,7 @@ async function t29OpenQuizGate(moduleKey, opts) {
   opts = opts || {};
   if (document.getElementById("t29QuizGate")) return; // already open
   const session = await getSessionUser();
-  if (!session || session.role !== "student") return;
+  if (!session || session.role !== "student" || session._studentView) return; // student view is never gated (quizzes can't be submitted there)
   const cls = withNewModuleDefaults(await getClassCached(session.classCode));
   const me = Object.assign({ username: session.username }, await getUserCached(session.username));
   const quiz = qgFindQuiz(cls, me, moduleKey);
@@ -96,7 +96,7 @@ async function t29OpenQuizGate(moduleKey, opts) {
 // goes to that module's page once it's passed.
 async function t29OpenQuizForModule(moduleKey) {
   const session = await getSessionUser();
-  if (!session || session.role !== "student") return;
+  if (!session || session.role !== "student" || session._studentView) return;
   const link = document.querySelector(`nav a[data-module="${moduleKey}"]`);
   const reasons = await getModuleLockReasons(session.username, session.classCode);
   if (reasons[moduleKey] !== "quiz" && reasons[moduleKey] !== "both") {
@@ -245,7 +245,7 @@ async function qgGuardModulePage() {
   const moduleKey = qgCurrentModuleKey();
   if (!moduleKey) return;
   const session = await getSessionUser();
-  if (!session || session.role !== "student" || !session.classCode) return;
+  if (!session || session.role !== "student" || session._studentView || !session.classCode) return;
   const raw = await getClassCached(session.classCode);
   if (!raw) return;
   const cls = withNewModuleDefaults(raw);

@@ -199,6 +199,8 @@ function uid(prefix) {
 }
 
 function fmtMoney(n) {
+  // Student view: the teacher's bank never runs out. Its stand-in balance (T29_SV_CASH) reads "Unlimited".
+  if (Number(n) === T29_SV_CASH && t29SvActive()) return "Unlimited ∞";
   const v = Math.round((Number(n) || 0) * 100) / 100; // round first, so -0.004 shows "$0.00", not "-$0.00"
   // Sign goes in front of the "$" ("-$5.00", not "$-5.00").
   return (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); // fixed locale, so every device shows 1,234.50
@@ -726,7 +728,8 @@ async function getSessionUser() {
     clearSession();
     return null;
   }
-  return u;
+  // Student view (see the end of this file): a teacher using the app as a student is handed back as one.
+  return t29SvViewOf(u);
 }
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
@@ -804,6 +807,7 @@ function timeExemptionState(u) {
 let _timeTrackingStarted = false;
 function startTimeTracking(u) {
   if (_timeTrackingStarted) return; // one tracker per page load, guaranteed
+  if (u && u._studentView) return; // a teacher in student view isn't on the clock
   const status = timeLimitStatus(u);
   if (!status.limited) return; // no limit set for this class — do nothing, zero cost
   _timeTrackingStarted = true;
@@ -915,7 +919,7 @@ let _presenceDead = false;
 let T29_PRESENCE_READ_DENIED = false;
 
 function startPresence(u) {
-  if (_presenceCtx || !u || u.role !== "student" || !u.username || !u.classCode) return;
+  if (_presenceCtx || !u || u.role !== "student" || u._studentView || !u.username || !u.classCode) return;
   const ctx = _presenceCtx = {
     ref: fdb.collection("presence").doc(u.classCode),
     username: u.username,
@@ -1115,7 +1119,7 @@ async function requireLogin(opts) {
     window.location.href = "index.html";
     return null;
   }
-  if (u.role === "student" && !opts.skipTimeLimit && !archivedReadOnly) {
+  if (u.role === "student" && !u._studentView && !opts.skipTimeLimit && !archivedReadOnly) {
     if (timeLimitStatus(u).reached) {
       window.location.href = "timeup.html";
       return null;
@@ -1126,7 +1130,7 @@ async function requireLogin(opts) {
   if (u.role === "student" && !archivedReadOnly) startPresence(u);
   // Counts towards the class's 3-month inactivity clock (never blocks the page).
   // Teacher Home passes skipActivity: just browsing the list isn't using a class.
-  if (!opts.skipActivity && !archivedReadOnly) t29TouchClassActivity(u).catch(() => {});
+  if (!opts.skipActivity && !archivedReadOnly && !u._studentView) t29TouchClassActivity(u).catch(() => {});
   return u;
 }
 // BUGFIX: logging out used to only forget the username in localStorage —
@@ -1135,6 +1139,7 @@ async function requireLogin(opts) {
 // account's database access. Now signs out of Firebase too (capped at a
 // couple of seconds so a slow connection can't trap anyone on the page).
 async function logout() {
+  if (t29SvActive()) await t29SvExit({ redirect: false }); // leave student view first, so its changes are cleared
   await t29PresenceOnLogout(); // best-effort, capped at ~1s, needs the login still valid
   clearSession();
   try {
@@ -2661,6 +2666,10 @@ async function adjustBalance(username, delta) {
 }
 
 async function logTxn(classCode, txn, opts) {
+  // Student view: the class's activity log is shared, so nothing is added to it (sending money, which a teacher does
+  // for real, is the exception: T29_SV_ALLOW). Skipping it quietly lets the rest of the action finish, rather than
+  // failing after the teacher's own temporary data has already changed.
+  if (T29_SV_ALLOW === 0 && t29SvActive()) return;
   const classRef = classesCol().doc(classCode);
   // Built once, outside the transaction, so every retry (Firestore retries
   // on contention) pushes the exact same entry rather than a new id/ts each
@@ -4050,9 +4059,14 @@ async function anwGlobalBootstrap() {
     // most pages never sync it), so a device with a wrong clock stamped the wrong day into
     // lastMarketDayRun/lastPropertyMarketDayRun — making the real day look "already run".
     await syncServerClock(u.classCode).catch(() => {});
-    autoMarketDayIfDue(u.classCode).catch(e => console.error("Auto stock market day failed:", e));
-    autoPropertyMarketDayIfDue(u.classCode).catch(e => console.error("Auto property market day failed:", e));
-    window.T29_RATES_READY = autoVariableRatesIfDue(u.classCode).catch(() => {});
+    if (u._studentView) {
+      // Student view never runs the class-wide simulations: they write to the shared class.
+      window.T29_RATES_READY = Promise.resolve();
+    } else {
+      autoMarketDayIfDue(u.classCode).catch(e => console.error("Auto stock market day failed:", e));
+      autoPropertyMarketDayIfDue(u.classCode).catch(e => console.error("Auto property market day failed:", e));
+      window.T29_RATES_READY = autoVariableRatesIfDue(u.classCode).catch(() => {});
+    }
     // Note down net worth for the report trend: every Monday, first thing.
     // A teacher's visit covers the whole class; a student's covers themselves.
     if (u.role === "teacher" && typeof recordClassNetWorthIfDue === "function") recordClassNetWorthIfDue(u.classCode).catch(() => {});
@@ -4431,6 +4445,13 @@ function anwPaintBalanceWidget(user, cls) {
   const box = document.getElementById("anwBalanceWidget"), valEl = document.getElementById("anwBalanceWidgetValue");
   if (!box || !valEl || !user) return;
   const labelEl = box.querySelector(".anw-bw-label");
+  // Student view: money is the teacher's own bank, which never runs out.
+  if (t29SvActive() && !_anwShowsChips()) {
+    labelEl.innerHTML = _anwWidgetLabelHtml(); valEl.textContent = "Unlimited ∞";
+    box.disabled = true; box.classList.add("is-static"); box.title = "";
+    box.setAttribute("aria-label", `${labelEl.textContent.trim()} Unlimited.`);
+    return;
+  }
   let cur = null, n = 0;
   if (!_anwShowsChips()) { try { const r = anwBalanceChoice(user, cls); cur = r.cur; n = r.ch.length; } catch (e) { /* show cash below */ } }
   if (_anwShowsChips()) { labelEl.innerHTML = _anwWidgetLabelHtml(); valEl.textContent = fmtMoney(gamblingAccountToday(user).balance); }
@@ -4672,3 +4693,302 @@ async function t29NoteGate(username, note) {
   try { u = await getUserCached(username); } catch (e) { /* treat as a student */ }
   return (u && u.role === "teacher") ? null : { ok: false, error: c.error };
 }
+
+/* ===================== Teacher "Student view" =====================
+   A teacher can use the app exactly as one of their students would, from the
+   "View as student" button on their dashboard.
+
+   HOW IT WORKS
+   - It is a per-TAB mode (sessionStorage), so the teacher can keep their own
+     dashboard open in another tab. getSessionUser() hands every student page the
+     teacher's account with role "student" (see t29SvViewOf), so the real student
+     pages, menus and rules apply. Code that reads a user doc straight from
+     Firestore still sees the real "teacher" role, which is what keeps money on
+     the teacher's own unlimited bank (nothing is deducted, nothing can run out).
+   - Nothing done in student view is kept. When it starts, the teacher's own user
+     doc is saved (as the _svBackup field on that same doc) and the student-only
+     fields a teacher doc doesn't have are filled in. When it ends, every field that
+     changed is put back, and the extra ones are removed (t29SvRestore).
+   - The real class can't be changed from student view. A write guard on the
+     Firestore shim (firebase-init.js) refuses every write except: the teacher's own
+     user doc, and money sent through transferMoney (exactly what a teacher does from
+     their own Bank page). Buying, selling, applying for jobs, listing, trading shares
+     and quizzes are switched off up front with a clear message (T29_SV_BLOCKED_FNS).
+   - Background jobs that write class-wide data (market/property days, class
+     activity, presence, time limit) are skipped in student view.
+   If the tab is closed without exiting, the next time the teacher opens their
+   dashboard the leftover changes are cleaned up (t29SvRecoverStale). */
+const T29_SV_KEY = "t29-student-view";
+const T29_SV_BEAT_KEY = "t29-sv-beat";
+// Fields student view never touches, so a teacher's identity can't be changed by it.
+const T29_SV_PROTECTED = ["username", "role", "authUid", "classCode", "sessionVersion", "name", "title", "lastName", "_svBackup"];
+// While in student view the teacher doc holds this balance, so every page's "can I afford it?" check passes
+// (the teacher's own bank is unlimited). fmtMoney shows it as "Unlimited ∞"; the real balance is restored on exit.
+const T29_SV_CASH = 1000000;
+const T29_SV_MSG = "Switched off in student view, because it would change the real class.";
+// Actions that change shared class data (purchases, jobs, listings, shares, quizzes).
+// In student view each one just answers "no" with T29_SV_MSG; the page shows it where it
+// would show any other error. Anything missed is still refused by the write guard below.
+const T29_SV_BLOCKED_FNS = [
+  "buyStoreItem", "buyStoreCart", "sellStoreItem", "sellStoreItemBulk",
+  "buyProperty", "sellProperty", "rentNpcProperty", "moveOutNpcProperty",
+  "createListing", "updateListing", "cancelListing", "buyListing",
+  "buyShares", "sellShares",
+  "submitQuizAttempt", "applyForJob_data",
+  "buyVehicle", "sellVehicle", "buyTruckLicence"
+];
+// The few of those that report failure by throwing (their page shows e.message) instead of returning { ok: false }.
+const T29_SV_THROWING = ["applyForJob_data"];
+let T29_SV_ALLOW = 0;          // >0 while a send-money call is running (see t29SvTransfer)
+let _svLastGesture = 0, _svLastNotice = 0;
+
+function t29SvState() {
+  try {
+    const raw = sessionStorage.getItem(T29_SV_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return (o && o.u && o.c) ? o : null;
+  } catch (e) { return null; }
+}
+function t29SvActive() { return !!t29SvState(); }
+
+// "teacher" or "student" as the app should treat this user right now.
+function t29EffRole(user) {
+  if (user && user.role === "teacher") {
+    const st = t29SvState();
+    if (st && st.u === user.username) return "student";
+  }
+  return user ? user.role : null;
+}
+// The teacher's account as student pages should see it. A copy: the cached original stays untouched.
+function t29SvViewOf(u) {
+  const st = t29SvState();
+  if (!st || !u || u.role !== "teacher" || u.username !== st.u || u.classCode !== st.c) return u;
+  return Object.assign({}, u, { role: "student", _studentView: true });
+}
+
+// Fields a real student doc starts with that a teacher doc lacks (see createStudentAccount).
+// (balance is set separately, to T29_SV_CASH, when student view starts.)
+function t29SvStudentDefaults() {
+  return {
+    jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
+    dailyLimitMinutes: null, timeSpentTodaySec: 0, timeSpentDate: null,
+    timeExemptionStatus: null, timeExemptionDate: null, extraMinutesToday: 0, extraMinutesDate: null,
+    reportMonth: Object.assign(emptyReportBucket(), { monthKey: nzMonthKey() }),
+    reportLifetime: emptyReportBucket()
+  };
+}
+
+/* ---------- The write guard (called by the Firestore shim in firebase-init.js) ---------- */
+function t29SvWriteGuard(path, op, data) {
+  const st = t29SvState();
+  if (!st || T29_SV_ALLOW > 0) return;
+  if (path === "users/" + st.u) return; // the teacher's own doc: temporary, cleared on exit
+  // The server-clock probe every page does (a single hidden field, harmless).
+  if (op === "set" && path === "classes/" + st.c && data && Object.keys(data).length === 1 && Object.prototype.hasOwnProperty.call(data, "_clockProbe")) return;
+  t29SvNotifyBlocked();
+  const e = new Error("STUDENT_VIEW_BLOCKED");
+  e.code = "t29-student-view-blocked";
+  throw e;
+}
+window.__t29WriteGuard = t29SvWriteGuard;
+
+// Only speaks up when the refusal follows something the teacher just did, so the page's own
+// background work never pops a message.
+function t29SvNotifyBlocked() {
+  const now = Date.now();
+  if (now - _svLastGesture > 6000 || now - _svLastNotice < 5000) return;
+  _svLastNotice = now;
+  try { t29Toast(T29_SV_MSG, { type: "error" }); } catch (e) { /* no toast available */ }
+}
+
+// Sending money works exactly as it does for a teacher on their own Bank page.
+async function t29SvTransfer(fromUser, toUser, amount, note) {
+  T29_SV_ALLOW++;
+  try { return await transferMoney(fromUser, toUser, amount, note); }
+  finally { T29_SV_ALLOW--; }
+}
+
+function t29SvInstallWrappers() {
+  T29_SV_BLOCKED_FNS.forEach(name => {
+    const f = window[name];
+    if (typeof f !== "function" || f._svWrapped) return;
+    const throws = T29_SV_THROWING.indexOf(name) !== -1;
+    const w = async function () { if (throws) throw new Error(T29_SV_MSG); return { ok: false, error: T29_SV_MSG }; };
+    w._svWrapped = true;
+    window[name] = w;
+  });
+  if (typeof window.sendMoneyFrom === "function" && !window.sendMoneyFrom._svWrapped) {
+    const w = async function (fromUser, toUser, amount, note) { return t29SvTransfer(fromUser, toUser, amount, note); };
+    w._svWrapped = true;
+    window.sendMoneyFrom = w;
+  }
+}
+
+/* ---------- Starting, leaving and cleaning up ---------- */
+async function t29SvEnter() {
+  const u = await getSessionUser();
+  if (!u || u.role !== "teacher" || !u.classCode) return { ok: false, error: "Open one of your classes first." };
+  const ref = usersCol().doc(u.username);
+  const fail = { ok: false, error: "Couldn't start student view. Check your connection and try again." };
+  let fresh;
+  try {
+    const snap = await ref.get({ source: "server" });
+    if (!snap.exists) return fail;
+    fresh = snap.data();
+    if (fresh._svBackup) { // left over from a student view that was never closed: clear it first so changes can't stack
+      await t29SvRestore(u.username);
+      const again = await ref.get({ source: "server" });
+      fresh = again.data();
+    }
+  } catch (e) { return fail; }
+  const clean = Object.assign({}, fresh);
+  delete clean._svBackup;
+  const patch = { _svBackup: JSON.stringify({ at: Date.now(), doc: clean }), balance: T29_SV_CASH };
+  const defaults = t29SvStudentDefaults();
+  Object.keys(defaults).forEach(k => { if (clean[k] === undefined) patch[k] = defaults[k]; });
+  try { await ref.update(patch); } catch (e) { console.warn("Student view couldn't start:", e); return fail; }
+  try {
+    sessionStorage.setItem(T29_SV_KEY, JSON.stringify({ u: u.username, c: u.classCode, t: Date.now() }));
+    localStorage.setItem(T29_SV_BEAT_KEY, JSON.stringify({ u: u.username, t: Date.now() }));
+    // The menu layout saved from the teacher pages must not flash on the first student page.
+    localStorage.removeItem("t29-topbar-fit");
+    localStorage.removeItem("t29-mod-off-boot");
+  } catch (e) { /* storage blocked: the mode can't start */
+    try { await t29SvRestore(u.username); } catch (e2) { /* cleaned up on the next dashboard visit */ }
+    return { ok: false, error: "Your browser is blocking the storage student view needs." };
+  }
+  window.location.href = "student.html";
+  return { ok: true };
+}
+
+// Puts the teacher's doc back exactly as it was when student view started.
+async function t29SvRestore(username) {
+  const ref = usersCol().doc(username);
+  const snap = await ref.get({ source: "server" });
+  if (!snap.exists) return true;
+  const now = snap.data();
+  if (!now._svBackup) return true;
+  let b = null;
+  try { b = JSON.parse(now._svBackup); } catch (e) { b = null; }
+  const del = firebase.firestore.FieldValue.delete();
+  const patch = { _svBackup: del };
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const isStamp = v => !!v && typeof v === "object" && own(v, "seconds") && own(v, "nanoseconds");
+  if (b && b.doc && typeof b.doc === "object") {
+    const was = b.doc;
+    new Set(Object.keys(now).concat(Object.keys(was))).forEach(k => {
+      if (T29_SV_PROTECTED.indexOf(k) !== -1) return;
+      const had = own(was, k), has = own(now, k);
+      if (had && has) {
+        if (JSON.stringify(was[k]) === JSON.stringify(now[k]) || isStamp(was[k])) return;
+        patch[k] = was[k];
+      } else if (had) { if (!isStamp(was[k])) patch[k] = was[k]; }
+      else patch[k] = del;
+    });
+  }
+  await ref.update(patch);
+  try { if (window._rcDel) window._rcDel("users", username); } catch (e) { /* cache not installed */ }
+  return true;
+}
+
+async function t29SvExit(opts) {
+  opts = opts || {};
+  const st = t29SvState();
+  const username = st ? st.u : T29_SESSION_USERNAME;
+  t29SvBusy("Leaving student view…");
+  let ok = true;
+  try { if (username) ok = await t29SvRestore(username); } catch (e) { console.warn("Student view cleanup failed:", e); ok = false; }
+  try {
+    sessionStorage.removeItem(T29_SV_KEY);
+    // A failed clean-up keeps an already-expired heartbeat, so the next dashboard visit retries at once.
+    if (ok) localStorage.removeItem(T29_SV_BEAT_KEY);
+    else localStorage.setItem(T29_SV_BEAT_KEY, JSON.stringify({ u: username, t: 0 }));
+    localStorage.removeItem("t29-topbar-fit");
+    localStorage.removeItem("t29-mod-off-boot");
+  } catch (e) { /* ignore */ }
+  const back = () => { if (opts.redirect !== false) window.location.href = "teacher.html"; };
+  if (!ok) {
+    try { await t29Alert("Your changes from student view couldn't be cleared just now (no connection?). They'll be cleared the next time you open your dashboard."); } catch (e) { /* ignore */ }
+  }
+  back();
+}
+
+// Called by the teacher pages after requireLogin(): if a student view was abandoned (tab closed,
+// browser crashed) clear what it left behind. A live student view in another tab is left alone.
+async function t29SvRecoverStale(u) {
+  try {
+    if (!u || u.role !== "teacher" || !u._svBackup || t29SvActive()) return false;
+    let beat = null;
+    try { beat = JSON.parse(localStorage.getItem(T29_SV_BEAT_KEY) || "null"); } catch (e) { beat = null; }
+    let at = 0;
+    try { at = JSON.parse(u._svBackup).at || 0; } catch (e) { at = 0; }
+    const mine = !!beat && beat.u === u.username;
+    // Same browser: the open student-view tab pings every few seconds. Another device: no ping to go by, so wait a couple of hours.
+    const stale = mine ? (Date.now() - (beat.t || 0) > 30000) : (!at || Date.now() - at > 2 * 3600 * 1000);
+    if (!stale) return false;
+    await t29SvRestore(u.username);
+    try { localStorage.removeItem(T29_SV_BEAT_KEY); } catch (e) { /* ignore */ }
+    return true;
+  } catch (e) { console.warn("Student view clean-up:", e); return false; }
+}
+
+/* ---------- On-page bits: the "Exit" pill, heartbeat and wrappers ---------- */
+function t29SvBusy(text) {
+  if (!document.body || document.getElementById("t29SvBusy")) return;
+  const d = document.createElement("div");
+  d.id = "t29SvBusy";
+  d.style.cssText = "position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.55);color:#fff;font:600 16px/1.4 system-ui,sans-serif;";
+  d.textContent = text;
+  document.body.appendChild(d);
+}
+
+function t29SvMountPill() {
+  if (!document.body || document.getElementById("t29SvPill")) return;
+  if (!document.getElementById("t29SvCss")) {
+    const css = document.createElement("style");
+    css.id = "t29SvCss";
+    css.textContent = `
+#t29SvPill{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:9500;
+  display:flex;align-items:center;gap:12px;max-width:calc(100vw - 24px);padding:8px 8px 8px 16px;border-radius:999px;
+  background:#1e293b;color:#fff;box-shadow:0 6px 24px rgba(15,23,42,.35);font:600 14px/1.25 system-ui,-apple-system,"Segoe UI",sans-serif;}
+#t29SvPill .t29sv-dot{width:9px;height:9px;border-radius:50%;background:#fbbf24;flex:none;}
+#t29SvPill .t29sv-text{display:flex;flex-direction:column;min-width:0;}
+#t29SvPill .t29sv-text small{font-weight:500;font-size:12px;opacity:.78;}
+#t29SvPill .t29sv-exit{flex:none;border:0;border-radius:999px;padding:8px 16px;background:#fbbf24;color:#1e293b;font:700 14px/1 inherit;font-family:inherit;cursor:pointer;}
+#t29SvPill .t29sv-exit:hover{background:#fcd34d;}
+#t29SvPill .t29sv-exit:focus-visible{outline:3px solid #fff;outline-offset:2px;}
+html.t29-student-view body{padding-bottom:84px;}
+@media (max-width:480px){#t29SvPill{gap:8px;padding-left:12px;}#t29SvPill .t29sv-text small{display:none;}}
+@media print{#t29SvPill{display:none;}}`;
+    document.head.appendChild(css);
+  }
+  const pill = document.createElement("div");
+  pill.id = "t29SvPill";
+  pill.setAttribute("role", "region");
+  pill.setAttribute("aria-label", "Student view");
+  pill.innerHTML = `<span class="t29sv-dot" aria-hidden="true"></span><span class="t29sv-text"><span>Student view</span><small>Anything you do here is temporary</small></span><button type="button" class="t29sv-exit">Exit</button>`;
+  pill.querySelector(".t29sv-exit").addEventListener("click", () => { t29SvExit(); });
+  document.body.appendChild(pill);
+}
+
+function t29SvBoot() {
+  const st = t29SvState();
+  if (!st) return;
+  document.documentElement.classList.add("t29-student-view");
+  t29SvMountPill();
+  // The page's scripts are loaded deferred, so most of the functions to wrap don't exist yet at this
+  // point: try again after the last script has run (DOMContentLoaded) and once the page has loaded.
+  // Installing is safe to repeat. A click before it lands is still stopped by the write guard.
+  t29SvInstallWrappers();
+  document.addEventListener("DOMContentLoaded", t29SvInstallWrappers);
+  window.addEventListener("load", t29SvInstallWrappers);
+  setTimeout(t29SvInstallWrappers, 400);
+  ["pointerdown", "click", "keydown", "submit", "change"].forEach(ev =>
+    document.addEventListener(ev, () => { _svLastGesture = Date.now(); }, true));
+  const beat = () => { try { localStorage.setItem(T29_SV_BEAT_KEY, JSON.stringify({ u: st.u, t: Date.now() })); } catch (e) { /* ignore */ } };
+  beat();
+  setInterval(beat, 5000);
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", t29SvBoot);
+else t29SvBoot();

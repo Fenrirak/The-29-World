@@ -211,7 +211,7 @@ async function render() {
   if (cls && window._rcSet) window._rcSet("classes", CURRENT.classCode, cls, STUDENT_CLASS_TTL_MS);
 
   document.getElementById("greeting").textContent = "Hi, " + me.name + "!";
-  document.getElementById("balance").textContent = fmtMoney(me.balance);
+  document.getElementById("balance").textContent = t29SvActive() ? "Unlimited ∞" : fmtMoney(me.balance); // student view: the teacher's own bank never runs out
   document.getElementById("portfolio").textContent = fmtMoney(await portfolioValue(me.username, me.classCode));
   bcLast = { me: acctLogical(me), cls };
   bcRenderAcct();
