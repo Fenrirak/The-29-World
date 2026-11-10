@@ -3609,32 +3609,8 @@ async function revealWeeklyEvent(classCode, eventLogId) {
     }
     found.revealedDay = nzDateKey();
     found.status = found.type === "choice" ? "pending" : "resolved";
-    // A bad fixed event the student's insurance covers: if they have enough
-    // cash for what the plan makes them pay (its excess plus anything the
-    // plan doesn't cover), insurance steps in and they pay only that instead
-    // of the full cost. Not enough cash, no matching plan, or a plan that
-    // wouldn't save them anything: charged in full as before (and can still
-    // be claimed afterwards). Write-offs are never applied automatically.
-    let insNote = "";
-    if (found.type === "fixed" && found.severity === "bad" && Number(found.amount) < 0 && !found.claimed) {
-      const uSnap = await t.get(usersCol().doc(found.studentUser));
-      if (uSnap.exists && uSnap.data().role !== "teacher") {
-        const u = uSnap.data();
-        const loss = Math.abs(Number(found.amount));
-        const cash = u.balance || 0;
-        const opt = weeklyEventClaimOptions(liveCls, u, found)
-          .filter(o => !o.writeOff && o.studentPays < loss && (cash >= o.studentPays || cardEventRoom(u, liveCls) >= o.studentPays))
-          .sort((a, b) => a.studentPays - b.studentPays)[0];
-        if (opt) {
-          found.claimed = true;
-          found.originalAmount = found.amount;
-          found.amount = -opt.studentPays;
-          found.insurancePlanId = opt.plan.id;
-          insNote = ` (insurance: ${insurancePlanName(opt.plan)}. You paid ${fmtMoney(opt.studentPays)} instead of ${fmtMoney(loss)})`;
-          found.insuranceNote = insNote.trim();
-        }
-      }
-    }
+    // Charge the event in full. Insurance is optional: the student can
+    // choose a claim in the popup afterwards, including any write-off.
     entry = Object.assign({}, found);
     t.update(classRef, { eventLog: liveCls.eventLog });
   });

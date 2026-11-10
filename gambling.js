@@ -407,10 +407,15 @@ function repeatBlackjackBet() {
 document.addEventListener("click", (e) => {
   const chip = e.target.closest && e.target.closest(".bet-chip");
   if (!chip || chip.disabled) return;
-  const cfg = BET_GAMES[chip.parentElement.dataset.game];
+  const game = chip.parentElement.dataset.game;
+  const cfg = BET_GAMES[game];
   if (!cfg) return;
+  const actionBtn = document.getElementById(game === "blackjack" ? "bjDealBtn" : "spinBtn");
+  if (!actionBtn || actionBtn.disabled || (game === "blackjack" && BJ_DEAL_PENDING)) return;
   document.getElementById(cfg.input).value = chip.dataset.amt;
-  syncBetChips(chip.parentElement.dataset.game);
+  syncBetChips(game);
+  if (game === "blackjack") bjDeal();
+  else spin();
 });
 document.addEventListener("input", (e) => {
   const game = e.target && Object.keys(BET_GAMES).find(g => BET_GAMES[g].input === e.target.id);
