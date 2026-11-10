@@ -81,6 +81,7 @@ function pdfWrapText(str, size, width, bold) {
 // characters that are special inside a PDF string literal.
 function pdfAscii(str) {
   const map = {
+    "\u2122": "\x99", // WinAnsi trademark glyph
     "—": "-", "–": "-", "‘": "'", "’": "'", "“": '"', "”": '"',
     "…": "...", "★": "*", "☆": "*", "×": "x", "−": "-",
     "→": "->", "›": ">", " ": " ", "•": "-"
@@ -238,7 +239,7 @@ function pdfDoc() {
     titleBlock(title, subtitle, meta) {
       this._startPage();
       this.rect(0, PDF_PAGE_H - 92, PDF_PAGE_W, 92, PDF_COLORS.navy);
-      this.text("The 29 World", PDF_MARGIN, PDF_PAGE_H - 36, 11, { bold: true, color: PDF_COLORS.gold });
+      this.text("The 29 World™", PDF_MARGIN, PDF_PAGE_H - 36, 11, { bold: true, color: PDF_COLORS.gold });
       const titleSize = Math.min(19, PDF_CONTENT_W * 0.94 / Math.max(1, pdfTextWidth(title, 1, true)));
       this.text(title, PDF_MARGIN, PDF_PAGE_H - 60, titleSize, { bold: true, color: PDF_COLORS.white });
       if (subtitle) this.text(subtitle, PDF_MARGIN, PDF_PAGE_H - 78, 9.5, { color: [0.78, 0.82, 0.89] });

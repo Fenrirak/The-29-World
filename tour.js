@@ -23,7 +23,7 @@
 
 const T29_TOURS = {
   student: [
-    { title: "Welcome to The 29 World! 👋",
+    { title: "Welcome to The 29 World™! 👋",
       text: "This is your own pretend-money world. You'll earn money, save it, spend it and invest it, and see how good you are with money. Here's a quick tour." },
     { target: ["#balance"], card: true, title: "Your cash",
       text: "The money you can spend right now. It also stays in the corner of every page so you always know what you've got." },

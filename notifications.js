@@ -959,7 +959,7 @@ function notifDeviceRender(host) {
     desc = notifIsIos()
       ? (notifIsStandalone()
           ? "Alerts need iOS or iPadOS 16.4 or newer. Update your device, then reopen the app."
-          : "iPhone and iPad only allow alerts for sites added to the Home Screen. Tap Share, then Add to Home Screen, open The 29 World from its new icon, and switch this on there.")
+          : "iPhone and iPad only allow alerts for sites added to the Home Screen. Tap Share, then Add to Home Screen, open The 29 World™ from its new icon, and switch this on there.")
       : window.isSecureContext === false ? "Alerts need a secure (https) connection."
       : "Not available in this browser. Try Chrome, Edge, Firefox or Safari.";
   } else if (blocked) {

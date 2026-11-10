@@ -3714,7 +3714,7 @@ function t29ShowConnectionProblem() {
   box.innerHTML = `
     <div class="t29-conn-card" role="alert">
       <h2>Can't connect right now</h2>
-      <p>The 29 World couldn't reach its server. Check your Wi-Fi or mobile data, then try again. You're still logged in.</p>
+      <p>The 29 World™ couldn't reach its server. Check your Wi-Fi or mobile data, then try again. You're still logged in.</p>
       <button type="button" class="btn gold">Try again</button>
     </div>`;
   box.querySelector("button").addEventListener("click", () => window.location.reload());

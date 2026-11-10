@@ -61,7 +61,7 @@ async function init() {
 function renderExemptionBox(u) {
   const limitMin = u.dailyLimitMinutes;
   document.getElementById("explainText").textContent =
-    `Your teacher has set a daily limit of ${limitMin} minute${limitMin === 1 ? "" : "s"} on The 29 World, and you've used it all up for today.`;
+    `Your teacher has set a daily limit of ${limitMin} minute${limitMin === 1 ? "" : "s"} on The 29 World™, and you've used it all up for today.`;
   document.getElementById("resetNote").textContent = "Your time resets at midnight. Come back tomorrow.";
 
   const box = document.getElementById("exemptionBox");

@@ -122,7 +122,7 @@ function pvBuildReportHtml(doc, opts) {
       </div>
       <div class="pv-explainer">
         <span class="pv-explainer-icon">${pvIcon("star", 18)}</span>
-        <p><strong>What is this?</strong> The 29 World is a classroom money game. Students earn, save, spend and invest
+        <p><strong>What is this?</strong> The 29 World™ is a classroom money game. Students earn, save, spend and invest
         <em>pretend</em> money to practise real money skills. None of the amounts here are real money.</p>
       </div>
     </section>
@@ -195,7 +195,7 @@ function pvBuildReportHtml(doc, opts) {
 
 function pvRender(doc) {
   const v = doc.view || {};
-  document.title = `${v.name || "Report card"}, Family View | The 29 World`;
+  document.title = `${v.name || "Report card"}, Family View | The 29 World™`;
   document.getElementById("parentReport").innerHTML = pvBuildReportHtml(doc);
   document.getElementById("parentLoading").classList.add("hidden");
   document.getElementById("parentReport").classList.remove("hidden");

@@ -81,7 +81,7 @@ function ccInjectThemeCss() {
 }
 function ccMiniCard(bgStyle, name, limit) {
   return `<span class="cc-mini" style="${bgStyle}"><span class="cc-mini-tick" aria-hidden="true">✓</span>
-    <span class="cc-mini-top"><span>THE 29 WORLD</span><span>)))</span></span>
+    <span class="cc-mini-top"><span>THE 29 WORLD™</span><span>)))</span></span>
     <span class="cc-mini-chip"></span>
     <span class="cc-mini-bot"><span class="cc-mini-name">${ccEsc(name)}</span><span class="cc-mini-limit">${ccEsc(limit)}</span></span></span>`;
 }
@@ -132,7 +132,7 @@ function ccVisual(cls, plan, name, last4, opts) {
   return `
     <div class="cc-visual cc-t${ccTier(cls, plan.id)} ${opts.small ? "sm" : ""} ${opts.pending ? "is-pending" : ""}" style="${ccThemeStyle(plan)}">
       <div class="cc-v-top">
-        <span class="cc-v-brand">THE 29 WORLD</span>
+        <span class="cc-v-brand">THE 29 WORLD™</span>
         <span class="cc-v-wave" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 7c2.2 2.8 2.2 7.2 0 10"/><path d="M12 4.5c3.6 4.2 3.6 10.8 0 15"/><path d="M16 2.5c4.8 5.6 4.8 13.4 0 19"/></svg></span>
       </div>
       <div class="cc-v-chip" aria-hidden="true"></div>
