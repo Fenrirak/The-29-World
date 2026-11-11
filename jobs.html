@@ -51,6 +51,7 @@ here=/^(bank|budget|termdeposit|kiwisaver|loan|market|store|marketplace|jobs|tra
 if(m&&m.u===u&&Array.isArray(m.k)){for(var i=0;i<m.k.length;i++)h.classList.add('mod-off-'+m.k[i]);if(here&&m.k.indexOf(pg)>-1)h.classList.add('mod-off-here');}
 else if(here){h.classList.add('mod-hold');setTimeout(function(){h.classList.remove('mod-hold');},4000);}
 }catch(_){}})();</script>
+<style>@media (max-width:480px){label[for$="JobAutoWeeks"]{flex-wrap:wrap;}}</style>
 </head>
 <body>
 
