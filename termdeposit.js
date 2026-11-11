@@ -79,7 +79,7 @@ async function render() {
       <div class="flex-between">
         <div>
           <h4>${escapeHtml(p.name)}</h4>
-          <p class="muted-small">Minimum ${fmtMoney(p.minAmount)} &middot; ${p.days} days &middot; ${p.rate}% interest/week (compounds to maturity) &middot; ${p.earlyFeePct}% fee if broken early</p>
+          <p class="muted-small">Minimum ${fmtMoney(p.minAmount)} &middot; ${p.days} days &middot; ${p.rate}% interest/week (compounds to maturity) &middot; ${Math.min(100, Math.max(0, Number(p.earlyFeePct) || 0))}% fee if broken early</p>
         </div>
         <div>
           ${IS_TEACHER
@@ -88,7 +88,7 @@ async function render() {
                  <button class="btn small coral" onclick="deletePlan('${p.id}')">Remove</button>
                </div>`
             : `<div class="row-flex" style="gap:8px;">
-                 <input type="number" min="${p.minAmount}" step="0.01" id="amt-${p.id}" placeholder="Amount" style="max-width:140px;">
+                 <input type="number" min="${p.minAmount}" step="0.01" id="amt-${p.id}" aria-label="Deposit amount for ${escapeHtml(p.name)}" placeholder="Amount" style="max-width:140px;">
                  <button class="btn small gold" id="depositBtn-${p.id}" onclick="openDeposit('${p.id}')">Deposit</button>
                </div>`}
         </div>
@@ -108,7 +108,7 @@ async function render() {
       row.className = "auto-row";
       row.innerHTML = `
         <div class="auto-details"><strong>${fmtMoney(d.amount)}</strong> in ${escapeHtml(d.plan.name)}
-          <div class="muted-small">Matures ${d.matureDate} &middot; ${d.plan.earlyFeePct}% fee if withdrawn early</div>
+          <div class="muted-small">Matures ${d.matureDate} &middot; ${Math.min(100, Math.max(0, Number(d.plan.earlyFeePct) || 0))}% fee if withdrawn early</div>
         </div>
         <button class="btn small coral" onclick="withdrawEarly('${d.id}')">Withdraw early</button>
       `;
@@ -196,7 +196,11 @@ async function openDeposit(id) {
 
 async function withdrawEarly(depositId) {
   if (await t29Confirm("Withdraw early? You'll pay the early withdrawal fee and forfeit interest.")) {
-    await withdrawTermDepositEarly(CURRENT.username, depositId);
+    const result = await withdrawTermDepositEarly(CURRENT.username, depositId);
+    if (!result.ok) {
+      await t29Alert(result.error || "Couldn't withdraw this deposit. Please try again.");
+      return;
+    }
     await render();
   }
 }
