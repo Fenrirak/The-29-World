@@ -149,8 +149,12 @@ function _wrapDocRef(realRef) {
     },
     // Live listener on this one document. Returns the function that stops it.
     // Billed one read when it starts and one per change after that, instead of one per poll.
-    onSnapshot(next, error) {
-      return onSnapshot(realRef, snap => next(_wrapSnap(snap)), err => { if (error) error(err); });
+    onSnapshot(optionsOrNext, nextOrError, onError) {
+      const hasOptions = typeof optionsOrNext !== "function";
+      const options = hasOptions ? optionsOrNext : {};
+      const next = hasOptions ? nextOrError : optionsOrNext;
+      const error = hasOptions ? onError : nextOrError;
+      return onSnapshot(realRef, options, snap => next(_wrapSnap(snap)), err => { if (error) error(err); });
     },
     set(data, options) {
       return _t29Guarded(realRef, "set", data, () => options ? setDoc(realRef, data, options) : setDoc(realRef, data));

@@ -1398,7 +1398,7 @@ function gamblingAccountToday(user) {
 async function getGamblingAccountView(username, classCode) {
   // This view is refreshed immediately after money moves. A live-listener
   // cache can still contain the pre-commit snapshot at that point.
-  const [user, cls] = await Promise.all([getUser(username), getClass(classCode)]);
+  const [user, cls] = await Promise.all([getUser(username, { fresh: true }), getClass(classCode)]);
   if (!user || !cls) return null;
   const acc = gamblingAccountToday(user);
   const g = cls.gambling;

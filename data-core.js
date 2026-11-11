@@ -405,9 +405,13 @@ function _sharedFetch(map, key, fetcher) {
   return p;
 }
 
-async function getUser(username) {
+async function getUser(username, options) {
   if (!username) return null;
   await T29_AUTH_READY; // firestore.rules requires request.auth != null
+  if (options?.fresh) {
+    const snap = await usersCol().doc(username).get({ source: "server" });
+    return snap.exists ? _cloneDoc(snap.data()) : null;
+  }
   const data = await _sharedFetch(_inFlightUserFetch, username, () =>
     usersCol().doc(username).get().then(snap => snap.exists ? snap.data() : null)
   );
