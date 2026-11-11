@@ -267,7 +267,7 @@ async function render() {
       ${IS_TEACHER ? `
         <div class="grid grid-2" style="margin-top:10px;">
           <div>
-            <label>Set new price</label>
+            <label for="price-${co.id}">Set new price</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="0.01" step="0.01" id="price-${co.id}" value="${co.price}">
               <button class="btn small" onclick="setPrice('${co.id}')">${icon("save",13)} Update</button>
@@ -280,11 +280,11 @@ async function render() {
         </div>
         <div class="grid grid-3" style="margin-top:10px;">
           <div>
-            <label>Min % change (this company)</label>
+            <label for="rmin-${co.id}">Min % change (this company)</label>
             <input type="number" min="0" step="0.5" id="rmin-${co.id}" value="${(co.priceRange || cls.priceRange || {min:1}).min}">
           </div>
           <div>
-            <label>Max % change (this company)</label>
+            <label for="rmax-${co.id}">Max % change (this company)</label>
             <input type="number" min="0" step="0.5" id="rmax-${co.id}" value="${(co.priceRange || cls.priceRange || {max:5}).max}">
           </div>
           <div style="display:flex;align-items:flex-end;">
@@ -294,14 +294,14 @@ async function render() {
       ` : `
         <div class="grid grid-2" style="margin-top:10px;">
           <div>
-            <label>Buy shares</label>
+            <label for="buy-${co.id}">Buy shares</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="1" step="1" id="buy-${co.id}" placeholder="qty">
               <button class="btn small gold" id="buyBtn-${co.id}" onclick="buy('${co.id}')">Buy</button>
             </div>
           </div>
           <div>
-            <label>Sell shares</label>
+            <label for="sell-${co.id}">Sell shares</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="1" step="1" id="sell-${co.id}" placeholder="qty">
               <button class="btn small secondary" id="sellBtn-${co.id}" onclick="sell('${co.id}')">Sell</button>

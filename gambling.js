@@ -511,7 +511,9 @@ function refreshGamblingAccountCardIfVisible() {
   return refreshGamblingAccountCard();
 }
 
+let gamblingAccountRefreshSequence = 0;
 async function refreshGamblingAccountCard() {
+  const sequence = ++gamblingAccountRefreshSequence;
   // Defensive by design, not just at the render() call site: this now adds
   // a real network round-trip (a fresh user-doc read) into render() and
   // every Blackjack action, none of which used to touch the network for
@@ -522,7 +524,7 @@ async function refreshGamblingAccountCard() {
   // last showed, instead of the whole tab failing to render.
   try {
     const view = await getGamblingAccountView(CURRENT.username, CURRENT.classCode);
-    renderGamblingAccountCard(view);
+    if (sequence === gamblingAccountRefreshSequence) renderGamblingAccountCard(view);
   } catch (e) {
     console.warn("Gambling account card failed to refresh:", e);
   }

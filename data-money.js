@@ -3359,25 +3359,49 @@ function nzMonthKey(d) { const p = nzParts(d); return `${p.year}-${p.month}`; }
 async function recordReportActivity(username, txn) {
   if (!username || !txnBelongsTo(txn, username)) return;
   if (!reportClassifications(txn, username).length) return;
+  // A peer payment permits the balance transfer, not arbitrary writes to
+  // the recipient's account. Their own session (or a teacher) reconciles
+  // the shared ledger below without changing the security rules.
+  const student = t29SessionStudent();
+  if (student && student !== username) return;
   const userRef = usersCol().doc(username);
   try {
     await fdb.runTransaction(async (t) => {
       const snap = await t.get(userRef);
       if (!snap.exists) return; // e.g. student removed mid-flight — nothing to update
       const u = snap.data();
-      let recent = [];
-      if (!u.reportAccounting || u.reportAccounting.version !== 2) {
-        const cs = await t.get(classesCol().doc(u.classCode));
-        if (cs.exists) recent = cs.data().txns || [];
-      }
+      if (u.role !== "student" || !u.classCode) return;
+      const cs = await t.get(classesCol().doc(u.classCode));
+      const recent = cs.exists ? cs.data().txns || [] : [];
       const accounting = reportAccountingView(Object.assign({ username }, u), recent);
       reportAccountingApply(accounting, txn, username);
       accounting.seen = accounting.seen.slice(-(MAX_STORED_TXNS + 20));
-      t.update(userRef, { reportAccounting: accounting });
+      if (JSON.stringify(accounting) !== JSON.stringify(u.reportAccounting))
+        t.update(userRef, { reportAccounting: accounting });
     });
   } catch (e) {
     console.warn("recordReportActivity failed (rolling report totals only. Money already moved):", e);
   }
+}
+
+// Reconcile incoming activity while its owner is online, and on the next
+// visit. Teachers cover their roster as well. Reuse the existing class
+// listener; clock probes and unrelated students' activity cause no writes.
+function watchReportActivity(user) {
+  if (!user || !user.classCode || user._studentView) return;
+  const signatures = new Map();
+  return t29WatchDoc("classes", user.classCode, (cls, info) => {
+    if (!cls || cls.archived || info?.error || info?.fromCache || info?.hasPendingWrites) return;
+    const names = user.role === "teacher" ? cls.students || [] : [user.username];
+    for (const username of names) {
+      const entries = (cls.txns || []).filter(t => t && txnBelongsTo(t, username));
+      if (!entries.length) continue;
+      const signature = JSON.stringify(entries.map(reportEntryKey));
+      if (signatures.get(username) === signature) continue;
+      signatures.set(username, signature);
+      recordReportActivity(username, entries.find(t => reportClassifications(t, username).length) || entries[0]);
+    }
+  });
 }
 
 /* ===================== Tax ===================== */

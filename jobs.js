@@ -613,7 +613,7 @@ function renderWageTax(cls) {
   box.innerHTML = bands.map((b, i) => {
     const range = i === 0 ? (b.upTo == null ? "All of your pay" : `Up to ${m(b.upTo)}`)
       : b.upTo == null ? `Over ${m(b.from)}`
-      : Number.isInteger(b.from) ? `${m(b.from + 1)} – ${m(b.upTo)}` : `Over ${m(b.from)}, up to ${m(b.upTo)}`;
+      : `Over ${m(b.from)}, up to ${m(b.upTo)}`;
     return `<div class="auto-row"><div class="auto-details">${range}</div><strong>${b.rate > 0 ? t29TaxPct(b.rate) : "Tax-free"}</strong></div>`;
   }).join("");
 }

@@ -1396,7 +1396,9 @@ function gamblingAccountToday(user) {
 // Read-only view combining the student's account with the class's current
 // gambling settings, for rendering the shared account card.
 async function getGamblingAccountView(username, classCode) {
-  const [user, cls] = await Promise.all([getUserCached(username), getClassCached(classCode)]);
+  // This view is refreshed immediately after money moves. A live-listener
+  // cache can still contain the pre-commit snapshot at that point.
+  const [user, cls] = await Promise.all([getUser(username), getClass(classCode)]);
   if (!user || !cls) return null;
   const acc = gamblingAccountToday(user);
   const g = cls.gambling;

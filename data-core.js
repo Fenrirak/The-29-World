@@ -642,14 +642,18 @@ function t29WatchDoc(col, id, cb) {
     T29_AUTH_READY.then(() => {
       if (live.dead) return;
       const ref = (col === "users" ? usersCol() : classesCol()).doc(id);
-      live.unsub = ref.onSnapshot(snap => {
+      live.unsub = ref.onSnapshot({ includeMetadataChanges: true }, snap => {
         let data = snap.exists ? snap.data() : null;
         if (data && col === "classes") data = withNewModuleDefaults(data);
         const sig = JSON.stringify(data, (k, v) => (k === "_clockProbe" ? undefined : v));
-        const changed = !live.has || sig !== live.sig;
+        const info = snap.metadata || {};
+        const confirmed = !info.fromCache && !info.hasPendingWrites;
+        const changed = !live.has || sig !== live.sig || (confirmed && !live.confirmed);
+        live.confirmed = confirmed;
+        live.info = info;
         live.has = true; live.sig = sig; live.data = data;
         prime();
-        if (changed) tell(data, snap.metadata || {});
+        if (changed) tell(data, info);
       }, err => {
         // Listener ended: forget it so the next watch starts a fresh one, and let callers fall back.
         clearInterval(live.keep);
@@ -662,7 +666,7 @@ function t29WatchDoc(col, id, cb) {
   w.subs.add(cb);
   if (w.has) { // joining late: hand over the current copy straight away
     const cur = w;
-    Promise.resolve().then(() => { if (cur.subs.has(cb)) { try { cb(_cloneDoc(cur.data), {}); } catch (e) { console.warn("Live update handler failed:", e); } } });
+    Promise.resolve().then(() => { if (cur.subs.has(cb)) { try { cb(_cloneDoc(cur.data), cur.info || {}); } catch (e) { console.warn("Live update handler failed:", e); } } });
   }
   return function stopWatching() {
     const cur = w;
@@ -4140,6 +4144,7 @@ async function anwGlobalBootstrap() {
     // most pages never sync it), so a device with a wrong clock stamped the wrong day into
     // lastMarketDayRun/lastPropertyMarketDayRun — making the real day look "already run".
     await syncServerClock(u.classCode).catch(() => {});
+    if (typeof watchReportActivity === "function") watchReportActivity(u);
     if (u._studentView) {
       // Student view never runs the class-wide simulations: they write to the shared class.
       window.T29_RATES_READY = Promise.resolve();
