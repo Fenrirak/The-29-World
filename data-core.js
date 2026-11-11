@@ -1399,42 +1399,99 @@ function t29AuthErrorMessage(e) {
 // class's students individually (getClassStudents would be one extra
 // batch of reads per class); cls.students is already the full roster
 // array on the class doc itself, so its length is enough for a count.
+// Only server-confirmed reads can establish migration completeness. Never
+// treat an offline query or a failed co-teacher query as an empty class list.
+async function t29ClassListQueries(collectionName, username) {
+  const col = fdb.collection(collectionName);
+  const snaps = await Promise.all([
+    col.where("teacher", "==", username).get({ source: "server" }),
+    col.where("coTeachers", "array-contains", username).get({ source: "server" })
+  ]);
+  const docs = new Map();
+  for (const snap of snaps) {
+    if (snap.metadata && (snap.metadata.fromCache || snap.metadata.hasPendingWrites)) throw new Error("Unconfirmed class list");
+    snap.forEach(d => docs.set(d.id, d.data()));
+  }
+  return docs;
+}
+function t29ClassListRows(docs, username, summaries) {
+  return Array.from(docs, ([code, data]) => {
+    const cls = summaries ? data : t29DeriveClassSummary(code, data);
+    return { code, name: cls.name, createdAt: cls.createdAt || null,
+      archived: !!cls.archived, archivedAt: cls.archivedAt || null,
+      autoArchived: !!cls.autoArchived, lastActivityAt: cls.lastActivityAt || null,
+      studentCount: cls.studentCount, isOwner: cls.teacher === username,
+      ownerUsername: cls.teacher, coTeachers: cls.coTeachers || [] };
+  }).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+function t29SummaryEqual(a, b) {
+  return !!a && Object.keys(b).every(k => JSON.stringify(a[k]) === JSON.stringify(b[k]));
+}
+// Re-read in the transaction: an earlier render's roster/activity must never
+// overwrite a more recent student join or archive. Used by migration and heal.
+async function t29RepairClassSummary(code) {
+  return fdb.runTransaction(async t => {
+    const ref = classesCol().doc(code), summaryRef = fdb.collection("classSummaries").doc(code);
+    const cls = await t.get(ref);
+    if (!cls.exists) return;
+    const saved = await t.get(summaryRef);
+    const derived = t29DeriveClassSummary(code, cls.data());
+    if (!saved.exists || !t29SummaryEqual(saved.data(), derived)) {
+      t.set(summaryRef, { ...derived, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }
+  });
+}
+const _t29SummaryHeals = new Map();
+async function t29SelfHealClassSummary(code, cls) {
+  if (!cls || _t29SummaryHeals.has(code)) return;
+  const task = (async () => {
+    try {
+      const saved = await fdb.collection("classSummaries").doc(code).get({ source: "server" });
+      if (!saved.exists || !t29SummaryEqual(saved.data(), t29DeriveClassSummary(code, cls))) await t29RepairClassSummary(code);
+    } catch (e) { console.warn("Class summary self-heal failed:", code, e); }
+  })();
+  _t29SummaryHeals.set(code, task);
+  try { await task; } finally { _t29SummaryHeals.delete(code); }
+}
+async function t29SummaryGeneration() {
+  const snap = await fdb.collection("classSummaryState").doc("global").get({ source: "server" });
+  return snap.exists ? snap.data().generation : 0;
+}
 async function getTeacherClasses(username) {
   if (!username) return [];
-  await T29_AUTH_READY; // firestore.rules requires request.auth != null
-  // PERF: both queries run at the same time instead of one after the other.
-  // The co-teacher query is best effort: if it is ever refused, their own
-  // classes must still load.
-  const ownQuery = classesCol().where("teacher", "==", username).get();
-  const coQuery = classesCol().where("coTeachers", "array-contains", username).get()
-    .catch(e => { console.warn("Co-teacher classes unavailable:", e && e.code); return null; });
-  const [snap, coSnap] = await Promise.all([ownQuery, coQuery]);
-  const list = [];
-  const seen = new Set();
-  const add = (doc, isOwner) => {
-    // PERF: only a few plain fields are read below, so skip the deep copy and
-    // module defaults (they cost real time on big class docs). data() is already a fresh object.
-    const cls = doc.data();
-    if (seen.has(cls.code)) return;
-    seen.add(cls.code);
-    list.push({
-      code: cls.code,
-      name: cls.name,
-      createdAt: cls.createdAt || null,
-      archived: !!cls.archived,
-      archivedAt: cls.archivedAt || null,
-      autoArchived: !!cls.autoArchived,
-      lastActivityAt: cls.lastActivityAt || null,
-      studentCount: (cls.students || []).length,
-      isOwner,
-      ownerUsername: cls.teacher,
-      coTeachers: cls.coTeachers || []
-    });
-  };
-  snap.forEach(doc => add(doc, true));
-  if (coSnap) coSnap.forEach(doc => add(doc, false));
-  list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  return list;
+  await T29_AUTH_READY;
+  installReadCache();
+  try {
+    const markerRef = fdb.collection("classSummaryMigrations").doc(username);
+    const [generation, marker] = await Promise.all([
+      t29SummaryGeneration(), markerRef.get({ source: "server" })
+    ]);
+    if (!marker.exists || marker.data().version !== 1 || marker.data().generation !== generation) {
+      const full = await t29ClassListQueries("classes", username);
+      // Rules compare each projection to the CURRENT class at commit time.
+      // Reuse the full-query snapshot instead of downloading every class again.
+      // A concurrent edit rejects a stale projection and falls back below; no
+      // completion marker is written after a failed migration. Individual
+      // writes also keep the rules access budget bounded for large accounts.
+      for (const [code, cls] of full) {
+        await fdb.collection("classSummaries").doc(code).set({
+          ...t29DeriveClassSummary(code, cls), updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      await fdb.runTransaction(async t => {
+        const state = await t.get(fdb.collection("classSummaryState").doc("global"));
+        const current = state.exists ? state.data().generation : 0;
+        if (current !== generation) throw new Error("Class migration invalidated; use full classes");
+        t.set(markerRef, { version: 1, generation });
+      });
+    }
+    const summaries = await t29ClassListQueries("classSummaries", username);
+    if (await t29SummaryGeneration() !== generation) throw new Error("Class summaries invalidated during read");
+    return t29ClassListRows(summaries, username, true);
+  } catch (e) {
+    console.warn("Class summaries unavailable; reading full classes:", e);
+    return t29ClassListRows(await t29ClassListQueries("classes", username), username, false);
+  }
 }
 
 // "Create a brand new class" from Home — identical result to the original
@@ -1767,18 +1824,22 @@ async function t29TouchClassActivity(u) {
 // marked archived. Classes with no activity stamp yet get one (clock starts now).
 async function t29AutoArchiveStaleClasses(classes) {
   const cutoff = t29InactiveCutoffMs();
-  // PERF: classes are checked at the same time, not one write after another.
   await Promise.all(classes.map(async c => {
-    if (c.archived) return;
+    if (c.archived || (c.lastActivityAt && c.lastActivityAt >= cutoff)) return;
     try {
-      if (!c.lastActivityAt) {
-        await classesCol().doc(c.code).update({ lastActivityAt: Date.now() });
-        c.lastActivityAt = Date.now();
-      } else if (c.lastActivityAt < cutoff) {
-        const now = Date.now();
-        await classesCol().doc(c.code).update({ archived: true, archivedAt: now, autoArchived: true });
-        c.archived = true; c.archivedAt = now; c.autoArchived = true;
-      }
+      const current = await fdb.runTransaction(async t => {
+        const ref = classesCol().doc(c.code), snap = await t.get(ref);
+        if (!snap.exists) return null;
+        const cls = snap.data(), now = Date.now();
+        if (!cls.archived) {
+          const patch = !cls.lastActivityAt ? { lastActivityAt: now }
+            : cls.lastActivityAt < cutoff ? { archived: true, archivedAt: now, autoArchived: true } : null;
+          if (patch) { t.update(ref, patch); Object.assign(cls, patch); }
+        }
+        return t29DeriveClassSummary(c.code, cls);
+      });
+      if (current) Object.assign(c, { archived: current.archived, archivedAt: current.archivedAt,
+        autoArchived: current.autoArchived, lastActivityAt: current.lastActivityAt, studentCount: current.studentCount });
     } catch (e) { console.warn("Auto-archive check failed for", c.code, e && e.code); }
   }));
   return classes;
@@ -1826,18 +1887,27 @@ async function t29JoinAsCoTeacher(teacherUsername, input) {
     if (t29IsConnectionError(e)) throw e;
     return { ok: false, error: "That code didn't work. It may have been used already, cancelled, or the class already has 2 co-teachers. Ask the class owner for a new one." };
   }
+  t29RepairClassSummary(classCode).catch(e => console.warn("Joined class summary repair failed:", classCode, e));
   return { ok: true, classCode };
 }
 async function t29RemoveCoTeacher(classCode, ownerUsername, coUsername) {
-  const cls = await getClass(classCode);
-  if (!cls || cls.teacher !== ownerUsername) return { ok: false, error: "Only the class owner can remove co-teachers." };
-  await classesCol().doc(classCode).update({ coTeachers: (cls.coTeachers || []).filter(n => n !== coUsername) });
+  const allowed = await fdb.runTransaction(async t => {
+    const ref = classesCol().doc(classCode), snap = await t.get(ref);
+    if (!snap.exists || snap.data().teacher !== ownerUsername) return false;
+    t.update(ref, { coTeachers: (snap.data().coTeachers || []).filter(n => n !== coUsername) });
+    return true;
+  });
+  if (!allowed) return { ok: false, error: "Only the class owner can do this." };
   // Best effort: stop their account pointing at this class (they may not have it open).
   await usersCol().doc(coUsername).update({ classCode: "" }).catch(() => {});
   return { ok: true };
 }
 async function t29LeaveAsCoTeacher(classCode, username) {
-  await classesCol().doc(classCode).update({ coTeachers: firebase.firestore.FieldValue.arrayRemove(username) });
+  await fdb.runTransaction(async t => {
+    const ref = classesCol().doc(classCode), snap = await t.get(ref);
+    if (!snap.exists) throw new Error("Class not found");
+    t.update(ref, { coTeachers: (snap.data().coTeachers || []).filter(n => n !== username) });
+  });
   const me = await getUser(username).catch(() => null);
   if (me && me.classCode === classCode) await usersCol().doc(username).update({ classCode: "" }).catch(() => {});
   return { ok: true };
@@ -2421,6 +2491,7 @@ async function t29DeleteTeacherAccount(username, password) {
     // orphaned recovery records must not survive a reusable username.
     await fdb.collection("recoveryCheck").doc(username).delete();
     await fdb.collection("teacherRecovery").doc(username).delete();
+    await fdb.collection("classSummaryMigrations").doc(username).delete();
     // The mapping and app account must disappear together: a failure of
     // either write must leave the teacher able to log in and retry.
     await fdb.runTransaction(async t => {

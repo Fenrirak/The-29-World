@@ -26,7 +26,7 @@ import { initializeApp, deleteApp }
   from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
 import {
   getFirestore, doc, collection, query, where,
-  getDoc, getDocFromServer, getDocs, onSnapshot,
+  getDoc, getDocFromServer, getDocs, getDocsFromServer, onSnapshot,
   setDoc, updateDoc, deleteDoc, runTransaction, writeBatch,
   serverTimestamp, increment, deleteField, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
@@ -130,7 +130,7 @@ function _wrapQuerySnap(snap) {
 
 function _wrapQueryRef(ref) {
   return {
-    async get() { return _wrapQuerySnap(await getDocs(ref)); },
+    async get(opts) { return _wrapQuerySnap(await (opts && opts.source === "server" ? getDocsFromServer(ref) : getDocs(ref))); },
     onSnapshot(next, error) {
       return onSnapshot(ref, { includeMetadataChanges: true },
         snap => next(_wrapQuerySnap(snap)), err => { if (error) error(err); });
@@ -138,7 +138,7 @@ function _wrapQueryRef(ref) {
   };
 }
 
-function _wrapDocRef(realRef) {
+function _wrapDocRef(realRef, db) {
   return {
     _ref: realRef,
     async get(opts) {
@@ -157,10 +157,10 @@ function _wrapDocRef(realRef) {
       return onSnapshot(realRef, options, snap => next(_wrapSnap(snap)), err => { if (error) error(err); });
     },
     set(data, options) {
-      return _t29Guarded(realRef, "set", data, () => options ? setDoc(realRef, data, options) : setDoc(realRef, data));
+      return _t29Guarded(realRef, "set", data, () => _t29DirectWrite(db, realRef, "set", data, options));
     },
-    update(data) { return _t29Guarded(realRef, "update", data, () => updateDoc(realRef, data)); },
-    delete() { return _t29Guarded(realRef, "delete", null, () => deleteDoc(realRef)); }
+    update(data) { return _t29Guarded(realRef, "update", data, () => _t29DirectWrite(db, realRef, "update", data)); },
+    delete() { return _t29Guarded(realRef, "delete", null, () => _t29DirectWrite(db, realRef, "delete")); }
   };
 }
 
@@ -168,7 +168,7 @@ function _wrapCollectionRef(name, db = _db) {
   const realCol = collection(db, name);
   return {
     ..._wrapQueryRef(realCol),
-    doc(id) { return _wrapDocRef(doc(realCol, id)); },
+    doc(id) { return _wrapDocRef(doc(realCol, id), db); },
     // Class ownership/co-teacher queries use one filter; no chaining is needed.
     where(field, op, value) {
       const q = query(realCol, where(field, op, value));
@@ -180,38 +180,158 @@ function _wrapCollectionRef(name, db = _db) {
 // Built by a function (rather than one fixed object) so a second, separate
 // Firestore connection can get the exact same compat-shaped API — see
 // t29OpenSignupSession() below.
+// Every Firebase connection (including bulk signup) uses this boundary.
+// Class writes and their projection commit together. Deferred transaction writes
+// let us finish all reads first, as required by the modular SDK.
+const _t29SummaryFields = ["code", "name", "teacher", "coTeachers", "createdAt",
+  "lastActivityAt", "archived", "archivedAt", "autoArchived", "students"];
+function _t29ClassWrite(op) {
+  return /^classes\/[^/]+$/.test(op.ref.path) && (op.method === "delete"
+    || (op.method === "set" && !op.options?.merge && !op.options?.mergeFields)
+    || Object.keys(op.data || {}).some(k => _t29SummaryFields.includes(k.split(".")[0])));
+}
+function _t29SummarySource(data) {
+  const out = {};
+  for (const k of _t29SummaryFields) if (Object.hasOwn(data || {}, k)) {
+    out[k] = Array.isArray(data[k]) ? data[k].slice() : data[k];
+  }
+  return out;
+}
+function _t29Summary(code, cls) {
+  return { code, name: cls.name ?? "", teacher: cls.teacher ?? "",
+    coTeachers: cls.coTeachers || [], createdAt: cls.createdAt ?? null,
+    lastActivityAt: cls.lastActivityAt ?? null, archived: !!cls.archived,
+    archivedAt: cls.archivedAt ?? null, autoArchived: !!cls.autoArchived,
+    studentCount: (cls.students || []).length };
+}
+window.t29DeriveClassSummary = _t29Summary;
+// The native SDK captures values when set/update is called. Preserve that
+// contract while deferring writes; later callback mutations must not change
+// queued payloads. Keep SDK Timestamp/FieldValue/DocumentReference instances.
+function _t29SnapshotWriteValue(value) {
+  if (Array.isArray(value)) return value.map(_t29SnapshotWriteValue);
+  if (value && typeof value === "object") {
+    const proto = Object.getPrototypeOf(value);
+    if (proto === null || Object.prototype.hasOwnProperty.call(proto, "isPrototypeOf")) {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, _t29SnapshotWriteValue(v)]));
+    }
+  }
+  return value;
+}
+function _t29Queue(ops, ref, method, data, options) {
+  _t29GuardCheck(ref, method, data);
+  const captured = _t29SnapshotWriteValue(data);
+  ops.push({ ref, method, data: captured, options, summaryData: _t29SummarySource(captured) });
+}
+function _t29ApplyWrite(writer, op) {
+  if (op.method === "delete") writer.delete(op.ref);
+  else if (op.method === "set" && op.options) writer.set(op.ref, op.data, op.options);
+  else writer[op.method](op.ref, op.data);
+}
+async function _t29Flush(db, writer, ops, reads) {
+  const states = new Map();
+  for (const op of ops.filter(_t29ClassWrite)) {
+    const code = op.ref.id || op.ref.path.split("/")[1];
+    if (op.method === "delete") { states.set(code, { deleted: true }); continue; }
+    const replacing = op.method === "set" && !op.options?.merge && !op.options?.mergeFields;
+    let state = states.get(code);
+    if (!state || state.deleted) {
+      let base = reads ? reads.get(op.ref.path) : undefined;
+      // Full replacement needs no read (new teacher signup cannot read its
+      // class yet). Blind batch changes invalidate instead of guessing.
+      if (!replacing && base === undefined && reads) {
+        const snap = await writer.get(op.ref);
+        base = snap.exists() ? _t29SummarySource(snap.data()) : {};
+        reads.set(op.ref.path, base);
+      }
+      state = { data: base || {}, invalid: !replacing && base === undefined };
+    }
+    if (replacing) state = { data: {}, invalid: false };
+    const patch = op.summaryData;
+    // Transforms (notably a blind co-teacher join/leave) cannot be derived
+    // without a readable preimage. Delete + generation advance is atomic:
+    // every dashboard must remigrate before it can trust summaries again.
+    if (op.options?.mergeFields || Object.keys(op.data || {}).some(k => k.includes(".") && _t29SummaryFields.includes(k.split(".")[0]))
+      || Object.values(patch).some(v => v && typeof v === "object" && !Array.isArray(v))) state.invalid = true;
+    Object.assign(state.data, patch);
+    states.set(code, state);
+  }
+  for (const op of ops) _t29ApplyWrite(writer, op);
+  let invalidated = null;
+  for (const [code, state] of states) {
+    const ref = doc(db, "classSummaries", code);
+    if (state.deleted || state.invalid) writer.delete(ref);
+    else writer.set(ref, { ..._t29Summary(code, state.data), updatedAt: serverTimestamp() });
+    if (state.invalid) invalidated = code;
+  }
+  if (invalidated) writer.set(doc(db, "classSummaryState", "global"), { generation: increment(1), classCode: invalidated }, { merge: true });
+}
+async function _t29DirectWrite(db, ref, method, data, options) {
+  const op = { ref, method, data, options, summaryData: _t29SummarySource(data) };
+  try {
+    if (!_t29ClassWrite(op)) {
+      if (method === "delete") return await deleteDoc(ref);
+      if (method === "update") return await updateDoc(ref, data);
+      return await (options ? setDoc(ref, data, options) : setDoc(ref, data));
+    }
+    // Co-teacher join is deliberately blind: the joining teacher has no
+    // permission to read this class before committing the invitation.
+    if (method === "update" && Object.hasOwn(data, "coTeacherJoin")) {
+      const batch = writeBatch(db);
+      await _t29Flush(db, batch, [op], null);
+      return await batch.commit();
+    }
+    if (method === "delete" || (method === "set" && !options?.merge && !options?.mergeFields)) {
+      const batch = writeBatch(db);
+      await _t29Flush(db, batch, [op], null);
+      return await batch.commit();
+    }
+    return await runTransaction(db, tx => _t29Flush(db, tx, [op], new Map()));
+  } catch (e) { console.warn("Class/summary write failed:", ref.path, e); throw e; }
+}
 function _makeFdb(db) { return {
   collection(name) { return _wrapCollectionRef(name, db); },
   async runTransaction(updateFn) {
-    return runTransaction(db, async (transaction) => {
-      const t = {
-        async get(docRefShim) {
-          const snap = await transaction.get(docRefShim._ref);
-          return _wrapSnap(snap);
-        },
-        // Every t.set() call site in the data-*.js files passes only (ref, data), so
-        // this doesn't bother threading through a third options argument.
-        set(docRefShim, data) { _t29GuardCheck(docRefShim._ref, "set", data); return transaction.set(docRefShim._ref, data); },
-        update(docRefShim, data) { _t29GuardCheck(docRefShim._ref, "update", data); return transaction.update(docRefShim._ref, data); },
-        delete(docRefShim) { _t29GuardCheck(docRefShim._ref, "delete", null); return transaction.delete(docRefShim._ref); }
-      };
-      return updateFn(t);
-    });
+    try {
+      return await runTransaction(db, async transaction => {
+        const ops = [], reads = new Map();
+        const t = {
+          async get(ref) {
+            const snap = await transaction.get(ref._ref);
+            if (/^classes\/[^/]+$/.test(ref._ref.path)) reads.set(ref._ref.path, _t29SummarySource(snap.exists() ? snap.data() : {}));
+            return _wrapSnap(snap);
+          },
+          set(ref, data, options) { _t29Queue(ops, ref._ref, "set", data, options); return t; },
+          update(ref, data) { _t29Queue(ops, ref._ref, "update", data); return t; },
+          delete(ref) { _t29Queue(ops, ref._ref, "delete"); return t; }
+        };
+        const result = await updateFn(t);
+        await _t29Flush(db, transaction, ops, reads);
+        return result;
+      });
+    } catch (e) { console.warn("Transaction (including class summaries) failed:", e); throw e; }
   },
-  // Only ever used for the merge-set chunked batches in setStudentTimeLimit
-  // (see the data-*.js files) — batch.update()/.delete() aren't called anywhere in
-  // this app, so this doesn't bother implementing them.
   batch() {
-    const b = writeBatch(db);
-    const shimBatch = {
-      set(docRefShim, data, options) {
-        _t29GuardCheck(docRefShim._ref, "set", data);
-        options ? b.set(docRefShim._ref, data, options) : b.set(docRefShim._ref, data);
-        return shimBatch;
-      },
-      commit() { return b.commit(); }
+    const ops = [];
+    const batch = {
+      set(ref, data, options) { _t29Queue(ops, ref._ref, "set", data, options); return batch; },
+      update(ref, data) { _t29Queue(ops, ref._ref, "update", data); return batch; },
+      delete(ref) { _t29Queue(ops, ref._ref, "delete"); return batch; },
+      async commit() {
+        try {
+          const writer = writeBatch(db);
+          await _t29Flush(db, writer, ops, null);
+          await writer.commit();
+          // Batch writes bypass installReadCache's document/transaction hooks.
+          for (const op of ops) {
+            const [col, id] = op.ref.path.split("/");
+            if (col === "users" || col === "classes") window._rcDel?.(col, id);
+          }
+          if (ops.some(op => /^(users|classes)\//.test(op.ref.path))) window._anwOnWriteSettled?.();
+        } catch (e) { console.warn("Batch (including class summaries) failed:", e); throw e; }
+      }
     };
-    return shimBatch;
+    return batch;
   }
 }; }
 const fdb = _makeFdb(_db);

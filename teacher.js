@@ -125,6 +125,7 @@ async function init() {
 
 async function render() {
   const cls = await getClassCached(CLASS_CODE);
+  t29SelfHealClassSummary(CLASS_CODE, cls); // best effort; never delays the page
   document.getElementById("className").textContent = cls.name;
   document.getElementById("classCode").textContent = cls.code;
   document.getElementById("classArchivedBanner").classList.toggle("hidden", !cls.archived);
