@@ -320,7 +320,10 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     <p>Every week, each student gets 2 to 5 of the active events below, each on a different school day (Monday to Friday, never two on the same day). The week is planned the first time you open the site that week, so opening it on Monday gives the full spread. Events without "Can repeat" are only ever given once to each student, so add plenty of events or tick "Can repeat".</p>
     <button class="btn secondary small" onclick="runWeeklyEventsNow()" id="runEventsNowBtn" style="margin-bottom:12px;">Run this week's events now</button>
     <div id="eventRecoWrap"></div>
+    <details class="fold-sub" id="eventListFold">
+    <summary><span class="fold-head"><span id="eventListTitle">Your events</span><span class="fold-hint">Show or hide the list of events.</span></span></summary>
     <div id="eventList"></div>
+    </details>
     <p class="muted-small" id="noEvents">You haven't added any events yet.</p>
     <details class="fold-sub" id="eventFold">
     <summary><span class="fold-head"><span id="eventFoldTitle">Add an event</span><span class="fold-hint">Create a new random event for the class.</span></span></summary>
@@ -529,7 +532,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="settings-menu.js?v=372f044a"></script>
 <script defer src="shortcuts.js?v=5c3b32dc"></script>
 <script defer src="offline.js?v=ac2cbd82"></script>
-<script defer src="data-core.js?v=51ff1298"></script>
+<script defer src="data-core.js?v=a1294ecf"></script>
 <script defer src="data-money.js?v=cff4d2fb"></script>
 <script defer src="data-life.js?v=00c27be6"></script>
 <script defer src="data-property.js?v=9ee91f2c"></script>
@@ -542,7 +545,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="notifications.js?v=abfec722"></script>
 <script defer src="pdf-report.js?v=cba2b85b"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
-<script defer src="teacher.js?v=bbeb2a96"></script>
+<script defer src="teacher.js?v=cb2e5e18"></script>
 <script defer src="bulk-students.js?v=e1e73dae"></script>
 </body>
 </html>

@@ -82,8 +82,18 @@ async function init() {
   // alone can take seconds (it writes per student), and blocking here is
   // what made a phone sit on a blank page. The popups and the final
   // render() below still run after the jobs, exactly as they did before.
-  await t29FirstPaint(render);
+  // PERF: the first paint and the day's jobs now run side by side instead of
+  // one after the other (the jobs only wait for the clock sync, not for the
+  // paint), and reads they share are fetched once. The paint is tracked so a
+  // failed one still gets redrawn below.
+  let firstPaintOk = true;
+  const T29_FIRST_PAINT = t29FirstPaint(async () => {
+    try { await render(); } catch (e) { firstPaintOk = false; throw e; }
+  });
   await T29_CLOCK_SYNC;
+  // Writes are counted (see _anwOnWriteSettled in data-core.js) so the final
+  // redraw below only happens when a job actually changed something.
+  const T29_WRITES_BEFORE = window._t29WriteSeq || 0;
   // Same reasoning as the other pages: these are 8 independent jobs, so
   // running them together instead of one-at-a-time avoids 8 sequential
   // network round-trips on page load.
@@ -101,11 +111,14 @@ async function init() {
     safeBgJob(processCreditCards(CLASS_CODE), "processCreditCards"),
     safeBgJob(processJobPromotions(CLASS_CODE), "processJobPromotions")
   ]);
-  await T29_STARTUP_JOBS;
+  await Promise.all([T29_FIRST_PAINT, T29_STARTUP_JOBS]);
   await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
   await checkBigEventPopup(CURRENT.username, CLASS_CODE);
   await checkAdjustmentPopup(CURRENT.username, CLASS_CODE);
-  await render();
+  // PERF: this second full render re-reads every student, so skip it on the
+  // common day when no job or popup wrote anything (what's on screen is
+  // already current). Still runs if anything was written or the paint failed.
+  if (!firstPaintOk || (window._t29WriteSeq || 0) !== T29_WRITES_BEFORE) await render();
   startPresencePolling();
   if (typeof t29MaybeStartTour === "function") t29MaybeStartTour("teacher", CURRENT);
 }
@@ -121,6 +134,9 @@ async function render() {
   document.getElementById("restartTile").classList.toggle("hidden", cls.teacher !== CURRENT.username);
   renderCoTeachers(cls).catch(e => console.warn("Co-teacher panel failed:", e));
 
+  // PERF: the teacher's display name is fetched alongside the students, not after them.
+  const teacherP = getClassTeacherDisplay(cls);
+  teacherP.catch(() => {}); // surfaced where it's awaited below
   // Pass the class doc already in hand, so this doesn't read it again first.
   const students = await getClassStudents(CLASS_CODE, cls);
   document.getElementById("statStudents").textContent = students.length;
@@ -151,7 +167,7 @@ async function render() {
   // name lookup cache for describeTxn / applications
   const nameCache = {};
   students.forEach(s => { nameCache[s.username] = s.name; });
-  const teacher = await getClassTeacherDisplay(cls);
+  const teacher = await teacherP;
   if (teacher) nameCache[teacher.username] = teacher.name;
 
   // net worth ranking (also gives us each student's lifestyle rating for the table below)
@@ -163,9 +179,11 @@ async function render() {
   document.getElementById("statTotal").textContent = fmtMoney(board.reduce((sum, r) => sum + (Number(r.net) || 0), 0));
   const lifestyleByUser = {};
   const lifestyleBandByUser = {};
-  await Promise.all(students.map(async s => {
-    lifestyleByUser[s.username] = await lifestyleRating(s.username, CLASS_CODE);
-  }));
+  // PERF: worked out from the class and students already in hand. lifestyleRating()
+  // re-fetched each student, and on a slow connection its 2-second read cache had
+  // expired by then, so it re-read the whole class a second time.
+  const lsCls = withNewModuleDefaults(cls);
+  students.forEach(s => { lifestyleByUser[s.username] = lifestyleRatingFromData(lsCls, s, s.username); });
   students.forEach(s => {
     const row = board.find(r => r.username === s.username);
     // Stacked total across every property the student owns, not just one,
@@ -245,6 +263,9 @@ async function render() {
   const evBox = document.getElementById("eventList");
   const evs = cls.eventDefs || [];
   document.getElementById("noEvents").classList.toggle("hidden", evs.length > 0);
+  // The list sits in a fold (closed by default) so a class with lots of events doesn't make the page huge.
+  document.getElementById("eventListFold").classList.toggle("hidden", evs.length === 0);
+  document.getElementById("eventListTitle").textContent = `Your events (${evs.length})`;
   evBox.innerHTML = "";
   evs.forEach(ev => {
     const row = document.createElement("div");

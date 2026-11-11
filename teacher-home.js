@@ -42,8 +42,18 @@ async function loanInterestForMyClasses() {
 
 async function render() {
   ALL_CLASSES = await getTeacherClasses(CURRENT.username);
-  // Archive any class nobody has used for 3 months (there's no server, so this is where it happens).
-  await t29AutoArchiveStaleClasses(ALL_CLASSES);
+  paintClassGrid();
+  // PERF: archive any class nobody has used for 3 months (there's no server, so this is
+  // where it happens) AFTER the classes are on screen, not before. The grid is only
+  // redrawn if a class actually got archived.
+  const list = ALL_CLASSES;
+  const wasArchived = list.map(c => c.archived);
+  t29AutoArchiveStaleClasses(list).then(() => {
+    if (list === ALL_CLASSES && list.some((c, i) => c.archived !== wasArchived[i])) paintClassGrid();
+  }).catch(e => console.warn("Auto-archive check failed:", e));
+}
+
+function paintClassGrid() {
   const grid = document.getElementById("classGrid");
   const noClasses = document.getElementById("noClasses");
   noClasses.classList.toggle("hidden", ALL_CLASSES.length > 0);

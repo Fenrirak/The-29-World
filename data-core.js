@@ -1402,15 +1402,19 @@ function t29AuthErrorMessage(e) {
 async function getTeacherClasses(username) {
   if (!username) return [];
   await T29_AUTH_READY; // firestore.rules requires request.auth != null
-  const snap = await classesCol().where("teacher", "==", username).get();
-  // Classes the teacher was added to as a co-teacher. Best effort: if this
-  // second query is ever refused, their own classes must still load.
-  let coSnap = null;
-  try { coSnap = await classesCol().where("coTeachers", "array-contains", username).get(); } catch (e) { console.warn("Co-teacher classes unavailable:", e && e.code); }
+  // PERF: both queries run at the same time instead of one after the other.
+  // The co-teacher query is best effort: if it is ever refused, their own
+  // classes must still load.
+  const ownQuery = classesCol().where("teacher", "==", username).get();
+  const coQuery = classesCol().where("coTeachers", "array-contains", username).get()
+    .catch(e => { console.warn("Co-teacher classes unavailable:", e && e.code); return null; });
+  const [snap, coSnap] = await Promise.all([ownQuery, coQuery]);
   const list = [];
   const seen = new Set();
   const add = (doc, isOwner) => {
-    const cls = withNewModuleDefaults(_cloneDoc(doc.data()));
+    // PERF: only a few plain fields are read below, so skip the deep copy and
+    // module defaults (they cost real time on big class docs). data() is already a fresh object.
+    const cls = doc.data();
     if (seen.has(cls.code)) return;
     seen.add(cls.code);
     list.push({
@@ -1763,8 +1767,9 @@ async function t29TouchClassActivity(u) {
 // marked archived. Classes with no activity stamp yet get one (clock starts now).
 async function t29AutoArchiveStaleClasses(classes) {
   const cutoff = t29InactiveCutoffMs();
-  for (const c of classes) {
-    if (c.archived) continue;
+  // PERF: classes are checked at the same time, not one write after another.
+  await Promise.all(classes.map(async c => {
+    if (c.archived) return;
     try {
       if (!c.lastActivityAt) {
         await classesCol().doc(c.code).update({ lastActivityAt: Date.now() });
@@ -1775,7 +1780,7 @@ async function t29AutoArchiveStaleClasses(classes) {
         c.archived = true; c.archivedAt = now; c.autoArchived = true;
       }
     } catch (e) { console.warn("Auto-archive check failed for", c.code, e && e.code); }
-  }
+  }));
   return classes;
 }
 
@@ -4589,6 +4594,8 @@ async function anwRefreshBalanceWidget() {
 // called, or a teacher session) — it just no-ops via the username guard
 // inside anwRefreshBalanceWidget.
 function _anwOnWriteSettled() {
+  // Counts settled writes so a page can tell whether anything changed (see teacher.js init).
+  window._t29WriteSeq = (window._t29WriteSeq || 0) + 1;
   if (_anwShowsChips()) return;
   anwRefreshBalanceWidget();
 }
