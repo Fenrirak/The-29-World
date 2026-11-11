@@ -1227,6 +1227,8 @@ function defaultClassData(code, className, teacherUsername) {
     // coTeacherCode is a single-use join code the owner hands to a co-teacher.
     coTeachers: [], coTeacherCode: null,
     templateShareToken: null,
+    // New classes (base template or from scratch) charge Comets for avatar items by default; a teacher can switch to free or money.
+    avatarShop: { currency: "comets" },
     payDay: "Fri",
     mortgageDay: "Fri",
     mortgageForceDueWeek: null,
@@ -1630,6 +1632,8 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
   ["cardPlans", "cardSettings", "accountPlans", "accountSettings", "avatarShop"].forEach(k => {
     if (template[k] !== undefined && template[k] !== null) cls[k] = _cloneDoc(template[k]);
   });
+  // A copy keeps its source's avatar shop as-is: classes made before Comets existed stay free.
+  if (template.avatarShop === undefined || template.avatarShop === null) delete cls.avatarShop;
   // KiwiSaver settings carry over; a retired class's copy starts un-retired.
   if (template.kiwiSaver) cls.kiwiSaver = Object.assign(_cloneDoc(template.kiwiSaver), { retired: false, retiredAt: null });
 
