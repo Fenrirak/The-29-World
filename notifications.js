@@ -662,8 +662,8 @@ function notifTeacherChangeItems(me, cls) {
 }
 
 /* ---- Dismissing to-do items ----
-   A student can dismiss anything that needs action (X on the dashboard's
-   "To do today" and on the bell's action rows). Remembered per device by item id.
+   A student can dismiss any item (X on every row of the dashboard's
+   "To do today" and of the bell; only the password-lock notice stays). Remembered per device by item id.
    Most ids carry today's date, so a dismissed reminder for something still
    unresolved (a loan, rent, transport) comes back tomorrow; one-off items stay gone.
    "Show dismissed" on the dashboard brings them all back. */
@@ -711,7 +711,7 @@ function buildNotifications(me, cls, opts) {
     notifMarketplaceNewListingItems(me, cls),
     notifTeacherChangeItems(me, cls)
   );
-  if (!(opts && opts.keepDismissed)) items = items.filter(n => !(n.action && notifTodoIsDismissed(me.username, n.id)));
+  if (!(opts && opts.keepDismissed)) items = items.filter(n => !notifTodoIsDismissed(me.username, n.id));
   // Order: needs-action first, then unread-over-read, then newest first.
   // The unread tiebreaker matters because several builders (term deposits,
   // marketplace listings) carry timestamps that don't reset day to day —
@@ -1265,7 +1265,7 @@ function notifRenderList() {
         ${n.body ? `<span class="notif-sub">${escapeHtml(n.body)}</span>` : ""}
         <span class="notif-time">${n.urgent ? "URGENT · " : n.action ? "Needs your attention · " : ""}${notifRelativeTime(n.ts)}</span>
       </span>
-      ${n.action && !NOTIF_IS_TEACHER ? `<button type="button" class="notif-dismiss" data-nid="${escapeHtml(n.id)}" aria-label="Dismiss: ${escapeHtml(n.title)}" title="Dismiss" onclick="notifDismissFromBell(event,this)">&times;</button>` : ""}
+      ${!NOTIF_IS_TEACHER && !/^lock-/.test(n.id) ? `<button type="button" class="notif-dismiss" data-nid="${escapeHtml(n.id)}" aria-label="Dismiss: ${escapeHtml(n.title)}" title="Dismiss" onclick="notifDismissFromBell(event,this)">&times;</button>` : ""}
     </${tag}>`;
   }).join("");
 

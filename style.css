@@ -4441,14 +4441,13 @@ body.t29-page-locked main,body.t29-page-locked .site-footer{visibility:hidden;}
 }
 
 /* ===== To do: dismiss ===== */
-.todo-item{position:relative;padding-right:34px;}
-.todo-dismiss,.notif-dismiss{background:none;border:0;color:var(--muted);font-size:22px;line-height:1;padding:2px 8px;border-radius:8px;cursor:pointer;flex-shrink:0;}
-.todo-dismiss{position:absolute;right:0;top:50%;transform:translateY(-50%);}
+.todo-actions{display:flex;align-items:center;justify-content:flex-end;gap:4px;flex-shrink:0;}
+.todo-dismiss,.notif-dismiss{display:inline-flex;align-items:center;justify-content:center;background:none;border:0;color:var(--muted);font-size:22px;line-height:1;height:32px;min-height:0;width:32px;padding:0;border-radius:8px;cursor:pointer;flex-shrink:0;}
 .todo-dismiss:hover,.notif-dismiss:hover{background:var(--line);color:var(--navy-900);}
-.notif-dismiss{align-self:flex-start;margin:-4px -6px 0 0;}
+.notif-dismiss{align-self:center;margin:0 -6px 0 0;}
 .todo-restore-row{margin:8px 0 0;}
 .todo-restore{background:none;border:0;padding:0;color:var(--muted);font-size:var(--fs-md);font-weight:700;text-decoration:underline;cursor:pointer;}
-@media (max-width:640px){.todo-dismiss{top:10px;transform:none;}}
+@media (max-width:640px){.todo-actions{justify-content:space-between;}}
 html.dark-mode .todo-dismiss:hover,html.dark-mode .notif-dismiss:hover{color:var(--heading-text);}
 
 /* ===== Trade Centre: new-listing alert toggle ===== */

@@ -452,8 +452,7 @@ function renderTodo(me, cls) {
         <div class="todo-title">${it.urgent ? `<span class="todo-tag">Today</span>` : ""}${escapeHtml(it.title)}</div>
         ${it.body ? `<div class="todo-body">${escapeHtml(it.body)}</div>` : ""}
       </div>
-      ${btn}
-      <button type="button" class="todo-dismiss" data-todo-id="${escapeHtml(it.id || "")}" aria-label="Dismiss: ${escapeHtml(it.title)}" title="Dismiss">&times;</button>
+      <div class="todo-actions">${btn}<button type="button" class="todo-dismiss" data-todo-id="${escapeHtml(it.id || it.title)}" aria-label="Dismiss: ${escapeHtml(it.title)}" title="Dismiss">&times;</button></div>
     </li>`;
   }).join("")}</ul>${restore}`;
   list.onclick = ev => {
