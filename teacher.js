@@ -211,17 +211,10 @@ async function render() {
   board.forEach((row, i) => {
     const div = document.createElement("div");
     div.className = "leaderboard-row";
-    div.innerHTML = `
-      <span class="rank-pill ${medalClass(i)}">${i + 1}</span>
-      ${avatarBadge(avById[row.username] || row)}
-      <div style="flex:1;">
-        <div class="leaderboard-name">${escapeHtml(row.name)}</div>
-        <div class="leaderboard-sub">${fmtMoney(row.balance)} cash${row.savings ? ` + ${fmtMoney(row.savings)} savings` : ""}${row.termDeposits ? ` + ${fmtMoney(row.termDeposits)} term deposits` : ""} + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.propertyValue ? ` + ${fmtMoney(row.propertyValue)} property` : ""}${row.gamblingBalance ? ` + ${fmtMoney(row.gamblingBalance)} gambling account` : ""}${row.vehicleValue ? ` + ${fmtMoney(row.vehicleValue)} vehicles` : ""}${row.kiwiSaver ? ` + ${fmtMoney(row.kiwiSaver)} KiwiSaver` : ""}${row.owed ? ` - ${fmtMoney(row.owed)} owed` : ""}</div>
-      </div>
-      <div class="leaderboard-net">${fmtMoney(row.net)}</div>
-    `;
+    div.innerHTML = leaderboardRowHtml(row, i, { avatarSource: avById[row.username] || row, medal: medalClass(i) });
     nwBox.appendChild(div);
   });
+  leaderboardWireTaps(nwBox);
 
   // students table
   const netByUser = {};

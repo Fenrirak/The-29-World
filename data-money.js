@@ -1156,6 +1156,7 @@ async function _creditStudentInterest(classCode, username, dateKey, { force = fa
       credited = credit;
     });
   } catch (e) {
+    console.warn("Interest could not be paid to " + username + " (will retry on the next load):", e);
     return null;
   }
   if (!credited) return null;
@@ -2451,22 +2452,43 @@ async function saveInterestSettings(classCode, settings) {
   if (cashParts.length) out.push({ to: "all", icon: "piggy", tone: "gold", title: "Your teacher changed how interest works", body: cashParts.join("; ") + ".", href: "bank.html" });
   await t29NotifyStudents(classCode, out);
 }
+// The most recent day (today included) that falls on the class's interest
+// day — the date the CURRENT round of interest was scheduled for.
+function _interestScheduledKey(cls, todayKey) {
+  const t = dateKeyToUTC(todayKey);
+  const idx = DAY_NAMES.indexOf(cls.interestDay || "Fri");
+  const back = idx < 0 ? 0 : (new Date(t).getUTCDay() - idx + 7) % 7;
+  return new Date(t - back * 86400000).toISOString().slice(0, 10);
+}
 // Is it THIS student's turn for interest, going by the class's schedule
 // and THEIR OWN lastInterestApplied stamp (not a single class-wide
 // flag — see the big comment above applyMyInterestIfDue/
 // applyInterestToClassIfDue below for why it has to work this way).
-// Same day/frequency logic the old class-wide autoInterestIfDue used,
-// just evaluated per student instead of once for the whole class.
+//
+// BUGFIX: this used to require that TODAY is exactly the interest day, so
+// a weekly "Friday" schedule only ever paid anyone who happened to open the
+// site (or whose teacher did) ON a Friday — on every other day nothing ran,
+// and the per-student stamp the design was built around never got to do its
+// job (a student who missed Friday was never paid for that week). Now a
+// scheduled day that has come and gone without this student being paid
+// still counts: they're paid on their next visit, whatever day that is,
+// exactly once per round. The stamp (lastInterestApplied = the day they
+// were paid) is what stops a second payment.
 function isInterestDueForUser(cls, user, todayKey) {
   if (!cls || !cls.interestAuto || cls.archived) return false;
   if (!user || user.role !== "student") return false;
-  if (user.lastInterestApplied === todayKey) return false;
-  if (cls.interestFrequency !== "daily") {
-    if (nzDayName() !== (cls.interestDay || "Fri")) return false;
-    if (user.lastInterestApplied) {
-      const need = FREQ_DAYS[cls.interestFrequency] || 7;
-      if (daysBetweenKeys(user.lastInterestApplied, todayKey) < need) return false;
-    }
+  const last = user.lastInterestApplied;
+  if (last === todayKey) return false;
+  if (cls.interestFrequency === "daily") return true;
+  const sched = _interestScheduledKey(cls, todayKey);
+  if (last) {
+    if (last >= sched) return false; // already paid since the latest scheduled day (date keys sort as text)
+    // Fortnightly / every 4 weeks: skip the in-between weekly dates. A late
+    // catch-up is at most 6 days after its scheduled day, hence "- 6".
+    const need = FREQ_DAYS[cls.interestFrequency] || 7;
+    if (daysBetweenKeys(last, sched) < need - 6) return false;
+  } else if (typeof user.joinedAt === "number" && nzDateKey(new Date(user.joinedAt)) > sched) {
+    return false; // joined after the latest scheduled day, so their first round is the next one
   }
   return true;
 }
@@ -2564,6 +2586,60 @@ async function applyInterestToClassIfDue(classCode) {
 }
 
 /* ---------------- Leaderboard ---------------- */
+/* Net worth ranking rows (student + teacher pages share this). On a computer
+   the breakdown sits inline under the name. On a phone that run-on line is
+   hidden and the row becomes tap-to-open instead: the tapped row shows a
+   tidy labelled list. A hint line above each list (.lb-hint) tells people. */
+function leaderboardParts(row) {
+  const p = [["cash", "Cash", row.balance, false]];
+  if (row.savings) p.push(["savings", "Savings", row.savings, false]);
+  if (row.termDeposits) p.push(["term deposits", "Term deposits", row.termDeposits, false]);
+  p.push(["invested", "Invested", row.invested, false]);
+  if (row.storeValue) p.push(["items", "Items", row.storeValue, false]);
+  if (row.propertyValue) p.push(["property", "Property", row.propertyValue, false]);
+  if (row.gamblingBalance) p.push(["gambling account", "Gambling account", row.gamblingBalance, false]);
+  if (row.vehicleValue) p.push(["vehicles", "Vehicles", row.vehicleValue, false]);
+  if (row.kiwiSaver) p.push(["KiwiSaver", "KiwiSaver", row.kiwiSaver, false]);
+  if (row.owed) p.push(["owed", "Owed", row.owed, true]);
+  return p;
+}
+function leaderboardRowHtml(row, index, opts) {
+  opts = opts || {};
+  const parts = leaderboardParts(row);
+  const inline = parts.map((p, i) => (i === 0 ? "" : p[3] ? " - " : " + ") + fmtMoney(p[2]) + " " + p[0]).join("");
+  const detail = parts.map(p => `<div class="lb-line${p[3] ? " lb-owed" : ""}"><span>${p[1]}</span><span>${p[3] ? "&minus;" : ""}${fmtMoney(p[2])}</span></div>`).join("")
+    + `<div class="lb-line lb-total"><span>Net worth</span><span>${fmtMoney(row.net)}</span></div>`;
+  return `
+      <span class="rank-pill ${opts.medal || ""}">${index + 1}</span>
+      ${avatarBadge(opts.avatarSource || row)}
+      <div class="lb-main">
+        <div class="leaderboard-name">${escapeHtml(row.name)}${opts.you ? " (you)" : ""}</div>
+        <div class="leaderboard-sub lb-inline">${inline}</div>
+      </div>
+      <div class="leaderboard-net">${fmtMoney(row.net)}</div>
+      <span class="lb-chev" aria-hidden="true"></span>
+      <div class="lb-detail">${detail}</div>
+    `;
+}
+// One delegated listener per list. Only acts on phones (where the inline
+// breakdown is hidden); tapping an avatar still opens the avatar popup.
+function leaderboardWireTaps(box) {
+  if (!box || box._lbWired) return;
+  box._lbWired = true;
+  const phone = () => window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+  const toggle = ev => {
+    if (!phone()) return;
+    const row = ev.target.closest && ev.target.closest(".leaderboard-row");
+    if (!row || !box.contains(row)) return;
+    if (ev.target.closest(".av-img, .student-avatar, [data-av-user]")) return;
+    const open = row.classList.toggle("lb-open");
+    row.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  box.addEventListener("click", toggle);
+  box.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.classList && ev.target.classList.contains("leaderboard-row")) { ev.preventDefault(); toggle(ev); } });
+  box.querySelectorAll(".leaderboard-row").forEach(r => { r.tabIndex = 0; r.setAttribute("aria-expanded", "false"); });
+}
+
 async function classLeaderboard(classCode, viewerUsername, precomputedStudents) {
   const cls = await getClassCached(classCode);
   if (!cls) return [];

@@ -259,17 +259,10 @@ async function render() {
   board.forEach((row, i) => {
     const div = document.createElement("div");
     div.className = "leaderboard-row" + (row.username === me.username ? " me" : "");
-    div.innerHTML = `
-      <span class="rank-pill ${medalClass(i)}">${i + 1}</span>
-      ${avatarBadge(avById[row.username] || row)}
-      <div style="flex:1;">
-        <div class="leaderboard-name">${escapeHtml(row.name)}${row.username === me.username ? " (you)" : ""}</div>
-        <div class="leaderboard-sub">${fmtMoney(row.balance)} cash${row.savings ? ` + ${fmtMoney(row.savings)} savings` : ""}${row.termDeposits ? ` + ${fmtMoney(row.termDeposits)} term deposits` : ""} + ${fmtMoney(row.invested)} invested${row.storeValue ? ` + ${fmtMoney(row.storeValue)} items` : ""}${row.propertyValue ? ` + ${fmtMoney(row.propertyValue)} property` : ""}${row.gamblingBalance ? ` + ${fmtMoney(row.gamblingBalance)} gambling account` : ""}${row.vehicleValue ? ` + ${fmtMoney(row.vehicleValue)} vehicles` : ""}${row.kiwiSaver ? ` + ${fmtMoney(row.kiwiSaver)} KiwiSaver` : ""}${row.owed ? ` - ${fmtMoney(row.owed)} owed` : ""}</div>
-      </div>
-      <div class="leaderboard-net">${fmtMoney(row.net)}</div>
-    `;
+    div.innerHTML = leaderboardRowHtml(row, i, { avatarSource: avById[row.username] || row, you: row.username === me.username, medal: medalClass(i) });
     lbBox.appendChild(div);
   });
+  leaderboardWireTaps(lbBox);
 
   // classmates (reuses allStudents fetched above for the leaderboard)
   const classmates = allStudents.filter(s => s.username !== me.username);
@@ -395,12 +388,16 @@ const TODO_CTA = {
   "loan.html": "Repay", "property.html": "Go to Property", "transport.html": "Pay transport", "bigevents.html": "Decide",
   "marketplace.html": "See offers", "budget.html": "Open budget", "jobs.html": "Find a job", "kiwisaver.html": "Open KiwiSaver"
 };
+let LAST_TODO = null;
+function refreshTodo() { if (LAST_TODO) renderTodo(LAST_TODO.me, LAST_TODO.cls); }
+function restoreTodo() { notifTodoRestoreAll(LAST_TODO.me.username); if (typeof notifRefresh === "function") notifRefresh(LAST_TODO.me.username, CURRENT.classCode); refreshTodo(); }
 function renderTodo(me, cls) {
-  const items = [];
+  LAST_TODO = { me, cls };
+  let items = [];
   if (typeof buildNotifications === "function") {
     if (typeof NOTIF_USER !== "undefined" && !NOTIF_USER) NOTIF_USER = me.username;
-    buildNotifications(me, cls).filter(n => n.action).forEach(n => {
-      const item = { title: n.title, body: n.body, urgent: n.tone === "coral", href: n.href, onClick: n.onClick };
+    buildNotifications(me, cls, { keepDismissed: true }).filter(n => n.action).forEach(n => {
+      const item = { id: n.id, title: n.title, body: n.body, urgent: n.tone === "coral", href: n.href, onClick: n.onClick };
       // On this page, these two are handled right here rather than by a link.
       if (/^promo-/.test(n.id)) { item.onClick = "checkAndShowPromotionPopup(CURRENT.username)"; item.cta = "Answer"; item.href = null; }
       if (/^sh-\d/.test(n.id)) { item.onClick = "document.getElementById('sideHustleCard').scrollIntoView({ behavior: 'smooth' })"; item.cta = "Check in"; item.href = null; }
@@ -412,33 +409,37 @@ function renderTodo(me, cls) {
   const weekKey = isoWeekKey();
   const now = trustedNow().getTime();
   (cls.eventLog || []).filter(l => l.studentUser === me.username && l.week === weekKey && l.type === "choice" && l.status === "pending" && (l.revealAt === undefined || l.revealAt <= now))
-    .forEach(l => items.push({ title: "Choose what to do: " + (l.name || "this week's event"), body: "An event this week is waiting for your choice.", urgent: true,
+    .forEach(l => items.push({ id: "event-choice-" + (l.id || l.week) + "-" + nzDateKey(), title: "Choose what to do: " + (l.name || "this week's event"), body: "An event this week is waiting for your choice.", urgent: true,
       onClick: "checkWeeklyEventPopup(CURRENT.username, CURRENT.classCode)", cta: "Choose" }));
   // Money for bills (the budget's own warning, which already counts savings).
   try {
     const v = buildBudgetView(cls, me, me.username);
     if (v && v.verdict && (v.verdict.tone === "bad" || v.verdict.tone === "warn") && v.shortfall) {
-      items.push({ title: v.verdict.tone === "bad" ? "Not enough money for this week's bills" : "Move money from savings for bills",
+      items.push({ id: "budget-bills-" + nzDateKey(), title: v.verdict.tone === "bad" ? "Not enough money for this week's bills" : "Move money from savings for bills",
         body: v.verdict.text, urgent: v.verdict.tone === "bad", href: "budget.html#budgetCard", cta: "Open budget" });
     }
   } catch (e) { /* budget is a bonus here — never let it stop the list */ }
   // KiwiSaver unlocked after the class retired.
   const ks = typeof kiwiSaverOf === "function" ? kiwiSaverOf(me) : null;
   if (ks && ks.balance > 0 && kiwiSaverSettings(cls).retired) {
-    items.push({ title: "Your KiwiSaver is unlocked", body: `You've retired, so you can take out your ${fmtMoney(ks.balance)} whenever you like.`, href: "kiwisaver.html" });
+    items.push({ id: "kiwisaver-unlocked-" + nzDateKey(), title: "Your KiwiSaver is unlocked", body: `You've retired, so you can take out your ${fmtMoney(ks.balance)} whenever you like.`, href: "kiwisaver.html" });
   }
   // No job yet, and there are jobs to apply for.
   const hasJobs = (cls.jobs || []).some(j => j.tiers && j.tiers.length);
   const applied = (cls.jobApplications || []).some(a => a.studentUser === me.username && (!a.status || a.status === "pending"));
   if (!me.jobId && hasJobs && !applied && !(kiwiSaverSettings(cls).retired)) {
-    items.push({ title: "Get a job", body: "You don't have a job yet, so nothing comes in on pay day. Apply for one on the Jobs page.", href: "jobs.html" });
+    items.push({ id: "get-a-job-" + nzDateKey(), title: "Get a job", body: "You don't have a job yet, so nothing comes in on pay day. Apply for one on the Jobs page.", href: "jobs.html" });
   }
 
   items.sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
+  const total = items.length;
+  items = items.filter(it => !(it.id && notifTodoIsDismissed(me.username, it.id)));
+  const hidden = total - items.length;
   const list = document.getElementById("todoList");
   document.getElementById("todoCount").textContent = items.length ? `${items.length} thing${items.length === 1 ? "" : "s"}` : "";
+  const restore = hidden ? `<p class="todo-restore-row"><button type="button" class="todo-restore" onclick="restoreTodo()">Show ${hidden} dismissed</button></p>` : "";
   if (!items.length) {
-    list.innerHTML = `<p class="todo-empty">You're all caught up. Nothing needs doing today.</p>`;
+    list.innerHTML = `<p class="todo-empty">${hidden ? "Everything is dismissed for now." : "You're all caught up. Nothing needs doing today."}</p>${restore}`;
     return;
   }
   list.innerHTML = `<ul class="todo-list">${items.map(it => {
@@ -452,8 +453,15 @@ function renderTodo(me, cls) {
         ${it.body ? `<div class="todo-body">${escapeHtml(it.body)}</div>` : ""}
       </div>
       ${btn}
+      <button type="button" class="todo-dismiss" data-todo-id="${escapeHtml(it.id || "")}" aria-label="Dismiss: ${escapeHtml(it.title)}" title="Dismiss">&times;</button>
     </li>`;
-  }).join("")}</ul>`;
+  }).join("")}</ul>${restore}`;
+  list.onclick = ev => {
+    const x = ev.target.closest && ev.target.closest(".todo-dismiss");
+    if (!x) return;
+    notifTodoDismiss(me.username, x.getAttribute("data-todo-id"));
+    refreshTodo();
+  };
 }
 
 /* Savings goals: see savings-goals.js (shared with the Bank page). */

@@ -727,7 +727,7 @@ async function createListing(username, classCode, { assetType, assetId, price, d
         description: String(description || "").trim().slice(0, 240),
         price: amount, quantity: qtyRaw,
         status: mp.requireApproval ? "pending" : "active",
-        createdKey: nzDateKey(), ts: Date.now(),
+        createdKey: nzDateKey(), ts: Date.now(), liveTs: mp.requireApproval ? null : Date.now(),
         soldTo: null, soldTs: null, soldPrice: null, fee: 0, offers: []
       };
       cls.listings.push(created);
@@ -870,6 +870,7 @@ async function decideListing(classCode, listingId, approve, reason) {
     const l = cls.listings.find(x => x.id === listingId);
     if (!l || l.status !== "pending") return;
     l.status = approve ? "active" : "rejected";
+    if (approve) l.liveTs = Date.now();
     if (!approve) l.rejectReason = String(reason || "").slice(0, 160);
     t.update(classRef, { listings: cls.listings });
   });

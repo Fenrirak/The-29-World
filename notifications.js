@@ -575,6 +575,30 @@ function notifMarketplaceItems(me, cls) {
   return out;
 }
 
+/* ---- Trade Centre: "tell me when something new is listed" (opt-in) ----
+   Per student, per device, kept in localStorage like device alerts. The stored value is
+   when they switched it on, so only listings that go live AFTER that are announced.
+   Items are ordinary bell items, so device alerts (if on) cover them too. */
+function notifMktNewKey(u) { return "t29-mkt-new-" + u; }
+function notifMktNewGet(u) { try { return Number(localStorage.getItem(notifMktNewKey(u))) || 0; } catch (e) { return 0; } }
+function notifMktNewSet(u, on) {
+  try { if (on) localStorage.setItem(notifMktNewKey(u), String(Date.now())); else localStorage.removeItem(notifMktNewKey(u)); } catch (e) { /* private mode */ }
+}
+function notifMarketplaceNewListingItems(me, cls) {
+  const since = notifMktNewGet(me.username);
+  if (!since || !cls.marketplace || !cls.marketplace.enabled) return [];
+  const cutoff = Math.max(since, trustedNow().getTime() - 3 * 86400000);
+  return (cls.listings || []).filter(l => l.status === "active" && l.seller !== me.username && (l.liveTs || l.ts || 0) > cutoff).map(l => {
+    const q = listingQuantity(l);
+    return {
+      id: "newlisting-" + l.id, ts: l.liveTs || l.ts, icon: "swap", tone: "gold",
+      title: `New in the Trade Centre: ${l.name}${q > 1 ? " ×" + q : ""}`,
+      body: `A classmate listed ${q > 1 ? "these" : "it"} at ${fmtMoney(l.price)}${q > 1 ? " each" : ""}. Open the Trade Centre to take a look.`,
+      href: "marketplace.html"
+    };
+  });
+}
+
 // ---- Teachers: requests from students (see t29NotifyTeacher in data-core.js) ----
 // Where each kind of request is dealt with, and its icon. These are fixed here, never taken
 // from the stored notice, because that text is written by students.
@@ -637,8 +661,39 @@ function notifTeacherChangeItems(me, cls) {
   return out;
 }
 
-function buildNotifications(me, cls) {
-  const items = [].concat(
+/* ---- Dismissing to-do items ----
+   A student can dismiss anything that needs action (X on the dashboard's
+   "To do today" and on the bell's action rows). Remembered per device by item id.
+   Most ids carry today's date, so a dismissed reminder for something still
+   unresolved (a loan, rent, transport) comes back tomorrow; one-off items stay gone.
+   "Show dismissed" on the dashboard brings them all back. */
+function notifTodoKey(u) { return "t29-todo-dismissed-" + u; }
+function notifTodoMap(u) {
+  try { const m = JSON.parse(localStorage.getItem(notifTodoKey(u)) || "{}"); return m && typeof m === "object" ? m : {}; } catch (e) { return {}; }
+}
+function notifTodoIsDismissed(u, id) { return !!id && !!u && !!notifTodoMap(u)[id]; }
+function notifTodoDismiss(u, id) {
+  if (!u || !id) return;
+  const m = notifTodoMap(u), cutoff = Date.now() - 14 * 86400000;
+  m[id] = Date.now();
+  const keep = {};
+  Object.keys(m).filter(k => m[k] > cutoff).sort((a, b) => m[b] - m[a]).slice(0, 200).forEach(k => { keep[k] = m[k]; });
+  try { localStorage.setItem(notifTodoKey(u), JSON.stringify(keep)); } catch (e) { /* private mode: lasts until reload */ }
+  notifDropItem(id);
+}
+function notifTodoRestoreAll(u) { try { localStorage.removeItem(notifTodoKey(u)); } catch (e) {} }
+function notifDropItem(id) {
+  NOTIF_ITEMS = NOTIF_ITEMS.filter(n => n.id !== id);
+  if (typeof notifPaint === "function") notifPaint();
+}
+function notifDismissFromBell(ev, btn) {
+  ev.preventDefault(); ev.stopPropagation();
+  notifTodoDismiss(NOTIF_USER, btn.getAttribute("data-nid"));
+  if (typeof refreshTodo === "function") refreshTodo();
+}
+
+function buildNotifications(me, cls, opts) {
+  let items = [].concat(
     notifLoanItems(me),
     notifCardItems(me, cls),
     notifMortgageItems(me, cls),
@@ -653,8 +708,10 @@ function buildNotifications(me, cls) {
     notifSideHustleRequestItems(me, cls),
     notifQuizItems(me, cls),
     notifMarketplaceItems(me, cls),
+    notifMarketplaceNewListingItems(me, cls),
     notifTeacherChangeItems(me, cls)
   );
+  if (!(opts && opts.keepDismissed)) items = items.filter(n => !(n.action && notifTodoIsDismissed(me.username, n.id)));
   // Order: needs-action first, then unread-over-read, then newest first.
   // The unread tiebreaker matters because several builders (term deposits,
   // marketplace listings) carry timestamps that don't reset day to day —
@@ -1208,6 +1265,7 @@ function notifRenderList() {
         ${n.body ? `<span class="notif-sub">${escapeHtml(n.body)}</span>` : ""}
         <span class="notif-time">${n.urgent ? "URGENT · " : n.action ? "Needs your attention · " : ""}${notifRelativeTime(n.ts)}</span>
       </span>
+      ${n.action && !NOTIF_IS_TEACHER ? `<button type="button" class="notif-dismiss" data-nid="${escapeHtml(n.id)}" aria-label="Dismiss: ${escapeHtml(n.title)}" title="Dismiss" onclick="notifDismissFromBell(event,this)">&times;</button>` : ""}
     </${tag}>`;
   }).join("");
 

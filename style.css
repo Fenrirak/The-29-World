@@ -4431,3 +4431,47 @@ body.t29-page-locked main,body.t29-page-locked .site-footer{visibility:hidden;}
   .qr-desktop{display:none;}
   .qr-mobile{display:block;}
 }
+
+
+/* ===== Transport: total + status badge (was right-aligned inside a narrow wrapped box on phones) ===== */
+.transport-total{text-align:right;}
+.transport-total-amt{font-size:1.4em;font-weight:700;}
+@media (max-width:640px){
+  .transport-total{flex:1 1 100%;text-align:left;display:flex;align-items:center;flex-wrap:wrap;gap:10px;}
+}
+
+/* ===== To do: dismiss ===== */
+.todo-item{position:relative;padding-right:34px;}
+.todo-dismiss,.notif-dismiss{background:none;border:0;color:var(--muted);font-size:22px;line-height:1;padding:2px 8px;border-radius:8px;cursor:pointer;flex-shrink:0;}
+.todo-dismiss{position:absolute;right:0;top:50%;transform:translateY(-50%);}
+.todo-dismiss:hover,.notif-dismiss:hover{background:var(--line);color:var(--navy-900);}
+.notif-dismiss{align-self:flex-start;margin:-4px -6px 0 0;}
+.todo-restore-row{margin:8px 0 0;}
+.todo-restore{background:none;border:0;padding:0;color:var(--muted);font-size:var(--fs-md);font-weight:700;text-decoration:underline;cursor:pointer;}
+@media (max-width:640px){.todo-dismiss{top:10px;transform:none;}}
+html.dark-mode .todo-dismiss:hover,html.dark-mode .notif-dismiss:hover{color:var(--heading-text);}
+
+/* ===== Trade Centre: new-listing alert toggle ===== */
+.mkt-notify{display:flex;align-items:flex-start;gap:10px;margin:10px 0 14px;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--r-3);cursor:pointer;}
+.mkt-notify input{width:20px;height:20px;min-height:auto;flex-shrink:0;margin-top:2px;accent-color:var(--navy-900);}
+
+/* ===== Net worth ranking: tap-to-open on phones ===== */
+.lb-main{flex:1;min-width:0;}
+.lb-detail,.lb-chev,.lb-hint{display:none;}
+.lb-line{display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:var(--fs-md);}
+.lb-line + .lb-line{border-top:1px solid var(--line);}
+.lb-owed span:last-child{color:var(--coral);}
+.lb-total{font-weight:800;color:var(--navy-900);}
+@media (max-width:640px){
+  .lb-hint{display:block;margin:0 0 6px;}
+  .leaderboard-row{flex-wrap:wrap;gap:8px;padding:10px 8px;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  .leaderboard-row .lb-inline{display:none;}
+  .leaderboard-row .leaderboard-name{overflow-wrap:anywhere;line-height:1.25;}
+  .leaderboard-net{font-size:1rem;white-space:nowrap;}
+  #leaderboardList .leaderboard-row .student-avatar,#netWorthList .leaderboard-row .student-avatar{width:40px !important;height:40px !important;min-width:40px;font-size:14px !important;}
+  .lb-chev{display:block;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin:0 4px 3px 2px;flex-shrink:0;transition:transform .15s ease;}
+  .leaderboard-row.lb-open .lb-chev{transform:rotate(-135deg);margin-bottom:-3px;}
+  .leaderboard-row.lb-open .lb-detail{display:block;flex:1 1 100%;order:9;margin:2px 0 4px;padding:6px 12px;border-radius:var(--r-3);background:rgba(15,30,60,.05);}
+}
+html.dark-mode .lb-detail{background:rgba(255,255,255,.06) !important;}
+html.dark-mode .lb-total{color:var(--heading-text);}

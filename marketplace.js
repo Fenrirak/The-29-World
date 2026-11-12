@@ -198,6 +198,7 @@ function renderStudent() {
   const shown = FILTER === "all" ? others : others.filter(l => l.assetType === FILTER);
   document.getElementById("noBrowse").classList.toggle("hidden", shown.length > 0);
   document.getElementById("browseList").innerHTML = shown.map(l => listingCardHtml(l, {})).join("");
+  mktSyncNotifyBox();
 
   document.getElementById("noSold").classList.toggle("hidden", sold.length > 0);
   document.getElementById("soldTable").innerHTML = sold.slice(0, 20).map(l => {
@@ -629,3 +630,23 @@ async function cancelMine(id) {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+
+/* "Tell me when something new is listed": each new listing from a classmate
+   becomes an item in the bell (see notifMarketplaceNewListingItems). */
+function mktSyncNotifyBox() {
+  const box = document.getElementById("mktNotifyNew");
+  if (!box || !ME) return;
+  const on = notifMktNewGet(ME.username) > 0;
+  box.checked = on;
+  const deviceOn = typeof notifDeviceAlertsOn === "function" && notifDeviceAlertsOn();
+  document.getElementById("mktNotifyHelp").textContent = !on
+    ? " You'll get a message in the bell every time a classmate puts something up."
+    : deviceOn ? " On. New listings show in the bell and as a device alert."
+    : " On. New listings show in the bell. Turn on device alerts from the bell to get a phone or computer alert as well.";
+}
+async function mktToggleNotify(on) {
+  notifMktNewSet(ME.username, on);
+  mktSyncNotifyBox();
+  if (typeof notifRefresh === "function") notifRefresh(ME.username, CURRENT.classCode);
+}

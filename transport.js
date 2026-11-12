@@ -488,8 +488,8 @@ function renderTransportExpenses(me, cls) {
   document.getElementById("transportExpensesBody").innerHTML = `
     <div class="flex-between" style="align-items:flex-start;">
       <div>${lines.join("")}</div>
-      <div style="text-align:right;">
-        <div style="font-size:1.4em;font-weight:700;">${fmtMoney(amt.total)}</div>
+      <div class="transport-total">
+        <div class="transport-total-amt">${fmtMoney(amt.total)}</div>
         ${statusBadge}
       </div>
     </div>
