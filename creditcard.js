@@ -127,32 +127,33 @@ function ccRandomTheme(planId) {
 }
 
 /* ---------------- Lifetime totals: what adds up to them ---------------- */
-function ccTsLabel(ts) {
-  try { return new Date(ts).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland", weekday: "short", day: "numeric", month: "short" }).replace(",", ""); } catch (e) { return ""; }
-}
-// Every cashback / interest / fee line behind the two totals. New ones come from the
-// card's own itemised log (data-money.js, cardLogLifetime). Older ones are recovered from
-// the class transaction list (which only keeps the latest ~200). Anything older still shows
-// as one "Earlier" line, so the rows always add up to the totals above.
-function ccLifetimeItems(me, cls) {
-  const c = me.creditCard, lt = c.lifetime || {};
-  const logged = (c.lifetimeLog || []).map(e => ({ kind: e.kind, amount: e.amount, note: e.note, ts: e.ts, label: e.dateKey ? cardDateLabel(e.dateKey) : ccTsLabel(e.ts) }));
-  const from = c.lifetimeLogFrom || Infinity, since = c.appliedTs || 0;
-  const kindOf = { "card-cashback": "cashback", "card-interest": "interest", "card-fee": "fee" };
-  const older = ((cls && cls.txns) || []).filter(t => t && t.ts && t.ts < from && t.ts >= since && kindOf[t.type]
-    && (t.type === "card-cashback" ? t.to === me.username : t.from === me.username))
-    .map(t => ({ kind: kindOf[t.type], amount: cardRound(t.amount), note: t.note || "", ts: t.ts, label: ccTsLabel(t.ts) }));
-  const sum = a => cardRound(a.reduce((n, x) => n + x.amount, 0));
-  const build = (isIn, total) => {
-    let rows = logged.filter(isIn);
-    const extra = older.filter(isIn);
-    if (sum(rows) + sum(extra) <= total + 0.004) rows = rows.concat(extra); // never let recovered lines overshoot the total
-    rows.sort((a, b) => b.ts - a.ts);
-    return { rows, total, earlier: cardRound(Math.max(0, total - sum(rows))) };
-  };
+// Cashback box = cashback + spend rewards + vouchers used. Interest box = interest + fees.
+function ccLtCashTotal(lt) { return cardRound(((lt && lt.cashback) || 0) + ((lt && lt.voucherSaved) || 0)); }
+// Parts are tracked on the card (data-money.js, cardLifetimeAdd). For a card that already had
+// totals, older parts are recovered from the class transaction list (it only keeps the newest
+// ~200 lines class-wide); whatever is left shows as "Earlier", so the lines always add up.
+function ccLifetimeParts(me, cls) {
+  const c = me.creditCard, lt = c.lifetime || {}, T = v => cardRound(v || 0);
+  const from = lt.trackedFrom || Infinity, since = c.appliedTs || 0;
+  const num = m => (m ? Number(m[1].replace(/,/g, "")) : 0);
+  let bPct = 0, bFixed = 0, bMonthly = 0, bLate = 0;
+  ((cls && cls.txns) || []).filter(t => t && t.ts && t.ts < from && t.ts >= since).forEach(t => {
+    const amt = T(t.amount), note = t.note || "";
+    if (t.type === "card-cashback" && t.to === me.username) {
+      let pv = num(/% cashback \$([\d,]+(?:\.\d+)?)/.exec(note)), fv = num(/ = \$([\d,]+(?:\.\d+)?)\s*$/.exec(note));
+      if (Math.abs(pv + fv - amt) > 0.011) { pv = amt; fv = 0; } // can't split it (capped at the spend): call it cashback
+      bPct += pv; bFixed += fv;
+    } else if (t.type === "card-fee" && t.from === me.username) {
+      if (/^Late payment fee/.test(note)) bLate += amt; else bMonthly += amt;
+    }
+  });
+  let pct = T(lt.cashbackPct), fixed = T(lt.rewardFixed), monthly = T(lt.monthlyFees), late = T(lt.lateFees);
+  const cashOld = Math.max(0, T(lt.cashback) - pct - fixed), feeOld = Math.max(0, T(lt.fees) - monthly - late);
+  if (bPct + bFixed <= cashOld + 0.004) { pct += bPct; fixed += bFixed; }       // never let recovered lines overshoot the total
+  if (bMonthly + bLate <= feeOld + 0.004) { monthly += bMonthly; late += bLate; }
   return {
-    cash: build(x => x.kind === "cashback", cardRound(lt.cashback || 0)),
-    cost: build(x => x.kind !== "cashback", cardRound((lt.interest || 0) + (lt.fees || 0)))
+    cash: { lines: [["Cashback", T(pct)], ["Spend reward", T(fixed)], ["Voucher", T(lt.voucherSaved)]], earlier: T(Math.max(0, T(lt.cashback) - pct - fixed)) },
+    cost: { lines: [["Interest", T(lt.interest)], ["Monthly fee", T(monthly)], ["Late fee", T(late)]], earlier: T(Math.max(0, T(lt.fees) - monthly - late)) }
   };
 }
 function ccInjectLifetimeCss() {
@@ -160,42 +161,23 @@ function ccInjectLifetimeCss() {
   const st = document.createElement("style");
   st.id = "ccLtCss";
   st.textContent = `
-.cc-ltb{margin-top:12px;display:flex;flex-direction:column;gap:10px}
-.cc-ltb-sec{border:1px solid rgba(120,130,170,.25);border-radius:12px;padding:10px 12px;background:rgba(120,130,170,.06)}
-.cc-ltb-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;opacity:.9}
-.cc-ltb-head b{font-size:13px;letter-spacing:0}
-.cc-ltb-list{list-style:none;margin:6px 0 0;padding:0;max-height:210px;overflow:auto}
-.cc-ltb-list li{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;padding:6px 0;border-top:1px solid rgba(120,130,170,.18);font-size:12px;line-height:1.3}
-.cc-ltb-list li:first-child{border-top:0}
-.cc-ltb-d{opacity:.7;white-space:nowrap}
-.cc-ltb-t small{display:block;opacity:.7;font-size:11px}
-.cc-ltb-a{font-weight:800;white-space:nowrap}
-.cc-ltb-a.good{color:#177a5c}.cc-ltb-a.bad{color:#b0402a}
-.cc-ltb-empty{margin:6px 0 0;font-size:12px;opacity:.7}`;
+.cc-ltb{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+.cc-ltb ul{list-style:none;margin:0;padding:0 4px;font-size:13px;line-height:1.55}
+.cc-ltb li{padding:1px 0}
+.cc-ltb b{font-weight:800}
+.cc-ltb b.good{color:#177a5c}.cc-ltb b.bad{color:#b0402a}
+.cc-ltb .none{opacity:.65}`;
   document.head.appendChild(st);
-}
-function ccLtRowText(r) {
-  let head = String(r.note || ""), parts = "";
-  if (r.kind === "cashback") {
-    const i = head.indexOf(": ");
-    if (i > 0) { parts = head.slice(i + 2); head = head.slice(0, i); }
-    head = head.replace(/^Cashback \$[\d,]+(\.\d+)? on /, "Cashback on ");
-  } else if (r.kind === "interest") head = head.replace(/^Interest on unpaid statement /, "Interest on unpaid balance ");
-  return `<span class="cc-ltb-t">${ccEsc(head)}${parts ? `<small>${ccEsc(parts)}</small>` : ""}</span>`;
 }
 function ccLifetimeHtml(me, cls) {
   ccInjectLifetimeCss();
-  const it = ccLifetimeItems(me, cls);
-  const sec = (title, g, cls2, sign, emptyMsg) => {
-    const rows = g.rows.map(r => `<li><span class="cc-ltb-d">${ccEsc(r.label)}</span>${ccLtRowText(r)}<span class="cc-ltb-a ${cls2}">${sign}${fmtMoney(r.amount)}</span></li>`);
-    if (g.earlier > 0.004) rows.push(`<li><span class="cc-ltb-d">Earlier</span><span class="cc-ltb-t">Older activity (no longer itemised)</span><span class="cc-ltb-a ${cls2}">${sign}${fmtMoney(g.earlier)}</span></li>`);
-    return `<section class="cc-ltb-sec"><div class="cc-ltb-head"><span>${title}</span><b class="${cls2}">${sign}${fmtMoney(g.total)}</b></div>
-      ${rows.length ? `<ul class="cc-ltb-list">${rows.join("")}</ul>` : `<p class="cc-ltb-empty">${emptyMsg}</p>`}</section>`;
+  const p = ccLifetimeParts(me, cls);
+  const col = (g, tone, sign) => {
+    const rows = g.lines.filter(l => l[1] > 0.004).map(l => `<li>${ccEsc(l[0])}: <b class="${tone}">${sign}${fmtMoney(l[1])}</b></li>`);
+    if (g.earlier > 0.004) rows.push(`<li title="From before this breakdown was kept">Earlier: <b class="${tone}">${sign}${fmtMoney(g.earlier)}</b></li>`);
+    return `<ul>${rows.join("") || `<li class="none">Nothing yet</li>`}</ul>`;
   };
-  return `<div class="cc-ltb">
-    ${sec("What makes up your cashback", it.cash, "good", "+", "Nothing yet. Cashback is added when a statement closes.")}
-    ${sec("What makes up your interest &amp; fees", it.cost, "bad", "", "No interest or fees so far.")}
-  </div>`;
+  return `<div class="cc-ltb">${col(p.cash, "good", "+")}${col(p.cost, "bad", "\u2212")}</div>`;
 }
 
 /* ---------------- Little building blocks ---------------- */
@@ -390,7 +372,7 @@ function ccActiveHtml(me, cls) {
       ${ccVisual(cls, plan, me.name, cardLast4(me.username))}
       <div class="cc-perks center">${ccPerks(plan)}</div>
       <div class="cc-lifetime">
-        <div><span>Cashback &amp; rewards</span><strong class="good">${fmtMoney(lt.cashback || 0)}</strong></div>
+        <div><span>Cashback &amp; rewards</span><strong class="good">${fmtMoney(ccLtCashTotal(lt))}</strong></div>
         <div><span>Interest &amp; fees charged</span><strong class="${(lt.interest || 0) + (lt.fees || 0) > 0 ? "bad" : ""}">${fmtMoney((lt.interest || 0) + (lt.fees || 0))}</strong></div>
       </div>
       ${ccLifetimeHtml(me, cls)}

@@ -4801,15 +4801,16 @@ function cardStmtRemaining(card) {
 // The amount that costs lifestyle points: last period's closing balance
 // that is still unpaid — counted from the day it closes, free days included.
 function cardOwedForPenalty(user) { return cardIsActive(user) ? cardStmtRemaining(user.creditCard) : 0; }
-// Itemised record of everything that adds up to card.lifetime (cashback,
-// interest, fees), so the Bank page can show WHAT makes up each total.
-// Written at the same moment as the totals, so the two always agree.
-const CARD_LOG_MAX = 300;
-function cardLogLifetime(card, kind, amount, note, dateKey) {
+// Running totals behind the Bank page's "Cashback & rewards" and "Interest & fees"
+// boxes, split by where the money came from: cashbackPct, rewardFixed, voucherSaved,
+// monthlyFees, lateFees (interest and the fees total are kept directly on lifetime).
+// trackedFrom marks when this started, so older cards can tell what came before it.
+function cardLifetimeAdd(card, field, amount) {
   amount = cardRound(amount);
-  if (!(amount > 0)) return;
-  if (!card.lifetimeLogFrom) card.lifetimeLogFrom = Date.now(); // entries before this were not itemised on the card
-  card.lifetimeLog = (card.lifetimeLog || []).concat([{ ts: Date.now(), dateKey: dateKey || null, kind, amount, note: note || "" }]).slice(-CARD_LOG_MAX);
+  if (!card || !(amount > 0)) return;
+  const lt = card.lifetime = card.lifetime || { cashback: 0, interest: 0, fees: 0 };
+  if (!lt.trackedFrom) lt.trackedFrom = Date.now();
+  lt[field] = cardRound((lt[field] || 0) + amount);
 }
 function cardAvailable(card, plan) { return cardRound(Math.max(0, (plan ? plan.limit : 0) - ((card && card.balance) || 0))); }
 // What a statement period's spending earns on this plan. Spend-and-earn is
@@ -5325,6 +5326,7 @@ function cardConsumeVoucher(card, voucher) {
   const i = (card.vouchers || []).findIndex(v => v.id === voucher.id);
   if (i < 0) return;
   const v = card.vouchers[i];
+  cardLifetimeAdd(card, "voucherSaved", voucher.saves); // counts towards "Cashback & rewards" on the Bank page
   if (v.kind === "credit") { v.left = cardRound((v.left || 0) - voucher.saves); if (v.left <= 0.004) card.vouchers.splice(i, 1); }
   else card.vouchers.splice(i, 1);
 }
@@ -5342,7 +5344,7 @@ function cardLateCheck(card, plan, asOfKey, logs) {
     s.lateFee = plan.lateFee;
     const lateNote = `Late payment fee. The ${fmtMoney(s.minDue)} minimum wasn't paid by ${cardDateLabel(s.dueKey)}`;
     logs.push({ type: "card-fee", amount: plan.lateFee, note: lateNote });
-    cardLogLifetime(card, "fee", plan.lateFee, lateNote, asOfKey);
+    cardLifetimeAdd(card, "lateFees", plan.lateFee);
   }
   return true;
 }
@@ -5363,7 +5365,6 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     card.lifetime.interest = cardRound(card.lifetime.interest + interest);
     const intNote = `Interest on unpaid statement (${fmtMoney(interestBase)} still owing): ${plan.rate}% for 2 weeks`;
     logs.push({ type: "card-interest", amount: interest, note: intNote });
-    cardLogLifetime(card, "interest", interest, intNote, closeKey);
   }
   card.cycles = (card.cycles || 0) + 1;
   let fee = 0;
@@ -5372,7 +5373,7 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     card.balance = cardRound(card.balance + fee);
     card.lifetime.fees = cardRound(card.lifetime.fees + fee);
     logs.push({ type: "card-fee", amount: fee, note: `Monthly card fee: ${plan.name}` });
-    cardLogLifetime(card, "fee", fee, `Monthly card fee: ${plan.name}`, closeKey);
+    cardLifetimeAdd(card, "monthlyFees", fee);
   }
   // Cashback + spend-and-earn reward for the period just ended. It is a
   // STATEMENT CREDIT: it comes straight off the closing balance below. Only
@@ -5390,7 +5391,9 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     if (rw.fixed > 0) parts.push(`${fmtMoney(rw.back)} back for every ${fmtMoney(rw.every)} in a single purchase × ${rw.steps} = ${fmtMoney(rw.fixed)}`);
     const cbNote = `Cashback ${fmtMoney(cashback)} on ${fmtMoney(card.periodSpend)} spent: ${parts.join(" + ")}`;
     logs.push({ type: "card-cashback", amount: cashback, note: cbNote });
-    cardLogLifetime(card, "cashback", cashback, cbNote, closeKey);
+    const pctPart = Math.min(rw.pct || 0, cashback);
+    cardLifetimeAdd(card, "cashbackPct", pctPart);
+    cardLifetimeAdd(card, "rewardFixed", cashback - pctPart);
   }
   const nextClose = dateKeyPlusDays(closeKey, CARD_CYCLE_DAYS);
   card.vouchers = (card.vouchers || []).filter(v => v.expiryKey > closeKey).concat(cardIssueVouchers(plan, nextClose));
