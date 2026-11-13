@@ -267,6 +267,7 @@ async function processJobPromotions(classCode) {
     try {
       const userRef = usersCol().doc(student.username);
       await fdb.runTransaction(async (t) => {
+        offered = false; // reset every attempt: this callback can be retried
         const snap = await t.get(userRef);
         if (!snap.exists) return;
         const live = snap.data();

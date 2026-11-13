@@ -1178,39 +1178,40 @@ async function processPropertyRent(classCode) {
     // rentLastPaidDate is never reset by a move, so it still remembers.
     if (prop.rentLastPaidDate === todayKey) continue;
     const classRef = classesCol().doc(classCode);
-    let didRun = false, amt = 0, owner = "";
+    // The transaction RETURNS what it did, and only a commit that really
+    // happened gets logged. (This used to set didRun/amt/owner inside the
+    // callback and read them afterwards. When the commit was then refused or
+    // lost a contention race, e.g. a classmate's page trying to credit the
+    // owner, the stale didRun === true still logged "Weekly rent received" on
+    // every page load while the money only moved once.)
+    let paid = null;
     try {
-      // Owner credit + the "paid" stamp now happen in ONE transaction (same
-      // atomic pattern as payTenantRent) — a bare adjustBalance() call
-      // afterwards can silently no-op on contention while the week still
-      // gets marked paid and logged as a success, which is exactly the
-      // "rent paid but never arrived" bug this replaces.
-      await fdb.runTransaction(async (t) => {
-        didRun = false;
+      // Owner credit + the "paid" stamp happen in ONE transaction (same
+      // atomic pattern as payTenantRent).
+      paid = await fdb.runTransaction(async (t) => {
         const classSnap = await t.get(classRef);
-        if (!classSnap.exists) return;
+        if (!classSnap.exists) return null;
         const liveCls = withNewModuleDefaults(classSnap.data());
         const liveProp = liveCls.properties.find(p => p.id === prop.id);
-        if (!liveProp || !liveProp.owner || liveProp.occupancy !== "rented") return;
-        if (liveProp.rentLastWeekPaid === weekKey) return;
-        if (liveProp.rentLastPaidDate === todayKey) return;
+        if (!liveProp || !liveProp.owner || liveProp.occupancy !== "rented") return null;
+        if (liveProp.rentLastWeekPaid === weekKey) return null;
+        if (liveProp.rentLastPaidDate === todayKey) return null;
         const ownerRef = usersCol().doc(liveProp.owner);
         const ownerSnap = await t.get(ownerRef); // ownership may have changed since the first attempt
-        if (!ownerSnap.exists) return;
+        if (!ownerSnap.exists) return null;
         const ownerData = ownerSnap.data();
-        amt = liveProp.rentPerWeek;
-        owner = liveProp.owner;
+        const amt = liveProp.rentPerWeek;
         liveProp.rentLastWeekPaid = weekKey;
         liveProp.rentLastPaidDate = todayKey;
         t.update(classRef, { properties: liveCls.properties });
         if (ownerData.role !== "teacher") {
           t.update(ownerRef, { balance: Math.round((ownerData.balance + amt) * 100) / 100 });
         }
-        didRun = true;
+        return { amt, owner: liveProp.owner };
       });
-    } catch (e) { /* ignore, try next */ }
-    if (didRun) {
-      await logTxn(classCode, { type: "property-rent", to: owner, amount: amt, note: `Weekly rent received: ${prop.name}` });
+    } catch (e) { paid = null; /* refused or contended: nothing moved, so nothing is logged; tries again next load */ }
+    if (paid) {
+      await logTxn(classCode, { type: "property-rent", to: paid.owner, amount: paid.amt, note: `Weekly rent received: ${prop.name}` });
       ran++;
     }
   }

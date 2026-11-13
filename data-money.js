@@ -2361,6 +2361,7 @@ async function processTermDeposits(classCode) {
     if (!cls || cls.archived) return 0;
     if (cls.lastTermDepositCheckDay === todayKey) return 0;
     await fdb.runTransaction(async (t) => {
+      claimed = false; // reset every attempt: this callback can be retried
       const snap = await t.get(classRef);
       if (!snap.exists) return;
       const liveCls = snap.data();
