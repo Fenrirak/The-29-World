@@ -1820,7 +1820,7 @@ async function checkinSideHustle(username, classCode) {
       const life = getLifeBenefitTotals(user);
       if (life.incomePercent) amount = Math.round(amount * (1 + life.incomePercent / 100) * 100) / 100;
       hustleName = hustle.name;
-      streak = (sh.streak || 0) + 1;
+      streak = sideHustleStreakAfterCheckin(sh, todayKey);
       const newBal = Math.round((user.balance + amount) * 100) / 100;
       t.update(userRef, {
         balance: newBal,

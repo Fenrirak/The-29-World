@@ -324,6 +324,22 @@ function dateKeyToUTC(key) {
 function daysBetweenKeys(earlierKey, laterKey) {
   return Math.round((dateKeyToUTC(laterKey) - dateKeyToUTC(earlierKey)) / 86400000);
 }
+// Side hustle streak = consecutive NZ calendar days with a check-in.
+// Checking in the day after the last check-in extends it; any longer gap
+// (or a first check-in) starts a new streak at 1.
+function sideHustleStreakAfterCheckin(sh, todayKey) {
+  const last = sh && sh.lastCheckin;
+  if (last && daysBetweenKeys(last, todayKey) === 1) return (Number(sh.streak) || 0) + 1;
+  return 1;
+}
+// Streak to DISPLAY right now: still alive if the last check-in was today or
+// yesterday, otherwise it has been broken (0), even though the stored value
+// only gets reset at the next check-in.
+function sideHustleLiveStreak(sh, todayKey) {
+  if (!sh || !sh.lastCheckin) return 0;
+  const gap = daysBetweenKeys(sh.lastCheckin, todayKey);
+  return gap === 0 || gap === 1 ? (Number(sh.streak) || 0) : 0;
+}
 // Current hour (0-23) and minute in NZ wall-clock time — used by the side
 // hustle check-in window (must check in within 15 min of the chosen hour).
 function nzHourMinute(d) {

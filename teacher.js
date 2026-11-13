@@ -1336,7 +1336,7 @@ async function renderProfile(username) {
       <div class="auto-row">
         <div class="auto-details">
           <strong>${escapeHtml(shDef.name)}</strong>
-          <div class="muted-small">Checks in at ${hourLabel(sh.checkinHour)} &middot; ${fmtMoney(payout)} per check-in${sh.streak ? ` &middot; streak: ${sh.streak}` : ""}</div>
+          <div class="muted-small">Checks in at ${hourLabel(sh.checkinHour)} &middot; ${fmtMoney(payout)} per check-in${sideHustleLiveStreak(sh, nzDateKey()) ? ` &middot; streak: ${sideHustleLiveStreak(sh, nzDateKey())}` : ""}</div>
           <div class="muted-small">Last checked in: ${sh.lastCheckin || "Never"}</div>
         </div>
       </div>
