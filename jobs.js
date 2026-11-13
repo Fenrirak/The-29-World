@@ -92,6 +92,7 @@ async function render() {
 function renderTeacherView(cls, students) {
   renderPayDay(cls);
   renderSideHustles(cls, students);
+  paintHustleReco(cls);
   renderJobsGrid(cls, students);
   renderLogTracker(cls, students);
   renderApplications(cls, students);
@@ -124,28 +125,6 @@ async function savePayDay() {
 /* ── Side hustles (teacher) ────────────────────────────────────────── */
 function renderSideHustles(cls, students) {
   shEnsureBuilder(cls);
-  const reqBox = document.getElementById("sideHustleRequests");
-  const pending = students.filter(s => s.sideHustleRequest && s.sideHustleRequest.status === "pending");
-  document.getElementById("noSideHustleRequests").classList.toggle("hidden", pending.length > 0);
-  reqBox.innerHTML = "";
-  pending.forEach(s => {
-    const req = s.sideHustleRequest;
-    const hustles = cls.sideHustles || [];
-    const from = hustles.find(h => h.id === (s.sideHustle || {}).hustleId);
-    const to = hustles.find(h => h.id === req.hustleId);
-    const row = document.createElement("div");
-    row.className = "auto-row";
-    row.innerHTML = `
-      <div class="auto-details"><strong>${escapeHtml(s.name)}</strong>
-        wants to switch ${from ? `from ${escapeHtml(from.name)} (${hourLabel((s.sideHustle || {}).checkinHour)})` : "(no current hustle)"}
-        to <strong>${to ? escapeHtml(to.name) : "—"}</strong> at ${hourLabel(req.checkinHour)}
-      </div>
-      <button class="btn small" onclick="approveSideHustleRequest('${escapeJsAttr(s.username)}')">Approve</button>
-      <button class="btn small coral" onclick="denySideHustleRequest('${escapeJsAttr(s.username)}')">Deny</button>
-    `;
-    reqBox.appendChild(row);
-  });
-
   const shBox = document.getElementById("sideHustleList");
   const hustles = cls.sideHustles || [];
   document.getElementById("noSideHustlesTeacher").classList.toggle("hidden", hustles.length > 0);
@@ -192,6 +171,76 @@ function parseHourLabel(str) {
   return h;
 }
 
+
+/* ── Recommended side hustles ─────────────────────────────────────────
+   Five ready-made hustles from the base template. Each offers all 24 check-in hours and pays less
+   the deeper into the night it is. Amounts are the full-year template's (hustle pay isn't scaled by
+   term). Added ones are ordinary hustles the teacher can edit or remove. The panel is gone once all
+   are added; it can be dismissed (remembered on this device) and brought back. */
+const hsRecoKey = () => "t29-hustle-reco-dismissed:" + (CLASS_CODE || "");
+function hsRecoDismissed() { try { return localStorage.getItem(hsRecoKey()) === "1"; } catch (e) { return false; } }
+function hsDismissReco(on) {
+  try { if (on) localStorage.setItem(hsRecoKey(), "1"); else localStorage.removeItem(hsRecoKey()); } catch (e) { /* ignore */ }
+  getClassCached(CLASS_CODE).then(paintHustleReco);
+}
+function hsRecoRemaining(cls) {
+  const have = new Set((cls.sideHustles || []).map(h => String(h.name || "").trim().toLowerCase()));
+  return t29BaseTemplateHustleInputs().filter(r => !have.has(r.name.toLowerCase()));
+}
+function paintHustleReco(cls) {
+  const wrap = document.getElementById("hustleRecoWrap");
+  if (!wrap) return;
+  const left = hsRecoRemaining(cls);
+  if (!left.length) { wrap.innerHTML = ""; return; }
+  if (hsRecoDismissed()) {
+    wrap.innerHTML = `<p class="muted-small"><a href="#" onclick="hsDismissReco(false);return false;">Show recommended side hustles</a></p>`;
+    return;
+  }
+  wrap.innerHTML = `<div class="card qz-reco-panel">
+    <div class="qz-reco-head">
+      <h2>${icon("sparkle", 18)} Recommended side hustles</h2>
+      <span class="qz-reco-actions">
+        <button class="btn small gold" type="button" onclick="hsAddAllReco()">+ Add all ${left.length} remaining</button>
+        <button class="btn small secondary" type="button" onclick="hsDismissReco(true)">Dismiss</button>
+      </span>
+    </div>
+    <p class="muted-small">Ready-made hustles with a daily check-in at any of the 24 hours, sized for a full year. The deeper into the night, the less they pay. Add the ones you like and edit anything afterwards.</p>
+    <div class="qz-reco-grid">${left.map(r => {
+      const range = hustlePayRange(r.payouts);
+      const top = hustlePayRuns(r.payouts).filter(x => x.amount === range.max).sort((a, b) => (b.to - b.from) - (a.to - a.from))[0];
+      const bars = Array.from({ length: 24 }, (_, h) => { const p = Number(r.payouts[h]) || 0; return `<i class="${p ? "on" : ""}" style="height:${Math.max(4, Math.round(p / range.max * 100))}%" title="${hourLabel(h)}: ${hustleMoney(p)}"></i>`; }).join("");
+      return `
+      <div class="qz-reco-item">
+        <div><strong>${escapeHtml(r.name)}</strong><span class="muted-small">${escapeHtml(r.description)}</span></div>
+        <div class="sh-spark" aria-hidden="true">${bars}</div>
+        <div class="quiz-meta" style="margin:0;">
+          <span class="badge navy">24 hours</span>
+          <span class="badge gold">${hustleMoney(range.min)} to ${hustleMoney(range.max)}</span>
+          <span class="muted-small">Best ${hustleRunLabel(top)}</span>
+        </div>
+        <button class="btn small gold" type="button" onclick="hsAddReco('${encodeURIComponent(r.name)}')">+ Add</button>
+      </div>`;
+    }).join("")}
+    </div></div>`;
+}
+async function hsAddReco(nameEnc) {
+  const name = decodeURIComponent(nameEnc);
+  const cls = await getClassCached(CLASS_CODE);
+  const r = hsRecoRemaining(cls).find(x => x.name === name);
+  if (!r) return;
+  await addSideHustle(CLASS_CODE, r);
+  await render();
+  t29Toast(`Added ${r.name}.`);
+}
+async function hsAddAllReco() {
+  const cls = await getClassCached(CLASS_CODE);
+  const left = hsRecoRemaining(cls);
+  if (!left.length) return;
+  if (!await t29Confirm(`Add ${left.length} side hustles? You can edit or remove any of them afterwards.`)) return;
+  await addSideHustles(CLASS_CODE, left);
+  await render();
+  t29Toast(`Added ${left.length} side hustles.`);
+}
 
 async function approveSideHustleRequest(username) {
   const res = await approveSideHustleChange(username, CLASS_CODE);
@@ -541,12 +590,14 @@ async function deleteJobClick(jobId) {
 /* ── Applications (teacher) ────────────────────────────────────────── */
 function renderApplications(cls, students) {
   const pending = (cls.jobApplications || []).filter(a => a.status === "pending");
+  const hustleReqs = students.filter(s => s.sideHustleRequest && s.sideHustleRequest.status === "pending");
+  const total = pending.length + hustleReqs.length;
   const box     = document.getElementById("applicationsBox");
-  document.getElementById("applicationsBadge").textContent = pending.length || "";
-  document.getElementById("applicationsBadge").classList.toggle("hidden", !pending.length);
+  document.getElementById("applicationsBadge").textContent = total || "";
+  document.getElementById("applicationsBadge").classList.toggle("hidden", !total);
 
-  if (!pending.length) {
-    box.innerHTML = `<p class="muted-small">No pending applications.</p>`;
+  if (!total) {
+    box.innerHTML = `<p class="muted-small">No pending applications or requests.</p>`;
     return;
   }
 
@@ -558,13 +609,34 @@ function renderApplications(cls, students) {
     row.className = "auto-row";
     row.innerHTML = `
       <div class="auto-details">
-        <strong>${s ? escapeHtml(s.name) : escapeHtml(a.studentUser)}</strong> applied for <strong>${j ? escapeHtml(j.title) : "Unknown job"}</strong>
+        <span class="badge navy">Job</span> <strong>${s ? escapeHtml(s.name) : escapeHtml(a.studentUser)}</strong> applied for <strong>${j ? escapeHtml(j.title) : "Unknown job"}</strong>
         ${j && j.tiers && j.tiers.length ? `<div class="muted-small">Starting at: ${escapeHtml(j.tiers[0].name)}: ${fmtMoney(j.tiers[0].wage)}/pay day</div>` : ""}
         <div class="muted-small">${a.coverLetter ? `"${escapeHtml(a.coverLetter)}"` : "No cover letter."}</div>
       </div>
       <div class="row-flex" style="gap:8px;">
         <button class="btn small mint"  onclick="approveApp('${a.id}')">Approve</button>
         <button class="btn small coral" onclick="declineApp('${a.id}')">Decline</button>
+      </div>
+    `;
+    box.appendChild(row);
+  });
+
+  // Side hustle change requests sit in the same list.
+  const hustles = cls.sideHustles || [];
+  hustleReqs.forEach(s => {
+    const req = s.sideHustleRequest;
+    const from = hustles.find(h => h.id === (s.sideHustle || {}).hustleId);
+    const to = hustles.find(h => h.id === req.hustleId);
+    const row = document.createElement("div");
+    row.className = "auto-row";
+    row.innerHTML = `
+      <div class="auto-details"><span class="badge gold">Side hustle</span> <strong>${escapeHtml(s.name)}</strong>
+        wants to switch ${from ? `from ${escapeHtml(from.name)} (${hourLabel((s.sideHustle || {}).checkinHour)})` : "(no current hustle)"}
+        to <strong>${to ? escapeHtml(to.name) : "—"}</strong> at ${hourLabel(req.checkinHour)}
+      </div>
+      <div class="row-flex" style="gap:8px;">
+        <button class="btn small mint" onclick="approveSideHustleRequest('${escapeJsAttr(s.username)}')">Approve</button>
+        <button class="btn small coral" onclick="denySideHustleRequest('${escapeJsAttr(s.username)}')">Deny</button>
       </div>
     `;
     box.appendChild(row);

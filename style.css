@@ -4504,7 +4504,7 @@ html.dark-mode .lb-total{color:var(--heading-text);}
 .sh-chart{border-collapse:separate;border-spacing:0;width:100%;min-width:max-content;}
 .sh-chart th,.sh-chart td{padding:5px 6px;text-align:center;border-bottom:1px solid var(--line);background:var(--card);}
 .sh-chart tbody tr:last-child th,.sh-chart tbody tr:last-child td{border-bottom:0;}
-.sh-chart thead th{position:sticky;top:0;z-index:2;vertical-align:bottom;padding:10px 8px 8px;}
+.sh-chart thead th{position:sticky;top:0;z-index:2;vertical-align:top;padding:10px 8px 8px;}
 .sh-chart tbody th,.sh-chart .sh-corner{position:sticky;left:0;z-index:1;text-align:left;white-space:nowrap;font-weight:800;color:var(--muted);min-width:64px;border-right:1px solid var(--line);}
 .sh-chart .sh-corner{z-index:3;}
 .sh-hname{font-weight:800;color:var(--ink);}

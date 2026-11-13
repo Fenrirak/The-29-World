@@ -605,7 +605,7 @@ function notifMarketplaceNewListingItems(me, cls) {
 const NOTIF_INBOX_TTL_MS = 14 * 24 * 3600 * 1000;
 const NOTIF_INBOX_KINDS = {
   time:    { icon: "hourglass", href: "teacher.html#timeExemptionBanner" },
-  hustle:  { icon: "briefcase", href: "jobs.html#sideHustleRequestsWrap" },
+  hustle:  { icon: "briefcase", href: "jobs.html#applicationsCard" },
   job:     { icon: "briefcase", href: "jobs.html#applicationsCard" },
   card:    { icon: "wallet",    href: "bank.html#cardTeacherCard" },
   account: { icon: "piggy",     href: "bank.html#acctTeacherCard" },
@@ -1459,7 +1459,7 @@ document.addEventListener("DOMContentLoaded", notifBoot);
    some start hidden, so the browser's own #hash jump can't be relied on: wait for the section
    to appear, scroll it into view and flash it so it's obvious where to act. Only the ids
    below are handled, so no other page's hashes are touched. */
-const NOTIF_DEEP_IDS = ["timeExemptionBanner", "sideHustleRequestsWrap", "applicationsCard", "logTrackerCard",
+const NOTIF_DEEP_IDS = ["timeExemptionBanner", "applicationsCard", "logTrackerCard",
   "cardTeacherCard", "acctTeacherCard", "approvalCard", "pane-classmates", "overdueWrap"];
 let NOTIF_DEEP_RUN = 0;
 function notifDeepScroll(hash) {
@@ -1498,5 +1498,28 @@ document.addEventListener("click", e => {
   e.preventDefault();
   notifClose();
   if (location.hash !== url.hash) history.replaceState(null, "", url.hash);
-  notifDeepScroll(url.hash);
+  // The request may have arrived after this page last loaded, so check for anything new first.
+  notifRefreshPageData().then(() => notifDeepScroll(url.hash));
 });
+
+/* Clicking a notification for the page you're already on: nothing reloads, so what's on screen can be
+   older than the request the notification is about. Drop the cached class (and its students') so the
+   next read goes to the database, then run the page's own render() to redraw from fresh data.
+   Waits at most 5 seconds, and if anything fails the page simply keeps what it had. */
+let NOTIF_PAGE_REFRESH = null;
+function notifRefreshPageData() {
+  if (!NOTIF_PAGE_REFRESH) {
+    NOTIF_PAGE_REFRESH = (async () => {
+      try {
+        const code = NOTIF_CLASS;
+        if (code && typeof window._rcDel === "function") {
+          const cached = typeof window._rcGet === "function" ? window._rcGet("classes", code) : null;
+          ((cached && cached.students) || []).forEach(u => window._rcDel("users", u));
+          window._rcDel("classes", code);
+        }
+        if (typeof render === "function") await render();
+      } catch (e) { /* keep what the page already shows */ }
+    })().finally(() => { NOTIF_PAGE_REFRESH = null; });
+  }
+  return Promise.race([NOTIF_PAGE_REFRESH, new Promise(r => setTimeout(r, 5000))]);
+}

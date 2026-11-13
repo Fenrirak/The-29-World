@@ -32,7 +32,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=26a6b7e1">
+<link rel="stylesheet" href="style.css?v=59bcda64">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -128,6 +128,22 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div id="payDayMsg"></div>
     </div>
 
+    <!-- This pay cycle: who has met their job's requirement -->
+    <div class="card" id="logTrackerCard">
+      <h2>This pay cycle</h2>
+      <p class="muted-small" id="logTrackerHint" style="margin:0 0 14px;"></p>
+      <div id="logTrackerBox"></div>
+    </div>
+
+    <!-- Applications -->
+    <div class="card" id="applicationsCard">
+      <div class="flex-between">
+        <h2>Pending applications <span id="applicationsBadge" class="badge coral hidden" style="font-size:var(--fs-xs);vertical-align:middle;"></span></h2>
+      </div>
+      <p class="muted-small">Job applications and side hustle change requests wait here for your approval. Students who apply for a job always start at the entry tier.</p>
+      <div id="applicationsBox"></div>
+    </div>
+
     <!-- Jobs grid -->
     <div class="card">
       <div class="flex-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
@@ -137,13 +153,6 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         </div>
       </div>
       <div id="jobsGrid" class="jobs-family-grid" style="margin-top:20px;"></div>
-    </div>
-
-    <!-- This pay cycle: who has met their job's requirement -->
-    <div class="card" id="logTrackerCard">
-      <h2>This pay cycle</h2>
-      <p class="muted-small" id="logTrackerHint" style="margin:0 0 14px;"></p>
-      <div id="logTrackerBox"></div>
     </div>
 
     <!-- Add new job -->
@@ -174,25 +183,13 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       </div>
     </details>
 
-    <!-- Applications -->
-    <div class="card" id="applicationsCard">
-      <div class="flex-between">
-        <h2>Pending applications <span id="applicationsBadge" class="badge coral hidden" style="font-size:var(--fs-xs);vertical-align:middle;"></span></h2>
-      </div>
-      <p class="muted-small">When students apply for a job, they always start at the entry tier.</p>
-      <div id="applicationsBox"></div>
-    </div>
+    <!-- Recommended side hustles (premade, dismissable) -->
+    <div id="hustleRecoWrap"></div>
 
     <!-- Side hustles (moved here from the Dashboard) -->
     <div class="card" id="sideHustleCard">
       <h2 id="hSideHustles">Side hustles</h2>
       <p class="muted-small">Students each pick one hustle and a daily check-in hour (e.g. 1am, 2am, 3am...). They must check in within 15 minutes after that hour to get paid, the amount depends on which hour they picked. Once a student has picked one, any change needs your approval, that stops someone quietly retiming their check-in to match whenever they happen to be online.</p>
-
-      <div id="sideHustleRequestsWrap">
-        <h3 id="hSideHustleRequests" style="margin-top:0;">Pending change requests</h3>
-        <div id="sideHustleRequests"></div>
-        <p class="muted-small" id="noSideHustleRequests">No pending requests.</p>
-      </div>
 
       <div id="sideHustleList" style="margin-top:16px;"></div>
       <p class="muted-small" id="noSideHustlesTeacher">You haven't added any side hustles yet.</p>
@@ -364,14 +361,15 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=98ea2dcf"></script>
 <script defer src="data-money.js?v=e9ae46f1"></script>
-<script defer src="data-life.js?v=958b7abb"></script>
+<script defer src="data-life.js?v=e845ca0c"></script>
 <script defer src="data-property.js?v=d9d76f21"></script>
 <script defer src="data-markets.js?v=2ebd767f"></script>
+<script defer src="base-template.js?v=0f42872b"></script>
 <script defer src="events-ui.js?v=5bf20a4c"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=c23aec59"></script>
-<script defer src="notifications.js?v=28e38172"></script>
-<script defer src="jobs.js?v=12e57653"></script>
+<script defer src="notifications.js?v=e0afe5b8"></script>
+<script defer src="jobs.js?v=6666899a"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
 </body>
 </html>

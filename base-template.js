@@ -400,13 +400,25 @@ const BT_LIFE = [
   { name: "Long-term Illness", desc: "A tough time that cuts your income.", b: { incomePercent: -10, lifestylePoints: -2 } }
 ];
 
-// Side hustles: pay per daily check-in at each hour the student can choose.
+// Side hustles: pay per daily check-in at each hour the student can choose. Every hustle offers all 24
+// hours, and the deeper into the night (about 10pm to 5am) the less it pays, so a late check-in is never
+// the best deal. Each one peaks at a different time of day. Pay is a weekly-style flow like wages, so it
+// is the same whatever term size is chosen (a full year uses these exact amounts).
+//        hour:  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23
+const BT_HUSTLE_CURVES = {
+  pets:     [2, 2, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 4, 5, 5, 6, 6, 6, 6, 5, 5, 4, 3, 3],
+  carwash:  [1, 1, 1, 1, 1, 2, 2, 3, 4, 5, 5, 5, 5, 5, 5, 4, 4, 3, 3, 3, 2, 2, 2, 1],
+  delivery: [2, 2, 1, 1, 1, 2, 3, 4, 4, 5, 6, 7, 7, 6, 5, 5, 6, 7, 7, 7, 5, 4, 3, 3],
+  homework: [1, 1, 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 3, 3, 4, 5, 6, 6, 6, 6, 5, 4, 3, 2],
+  market:   [1, 1, 1, 1, 1, 2, 3, 4, 5, 5, 5, 5, 5, 4, 4, 3, 3, 3, 3, 2, 2, 2, 2, 1]
+};
+const _btHustlePay = arr => { const o = {}; arr.forEach((v, h) => { o[h] = v; }); return o; };
 const BT_HUSTLES = [
-  { name: "Dog Walking", desc: "Walk the neighbours' dogs.", pay: { 6: 4, 7: 4, 15: 3, 16: 3, 17: 3, 18: 3, 19: 3 } },
-  { name: "Lawn Mowing", desc: "Mow lawns around the street.", pay: { 8: 4, 9: 4, 10: 4, 15: 3, 16: 3, 17: 3 } },
-  { name: "Paper Round", desc: "Deliver the local newspaper.", pay: { 6: 5, 7: 5, 16: 3, 17: 3 } },
-  { name: "Baking Stall", desc: "Bake and sell treats at the weekend market.", pay: { 8: 4, 9: 4, 10: 4, 11: 4, 12: 4 } },
-  { name: "Tutoring", desc: "Help younger students with homework.", pay: { 15: 5, 16: 5, 17: 5, 18: 5, 19: 5 } }
+  { name: "Pet Sitting", desc: "Look after the neighbours' pets. Best after school.", pay: _btHustlePay(BT_HUSTLE_CURVES.pets) },
+  { name: "Car Washing", desc: "Wash cars on the street. Best in the middle of the day.", pay: _btHustlePay(BT_HUSTLE_CURVES.carwash) },
+  { name: "Delivery Runner", desc: "Deliver food and parcels. Busiest at lunch and dinner.", pay: _btHustlePay(BT_HUSTLE_CURVES.delivery) },
+  { name: "Homework Helper", desc: "Help younger students with homework. Best after school.", pay: _btHustlePay(BT_HUSTLE_CURVES.homework) },
+  { name: "Market Stall", desc: "Sell crafts and baking at the market. Best in the morning.", pay: _btHustlePay(BT_HUSTLE_CURVES.market) }
 ];
 
 // Quizzes (practice and optional module locks). [question, [options], correct index, explanation]
@@ -624,6 +636,11 @@ function t29BaseTemplateData(terms) {
 // Used by the Teacher and Big Events pages as the "recommended events" for a class built from scratch.
 function t29BaseTemplateEventInputs(terms) {
   return t29BaseTemplateData(terms).events.map(_btEventInput);
+}
+// The ready-made side hustles as plain inputs (not yet saved), for the Jobs page's "recommended side hustles".
+// Same amounts for every term size (see the note on BT_HUSTLES), so this is the full-year template.
+function t29BaseTemplateHustleInputs() {
+  return BT_HUSTLES.map(h => ({ name: h.name, description: h.desc, payouts: cleanHustlePayouts(h.pay) }));
 }
 function t29BaseTemplateBigEventInputs(terms) {
   return t29BaseTemplateData(terms).bigEvents.map(_btBigEventInput);

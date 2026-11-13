@@ -1671,6 +1671,26 @@ async function addSideHustle(classCode, hustle) {
   await t29NotifyStudents(classCode, { to: "all", icon: "briefcase", tone: "navy",
     title: `Your teacher added a new side hustle: ${hustle.name}`, body: "Have a look on your dashboard to see what it pays.", href: "student.html" });
 }
+// Teacher: add several side hustles at once (the recommended set). One notification for the lot.
+async function addSideHustles(classCode, hustles) {
+  const list = (hustles || []).filter(h => h && String(h.name || "").trim());
+  if (!list.length) return { ok: false, error: "Nothing to add." };
+  const classRef = classesCol().doc(classCode);
+  await fdb.runTransaction(async (t) => {
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const cls = withNewModuleDefaults(snap.data());
+    list.forEach(h => cls.sideHustles.push({
+      id: uid("sh"), name: h.name, description: h.description || "",
+      payouts: cleanHustlePayouts(h.payouts)
+    }));
+    t.update(classRef, { sideHustles: cls.sideHustles });
+  });
+  await t29NotifyStudents(classCode, { to: "all", icon: "briefcase", tone: "navy",
+    title: list.length === 1 ? `Your teacher added a new side hustle: ${list[0].name}` : `Your teacher added ${list.length} new side hustles`,
+    body: "Have a look on your dashboard to see what they pay.", href: "student.html" });
+  return { ok: true, count: list.length };
+}
 async function editSideHustle(classCode, hustleId, hustle) {
   const classRef = classesCol().doc(classCode);
   let before = null, after = null; // what the teacher changed, for the side hustlers' notification
