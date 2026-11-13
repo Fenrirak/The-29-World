@@ -1332,11 +1332,14 @@ async function renderProfile(username) {
   const shDef = sh && sh.hustleId ? (cls.sideHustles || []).find(h => h.id === sh.hustleId) : null;
   if (shDef) {
     const payout = Number(shDef.payouts[sh.checkinHour]) || 0;
+    const shBonus = Math.max(0, Number(shDef.streakBonus) || 0);
+    const shLive = sideHustleLiveStreak(sh, nzDateKey());
+    const shNext = sideHustlePay(shDef, sh.checkinHour, shLive + (sh.lastCheckin === nzDateKey() ? 0 : 1) || 1);
     rows.push(`
       <div class="auto-row">
         <div class="auto-details">
           <strong>${escapeHtml(shDef.name)}</strong>
-          <div class="muted-small">Checks in at ${hourLabel(sh.checkinHour)} &middot; ${fmtMoney(payout)} per check-in${sideHustleLiveStreak(sh, nzDateKey()) ? ` &middot; streak: ${sideHustleLiveStreak(sh, nzDateKey())}` : ""}</div>
+          <div class="muted-small">Checks in at ${hourLabel(sh.checkinHour)} &middot; ${fmtMoney(payout)} per check-in${shBonus > 0 ? ` (+${fmtMoney(shBonus)}/day streak bonus)` : ""}${shLive ? ` &middot; streak: ${shLive}${shBonus > 0 ? ` &middot; ${sh.lastCheckin === nzDateKey() ? "paid" : "next pays"} ${fmtMoney(shNext)}` : ""}` : ""}</div>
           <div class="muted-small">Last checked in: ${sh.lastCheckin || "Never"}</div>
         </div>
       </div>

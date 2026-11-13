@@ -4458,3 +4458,16 @@ html.dark-mode .todo-dismiss:hover,html.dark-mode .notif-dismiss:hover{color:var
 }
 html.dark-mode .lb-detail{background:rgba(255,255,255,.06) !important;}
 html.dark-mode .lb-total{color:var(--heading-text);}
+
+/* ---- Side hustle streak bonus (student card) ---- */
+.sh-streak{margin:16px 0 18px;padding:14px 16px 16px;border:1.5px solid var(--line);border-radius:var(--r-5);background:var(--bg);}
+.sh-streak-head{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;}
+.sh-streak-ico{display:inline-flex;color:var(--gold-dark);}
+.sh-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.sh-chip{flex:1 1 84px;min-width:84px;padding:9px 10px 8px;text-align:center;border:1.5px solid var(--line);border-radius:var(--r-3);background:var(--card);}
+.sh-chip .d{color:var(--muted);font-size:var(--fs-xs);font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
+.sh-chip .p{margin-top:2px;font-size:1.05rem;font-weight:900;}
+.sh-chip .s{margin-top:2px;min-height:1em;font-size:var(--fs-xs);font-weight:700;color:var(--gold-dark);}
+.sh-chip.done{border-color:var(--gold);background:rgba(232,184,75,.18);}
+.sh-chip.next{border-color:var(--gold);box-shadow:0 0 0 1.5px var(--gold) inset;}
+@media (max-width:520px){.sh-chip:nth-child(n+4){display:none;}}

@@ -332,6 +332,18 @@ function sideHustleStreakAfterCheckin(sh, todayKey) {
   if (last && daysBetweenKeys(last, todayKey) === 1) return (Number(sh.streak) || 0) + 1;
   return 1;
 }
+// What a check-in pays on a given streak day (1 = first day / streak just
+// started). Base payout for that hour, plus the hustle's streak bonus for
+// every day after the first: day 2 = base + bonus, day 3 = base + 2 x bonus...
+// A broken streak starts again at day 1, so it drops back to the base pay.
+function sideHustlePay(hustle, hour, streakDay) {
+  const raw = (hustle && hustle.payouts || {})[hour];
+  if (raw === undefined || raw === null || raw === "") return 0; // hour not offered: no pay, so no bonus either
+  const base = Math.max(0, Number(raw) || 0);
+  const bonus = Math.max(0, Number(hustle && hustle.streakBonus) || 0);
+  const extraDays = Math.max(0, (Math.floor(Number(streakDay)) || 1) - 1);
+  return Math.round((base + bonus * extraDays) * 100) / 100;
+}
 // Streak to DISPLAY right now: still alive if the last check-in was today or
 // yesterday, otherwise it has been broken (0), even though the stored value
 // only gets reset at the next check-in.

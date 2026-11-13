@@ -158,6 +158,7 @@ function renderSideHustles(cls, students) {
     row.innerHTML = `
       <div class="auto-details">${icon("briefcase", 14)} <strong>${escapeHtml(h.name)}</strong>
         <div class="muted-small">${payoutSummary}</div>
+        ${Number(h.streakBonus) > 0 ? `<div style="margin-top:6px;"><span class="badge gold">${icon("bolt", 12)} +${fmtMoney(h.streakBonus)} per day streak bonus</span></div>` : ""}
         ${h.description ? `<div class="muted-small">${escapeHtml(h.description)}</div>` : ""}
       </div>
       <button class="btn small secondary" onclick="startEditSideHustle('${h.id}')">${icon("edit", 13)} Edit</button>
@@ -227,10 +228,20 @@ async function addSideHustleForm(e) {
     return false;
   }
 
+  const bonusRaw = document.getElementById("shStreakBonus").value.trim();
+  let streakBonus = 0;
+  if (bonusRaw !== "") {
+    streakBonus = parseMoneyInput(bonusRaw);
+    if (Number.isNaN(streakBonus) || streakBonus < 0) {
+      alert("Couldn't read the streak bonus. Enter a plain amount like 2 (or leave it blank for no streak bonus).");
+      return false;
+    }
+  }
+
   if (EDITING_SIDE_HUSTLE_ID) {
-    await editSideHustle(CLASS_CODE, EDITING_SIDE_HUSTLE_ID, { name, description, payouts });
+    await editSideHustle(CLASS_CODE, EDITING_SIDE_HUSTLE_ID, { name, description, payouts, streakBonus });
   } else {
-    await addSideHustle(CLASS_CODE, { name, description, payouts });
+    await addSideHustle(CLASS_CODE, { name, description, payouts, streakBonus });
   }
   resetSideHustleForm();
   await render();
@@ -242,6 +253,7 @@ function resetSideHustleForm() {
   document.getElementById("shName").value = "";
   document.getElementById("shDesc").value = "";
   document.getElementById("shPayoutsArea").value = "";
+  document.getElementById("shStreakBonus").value = "";
   document.getElementById("addSideHustleBtn").innerHTML = icon("plus", 15) + " Add side hustle";
   document.getElementById("hustleFoldTitle").textContent = "Add a side hustle";
   document.getElementById("hustleFold").open = false;
@@ -259,6 +271,7 @@ function startEditSideHustle(id) {
     document.getElementById("shPayoutsArea").value = Object.keys(h.payouts || {})
       .map(Number).sort((a, b) => a - b)
       .map(hr => `${hourLabel(hr)} | ${h.payouts[hr]}`).join("\n");
+    document.getElementById("shStreakBonus").value = Number(h.streakBonus) > 0 ? h.streakBonus : "";
     document.getElementById("addSideHustleBtn").innerHTML = icon("save", 15) + " Save changes";
     document.getElementById("hustleFoldTitle").textContent = "Edit side hustle";
     document.getElementById("hustleFold").open = true;
