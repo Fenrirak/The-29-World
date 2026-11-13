@@ -4766,6 +4766,10 @@ async function _deleteParentViewFor(username) {
    - Pay the closing balance IN FULL by the due date and no interest is
      charged. If not, interest (a % per 2 weeks) is added to what is owed
      at the next statement. Missing the minimum payment also costs a late fee.
+   - Payments can be made ANYTIME, not just after a statement closes. They
+     go to the closed statement first (it has the due date), then the rest
+     comes straight off spending that hasn't been billed yet, so the next
+     statement is smaller.
    - The monthly fee is charged every 4 weeks (every second statement).
    - Benefits: cashback on spending (a % of what's spent, credited at each
      statement), an optional spend-and-earn reward ("$X back for every $Y
@@ -4797,6 +4801,16 @@ function cardStmtRemaining(card) {
 // The amount that costs lifestyle points: last period's closing balance
 // that is still unpaid — counted from the day it closes, free days included.
 function cardOwedForPenalty(user) { return cardIsActive(user) ? cardStmtRemaining(user.creditCard) : 0; }
+// Itemised record of everything that adds up to card.lifetime (cashback,
+// interest, fees), so the Bank page can show WHAT makes up each total.
+// Written at the same moment as the totals, so the two always agree.
+const CARD_LOG_MAX = 300;
+function cardLogLifetime(card, kind, amount, note, dateKey) {
+  amount = cardRound(amount);
+  if (!(amount > 0)) return;
+  if (!card.lifetimeLogFrom) card.lifetimeLogFrom = Date.now(); // entries before this were not itemised on the card
+  card.lifetimeLog = (card.lifetimeLog || []).concat([{ ts: Date.now(), dateKey: dateKey || null, kind, amount, note: note || "" }]).slice(-CARD_LOG_MAX);
+}
 function cardAvailable(card, plan) { return cardRound(Math.max(0, (plan ? plan.limit : 0) - ((card && card.balance) || 0))); }
 // What a statement period's spending earns on this plan. Spend-and-earn is
 // paid in WHOLE steps ($5 per $100: $199 earns $5, $200 earns $10) and counted
@@ -5089,7 +5103,7 @@ async function cancelCreditCard(username, classCode) {
       t.update(userRef, { creditCard: null });
     });
   } catch (e) {
-    return { ok: false, error: e.message === "OWING" ? "You can only close your card once you owe nothing. Pay your closing balance, then close it after your next statement if you've spent more since." : "Something went wrong. Please try again." };
+    return { ok: false, error: e.message === "OWING" ? "You can only close your card once you owe nothing. Pay off everything you owe on the card (you can pay any time), then close it." : "Something went wrong. Please try again." };
   }
   if (wasPending) await t29NotifyTeacher(classCode, "card", "cancel", "");
   return { ok: true };
@@ -5100,38 +5114,42 @@ async function payCreditCard(username, classCode, amount) {
   amount = cardRound(amount);
   if (!(amount > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   const userRef = usersCol().doc(username);
-  let owingAfter = 0, clearedStmt = false;
+  let owingAfter = 0, clearedStmt = false, toStmt = 0, toNew = 0;
   try {
     await fdb.runTransaction(async (t) => {
+      clearedStmt = false; toStmt = 0; toNew = 0; // reset every attempt: this callback can be retried
       const us = await t.get(userRef);
       if (!us.exists) throw new Error("NOT_FOUND");
       const user = us.data(), card = user.creditCard;
       if (!cardIsActive(user)) throw new Error("NOCARD");
-      // Payments only go towards a CLOSED statement — nothing can be paid
-      // on spending that hasn't been billed yet.
-      const today = nzDateKey(), rem = cardStmtRemaining(card);
-      if (rem <= 0.004) throw new Error("NOSTMT");
-      if (amount > rem + 0.004) throw new Error("OVER_STMT");
+      // Payments can be made any time, up to everything owed on the card.
+      // They go to the CLOSED statement first (it has a due date); whatever
+      // is left comes off spending that hasn't been billed yet, which makes
+      // the next statement smaller.
+      const today = nzDateKey(), owing = cardRound(card.balance || 0), rem = cardStmtRemaining(card);
+      if (owing <= 0.004) throw new Error("NOOWING");
+      if (amount > owing + 0.004) throw new Error("OVER_OWING");
       if ((user.balance || 0) < amount) throw new Error("BROKE");
-      if (card.stmt && rem > 0) {
-        const toStmt = Math.min(amount, rem);
+      toStmt = Math.min(amount, rem, owing);
+      if (card.stmt && toStmt > 0.004) {
         card.stmt.paid = cardRound((card.stmt.paid || 0) + toStmt);
         // Only money in by the due date counts as "on time" — it's what
         // decides interest and the late fee at the next statement.
         if (today <= card.stmt.dueKey) card.stmt.paidOnTime = cardRound((card.stmt.paidOnTime || 0) + toStmt);
         clearedStmt = cardStmtRemaining(card) <= 0.004;
-      }
-      card.balance = cardRound(Math.max(0, card.balance - amount));
+      } else toStmt = 0;
+      toNew = cardRound(amount - toStmt);
+      card.balance = cardRound(Math.max(0, owing - amount));
       owingAfter = card.balance;
       t.update(userRef, { balance: cardRound(user.balance - amount), creditCard: card });
     });
   } catch (e) {
-    const m = { NOCARD: "You don't have an active credit card.", NOSTMT: "You can only start paying once your statement closes. Nothing is due yet.", OVER_STMT: "You can only pay up to your closing balance. Spending since the statement closed can be paid after the next one closes.", BROKE: "You don't have enough cash for that payment." };
+    const m = { NOCARD: "You don't have an active credit card.", NOOWING: "You don't owe anything on your card right now.", OVER_OWING: "You can only pay up to what you owe on the card.", BROKE: "You don't have enough cash for that payment." };
     return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
   }
   await logTxn(classCode, { type: "card-payment", from: username, amount,
     note: owingAfter <= 0.004 ? "Credit card paid off" : `Credit card payment: ${fmtMoney(owingAfter)} still owing` });
-  return { ok: true, owingAfter, clearedStmt };
+  return { ok: true, owingAfter, clearedStmt, toStmt, toNew };
 }
 
 /* ---------------- Spending on the card ---------------- */
@@ -5322,7 +5340,9 @@ function cardLateCheck(card, plan, asOfKey, logs) {
     card.balance = cardRound(card.balance + plan.lateFee);
     card.lifetime.fees = cardRound((card.lifetime.fees || 0) + plan.lateFee);
     s.lateFee = plan.lateFee;
-    logs.push({ type: "card-fee", amount: plan.lateFee, note: `Late payment fee. The ${fmtMoney(s.minDue)} minimum wasn't paid by ${cardDateLabel(s.dueKey)}` });
+    const lateNote = `Late payment fee. The ${fmtMoney(s.minDue)} minimum wasn't paid by ${cardDateLabel(s.dueKey)}`;
+    logs.push({ type: "card-fee", amount: plan.lateFee, note: lateNote });
+    cardLogLifetime(card, "fee", plan.lateFee, lateNote, asOfKey);
   }
   return true;
 }
@@ -5341,7 +5361,9 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     interest = cardRound(interestBase * plan.rate / 100);
     card.balance = cardRound(card.balance + interest);
     card.lifetime.interest = cardRound(card.lifetime.interest + interest);
-    logs.push({ type: "card-interest", amount: interest, note: `Interest on unpaid statement (${fmtMoney(interestBase)} still owing): ${plan.rate}% for 2 weeks` });
+    const intNote = `Interest on unpaid statement (${fmtMoney(interestBase)} still owing): ${plan.rate}% for 2 weeks`;
+    logs.push({ type: "card-interest", amount: interest, note: intNote });
+    cardLogLifetime(card, "interest", interest, intNote, closeKey);
   }
   card.cycles = (card.cycles || 0) + 1;
   let fee = 0;
@@ -5350,6 +5372,7 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     card.balance = cardRound(card.balance + fee);
     card.lifetime.fees = cardRound(card.lifetime.fees + fee);
     logs.push({ type: "card-fee", amount: fee, note: `Monthly card fee: ${plan.name}` });
+    cardLogLifetime(card, "fee", fee, `Monthly card fee: ${plan.name}`, closeKey);
   }
   // Cashback + spend-and-earn reward for the period just ended. It is a
   // STATEMENT CREDIT: it comes straight off the closing balance below. Only
@@ -5365,7 +5388,9 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
     const parts = [];
     if (rw.pct > 0) parts.push(`${plan.cashbackPct}% cashback ${fmtMoney(rw.pct)}`);
     if (rw.fixed > 0) parts.push(`${fmtMoney(rw.back)} back for every ${fmtMoney(rw.every)} in a single purchase × ${rw.steps} = ${fmtMoney(rw.fixed)}`);
-    logs.push({ type: "card-cashback", amount: cashback, note: `Cashback ${fmtMoney(cashback)} on ${fmtMoney(card.periodSpend)} spent: ${parts.join(" + ")}` });
+    const cbNote = `Cashback ${fmtMoney(cashback)} on ${fmtMoney(card.periodSpend)} spent: ${parts.join(" + ")}`;
+    logs.push({ type: "card-cashback", amount: cashback, note: cbNote });
+    cardLogLifetime(card, "cashback", cashback, cbNote, closeKey);
   }
   const nextClose = dateKeyPlusDays(closeKey, CARD_CYCLE_DAYS);
   card.vouchers = (card.vouchers || []).filter(v => v.expiryKey > closeKey).concat(cardIssueVouchers(plan, nextClose));

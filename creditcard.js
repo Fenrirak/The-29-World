@@ -126,6 +126,78 @@ function ccRandomTheme(planId) {
   return pool[Math.floor(Math.random() * pool.length)].id;
 }
 
+/* ---------------- Lifetime totals: what adds up to them ---------------- */
+function ccTsLabel(ts) {
+  try { return new Date(ts).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland", weekday: "short", day: "numeric", month: "short" }).replace(",", ""); } catch (e) { return ""; }
+}
+// Every cashback / interest / fee line behind the two totals. New ones come from the
+// card's own itemised log (data-money.js, cardLogLifetime). Older ones are recovered from
+// the class transaction list (which only keeps the latest ~200). Anything older still shows
+// as one "Earlier" line, so the rows always add up to the totals above.
+function ccLifetimeItems(me, cls) {
+  const c = me.creditCard, lt = c.lifetime || {};
+  const logged = (c.lifetimeLog || []).map(e => ({ kind: e.kind, amount: e.amount, note: e.note, ts: e.ts, label: e.dateKey ? cardDateLabel(e.dateKey) : ccTsLabel(e.ts) }));
+  const from = c.lifetimeLogFrom || Infinity, since = c.appliedTs || 0;
+  const kindOf = { "card-cashback": "cashback", "card-interest": "interest", "card-fee": "fee" };
+  const older = ((cls && cls.txns) || []).filter(t => t && t.ts && t.ts < from && t.ts >= since && kindOf[t.type]
+    && (t.type === "card-cashback" ? t.to === me.username : t.from === me.username))
+    .map(t => ({ kind: kindOf[t.type], amount: cardRound(t.amount), note: t.note || "", ts: t.ts, label: ccTsLabel(t.ts) }));
+  const sum = a => cardRound(a.reduce((n, x) => n + x.amount, 0));
+  const build = (isIn, total) => {
+    let rows = logged.filter(isIn);
+    const extra = older.filter(isIn);
+    if (sum(rows) + sum(extra) <= total + 0.004) rows = rows.concat(extra); // never let recovered lines overshoot the total
+    rows.sort((a, b) => b.ts - a.ts);
+    return { rows, total, earlier: cardRound(Math.max(0, total - sum(rows))) };
+  };
+  return {
+    cash: build(x => x.kind === "cashback", cardRound(lt.cashback || 0)),
+    cost: build(x => x.kind !== "cashback", cardRound((lt.interest || 0) + (lt.fees || 0)))
+  };
+}
+function ccInjectLifetimeCss() {
+  if (document.getElementById("ccLtCss")) return;
+  const st = document.createElement("style");
+  st.id = "ccLtCss";
+  st.textContent = `
+.cc-ltb{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+.cc-ltb-sec{border:1px solid rgba(120,130,170,.25);border-radius:12px;padding:10px 12px;background:rgba(120,130,170,.06)}
+.cc-ltb-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;opacity:.9}
+.cc-ltb-head b{font-size:13px;letter-spacing:0}
+.cc-ltb-list{list-style:none;margin:6px 0 0;padding:0;max-height:210px;overflow:auto}
+.cc-ltb-list li{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;padding:6px 0;border-top:1px solid rgba(120,130,170,.18);font-size:12px;line-height:1.3}
+.cc-ltb-list li:first-child{border-top:0}
+.cc-ltb-d{opacity:.7;white-space:nowrap}
+.cc-ltb-t small{display:block;opacity:.7;font-size:11px}
+.cc-ltb-a{font-weight:800;white-space:nowrap}
+.cc-ltb-a.good{color:#177a5c}.cc-ltb-a.bad{color:#b0402a}
+.cc-ltb-empty{margin:6px 0 0;font-size:12px;opacity:.7}`;
+  document.head.appendChild(st);
+}
+function ccLtRowText(r) {
+  let head = String(r.note || ""), parts = "";
+  if (r.kind === "cashback") {
+    const i = head.indexOf(": ");
+    if (i > 0) { parts = head.slice(i + 2); head = head.slice(0, i); }
+    head = head.replace(/^Cashback \$[\d,]+(\.\d+)? on /, "Cashback on ");
+  } else if (r.kind === "interest") head = head.replace(/^Interest on unpaid statement /, "Interest on unpaid balance ");
+  return `<span class="cc-ltb-t">${ccEsc(head)}${parts ? `<small>${ccEsc(parts)}</small>` : ""}</span>`;
+}
+function ccLifetimeHtml(me, cls) {
+  ccInjectLifetimeCss();
+  const it = ccLifetimeItems(me, cls);
+  const sec = (title, g, cls2, sign, emptyMsg) => {
+    const rows = g.rows.map(r => `<li><span class="cc-ltb-d">${ccEsc(r.label)}</span>${ccLtRowText(r)}<span class="cc-ltb-a ${cls2}">${sign}${fmtMoney(r.amount)}</span></li>`);
+    if (g.earlier > 0.004) rows.push(`<li><span class="cc-ltb-d">Earlier</span><span class="cc-ltb-t">Older activity (no longer itemised)</span><span class="cc-ltb-a ${cls2}">${sign}${fmtMoney(g.earlier)}</span></li>`);
+    return `<section class="cc-ltb-sec"><div class="cc-ltb-head"><span>${title}</span><b class="${cls2}">${sign}${fmtMoney(g.total)}</b></div>
+      ${rows.length ? `<ul class="cc-ltb-list">${rows.join("")}</ul>` : `<p class="cc-ltb-empty">${emptyMsg}</p>`}</section>`;
+  };
+  return `<div class="cc-ltb">
+    ${sec("What makes up your cashback", it.cash, "good", "+", "Nothing yet. Cashback is added when a statement closes.")}
+    ${sec("What makes up your interest &amp; fees", it.cost, "bad", "", "No interest or fees so far.")}
+  </div>`;
+}
+
 /* ---------------- Little building blocks ---------------- */
 function ccVisual(cls, plan, name, last4, opts) {
   opts = opts || {};
@@ -253,7 +325,7 @@ function ccActiveHtml(me, cls) {
   const today = nzDateKey(), s = c.stmt, rem = cardStmtRemaining(c);
   const owing = cardRound(c.balance || 0), avail = cardAvailable(c, plan);
   const unbilled = cardRound(Math.max(0, owing - rem));
-  const canPay = rem > 0.004;
+  const canPay = owing > 0.004; // you can pay any time, not only once a statement closes
   const usedPct = plan.limit > 0 ? Math.min(100, owing / plan.limit * 100) : 0;
   const pen = cls.lifestyleConfig && cls.lifestyleConfig.creditCard;
   const penPts = pen && pen.enabled && pen.perAmount > 0 && pen.points > 0 ? Math.floor(rem / pen.perAmount) * pen.points : 0;
@@ -319,8 +391,9 @@ function ccActiveHtml(me, cls) {
       <div class="cc-perks center">${ccPerks(plan)}</div>
       <div class="cc-lifetime">
         <div><span>Cashback &amp; rewards</span><strong class="good">${fmtMoney(lt.cashback || 0)}</strong></div>
-        <div><span>Interest &amp; fees paid</span><strong class="${(lt.interest || 0) + (lt.fees || 0) > 0 ? "bad" : ""}">${fmtMoney((lt.interest || 0) + (lt.fees || 0))}</strong></div>
+        <div><span>Interest &amp; fees charged</span><strong class="${(lt.interest || 0) + (lt.fees || 0) > 0 ? "bad" : ""}">${fmtMoney((lt.interest || 0) + (lt.fees || 0))}</strong></div>
       </div>
+      ${ccLifetimeHtml(me, cls)}
     </div>
     <div class="cc-right">
       ${banner}
@@ -328,21 +401,22 @@ function ccActiveHtml(me, cls) {
         <div class="cc-limit-head"><span>Owing <strong>${fmtMoney(owing)}</strong> of ${fmtMoney(plan.limit)}</span><span class="cc-avail">${fmtMoney(avail)} available</span></div>
         <div class="cc-limit-bar"><div class="cc-limit-fill ${usedPct > 85 ? "hot" : ""}" style="width:${usedPct.toFixed(1)}%"></div></div>
         ${plan.cashbackPct > 0 ? (() => { const e = cardRewardOf(plan, c.periodSpend || 0).pct; return `<div class="cc-limit-earn ${e > 0 ? "has" : ""}">${icon("coin", 14)}<span>Cashback earned so far</span><strong>+${fmtMoney(e)}</strong></div>`; })() : ""}
-        <div class="cc-limit-sub">${unbilled > 0 ? `${fmtMoney(unbilled)} spent since your last statement · it closes ${ccEsc(cardDateLabel(c.nextCloseKey))}` : `Next statement closes ${ccEsc(cardDateLabel(c.nextCloseKey))}`}</div>
+        <div class="cc-limit-sub">${unbilled > 0 ? `${fmtMoney(unbilled)} owing from spending since your last statement · it closes ${ccEsc(cardDateLabel(c.nextCloseKey))}` : `Next statement closes ${ccEsc(cardDateLabel(c.nextCloseKey))}`}</div>
       </div>
       ${ccRewardsHtml(plan, c, today)}
       <label class="cc-check cc-check-tile"><input type="checkbox" ${c.eventsOnCard ? "checked" : ""} onchange="ccSetEventsPref(this.checked)"> Put unexpected costs (random events) on this card first</label>
       <div class="muted-small" style="margin-bottom:8px;">Big events ask you how to pay each time. Random events can't ask first, so this is their default (cash covers anything over your limit).</div>
       <div class="cc-pay">
         <label for="ccPayAmt">Make a payment <span class="muted-small">from your cash (${fmtMoney(me.balance)})</span></label>
-        ${canPay ? "" : `<div class="muted-small" style="margin-bottom:6px;">You can start paying once your statement closes on ${ccEsc(cardDateLabel(c.nextCloseKey))}.</div>`}
+        ${canPay ? `<div class="muted-small" style="margin-bottom:6px;">Pay any time.${unbilled > 0.004 ? (rem > 0.004 ? " Your closing balance is paid first, then the rest goes towards spending that hasn't been billed yet, so your next statement is smaller." : " It goes towards spending that hasn't been billed yet, so your next statement is smaller.") : ""}</div>` : `<div class="muted-small" style="margin-bottom:6px;">You don't owe anything on your card right now.</div>`}
         <div class="cc-pay-row">
-          <div class="cc-pay-input"><span>$</span><input id="ccPayAmt" type="number" min="0.01" max="${rem}" step="0.01" placeholder="0.00" ${canPay ? "" : "disabled"}></div>
+          <div class="cc-pay-input"><span>$</span><input id="ccPayAmt" type="number" min="0.01" max="${owing}" step="0.01" placeholder="0.00" ${canPay ? "" : "disabled"}></div>
           <button class="btn mint" onclick="ccPay()" ${canPay ? "" : "disabled"}>Pay</button>
         </div>
         <div class="cc-quick">
-          ${canPay ? `<button type="button" onclick="ccFill(${rem})">Closing balance · ${fmtMoney(rem)}</button>` : ""}
-          ${canPay && s && (s.minDue - (s.paid || 0)) > 0.004 ? `<button type="button" onclick="ccFill(${cardRound(Math.min(rem, s.minDue - (s.paid || 0)))})">Minimum · ${fmtMoney(Math.min(rem, s.minDue - (s.paid || 0)))}</button>` : ""}
+          ${rem > 0.004 ? `<button type="button" onclick="ccFill(${rem})">Closing balance · ${fmtMoney(rem)}</button>` : ""}
+          ${rem > 0.004 && s && (s.minDue - (s.paid || 0)) > 0.004 ? `<button type="button" onclick="ccFill(${cardRound(Math.min(rem, s.minDue - (s.paid || 0)))})">Minimum · ${fmtMoney(Math.min(rem, s.minDue - (s.paid || 0)))}</button>` : ""}
+          ${unbilled > 0.004 ? `<button type="button" onclick="ccFill(${owing})">${rem > 0.004 ? "Everything owed" : "Pay it all"} · ${fmtMoney(owing)}</button>` : ""}
         </div>
       </div>
     </div>
@@ -356,6 +430,7 @@ function ccActiveHtml(me, cls) {
     </div>
     <ul class="cc-rules">
       <li>Your statement closes every 2 weeks (on a ${ccEsc(DAY_FULL[cardSettings(cls).statementDay] || "Friday")}). Whatever you owe then becomes the <strong>closing balance</strong>.</li>
+      <li>You can make a payment <strong>any time</strong>, not just after a statement closes. It goes to your closing balance first, then to spending that hasn't been billed yet, which makes your next statement smaller.</li>
       <li>Pay it <strong>in full</strong> by the due date and there's no interest. If you don't, interest is added at the next statement, only on the part you still owe from this one, never on new spending.</li>
       <li>The monthly fee is charged every 4 weeks. Cashback is added up when each statement closes, and spend-and-earn rewards are earned one purchase at a time. Both are taken <strong>off your closing balance</strong> (so your bill is smaller). They aren't paid into your cash, unless you owe less than you earned.</li>
       <li>Use it wherever a real card works: the <a href="store.html">Store</a> (card perks apply there), Transport, insurance sign-up fees, the Trade Centre (not houses), school rentals, and big or random events. Automatic payments can go on it too, but only to your teacher. It can't pay mortgages, another student (except for Trade Centre purchases), loans, savings, shares or gambling.</li>
@@ -384,7 +459,7 @@ async function ccPay() {
   const res = await payCreditCard(CURRENT.username, CURRENT.classCode, amt);
   if (!res.ok) { ccMsg("ccMsg", `<div class="error-msg">${ccEsc(res.error)}</div>`); return; }
   await render();
-  ccMsg("ccMsg", `<div class="success-msg">Paid ${fmtMoney(amt)}.${res.clearedStmt ? " Your closing balance is cleared. No interest!" : ""}</div>`);
+  ccMsg("ccMsg", `<div class="success-msg">Paid ${fmtMoney(amt)}.${res.clearedStmt ? " Your closing balance is cleared. No interest!" : ""}${res.toNew > 0.004 ? ` ${fmtMoney(res.toNew)} went towards spending that hasn't been billed yet, so your next statement will be smaller.` : ""}</div>`);
 }
 async function ccSetEventsPref(on) {
   await setCardEventsPref(CURRENT.username, on);
