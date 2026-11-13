@@ -447,7 +447,7 @@ function mktInjectCss() {
   .mkt-pb-seg{display:inline-flex;gap:4px;padding:4px;border-radius:14px;background:rgba(127,127,127,.15)}
   .mkt-pb-seg button{border:0;background:transparent;color:inherit;border-radius:10px;padding:8px 18px;cursor:pointer;font:inherit;font-weight:700;display:flex;flex-direction:column;align-items:center;line-height:1.15;opacity:.7}
   .mkt-pb-seg button small{font-size:.72em;font-weight:600}
-  .mkt-pb-seg button.on{background:var(--card);color:var(--ink,#1f2b44);opacity:1;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  .mkt-pb-seg button.on{background:var(--card);color:var(--ink,#1f2b44);opacity:1;box-shadow:var(--shadow-btn)}
   .mkt-pb-chips{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
   .mkt-chip{font-size:.8em;font-weight:700;padding:4px 12px;border-radius:999px;border:1px solid rgba(127,127,127,.35)}
   .mkt-chip.mint{background:rgba(46,184,120,.15);border-color:rgba(46,184,120,.45)}

@@ -1391,7 +1391,7 @@ async function renderProfile(username) {
   const ownedProps = poss.properties || (poss.property ? [poss.property] : []);
   ownedProps.filter(p => isMortgagePaymentOverdue(p, cls)).forEach(p => {
     rows.push(`
-      <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;">
+      <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:var(--r-2);">
         <div class="auto-details">
           <strong>${icon("house", 14)} Mortgage payment overdue: ${escapeHtml(p.name)}</strong>
           <div class="muted-small">This week's payment (due ${DAY_FULL[cls.mortgageDay || "Fri"]}) hasn't been paid yet.</div>
@@ -1430,7 +1430,7 @@ async function renderProfile(username) {
     const rh = poss.rentedHome;
     const overdue = isSubletRentOverdue(rh, cls);
     rows.push(`
-      <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;"' : ""}>
+      <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:var(--r-2);"' : ""}>
         <div class="auto-details">
           <strong>Renting from a classmate:</strong> ${escapeHtml(rh.name)}: ${fmtMoney(rh.sublet.price)}/week from @${escapeHtml(rh.owner)}
           <div class="muted-small">${overdue ? "This week's rent hasn't been paid yet. " : ""}Minimum lease: ${rh.sublet.minWeeks} week${rh.sublet.minWeeks === 1 ? "" : "s"}.</div>
@@ -1445,7 +1445,7 @@ async function renderProfile(username) {
     const rn = poss.rentedNpcHome;
     const overdue = isNpcRentOverdue(rn);
     rows.push(`
-      <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;"' : ""}>
+      <div class="auto-row"${overdue ? ' style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:var(--r-2);"' : ""}>
         <div class="auto-details">
           <strong>Renting a school property:</strong> ${escapeHtml(rn.name)}: ${fmtMoney(rn.rentPerWeek)}/week
           <div class="muted-small">${overdue ? "This week's rent hasn't been paid yet. " : ""}Minimum lease: ${rn.minWeeks} week${rn.minWeeks === 1 ? "" : "s"}.</div>
@@ -1460,7 +1460,7 @@ async function renderProfile(username) {
   rows.push(`<h4>${icon("car", 16)} Transport</h4>`);
   if (isTransportPaymentOverdue(s, cls)) {
     rows.push(`
-      <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:8px;">
+      <div class="auto-row" style="background:var(--pastel-coral-bg,#fde2e2);border:1px solid var(--pastel-coral-border,#f3a6a6);border-radius:var(--r-2);">
         <div class="auto-details">
           <strong>${icon("car", 14)} Transport payment overdue</strong>
           <div class="muted-small">A transport payment due on ${DAY_FULL[cls.transportDay || "Fri"]} was missed and hasn't been cleared.</div>

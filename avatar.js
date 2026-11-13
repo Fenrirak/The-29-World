@@ -1656,7 +1656,7 @@
     const st = document.createElement("style");
     st.id = "t29AvCss";
     st.textContent = `
-html .student-avatar.av-img{background:none !important;padding:0;overflow:hidden;box-shadow:var(--shadow-sm);}
+html .student-avatar.av-img{background:none !important;padding:0;overflow:hidden;box-shadow:var(--shadow-btn);}
 .student-avatar.av-img{flex:none;aspect-ratio:1/1;}
 .student-avatar.av-img svg{display:block;width:100%;height:100%;}
 .av-comet{width:1.05em;height:1.05em;vertical-align:-.18em;margin-right:2px;}
@@ -1666,14 +1666,14 @@ html .student-avatar.av-img{background:none !important;padding:0;overflow:hidden
 .av-self-btn .av-pen{position:absolute;right:-3px;bottom:-3px;width:22px;height:22px;border-radius:50%;background:var(--gold,#f5b82e);color:#1f2b44;display:flex;align-items:center;justify-content:center;line-height:0;border:2px solid #fff;}
 .av-self-btn .av-pen svg{display:block;flex:none;}
 .av-ov{position:fixed;inset:0;z-index:400;background:rgba(15,20,40,.55);display:flex;align-items:center;justify-content:center;padding:12px;}
-.av-card{background:var(--card,#fff);color:var(--ink,#1f2b44);border-radius:18px;width:min(940px,100%);max-height:calc(100vh - 24px);display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;}
+.av-card{background:var(--card,#fff);color:var(--ink,#1f2b44);border-radius:18px;width:min(940px,100%);max-height:calc(100vh - 24px);display:flex;flex-direction:column;box-shadow:var(--shadow-modal);overflow:hidden;}
 .av-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1.5px solid var(--line,#e3e7f0);}
 .av-head h3{margin:0;font-size:1.2rem;}
 .av-x{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;color:inherit;--g-size:22px;}
 .av-x:hover{background:rgba(128,128,128,.16);}
 .av-body{display:flex;gap:18px;padding:16px 18px;overflow:auto;flex:1;min-height:0;}
 .av-left{flex:0 0 220px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
-.av-prev{width:200px;height:200px;min-width:200px;min-height:200px;flex:none;aspect-ratio:1/1;border-radius:50%;overflow:hidden;box-shadow:0 6px 20px rgba(0,0,0,.2);line-height:0;}
+.av-prev{width:200px;height:200px;min-width:200px;min-height:200px;flex:none;aspect-ratio:1/1;border-radius:50%;overflow:hidden;box-shadow:var(--shadow-box);line-height:0;}
 .av-prev svg{display:block;width:100%;height:100%;}
 .av-prev.av-initials{display:flex;align-items:center;justify-content:center;font-size:4rem;font-weight:900;color:#fff;line-height:1;background:linear-gradient(135deg,var(--navy-500,#4a5a85),var(--navy-900,#1f2b44));}
 .av-chip{display:inline-flex;align-items:center;gap:4px;background:#f1f4fb;border:1.5px solid var(--line,#e3e7f0);border-radius:999px;padding:3px 10px;font-weight:800;font-size:var(--fs-md);}
@@ -1706,7 +1706,7 @@ html .student-avatar.av-img{background:none !important;padding:0;overflow:hidden
 .av-foot .av-sum{flex:1;min-width:180px;font-weight:700;font-size:var(--fs-md);}
 .av-foot .av-msg{width:100%;font-weight:700;color:#b8402c;}
 .av-bad{color:#b8402c;}
-.av-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:450;background:#1f2b44;color:#fff;border-radius:14px;padding:12px 16px;font-weight:700;box-shadow:0 8px 28px rgba(0,0,0,.35);display:flex;gap:12px;align-items:center;max-width:calc(100vw - 24px);}
+.av-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:450;background:#1f2b44;color:#fff;border-radius:14px;padding:12px 16px;font-weight:700;box-shadow:var(--shadow-pop);display:flex;gap:12px;align-items:center;max-width:calc(100vw - 24px);}
 .av-toast button{border:0;border-radius:10px;padding:6px 10px;font-weight:800;cursor:pointer;background:#f5b82e;color:#1f2b44;}
 .av-toast .av-toast-x{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:28px;height:28px;margin:-4px -6px -4px -4px;padding:0;border-radius:50%;background:none;color:#fff;--g-size:20px;}
 .av-toast .av-toast-x:hover{background:rgba(255,255,255,.16);}
@@ -1738,7 +1738,7 @@ html.dark-mode .av-self-btn .av-pen{border-color:#1a2036;}
 .av-lb{position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px;background:rgba(15,20,40,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:avLbFade .18s ease-out both;overscroll-behavior:contain;}
 .av-lb.av-lb-out{animation:avLbFadeOut .17s ease-in both;}
 .av-lb.av-lb-out .av-lb-card{animation:avLbPopOut .17s ease-in both;}
-.av-lb-card{position:relative;width:min(400px,100%);max-height:calc(100vh - 28px);max-height:calc(100dvh - 28px);overflow:auto;background:var(--card,#fff);color:var(--ink,#1f2b44);border-radius:24px;box-shadow:0 24px 70px rgba(0,0,0,.5);animation:avLbPop .32s cubic-bezier(.2,1.25,.4,1) both;}
+.av-lb-card{position:relative;width:min(400px,100%);max-height:calc(100vh - 28px);max-height:calc(100dvh - 28px);overflow:auto;background:var(--card,#fff);color:var(--ink,#1f2b44);border-radius:24px;box-shadow:var(--shadow-modal);animation:avLbPop .32s cubic-bezier(.2,1.25,.4,1) both;}
 .av-lb-hero{position:relative;display:flex;align-items:center;justify-content:center;padding:34px 20px 30px;background:radial-gradient(circle at 50% 42%,rgba(255,255,255,.16),rgba(255,255,255,0) 62%),linear-gradient(160deg,var(--navy-500,#4a5a85),var(--navy-900,#1f2b44));}
 .av-lb-av{width:min(270px,64vw,38vh);aspect-ratio:1/1;border-radius:50%;overflow:hidden;line-height:0;flex:none;background:#fff;box-shadow:0 0 0 6px rgba(255,255,255,.92),0 14px 36px rgba(0,0,0,.4);}
 .av-lb-av svg{display:block;width:100%;height:100%;}
@@ -1767,7 +1767,7 @@ html.dark-mode .av-self-btn .av-pen{border-color:#1a2036;}
 .leaderboard-row .student-avatar{width:48px !important;height:48px !important;min-width:48px;font-size:16px !important;}
 .leaderboard-row .av-img[data-av-user]{cursor:zoom-in !important;}
 html.dark-mode .av-lb-chip{background:#222b46;}
-html.dark-mode .av-lb-card{box-shadow:0 24px 70px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.08);}`;
+html.dark-mode .av-lb-card{box-shadow:var(--shadow-modal),0 0 0 1px rgba(255,255,255,.08);}`;
     st.textContent += `
 /* Avatar editor: keep labels inside pills, even in a short or narrow modal. */
 .av-tabs{flex:0 0 auto;align-items:center;min-height:52px;overflow-x:auto;overflow-y:hidden;padding:4px 2px 10px;max-width:100%;scroll-padding-inline:4px;}

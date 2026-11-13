@@ -578,8 +578,6 @@ async function acClose(id) {
 
 /* ---------------- Balance tile (teacher only: students get one tile per account instead, see acTilesHtml) ---------------- */
 const acGetBalView = anwGetBalView, acSetBalView = anwSetBalView; // shared with the floating widget (data-core.js)
-// The account the tile shows: the one they picked if it's still open, otherwise cash, otherwise the first open account.
-function acBalanceChoice(me, cls) { return anwBalanceChoice(me, cls); }
 function acPaintBalanceWidget(me, cls) {
   const box = document.getElementById("balanceStat"); if (!box) return;
   box.classList.toggle("hidden", !IS_TEACHER);

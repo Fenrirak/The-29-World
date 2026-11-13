@@ -562,15 +562,15 @@ function cartContinue() { cartCloseDrawer(); }
 function cartInjectCss() {
   const st = document.createElement("style");
   st.textContent = `
-.cart-fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:2000;display:inline-flex;align-items:center;gap:10px;width:auto;margin:0;padding:12px 18px;border:0;border-radius:999px;background:#e3a72f;color:#1f2b44;font:inherit;font-weight:800;cursor:pointer;box-shadow:0 8px 24px rgba(31,43,68,.35);transition:transform .15s,box-shadow .15s}
-.cart-fab:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(31,43,68,.4)}
+.cart-fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:2000;display:inline-flex;align-items:center;gap:10px;width:auto;margin:0;padding:12px 18px;border:0;border-radius:999px;background:#e3a72f;color:#1f2b44;font:inherit;font-weight:800;cursor:pointer;box-shadow:var(--shadow-pop);transition:transform .15s,box-shadow .15s}
+.cart-fab:hover{transform:translateY(-2px);box-shadow:var(--shadow-pop)}
 .cart-fab:focus-visible,.cart-x:focus-visible{outline:3px solid rgba(227,167,47,.6);outline-offset:2px}
 .cart-fab.bump{animation:cartBump .45s}
 @keyframes cartBump{30%{transform:scale(1.12)}60%{transform:scale(.97)}}
 .cf-count{min-width:24px;height:24px;padding:0 7px;border-radius:12px;background:#1f2b44;color:#fff;font-size:var(--fs-sm);display:inline-flex;align-items:center;justify-content:center}
 .cart-overlay{position:fixed;inset:0;z-index:2001;background:rgba(15,20,32,.5);opacity:0;pointer-events:none;transition:opacity .22s}
 .cart-overlay.open{opacity:1;pointer-events:auto}
-.cart-drawer{position:fixed;top:0;right:0;bottom:0;z-index:2002;width:min(430px,100vw);display:flex;flex-direction:column;background:#fff;color:#1f2b44;box-shadow:-12px 0 40px rgba(0,0,0,.28);transform:translateX(102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);visibility:hidden}
+.cart-drawer{position:fixed;top:0;right:0;bottom:0;z-index:2002;width:min(430px,100vw);display:flex;flex-direction:column;background:#fff;color:#1f2b44;box-shadow:var(--shadow-edge-end);transform:translateX(102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);visibility:hidden}
 .cart-drawer.open{transform:none;visibility:visible}
 html.dark-mode .cart-drawer{background:#1c2433;color:#eef1f7}
 body.cart-lock{overflow:hidden}

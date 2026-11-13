@@ -5,7 +5,7 @@
 .bj-table {
   margin-top: 16px;
   padding: 18px;
-  border-radius: 14px;
+  border-radius: var(--r-5);
   background: radial-gradient(ellipse at center, #1f5c3f 0%, #123626 100%);
   border: 6px solid #5a3a1e;
 }
@@ -22,7 +22,7 @@
   font-weight: 900;
   letter-spacing: .04em;
   text-transform: uppercase;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   opacity: .85;
   margin-bottom: 6px;
 }
@@ -36,7 +36,7 @@
 .bj-seat {
   text-align: center;
   padding: 10px 6px;
-  border-radius: 10px;
+  border-radius: var(--r-3);
   background: rgba(255,255,255,0.06);
   transition: background .2s;
 }
@@ -53,7 +53,7 @@
 .bj-seat-name {
   color: #fff;
   font-weight: 800;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   margin-bottom: 6px;
 }
 
@@ -78,10 +78,10 @@
   align-items: center;
   justify-content: center;
   font-weight: 900;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
   border: 1px solid #ccc;
-  font-family: Trebuchet MS, sans-serif;
+  font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
 }
 
 .bj-card.red { color: #c9503a; }
@@ -95,16 +95,16 @@
 .bj-total {
   color: #ffe9a8;
   font-weight: 900;
-  font-size: 14px;
+  font-size: var(--fs-md);
   margin-top: 4px;
 }
 
 .bj-outcome {
   font-weight: 800;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   margin-top: 2px;
   padding: 2px 8px;
-  border-radius: 20px;
+  border-radius: var(--r-7);
   display: inline-block;
 }
 
@@ -119,7 +119,7 @@
   color: #1f2b44;
   background: #ffd778;
   padding: 2px 8px;
-  border-radius: 20px;
+  border-radius: var(--r-7);
   margin-bottom: 6px;
   animation: bjPulse 1s ease-in-out infinite;
 }
@@ -140,7 +140,7 @@
 
 @media (max-width: 640px) {
   .bj-seats-row { grid-template-columns: 1fr; }
-  .bj-card { width: 30px; height: 42px; font-size: 12px; }
+  .bj-card { width: 30px; height: 42px; font-size: var(--fs-xs); }
 }
 
 /* ===================== Gambling account tab ===================== */
@@ -160,9 +160,9 @@
   overflow: hidden;
   min-height: 150px;
   padding: 22px 24px;
-  border-radius: 14px;
+  border-radius: var(--r-5);
   background: linear-gradient(135deg, #e6bd66 0%, #d4a24c 55%, #c28f2e 100%);
-  box-shadow: 0 8px 20px -8px rgba(178, 132, 42, 0.55);
+  box-shadow: var(--shadow-box);
 }
 /* Faint repeating diamond motif so the gold panel doesn't read as an
    empty flat block — decorative only, sits behind the icon/label/value. */
@@ -197,8 +197,8 @@
 
 .ga-actions-panel {
   background: rgba(232, 184, 75, 0.07);
-  border: 1.5px solid rgba(212, 162, 76, 0.35);
-  border-radius: 14px;
+  border: 1.5px solid rgba(232,184,75,0.35);
+  border-radius: var(--r-5);
   padding: 20px 22px;
   display: flex;
   flex-direction: column;
@@ -228,13 +228,13 @@
   content: "";
   flex: 1;
   height: 1px;
-  background: rgba(212, 162, 76, 0.35);
+  background: rgba(232,184,75,0.35);
 }
 
 .ga-limits-grid { margin-top: 20px; }
 .ga-limit-block {
   border: 1.5px solid var(--line, #e6e6ea);
-  border-radius: 12px;
+  border-radius: var(--r-4);
   padding: 14px 16px;
 }
 .ga-limit-head {
@@ -270,9 +270,9 @@
   gap: 4px;
   margin: 14px 0 22px;
   padding: 4px;
-  border-radius: 999px;
-  background: rgba(212,162,76,0.07);
-  border: 1px solid rgba(212,162,76,0.35);
+  border-radius: var(--r-pill);
+  background: rgba(232,184,75,0.07);
+  border: 1px solid rgba(232,184,75,0.35);
 }
 .mode-btn {
   display: flex;
@@ -280,21 +280,21 @@
   justify-content: center;
   gap: 8px;
   padding: 9px 22px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: none;
   background: transparent;
-  color: var(--gold, #d4a24c);
+  color: var(--gold);
   font-weight: 800;
-  font-size: 14px;
+  font-size: var(--fs-md);
   line-height: 1;
   cursor: pointer;
   transition: background .18s ease, color .18s ease, box-shadow .18s ease;
 }
-.mode-btn:hover:not(.active) { background: rgba(212,162,76,0.14); }
+.mode-btn:hover:not(.active) { background: rgba(232,184,75,0.14); }
 .mode-btn.active {
-  background: var(--gold, #d4a24c);
+  background: var(--gold);
   color: #1f2b44;
-  box-shadow: 0 2px 8px rgba(212,162,76,0.4);
+  box-shadow: var(--shadow-btn);
 }
 .mode-btn .icon-slot {
   width: 18px;
@@ -312,7 +312,7 @@
   .mode-switch { display: flex; width: 100%; }
   /* Three options (Account, Roulette, Blackjack) have to share a phone's
      width, so they lose the roomy side padding and can shrink. */
-  .mode-btn { flex: 1; min-width: 0; padding: 9px 6px; gap: 5px; font-size: 13px; }
+  .mode-btn { flex: 1; min-width: 0; padding: 9px 6px; gap: 5px; font-size: var(--fs-sm); }
 }
 
 /* ===================== Blackjack: landscape-only ===================== */
@@ -331,7 +331,7 @@
 }
 .bj-rotate-prompt h3 {
   margin: 0;
-  color: var(--gold, #d4a24c);
+  color: var(--gold);
   font-size: 18px;
 }
 .bj-rotate-prompt p { max-width: 320px; margin: 0; }
@@ -339,8 +339,8 @@
 .bj-rotate-icon {
   width: 56px;
   height: 88px;
-  border: 4px solid var(--gold, #d4a24c);
-  border-radius: 10px;
+  border: 4px solid var(--gold);
+  border-radius: var(--r-3);
   position: relative;
   animation: bjRotateHint 1.8s ease-in-out infinite;
 }
@@ -353,7 +353,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--gold, #d4a24c);
+  background: var(--gold);
   transform: translateX(-50%);
 }
 @keyframes bjRotateHint {
@@ -388,9 +388,9 @@
   gap: 8px 36px;
   margin: 16px 0;
   padding: 12px 24px;
-  border-radius: 14px;
+  border-radius: var(--r-5);
   background: rgba(232,184,75,0.07);
-  border: 1.5px solid rgba(212,162,76,0.35);
+  border: 1.5px solid rgba(232,184,75,0.35);
 }
 .perf-head {
   display: flex;
@@ -400,7 +400,7 @@
 }
 .perf-title {
   font-weight: 800;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--navy-900, #1f2b44);
@@ -413,7 +413,7 @@
   left: 0; right: 0; top: 50%;
   height: 8px;
   transform: translateY(-50%);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: rgba(31,43,68,0.12);
   box-shadow: inset 0 1px 2px rgba(31,43,68,0.18);
   overflow: hidden;
@@ -421,7 +421,7 @@
 .perf-fill, .perf-trail {
   position: absolute;
   left: 0; top: 0; bottom: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   transition: width .22s cubic-bezier(.4,0,.2,1);
 }
 .perf-fill {
@@ -432,7 +432,7 @@
 .perf-trail {
   display: none;
   width: calc(var(--t) / 2 + (100% - var(--t)) * var(--d));
-  background: repeating-linear-gradient(45deg, rgba(212,162,76,0.6) 0 4px, rgba(212,162,76,0.22) 4px 8px);
+  background: repeating-linear-gradient(45deg, rgba(232,184,75,0.6) 0 4px, rgba(232,184,75,0.22) 4px 8px);
 }
 .perf-toggle[data-mode="auto"] .perf-trail { display: block; }
 
@@ -530,21 +530,21 @@
   left: calc(var(--t) / 2 + (100% - var(--t)) * var(--k));
   transform: translateX(-50%);
   padding: 4px 9px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-family: inherit;
   font-weight: 800;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   line-height: 1;
   white-space: nowrap;
   color: rgba(31,43,68,0.55);
   cursor: pointer;
   transition: color .18s, background .18s;
 }
-.perf-labels button:hover { color: #1f2b44; background: rgba(212,162,76,0.18); }
-.perf-labels button.active { color: #1f2b44; background: rgba(212,162,76,0.3); }
+.perf-labels button:hover { color: #1f2b44; background: rgba(232,184,75,0.18); }
+.perf-labels button.active { color: #1f2b44; background: rgba(232,184,75,0.3); }
 .perf-labels button.detected:not(.active) { box-shadow: inset 0 0 0 1.5px rgba(194,143,46,0.75); color: #1f2b44; }
 
-.perf-hint { display: block; margin: 6px 0 0; line-height: 1.3; font-size: 12px; }
+.perf-hint { display: block; margin: 6px 0 0; line-height: 1.3; font-size: var(--fs-xs); }
 
 @media (max-width: 640px) {
   .perf-toggle { grid-template-columns: 1fr; padding: 10px 22px 8px; }

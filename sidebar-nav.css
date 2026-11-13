@@ -64,7 +64,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
     gap: 2px;
     overflow-y: auto;
     overflow-x: hidden;
-    box-shadow: 6px 0 28px rgba(20,28,46,.18);
+    box-shadow: var(--shadow-edge);
     z-index: 90;
   }
   html.sidebar-nav body{ padding-left: var(--sb-width); }
@@ -210,7 +210,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
     width: 34px;
     height: 34px;
     flex-shrink: 0;
-    border-radius: 8px;
+    border-radius: var(--r-2);
     border: none;
     background: rgba(255,255,255,.1);
     cursor: pointer;
@@ -257,7 +257,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
     transform: translateX(-100%);
     transition: transform .24s ease;
     z-index: 130;
-    box-shadow: 10px 0 36px rgba(0,0,0,.4);
+    box-shadow: var(--shadow-edge);
   }
   /* The drawer is a fixed-height flex column, so its children default to
      flex-shrink:1 and quietly squash themselves to fit instead of

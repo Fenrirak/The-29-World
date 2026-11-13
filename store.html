@@ -23,7 +23,7 @@
     var s = document.createElement('script'); s.src = js;
     document.head.appendChild(s);
   }
-  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=c69a1fa3', 'sidebar-nav.js?v=d620d750');
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=2644cfb0', 'sidebar-nav.js?v=d620d750');
 })();
 </script>
 <title>Store | The 29 World™</title>
@@ -32,7 +32,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=c4a24b6e">
+<link rel="stylesheet" href="style.css?v=2069f313">
 <style>
 /* ---- Teacher: arrange the store ---- */
 .sort-bar{margin-bottom:18px}
@@ -43,24 +43,24 @@
 .sort-status.err{color:#d8563f;opacity:1}
 .sort-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
 .sort-row-label{font-size:var(--fs-xs);font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.6;min-width:74px}
-.sort-chip{width:auto;margin:0;font:inherit;font-size:var(--fs-md);font-weight:600;color:inherit;background:transparent;border:1.5px solid rgba(128,128,128,.4);border-radius:999px;padding:7px 14px;min-height:38px;cursor:pointer;transition:background .18s,border-color .18s,transform .18s,box-shadow .18s}
-.sort-chip:hover{border-color:#e3a72f;transform:translateY(-1px)}
-.sort-chip.active{background:#e3a72f;border-color:#e3a72f;color:#1f2b44;box-shadow:0 3px 10px rgba(227,167,47,.35)}
-.sort-chip:focus-visible,.rc-btn:focus-visible,.rc-grip:focus-visible{outline:3px solid rgba(227,167,47,.6);outline-offset:2px}
+.sort-chip{width:auto;margin:0;font:inherit;font-size:var(--fs-md);font-weight:600;color:inherit;background:transparent;border:1.5px solid rgba(128,128,128,.4);border-radius:var(--r-pill);padding:7px 14px;min-height:38px;cursor:pointer;transition:background .18s,border-color .18s,transform .18s,box-shadow .18s}
+.sort-chip:hover{border-color:var(--gold);transform:translateY(-1px)}
+.sort-chip.active{background:var(--gold);border-color:var(--gold);color:#1f2b44;box-shadow:var(--shadow-btn)}
+.sort-chip:focus-visible,.rc-btn:focus-visible,.rc-grip:focus-visible{outline:3px solid rgba(232,184,75,.6);outline-offset:2px}
 .sort-hint{margin:12px 0 0;line-height:1.45}
 .sort-keep{margin-top:10px}
 .store-left{display:flex;gap:12px;align-items:flex-start;min-width:0;flex:1}
 .store-info{min-width:0;flex:1}
 .reorder-ctl{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
 .rank-badge{font-size:var(--fs-sm);font-weight:700;opacity:.65;min-width:22px;text-align:center}
-.rc-btn,.rc-grip{width:36px;height:30px;padding:0;margin:0;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;border:1.5px solid rgba(128,128,128,.35);background:transparent;color:inherit;cursor:pointer;transition:background .15s,border-color .15s}
-.rc-btn:hover:not(:disabled),.rc-grip:hover{border-color:#e3a72f;background:rgba(227,167,47,.14)}
+.rc-btn,.rc-grip{width:36px;height:30px;padding:0;margin:0;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--r-2);border:1.5px solid rgba(128,128,128,.35);background:transparent;color:inherit;cursor:pointer;transition:background .15s,border-color .15s}
+.rc-btn:hover:not(:disabled),.rc-grip:hover{border-color:var(--gold);background:rgba(232,184,75,.14)}
 .rc-btn:disabled{opacity:.28;cursor:default}
 .rc-grip{height:36px;cursor:grab;touch-action:none;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 #itemList.auto-sorted .rc-btn,#itemList.auto-sorted .rc-grip{display:none}
 #itemList > .store-card{position:relative;transition:box-shadow .2s ease,opacity .2s ease}
-#itemList > .store-card:hover{box-shadow:var(--shadow)}
-#itemList > .store-card.dragging{z-index:60;box-shadow:0 16px 38px rgba(0,0,0,.35);outline:2px solid #e3a72f;cursor:grabbing}
+#itemList > .store-card:hover{box-shadow:var(--shadow-hover)}
+#itemList > .store-card.dragging{z-index:60;box-shadow:var(--shadow-pop);outline:2px solid var(--gold);cursor:grabbing}
 #itemList > .store-card.settling{z-index:60}
 #itemList.is-dragging > .store-card:not(.dragging){opacity:.8}
 body.store-dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
@@ -69,8 +69,8 @@ body.store-dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
 /* ---- Student: inventory ---- */
 .inv-card{padding:0;margin-bottom:18px;overflow:hidden}
 .inv-head{width:100%;margin:0;display:flex;align-items:center;gap:12px;padding:12px 18px;min-height:60px;background:transparent;border:0;border-radius:0;color:inherit;font:inherit;text-align:left;cursor:pointer;box-shadow:none;transition:background .18s}
-.inv-head:hover{background:rgba(227,167,47,.09)}
-.inv-head:focus-visible{outline:3px solid rgba(227,167,47,.6);outline-offset:-3px}
+.inv-head:hover{background:rgba(232,184,75,.09)}
+.inv-head:focus-visible{outline:3px solid rgba(232,184,75,.6);outline-offset:-3px}
 .inv-head.static{cursor:default}.inv-head.static:hover{background:transparent}
 .inv-text{display:flex;flex-direction:column;min-width:0}
 .inv-title{font-weight:700;font-size:1.1rem;line-height:1.2}
@@ -83,17 +83,17 @@ body.store-dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
 .inv-card.open .inv-chev{transform:rotate(180deg)}
 .inv-body{padding:2px 18px 18px;border-top:1px solid rgba(128,128,128,.22)}
 .inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:14px}
-.inv-tile{display:flex;flex-direction:column;gap:5px;padding:12px 14px;border:1.5px solid rgba(128,128,128,.3);border-radius:14px;background:rgba(128,128,128,.05);transition:border-color .18s,transform .18s,box-shadow .18s}
+.inv-tile{display:flex;flex-direction:column;gap:5px;padding:12px 14px;border:1.5px solid rgba(128,128,128,.3);border-radius:var(--r-5);background:rgba(128,128,128,.05);transition:border-color .18s,transform .18s,box-shadow .18s}
 .inv-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .inv-name{font-weight:700;line-height:1.25;word-break:break-word}
-.inv-qty{flex-shrink:0;min-width:36px;height:26px;padding:0 10px;border-radius:999px;background:#2e9d6a;color:#fff;font-weight:800;font-size:var(--fs-md);display:inline-flex;align-items:center;justify-content:center}
+.inv-qty{flex-shrink:0;min-width:36px;height:26px;padding:0 10px;border-radius:var(--r-pill);background:#2e9d6a;color:#fff;font-weight:800;font-size:var(--fs-md);display:inline-flex;align-items:center;justify-content:center}
 .inv-meta{font-size:var(--fs-sm);opacity:.75;line-height:1.35}
 .inv-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:8px}
 .inv-acts .btn{width:auto;margin:0}
 #itemList > .store-card.inv-flash{animation:invFlash 1.5s ease}
-@keyframes invFlash{0%,100%{box-shadow:none}25%,60%{box-shadow:0 0 0 3px #e3a72f,0 10px 26px rgba(227,167,47,.35)}}
+@keyframes invFlash{0%,100%{box-shadow:none}25%,60%{box-shadow:0 0 0 3px var(--gold),0 10px 26px rgba(232,184,75,.35)}}
 @media (max-width:640px){.inv-preview{display:none}.inv-head{padding:12px 14px}.inv-body{padding:2px 14px 16px}.inv-grid{grid-template-columns:1fr}}
-@media (prefers-reduced-motion:reduce){.inv-chev,.inv-tile,.inv-head{transition:none}#itemList > .store-card.inv-flash{animation:none;outline:3px solid #e3a72f}}
+@media (prefers-reduced-motion:reduce){.inv-chev,.inv-tile,.inv-head{transition:none}#itemList > .store-card.inv-flash{animation:none;outline:3px solid var(--gold)}}
 </style>
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
@@ -221,18 +221,18 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
 <script type="module" src="firebase-init.js?v=e3543fda"></script>
 <script defer src="icons.js?v=dbe56314"></script>
-<script defer src="settings-menu.js?v=372f044a"></script>
+<script defer src="settings-menu.js?v=54fe64ca"></script>
 <script defer src="shortcuts.js?v=5c3b32dc"></script>
-<script defer src="offline.js?v=ac2cbd82"></script>
+<script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=66d481e0"></script>
 <script defer src="data-money.js?v=e9ae46f1"></script>
 <script defer src="data-life.js?v=4cc2cf3b"></script>
 <script defer src="data-property.js?v=d9d76f21"></script>
 <script defer src="data-markets.js?v=2ebd767f"></script>
-<script defer src="events-ui.js?v=9b6e825f"></script>
+<script defer src="events-ui.js?v=5bf20a4c"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=2b95ab96"></script>
-<script defer src="creditcard.js?v=63dd7488"></script>
-<script defer src="store.js?v=ff6ef1d0"></script>
+<script defer src="creditcard.js?v=4611fcd4"></script>
+<script defer src="store.js?v=e686377a"></script>
 </body>
 </html>

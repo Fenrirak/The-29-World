@@ -24,7 +24,7 @@
     var s = document.createElement('script'); s.src = js;
     document.head.appendChild(s);
   }
-  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=c69a1fa3', 'sidebar-nav.js?v=d620d750');
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=2644cfb0', 'sidebar-nav.js?v=d620d750');
 })();
 </script>
 <title>Teacher Dashboard | The 29 World™</title>
@@ -33,7 +33,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=c4a24b6e">
+<link rel="stylesheet" href="style.css?v=2069f313">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -42,15 +42,15 @@
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <style>
   /* Online now / last opened */
-  .online-pill { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; line-height: 1.4; vertical-align: middle; white-space: nowrap; background: rgba(128,128,128,0.14); }
+  .online-pill { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; padding: 3px 10px; border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 600; line-height: 1.4; vertical-align: middle; white-space: nowrap; background: rgba(128,128,128,0.14); }
   .online-pill[hidden] { display: none; }
   .online-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #b5b5b5; }
   .online-pill.has-online { background: rgba(46,160,90,0.16); color: #23844a; }
   .online-pill.has-online::before { background: #2ea05a; }
   .presence-dot { display: inline-block; width: 8px; height: 8px; margin-left: 7px; border-radius: 50%; background: #c4c4c4; vertical-align: middle; }
   .presence-dot.on { background: #2ea05a; box-shadow: 0 0 0 3px rgba(46,160,90,0.2); }
-  .profile-presence { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; margin: 10px 0 20px; padding: 0; border: 0; font-size: 0.85rem; }
-  .presence-badge { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 0.9rem; }
+  .profile-presence { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; margin: 10px 0 20px; padding: 0; border: 0; font-size: var(--fs-md); }
+  .presence-badge { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: var(--fs-md); }
   .presence-badge i { width: 9px; height: 9px; border-radius: 50%; background: #b5b5b5; }
   .presence-badge.on { color: #23844a; }
   .presence-badge.on i { background: #2ea05a; box-shadow: 0 0 0 3px rgba(46,160,90,0.2); }
@@ -66,7 +66,7 @@
   #thresholdList { display: flex; flex-direction: column; gap: 18px; margin-bottom: 18px; }
   .threshold-row {
     border: 1.5px solid var(--line);
-    border-radius: 12px;
+    border-radius: var(--r-4);
     padding: 18px 20px;
     background: rgba(0,0,0,0.012);
   }
@@ -162,12 +162,12 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     </div>
   </div>
 
-  <div id="classArchivedBanner" class="hidden" style="margin-top:16px;padding:14px 18px;border-radius:12px;background:linear-gradient(135deg,var(--warn-banner-grad-start),var(--warn-banner-grad-end));border:1.5px solid var(--coral);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;color:var(--warn-banner-text);">
+  <div id="classArchivedBanner" class="hidden" style="margin-top:16px;padding:14px 18px;border-radius:var(--r-4);background:linear-gradient(135deg,var(--warn-banner-grad-start),var(--warn-banner-grad-end));border:1.5px solid var(--coral);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;color:var(--warn-banner-text);">
     <span><span id="classArchivedIcon" style="vertical-align:middle;margin-right:6px;"></span>This class is archived, students can't do anything in it until you reopen it.</span>
     <button class="btn small gold" onclick="reopenThisClass()" id="reopenClassBtn">Reopen this class</button>
   </div>
 
-  <div id="timeExemptionBanner" class="hidden" style="margin-top:16px;padding:14px 18px;border-radius:12px;background:linear-gradient(135deg,var(--warn-banner-grad-start),var(--warn-banner-grad-end));border:1.5px solid var(--coral);color:var(--warn-banner-text);">
+  <div id="timeExemptionBanner" class="hidden" style="margin-top:16px;padding:14px 18px;border-radius:var(--r-4);background:linear-gradient(135deg,var(--warn-banner-grad-start),var(--warn-banner-grad-end));border:1.5px solid var(--coral);color:var(--warn-banner-text);">
     <div id="timeExemptionBannerList" style="display:flex;flex-direction:column;gap:10px;"></div>
   </div>
 
@@ -530,23 +530,23 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 
 <script type="module" src="firebase-init.js?v=e3543fda"></script>
 <script defer src="icons.js?v=dbe56314"></script>
-<script defer src="settings-menu.js?v=372f044a"></script>
+<script defer src="settings-menu.js?v=54fe64ca"></script>
 <script defer src="shortcuts.js?v=5c3b32dc"></script>
-<script defer src="offline.js?v=ac2cbd82"></script>
+<script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=66d481e0"></script>
 <script defer src="data-money.js?v=e9ae46f1"></script>
 <script defer src="data-life.js?v=4cc2cf3b"></script>
 <script defer src="data-property.js?v=d9d76f21"></script>
 <script defer src="data-markets.js?v=2ebd767f"></script>
 <script defer src="tour.js?v=475f7fc8"></script>
-<script defer src="events-ui.js?v=9b6e825f"></script>
+<script defer src="events-ui.js?v=5bf20a4c"></script>
 <script defer src="base-template.js?v=f0d00d4a"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
-<script defer src="avatar.js?v=c81364b1"></script>
+<script defer src="avatar.js?v=c23aec59"></script>
 <script defer src="notifications.js?v=2b95ab96"></script>
 <script defer src="pdf-report.js?v=cba2b85b"></script>
 <script defer src="class-export.js?v=92f31bf5"></script>
-<script defer src="teacher.js?v=3dab43dc"></script>
+<script defer src="teacher.js?v=0f9397a9"></script>
 <script defer src="bulk-students.js?v=e1e73dae"></script>
 </body>
 </html>

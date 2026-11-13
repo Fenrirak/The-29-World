@@ -23,7 +23,7 @@
     bar.setAttribute("aria-live", "polite");
     bar.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));" +
       "z-index:99999;max-width:min(92vw,460px);padding:10px 16px;border-radius:12px;font:600 14px/1.35 system-ui,-apple-system,'Segoe UI',sans-serif;" +
-      "text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.28);color:#fff;background:#1f2b44;border:1px solid rgba(255,255,255,.25);display:none;";
+      "text-align:center;box-shadow:var(--shadow-pop);color:#fff;background:#1f2b44;border:1px solid rgba(255,255,255,.25);display:none;";
     document.body.appendChild(bar);
     return bar;
   }

@@ -706,7 +706,7 @@ async function cardAskPay(total, what) {
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
           <button class="btn gold" data-mode="cash">Pay from cash <small>(${fmtMoney(cash)} available)</small></button>
           <button class="btn gold" data-mode="card" ${canCard ? "" : "disabled"}>Put it on my credit card <small>(${canCard ? `${fmtMoney(avail)} available` : `only ${fmtMoney(avail)} available`})</small></button>
-          ${canSplit ? `<div style="border:1px solid var(--line, #ddd);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;">
+          ${canSplit ? `<div style="border:1px solid var(--line, #ddd);border-radius:var(--r-4);padding:10px;display:flex;flex-direction:column;gap:8px;">
             <label for="cardSplitAmt" style="font-weight:700;">Part card, part cash</label>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Card covers $<input id="cardSplitAmt" type="number" min="0.01" max="${maxCard}" step="0.01" value="${startCard}" style="width:110px;">
               <span class="muted-small" id="cardSplitCash"></span></div>

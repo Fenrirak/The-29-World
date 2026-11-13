@@ -63,7 +63,7 @@ function ccInjectThemeCss() {
 .cc-themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px;margin-top:6px}
 .cc-theme{appearance:none;background:none;border:0;padding:0;cursor:pointer;text-align:left;font:inherit;color:inherit}
 .cc-mini{position:relative;height:82px;border-radius:10px;padding:8px 9px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;
-  box-shadow:0 2px 6px rgba(0,0,0,.25);outline:3px solid transparent;outline-offset:2px;transition:transform .12s,outline-color .12s}
+  box-shadow:var(--shadow-btn);outline:3px solid transparent;outline-offset:2px;transition:transform .12s,outline-color .12s}
 .cc-theme:hover .cc-mini,.cc-theme:focus-visible .cc-mini{transform:translateY(-2px)}
 .cc-theme.on .cc-mini{outline-color:#f0b429}
 .cc-mini-top{display:flex;justify-content:space-between;font-size:7px;letter-spacing:.14em;font-weight:800;opacity:.92}
@@ -72,7 +72,7 @@ function ccInjectThemeCss() {
 .cc-mini-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .cc-mini-limit{white-space:nowrap}
 .cc-mini-tick{position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:#f0b429;color:#1f2b44;
-  display:none;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  display:none;align-items:center;justify-content:center;box-shadow:var(--shadow-btn)}
 .cc-theme.on .cc-mini-tick{display:flex}
 .cc-theme-label{display:block;font-size:12px;font-weight:700;margin-top:7px}
 .cc-theme.random .cc-mini{background:repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0,rgba(255,255,255,.07) 6px,rgba(255,255,255,0) 6px,rgba(255,255,255,0) 14px),linear-gradient(135deg,#4a7ae0,#9a86e6 25%,#e0586a 50%,#f2a65a 75%,#4fb8b0)}
