@@ -1264,6 +1264,8 @@ function defaultClassData(code, className, teacherUsername) {
     publicTransportFee: { amount: 0, description: "" },
     priceRange: { min: 1, max: 5 },
     propertyPriceRange: { min: 0.5, max: 2 },
+    marketUpChance: 55,
+    propertyUpChance: 55,
     lastPropertyMarketDayRun: null,
     automations: [],
     jobApplications: [],
@@ -1629,6 +1631,8 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
   cls.wageTaxBrackets = _cloneDoc(template.wageTaxBrackets || []);
   cls.priceRange = _cloneDoc(template.priceRange || cls.priceRange);
   cls.propertyPriceRange = _cloneDoc(template.propertyPriceRange || cls.propertyPriceRange);
+  cls.marketUpChance = t29UpChance(template.marketUpChance);
+  cls.propertyUpChance = t29UpChance(template.propertyUpChance);
   cls.sellBackRates = _cloneDoc(template.sellBackRates || cls.sellBackRates);
   cls.truckLicence = _cloneDoc(template.truckLicence || cls.truckLicence);
   cls.dailyTimeLimitMinutes = template.dailyTimeLimitMinutes || null;
@@ -1672,6 +1676,15 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
 // saved inside a share link so another teacher can import it without
 // needing permission to read the class itself. No people, money or
 // history goes in it — only what a brand-new class would start with.
+/* Chance (0-100 %) that a share or property price goes UP on a simulated day. Teachers set it per class
+   (cls.marketUpChance for shares, cls.propertyUpChance for property). Anything missing or not a number is 55. */
+const T29_DEFAULT_UP_CHANCE = 55;
+function t29UpChance(v) {
+  if (v === null || v === undefined || v === "") return T29_DEFAULT_UP_CHANCE;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : T29_DEFAULT_UP_CHANCE;
+}
+
 function _templateSnapshot(cls) {
   const t = _classDataFromTemplate("", cls.name || "", cls.teacher || "", withNewModuleDefaults(_cloneDoc(cls)));
   ["code", "name", "teacher", "students", "txns", "createdAt", "reportArchives", "archived", "archivedAt",
@@ -3987,6 +4000,9 @@ function withNewModuleDefaults(cls) {
   // to feel steadier than the stock market, so this defaults to a gentler
   // band than cls.priceRange's stock default of 1-5%.
   if (!cls.propertyPriceRange) cls.propertyPriceRange = { min: 0.5, max: 2 };
+  // Chance of a price going up on a simulated day (default 55%), set by the teacher.
+  cls.marketUpChance = t29UpChance(cls.marketUpChance);
+  cls.propertyUpChance = t29UpChance(cls.propertyUpChance);
   if (cls.lastPropertyMarketDayRun === undefined) cls.lastPropertyMarketDayRun = null;
   // Teacher-listed rentals with no student owner — "the school" is the
   // landlord. A student rents a unit directly from the teacher's listing

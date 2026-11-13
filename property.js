@@ -118,6 +118,30 @@ function populatePropertyMarketSettings(cls) {
   const range = cls.propertyPriceRange || { min: 0.5, max: 2 };
   document.getElementById("propRangeMin").value = range.min;
   document.getElementById("propRangeMax").value = range.max;
+  const upEl = document.getElementById("propUpChance");
+  if (upEl && document.activeElement !== upEl) { upEl.value = t29UpChance(cls.propertyUpChance); paintPropDownChance(); }
+}
+// Shows the down chance (100 minus the up chance) as the teacher types.
+function paintPropDownChance() {
+  const up = document.getElementById("propUpChance"), down = document.getElementById("propDownChance");
+  if (!up || !down) return;
+  const n = Number(up.value);
+  down.value = up.value !== "" && Number.isFinite(n) && n >= 0 && n <= 100 ? String(Math.round((100 - n) * 10) / 10) : "";
+}
+async function savePropUpChance() {
+  const btn = document.getElementById("savePropUpChanceBtn");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const res = await setPropertyUpChance(CURRENT.classCode, document.getElementById("propUpChance").value);
+    if (!res.ok) { setMsg("propUpChanceMsg", `<div class="error-msg">${escapeHtml(res.error)}</div>`); return; }
+    setMsg("propUpChanceMsg", `<div class="success-msg">Saved. Each listing now has a ${res.value}% chance of going up and a ${Math.round((100 - res.value) * 10) / 10}% chance of going down each simulated day.</div>`);
+    await render();
+  } catch (e) {
+    setMsg("propUpChanceMsg", `<div class="error-msg">Couldn't save. Please try again.</div>`);
+  } finally {
+    btn.disabled = false;
+  }
 }
 async function savePropRange() {
   const min = document.getElementById("propRangeMin").value;

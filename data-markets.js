@@ -127,6 +127,17 @@ async function setPriceRange(classCode, min, max) {
   }
 }
 
+// Teacher: the chance (0-100 %) that a company's price goes UP on a simulated day. Down is the rest.
+async function setMarketUpChance(classCode, chance) {
+  const n = Number(chance);
+  if (chance === "" || chance === null || chance === undefined || !Number.isFinite(n) || n < 0 || n > 100) {
+    return { ok: false, error: "Enter a chance between 0 and 100." };
+  }
+  const value = Math.round(n * 10) / 10;
+  await classesCol().doc(classCode).update({ marketUpChance: value });
+  return { ok: true, value };
+}
+
 // Applies one simulated day's random price move to every company on `cls`
 // IN PLACE, and returns the per-company results. Shared by the auto-trigger
 // and the manual "Simulate a market day" button so both move prices exactly
@@ -134,12 +145,12 @@ async function setPriceRange(classCode, min, max) {
 function applyMarketDayMoves(cls) {
   const results = [];
   const range = cls.priceRange || { min: 1, max: 5 };
+  const upChance = t29UpChance(cls.marketUpChance);
   cls.companies.forEach(co => {
     const coRange = co.priceRange || range;
     const pct = coRange.min + Math.random() * (coRange.max - coRange.min);
-    // Upward bias: 60% chance of an up day vs 40% down, rather than a
-    // straight coin flip.
-    const direction = Math.random() < 0.4 ? -1 : 1;
+    // Up with the teacher's chance (cls.marketUpChance, 55% unless changed), down otherwise.
+    const direction = Math.random() < upChance / 100 ? 1 : -1;
     const newPrice = Math.max(0.01, Math.round(co.price * (1 + (direction * pct) / 100) * 100) / 100);
     co.price = newPrice;
     co.history.push(newPrice);

@@ -518,7 +518,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
       <div class="card">
         <div class="set-head"><h2><span class="icon-slot" data-icon="chart"></span> Daily price movement</h2></div>
-        <p class="muted-small" style="margin:6px 0 0;">Like the Stock Market, property prices drift by a random percentage every simulated day, rising a little more often than falling (about 6 days in 10). It runs automatically once a day (the first page load of the day triggers it). Any listing can override this range from its <strong>Pricing</strong> button.</p>
+        <p class="muted-small" style="margin:6px 0 0;">Like the Stock Market, property prices drift by a random percentage every simulated day, rising or falling by the chance you set below (55% up by default). It runs automatically once a day (the first page load of the day triggers it). Any listing can override this range from its <strong>Pricing</strong> button.</p>
 
         <div class="set-row">
           <div class="set-text">
@@ -531,6 +531,19 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
             <button class="btn small secondary" onclick="savePropRange()" id="savePropRangeBtn">Save</button>
           </div>
           <div id="propRangeMsg" class="set-msg"></div>
+        </div>
+
+        <div class="set-row">
+          <div class="set-text">
+            <strong>Chance of going up</strong>
+            <span class="muted-small">Each listing rolls this every simulated day. Otherwise it goes down. 50% is a fair coin flip. New classes start at 55%.</span>
+          </div>
+          <div class="set-ctl">
+            <div class="field-sm"><label for="propUpChance">Up %</label><input id="propUpChance" type="number" min="0" max="100" step="1" inputmode="decimal" oninput="paintPropDownChance()"></div>
+            <div class="field-sm"><label for="propDownChance">Down %</label><input id="propDownChance" type="text" readonly tabindex="-1" aria-label="Chance of going down, worked out from the chance of going up"></div>
+            <button class="btn small secondary" onclick="savePropUpChance()" id="savePropUpChanceBtn">Save</button>
+          </div>
+          <div id="propUpChanceMsg" class="set-msg"></div>
         </div>
 
         <div class="set-row">
@@ -732,14 +745,14 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="settings-menu.js?v=54fe64ca"></script>
 <script defer src="shortcuts.js?v=5c3b32dc"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
-<script defer src="data-core.js?v=98ea2dcf"></script>
+<script defer src="data-core.js?v=13f6f2ad"></script>
 <script defer src="data-money.js?v=318e9a8a"></script>
 <script defer src="data-life.js?v=e845ca0c"></script>
-<script defer src="data-property.js?v=d9d76f21"></script>
-<script defer src="data-markets.js?v=95365b86"></script>
+<script defer src="data-property.js?v=2ae916b7"></script>
+<script defer src="data-markets.js?v=cbd1eee8"></script>
 <script defer src="events-ui.js?v=5bf20a4c"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=e0afe5b8"></script>
-<script defer src="property.js?v=a9c5971e"></script>
+<script defer src="property.js?v=90a578d4"></script>
 </body>
 </html>

@@ -23,10 +23,14 @@ const T29X_NOT_MONEY = /(minutes|seconds|sec$|days|weeks|count|qty|quantity|stoc
 const T29X_MONEY = /(price|balance|amount|wage|cost|fee|rent|payment|savings|owed|principal|deposit|bet|worth|value|premium|income|spent|saved|borrowed|payout|refund|fine|offer|total|bonus|winnings|profit|loss|gain|chips|upto|allowance|salary|earned|stake|winlimit|buyin|history|^net$|^cap$)/i;
 const T29X_PCT = /(pct|percent|rate$)/i;
 
-/* Keep in sync with applyMarketDayMoves (data-markets.js) and
-   applyPropertyMarketDayMoves (data-property.js): both draw "down" when
-   Math.random() < 0.4, otherwise "up". */
-const T29X_CHANCE_DOWN = 40, T29X_CHANCE_UP = 60;
+/* The up / down chances come from the class settings (cls.marketUpChance for shares, cls.propertyUpChance
+   for property; 55% up unless the teacher changed them). See applyMarketDayMoves (data-markets.js) and
+   applyPropertyMarketDayMoves (data-property.js). */
+function t29xChance(v) {
+  const n = Number(v);
+  const up = (v === null || v === undefined || v === "" || !Number.isFinite(n)) ? 55 : Math.min(100, Math.max(0, n));
+  return { up, down: Math.round((100 - up) * 10) / 10 };
+}
 
 function t29xIdIndex(cls, students) {
   const m = new Map();
@@ -165,8 +169,8 @@ async function t29xBuild(classCode) {
 
   /* markets */
   H(1, "Markets: prices, history and the chance of going up or down");
-  P(`Shares: every simulated market day each company independently has a ${T29X_CHANCE_UP}% chance of moving UP and a ${T29X_CHANCE_DOWN}% chance of moving DOWN. The size of the move is random between the company's own % range (or the class default ${cls.priceRange ? cls.priceRange.min + "% to " + cls.priceRange.max + "%" : "1% to 5%"}).`);
-  P(`Property: the same ${T29X_CHANCE_UP}% up / ${T29X_CHANCE_DOWN}% down rule, with a move between the listing's own % range (or the class default ${cls.propertyPriceRange ? cls.propertyPriceRange.min + "% to " + cls.propertyPriceRange.max + "%" : "0.5% to 2%"}).`);
+  P(`Shares: every simulated market day each company independently has a ${t29xChance(cls.marketUpChance).up}% chance of moving UP and a ${t29xChance(cls.marketUpChance).down}% chance of moving DOWN. The size of the move is random between the company's own % range (or the class default ${cls.priceRange ? cls.priceRange.min + "% to " + cls.priceRange.max + "%" : "1% to 5%"}).`);
+  P(`Property: a ${t29xChance(cls.propertyUpChance).up}% up / ${t29xChance(cls.propertyUpChance).down}% down rule, with a move between the listing's own % range (or the class default ${cls.propertyPriceRange ? cls.propertyPriceRange.min + "% to " + cls.propertyPriceRange.max + "%" : "0.5% to 2%"}).`);
   H(2, "Companies (shares)");
   (cls.companies || []).forEach(co => {
     const hist = co.history || [], dates = co.historyDates || [];
@@ -174,7 +178,7 @@ async function t29xBuild(classCode) {
     const chg = prev ? ((co.price - prev) / prev * 100) : null;
     const r = co.priceRange || cls.priceRange || {};
     H(3, `${co.name} - ${money(co.price)}`);
-    P(`Last move: ${chg === null ? "no previous price" : (chg >= 0 ? "+" : "") + chg.toFixed(2) + "%"} | Daily move range: ${r.min}% to ${r.max}% (${co.priceRange ? "this company's own" : "class default"}) | Chance up ${T29X_CHANCE_UP}% / down ${T29X_CHANCE_DOWN}%`, 1);
+    P(`Last move: ${chg === null ? "no previous price" : (chg >= 0 ? "+" : "") + chg.toFixed(2) + "%"} | Daily move range: ${r.min}% to ${r.max}% (${co.priceRange ? "this company's own" : "class default"}) | Chance up ${t29xChance(cls.marketUpChance).up}% / down ${t29xChance(cls.marketUpChance).down}%`, 1);
     P("Price history, oldest to newest: " + (hist.length ? hist.map((p, n) => `${dates[n] ? dates[n] + " " : ""}${money(p)}`).join(", ") : "none"), 1);
     const holders = Object.entries(co.holders || {}).filter(([, n]) => n > 0);
     P("Shareholders: " + (holders.length ? holders.map(([u, n]) => `${ids.get(u) || u} x${n} = ${money(n * co.price)}`).join(", ") : "none"), 1);
@@ -184,7 +188,7 @@ async function t29xBuild(classCode) {
     const hist = p.priceHistory || [], dates = p.priceHistoryDates || [];
     const r = p.priceRange || cls.propertyPriceRange || {};
     H(3, `${p.name} - ${money(p.price)}`);
-    P(`Owner: ${p.owner ? (ids.get(p.owner) || p.owner) : "nobody (for sale)"} | Comfort rating: ${p.comfort || 0} stars | Weekly rent: ${money(p.rentPerWeek || 0)} | Daily move range ${r.min}% to ${r.max}% (${p.priceRange ? "own" : "class default"}) | Chance up ${T29X_CHANCE_UP}% / down ${T29X_CHANCE_DOWN}%`, 1);
+    P(`Owner: ${p.owner ? (ids.get(p.owner) || p.owner) : "nobody (for sale)"} | Comfort rating: ${p.comfort || 0} stars | Weekly rent: ${money(p.rentPerWeek || 0)} | Daily move range ${r.min}% to ${r.max}% (${p.priceRange ? "own" : "class default"}) | Chance up ${t29xChance(cls.propertyUpChance).up}% / down ${t29xChance(cls.propertyUpChance).down}%`, 1);
     P("Price history, oldest to newest: " + (hist.length ? hist.map((x, n) => `${dates[n] ? dates[n] + " " : ""}${money(x)}`).join(", ") : "none"), 1);
   });
 

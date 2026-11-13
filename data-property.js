@@ -229,6 +229,17 @@ async function setPropertyPriceRange(classCode, min, max) {
   }
 }
 
+// Teacher: the chance (0-100 %) that a property listing's price goes UP on a simulated day. Down is the rest.
+async function setPropertyUpChance(classCode, chance) {
+  const n = Number(chance);
+  if (chance === "" || chance === null || chance === undefined || !Number.isFinite(n) || n < 0 || n > 100) {
+    return { ok: false, error: "Enter a chance between 0 and 100." };
+  }
+  const value = Math.round(n * 10) / 10;
+  await classesCol().doc(classCode).update({ propertyUpChance: value });
+  return { ok: true, value };
+}
+
 // Quick teacher override for a listing's price alone — same idea as the
 // Stock Market's updateCompanyPrice "Set new price" control, without
 // having to reopen the full Edit form and resubmit every other field.
@@ -327,6 +338,7 @@ async function setListingPriceRange(classCode, propId, min, max) {
 function applyPropertyMarketDayMoves(cls) {
   const results = [];
   const range = cls.propertyPriceRange || { min: 0.5, max: 2 };
+  const upChance = t29UpChance(cls.propertyUpChance);
   const dateKey = nzDateKey();
   const groups = new Map();
   (cls.properties || []).forEach(p => {
@@ -339,8 +351,8 @@ function applyPropertyMarketDayMoves(cls) {
     const oldPrice = first.price;
     const listingRange = first.priceRange || range;
     const pct = listingRange.min + Math.random() * (listingRange.max - listingRange.min);
-    // Upward bias: 60% chance of an up day vs 40% down (same as shares).
-    const direction = Math.random() < 0.4 ? -1 : 1;
+    // Up with the teacher's chance (cls.propertyUpChance, 55% unless changed), down otherwise.
+    const direction = Math.random() < upChance / 100 ? 1 : -1;
     const newPrice = Math.max(0.01, Math.round(oldPrice * (1 + (direction * pct) / 100) * 100) / 100);
     units.forEach(u => {
       if (!Array.isArray(u.priceHistory) || u.priceHistory.length === 0) u.priceHistory = [oldPrice];

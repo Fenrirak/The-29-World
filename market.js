@@ -229,6 +229,8 @@ async function render() {
   const range = cls.priceRange || { min: 1, max: 5 };
   document.getElementById("rangeMin").value = range.min;
   document.getElementById("rangeMax").value = range.max;
+  const upEl = document.getElementById("upChance");
+  if (upEl && document.activeElement !== upEl) { upEl.value = t29UpChance(cls.marketUpChance); paintDownChance(); }
 
   list.innerHTML = "";
 
@@ -392,6 +394,30 @@ async function sell(id) {
     await render();
   } finally {
     if (btn) btn.disabled = false;
+  }
+}
+
+// Shows the down chance (100 minus the up chance) as the teacher types.
+function paintDownChance() {
+  const up = document.getElementById("upChance"), down = document.getElementById("downChance");
+  if (!up || !down) return;
+  const n = Number(up.value);
+  down.value = up.value !== "" && Number.isFinite(n) && n >= 0 && n <= 100 ? String(Math.round((100 - n) * 10) / 10) : "";
+}
+async function saveUpChance() {
+  const btn = document.getElementById("saveUpChanceBtn");
+  const msg = document.getElementById("upChanceMsg");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const res = await setMarketUpChance(CLASS_CODE, document.getElementById("upChance").value);
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escapeHtml(res.error)}</div>`; return; }
+    msg.innerHTML = `<div class="success-msg">Saved. Each company now has a ${res.value}% chance of going up and a ${Math.round((100 - res.value) * 10) / 10}% chance of going down each simulated day.</div>`;
+    await render();
+  } catch (e) {
+    msg.innerHTML = `<div class="error-msg">Couldn't save. Please try again.</div>`;
+  } finally {
+    btn.disabled = false;
   }
 }
 

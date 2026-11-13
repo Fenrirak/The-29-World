@@ -134,7 +134,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 
     <details class="fold-sub" id="rangeFold">
       <summary><span class="fold-head"><h2 id="hVolatility">Daily price movement</h2><span class="fold-hint">How far a share price can move each simulated day.</span></span></summary>
-      <p>Set how much every <strong>new</strong> company's share price can randomly move each time you simulate a market day. Each simulated day picks a random direction: <strong>up or down</strong>, with up a little more likely (about 6 days in 10), and a random size within this range, so prices can rise <em>or</em> fall. Each company's range can also be fine-tuned individually below once it's listed.</p>
+      <p>Set how much every <strong>new</strong> company's share price can randomly move each time you simulate a market day. Each simulated day picks a random direction: <strong>up or down</strong>, with the chance of going up set below (55% by default), and a random size within this range, so prices can rise <em>or</em> fall. Each company's range can also be fine-tuned individually below once it's listed.</p>
       <div class="grid grid-3">
         <div>
           <label for="rangeMin" id="labRangeMin">Minimum % change</label>
@@ -149,6 +149,23 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         </div>
       </div>
       <div id="rangeMsg"></div>
+
+      <h3 style="margin:20px 0 6px;" id="hUpChance">Chance of going up or down</h3>
+      <p class="muted-small" style="margin:0 0 10px;">Each simulated day, every company independently rolls this chance of moving <strong>up</strong>. Otherwise it moves down. 50% is a fair coin flip. New classes start at 55%.</p>
+      <div class="grid grid-3">
+        <div>
+          <label for="upChance" id="labUpChance">Chance of going up (%)</label>
+          <input id="upChance" type="number" min="0" max="100" step="1" inputmode="decimal" oninput="paintDownChance()">
+        </div>
+        <div>
+          <label for="downChance" id="labDownChance">Chance of going down (%)</label>
+          <input id="downChance" type="text" readonly tabindex="-1" aria-label="Chance of going down, worked out from the chance of going up">
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button class="btn secondary" style="width:100%;" onclick="saveUpChance()" id="saveUpChanceBtn">Save chance</button>
+        </div>
+      </div>
+      <div id="upChanceMsg"></div>
     </details>
   </div>
 
@@ -171,14 +188,14 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="settings-menu.js?v=54fe64ca"></script>
 <script defer src="shortcuts.js?v=5c3b32dc"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
-<script defer src="data-core.js?v=98ea2dcf"></script>
+<script defer src="data-core.js?v=13f6f2ad"></script>
 <script defer src="data-money.js?v=318e9a8a"></script>
 <script defer src="data-life.js?v=e845ca0c"></script>
-<script defer src="data-property.js?v=d9d76f21"></script>
-<script defer src="data-markets.js?v=95365b86"></script>
+<script defer src="data-property.js?v=2ae916b7"></script>
+<script defer src="data-markets.js?v=cbd1eee8"></script>
 <script defer src="events-ui.js?v=5bf20a4c"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=e0afe5b8"></script>
-<script defer src="market.js?v=701e6e69"></script>
+<script defer src="market.js?v=0caf7b16"></script>
 </body>
 </html>

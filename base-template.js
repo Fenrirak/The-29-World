@@ -700,6 +700,7 @@ function t29ApplyBaseTemplate(cls, terms) {
     }
   });
   cls.propertyPriceRange = { min: 0.5, max: 2 };
+  cls.propertyUpChance = 55;       // % chance a property price goes up on a simulated day
   cls.propertyBreakFee = M(50);
   cls.movingCost = M(150);
 
@@ -789,6 +790,7 @@ function t29ApplyBaseTemplate(cls, terms) {
 
   // ---- Stock market ----
   cls.priceRange = { min: 1, max: 5 };
+  cls.marketUpChance = 55;         // % chance a share price goes up on a simulated day
   cls.companies = d.companies.map(c => ({
     id: uid("co"), name: c[0], price: c[1], totalShares: c[2], availableShares: c[2],
     history: [c[1]], historyDates: [nzDateKey()], holders: {}, costBasis: {},
