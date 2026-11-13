@@ -507,7 +507,7 @@ async function notifTeacherQuizItems(classCode) {
         id: "tq-" + r.quiz.id + "-" + today + "-" + n, ts: notifTodayStartMs(), icon: "quiz", tone: "coral",
         title: `${n} ${n === 1 ? "student hasn't" : "students haven't"} passed "${r.quiz.title}"`,
         body: `Due ${quizDeadlineLabel(r.quiz.deadline)}. ${names}${n > 4 ? ` and ${n - 4} more` : ""}.`,
-        href: "quizzes.html"
+        href: "quizzes.html#overdueWrap"
       };
     });
   } catch (e) { NOTIF_TQ.items = []; }
@@ -604,14 +604,14 @@ function notifMarketplaceNewListingItems(me, cls) {
 // from the stored notice, because that text is written by students.
 const NOTIF_INBOX_TTL_MS = 14 * 24 * 3600 * 1000;
 const NOTIF_INBOX_KINDS = {
-  time:    { icon: "hourglass", href: "teacher.html" },
-  hustle:  { icon: "briefcase", href: "teacher.html" },
-  job:     { icon: "briefcase", href: "jobs.html" },
-  card:    { icon: "wallet",    href: "bank.html" },
-  account: { icon: "piggy",     href: "bank.html" },
-  listing: { icon: "swap",      href: "marketplace.html" },
-  sublet:  { icon: "house",     href: "property.html" },
-  tick:    { icon: "briefcase", href: "jobs.html" }
+  time:    { icon: "hourglass", href: "teacher.html#timeExemptionBanner" },
+  hustle:  { icon: "briefcase", href: "jobs.html#sideHustleRequestsWrap" },
+  job:     { icon: "briefcase", href: "jobs.html#applicationsCard" },
+  card:    { icon: "wallet",    href: "bank.html#cardTeacherCard" },
+  account: { icon: "piggy",     href: "bank.html#acctTeacherCard" },
+  listing: { icon: "swap",      href: "marketplace.html#approvalCard" },
+  sublet:  { icon: "house",     href: "property.html#pane-classmates" },
+  tick:    { icon: "briefcase", href: "jobs.html#logTrackerCard" }
 };
 function notifTeacherInboxItems(inbox) {
   const cutoff = trustedNow().getTime() - NOTIF_INBOX_TTL_MS;
@@ -1452,3 +1452,51 @@ function notifBoot() {
   else setTimeout(start, 400);
 }
 document.addEventListener("DOMContentLoaded", notifBoot);
+
+/* ---- Teacher notification deep links ----
+   A teacher's notification opens the page AND the section where the request is dealt with
+   (e.g. jobs.html#applicationsCard). The sections are drawn after the page's data loads, and
+   some start hidden, so the browser's own #hash jump can't be relied on: wait for the section
+   to appear, scroll it into view and flash it so it's obvious where to act. Only the ids
+   below are handled, so no other page's hashes are touched. */
+const NOTIF_DEEP_IDS = ["timeExemptionBanner", "sideHustleRequestsWrap", "applicationsCard", "logTrackerCard",
+  "cardTeacherCard", "acctTeacherCard", "approvalCard", "pane-classmates", "overdueWrap"];
+let NOTIF_DEEP_RUN = 0;
+function notifDeepScroll(hash) {
+  const id = String(hash || "").replace(/^#/, "");
+  if (!NOTIF_DEEP_IDS.includes(id)) return;
+  const run = ++NOTIF_DEEP_RUN; // a newer click cancels an older wait
+  const t0 = Date.now();
+  (function look() {
+    if (run !== NOTIF_DEEP_RUN) return;
+    const el = document.getElementById(id);
+    if (el && el.offsetHeight > 0 && !el.closest(".hidden")) {
+      if (!document.getElementById("notifDeepCss")) {
+        const st = document.createElement("style");
+        st.id = "notifDeepCss";
+        st.textContent = "@keyframes notifDeepFlash{0%,60%{box-shadow:0 0 0 3px var(--gold,#f5b301)}100%{box-shadow:0 0 0 3px transparent}}" +
+          ".notif-deep-flash{animation:notifDeepFlash 2.4s ease-out 1;border-radius:12px}";
+        document.head.appendChild(st);
+      }
+      el.style.scrollMarginTop = "84px";
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      el.classList.remove("notif-deep-flash"); void el.offsetWidth; el.classList.add("notif-deep-flash");
+      setTimeout(() => el.classList.remove("notif-deep-flash"), 2600);
+      return;
+    }
+    if (Date.now() - t0 < 12000) setTimeout(look, 250); // data still loading
+  })();
+}
+document.addEventListener("DOMContentLoaded", () => { if (location.hash) notifDeepScroll(location.hash); });
+window.addEventListener("hashchange", () => notifDeepScroll(location.hash));
+// Already on the right page: the browser won't navigate, so scroll to the section ourselves.
+document.addEventListener("click", e => {
+  const a = e.target.closest && e.target.closest("#notifList a.notif-row[href]");
+  if (!a) return;
+  const url = new URL(a.getAttribute("href"), location.href);
+  if (url.pathname !== location.pathname || !url.hash || !NOTIF_DEEP_IDS.includes(url.hash.slice(1))) return;
+  e.preventDefault();
+  notifClose();
+  if (location.hash !== url.hash) history.replaceState(null, "", url.hash);
+  notifDeepScroll(url.hash);
+});

@@ -48,7 +48,11 @@ async function init() {
   paintChrome();
   // Teachers don't need data to know which tab to open; students get theirs
   // in render() once it's known whether they own or rent anything.
-  if (IS_TEACHER) setTab(TABS_BY_ROLE.teacher.includes(savedTab()) ? savedTab() : "listings", false);
+  if (IS_TEACHER) {
+    // A notification link (property.html#pane-classmates) names the tab to open.
+    const hashTab = (location.hash.match(/^#pane-(\w+)$/) || [])[1];
+    setTab(TABS_BY_ROLE.teacher.includes(hashTab) ? hashTab : TABS_BY_ROLE.teacher.includes(savedTab()) ? savedTab() : "listings", false);
+  }
   // BUGFIX: this page runs the same day-gated jobs (automations, rent,
   // interest, term deposits...) as bank.js/teacher.js/student.js but was
   // missing the server-clock sync those pages already do first — see
