@@ -512,18 +512,9 @@ function sh(id) {
 }
 
 let SH_MODE_REQUEST = false; // true once the student clicks "Request a change"
-let SH_HUSTLES = []; // cached from the latest render, used by the pay preview
-
-function populateSideHustleHourSelect() {
-  const sel = sh("shHour");
-  if (!sel || sel.options.length) return;
-  for (let h = 0; h < 24; h++) {
-    const opt = document.createElement("option");
-    opt.value = h;
-    opt.textContent = hourLabel(h);
-    sel.appendChild(opt);
-  }
-}
+let SH_HUSTLES = []; // cached from the latest render, used by the pay chart
+let SH_ME = null;
+let SH_SEL = null; // { hustleId, hour } the student tapped in the pay chart
 
 // e.g. "4pm – 4:15pm"
 function sideHustleWindowLabel(h) {
@@ -541,24 +532,13 @@ function shSetBlock(state) {
 }
 
 async function renderSideHustle(me, cls, lockedModules) {
-  populateSideHustleHourSelect();
+  SH_ME = me;
   const hustles = cls.sideHustles || [];
   const isLocked = (lockedModules || []).includes("sidehustle");
 
   if (isLocked) { shSetBlock("locked"); return; }
   if (hustles.length === 0) { shSetBlock("empty"); return; }
   SH_HUSTLES = hustles;
-
-  const sel = sh("shSelect");
-  if (sel) {
-    sel.innerHTML = "";
-    hustles.forEach(h => {
-      const opt = document.createElement("option");
-      opt.value = h.id;
-      opt.textContent = h.name;
-      sel.appendChild(opt);
-    });
-  }
 
   const myHustle = me.sideHustle;
   const current = myHustle && hustles.find(h => h.id === myHustle.hustleId);
@@ -571,16 +551,15 @@ async function renderSideHustle(me, cls, lockedModules) {
   if (state === "pick" || state === "request") {
     const intro = sh("shPickIntro");
     if (intro) intro.textContent = state === "pick"
-      ? "Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid."
-      : "Request a new side hustle or check-in hour. Your teacher has to approve the change before it applies. Your current hustle keeps working until they do.";
+      ? "Compare every side hustle below, then tap the pay for the hustle and hour you want. You must check in within 15 minutes after your chosen hour to get paid."
+      : "Tap the pay for the hustle and hour you want to switch to. Your teacher has to approve the change before it applies, and your current hustle keeps working until they do.";
     const saveBtn = sh("shSaveBtn");
     if (saveBtn) saveBtn.textContent = state === "pick" ? "Save my side hustle" : "Request this change";
     const cancelBtn = sh("shCancelBtn");
     if (cancelBtn) cancelBtn.classList.toggle("hidden", state === "pick");
-    if (sel && myHustle && myHustle.hustleId) sel.value = myHustle.hustleId;
-    const hourSel = sh("shHour");
-    if (hourSel && myHustle && myHustle.checkinHour !== undefined) hourSel.value = myHustle.checkinHour;
-    shUpdatePayPreview();
+    if (SH_SEL && !hustles.some(h => h.id === SH_SEL.hustleId)) SH_SEL = null;
+    shRenderPickChart(me, hustles);
+    shUpdateConfirm();
     return;
   }
 
@@ -604,15 +583,13 @@ async function renderSideHustle(me, cls, lockedModules) {
     }
   }
 
+  const cmp = sh("shCompareChart");
+  if (cmp) cmp.innerHTML = shChartHtml(hustles, myHustle, false);
+
   const nameEl = sh("shName"); if (nameEl) nameEl.textContent = current.name;
   const windowEl = sh("shWindow"); if (windowEl) windowEl.textContent = sideHustleWindowLabel(myHustle.checkinHour);
-  // Pay depends on the streak day: base + the teacher's streak bonus for each day after the first.
-  const todayKey = nzDateKey();
-  const liveStreak = sideHustleLiveStreak(myHustle, todayKey);
-  const checkedToday = myHustle.lastCheckin === todayKey;
-  const pay = sideHustlePay(current, myHustle.checkinHour, checkedToday ? Math.max(1, liveStreak) : liveStreak + 1);
+  const pay = Number(current.payouts[myHustle.checkinHour]) || 0;
   const payEl = sh("shPay"); if (payEl) payEl.textContent = fmtMoney(pay);
-  shRenderStreak(current, myHustle, liveStreak, checkedToday);
 
   const { hour, minute } = nzHourMinute();
   const inWindow = hour === myHustle.checkinHour && minute <= 15;
@@ -621,7 +598,7 @@ async function renderSideHustle(me, cls, lockedModules) {
   if (checkinBtn) checkinBtn.disabled = !inWindow || already;
   const statusEl = sh("shStatus");
   if (statusEl) {
-    if (already) statusEl.textContent = `You've checked in today. Streak: ${liveStreak} day${liveStreak === 1 ? "" : "s"}.` + (Number(current.streakBonus) > 0 ? ` Tomorrow's check-in pays ${fmtMoney(sideHustlePay(current, myHustle.checkinHour, liveStreak + 1))}.` : "");
+    if (already) statusEl.textContent = `You've checked in today. Streak: ${myHustle.streak || 0} day${(myHustle.streak || 0) === 1 ? "" : "s"}.`;
     else if (inWindow) statusEl.textContent = "You're in your check-in window. Go ahead!";
     else statusEl.textContent = `Come back at ${hourLabel(myHustle.checkinHour)} to check in.`;
   }
@@ -629,56 +606,70 @@ async function renderSideHustle(me, cls, lockedModules) {
   if (changeBtn) changeBtn.classList.toggle("hidden", hasPendingRequest);
 }
 
-// Streak bonus panel: shows the day-by-day pay ladder, where the student is on it,
-// and what happens if they miss a day. Hidden when the hustle has no streak bonus.
-function shRenderStreak(current, myHustle, liveStreak, checkedToday) {
-  const box = sh("shStreakBox");
-  if (!box) return;
-  const bonus = Math.max(0, Number(current.streakBonus) || 0);
-  if (!(bonus > 0)) { box.classList.add("hidden"); box.innerHTML = ""; return; }
-  const hour = myHustle.checkinHour;
-  const nextDay = liveStreak + 1;                  // the next check-in that will be paid
-  const start = Math.max(1, nextDay - 2);
-  let chips = "";
-  for (let d = start; d < start + 5; d++) {
-    const state = d < nextDay ? "done" : (d === nextDay ? "next" : "");
-    const tag = d === nextDay ? (checkedToday ? "Tomorrow" : "Today") : "&nbsp;";
-    chips += `<div class="sh-chip ${state}"><div class="d">Day ${d}${d < nextDay ? " &#10003;" : ""}</div><div class="p">${fmtMoney(sideHustlePay(current, hour, d))}</div><div class="s">${tag}</div></div>`;
-  }
-  const nextPay = fmtMoney(sideHustlePay(current, hour, nextDay));
-  const basePay = fmtMoney(sideHustlePay(current, hour, 1));
-  const note = checkedToday
-    ? `Check in again tomorrow to keep your streak going and earn ${nextPay}.`
-    : liveStreak > 0
-      ? `Check in today to keep your streak going and earn ${nextPay}. Miss a day and you're back to ${basePay}.`
-      : `Check in every day to build a streak: each extra day adds ${fmtMoney(bonus)} to your pay.`;
-  box.innerHTML = `
-    <div class="sh-streak-head">
-      <span class="sh-streak-ico">${icon("bolt", 18)}</span>
-      <strong>${liveStreak > 0 ? `${liveStreak}-day streak` : "No streak yet"}</strong>
-      <span class="badge gold">+${fmtMoney(bonus)} per day</span>
-    </div>
-    <div class="sh-chips">${chips}</div>
-    <p class="muted-small" style="margin:10px 0 0;">${note}</p>`;
-  box.classList.remove("hidden");
+/* Pay chart: every hustle side by side, one row per check-in hour, so pay can be
+   compared at a glance with nothing to select first. Hours nobody pays for are
+   left out. selectable = students tap a pay amount to choose it (the picker);
+   otherwise it's a read-only comparison (shown once they already have a hustle). */
+function shChartHtml(hustles, mine, selectable) {
+  const hours = [];
+  for (let h = 0; h < 24; h++) if (hustles.some(x => Number((x.payouts || {})[h]) > 0)) hours.push(h);
+  if (!hours.length) return `<p class="muted-small">Your teacher hasn't set any pay amounts yet.</p>`;
+  const head = hustles.map(x => {
+    const r = hustlePayRange(x.payouts);
+    return `<th scope="col"><div class="sh-hname">${escapeHtml(x.name)}</div>
+      <div class="sh-hrange">${r ? (r.min === r.max ? hustleMoney(r.max) : hustleMoney(r.min) + " to " + hustleMoney(r.max)) : "no pay set"}</div>
+      ${x.description ? `<div class="sh-hdesc">${escapeHtml(x.description)}</div>` : ""}</th>`;
+  }).join("");
+  const rows = hours.map(h => {
+    const pays = hustles.map(x => Number((x.payouts || {})[h]) || 0);
+    const top = Math.max(...pays);
+    const hasBest = pays.filter(p => p > 0).length > 1 && pays.some(p => p > 0 && p < top);
+    const cells = hustles.map((x, i) => {
+      const p = pays[i];
+      if (!(p > 0)) return `<td><span class="sh-none">–</span></td>`;
+      const cur = mine && mine.hustleId === x.id && Number(mine.checkinHour) === h;
+      const cls = "sh-pay" + (hasBest && p === top ? " best" : "") + (cur ? " cur" : "") + (selectable ? "" : " ro");
+      const label = `${x.name} at ${hourLabel(h)}: ${fmtMoney(p)}${cur ? " (your current choice)" : ""}`;
+      return selectable
+        ? `<td><button type="button" class="${cls}" data-hid="${escapeHtml(x.id)}" data-hr="${h}" aria-label="${escapeHtml(label)}">${hustleMoney(p)}</button></td>`
+        : `<td><span class="${cls}" title="${escapeHtml(label)}">${hustleMoney(p)}</span></td>`;
+    }).join("");
+    return `<tr><th scope="row">${hourLabel(h)}</th>${cells}</tr>`;
+  }).join("");
+  const legend = [hustles.length > 1 ? `<span class="sh-key best"></span> best pay for that hour` : "", mine ? `<span class="sh-key cur"></span> your current choice` : ""].filter(Boolean).join(" &nbsp; ");
+  return `<div class="sh-chart-scroll"><table class="sh-chart"><thead><tr><th scope="col" class="sh-corner">Check-in</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+    ${legend ? `<p class="muted-small sh-legend">${legend}</p>` : ""}`;
 }
-
-// Reads straight from the currently selected hustle's payouts — works
-// automatically for hustles the teacher already created and any new ones
-// added later, since it's not hardcoded to specific hustles or amounts.
-function shUpdatePayPreview() {
-  const preview = sh("shPayPreview");
-  if (!preview) return;
-  const selEl = sh("shSelect"), hourEl = sh("shHour");
-  if (!selEl || !hourEl) return;
-  const hustle = SH_HUSTLES.find(h => h.id === selEl.value);
-  const hour = Number(hourEl.value);
-  if (!hustle) { preview.textContent = ""; return; }
-  const pay = Number(hustle.payouts[hour]) || 0;
-  const bonus = Math.max(0, Number(hustle.streakBonus) || 0);
-  preview.textContent = `Checking in at ${hourLabel(hour)} for ${hustle.name} pays ${fmtMoney(pay)}` + (bonus > 0
-    ? `, plus ${fmtMoney(bonus)} more for every day in a row you check in (day 2 pays ${fmtMoney(sideHustlePay(hustle, hour, 2))}, day 3 pays ${fmtMoney(sideHustlePay(hustle, hour, 3))}...).`
-    : ".");
+function shRenderPickChart(me, hustles) {
+  const wrap = sh("shChartWrap");
+  if (!wrap) return;
+  wrap.innerHTML = shChartHtml(hustles, me.sideHustle || null, true);
+  wrap.onclick = ev => {
+    const b = ev.target.closest && ev.target.closest(".sh-pay[data-hr]");
+    if (!b) return;
+    SH_SEL = { hustleId: b.getAttribute("data-hid"), hour: Number(b.getAttribute("data-hr")) };
+    wrap.querySelectorAll(".sh-pay.sel").forEach(x => x.classList.remove("sel"));
+    b.classList.add("sel");
+    shUpdateConfirm();
+  };
+  if (SH_SEL) {
+    const b = wrap.querySelector(`.sh-pay[data-hid="${SH_SEL.hustleId}"][data-hr="${SH_SEL.hour}"]`);
+    if (b) b.classList.add("sel"); else SH_SEL = null;
+  }
+}
+function shUpdateConfirm() {
+  const preview = sh("shPayPreview"), save = sh("shSaveBtn");
+  if (!preview || !save) return;
+  const hustle = SH_SEL && SH_HUSTLES.find(h => h.id === SH_SEL.hustleId);
+  if (!hustle) {
+    preview.textContent = "Tap a pay amount above to choose that side hustle and check-in hour.";
+    save.disabled = true;
+    return;
+  }
+  const mine = SH_ME && SH_ME.sideHustle;
+  const same = !!(mine && mine.hustleId === hustle.id && Number(mine.checkinHour) === SH_SEL.hour);
+  preview.innerHTML = `<strong>${escapeHtml(hustle.name)}</strong> at <strong>${hourLabel(SH_SEL.hour)}</strong> pays <strong>${fmtMoney(Number(hustle.payouts[SH_SEL.hour]) || 0)}</strong> each day you check in.${same ? " This is already your hustle." : ""}`;
+  save.disabled = same;
 }
 
 function shStartChangeRequest() {
@@ -688,20 +679,22 @@ function shStartChangeRequest() {
 
 function shCancelPick() {
   SH_MODE_REQUEST = false;
+  SH_SEL = null;
   const msg = sh("shPickMsg");
   if (msg) msg.textContent = "";
   render();
 }
 
 async function shSaveChoice() {
-  const hustleId = sh("shSelect").value;
-  const hour = sh("shHour").value;
   const msg = sh("shPickMsg");
+  if (!SH_SEL) { if (msg) msg.textContent = "Tap a pay amount in the table first."; return; }
+  const hustleId = SH_SEL.hustleId, hour = SH_SEL.hour;
   if (msg) msg.textContent = "Saving...";
   const res = await requestSideHustleChange(CURRENT.username, CURRENT.classCode, hustleId, hour);
   if (!res.ok) { if (msg) msg.textContent = res.error; return; }
   if (msg) msg.textContent = res.pending ? "Request sent. Waiting on your teacher to approve it." : "";
   SH_MODE_REQUEST = false;
+  SH_SEL = null;
   await render();
 }
 
@@ -712,7 +705,7 @@ async function shDoCheckin() {
   const statusEl = sh("shStatus");
   if (statusEl) {
     statusEl.textContent = res.ok
-      ? `Checked in! +${fmtMoney(res.amount)}${res.bonus > 0 ? ` (includes ${fmtMoney(res.bonus)} streak bonus)` : ""}. Streak: ${res.streak} day${res.streak === 1 ? "" : "s"}.`
+      ? `Checked in! +${fmtMoney(res.amount)}. Streak: ${res.streak} day${res.streak === 1 ? "" : "s"}.`
       : res.error;
   }
   await render();

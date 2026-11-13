@@ -1633,10 +1633,28 @@ function cleanHustlePayouts(p) {
   });
   return out;
 }
-// Streak bonus: extra dollars per day in a row (from day 2). Blank/invalid/negative = none.
-function cleanStreakBonus(v) {
-  const n = Number(v);
-  return (Number.isFinite(n) && n > 0) ? Math.round(n * 100) / 100 : 0;
+// ---- Pay helpers shared by the teacher's builder/list and the student's pay chart ----
+// "Offered" = an hour (0-23) with a payout above zero.
+function hustleOfferedHours(payouts) {
+  return Object.keys(payouts || {}).map(Number)
+    .filter(h => Number.isInteger(h) && h >= 0 && h <= 23 && Number(payouts[h]) > 0).sort((a, b) => a - b);
+}
+function hustleMoney(n) { const v = Math.round((Number(n) || 0) * 100) / 100; return "$" + (Number.isInteger(v) ? v : v.toFixed(2)); }
+// Consecutive hours paying the same amount collapse into one run: [{from, to, amount}].
+function hustlePayRuns(payouts) {
+  const runs = [];
+  hustleOfferedHours(payouts).forEach(h => {
+    const amt = Number(payouts[h]), last = runs[runs.length - 1];
+    if (last && last.to === h - 1 && last.amount === amt) last.to = h; else runs.push({ from: h, to: h, amount: amt });
+  });
+  return runs;
+}
+function hustleRunLabel(r) { return r.from === r.to ? hourLabel(r.from) : hourLabel(r.from) + "–" + hourLabel(r.to); }
+function hustlePayRange(payouts) {
+  const hrs = hustleOfferedHours(payouts);
+  if (!hrs.length) return null;
+  const a = hrs.map(h => Number(payouts[h]));
+  return { min: Math.min(...a), max: Math.max(...a), count: hrs.length };
 }
 async function addSideHustle(classCode, hustle) {
   const classRef = classesCol().doc(classCode);
@@ -1646,7 +1664,7 @@ async function addSideHustle(classCode, hustle) {
     const cls = withNewModuleDefaults(snap.data());
     cls.sideHustles.push({
       id: uid("sh"), name: hustle.name, description: hustle.description || "",
-      payouts: cleanHustlePayouts(hustle.payouts), streakBonus: cleanStreakBonus(hustle.streakBonus)
+      payouts: cleanHustlePayouts(hustle.payouts)
     });
     t.update(classRef, { sideHustles: cls.sideHustles });
   });
@@ -1666,8 +1684,7 @@ async function editSideHustle(classCode, hustleId, hustle) {
     const prevH = cls.sideHustles[idx];
     cls.sideHustles[idx] = {
       ...cls.sideHustles[idx],
-      name: hustle.name, description: hustle.description || "", payouts: cleanHustlePayouts(hustle.payouts),
-      streakBonus: cleanStreakBonus(hustle.streakBonus)
+      name: hustle.name, description: hustle.description || "", payouts: cleanHustlePayouts(hustle.payouts)
     };
     t.update(classRef, { sideHustles: cls.sideHustles });
     before = prevH; after = cls.sideHustles[idx];
@@ -1680,11 +1697,8 @@ async function editSideHustle(classCode, hustleId, hustle) {
       if (after.name !== before.name) parts.push(`renamed to ${after.name}`);
       const a = Number((before.payouts || {})[hr]) || 0, b = Number((after.payouts || {})[hr]) || 0;
       if (a !== b) parts.push(`your ${hourLabel(hr)} check-in pays ${fmtMoney(b)} (was ${fmtMoney(a)})`);
-      const sa = Number(before.streakBonus) || 0, sb = Number(after.streakBonus) || 0;
-      if (sa !== sb) parts.push(sb > 0 ? `the streak bonus is now +${fmtMoney(sb)} per day${sa > 0 ? ` (was +${fmtMoney(sa)})` : ""}` : "the streak bonus was removed");
       if (!parts.length) return;
-      const up = b > a || sb > sa, down = b < a || sb < sa;
-      out.push({ to: s.username, icon: "briefcase", tone: up && !down ? "mint" : (down && !up ? "coral" : "gold"),
+      out.push({ to: s.username, icon: "briefcase", tone: b > a ? "mint" : (b < a ? "coral" : "gold"),
         title: `Your teacher changed your side hustle: ${before.name}`, body: parts.join("; ") + ".", href: "student.html" });
     });
     await t29NotifyStudents(classCode, out);
@@ -1806,7 +1820,7 @@ async function checkinSideHustle(username, classCode) {
   }
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let amount = 0, hustleName = "", streak = 0, bonus = 0;
+  let amount = 0, hustleName = "", streak = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1825,18 +1839,11 @@ async function checkinSideHustle(username, classCode) {
       const todayKey = nzDateKey();
       if (sh.lastCheckin === todayKey) throw new Error("ALREADY");
 
-      // Streak first: the pay depends on which day in a row this is (base + bonus x days after the first).
-      streak = sideHustleStreakAfterCheckin(sh, todayKey);
-      const basePay = Math.max(0, Number(hustle.payouts[sh.checkinHour]) || 0);
-      amount = sideHustlePay(hustle, sh.checkinHour, streak);
-      bonus = Math.round((amount - basePay) * 100) / 100;
+      amount = Math.max(0, Number(hustle.payouts[sh.checkinHour]) || 0);
       const life = getLifeBenefitTotals(user);
-      if (life.incomePercent) {
-        const mult = 1 + life.incomePercent / 100;
-        amount = Math.round(amount * mult * 100) / 100;
-        bonus = Math.round(bonus * mult * 100) / 100;
-      }
+      if (life.incomePercent) amount = Math.round(amount * (1 + life.incomePercent / 100) * 100) / 100;
       hustleName = hustle.name;
+      streak = (sh.streak || 0) + 1;
       const newBal = Math.round((user.balance + amount) * 100) / 100;
       t.update(userRef, {
         balance: newBal,
@@ -1850,8 +1857,8 @@ async function checkinSideHustle(username, classCode) {
     if (e.message === "ALREADY") return { ok: false, error: "You've already checked in today." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "side-hustle", to: username, amount, note: `Side hustle check-in: ${hustleName}${bonus > 0 ? ` (day ${streak} streak, incl. ${fmtMoney(bonus)} bonus)` : ""}` });
-  return { ok: true, amount, streak, bonus };
+  await logTxn(classCode, { type: "side-hustle", to: username, amount, note: `Side hustle check-in: ${hustleName}` });
+  return { ok: true, amount, streak };
 }
 
 async function buyInsurance(username, classCode, planId, opts) {

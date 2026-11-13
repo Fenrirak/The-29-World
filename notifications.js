@@ -422,7 +422,7 @@ function notifSideHustleItems(me, cls) {
     id: "sh-" + today, ts: notifTodayStartMs(), icon: "briefcase", tone: "mint",
     title: "Side hustle check-in is open right now",
     // e.g. "until 4:15pm" (hourLabel gives "4pm", so the minutes go in the middle)
-    body: `${hustle.name}. You have until ${(sh.checkinHour % 12) || 12}:15${sh.checkinHour < 12 ? "am" : "pm"} to check in and get paid ${fmtMoney(sideHustlePay(hustle, sh.checkinHour, sideHustleStreakAfterCheckin(sh, today)))}.`,
+    body: `${hustle.name}. You have until ${(sh.checkinHour % 12) || 12}:15${sh.checkinHour < 12 ? "am" : "pm"} to check in and get paid ${fmtMoney(Number(hustle.payouts[sh.checkinHour]) || 0)}.`,
     href: "student.html", action: true
   }];
 }

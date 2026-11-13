@@ -32,7 +32,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=a1cf365c">
+<link rel="stylesheet" href="style.css?v=26a6b7e1">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -193,20 +193,15 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     </div>
 
     <div id="shPickBlock" class="hidden">
-      <p id="shPickIntro">Pick a side hustle and the hour you'll check in every day. You must check in within 15 minutes after your chosen hour to get paid.</p>
-      <div class="grid grid-2">
-        <div>
-          <label for="shSelect" id="labShSelect">Side hustle</label>
-          <select id="shSelect" onchange="shUpdatePayPreview()"></select>
-        </div>
-        <div>
-          <label for="shHour" id="labShHour">Daily check-in time</label>
-          <select id="shHour" onchange="shUpdatePayPreview()"></select>
-        </div>
+      <p id="shPickIntro">Compare every side hustle below, then tap the pay for the hustle and hour you want. You must check in within 15 minutes after your chosen hour to get paid.</p>
+      <div id="shChartWrap"></div>
+      <div class="sh-confirm">
+        <span id="shPayPreview" class="sh-preview"></span>
+        <span class="sh-confirm-btns">
+          <button class="btn" id="shSaveBtn" onclick="shSaveChoice()" disabled>Save my side hustle</button>
+          <button class="btn secondary small hidden" id="shCancelBtn" onclick="shCancelPick()">Cancel</button>
+        </span>
       </div>
-      <p class="muted-small" id="shPayPreview"></p>
-      <button class="btn" id="shSaveBtn" onclick="shSaveChoice()">Save my side hustle</button>
-      <button class="btn secondary small hidden" id="shCancelBtn" onclick="shCancelPick()">Cancel</button>
       <div id="shPickMsg"></div>
     </div>
 
@@ -230,11 +225,14 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
           <div class="value" id="shPay">$0.00</div>
         </div>
       </div>
-      <div id="shStreakBox" class="sh-streak hidden"></div>
-
       <button class="btn gold" id="shCheckinBtn" onclick="shDoCheckin()">Check in now</button>
       <button class="btn secondary small" id="shChangeBtn" onclick="shStartChangeRequest()">Request a change</button>
       <p class="muted-small" id="shStatus"></p>
+      <details class="fold-sub" id="shCompare">
+        <summary><span class="fold-head"><span>Compare what every side hustle pays</span><span class="fold-hint">All hustles and hours in one table.</span></span></summary>
+        <div id="shCompareChart"></div>
+        <p class="muted-small">To switch, press "Request a change". Your teacher has to approve it.</p>
+      </details>
     </div>
   </div>
 
@@ -298,15 +296,15 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=98ea2dcf"></script>
 <script defer src="data-money.js?v=e9ae46f1"></script>
-<script defer src="data-life.js?v=a1cfd55e"></script>
+<script defer src="data-life.js?v=958b7abb"></script>
 <script defer src="data-property.js?v=d9d76f21"></script>
 <script defer src="data-markets.js?v=2ebd767f"></script>
 <script defer src="tour.js?v=475f7fc8"></script>
 <script defer src="events-ui.js?v=5bf20a4c"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=c23aec59"></script>
-<script defer src="notifications.js?v=c7ea7f60"></script>
+<script defer src="notifications.js?v=2b95ab96"></script>
 <script defer src="savings-goals.js?v=7bf554be"></script>
-<script defer src="student.js?v=bae56b45"></script>
+<script defer src="student.js?v=0854c74c"></script>
 </body>
 </html>

@@ -123,6 +123,7 @@ async function savePayDay() {
 
 /* ── Side hustles (teacher) ────────────────────────────────────────── */
 function renderSideHustles(cls, students) {
+  shEnsureBuilder(cls);
   const reqBox = document.getElementById("sideHustleRequests");
   const pending = students.filter(s => s.sideHustleRequest && s.sideHustleRequest.status === "pending");
   document.getElementById("noSideHustleRequests").classList.toggle("hidden", pending.length > 0);
@@ -152,13 +153,14 @@ function renderSideHustles(cls, students) {
   hustles.forEach(h => {
     const row = document.createElement("div");
     row.className = "auto-row";
-    const payoutSummary = Object.keys(h.payouts || {})
-      .map(Number).sort((a, b) => a - b)
-      .map(hr => `${hourLabel(hr)}: ${fmtMoney(h.payouts[hr])}`).join(", ") || "No payouts set";
+    const range = hustlePayRange(h.payouts);
+    const payoutSummary = range
+      ? `<div>${range.count} hour${range.count === 1 ? "" : "s"} offered, ${range.min === range.max ? hustleMoney(range.max) : hustleMoney(range.min) + " to " + hustleMoney(range.max)}</div>`
+        + `<div class="sh-runs">${hustlePayRuns(h.payouts).map(r => `<span class="sh-run"><b>${hustleRunLabel(r)}</b> ${hustleMoney(r.amount)}</span>`).join("")}</div>`
+      : "No payouts set";
     row.innerHTML = `
       <div class="auto-details">${icon("briefcase", 14)} <strong>${escapeHtml(h.name)}</strong>
         <div class="muted-small">${payoutSummary}</div>
-        ${Number(h.streakBonus) > 0 ? `<div style="margin-top:6px;"><span class="badge gold">${icon("bolt", 12)} +${fmtMoney(h.streakBonus)} per day streak bonus</span></div>` : ""}
         ${h.description ? `<div class="muted-small">${escapeHtml(h.description)}</div>` : ""}
       </div>
       <button class="btn small secondary" onclick="startEditSideHustle('${h.id}')">${icon("edit", 13)} Edit</button>
@@ -207,41 +209,21 @@ async function addSideHustleForm(e) {
   e.preventDefault();
   const name = document.getElementById("shName").value.trim();
   const description = document.getElementById("shDesc").value.trim();
-  const lines = document.getElementById("shPayoutsArea").value.split("\n").map(l => l.trim()).filter(Boolean);
-  const payouts = {};
-  for (const line of lines) {
-    const [hourPart, amtPart] = line.split("|");
-    const hour = parseHourLabel(hourPart);
-    if (hour === null) {
-      alert(`Couldn't read the hour "${(hourPart || "").trim()}". Use a plain hour like "1am" or "3pm".`);
-      return false;
-    }
-    const amount = parseMoneyInput(amtPart);
-    if (Number.isNaN(amount)) {
-      alert(`Couldn't read the amount for "${(hourPart || "").trim()}". Enter a plain number like 20 (no currency symbols needed).`);
-      return false;
-    }
-    payouts[hour] = amount;
-  }
-  if (Object.keys(payouts).length === 0) {
-    alert('Add at least one payout, as "hour | amount" (e.g. "1am | 20").');
+  const { payouts, bad } = shReadPayouts();
+  if (bad.length) {
+    shShowMsg(`Check ${bad.map(hourLabel).join(", ")}: amounts need to be plain numbers like 20.`);
     return false;
   }
-
-  const bonusRaw = document.getElementById("shStreakBonus").value.trim();
-  let streakBonus = 0;
-  if (bonusRaw !== "") {
-    streakBonus = parseMoneyInput(bonusRaw);
-    if (Number.isNaN(streakBonus) || streakBonus < 0) {
-      alert("Couldn't read the streak bonus. Enter a plain amount like 2 (or leave it blank for no streak bonus).");
-      return false;
-    }
+  if (Object.keys(payouts).length === 0) {
+    shShowMsg("Add a payout for at least one hour first.");
+    return false;
   }
+  shShowMsg("");
 
   if (EDITING_SIDE_HUSTLE_ID) {
-    await editSideHustle(CLASS_CODE, EDITING_SIDE_HUSTLE_ID, { name, description, payouts, streakBonus });
+    await editSideHustle(CLASS_CODE, EDITING_SIDE_HUSTLE_ID, { name, description, payouts });
   } else {
-    await addSideHustle(CLASS_CODE, { name, description, payouts, streakBonus });
+    await addSideHustle(CLASS_CODE, { name, description, payouts });
   }
   resetSideHustleForm();
   await render();
@@ -252,8 +234,9 @@ function resetSideHustleForm() {
   EDITING_SIDE_HUSTLE_ID = null;
   document.getElementById("shName").value = "";
   document.getElementById("shDesc").value = "";
-  document.getElementById("shPayoutsArea").value = "";
-  document.getElementById("shStreakBonus").value = "";
+  shClearPayouts();
+  shShowMsg("");
+  document.getElementById("shPasteBox").classList.add("hidden");
   document.getElementById("addSideHustleBtn").innerHTML = icon("plus", 15) + " Add side hustle";
   document.getElementById("hustleFoldTitle").textContent = "Add a side hustle";
   document.getElementById("hustleFold").open = false;
@@ -268,10 +251,7 @@ function startEditSideHustle(id) {
     EDITING_SIDE_HUSTLE_ID = id;
     document.getElementById("shName").value = h.name;
     document.getElementById("shDesc").value = h.description || "";
-    document.getElementById("shPayoutsArea").value = Object.keys(h.payouts || {})
-      .map(Number).sort((a, b) => a - b)
-      .map(hr => `${hourLabel(hr)} | ${h.payouts[hr]}`).join("\n");
-    document.getElementById("shStreakBonus").value = Number(h.streakBonus) > 0 ? h.streakBonus : "";
+    shLoadPayouts(h.payouts);
     document.getElementById("addSideHustleBtn").innerHTML = icon("save", 15) + " Save changes";
     document.getElementById("hustleFoldTitle").textContent = "Edit side hustle";
     document.getElementById("hustleFold").open = true;
@@ -1274,3 +1254,158 @@ async function submitLogQuiz() {
 setInterval(() => { if (!document.hidden && LOG_CTX) paintJobLog(); }, 20000);
 
 document.addEventListener("DOMContentLoaded", init);
+
+
+/* ===================== Side hustle payout builder =====================
+   24 boxes (one per check-in hour) instead of a typed "hour | amount" list.
+   Leave a box blank = that hour isn't offered. Quick fill, copy-from, paste a
+   spreadsheet column and paste a typed list all just fill these boxes, so what
+   the teacher sees is exactly what will be saved. */
+let SH_CLASS_HUSTLES = [];
+function shHourInputs() { return Array.from(document.querySelectorAll("#shHourGrid input[data-hr]")); }
+function shRound2(n) { return Math.round(n * 100) / 100; }
+function shShowMsg(text) {
+  const el = document.getElementById("sideHustleMsg");
+  if (el) el.innerHTML = text ? `<p class="muted-small" style="color:var(--coral);font-weight:700;">${escapeHtml(text)}</p>` : "";
+}
+function shEnsureBuilder(cls) {
+  const grid = document.getElementById("shHourGrid");
+  if (!grid) return;
+  if (!grid.children.length) {
+    grid.innerHTML = Array.from({ length: 24 }, (_, h) =>
+      `<label class="sh-cell"><span class="sh-hr">${hourLabel(h)}</span><span class="sh-money"><i>$</i><input type="text" inputmode="decimal" autocomplete="off" data-hr="${h}" aria-label="Pay for ${hourLabel(h)}"></span></label>`).join("");
+    const opts = Array.from({ length: 24 }, (_, h) => `<option value="${h}">${hourLabel(h)}</option>`).join("");
+    document.getElementById("shFillFrom").innerHTML = opts;
+    document.getElementById("shFillTo").innerHTML = opts;
+    document.getElementById("shFillFrom").value = 0;
+    document.getElementById("shFillTo").value = 23;
+    grid.addEventListener("input", shGridChanged);
+    grid.addEventListener("keydown", ev => {
+      if (ev.key !== "Enter" || !ev.target.matches("input[data-hr]")) return;
+      ev.preventDefault(); // Enter moves to the next hour instead of submitting half a form
+      const next = grid.querySelector(`input[data-hr="${Number(ev.target.dataset.hr) + 1}"]`);
+      if (next) { next.focus(); next.select(); }
+    });
+    grid.addEventListener("paste", shGridPaste);
+    shSpark();
+    shGridChanged();
+  }
+  SH_CLASS_HUSTLES = cls.sideHustles || [];
+  const cp = document.getElementById("shCopyFrom");
+  cp.innerHTML = `<option value="">Copy payouts from another hustle…</option>` +
+    SH_CLASS_HUSTLES.map(h => `<option value="${escapeHtml(h.id)}">${escapeHtml(h.name)}</option>`).join("");
+  cp.classList.toggle("hidden", SH_CLASS_HUSTLES.length === 0);
+}
+function shSpark() {
+  document.getElementById("shSpark").innerHTML = Array.from({ length: 24 }, (_, h) => `<i data-hr="${h}"></i>`).join("");
+}
+// Reads the boxes: { payouts: {hour: amount}, bad: [hours that aren't numbers] }. Blank or 0 = not offered.
+function shReadPayouts() {
+  const payouts = {}, bad = [];
+  shHourInputs().forEach(inp => {
+    const v = inp.value.trim();
+    if (!v) return;
+    const n = parseMoneyInput(v);
+    if (Number.isNaN(n) || n < 0) { bad.push(Number(inp.dataset.hr)); return; }
+    if (n > 0) payouts[inp.dataset.hr] = shRound2(n);
+  });
+  return { payouts, bad };
+}
+function shGridChanged() {
+  const { payouts, bad } = shReadPayouts();
+  const amounts = Object.values(payouts), max = Math.max(0, ...amounts);
+  shHourInputs().forEach(inp => {
+    const cell = inp.closest(".sh-cell"), h = Number(inp.dataset.hr);
+    cell.classList.toggle("has-value", payouts[h] !== undefined);
+    cell.classList.toggle("bad", bad.includes(h));
+    const bar = document.querySelector(`#shSpark i[data-hr="${h}"]`);
+    if (bar) {
+      bar.style.height = payouts[h] ? Math.max(8, Math.round(payouts[h] / max * 100)) + "%" : "2px";
+      bar.title = payouts[h] ? `${hourLabel(h)}: ${hustleMoney(payouts[h])}` : `${hourLabel(h)}: not offered`;
+      bar.classList.toggle("on", payouts[h] !== undefined);
+    }
+  });
+  const el = document.getElementById("shSummary");
+  el.textContent = amounts.length
+    ? `${amounts.length} of 24 hours offered, ${Math.min(...amounts) === max ? hustleMoney(max) : hustleMoney(Math.min(...amounts)) + " to " + hustleMoney(max)}`
+    : "No hours set yet.";
+}
+function shSetCell(h, amt) {
+  const inp = document.querySelector(`#shHourGrid input[data-hr="${h}"]`);
+  if (inp) inp.value = (amt === "" || amt === null || amt === undefined) ? "" : String(shRound2(Number(amt)));
+}
+function shClearPayouts() { for (let h = 0; h < 24; h++) shSetCell(h, ""); shGridChanged(); }
+function shLoadPayouts(payouts) {
+  for (let h = 0; h < 24; h++) shSetCell(h, Number((payouts || {})[h]) > 0 ? payouts[h] : "");
+  shGridChanged();
+}
+function shCopyFromHustle(sel) {
+  const h = SH_CLASS_HUSTLES.find(x => x.id === sel.value);
+  if (h) { shLoadPayouts(h.payouts); shShowMsg(""); }
+  sel.value = "";
+}
+function shPreset(from, to) {
+  document.getElementById("shFillFrom").value = from;
+  document.getElementById("shFillTo").value = to;
+  document.getElementById("shFillAmt").focus();
+}
+// From..to (wraps past midnight, so 10pm to 5am works), starting at one amount and
+// changing by a fixed step each hour (0 = the same amount all the way).
+function shFillRange() {
+  const from = Number(document.getElementById("shFillFrom").value), to = Number(document.getElementById("shFillTo").value);
+  const start = parseMoneyInput(document.getElementById("shFillAmt").value);
+  const stepRaw = document.getElementById("shFillStep").value.trim();
+  const step = stepRaw === "" ? 0 : parseMoneyInput(stepRaw);
+  if (Number.isNaN(start) || start < 0) { shShowMsg("Type the amount to start at, e.g. 20."); return; }
+  if (Number.isNaN(step)) { shShowMsg("The change per hour should be a number like 2 or -1 (or leave it blank)."); return; }
+  shShowMsg("");
+  const count = ((to - from + 24) % 24) + 1;
+  for (let i = 0; i < count; i++) shSetCell((from + i) % 24, Math.max(0, start + step * i));
+  shGridChanged();
+}
+function shTogglePaste() { document.getElementById("shPasteBox").classList.toggle("hidden"); }
+// "3pm" -> [15]; "12am-5am" / "10pm to 5am" -> the hours in between (wraps midnight); "all" -> every hour.
+function shParseHourSpec(str) {
+  const t = String(str || "").trim().toLowerCase();
+  if (t === "all" || t === "all day") return Array.from({ length: 24 }, (_, i) => i);
+  const parts = t.split(/\s*(?:-|–|—|to)\s*/);
+  if (parts.length === 1) { const h = parseHourLabel(parts[0]); return h === null ? null : [h]; }
+  if (parts.length !== 2) return null;
+  const a = parseHourLabel(parts[0]), b = parseHourLabel(parts[1]);
+  if (a === null || b === null) return null;
+  const out = [], n = ((b - a + 24) % 24) + 1;
+  for (let i = 0; i < n; i++) out.push((a + i) % 24);
+  return out;
+}
+function shApplyPaste() {
+  const lines = document.getElementById("shPasteArea").value.split("\n").map(l => l.trim()).filter(Boolean);
+  const todo = [], problems = [];
+  lines.forEach(line => {
+    const m = line.match(/^(.*?)(?:\s*[|=:\t]\s*|\s+)\$?\s*(\d[\d,]*(?:\.\d+)?)\s*$/);
+    const hours = m ? shParseHourSpec(m[1]) : null;
+    const amt = m ? parseMoneyInput(m[2]) : NaN;
+    if (!hours || Number.isNaN(amt)) problems.push(line); else todo.push([hours, amt]);
+  });
+  if (problems.length) { shShowMsg(`Couldn't read: ${problems.slice(0, 3).join("; ")}${problems.length > 3 ? "…" : ""}. Nothing was added. Use an hour like 3pm or 12am-5am, then an amount.`); return; }
+  if (!todo.length) { shShowMsg("Paste at least one line first."); return; }
+  todo.forEach(([hours, amt]) => hours.forEach(h => shSetCell(h, amt)));
+  document.getElementById("shPasteArea").value = "";
+  document.getElementById("shPasteBox").classList.add("hidden");
+  shShowMsg("");
+  shGridChanged();
+}
+// Pasting a spreadsheet column (several numbers on separate lines) into any box fills down from that hour.
+function shGridPaste(ev) {
+  const text = (ev.clipboardData || window.clipboardData).getData("text");
+  const parts = text.split(/[\r\n\t]+/).map(x => x.trim()).filter(Boolean);
+  if (parts.length < 2) return;
+  ev.preventDefault();
+  if (parts.some(p => /[a-z]/i.test(p))) { // looks like a typed list ("3pm | 20"): hand it to the list box
+    document.getElementById("shPasteBox").classList.remove("hidden");
+    document.getElementById("shPasteArea").value = text;
+    return;
+  }
+  const start = Number(ev.target.dataset.hr);
+  parts.forEach((p, i) => { const n = parseMoneyInput(p); if (start + i < 24) shSetCell(start + i, Number.isNaN(n) ? "" : n); });
+  shGridChanged();
+}

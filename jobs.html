@@ -32,7 +32,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=a1cf365c">
+<link rel="stylesheet" href="style.css?v=26a6b7e1">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -128,13 +128,6 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div id="payDayMsg"></div>
     </div>
 
-    <!-- This pay cycle: who has met their job's requirement -->
-    <div class="card" id="logTrackerCard">
-      <h2>This pay cycle</h2>
-      <p class="muted-small" id="logTrackerHint" style="margin:0 0 14px;"></p>
-      <div id="logTrackerBox"></div>
-    </div>
-
     <!-- Jobs grid -->
     <div class="card">
       <div class="flex-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
@@ -144,6 +137,13 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         </div>
       </div>
       <div id="jobsGrid" class="jobs-family-grid" style="margin-top:20px;"></div>
+    </div>
+
+    <!-- This pay cycle: who has met their job's requirement -->
+    <div class="card" id="logTrackerCard">
+      <h2>This pay cycle</h2>
+      <p class="muted-small" id="logTrackerHint" style="margin:0 0 14px;"></p>
+      <div id="logTrackerBox"></div>
     </div>
 
     <!-- Add new job -->
@@ -203,14 +203,42 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <input id="shName" placeholder="e.g. Dog walking" required>
         <label for="shDesc" id="labShDesc">Description (optional)</label>
         <input id="shDesc" placeholder="e.g. Walk the neighbourhood dogs">
-        <label for="shPayoutsArea" id="labShPayouts">Payout per check-in hour, one per line, as "hour | amount"</label>
-        <textarea id="shPayoutsArea" rows="4" placeholder="1am | 20
-3pm | 25
-7pm | 15" required></textarea>
-        <p class="muted-small">Only list the hours you want to offer a payout for (e.g. 12am, 1am, ... 11pm), one "hour | amount" per line. Hours you leave out won't pay anything if a student somehow picks them.</p>
-        <label for="shStreakBonus" id="labShStreakBonus">Streak bonus per day (optional)</label>
-        <input id="shStreakBonus" inputmode="decimal" autocomplete="off" placeholder="e.g. 2" style="max-width:200px;">
-        <p class="muted-small">Extra pay for every day in a row a student checks in, starting on day 2 and stacking each day: day 2 pays the base payout + this amount, day 3 pays base + 2&times; this amount, and so on. Miss a day and they drop back to the base payout. Leave blank for no streak bonus.</p>
+        <label id="labShPayouts">What it pays at each check-in hour</label>
+        <p class="muted-small">Type an amount under each hour you want to offer and leave the others blank. For long lists use the quick tools: fill a whole stretch of hours in one go, copy another hustle, or paste a column from a spreadsheet straight into the first box.</p>
+        <div class="sh-tools">
+          <div class="sh-fill">
+            <strong>Quick fill</strong>
+            <span class="sh-chips">
+              <button type="button" class="sh-chip" onclick="shPreset(0,23)">All day</button>
+              <button type="button" class="sh-chip" onclick="shPreset(22,5)">Overnight</button>
+              <button type="button" class="sh-chip" onclick="shPreset(6,11)">Morning</button>
+              <button type="button" class="sh-chip" onclick="shPreset(12,17)">Afternoon</button>
+              <button type="button" class="sh-chip" onclick="shPreset(18,21)">Evening</button>
+            </span>
+          </div>
+          <div class="sh-fill">
+            <span>From</span><select id="shFillFrom" aria-label="From hour"></select>
+            <span>to</span><select id="shFillTo" aria-label="To hour"></select>
+            <span>pay $</span><input id="shFillAmt" inputmode="decimal" placeholder="20" aria-label="Amount to start at">
+            <span>then change by $</span><input id="shFillStep" inputmode="decimal" placeholder="0" aria-label="Change per hour">
+            <span>each hour</span>
+            <button type="button" class="btn small secondary" onclick="shFillRange()">Apply</button>
+          </div>
+          <div class="sh-fill">
+            <select id="shCopyFrom" class="hidden" onchange="shCopyFromHustle(this)" aria-label="Copy payouts from another hustle"></select>
+            <button type="button" class="btn small secondary" onclick="shTogglePaste()">Paste a list</button>
+            <button type="button" class="btn small secondary" onclick="shClearPayouts()">Clear all hours</button>
+          </div>
+          <div id="shPasteBox" class="hidden">
+            <textarea id="shPasteArea" rows="5" placeholder="12am-5am | 20&#10;6am-11am | 25&#10;3pm | 30"></textarea>
+            <p class="muted-small">One per line: an hour (<em>3pm</em>) or a stretch (<em>12am-5am</em>), then the amount. Use <em>|</em>, <em>:</em>, a tab or a space between them.</p>
+            <button type="button" class="btn small" onclick="shApplyPaste()">Add to the hours below</button>
+          </div>
+        </div>
+        <div class="sh-hour-grid" id="shHourGrid"></div>
+        <div class="sh-summary" id="shSummary"></div>
+        <div class="sh-spark" id="shSpark" aria-hidden="true"></div>
+        <div class="sh-spark-axis" aria-hidden="true"><span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span></div>
         <button class="btn" type="submit" id="addSideHustleBtn">Add side hustle</button>
       </form>
       </details>
@@ -336,14 +364,14 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=98ea2dcf"></script>
 <script defer src="data-money.js?v=e9ae46f1"></script>
-<script defer src="data-life.js?v=a1cfd55e"></script>
+<script defer src="data-life.js?v=958b7abb"></script>
 <script defer src="data-property.js?v=d9d76f21"></script>
 <script defer src="data-markets.js?v=2ebd767f"></script>
 <script defer src="events-ui.js?v=5bf20a4c"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=c23aec59"></script>
-<script defer src="notifications.js?v=c7ea7f60"></script>
-<script defer src="jobs.js?v=a3353c38"></script>
+<script defer src="notifications.js?v=2b95ab96"></script>
+<script defer src="jobs.js?v=12e57653"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
 </body>
 </html>
