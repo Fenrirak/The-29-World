@@ -242,7 +242,10 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
   <div class="card">
     <div class="flex-between">
       <h2 id="hMarket">Market snapshot</h2>
-      <a class="btn small gold" href="market.html" id="marketLink">Go to Stock Market</a>
+      <span class="row-flex" style="gap:8px;flex-wrap:wrap;">
+        <button class="btn small secondary hidden" type="button" id="resetSnapshotBtn" onclick="resetMarketSnapshot()">Reset snapshot</button>
+        <a class="btn small gold" href="market.html" id="marketLink">Go to Stock Market</a>
+      </span>
     </div>
     <div class="table-scroll">
     <table class="stack-table">
@@ -250,7 +253,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <tbody id="marketSnapshot"></tbody>
     </table>
     </div>
-    <p class="muted-small">All-time = every share you've ever bought/sold in that company, gains and losses combined, compared to what you paid.</p>
+    <p class="muted-small">All-time = every share you've ever bought/sold in that company, gains and losses combined, compared to what you paid. Use <strong>Reset snapshot</strong> to start counting again from today.</p>
     <p class="muted-small hidden" id="allTimeNote">* means that row's all-time figure may be incomplete. Either it includes shares bought before this feature existed (no recorded cost), or a past sale old enough to have aged out of the activity log.</p>
     <p class="muted-small" id="noCompanies">Your teacher hasn't opened any companies yet.</p>
   </div>
@@ -295,16 +298,16 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="shortcuts.js?v=5c3b32dc"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=98ea2dcf"></script>
-<script defer src="data-money.js?v=e9ae46f1"></script>
+<script defer src="data-money.js?v=318e9a8a"></script>
 <script defer src="data-life.js?v=e845ca0c"></script>
 <script defer src="data-property.js?v=d9d76f21"></script>
-<script defer src="data-markets.js?v=2ebd767f"></script>
+<script defer src="data-markets.js?v=95365b86"></script>
 <script defer src="tour.js?v=475f7fc8"></script>
 <script defer src="events-ui.js?v=5bf20a4c"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=c23aec59"></script>
 <script defer src="notifications.js?v=e0afe5b8"></script>
 <script defer src="savings-goals.js?v=7bf554be"></script>
-<script defer src="student.js?v=0854c74c"></script>
+<script defer src="student.js?v=3c50c326"></script>
 </body>
 </html>

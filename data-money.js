@@ -2862,11 +2862,21 @@ async function stockAllTimeGain(username, classCode) {
     };
   });
 
+  // If the student reset their Market snapshot (resetStockSnapshot in data-markets.js), every company's
+  // costBasis entry carries the same resetAt. Sales logged before it no longer count, so realized
+  // gain starts again from $0. Log entries with no timestamp are older than any reset.
+  let resetAt = 0;
+  cls.companies.forEach(co => {
+    const r = co.costBasis && co.costBasis[username] && co.costBasis[username].resetAt;
+    if (Number.isFinite(r) && r > resetAt) resetAt = r;
+  });
+
   let realized = 0;
   txns.forEach(t => {
     if (t.realizedGain === undefined) return;
     const isMine = (t.type === "stock-sell" || t.type === "stock-close") && t.to === username;
     if (!isMine) return;
+    if (resetAt && !(t.ts > resetAt)) return;
     realized += t.realizedGain;
     if (t.companyId && perCompany[t.companyId]) {
       perCompany[t.companyId].realized = Math.round((perCompany[t.companyId].realized + t.realizedGain) * 100) / 100;

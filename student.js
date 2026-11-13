@@ -280,6 +280,8 @@ async function render() {
   const mbody = document.getElementById("marketSnapshot");
   mbody.innerHTML = "";
   document.getElementById("noCompanies").classList.toggle("hidden", cls.companies.length > 0);
+  const resetSnapBtn = document.getElementById("resetSnapshotBtn");
+  if (resetSnapBtn) resetSnapBtn.classList.toggle("hidden", cls.companies.length === 0);
   // "Since Monday" reuses the same Monday-of-the-current-week key and
   // price-lookup helpers the weekly stock estimate (the data-*.js files) already uses,
   // so this figure lines up with what students see there.
@@ -374,6 +376,49 @@ async function render() {
     `;
     bpBox.appendChild(row);
   });
+}
+
+/* ---------------- Reset my Market snapshot ----------------
+   Clears the all-time $ / % figures and re-costs the shares the student still holds at today's price
+   (see resetStockSnapshot in data-markets.js). The confirm box spells out exactly what will happen. */
+async function resetMarketSnapshot() {
+  const btn = document.getElementById("resetSnapshotBtn");
+  if (!btn || btn.disabled) return;
+  const user = CURRENT.username;
+  const cls = await getClassCached(CURRENT.classCode);
+  const gain = await stockAllTimeGain(user, CURRENT.classCode);
+  let shares = 0, companies = 0, value = 0;
+  (cls.companies || []).forEach(co => {
+    const n = (co.holders && co.holders[user]) || 0;
+    if (n > 0) { shares += n; companies++; value += n * co.price; }
+  });
+  const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
+  const gSign = gain.total > 0 ? "+" : gain.total < 0 ? "-" : "";
+  const msg = [
+    "Reset your Market snapshot?",
+    "",
+    "What will happen:",
+    "\u2022 All-time ($) and All-time (%) go back to $0 and 0% for every company.",
+    "\u2022 You keep every share you own. Nothing is bought or sold, and your balance does not change.",
+    shares > 0
+      ? `\u2022 Your ${plural(shares, "share")} in ${plural(companies, "company").replace("companys", "companies")} (worth ${fmtMoney(value)} at today's prices) are counted as if you bought them today. Today's market price becomes their purchase cost, so gains and losses are measured from now on.`
+      : "\u2022 You don't hold any shares right now, so the snapshot simply starts fresh at $0.",
+    "\u2022 Profits and losses from shares you sold in the past are cleared from the snapshot.",
+    "\u2022 The Price, My shares and Since Mon columns are not affected.",
+    "",
+    `Right now your all-time total is ${gSign}${fmtMoney(Math.abs(gain.total))}${gain.complete ? "" : " (at least, some history is missing)"}.`,
+    "This can't be undone."
+  ].join("\n");
+  if (!await t29Confirm(msg, { confirmText: "Reset snapshot", cancelText: "Cancel", danger: true })) return;
+  btn.disabled = true;
+  try {
+    const res = await resetStockSnapshot(user, CURRENT.classCode);
+    if (!res.ok) { await t29Alert(res.error || "Couldn't reset your snapshot. Please try again."); return; }
+    await render();
+    t29Toast("Market snapshot reset. All-time figures now start from today.");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ---------------- To do today ----------------

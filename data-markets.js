@@ -371,7 +371,9 @@ async function buyShares(username, classCode, companyId, shares) {
       co.costBasis[username] = {
         shares: basis.shares + shares,
         totalCost: Math.round((basis.totalCost + cost) * 100) / 100,
-        totalBought: Math.round((basis.totalBought + cost) * 100) / 100
+        totalBought: Math.round((basis.totalBought + cost) * 100) / 100,
+        // Keep the "snapshot was reset at" marker (see resetStockSnapshot) through later buys.
+        ...(Number.isFinite(rawBasis && rawBasis.resetAt) ? { resetAt: rawBasis.resetAt } : {})
       };
 
       t.update(userRef, { balance: Math.round((user.balance - cost) * 100) / 100 });
@@ -455,7 +457,9 @@ async function sellShares(username, classCode, companyId, shares) {
       co.costBasis[username] = {
         shares: remainingShares,
         totalCost: Math.max(0, Math.round((basis.totalCost - costOfSold) * 100) / 100),
-        totalBought: basis.totalBought // cumulative — a sale never reduces this
+        totalBought: basis.totalBought, // cumulative — a sale never reduces this
+        // Keep the "snapshot was reset at" marker (see resetStockSnapshot) through later sales.
+        ...(Number.isFinite(rawBasis && rawBasis.resetAt) ? { resetAt: rawBasis.resetAt } : {})
       };
 
       t.update(userRef, { balance: Math.round((user.balance + proceeds) * 100) / 100 });
@@ -474,6 +478,51 @@ async function sellShares(username, classCode, companyId, shares) {
     costBasisSold, realizedGain: Math.round((proceeds - costBasisSold) * 100) / 100
   });
   return { ok: true };
+}
+
+/* ===================== Reset the Market snapshot =====================
+   Lets a student wipe the dashboard's all-time $ / % figures and start counting again from today.
+   Nothing is bought or sold and no money moves. For every company:
+     - the shares they hold now are costed at TODAY'S market price (shares x price), so unrealized
+       gain starts at $0 and the % starts at 0%;
+     - the cumulative "totalBought" is set to that same amount (0 for a company they hold none of);
+     - resetAt (a timestamp) is stamped on the entry. stockAllTimeGain() in data-money.js ignores any
+       stock-sell / stock-close entry in the shared activity log from before the newest resetAt, which
+       is how realized profit and loss from earlier sales is cleared too. buyShares / sellShares carry
+       resetAt forward, so it survives later trades.
+   Everything lives inside companies[].costBasis[username], the same place buyShares already writes,
+   so it needs no new fields (and no rule changes). */
+async function resetStockSnapshot(username, classCode) {
+  const classRef = classesCol().doc(classCode);
+  const at = Date.now();
+  let companies = 0, shareCount = 0, value = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      companies = 0; shareCount = 0; value = 0; // reset every attempt: this callback can be retried
+      const classSnap = await t.get(classRef);
+      if (!classSnap.exists) throw new Error("NOT_FOUND");
+      const cls = classSnap.data();
+      const list = cls.companies || [];
+      // Check every price first, so a bad one can't leave the reset half done.
+      list.forEach(co => {
+        if (((co.holders && co.holders[username]) || 0) > 0 && !Number.isFinite(co.price)) throw new Error("BAD_PRICE");
+      });
+      list.forEach(co => {
+        const shares = (co.holders && co.holders[username]) || 0;
+        const cost = shares > 0 ? Math.round(shares * co.price * 100) / 100 : 0;
+        co.costBasis = co.costBasis || {};
+        co.costBasis[username] = { shares: shares > 0 ? shares : 0, totalCost: cost, totalBought: cost, resetAt: at };
+        if (shares > 0) { companies++; shareCount += shares; value += cost; }
+      });
+      t.update(classRef, { companies: list });
+    });
+  } catch (e) {
+    if (e.message === "NOT_FOUND") return { ok: false, error: "Not found." };
+    if (e.message === "BAD_PRICE") return { ok: false, error: "One of your companies has an invalid price. Ask your teacher to set a new price, then try again." };
+    console.error("resetStockSnapshot failed:", e);
+    return { ok: false, error: "Something went wrong. Please try again. (" + (e.code || e.message || "unknown") + ")" };
+  }
+  return { ok: true, companies, shares: shareCount, value: Math.round(value * 100) / 100 };
 }
 
 /* ===================== Peer-to-peer marketplace =====================
