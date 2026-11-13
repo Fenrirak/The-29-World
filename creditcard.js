@@ -161,8 +161,9 @@ function ccInjectLifetimeCss() {
   const st = document.createElement("style");
   st.id = "ccLtCss";
   st.textContent = `
-.cc-ltb{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
-.cc-ltb ul{list-style:none;margin:0;padding:0 4px;font-size:13px;line-height:1.55}
+.cc-ltb{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:400px;margin-top:-6px}
+.cc-ltb ul{list-style:none;margin:0;padding:0;font-size:15px;line-height:1.55;text-align:left}
+.cc-ltb ul:last-child{text-align:right}
 .cc-ltb li{padding:1px 0}
 .cc-ltb b{font-weight:800}
 .cc-ltb b.good{color:#177a5c}.cc-ltb b.bad{color:#b0402a}
