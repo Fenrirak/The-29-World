@@ -32,7 +32,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=2069f313">
+<link rel="stylesheet" href="style.css?v=2b715e4b">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -90,7 +90,6 @@
     background: var(--card); border: 1px solid var(--line); border-radius: var(--r-5);
     box-shadow: var(--shadow-box); transition: box-shadow .2s ease;
   }
-  .pcard:hover { box-shadow: var(--shadow-hover); }
   .pcard.is-sold { opacity: .72; }
   .pcard-top { display: flex; flex-wrap: wrap; gap: 12px 16px; justify-content: space-between; align-items: flex-start; padding: 18px 18px 12px; }
   .pcard-id { display: flex; gap: 12px; flex: 1 1 200px; min-width: 0; }
@@ -241,7 +240,7 @@
   .mc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
   @media (max-width: 660px) { .anw-modal-card.mc-modal { padding: 18px 16px; } .mc-grid { grid-template-columns: 1fr; } }
   .mc-opt { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border: 1.5px solid var(--line); border-radius: var(--r-5); background: var(--card); transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
-  .mc-opt:hover { border-color: var(--gold); box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+  .mc-opt:hover { border-color: var(--gold); }
   .mc-opt.is-variable:hover { border-color: var(--sky); }
   .anw-modal-card.mc-modal:focus { outline: none; }
   #mcTitle { display: flex; align-items: center; gap: 8px; }

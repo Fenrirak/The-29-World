@@ -27,7 +27,7 @@
      equivalents further down). Nothing else on the site invents its own.
        --shadow-box      background boxes: cards, stat tiles, panels, the top bar
        --shadow-btn      buttons and small controls: tabs, chips, avatars, switch knobs
-       --shadow-hover    anything you can tap, while hovered (cards, tiles, buttons)
+       --shadow-hover    clickable things only (buttons, links, whole-card links), while hovered
        --shadow-pop      floating things: menus, popovers, toasts, banners, tour cards
        --shadow-modal    modals and dialogs: the biggest on the site
        --shadow-edge     side drawers: -edge casts right (left drawer), -edge-end casts left
@@ -475,7 +475,6 @@ html.dark-mode .legal-main .about-card .about-lead{color:var(--heading-text);}
   overflow-wrap:break-word;
   transition:box-shadow .2s ease, transform .2s ease;
 }
-.card:hover{box-shadow:var(--shadow-hover);}
 .card h2{display:flex;align-items:center;gap:9px;}
 .card h2 .icon{color:var(--navy-900);flex-shrink:0;}
 .grid{display:grid;gap:20px;}
@@ -800,7 +799,6 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
 
 /* ---------------- Job listing cards ---------------- */
 .job-card{border:1.5px solid var(--line);border-radius:var(--r-4);padding:16px;margin-bottom:14px;transition:box-shadow .15s ease;}
-.job-card:hover{box-shadow:var(--shadow-hover);}
 .job-card h4{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
 .job-card h4 .icon{color:var(--navy-700);}
 .status-pending{color:var(--gold-dark);font-weight:800;}
@@ -1284,7 +1282,6 @@ a.notif-row.unread:hover{background:#f7f3e6;}
   border:1.5px solid var(--line);border-radius:var(--r-5);padding:18px 20px;margin-bottom:16px;
   transition:box-shadow .15s ease;background:var(--card);
 }
-.quiz-card:hover{box-shadow:var(--shadow-hover);}
 .quiz-card.passed{border-color:#9fdcc4;background:linear-gradient(180deg,#f4fcf8,var(--card) 60%);}
 .quiz-card.locking{border-color:#f0c3b8;}
 .quiz-card h3{display:flex;align-items:center;gap:9px;margin:0 0 4px;font-size:1.1rem;}
@@ -1414,7 +1411,6 @@ a.notif-row.unread:hover{background:#f7f3e6;}
   display:flex;flex-direction:column;gap:2px;position:relative;overflow:hidden;
   transition:box-shadow .15s ease;
 }
-.mkt-listing:hover{box-shadow:var(--shadow-hover);}
 .mkt-listing.mine{border-color:#eddcb4;background:linear-gradient(180deg,#fffdf6,var(--card) 55%);}
 .mkt-listing h4{display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:1rem;}
 .mkt-listing h4 .icon{color:var(--navy-700);flex-shrink:0;}
@@ -2128,7 +2124,6 @@ html.dark-mode .notif-dot{
   transition: box-shadow .2s, border-color .2s;
 }
 .job-family-card:hover {
-  box-shadow: var(--shadow-hover);
   border-color: #c8d0e0;
 }
 
@@ -3467,7 +3462,6 @@ html.dark-mode .cc-timeline{background:rgba(255,255,255,.12);}
 /* ---- Student: choosing / pending ---- */
 .cc-plans{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(270px,100%),1fr));gap:16px;}
 .cc-plan{display:flex;flex-direction:column;border:1.5px solid var(--line);border-radius:var(--r-6);overflow:hidden;background:var(--card);transition:transform .15s,box-shadow .15s;}
-.cc-plan:not(.locked):hover{transform:translateY(-3px);box-shadow:var(--shadow-hover);}
 .cc-plan.locked .cc-visual{filter:grayscale(.75);opacity:.75;}
 .cc-plan-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:12px;flex:1;}
 .cc-plan-body .btn{margin-top:auto;width:100%;}
@@ -3524,7 +3518,6 @@ html.dark-mode .cc-timeline{background:rgba(255,255,255,.12);}
 .cc-set-pen.is-off .cc-sentence{opacity:.5;}
 .cc-tplans{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:16px;margin-top:8px;}
 .cc-tplan{display:flex;flex-direction:column;overflow:hidden;background:var(--card);border:1.5px solid var(--line);border-radius:var(--r-6);transition:transform .15s,box-shadow .15s;}
-.cc-tplan:hover{transform:translateY(-2px);box-shadow:var(--shadow-hover);}
 .cc-tplan-body{display:flex;flex-direction:column;gap:10px;flex:1;padding:12px 16px 16px;}
 .cc-tplan-actions{margin-top:auto;padding-top:4px;}
 .cc-tablewrap{border:1.5px solid var(--line);border-radius:var(--r-5);background:var(--card);}
@@ -3930,7 +3923,6 @@ html.dark-mode .stat .value.t29-up{animation-name:t29UpDark;}
 /* accounts a student owns */
 .ac-own-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:16px;margin-top:10px;}
 .ac-own{display:flex;flex-direction:column;border:1.5px solid var(--line);border-radius:var(--r-6);overflow:hidden;background:var(--card);transition:transform .15s,box-shadow .15s;}
-.ac-own:hover{transform:translateY(-2px);box-shadow:var(--shadow-hover);}
 .ac-own-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:12px;flex:1;}
 .ac-bal{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
 .ac-bal span{font-size:var(--fs-xs);font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
@@ -3990,9 +3982,7 @@ html.dark-mode .ac-swap{color:var(--ink);}
 .ac-reco-note{margin:0 0 12px;}
 .ac-reco{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr));gap:12px;}
 .ac-reco-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--card);border:1.5px solid var(--line);border-radius:var(--r-5);padding:12px 14px;transition:box-shadow .15s,transform .15s;}
-.ac-reco-item:hover{box-shadow:var(--shadow-hover);transform:translateY(-1px);}
 .ac-reco-item.have{opacity:.62;}
-.ac-reco-item.have:hover{box-shadow:none;transform:none;}
 .ac-reco-body{min-width:0;display:flex;flex-direction:column;gap:4px;}
 .ac-reco-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .ac-reco-body p{margin:0;font-size:var(--fs-sm);line-height:1.4;color:var(--muted);}
@@ -4115,7 +4105,6 @@ html.dark-mode .bk-tiles .stat.bk-balance:focus-visible{outline-color:#fff;}
 
 /* Nothing on the Bank page lifts or pops when hovered unless it can be clicked. The boxes below only hold buttons of
    their own, so they stay still (the buttons inside still react as usual). */
-.page-bank .card:hover{box-shadow:var(--shadow-hover);}
 .page-bank .ac-own,.page-bank .ac-own:hover,
 .page-bank .cc-plan,.page-bank .cc-plan:hover,.page-bank .cc-plan:not(.locked):hover,
 .page-bank .cc-tplan,.page-bank .cc-tplan:hover,
