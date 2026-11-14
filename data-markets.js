@@ -127,6 +127,12 @@ async function setPriceRange(classCode, min, max) {
   }
 }
 
+// Teacher: whether students can see how far each company's price can move on a simulated day.
+async function setShowShareMove(classCode, on) {
+  await classesCol().doc(classCode).update({ showShareMove: !!on });
+  return { ok: true, value: !!on };
+}
+
 // Teacher: the chance (0-100 %) that a company's price goes UP on a simulated day. Down is the rest.
 async function setMarketUpChance(classCode, chance) {
   const n = Number(chance);

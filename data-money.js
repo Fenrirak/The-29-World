@@ -3152,6 +3152,152 @@ function reportAccountingNote(report) {
     + (report.earningsComplete === false ? " Income is a verified subtotal, so a savings-rate percentage is not shown." : "");
 }
 
+/* ---------------- Report card resets ----------------
+   A student can ask to reset any number on their report card (a category such as
+   "Wages", a whole section, this month or all time) to 0. It only happens once their
+   teacher approves, and they can withdraw the request any time before that.
+
+   A reset only changes what the report card SHOWS. Nothing else moves: balances, savings,
+   net worth, transactions and the underlying accounting (reportAccounting) are untouched.
+   Approving stores a baseline (the number at that moment) on the student's doc in
+   `reportBaselines`, and the card shows the real number minus the baseline, so anything
+   earned or spent afterwards counts from 0. Only a teacher can write baselines; students
+   only write their own `reportResetRequests`. A "this month" baseline belongs to the month
+   it was made in and is ignored once a new month starts (the month's numbers restart then
+   anyway). */
+const REPORT_RESET_SECTIONS = { income: "Income", saved: "Saved & invested", spent: "Spent", returned: "Returned money & sale proceeds", borrowed: "Borrowed" };
+const REPORT_RESET_SCOPES = { month: "this month", life: "all time" };
+const REPORT_RESET_MAX_PENDING = 20;
+function reportResetLabel(r) {
+  const what = r.category === "*" ? "everything" : r.category;
+  return `${REPORT_RESET_SECTIONS[r.section] || r.section}: ${what} (${REPORT_RESET_SCOPES[r.scope] || r.scope})`;
+}
+function reportBaselineOf(student, scope, monthKey) {
+  const b = student && student.reportBaselines && student.reportBaselines[scope];
+  if (!b) return null;
+  if (scope === "month" && b.monthKey !== monthKey) return null;
+  return b;
+}
+// A copy of an accounting bucket with each reset category (and section total) reduced by its baseline.
+function reportAdjustBucket(bucket, base) {
+  if (!base) return bucket;
+  const out = _cloneDoc(bucket);
+  ["income", "saved", "spent", "returned"].forEach(sec => {
+    const cats = base[sec] || {};
+    out[sec] = out[sec] || {};
+    Object.keys(cats).forEach(cat => { if (cat in out[sec]) out[sec][cat] = budgetRound(out[sec][cat] - cats[cat]); });
+    const off = Number((base.totals || {})[sec]) || 0;
+    if (off) out[sec + "Total"] = budgetRound((out[sec + "Total"] || 0) - off);
+  });
+  const bOff = Number((base.totals || {}).borrowed) || 0;
+  if (bOff) out.borrowedTotal = budgetRound((out.borrowedTotal || 0) - bOff);
+  return out;
+}
+function _reportResetId() { return "rr" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+async function requestReportReset(username, classCode, scope, section, category) {
+  category = String(category === undefined || category === null ? "" : category).trim();
+  if (!REPORT_RESET_SCOPES[scope] || !REPORT_RESET_SECTIONS[section] || !category || category.length > 120) return { ok: false, error: "That can't be reset." };
+  if (section === "borrowed") category = "*";
+  const userRef = usersCol().doc(username);
+  let req = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      req = null; // reset every attempt: this callback can be retried
+      const us = await t.get(userRef);
+      if (!us.exists) throw new Error("NOT_FOUND");
+      const list = (us.data().reportResetRequests || []).slice();
+      const pend = list.filter(r => r.status === "pending");
+      if (pend.some(r => r.scope === scope && r.section === section && (r.category === category || r.category === "*"))) throw new Error("DUPLICATE");
+      if (pend.length >= REPORT_RESET_MAX_PENDING) throw new Error("TOO_MANY");
+      req = { id: _reportResetId(), scope, section, category, status: "pending", ts: Date.now() };
+      // Keep every pending request and only the 10 newest decided ones.
+      const decided = list.filter(r => r.status !== "pending").slice(-10);
+      t.update(userRef, { reportResetRequests: pend.concat(decided, [req]) });
+    });
+  } catch (e) {
+    return { ok: false, error: e.message === "DUPLICATE" ? "You've already asked to reset that. Your teacher hasn't answered yet."
+      : e.message === "TOO_MANY" ? "You have lots of requests waiting. Withdraw some or wait for your teacher to answer them." : "Something went wrong. Please try again." };
+  }
+  await t29NotifyTeacher(classCode, "reportreset", "req", reportResetLabel(req));
+  return { ok: true, request: req };
+}
+// Only a request still waiting can be withdrawn. If the teacher got there first, say so (never undo an approval).
+async function withdrawReportReset(username, classCode, requestId) {
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef);
+      if (!us.exists) throw new Error("NOT_FOUND");
+      const list = us.data().reportResetRequests || [];
+      const r = list.find(x => x.id === requestId);
+      if (!r) throw new Error("GONE");
+      if (r.status !== "pending") throw new Error("DECIDED:" + r.status);
+      t.update(userRef, { reportResetRequests: list.filter(x => x.id !== requestId) });
+    });
+  } catch (e) {
+    const m = String(e.message || "");
+    if (m.startsWith("DECIDED:")) return { ok: false, error: m === "DECIDED:approved" ? "Your teacher already approved that reset, so it can't be withdrawn." : "Your teacher already answered that request." };
+    if (m === "GONE") return { ok: false, error: "That request isn't there any more." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  await t29NotifyTeacher(classCode, "reportreset", "cancel", "");
+  return { ok: true };
+}
+// Teacher: approve (sets the baselines so the card shows 0 from now) or decline a request.
+async function decideReportReset(classCode, username, requestId, approve) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  let decided = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      decided = null;
+      const us = await t.get(userRef), cs = await t.get(classRef);
+      if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
+      const user = us.data(), cls = withNewModuleDefaults(cs.data());
+      const list = (user.reportResetRequests || []).map(r => Object.assign({}, r));
+      const req = list.find(r => r.id === requestId && r.status === "pending");
+      if (!req) throw new Error("NOT_PENDING"); // withdrawn, or already answered
+      const upd = {};
+      if (approve) {
+        const acc = reportAccountingView(Object.assign({ username }, user), cls.txns || []);
+        const raw = req.scope === "month" ? acc.month : acc.lifetime;
+        const baselines = _cloneDoc(user.reportBaselines || {});
+        let b = baselines[req.scope] || {};
+        if (req.scope === "month" && b.monthKey !== acc.monthKey) b = { monthKey: acc.monthKey };
+        if (req.scope === "month") b.monthKey = acc.monthKey;
+        b.totals = b.totals || {};
+        if (req.section === "borrowed") b.totals.borrowed = budgetRound(raw.borrowedTotal || 0);
+        else {
+          const rawCats = raw[req.section] || {};
+          b[req.section] = b[req.section] || {};
+          if (req.category === "*") {
+            Object.keys(rawCats).forEach(cat => { b[req.section][cat] = rawCats[cat]; });
+            b.totals[req.section] = budgetRound(raw[req.section + "Total"] || 0);
+          } else if (req.category in rawCats) {
+            const shown = budgetRound(rawCats[req.category] - (b[req.section][req.category] || 0));
+            b[req.section][req.category] = rawCats[req.category];
+            b.totals[req.section] = budgetRound((Number(b.totals[req.section]) || 0) + shown);
+          }
+        }
+        baselines[req.scope] = b;
+        upd.reportBaselines = baselines;
+      }
+      req.status = approve ? "approved" : "declined";
+      req.decidedTs = Date.now();
+      upd.reportResetRequests = list;
+      t.update(userRef, upd);
+      decided = Object.assign({}, req);
+    });
+  } catch (e) {
+    return { ok: false, error: e.message === "NOT_PENDING" ? "That request was withdrawn or already answered. Refresh to see the latest." : "Couldn't save that. Refresh and try again." };
+  }
+  if (decided) {
+    await t29NotifyStudents(classCode, { to: username, icon: "chart", tone: approve ? "mint" : "coral",
+      title: approve ? "Your teacher approved your report card reset" : "Your teacher declined your report card reset",
+      body: `${reportResetLabel(decided)}.${approve ? " That number now starts again from 0 on your report card. Nothing else changed." : ""}`, href: "reports.html" });
+  }
+  return { ok: true };
+}
+
 // Builds one student's report-card data. Net worth fields are a live
 // snapshot (a point in time). Income/saved/spent fields cover THIS NZ
 // CALENDAR MONTH, read from the rolling totals recordReportActivity() keeps
@@ -3164,7 +3310,9 @@ function reportAccountingNote(report) {
 function buildStudentReportData(student, cls) {
   const username = student.username;
   const accounting = reportAccountingView(student, cls.txns || []);
-  const month = accounting.month, lifetime = accounting.lifetime;
+  // Approved resets (see "Report card resets") only change what the card shows.
+  const month = reportAdjustBucket(accounting.month, reportBaselineOf(student, "month", accounting.monthKey));
+  const lifetime = reportAdjustBucket(accounting.lifetime, reportBaselineOf(student, "life", accounting.monthKey));
   const earningsComplete = accounting.historyComplete !== false && !Object.keys(month.returned).some(k => /unknown/.test(k));
 
   const income = month.income, saved = month.saved, spent = month.spent;
@@ -3227,6 +3375,8 @@ function buildStudentReportData(student, cls) {
     returned: month.returned, returnedTotal: month.returnedTotal,
     topExpenseCategory: topExpense ? { category: topExpense[0], amount: topExpense[1] } : null,
     loans,
+    // The student's reset requests (waiting or recently answered) for the report-card buttons and the teacher's queue.
+    resetRequests: (student.reportResetRequests || []).map(r => ({ id: r.id, scope: r.scope, section: r.section, category: r.category, status: r.status, ts: r.ts || 0 })),
     // Entire history — never reset, see recordReportActivity above.
     lifetimeIncome: lifetime.income, lifetimeSaved: lifetime.saved, lifetimeSpent: lifetime.spent,
     lifetimeReturned: lifetime.returned, lifetimeReturnedTotal: lifetime.returnedTotal,
@@ -4144,26 +4294,203 @@ function normalizeBudgetPlan(raw) {
   return { hasPlan: true, saveAmount: budgetRound(save), updatedAt: raw.updatedAt || null };
 }
 
+/* ---------------- Editing the day-by-day list ----------------
+   A student can take regular items out of their week and add their own (pocket money, a
+   lunch budget, a planned saving...). Edits are saved either for THIS WEEK ONLY or for this
+   week AND FUTURE weeks, and the totals, the "how this week is going" rows and safe-to-spend
+   all follow the edited list. Nothing here moves money: a bill that is taken out of the plan
+   still gets charged, the plan just no longer reserves money for it.
+
+   Stored on user.budget.edits (so it travels with the existing `budget` field):
+     { rule:  { from: "<Monday>", removed: [item keys], added: [custom items] } | null,   // this and future weeks
+       weeks: { "<Monday>": { removed: [...], added: [...] } } }                          // one week only
+   A custom item is { id, label, amount, dir: "in" | "out" | "save", day: 0-6 (Monday = 0) }.
+   For a week, its own saved entry wins; otherwise the "this and future" rule applies from the
+   week it was saved; otherwise the list is automatic. Each saved entry is the WHOLE edited
+   state for the weeks it covers, so saving again replaces it. */
+const BUDGET_MAX_CUSTOM = 25, BUDGET_MAX_LABEL = 40, BUDGET_MAX_ITEM = 1000000;
+function budgetEditsFor(raw, weekStartKey) {
+  const e = raw && raw.edits;
+  if (!e) return null;
+  const w = e.weeks && e.weeks[weekStartKey];
+  if (w) return { source: "week", removed: w.removed || [], added: w.added || [] };
+  if (e.rule && e.rule.from <= weekStartKey) return { source: "rule", removed: e.rule.removed || [], added: e.rule.added || [] };
+  return null;
+}
+function budgetCustomItem(c, weekStartKey, todayKey) {
+  const dayKey = dateKeyPlusDays(weekStartKey, Math.min(6, Math.max(0, Number(c.day) || 0)));
+  // Your own planned items can't be matched to a payment, so they count as happened once their day has passed.
+  const status = dayKey < todayKey ? "done" : budgetStatus(dayKey, todayKey, false);
+  return { key: "custom-" + c.id, custom: true, customId: c.id, dir: c.dir, icon: c.dir === "in" ? "coin" : c.dir === "save" ? "piggy" : "cart",
+    label: c.label, amount: budgetRound(c.amount), dayKey, status, conditional: c.dir === "in",
+    note: c.dir === "in" ? "Added by you. Safe to spend doesn't count it" : "Added by you" };
+}
+// Applies the student's saved edits to the week's automatic list (changes sched.items) and says what was changed.
+function budgetApplyEdits(user, sched) {
+  const base = sched.items.slice();
+  const eff = budgetEditsFor(user.budget, sched.weekStartKey);
+  if (!eff) return { baseItems: base, removedItems: [], removedKeys: [], customAdded: [], editSource: "auto" };
+  const rm = new Set(eff.removed);
+  sched.items = base.filter(i => !rm.has(i.key)).concat(eff.added.map(c => budgetCustomItem(c, sched.weekStartKey, sched.todayKey)));
+  return { baseItems: base, removedItems: base.filter(i => rm.has(i.key)), removedKeys: eff.removed.slice(), customAdded: eff.added.map(c => Object.assign({}, c)), editSource: eff.source };
+}
+function budgetCleanDraft(draft) {
+  const removed = Array.from(new Set((draft && draft.removed || []).map(String)));
+  const added = ((draft && draft.added) || []).map(c => ({
+    id: String(c.id), label: String(c.label || "").trim(), amount: budgetRound(c.amount),
+    dir: c.dir === "in" || c.dir === "save" ? c.dir : "out", day: Math.floor(Number(c.day))
+  }));
+  return { removed, added };
+}
+// Everything that stops a set of edits being saved, each one specific, plus notes that don't block it.
+// `view` is buildBudgetView's result (it carries the automatic list), `draft` the edited state, `scope` "week" | "future".
+function budgetValidateEdits(view, user, draft, scope) {
+  const errors = [], notes = [];
+  const d = budgetCleanDraft(draft);
+  const prevRemoved = new Set(view.removedKeys || []), prevAdded = new Set((view.customAdded || []).map(c => c.id));
+  const todayIdx = Math.max(0, Math.round(daysBetweenKeys(view.weekStartKey, view.todayKey)));
+  const dayName = i => budgetDayWord(dateKeyPlusDays(view.weekStartKey, i));
+  const dirWord = x => x === "in" ? "money in" : x === "save" ? "saving" : "bill or spending";
+  // 1. Taking out regular items
+  d.removed.forEach(key => {
+    const it = (view.baseItems || []).find(i => i.key === key);
+    if (!it || prevRemoved.has(key)) return;
+    if (it.status === "done") {
+      errors.push(`"${it.label}" (${it.dayKey ? budgetDayWord(it.dayKey) : "every day"}) has already ${it.dir === "in" ? "arrived" : it.dir === "out" ? "been paid" : "happened"} this week, so it can't be taken out of this week's plan. Take it out after the week ends instead.`);
+    } else if (it.dir === "out" && it.status !== "missed") {
+      notes.push(`"${it.label}" will still be charged by itself. Taking it out only stops your plan from setting money aside for it, so safe to spend can look bigger than it really is.`);
+    }
+  });
+  // 2. Items they added
+  const seen = new Map();
+  (view.baseItems || []).filter(i => !d.removed.includes(i.key)).forEach(i => {
+    if (i.dayKey) seen.set(`${i.dir}|${i.label.trim().toLowerCase()}|${Math.round(daysBetweenKeys(view.weekStartKey, i.dayKey))}`, "a regular item");
+  });
+  if (d.added.length > BUDGET_MAX_CUSTOM) errors.push(`You have ${d.added.length} items of your own. The most is ${BUDGET_MAX_CUSTOM}. Remove ${d.added.length - BUDGET_MAX_CUSTOM} to save.`);
+  d.added.forEach(c => {
+    const nm = c.label ? `"${c.label}"` : "An item you added";
+    if (!c.label) { errors.push("One of your items has no name. Give it a name or remove it."); return; }
+    if (c.label.length > BUDGET_MAX_LABEL) errors.push(`${nm} has a name longer than ${BUDGET_MAX_LABEL} characters. Shorten it.`);
+    if (!(c.amount > 0) || c.amount > BUDGET_MAX_ITEM) errors.push(`${nm} needs an amount between $0.01 and ${fmtMoney(BUDGET_MAX_ITEM)}.`);
+    if (!(c.day >= 0 && c.day <= 6)) { errors.push(`${nm} needs a day of the week.`); return; }
+    if (!prevAdded.has(c.id) && c.day < todayIdx) errors.push(`${nm} is set for ${dayName(c.day)}, which has already passed this week. Pick ${dayName(todayIdx)} (today) or a later day.`);
+    const k = `${c.dir}|${c.label.toLowerCase()}|${c.day}`;
+    if (seen.has(k)) errors.push(`${nm} on ${dayName(c.day)} is already in your plan as ${seen.get(k)} (${dirWord(c.dir)}). Change its name, day or type, or remove one of them.`);
+    else seen.set(k, "another item you added");
+  });
+  // 3. Saving for this week AND future weeks
+  const edits = (user && user.budget && user.budget.edits) || {};
+  if (scope === "future") {
+    Object.keys(edits.weeks || {}).filter(k => k > view.weekStartKey).forEach(k => {
+      errors.push(`The week of ${budDateLabelSafe(k)} already has its own saved changes, and they would override this. Reset that week to automatic first.`);
+    });
+    const own = (edits.weeks || {})[view.weekStartKey];
+    if (own) {
+      const oneOff = (own.added || []).filter(c => d.added.some(x => x.id === c.id)).map(c => `"${c.label}"`);
+      if (oneOff.length) notes.push(`${oneOff.join(", ")} ${oneOff.length === 1 ? "was" : "were"} only for this week. Saving for this and future weeks makes ${oneOff.length === 1 ? "it" : "them"} repeat every week.`);
+    }
+  }
+  return { errors, notes };
+}
+function budDateLabelSafe(key) {
+  const [y, m, dd] = key.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-NZ", { timeZone: "UTC", day: "numeric", month: "short" }).format(new Date(Date.UTC(y, m - 1, dd)));
+}
+function _budgetPrune(edits, weekStartKey) {
+  edits.weeks = edits.weeks || {};
+  Object.keys(edits.weeks).forEach(k => { if (k < weekStartKey) delete edits.weeks[k]; }); // weeks that are over aren't shown again
+  if (!Object.keys(edits.weeks).length) delete edits.weeks;
+  if (!edits.rule) delete edits.rule;
+  return Object.keys(edits).length ? edits : null;
+}
+async function saveBudgetEdits(username, scope, draft, weekStartKey) {
+  const d = budgetCleanDraft(draft);
+  const ref = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(ref);
+      if (!us.exists) throw new Error("NOT_FOUND");
+      const raw = us.data().budget || {};
+      const edits = _cloneDoc(raw.edits || {});
+      edits.weeks = edits.weeks || {};
+      if (scope === "future") {
+        const later = Object.keys(edits.weeks).filter(k => k > weekStartKey);
+        if (later.length) throw new Error("CLASH:" + budDateLabelSafe(later[0]));
+        delete edits.weeks[weekStartKey]; // the new rule covers this week too
+        edits.rule = { from: weekStartKey, removed: d.removed, added: d.added };
+      } else {
+        const rule = edits.rule && edits.rule.from <= weekStartKey;
+        if (!d.removed.length && !d.added.length && !rule) delete edits.weeks[weekStartKey];
+        else edits.weeks[weekStartKey] = { removed: d.removed, added: d.added };
+      }
+      const clean = _budgetPrune(edits, weekStartKey), next = Object.assign({}, raw);
+      if (clean) next.edits = clean; else delete next.edits;
+      t.update(ref, { budget: Object.keys(next).length ? next : null });
+    });
+  } catch (e) {
+    const m = String(e.message || "");
+    if (m.startsWith("CLASH:")) return { ok: false, errors: [`The week of ${m.slice(6)} already has its own saved changes, and they would override this. Reset that week to automatic first.`] };
+    return { ok: false, errors: ["Your changes couldn't be saved. Check your connection and try again."] };
+  }
+  return { ok: true };
+}
+// Back to the automatic list. scope "week": just this week (a "this and future" rule keeps going for other weeks).
+// scope "future": this week and every week after.
+async function resetBudgetEdits(username, scope, weekStartKey) {
+  const ref = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(ref);
+      if (!us.exists) throw new Error("NOT_FOUND");
+      const raw = us.data().budget || {};
+      const edits = _cloneDoc(raw.edits || {});
+      edits.weeks = edits.weeks || {};
+      if (scope === "future") {
+        edits.rule = null;
+        Object.keys(edits.weeks).forEach(k => { if (k >= weekStartKey) delete edits.weeks[k]; });
+      } else if (edits.rule && edits.rule.from <= weekStartKey) edits.weeks[weekStartKey] = { removed: [], added: [] }; // automatic this week, rule still runs after
+      else delete edits.weeks[weekStartKey];
+      const clean = _budgetPrune(edits, weekStartKey), next = Object.assign({}, raw);
+      if (clean) next.edits = clean; else delete next.edits;
+      t.update(ref, { budget: Object.keys(next).length ? next : null });
+    });
+  } catch (e) { return { ok: false, error: "Couldn't reset. Check your connection and try again." }; }
+  return { ok: true };
+}
+
 const MAX_BUDGET_SAVE = 1000000;
 async function saveBudget(username, saveAmount) {
   const raw = String(saveAmount === undefined || saveAmount === null ? "" : saveAmount).trim();
   const save = budgetRound(raw);
   if (raw === "" || !Number.isFinite(Number(raw)) || Number(raw) < 0) return { ok: false, error: "Enter how much you'll save each week: 0 or more." };
   if (save > MAX_BUDGET_SAVE) return { ok: false, error: `That's more than ${fmtMoney(MAX_BUDGET_SAVE)}. Try a smaller amount.` };
-  await usersCol().doc(username).update({
-    budget: { saveAmount: save, weekKey: isoWeekKey(), updatedAt: Date.now() }
+  // Keep the student's day-by-day edits (they're saved separately from how much they save).
+  const ref = usersCol().doc(username);
+  await fdb.runTransaction(async (t) => {
+    const us = await t.get(ref);
+    const old = (us.exists && us.data().budget) || {};
+    const next = { saveAmount: save, weekKey: isoWeekKey(), updatedAt: Date.now() };
+    if (old.edits) next.edits = old.edits;
+    t.update(ref, { budget: next });
   });
   return { ok: true };
 }
 
+// Clears how much they planned to save. Their day-by-day edits stay (reset those with resetBudgetEdits).
 async function clearBudget(username) {
-  await usersCol().doc(username).update({ budget: null });
+  const ref = usersCol().doc(username);
+  await fdb.runTransaction(async (t) => {
+    const us = await t.get(ref);
+    const old = (us.exists && us.data().budget) || {};
+    t.update(ref, { budget: old.edits ? { edits: old.edits } : null });
+  });
   return { ok: true };
 }
 
 /* ---------------- Everything the page needs, in one pass ---------------- */
 function buildBudgetView(cls, user, username) {
   const sched = budgetWeekItems(cls, user, username);
+  const edited = budgetApplyEdits(user, sched); // the student's own edits to the day-by-day list (if any)
   const { items, weekStartKey, todayKey } = sched;
   const actual = budgetWeekActuals(cls, username, weekStartKey);
   const historyIncomplete = (cls.txns || []).length >= MAX_STORED_TXNS && !(cls.txns || []).some(t =>
@@ -4351,7 +4678,7 @@ function buildBudgetView(cls, user, username) {
   const notes = [];
   if (historyIncomplete) notes.push({ tone: "warn", icon: "history", text: "The class activity log no longer covers the full week. Recorded income, spending, saving and paid bills may be incomplete. Check your account history before relying on this plan." });
   const conditional = inItems.filter(i => i.conditional && ["today", "upcoming"].includes(i.status));
-  if (conditional.length) notes.push({ tone: "warn", icon: "coin", text: "Coming in includes conditional income (job approval or a classmate's payment). Safe to spend excludes it until it arrives." });
+  if (conditional.length) notes.push({ tone: "warn", icon: "coin", text: "Coming in includes conditional income (job approval, a classmate's payment, or income you added yourself). Safe to spend excludes it until it arrives." });
   if (savings > other.movable + 0.005) notes.push({ tone: "warn", icon: "piggy", text: `${fmtMoney(savings)} is in your other accounts, but only ${fmtMoney(other.movable)} is currently withdrawable after fees and limits.` });
   // Insurance premiums aren't taken automatically — students are meant to
   // pay them with an automatic payment to their teacher (see
@@ -4383,12 +4710,16 @@ function buildBudgetView(cls, user, username) {
   const cardInfo = cardNow;
   if (cardInfo) {
     const wk0 = budgetWeekStartKey(), wk1 = dateKeyPlusDays(wk0, 6);
-    if (cardInfo.stmtRemaining > 0 && cardInfo.dueKey > wk1) {
-      notes.push({ tone: "warn", icon: "creditcard", text: `Your credit card statement (${fmtMoney(cardInfo.stmtRemaining)}) is due ${cardDateLabel(cardInfo.dueKey)}. Pay all of it by then and there's no interest.` });
-    }
-    if (cardInfo.unbilled > 0 && cardInfo.nextCloseKey >= wk0 && cardInfo.nextCloseKey <= wk1) {
-      notes.push({ tone: "warn", icon: "creditcard", text: `Your card statement closes ${cardDateLabel(cardInfo.nextCloseKey)}. The ${fmtMoney(cardInfo.unbilled)} on your card so far becomes the closing balance you'll need to pay.` });
-    }
+    const allCards = [cardInfo].concat(cardInfo.others || []), manyCards = allCards.length > 1;
+    allCards.forEach(ci => {
+      const nm = manyCards ? `${ci.plan.name} card` : "credit card";
+      if (ci.stmtRemaining > 0 && ci.dueKey > wk1) {
+        notes.push({ tone: "warn", icon: "creditcard", text: `Your ${nm} statement (${fmtMoney(ci.stmtRemaining)}) is due ${cardDateLabel(ci.dueKey)}. Pay all of it by then and there's no interest.` });
+      }
+      if (ci.unbilled > 0 && ci.nextCloseKey >= wk0 && ci.nextCloseKey <= wk1) {
+        notes.push({ tone: "warn", icon: "creditcard", text: `Your ${manyCards ? ci.plan.name + " card" : "card"} statement closes ${cardDateLabel(ci.nextCloseKey)}. The ${fmtMoney(ci.unbilled)} on ${manyCards ? "that" : "your"} card so far becomes the closing balance you'll need to pay.` });
+      }
+    });
   }
   // KiwiSaver comes off the pay before it arrives; the tracker explains it in its own row.
   const wageItems = items.filter(i => (i.key === "wage" || i.key.startsWith("recorded-wage-") || i.key.startsWith("payslip-")) && i.status !== "missed" && i.kiwi);
@@ -4410,7 +4741,7 @@ function buildBudgetView(cls, user, username) {
   }
 
   return {
-    ...sched, actual, plan,
+    ...sched, ...edited, actual, plan,
     inItems, outItems, scheduledIn, inTotal, billsTotal, billsPaid, billsLeft, left,
     saveTarget, autoSave, spendAllowed, spent, spendLeft,
     cash, savings, savingsSpare, restIn, restBills, restReturns, safeTotal, safeNow, safeTimed, lowestDay, shortfall, verdict, notes, kiwi,
@@ -4786,13 +5117,54 @@ async function _deleteParentViewFor(username) {
    class-wide safety net. Statements catch up if nobody opened the site. */
 const CARD_CYCLE_DAYS = 14;
 const CARD_MAX_FREE_DAYS = 13; // must end before the next statement closes
-const CARD_DEFAULT_SETTINGS = { enabled: true, approval: "teacher", statementDay: "Fri", splitMin: 100 }; // splitMin: smallest purchase that may be split between card and cash
+const CARD_DEFAULT_SETTINGS = { enabled: true, approval: "teacher", statementDay: "Fri", splitMin: 100, maxCards: 2 }; // splitMin: smallest purchase that may be split between card and cash; maxCards: most cards a student may hold (or have applied for) at once
 
 function cardRound(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function cardSettings(cls) { return Object.assign({}, CARD_DEFAULT_SETTINGS, (cls && cls.cardSettings) || {}); }
 function cardPlansOf(cls) { return ((cls && cls.cardPlans) || []).filter(p => !p.archived); }
 function cardPlanById(cls, id) { return ((cls && cls.cardPlans) || []).find(p => p.id === id) || null; }
 function cardIsActive(user) { return !!(user && user.creditCard && user.creditCard.status === "active"); }
+/* A student can hold several cards at once (up to the teacher's cardSettings.maxCards).
+   `creditCard` is always the card used for spending (the Store, events, rentals and so on), an
+   active one whenever the student has any. Every other card they hold or have applied for sits in
+   `extraCards`, with exactly the same shape, and gets its own statements, interest and payments.
+   Applications are identified by their plan, and a student can't hold the same plan twice. */
+const CARD_MAX_ALLOWED = 10;
+function cardMaxFor(cls) {
+  const n = Math.floor(Number(cardSettings(cls).maxCards));
+  return Number.isFinite(n) && n >= 1 ? Math.min(CARD_MAX_ALLOWED, n) : 2;
+}
+function cardIsLive(c) { return !!c && (c.status === "active" || c.status === "pending"); }
+function cardsHeld(user) {
+  const out = [];
+  if (user && cardIsLive(user.creditCard)) out.push(user.creditCard);
+  ((user && user.extraCards) || []).forEach(c => { if (cardIsLive(c)) out.push(c); });
+  return out;
+}
+function cardsActive(user) { return cardsHeld(user).filter(c => c.status === "active"); }
+function cardHeldByPlan(user, planId) { return cardsHeld(user).find(c => c.planId === planId) || null; }
+// Puts the cards back in order: creditCard = the spending card (an active one if there is any); extraCards =
+// every other live card. A "denied" note is only kept when nothing else is held.
+function cardTidy(user) {
+  const all = [user.creditCard].concat(user.extraCards || []).filter(Boolean);
+  const live = all.filter(cardIsLive);
+  let main = null;
+  if (live.length) {
+    const cur = user.creditCard;
+    main = cardIsLive(cur) && cur.status === "active" ? cur
+      : live.find(c => c.status === "active") || (cardIsLive(cur) ? cur : live[0]);
+  } else main = all.find(c => c && c.status === "denied") || null;
+  user.creditCard = main;
+  user.extraCards = live.filter(c => c !== main);
+  return user;
+}
+function cardRemove(user, card) {
+  const rest = [user.creditCard].concat(user.extraCards || []).filter(c => c && c !== card && cardIsLive(c));
+  user.creditCard = rest[0] || null;
+  user.extraCards = rest.slice(1);
+  return cardTidy(user);
+}
+function cardWriteFields(user) { return { creditCard: user.creditCard || null, extraCards: user.extraCards || [] }; }
 // What is still unpaid of the last statement's closing balance.
 function cardStmtRemaining(card) {
   if (!card || !card.stmt) return 0;
@@ -4800,7 +5172,7 @@ function cardStmtRemaining(card) {
 }
 // The amount that costs lifestyle points: last period's closing balance
 // that is still unpaid — counted from the day it closes, free days included.
-function cardOwedForPenalty(user) { return cardIsActive(user) ? cardStmtRemaining(user.creditCard) : 0; }
+function cardOwedForPenalty(user) { return cardRound(cardsActive(user).reduce((s, c) => s + cardStmtRemaining(c), 0)); }
 // Running totals behind the Bank page's "Cashback & rewards" and "Interest & fees"
 // boxes, split by where the money came from: cashbackPct, rewardFixed, voucherSaved,
 // monthlyFees, lateFees (interest and the fees total are kept directly on lifetime).
@@ -4909,7 +5281,8 @@ async function saveCardSettings(classCode, s) {
     enabled: !!s.enabled,
     approval: s.approval === "instant" ? "instant" : "teacher",
     statementDay: DAY_NAMES.includes(s.statementDay) ? s.statementDay : "Fri",
-    splitMin: s.splitMin === undefined || s.splitMin === "" ? CARD_DEFAULT_SETTINGS.splitMin : Math.max(0, cardRound(s.splitMin))
+    splitMin: s.splitMin === undefined || s.splitMin === "" ? CARD_DEFAULT_SETTINGS.splitMin : Math.max(0, cardRound(s.splitMin)),
+    maxCards: (() => { const n = Math.floor(Number(s.maxCards)); return Number.isFinite(n) && n >= 1 ? Math.min(CARD_MAX_ALLOWED, n) : CARD_DEFAULT_SETTINGS.maxCards; })()
   };
   const oldCls = await getClass(classCode).catch(() => null);
   const old = cardSettings(oldCls);
@@ -4919,13 +5292,14 @@ async function saveCardSettings(classCode, s) {
   // who already hold (or have applied for) a card.
   const everyone = [], holdersOnly = [];
   if (old.enabled !== clean.enabled) everyone.push(clean.enabled ? "credit cards are now switched on" : "credit cards are now switched off");
+  if (old.maxCards !== clean.maxCards) everyone.push(`you can now hold up to ${clean.maxCards} credit card${clean.maxCards === 1 ? "" : "s"} at once (was ${old.maxCards})`);
   if (old.approval !== clean.approval) everyone.push(clean.approval === "instant" ? "new cards are now approved instantly" : "new cards now need teacher approval");
   if (old.statementDay !== clean.statementDay) holdersOnly.push(`your statement now closes on ${clean.statementDay} (was ${old.statementDay})`);
   if (old.splitMin !== clean.splitMin) holdersOnly.push(`only purchases of ${fmtMoney(clean.splitMin)} or more can be split between card and cash (was ${fmtMoney(old.splitMin)})`);
   const out = [];
   if (everyone.length) out.push({ to: "all", icon: "creditcard", tone: "gold", title: "Your teacher changed the credit card settings", body: everyone.join("; ") + ".", href: "bank.html#cardCard" });
   if (holdersOnly.length) {
-    const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending"));
+    const holders = await t29StudentsWhere(classCode, s => cardsHeld(s).length > 0);
     out.push({ to: holders, icon: "creditcard", tone: "gold", title: "Your teacher changed your credit card settings", body: holdersOnly.join("; ") + ".", href: "bank.html#cardCard" });
   }
   await t29NotifyStudents(classCode, out);
@@ -4976,7 +5350,7 @@ async function saveCardPlan(classCode, raw) {
   } else if (before) {
     const parts = cardPlanChangeParts(before, clean);
     if (parts.length) {
-      const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending") && s.creditCard.planId === clean.id);
+      const holders = await t29StudentsWhere(classCode, s => cardHeldByPlan(s, clean.id));
       await t29NotifyStudents(classCode, { to: holders, icon: "creditcard", tone: "gold",
         title: `Your teacher changed your ${clean.name} card`,
         body: parts.join("; ") + ". Changes apply to your card from your next statement, and in the store straight away.", href: "bank.html#cardCard" });
@@ -5000,7 +5374,7 @@ async function removeCardPlan(classCode, planId, archiveOnly) {
     t.update(classRef, { cardPlans: plans });
   });
   if (gone && gone.archived) {
-    const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending") && s.creditCard.planId === planId);
+    const holders = await t29StudentsWhere(classCode, s => cardHeldByPlan(s, planId));
     await t29NotifyStudents(classCode, { to: holders, icon: "creditcard", tone: "gold",
       title: `Your teacher retired the ${gone.name} card`,
       body: "It is no longer offered to new students. Your own card keeps working.", href: "bank.html#cardCard" });
@@ -5013,7 +5387,7 @@ async function setCardLifestylePenalty(classCode, { enabled, perAmount, points }
   await classesCol().doc(classCode).update({ "lifestyleConfig.creditCard": clean });
   const desc = p => p.enabled && p.perAmount > 0 && p.points > 0 ? `lose ${p.points} lifestyle ${p.points === 1 ? "point" : "points"} for every ${fmtMoney(p.perAmount)} left unpaid` : "no lifestyle penalty";
   if (!!old.enabled !== clean.enabled || (clean.enabled && (Number(old.perAmount) !== clean.perAmount || Number(old.points) !== clean.points))) {
-    const holders = await t29StudentsWhere(classCode, s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending"));
+    const holders = await t29StudentsWhere(classCode, s => cardsHeld(s).length > 0);
     await t29NotifyStudents(classCode, { to: holders, icon: "creditcard", tone: "gold",
       title: "Your teacher changed the credit card lifestyle penalty",
       body: `Now: ${desc(clean)} (was: ${desc(old)}).`, href: "bank.html#cardCard" });
@@ -5024,7 +5398,7 @@ async function setCardLifestylePenalty(classCode, { enabled, perAmount, points }
 /* ---------------- Applying, approving, closing ---------------- */
 async function applyForCreditCard(username, classCode, planId) {
   const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
-  let status = "pending", planName = "";
+  let status = "pending", planName = "", maxN = 2;
   try {
     await fdb.runTransaction(async (t) => {
       const us = await t.get(userRef), cs = await t.get(classRef);
@@ -5036,52 +5410,70 @@ async function applyForCreditCard(username, classCode, planId) {
       const plan = cardPlanById(cls, planId);
       if (!plan || plan.archived) throw new Error("NOT_FOUND");
       planName = plan.name || "";
-      const cur = user.creditCard;
-      if (cur && (cur.status === "active" || cur.status === "pending")) throw new Error("HAS_CARD");
+      maxN = cardMaxFor(cls);
+      const held = cardsHeld(user);
+      if (held.some(c => c.planId === planId)) throw new Error("HAS_PLAN");
+      if (held.length >= maxN) throw new Error("MAX");
       if (lifestyleRatingFromData(cls, user, username) < plan.minLifestyle) throw new Error("LIFESTYLE");
-      if (st.approval === "instant") { status = "active"; t.update(userRef, { creditCard: cardMakeActive(plan, cls, nzDateKey()) }); }
-      else { status = "pending"; t.update(userRef, { creditCard: { status: "pending", planId, appliedTs: Date.now() } }); }
+      const fresh = st.approval === "instant" ? cardMakeActive(plan, cls, nzDateKey()) : { status: "pending", planId, appliedTs: Date.now() };
+      status = fresh.status;
+      user.extraCards = (user.extraCards || []).concat([fresh]);
+      cardTidy(user); // decides which card is used for spending
+      t.update(userRef, cardWriteFields(user));
     });
   } catch (e) {
-    const m = { OFF: "Credit cards aren't switched on for this class.", HAS_CARD: "You already have a credit card.",
+    const m = { OFF: "Credit cards aren't switched on for this class.",
+      HAS_PLAN: "You already have that card (or an application for it).",
+      MAX: `You already have the most cards your teacher allows (${maxN}). Cancel or withdraw one before you apply for another.`,
       LIFESTYLE: "Your lifestyle rating isn't high enough for that card yet.", NOT_FOUND: "That card isn't available any more." };
     return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
   }
   if (status === "pending") await t29NotifyTeacher(classCode, "card", "req", planName);
   return { ok: true, status };
 }
-async function approveCreditCard(classCode, username) {
+async function approveCreditCard(classCode, username, planId) {
   const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
-  let approvedPlan = null;
+  let approvedPlan = null, forSpending = true;
   try {
-    approvedPlan = null; // (set again inside the transaction)
     await fdb.runTransaction(async (t) => {
+      approvedPlan = null; forSpending = true; // reset every attempt: this callback can be retried
       const us = await t.get(userRef), cs = await t.get(classRef);
       if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
       const user = us.data(), cls = withNewModuleDefaults(cs.data());
-      if (!user.creditCard || user.creditCard.status !== "pending") throw new Error("NOT_PENDING");
-      const plan = cardPlanById(cls, user.creditCard.planId);
+      const pend = cardsHeld(user).find(c => c.status === "pending" && (!planId || c.planId === planId));
+      if (!pend) throw new Error("NOT_PENDING");
+      const plan = cardPlanById(cls, pend.planId);
       if (!plan) throw new Error("NOT_FOUND");
-      t.update(userRef, { creditCard: cardMakeActive(plan, cls, nzDateKey()) });
+      const active = cardMakeActive(plan, cls, nzDateKey());
+      if (user.creditCard === pend) user.creditCard = active;
+      else user.extraCards = (user.extraCards || []).map(c => c === pend ? active : c);
+      cardTidy(user);
+      forSpending = user.creditCard === active;
+      t.update(userRef, cardWriteFields(user));
       approvedPlan = plan;
     });
   } catch (e) { return { ok: false, error: "Couldn't approve that card. It may have changed. Refresh and try again." }; }
   if (approvedPlan) {
     await t29NotifyStudents(classCode, { to: username, icon: "creditcard", tone: "mint",
       title: `Your teacher approved your ${approvedPlan.name} card`,
-      body: `You can spend up to ${fmtMoney(approvedPlan.limit)} on it. Find it on the Bank page.`, href: "bank.html#cardCard" });
+      body: `You can spend up to ${fmtMoney(approvedPlan.limit)} on it. Find it on the Bank page.${forSpending ? "" : " Your other card is still the one used for purchases until you switch."}`, href: "bank.html#cardCard" });
   }
   return { ok: true };
 }
-async function declineCreditCard(classCode, username) {
+async function declineCreditCard(classCode, username, planId) {
   const userRef = usersCol().doc(username);
   try {
     await fdb.runTransaction(async (t) => {
       const us = await t.get(userRef);
       if (!us.exists) throw new Error("NOT_FOUND");
-      const c = us.data().creditCard;
-      if (!c || c.status !== "pending") throw new Error("NOT_PENDING");
-      t.update(userRef, { creditCard: { status: "denied", planId: c.planId, deniedTs: Date.now() } });
+      const user = us.data();
+      const pend = cardsHeld(user).find(c => c.status === "pending" && (!planId || c.planId === planId));
+      if (!pend) throw new Error("NOT_PENDING");
+      cardRemove(user, pend);
+      // Nothing else held: leave the "not approved" note the student sees on their Bank page.
+      if (!cardsHeld(user).length) user.creditCard = { status: "denied", planId: pend.planId, deniedTs: Date.now() };
+      cardTidy(user);
+      t.update(userRef, cardWriteFields(user));
     });
   } catch (e) { return { ok: false, error: "Couldn't decline that. It may have changed. Refresh and try again." }; }
   await t29NotifyStudents(classCode, { to: username, icon: "creditcard", tone: "coral",
@@ -5089,7 +5481,8 @@ async function declineCreditCard(classCode, username) {
     body: "You can ask your teacher why, or apply again later.", href: "bank.html#cardCard" });
   return { ok: true };
 }
-async function cancelCreditCard(username, classCode) {
+// planId picks which card (a pending application is withdrawn, an active card is closed); without it, the spending card.
+async function cancelCreditCard(username, classCode, planId) {
   const userRef = usersCol().doc(username);
   let wasPending = false;
   try {
@@ -5097,21 +5490,46 @@ async function cancelCreditCard(username, classCode) {
       wasPending = false; // reset every attempt: this callback can be retried
       const us = await t.get(userRef);
       if (!us.exists) throw new Error("NOT_FOUND");
-      const c = us.data().creditCard;
-      if (!c) return;
+      const user = us.data();
+      const c = planId ? cardHeldByPlan(user, planId) : (cardIsLive(user.creditCard) ? user.creditCard : null);
+      if (!c) {
+        // Nothing live: just clear a leftover "not approved" note.
+        if (!planId && user.creditCard && !cardIsLive(user.creditCard)) t.update(userRef, { creditCard: null });
+        return;
+      }
       if (c.status === "active" && (c.balance || 0) > 0.004) throw new Error("OWING");
       wasPending = c.status === "pending";
-      t.update(userRef, { creditCard: null });
+      cardRemove(user, c);
+      t.update(userRef, cardWriteFields(user));
     });
   } catch (e) {
-    return { ok: false, error: e.message === "OWING" ? "You can only close your card once you owe nothing. Pay off everything you owe on the card (you can pay any time), then close it." : "Something went wrong. Please try again." };
+    return { ok: false, error: e.message === "OWING" ? "You can only close a card once you owe nothing on it. Pay off everything you owe on that card (you can pay any time), then close it." : "Something went wrong. Please try again." };
   }
   if (wasPending) await t29NotifyTeacher(classCode, "card", "cancel", "");
   return { ok: true };
 }
+// Makes a card you hold the one used for purchases (Store, events, rentals...). Nothing about either card changes.
+async function setPrimaryCard(username, planId) {
+  const userRef = usersCol().doc(username);
+  try {
+    await fdb.runTransaction(async (t) => {
+      const us = await t.get(userRef);
+      if (!us.exists) throw new Error("NOT_FOUND");
+      const user = us.data();
+      const c = cardsActive(user).find(x => x.planId === planId);
+      if (!c) throw new Error("NOCARD");
+      if (user.creditCard === c) return;
+      user.extraCards = (user.extraCards || []).map(x => x === c ? user.creditCard : x);
+      user.creditCard = c;
+      cardTidy(user);
+      t.update(userRef, cardWriteFields(user));
+    });
+  } catch (e) { return { ok: false, error: "Couldn't switch cards. Refresh and try again." }; }
+  return { ok: true };
+}
 
 /* ---------------- Paying the card ---------------- */
-async function payCreditCard(username, classCode, amount) {
+async function payCreditCard(username, classCode, amount, planId, planName) {
   amount = cardRound(amount);
   if (!(amount > 0)) return { ok: false, error: "Enter an amount greater than zero." };
   const userRef = usersCol().doc(username);
@@ -5121,8 +5539,9 @@ async function payCreditCard(username, classCode, amount) {
       clearedStmt = false; toStmt = 0; toNew = 0; // reset every attempt: this callback can be retried
       const us = await t.get(userRef);
       if (!us.exists) throw new Error("NOT_FOUND");
-      const user = us.data(), card = user.creditCard;
-      if (!cardIsActive(user)) throw new Error("NOCARD");
+      const user = us.data();
+      const card = planId ? cardsActive(user).find(c => c.planId === planId) : (cardIsActive(user) ? user.creditCard : null);
+      if (!card) throw new Error("NOCARD");
       // Payments can be made any time, up to everything owed on the card.
       // They go to the CLOSED statement first (it has a due date); whatever
       // is left comes off spending that hasn't been billed yet, which makes
@@ -5142,14 +5561,15 @@ async function payCreditCard(username, classCode, amount) {
       toNew = cardRound(amount - toStmt);
       card.balance = cardRound(Math.max(0, owing - amount));
       owingAfter = card.balance;
-      t.update(userRef, { balance: cardRound(user.balance - amount), creditCard: card });
+      t.update(userRef, Object.assign({ balance: cardRound(user.balance - amount) }, cardWriteFields(user)));
     });
   } catch (e) {
-    const m = { NOCARD: "You don't have an active credit card.", NOOWING: "You don't owe anything on your card right now.", OVER_OWING: "You can only pay up to what you owe on the card.", BROKE: "You don't have enough cash for that payment." };
+    const m = { NOCARD: "You don't have an active credit card.", NOOWING: "You don't owe anything on that card right now.", OVER_OWING: "You can only pay up to what you owe on the card.", BROKE: "You don't have enough cash for that payment." };
     return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
   }
+  const which = planName ? ` (${planName})` : "";
   await logTxn(classCode, { type: "card-payment", from: username, amount,
-    note: owingAfter <= 0.004 ? "Credit card paid off" : `Credit card payment: ${fmtMoney(owingAfter)} still owing` });
+    note: owingAfter <= 0.004 ? `Credit card${which} paid off` : `Credit card${which} payment: ${fmtMoney(owingAfter)} still owing` });
   return { ok: true, owingAfter, clearedStmt, toStmt, toNew };
 }
 
@@ -5257,7 +5677,7 @@ function cardTakeEventCost(user, cls, loss, force) {
   return { card, cash: cardRound(loss - card) };
 }
 // What the student still owes on the card — counts against net worth like a loan.
-function cardOwed(user) { return cardIsActive(user) ? cardRound(user.creditCard.balance || 0) : 0; }
+function cardOwed(user) { return cardRound(cardsActive(user).reduce((s, c) => s + (c.balance || 0), 0)); }
 // Charges a bad random event's cost (see revealWeeklyEvent). Teachers pay nothing.
 async function takeEventCost(username, classCode, loss) {
   loss = cardRound(loss);
@@ -5294,9 +5714,13 @@ async function logPurchaseTxn(classCode, username, pay, cat, txn) {
   await logTxn(classCode, { type: "card-purchase", cat, surprise: !!txn.surprise, scheduled: !!txn.scheduled, from: username, amount: card,
     note: `${txn.note} (credit card${split ? `, ${fmtMoney(cash)} paid in cash` : ""})` });
 }
+function cardVouchersOf(card, todayKey) {
+  if (!card || card.status !== "active") return [];
+  return (card.vouchers || []).filter(v => v.expiryKey >= todayKey && (v.kind === "percent" || (v.left || 0) > 0.004));
+}
+// Vouchers on the card used for spending (the one the Store charges).
 function cardUsableVouchers(user, todayKey) {
-  if (!cardIsActive(user)) return [];
-  return (user.creditCard.vouchers || []).filter(v => v.expiryKey >= todayKey && (v.kind === "percent" || (v.left || 0) > 0.004));
+  return cardIsActive(user) ? cardVouchersOf(user.creditCard, todayKey) : [];
 }
 function cardVoucherLabel(v) { return v.kind === "percent" ? `${v.value}% off` : `${fmtMoney(v.left !== null && v.left !== undefined ? v.left : v.value)} credit`; }
 // One place that works out a class-store price, used by the checkout and
@@ -5428,6 +5852,24 @@ function cardRunCycle(user, cls, today, logs) {
   if (cardLateCheck(card, plan, today, logs)) changed = true;
   return changed;
 }
+// Runs the statement cycle for EVERY active card the student holds. cardRunCycle() works on user.creditCard,
+// so each card is put there for its turn and the spending card is put back afterwards.
+function cardRunAll(user, cls, today, logs) {
+  let changed = false;
+  const main = user.creditCard, all = [main].concat(user.extraCards || []);
+  const many = all.filter(c => c && c.status === "active").length > 1;
+  all.forEach(c => {
+    if (!c || c.status !== "active") return;
+    const before = logs.length;
+    user.creditCard = c;
+    try { if (cardRunCycle(user, cls, today, logs)) changed = true; } finally { user.creditCard = main; }
+    if (many) {
+      const plan = cardPlanById(cls, c.planId);
+      for (let i = before; i < logs.length; i++) if (plan && logs[i] && logs[i].note) logs[i].note = `${logs[i].note} (${plan.name} card)`;
+    }
+  });
+  return changed;
+}
 async function processCreditCards(classCode) {
   const cls = await getClass(classCode);
   if (!cls || cls.archived || !cardSettings(cls).enabled && !(cls.cardPlans || []).length) return 0;
@@ -5436,11 +5878,8 @@ async function processCreditCards(classCode) {
   const today = nzDateKey();
   let count = 0;
   for (const s of students) {
-    const c = s.creditCard;
-    if (!c || c.status !== "active") continue;
-    const dueClose = c.nextCloseKey && today >= c.nextCloseKey;
-    const dueLate = c.stmt && !c.stmt.lateChecked && today > c.stmt.dueKey;
-    if (!dueClose && !dueLate) continue;
+    const due = cardsActive(s).some(c => (c.nextCloseKey && today >= c.nextCloseKey) || (c.stmt && !c.stmt.lateChecked && today > c.stmt.dueKey));
+    if (!due) continue;
     const ref = usersCol().doc(s.username);
     let logs = [];
     try {
@@ -5449,7 +5888,7 @@ async function processCreditCards(classCode) {
         const snap = await t.get(ref);
         if (!snap.exists) return;
         const user = snap.data();
-        if (cardRunCycle(user, cls, today, logs)) t.update(ref, { creditCard: user.creditCard, balance: user.balance });
+        if (cardRunAll(user, cls, today, logs)) t.update(ref, Object.assign({ balance: user.balance }, cardWriteFields(user)));
         else logs = [];
       });
     } catch (e) { continue; }
@@ -5463,9 +5902,9 @@ async function processCreditCards(classCode) {
 }
 
 // What the budget needs to know about a student's card (null = no card).
-function cardBudgetInfo(cls, user) {
-  if (!cardIsActive(user)) return null;
-  const c = user.creditCard, plan = cardPlanById(cls, c.planId);
+function cardBudgetInfoOf(cls, c) {
+  if (!c || c.status !== "active") return null;
+  const plan = cardPlanById(cls, c.planId);
   if (!plan) return null;
   const stmtRemaining = cardStmtRemaining(c);
   return {
@@ -5474,6 +5913,15 @@ function cardBudgetInfo(cls, user) {
     dueKey: c.stmt ? c.stmt.dueKey : null, nextCloseKey: c.nextCloseKey, periodSpend: cardRound(c.periodSpend || 0),
     cashbackSoFar: cardPeriodReward(plan, c).total, cashbackLifetime: cardRound((c.lifetime && c.lifetime.cashback) || 0)
   };
+}
+
+// The spending card's numbers, plus `others` (the same for every other active card the student holds).
+function cardBudgetInfo(cls, user) {
+  if (!cardIsActive(user)) return null;
+  const main = cardBudgetInfoOf(cls, user.creditCard);
+  if (!main) return null;
+  main.others = (user.extraCards || []).map(c => cardBudgetInfoOf(cls, c)).filter(Boolean);
+  return main;
 }
 
 const CARD_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

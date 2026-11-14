@@ -96,6 +96,7 @@ function render() {
 
 /* ---------------- Teacher view ---------------- */
 function renderTeacher() {
+  renderResetQueue();
   document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + " This month";
   document.getElementById("periodRange").textContent = `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
 
@@ -147,7 +148,7 @@ function renderStudent() {
   }
   body.innerHTML = `
     <p class="print-only rpt-print-head"><strong>${escapeHtml(s.name)}</strong></p>
-    ${studentReportHTML(s)}
+    ${studentReportHTML(s, { mine: true })}
   `;
 }
 
@@ -267,7 +268,8 @@ document.addEventListener("click", e => {
 
 /* ---------------- Shared per-student breakdown ---------------- */
 const REPORT_LIFETIME_NOTE = "Everything since the account was made, or since the class was last restarted. It doesn't reset when the month rolls over.";
-function renderBars(map, colorClass) {
+// ctx (only on a student's own card): { scope, section } adds the "Reset" buttons.
+function renderBars(map, colorClass, ctx) {
   const entries = Object.entries(map || {}).filter(([,v]) => Number.isFinite(v) && v !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   if (!entries.length) return `<p class="muted-small">Nothing here yet.</p>`;
   const max = Math.max(...entries.map(e => Math.abs(e[1])));
@@ -276,8 +278,97 @@ function renderBars(map, colorClass) {
       <div class="rpt-bar-label">${escapeHtml(label)}</div>
       <div class="rpt-bar-track"><div class="rpt-bar-fill ${amt < 0 ? "coral" : colorClass}" style="width:${max ? Math.round((Math.abs(amt) / max) * 100) : 0}%"></div></div>
       <div class="rpt-bar-amount">${fmtMoney(amt)}</div>
+      ${ctx ? `<div class="rpt-reset-cell no-print">${rptResetControl(ctx.scope, ctx.section, label)}</div>` : ""}
     </div>
   `).join("");
+}
+
+/* ---------------- Asking to reset a number (student) ----------------
+   A reset only changes what this card shows, and only once the teacher approves it. */
+let RPT_MY_REQUESTS = [];
+const RPT_SECTION_NAMES = { income: "Income", saved: "Saved & invested", spent: "Spent", returned: "Returned money & sale proceeds", borrowed: "Borrowed" };
+const RPT_SCOPE_NAMES = { month: "this month", life: "all time" };
+function rptInjectCss() {
+  if (document.getElementById("rptResetCss")) return;
+  const st = document.createElement("style");
+  st.id = "rptResetCss";
+  st.textContent = `.rpt-reset-cell{flex:0 0 auto;display:flex;align-items:center;gap:6px;min-width:84px;justify-content:flex-end}
+.rpt-reset-cell .btn,.rpt-sec-btn{padding:2px 9px;font-size:var(--fs-xs,12px)}
+.rpt-reset-tag{font-size:var(--fs-xs,12px);font-weight:700;color:#8a6414;white-space:nowrap}
+.rpt-sec-btn{margin-left:10px;vertical-align:middle}
+.rpt-reqbox{border:1px solid rgba(128,128,128,.3);border-radius:10px;padding:10px 14px;margin:12px 0}
+.rpt-reqbox h4{margin:0 0 6px}
+.rpt-reqrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:4px 0}`;
+  document.head.appendChild(st);
+}
+function rptPendingFor(scope, section, cat) {
+  return RPT_MY_REQUESTS.find(r => r.status === "pending" && r.scope === scope && r.section === section && (r.category === cat || r.category === "*"));
+}
+function rptResetControl(scope, section, cat) {
+  const p = rptPendingFor(scope, section, cat);
+  if (p) return `<span class="rpt-reset-tag">Reset requested</span><button type="button" class="btn small secondary" data-rid="${escapeHtml(p.id)}" onclick="rptWithdraw(this.dataset.rid)">Withdraw</button>`;
+  return `<button type="button" class="btn small secondary" title="Ask your teacher to reset this to 0" data-scope="${scope}" data-section="${section}" data-cat="${escapeHtml(cat)}" onclick="rptRequest(this)">Reset</button>`;
+}
+// "Reset all" for a whole section (only when something is showing).
+function rptSectionButton(mine, scope, section, map) {
+  if (!mine) return "";
+  const has = Object.values(map || {}).some(v => Number.isFinite(v) && v !== 0);
+  if (!has && section !== "borrowed") return "";
+  const p = rptPendingFor(scope, section, "*");
+  if (p) return `<span class="rpt-reset-tag no-print" style="margin-left:10px;">Reset requested</span><button type="button" class="btn small secondary rpt-sec-btn no-print" data-rid="${escapeHtml(p.id)}" onclick="rptWithdraw(this.dataset.rid)">Withdraw</button>`;
+  return `<button type="button" class="btn small secondary rpt-sec-btn no-print" title="Ask your teacher to reset all of this to 0" data-scope="${scope}" data-section="${section}" data-cat="*" onclick="rptRequest(this)">Reset all</button>`;
+}
+function rptRequestsBox() {
+  const pend = RPT_MY_REQUESTS.filter(r => r.status === "pending");
+  const done = RPT_MY_REQUESTS.filter(r => r.status === "approved" || r.status === "declined").sort((a, b) => b.ts - a.ts).slice(0, 5);
+  if (!pend.length && !done.length) return `<div id="rptResetMsg" class="no-print"></div>`;
+  const what = r => `${RPT_SECTION_NAMES[r.section] || r.section}: ${r.category === "*" ? "everything" : escapeHtml(r.category)} (${RPT_SCOPE_NAMES[r.scope] || r.scope})`;
+  return `<div class="rpt-reqbox no-print"><h4>Your reset requests</h4>
+    ${pend.map(r => `<div class="rpt-reqrow"><span>${what(r)} <span class="rpt-reset-tag">Waiting for your teacher</span></span><button type="button" class="btn small secondary" data-rid="${escapeHtml(r.id)}" onclick="rptWithdraw(this.dataset.rid)">Withdraw</button></div>`).join("")}
+    ${done.map(r => `<div class="rpt-reqrow muted-small"><span>${what(r)}: ${r.status === "approved" ? "approved, now starts from 0" : "declined"}</span></div>`).join("")}
+    <div class="muted-small">A reset only changes the numbers on this report card. Nothing else changes.</div>
+  </div><div id="rptResetMsg" class="no-print"></div>`;
+}
+function rptMsg(html) { const el = document.getElementById("rptResetMsg"); if (el) el.innerHTML = html || ""; }
+async function rptRequest(btn) {
+  const scope = btn.dataset.scope, section = btn.dataset.section, cat = btn.dataset.cat;
+  const target = cat === "*" ? `all of ${RPT_SECTION_NAMES[section]} (${RPT_SCOPE_NAMES[scope]})` : `${cat} (${RPT_SECTION_NAMES[section]}, ${RPT_SCOPE_NAMES[scope]})`;
+  if (!await t29Confirm(`Ask your teacher to reset ${target} to 0? It only changes your report card, and only once your teacher approves. You can withdraw the request until then.`)) return;
+  btn.disabled = true;
+  const res = await requestReportReset(CURRENT.username, CLASS_CODE, scope, section, cat);
+  await showCurrentPeriod();
+  rptMsg(res.ok ? `<div class="success-msg">Request sent to your teacher. You can withdraw it until it's approved.</div>` : `<div class="error-msg">${escapeHtml(res.error)}</div>`);
+}
+async function rptWithdraw(id) {
+  const res = await withdrawReportReset(CURRENT.username, CLASS_CODE, id);
+  await showCurrentPeriod();
+  rptMsg(res.ok ? `<div class="success-msg">Request withdrawn. Nothing was changed.</div>` : `<div class="error-msg">${escapeHtml(res.error)}</div>`);
+}
+
+/* ---------------- Teacher: reset requests waiting ---------------- */
+function renderResetQueue() {
+  const card = document.getElementById("resetRequestsCard"), body = document.getElementById("resetRequestsBody");
+  if (!card || !body) return;
+  card.classList.toggle("hidden", !IS_TEACHER);
+  const rows = [];
+  (VIEWED_REPORT.students || []).forEach(s => (s.resetRequests || []).filter(r => r.status === "pending").forEach(r => rows.push({ s, r })));
+  rows.sort((a, b) => a.r.ts - b.r.ts);
+  document.getElementById("resetRequestsCount").textContent = rows.length ? `${rows.length} waiting` : "";
+  body.innerHTML = rows.length ? `<div class="table-scroll"><table class="stack-table"><thead><tr><th>Student</th><th>Wants reset</th><th>Asked</th><th></th></tr></thead><tbody>${rows.map(({ s, r }) => `
+    <tr><td>${escapeHtml(s.name)}</td>
+      <td>${escapeHtml(RPT_SECTION_NAMES[r.section] || r.section)}: ${r.category === "*" ? "everything" : escapeHtml(r.category)} <span class="muted-small">(${RPT_SCOPE_NAMES[r.scope] || r.scope})</span></td>
+      <td>${r.ts ? new Date(r.ts).toLocaleDateString() : "—"}</td>
+      <td class="no-print"><button class="btn small mint" data-user="${escapeHtml(s.username)}" data-rid="${escapeHtml(r.id)}" onclick="rptDecide(this,true)">Approve</button>
+        <button class="btn small coral" data-user="${escapeHtml(s.username)}" data-rid="${escapeHtml(r.id)}" onclick="rptDecide(this,false)">Decline</button></td></tr>`).join("")}</tbody></table></div>
+    <p class="muted-small">Approving only changes the numbers on that student's report card (including the PDF and family view). Balances, savings, net worth and history stay exactly as they are.</p>`
+    : `<p class="muted-small">No reset requests waiting.</p>`;
+}
+async function rptDecide(btn, approve) {
+  btn.disabled = true;
+  const res = await decideReportReset(CLASS_CODE, btn.dataset.user, btn.dataset.rid, approve);
+  const msg = document.getElementById("resetRequestsMsg");
+  await showCurrentPeriod();
+  if (msg) msg.innerHTML = res.ok ? `<div class="success-msg">${approve ? "Approved. That number now shows 0 on the student's report card." : "Declined."}</div>` : `<div class="error-msg">${escapeHtml(res.error)}</div>`;
 }
 
 function renderLoanHistory(loans) {
@@ -292,10 +383,15 @@ function renderLoanHistory(loans) {
   </tbody></table></div>`;
 }
 
-function studentReportHTML(s) {
+function studentReportHTML(s, opts) {
+  const mine = !!(opts && opts.mine);
+  RPT_MY_REQUESTS = mine ? (s.resetRequests || []) : [];
+  if (mine) rptInjectCss();
+  const rc = (scope, section) => mine ? { scope, section } : null;
   const savedLabel = s.accountingVersion === 2 ? "Net saved &amp; invested" : "Deposited &amp; invested (legacy)";
   return `
     <p class="muted-small">${escapeHtml(reportAccountingNote(s))}</p>
+    ${mine ? rptRequestsBox() : ""}
     <div class="profile-summary">
       <div class="profile-chip"><div class="label">Net worth</div><div class="value">${fmtMoney(s.netWorth)}</div></div>
       <div class="profile-chip"><div class="label">Savings rate</div><div class="value">${s.savingsRate === null ? "—" : s.savingsRate + "%"}</div></div>
@@ -319,30 +415,30 @@ function studentReportHTML(s) {
       <tr><td>Owed (loans, mortgage and credit card)</td><td>${s.owed > 0 ? "-" : ""}${fmtMoney(s.owed)}</td></tr>
     </tbody></table></div>
 
-    <h4>${icon("download", 16)} Income this month ${fmtMoney(s.incomeTotal)}</h4>
-    ${renderBars(s.income, "gold")}
+    <h4>${icon("download", 16)} Income this month ${fmtMoney(s.incomeTotal)}${rptSectionButton(mine, "month", "income", s.income)}</h4>
+    ${renderBars(s.income, "gold", rc("month", "income"))}
 
-    <h4>${icon("piggy", 16)} ${savedLabel} this month ${fmtMoney(s.savedTotal)}</h4>
-    ${renderBars(s.saved, "mint")}
-    ${s.borrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this month (not counted as income).</p>` : ""}
+    <h4>${icon("piggy", 16)} ${savedLabel} this month ${fmtMoney(s.savedTotal)}${rptSectionButton(mine, "month", "saved", s.saved)}</h4>
+    ${renderBars(s.saved, "mint", rc("month", "saved"))}
+    ${s.borrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this month (not counted as income).${rptSectionButton(mine, "month", "borrowed", null)}</p>` : ""}
 
-    <h4>${icon("send", 16)} Spent this month ${fmtMoney(s.spentTotal)}</h4>
-    ${renderBars(s.spent, "coral")}
+    <h4>${icon("send", 16)} Spent this month ${fmtMoney(s.spentTotal)}${rptSectionButton(mine, "month", "spent", s.spent)}</h4>
+    ${renderBars(s.spent, "coral", rc("month", "spent"))}
 
     <h3 style="margin-top:26px;">${icon("history", 17)} Entire history</h3>
     <p class="muted-small">${REPORT_LIFETIME_NOTE}</p>
 
-    <h4>${icon("download", 16)} All-time income ${fmtMoney(s.lifetimeIncomeTotal)}</h4>
-    ${renderBars(s.lifetimeIncome, "gold")}
+    <h4>${icon("download", 16)} All-time income ${fmtMoney(s.lifetimeIncomeTotal)}${rptSectionButton(mine, "life", "income", s.lifetimeIncome)}</h4>
+    ${renderBars(s.lifetimeIncome, "gold", rc("life", "income"))}
 
-    <h4>${icon("piggy", 16)} All-time ${savedLabel.toLowerCase()} ${fmtMoney(s.lifetimeSavedTotal)}</h4>
-    ${renderBars(s.lifetimeSaved, "mint")}
-    ${s.lifetimeBorrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.lifetimeBorrowedTotal)} in loans in total (not counted as income).</p>` : ""}
+    <h4>${icon("piggy", 16)} All-time ${savedLabel.toLowerCase()} ${fmtMoney(s.lifetimeSavedTotal)}${rptSectionButton(mine, "life", "saved", s.lifetimeSaved)}</h4>
+    ${renderBars(s.lifetimeSaved, "mint", rc("life", "saved"))}
+    ${s.lifetimeBorrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.lifetimeBorrowedTotal)} in loans in total (not counted as income).${rptSectionButton(mine, "life", "borrowed", null)}</p>` : ""}
 
-    <h4>${icon("send", 16)} All-time spent ${fmtMoney(s.lifetimeSpentTotal)}</h4>
-    ${renderBars(s.lifetimeSpent, "coral")}
+    <h4>${icon("send", 16)} All-time spent ${fmtMoney(s.lifetimeSpentTotal)}${rptSectionButton(mine, "life", "spent", s.lifetimeSpent)}</h4>
+    ${renderBars(s.lifetimeSpent, "coral", rc("life", "spent"))}
 
-    ${s.returnedTotal ? `<h4>Returned money &amp; sale proceeds this month ${fmtMoney(s.returnedTotal)}</h4>${renderBars(s.returned, "gold")}` : ""}
+    ${s.returnedTotal ? `<h4>Returned money &amp; sale proceeds this month ${fmtMoney(s.returnedTotal)}${rptSectionButton(mine, "month", "returned", s.returned)}</h4>${renderBars(s.returned, "gold", rc("month", "returned"))}` : ""}
 
     <h4>${icon("loan", 16)} Loan history</h4>
     ${renderLoanHistory(s.loans)}

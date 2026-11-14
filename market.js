@@ -229,6 +229,8 @@ async function render() {
   const range = cls.priceRange || { min: 1, max: 5 };
   document.getElementById("rangeMin").value = range.min;
   document.getElementById("rangeMax").value = range.max;
+  const moveEl = document.getElementById("showShareMove");
+  if (moveEl) moveEl.checked = !!cls.showShareMove;
   const upEl = document.getElementById("upChance");
   if (upEl && document.activeElement !== upEl) { upEl.value = t29UpChance(cls.marketUpChance); paintDownChance(); }
 
@@ -260,6 +262,7 @@ async function render() {
         <div>
           <h4>${escapeHtml(co.name)}</h4>
           <div class="${change > 0 ? 'ticker-up' : change < 0 ? 'ticker-down' : ''}">${fmtMoney(co.price)} ${hist.length > 1 ? `<span class="muted-small">(${change > 0 ? '+' : ''}${changePct}% today)</span>` : ""}</div>
+          ${!IS_TEACHER && cls.showShareMove ? shareMoveHtml(co, cls) : ""}
         </div>
         ${sparkline(co.history)}
       </div>
@@ -418,6 +421,32 @@ async function saveUpChance() {
     msg.innerHTML = `<div class="error-msg">Couldn't save. Please try again.</div>`;
   } finally {
     btn.disabled = false;
+  }
+}
+
+// Student-facing: how far this company's price can move on a simulated market day (teacher turns this on).
+function shareMoveHtml(co, cls) {
+  const r = co.priceRange || cls.priceRange || { min: 1, max: 5 };
+  const lo = Math.max(0, Number(r.min) || 0), hi = Math.max(lo, Number(r.max) || 0);
+  const d = pct => fmtMoney(Math.round(co.price * pct) / 100);
+  if (hi <= 0) return `<div class="muted-small">On a market day this share doesn't move.</div>`;
+  const pctText = lo === hi ? `${hi}%` : `${lo}%–${hi}%`;
+  const dolText = lo === hi ? d(hi) : `${d(lo)}–${d(hi)}`;
+  return `<div class="muted-small">On a market day it moves ${pctText}, up or down (about ${dolText} a share at today's price).</div>`;
+}
+async function saveShowShareMove() {
+  const el = document.getElementById("showShareMove"), msg = document.getElementById("showMoveMsg");
+  if (!el) return;
+  el.disabled = true;
+  try {
+    const res = await setShowShareMove(CLASS_CODE, el.checked);
+    msg.innerHTML = `<div class="success-msg">Saved. Students ${res.value ? "can now" : "can no longer"} see each company's daily price range.</div>`;
+    await render();
+  } catch (e) {
+    el.checked = !el.checked;
+    msg.innerHTML = `<div class="error-msg">Couldn't save. Please try again.</div>`;
+  } finally {
+    el.disabled = false;
   }
 }
 

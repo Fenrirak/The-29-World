@@ -129,6 +129,7 @@ function budSaveValue() {
 function renderBudgetStudent(me, cls) {
   const v = buildBudgetView(cls, me, CURRENT.username);
   BUDGET_VIEW = v;
+  BUD_ME = me;
   document.getElementById("budWeek").textContent = budWeekLabel(v.weekStartKey);
 
   /* ---- The three numbers ---- */
@@ -192,14 +193,16 @@ function renderBudgetStudent(me, cls) {
   }
   // Credit card: what's owing against the limit, and what's coming.
   if (v.card) {
-    const cd = v.card;
+   const cardList = [v.card].concat(v.card.others || []), manyCards = cardList.length > 1;
+   cardList.forEach(cd => {
     const hot = cd.limit > 0 && cd.balance / cd.limit >= 0.85;
     const earn = cd.cashbackSoFar > 0 ? `<span class="bud-cashback" title="Comes off your closing balance when the statement closes">+${fmtMoney(cd.cashbackSoFar)} cashback</span>` : "";
-    rows.push(row("Credit card", `<strong>${fmtMoney(cd.balance)}</strong> of ${fmtMoney(cd.limit)}${earn}`,
+    rows.push(row(manyCards ? `${budEsc(cd.plan.name)} card${cd === v.card ? " (for purchases)" : ""}` : "Credit card", `<strong>${fmtMoney(cd.balance)}</strong> of ${fmtMoney(cd.limit)}${earn}`,
       cd.limit > 0 ? (cd.balance / cd.limit) * 100 : 0, hot ? "cardhot" : "cardbal",
       (cd.stmtRemaining > 0 ? `${fmtMoney(cd.stmtRemaining)} closing balance due ${budEsc(cardDateLabel(cd.dueKey))} · ` : "")
         + (cd.unbilled > 0 ? `${fmtMoney(cd.unbilled)} spent since the last statement, closing ${budEsc(cardDateLabel(cd.nextCloseKey))}` : `Next statement closes ${budEsc(cardDateLabel(cd.nextCloseKey))}`)
         + (cd.cashbackSoFar > 0 ? ` · ${fmtMoney(cd.cashbackSoFar)} cashback earned so far comes off your closing balance` : "")));
+   });
   }
   // KiwiSaver comes off their pay before it reaches them, so it's shown
   // on its own rather than counted in the money above.
@@ -280,6 +283,7 @@ function renderBudgetStudent(me, cls) {
   }
   document.getElementById("budDays").innerHTML = blocks.length ? blocks.join("")
     : `<p class="muted-small bud-empty">Nothing regular comes in or goes out this week yet.</p>`;
+  budRenderEditArea(v); // the Edit / Reset buttons (and the edit screen itself while editing)
   const toCome = v.items.filter(i => i.status === "today" || i.status === "upcoming" || i.status === "overdue").length;
   document.getElementById("budDaysCount").textContent = v.items.length
     ? `${v.items.length} item${v.items.length === 1 ? "" : "s"}${toCome ? ` · ${toCome} still to come` : ""}` : "";
@@ -296,6 +300,187 @@ function renderBudgetStudent(me, cls) {
     `<div class="bud-note ${n.tone}"><span>${budEsc(n.text)}</span></div>`).join("");
 
   budgetRecalc();
+}
+
+/* ---------------- Editing the day by day list ----------------
+   Take regular items out, add your own, then save for this week only or for this and future
+   weeks. The sums are in data-money.js (budgetApplyEdits / budgetValidateEdits / saveBudgetEdits);
+   saving redraws the whole page, so the tiles, tracker and safe-to-spend follow the edited list. */
+let BUD_EDIT = null;          // { removed: Set of item keys, added: [custom items] } while editing
+let BUD_ME = null;            // the student's doc, for the saved edits
+let BUD_RESET_OPEN = false;   // the "reset to automatic" choice is showing
+let BUD_FLASH = "";           // the last save/reset message
+
+function budInjectEditCss() {
+  if (document.getElementById("budEditCss")) return;
+  const st = document.createElement("style");
+  st.id = "budEditCss";
+  st.textContent = `.bud-edit-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.bud-edit-row .muted-small{flex:1 1 220px}
+.bud-edit-panel{border:1px solid rgba(128,128,128,.3);border-radius:10px;padding:10px 14px;margin:8px 0}
+.bud-add{border:1px dashed rgba(128,128,128,.5);border-radius:10px;padding:10px 14px;margin:14px 0}
+.bud-add-title{font-weight:800;margin-bottom:8px}
+.bud-add-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-items:end}
+.bud-edit-actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 6px}
+.bud-edit-issues{margin:8px 0;padding:10px 14px 10px 30px;border-radius:10px;background:rgba(224,88,106,.12)}
+.bud-edit-issues li{margin:3px 0}
+.bud-edit-notes{margin:8px 0;padding:10px 14px 10px 30px;border-radius:10px;background:rgba(240,180,41,.15)}
+.bud-row-end .btn{padding:2px 9px;font-size:var(--fs-xs,12px)}
+.bud-removed-title{font-weight:800;margin:16px 0 4px}`;
+  document.head.appendChild(st);
+}
+function budEditSourceText(src) {
+  return src === "week" ? "You've changed this week's list (this week only)."
+    : src === "rule" ? "You've changed your list for this and future weeks."
+    : "This list is automatic. Edit it to add or take out items.";
+}
+function budRenderEditArea(v) {
+  budInjectEditCss();
+  const bar = document.getElementById("budEditBar");
+  if (!bar) return;
+  if (BUD_EDIT) {
+    bar.innerHTML = `<div class="muted-small">Editing your week. Take things out, add your own, then choose how to save.</div>`;
+    document.getElementById("budDays").innerHTML = budEditHtml(v);
+    return;
+  }
+  const edits = BUD_ME && BUD_ME.budget && BUD_ME.budget.edits;
+  const hasEdits = v.editSource !== "auto" || !!(edits && (edits.rule || (edits.weeks && Object.keys(edits.weeks).length)));
+  const resetPanel = BUD_RESET_OPEN ? `<div class="bud-edit-panel">
+      <strong>Go back to the automatic list?</strong>
+      <div class="muted-small" style="margin:4px 0 8px;">${v.editSource === "rule" ? "\"This week only\" keeps your changes for later weeks." : "Your own items and anything you took out are cleared."}</div>
+      <div class="bud-edit-actions" style="margin:0;">
+        <button class="btn small" onclick="budReset('week')">This week only</button>
+        <button class="btn small" onclick="budReset('future')">This and future weeks</button>
+        <button class="btn small secondary" onclick="budResetAsk(false)">Never mind</button>
+      </div></div>` : "";
+  bar.innerHTML = `<div class="bud-edit-row"><span class="muted-small">${budEsc(budEditSourceText(v.editSource))}</span>
+      <button class="btn small gold" onclick="budEditStart()">Edit my days</button>
+      ${hasEdits ? `<button class="btn small secondary" onclick="budResetAsk(true)">Reset to automatic</button>` : ""}</div>${resetPanel}${BUD_FLASH}`;
+}
+function budResetAsk(open) { BUD_RESET_OPEN = !!open; BUD_FLASH = ""; if (BUDGET_VIEW) budRenderEditArea(BUDGET_VIEW); }
+async function budReset(scope) {
+  const v = BUDGET_VIEW; if (!v) return;
+  const res = await resetBudgetEdits(CURRENT.username, scope, v.weekStartKey);
+  BUD_RESET_OPEN = false;
+  BUD_FLASH = res.ok ? `<div class="success-msg">${scope === "future" ? "Back to automatic for this week and future weeks." : "Back to automatic for this week."}</div>` : `<div class="error-msg">${budEsc(res.error)}</div>`;
+  await render();
+}
+function budEditStart() {
+  const v = BUDGET_VIEW; if (!v) return;
+  BUD_EDIT = { removed: new Set(v.removedKeys || []), added: (v.customAdded || []).map(c => Object.assign({}, c)) };
+  BUD_RESET_OPEN = false; BUD_FLASH = "";
+  const w = document.getElementById("budDaysWrap"); if (w) w.open = true;
+  budRenderEditArea(v);
+}
+async function budEditCancel() { BUD_EDIT = null; await render(); }
+function budDraftItems(v) {
+  const kept = (v.baseItems || []).filter(i => !BUD_EDIT.removed.has(i.key));
+  return kept.concat(BUD_EDIT.added.map(c => budgetCustomItem(c, v.weekStartKey, v.todayKey)));
+}
+function budEditHtml(v) {
+  const items = budDraftItems(v);
+  const todayIdx = Math.max(0, Math.round(daysBetweenKeys(v.weekStartKey, v.todayKey)));
+  const row = i => {
+    const sign = i.dir === "in" || i.dir === "unsave" ? "+" : "−";
+    const amtCls = i.dir === "in" || i.dir === "unsave" ? "in" : i.dir === "save" ? "save" : "out";
+    const happened = i.status === "done" && !i.custom;
+    const btn = i.custom
+      ? `<button type="button" class="btn small secondary" data-id="${budEsc(i.customId)}" onclick="budEditRemoveCustom(this.dataset.id)">Remove</button>`
+      : happened ? `<span class="bud-chip-status done">Already happened</span>`
+      : `<button type="button" class="btn small secondary" data-key="${budEsc(i.key)}" onclick="budEditRemove(this.dataset.key)">Take out</button>`;
+    return `<div class="bud-row ${amtCls}">
+      <span class="bud-row-icon">${icon(i.icon, 15)}</span>
+      <div class="bud-row-text"><div class="bud-row-label">${budEsc(i.label)}</div>${i.note ? `<div class="bud-row-note">${budEsc(i.note)}</div>` : ""}</div>
+      <div class="bud-row-end"><span class="bud-row-amt">${sign}${fmtMoney(i.amount)}</span>${btn}</div></div>`;
+  };
+  const blocks = [];
+  for (let d = 0; d < 7; d++) {
+    const key = dateKeyPlusDays(v.weekStartKey, d);
+    const dayItems = items.filter(i => i.dayKey === key);
+    const order = { in: 0, unsave: 1, out: 2, save: 3 };
+    dayItems.sort((a, b) => order[a.dir] - order[b.dir]);
+    blocks.push(`<div class="bud-day${key === v.todayKey ? " today" : ""}${key < v.todayKey ? " past" : ""}">
+      <div class="bud-day-head">${budDateLabel(key)}${key === v.todayKey ? ` <span class="bud-today">Today</span>` : ""}</div>
+      ${dayItems.length ? dayItems.map(row).join("") : `<p class="muted-small" style="margin:6px 0;">Nothing planned.</p>`}</div>`);
+  }
+  const daily = items.filter(i => i.status === "daily");
+  if (daily.length) blocks.push(`<div class="bud-day"><div class="bud-day-head">Every day</div>${daily.map(row).join("")}</div>`);
+  const gone = (v.baseItems || []).filter(i => BUD_EDIT.removed.has(i.key));
+  const goneHtml = gone.length ? `<div class="bud-removed-title">Taken out of your plan</div>${gone.map(i => `
+    <div class="bud-row crossed"><span class="bud-row-icon">${icon(i.icon, 15)}</span>
+      <div class="bud-row-text"><div class="bud-row-label">${budEsc(i.label)}</div></div>
+      <div class="bud-row-end"><span class="bud-row-amt">${i.dir === "in" || i.dir === "unsave" ? "+" : "−"}${fmtMoney(i.amount)}</span>
+        <button type="button" class="btn small secondary" data-key="${budEsc(i.key)}" onclick="budEditRestore(this.dataset.key)">Put back</button></div></div>`).join("")}` : "";
+  const dayOpts = [0, 1, 2, 3, 4, 5, 6].map(d => {
+    const past = d < todayIdx, nm = budgetDayWord(dateKeyPlusDays(v.weekStartKey, d));
+    return `<option value="${d}" ${past ? "disabled" : ""} ${d === todayIdx ? "selected" : ""}>${nm}${past ? " (passed)" : d === todayIdx ? " (today)" : ""}</option>`;
+  }).join("");
+  return `${blocks.join("")}${goneHtml}
+    <div class="bud-add">
+      <div class="bud-add-title">Add your own</div>
+      <div class="bud-add-grid">
+        <div><label for="budAddLabel">What is it?</label><input id="budAddLabel" type="text" maxlength="${BUDGET_MAX_LABEL}" placeholder="e.g. Pocket money"></div>
+        <div><label for="budAddAmt">Amount</label><input id="budAddAmt" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+        <div><label for="budAddDir">Type</label><select id="budAddDir"><option value="in">Money coming in</option><option value="out" selected>Bill or spending</option><option value="save">Saving</option></select></div>
+        <div><label for="budAddDay">Day</label><select id="budAddDay">${dayOpts}</select></div>
+        <div><button type="button" class="btn small gold" style="width:100%;" onclick="budEditAdd()">Add</button></div>
+      </div>
+    </div>
+    <div class="bud-edit-actions">
+      <button type="button" class="btn gold" id="budEditSaveWeek" onclick="budEditSave('week')">Save for this week only</button>
+      <button type="button" class="btn" id="budEditSaveFuture" onclick="budEditSave('future')">Save for this and future weeks</button>
+      <button type="button" class="btn secondary" onclick="budEditCancel()">Cancel</button>
+    </div>
+    <div id="budEditMsg"></div>`;
+}
+// Redraw the edit list without losing what's typed in the "add" boxes.
+function budEditRerender() {
+  const ids = ["budAddLabel", "budAddAmt", "budAddDir", "budAddDay"], keep = {};
+  ids.forEach(id => { const el = document.getElementById(id); if (el) keep[id] = el.value; });
+  document.getElementById("budDays").innerHTML = budEditHtml(BUDGET_VIEW);
+  ids.forEach(id => { const el = document.getElementById(id); if (el && keep[id] !== undefined) el.value = keep[id]; });
+}
+function budEditMsg(html) { const el = document.getElementById("budEditMsg"); if (el) el.innerHTML = html || ""; }
+function budEditRemove(key) { if (BUD_EDIT) { BUD_EDIT.removed.add(key); budEditRerender(); } }
+function budEditRestore(key) { if (BUD_EDIT) { BUD_EDIT.removed.delete(key); budEditRerender(); } }
+function budEditRemoveCustom(id) { if (BUD_EDIT) { BUD_EDIT.added = BUD_EDIT.added.filter(c => c.id !== id); budEditRerender(); } }
+function budEditAdd() {
+  if (!BUD_EDIT) return;
+  const label = document.getElementById("budAddLabel").value.trim();
+  const amount = Number(document.getElementById("budAddAmt").value);
+  const dir = document.getElementById("budAddDir").value, day = Number(document.getElementById("budAddDay").value);
+  const problems = [];
+  if (!label) problems.push("Type what it is, like \"Pocket money\".");
+  if (label.length > BUDGET_MAX_LABEL) problems.push(`Keep the name to ${BUDGET_MAX_LABEL} characters or fewer.`);
+  if (!(amount > 0)) problems.push("Type an amount greater than $0.");
+  else if (amount > BUDGET_MAX_ITEM) problems.push(`The amount can't be more than ${fmtMoney(BUDGET_MAX_ITEM)}.`);
+  if (BUD_EDIT.added.length >= BUDGET_MAX_CUSTOM) problems.push(`You can add up to ${BUDGET_MAX_CUSTOM} items of your own. Remove one first.`);
+  if (problems.length) { budEditMsg(`<ul class="bud-edit-issues">${problems.map(p => `<li>${budEsc(p)}</li>`).join("")}</ul>`); return; }
+  BUD_EDIT.added.push({ id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), label, amount: budgetRound(amount), dir, day });
+  budEditRerender();
+  document.getElementById("budAddLabel").value = ""; document.getElementById("budAddAmt").value = "";
+  budEditMsg("");
+}
+async function budEditSave(scope) {
+  if (!BUD_EDIT || !BUDGET_VIEW) return;
+  const draft = { removed: Array.from(BUD_EDIT.removed), added: BUD_EDIT.added };
+  const chk = budgetValidateEdits(BUDGET_VIEW, BUD_ME, draft, scope);
+  const list = (arr, cls) => arr.length ? `<ul class="${cls}">${arr.map(m => `<li>${budEsc(m)}</li>`).join("")}</ul>` : "";
+  if (chk.errors.length) {
+    budEditMsg(`<div class="muted-small"><strong>Not saved yet.</strong> Fix ${chk.errors.length === 1 ? "this" : "these"} and try again:</div>${list(chk.errors, "bud-edit-issues")}`);
+    return;
+  }
+  const btns = ["budEditSaveWeek", "budEditSaveFuture"].map(id => document.getElementById(id));
+  btns.forEach(b => { if (b) b.disabled = true; });
+  const res = await saveBudgetEdits(CURRENT.username, scope, draft, BUDGET_VIEW.weekStartKey);
+  if (!res.ok) {
+    btns.forEach(b => { if (b) b.disabled = false; });
+    budEditMsg(`<div class="muted-small"><strong>Not saved.</strong></div>${list(res.errors || [], "bud-edit-issues")}`);
+    return;
+  }
+  BUD_EDIT = null;
+  BUD_FLASH = `<div class="success-msg">Saved for ${scope === "future" ? "this week and future weeks" : "this week only"}. The numbers above now follow your list.</div>${list(chk.notes, "bud-edit-notes")}`;
+  await render();
 }
 
 // Remembers whether this student likes the day-by-day list open.

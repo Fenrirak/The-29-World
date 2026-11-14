@@ -58,7 +58,7 @@ function paintTabs(list) {
     const html = list.map(t => {
       const on = t.key === ACTIVE_TAB;
       const id = "tab" + t.key.charAt(0).toUpperCase() + t.key.slice(1);
-      return `<button type="button" role="tab" id="${id}" class="${on ? "active" : ""}" aria-selected="${on}" aria-controls="${EV_PANES[t.key]}" onclick="showTab('${t.key}')">${icon(t.icon, 16)} ${t.label} <span class="ev-tab-count">${t.count}</span></button>`;
+      return `<button type="button" role="tab" id="${id}" class="${on ? "active" : ""}" aria-selected="${on}" aria-controls="${EV_PANES[t.key]}" onclick="showTab('${t.key}')">${icon(t.icon, 18)} ${t.label} <span class="ev-tab-count">${t.count}</span></button>`;
     }).join("");
     // Only rebuilt when something changed, so a background refresh never steals keyboard focus.
     if (bar.dataset.sig !== html) { bar.innerHTML = html; bar.dataset.sig = html; }

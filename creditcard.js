@@ -132,8 +132,8 @@ function ccLtCashTotal(lt) { return cardRound(((lt && lt.cashback) || 0) + ((lt 
 // Parts are tracked on the card (data-money.js, cardLifetimeAdd). For a card that already had
 // totals, older parts are recovered from the class transaction list (it only keeps the newest
 // ~200 lines class-wide); whatever is left shows as "Earlier", so the lines always add up.
-function ccLifetimeParts(me, cls) {
-  const c = me.creditCard, lt = c.lifetime || {}, T = v => cardRound(v || 0);
+function ccLifetimeParts(me, cls, card) {
+  const c = card || me.creditCard, lt = c.lifetime || {}, T = v => cardRound(v || 0);
   const from = lt.trackedFrom || Infinity, since = c.appliedTs || 0;
   const num = m => (m ? Number(m[1].replace(/,/g, "")) : 0);
   let bPct = 0, bFixed = 0, bMonthly = 0, bLate = 0;
@@ -170,9 +170,9 @@ function ccInjectLifetimeCss() {
 .cc-ltb .none{opacity:.65}`;
   document.head.appendChild(st);
 }
-function ccLifetimeHtml(me, cls) {
+function ccLifetimeHtml(me, cls, card) {
   ccInjectLifetimeCss();
-  const p = ccLifetimeParts(me, cls);
+  const p = ccLifetimeParts(me, cls, card);
   const col = (g, tone, sign) => {
     const rows = g.lines.filter(l => l[1] > 0.004).map(l => `<li>${ccEsc(l[0])}: <b class="${tone}">${sign}${fmtMoney(l[1])}</b></li>`);
     if (g.earlier > 0.004) rows.push(`<li title="From before this breakdown was kept">Earlier: <b class="${tone}">${sign}${fmtMoney(g.earlier)}</b></li>`);
@@ -250,43 +250,75 @@ function renderCreditCard(me, cls, students) {
 }
 
 /* ================= Student ================= */
+function ccInjectMultiCss() {
+  if (document.getElementById("ccMultiCss")) return;
+  const st = document.createElement("style");
+  st.id = "ccMultiCss";
+  st.textContent = `
+.cc-card-title{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:26px 0 14px;padding-top:18px;border-top:1px solid rgba(128,128,128,.25)}
+.cc-card-title h3{margin:0}
+.cc-others-head{margin:28px 0 6px;padding-top:18px;border-top:1px solid rgba(128,128,128,.25)}
+.cc-others-head h3{margin:0 0 4px}`;
+  document.head.appendChild(st);
+}
 function ccRenderStudent(me, cls) {
+  ccInjectMultiCss();
   const el = document.getElementById("cardCard");
-  const st = cardSettings(cls), plans = cardPlansOf(cls).slice().sort((a, b) => a.limit - b.limit), card = me.creditCard;
-  const active = cardIsActive(me);
+  const st = cardSettings(cls), plans = cardPlansOf(cls).slice().sort((a, b) => a.limit - b.limit);
+  const maxN = cardMaxFor(cls), held = cardsHeld(me);
+  const mine = held.filter(c => c.status === "active"), pend = held.filter(c => c.status === "pending");
+  const heldIds = new Set(held.map(c => c.planId));
   el.classList.remove("hidden"); // always visible to students in the Bank tab
-  const head = (note) => `<div class="flex-between cc-head"><h2 id="hCard">Credit card</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
-  if (active) { el.innerHTML = head(st.approval === "instant" ? "Instant approval" : "Teacher approval needed") + ccActiveHtml(me, cls) + `<div id="ccMsg"></div>`; return; }
-  if (card && card.status === "pending") {
-    const plan = cardPlanById(cls, card.planId);
-    el.innerHTML = head("Application sent") + (plan ? `<div class="cc-pending">
+  const head = (note) => `<div class="flex-between cc-head"><h2 id="hCard">Credit card${maxN > 1 ? "s" : ""}</h2>${note ? `<span class="cc-head-note">${note}</span>` : ""}</div>`;
+  const approvalNote = st.approval === "instant" ? "Instant approval" : "Teacher approval needed";
+  const off = !st.enabled;
+  const score = lifestyleRatingFromData(cls, me, me.username);
+  const atCap = held.length >= maxN;
+  let html = "";
+
+  // ---- the cards this student already holds or has applied for ----
+  mine.forEach(c => { html += ccActiveHtml(me, cls, c, { main: c === me.creditCard, many: held.length > 1 }); });
+  pend.forEach(c => { html += ccPendingHtml(me, cls, c, held.length > 1); });
+
+  // ---- every other card on offer: always visible, even while one is open ----
+  const rest = plans.filter(p => !heldIds.has(p.id));
+  const denied = !held.length && me.creditCard && me.creditCard.status === "denied";
+  if (rest.length || !held.length) {
+    const tiles = rest.map(p => ccPlanTile(me, cls, p, score, off, atCap)).join("");
+    let body;
+    if (!plans.length) {
+      body = `<div class="cc-off">${icon("lock", 22)}<div><strong>${off ? "Credit cards aren't open yet" : "No cards on offer yet"}</strong><span>${off ? "Your teacher hasn't switched credit cards on for the class." : "Your teacher hasn't set up any cards yet."} Check back soon.</span></div></div>`;
+    } else if (!rest.length) {
+      body = "";
+    } else {
+      body = (off ? `<div class="cc-off">${icon("lock", 22)}<div><strong>Applications aren't open yet</strong><span>Have a look at the cards below. Your teacher will open applications soon.</span></div></div>` : "")
+        + (atCap && !off ? `<div class="cc-note">${icon("lock", 16)}<span>You hold ${held.length} of ${maxN} card${maxN === 1 ? "" : "s"}, the most your teacher allows. Cancel${pend.length ? " or withdraw" : ""} one to apply for a different card.</span></div>` : "")
+        + `<div class="cc-plans">${tiles}</div>`;
+    }
+    if (body) {
+      html += held.length
+        ? `<div class="cc-others-head"><h3>${icon("creditcard", 16)} ${rest.length === 1 ? "Another card" : "Other cards"} you can look at</h3><div class="muted-small">You hold ${held.length} of ${maxN}${maxN === 1 ? " card" : " cards"}.</div></div>${body}`
+        : body;
+    }
+  }
+  el.innerHTML = head(off && !held.length ? "Not open yet" : approvalNote)
+    + (denied ? `<div class="cc-note bad">${icon("bell", 16)}<span>Your last application wasn't approved. You can pick another card below.</span></div>` : "")
+    + html
+    + `<div id="ccMsg"></div>`;
+}
+function ccPendingHtml(me, cls, card, many) {
+  const plan = cardPlanById(cls, card.planId), pid = ccEsc(card.planId);
+  return `${many ? `<div class="cc-card-title"><h3>${plan ? ccEsc(plan.name) : "Card application"}</h3></div>` : ""}
+    ${plan ? `<div class="cc-pending">
         <div class="cc-pending-card">${ccVisual(cls, plan, me.name, cardLast4(me.username), { pending: true })}</div>
         <div class="cc-pending-text">
           <span class="badge gold">${icon("history", 12)} Waiting for approval</span>
           <h3>Your ${ccEsc(plan.name)} application is with your teacher</h3>
           <p class="muted-small">You'll be able to spend as soon as it's approved. Nothing else to do.</p>
-          <button class="btn small" onclick="ccCancel()">Withdraw application</button>
-        </div></div>` : `<p class="muted-small">That plan is no longer available.</p><button class="btn small" onclick="ccCancel()">Withdraw application</button>`)
-      + `<div id="ccMsg"></div>`;
-    return;
-  }
-  const denied = card && card.status === "denied";
-  const score = lifestyleRatingFromData(cls, me, me.username);
-  const off = !st.enabled;
-  const tiles = plans.map(p => ccPlanTile(me, cls, p, score, off)).join("");
-  let body;
-  if (!plans.length) {
-    body = `<div class="cc-off">${icon("lock", 22)}<div><strong>${off ? "Credit cards aren't open yet" : "No cards on offer yet"}</strong><span>${off ? "Your teacher hasn't switched credit cards on for the class." : "Your teacher hasn't set up any cards yet."} Check back soon.</span></div></div>`;
-  } else {
-    body = (off ? `<div class="cc-off">${icon("lock", 22)}<div><strong>Applications aren't open yet</strong><span>Have a look at the cards below. Your teacher will open applications soon.</span></div></div>` : "")
-      + `<div class="cc-plans">${tiles}</div>`;
-  }
-  el.innerHTML = head(off ? "Not open yet" : (st.approval === "instant" ? "Instant approval" : "Teacher approval needed"))
-    + (denied ? `<div class="cc-note bad">${icon("bell", 16)}<span>Your last application wasn't approved. You can pick another card below.</span></div>` : "")
-    + body
-    + `<div id="ccMsg"></div>`;
+          <button class="btn small" onclick="ccCancel('${pid}')">Withdraw application</button>
+        </div></div>` : `<p class="muted-small">That plan is no longer available.</p><button class="btn small" onclick="ccCancel('${pid}')">Withdraw application</button>`}`;
 }
-function ccPlanTile(me, cls, p, score, off) {
+function ccPlanTile(me, cls, p, score, off, atCap) {
   const locked = score < p.minLifestyle;
   const instant = cardSettings(cls).approval === "instant";
   return `<div class="cc-plan ${locked || off ? "locked" : ""}">
@@ -298,12 +330,15 @@ function ccPlanTile(me, cls, p, score, off) {
         ? `<div class="cc-lock">${icon("lock", 14)}<span>Applications aren't open yet</span></div>`
         : locked
         ? `<div class="cc-lock">${icon("lock", 14)}<span>Needs ${ccTierNeedText(cls, p.minLifestyle)}. Yours is ${Math.floor(score * 10) / 10}</span></div>`
+        : atCap
+        ? `<div class="cc-lock">${icon("lock", 14)}<span>Card limit reached (${cardMaxFor(cls)}). Cancel a card to apply</span></div>`
         : `<button class="btn gold" onclick="ccApply('${ccEsc(p.id)}')">${instant ? "Get this card" : "Apply for this card"}</button>`}
     </div>
   </div>`;
 }
-function ccActiveHtml(me, cls) {
-  const c = me.creditCard, plan = cardPlanById(cls, c.planId);
+function ccActiveHtml(me, cls, c, o) {
+  o = o || {};
+  const pid = ccEsc(c.planId), plan = cardPlanById(cls, c.planId);
   if (!plan) return `<p class="muted-small">Your card's plan was removed by your teacher. Pay off the balance of ${fmtMoney(c.balance || 0)} below.</p>`;
   const today = nzDateKey(), s = c.stmt, rem = cardStmtRemaining(c);
   const owing = cardRound(c.balance || 0), avail = cardAvailable(c, plan);
@@ -348,7 +383,7 @@ function ccActiveHtml(me, cls) {
   }
 
   // ---- vouchers ----
-  const vs = cardUsableVouchers(me, today);
+  const vs = cardVouchersOf(c, today);
   const vouchers = vs.length ? `<div class="cc-vouchers"><h3>${icon("ticket", 16)} Your vouchers</h3><div class="cc-voucher-row">${vs.map(v => `
       <a class="cc-voucher" href="store.html">
         <div class="cc-voucher-val">${v.kind === "percent" ? `${v.value}%` : fmtMoney(v.left)}</div>
@@ -367,7 +402,10 @@ function ccActiveHtml(me, cls) {
     ${s.cashback > 0 && !(s.cashbackPct > 0) && !(s.rewardFixed > 0) ? `<div class="cc-fact"><span>Cashback earned</span><strong>−${fmtMoney(s.cashback)}</strong></div>` : ""}
     <div class="cc-fact"><span>Closing balance</span><strong>${fmtMoney(s.amount)}</strong></div>` : `<p class="muted-small">No statement has closed yet.</p>`;
 
-  return `
+  const title = o.many ? `<div class="cc-card-title"><h3>${ccEsc(plan.name)}</h3>${o.main
+    ? `<span class="badge mint">${icon("cart", 12)} Used for purchases</span>`
+    : `<button class="btn small" onclick="ccMakePrimary('${pid}')">Use this card for purchases</button>`}</div>` : "";
+  return `${title}
   <div class="cc-active">
     <div class="cc-left">
       ${ccVisual(cls, plan, me.name, cardLast4(me.username))}
@@ -376,7 +414,7 @@ function ccActiveHtml(me, cls) {
         <div><span>Cashback &amp; rewards</span><strong class="good">${fmtMoney(ccLtCashTotal(lt))}</strong></div>
         <div><span>Interest &amp; fees charged</span><strong class="${(lt.interest || 0) + (lt.fees || 0) > 0 ? "bad" : ""}">${fmtMoney((lt.interest || 0) + (lt.fees || 0))}</strong></div>
       </div>
-      ${ccLifetimeHtml(me, cls)}
+      ${ccLifetimeHtml(me, cls, c)}
     </div>
     <div class="cc-right">
       ${banner}
@@ -387,19 +425,19 @@ function ccActiveHtml(me, cls) {
         <div class="cc-limit-sub">${unbilled > 0 ? `${fmtMoney(unbilled)} owing from spending since your last statement · it closes ${ccEsc(cardDateLabel(c.nextCloseKey))}` : `Next statement closes ${ccEsc(cardDateLabel(c.nextCloseKey))}`}</div>
       </div>
       ${ccRewardsHtml(plan, c, today)}
-      <label class="cc-check cc-check-tile"><input type="checkbox" ${c.eventsOnCard ? "checked" : ""} onchange="ccSetEventsPref(this.checked)"> Put unexpected costs (random events) on this card first</label>
-      <div class="muted-small" style="margin-bottom:8px;">Big events ask you how to pay each time. Random events can't ask first, so this is their default (cash covers anything over your limit).</div>
+      ${o.main ? `<label class="cc-check cc-check-tile"><input type="checkbox" ${c.eventsOnCard ? "checked" : ""} onchange="ccSetEventsPref(this.checked)"> Put unexpected costs (random events) on this card first</label>
+      <div class="muted-small" style="margin-bottom:8px;">Big events ask you how to pay each time. Random events can't ask first, so this is their default (cash covers anything over your limit).</div>` : (o.many ? `<div class="muted-small" style="margin-bottom:8px;">The Store, events, rentals and other purchases are charged to your <strong>purchases card</strong>. You can still pay this card's bill any time.</div>` : "")}
       <div class="cc-pay">
-        <label for="ccPayAmt">Make a payment <span class="muted-small">from your cash (${fmtMoney(me.balance)})</span></label>
+        <label for="ccPayAmt-${pid}">Make a payment <span class="muted-small">from your cash (${fmtMoney(me.balance)})</span></label>
         ${canPay ? `<div class="muted-small" style="margin-bottom:6px;">Pay any time.${unbilled > 0.004 ? (rem > 0.004 ? " Your closing balance is paid first, then the rest goes towards spending that hasn't been billed yet, so your next statement is smaller." : " It goes towards spending that hasn't been billed yet, so your next statement is smaller.") : ""}</div>` : `<div class="muted-small" style="margin-bottom:6px;">You don't owe anything on your card right now.</div>`}
         <div class="cc-pay-row">
-          <div class="cc-pay-input"><span>$</span><input id="ccPayAmt" type="number" min="0.01" max="${owing}" step="0.01" placeholder="0.00" ${canPay ? "" : "disabled"}></div>
-          <button class="btn mint" onclick="ccPay()" ${canPay ? "" : "disabled"}>Pay</button>
+          <div class="cc-pay-input"><span>$</span><input id="ccPayAmt-${pid}" type="number" min="0.01" max="${owing}" step="0.01" placeholder="0.00" ${canPay ? "" : "disabled"}></div>
+          <button class="btn mint" onclick="ccPay('${pid}')" ${canPay ? "" : "disabled"}>Pay</button>
         </div>
         <div class="cc-quick">
-          ${rem > 0.004 ? `<button type="button" onclick="ccFill(${rem})">Closing balance · ${fmtMoney(rem)}</button>` : ""}
-          ${rem > 0.004 && s && (s.minDue - (s.paid || 0)) > 0.004 ? `<button type="button" onclick="ccFill(${cardRound(Math.min(rem, s.minDue - (s.paid || 0)))})">Minimum · ${fmtMoney(Math.min(rem, s.minDue - (s.paid || 0)))}</button>` : ""}
-          ${unbilled > 0.004 ? `<button type="button" onclick="ccFill(${owing})">${rem > 0.004 ? "Everything owed" : "Pay it all"} · ${fmtMoney(owing)}</button>` : ""}
+          ${rem > 0.004 ? `<button type="button" onclick="ccFill(${rem}, '${pid}')">Closing balance · ${fmtMoney(rem)}</button>` : ""}
+          ${rem > 0.004 && s && (s.minDue - (s.paid || 0)) > 0.004 ? `<button type="button" onclick="ccFill(${cardRound(Math.min(rem, s.minDue - (s.paid || 0)))}, '${pid}')">Minimum · ${fmtMoney(Math.min(rem, s.minDue - (s.paid || 0)))}</button>` : ""}
+          ${unbilled > 0.004 ? `<button type="button" onclick="ccFill(${owing}, '${pid}')">${rem > 0.004 ? "Everything owed" : "Pay it all"} · ${fmtMoney(owing)}</button>` : ""}
         </div>
       </div>
     </div>
@@ -421,13 +459,13 @@ function ccActiveHtml(me, cls) {
     </ul>
   </details>
   <div class="cc-close" style="margin-top:14px;">
-    <button class="btn small ghost-danger" onclick="ccCancel()">Cancel this card</button>
+    <button class="btn small ghost-danger" onclick="ccCancel('${pid}')">Cancel this card</button>
     <div class="muted-small" style="margin-top:6px;">${owing <= 0.004 ? "Closes your card. Any unused vouchers will be lost." : "You can cancel once you owe nothing on the card."}</div>
   </div>`;
 }
 
 /* ---- Student actions ---- */
-function ccFill(n) { const i = document.getElementById("ccPayAmt"); if (i) { i.value = cardRound(n).toFixed(2); i.focus(); } }
+function ccFill(n, pid) { const i = document.getElementById("ccPayAmt-" + pid); if (i) { i.value = cardRound(n).toFixed(2); i.focus(); } }
 async function ccApply(planId) {
   ccMsg("ccMsg", "");
   const res = await applyForCreditCard(CURRENT.username, CURRENT.classCode, planId);
@@ -435,25 +473,34 @@ async function ccApply(planId) {
   await render();
   ccMsg("ccMsg", `<div class="success-msg">${res.status === "active" ? "Your card is ready! Your first statement date is shown below." : "Application sent to your teacher."}</div>`);
 }
-async function ccPay() {
-  const input = document.getElementById("ccPayAmt");
+async function ccPay(pid) {
+  const input = document.getElementById("ccPayAmt-" + pid);
   const amt = cardRound(input ? input.value : 0);
+  const plan = CC_CLS ? cardPlanById(CC_CLS, pid) : null;
   ccMsg("ccMsg", "");
-  const res = await payCreditCard(CURRENT.username, CURRENT.classCode, amt);
+  const res = await payCreditCard(CURRENT.username, CURRENT.classCode, amt, pid, plan ? plan.name : "");
   if (!res.ok) { ccMsg("ccMsg", `<div class="error-msg">${ccEsc(res.error)}</div>`); return; }
   await render();
-  ccMsg("ccMsg", `<div class="success-msg">Paid ${fmtMoney(amt)}.${res.clearedStmt ? " Your closing balance is cleared. No interest!" : ""}${res.toNew > 0.004 ? ` ${fmtMoney(res.toNew)} went towards spending that hasn't been billed yet, so your next statement will be smaller.` : ""}</div>`);
+  ccMsg("ccMsg", `<div class="success-msg">Paid ${fmtMoney(amt)}${plan && cardsActive(CC_ME).length > 1 ? ` to your ${ccEsc(plan.name)} card` : ""}.${res.clearedStmt ? " Your closing balance is cleared. No interest!" : ""}${res.toNew > 0.004 ? ` ${fmtMoney(res.toNew)} went towards spending that hasn't been billed yet, so your next statement will be smaller.` : ""}</div>`);
 }
 async function ccSetEventsPref(on) {
   await setCardEventsPref(CURRENT.username, on);
   await render();
   ccMsg("ccMsg", `<div class="success-msg">${on ? "Unexpected costs will go on your card first." : "Unexpected costs will come out of your cash."}</div>`);
 }
-async function ccCancel() {
-  const c = CC_ME && CC_ME.creditCard;
-  const msg = c && c.status === "pending" ? "Withdraw your card application?" : "Cancel your credit card? Any unused vouchers will be lost.";
+async function ccMakePrimary(pid) {
+  ccMsg("ccMsg", "");
+  const res = await setPrimaryCard(CURRENT.username, pid);
+  if (!res.ok) { ccMsg("ccMsg", `<div class="error-msg">${ccEsc(res.error)}</div>`); return; }
+  await render();
+  const plan = CC_CLS ? cardPlanById(CC_CLS, pid) : null;
+  ccMsg("ccMsg", `<div class="success-msg">${plan ? ccEsc(plan.name) : "That card"} is now the card used for purchases.</div>`);
+}
+async function ccCancel(pid) {
+  const c = CC_ME ? cardHeldByPlan(CC_ME, pid) : null;
+  const msg = c && c.status === "pending" ? "Withdraw your card application?" : "Cancel this credit card? Any unused vouchers on it will be lost.";
   if (!await t29Confirm(msg)) return;
-  const res = await cancelCreditCard(CURRENT.username, CURRENT.classCode);
+  const res = await cancelCreditCard(CURRENT.username, CURRENT.classCode, pid);
   if (!res.ok) { ccMsg("ccMsg", `<div class="error-msg">${ccEsc(res.error)}</div>`); return; }
   await render();
 }
@@ -464,14 +511,14 @@ function ccRenderTeacher(cls, students) {
   const st = cardSettings(cls), allPlans = cls.cardPlans || [];
   const live = allPlans.filter(p => !p.archived), archived = allPlans.filter(p => p.archived);
   const pen = (cls.lifestyleConfig && cls.lifestyleConfig.creditCard) || { enabled: false, perAmount: 0, points: 1 };
-  const holders = students.filter(s => s.creditCard && (s.creditCard.status === "active" || s.creditCard.status === "pending"));
-  const pending = students.filter(s => s.creditCard && s.creditCard.status === "pending");
-  const active = students.filter(s => cardIsActive(s));
+  // One row per CARD (a student can hold several), each tied to its student.
+  const pending = [], active = [];
+  students.forEach(s => cardsHeld(s).forEach(c => (c.status === "pending" ? pending : active).push({ s, c })));
   const today = nzDateKey();
   const dayOpts = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => `<option value="${d}" ${st.statementDay === d ? "selected" : ""}>${DAY_FULL[d]}</option>`).join("");
 
   const planRows = live.length ? live.slice().sort((a, b) => a.limit - b.limit).map(p => {
-    const n = holders.filter(s => s.creditCard.planId === p.id).length;
+    const n = students.filter(s => cardHeldByPlan(s, p.id)).length;
     return `<div class="cc-tplan">
       ${ccVisual(cls, p, "", "", { small: true })}
       <div class="cc-tplan-body">
@@ -485,27 +532,27 @@ function ccRenderTeacher(cls, students) {
   }).join("") : `<div class="empty-state"><p>No plans yet. Add your first one below. Try a basic card with a low limit, then a premium one with better perks.</p></div>`;
 
   const pendRows = pending.length ? `<h3 class="cc-sub">${icon("history", 16)} Waiting for approval (${pending.length})</h3>
-    <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Card</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(s => {
-      const p = cardPlanById(cls, s.creditCard.planId); if (!p) return "";
+    <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Card</th><th>Lifestyle</th><th></th></tr></thead><tbody>${pending.map(({ s, c }) => {
+      const p = cardPlanById(cls, c.planId); if (!p) return "";
       const sc = lifestyleRatingFromData(cls, s, s.username), ok = sc >= p.minLifestyle;
       return `<tr><td>${ccEsc(s.name)}</td><td>${ccEsc(p.name)} · ${fmtMoney(p.limit)}</td>
         <td><span class="badge ${ok ? "mint" : "coral"}">${Math.floor(sc * 10) / 10} / ${p.minLifestyle} needed${ccTierForRating(cls, p.minLifestyle) ? " (" + ccEsc(ccTierForRating(cls, p.minLifestyle).label) + ")" : ""}</span></td>
-        <td class="cc-row-actions"><button class="btn small mint" onclick="ccApprove('${escapeJsAttr(s.username)}', ${ok})">Approve</button>
-          <button class="btn small coral" onclick="ccDecline('${escapeJsAttr(s.username)}')">Decline</button></td></tr>`;
+        <td class="cc-row-actions"><button class="btn small mint" onclick="ccApprove('${escapeJsAttr(s.username)}', ${ok}, '${escapeJsAttr(c.planId)}')">Approve</button>
+          <button class="btn small coral" onclick="ccDecline('${escapeJsAttr(s.username)}', '${escapeJsAttr(c.planId)}')">Decline</button></td></tr>`;
     }).join("")}</tbody></table></div>` : "";
 
   const cardRows = active.length ? `<h3 class="cc-sub">${icon("users", 16)} Cards in use (${active.length})</h3>
-    <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Card</th><th>Owing</th><th>Unpaid statement</th><th>Due</th><th>Status</th></tr></thead><tbody>${active.map(s => {
-      const c = s.creditCard, p = cardPlanById(cls, c.planId), rem = cardStmtRemaining(c);
+    <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Card</th><th>Owing</th><th>Unpaid statement</th><th>Due</th><th>Status</th></tr></thead><tbody>${active.map(({ s, c }) => {
+      const p = cardPlanById(cls, c.planId), rem = cardStmtRemaining(c);
       let status = `<span class="badge mint">Clear</span>`, due = "—";
       if (c.stmt && rem > 0.004) {
         const d = daysBetweenKeys(today, c.stmt.dueKey); due = ccEsc(cardDateLabel(c.stmt.dueKey));
         status = d < 0 ? `<span class="badge coral">${ccPlural(Math.abs(d), "day")} overdue</span>` : `<span class="badge gold">${d === 0 ? "Due today" : `${ccPlural(d, "day")} left`}</span>`;
       } else if ((c.balance || 0) > 0.004) status = `<span class="badge navy">Spending</span>`;
-      return `<tr><td>${ccEsc(s.name)}</td><td>${p ? ccEsc(p.name) : "—"}</td><td>${fmtMoney(c.balance || 0)}</td><td>${rem > 0.004 ? fmtMoney(rem) : "—"}</td><td>${due}</td><td>${status}</td></tr>`;
+      return `<tr><td>${ccEsc(s.name)}</td><td>${p ? ccEsc(p.name) : "—"}${s.creditCard === c && cardsActive(s).length > 1 ? ` <span class="muted-small">(for purchases)</span>` : ""}</td><td>${fmtMoney(c.balance || 0)}</td><td>${rem > 0.004 ? fmtMoney(rem) : "—"}</td><td>${due}</td><td>${status}</td></tr>`;
     }).join("")}</tbody></table></div>` : "";
 
-  const overdueN = active.filter(s => { const c = s.creditCard; return c.stmt && cardStmtRemaining(c) > 0.004 && daysBetweenKeys(today, c.stmt.dueKey) < 0; }).length;
+  const overdueN = active.filter(({ c }) => c.stmt && cardStmtRemaining(c) > 0.004 && daysBetweenKeys(today, c.stmt.dueKey) < 0).length;
   const penNum = (id, val, ph) => `<input id="${id}" type="number" min="0" step="1" value="${val}" ${ph ? `placeholder="${ph}"` : ""} onchange="ccSaveSettings()">`;
 
   el.innerHTML = `
@@ -523,6 +570,8 @@ function ccRenderTeacher(cls, students) {
       <div class="cc-settings">
         <div class="cc-set"><label for="ccsApproval">New cards</label><p>Who decides when a student applies.</p>
           <select id="ccsApproval" onchange="ccSaveSettings()"><option value="teacher" ${st.approval === "teacher" ? "selected" : ""}>You approve each one</option><option value="instant" ${st.approval === "instant" ? "selected" : ""}>Instant for eligible students</option></select></div>
+        <div class="cc-set"><label for="ccsMax">Cards per student</label><p>Most cards a student can hold (or have applied for) at once. Students who already hold more keep them. Default 2.</p>
+          <div class="cc-num"><input id="ccsMax" type="number" min="1" max="${CARD_MAX_ALLOWED}" step="1" value="${cardMaxFor(cls)}" onchange="ccSaveSettings()"></div></div>
         <div class="cc-set"><label for="ccsDay">Statement closes on</label><p>Statements then close every 2 weeks.</p>
           <select id="ccsDay" onchange="ccSaveSettings()">${dayOpts}</select></div>
         <div class="cc-set"><label for="ccsSplit">Part-payments from</label><p>Smallest purchase a student may split between card and cash. A purchase the card can't cover can always be split.</p>
@@ -647,19 +696,19 @@ async function ccRestorePlan(id) {
 }
 async function ccSaveSettings() {
   const g = id => document.getElementById(id);
-  await saveCardSettings(CURRENT.classCode, { enabled: g("ccsEnabled").checked, approval: g("ccsApproval").value, statementDay: g("ccsDay").value, splitMin: g("ccsSplit").value });
+  await saveCardSettings(CURRENT.classCode, { enabled: g("ccsEnabled").checked, approval: g("ccsApproval").value, statementDay: g("ccsDay").value, splitMin: g("ccsSplit").value, maxCards: g("ccsMax").value });
   await setCardLifestylePenalty(CURRENT.classCode, { enabled: g("ccsPenOn").checked, perAmount: g("ccsPenAmt").value, points: g("ccsPenPts").value });
   await render();
   ccMsg("ccTMsg", `<div class="success-msg">Saved.</div>`);
 }
-async function ccApprove(username, eligible) {
+async function ccApprove(username, eligible, planId) {
   if (!eligible && !await t29Confirm("This student is below the lifestyle rating for that card. Approve anyway?")) return;
-  const res = await approveCreditCard(CURRENT.classCode, username);
+  const res = await approveCreditCard(CURRENT.classCode, username, planId);
   if (!res.ok) ccMsg("ccTMsg", `<div class="error-msg">${ccEsc(res.error)}</div>`);
   await render();
 }
-async function ccDecline(username) {
-  const res = await declineCreditCard(CURRENT.classCode, username);
+async function ccDecline(username, planId) {
+  const res = await declineCreditCard(CURRENT.classCode, username, planId);
   if (!res.ok) ccMsg("ccTMsg", `<div class="error-msg">${ccEsc(res.error)}</div>`);
   await render();
 }
@@ -686,7 +735,7 @@ function ccStoreBarRender(me, cls) {
     <div class="cc-pb-title"><strong>Pay with</strong></div>
     <div class="cc-pb-seg" role="group" aria-label="Payment method">
       <button type="button" class="${useCard ? "" : "on"}" onclick="ccStoreSetPay(false)">Cash<small>${fmtMoney(me.balance)}</small></button>
-      <button type="button" class="${useCard ? "on" : ""}" onclick="ccStoreSetPay(true)">Credit card<small>${fmtMoney(avail)} available</small></button>
+      <button type="button" class="${useCard ? "on" : ""}" onclick="ccStoreSetPay(true)">${cardsActive(me).length > 1 ? ccEsc(plan.name) + " card" : "Credit card"}<small>${fmtMoney(avail)} available</small></button>
     </div>
     <div class="cc-pb-perks">${useCard
       ? (plan.storeDiscountPct > 0 ? `<span class="cc-chip gold">${plan.storeDiscountPct}% card discount applied</span>` : "")

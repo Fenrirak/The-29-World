@@ -175,24 +175,34 @@ function notifLoanItems(me) {
 // The credit card statement: from the day it closes until it's paid in full.
 // `action: true` puts it above the informational stock moves.
 function notifCardItems(me, cls) {
-  if (!cardIsActive(me) || !me.creditCard.stmt) return [];
-  const s = me.creditCard.stmt, owe = cardStmtRemaining(me.creditCard);
-  if (owe <= 0) return [];
+  // One reminder per card with an unpaid statement (a student can hold several cards).
+  const out = [], active = cardsActive(me), many = active.length > 1;
+  active.forEach(c => {
+    const plan = many ? cardPlanById(cls, c.planId) : null;
+    const item = notifCardItem(me, cls, c, c === me.creditCard ? "" : "-" + c.planId, plan ? plan.name + " card" : "Credit card");
+    if (item) out.push(item);
+  });
+  return out;
+}
+function notifCardItem(me, cls, card, idSuffix, cardName) {
+  if (!card || !card.stmt) return null;
+  const s = card.stmt, owe = cardStmtRemaining(card);
+  if (owe <= 0) return null;
   const today = nzDateKey();
   const days = daysBetweenKeys(today, s.dueKey);
   const pen = cls && cls.lifestyleConfig && cls.lifestyleConfig.creditCard;
   const penNote = pen && pen.enabled && pen.perAmount > 0 && pen.points > 0 ? " Until it's paid it costs you lifestyle points." : "";
   let title, tone, body, id, ts;
   if (days < 0) {
-    tone = "coral"; id = `card-stmt-${s.closeKey}-late`; ts = notifTodayStartMs();
-    title = `Credit card overdue by ${Math.abs(days)} ${Math.abs(days) === 1 ? "day" : "days"}`;
+    tone = "coral"; id = `card-stmt-${s.closeKey}-late${idSuffix}`; ts = notifTodayStartMs();
+    title = `${cardName} overdue by ${Math.abs(days)} ${Math.abs(days) === 1 ? "day" : "days"}`;
     body = `${fmtMoney(owe)} is still unpaid, so interest will be added at your next statement.${penNote}`;
   } else {
-    tone = days <= 2 ? "coral" : "gold"; id = `card-stmt-${s.closeKey}`; ts = s.closeTs || notifTodayStartMs();
-    title = days === 0 ? "Credit card payment due today" : `Credit card statement closed: ${fmtMoney(s.amount)}`;
+    tone = days <= 2 ? "coral" : "gold"; id = `card-stmt-${s.closeKey}${idSuffix}`; ts = s.closeTs || notifTodayStartMs();
+    title = days === 0 ? `${cardName} payment due today` : `${cardName} statement closed: ${fmtMoney(s.amount)}`;
     body = `Pay ${fmtMoney(owe)} by ${cardDateLabel(s.dueKey)} (${days} ${days === 1 ? "day" : "days"} left) to avoid interest.${penNote}`;
   }
-  return [{ id, ts, icon: "creditcard", tone, title, body, href: "bank.html#cardCard", action: true }];
+  return { id, ts, icon: "creditcard", tone, title, body, href: "bank.html#cardCard", action: true };
 }
 
 function notifMortgageItems(me, cls) {
@@ -611,7 +621,8 @@ const NOTIF_INBOX_KINDS = {
   account: { icon: "piggy",     href: "bank.html#acctTeacherCard" },
   listing: { icon: "swap",      href: "marketplace.html#approvalCard" },
   sublet:  { icon: "house",     href: "property.html#pane-classmates" },
-  tick:    { icon: "briefcase", href: "jobs.html#logTrackerCard" }
+  tick:    { icon: "briefcase", href: "jobs.html#logTrackerCard" },
+  reportreset: { icon: "chart", href: "reports.html#resetRequestsCard" }
 };
 function notifTeacherInboxItems(inbox) {
   const cutoff = trustedNow().getTime() - NOTIF_INBOX_TTL_MS;

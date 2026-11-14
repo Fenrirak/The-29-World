@@ -4543,9 +4543,20 @@ button.sh-pay:hover{border-color:var(--gold);}
 .ev-vis-text .muted-small{font-weight:500;line-height:1.45;}
 html.dark-mode .ev-vis-text strong{color:var(--heading-text);}
 
-.ev-tabs button{min-height:42px;}
-.ev-tab-count{font-size:var(--fs-xs);font-weight:800;line-height:1;padding:3px 8px;border-radius:var(--r-pill);background:rgba(90,101,123,.16);}
-.ev-tabs button.active .ev-tab-count{background:rgba(255,255,255,.22);}
+/* The Events switcher uses the same segmented pill as the Gambling page's mode switcher (.mode-switch / .mode-btn in
+   blackjack.css): one gold-outlined track, gold pill for the open section. */
+.tabs.ev-tabs{display:inline-flex;max-width:100%;gap:4px;margin:14px 0 22px;padding:4px;border-radius:var(--r-pill);background:rgba(232,184,75,0.07);border:1px solid rgba(232,184,75,0.35);}
+.tabs.ev-tabs button{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:8px;min-height:0;padding:9px 22px;border-radius:var(--r-pill);border:none;background:transparent;color:var(--gold);font-weight:800;font-size:var(--fs-md);line-height:1;cursor:pointer;transition:background .18s ease,color .18s ease,box-shadow .18s ease;}
+.tabs.ev-tabs button:hover:not(.active){background:rgba(232,184,75,0.14);}
+.tabs.ev-tabs button.active{background:var(--gold);color:#1f2b44;box-shadow:var(--shadow-btn);}
+.tabs.ev-tabs button:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+html.dark-mode .tabs.ev-tabs button.active{background:var(--gold);color:#1f2b44;}
+.ev-tab-count{font-size:var(--fs-xs);font-weight:800;line-height:1;padding:3px 8px;border-radius:var(--r-pill);background:rgba(232,184,75,.18);}
+.tabs.ev-tabs button.active .ev-tab-count{background:rgba(31,43,68,.15);}
+@media (max-width:520px){
+  .tabs.ev-tabs{display:flex;width:100%;}
+  .tabs.ev-tabs button{flex:1;min-width:0;padding:9px 6px;gap:5px;font-size:var(--fs-sm);white-space:normal;text-align:center;line-height:1.15;flex-wrap:wrap;}
+}
 
 /* summary tiles (student) */
 .ev-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:18px;}
@@ -4566,8 +4577,7 @@ html.dark-mode .ev-vis-text strong{color:var(--heading-text);}
 html.dark-mode .ev-chip[aria-pressed="true"]{color:var(--heading-text);border-color:var(--heading-text);}
 
 /* one event, as a row (history and the teacher's lists) */
-.ev-row{display:flex;align-items:flex-start;gap:12px;padding:13px 14px;margin-bottom:10px;background:var(--card);border:1.5px solid var(--line);border-left:5px solid var(--lilac);border-radius:var(--r-3);}
-.ev-row.big{border-left-color:var(--gold);}
+.ev-row{display:flex;align-items:flex-start;gap:12px;padding:13px 14px;margin-bottom:10px;background:var(--card);border:1.5px solid var(--line);border-radius:var(--r-3);}
 .ev-ico{flex:0 0 38px;width:38px;height:38px;border-radius:var(--r-3);display:flex;align-items:center;justify-content:center;background:#efecfb;color:#5a4fb0;}
 .big > .ev-ico,.ev-card.big .ev-ico{background:#fbf1dd;color:#8a6112;}
 html.dark-mode .ev-ico{background:rgba(138,127,214,.2);color:#cfc9f7;}

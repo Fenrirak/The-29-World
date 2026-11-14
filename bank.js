@@ -123,17 +123,21 @@ async function render() {
   const allStudents = await getClassStudents(me.classCode, cls);
 
   // Credit card: the stat tile up top, and the card section (see creditcard.js).
-  const showCardStat = !IS_TEACHER && cardIsActive(me);
+  const showCardStat = !IS_TEACHER && cardsActive(me).length > 0;
   document.getElementById("cardStat").classList.toggle("hidden", !showCardStat);
   renderSavingsSettings(cls); // teacher-only savings & interest settings (moved here from Class settings)
   renderBankAccounts(me, cls, allStudents); // the account tiles at the top, "My accounts" and "Open an account" (see accounts.js)
   if (showCardStat) {
-    const cp = cardPlanById(cls, me.creditCard.planId);
-    document.getElementById("cardOwing").textContent = fmtMoney(me.creditCard.balance || 0);
+    // Everything owed across every card; the note describes the card used for purchases (or the sum of limits for several).
+    const mine = cardsActive(me);
+    document.getElementById("cardOwing").textContent = fmtMoney(cardOwed(me));
     {
-      const earned = cp ? cardRewardOf(cp, me.creditCard.periodSpend || 0).total : 0;
-      document.getElementById("cardStatNote").textContent = cp
-        ? `${fmtMoney(cardAvailable(me.creditCard, cp))} available of ${fmtMoney(cp.limit)}` + (earned > 0 ? ` · ${fmtMoney(earned)} cashback earned so far` : "") : "";
+      const plans = mine.map(c => cardPlanById(cls, c.planId));
+      const avail = mine.reduce((s, c, i) => s + (plans[i] ? cardAvailable(c, plans[i]) : 0), 0);
+      const limit = plans.reduce((s, p) => s + (p ? p.limit : 0), 0);
+      const earned = mine.reduce((s, c, i) => s + (plans[i] ? cardRewardOf(plans[i], c.periodSpend || 0).total : 0), 0);
+      document.getElementById("cardStatNote").textContent = limit > 0
+        ? `${fmtMoney(avail)} available of ${fmtMoney(limit)}${mine.length > 1 ? ` across ${mine.length} cards` : ""}` + (earned > 0 ? ` · ${fmtMoney(earned)} cashback earned so far` : "") : "";
     }
   }
   renderCreditCard(me, cls, allStudents);
