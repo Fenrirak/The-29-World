@@ -58,7 +58,7 @@ const WS_MODULES = [
     blurb: "Protecting against the unexpected.",                       topic: "how insurance protects you from risk" },
   { key: "tax",         name: "Tax",          group: "Life",  accent: "#5a657b", enabled: true,
     blurb: "Where your pay goes before you see it.",                   topic: "income tax and paying your share" },
-  { key: "bigevents",   name: "Big Events",   group: "Life",  accent: "#cc5a7a", enabled: true,
+  { key: "bigevents",   name: "Events",   group: "Life",  accent: "#cc5a7a", enabled: true,
     blurb: "Handling life's curveballs.",                              topic: "coping financially with unexpected events" },
 
   // Not relevant for worksheets right now. Flip `enabled` to true to switch one on.

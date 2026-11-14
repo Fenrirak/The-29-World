@@ -2892,6 +2892,33 @@ async function updateBigEventDef(classCode, defId, ev) {
     t.update(classRef, { bigEventDefs: cls.bigEventDefs });
   });
 }
+/* ---------------- Let students see every possible event ----------------
+   Teacher switch on the Events page. When on, students get an "All possible events" tab listing every
+   active random event and big event the class can hand out. Stored on the class doc as
+   studentsSeeAllEvents (missing = off); students can't write it (it is in the locked list in
+   firestore.rules). Turning it on tells the class; turning it off is quiet. */
+function studentsSeeAllEvents(cls) {
+  return !!(cls && cls.studentsSeeAllEvents === true);
+}
+async function setStudentsSeeAllEvents(classCode, on) {
+  const want = !!on;
+  const classRef = classesCol().doc(classCode);
+  let changed = false;
+  await fdb.runTransaction(async (t) => {
+    changed = false;
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    if ((snap.data().studentsSeeAllEvents === true) === want) return;
+    t.update(classRef, { studentsSeeAllEvents: want });
+    changed = true;
+  });
+  if (changed && want) {
+    await t29NotifyStudents(classCode, { to: "all", icon: "eye", tone: "mint",
+      title: "You can now see every possible event",
+      body: "Open Events to browse all the random and big events that can happen in your class.", href: "bigevents.html" });
+  }
+  return { ok: true, changed };
+}
 /* ---------------- When in the week events happen ----------------
    Weekly events and big events land on school days (Monday to Friday), at
    a random moment between 8:30am and 3pm NZ time — when students are most
@@ -4336,7 +4363,7 @@ const LIFESTYLE_LOCKABLE_MODULES = [
   { key: "transport", label: "Transport" },
   { key: "property", label: "Property" },
   { key: "insurance", label: "Insurance" },
-  { key: "bigevents", label: "Big Events" },
+  { key: "bigevents", label: "Events" },
   { key: "life", label: "Life" },
   { key: "gambling", label: "Gambling" },
   { key: "marketplace", label: "Trade Centre" },

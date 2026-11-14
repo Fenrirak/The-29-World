@@ -4363,7 +4363,7 @@ async function showKiwiSaverNavIfOn(u) {
 const T29_MODULES = {
   bank: "Bank", budget: "Budget", termdeposit: "Term Deposit", kiwisaver: "KiwiSaver", loan: "Loans",
   market: "Stock Market", store: "Store", marketplace: "Trade Centre", jobs: "Jobs", transport: "Transport",
-  property: "Property", insurance: "Insurance", tax: "Tax", bigevents: "Big Events", life: "Life", gambling: "Gambling"
+  property: "Property", insurance: "Insurance", tax: "Tax", bigevents: "Events", life: "Life", gambling: "Gambling"
 };
 function moduleKeyOfPage() {
   const file = (location.pathname.split("/").pop() || "").split("?")[0];

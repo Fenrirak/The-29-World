@@ -1,0 +1,1372 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ===================== How this maps to the app =====================
+       The app now signs every real user into Firebase Auth (email/password,
+       using a synthetic "<username>@t29.local" email — see the data-*.js files). That
+       gives every request a real, per-account request.auth.uid.
+
+       /uidIndex/{authUid} -> { username }  is a one-time, self-written
+       mapping from that Firebase Auth uid back to this app's own
+       "username" (which is what /users and /classes documents are keyed
+       by, and what all the existing app code already expects). It's
+       created once, by the user themselves, in the same transaction as
+       their /users doc, and never changes after that.
+
+       Everything below is written in terms of "the requester's own
+       username" (myUsername()) and "the requester's own user doc"
+       (myUserDoc()), resolved via that mapping, rather than trusting
+       anything the client claims about itself.
+       ===================================================================== */
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // SECURITY FIX: this used to trust /uidIndex blindly — and /uidIndex
+    // could be created pointing at ANY username (its create rule only
+    // checked that you wrote your own uid's entry). Anyone able to make a
+    // Firebase Auth account (signup is open on the login page) could map
+    // it to a teacher's username and get that teacher's full access. The
+    // create rule below now refuses that, and this also refuses any such
+    // entry that may already exist: a mapping only counts if the user doc
+    // it points at names this same uid as its owner. A mismatch yields a
+    // name containing "/", which no document id can contain, so it can
+    // never equal a real username and every check built on it fails.
+    function myUsername() {
+      let name = get(/databases/$(database)/documents/uidIndex/$(request.auth.uid)).data.username;
+      return get(/databases/$(database)/documents/users/$(name)).data.get('authUid', null) == request.auth.uid
+        ? name
+        : '/unverified';
+    }
+
+    function myUserDoc() {
+      return get(/databases/$(database)/documents/users/$(myUsername())).data;
+    }
+
+    function isTeacher() {
+      return signedIn() && myUserDoc().role == 'teacher';
+    }
+
+    // A null class means the teacher has not opened one yet. Two teachers
+    // without classes must not count as classmates of each other.
+    function sharesActiveClass(data) {
+      let code = myUserDoc().get('classCode', null);
+      return code is string && code != '' && code == data.get('classCode', null);
+    }
+
+    // A teacher's classCode is just the class they currently have open.
+    // Students must still be able to read their own class's teacher when
+    // that teacher switches classes or has no class open. Use the saved
+    // class ownership, never a role or username supplied by the browser.
+    function isTeacherOfMyClass(username) {
+      let code = myUserDoc().get('classCode', null);
+      return code is string && code != ''
+        && get(/databases/$(database)/documents/classes/$(code)).data.get('teacher', null) == username;
+    }
+
+    // A chosen bank account can pay a classmate too. Compare the one changed
+    // account entry, keeping all unchanged entries out of the calculation.
+    // A transfer may reduce cash, savings OR that account, plus a withdrawal
+    // fee. Moving money between those sources must not count as spending.
+    function extraAccountDebit(before, after) {
+      let oldAccounts = before.get('bankAccounts', []);
+      let newAccounts = after.get('bankAccounts', []);
+      let removed = oldAccounts.removeAll(newAccounts);
+      let added = newAccounts.removeAll(oldAccounts);
+      return removed.size() == 0 && added.size() == 0 ? 0
+        : (removed.size() == 1 && added.size() == 1
+            && removed[0].id == added[0].id
+            && removed[0].get('status', '') == 'active'
+            && added[0].get('status', '') == 'active'
+          ? removed[0].get('balance', 0) - added[0].get('balance', 0)
+          : -1000000000000000);
+    }
+    function accountDebit(before, after) {
+      return before.get('balance', 0) - after.get('balance', 0)
+        + before.get('savings', 0) - after.get('savings', 0)
+        + extraAccountDebit(before, after);
+    }
+
+    // BUGFIX: transferMoney() (see data-core.js / bank.js "Send money") runs ONE
+    // atomic transaction that debits the sender's own doc AND credits the
+    // recipient's doc. Without this, a student could only ever write their
+    // own doc, so the credit half of every peer-to-peer transfer was denied
+    // — and because both writes are in the same commit, that denial failed
+    // the WHOLE transaction, including the sender's own debit.
+    //
+    // This lets a student credit a SAME-CLASS classmate's balance, but only
+    // as the credit half of a genuine transfer: the amount credited here
+    // cannot exceed the net debit already applied, in this same
+    // commit, to the caller's OWN accounts (checked via getAfter(), which
+    // sees post-commit values, unlike plain get()/myUserDoc()). It still
+    // can't touch any field but balance, can't credit itself, and can't
+    // move money that didn't come out of the caller's own account.
+    function isPeerTransferCredit(username) {
+      let delta = request.resource.data.balance - resource.data.balance;
+      let myBefore = myUserDoc();
+      let myAfter = getAfter(/databases/$(database)/documents/users/$(myUsername())).data;
+      return myUserDoc().classCode == resource.data.classCode
+        && username != myUsername()
+        && delta > 0
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance'])
+        // Compared with a tiny tolerance, NOT ==. The app writes balances rounded to 2 decimals, but Rules subtract raw
+        // doubles: 127.49 - 0.01 is 127.47999999999999 in floating point, which is not == 127.48, so exact equality
+        // refused roughly 1 in 5 perfectly valid transfers with a 403 ("Something went wrong").
+        // A withdrawal fee may make the debit larger than the credit.
+        && accountDebit(myBefore, myAfter) >= delta - 0.000001;
+    }
+
+    // BUGFIX: _settleListing() (see data-markets.js — powers both buyListing() and
+    // acceptOffer(), the Trade Centre's two purchase paths) runs ONE
+    // transaction that writes to BOTH the buyer's and the seller's own
+    // /users docs — whichever one ISN'T the caller needs a peer-write
+    // allowance the same way transferMoney's credit half does above. But
+    // isPeerTransferCredit() above doesn't fit either shape here:
+    //   - It only ever CREDITS a peer. buyListing() (buyer calls, seller
+    //     is the peer) needs that same credit — but acceptOffer() (SELLER
+    //     calls, buyer is the peer) needs the reverse: the caller DEBITS a
+    //     peer's balance. Peer debits didn't exist anywhere else in this
+    //     file, so this was flatly impossible before.
+    //   - It requires the amount credited to match the caller's own debit
+    //     EXACTLY. A Trade Centre sale can charge a marketplace fee (see
+    //     `marketplace.feePct` in the data-*.js files), so the seller is credited
+    //     LESS than the buyer is debited — never an exact match whenever
+    //     a class has any fee configured at all.
+    //   - It only ever allows `balance` to change. A store-item trade
+    //     also has to move the item itself between the two users'
+    //     `storeItems` arrays, which isPeerTransferCredit flatly refuses.
+    // Net effect: before this fix, EVERY acceptOffer() call failed
+    // outright (wrong direction), and every buyListing() call failed too
+    // except the specific case of a non-store item in a class with its
+    // marketplace fee set to exactly 0% (the one shape that happens to
+    // satisfy isPeerTransferCredit by accident) — which is likely why
+    // this could plausibly have seemed to "work" for some trades and not
+    // others, depending on what was being sold and what fee the class had
+    // configured, rather than failing (or working) consistently.
+    //
+    // These two functions cover both directions. Same spirit as
+    // isPeerTransferCredit — verify the MONEY-CONSERVATION invariant
+    // (nothing is credited that wasn't debited from the other side, a
+    // market fee can only ever shrink what the seller nets, never grow
+    // it), not the specific listing's exact price/fee, which (same
+    // limitation noted throughout this file) would require reading one
+    // specific element out of the class doc's `listings` array — not
+    // possible in Rules. A colluding buyer+seller pair could still use
+    // this to move money between themselves at a self-chosen "price"
+    // instead of a listing's real one — but that's no more than
+    // isPeerTransferCredit (and plain transferMoney) already allow today
+    // for ANY two classmates, fee-free, no listing required at all — so
+    // this doesn't introduce a new category of risk, just extends the
+    // existing one to tolerate a fee and an optional item hand-off.
+    //
+    // storeItems is deliberately constrained beyond "allowed to change":
+    // whichever side is a store trade must change size by the SAME number of items on both sides (1 or more), in
+    // the direction that matches which side of the money this write is
+    // (the side losing money gains an item; the side gaining money loses
+    // one) — without this, the same collusion pair could use a
+    // fee-conserving trade purely as cover to freely inject or duplicate
+    // arbitrary store items on either side, which would be a strictly
+    // worse hole than the money-only case.
+    // CREDIT-CARD FIX: paying a classmate by credit card moves no cash out
+    // of the buyer's balance — the buyer's `creditCard.balance` (what they
+    // owe) goes UP instead. The old checks only counted cash, so any card
+    // purchase looked like money appearing from nowhere and the commit was
+    // refused with a 403 ("Something went wrong"). Money paid is now
+    // cash spent + card debt added; the seller can still never be credited
+    // more than that.
+    function cardDebtUp(b, a) {
+      return (b.get('creditCard', null) != null && a.get('creditCard', null) != null)
+        ? a.creditCard.get('balance', 0) - b.creditCard.get('balance', 0)
+        : 0;
+    }
+    function isPeerTradeCredit(username) {
+      // Caller (the buyer) is paying; THIS doc is the seller being paid.
+      let before = resource.data;
+      let after = request.resource.data;
+      let delta = after.balance - before.balance;
+      let myBefore = myUserDoc();
+      let myAfter = getAfter(/databases/$(database)/documents/users/$(myUsername())).data;
+      let myPaid = accountDebit(myBefore, myAfter) + cardDebtUp(myBefore, myAfter);
+      return myBefore.classCode == before.classCode
+        && username != myUsername()
+        && delta > 0
+        && myPaid >= delta - 0.000001   // float tolerance, same reason as isPeerTransferCredit
+        && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems', 'storePaid'])
+        && (
+          !after.diff(before).affectedKeys().hasAny(['storeItems']) ||
+          // One OR MORE copies (an accepted offer can be for several), but the seller's loss must equal
+          // the buyer's gain exactly, so items still can't be injected or duplicated.
+          (before.get('storeItems', []).size() - after.storeItems.size() >= 1
+            && before.get('storeItems', []).size() - after.storeItems.size()
+               == myAfter.get('storeItems', []).size() - myBefore.get('storeItems', []).size())
+        );
+    }
+    function isPeerTradeDebit(username) {
+      // Caller (the seller) accepted an offer; THIS doc is the buyer paying,
+      // by cash and/or their credit card (their chosen default account).
+      let before = resource.data;
+      let after = request.resource.data;
+      let cashDown = before.balance - after.balance;
+      let cardUp = cardDebtUp(before, after);
+      let paid = cashDown + cardUp;
+      let myBefore = myUserDoc();
+      let myAfter = getAfter(/databases/$(database)/documents/users/$(myUsername())).data;
+      let myGain = myAfter.balance - myBefore.balance;
+      return myBefore.classCode == before.classCode
+        && username != myUsername()
+        && cashDown >= 0
+        && cardUp >= 0
+        && paid > 0
+        && myGain <= paid + 0.000001   // float tolerance, same reason as isPeerTransferCredit
+        && after.diff(before).affectedKeys().hasOnly(['balance', 'storeItems', 'storePaid', 'creditCard'])
+        && (
+          !after.diff(before).affectedKeys().hasAny(['creditCard']) ||
+          (before.get('creditCard', null) != null && after.get('creditCard', null) != null
+            && after.creditCard.get('status', '') == before.creditCard.get('status', '')
+            && after.creditCard.get('planId', '') == before.creditCard.get('planId', ''))
+        )
+        && (
+          !after.diff(before).affectedKeys().hasAny(['storeItems']) ||
+          // Same conservation rule as isPeerTradeCredit: the buyer gains exactly what the seller (the
+          // caller) loses, and at least one.
+          (after.storeItems.size() - before.get('storeItems', []).size() >= 1
+            && after.storeItems.size() - before.get('storeItems', []).size()
+               == myBefore.get('storeItems', []).size() - myAfter.get('storeItems', []).size())
+        );
+    }
+
+    // ---------------- Student self-write guardrails ----------------
+    // SECURITY FIX: the old `allow update: if ... myUsername() == username
+    // ...` let a signed-in student rewrite ANY field on their own /users
+    // doc directly (via the browser console / Firestore SDK) — not just
+    // the ones the data layer's own functions touch. The functions below narrow
+    // that specific self-write branch. They do NOT touch the isTeacher()
+    // or isPeerTransferCredit() branches below, since those already run
+    // under a different, already-trusted identity.
+    //
+    // KNOWN LIMITS (Firestore Rules has no loops and no way to read an
+    // individual array element — see rules.List's method list: concat,
+    // hasAll/Any/Only, join, removeAll, size — nothing that inspects one
+    // entry). That means:
+    //   - `loans` (an array) can only be checked at the whole-array level.
+    //     isSafeSelfEconomyChange() below blocks it from ever shrinking
+    //     (closes "delete my loans to erase debt"), but can't validate an
+    //     individual loan's `owed`/`status` fields, so directly editing
+    //     an existing entry in place is still possible.
+    //   - `quizResults` is a map (keyed by quiz id), which DOES support
+    //     precise per-key diffing via Map#diff(). isSafeSelfEconomyChange()
+    //     uses that to block deleting a result and to block touching more
+    //     than one quiz per write — but it can't re-grade a submission
+    //     (no loop over `quiz.questions`), so a self-reported pass on a
+    //     quiz still can't be verified as genuine without a backend.
+    //   - jobId/jobTierId/jobTierSince/pendingPromotion have no such
+    //     limit: they're plain scalar fields, so they CAN be locked down
+    //     completely (see jobFieldsUnchanged/isPromotionResponse).
+
+    // True only for the EXACT field-diff produced by respondToPromotion()'s
+    // accept/decline paths in the data-*.js files: pendingPromotion goes from a real
+    // offer to null, jobId never changes, and jobTierId either stays the
+    // same (decline) or becomes exactly the tierId that was already sitting
+    // in that offer (accept). This can never be used to grant a job, a
+    // tier, or an offer that wasn't already on the account — every OTHER
+    // way jobId/jobTierId change (assignJob, approveApplication,
+    // setStudentJobTier, declineApplication, cancelPendingPromotion) is
+    // teacher-invoked and goes through the isTeacher() branch instead.
+    function isPromotionResponse() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let promo = before.get('pendingPromotion', null);
+      return promo != null
+        && after.get('pendingPromotion', null) == null
+        && after.get('jobId', null) == before.get('jobId', null)
+        && (
+          after.get('jobTierId', null) == before.get('jobTierId', null) ||
+          after.get('jobTierId', null) == promo.tierId
+        )
+        && after.diff(before).affectedKeys().hasOnly(['pendingPromotion', 'jobTierSince', 'jobTierId']);
+    }
+
+    // .get(key, null) rather than plain dot access throughout this file's
+    // new checks: a teacher's own /users doc has no jobId/jobTierId/
+    // jobTierSince/pendingPromotion fields at all (see createTeacherAndClass
+    // in the data-*.js files), and plain dot access on a missing map key THROWS in
+    // Firestore Rules — which, same as the `allow get` bug fixed above,
+    // would deny the entire containing `||` rather than just this clause.
+    function jobFieldsUnchanged() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return before.get('jobId', null) == after.get('jobId', null)
+        && before.get('jobTierId', null) == after.get('jobTierId', null)
+        && before.get('jobTierSince', null) == after.get('jobTierSince', null)
+        && before.get('pendingPromotion', null) == after.get('pendingPromotion', null);
+    }
+
+    // "Don't pay — lose your job" on an income big event (resolveBigEvent's
+    // forfeit branch in data-life.js): the student clears their OWN job.
+    // Every job field has to end up empty, so this can only ever take a
+    // job away — never give anyone a job, a tier or an offer.
+    function isJobForfeit() {
+      let after = request.resource.data;
+      return after.get('jobId', null) == null
+        && after.get('jobTierId', null) == null
+        && after.get('jobTierSince', null) == null
+        && after.get('pendingPromotion', null) == null;
+    }
+
+    function isSafeSelfEconomyChange() {
+      let before = resource.data;
+      let after = request.resource.data;
+      // BUGFIX: this used to read `!('loans' in after) || ...`, which
+      // meant deleting the WHOLE field outright (a raw
+      // update({loans: FieldValue.delete()}) call, not just shrinking the
+      // array) was treated as "nothing to check" and sailed straight
+      // through — a more direct way to erase debt/quiz history than the
+      // thing this was built to block. Fix: once a field exists in
+      // `before`, it must still exist in `after`, not just satisfy the
+      // size/diff check — only a field that never existed before this
+      // write (nothing to protect yet) skips the check entirely.
+      let loansOk = !('loans' in before)
+        || ('loans' in after && after.loans.size() >= before.loans.size());
+      let qrOk = !('quizResults' in before)
+        || (
+          'quizResults' in after &&
+          after.quizResults.diff(before.quizResults).removedKeys().size() == 0 &&
+          after.quizResults.diff(before.quizResults).affectedKeys().size() <= 1
+        );
+      // Same idea for the credit card: a student can't make an owing card
+      // vanish by deleting/nulling the field (cancelling is only allowed once
+      // nothing is owed). Like the rest of this file, it can't check the
+      // amounts are right — only that the debt record isn't simply erased.
+      let cardOk = !('creditCard' in before)
+        || before.creditCard == null
+        || before.creditCard.get('status', '') != 'active'
+        || before.creditCard.get('balance', 0) <= 0
+        || ('creditCard' in after && after.creditCard != null);
+      return loansOk && qrOk && cardOk;
+    }
+
+    // SECURITY FIX: isSafeSelfEconomyChange() above only ever validated
+    // `loans` and `quizResults` — every OTHER field on a student's own
+    // doc (balance, savings, gamblingAccount, storeItems, insurance,
+    // sideHustle, truckLicence, termDeposits, and more) had NO check at
+    // all, meaning a signed-in student could set any of them to anything
+    // via a raw Firestore SDK call (browser console — no exploit tooling
+    // needed). This function switches that from a blocklist (only 2
+    // fields ever examined) to an allowlist: every top-level field a
+    // self-write is allowed to touch anywhere in the app must be named
+    // here, or the write is denied outright, whatever value it carries.
+    //
+    // This list was built by tracing every place in the data-*.js files that writes
+    // to a user's OWN /users/{username} doc (i.e. every call reachable
+    // with `username` equal to the caller's own logged-in identity, not
+    // a teacher acting on someone else) — buying/selling shares, taking/
+    // repaying a loan, the store, insurance, side hustles, the truck
+    // licence, term deposits, gambling/blackjack, quizzes, budgets,
+    // property moves/rent, time-limit tracking, and the one-time legacy-
+    // login migration. Fields only ever written by a TEACHER-invoked
+    // action on ANOTHER student's doc (jobTaskApproval, lifeItems,
+    // lifestyleOverride, extraMinutesToday/-Date, dailyLimitMinutes, and
+    // so on) are deliberately left OFF this list — those already go
+    // through the isTeacher() branch below, which has full access, so
+    // leaving them off here is what actually blocks a student granting
+    // these to themselves directly.
+    //
+    // NOTE ON VALUES vs. FIELD NAMES: this closes "a student can rewrite
+    // literally any field" — it does NOT (and structurally can't, in
+    // Firestore Rules alone, same limitation noted throughout this file)
+    // verify that e.g. a `balance` change is the CORRECT amount for
+    // whatever action supposedly caused it. That would mean re-deriving
+    // every action's business logic — share prices, tax, interest, quiz
+    // grading — inside the rules themselves, which Firestore Rules has
+    // no facility for. A student could still, say, buy a share and claim
+    // a self-picked price via a direct SDK call instead of the real one.
+    // Genuinely closing THAT needs the same Cloud Functions move already
+    // called out for the companies/storeItems/properties/vehicles gap
+    // above and the quizResults grading gap in the comment further up.
+    function isAllowedSelfFieldSet() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let changed = after.diff(before).affectedKeys();
+      let selfWritableFields = [
+        // Identity/session bookkeeping a self-write legitimately touches.
+        'authUid', 'password', 'sessionVersion',
+        // Job-offer response — already independently constrained to the
+        // EXACT diff shape by jobFieldsUnchanged()/isPromotionResponse()
+        // below; listed here too so this allowlist doesn't reject what
+        // that check already validated.
+        'jobId', 'jobTierId', 'jobTierSince', 'pendingPromotion',
+        // Core economy.
+        // lastInterestApplied / lastWagePaid / lastLifeAllowanceWeeklyPaid /
+        // lastLifeAllowanceDailyPaid: the date each was last paid into
+        // THIS account (see applyMyInterestIfDue/payMyWageIfDue/
+        // payMyDailyLifeAllowanceIfDue and the shared _pay...()/
+        // _creditStudentInterest() helpers in data-money.js). This is what lets
+        // a student's own visit safely pay their own interest/wage/
+        // allowance without needing a teacher's session — each stamp only
+        // ever changes together with balance/savings, in the SAME
+        // transaction, so a student can advance their own "already paid
+        // today" markers but still can't touch anyone else's.
+        'balance', 'savings', 'lastInterestApplied', 'reportAccounting',
+        'lastWagePaid', 'lastLifeAllowanceWeeklyPaid', 'lastLifeAllowanceDailyPaid',
+        'loans', 'quizResults', 'gamblingAccount', 'creditCard', 'bankAccounts',
+        // closedDefaults: which of the two original accounts (Cash balance / Savings Account) the student has closed,
+        // e.g. { cash: true }. Closing one moves its money in the SAME transaction as the balance/savings change;
+        // like bankAccounts, the values aren't checked here (see the note below).
+        'closedDefaults',
+        // mainAccount: which of the student's open everyday accounts ("cash" or a bankAccounts id) is their MAIN account.
+        // Picking one swaps what `balance` stands for with that account's entry in bankAccounts in the SAME write
+        // (see setMainAccount in data-money.js), so like bankAccounts the values aren't checked here (see the note below).
+        'mainAccount',
+        // storePaid: what each owned store unit cost, so a sell-back can't refund more than was paid.
+        // storeBought: how many of each store item this student has ever bought (the teacher's per-student buying limit).
+        'storeItems', 'storePaid', 'storeBought', 'insurance', 'sideHustle', 'termDeposits', 'truckLicence',
+        // lifeVoucherUsed: which weekly life-item vouchers this student has used this week.
+        'lifeVoucherUsed',
+        // Economy-adjacent state each feature's own self-service flow owns.
+        'sideHustleRequest', 'sideHustleDenialNote', 'truckCheckins',
+        'lastMoveDate', 'blackjackRound', 'lastBjSeat', 'budget',
+        // BUGFIX: payTransportExpenses() (see data-life.js — the "Pay this
+        // week's transport expenses" button on transport.html) is a
+        // STUDENT-invoked action on the student's OWN doc: it debits
+        // their balance and stamps transportLastWeekPaid with the ISO
+        // week so the same week can't be charged twice. This field was
+        // missing from the allowlist, so that write — and therefore the
+        // whole transaction, including the debit — was denied for every
+        // student, every week, surfacing as the generic "Something went
+        // wrong. Please try again." The teacher-only counterpart
+        // (resolveTransportOverdue) writes the same field but goes
+        // through the isTeacher() branch, which is why clearing an
+        // overdue payment worked while paying one never did.
+        'transportLastWeekPaid',
+        // BUGFIX: recordReportActivity() (data-money.js) keeps the Reports page's
+        // "this month" / "entire history" totals on the student's OWN doc,
+        // updated after every transaction. These were missing from this
+        // list, so every student-side update was denied and the totals only
+        // ever moved when a teacher's session happened to do the action —
+        // the Reports page showed "Nothing here yet" for most students.
+        // They only feed the report card, never any balance.
+        'reportMonth', 'reportLifetime',
+        // netWorthLog: the 3-day net-worth notes behind the report
+        // card's trend line (recordMyNetWorthIfDue in data-money.js). Only feeds the
+        // report; moves no money.
+        'netWorthLog',
+        // Savings goals (addSavingsGoal etc. in data-money.js) and the id
+        // of the student's family link (createParentLink). Neither moves
+        // or creates any money — goals are just names and target amounts,
+        // and the link id only points at the student's own summary.
+        'savingsGoals', 'parentViewToken',
+        // KiwiSaver (see the KiwiSaver section of data-money.js) and the
+        // payslip each pay day saves. Pay day writes both in the same
+        // transaction as the wage, and a student manages their own
+        // KiwiSaver (rate, fund, pausing, extra contributions). Like
+        // balance, the VALUES aren't checked here (see the note below).
+        'kiwiSaver', 'payslips',
+        // Time-limit tracking/exemption requests.
+        'timeSpentTodaySec', 'timeSpentDate',
+        'timeExemptionStatus', 'timeExemptionDate', 'timeExemptionRequestedAt',
+        // Default pay account ("cash"/"card") the Trade Centre (accepted offers)
+        // and the Store pre-select. Preference only; moves no money.
+        'mpPayDefault', 'storePayDefault',
+        // Avatar editor: the look + list of owned items, and the Comets
+        // balance. Comets can only be SPENT by a student (see
+        // cometsNotRaised below); only a teacher can raise them.
+        'avatar', 'comets',
+        // Notification bell "read up to" timestamp (notifications.js), so
+        // marking read on one device/tab holds on the others. A single
+        // number; moves no money and unlocks nothing.
+        'notifLastRead',
+        // Check-in / questionnaire log (jobLog.days[dateKey]) a student writes to their own doc.
+        'jobLog',
+        // jobTickReq: how many job tick-off requests they've sent today (requestJobTick, max 3 a day).
+        'jobTickReq'
+      ];
+      // classCode: the ONE self-writable identity-ish field, and ONLY for
+      // a teacher's own account — see createClassForTeacher/
+      // switchActiveClass/deleteClassPermanently/importSharedTemplate in
+      // the data-*.js files, all of which change the CALLER's own classCode as part
+      // of managing their own classes. A student never legitimately
+      // changes their own classCode after joining — allowing it would
+      // let a student "teleport" into any class whose code they can
+      // guess, reading its roster/balances. So it's allowed here only
+      // when the account already is (and, per the role-lock above,
+      // remains) a teacher.
+      return changed.hasOnly(selfWritableFields)
+        || (before.role == 'teacher' && changed.hasOnly(selfWritableFields.concat(['classCode'])));
+    }
+
+    // Comets are handed out by teachers only: a student's own write may
+    // keep or lower the balance, never raise it.
+    function cometsNotRaised() {
+      return request.resource.data.get('comets', 0) <= resource.data.get('comets', 0);
+    }
+
+    function isAllowedSelfUpdate(username) {
+      return myUsername() == username
+        && cometsNotRaised()
+        && (jobFieldsUnchanged() || isPromotionResponse() || isJobForfeit())
+        && isSafeSelfEconomyChange()
+        && isAllowedSelfFieldSet();
+    }
+
+    // The second half of a legacy account's one-time migration (see
+    // t29TryMigrateLegacyLogin in data-core.js): stamping the new Auth uid onto
+    // a /users doc that has never had an owner, and dropping its old
+    // plaintext password — allowed only once this uid's /uidIndex entry
+    // (already committed by the first half) names this account AND carries
+    // the matching password proof. Never throws: each check is guarded
+    // before the one after it reads anything.
+    function isLegacyClaim(username) {
+      let before = resource.data;
+      let after = request.resource.data;
+      return !('authUid' in before)
+        && before.get('password', null) is string
+        && after.get('authUid', null) == request.auth.uid
+        && !('password' in after)
+        && after.diff(before).affectedKeys().hasOnly(['authUid', 'password'])
+        && exists(/databases/$(database)/documents/uidIndex/$(request.auth.uid))
+        && get(/databases/$(database)/documents/uidIndex/$(request.auth.uid)).data.username == username
+        && get(/databases/$(database)/documents/uidIndex/$(request.auth.uid)).data.get('legacyProof', null) == before.password;
+    }
+
+    // ---------------- What a brand-new account may be ----------------
+    // SECURITY FIX: the /users create rule used to check only that the new
+    // doc belonged to the login making it — not its role or class. So
+    // anyone could sign up (straight through the Firestore SDK, skipping
+    // the app) as role "teacher" pointing at ANY existing class, and every
+    // rule that trusts isTeacher() would then give them full teacher
+    // control of that class. A new teacher either starts without an open
+    // class (and joins later through the code-checked co-teacher rule), or
+    // creates a BRAND-NEW class that names them as its teacher;
+    //   - a student, joining a class that ALREADY exists, and whose roster
+    //     includes them once this commit is saved.
+    // Each check is only reached once the one before it has passed, so
+    // nothing here errors or reads a missing document.
+    function isValidNewAccount(username) {
+      let data = request.resource.data;
+      let code = data.get('classCode', null);
+      return (data.get('role', null) == 'teacher' && code == null)
+        || (code is string && code != '' && (
+          (data.get('role', null) == 'teacher' && isOwnBrandNewClass(code, username)) ||
+          (data.get('role', null) == 'student' && isJoiningExistingClass(code, username))
+        ));
+    }
+    // A brand-new STUDENT doc may only carry the fields t29JoinClassAsNewStudent()
+    // (data-core.js) writes, and may start with no more than the class's welcome
+    // grant (or the $20 default) and no savings, loans or job. Without this, a new
+    // account could be created with any balance or any asset. If that function ever
+    // writes another field at signup, add it to this list or signup will be refused.
+    function isSaneNewStudentDoc(data) {
+      return data.get('role', null) != 'student'
+        || (
+          data.keys().hasOnly([
+            'username', 'authUid', 'role', 'name', 'classCode', 'joinedAt',
+            'balance', 'jobId', 'jobTierId', 'jobTierSince', 'pendingPromotion',
+            'savings', 'loans', 'sessionVersion', 'dailyLimitMinutes',
+            'timeSpentTodaySec', 'timeSpentDate',
+            'timeExemptionStatus', 'timeExemptionDate',
+            'extraMinutesToday', 'extraMinutesDate',
+            'reportMonth', 'reportLifetime'
+          ])
+          && data.balance >= 0
+          && (
+            data.balance <= 20
+            || data.balance <= get(/databases/$(database)/documents/classes/$(data.classCode)).data.get('welcomeGrant', 20)
+          )
+          && data.get('savings', 0) == 0
+          && data.get('loans', []).size() == 0
+          && data.get('jobId', null) == null
+          && data.get('jobTierId', null) == null
+          && data.get('pendingPromotion', null) == null
+          && data.get('extraMinutesToday', 0) == 0
+        );
+    }
+    function isOwnBrandNewClass(code, username) {
+      return !exists(/databases/$(database)/documents/classes/$(code))
+        && existsAfter(/databases/$(database)/documents/classes/$(code))
+        && getAfter(/databases/$(database)/documents/classes/$(code)).data.get('teacher', null) == username;
+    }
+    function isJoiningExistingClass(code, username) {
+      return exists(/databases/$(database)/documents/classes/$(code))
+        && getAfter(/databases/$(database)/documents/classes/$(code)).data.get('students', []).hasAny([username]);
+    }
+
+    // ---------------- uid -> username mapping ----------------
+    /* ---------------- Login lockout (/loginLocks) ----------------
+       5 wrong passwords for one username locks logging in to it for 30
+       minutes (see "Login lockout" in data-core.js). This has to work
+       BEFORE anyone is signed in, so it is the one collection that
+       allows unauthenticated writes. To keep that safe, every write is
+       pinned to exactly the shapes the app makes:
+         - the doc id must be a "<name>@t29.local" auth email;
+         - a wrong attempt can only add exactly 1 to the count;
+         - the 5th attempt must stamp lockedAt/lastLockAt with the SERVER
+           time (request.time), so a client can't pick its own lock time
+           or lock someone for longer than 30 minutes;
+         - while locked (count 5, under 30 minutes old) nothing can change
+           it, except that it expires by itself (a stale doc restarts at 1);
+         - only the account's own signed-in login can reset the count
+           back to 0 (its token email must equal the doc id).
+       It stores no passwords and nothing but counts and timestamps. */
+    match /loginLocks/{name} {
+      allow get: if true;
+      allow list: if false;
+
+      function lockShapeOk() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['count', 'lockedAt', 'lastLockAt', 'updatedAt'])
+          && d.keys().hasAll(['count', 'lockedAt', 'lastLockAt', 'updatedAt'])
+          && d.count is int
+          && d.updatedAt == request.time
+          && name.size() <= 150
+          && name.matches('.*@t29[.]local');
+      }
+      function lockIsStale() {
+        return request.time > resource.data.updatedAt + duration.value(30, 'm');
+      }
+      function lockFailedAttempt() {
+        let d = request.resource.data;
+        let r = resource.data;
+        return (lockIsStale() && d.count == 1 && d.lockedAt == null && d.lastLockAt == r.lastLockAt)
+          || (!lockIsStale() && d.count == r.count + 1 && d.count <= 5
+              && (
+                (d.count < 5 && d.lockedAt == null && d.lastLockAt == r.lastLockAt)
+                || (d.count == 5 && d.lockedAt == request.time && d.lastLockAt == request.time)
+              ));
+      }
+      function lockOwnerReset() {
+        let d = request.resource.data;
+        let r = resource.data;
+        return request.auth != null
+          && request.auth.token.email == name
+          && d.count == 0 && d.lockedAt == null && d.lastLockAt == r.lastLockAt
+          && r.count > 0 && (r.count < 5 || lockIsStale());
+      }
+
+      allow create: if lockShapeOk()
+        && request.resource.data.count == 1
+        && request.resource.data.lockedAt == null
+        && request.resource.data.lastLockAt == null;
+      allow update: if lockShapeOk() && (lockFailedAttempt() || lockOwnerReset());
+      allow delete: if false;
+    }
+
+    /* ---------------- Teacher account recovery ----------------
+       /teacherRecovery/{username} -> { email }  is the OPTIONAL email a
+       teacher gives so they can get back into their account. It lives in its
+       own document (not on /users, which classmates can read) and only that
+       teacher can read it.
+       Forgot password: the teacher proves they own the email by signing in
+       with the emailed link (Firebase Auth email-link sign-in), which makes
+       a new login whose verified token email equals this document's email.
+       isRecoveryTakeover() below then lets that login take over the teacher's
+       /users doc (and, via /uidIndex, their data); the old login stops
+       working because the doc's authUid no longer matches it. */
+    function recoveryEmailOk(email) {
+      return email is string && email.size() <= 254
+        && email.matches('^[^@\\s]+@[^@\\s]+[.][^@\\s]+$');
+    }
+    match /teacherRecovery/{username} {
+      allow get: if signedIn() && myUsername() == username;
+      allow list: if false;
+      // At signup: written in the same commit that creates the teacher's /users doc.
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['email'])
+        && recoveryEmailOk(request.resource.data.email)
+        && existsAfter(/databases/$(database)/documents/users/$(username))
+        && getAfter(/databases/$(database)/documents/users/$(username)).data.authUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(username)).data.role == 'teacher';
+      // Later (Teacher Home): the signed-in teacher can change or remove it.
+      allow update: if signedIn() && myUsername() == username && isTeacher()
+        && request.resource.data.keys().hasOnly(['email'])
+        && recoveryEmailOk(request.resource.data.email);
+      allow delete: if signedIn() && myUsername() == username && isTeacher();
+    }
+    // Worksheet drafts belong to the teacher account, not the shared class.
+    // Reset/hide/delete states are revisioned tombstones, so an offline
+    // browser cannot silently resurrect a removed worksheet on reconnect.
+    function ownsWorksheets(username) {
+      return signedIn() && isTeacher() && myUsername() == username;
+    }
+    function validWorksheetRecord(sheetId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['v', 'kind', 'sheet', 'revision', 'mutationId', 'updatedAt'])
+        && d.v == 1
+        && d.revision is int && d.revision > 0
+        && d.mutationId is string && d.mutationId.size() > 0 && d.mutationId.size() <= 128
+        && d.updatedAt == request.time
+        && d.kind in ['sheet', 'default', 'hidden', 'deleted']
+        && (d.kind == 'sheet'
+          ? (d.sheet is map && d.sheet.id == sheetId
+            && d.sheet.moduleKey is string && d.sheet.title is string
+            && d.sheet.subtitle is string && d.sheet.settings is map && d.sheet.blocks is list)
+          : d.sheet == null);
+    }
+    match /teacherWorksheets/{username}/sheets/{sheetId} {
+      allow read, delete: if ownsWorksheets(username);
+      allow create: if ownsWorksheets(username) && validWorksheetRecord(sheetId)
+        && request.resource.data.revision == 1;
+      allow update: if ownsWorksheets(username) && validWorksheetRecord(sheetId)
+        && request.resource.data.revision == resource.data.revision + 1;
+    }
+
+    // Fingerprint (hash) of username+email: readable so the forgot-password form can check a
+    // username/email pair before sending. It holds no email address. Single lookups only.
+    match /recoveryCheck/{username} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['hash'])
+        && request.resource.data.hash is string && request.resource.data.hash.size() == 64
+        && ((myUsername() == username && isTeacher())
+          || (existsAfter(/databases/$(database)/documents/users/$(username))
+              && getAfter(/databases/$(database)/documents/users/$(username)).data.authUid == request.auth.uid
+              && getAfter(/databases/$(database)/documents/users/$(username)).data.role == 'teacher'));
+      allow update: if signedIn() && myUsername() == username && isTeacher()
+        && request.resource.data.keys().hasOnly(['hash'])
+        && request.resource.data.hash is string && request.resource.data.hash.size() == 64;
+      allow delete: if signedIn() && myUsername() == username && isTeacher();
+    }
+    function isRecoveryTakeover(username) {
+      return signedIn()
+        && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.get('email', null) is string
+        && exists(/databases/$(database)/documents/teacherRecovery/$(username))
+        && request.auth.token.email.lower() == get(/databases/$(database)/documents/teacherRecovery/$(username)).data.email.lower()
+        && resource.data.role == 'teacher'
+        && request.resource.data.authUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['authUid', 'sessionVersion']);
+    }
+
+    match /uidIndex/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      // A teacher deleting their own account removes their own entry (and only that).
+      allow delete: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      // Written exactly once, by the account it belongs to, right after
+      // that Firebase Auth account is created (signup, or a legacy
+      // account's one-time migration on first login post-fix).
+      //
+      // SECURITY FIX: it must also point at a username this uid really
+      // owns (see myUsername() above for what went wrong without this):
+      //   - signup: the SAME commit creates that /users doc with
+      //     authUid == this uid (createTeacherAndClass/createStudentAccount);
+      //   - legacy migration: the /users doc has no owner yet, and
+      //     `legacyProof` matches the account's old stored password —
+      //     i.e. the person knows the password, exactly what logging in
+      //     as them would have required. This doc is readable only by its
+      //     own uid (allow get above), so the proof isn't exposed.
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['username', 'legacyProof'])
+        && request.resource.data.username is string
+        && (
+          (
+            existsAfter(/databases/$(database)/documents/users/$(request.resource.data.username))
+            && getAfter(/databases/$(database)/documents/users/$(request.resource.data.username)).data.get('authUid', null) == request.auth.uid
+          ) || (
+            exists(/databases/$(database)/documents/users/$(request.resource.data.username))
+            && !('authUid' in get(/databases/$(database)/documents/users/$(request.resource.data.username)).data)
+            && get(/databases/$(database)/documents/users/$(request.resource.data.username)).data.get('password', null) is string
+            && request.resource.data.get('legacyProof', null) == get(/databases/$(database)/documents/users/$(request.resource.data.username)).data.password
+          )
+        );
+      allow update: if false;
+      // Only this login may remove its immutable mapping, and only when
+      // its app account is also gone (normally in the same transaction).
+      allow delete: if signedIn() && request.auth.uid == uid
+        && !existsAfter(/databases/$(database)/documents/users/$(resource.data.username));
+    }
+
+    // ---------------- Students & teachers ----------------
+    match /users/{username} {
+      // Read access: anyone signed in gets their own doc. Anyone signed
+      // in and currently a member of the SAME class — teacher or fellow
+      // student — can also read this doc, which is what actually powers
+      // things like the teacher's roster, a student's "My classmates"
+      // list, and marketplace/leaderboard displays that show another
+      // student's name. (The old fully-open rules let this work by
+      // accident for literally anyone on the internet; this keeps it
+      // working for classmates only.) WRITE access stays far narrower —
+      // see `allow update` below — this only ever grants read.
+      // SECURITY FIX: there used to be a first branch here,
+      // `!('authUid' in resource.data)`, letting ANY signed-in visitor
+      // (even an anonymous one) read a not-yet-migrated account's doc —
+      // including its old plaintext `password` field — just by knowing the
+      // username. It only existed so t29TryMigrateLegacyLogin() could read
+      // that password to check it in the browser. The check now happens
+      // here in the rules instead (see legacyProof on /uidIndex and
+      // isLegacyClaim() below), so nobody needs to read it any more.
+      allow get: if signedIn() && (
+        myUsername() == username ||
+        sharesActiveClass(resource.data) ||
+        isTeacherOfMyClass(username)
+      );
+      allow list: if signedIn() && (
+        myUsername() == username ||
+        sharesActiveClass(resource.data)
+      );
+
+      // Account creation: the brand-new Firebase Auth uid creating this
+      // doc must be the same uid the username is being claimed for, and a
+      // username can only ever be claimed once. (Legacy accounts created
+      // before this fix don't have authUid set yet — see the migration
+      // note in data-core.js for how those get one on first login.)
+      allow create: if signedIn()
+        && request.resource.data.authUid == request.auth.uid
+        && request.resource.data.username == username
+        && !exists(/databases/$(database)/documents/users/$(username))
+        && isValidNewAccount(username)
+        && isSaneNewStudentDoc(request.resource.data);
+
+      allow update: if signedIn() && (
+        // First, so it short-circuits before myUsername() (which can't
+        // resolve until this very write sets authUid) is ever evaluated.
+        isLegacyClaim(username) ||
+        isRecoveryTakeover(username) ||
+        isAllowedSelfUpdate(username) ||
+        (isTeacher() && sharesActiveClass(resource.data)) ||
+        isPeerTransferCredit(username) ||
+        isPeerTradeCredit(username) ||
+        isPeerTradeDebit(username)
+      )
+      // Identity fields are never client-editable once claimed. authUid
+      // is the one exception: a legacy (pre-fix) account has none yet, so
+      // it may be SET once, but never changed afterwards.
+      && request.resource.data.username == resource.data.username
+      && request.resource.data.role == resource.data.role
+      && (
+        !('authUid' in resource.data) ||
+        request.resource.data.authUid == resource.data.authUid ||
+        isRecoveryTakeover(username)
+      );
+
+      allow delete: if signedIn() && isTeacher()
+        && (myUsername() == username || sharesActiveClass(resource.data));
+    }
+
+    // ---------------- Student self-write guardrails (classes) ----------------
+    // SECURITY FIX: the old `allow update` on /classes let ANY member —
+    // student or teacher — rewrite ANY field on the shared class doc:
+    // tax rates, interest rate, loan tiers, job pay, store/quiz
+    // definitions, the roster, all of it. This narrows what a NON-teacher
+    // member can touch. The teacher branch below is untouched (full
+    // access), since background jobs (pay day, interest, market days —
+    // see runPayDayInternal/applyInterest/etc. in data-money.js) write to
+    // MULTIPLE students' own /users docs in the same run, which only
+    // isTeacher() is allowed to do — meaning these jobs already only
+    // succeed when triggered under a teacher's own session, before or
+    // after this change.
+    //
+    // REMAINING GAP, precisely stated (same root cause as the /users
+    // loans/quizResults limits above): `companies`, `storeItems`,
+    // `properties`, `vehicles`, and `npcProperties` are each "mixed" —
+    // buying/selling modifies fields (shares held, stock sold, occupancy)
+    // INSIDE an existing catalog entry, the exact same shape as a student
+    // directly editing that entry's price. Verified against every
+    // student-facing buy/sell function in data-markets.js (buyShares/sellShares,
+    // buyVehicle/sellVehicle, buyProperty/sellProperty, buyStoreItem,
+    // rentNpcProperty/moveOutNpcProperty): none of them ever add or
+    // remove a catalog entry, only modify one in place — only the
+    // teacher's own add/remove functions change how many entries exist.
+    // So isSafeStudentCatalogChange() below locks each array's LENGTH for
+    // student writes, which blocks wiping out a whole catalog AND
+    // sneaking in a fake new entry (e.g. planting a cheap fake company to
+    // buy shares of) — but it can't stop editing an EXISTING entry's
+    // price, because that requires inspecting one array element, and
+    // Firestore Rules has no way to do that (see rules.List's method
+    // list in the /users section above — no indexing, no loops).
+    // Converting these to id-keyed maps would NOT fix this either: a
+    // map's diff() can tell you a key changed, but there's no way to
+    // extract WHICH key from that result to then inspect it, so per-field
+    // validation of "the one entry that changed" isn't achievable that
+    // way. Actually closing this needs either Cloud Functions, or
+    // splitting each of these into two separate fields (teacher-only
+    // config vs. student-writable activity) — which requires updating
+    // every page that renders this data, not just this file.
+    function isSafeStudentCatalogChange() {
+      let before = resource.data;
+      let after = request.resource.data;
+      // Same bug/fix as isSafeSelfEconomyChange above: once one of these
+      // fields exists, deleting it outright must be rejected exactly like
+      // shrinking or replacing it would be — not waved through as
+      // "nothing to check."
+      return (!('companies' in before) || ('companies' in after && after.companies.size() == before.companies.size()))
+        && (!('storeItems' in before) || ('storeItems' in after && after.storeItems.size() == before.storeItems.size()))
+        && (!('properties' in before) || ('properties' in after && after.properties.size() == before.properties.size()))
+        && (!('vehicles' in before) || ('vehicles' in after && after.vehicles.size() == before.vehicles.size()))
+        && (!('npcProperties' in before) || ('npcProperties' in after && after.npcProperties.size() == before.npcProperties.size()));
+    }
+
+    function isSafeStudentsFieldChange() {
+      let before = resource.data;
+      let after = request.resource.data;
+      // Joining a class appends the new student's own username in the
+      // same transaction as their signup (see createStudentAccount) —
+      // the only legitimate way a non-teacher ever changes this field.
+      // Never permits an existing name to disappear (removeStudent,
+      // which does this, is teacher-only), the list to be replaced, or
+      // (same bug/fix as above) the whole field deleted outright.
+      return !('students' in before)
+        || (
+          'students' in after && (
+            after.students == before.students
+            || (after.students.size() == before.students.size() + 1 && after.students.hasAll(before.students))
+          )
+        );
+    }
+
+    // Students may stamp "someone used the class just now" (cls.lastActivityAt, which drives the
+    // 3-month auto-archive) but only with a time near the real one, so it can't be
+    // pushed back to make a busy class look abandoned.
+    function activityStampOk() {
+      let a = request.resource.data;
+      let b = resource.data;
+      return a.get('lastActivityAt', null) == b.get('lastActivityAt', null)
+        || (a.lastActivityAt is number
+            && a.lastActivityAt <= request.time.toMillis() + 86400000
+            && a.lastActivityAt >= request.time.toMillis() - 86400000);
+    }
+
+    function isAllowedStudentClassUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      // Pure teacher-configured settings/definitions and maintenance-job
+      // bookkeeping (payDayProgress/lastXRun) — no legitimate student
+      // action writes any of these directly. Locking the lastXRun/
+      // Progress fields also closes a real "free money" replay: without
+      // this, a student could reset their own already-been-paid marker
+      // and re-trigger a pay day/interest run to collect it twice.
+      // (lastPropertyMarketDayRun is deliberately NOT in this list — see
+      // the note just above it, below.)
+      let lockedFields = [
+        'name', 'teacher', 'code', 'createdAt',
+        'interestRate', 'cashInterestRate', 'interestAuto', 'interestFrequency', 'interestDay',
+        'taxRates', 'wageTaxBrackets',
+        // Teacher-set chance of share / property prices going up each simulated day.
+        'marketUpChance', 'propertyUpChance',
+        'loanTiers', 'maxLoanAmount', 'maxLoanCount', 'termDepositPlans', 'cardPlans', 'cardSettings', 'accountPlans', 'accountSettings',
+        'jobs', 'quizzes', 'quizGate', 'insurancePlans', 'insuranceDay',
+        'gambling', 'blackjack',
+        'priceRange', 'propertyPriceRange',
+        'sellBackRates', 'truckLicence', 'movingCost', 'propertyBreakFee',
+        'mortgageDay', 'mortgageForceDueWeek', 'payDay',
+        // SECURITY FIX: these four are teacher-only settings that were
+        // missing from this list, so a student could rewrite them
+        // directly via the SDK. transportDay/publicTransportFee/
+        // publicTransportFeeOverrides (see setTransportDay/
+        // setPublicTransportFee/setPublicTransportFeeOverrides in
+        // the data-*.js files) together decide WHEN weekly transport expenses fall
+        // due and HOW MUCH they are — leaving them open meant a student
+        // could zero out their own class's transport fee, or move the
+        // due day so the charge never came round, which is the same
+        // "skip a recurring cost" hole the payDay/interest bookkeeping
+        // fields further down were locked to close. reportArchives is
+        // only ever written by archiveClassReport/deleteReportArchive,
+        // both teacher-only (reports.html is in NAV_TEACHER_ONLY), so
+        // leaving it open let any student delete the class's saved
+        // report cards.
+        'transportDay', 'publicTransportFee', 'publicTransportFeeOverrides',
+        'reportArchives',
+        'lifestyleConfig', 'lifestyleThresholds', 'lifestyleLock',
+        'marketplace', 'propertyRentals', 'dailyTimeLimitMinutes',
+        'archived', 'archivedAt', 'autoArchived', 'templateShareToken',
+        'coTeachers', 'coTeacherCode', 'coTeacherJoin',
+        'eventDefs', 'bigEventDefs', 'studentsSeeAllEvents', 'sideHustles', 'lifeItems',
+        'payDayProgress', 'lastPayDayRun', 'lastInterestRun', 'lastInsuranceWeekRun',
+        // lastPropertyMarketDayRun is intentionally left OFF this list —
+        // see autoPropertyMarketDayIfDue in data-property.js. Unlike every other
+        // lastXRun field here, claiming it never credits money into any
+        // account (it only gates a randomized price move on `properties`,
+        // which isSafeStudentCatalogChange below already limits students
+        // to editing in place, same as buying/selling always could) — so
+        // there's no "free money replay" for a student to gain by
+        // resetting it, unlike payDay/interest. Locking it only ever
+        // caused property prices to silently stop drifting for a class
+        // where a teacher wasn't visiting that day.
+        'lastEventWeekRun', 'lastEventDayRun', 'lastBigEventWeekRun',
+        // BUGFIX: lifeDailyProgress/lastLifeDailyRun (see
+        // processDailyLifeAllowance in the data-*.js files) are the exact same shape
+        // of "already paid today" bookkeeping as payDayProgress/
+        // lastPayDayRun right above — and were missing from this list.
+        // Without this, a student could reset their own class's copy of
+        // these two fields directly and re-trigger their Daily Life
+        // Allowance for a second (or hundredth) payout the same day.
+        'lifeDailyProgress', 'lastLifeDailyRun',
+        // The class's KiwiSaver settings (fund returns, retirement) —
+        // only ever saved by the teacher (saveKiwiSaverSettings /
+        // retireClass in data-money.js).
+        'kiwiSaver',
+        // Teacher-only settings that were missing from this list: a student could
+        // otherwise raise the welcome grant (then farm second accounts), change the
+        // store sort, or make every avatar item free.
+        'welcomeGrant', 'storeSortMode', 'avatarShop'
+      ];
+      return !changed.hasAny(lockedFields) && isSafeStudentsFieldChange() && isSafeStudentCatalogChange() && activityStampOk();
+    }
+
+    // ---------------- Signing up (brand-new accounts) ----------------
+    // BUGFIX: signup (createTeacherAndClass / createStudentAccount in
+    // data-core.js) writes the new /uidIndex entry, the new /users doc and
+    // the class change all in ONE transaction. Every /classes rule below
+    // finds "who is asking" through myUsername(), which uses get() — and
+    // get() only sees data that is ALREADY saved, not writes in the same
+    // commit. So during signup the new account didn't exist yet as far as
+    // those rules could tell, and every teacher signup (creating the class)
+    // and every student signup (reading the class, then adding themselves
+    // to it) was refused.
+    //
+    // The rules here are separate `allow` lines added next to the existing
+    // ones, which they don't change: Firestore grants a request if ANY of
+    // its allow lines says yes, so these can only ever let signup through,
+    // never block anything that already worked.
+
+    // True only inside the commit that creates this uid's /uidIndex entry
+    // — i.e. the signup transaction itself. exists()/existsAfter() never
+    // error, so this is always a clean true/false.
+    function isSigningUp() {
+      return signedIn()
+        && !exists(/databases/$(database)/documents/uidIndex/$(request.auth.uid))
+        && existsAfter(/databases/$(database)/documents/uidIndex/$(request.auth.uid));
+    }
+
+    // The /users doc for `name` must be NEW in this same commit (not saved
+    // before it). exists()/existsAfter() never error, so this is a clean
+    // true/false and it's safe to read the doc after it says yes.
+    function isNewAccountFor(name) {
+      return name is string
+        && !exists(/databases/$(database)/documents/users/$(name))
+        && existsAfter(/databases/$(database)/documents/users/$(name));
+    }
+
+    // That new /users doc belongs to this login, has this role, and points
+    // at this class.
+    function newAccountMatches(doc, role, classCode) {
+      return doc.get('authUid', null) == request.auth.uid
+        && doc.get('role', null) == role
+        && doc.get('classCode', null) == classCode;
+    }
+
+    // Teacher signup: the new teacher creates their first class, named as
+    // its teacher, and their new /users doc points at it. (Each helper
+    // below is only reached once the check before it has passed, so every
+    // document is looked up at most once and never while it's missing.)
+    function isSignupClassCreate(classCode) {
+      return isSigningUp()
+        && signupCreateOk(classCode, getAfter(/databases/$(database)/documents/uidIndex/$(request.auth.uid)).data.username);
+    }
+    function signupCreateOk(classCode, name) {
+      return isNewAccountFor(name)
+        && newAccountMatches(getAfter(/databases/$(database)/documents/users/$(name)).data, 'teacher', classCode)
+        && request.resource.data.get('teacher', null) == name;
+    }
+
+    // Student signup: the new student adds exactly their own name to the
+    // roster (plus the "Welcome grant" line in txns) of the class their new
+    // /users doc says they're joining. Nothing else on the class can change.
+    function isSignupClassJoin(classCode) {
+      return isSigningUp()
+        && signupJoinOk(classCode, getAfter(/databases/$(database)/documents/uidIndex/$(request.auth.uid)).data.username);
+    }
+    function signupJoinOk(classCode, name) {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isNewAccountFor(name)
+        && newAccountMatches(getAfter(/databases/$(database)/documents/users/$(name)).data, 'student', classCode)
+        && after.diff(before).affectedKeys().hasOnly(['students', 'txns'])
+        && after.get('students', []).size() == before.get('students', []).size() + 1
+        && after.get('students', []).hasAll(before.get('students', []))
+        && after.get('students', []).hasAny([name]);
+    }
+
+    // ---------------- Co-teachers ----------------
+    function coTeacherFieldsUnchanged() {
+      let a = request.resource.data;
+      let b = resource.data;
+      return a.teacher == b.teacher
+        && a.get('coTeachers', []) == b.get('coTeachers', [])
+        && a.get('coTeacherCode', null) == b.get('coTeacherCode', null)
+        && a.get('coTeacherJoin', null) == b.get('coTeacherJoin', null);
+    }
+    // A teacher adds THEMSELVES as a co-teacher by presenting the class's
+    // single-use code (the owner put it in coTeacherCode). The same write
+    // uses the code up. At most 2 co-teachers; nothing else may change.
+    function isCoTeacherJoin() {
+      let a = request.resource.data;
+      let b = resource.data;
+      return isTeacher()
+        && b.teacher != myUsername()
+        && b.get('coTeacherCode', null) is string
+        && a.get('coTeacherJoin', null) == b.coTeacherCode
+        && a.get('coTeacherCode', null) == null
+        && a.diff(b).affectedKeys().hasOnly(['coTeachers', 'coTeacherJoin', 'coTeacherCode'])
+        && a.coTeachers is list
+        && a.coTeachers.size() <= 2
+        && a.coTeachers.size() == b.get('coTeachers', []).size() + 1
+        && a.coTeachers.hasAll(b.get('coTeachers', []))
+        && a.coTeachers.hasAny([myUsername()])
+        && !(myUsername() in b.get('coTeachers', []));
+    }
+    // A co-teacher removes THEMSELVES, and nothing else changes.
+    function isCoTeacherLeave() {
+      let a = request.resource.data;
+      let b = resource.data;
+      return isTeacher()
+        && myUsername() in b.get('coTeachers', [])
+        && a.diff(b).affectedKeys().hasOnly(['coTeachers'])
+        && a.coTeachers.size() == b.coTeachers.size() - 1
+        && !(myUsername() in a.coTeachers);
+    }
+
+    // ---------------- Class summaries ----------------
+    // All original class authorization branches remain in force. These
+    // additional predicates enforce only the projection/invalidation invariant.
+    function summaryMatches(code, c, d) {
+      return d.keys().hasOnly(['code', 'name', 'teacher', 'coTeachers', 'createdAt',
+          'lastActivityAt', 'archived', 'archivedAt', 'autoArchived', 'studentCount', 'updatedAt'])
+        && d.code == code && d.name == c.get('name', '') && d.teacher == c.get('teacher', '')
+        && d.coTeachers == c.get('coTeachers', [])
+        && d.createdAt == c.get('createdAt', null)
+        && d.lastActivityAt == c.get('lastActivityAt', null)
+        && d.archived == (c.get('archived', false) == true)
+        && d.archivedAt == c.get('archivedAt', null)
+        && d.autoArchived == (c.get('autoArchived', false) == true)
+        && d.studentCount == c.get('students', []).size()
+        && d.updatedAt is timestamp;
+    }
+    function summaryGeneration() {
+      return exists(/databases/$(database)/documents/classSummaryState/global)
+        ? get(/databases/$(database)/documents/classSummaryState/global).data.generation : 0;
+    }
+    function summaryInvalidated() {
+      return getAfter(/databases/$(database)/documents/classSummaryState/global).data.generation == summaryGeneration() + 1;
+    }
+    function classSummaryConsistent(code) {
+      return (existsAfter(/databases/$(database)/documents/classSummaries/$(code))
+          && summaryMatches(code, request.resource.data, getAfter(/databases/$(database)/documents/classSummaries/$(code)).data))
+        || (!existsAfter(/databases/$(database)/documents/classSummaries/$(code)) && summaryInvalidated());
+    }
+    function classSummaryUpdateOk(code) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'code', 'name', 'teacher', 'coTeachers', 'createdAt', 'lastActivityAt', 'archived', 'archivedAt', 'autoArchived', 'students'])
+        || classSummaryConsistent(code);
+    }
+    function summaryClassChanged(code) {
+      return !exists(/databases/$(database)/documents/classes/$(code))
+        || getAfter(/databases/$(database)/documents/classes/$(code)).data != get(/databases/$(database)/documents/classes/$(code)).data;
+    }
+    match /classSummaries/{code} {
+      // Queries can prove this directly from their teacher/coTeachers filter.
+      allow list: if signedIn() && (resource.data.teacher == myUsername() || myUsername() in resource.data.coTeachers);
+      // A missing summary is readable by a class teacher for migration/heal.
+      allow get: if isTeacherOfClass(code);
+      // A student cannot read summaries or author arbitrary fields. An atomic
+      // class change must pass the ORIGINAL class rules, and the projection
+      // must exactly match its post-commit class, including roster size.
+      allow create, update: if signedIn()
+        && summaryMatches(code, getAfter(/databases/$(database)/documents/classes/$(code)).data, request.resource.data)
+        && request.resource.data.updatedAt == request.time
+        && (summaryClassChanged(code) || isTeacherOfClass(code));
+      allow delete: if signedIn() && (
+        (exists(/databases/$(database)/documents/classes/$(code))
+          && !existsAfter(/databases/$(database)/documents/classes/$(code)))
+        || (summaryClassChanged(code) && summaryInvalidated()));
+    }
+    function validSummaryInvalidation() {
+      let code = request.resource.data.classCode;
+      return code is string
+        && existsAfter(/databases/$(database)/documents/classes/$(code))
+        && !existsAfter(/databases/$(database)/documents/classSummaries/$(code))
+        && summaryClassChanged(code);
+    }
+    match /classSummaryState/{id} {
+      allow get: if signedIn() && id == 'global';
+      allow list, delete: if false;
+      allow create: if signedIn() && id == 'global'
+        && request.resource.data.keys().hasOnly(['generation', 'classCode']) && validSummaryInvalidation() && request.resource.data.generation == 1;
+      allow update: if signedIn() && id == 'global'
+        && request.resource.data.keys().hasOnly(['generation', 'classCode']) && validSummaryInvalidation()
+        && request.resource.data.generation == resource.data.generation + 1;
+    }
+    match /classSummaryMigrations/{username} {
+      allow get, delete: if signedIn() && myUsername() == username && isTeacher();
+      allow list: if false;
+      allow create, update: if signedIn() && myUsername() == username && isTeacher()
+        && request.resource.data.keys().hasOnly(['version', 'generation'])
+        && request.resource.data.version == 1 && request.resource.data.generation == summaryGeneration();
+    }
+
+    // ---------------- Classes ----------------
+    match /classes/{classCode} {
+      // Signup only — see "Signing up" above. The read is a joining
+      // student checking the class code exists (and reading its roster and
+      // time limit) before their account exists. It's allowed only for a
+      // signed-in login that has no app account yet, and only by exact
+      // class code (listing stays refused), so it shows nothing beyond what
+      // joining with that same code would.
+      allow get: if signedIn()
+        && !exists(/databases/$(database)/documents/uidIndex/$(request.auth.uid));
+      allow create: if isSignupClassCreate(classCode) && classSummaryConsistent(classCode);
+      allow update: if isSignupClassJoin(classCode) && classSummaryUpdateOk(classCode);
+
+      // Any member of the class (student or teacher) can read/write the
+      // shared class doc. A teacher who owns several classes can also
+      // read/write any of THEIR OTHER classes, not just the one they
+      // currently have open (matches multi-class support in teacher-home).
+      // Co-teachers (cls.coTeachers, at most 2) count as teachers of the
+      // class. A teacher whose account still POINTS at a class they no longer
+      // belong to (e.g. a removed co-teacher) gets nothing from that pointer.
+      allow get: if signedIn() && (
+        (myUserDoc().classCode == classCode
+          && (myUserDoc().role != 'teacher'
+              || resource.data.teacher == myUsername()
+              || myUsername() in resource.data.get('coTeachers', []))) ||
+        resource.data.teacher == myUsername() ||
+        myUsername() in resource.data.get('coTeachers', [])
+      );
+      // Queries used by "My Classes": where teacher == username, and where
+      // coTeachers array-contains username — each scoped to just those classes.
+      allow list: if signedIn() && (
+        resource.data.teacher == myUsername() ||
+        myUsername() in resource.data.coTeachers
+      );
+
+      allow create: if signedIn() && request.resource.data.teacher == myUsername() && classSummaryConsistent(classCode);
+
+      // The owner can change anything. A co-teacher running the class can
+      // change everything EXCEPT who owns it and who the co-teachers are.
+      // Joining/leaving as a co-teacher are their own narrow rules below.
+      allow update: if classSummaryUpdateOk(classCode) && signedIn() && (
+        (isTeacher() && (
+          resource.data.teacher == myUsername() ||
+          (myUsername() in resource.data.get('coTeachers', []) && coTeacherFieldsUnchanged())
+        )) ||
+        isCoTeacherJoin() ||
+        isCoTeacherLeave() ||
+        (!isTeacher() && myUserDoc().classCode == classCode && isAllowedStudentClassUpdate())
+      );
+
+      allow delete: if signedIn() && resource.data.teacher == myUsername()
+        && !existsAfter(/databases/$(database)/documents/classSummaries/$(classCode));
+    }
+
+    /* ---------------- Student presence ("last opened" / "online now") ----------------
+       presence/{classCode} -> { p: { <username>: { o, a, off } } } is ONE small doc per
+       class (see "Presence" in data-core.js):
+         o   = start of the student's latest visit (server time)
+         a   = their latest ping (server time)
+         off = true once they've logged out
+       A student can only ever change THEIR OWN entry, and `a` must be the real server
+       time (request.time), so nobody can fake someone else being online or claim a time
+       from the future. Only that class's teachers (the owner and co-teachers) can read
+       it, so classmates can't see each other's status. Single-document reads only. */
+    function isStudentOfClass(code) {
+      return signedIn() && myUserDoc().role == 'student' && myUserDoc().classCode == code;
+    }
+    function isTeacherOfClass(code) {
+      return isTeacher() && (
+        get(/databases/$(database)/documents/classes/$(code)).data.teacher == myUsername() ||
+        myUsername() in get(/databases/$(database)/documents/classes/$(code)).data.get('coTeachers', [])
+      );
+    }
+    function presenceEntryOk(e) {
+      return e is map
+        && e.keys().hasOnly(['o', 'a', 'off'])
+        && e.get('a', null) == request.time
+        && e.get('off', false) is bool
+        && (!('o' in e) || (e.o is timestamp && e.o <= request.time));
+    }
+    match /presence/{classCode} {
+      allow get: if isTeacherOfClass(classCode);
+      allow list: if false;
+      allow create: if isStudentOfClass(classCode)
+        && request.resource.data.keys().hasOnly(['p'])
+        && request.resource.data.p.keys().hasOnly([myUsername()])
+        && presenceEntryOk(request.resource.data.p[myUsername()]);
+      allow update: if isStudentOfClass(classCode)
+        && request.resource.data.keys().hasOnly(['p'])
+        && request.resource.data.p.diff(resource.data.p).affectedKeys().hasOnly([myUsername()])
+        && presenceEntryOk(request.resource.data.p[myUsername()]);
+      allow delete: if false;
+    }
+
+    /* ---------------- Student requests -> teacher's bell (teacherInbox) ----------------
+       teacherInbox/{classCode} -> { n: { <username>: { <kind>: { ts, st, title, body } } } }
+       (see "Student requests -> the teacher's bell" in data-core.js). One slot per student
+       per kind. A student can only ever change THEIR OWN slots; each slot must be exactly
+       those four fields, `ts` can't be in the future, and the text is length-capped, so a
+       student can't bloat the document or write as anyone else. Only that class's
+       teachers (owner and co-teachers) can read it. Single-document reads only. */
+    function inboxSlotOk(e) {
+      return e == null || (
+        e is map
+        && e.keys().hasOnly(['ts', 'st', 'title', 'body'])
+        && e.keys().hasAll(['ts', 'st', 'title', 'body'])
+        && e.ts is timestamp && e.ts <= request.time
+        && e.st in ['req', 'cancel']
+        && e.title is string && e.title.size() <= 120
+        && e.body is string && e.body.size() <= 300
+      );
+    }
+    function inboxStudentOk(m) {
+      return m is map
+        && m.keys().hasOnly(['time', 'hustle', 'job', 'card', 'account', 'listing', 'sublet', 'tick'])
+        && inboxSlotOk(m.get('time', null))
+        && inboxSlotOk(m.get('hustle', null))
+        && inboxSlotOk(m.get('job', null))
+        && inboxSlotOk(m.get('card', null))
+        && inboxSlotOk(m.get('account', null))
+        && inboxSlotOk(m.get('listing', null))
+        && inboxSlotOk(m.get('sublet', null))
+        && inboxSlotOk(m.get('tick', null));
+    }
+    match /teacherInbox/{classCode} {
+      allow get: if isTeacherOfClass(classCode);
+      allow list: if false;
+      allow create: if isStudentOfClass(classCode)
+        && request.resource.data.keys().hasOnly(['n'])
+        && request.resource.data.n.keys().hasOnly([myUsername()])
+        && inboxStudentOk(request.resource.data.n[myUsername()]);
+      allow update: if isStudentOfClass(classCode)
+        && request.resource.data.keys().hasOnly(['n'])
+        && request.resource.data.n.diff(resource.data.n).affectedKeys().hasOnly([myUsername()])
+        && inboxStudentOk(request.resource.data.n[myUsername()]);
+      allow delete: if false;
+    }
+
+    // ---------------- Cross-account template sharing ----------------
+    match /templateShares/{token} {
+      allow get: if signedIn();       // needed to preview a share link before importing
+      allow list: if false;
+      allow create: if signedIn() && isTeacher() && request.resource.data.teacher == myUsername();
+      allow delete: if signedIn() && isTeacher() && resource.data.teacher == myUsername();
+      allow update: if false;
+    }
+
+    // ---------------- Family (parent) view links ----------------
+    // parent.html?t=<token> shows a ready-made summary of one student's
+    // report card to their family, who have no account (see "Parent view"
+    // in data-money.js). Anyone holding the long random token can read
+    // that ONE summary — there's no listing, so tokens can't be found by
+    // browsing. Only the student themselves, or a teacher whose open class
+    // is that student's class (same test as the teacher branch of the
+    // /users update rule above), can write or delete it.
+    function isParentViewWriter(username) {
+      return username is string && (
+        username == myUsername() ||
+        (isTeacher() && sharesActiveClass(get(/databases/$(database)/documents/users/$(username)).data))
+      );
+    }
+    match /parentViews/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['username', 'classCode', 'updatedAt', 'view'])
+        && isParentViewWriter(request.resource.data.username);
+      allow update: if signedIn()
+        && request.resource.data.keys().hasOnly(['username', 'classCode', 'updatedAt', 'view'])
+        && request.resource.data.username == resource.data.username
+        && isParentViewWriter(resource.data.username);
+      allow delete: if signedIn() && isParentViewWriter(resource.data.username);
+    }
+  }
+}

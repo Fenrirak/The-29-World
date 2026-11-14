@@ -33,7 +33,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=59bcda64">
+<link rel="stylesheet" href="style.css?v=842e2ce2">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -122,7 +122,7 @@ else if(here){h.classList.add('mod-hold');setTimeout(function(){h.classList.remo
     <a href="property.html" data-module="property"><span class="icon-slot" data-icon="house"></span><span class="nav-label">Property</span></a>
     <a href="insurance.html" data-module="insurance"><span class="icon-slot" data-icon="shield"></span><span class="nav-label">Insurance</span></a>
     <a href="tax.html" data-module="tax"><span class="icon-slot" data-icon="percent"></span><span class="nav-label">Tax</span></a>
-    <a href="bigevents.html" data-module="bigevents"><span class="icon-slot" data-icon="bolt"></span><span class="nav-label">Big Events</span></a>
+    <a href="bigevents.html" data-module="bigevents"><span class="icon-slot" data-icon="bolt"></span><span class="nav-label">Events</span></a>
     <a href="life.html" data-module="life"><span class="icon-slot" data-icon="trophy"></span><span class="nav-label">Life</span></a>
     <a href="gambling.html" data-module="gambling"><span class="icon-slot" data-icon="dice"></span><span class="nav-label">Gambling</span></a>
     <a href="quizzes.html"><span class="icon-slot" data-icon="quiz"></span><span class="nav-label">Quizzes</span></a>
@@ -317,90 +317,6 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
   </div>
 
   <div class="card">
-    <h2 id="hEvents">Random weekly events</h2>
-    <p>Every week, each student gets 2 to 5 of the active events below, each on a different school day (Monday to Friday, never two on the same day). The week is planned the first time you open the site that week, so opening it on Monday gives the full spread. Events without "Can repeat" are only ever given once to each student, so add plenty of events or tick "Can repeat".</p>
-    <button class="btn secondary small" onclick="runWeeklyEventsNow()" id="runEventsNowBtn" style="margin-bottom:12px;">Run this week's events now</button>
-    <div id="eventRecoWrap"></div>
-    <details class="fold-sub" id="eventListFold">
-    <summary><span class="fold-head"><span id="eventListTitle">Your events</span><span class="fold-hint">Show or hide the list of events.</span></span></summary>
-    <div id="eventList"></div>
-    </details>
-    <p class="muted-small" id="noEvents">You haven't added any events yet.</p>
-    <details class="fold-sub" id="eventFold">
-    <summary><span class="fold-head"><span id="eventFoldTitle">Add an event</span><span class="fold-hint">Create a new random event for the class.</span></span></summary>
-    <form onsubmit="return addEventForm(event)">
-      <label for="evType" id="labEvType">Event type</label>
-      <select id="evType" onchange="toggleEventType()">
-        <option value="fixed">Fixed amount (happens automatically)</option>
-        <option value="choice">Multiple choice (student picks what happens)</option>
-      </select>
-      <div class="grid grid-3">
-        <div>
-          <label for="evName" id="labEvName">Event name</label>
-          <input id="evName" placeholder="e.g. Found money on the ground" required>
-        </div>
-        <div id="evAmountWrap">
-          <label for="evAmountMode" id="labEvAmountMode">Amount is</label>
-          <select id="evAmountMode" onchange="toggleEventType()">
-            <option value="fixed">A set amount</option>
-            <option value="percent">A % of an item's present cost</option>
-          </select>
-          <div id="evFixedWrap">
-            <label for="evAmount" id="labEvAmount">Amount (negative for a cost)</label>
-            <input id="evAmount" type="number" step="0.01">
-          </div>
-          <div id="evPercentWrap" class="hidden">
-            <label for="evPercent" id="labEvPercent">Percentage (negative for a cost)</label>
-            <input id="evPercent" type="number" step="0.01" min="-1000" max="1000" placeholder="e.g. -20">
-          </div>
-        </div>
-        <div>
-          <label for="evSeverity" id="labEvSeverity">Severity</label>
-          <select id="evSeverity" onchange="updateEventCoverBox()">
-            <option value="neutral">Neutral</option>
-            <option value="bad">Bad (can be claimed on insurance)</option>
-          </select>
-        </div>
-      </div>
-      <div id="evBaseBox" class="hidden">
-        <div id="evBaseSelectWrap">
-          <label for="evBase" id="labEvBase">The percentage is of</label>
-          <select id="evBase">
-            <option value="income">The student's weekly wage (before tax)</option>
-            <option value="property">The present market price of one of their properties</option>
-            <option value="transport">The present price of one of their vehicles</option>
-          </select>
-        </div>
-        <p class="muted-small" id="evBaseHint"></p>
-      </div>
-      <div id="evCoverWrap" class="hidden">
-        <label for="evCoverage" id="labEvCoverage">Which insurance can claim it?</label>
-        <select id="evCoverage" onchange="updateEventCoverBox()">
-          <option value="general">General insurance</option>
-          <option value="property">Property insurance (only given to students who own or rent a home)</option>
-          <option value="transport">Transport insurance (only given to students with a vehicle)</option>
-        </select>
-        <div id="evCoverBox" class="hidden"></div>
-      </div>
-      <div id="evOptionsWrap" class="hidden">
-        <label for="evOptionsArea" id="labEvOptions">Choices, one per line, as "Label | amount | what happened (optional)", the amount can also be a percentage, like -20%</label>
-        <textarea id="evOptionsArea" rows="4" placeholder="Pay for repairs | -10 | The plumber fixed it in an hour
-Ignore it and hope for the best | 0 | Nothing happened, you got lucky
-Do it yourself and save money | -3 | It mostly worked, but you had to buy some parts"></textarea>
-        <p class="muted-small">The student will be shown this scenario and must pick one of these choices, each choice's amount is applied to their balance (negative for a cost, positive for a gain, 0 for no effect). The third part is optional, a short line explaining what happened, shown to the student after they choose.</p>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:12px;">
-        <input type="checkbox" id="evRepeat" style="width:20px;height:20px;min-height:auto;flex-shrink:0;">
-        <label for="evRepeat" style="margin:0;">Can repeat</label>
-      </div>
-      <label for="evDesc" id="labEvDesc">Description (shown in the activity feed)</label>
-      <input id="evDesc" placeholder="e.g. Someone dropped some coins">
-      <button class="btn" type="submit" id="addEventBtn">Add event</button>
-    </form>
-    </details>
-  </div>
-
-  <div class="card">
     <h2 id="hActivity">Recent activity</h2>
     <div class="table-scroll">
     <table id="txnTable" class="txn-table">
@@ -533,9 +449,9 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="settings-menu.js?v=54fe64ca"></script>
 <script defer src="shortcuts.js?v=5c3b32dc"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
-<script defer src="data-core.js?v=13f6f2ad"></script>
+<script defer src="data-core.js?v=b8b23078"></script>
 <script defer src="data-money.js?v=8acbb3c6"></script>
-<script defer src="data-life.js?v=e845ca0c"></script>
+<script defer src="data-life.js?v=b7c5a78f"></script>
 <script defer src="data-property.js?v=2ae916b7"></script>
 <script defer src="data-markets.js?v=cbd1eee8"></script>
 <script defer src="tour.js?v=475f7fc8"></script>
@@ -546,7 +462,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="notifications.js?v=e0afe5b8"></script>
 <script defer src="pdf-report.js?v=cba2b85b"></script>
 <script defer src="class-export.js?v=23014cb0"></script>
-<script defer src="teacher.js?v=3dab43dc"></script>
+<script defer src="teacher.js?v=7643be6d"></script>
 <script defer src="bulk-students.js?v=e1e73dae"></script>
 </body>
 </html>
