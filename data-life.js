@@ -1633,6 +1633,16 @@ function cleanHustlePayouts(p) {
   });
   return out;
 }
+// Streak bonus fields from the teacher's form: +$ per consecutive day (0 = none) and an optional
+// ceiling on the bonus (null = no limit). Always numbers/null, never undefined (Firestore rejects undefined).
+function cleanHustleStreak(h) {
+  const r2 = n => Math.round(n * 100) / 100;
+  const bonus = Number(h && h.streakBonus);
+  const max = Number(h && h.streakBonusMax);
+  const streakBonus = Number.isFinite(bonus) && bonus > 0 ? r2(bonus) : 0;
+  const streakBonusMax = streakBonus > 0 && Number.isFinite(max) && max > 0 ? r2(max) : null;
+  return { streakBonus, streakBonusMax };
+}
 // ---- Pay helpers shared by the teacher's builder/list and the student's pay chart ----
 // "Offered" = an hour (0-23) with a payout above zero.
 function hustleOfferedHours(payouts) {
@@ -1664,7 +1674,7 @@ async function addSideHustle(classCode, hustle) {
     const cls = withNewModuleDefaults(snap.data());
     cls.sideHustles.push({
       id: uid("sh"), name: hustle.name, description: hustle.description || "",
-      payouts: cleanHustlePayouts(hustle.payouts)
+      payouts: cleanHustlePayouts(hustle.payouts), ...cleanHustleStreak(hustle)
     });
     t.update(classRef, { sideHustles: cls.sideHustles });
   });
@@ -1682,7 +1692,7 @@ async function addSideHustles(classCode, hustles) {
     const cls = withNewModuleDefaults(snap.data());
     list.forEach(h => cls.sideHustles.push({
       id: uid("sh"), name: h.name, description: h.description || "",
-      payouts: cleanHustlePayouts(h.payouts)
+      payouts: cleanHustlePayouts(h.payouts), ...cleanHustleStreak(h)
     }));
     t.update(classRef, { sideHustles: cls.sideHustles });
   });
@@ -1704,7 +1714,9 @@ async function editSideHustle(classCode, hustleId, hustle) {
     const prevH = cls.sideHustles[idx];
     cls.sideHustles[idx] = {
       ...cls.sideHustles[idx],
-      name: hustle.name, description: hustle.description || "", payouts: cleanHustlePayouts(hustle.payouts)
+      name: hustle.name, description: hustle.description || "", payouts: cleanHustlePayouts(hustle.payouts),
+      // callers that don't pass streak fields leave the existing bonus alone
+      ...((hustle.streakBonus === undefined && hustle.streakBonusMax === undefined) ? {} : cleanHustleStreak(hustle))
     };
     t.update(classRef, { sideHustles: cls.sideHustles });
     before = prevH; after = cls.sideHustles[idx];
@@ -1717,8 +1729,13 @@ async function editSideHustle(classCode, hustleId, hustle) {
       if (after.name !== before.name) parts.push(`renamed to ${after.name}`);
       const a = Number((before.payouts || {})[hr]) || 0, b = Number((after.payouts || {})[hr]) || 0;
       if (a !== b) parts.push(`your ${hourLabel(hr)} check-in pays ${fmtMoney(b)} (was ${fmtMoney(a)})`);
+      const sa = Number(before.streakBonus) || 0, sb = Number(after.streakBonus) || 0;
+      const ma = Number(before.streakBonusMax) || 0, mb = Number(after.streakBonusMax) || 0;
+      if (sa !== sb) parts.push(sb > 0 ? `streak bonus is now +${fmtMoney(sb)} for every consecutive day you check in${sa > 0 ? ` (was +${fmtMoney(sa)})` : ""}` : "the streak bonus was removed");
+      else if (sb > 0 && ma !== mb) parts.push(mb > 0 ? `the streak bonus now tops out at +${fmtMoney(mb)}` : "the streak bonus no longer has a limit");
       if (!parts.length) return;
-      out.push({ to: s.username, icon: "briefcase", tone: b > a ? "mint" : (b < a ? "coral" : "gold"),
+      const delta = (b - a) + (sb - sa);
+      out.push({ to: s.username, icon: "briefcase", tone: delta > 0 ? "mint" : (delta < 0 ? "coral" : "gold"),
         title: `Your teacher changed your side hustle: ${before.name}`, body: parts.join("; ") + ".", href: "student.html" });
     });
     await t29NotifyStudents(classCode, out);
@@ -1840,7 +1857,7 @@ async function checkinSideHustle(username, classCode) {
   }
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
-  let amount = 0, hustleName = "", streak = 0;
+  let amount = 0, hustleName = "", streak = 0, bonus = 0;
   try {
     await fdb.runTransaction(async (t) => {
       const userSnap = await t.get(userRef);
@@ -1859,11 +1876,14 @@ async function checkinSideHustle(username, classCode) {
       const todayKey = nzDateKey();
       if (sh.lastCheckin === todayKey) throw new Error("ALREADY");
 
-      amount = Math.max(0, Number(hustle.payouts[sh.checkinHour]) || 0);
-      const life = getLifeBenefitTotals(user);
-      if (life.incomePercent) amount = Math.round(amount * (1 + life.incomePercent / 100) * 100) / 100;
+      // Checking in the day after the last check-in extends the streak; a longer gap starts it again at 1.
+      streak = sideHustleStreakAfterCheckin(sh, todayKey);
+      const baseAmt = Math.max(0, Number(hustle.payouts[sh.checkinHour]) || 0);
+      const bonusAmt = baseAmt > 0 ? sideHustleStreakBonus(hustle, streak) : 0;
+      const boost = 1 + (getLifeBenefitTotals(user).incomePercent || 0) / 100; // job income boost covers the bonus too
+      amount = Math.round((baseAmt + bonusAmt) * boost * 100) / 100;
+      bonus = Math.round(bonusAmt * boost * 100) / 100;
       hustleName = hustle.name;
-      streak = (sh.streak || 0) + 1;
       const newBal = Math.round((user.balance + amount) * 100) / 100;
       t.update(userRef, {
         balance: newBal,
@@ -1877,8 +1897,8 @@ async function checkinSideHustle(username, classCode) {
     if (e.message === "ALREADY") return { ok: false, error: "You've already checked in today." };
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-  await logTxn(classCode, { type: "side-hustle", to: username, amount, note: `Side hustle check-in: ${hustleName}` });
-  return { ok: true, amount, streak };
+  await logTxn(classCode, { type: "side-hustle", to: username, amount, note: `Side hustle check-in: ${hustleName}${bonus > 0 ? ` (day ${streak} streak, includes ${fmtMoney(bonus)} bonus)` : ""}` });
+  return { ok: true, amount, streak, bonus };
 }
 
 async function buyInsurance(username, classCode, planId, opts) {

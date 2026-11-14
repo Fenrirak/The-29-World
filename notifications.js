@@ -428,11 +428,14 @@ function notifSideHustleItems(me, cls) {
   if (sh.lastCheckin === today) return [];
   const { hour, minute } = nzHourMinute();
   if (hour !== sh.checkinHour || minute > 15) return [];
+  const payDay = sideHustleLiveStreak(sh, today) + 1; // the streak day this check-in would be
+  const payNow = sideHustlePay(hustle, sh.checkinHour, payDay);
+  const bonusNow = sideHustleStreakBonus(hustle, payDay);
   return [{
     id: "sh-" + today, ts: notifTodayStartMs(), icon: "briefcase", tone: "mint",
     title: "Side hustle check-in is open right now",
     // e.g. "until 4:15pm" (hourLabel gives "4pm", so the minutes go in the middle)
-    body: `${hustle.name}. You have until ${(sh.checkinHour % 12) || 12}:15${sh.checkinHour < 12 ? "am" : "pm"} to check in and get paid ${fmtMoney(Number(hustle.payouts[sh.checkinHour]) || 0)}.`,
+    body: `${hustle.name}. You have until ${(sh.checkinHour % 12) || 12}:15${sh.checkinHour < 12 ? "am" : "pm"} to check in and get paid ${fmtMoney(payNow)}${bonusNow > 0 ? `, including a ${fmtMoney(bonusNow)} streak bonus` : ""}.`,
     href: "student.html", action: true
   }];
 }

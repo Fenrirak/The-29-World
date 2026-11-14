@@ -975,11 +975,13 @@ async function renderProfile(username) {
   const shDef = sh && sh.hustleId ? (cls.sideHustles || []).find(h => h.id === sh.hustleId) : null;
   if (shDef) {
     const payout = Number(shDef.payouts[sh.checkinHour]) || 0;
+    const liveStreak = sideHustleLiveStreak(sh, nzDateKey()); // 0 once a day has been missed
+    const streakBonusNow = sideHustleStreakBonus(shDef, liveStreak);
     rows.push(`
       <div class="auto-row">
         <div class="auto-details">
           <strong>${escapeHtml(shDef.name)}</strong>
-          <div class="muted-small">Checks in at ${hourLabel(sh.checkinHour)} &middot; ${fmtMoney(payout)} per check-in${sh.streak ? ` &middot; streak: ${sh.streak}` : ""}</div>
+          <div class="muted-small">Checks in at ${hourLabel(sh.checkinHour)} &middot; ${fmtMoney(payout)} per check-in${liveStreak ? ` &middot; streak: ${liveStreak}${streakBonusNow > 0 ? ` (+${fmtMoney(streakBonusNow)} bonus)` : ""}` : ""}</div>
           <div class="muted-small">Last checked in: ${sh.lastCheckin || "Never"}</div>
         </div>
       </div>

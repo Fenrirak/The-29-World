@@ -332,6 +332,18 @@ function sideHustleStreakAfterCheckin(sh, todayKey) {
   if (last && daysBetweenKeys(last, todayKey) === 1) return (Number(sh.streak) || 0) + 1;
   return 1;
 }
+// The streak bonus alone for a check-in on a given streak day. The teacher sets
+// hustle.streakBonus (+$ per consecutive day) and, optionally, hustle.streakBonusMax
+// (the most the bonus can reach). Day 1 has no bonus; day 2 = 1 x bonus, day 3 = 2 x bonus...
+function sideHustleStreakBonus(hustle, streakDay) {
+  const per = Math.max(0, Number(hustle && hustle.streakBonus) || 0);
+  if (!per) return 0;
+  const extraDays = Math.max(0, (Math.floor(Number(streakDay)) || 1) - 1);
+  let bonus = per * extraDays;
+  const cap = Number(hustle && hustle.streakBonusMax);
+  if (Number.isFinite(cap) && cap > 0) bonus = Math.min(bonus, cap);
+  return Math.round(bonus * 100) / 100;
+}
 // What a check-in pays on a given streak day (1 = first day / streak just
 // started). Base payout for that hour, plus the hustle's streak bonus for
 // every day after the first: day 2 = base + bonus, day 3 = base + 2 x bonus...
@@ -340,9 +352,8 @@ function sideHustlePay(hustle, hour, streakDay) {
   const raw = (hustle && hustle.payouts || {})[hour];
   if (raw === undefined || raw === null || raw === "") return 0; // hour not offered: no pay, so no bonus either
   const base = Math.max(0, Number(raw) || 0);
-  const bonus = Math.max(0, Number(hustle && hustle.streakBonus) || 0);
-  const extraDays = Math.max(0, (Math.floor(Number(streakDay)) || 1) - 1);
-  return Math.round((base + bonus * extraDays) * 100) / 100;
+  if (!(base > 0)) return 0;
+  return Math.round((base + sideHustleStreakBonus(hustle, streakDay)) * 100) / 100;
 }
 // Streak to DISPLAY right now: still alive if the last check-in was today or
 // yesterday, otherwise it has been broken (0), even though the stored value

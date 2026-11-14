@@ -200,6 +200,13 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <input id="shName" placeholder="e.g. Dog walking" required>
         <label for="shDesc" id="labShDesc">Description (optional)</label>
         <input id="shDesc" placeholder="e.g. Walk the neighbourhood dogs">
+        <label id="labShStreak">Streak bonus (optional)</label>
+        <p class="muted-small">Extra pay for every consecutive day a student checks in, and it stacks. With +$2: day 1 pays the normal amount, day 2 pays $2 extra, day 3 pays $4 extra, day 4 pays $6 extra. Missing a day starts the streak again at day 1. Students see the bonus on their dashboard.</p>
+        <div class="sh-fill">
+          <span>+ $</span><input id="shStreakBonus" inputmode="decimal" placeholder="0" aria-label="Bonus per consecutive day" oninput="shStreakPreview()">
+          <span>per consecutive day, max bonus $</span><input id="shStreakMax" inputmode="decimal" placeholder="no limit" aria-label="Maximum streak bonus, blank for no limit" oninput="shStreakPreview()">
+        </div>
+        <p class="muted-small" id="shStreakPreview"></p>
         <label id="labShPayouts">What it pays at each check-in hour</label>
         <p class="muted-small">Type an amount under each hour you want to offer and leave the others blank. For long lists use the quick tools: fill a whole stretch of hours in one go, copy another hustle, or paste a column from a spreadsheet straight into the first box.</p>
         <div class="sh-tools">
@@ -359,17 +366,17 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="settings-menu.js?v=54fe64ca"></script>
 <script defer src="shortcuts.js?v=5c3b32dc"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
-<script defer src="data-core.js?v=8edb1d37"></script>
+<script defer src="data-core.js?v=bd72c58d"></script>
 <script defer src="data-money.js?v=a7948914"></script>
-<script defer src="data-life.js?v=b7c5a78f"></script>
+<script defer src="data-life.js?v=4de0e636"></script>
 <script defer src="data-property.js?v=2ae916b7"></script>
 <script defer src="data-markets.js?v=1c6f4fff"></script>
 <script defer src="base-template.js?v=42a151b2"></script>
 <script defer src="events-ui.js?v=5bf20a4c"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=c23aec59"></script>
-<script defer src="notifications.js?v=43c59d67"></script>
-<script defer src="jobs.js?v=6666899a"></script>
+<script defer src="notifications.js?v=1a391ac9"></script>
+<script defer src="jobs.js?v=2873835b"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
 </body>
 </html>

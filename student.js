@@ -633,12 +633,16 @@ async function renderSideHustle(me, cls, lockedModules) {
 
   const nameEl = sh("shName"); if (nameEl) nameEl.textContent = current.name;
   const windowEl = sh("shWindow"); if (windowEl) windowEl.textContent = sideHustleWindowLabel(myHustle.checkinHour);
-  const pay = Number(current.payouts[myHustle.checkinHour]) || 0;
+  const todayKey = nzDateKey();
+  const already = myHustle.lastCheckin === todayKey;
+  const liveStreak = sideHustleLiveStreak(myHustle, todayKey); // 0 once a day has been missed
+  // Today's pay = what you got today, or what the next check-in pays if the streak carries on (bonus included).
+  const pay = sideHustlePay(current, myHustle.checkinHour, already ? Math.max(1, liveStreak) : liveStreak + 1);
   const payEl = sh("shPay"); if (payEl) payEl.textContent = fmtMoney(pay);
+  shRenderStreakNote(current, myHustle.checkinHour, liveStreak, already);
 
   const { hour, minute } = nzHourMinute();
   const inWindow = hour === myHustle.checkinHour && minute <= 15;
-  const already = myHustle.lastCheckin === nzDateKey();
   const checkinBtn = sh("shCheckinBtn");
   if (checkinBtn) checkinBtn.disabled = !inWindow || already;
   const statusEl = sh("shStatus");
@@ -649,6 +653,28 @@ async function renderSideHustle(me, cls, lockedModules) {
   }
   const changeBtn = sh("shChangeBtn");
   if (changeBtn) changeBtn.classList.toggle("hidden", hasPendingRequest);
+}
+
+// Explains the teacher's streak bonus to the student and where their own streak stands.
+function shRenderStreakNote(hustle, hr, liveStreak, already) {
+  const el = sh("shStreakNote"); if (!el) return;
+  const per = Number(hustle.streakBonus) || 0;
+  if (!(per > 0) || !(Number((hustle.payouts || {})[hr]) > 0)) { el.classList.add("hidden"); el.textContent = ""; return; }
+  const cap = Number(hustle.streakBonusMax) > 0 ? Number(hustle.streakBonusMax) : 0;
+  const days = n => `${n} day${n === 1 ? "" : "s"}`;
+  const rule = `Streak bonus: +${fmtMoney(per)} extra for every consecutive day you check in, and it stacks${cap ? ` (up to +${fmtMoney(cap)})` : ""}. Miss a day and it starts again.`;
+  let now;
+  if (already) {
+    const got = sideHustleStreakBonus(hustle, liveStreak);
+    now = `You're on a ${days(liveStreak)} streak${got > 0 ? ` and today's check-in included a ${fmtMoney(got)} bonus` : ""}. Check in tomorrow to make it ${days(liveStreak + 1)} and earn ${fmtMoney(sideHustlePay(hustle, hr, liveStreak + 1))}.${cap && got >= cap ? " You've reached the max bonus, keep the streak going to keep earning it." : ""}`;
+  } else if (liveStreak > 0) {
+    const next = liveStreak + 1;
+    now = `You're on a ${days(liveStreak)} streak. Check in today to make it ${days(next)} and earn ${fmtMoney(sideHustlePay(hustle, hr, next))}, which includes a ${fmtMoney(sideHustleStreakBonus(hustle, next))} bonus.`;
+  } else {
+    now = `Check in today to start a streak. Your next check-in will pay ${fmtMoney(sideHustlePay(hustle, hr, 2))}.`;
+  }
+  el.textContent = rule + " " + now;
+  el.classList.remove("hidden");
 }
 
 /* Pay chart: every hustle side by side, one row per check-in hour, so pay can be
@@ -663,6 +689,7 @@ function shChartHtml(hustles, mine, selectable) {
     const r = hustlePayRange(x.payouts);
     return `<th scope="col"><div class="sh-hname">${escapeHtml(x.name)}</div>
       <div class="sh-hrange">${r ? (r.min === r.max ? hustleMoney(r.max) : hustleMoney(r.min) + " to " + hustleMoney(r.max)) : "no pay set"}</div>
+      ${Number(x.streakBonus) > 0 ? `<div class="sh-hrange">+${hustleMoney(x.streakBonus)}/day streak bonus${Number(x.streakBonusMax) > 0 ? `, max +${hustleMoney(x.streakBonusMax)}` : ""}</div>` : ""}
       ${x.description ? `<div class="sh-hdesc">${escapeHtml(x.description)}</div>` : ""}</th>`;
   }).join("");
   const rows = hours.map(h => {
@@ -713,7 +740,7 @@ function shUpdateConfirm() {
   }
   const mine = SH_ME && SH_ME.sideHustle;
   const same = !!(mine && mine.hustleId === hustle.id && Number(mine.checkinHour) === SH_SEL.hour);
-  preview.innerHTML = `<strong>${escapeHtml(hustle.name)}</strong> at <strong>${hourLabel(SH_SEL.hour)}</strong> pays <strong>${fmtMoney(Number(hustle.payouts[SH_SEL.hour]) || 0)}</strong> each day you check in.${same ? " This is already your hustle." : ""}`;
+  preview.innerHTML = `<strong>${escapeHtml(hustle.name)}</strong> at <strong>${hourLabel(SH_SEL.hour)}</strong> pays <strong>${fmtMoney(Number(hustle.payouts[SH_SEL.hour]) || 0)}</strong> each day you check in.${Number(hustle.streakBonus) > 0 ? ` Plus a streak bonus of +${fmtMoney(hustle.streakBonus)} more for every consecutive day${Number(hustle.streakBonusMax) > 0 ? `, up to +${fmtMoney(hustle.streakBonusMax)}` : ""}.` : ""}${same ? " This is already your hustle." : ""}`;
   save.disabled = same;
 }
 
@@ -750,7 +777,7 @@ async function shDoCheckin() {
   const statusEl = sh("shStatus");
   if (statusEl) {
     statusEl.textContent = res.ok
-      ? `Checked in! +${fmtMoney(res.amount)}. Streak: ${res.streak} day${res.streak === 1 ? "" : "s"}.`
+      ? `Checked in! +${fmtMoney(res.amount)}${res.bonus > 0 ? ` (includes a ${fmtMoney(res.bonus)} streak bonus)` : ""}. Streak: ${res.streak} day${res.streak === 1 ? "" : "s"}.`
       : res.error;
   }
   await render();

@@ -141,6 +141,7 @@ function renderSideHustles(cls, students) {
       <div class="auto-details">${icon("briefcase", 14)} <strong>${escapeHtml(h.name)}</strong>
         <div class="muted-small">${payoutSummary}</div>
         ${h.description ? `<div class="muted-small">${escapeHtml(h.description)}</div>` : ""}
+        ${Number(h.streakBonus) > 0 ? `<div class="muted-small">${icon("sparkle", 13)} Streak bonus: +${hustleMoney(h.streakBonus)} per consecutive day${Number(h.streakBonusMax) > 0 ? `, max +${hustleMoney(h.streakBonusMax)}` : ", no limit"}</div>` : ""}
       </div>
       <button class="btn small secondary" onclick="startEditSideHustle('${h.id}')">${icon("edit", 13)} Edit</button>
       <button class="btn small coral" onclick="removeSideHustleClick('${h.id}')">${icon("trash", 13)} Remove</button>
@@ -267,12 +268,15 @@ async function addSideHustleForm(e) {
     shShowMsg("Add a payout for at least one hour first.");
     return false;
   }
+  const streak = shReadStreak();
+  if (streak.error) { shShowMsg(streak.error); return false; }
   shShowMsg("");
+  const streakBonus = streak.bonus, streakBonusMax = streak.max;
 
   if (EDITING_SIDE_HUSTLE_ID) {
-    await editSideHustle(CLASS_CODE, EDITING_SIDE_HUSTLE_ID, { name, description, payouts });
+    await editSideHustle(CLASS_CODE, EDITING_SIDE_HUSTLE_ID, { name, description, payouts, streakBonus, streakBonusMax });
   } else {
-    await addSideHustle(CLASS_CODE, { name, description, payouts });
+    await addSideHustle(CLASS_CODE, { name, description, payouts, streakBonus, streakBonusMax });
   }
   resetSideHustleForm();
   await render();
@@ -283,6 +287,9 @@ function resetSideHustleForm() {
   EDITING_SIDE_HUSTLE_ID = null;
   document.getElementById("shName").value = "";
   document.getElementById("shDesc").value = "";
+  document.getElementById("shStreakBonus").value = "";
+  document.getElementById("shStreakMax").value = "";
+  shStreakPreview();
   shClearPayouts();
   shShowMsg("");
   document.getElementById("shPasteBox").classList.add("hidden");
@@ -300,6 +307,9 @@ function startEditSideHustle(id) {
     EDITING_SIDE_HUSTLE_ID = id;
     document.getElementById("shName").value = h.name;
     document.getElementById("shDesc").value = h.description || "";
+    document.getElementById("shStreakBonus").value = Number(h.streakBonus) > 0 ? h.streakBonus : "";
+    document.getElementById("shStreakMax").value = Number(h.streakBonus) > 0 && Number(h.streakBonusMax) > 0 ? h.streakBonusMax : "";
+    shStreakPreview();
     shLoadPayouts(h.payouts);
     document.getElementById("addSideHustleBtn").innerHTML = icon("save", 15) + " Save changes";
     document.getElementById("hustleFoldTitle").textContent = "Edit side hustle";
@@ -1334,6 +1344,31 @@ document.addEventListener("DOMContentLoaded", init);
    spreadsheet column and paste a typed list all just fill these boxes, so what
    the teacher sees is exactly what will be saved. */
 let SH_CLASS_HUSTLES = [];
+// Streak bonus inputs: "+$ per consecutive day" and an optional ceiling (blank = no limit).
+function shNum(id) {
+  const raw = document.getElementById(id).value.replace(/[$,\s]/g, "");
+  if (raw === "") return { blank: true, n: 0 };
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? { n } : { bad: true };
+}
+function shReadStreak() {
+  const b = shNum("shStreakBonus"), m = shNum("shStreakMax");
+  if (b.bad) return { error: "Streak bonus needs to be a plain number like 2 (or leave it blank for none)." };
+  if (m.bad) return { error: "Max streak bonus needs to be a plain number like 10 (or leave it blank for no limit)." };
+  const bonus = shRound2(b.n);
+  const max = !bonus || m.blank || !m.n ? null : shRound2(m.n);
+  if (max !== null && max < bonus) return { error: "The max streak bonus can't be less than the daily bonus." };
+  return { bonus, max };
+}
+function shStreakPreview() {
+  const el = document.getElementById("shStreakPreview");
+  if (!el) return;
+  const s = shReadStreak();
+  if (s.error || !s.bonus) { el.textContent = s.error ? "" : "No streak bonus. Students get the normal pay every day."; return; }
+  const h = { streakBonus: s.bonus, streakBonusMax: s.max };
+  const days = [2, 3, 4, 5].map(d => `Day ${d}: +${hustleMoney(sideHustleStreakBonus(h, d))}`).join(" · ");
+  el.textContent = days + (s.max ? `. The bonus stops growing at +${hustleMoney(s.max)} (from day ${Math.ceil(s.max / s.bonus) + 1}).` : " and so on, with no limit.");
+}
 function shHourInputs() { return Array.from(document.querySelectorAll("#shHourGrid input[data-hr]")); }
 function shRound2(n) { return Math.round(n * 100) / 100; }
 function shShowMsg(text) {
