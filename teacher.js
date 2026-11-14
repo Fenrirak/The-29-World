@@ -20,7 +20,7 @@ function paintChrome() {
   document.getElementById("interestBtn").innerHTML = icon("percent", 15) + " Apply Interest";
   document.getElementById("studentViewBtn").innerHTML = icon("eye", 15) + " View as student";
   document.getElementById("iconStudents").innerHTML = icon("users", 30);
-  document.getElementById("iconNetWorth").innerHTML = icon("wallet", 30);
+  document.getElementById("iconNetWorth").innerHTML = icon("cashnote", 30);
   document.getElementById("classArchivedIcon").innerHTML = icon("lock", 15);
   // Same icon as the Stock Market page and menu.
   document.getElementById("iconCompanies").innerHTML = icon("chart", 30);
@@ -32,8 +32,8 @@ function paintChrome() {
   document.getElementById("hTimeLimit").innerHTML = icon("hourglass", 18) + " Daily time limit";
   document.getElementById("hExport").innerHTML = icon("download", 18) + " Export this class";
   document.getElementById("hDanger").innerHTML = icon("repeat", 18) + " Restart class";
-  document.getElementById("saveWelcomeBtn").innerHTML = icon("save", 14) + " Save welcome grant";
-  document.getElementById("saveDailyTimeLimitBtn").innerHTML = icon("save", 14) + " Save time limit";
+  document.getElementById("saveWelcomeBtn").innerHTML = "Save welcome grant";
+  document.getElementById("saveDailyTimeLimitBtn").innerHTML = "Save time limit";
   document.getElementById("exportPdfBtn").innerHTML = icon("download", 15) + " Download as PDF";
   document.getElementById("exportMdBtn").innerHTML = icon("download", 15) + " Download as Markdown";
   document.getElementById("restartBtn").innerHTML = icon("repeat", 15) + " Restart class";
@@ -43,10 +43,10 @@ function paintChrome() {
   document.getElementById("labAdjNote").innerHTML = icon("note", 13) + " Reason";
   document.getElementById("applyAdjBtn").innerHTML = icon("send", 15) + " Apply";
   document.getElementById("hLifestyle").innerHTML = icon("star", 18) + " Lifestyle rating settings";
-  document.getElementById("saveLifestyleBtn").innerHTML = icon("save", 14) + " Save lifestyle settings";
+  document.getElementById("saveLifestyleBtn").innerHTML = "Save lifestyle settings";
   document.getElementById("hThresholds").innerHTML = icon("star", 18) + " Lifestyle rating bands";
   document.getElementById("addThresholdBtn").innerHTML = icon("plus", 13) + " Add band";
-  document.getElementById("saveThresholdsBtn").innerHTML = icon("save", 14) + " Save bands";
+  document.getElementById("saveThresholdsBtn").innerHTML = "Save bands";
 }
 
 async function init() {
@@ -944,7 +944,7 @@ async function renderProfile(username) {
           </div>
           <button class="btn small" onclick="applyProfileTierChange('${escapeJsAttr(username)}', event)">Save</button>
           ${tierIdx >= 0 && tierIdx < tiers.length - 1
-            ? `<button class="btn small mint" onclick="promoteProfileStudent('${escapeJsAttr(username)}', event)">⬆ Offer promotion to ${escapeHtml(tiers[tierIdx + 1].name)}</button>`
+            ? `<button class="btn small mint" onclick="promoteProfileStudent('${escapeJsAttr(username)}', event)">Offer promotion to ${escapeHtml(tiers[tierIdx + 1].name)}</button>`
             : `<span class="badge mint" style="align-self:flex-end;">At top tier</span>`}
         </div>
         <p class="muted-small" style="margin-top:6px;">Moving up requires ${escapeHtml(s.name.split(" ")[0])} to accept the offer first; moving down applies right away.</p>

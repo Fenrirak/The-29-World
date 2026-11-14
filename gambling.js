@@ -181,7 +181,7 @@ function showRouletteAnimation(number) {
     overlay.id = "wheelOverlay";
     overlay.innerHTML = `
       <div class="anw-modal-card" style="text-align:center;max-width:500px;">
-        <h2 style="display:flex;align-items:center;justify-content:center;gap:9px;">${icon("dice", 24)} Spinning the wheel...</h2>
+        <h2 style="display:flex;align-items:center;justify-content:center;gap:9px;">${icon("roulette", 24)} Spinning the wheel...</h2>
         <div class="wheel-stage">
           <div class="wheel-rim">
             <div class="wheel-disc" id="wheelDisc" style="background:${wheelGradient()};">
@@ -1462,22 +1462,22 @@ function paintChrome() {
   document.getElementById("pageIntro").textContent = IS_TEACHER
     ? "Set the limits for Roulette and Blackjack, including each student's daily buy-in and winning limits, and see every bet your students place."
     : "Pick a game below. Only bet what you can afford to lose!";
-  document.getElementById("hSettings").innerHTML = icon("dice", 18) + " Roulette settings";
-  document.getElementById("saveSettingsBtn").innerHTML = icon("save", 14) + " Save settings";
+  document.getElementById("hSettings").innerHTML = icon("roulette", 18) + " Roulette settings";
+  document.getElementById("saveSettingsBtn").innerHTML = "Save settings";
   document.getElementById("labEnabled").textContent = "Allow students to gamble";
   document.getElementById("hDisabled").innerHTML = icon("dice", 20) + " Gambling is paused";
   document.getElementById("hBet").textContent = "Place a bet";
   document.getElementById("hRecent").innerHTML = icon("history", 18) + " My recent bets";
 
   document.getElementById("bjHSettings").innerHTML = icon("cards", 18) + " Blackjack settings";
-  document.getElementById("bjSaveSettingsBtn").innerHTML = icon("save", 14) + " Save settings";
+  document.getElementById("bjSaveSettingsBtn").innerHTML = "Save settings";
   document.getElementById("bjLabEnabled").textContent = "Allow students to play Blackjack";
   document.getElementById("bjHDisabled").innerHTML = icon("cards", 20) + " Blackjack is paused";
   document.getElementById("bjHTable").textContent = "Blackjack table";
   document.getElementById("bjHRecent").innerHTML = icon("history", 18) + " My recent bets";
 
-  document.getElementById("hAccountSettings").innerHTML = icon("dice", 18) + " Gambling account settings";
-  document.getElementById("acctSaveSettingsBtn").innerHTML = icon("save", 14) + " Save settings";
+  document.getElementById("hAccountSettings").innerHTML = "Gambling account settings";
+  document.getElementById("acctSaveSettingsBtn").innerHTML = "Save settings";
   document.getElementById("acctHDisabled").innerHTML = icon("dice", 20) + " Gambling is paused";
   document.getElementById("hGamblingAccount").textContent = "Gambling account";
   const actBox = document.getElementById("gAcctRecentTxns");

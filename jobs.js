@@ -20,6 +20,7 @@ let EDIT_TIERS  = []; // { id, name, wage, description } — id="" means new
 
 function paintChrome() {
   paintIconSlots();
+  document.getElementById("pageTitle").innerHTML = icon("briefcase", 26) + " Jobs";
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -138,10 +139,10 @@ function renderSideHustles(cls, students) {
         + `<div class="sh-runs">${hustlePayRuns(h.payouts).map(r => `<span class="sh-run"><b>${hustleRunLabel(r)}</b> ${hustleMoney(r.amount)}</span>`).join("")}</div>`
       : "No payouts set";
     row.innerHTML = `
-      <div class="auto-details">${icon("briefcase", 14)} <strong>${escapeHtml(h.name)}</strong>
+      <div class="auto-details"><strong>${escapeHtml(h.name)}</strong>
         <div class="muted-small">${payoutSummary}</div>
         ${h.description ? `<div class="muted-small">${escapeHtml(h.description)}</div>` : ""}
-        ${Number(h.streakBonus) > 0 ? `<div class="muted-small">${icon("sparkle", 13)} Streak bonus: +${hustleMoney(h.streakBonus)} per consecutive day${Number(h.streakBonusMax) > 0 ? `, max +${hustleMoney(h.streakBonusMax)}` : ", no limit"}</div>` : ""}
+        ${Number(h.streakBonus) > 0 ? `<div class="muted-small">Streak bonus: +${hustleMoney(h.streakBonus)} per consecutive day${Number(h.streakBonusMax) > 0 ? `, max +${hustleMoney(h.streakBonusMax)}` : ", no limit"}</div>` : ""}
       </div>
       <button class="btn small secondary" onclick="startEditSideHustle('${h.id}')">${icon("edit", 13)} Edit</button>
       <button class="btn small coral" onclick="removeSideHustleClick('${h.id}')">${icon("trash", 13)} Remove</button>
@@ -311,7 +312,7 @@ function startEditSideHustle(id) {
     document.getElementById("shStreakMax").value = Number(h.streakBonus) > 0 && Number(h.streakBonusMax) > 0 ? h.streakBonusMax : "";
     shStreakPreview();
     shLoadPayouts(h.payouts);
-    document.getElementById("addSideHustleBtn").innerHTML = icon("save", 15) + " Save changes";
+    document.getElementById("addSideHustleBtn").innerHTML = "Save changes";
     document.getElementById("hustleFoldTitle").textContent = "Edit side hustle";
     document.getElementById("hustleFold").open = true;
     if (!document.getElementById("cancelEditSideHustleBtn")) {
@@ -742,7 +743,7 @@ function renderMyJob(me, cls) {
         </div>
         ${!isTop && job.autoPromoteWeeks > 0
           ? `<p class="muted-small tier-auto-note">${icon("repeat", 12)} Auto-promotes every ${job.autoPromoteWeeks} week${job.autoPromoteWeeks === 1 ? "" : "s"}. Next tier: <strong>${escapeHtml(tiers[tierIdx + 1].name)}</strong> (${fmtMoney(tiers[tierIdx + 1].wage)}/pay day)</p>`
-          : isTop ? `<p class="muted-small tier-auto-note">🏆 Top tier. You've reached the highest level!</p>` : ""}
+          : isTop ? `<p class="muted-small tier-auto-note">Top tier. You've reached the highest level!</p>` : ""}
       ` : ""}
     </div>
   `;

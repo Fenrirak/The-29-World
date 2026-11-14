@@ -986,8 +986,8 @@ function listingChips(p, cls, extraChips) {
   chips.push(`<span class="chip">${comfortStars(p.comfort)}</span>`);
   if (p.mortgageWeeks > 0 && variableRateOffered(p)) {
     const due = `Weekly payments are due ${dayFull(cls.mortgageDay)}s`;
-    chips.push(`<span class="chip chip-fixed" title="Rate locked in for the whole mortgage. ${due}"><span class="chip-ico">${icon("lock", 13)}</span>Fixed ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`);
-    chips.push(`<span class="chip chip-var" title="Rate moves each week inside this range. ${due}"><span class="chip-ico">${icon("percent", 13)}</span>Variable ${p.variableRateMin}\u2013${p.variableRateMax}%/wk &middot; now ${p.variableRate}%</span>`);
+    chips.push(`<span class="chip chip-fixed" title="Rate locked in for the whole mortgage. ${due}">Fixed ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`);
+    chips.push(`<span class="chip chip-var" title="Rate moves each week inside this range. ${due}">Variable ${p.variableRateMin}\u2013${p.variableRateMax}%/wk &middot; now ${p.variableRate}%</span>`);
   } else {
     chips.push(p.mortgageWeeks > 0
       ? `<span class="chip" title="Weekly payments are due ${dayFull(cls.mortgageDay)}s">Mortgage ${p.mortgageWeeks} wks${p.mortgageInterestRate > 0 ? ` @ ${p.mortgageInterestRate}%/wk` : ""}</span>`
@@ -1545,7 +1545,7 @@ async function openPricingModal(id) {
       <span class="muted-small">Changes the price right away. It's currently ${fmtMoney(p.price)}.</span>
       <div class="p-inline">
         <input type="number" min="0.01" step="0.01" id="price-${p.id}" value="${p.price}" aria-label="New price in dollars">
-        <button class="btn small" onclick="overridePriceClick('${p.id}')">${icon("save", 13)} Update</button>
+        <button class="btn small" onclick="overridePriceClick('${p.id}')">Update</button>
       </div>
     </div>
     <div class="form-sec">
@@ -1556,7 +1556,7 @@ async function openPricingModal(id) {
         <div><label for="prmax-${p.id}">Max % change</label><input type="number" min="0" step="0.1" id="prmax-${p.id}" value="${range.max}"></div>
       </div>
       <div class="p-modal-foot">
-        <button class="btn small gold" onclick="setListingRangeClick('${p.id}')">${icon("save", 13)} Save range</button>
+        <button class="btn small gold" onclick="setListingRangeClick('${p.id}')">Save range</button>
         ${p.priceRange ? `<button class="btn small secondary" onclick="clearListingRangeClick('${p.id}')">Reset to class default</button>` : ""}
       </div>
     </div>
@@ -1613,7 +1613,7 @@ function resetPropForm() {
 }
 function setPropModalMode(editing) {
   document.getElementById("hAdd").textContent = editing ? "Edit property" : "Add a property";
-  document.getElementById("addBtn").innerHTML = editing ? icon("save", 15) + " Save changes" : icon("plus", 15) + " Add property";
+  document.getElementById("addBtn").innerHTML = editing ? "Save changes" : icon("plus", 15) + " Add property";
   document.getElementById("addMsg").innerHTML = "";
 }
 function openPropModal() {
@@ -1768,7 +1768,7 @@ function npcTenantBlock(u, nameOf) {
 }
 function setNpcModalMode(editing) {
   document.getElementById("hAddNpc").textContent = editing ? "Edit school rental" : "Add a school rental";
-  document.getElementById("addNpcBtn").innerHTML = editing ? icon("save", 15) + " Save changes" : icon("plus", 15) + " Add school rental";
+  document.getElementById("addNpcBtn").innerHTML = editing ? "Save changes" : icon("plus", 15) + " Add school rental";
   document.getElementById("addNpcMsg").innerHTML = "";
 }
 function openNpcModal() {

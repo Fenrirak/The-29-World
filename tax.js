@@ -71,9 +71,9 @@ function removeBracket(i) {
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("percent", 26) + " Tax";
-  document.getElementById("hRates").innerHTML = icon("percent", 18) + " Tax rates";
-  document.getElementById("saveBtn").innerHTML = icon("save", 15) + " Save tax rates";
-  document.getElementById("hWageBrackets").innerHTML = icon("percent", 18) + " Wage tax brackets";
+  document.getElementById("hRates").innerHTML = "Tax rates";
+  document.getElementById("saveBtn").innerHTML = "Save tax rates";
+  document.getElementById("hWageBrackets").innerHTML = "Wage tax brackets";
 }
 
 async function init() {

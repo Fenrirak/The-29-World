@@ -191,7 +191,7 @@ function paintChrome() {
   document.getElementById("pageIntro").textContent = IS_TEACHER
     ? "Build insurance plans for your class by choosing the company, type of cover, price and excess, and set the day premiums are paid."
     : "Protect yourself against the unexpected: pay a small weekly premium now, save on the excess later.";
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add an insurance plan";
+  document.getElementById("hAdd").innerHTML = "Add an insurance plan";
   document.getElementById("addBtn").innerHTML = "Add plan";
   document.getElementById("hMine").innerHTML = icon("shield", 18) + " My cover";
   document.getElementById("hPayDay").innerHTML = icon("calendar", 18) + " Premium payment day";
@@ -398,7 +398,7 @@ function cancelEditPlan() {
   clearPlanDetails();
   document.getElementById("pCoverage").value = "general";
   updatePlanFormForCoverage("", "");
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add an insurance plan";
+  document.getElementById("hAdd").innerHTML = "Add an insurance plan";
   document.getElementById("addBtn").innerHTML = "Add plan";
   document.getElementById("cancelEditBtn").classList.add("hidden");
 }

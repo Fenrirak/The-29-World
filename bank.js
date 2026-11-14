@@ -11,7 +11,7 @@ function paintChrome() {
   document.getElementById("pageTitle").innerHTML = icon("piggy", 26) + " Bank";
   document.getElementById("iconAuto").innerHTML = icon("repeat", 30);
   document.getElementById("iconCardStat").innerHTML = icon("creditcard", 30); // credit card tile: its own card icon (not the wallet)
-  document.getElementById("hActivity").innerHTML = icon("bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 3 days)");
+  document.getElementById("hActivity").innerHTML = icon(IS_TEACHER ? "history" : "bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 3 days)");
   if (IS_TEACHER) document.getElementById("labAmount").textContent = "Amount (negative to deduct from a student)";
   if (IS_TEACHER) {
     const amtInput = document.getElementById("amount");
@@ -338,7 +338,7 @@ function renderSavingsSettings(cls) {
       </div>
       <p class="muted-small bs-tune">${icon("sparkle", 14)}<span>Accounts you add from the recommended list are personalised to this schedule: fees and withdrawal limits scale with how often interest is paid.</span></p>
     </section>
-    <div class="bs-save"><button class="btn gold" id="bsSaveBtn" onclick="bsSave()">${icon("save", 15)} Save interest settings</button>
+    <div class="bs-save"><button class="btn gold" id="bsSaveBtn" onclick="bsSave()">Save interest settings</button>
       <span class="muted-small">These settings are for the <strong>Default everyday</strong> and <strong>savings</strong> accounts. Students are told when rates or the schedule change.</span></div>
     <div id="bsMsg"></div>`;
   bsHints();

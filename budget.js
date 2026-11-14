@@ -590,9 +590,9 @@ function renderBudgetTeacher(cls, students) {
       <div class="label">${label}</div>
       <div class="value">${value}${of !== undefined ? `<span style="font-size:1rem;font-weight:700;"> / ${of}</span>` : ""}</div></div>`;
   document.getElementById("budTeacherStats").innerHTML =
-    stat("sky", "idcard", "Have a savings plan", planned.length, rows.length) +
-    stat("mint", "trophy", "On track", onTrack.length, rows.length) +
-    stat(needHelp.length ? "gold" : "mint", "shield", "Might need a hand", needHelp.length, rows.length);
+    stat("sky", "clipboard", "Have a savings plan", planned.length, rows.length) +
+    stat("mint", "flag", "On track", onTrack.length, rows.length) +
+    stat(needHelp.length ? "gold" : "mint", "lifebuoy", "Might need a hand", needHelp.length, rows.length);
 
   const FLAG = {
     unknown: `<span class="bud-flag warn">Incomplete activity history</span>`,

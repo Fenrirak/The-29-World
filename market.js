@@ -37,17 +37,17 @@ function paintChrome() {
   document.getElementById("pageIntro").textContent = IS_TEACHER
     ? "Open companies for your class to invest in, move prices with a simulated market day, and set how far the daily price swings can go."
     : "Buy and sell shares in companies your teacher has opened for the class.";
-  document.getElementById("hOpen").innerHTML = icon("plus", 18) + " Open a new company";
-  document.getElementById("labName").innerHTML = icon("building", 13) + " Company name";
-  document.getElementById("labPrice").innerHTML = icon("coin", 13) + " Starting share price";
-  document.getElementById("labShares").innerHTML = icon("chart", 13) + " Total shares available";
-  document.getElementById("openBtn").innerHTML = icon("plus", 15) + " Open company";
-  document.getElementById("hVolatility").innerHTML = icon("chart", 18) + " Daily price movement";
-  document.getElementById("labRangeMin").innerHTML = icon("chart", 13) + " Minimum % change";
-  document.getElementById("labRangeMax").innerHTML = icon("chart", 13) + " Maximum % change";
-  document.getElementById("saveRangeBtn").innerHTML = icon("save", 14) + " Save range";
-  document.getElementById("hMarketDay").innerHTML = icon("chart", 18) + " Market day";
-  document.getElementById("simDayBtn").innerHTML = icon("chart", 15) + " Simulate a market day";
+  document.getElementById("hOpen").innerHTML = "Open a new company";
+  document.getElementById("labName").innerHTML = "Company name";
+  document.getElementById("labPrice").innerHTML = "Starting share price";
+  document.getElementById("labShares").innerHTML = "Total shares available";
+  document.getElementById("openBtn").innerHTML = "Open company";
+  document.getElementById("hVolatility").innerHTML = "Daily price movement";
+  document.getElementById("labRangeMin").innerHTML = "Minimum % change";
+  document.getElementById("labRangeMax").innerHTML = "Maximum % change";
+  document.getElementById("saveRangeBtn").innerHTML = "Save range";
+  document.getElementById("hMarketDay").innerHTML = "Market day";
+  document.getElementById("simDayBtn").innerHTML = "Simulate a market day";
 }
 
 async function init() {
@@ -275,12 +275,12 @@ async function render() {
             <label for="price-${co.id}">Set new price</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="0.01" step="0.01" id="price-${co.id}" value="${co.price}">
-              <button class="btn small" onclick="setPrice('${co.id}')">${icon("save",13)} Update</button>
+              <button class="btn small" onclick="setPrice('${co.id}')">Update</button>
             </div>
           </div>
           <div style="text-align:right;">
             <label>&nbsp;</label>
-            <button class="btn small coral" onclick="closeCo('${co.id}')">${icon("coin",13)} Delist &amp; cash out holders</button>
+            <button class="btn small coral" onclick="closeCo('${co.id}')">Delist &amp; cash out holders</button>
           </div>
         </div>
         <div class="grid grid-3" style="margin-top:10px;">
@@ -293,7 +293,7 @@ async function render() {
             <input type="number" min="0" step="0.5" id="rmax-${co.id}" value="${(co.priceRange || cls.priceRange || {max:5}).max}">
           </div>
           <div style="display:flex;align-items:flex-end;">
-            <button class="btn small secondary" style="width:100%;" onclick="setCoRange('${co.id}')">${icon("save",13)} Save range</button>
+            <button class="btn small secondary" style="width:100%;" onclick="setCoRange('${co.id}')">Save range</button>
           </div>
         </div>
       ` : `

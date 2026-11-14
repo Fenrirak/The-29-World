@@ -58,7 +58,7 @@ function paintTabs(list) {
     const html = list.map(t => {
       const on = t.key === ACTIVE_TAB;
       const id = "tab" + t.key.charAt(0).toUpperCase() + t.key.slice(1);
-      return `<button type="button" role="tab" id="${id}" class="${on ? "active" : ""}" aria-selected="${on}" aria-controls="${EV_PANES[t.key]}" onclick="showTab('${t.key}')">${icon(t.icon, 18)} ${t.label} <span class="ev-tab-count">${t.count}</span></button>`;
+      return `<button type="button" role="tab" id="${id}" class="${on ? "active" : ""}" aria-selected="${on}" aria-controls="${EV_PANES[t.key]}" onclick="showTab('${t.key}')">${(t.key === "random" || t.key === "big") ? "" : icon(t.icon, 18) + " "}${t.label} <span class="ev-tab-count">${t.count}</span></button>`;
     }).join("");
     // Only rebuilt when something changed, so a background refresh never steals keyboard focus.
     if (bar.dataset.sig !== html) { bar.innerHTML = html; bar.dataset.sig = html; }
@@ -84,8 +84,8 @@ function paintChrome() {
   document.getElementById("pageIntro").textContent = IS_TEACHER
     ? "Everything unexpected that can happen to your students lives here. Random events are everyday surprises spread across the school week, and big events are rarer, high-stakes moments. Set both up, run them on demand, and choose whether students can see what could happen."
     : "Random events are everyday surprises that can land on any school day, and big events are rarer with higher stakes. Everything that has happened to you is listed below.";
-  document.getElementById("hRandom").innerHTML = icon("dice", 18) + " Random events";
-  document.getElementById("hBig").innerHTML = icon("bolt", 18) + " Big events";
+  document.getElementById("hRandom").innerHTML = "Random events";
+  document.getElementById("hBig").innerHTML = "Big events";
   document.getElementById("runEventsNowBtn").innerHTML = icon("sparkle", 14) + " Run this week's events now";
   document.getElementById("runBigEventsBtn").innerHTML = icon("bolt", 14) + " Run this week's big events now";
   document.getElementById("addEventBtn").innerHTML = icon("plus", 15) + " Add event";
@@ -193,7 +193,6 @@ function randomDefRowHtml(ev) {
     ? `<div class="ev-desc"><strong>Choices:</strong> ${(ev.options || []).map(o => `${escapeHtml(o.label)} (${eventAmountText(o.amount, o.percent, ev.amountBase)})${o.outcome ? `: ${escapeHtml(o.outcome)}` : ""}`).join(", ")}</div>`
     : `<div class="ev-desc"><strong>${eventAmountText(ev.amount, ev.amountMode === "percent" ? ev.amountPercent : 0, ev.amountBase)}</strong></div>`;
   return `<div class="ev-row random">
-    <span class="ev-ico">${icon("dice", 20)}</span>
     <div class="ev-main">
       <div class="ev-title"><span>${escapeHtml(ev.name)}</span>
         ${isChoice ? `<span class="badge lilac">Multiple choice</span>` : ""}
@@ -236,7 +235,6 @@ function bigDefRowHtml(d) {
     ? `<strong>${isGood ? "+" : ""}${Number(d.costPercent)}%</strong> of ${PERCENT_BASE_TEXT[d.module] || "the item's present cost"}, ${isGood ? "paid to the student" : "to pay"}`
     : `<strong>${isGood ? "+" : ""}${fmtMoney(d.cost)}</strong> ${isGood ? "paid to the student" : "to pay"}`;
   return `<div class="ev-row big">
-    <span class="ev-ico">${icon("bolt", 20)}</span>
     <div class="ev-main">
       <div class="ev-title"><span>${escapeHtml(d.name)}</span>
         <span class="badge navy">${MODULE_LABEL[d.module] || escapeHtml(d.module)}</span>
@@ -451,7 +449,6 @@ function buildCatalogue(cls) {
 function historyRowHtml(it) {
   const big = it.kind === "big";
   return `<div class="ev-row ${it.kind}">
-    <span class="ev-ico">${icon(big ? "bolt" : "dice", 20)}</span>
     <div class="ev-main">
       <div class="ev-title"><span>${escapeHtml(it.name)}</span>
         <span class="badge ${big ? "gold" : "lilac"}">${big ? "Big" : "Random"}</span>
@@ -467,7 +464,6 @@ function historyRowHtml(it) {
 function catalogCardHtml(it) {
   return `<div class="ev-card ${it.kind}">
     <div class="ev-card-head">
-      <span class="ev-ico">${icon(it.kind === "big" ? "bolt" : "dice", 20)}</span>
       <div class="ev-main"><div class="ev-title"><span>${escapeHtml(it.name)}</span> ${it.badges}</div></div>
     </div>
     ${it.desc ? `<div class="ev-desc">${escapeHtml(it.desc)}</div>` : ""}
@@ -543,7 +539,7 @@ function paintStudentList(pane) {
   listBox.innerHTML = groups.map(([k, title, ic, sub]) => {
     const arr = shown.filter(i => i.kind === k);
     if (!arr.length) return "";
-    return `<h3 class="ev-section-title">${icon(ic, 18)} ${title} <span class="badge navy">${arr.length}</span></h3>
+    return `<h3 class="ev-section-title">${title} <span class="badge navy">${arr.length}</span></h3>
       <p class="muted-small ev-section-sub">${sub}</p>
       <div class="ev-grid">${arr.map(catalogCardHtml).join("")}</div>`;
   }).join("");
@@ -628,7 +624,7 @@ function startEditEvent(id) {
     document.getElementById("beTakesAsset").checked = d.takesAsset !== false;
     updateCostLabel();
     updateCoverBox(d.insuranceCover || [], d.incident || null);
-    document.getElementById("addBtn").innerHTML = icon("save", 15) + " Save changes";
+    document.getElementById("addBtn").innerHTML = "Save changes";
     document.getElementById("bigFoldTitle").textContent = "Edit big event";
     document.getElementById("bigFold").open = true;
     if (!document.getElementById("cancelEditBtn")) {
@@ -883,7 +879,7 @@ function startEditRandomEvent(id) {
     document.getElementById("evPercent").value = ev.amountMode === "percent" && ev.amountPercent ? ev.amountPercent : "";
     if (ev.amountBase) document.getElementById("evBase").value = ev.amountBase;
     toggleEventType();
-    document.getElementById("addEventBtn").innerHTML = icon("save", 15) + " Save changes";
+    document.getElementById("addEventBtn").innerHTML = "Save changes";
     document.getElementById("eventFoldTitle").textContent = "Edit random event";
     document.getElementById("eventFold").open = true;
     if (!document.getElementById("cancelEditEventBtn")) {

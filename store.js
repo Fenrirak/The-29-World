@@ -67,7 +67,7 @@ function paintChrome() {
   document.getElementById("pageIntro").textContent = IS_TEACHER
     ? "Put items up for sale in your class store. Set each item's price, how many are in stock and any lifestyle stars it gives."
     : "Spend your hard-earned cash on things your teacher has put up for sale.";
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add an item";
+  document.getElementById("hAdd").innerHTML = "Add an item";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add item";
 }
 
@@ -306,7 +306,7 @@ function editItem(id) {
       Counts towards net worth / leaderboard
     </label>
     <div class="row-flex" style="gap:8px;margin-top:14px;">
-      <button class="btn small gold" onclick="saveItemEdit('${id}')">${icon("save", 13)} Save changes</button>
+      <button class="btn small gold" onclick="saveItemEdit('${id}')">Save changes</button>
       <button class="btn small secondary" onclick="cancelItemEdit('${id}')">Cancel</button>
     </div>
   `;

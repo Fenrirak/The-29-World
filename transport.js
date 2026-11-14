@@ -15,7 +15,7 @@ function paintChrome() {
   document.getElementById("pageIntro").textContent = IS_TEACHER
     ? "Add the vehicles your class can buy, then set the weekly public transport fee, sell-back rates and truck licence. Comfort ratings feed lifestyle scores, but only a student's comfiest vehicle counts."
     : "Buy a car, bike, or other ride with cash only, no financing. Owning more than one vehicle doesn't stack for your lifestyle score. Only your comfiest vehicle counts.";
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a vehicle";
+  document.getElementById("hAdd").innerHTML = "Add a vehicle";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add vehicle";
   document.getElementById("hMyVehicles").innerHTML = "My vehicles";
   document.getElementById("hBrowse").innerHTML = "Available vehicles";
@@ -287,7 +287,7 @@ async function editVeh(id) {
   onTypeChange();
   document.getElementById("hStock").value = (veh.stockLimit === null || veh.stockLimit === undefined) ? "" : veh.stockLimit;
   document.getElementById("hAdd").innerHTML = icon("edit", 18) + " Edit vehicle";
-  document.getElementById("addBtn").innerHTML = icon("save", 15) + " Save changes";
+  document.getElementById("addBtn").innerHTML = "Save changes";
   document.getElementById("cancelEditBtn").classList.remove("hidden");
   document.getElementById("addMsg").innerHTML = "";
   document.getElementById("teacherPanel").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -302,7 +302,7 @@ function cancelEditVeh() {
   document.getElementById("hWeeklyExpense").value = 0;
   document.getElementById("hPublicOffset").value = 0;
   onTypeChange();
-  document.getElementById("hAdd").innerHTML = icon("plus", 18) + " Add a vehicle";
+  document.getElementById("hAdd").innerHTML = "Add a vehicle";
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add vehicle";
   document.getElementById("cancelEditBtn").classList.add("hidden");
 }

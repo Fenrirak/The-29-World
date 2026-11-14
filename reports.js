@@ -27,7 +27,7 @@ function paintChrome() {
   document.getElementById("pageIntro").textContent = IS_TEACHER
     ? "Report cards: net worth, savings rate, biggest expenses and loan history. Net worth is noted automatically every 3 days, so each student's trend builds up on its own."
     : "Your report card: net worth, savings rate, biggest expenses and loan history for this month, plus your entire history.";
-  document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + " This month";
+  document.getElementById("hPeriod").innerHTML = "This month";
   document.getElementById("hMyReport").innerHTML = icon("idcard", 18) + " My report card";
 }
 
@@ -97,7 +97,7 @@ function render() {
 /* ---------------- Teacher view ---------------- */
 function renderTeacher() {
   renderResetQueue();
-  document.getElementById("hPeriod").innerHTML = icon("calendar", 18) + " This month";
+  document.getElementById("hPeriod").innerHTML = "This month";
   document.getElementById("periodRange").textContent = `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
 
   const rows = document.getElementById("classReportRows");
