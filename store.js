@@ -562,7 +562,7 @@ function cartContinue() { cartCloseDrawer(); }
 function cartInjectCss() {
   const st = document.createElement("style");
   st.textContent = `
-.cart-fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:2000;display:inline-flex;align-items:center;gap:10px;width:auto;margin:0;padding:12px 18px;border:0;border-radius:var(--sw-l,18px 4px 18px 4px);background:#e3a72f;color:#1f2b44;font:inherit;font-weight:800;cursor:pointer;box-shadow:var(--shadow-pop);transition:transform .15s,box-shadow .15s}
+.cart-fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:2000;display:inline-flex;align-items:center;gap:10px;width:auto;margin:0;padding:12px 18px;border:0;border-radius:var(--sw-l,23px 3px 23px 3px / 18px 3px 18px 3px);background:#e3a72f;color:#1f2b44;font:inherit;font-weight:600;cursor:pointer;box-shadow:var(--shadow-pop);transition:transform .15s,box-shadow .15s}
 .cart-fab:hover{transform:translateY(-2px);box-shadow:var(--shadow-pop)}
 .cart-fab:focus-visible,.cart-x:focus-visible{outline:3px solid rgba(227,167,47,.6);outline-offset:2px}
 .cart-fab.bump{animation:cartBump .45s}
@@ -585,7 +585,7 @@ body.cart-lock{overflow:hidden}
 .cl-name{font-weight:700;line-height:1.25;word-break:break-word}
 .cl-unit{display:block;font-size:var(--fs-sm);font-weight:400;opacity:.65;margin-top:2px}
 .cl-price{font-weight:800;text-align:right;white-space:nowrap}
-.cl-ctl{display:inline-flex;align-items:center;gap:4px;border:1.5px solid rgba(128,128,128,.35);border-radius:var(--sw-m,13px 3px 13px 3px);padding:2px}
+.cl-ctl{display:inline-flex;align-items:center;gap:4px;border:1.5px solid rgba(128,128,128,.35);border-radius:var(--sw-m,17px 2px 17px 2px / 13px 2px 13px 2px);padding:2px}
 .cl-step{width:30px;height:30px;margin:0;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer;position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .cl-step:hover:not(:disabled){background:rgba(227,167,47,.25)}
 .cl-step:disabled{opacity:.3;cursor:default}

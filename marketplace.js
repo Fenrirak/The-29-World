@@ -444,12 +444,12 @@ function mktInjectCss() {
   st.textContent = `
   .mkt-paybar{display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px;padding:14px 16px;margin:0 0 14px;border:1.5px solid var(--line,#dfe3ee);border-radius:16px;background:rgba(127,127,127,.07)}
   .mkt-paybar.hidden{display:none}
-  .mkt-pb-seg{display:inline-flex;gap:4px;padding:4px;border-radius:var(--sw-l,18px 4px 18px 4px);background:rgba(127,127,127,.15)}
-  .mkt-pb-seg button{border:0;background:transparent;color:inherit;border-radius:var(--sw-m,13px 3px 13px 3px);padding:8px 18px;cursor:pointer;font:inherit;font-weight:700;display:flex;flex-direction:column;align-items:center;line-height:1.15;opacity:.7}
+  .mkt-pb-seg{display:inline-flex;gap:4px;padding:4px;border-radius:var(--sw-l,23px 3px 23px 3px / 18px 3px 18px 3px);background:rgba(127,127,127,.15)}
+  .mkt-pb-seg button{border:0;background:transparent;color:inherit;border-radius:var(--sw-m,17px 2px 17px 2px / 13px 2px 13px 2px);padding:8px 18px;cursor:pointer;font:inherit;font-weight:700;display:flex;flex-direction:column;align-items:center;line-height:1.15;opacity:.7}
   .mkt-pb-seg button small{font-size:.72em;font-weight:600}
   .mkt-pb-seg button.on{background:var(--card);color:var(--ink,#1f2b44);opacity:1;box-shadow:0 2px 8px rgba(0,0,0,.15)}
   .mkt-pb-chips{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
-  .mkt-chip{font-size:.8em;font-weight:700;padding:4px 12px;border-radius:var(--sw-s,9px 2px 9px 2px);border:1px solid rgba(127,127,127,.35)}
+  .mkt-chip{font-size:.8em;font-weight:700;padding:4px 12px;border-radius:var(--sw-s,12px 1px 12px 1px / 9px 1px 9px 1px);border:1px solid rgba(127,127,127,.35)}
   .mkt-chip.mint{background:rgba(46,184,120,.15);border-color:rgba(46,184,120,.45)}
   .mkt-pb-split{flex:1;min-width:220px}
   .mkt-pb-note{flex-basis:100%;margin:0}`;

@@ -36,10 +36,10 @@
   --r-1:6px; --r-2:8px; --r-3:10px; --r-4:12px; --r-5:14px; --r-6:16px; --r-7:20px;
 
   /* Sweep corners: the shape that replaced the pill (rules in the SWEEP block at the end of this file).
-     Two diagonal corners curve, two stay crisp. xs = thin gauges, s = tags/badges/counts,
+     Two diagonal corners curve (stretched sideways so the shape leans), two stay crisp. xs = thin gauges, s = tags/badges/counts,
      m = chips/keys/switch tracks, l = rails and floating widgets. knob = switch thumbs. */
-  --sw-xs:4px 1px 4px 1px; --sw-s:9px 2px 9px 2px; --sw-m:13px 3px 13px 3px; --sw-l:18px 4px 18px 4px;
-  --sw-knob-m:10px 1px 10px 1px; --sw-knob-s:6px 1px 6px 1px;
+  --sw-xs:5px 1px 5px 1px / 4px 1px 4px 1px; --sw-s:12px 1px 12px 1px / 9px 1px 9px 1px; --sw-m:17px 2px 17px 2px / 13px 2px 13px 2px; --sw-l:23px 3px 23px 3px / 18px 3px 18px 3px;
+  --sw-knob-m:14px 1px 14px 1px / 10px 1px 10px 1px; --sw-knob-s:9px 1px 9px 1px / 6px 1px 6px 1px;
   --fs-xs:.75rem; --fs-sm:.8125rem; --fs-md:.875rem; --fs-lg:.9375rem;   /* type scale: 12 / 13 / 14 / 15px; 1rem and up are set per element */
 
   /* Shadow scale (dark mode swaps in black equivalents further down). Five steps, by how far a thing floats:
@@ -958,7 +958,7 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
 .bulk-head-text h2{margin:0 0 2px;}
 .bulk-head-text p{margin:0;}
 .bulk-field-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;}
-.bulk-counter{font-size:var(--fs-xs);font-weight:800;color:var(--muted);background:var(--bg);border:1px solid var(--line);padding:3px 11px;border-radius:var(--sw-s);margin-bottom:6px;white-space:nowrap;}
+.bulk-counter{font-size:var(--fs-xs);font-weight:600;color:var(--muted);background:var(--bg);border:1px solid var(--line);padding:3px 11px;border-radius:var(--sw-s);margin-bottom:6px;white-space:nowrap;}
 #bulkNames{min-height:172px;line-height:1.55;}
 .bulk-hint{margin:6px 0 0;}
 .bulk-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:2px 20px;margin-top:6px;}
@@ -1146,10 +1146,10 @@ html.dark-mode .anw-balance-widget:focus-visible{outline-color:#fff;}
 .anw-balance-widget:disabled,.anw-balance-widget.is-static{cursor:default;}
 @media (prefers-reduced-motion:reduce){.anw-balance-widget{transition:none;}.anw-balance-widget:hover:not(:disabled){transform:none;}}
 .anw-balance-widget .anw-bw-label{
-  color:#5a4415;font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.06em;font-weight:700;
+  color:#5a4415;font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.06em;font-weight:500;
   display:flex;align-items:center;gap:6px;
 }
-.anw-balance-widget .anw-bw-value{font-size:1.7rem;font-weight:900;margin-top:4px;line-height:1.1;}
+.anw-balance-widget .anw-bw-value{font-size:1.7rem;font-weight:600;margin-top:4px;line-height:1.1;}
 /* Laptops and tablets: the full-size widget is fixed in the left gutter, which is only wide enough to
    hold it when the window is wider than ~1480px. Below that it sat on top of the page content, so use
    the same compact bottom-corner pill the phone layout uses (and leave room so the last thing on the
@@ -1198,7 +1198,7 @@ html.dark-mode .anw-balance-widget:focus-visible{outline-color:#fff;}
   min-width:17px;height:17px;padding:0 4px;
   border-radius:var(--sw-s);
   background:linear-gradient(135deg,var(--coral-fill),var(--coral-fill-dark));
-  color:#fff;font-size:var(--fs-xs);font-weight:900;line-height:1;text-align:center;
+  color:#fff;font-size:var(--fs-xs);font-weight:600;line-height:1;text-align:center;
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 2px 6px rgba(200,60,40,.5);
   border:1.5px solid var(--navy-900);
@@ -1316,7 +1316,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .quiz-pill{
   display:inline-flex;align-items:center;gap:5px;
   background:#f2f5fb;border:1px solid var(--line);border-radius:var(--sw-s);
-  padding:4px 11px;font-size:var(--fs-sm);font-weight:700;color:var(--navy-700);
+  padding:4px 11px;font-size:var(--fs-sm);font-weight:600;color:var(--navy-700);
 }
 .quiz-pill .icon{width:12px;height:12px;}
 .quiz-pill.mint{background:#e3f8f0;border-color:#bfe9d8;color:#217a5a;}
@@ -1493,7 +1493,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 .bud-head{gap:10px;flex-wrap:wrap;}
 .bud-head h2{margin:0;}
 .bud-week{
-  font-size:var(--fs-xs);font-weight:800;text-transform:uppercase;letter-spacing:.07em;
+  font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.07em;
   color:var(--muted);background:#f2f5fb;border:1px solid var(--line);
   border-radius:var(--sw-s);padding:5px 12px;white-space:nowrap;
 }
@@ -2315,7 +2315,7 @@ html.dark-mode .notif-dot{
   background: rgba(201,154,46,.15);
   color: var(--navy-700);
   font-size: var(--fs-xs);
-  font-weight: 700;
+  font-weight: 600;
   padding: 1px 7px;
   border-radius: var(--sw-s);
   border: 1px solid rgba(201,154,46,.3);
@@ -2742,7 +2742,7 @@ html.dark-mode .t29-toast.success{border-color:var(--pastel-mint-border);backgro
 
 .t29-offline-banner{
   position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:2600;
-  background:var(--coral-fill);color:#fff;font-weight:700;font-size:var(--fs-md);
+  background:var(--coral-fill);color:#fff;font-weight:600;font-size:var(--fs-md);
   padding:8px 16px;border-radius:var(--sw-m);box-shadow:var(--shadow-lg);
   max-width:calc(100vw - 24px);text-align:center;
 }
@@ -3689,7 +3689,7 @@ html.dark-mode .t29-finder .t29-finder-input:focus{border-color:var(--accent-tex
 
 /* Shift box: module numbers shown on the menu itself while the box is open */
 .t29-badged{position:relative;}
-.t29-numbadge{position:absolute;top:2px;left:2px;min-width:15px;height:15px;padding:0 3px;box-sizing:border-box;border-radius:var(--sw-s);background:var(--navy-900);color:#fff;font:700 10px/15px system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center;pointer-events:none;z-index:3;box-shadow:0 0 0 1.5px rgba(255,255,255,.85);}
+.t29-numbadge{position:absolute;top:2px;left:2px;min-width:15px;height:15px;padding:0 3px;box-sizing:border-box;border-radius:var(--sw-s);background:var(--navy-900);color:#fff;font:600 10px/15px system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center;pointer-events:none;z-index:3;box-shadow:0 0 0 1.5px rgba(255,255,255,.85);}
 html.dark-mode .t29-numbadge{background:var(--gold);color:var(--navy-900);box-shadow:0 0 0 1.5px rgba(0,0,0,.35);}
 .t29-nav-pick{outline:2px solid var(--gold);outline-offset:-2px;border-radius:var(--r-2);}
 
@@ -4169,7 +4169,7 @@ html.dark-mode .ac-pick:focus-visible{outline-color:#fff;}
 
 /* Everyday | Savings switch */
 .ac-filter button{display:inline-flex;align-items:center;gap:8px;}
-.ac-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--sw-s);font-size:var(--fs-xs);font-weight:900;background:rgba(120,140,190,.18);color:inherit;}
+.ac-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--sw-s);font-size:var(--fs-xs);font-weight:600;background:rgba(120,140,190,.18);color:inherit;}
 .ac-filter button.on .ac-count{background:rgba(31,43,68,.16);}
 
 /* "Open an account" sits on its own, away from the accounts you already hold */
@@ -4416,7 +4416,7 @@ body.t29-page-locked main,body.t29-page-locked .site-footer{visibility:hidden;}
 #builderCard[open]>.qb-summary .qb-summary-hint{display:none;}
 
 .qr-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:.82rem;color:var(--muted);margin:0 0 12px;}
-.qr-chip{display:inline-block;min-width:46px;padding:3px 9px;border-radius:var(--sw-s);font-weight:800;font-size:.8rem;text-align:center;line-height:1.3;}
+.qr-chip{display:inline-block;min-width:46px;padding:3px 9px;border-radius:var(--sw-s);font-weight:600;font-size:.8rem;text-align:center;line-height:1.3;}
 .qr-chip.pass{background:#e3f8f0;color:#217a5a;}
 .qr-chip.fail{background:#fbf1dd;color:#8a6112;}
 .qr-chip.od{background:#fceae7;color:#b8402c;}
@@ -4571,7 +4571,7 @@ html.dark-mode .ev-vis-text strong{color:var(--heading-text);}
 .tabs.ev-tabs button.active{background:var(--gold);color:#1f2b44;box-shadow:var(--shadow-btn);}
 .tabs.ev-tabs button:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
 html.dark-mode .tabs.ev-tabs button.active{background:var(--gold);color:#1f2b44;}
-.ev-tab-count{font-size:var(--fs-xs);font-weight:800;line-height:1;padding:3px 8px;border-radius:var(--sw-s);background:rgba(232,184,75,.18);}
+.ev-tab-count{font-size:var(--fs-xs);font-weight:600;line-height:1;padding:3px 8px;border-radius:var(--sw-s);background:rgba(232,184,75,.18);}
 .tabs.ev-tabs button.active .ev-tab-count{background:rgba(31,43,68,.15);}
 @media (max-width:520px){
   .tabs.ev-tabs{display:flex;width:100%;}
@@ -4592,7 +4592,7 @@ html.dark-mode .tabs.ev-tabs button.active{background:var(--gold);color:#1f2b44;
 .ev-chip:hover{border-color:var(--navy-500);}
 .ev-chip:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
 .ev-chip[aria-pressed="true"]{background:var(--navy-900);border-color:var(--navy-900);color:#fff;box-shadow:var(--shadow-sm);}
-.ev-chip-n{font-size:var(--fs-xs);font-weight:800;padding:2px 7px;border-radius:var(--sw-s);background:rgba(90,101,123,.16);}
+.ev-chip-n{font-size:var(--fs-xs);font-weight:600;padding:2px 7px;border-radius:var(--sw-s);background:rgba(90,101,123,.16);}
 .ev-chip[aria-pressed="true"] .ev-chip-n{background:rgba(255,255,255,.22);}
 html.dark-mode .ev-chip[aria-pressed="true"]{color:var(--heading-text);border-color:var(--heading-text);}
 
@@ -4660,11 +4660,8 @@ html.dark-mode .ev-section-title{color:var(--heading-text);}
    on a chart, or a leaf tip. Nothing on the site is a capsule any more.
    Sizes (tokens in :root): --sw-xs thin gauges, --sw-s tags/badges/counts,
    --sw-m chips/keys/switch tracks, --sw-l rails and floating widgets.
-   Two ledger details finish it off:
-     - Ledger ticks: gauge tracks are ruled like ledger paper; the fill hides
-       the ticks as it grows.
-     - Double rule: a selected chip or tab is underlined twice, the way an
-       accountant marks a final total (so selection never relies on colour alone).
+   One ledger detail finishes it off: gauge tracks are ruled with ticks like
+   ledger paper, and the fill hides the ticks as it grows.
    ========================================================================== */
 .progress-bar,
 .rpt-bar-track,
@@ -4686,11 +4683,4 @@ html.dark-mode .ac-meter-bar,
 html.dark-mode .qr-bar {
   background-image:repeating-linear-gradient(90deg,transparent 0 7px,rgba(90,101,123,.22) 7px 8px);
   background-image:repeating-linear-gradient(90deg,transparent 0 7px,color-mix(in srgb,currentColor 22%,transparent) 7px 8px);
-}
-
-:where(.ac-filter button.on,.bet-chip.active,.bud-chip.on,.ev-chip[aria-pressed="true"],.jl-chip.on,.mkt-filter.active,.mode-btn.active,.nw-range-chip.active,.p-tabs button.active,.sort-chip.active,.tabs.ev-tabs button.active,.ws-mode button.on,.ws-tab.active) { position:relative; }
-.ac-filter button.on::after,.bet-chip.active::after,.bud-chip.on::after,.ev-chip[aria-pressed="true"]::after,.jl-chip.on::after,.mkt-filter.active::after,.mode-btn.active::after,.nw-range-chip.active::after,.p-tabs button.active::after,.sort-chip.active::after,.tabs.ev-tabs button.active::after,.ws-mode button.on::after,.ws-tab.active::after {
-  content:"";position:absolute;left:12px;right:12px;bottom:2px;height:3px;
-  border-top:1px solid currentColor;border-bottom:1px solid currentColor;
-  opacity:.55;pointer-events:none;
 }

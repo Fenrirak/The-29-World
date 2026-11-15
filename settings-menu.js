@@ -119,7 +119,7 @@ function smInjectCss() {
 /* Spotlight: draws the eye to the one switch a prompt is asking for */
 .settings-popover-row.sm-spot{border-radius:12px;outline:3px solid var(--gold);outline-offset:6px;animation:smSpotRing .9s ease-in-out 3;}
 .sm-spot .lg-switch-track{animation:smSpotTrack .9s ease-in-out 3;}
-.sm-spot-tag{display:block;width:fit-content;margin:5px 0 1px;padding:1px 8px;border-radius:var(--sw-s,9px 2px 9px 2px);background:var(--gold);color:var(--navy-900);font-size:.68rem;font-weight:800;letter-spacing:.04em;vertical-align:middle;white-space:nowrap;}
+.sm-spot-tag{display:block;width:fit-content;margin:5px 0 1px;padding:1px 8px;border-radius:var(--sw-s,12px 1px 12px 1px / 9px 1px 9px 1px);background:var(--gold);color:var(--navy-900);font-size:.68rem;font-weight:800;letter-spacing:.04em;vertical-align:middle;white-space:nowrap;}
 @keyframes smSpotRing{0%,100%{outline-color:var(--gold);outline-offset:6px;}50%{outline-color:transparent;outline-offset:11px;}}
 @keyframes smSpotTrack{0%,100%{box-shadow:0 0 0 0 rgba(240,180,41,.0);}50%{box-shadow:0 0 0 6px rgba(240,180,41,.55);}}
 @media (prefers-reduced-motion:reduce){.settings-popover-row.sm-spot,.sm-spot .lg-switch-track{animation:none;}}`;
