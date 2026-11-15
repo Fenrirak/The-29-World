@@ -1142,10 +1142,10 @@ html.dark-mode .anw-balance-widget:focus-visible{outline-color:#fff;}
 .anw-balance-widget:disabled,.anw-balance-widget.is-static{cursor:default;}
 @media (prefers-reduced-motion:reduce){.anw-balance-widget{transition:none;}.anw-balance-widget:hover:not(:disabled){transform:none;}}
 .anw-balance-widget .anw-bw-label{
-  color:#5a4415;font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.06em;font-weight:500;
+  color:#5a4415;font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.06em;font-weight:700;
   display:flex;align-items:center;gap:6px;
 }
-.anw-balance-widget .anw-bw-value{font-size:1.7rem;font-weight:600;margin-top:4px;line-height:1.1;}
+.anw-balance-widget .anw-bw-value{font-size:1.7rem;font-weight:700;margin-top:4px;line-height:1.1;}
 /* Laptops and tablets: the full-size widget is fixed in the left gutter, which is only wide enough to
    hold it when the window is wider than ~1480px. Below that it sat on top of the page content, so use
    the same compact bottom-corner pill the phone layout uses (and leave room so the last thing on the
