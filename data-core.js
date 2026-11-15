@@ -5193,12 +5193,12 @@ function t29SvMountPill() {
     css.id = "t29SvCss";
     css.textContent = `
 #t29SvPill{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:9500;
-  display:flex;align-items:center;gap:12px;max-width:calc(100vw - 24px);padding:8px 8px 8px 16px;border-radius:999px;
+  display:flex;align-items:center;gap:12px;max-width:calc(100vw - 24px);padding:8px 8px 8px 16px;border-radius:var(--sw-l,18px 4px 18px 4px);
   background:#1e293b;color:#fff;box-shadow:0 6px 24px rgba(15,23,42,.35);font:600 14px/1.25 system-ui,-apple-system,"Segoe UI",sans-serif;}
 #t29SvPill .t29sv-dot{width:9px;height:9px;border-radius:50%;background:#fbbf24;flex:none;}
 #t29SvPill .t29sv-text{display:flex;flex-direction:column;min-width:0;}
 #t29SvPill .t29sv-text small{font-weight:500;font-size:12px;opacity:.78;}
-#t29SvPill .t29sv-exit{flex:none;border:0;border-radius:999px;padding:8px 16px;background:#fbbf24;color:#1e293b;font:700 14px/1 inherit;font-family:inherit;cursor:pointer;}
+#t29SvPill .t29sv-exit{flex:none;border:0;border-radius:var(--sw-m,13px 3px 13px 3px);padding:8px 16px;background:#fbbf24;color:#1e293b;font:700 14px/1 inherit;font-family:inherit;cursor:pointer;}
 #t29SvPill .t29sv-exit:hover{background:#fcd34d;}
 #t29SvPill .t29sv-exit:focus-visible{outline:3px solid #fff;outline-offset:2px;}
 html.t29-student-view body{padding-bottom:84px;}

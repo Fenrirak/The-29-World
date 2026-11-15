@@ -173,7 +173,7 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
 @media (min-width: 901px) and (max-width: 1480px){
   html.sidebar-nav .anw-balance-widget{
     top: auto !important; right: auto; bottom: 14px; left: calc(var(--sb-width) + 14px);
-    min-width: 0; padding: 7px 13px; border-radius: var(--r-pill);
+    min-width: 0; padding: 7px 13px; border-radius: var(--sw-m);
     display: flex; align-items: center; gap: 8px;
   }
   html.sidebar-nav .anw-balance-widget .anw-bw-value{ font-size: 1.1rem; margin-top: 0; }
