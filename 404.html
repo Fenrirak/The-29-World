@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<base href="https://fenrirak.github.io/The-29-World/">
+<title>Page not found | The 29 World™</title>
+<link rel="icon" type="image/png" href="Favicon.png">
+<meta name="theme-color" content="#1f2b44">
+<script>try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch (e) {}</script>
+<style>
+@font-face{font-family:"Nunito";font-style:normal;font-weight:200 1000;font-display:swap;src:url(fonts/nunito-latin-wght-normal.woff2) format("woff2");}
+@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/inter-latin-wght-normal.woff2) format("woff2");}
+:root{--bg:#eef2fa;--card:#ffffff;--text:#1f2b44;--muted:#5b6785;--btn:#243a5e;--btn-text:#ffffff;--border:#cfd8ea;}
+html.dark-mode{--bg:#151515;--card:#1c2440;--text:#e8edf7;--muted:#a9b4cf;--btn:#8fb4ff;--btn-text:#151515;--border:#34406a;}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--bg);color:var(--text);font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.card{width:100%;max-width:420px;padding:40px 28px;text-align:center;background:var(--card);border-radius:20px;box-shadow:0 8px 30px rgba(31,43,68,.12)}
+.card img{width:64px;height:64px}
+.code{margin:12px 0 0;font-family:"Nunito","Inter",system-ui,sans-serif;font-size:72px;font-weight:900;line-height:1}
+h1{margin:8px 0 12px;font-family:"Nunito","Inter",system-ui,sans-serif;font-size:24px}
+p{margin:0 0 28px;color:var(--muted);line-height:1.5}
+.actions{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
+.btn{padding:12px 20px;border-radius:12px;border:2px solid var(--btn);font:inherit;font-weight:700;text-decoration:none;cursor:pointer;background:var(--btn);color:var(--btn-text)}
+.btn.secondary{background:transparent;color:var(--text);border-color:var(--border)}
+.btn:focus-visible{outline:3px solid var(--btn);outline-offset:2px}
+</style>
+</head>
+<body>
+<main class="card">
+  <img src="Favicon.png" alt="" width="64" height="64">
+  <div class="code" aria-hidden="true">404</div>
+  <h1>Page not found</h1>
+  <p>This page doesn’t exist, or it has been moved. Check the link, or head back to The 29 World™.</p>
+  <div class="actions">
+    <a class="btn" href="index.html">Go to home</a>
+    <button class="btn secondary" type="button" id="back">Go back</button>
+  </div>
+</main>
+<script>
+document.getElementById('back').addEventListener('click', function () {
+  if (history.length > 1) history.back(); else location.href = 'index.html';
+});
+</script>
+</body>
+</html>
