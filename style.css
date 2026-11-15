@@ -3139,7 +3139,7 @@ html.dark-mode .empty-state{border-color:rgba(255,255,255,.14);}
 .todo-text{min-width:0;flex:1 1 auto;}
 .todo-title{font-weight:800;color:var(--navy-900);line-height:1.35;}
 .todo-body{font-size:var(--fs-md);color:var(--muted);line-height:1.45;margin-top:2px;}
-.todo-tag{display:inline-block;margin-right:8px;padding:1px 8px;border-radius:var(--sw-s);background:#fbe9e5;color:#a8371f;font-size:var(--fs-xs);font-weight:800;letter-spacing:.05em;text-transform:uppercase;vertical-align:2px;}
+.todo-tag{display:inline-block;margin-right:8px;padding:2px 9px;border-radius:var(--sw-s);background:#fbe9e5;color:#a8371f;font-size:var(--fs-xs);font-weight:800;letter-spacing:.05em;text-transform:uppercase;vertical-align:2px;}
 .todo-item .btn{margin-top:0;flex-shrink:0;white-space:nowrap;}
 .todo-empty{margin:10px 0 0;color:var(--muted);}
 @media (max-width:520px){
