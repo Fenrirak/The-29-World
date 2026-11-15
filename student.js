@@ -430,7 +430,7 @@ async function resetMarketSnapshot() {
    here: a money-for-bills warning from the budget, a weekly event waiting
    for a choice, KiwiSaver once it's unlocked, and finding a job. */
 const TODO_CTA = {
-  "loan.html": "Repay", "property.html": "Go to Property", "transport.html": "Pay transport", "bigevents.html": "Decide",
+  "loan.html": "Repay", "property.html": "Go to Property", "transport.html": "Pay transport", "events.html": "Decide",
   "marketplace.html": "See offers", "budget.html": "Open budget", "jobs.html": "Find a job", "kiwisaver.html": "Open KiwiSaver"
 };
 let LAST_TODO = null;

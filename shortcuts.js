@@ -63,7 +63,7 @@
     "student.html", "teacher.html", "teacher-home.html", "bank.html", "budget.html",
     "termdeposit.html", "kiwisaver.html", "loan.html", "market.html", "store.html",
     "marketplace.html", "jobs.html", "transport.html", "property.html", "insurance.html",
-    "tax.html", "bigevents.html", "life.html", "gambling.html", "quizzes.html", "reports.html", "worksheets.html"
+    "tax.html", "events.html", "life.html", "gambling.html", "quizzes.html", "reports.html", "worksheets.html"
   ];
 
   var FINE_POINTER = !!(window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches);
@@ -153,7 +153,7 @@
     if (f === "tax.html") return true;
     if (f === "kiwisaver.html") return !root.classList.contains("ks-on");
     if (f === "gambling.html") return !root.classList.contains("casino-on");
-    if (/\.html$/.test(f) && root.classList.contains("mod-off-" + f.replace(/\.html$/, ""))) return true;
+    if (/\.html$/.test(f) && root.classList.contains("mod-off-" + (f === "events.html" ? "bigevents" : f.replace(/\.html$/, "")))) return true;
     return false;
   }
 

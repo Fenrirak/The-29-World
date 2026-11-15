@@ -848,6 +848,7 @@
     $("whoami").textContent = t29DisplayName(u);
     $("navHome").href = u.classCode ? "teacher.html" : "teacher-home.html";
     paintIconSlots();
+    $("pageTitle").innerHTML = icon("worksheet", 26) + " Worksheets";
 
     wsModuleList().forEach(m => wsDefaultsFor(m.key).forEach(d => S.defaultIds.add(d.id)));
     WS_MODULES.forEach(m => { if (!m.enabled) wsDefaultsFor(m.key).forEach(d => S.defaultIds.add(d.id)); });

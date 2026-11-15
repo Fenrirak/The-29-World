@@ -745,7 +745,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 /* ===================== Insurance types picker (teacher) =====================
    Shared by the weekly events form (teacher.html) and the big events form
-   (bigevents.html): first what happened (fire, theft, house damage...),
+   (events.html): first what happened (fire, theft, house damage...),
    then one row per property/transport insurance type, each with a tick box
    and how much that type pays out. Types that don't cover what happened
    can't be ticked — each type only covers what its description says.

@@ -92,7 +92,7 @@ function celebrateNewlyReachedGoals(username, goals) {
   try { seen = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) { seen = []; }
   const reachedIds = goals.filter(g => g.reached).map(g => g.id);
   goals.filter(g => g.reached && !seen.includes(g.id)).forEach(g => {
-    t29Toast(`🎉 Goal reached: ${g.name}! You've saved ${fmtMoney(g.target)}.`, { type: "success", duration: 6000 });
+    t29Toast(`Goal reached: ${g.name}! You've saved ${fmtMoney(g.target)}.`, { type: "success", duration: 6000 });
   });
   try { localStorage.setItem(key, JSON.stringify(reachedIds)); } catch (e) { /* ignore */ }
 }

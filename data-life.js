@@ -2935,7 +2935,7 @@ async function setStudentsSeeAllEvents(classCode, on) {
   if (changed && want) {
     await t29NotifyStudents(classCode, { to: "all", icon: "eye", tone: "mint",
       title: "You can now see every possible event",
-      body: "Open Events to browse all the random and big events that can happen in your class.", href: "bigevents.html" });
+      body: "Open Events to browse all the random and big events that can happen in your class.", href: "events.html" });
   }
   return { ok: true, changed };
 }
@@ -4796,7 +4796,7 @@ async function remindQuizStudents(classCode, quizId) {
     href: label ? (LIFESTYLE_NAV_HREF[q.moduleKey] || "student.html") : "student.html" });
   return { ok: true, count: todo.length };
 }
-const LIFESTYLE_NAV_HREF = { bank: "bank.html", budget: "budget.html", termdeposit: "termdeposit.html", kiwisaver: "kiwisaver.html", loan: "loan.html", market: "market.html", store: "store.html", jobs: "jobs.html", transport: "transport.html", property: "property.html", insurance: "insurance.html", bigevents: "bigevents.html", life: "life.html", gambling: "gambling.html", marketplace: "marketplace.html", sidehustle: "student.html" };
+const LIFESTYLE_NAV_HREF = { bank: "bank.html", budget: "budget.html", termdeposit: "termdeposit.html", kiwisaver: "kiwisaver.html", loan: "loan.html", market: "market.html", store: "store.html", jobs: "jobs.html", transport: "transport.html", property: "property.html", insurance: "insurance.html", bigevents: "events.html", life: "life.html", gambling: "gambling.html", marketplace: "marketplace.html", sidehustle: "student.html" };
 
 // Teacher: add several quizzes at once (the recommended set).
 async function addQuizzes(classCode, quizzes) {

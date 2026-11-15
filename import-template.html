@@ -32,7 +32,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=aa159f52">
+<link rel="stylesheet" href="style.css?v=4c3de900">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -47,7 +47,7 @@
 <script>/* modoff-boot: replay which modules the teacher switched off BEFORE first paint, so a hidden module never flashes into the top bar or the page and the bar never changes size afterwards (saved by t29SaveModOffBoot in data-core.js) */
 (function(){try{var h=document.documentElement,se=JSON.parse(localStorage.getItem('anw_session')||'null'),u=se&&se.username;if(!u)return;
 var m=JSON.parse(localStorage.getItem('t29-mod-off-boot')||'null'),pg=(location.pathname.split('/').pop()||'').split('?')[0].replace(/\.html$/,'').toLowerCase(),
-here=/^(bank|budget|termdeposit|kiwisaver|loan|market|store|marketplace|jobs|transport|property|insurance|tax|bigevents|life)$/.test(pg);
+here=/^(bank|budget|termdeposit|kiwisaver|loan|market|store|marketplace|jobs|transport|property|insurance|tax|bigevents|life)$/.test(pg=(pg==='events'?'bigevents':pg));
 if(m&&m.u===u&&Array.isArray(m.k)){for(var i=0;i<m.k.length;i++)h.classList.add('mod-off-'+m.k[i]);if(here&&m.k.indexOf(pg)>-1)h.classList.add('mod-off-here');}
 else if(here){h.classList.add('mod-hold');setTimeout(function(){h.classList.remove('mod-hold');},4000);}
 }catch(_){}})();</script>
@@ -124,11 +124,11 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 </footer>
 
 <script type="module" src="firebase-init.js?v=e3543fda"></script>
-<script defer src="icons.js?v=cddcaa2c"></script>
+<script defer src="icons.js?v=d9133a32"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
-<script defer src="data-core.js?v=bd72c58d"></script>
+<script defer src="data-core.js?v=188319b9"></script>
 <script defer src="data-money.js?v=a7948914"></script>
-<script defer src="data-life.js?v=4de0e636"></script>
+<script defer src="data-life.js?v=14548daf"></script>
 <script defer src="data-property.js?v=2ae916b7"></script>
 <script defer src="data-markets.js?v=1c6f4fff"></script>
 <script defer src="import-template.js?v=ce23d81a"></script>

@@ -394,7 +394,7 @@ function notifEventItems(me, cls) {
       id: "bigev-" + e.id, ts: dayStart, icon: "bolt", tone: "coral",
       title: "Big event needs a decision",
       body: `${e.name}: ${fmtMoney(e.cost)}. ${e.takesAsset === false ? "Pay it or claim on insurance." : "Pay it, claim on insurance, or lose the asset."}`,
-      href: "bigevents.html", action: true
+      href: "events.html", action: true
     });
   });
   return out;

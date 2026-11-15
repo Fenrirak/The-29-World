@@ -4377,9 +4377,17 @@ const T29_MODULES = {
   market: "Stock Market", store: "Store", marketplace: "Trade Centre", jobs: "Jobs", transport: "Transport",
   property: "Property", insurance: "Insurance", tax: "Tax", bigevents: "Events", life: "Life", gambling: "Gambling"
 };
+// The Events page file is events.html, but its module key stays "bigevents" because that key is
+// already saved in class settings. These two map between the file name and the module key.
+const T29_PAGE_MODULE = { events: "bigevents" };
+function t29ModuleFile(key) {
+  const f = Object.keys(T29_PAGE_MODULE).find(k => T29_PAGE_MODULE[k] === key);
+  return (f || key) + ".html";
+}
 function moduleKeyOfPage() {
   const file = (location.pathname.split("/").pop() || "").split("?")[0];
-  const key = file.replace(/\.html$/, "");
+  const page = file.replace(/\.html$/, "");
+  const key = T29_PAGE_MODULE[page] || page;
   return T29_MODULES[key] ? key : null;
 }
 function moduleIsOff(cls, key) {
@@ -4396,7 +4404,7 @@ function paintModuleOff(offKeys) {
   Object.keys(T29_MODULES).forEach(key => {
     if (key === "gambling") return; // its own menu rule (casino-on) hides it
     const isOff = off.has(key);
-    document.querySelectorAll(`.topbar nav a[href="${key}.html"]`).forEach(a => {
+    document.querySelectorAll(`.topbar nav a[href="${t29ModuleFile(key)}"]`).forEach(a => {
       if (a.classList.contains("mod-off") !== isOff) { a.classList.toggle("mod-off", isOff); changed = true; }
     });
     if (root.classList.contains("mod-off-" + key) !== isOff) root.classList.toggle("mod-off-" + key, isOff);
@@ -4487,7 +4495,7 @@ async function setModuleEnabled(classCode, key, enabled) {
     const name = T29_MODULES[key];
     await t29NotifyStudents(classCode, { to: "all", icon: "sparkle", tone: enabled ? "mint" : "coral",
       title: enabled ? `Your teacher switched ${name} on` : `Your teacher switched ${name} off`,
-      body: enabled ? `You can use ${name} again.` : `${name} is hidden until your teacher switches it back on.`, href: key + ".html" });
+      body: enabled ? `You can use ${name} again.` : `${name} is hidden until your teacher switches it back on.`, href: t29ModuleFile(key) });
   }
   return { ok: true };
 }

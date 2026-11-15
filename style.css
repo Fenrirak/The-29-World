@@ -226,7 +226,7 @@ html:not(.role-teacher).mod-off-transport .topbar nav a[href="transport.html"],
 html:not(.role-teacher).mod-off-property .topbar nav a[href="property.html"],
 html:not(.role-teacher).mod-off-insurance .topbar nav a[href="insurance.html"],
 html:not(.role-teacher).mod-off-tax .topbar nav a[href="tax.html"],
-html:not(.role-teacher).mod-off-bigevents .topbar nav a[href="bigevents.html"],
+html:not(.role-teacher).mod-off-bigevents .topbar nav a[href="events.html"],
 html:not(.role-teacher).mod-off-life .topbar nav a[href="life.html"]{display:none !important;}
 html.mod-off-here:not(.role-teacher) main > :not(#modOffNotice),
 html.mod-hold:not(.role-teacher) main > :not(#modOffNotice){display:none !important;}
@@ -1479,7 +1479,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
 }
 .bud-intro{color:var(--muted);font-size:var(--fs-lg);line-height:1.55;margin:10px 0 0;max-width:72ch;}
 
-/* Used by bigevents.html's "takes an asset" row and life.js's "give to
+/* Used by events.html's "takes an asset" row and life.js's "give to
    student" row, both of which set align-items/gap/flex-wrap inline but
    rely on this class for the display mode itself. */
 .flex-row{display:flex;}
@@ -4532,7 +4532,7 @@ button.sh-pay:hover{border-color:var(--gold);}
 }
 
 /* =====================================================================
-   Events page (bigevents.html / bigevents.js): tabs, filters, event rows and cards.
+   Events page (events.html / events.js): tabs, filters, event rows and cards.
    Random events and big events share one look; students get a history, teachers get the two editors.
    ===================================================================== */
 .ev-vis{padding:14px 18px;margin-bottom:16px;}
@@ -4578,10 +4578,6 @@ html.dark-mode .ev-chip[aria-pressed="true"]{color:var(--heading-text);border-co
 
 /* one event, as a row (history and the teacher's lists) */
 .ev-row{display:flex;align-items:flex-start;gap:12px;padding:13px 14px;margin-bottom:10px;background:var(--card);border:1.5px solid var(--line);border-radius:var(--r-3);}
-.ev-ico{flex:0 0 38px;width:38px;height:38px;border-radius:var(--r-3);display:flex;align-items:center;justify-content:center;background:#efecfb;color:#5a4fb0;}
-.big > .ev-ico,.ev-card.big .ev-ico{background:#fbf1dd;color:#8a6112;}
-html.dark-mode .ev-ico{background:rgba(138,127,214,.2);color:#cfc9f7;}
-html.dark-mode .big > .ev-ico,html.dark-mode .ev-card.big .ev-ico{background:rgba(232,184,75,.18);color:#f0cf7e;}
 .ev-main{flex:1;min-width:0;}
 .ev-title{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-weight:800;color:var(--navy-900);overflow-wrap:anywhere;}
 html.dark-mode .ev-title{color:var(--heading-text);}
