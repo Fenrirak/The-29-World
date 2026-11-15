@@ -27,7 +27,7 @@ Sign-in and saved data connect to the live Firebase project, so some features ma
 
 ## Legal
 
-© 2026 The 29 World™. All rights reserved. Use of the site is covered by the [Terms](terms.html), and personal data is handled as described in the [Privacy Policy](privacy.html).
+© 2026 The 29 World™. All rights reserved. The source code and content are covered by the [License](LICENSE.txt). Use of the site is covered by the [Terms](terms.html), and personal data is handled as described in the [Privacy Policy](privacy.html).
 
 Inter and Nunito are used under their own licenses (see `fonts/`).
 

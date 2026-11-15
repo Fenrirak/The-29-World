@@ -1,0 +1,189 @@
+THE 29 WORLD™ - PROPRIETARY LICENCE
+====================================
+
+Copyright © 2026 Nathan Chuantao Liu. All rights reserved.
+
+"The 29 World" is a classroom economy simulator (the "Work"). Nathan
+Chuantao Liu (the "Owner") is its author and copyright owner, and he
+asserts his moral right to be identified as the author of the Work.
+
+Website: https://fenrirak.github.io/The-29-World/
+Contact: Nathan.liu1211@gmail.com
+
+Last updated: 15 November 2026
+
+
+1. WHAT THIS LICENCE COVERS
+
+"Software" means everything in this repository and on the website,
+including the source code (HTML, CSS and JavaScript), page designs,
+text, icons, avatar and other artwork, simulation data, worksheets,
+images, and the name and logo of The 29 World. It does not include the
+Third-Party Components listed in section 9.
+
+
+2. OWNERSHIP
+
+The Owner owns the Software. This is NOT an open-source licence. You
+get only the permissions written in section 3. All other rights are
+reserved, including all rights under the Copyright Act 1994 (New
+Zealand) and equivalent laws in other countries.
+
+
+3. WHAT YOU MAY DO
+
+(a) Use the website. Teachers, students and parents may use the
+    website as it is meant to be used, under the Terms of Use
+    (terms.html) and the Privacy Policy (privacy.html).
+
+(b) Read the code. You may view the source code in your browser or on
+    GitHub.
+
+(c) Fork on GitHub. This repository is public. GitHub's Terms of
+    Service allow other GitHub users to view and fork public
+    repositories using GitHub's own features, and this licence does not
+    take that away. A fork is still subject to this licence: nothing
+    here lets you publish, host, deploy or use a fork outside GitHub's
+    own features.
+
+(d) Evaluate locally. You may download a copy and run it privately on
+    your own computer, for the sole purpose of evaluating it (reading,
+    testing and checking how it works), including small private edits
+    needed to run or test it. You may not use that copy to teach a
+    class or for any commercial purpose, and you may not share it with
+    anyone else. A local copy may connect to the website's online
+    services; this licence gives you no right to those services, or to
+    anyone's data or accounts, beyond what the Terms of Use allow.
+
+(e) Uses the law allows. Nothing in this licence restricts any use that
+    the Copyright Act 1994 allows without the owner's permission, such
+    as fair dealing for criticism, review, research or private study.
+
+
+4. WHAT YOU MAY NOT DO
+
+Unless the Owner gives you written permission, you may not:
+
+  - copy or reproduce the Software, except as allowed in section 3;
+  - modify, adapt, translate or create derivative works from the
+    Software, except for the private edits allowed in section 3(d);
+  - publish, distribute, share, upload, deploy or host the Software or
+    any part of it, including a copy of the website under another name
+    or address;
+  - sell, rent, lend, sublicense or otherwise commercialise the
+    Software;
+  - use the Software, or any substantial part of it, to build or offer
+    a copy of The 29 World or a substantially similar product or
+    service;
+  - run your own copy of the Software for a class, school or any other
+    group, rather than using the official website;
+  - remove or change any copyright, trademark or licence notice; or
+  - break the acceptable use rules in section 5 of the Terms of Use.
+
+
+5. NAME AND LOGO
+
+This licence does not give you any right to use the name "The 29
+World", its wordmark, logo or icons. You must not use them in a way
+that suggests the Owner has endorsed you or that you are connected to
+him or to the website.
+
+
+6. CONTENT ENTERED BY USERS
+
+Names, messages, marketplace listings, class settings and other content
+that teachers and students enter into the website stay theirs, as
+described in section 9 of the Terms of Use. That content is not part of
+the Software and is not licensed by this document.
+
+
+7. CONTRIBUTIONS AND FEEDBACK
+
+If you send the Owner code, fixes, ideas, bug reports or other material
+(for example, through a GitHub issue or pull request), you confirm that
+it is yours or that you have the right to share it. You keep your own
+copyright in it, and you give the Owner a worldwide, perpetual,
+irrevocable, royalty-free licence to use, modify and distribute it, as
+part of the Work or otherwise, without credit or payment. The Owner has
+no duty to use or accept any contribution.
+
+
+8. ENDING THIS LICENCE
+
+Your permissions under section 3 end automatically if you break this
+licence. If that happens you must stop using the Software and delete
+your copies. The Owner may also withdraw the permissions in sections
+3(b) to 3(d) at any time, for example by making the repository private
+or by updating this file.
+
+
+9. THIRD-PARTY COMPONENTS
+
+These components are not covered by this licence. They stay under their
+own licences, which continue to apply to them.
+
+  Inter (fonts)
+    Copyright 2016 The Inter Project Authors
+    (https://github.com/rsms/inter)
+    Licensed under the SIL Open Font License, Version 1.1.
+    Included in: fonts/inter-latin-wght-normal.woff2 and
+    fonts/inter-latin-ext-wght-normal.woff2
+    Licence text: fonts/Inter-LICENSE.txt
+
+  Nunito (fonts)
+    Copyright 2014 The Nunito Project Authors
+    (https://github.com/googlefonts/nunito)
+    Licensed under the SIL Open Font License, Version 1.1.
+    Included in: fonts/nunito-latin-wght-normal.woff2 and
+    fonts/nunito-latin-ext-wght-normal.woff2
+    Licence text: fonts/Nunito-LICENSE.txt
+
+  Firebase JavaScript SDK (Authentication, Cloud Firestore, App Check)
+    Copyright Google LLC
+    Licensed under the Apache License, Version 2.0
+    (https://www.apache.org/licenses/LICENSE-2.0).
+    This is loaded when the website runs, from Google's servers
+    (www.gstatic.com). It is not included in this repository. The
+    Firebase online services are provided by Google under Google's own
+    terms.
+
+The licence texts for Inter and Nunito must stay with their font files.
+Google and Firebase are trademarks of Google LLC.
+
+
+10. NO WARRANTY
+
+The Software is provided "as is", without any promise that it will be
+available, error-free or suitable for any purpose. It is an educational
+tool that uses play money only, and nothing in it is financial,
+investment, tax or legal advice (see the Terms of Use). To the extent
+the law allows, the Owner is not responsible for any loss that comes
+from using the Software. Nothing in this licence limits any rights you
+have under New Zealand law that cannot be excluded, including under the
+Consumer Guarantees Act 1993 where it applies.
+
+
+11. RELATIONSHIP TO OTHER DOCUMENTS
+
+The Terms of Use and the Privacy Policy govern use of the website and
+the handling of personal data. If they conflict with this licence about
+using the live website, the Terms of Use apply. For the source code and
+other content of the Software, this licence applies.
+
+
+12. GOVERNING LAW
+
+This licence is governed by the laws of New Zealand. The courts of New
+Zealand have non-exclusive jurisdiction over any dispute about it.
+
+
+13. CHANGES
+
+The Owner may update this licence. The latest version in this
+repository is the one that applies.
+
+
+14. PERMISSION AND QUESTIONS
+
+If you want to do something this licence does not allow, please ask
+first: Nathan.liu1211@gmail.com
