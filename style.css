@@ -1,3 +1,14 @@
+/* Fonts: Nunito for headings, buttons and the wordmark; Inter for body text and every dollar amount.
+   Self-hosted in /fonts (latin + latin-extended, so names with macrons show correctly). */
+@font-face{font-family:"Nunito";font-style:normal;font-weight:200 1000;font-display:swap;src:url(fonts/nunito-latin-wght-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+@font-face{font-family:"Nunito";font-style:normal;font-weight:200 1000;font-display:swap;src:url(fonts/nunito-latin-ext-wght-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;}
+@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/inter-latin-wght-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/inter-latin-ext-wght-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;}
+:root{
+  --font-body:"Inter","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+  --font-heading:"Nunito","Trebuchet MS","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+}
+
 :root{
   color-scheme:light;
   --navy-900:#1f2b44;
@@ -61,7 +72,7 @@ html{-webkit-text-size-adjust:100%;scrollbar-gutter:stable;}
 html,body{margin:0;padding:0;touch-action:manipulation;}
 body{
   color:var(--ink);
-  font-family:"Segoe UI","Trebuchet MS",Verdana,sans-serif;
+  font-family:var(--font-body);
   min-height:100vh;
   display:flex;
   flex-direction:column;
@@ -74,7 +85,7 @@ body{
 }
 .icon svg{width:100%;height:100%;display:block;}
 h1,h2,h3,h4{
-  font-family:"Trebuchet MS","Segoe UI",Verdana,sans-serif;
+  font-family:var(--font-heading);
   font-weight:800;
   color:var(--navy-900);
   letter-spacing:-0.01em;
@@ -111,6 +122,7 @@ p{color:var(--muted);line-height:1.5;}
    below), since shrinking text below a certain point stops being legible —
    dropping labels reads better than microscopic text. */
 .brand{
+  font-family:var(--font-heading);
   display:flex;
   align-items:center;
   gap:calc(6px * var(--navscale));
@@ -393,7 +405,7 @@ main{
   text-decoration:none;
   font-weight:800;
   font-size:1.2rem;
-  font-family:"Trebuchet MS","Segoe UI",Verdana,sans-serif;
+  font-family:var(--font-heading);
 }
 main.legal-main{max-width:760px;}
 .legal-main .card h1{margin-bottom:.2em;}
@@ -413,7 +425,7 @@ main.legal-main{max-width:760px;}
   display:flex;align-items:center;gap:10px;
   color:#fff;text-decoration:none;white-space:nowrap;
   font-weight:800;font-size:1.15rem;
-  font-family:"Trebuchet MS","Segoe UI",Verdana,sans-serif;
+  font-family:var(--font-heading);
 }
 .about-brand-icon{width:28px;height:28px;flex-shrink:0;border-radius:6px;display:block;}
 .about-topbar .about-back{
@@ -517,6 +529,9 @@ html.dark-mode .stat.lilac .label{color:rgba(255,255,255,.88);}
 
 label{display:block;font-weight:700;font-size:var(--fs-md);margin:12px 0 6px;color:var(--navy-900);}
 button,input,select,textarea{font-family:inherit;}
+button,.btn{font-family:var(--font-heading);}
+/* Money lines up in columns and big numbers: same-width digits (Inter). */
+table,.stat .value,.profile-chip .value,.ps-line,.ks-pay-row{font-variant-numeric:tabular-nums;}
 input,select,textarea{
   width:100%;
   padding:12px 14px;
@@ -597,7 +612,7 @@ tr:last-child td{border-bottom:none;}
 .auth-wrap::before, .auth-wrap::after{
   content:"$";
   position:absolute;
-  font-family:"Trebuchet MS",sans-serif;
+  font-family:var(--font-body);
   font-weight:900;
   color:rgba(255,255,255,0.05);
   pointer-events:none;
@@ -716,7 +731,7 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
   box-sizing:border-box;
 }
 .site-footer-brand{
-  font-family:Georgia,"Iowan Old Style","Palatino Linotype","Book Antiqua",serif;
+  font-family:var(--font-heading);
   font-size:1.35rem;
   font-weight:700;
   color:var(--navy-900);
@@ -729,7 +744,7 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
   align-items:center;
   gap:24px;
   margin-top:12px;
-  font-family:"Segoe UI","Trebuchet MS",Verdana,sans-serif;
+  font-family:var(--font-body);
 }
 .site-footer-links a{color:var(--muted);text-decoration:none;font-size:var(--fs-lg);font-weight:600;}
 .site-footer-links a:hover{color:var(--navy-700);text-decoration:underline;}
@@ -737,7 +752,7 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
   margin-top:16px;
   font-size:14.5px;
   color:var(--muted);
-  font-family:"Segoe UI","Trebuchet MS",Verdana,sans-serif;
+  font-family:var(--font-body);
 }
 @media (max-width:640px){
   .site-footer{padding:26px 16px 22px;}
@@ -1070,7 +1085,7 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
 .wheel-number{
   position:absolute;top:50%;left:50%;width:34px;height:34px;margin:-17px;
   border-radius:var(--r-1);display:flex;align-items:center;justify-content:center;
-  font-size:13px;font-weight:800;color:#fff;font-family:"Trebuchet MS",sans-serif;
+  font-size:13px;font-weight:800;color:#fff;font-family:var(--font-body);
   text-shadow:0 1px 2px rgba(0,0,0,0.5);
 }
 .wheel-hub{
@@ -3836,7 +3851,7 @@ html.dark-mode #payslipBox .ps-debit>span:last-child{color:var(--coral);}
 #payslipBox{font-family:inherit;font-style:normal;letter-spacing:normal;}
 #payslipBox :where(p,span,strong,summary,div){font-family:inherit;font-style:inherit;}
 #payslipBox h3,#payslipBox .ps-job{
-  font-family:"Trebuchet MS","Segoe UI",Verdana,sans-serif;
+  font-family:var(--font-heading);
   font-size:1rem;font-weight:800;letter-spacing:-.01em;line-height:1.5;
 }
 #payslipBox .ps-kicker,#payslipBox .ps-section{

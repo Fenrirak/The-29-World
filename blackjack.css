@@ -81,7 +81,7 @@
   font-size: var(--fs-sm);
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
   border: 1px solid #ccc;
-  font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
+  font-family:var(--font-body);
 }
 
 .bj-card.red { color: #c9503a; }
