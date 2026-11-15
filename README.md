@@ -15,7 +15,6 @@ A classroom economy simulator. Students run their own money in a shared make-bel
 - Plain HTML, CSS and JavaScript. There is no build step and no package manager.
 - Accounts and data use [Firebase](https://firebase.google.com/) (Authentication, Firestore and App Check), loaded from Google's CDN.
 - Hosted on GitHub Pages.
-- Fonts: Inter and Nunito, served from `fonts/` with their license files.
 
 ## Running it locally
 
@@ -28,8 +27,6 @@ Sign-in and saved data connect to the live Firebase project, so some features ma
 ## Legal
 
 © 2026 The 29 World™. All rights reserved. The source code and content are covered by the [License](LICENSE.txt). Use of the site is covered by the [Terms](terms.html), and personal data is handled as described in the [Privacy Policy](privacy.html).
-
-Inter and Nunito are used under their own licenses (see `fonts/`).
 
 ## Contact
 

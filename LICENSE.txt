@@ -122,22 +122,6 @@ or by updating this file.
 These components are not covered by this licence. They stay under their
 own licences, which continue to apply to them.
 
-  Inter (fonts)
-    Copyright 2016 The Inter Project Authors
-    (https://github.com/rsms/inter)
-    Licensed under the SIL Open Font License, Version 1.1.
-    Included in: fonts/inter-latin-wght-normal.woff2 and
-    fonts/inter-latin-ext-wght-normal.woff2
-    Licence text: fonts/Inter-LICENSE.txt
-
-  Nunito (fonts)
-    Copyright 2014 The Nunito Project Authors
-    (https://github.com/googlefonts/nunito)
-    Licensed under the SIL Open Font License, Version 1.1.
-    Included in: fonts/nunito-latin-wght-normal.woff2 and
-    fonts/nunito-latin-ext-wght-normal.woff2
-    Licence text: fonts/Nunito-LICENSE.txt
-
   Firebase JavaScript SDK (Authentication, Cloud Firestore, App Check)
     Copyright Google LLC
     Licensed under the Apache License, Version 2.0
@@ -147,7 +131,6 @@ own licences, which continue to apply to them.
     Firebase online services are provided by Google under Google's own
     terms.
 
-The licence texts for Inter and Nunito must stay with their font files.
 Google and Firebase are trademarks of Google LLC.
 
 
