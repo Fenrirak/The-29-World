@@ -122,6 +122,22 @@ or by updating this file.
 These components are not covered by this licence. They stay under their
 own licences, which continue to apply to them.
 
+  Selawik (fonts)
+    Copyright 2015 Microsoft Corporation, with Reserved Font Name Selawik
+    (https://github.com/microsoft/Selawik)
+    Licensed under the SIL Open Font License, Version 1.1.
+    Included in: fonts/selawik-regular.woff2, fonts/selawik-semibold.woff2 and
+    fonts/selawik-bold.woff2 (unmodified).
+    Licence text: fonts/Selawik-LICENSE.txt
+
+  Open Sans (fonts)
+    Copyright 2020 The Open Sans Project Authors
+    (https://github.com/googlefonts/opensans)
+    Licensed under the SIL Open Font License, Version 1.1.
+    Included in: fonts/opensans-latin-400.woff2, fonts/opensans-latin-600.woff2,
+    fonts/opensans-latin-ext-400.woff2 and fonts/opensans-latin-ext-600.woff2
+    Licence text: fonts/OpenSans-LICENSE.txt
+
   Firebase JavaScript SDK (Authentication, Cloud Firestore, App Check)
     Copyright Google LLC
     Licensed under the Apache License, Version 2.0
@@ -131,6 +147,7 @@ own licences, which continue to apply to them.
     Firebase online services are provided by Google under Google's own
     terms.
 
+The licence texts for Selawik and Open Sans must stay with their font files.
 Google and Firebase are trademarks of Google LLC.
 
 
