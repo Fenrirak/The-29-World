@@ -38,8 +38,8 @@
   /* Sweep corners: the shape that replaced the pill (rules in the SWEEP block at the end of this file).
      Two diagonal corners curve (stretched sideways so the shape leans), two stay crisp. xs = thin gauges, s = tags/badges/counts,
      m = chips/keys/switch tracks, l = rails and floating widgets. knob = switch thumbs. */
-  --sw-xs:5px 0 5px 0 / 3px 0 3px 0; --sw-s:12px 0 12px 0 / 7px 0 7px 0; --sw-m:17px 0 17px 0 / 10px 0 10px 0; --sw-l:23px 0 23px 0 / 14px 0 14px 0;
-  --sw-knob-m:14px 0 14px 0 / 8px 0 8px 0; --sw-knob-s:9px 0 9px 0 / 5px 0 5px 0;
+  --sw-xs:8px 0 8px 0 / 3px 0 3px 0; --sw-s:15px 0 15px 0 / 7px 0 7px 0; --sw-m:20px 0 20px 0 / 10px 0 10px 0; --sw-l:26px 0 26px 0 / 14px 0 14px 0;
+  --sw-knob-m:17px 0 17px 0 / 8px 0 8px 0; --sw-knob-s:12px 0 12px 0 / 5px 0 5px 0;
   --fs-xs:.75rem; --fs-sm:.8125rem; --fs-md:.875rem; --fs-lg:.9375rem;   /* type scale: 12 / 13 / 14 / 15px; 1rem and up are set per element */
 
   /* Shadow scale (dark mode swaps in black equivalents further down). Five steps, by how far a thing floats:
