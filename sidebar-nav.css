@@ -172,8 +172,9 @@ html.sidebar-nav .sb-hamburger.has-unread::after{
    bottom-left of the content area instead. */
 @media (min-width: 901px) and (max-width: 1480px){
   html.sidebar-nav .anw-balance-widget{
-    top: auto !important; right: auto; bottom: 14px; left: calc(var(--sb-width) + 14px);
-    min-width: 0; padding: 7px 13px; border-radius: var(--sw-m);
+    top: auto !important; right: auto; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); left: calc(var(--sb-width) + 14px);
+    min-width: 0; min-height: var(--anw-bw-h); box-sizing: border-box; max-width: calc(100vw - var(--sb-width) - 28px);
+    padding: 7px 13px; border-radius: var(--sw-m);
     display: flex; align-items: center; gap: 8px;
   }
   html.sidebar-nav .anw-balance-widget .anw-bw-value{ font-size: 1.1rem; margin-top: 0; }

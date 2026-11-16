@@ -1121,6 +1121,9 @@ html:not(.dark-mode) .student-avatar.c3{color:var(--navy-900);}
 }
 
 /* ===================== Floating balance widget ===================== */
+/* Sizes the chip's neighbours rely on: the chip's height, the Store's Cart button height, and the room the page keeps clear
+   at its bottom so the last thing on it can scroll out from under the chip. */
+:root{--anw-bw-h:36px;--anw-cart-h:48px;--anw-bw-clear:68px;}
 .anw-balance-widget{
   position:fixed;
   left:14px;
@@ -1152,19 +1155,31 @@ html.dark-mode .anw-balance-widget:focus-visible{outline-color:#fff;}
    the same compact bottom-corner pill the phone layout uses (and leave room so the last thing on the
    page can scroll clear of it). */
 @media (min-width:641px) and (max-width:1480px){
-  .anw-balance-widget{left:14px;top:auto !important;bottom:14px;padding:7px 13px;min-width:0;border-radius:var(--sw-m);display:flex;align-items:center;gap:8px;}
+  .anw-balance-widget{left:14px;top:auto !important;bottom:calc(14px + env(safe-area-inset-bottom,0px));padding:7px 13px;min-width:0;min-height:var(--anw-bw-h);box-sizing:border-box;max-width:calc(100vw - 28px);border-radius:var(--sw-m);display:flex;align-items:center;gap:8px;}
   .anw-balance-widget .anw-bw-label{font-size:var(--fs-xs);}
   .anw-balance-widget .anw-bw-value{font-size:1.1rem;margin-top:0;}
-  body:has(.anw-balance-widget){padding-bottom:60px;}
+  body:has(.anw-balance-widget){padding-bottom:calc(var(--anw-bw-clear) + env(safe-area-inset-bottom,0px));}
+  html:has(.anw-balance-widget){scroll-padding-bottom:calc(var(--anw-bw-clear) + env(safe-area-inset-bottom,0px));}
 }
 @media (max-width:640px){
   /* Phones: a small pill in the bottom corner, so it covers as little of
      the page as possible, and room at the bottom of the page so the last
      thing on it can always scroll clear of the widget. */
-  .anw-balance-widget{left:10px;top:auto;bottom:12px;padding:7px 13px;min-width:0;border-radius:var(--sw-m);display:flex;align-items:center;gap:8px;}
+  .anw-balance-widget{left:10px;top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));padding:7px 13px;min-width:0;min-height:var(--anw-bw-h);box-sizing:border-box;max-width:calc(100vw - 20px);border-radius:var(--sw-m);display:flex;align-items:center;gap:8px;}
   .anw-balance-widget .anw-bw-label{font-size:var(--fs-xs);}
   .anw-balance-widget .anw-bw-value{font-size:1.1rem;margin-top:0;}
-  body:has(.anw-balance-widget){padding-bottom:60px;}
+  body:has(.anw-balance-widget){padding-bottom:calc(var(--anw-bw-clear) + env(safe-area-inset-bottom,0px));}
+  html:has(.anw-balance-widget){scroll-padding-bottom:calc(var(--anw-bw-clear) + env(safe-area-inset-bottom,0px));}
+}
+
+/* Store: the floating Cart button sits bottom-right. It gets its own clearance at the bottom of the page, and on phones it
+   is stacked ABOVE the balance chip (side by side the two can't fit a phone's width once the cart total gets long). */
+body:has(.cart-fab){padding-bottom:calc(var(--anw-cart-h) + 18px + 16px + env(safe-area-inset-bottom,0px));}
+html:has(.cart-fab){scroll-padding-bottom:calc(var(--anw-cart-h) + 18px + 16px + env(safe-area-inset-bottom,0px));}
+@media (max-width:640px){
+  body:has(.anw-balance-widget) .cart-fab{bottom:calc(12px + var(--anw-bw-h) + 10px + env(safe-area-inset-bottom,0px));}
+  body:has(.anw-balance-widget):has(.cart-fab){padding-bottom:calc(12px + var(--anw-bw-h) + 10px + var(--anw-cart-h) + 16px + env(safe-area-inset-bottom,0px));}
+  html:has(.anw-balance-widget):has(.cart-fab){scroll-padding-bottom:calc(12px + var(--anw-bw-h) + 10px + var(--anw-cart-h) + 16px + env(safe-area-inset-bottom,0px));}
 }
 
 /* ===================== Reports (report cards) ===================== */
@@ -4449,6 +4464,26 @@ body.t29-page-locked main,body.t29-page-locked .site-footer{visibility:hidden;}
   .qr-mobile{display:block;}
 }
 
+/* Dark mode for the teacher "Recommended..." panels (Events, Jobs, Quizzes) and the quiz results table. Their light-mode colours
+   are fixed above (cream panel, pale table cells, pastel chips), so dark mode restates every one of them on the dark surfaces. */
+@media screen{
+html.dark-mode .qz-reco-panel{border-color:rgba(232,184,75,.4);background:linear-gradient(180deg,rgba(232,184,75,.14),rgba(232,184,75,0) 70%),var(--card);}
+html.dark-mode .qz-reco-item{border-color:var(--line);}
+html.dark-mode .qz-overdue{background:var(--pastel-coral-bg);border-color:var(--pastel-coral-border);}
+html.dark-mode .qz-overdue p{color:var(--ink);}
+html.dark-mode .qr-chip.pass{background:var(--pastel-mint-bg);color:var(--pastel-mint-text);}
+html.dark-mode .qr-chip.fail{background:var(--pastel-gold-bg);color:var(--pastel-gold-text);}
+html.dark-mode .qr-chip.od{background:var(--pastel-coral-bg);color:var(--pastel-coral-text);}
+html.dark-mode .qr-bar{background-color:rgba(255,255,255,.14);}
+html.dark-mode .qr-reset:hover{color:var(--heading-text);}
+html.dark-mode .qr-table th,html.dark-mode .qr-table td{border-bottom-color:var(--line);}
+html.dark-mode .qr-table thead th,html.dark-mode .qr-table .qr-sum td{background:var(--surface-2);}
+html.dark-mode .qr-table .qr-sum td{color:var(--muted);}
+html.dark-mode .qr-table .qr-name{box-shadow:1px 0 0 var(--line);}
+html.dark-mode .qr-table tbody tr:hover td,html.dark-mode .qr-table tbody tr:hover .qr-name{background:var(--surface-2);}
+html.dark-mode .qr-card,html.dark-mode .qr-list li{border-color:var(--line);}
+}
+
 
 /* ===== Transport: total + status badge (was right-aligned inside a narrow wrapped box on phones) ===== */
 .transport-total{text-align:right;}
@@ -4563,10 +4598,12 @@ html.dark-mode .ev-vis-text strong{color:var(--heading-text);}
 /* The Events switcher uses the same segmented pill as the Gambling page's mode switcher (.mode-switch / .mode-btn in
    blackjack.css): one gold-outlined track, gold swept key for the open section. */
 .tabs.ev-tabs{display:inline-flex;max-width:100%;gap:4px;margin:14px 0 22px;padding:4px;border-radius:var(--sw-l);background:rgba(232,184,75,0.07);border:1px solid rgba(232,184,75,0.35);}
-.tabs.ev-tabs button{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:8px;min-height:0;padding:9px 22px;border-radius:var(--sw-m);border:none;background:transparent;color:var(--gold);font-weight:800;font-size:var(--fs-md);line-height:1;cursor:pointer;transition:background .18s ease,color .18s ease,box-shadow .18s ease;}
+.tabs.ev-tabs button{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:8px;min-height:0;padding:9px 22px;border-radius:var(--sw-m);border:none;background:transparent;color:var(--navy-900);font-weight:800;font-size:var(--fs-md);line-height:1;cursor:pointer;transition:background .18s ease,color .18s ease,box-shadow .18s ease;}
 .tabs.ev-tabs button:hover:not(.active){background:rgba(232,184,75,0.14);}
 .tabs.ev-tabs button.active{background:var(--gold);color:#1f2b44;box-shadow:var(--shadow-btn);}
-.tabs.ev-tabs button:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.tabs.ev-tabs button:focus-visible{outline:2px solid var(--navy-900);outline-offset:2px;}
+html.dark-mode .tabs.ev-tabs button:not(.active){color:var(--gold);}
+html.dark-mode .tabs.ev-tabs button:focus-visible{outline-color:var(--gold);}
 html.dark-mode .tabs.ev-tabs button.active{background:var(--gold);color:#1f2b44;}
 .ev-tab-count{font-size:var(--fs-xs);font-weight:600;line-height:1;padding:3px 8px;border-radius:var(--sw-s);background:rgba(232,184,75,.18);}
 .tabs.ev-tabs button.active .ev-tab-count{background:rgba(31,43,68,.15);}
