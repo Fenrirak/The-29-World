@@ -313,7 +313,7 @@ function notifTermDepositItems(me) {
     const days = daysBetweenKeys(today, d.matureDate);
     if (days < 0 || days > 2) return null;
     return {
-      id: "td-" + d.id + "-" + today, ts: dayStart, icon: "vault", tone: "lilac",
+      id: "td-" + d.id + "-" + today, ts: dayStart, icon: "sprout", tone: "lilac",
       title: days === 0 ? "Term deposit matures today" : `Term deposit matures in ${days} ${days === 1 ? "day" : "days"}`,
       body: `${d.plan.name}: ${fmtMoney(d.amount)} locked in at ${d.plan.rate}%.`,
       href: "termdeposit.html"

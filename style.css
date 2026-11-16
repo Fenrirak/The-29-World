@@ -522,7 +522,8 @@ html.dark-mode .legal-main .about-card .about-lead{color:var(--heading-text);}
 .stat .label{color:#a9b6d1;font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.06em;font-weight:700;display:flex;align-items:center;gap:6px;padding-right:42px;min-height:28px;}
 .stat .value{font-size:2.1rem;font-weight:900;margin-top:14px;line-height:1.15;overflow-wrap:anywhere;}
 .stat.gold{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);box-shadow:0 6px 18px rgba(201,154,46,0.2);}
-.stat.gold .label{color:#5a4415;}
+.stat.gold .label{color:#3b2a06;}
+.stat.gold .muted-small{color:var(--navy-900);}
 .stat.mint{background:linear-gradient(135deg,var(--mint-fill),var(--mint-fill-dark));box-shadow:0 6px 18px rgba(46,152,115,0.2);}
 .stat.sky{background:linear-gradient(135deg,var(--sky-fill),var(--sky-fill-dark));box-shadow:0 6px 18px rgba(91,141,239,0.2);}
 .stat.lilac{background:linear-gradient(135deg,var(--lilac-fill),var(--lilac-fill-dark));box-shadow:0 6px 18px rgba(138,127,214,0.2);}
@@ -2060,7 +2061,7 @@ html.dark-mode .qb-opt-row input[type="radio"]{accent-color:var(--mint);}
    and anything using the same bright gold/mint/sky/lilac gradients at
    a similar size) so they don't glare next to the dark background. ---------------- */
 html.dark-mode .stat.gold{background:linear-gradient(135deg,var(--gold-dim),var(--gold-dark-dim));color:var(--heading-text);box-shadow:var(--shadow);}
-html.dark-mode .stat.gold .label{color:rgba(244,247,255,0.75);}
+html.dark-mode .stat.gold .label{color:#fff;}
 html.dark-mode .stat.mint{background:linear-gradient(135deg,var(--mint-dim),var(--mint-dark-dim));box-shadow:var(--shadow);}
 html.dark-mode .stat.sky{background:linear-gradient(135deg,var(--sky-dim),var(--sky-dark-dim));box-shadow:var(--shadow);}
 html.dark-mode .stat.lilac{background:linear-gradient(135deg,var(--lilac-dim),var(--lilac-dark-dim));box-shadow:var(--shadow);}
@@ -2092,7 +2093,7 @@ html.dark-mode .bud-track-fill.save{background:linear-gradient(90deg,var(--mint-
    regular dark-mode muted colour (light blue-grey), which is very low
    contrast against gold/mint/sky/lilac. Match it to the label colour
    already used on each fill instead. ---------------- */
-html.dark-mode .stat.gold .muted-small{color:rgba(244,247,255,0.8);}
+html.dark-mode .stat.gold .muted-small{color:#fff;}
 html.dark-mode .stat.mint .muted-small,
 html.dark-mode .stat.sky .muted-small,
 html.dark-mode .stat.lilac .muted-small{color:#fff;}
@@ -4694,27 +4695,4 @@ html.dark-mode .ev-section-title{color:var(--heading-text);}
    on a chart, or a leaf tip. Nothing on the site is a capsule any more.
    Sizes (tokens in :root): --sw-xs thin gauges, --sw-s tags/badges/counts,
    --sw-m chips/keys/switch tracks, --sw-l rails and floating widgets.
-   One ledger detail finishes it off: gauge tracks are ruled with ticks like
-   ledger paper, and the fill hides the ticks as it grows.
    ========================================================================== */
-.progress-bar,
-.rpt-bar-track,
-.bud-track-bar,
-.pv-bar-track,
-.tier-progress-bar-bg,
-.cc-timeline,
-.cc-limit-bar,
-.ac-meter-bar,
-.qr-bar,
-html.dark-mode .progress-bar,
-html.dark-mode .rpt-bar-track,
-html.dark-mode .bud-track-bar,
-html.dark-mode .pv-bar-track,
-html.dark-mode .tier-progress-bar-bg,
-html.dark-mode .cc-timeline,
-html.dark-mode .cc-limit-bar,
-html.dark-mode .ac-meter-bar,
-html.dark-mode .qr-bar {
-  background-image:repeating-linear-gradient(90deg,transparent 0 7px,rgba(90,101,123,.22) 7px 8px);
-  background-image:repeating-linear-gradient(90deg,transparent 0 7px,color-mix(in srgb,currentColor 22%,transparent) 7px 8px);
-}

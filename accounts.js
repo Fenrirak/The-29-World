@@ -113,7 +113,7 @@ function acInjectCss() {
 @media(max-width:640px){.bs-set2{grid-template-columns:minmax(0,1fr)}}
 #savingsSettingsCard .cc-panel + .cc-panel{margin-top:14px}
 .bs-hint{min-height:1.25em;margin-top:2px}
-.bs-off{opacity:.5;transition:opacity .15s}
+.bs-off select,.bs-off input{opacity:.55;transition:opacity .15s}
 .bs-tune{display:flex;gap:8px;align-items:flex-start;margin:14px 0 0}
 .bs-save{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:16px}
 .ac-have-wrap{display:flex;flex-direction:column;gap:8px;margin-top:auto}

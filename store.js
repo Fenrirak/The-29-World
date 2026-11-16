@@ -158,7 +158,7 @@ async function render() {
           </div>` : ""}
           <div class="store-info">
           <h4>${escapeHtml(it.name)} ${owned ? `<span class="badge mint">Owned ×${owned}</span>` : ""} ${IS_TEACHER ? "" : `<span class="badge gold ${CART[it.id] ? "" : "hidden"}" id="inCart-${it.id}">In cart ×${CART[it.id] || 0}</span>`}</h4>
-          <p>${escapeHtml(it.description) || "No description provided."}</p>
+          ${it.description ? `<p>${escapeHtml(it.description)}</p>` : ""}
           ${it.effect ? `<p class="muted-small">Does: ${escapeHtml(it.effect)}</p>` : ""}
           <p>${priceWithLifeDiscount(me, "store", it.price)} ${starsHtml(it.stars)}</p>
           <p class="muted-small">${it.stock === null ? "Unlimited stock" : `${it.stock} left in stock`}${IS_TEACHER ? ` · ${it.sold || 0} sold` : ""}${lim ? ` · ${IS_TEACHER ? `Limit ${lim} per student` : (room <= 0 ? `You've reached the limit of ${lim}` : `Limit ${lim} per student, you can buy ${room} more`)}` : ""}</p>

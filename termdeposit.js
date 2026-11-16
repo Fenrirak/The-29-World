@@ -2,7 +2,7 @@ let CURRENT, IS_TEACHER, PLANS = [];
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("pageTitle").innerHTML = icon("vault", 26) + " Term Deposit";
+  document.getElementById("pageTitle").innerHTML = icon("sprout", 26) + " Term Deposit";
   document.getElementById("pageIntro").textContent = IS_TEACHER
     ? "Create term deposit plans for your class, each with its own minimum deposit, term length, weekly interest rate and early withdrawal fee. You can edit them later."
     : "Lock money away for a fixed number of days to earn interest. Break it early and you'll pay a fee instead.";

@@ -969,7 +969,7 @@ function listingTop(p, cls, me, badgesHtml) {
         <div class="pcard-name">
           <h3>${escapeHtml(p.name)}</h3>
           ${badgesHtml ? `<div class="pcard-badges">${badgesHtml}</div>` : ""}
-          <p class="pcard-desc">${escapeHtml(p.description) || "No description provided."}</p>
+          ${p.description ? `<p class="pcard-desc">${escapeHtml(p.description)}</p>` : ""}
         </div>
       </div>
       <div class="pcard-money">
@@ -1722,7 +1722,7 @@ function renderNpcListings(cls, nameOf) {
             <div class="pcard-name">
               <h3>${escapeHtml(p.name)}</h3>
               <div class="pcard-badges"><span class="badge lilac">School rental</span></div>
-              <p class="pcard-desc">${escapeHtml(p.description) || "No description provided."}</p>
+              ${p.description ? `<p class="pcard-desc">${escapeHtml(p.description)}</p>` : ""}
             </div>
           </div>
           <div class="pcard-money">

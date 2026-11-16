@@ -150,7 +150,9 @@ async function render() {
 
     const box = document.getElementById("myLoanBox");
     box.innerHTML = "";
-    document.getElementById("loanAmount").closest("form").querySelector("button").disabled = atCountLimit;
+    const noLoanOptions = tiers.length === 0;
+    document.getElementById("loanAmount").disabled = noLoanOptions;
+    document.getElementById("takeLoanBtn").disabled = atCountLimit || noLoanOptions;
     const todayKey = nzDateKeyLocal();
     activeLoans.forEach(loan => {
       const overdue = loan.dueDate < todayKey;

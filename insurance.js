@@ -110,7 +110,7 @@ function singlePlanCardHtml(p, me) {
       <div class="flex-between">
         <div>
           <h4>${escapeHtml(p.name)} ${owned ? '<span class="badge mint">You have this</span>' : ""}</h4>
-          <p>${escapeHtml(p.description) || "No description provided."}</p>
+          ${p.description ? `<p>${escapeHtml(p.description)}</p>` : ""}
           <p class="muted-small">Covers: ${escapeHtml(coverageText(p))}
             ${needsCompany ? `<span class="badge coral">Not in a company yet. Click Edit to choose one</span>` : ""}</p>
           <p>${planPriceHtml(p, me)}</p>

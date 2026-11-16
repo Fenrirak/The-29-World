@@ -97,10 +97,12 @@
     }
     t = t.replace(/[\t;]+/g, " ").replace(/\s+/g, " ").trim();
     if (!t) return null;
-    const name = sanitizeUserText(t29TidyName(t), 60);
+    const fullName = t29TidyName(t);
+    const name = sanitizeUserText(fullName, 60);
     const words = name.split(" ");
     return { raw: String(raw).trim(), name, words, username: null, inClass: false,
-             problem: words.length < 2 ? "Needs a first and last name" : null };
+             problem: fullName.length > 60 ? "Name is over 60 characters, shorten it"
+                    : words.length < 2 ? "Needs a first and last name" : null };
   }
 
   function baseUsername(words, style) {

@@ -240,7 +240,7 @@ function bigDefRowHtml(d) {
         <span class="badge navy">${MODULE_LABEL[d.module] || escapeHtml(d.module)}</span>
         <span class="badge ${isGood ? "gold" : "coral"}">${isGood ? "Good" : "Bad"}</span>
       </div>
-      <div class="ev-desc">${escapeHtml(d.description) || "No description provided."}</div>
+      ${d.description ? `<div class="ev-desc">${escapeHtml(d.description)}</div>` : ""}
       <div class="ev-desc">${costLine}</div>
       ${insLine ? `<div class="muted-small ev-when">${insLine}</div>` : ""}
       ${!isGood ? `<div class="muted-small ev-when">${takesAsset ? "Not paying costs the student the related job/property/vehicle." : "Cost only. The student can't lose the asset over this."}</div>` : ""}

@@ -97,7 +97,7 @@ async function render() {
         <div class="flex-between">
           <div>
             <h4>${escapeHtml(item.name)}</h4>
-            <p>${escapeHtml(item.description) || "No description provided."}</p>
+            ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}
             <div style="margin-top:6px;">${lifeBenefitChips(item.benefits, item.frequency)}</div>
           </div>
           <div style="display:flex;gap:8px;">

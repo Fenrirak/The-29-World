@@ -4073,10 +4073,10 @@ function budgetWeekItems(cls, user, username) {
   (user.termDeposits || []).filter(d => d.matureDate && d.matureDate <= weekEndKey).forEach(d => {
     const dayKey = d.matureDate < todayKey ? todayKey : d.matureDate;
     const status = budgetStatus(dayKey, todayKey, false);
-    items.push({ key: "deposit-return-" + d.id, dir: "unsave", icon: "vault", label: "Term deposit returned: " + d.plan.name,
+    items.push({ key: "deposit-return-" + d.id, dir: "unsave", icon: "sprout", label: "Term deposit returned: " + d.plan.name,
       amount: budgetRound(d.amount), dayKey, status, liquidReturn: true, note: "Your principal returning, not new income" });
     const interest = budgetRound(termDepositPayout(d) - d.amount);
-    if (interest > 0) items.push({ key: "deposit-interest-" + d.id, dir: "in", icon: "vault", label: "Term deposit interest: " + d.plan.name,
+    if (interest > 0) items.push({ key: "deposit-interest-" + d.id, dir: "in", icon: "sprout", label: "Term deposit interest: " + d.plan.name,
       amount: interest, dayKey, status, note: "Interest when the deposit matures" });
   });
 

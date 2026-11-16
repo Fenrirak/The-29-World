@@ -32,7 +32,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=8d5ac901">
+<link rel="stylesheet" href="style.css?v=cb75c464">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -40,7 +40,6 @@
 <link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="firebase-init.js?v=e3543fda">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js">
@@ -61,7 +60,7 @@ else if(here){h.classList.add('mod-hold');setTimeout(function(){h.classList.remo
     <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="grid"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
     <a href="bank.html" data-module="bank"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
     <a href="budget.html" data-module="budget"><span class="icon-slot" data-icon="calendar"></span><span class="nav-label">Budget</span></a>
-    <a href="termdeposit.html" data-module="termdeposit"><span class="icon-slot" data-icon="vault"></span><span class="nav-label">Term Deposit</span></a>
+    <a href="termdeposit.html" data-module="termdeposit"><span class="icon-slot" data-icon="sprout"></span><span class="nav-label">Term Deposit</span></a>
     <a href="kiwisaver.html" data-module="kiwisaver"><span class="icon-slot" data-icon="kiwi"></span><span class="nav-label">KiwiSaver</span></a>
     <a href="loan.html" data-module="loan"><span class="icon-slot" data-icon="loan"></span><span class="nav-label">Loans</span></a>
     <a href="market.html" data-module="market"><span class="icon-slot" data-icon="chart"></span><span class="nav-label">Stock Market</span></a>
@@ -234,7 +233,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
             <button type="button" class="btn small secondary" onclick="shClearPayouts()">Clear all hours</button>
           </div>
           <div id="shPasteBox" class="hidden">
-            <textarea id="shPasteArea" rows="5" placeholder="12am-5am | 20&#10;6am-11am | 25&#10;3pm | 30"></textarea>
+            <textarea id="shPasteArea" rows="5" aria-label="Paste a list of hours and amounts, one per line" placeholder="12am-5am | 20&#10;6am-11am | 25&#10;3pm | 30"></textarea>
             <p class="muted-small">One per line: an hour (<em>3pm</em>) or a stretch (<em>12am-5am</em>), then the amount. Use <em>|</em>, <em>:</em>, a tab or a space between them.</p>
             <button type="button" class="btn small" onclick="shApplyPaste()">Add to the hours below</button>
           </div>
@@ -362,12 +361,12 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 </footer>
 
 <script type="module" src="firebase-init.js?v=e3543fda"></script>
-<script defer src="icons.js?v=cf6ccec5"></script>
+<script defer src="icons.js?v=00024d62"></script>
 <script defer src="settings-menu.js?v=c003caa8"></script>
 <script defer src="shortcuts.js?v=a39d9a62"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=4da071cc"></script>
-<script defer src="data-money.js?v=a7948914"></script>
+<script defer src="data-money.js?v=9e80a313"></script>
 <script defer src="data-life.js?v=14548daf"></script>
 <script defer src="data-property.js?v=2ae916b7"></script>
 <script defer src="data-markets.js?v=1c6f4fff"></script>
@@ -375,7 +374,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="events-ui.js?v=09a6e130"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=db3368f8"></script>
-<script defer src="notifications.js?v=a6a44e79"></script>
+<script defer src="notifications.js?v=0f7e459d"></script>
 <script defer src="jobs.js?v=1d53b62d"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
 </body>
