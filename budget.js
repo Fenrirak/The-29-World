@@ -3,8 +3,8 @@ let CURRENT, IS_TEACHER;
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("calendar", 26) + (IS_TEACHER ? " Budgeting" : " Budget");
-  document.getElementById("hBudget").innerHTML = "Budget";
-  document.getElementById("hBudPlan").innerHTML = "My plan";
+  document.getElementById("hBudget").textContent = "My week";
+  document.getElementById("hBudPlan").textContent = "Weekly savings target";
   document.getElementById("hBudTrack").innerHTML = "How this week is going";
   document.getElementById("hBudDays").innerHTML = "Day by day";
   document.getElementById("labBudSave").innerHTML = "How much will I save each week?";
@@ -70,16 +70,22 @@ async function init() {
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
   await checkAdjustmentPopup(u.username, u.classCode);
-  await render();
+  await render(true);
 }
 
-async function render() {
-  const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+let budgetRenderRequest = 0;
+async function render(fresh = false) {
+  const request = ++budgetRenderRequest;
+  const [me, cls] = await Promise.all([
+    fresh ? getUser(CURRENT.username, { fresh: true }) : getUserCached(CURRENT.username),
+    fresh ? getClass(CURRENT.classCode) : getClassCached(CURRENT.classCode)
+  ]);
+  if (request !== budgetRenderRequest) return;
   document.getElementById("budgetCard").classList.toggle("hidden", IS_TEACHER);
   document.getElementById("budgetTeacherCard").classList.toggle("hidden", !IS_TEACHER);
   if (IS_TEACHER) {
     const allStudents = await getClassStudents(me.classCode, cls);
-    renderBudgetTeacher(cls, allStudents);
+    if (request === budgetRenderRequest) renderBudgetTeacher(cls, allStudents);
   } else {
     renderBudgetStudent(me, cls);
   }
@@ -91,14 +97,17 @@ async function render() {
    the plan can update as the student types, without re-reading anything
    or redrawing the page under their cursor. */
 let BUDGET_VIEW = null;
+let budgetTargetDirty = false;
+let budgetClass = null;
 
 const BUD_STATUS = {
-  in:     { done: "Arrived", today: "Today", upcoming: "Coming", missed: "Missed", free: "Free week", daily: "Every day" },
-  out:    { done: "Paid", today: "Due today", upcoming: "Coming up", missed: "Missed", overdue: "Overdue", free: "Free week" },
+  in:     { settled: "Settled", done: "Arrived", today: "Today", upcoming: "Coming", missed: "Missed", free: "Free week", daily: "Every day" },
+  out:    { settled: "Settled", done: "Paid", today: "Due today", upcoming: "Coming up", missed: "Missed", overdue: "Overdue", free: "Free week" },
   save:   { done: "Done", today: "Today", upcoming: "Coming", missed: "Didn't happen" },
+  move: { done: "Moved", today: "Today", upcoming: "Coming", missed: "Missed" },
   unsave: { done: "Done", today: "Today", upcoming: "Coming", missed: "Didn't happen" }
 };
-const BUD_STATUS_TONE = { done: "done", today: "today", upcoming: "upcoming", missed: "missed", overdue: "missed", free: "free", daily: "upcoming" };
+const BUD_STATUS_TONE = { settled: "free", done: "done", today: "today", upcoming: "upcoming", missed: "missed", overdue: "missed", free: "free", daily: "upcoming" };
 
 function budEsc(s) { return escapeHtml(s === undefined || s === null ? "" : String(s)); }
 
@@ -130,6 +139,7 @@ function renderBudgetStudent(me, cls) {
   const v = buildBudgetView(cls, me, CURRENT.username);
   BUDGET_VIEW = v;
   BUD_ME = me;
+  budgetClass = cls;
   document.getElementById("budWeek").textContent = budWeekLabel(v.weekStartKey);
 
   /* ---- The three numbers ---- */
@@ -141,9 +151,9 @@ function renderBudgetStudent(me, cls) {
     </div>`;
   document.getElementById("budSummary").innerHTML =
     tile("in", "coin", "Coming in", fmtMoney(v.inTotal),
-      v.actual.extraTotal > 0 ? `Includes ${fmtMoney(v.actual.extraTotal)} extra so far` : "This week") +
+      `${fmtMoney(v.received)} recorded · ${fmtMoney(v.inTotal - v.received)} estimated`) +
     tile("out", "house", "Bills", fmtMoney(v.billsTotal),
-      v.billsTotal <= 0 ? "None this week" : v.billsLeft > 0 ? `${fmtMoney(v.billsLeft)} still to pay` : "All paid") +
+      v.billsTotal <= 0 ? "None this week" : v.billsLeft > 0 ? `${fmtMoney(v.billsLeft)} still to pay` : "Covered for this week") +
     tile("left" + (v.left < 0 ? " neg" : ""), "piggy", "Left after bills", fmtSigned(v.left),
       v.left < 0 ? "Your bills are more than you're earning" : "To save and spend");
 
@@ -153,7 +163,7 @@ function renderBudgetStudent(me, cls) {
 
   /* ---- The plan ---- */
   const input = document.getElementById("budSave");
-  if (document.activeElement !== input) {
+  if (!budgetTargetDirty) {
     input.value = v.plan.hasPlan ? v.plan.saveAmount
       : (v.autoSave > 0 ? v.autoSave : "");
   }
@@ -171,7 +181,7 @@ function renderBudgetStudent(me, cls) {
   rows.push(v.billsTotal > 0
     ? row("Bills paid", `<strong>${fmtMoney(v.billsPaid)}</strong> of ${fmtMoney(v.billsTotal)}`,
         (v.billsPaid / v.billsTotal) * 100, "bills",
-        v.billsLeft > 0 ? `${fmtMoney(v.billsLeft)} still to pay this week` : "Every bill is paid. Nice work")
+        (v.billsLeft > 0 ? `${fmtMoney(v.billsLeft)} still to pay this week` : "Covered for this week") + (v.assumedBills > 0 ? ` · ${fmtMoney(v.assumedBills)} assumed from personal items` : ""))
     : row("Bills", "None this week", null, "", ""));
   const spendParts = v.actual.purchases.concat(v.actual.surprises);
   const spendSub = spendParts.length ? spendParts.map(p => `${budEsc(p.label)} ${fmtMoney(p.amount)}`).join(" · ") : "Nothing spent yet this week";
@@ -214,31 +224,44 @@ function renderBudgetStudent(me, cls) {
       : row("KiwiSaver", `<strong>${fmtMoney(k.you)}</strong> from your pay`, null, "",
           `${when}, so it isn't in the money above. Your employer adds ${fmtMoney(k.employerNet)}${k.govt > 0 ? ` and the government adds ${fmtMoney(k.govt)}` : ""}.`));
   }
+  if (v.actual.assumedSaving > 0) rows.push(row("Personal saving included above", fmtMoney(v.actual.assumedSaving), null, "", "Assumed on the date you chose."));
   document.getElementById("budTrackRows").innerHTML = rows.join("");
 
-  // Safe to spend = cash + savings + rest of this week's income − rest of
-  // this week's bills (worked out in buildBudgetView).
-  const cashNow = Math.max(0, v.cash);
-  const othersWord = v.otherLabel === "Savings" ? "savings" : "other accounts";
-  let safeWhy;
-  if (v.historyIncomplete) safeWhy = "The full week's activity is unavailable, so this amount cannot be verified. Check the warning above.";
-  else if (v.paymentIssues.length) safeWhy = "An automatic payment has a funding problem. Check the warning above before spending.";
-  else if (v.safeTotal <= 0.005) safeWhy = `Your main account and withdrawable ${othersWord}, plus the money still to come, don't cover the rest of this week's bills, so there's nothing safe to spend.`;
-  else {
-    safeWhy = `Reserves money for bills on each remaining day, using only withdrawable accounts and excluding conditional income. Automatic saving is reserved too.`;
-    if (v.safeTimed < v.safeTotal - 0.005) safeWhy += ` Some money hasn't arrived yet or is reserved for saving, so the timing limit is ${fmtMoney(v.safeTimed)}.`;
-    if (v.safeNow > cashNow + 0.005) safeWhy += ` Only ${fmtMoney(cashNow)} is in your main account. Spending more means moving ${othersWord} into it first, on the Bank page.`;
-    if (v.plan.hasPlan && v.spendLeft < v.safeTimed - 0.005) safeWhy += v.spendLeft > 0.005 ? ` Your plan limits spending to ${fmtMoney(v.spendLeft)} more.` : " You've already used all of your plan's spending money.";
-  }
-  document.getElementById("budSafe").innerHTML = `
-    <div class="bud-safe-label">Safe to spend right now</div>
-    <div class="bud-safe-value">${fmtMoney(v.safeNow)}</div>
-    <div class="bud-safe-why">${budEsc(safeWhy)}</div>
-    <div class="bud-safe-have"><span>${budEsc(v.mainLabel)} <strong>${fmtSigned(v.cash)}</strong></span><span>${budEsc(v.otherLabel || "Savings")} <strong>${fmtMoney(v.savings)}</strong></span><span>Expected income <strong>+${fmtMoney(v.restIn)}</strong></span>${v.restReturns > 0 ? `<span>Deposits returning <strong>+${fmtMoney(v.restReturns)}</strong></span>` : ""}<span>Bills to pay <strong>−${fmtMoney(v.restBills)}</strong></span></div>`;
+  const planLimits = v.plan.hasPlan && Math.max(0, v.spendLeft) < v.safeTimed;
+  const explanation = v.historyIncomplete ? "The class history only covers part of this week."
+    : v.paymentIssues.length ? "A scheduled payment needs attention before you spend."
+    : v.cashClosed ? "Reopen your main account on Bank to use this money."
+    : planLimits ? "Your weekly plan limits what you can spend today."
+    : v.safeNow === 0 ? "Your available money is already spoken for this week."
+    : "You can spend this today and still cover the payments in your forecast.";
+  const detail = (label, value) => `<div><dt>${budEsc(label)}</dt><dd>${budEsc(value)}</dd></div>`;
+  const breakdown = [
+    detail(v.mainLabel, fmtSigned(v.cash)),
+    detail("Other money available after withdrawal fees and limits", fmtMoney(v.eligibleOther)),
+    v.hasBankGoal ? detail("Savings protected by your Bank goal", fmtMoney(v.protectedSavings)) : "",
+    detail("Income still expected without conditions", fmtMoney(v.restIn)),
+    v.restReturns ? detail("Term deposit principal returning", fmtMoney(v.restReturns)) : "",
+    detail("Payments still to cover", fmtMoney(v.restBills)),
+    v.assumedOut ? detail("Personal costs and saving assumed so far", fmtMoney(v.assumedOut)) : "",
+    v.remainingTarget ? detail("Weekly target still to set aside after scheduled transfers", fmtMoney(v.remainingTarget)) : "",
+    detail("Available after checking each day", fmtMoney(v.safeTimed)),
+    v.plan.hasPlan ? detail("Spending left in your weekly plan", fmtSigned(v.spendLeft)) : ""
+  ];
+  const safeBox = document.getElementById("budSafe");
+  const wasOpen = safeBox.querySelector && safeBox.querySelector("details[open]");
+  safeBox.innerHTML = `
+    <div class="bud-safe-main"><div><div class="bud-safe-label">Safe to spend right now</div>
+    <div class="bud-safe-value">${fmtMoney(v.safeNow)}</div></div>
+    <div class="bud-safe-why">${budEsc(explanation)}
+    ${v.hasBankGoal ? "Your Bank goal protects " + fmtMoney(v.protectedSavings) + " in withdrawable savings." : ""}
+    ${v.safeNow > Math.max(0, v.cash) ? "Move " + fmtMoney(v.safeNow - v.cash) + " into your main account to spend the full amount." : ""}</div></div>
+    <details class="bud-breakdown"${wasOpen ? " open" : ""}><summary>How this is worked out</summary>
+    <dl>${breakdown.join("")}</dl>
+    <p>Starting with money available today, each day adds expected receipts and reserves that day’s bills and saving. The lowest balance sets the limit. Your saved plan can bring it lower.</p></details>`;
 
   /* ---- Day by day ---- */
   const itemRow = i => {
-    const sign = i.dir === "in" || i.dir === "unsave" ? "+" : "−";
+    const sign = i.dir === "move" ? "↔ " : i.dir === "in" || i.dir === "unsave" ? "+" : "−";
     const amtCls = i.dir === "in" || i.dir === "unsave" ? "in" : i.dir === "save" ? "save" : "out";
     const crossed = i.status === "missed" || i.status === "free";
     // Money that hasn't moved yet is grey; it turns green/red once it has.
@@ -252,7 +275,7 @@ function renderBudgetStudent(me, cls) {
         </div>
         <div class="bud-row-end">
           <span class="bud-row-amt">${sign}${fmtMoney(i.amount)}</span>
-          <span class="bud-chip-status ${BUD_STATUS_TONE[i.status] || "upcoming"}">${budEsc((BUD_STATUS[i.dir] || BUD_STATUS.out)[i.status] || "")}</span>
+          <span class="bud-chip-status ${BUD_STATUS_TONE[i.status] || "upcoming"}">${budEsc(i.custom && i.status === "done" ? "Assumed" : (BUD_STATUS[i.dir] || BUD_STATUS.out)[i.status] || "")}</span>
         </div>
       </div>`;
   };
@@ -261,7 +284,7 @@ function renderBudgetStudent(me, cls) {
     const key = dateKeyPlusDays(v.weekStartKey, d);
     const dayItems = v.items.filter(i => i.dayKey === key);
     if (!dayItems.length) continue;
-    const order = { in: 0, unsave: 1, out: 2, save: 3 };
+    const order = { in: 0, unsave: 1, out: 2, save: 3, move: 4 };
     dayItems.sort((a, b) => order[a.dir] - order[b.dir]);
     blocks.push(`
       <div class="bud-day${key === v.todayKey ? " today" : ""}${key < v.todayKey ? " past" : ""}">
@@ -281,12 +304,13 @@ function renderBudgetStudent(me, cls) {
         <div class="bud-row-end"><span class="bud-row-amt">+${fmtMoney(e.amount)}</span><span class="bud-chip-status done">Arrived</span></div>
       </div>`).join("")}</div>`);
   }
-  document.getElementById("budDays").innerHTML = blocks.length ? blocks.join("")
+  if (!BUD_EDIT) document.getElementById("budDays").innerHTML = blocks.length ? blocks.join("")
     : `<p class="muted-small bud-empty">Nothing regular comes in or goes out this week yet.</p>`;
-  budRenderEditArea(v); // the Edit / Reset buttons (and the edit screen itself while editing)
+  if (!BUD_EDIT) budRenderEditArea(v);
   const toCome = v.items.filter(i => i.status === "today" || i.status === "upcoming" || i.status === "overdue").length;
-  document.getElementById("budDaysCount").textContent = v.items.length
-    ? `${v.items.length} item${v.items.length === 1 ? "" : "s"}${toCome ? ` · ${toCome} still to come` : ""}` : "";
+  const dayCount = v.items.length + v.actual.extra.length;
+  document.getElementById("budDaysCount").textContent = dayCount
+    ? `${dayCount} item${dayCount === 1 ? "" : "s"}${toCome ? ` · ${toCome} still to come` : ""}` : "";
   const daysWrap = document.getElementById("budDaysWrap");
   if (!daysWrap.dataset.ready) {
     daysWrap.dataset.ready = "1";
@@ -329,6 +353,12 @@ function budInjectEditCss() {
 .bud-removed-title{font-weight:800;margin:16px 0 4px}`;
   document.head.appendChild(st);
 }
+function budShowCommit(result) {
+  // The transaction returns the accepted plan, including edits preserved during a retry.
+  // A read begun before the write must never repaint over this result.
+  ++budgetRenderRequest;
+  renderBudgetStudent(Object.assign({}, BUD_ME, { budget: result.budget }), budgetClass);
+}
 function budEditSourceText(src) {
   return src === "week" ? "You've changed this week's list (this week only)."
     : src === "rule" ? "You've changed your list for this and future weeks."
@@ -363,7 +393,7 @@ async function budReset(scope) {
   const res = await resetBudgetEdits(CURRENT.username, scope, v.weekStartKey);
   BUD_RESET_OPEN = false;
   BUD_FLASH = res.ok ? `<div class="success-msg">${scope === "future" ? "Back to automatic for this week and future weeks." : "Back to automatic for this week."}</div>` : `<div class="error-msg">${budEsc(res.error)}</div>`;
-  await render();
+  if (res.ok) budShowCommit(res); else budRenderEditArea(v);
 }
 function budEditStart() {
   const v = BUDGET_VIEW; if (!v) return;
@@ -374,16 +404,16 @@ function budEditStart() {
 }
 async function budEditCancel() { BUD_EDIT = null; await render(); }
 function budDraftItems(v) {
-  const kept = (v.baseItems || []).filter(i => !BUD_EDIT.removed.has(i.key));
+  const kept = (v.baseItems || []).filter(i => i.status === "done" || !BUD_EDIT.removed.has(i.key));
   return kept.concat(BUD_EDIT.added.map(c => budgetCustomItem(c, v.weekStartKey, v.todayKey)));
 }
 function budEditHtml(v) {
   const items = budDraftItems(v);
   const todayIdx = Math.max(0, Math.round(daysBetweenKeys(v.weekStartKey, v.todayKey)));
   const row = i => {
-    const sign = i.dir === "in" || i.dir === "unsave" ? "+" : "−";
+    const sign = i.dir === "move" ? "↔ " : i.dir === "in" || i.dir === "unsave" ? "+" : "−";
     const amtCls = i.dir === "in" || i.dir === "unsave" ? "in" : i.dir === "save" ? "save" : "out";
-    const happened = i.status === "done" && !i.custom;
+    const happened = (i.status === "done" || i.status === "settled") && !i.custom;
     const btn = i.custom
       ? `<button type="button" class="btn small secondary" data-id="${budEsc(i.customId)}" onclick="budEditRemoveCustom(this.dataset.id)">Remove</button>`
       : happened ? `<span class="bud-chip-status done">Already happened</span>`
@@ -397,7 +427,7 @@ function budEditHtml(v) {
   for (let d = 0; d < 7; d++) {
     const key = dateKeyPlusDays(v.weekStartKey, d);
     const dayItems = items.filter(i => i.dayKey === key);
-    const order = { in: 0, unsave: 1, out: 2, save: 3 };
+    const order = { in: 0, unsave: 1, out: 2, save: 3, move: 4 };
     dayItems.sort((a, b) => order[a.dir] - order[b.dir]);
     blocks.push(`<div class="bud-day${key === v.todayKey ? " today" : ""}${key < v.todayKey ? " past" : ""}">
       <div class="bud-day-head">${budDateLabel(key)}${key === v.todayKey ? ` <span class="bud-today">Today</span>` : ""}</div>
@@ -405,7 +435,7 @@ function budEditHtml(v) {
   }
   const daily = items.filter(i => i.status === "daily");
   if (daily.length) blocks.push(`<div class="bud-day"><div class="bud-day-head">Every day</div>${daily.map(row).join("")}</div>`);
-  const gone = (v.baseItems || []).filter(i => BUD_EDIT.removed.has(i.key));
+  const gone = (v.baseItems || []).filter(i => i.status !== "done" && BUD_EDIT.removed.has(i.key));
   const goneHtml = gone.length ? `<div class="bud-removed-title">Taken out of your plan</div>${gone.map(i => `
     <div class="bud-row crossed"><span class="bud-row-icon">${icon(i.icon, 15)}</span>
       <div class="bud-row-text"><div class="bud-row-label">${budEsc(i.label)}</div></div>
@@ -431,7 +461,7 @@ function budEditHtml(v) {
       <button type="button" class="btn" id="budEditSaveFuture" onclick="budEditSave('future')">Save for this and future weeks</button>
       <button type="button" class="btn secondary" onclick="budEditCancel()">Cancel</button>
     </div>
-    <div id="budEditMsg"></div>`;
+    <div id="budEditMsg" role="status"></div>`;
 }
 // Redraw the edit list without losing what's typed in the "add" boxes.
 function budEditRerender() {
@@ -480,7 +510,7 @@ async function budEditSave(scope) {
   }
   BUD_EDIT = null;
   BUD_FLASH = `<div class="success-msg">Saved for ${scope === "future" ? "this week and future weeks" : "this week only"}. The numbers above now follow your list.</div>${list(chk.notes, "bud-edit-notes")}`;
-  await render();
+  budShowCommit(res);
 }
 
 // Remembers whether this student likes the day-by-day list open.
@@ -491,7 +521,8 @@ function budgetDaysToggled(el) {
 
 // The plan part, redrawn on every keystroke — only reads the input, never
 // the database.
-function budgetRecalc() {
+function budgetRecalc(editing = false) {
+  if (editing) budgetTargetDirty = true;
   const v = BUDGET_VIEW;
   if (!v) return;
   const save = budSaveValue();
@@ -503,12 +534,12 @@ function budgetRecalc() {
     ? [10, 20, 30, 50].map(p => {
         const amt = Math.round(left * p) / 100;
         const on = save !== null && Math.abs(save - amt) < 0.005;
-        return `<button type="button" class="bud-chip${on ? " on" : ""}" onclick="budgetPickPercent(${p})">${p}% <span>${fmtMoney(amt)}</span></button>`;
+        return `<button type="button" class="bud-chip${on ? " on" : ""}" aria-pressed="${on}" onclick="budgetPickPercent(${p})">${p}% <span>${fmtMoney(amt)}</span></button>`;
       }).join("")
     : "";
 
-  const s = save === null ? 0 : save;
-  const spend = Math.max(0, Math.round((left - s) * 100) / 100);
+  const s = Math.max(save || 0, v.autoSave);
+  const spend = budgetRound(Math.max(0, left - s));
   const result = document.getElementById("budResult");
   let html;
   if (save === null) {
@@ -521,6 +552,7 @@ function budgetRecalc() {
     html = `<span class="bud-result-line">Spending money this week: <strong>${fmtMoney(spend)}</strong></span>
             <span class="muted-small">${left > 0 ? `Saving ${Math.round((s / left) * 100)}% of what's left after bills.` : ""}</span>`;
   }
+  if (v.autoSave > (save || 0)) html += `<span class="muted-small">Your schedule already sets aside ${fmtMoney(v.autoSave)}. That amount is included in the split below.</span>`;
   result.innerHTML = html;
 
   // The whole week's money in one bar: bills / spending / saving.
@@ -544,7 +576,7 @@ function budgetRecalc() {
 function budgetPickPercent(p) {
   if (!BUDGET_VIEW || BUDGET_VIEW.left <= 0) return;
   document.getElementById("budSave").value = (Math.round(BUDGET_VIEW.left * p) / 100).toFixed(2);
-  budgetRecalc();
+  budgetRecalc(true);
 }
 
 async function saveBudgetPlan(e) {
@@ -555,8 +587,9 @@ async function saveBudgetPlan(e) {
   try {
     const res = await saveBudget(CURRENT.username, document.getElementById("budSave").value);
     if (res.ok) {
+      budgetTargetDirty = false;
+      budShowCommit(res);
       flashMsg(box, `<div class="success-msg">Plan saved. It keeps going every week until you change it.</div>`);
-      await render();
     } else {
       box.innerHTML = `<div class="error-msg">${budEsc(res.error)}</div>`;
     }
@@ -570,10 +603,18 @@ async function saveBudgetPlan(e) {
 
 async function budgetClear() {
   if (!await t29Confirm("Clear your budget plan?")) return;
-  await clearBudget(CURRENT.username);
-  document.getElementById("budSave").value = "";
-  document.getElementById("budMsg").innerHTML = "";
-  await render();
+  const button = document.getElementById("budClearBtn");
+  button.disabled = true;
+  try {
+    const res = await clearBudget(CURRENT.username);
+    budgetTargetDirty = false;
+    budShowCommit(res);
+    document.getElementById("budMsg").innerHTML = '<div class="success-msg">Weekly target cleared.</div>';
+  } catch (e) {
+    document.getElementById("budMsg").innerHTML = '<div class="error-msg">Couldn’t clear your target. Check your connection and try again.</div>';
+  } finally {
+    button.disabled = false;
+  }
 }
 
 /* ---------------- Teacher: everyone's budget ---------------- */
@@ -584,7 +625,7 @@ function renderBudgetTeacher(cls, students) {
 
   const planned = rows.filter(r => r.planned);
   const onTrack = rows.filter(r => r.status === "ok");
-  const needHelp = rows.filter(r => ["unknown", "bounce", "move", "short", "over"].includes(r.status));
+  const needHelp = rows.filter(r => ["unknown", "bounce", "move", "short", "over", "saving"].includes(r.status));
   const stat = (tone, ic, label, value, of) => `
     <div class="stat ${tone}"><span class="icon">${icon(ic, 26)}</span>
       <div class="label">${label}</div>
@@ -597,9 +638,10 @@ function renderBudgetTeacher(cls, students) {
   const FLAG = {
     unknown: `<span class="bud-flag warn">Incomplete activity history</span>`,
     bounce: `<span class="bud-flag short">A bill could bounce</span>`,
-    move: `<span class="bud-flag warn">Needs money from savings</span>`,
+    move: `<span class="bud-flag warn">Needs an account transfer</span>`,
     short: `<span class="bud-flag short">Bills more than money in</span>`,
     over: `<span class="bud-flag short">Over their plan</span>`,
+    saving: `<span class="bud-flag warn">Savings target needs funding</span>`,
     none: `<span class="bud-flag none">No plan yet</span>`,
     ok: `<span class="bud-flag ok">On track</span>`
   };
@@ -612,6 +654,7 @@ function renderBudgetTeacher(cls, students) {
       <td>${r.planned ? fmtMoney(r.saveTarget) + " a week" : "—"}</td>
       <td class="${r.saved < 0 ? "money-out" : ""}">${fmtSigned(r.saved)}</td>
       <td>${fmtMoney(r.spent)}${r.planned ? ` <span class="muted-small">of ${fmtMoney(r.spendAllowed)}</span>` : ""}</td>
+      <td>${fmtMoney(r.safeNow)}</td>
       <td>${FLAG[r.status]}</td>
     </tr>`).join("");
 }

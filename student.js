@@ -454,8 +454,8 @@ function renderTodo(me, cls) {
   // Money for bills (the budget's own warning, which already counts savings).
   try {
     const v = buildBudgetView(cls, me, me.username);
-    if (v && v.verdict && (v.verdict.tone === "bad" || v.verdict.tone === "warn") && v.shortfall) {
-      items.push({ id: "budget-bills-" + nzDateKey(), title: v.verdict.tone === "bad" ? "Not enough money for this week's bills" : "Move money from savings for bills",
+    if (v && v.verdict && (v.verdict.tone === "bad" || v.verdict.tone === "warn") && (v.shortfall || v.paymentIssues.length)) {
+      items.push({ id: "budget-bills-" + nzDateKey(), title: v.paymentIssues.length ? "Check a scheduled payment" : v.verdict.tone === "bad" ? "Not enough money for this week's bills" : "Move money for upcoming bills",
         body: v.verdict.text, urgent: v.verdict.tone === "bad", href: "budget.html#budgetCard", cta: "Open budget" });
     }
   } catch (e) { /* budget is a bonus here — never let it stop the list */ }

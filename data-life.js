@@ -2603,7 +2603,7 @@ function priceWithLifeDiscount(user, category, baseAmount) {
   const vs = base > 0 ? lifeUsableVouchers(user, category) : [];
   if (!vs.length) return `<strong>${fmtMoney(base)}</strong>`;
   const best = Math.max.apply(null, vs.map(v => v.pct));
-  return `<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;"><strong>${fmtMoney(base)}</strong><span class="badge lilac">${icon("ticket", 11)}<span class="voucher-label">${best}% voucher ready</span></span></span>`;
+  return `<span class="life-price"><strong>${fmtMoney(base)}</strong><span class="badge lilac">${icon("ticket", 11)}<span class="voucher-label">${best}% voucher ready</span></span></span>`;
 }
 async function addLifeItem(classCode, item) {
   const classRef = classesCol().doc(classCode);

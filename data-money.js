@@ -3784,17 +3784,24 @@ const BUDGET_COUNTED = ["done", "today", "upcoming", "overdue", "daily"];
 // it; `movable` is what they could really move into cash (a withdrawal fee comes off, and an account whose
 // withdrawal limit is used up gives nothing).
 function budgetOtherMoney(cls, user) {
-  let total = 0, movable = 0;
-  if (!acctDefaultClosed(user, "savings")) { total = movable = Math.max(0, Number(user.savings) || 0); }
-  acctActiveOf(user).forEach(a => {
-    const bal = Math.max(0, Number(a.balance) || 0), p = acctPlanById(cls, a.planId);
-    total += bal;
-    if (a.id === acctMainId(user)) { movable += bal; return; } // this entry holds the original Cash account's money (see Main account)
-    if (!p) { movable += bal; return; }
-    if (p.maxWithdrawals > 0 && (a.wd || 0) >= p.maxWithdrawals) return;
-    movable += Math.max(0, bal - (p.withdrawFee || 0));
-  });
-  return { total: budgetRound(total), movable: budgetRound(movable) };
+  const hasBankGoal = Array.isArray(user.savingsGoals) && user.savingsGoals.some(g => g && Number(g.target) > 0);
+  const savings = acctDefaultClosed(user, "savings") ? 0 : Math.max(0, Number(user.savings) || 0);
+  let total = savings, movable = savings, eligible = hasBankGoal ? 0 : savings;
+  const byAccount = new Map([["savings", eligible]]);
+  for (const a of acctActiveOf(user)) {
+    const balance = Math.max(0, Number(a.balance) || 0);
+    const originalCash = a.id === acctMainId(user);
+    const plan = originalCash ? null : acctPlanById(cls, a.planId);
+    total += balance;
+    if (plan && plan.maxWithdrawals > 0 && (a.wd || 0) >= plan.maxWithdrawals) continue;
+    const available = Math.max(0, balance - (plan && plan.withdrawFee || 0));
+    movable += available;
+    if (!hasBankGoal || originalCash || (plan && plan.kind === "everyday")) {
+      byAccount.set(originalCash ? "cash" : a.id, available);
+      eligible += available;
+    }
+  }
+  return { total: budgetRound(total), movable: budgetRound(movable), eligible: budgetRound(eligible), hasBankGoal, byAccount };
 }
 // Match the payment engine's duplicate cleanup even during first paint,
 // before its database cleanup has finished.
@@ -3817,7 +3824,7 @@ function budgetInsuranceInfo(cls, user, username) {
       (Number(a.amount) || 0) * 7 / (FREQ_DAYS[a.frequency] || 7), 0));
   return { premiums, toTeacher, gap: budgetRound(Math.max(0, premiums - toTeacher)) };
 }
-function budgetWeekItems(cls, user, username) {
+function budgetWeekItems(cls, user, username, records) {
   const items = [];
   const weekKey = isoWeekKey();
   const weekStartKey = budgetWeekStartKey();
@@ -3960,30 +3967,16 @@ function budgetWeekItems(cls, user, username) {
       dayKey: overdue ? todayKey : l.dueDate, status: overdue ? "overdue" : budgetStatus(l.dueDate, todayKey, false), where: "Loans",
       note: overdue ? "Overdue. Repay it on the Loans page" : "Due " + (l.dueDate === todayKey ? "today" : dayWord(l.dueDate)) + ". Repay it on the Loans page" });
   });
-  // Credit card: the last statement's closing balance is a bill on its due
-  // date (still showing, as overdue, until it's paid).
-  if (cardIsActive(user)) {
-    const cs = user.creditCard.stmt, owe = cardStmtRemaining(user.creditCard);
-    if (cs && owe > 0 && cs.dueKey <= weekEndKey) {
-      const overdue = cs.dueKey < todayKey;
-      // repay: it pays off card spending that was already counted when it was swiped, so it
-      // only matters for cash timing, never for the week's bills or spending plan.
-      items.push({ key: "card-stmt", dir: "out", repay: true, icon: "creditcard", label: "Credit card statement", amount: owe,
-        dayKey: overdue ? todayKey : cs.dueKey, status: overdue ? "overdue" : budgetStatus(cs.dueKey, todayKey, false), where: "Bank",
-        note: (overdue ? "Overdue. Pay it on the Bank page" : "Due " + (cs.dueKey === todayKey ? "today" : dayWord(cs.dueKey)) + ". Pay it on the Bank page")
-          + " (pay it all by the due date to avoid interest). It pays off card spending already counted in your plan, so it isn't counted again" });
-    }
-  }
   automations.forEach(a => {
     if (a.studentUser !== username || a.type === "savings-transfer") return;
     const when = budgetAutoThisWeek(a, weekStartKey);
     if (!when || !(Number(a.amount) > 0)) return;
     const status = budgetStatus(when.dayKey, todayKey, when.done);
-    const autoCard = !!a.useCard && a.toUser === cls.teacher && cardIsActive(user);
+    const autoCard = autoSource(a) === "card" && a.toUser === cls.teacher && cardIsActive(user);
     const srcId = autoSource(a), sourceOther = srcId !== "cash" && srcId !== "card" && acctSrcToLogical(srcId) !== acctMainId(user);
     const viaAcct = !autoCard && sourceOther ? acctSrcName(cls, user, srcId) : "";
     items.push({ key: "auto-" + a.id, dir: "out", icon: "repeat", label: a.note || "Automatic payment", amount: budgetRound(a.amount), dayKey: when.dayKey, status,
-      viaCard: !!a.useCard && a.toUser === cls.teacher, fromOther: sourceOther, sourceId: srcId,
+      viaCard: autoSource(a) === "card" && a.toUser === cls.teacher, fromOther: sourceOther, sourceId: srcId,
       note: status === "done" ? "Paid" : status === "missed" ? (autoCard ? "Didn't go out, not enough room on your credit card" : viaAcct ? `Didn't go out, not enough in your ${viaAcct}` : "Didn't go out, not enough cash on the day")
         : "Goes out by itself" + (a.toUser === cls.teacher ? ", to your teacher" : "") + (autoCard ? ", on your credit card" : viaAcct ? `, from your ${viaAcct}` : "") });
   });
@@ -4003,12 +3996,11 @@ function budgetWeekItems(cls, user, username) {
     const status = budgetStatus(when.dayKey, todayKey, when.done);
     const ends = autoEnds(a);
     const mainL = acctMainId(user); // the account payments come out of
-    if (ends.from !== mainL && ends.to !== mainL) return; // moves between accounts only — spendable money doesn't change
-    if (!acctNameOf(cls, user, ends.from) || !acctNameOf(cls, user, ends.to)) return; // one of the accounts is closed, so it can't run
+    const internal = ends.from !== mainL && ends.to !== mainL;
     const toSavings = ends.from === mainL;
-    const other = toSavings ? ends.to : ends.from, otherName = other === "savings" ? "savings" : acctNameOf(cls, user, other);
-    items.push({ key: "save-" + a.id, dir: toSavings ? "save" : "unsave", icon: "piggy",
-      label: toSavings ? `Automatic transfer to ${otherName}` : `Automatic transfer from ${otherName}`, amount: budgetRound(a.amount), dayKey: when.dayKey, status,
+    const other = toSavings ? ends.to : ends.from, otherName = other === "savings" ? "savings" : acctNameOf(cls, user, other) || "closed account";
+    items.push({ key: "save-" + a.id, dir: internal ? "move" : toSavings ? "save" : "unsave", icon: "piggy",
+      label: internal ? `${acctNameOf(cls, user, ends.from)} → ${acctNameOf(cls, user, ends.to)}` : toSavings ? `Automatic transfer to ${otherName}` : `Automatic transfer from ${otherName}`, amount: budgetRound(a.amount), dayKey: when.dayKey, status,
       fromAccount: ends.from, toAccount: ends.to,
       note: status === "done" ? "Done" : status === "missed" ? "Didn't happen, not enough money on the day" : "Happens by itself" });
   });
@@ -4023,20 +4015,39 @@ function budgetWeekItems(cls, user, username) {
       amount: interest, dayKey, status, note: "Interest when the deposit matures" });
   });
 
-  budgetAddCardForecast(cls, user, items, todayKey, weekEndKey);
-  budgetReconcileItems(cls, user, username, items, weekStartKey);
+  for (const event of cls.bigEventLog || []) {
+    if (event.studentUser !== username || event.status !== "pending" || !(event.cost > 0)) continue;
+    items.push({ key: "big-event-" + event.id, dir: "out", icon: "bolt", label: event.name || "Big event",
+      amount: budgetRound(event.cost), dayKey: todayKey, status: "today", cashReserveOnly: true,
+      note: "Full cost reserved until you choose how to handle this event. The actual cost appears after you decide." });
+  }
+  const heldCards = cardsActive(user);
+  for (const card of heldCards) {
+    const primary = card === user.creditCard;
+    const suffix = primary ? "" : "-" + card.planId;
+    const plan = cardPlanById(cls, card.planId);
+    const name = heldCards.length > 1 && plan ? plan.name + " card" : "Credit card";
+    const due = card.stmt && card.stmt.dueKey;
+    const owe = cardStmtRemaining(card);
+    if (due && due <= weekEndKey && owe > 0) {
+      items.push({ key: "card-stmt" + suffix, dir: "out", repay: true, icon: "creditcard", label: name + " statement",
+        amount: owe, primaryStatement: primary, dayKey: due < todayKey ? todayKey : due, status: due < todayKey ? "overdue" : budgetStatus(due, todayKey, false),
+        where: "Bank", note: "Pay on the Bank page. The purchases already count in your budget." });
+    }
+    budgetAddCardForecast(cls, card, primary, suffix, name, items, todayKey, weekEndKey);
+  }
+  budgetReconcileItems(cls, user, username, items, weekStartKey, records);
   return { items, weekKey, weekStartKey, weekEndKey, todayKey };
 }
 
 // A short interest-free period can make a statement that has NOT closed yet
 // payable this very week. Reserve it too, using the real statement calculator.
-function budgetAddCardForecast(cls, user, items, todayKey, weekEndKey) {
-  if (!cardIsActive(user)) return;
-  const plan = cardPlanById(cls, user.creditCard.planId), closeKey = user.creditCard.nextCloseKey;
+function budgetAddCardForecast(cls, held, primary, suffix, name, items, todayKey, weekEndKey) {
+  const plan = cardPlanById(cls, held.planId), closeKey = held.nextCloseKey;
   if (!plan || !closeKey || closeKey < todayKey || closeKey > weekEndKey) return;
   const dueKey = dateKeyPlusDays(closeKey, plan.freeDays || 0);
-  if (dueKey > weekEndKey) return;
-  const projected = JSON.parse(JSON.stringify(user)), card = projected.creditCard;
+  const card = JSON.parse(JSON.stringify(held));
+  const projected = { creditCard: card, balance: 0 };
   // This week's existing statement is already reserved separately. Model it
   // paid on time, so its principal is not included a second time at closing.
   if (card.stmt && card.stmt.dueKey <= closeKey) {
@@ -4044,7 +4055,7 @@ function budgetAddCardForecast(cls, user, items, todayKey, weekEndKey) {
     card.balance = cardRound(Math.max(0, card.balance - paid));
     card.stmt.paid = cardRound((card.stmt.paid || 0) + paid);
   }
-  items.filter(i => i.viaCard && ["today", "upcoming"].includes(i.status) && i.dayKey <= closeKey)
+  items.filter(i => primary && i.viaCard && ["today", "upcoming"].includes(i.status) && i.dayKey <= closeKey)
     .sort((a, b) => a.dayKey.localeCompare(b.dayKey)).forEach(i => {
       // Do not assume paying the old statement frees room before an autopay.
       // Its funding check below still uses the card's available credit now.
@@ -4052,19 +4063,18 @@ function budgetAddCardForecast(cls, user, items, todayKey, weekEndKey) {
     });
   const logs = [];
   cardCloseStatement(projected, card, Object.assign({}, plan, { vouchers: [] }), closeKey, logs);
-  if (card.stmt.amount > 0) items.push({ key: "card-next-stmt", dir: "out", repay: true, icon: "creditcard", label: "Next credit card statement (estimate)",
+  if (card.stmt.amount > 0 && dueKey <= weekEndKey) items.push({ key: "card-next-stmt" + suffix, dir: "out", repay: true, icon: "creditcard", label: name + " next statement (estimate)",
     amount: card.stmt.amount, dayKey: dueKey, status: budgetStatus(dueKey, todayKey, false), where: "Bank",
     note: "Closes this week and is also due this week. Includes current unbilled spending, scheduled card payments, fees and cashback; assumes the existing statement is paid on time" });
   logs.filter(t => t.type === "card-fee" || t.type === "card-interest").forEach((t, n) => {
-    items.push({ key: "card-projected-fee-" + n, dir: "out", icon: "creditcard", label: t.note, amount: t.amount,
-      dayKey: closeKey, status: budgetStatus(closeKey, todayKey, false), chargedToCard: true, note: "Expected at the next statement; included in the statement cash reserve" });
+    items.push({ key: "card-projected-fee-" + n + suffix, dir: "out", icon: "creditcard", label: t.note, amount: t.amount,
+      dayKey: closeKey, status: budgetStatus(closeKey, todayKey, false), chargedToCard: true, note: "Expected when the statement closes. Cash is due on the statement payment date." });
   });
 }
 
 // Paid amounts are history, not estimates at today's settings. Replace matching
 // paid rows with ledger amounts, and keep payments for assets/jobs since removed.
-function budgetReconcileItems(cls, user, username, items, startKey) {
-  const records = budgetTransactions(cls, username, startKey);
+function budgetReconcileItems(cls, user, username, items, startKey, records = budgetTransactions(cls, username, startKey)) {
   const used = new Set();
   const groupOf = i => i.key === "wage" ? "wage" : i.key.startsWith("allowance-weekly") ? "weekly"
     : i.key.startsWith("allowance-daily") ? "daily" : i.key.startsWith("mortgage-") ? "mortgage"
@@ -4084,6 +4094,7 @@ function budgetReconcileItems(cls, user, username, items, startKey) {
       case "transport-expense": group = "transport"; break;
       case "card-purchase": if (t.scheduled || /^Weekly transport expenses/.test(t.note || "")) group = "transport"; break;
       case "automation": group = t.to === username ? "auto-in" : "auto-out"; break;
+      case "card-interest": case "card-fee": group = "card-cost"; break;
       case "loan-repayment": group = "loan-paid"; break;
       case "card-payment": group = "card-paid"; break;
     }
@@ -4092,13 +4103,22 @@ function budgetReconcileItems(cls, user, username, items, startKey) {
     groups.get(group).push(t);
   });
   groups.forEach((txns, group) => {
-    const old = items.filter(i => groupOf(i) === group && (i.status === "done" || i.status === "missed"));
+    const old = items.filter(i => groupOf(i) === group);
     txns.forEach((t, n) => {
       const dayKey = nzDateKey(new Date(Number(t.ts)));
-      const match = old.find(i => !used.has(i) && (group === "daily" ? i.dayKey === dayKey
-        : group === "mortgage" || group.includes("rent") ? (t.note || "").includes(i.label.split(": ").slice(1).join(": ") || i.label.replace("Rent from ", ""))
-        : group.startsWith("auto-") ? String(t.id || "").startsWith(i.key.replace("auto-in-", "auto-") + "-") : true))
-        || old.find(i => !used.has(i) && i.status === "done" && i.dayKey === dayKey);
+      const candidates = old.filter(i => !used.has(i));
+      let match;
+      if (group.startsWith("auto-")) {
+        match = candidates.find(i => String(t.id || "").startsWith(i.key.replace("auto-in-", "auto-") + "-" + dayKey));
+      } else if (group === "mortgage" || group.includes("rent")) {
+        const name = (t.note || "").split(": ").slice(1).join(": ").replace(/\. Paid off!$/, "").replace(/ \((school rental|credit card)\)$/, "");
+        match = candidates.find(i => (i.label.split(": ").slice(1).join(": ") || i.label.replace("Rent from ", "")) === name);
+      } else if (group === "transport") {
+        match = candidates[0]; // one charge per week, even when split between cash and card
+      } else {
+        match = candidates.find(i => i.dayKey === dayKey);
+      }
+      if (!match) match = candidates.find(i => i.status === "done" && i.dayKey === dayKey);
       if (match) used.add(match);
       const incoming = ["wage", "weekly", "daily", "rent-in", "sublet-in", "auto-in"].includes(group);
       const slip = group === "wage" ? (user.payslips || []).find(p => p && p.dateKey === dayKey) : null;
@@ -4106,10 +4126,18 @@ function budgetReconcileItems(cls, user, username, items, startKey) {
       items.push(Object.assign({}, match || {}, { key: "recorded-" + group + "-" + (t.id || n), dir: incoming ? "in" : "out",
         icon: match ? match.icon : incoming ? "coin" : "repeat", label: match ? match.label : t.note || t.type,
         amount: budgetRound(t.amount), dayKey, status: "done", repay: group === "card-paid", note: "Recorded payment",
-        kiwi: slip ? slip.kiwi : match ? match.kiwi : null }));
+        kiwi: slip ? slip.kiwi : t.kiwi || (match ? match.kiwi : null) }));
     });
   });
   for (let n = items.length - 1; n >= 0; n--) if (used.has(items[n])) items.splice(n, 1);
+  // The payment stamp also gets set when a teacher waives a bill. Without a
+  // matching payment record, today's price is no evidence that cash moved.
+  for (const item of items) {
+    if (item.status !== "done" || !["mortgage", "transport", "rent-out", "sublet-in"].includes(groupOf(item))) continue;
+    item.status = "settled";
+    item.amount = 0;
+    item.note = "This week is settled. No payment amount appears in the available activity history.";
+  }
   // Payslips survive the shared activity log rolling over or a job being removed.
   (user.payslips || []).filter(p => p && p.dateKey >= startKey && p.dateKey <= nzDateKey()).forEach((p, n) => {
     if (items.some(i => i.dir === "in" && (i.key === "wage" || i.key.startsWith("recorded-wage-")) && i.dayKey === p.dateKey)) return;
@@ -4136,20 +4164,30 @@ const BUDGET_EXTRA_LABELS = {
   "insurance-claim": "Insurance claims", "cash-interest": "Interest", welcome: "Welcome grant",
   "store-sell": "Things you sold", "vehicle-sell": "Things you sold", "p2p-sell": "Things you sold", "property-sell": "Things you sold",
   transfer: "Money from others", event: "Random events", "big-event": "Big events", "life-grant": "Life events",
-  "kiwisaver-out": "From KiwiSaver", "kiwisaver-refund": "From KiwiSaver"
 };
-function budgetWeekActuals(cls, username, weekStartKey) {
+function budgetWeekActuals(cls, username, weekStartKey, records = budgetTransactions(cls, username, weekStartKey)) {
   const extra = {}, purchases = {}, surprises = {};
   let saved = 0, gambleIn = 0, gambleOut = 0, count = 0;
   const add = (map, label, amt) => { map[label] = budgetRound((map[label] || 0) + amt); };
-  budgetTransactions(cls, username, weekStartKey).forEach(t => {
+  records.forEach(t => {
     const amt = budgetRound(Math.abs(Number(t.amount) || 0));
-    if (!amt && !(t.type === "term-deposit-early" && Number(t.principal) > 0)) return;
+    if (["term-deposit-early", "term-deposit-mature", "stock-sell", "stock-close", "kiwisaver-out", "kiwisaver-refund", "account-close"].includes(t.type)) {
+      for (const line of reportClassifications(t, username)) {
+        if (line.bucket === "saved") saved += line.amount;
+        if (line.bucket === "income") add(extra, line.category, line.amount);
+        if (line.bucket === "spent") add(surprises, line.category, line.amount);
+      }
+      count++;
+      return;
+    }
+    if (!amt) return;
     const neg = Number(t.amount) < 0;
     const out = t.from === username;
     count++;
     switch (t.type) {
-      case "side-hustle": case "truck-drive": case "bonus": case "quiz-reward": case "insurance-claim":
+      case "interest": add(extra, "Account interest", amt); break;
+      case "insurance-claim": if (neg) add(surprises, "Insurance shortfall", amt); else add(extra, "Insurance claims", amt); break;
+      case "side-hustle": case "truck-drive": case "bonus": case "quiz-reward":
       case "cash-interest": case "welcome": case "store-sell": case "vehicle-sell": case "p2p-sell":
         add(extra, BUDGET_EXTRA_LABELS[t.type], amt); break;
       case "property-sell":
@@ -4171,7 +4209,6 @@ function budgetWeekActuals(cls, username, weekStartKey) {
         // The weekly transport bill is already a scheduled bill in the week's plan.
         if (t.scheduled || /^Weekly transport expenses/.test(t.note || "")) break;
         add(t.surprise ? surprises : purchases, (t.cat || "Store") + " (card)", amt); break;
-      case "card-interest": case "card-fee": add(surprises, "Card interest & fees", amt); break;
       case "account-fee": add(surprises, "Bank fees", amt); break;
       case "card-cashback": add(extra, "Card cashback", amt); break;
       case "p2p-buy": add(purchases, "Trade Centre", amt); break;
@@ -4186,28 +4223,7 @@ function budgetWeekActuals(cls, username, weekStartKey) {
       case "gambling-buyin": gambleIn += amt; break;
       case "gambling-cashout": gambleOut += amt; break;
       case "savings-deposit": case "term-deposit-open": case "stock-buy": case "kiwisaver-in": saved += amt; break;
-      case "savings-withdraw": case "stock-sell": case "stock-close": saved -= amt; break;
-      case "term-deposit-early": {
-        const principal = t.principal != null && Number.isFinite(Number(t.principal)) ? budgetRound(t.principal) : amt;
-        saved -= principal;
-        if (principal > amt) add(surprises, "Term deposit withdrawal fee", budgetRound(principal - amt));
-        break;
-      }
-      case "term-deposit-mature": {
-        const legacy = /matured:.*?([\d,]+\.\d{2})\s*\+/.exec(t.note || "");
-        const principal = Number.isFinite(Number(t.principal)) && t.principal != null ? budgetRound(t.principal)
-          : legacy ? budgetRound(legacy[1].replace(/,/g, "")) : amt;
-        saved -= principal;
-        if (amt > principal) add(extra, "Term deposit interest", budgetRound(amt - principal));
-        break;
-      }
-      // Closing an account moves the money to another of their own accounts. It only counts as money taken back out
-      // of savings when it landed in cash (closing the Cash account itself, or a move between two non-cash accounts, is neutral).
-      case "account-close": if (t.cashDir === "in") saved -= amt; break;
-      // KiwiSaver paid out to them (retired, hardship, or an opt-out
-      // refund). What comes off their pay each week never reached their
-      // cash, so money coming back out of it is new money for this week.
-      case "kiwisaver-out": case "kiwisaver-refund": add(extra, BUDGET_EXTRA_LABELS[t.type], amt); break;
+      case "savings-withdraw": saved -= amt; break;
       default: count--; // scheduled (wages, rent, bills...) or not money at all
     }
   });
@@ -4242,7 +4258,7 @@ function normalizeBudgetPlan(raw) {
    lunch budget, a planned saving...). Edits are saved either for THIS WEEK ONLY or for this
    week AND FUTURE weeks, and the totals, the "how this week is going" rows and safe-to-spend
    all follow the edited list. Nothing here moves money: a bill that is taken out of the plan
-   still gets charged, the plan just no longer reserves money for it.
+   still counts towards safe spending until it is paid.
 
    Stored on user.budget.edits (so it travels with the existing `budget` field):
      { rule:  { from: "<Monday>", removed: [item keys], added: [custom items] } | null,   // this and future weeks
@@ -4262,20 +4278,26 @@ function budgetEditsFor(raw, weekStartKey) {
 }
 function budgetCustomItem(c, weekStartKey, todayKey) {
   const dayKey = dateKeyPlusDays(weekStartKey, Math.min(6, Math.max(0, Number(c.day) || 0)));
-  // Your own planned items can't be matched to a payment, so they count as happened once their day has passed.
-  const status = dayKey < todayKey ? "done" : budgetStatus(dayKey, todayKey, false);
+  // Personal items are assumed on their chosen date and never post a bank transaction.
+  const status = dayKey <= todayKey ? "done" : "upcoming";
   return { key: "custom-" + c.id, custom: true, customId: c.id, dir: c.dir, icon: c.dir === "in" ? "coin" : c.dir === "save" ? "piggy" : "cart",
     label: c.label, amount: budgetRound(c.amount), dayKey, status, conditional: c.dir === "in",
-    note: c.dir === "in" ? "Added by you. Safe to spend doesn't count it" : "Added by you" };
+    note: status === "done" ? "Assumed on the date you chose. No bank transaction is created." : "Personal estimate. Counts on the date you chose." };
 }
 // Applies the student's saved edits to the week's automatic list (changes sched.items) and says what was changed.
 function budgetApplyEdits(user, sched) {
   const base = sched.items.slice();
   const eff = budgetEditsFor(user.budget, sched.weekStartKey);
   if (!eff) return { baseItems: base, removedItems: [], removedKeys: [], customAdded: [], editSource: "auto" };
-  const rm = new Set(eff.removed);
-  sched.items = base.filter(i => !rm.has(i.key)).concat(eff.added.map(c => budgetCustomItem(c, sched.weekStartKey, sched.todayKey)));
-  return { baseItems: base, removedItems: base.filter(i => rm.has(i.key)), removedKeys: eff.removed.slice(), customAdded: eff.added.map(c => Object.assign({}, c)), editSource: eff.source };
+  const removed = eff.removed.map(key => {
+    const daily = /^allowance-daily-(\d{4}-\d{2}-\d{2})$/.exec(key);
+    if (!daily || eff.source !== "rule") return key;
+    const day = (new Date(dateKeyToUTC(daily[1])).getUTCDay() + 6) % 7;
+    return "allowance-daily-" + dateKeyPlusDays(sched.weekStartKey, day);
+  });
+  const rm = new Set(removed);
+  sched.items = base.filter(i => i.status === "done" || !rm.has(i.key)).concat(eff.added.map(c => budgetCustomItem(c, sched.weekStartKey, sched.todayKey)));
+  return { baseItems: base, removedItems: base.filter(i => i.status !== "done" && rm.has(i.key)), removedKeys: removed, customAdded: eff.added.map(c => Object.assign({}, c)), editSource: eff.source };
 }
 function budgetCleanDraft(draft) {
   const removed = Array.from(new Set((draft && draft.removed || []).map(String)));
@@ -4301,7 +4323,7 @@ function budgetValidateEdits(view, user, draft, scope) {
     if (it.status === "done") {
       errors.push(`"${it.label}" (${it.dayKey ? budgetDayWord(it.dayKey) : "every day"}) has already ${it.dir === "in" ? "arrived" : it.dir === "out" ? "been paid" : "happened"} this week, so it can't be taken out of this week's plan. Take it out after the week ends instead.`);
     } else if (it.dir === "out" && it.status !== "missed") {
-      notes.push(`"${it.label}" will still be charged by itself. Taking it out only stops your plan from setting money aside for it, so safe to spend can look bigger than it really is.`);
+      notes.push(`"${it.label}" still counts towards safe spending while the payment is due, even if you leave it out of your weekly plan.`);
     }
   });
   // 2. Items they added
@@ -4350,7 +4372,7 @@ async function saveBudgetEdits(username, scope, draft, weekStartKey) {
   const d = budgetCleanDraft(draft);
   const ref = usersCol().doc(username);
   try {
-    await fdb.runTransaction(async (t) => {
+    const budget = await fdb.runTransaction(async (t) => {
       const us = await t.get(ref);
       if (!us.exists) throw new Error("NOT_FOUND");
       const raw = us.data().budget || {};
@@ -4368,21 +4390,23 @@ async function saveBudgetEdits(username, scope, draft, weekStartKey) {
       }
       const clean = _budgetPrune(edits, weekStartKey), next = Object.assign({}, raw);
       if (clean) next.edits = clean; else delete next.edits;
-      t.update(ref, { budget: Object.keys(next).length ? next : null });
+      const value = Object.keys(next).length ? next : null;
+      t.update(ref, { budget: value });
+      return value;
     });
+    return { ok: true, budget };
   } catch (e) {
     const m = String(e.message || "");
     if (m.startsWith("CLASH:")) return { ok: false, errors: [`The week of ${m.slice(6)} already has its own saved changes, and they would override this. Reset that week to automatic first.`] };
     return { ok: false, errors: ["Your changes couldn't be saved. Check your connection and try again."] };
   }
-  return { ok: true };
 }
 // Back to the automatic list. scope "week": just this week (a "this and future" rule keeps going for other weeks).
 // scope "future": this week and every week after.
 async function resetBudgetEdits(username, scope, weekStartKey) {
   const ref = usersCol().doc(username);
   try {
-    await fdb.runTransaction(async (t) => {
+    const budget = await fdb.runTransaction(async (t) => {
       const us = await t.get(ref);
       if (!us.exists) throw new Error("NOT_FOUND");
       const raw = us.data().budget || {};
@@ -4395,10 +4419,12 @@ async function resetBudgetEdits(username, scope, weekStartKey) {
       else delete edits.weeks[weekStartKey];
       const clean = _budgetPrune(edits, weekStartKey), next = Object.assign({}, raw);
       if (clean) next.edits = clean; else delete next.edits;
-      t.update(ref, { budget: Object.keys(next).length ? next : null });
+      const value = Object.keys(next).length ? next : null;
+      t.update(ref, { budget: value });
+      return value;
     });
+    return { ok: true, budget };
   } catch (e) { return { ok: false, error: "Couldn't reset. Check your connection and try again." }; }
-  return { ok: true };
 }
 
 const MAX_BUDGET_SAVE = 1000000;
@@ -4407,37 +4433,140 @@ async function saveBudget(username, saveAmount) {
   const save = budgetRound(raw);
   if (raw === "" || !Number.isFinite(Number(raw)) || Number(raw) < 0) return { ok: false, error: "Enter how much you'll save each week: 0 or more." };
   if (save > MAX_BUDGET_SAVE) return { ok: false, error: `That's more than ${fmtMoney(MAX_BUDGET_SAVE)}. Try a smaller amount.` };
-  // Keep the student's day-by-day edits (they're saved separately from how much they save).
+  // Preserve edits written by another tab when the transaction retries.
   const ref = usersCol().doc(username);
-  await fdb.runTransaction(async (t) => {
+  const budget = await fdb.runTransaction(async (t) => {
     const us = await t.get(ref);
     const old = (us.exists && us.data().budget) || {};
     const next = { saveAmount: save, weekKey: isoWeekKey(), updatedAt: Date.now() };
     if (old.edits) next.edits = old.edits;
     t.update(ref, { budget: next });
+    return next;
   });
-  return { ok: true };
+  return { ok: true, budget };
 }
 
 // Clears how much they planned to save. Their day-by-day edits stay (reset those with resetBudgetEdits).
 async function clearBudget(username) {
   const ref = usersCol().doc(username);
-  await fdb.runTransaction(async (t) => {
+  const budget = await fdb.runTransaction(async (t) => {
     const us = await t.get(ref);
     const old = (us.exists && us.data().budget) || {};
-    t.update(ref, { budget: old.edits ? { edits: old.edits } : null });
+    const next = old.edits ? { edits: old.edits } : null;
+    t.update(ref, { budget: next });
+    return next;
   });
-  return { ok: true };
+  return { ok: true, budget };
+}
+
+// Project the balances in date order. Keep today’s spending limit at the lowest
+// available balance, including the starting balance before any future receipts.
+function budgetCashForecast(cls, user, items, week, other, card, saveTarget, saved) {
+  const main = acctMainId(user), paymentIssues = [];
+  const assumedOut = budgetRound(items.filter(i => i.custom && i.status === "done" && i.dir !== "in")
+    .reduce((sum, i) => sum + i.amount, 0));
+  let balances = Object.assign({}, user, { balance: budgetRound(budgetRound(user.balance) - assumedOut) });
+  let cardRoom = card ? card.available : 0;
+  let restIn = 0, restBills = 0, restReturns = 0, futureSaving = 0;
+  let lowestCash = balances.balance, lowestDay = null, firstShort = null;
+  let protectedReleased = 0;
+  const reserved = new Map();
+  const sourceFloors = new Map(other.byAccount);
+  const available = () => budgetRound(balances.balance + budgetOtherMoney(cls, balances).eligible
+    - [...reserved.values()].reduce((a, b) => a + b, 0) - protectedReleased);
+  let lowestLiquid = available();
+  const pending = items.filter(i => ["today", "upcoming", "overdue"].includes(i.status));
+  for (let day = week.todayKey; day <= week.weekEndKey; day = dateKeyPlusDays(day, 1)) {
+    const rows = pending.filter(i => i.dayKey === day);
+    // Receipt jobs run before the student can spend. Conditional receipts stay in the plan only.
+    for (const i of rows.filter(i => i.dir === "in" || i.liquidReturn)) {
+      if (i.conditional) continue;
+      balances.balance = budgetRound(balances.balance + i.amount);
+      if (i.liquidReturn) { restReturns += i.amount; futureSaving -= i.amount; }
+      else restIn += i.amount;
+    }
+    let dayCashBills = 0;
+    for (const i of rows.filter(i => i.dir !== "in" && !i.liquidReturn)) {
+      const transfer = !!i.fromAccount;
+      let mainCost = 0;
+      if (i.primaryStatement && card) cardRoom = Math.min(card.limit, budgetRound(cardRoom + i.amount));
+      if (i.viaCard || i.cardable) {
+        i.cardOk = !!card && i.amount <= cardRoom + 0.005;
+        if (i.viaCard) {
+          if (i.cardOk) cardRoom = budgetRound(cardRoom - i.amount);
+          else paymentIssues.push(i.label + " needs " + fmtMoney(i.amount) + " of available credit. Check the payment source on Bank.");
+          continue;
+        }
+      }
+      if (i.chargedToCard) continue;
+      if (transfer || (i.sourceId && !["cash", "card"].includes(i.sourceId))) {
+        const from = transfer ? i.fromAccount : acctSrcToLogical(i.sourceId);
+        const before = budgetOtherMoney(cls, balances).eligible;
+        const beforeCash = balances.balance;
+        try {
+          const move = acctApplyMove(balances, cls, from, transfer ? i.toAccount : null, i.amount);
+          balances = Object.assign({}, balances, acctMoveFields(balances, move));
+          const after = budgetOtherMoney(cls, balances);
+          const change = budgetRound(after.eligible - before);
+          if (sourceFloors.has(from)) sourceFloors.set(from, Math.min(sourceFloors.get(from), after.byAccount.get(from) || 0));
+          if (from !== main && reserved.has(from)) {
+            reserved.set(from, Math.max(0, budgetRound(reserved.get(from) + Math.min(0, change))));
+          }
+          if (transfer && i.dir === "save") {
+            reserved.set(i.toAccount, budgetRound((reserved.get(i.toAccount) || 0) + Math.max(0, change)));
+            futureSaving += i.amount;
+          } else if (transfer && i.dir === "move") {
+            if (other.hasBankGoal && change > 0) protectedReleased += change;
+          } else if (transfer) {
+            futureSaving -= i.amount;
+            if (other.hasBankGoal && change === 0) protectedReleased += i.amount;
+          } else {
+            mainCost = budgetRound(beforeCash - balances.balance);
+            restBills += i.amount + move.fee;
+          }
+        } catch (e) {
+          paymentIssues.push(i.label + " cannot run on " + budgetDayWord(day) + ". Check its account balance, fees and limits on Bank.");
+          if (!transfer) restBills += i.amount;
+        }
+      } else {
+        balances.balance = budgetRound(balances.balance - i.amount);
+        if (i.dir === "save") futureSaving += i.amount;
+        else { mainCost = i.amount; restBills += i.amount; }
+      }
+      dayCashBills += mainCost;
+    }
+    if (!firstShort && dayCashBills > 0 && balances.balance < -0.005) {
+      firstShort = { dayKey: day, need: budgetRound(dayCashBills), have: budgetRound(balances.balance + dayCashBills) };
+    }
+    if (balances.balance < lowestCash) { lowestCash = balances.balance; lowestDay = day; }
+    lowestLiquid = Math.min(lowestLiquid, available());
+  }
+  const remainingTarget = saveTarget > 0 ? budgetRound(Math.max(0, saveTarget - saved - futureSaving)) : 0;
+  const safeTotal = budgetRound(available() - remainingTarget);
+  const availableFromSources = budgetRound([...sourceFloors.values()].reduce((a, b) => a + b, 0));
+  const sourceLimit = budgetRound(budgetRound(user.balance) - assumedOut + availableFromSources);
+  const safeTimed = Math.max(0, Math.min(lowestLiquid, safeTotal, sourceLimit));
+  const gap = Math.max(0, -lowestCash);
+  const uncovered = Math.max(0, -lowestLiquid, budgetRound(gap - availableFromSources));
+  const shortfall = firstShort && Object.assign(firstShort, { gap, fromSavings: Math.min(gap, availableFromSources),
+    uncovered, covered: uncovered <= 0.005, moveDue: firstShort.dayKey <= dateKeyPlusDays(week.todayKey, 1) });
+  return { safeTimed, safeTotal, lowestDay, shortfall, paymentIssues, savingsSpare: availableFromSources,
+    restIn: budgetRound(restIn), restBills: budgetRound(restBills), restReturns: budgetRound(restReturns),
+    assumedOut, remainingTarget, eligibleOther: other.eligible, protectedSavings: budgetRound(other.movable - other.eligible),
+    hasBankGoal: other.hasBankGoal };
 }
 
 /* ---------------- Everything the page needs, in one pass ---------------- */
 function buildBudgetView(cls, user, username) {
-  const sched = budgetWeekItems(cls, user, username);
+  const records = budgetTransactions(cls, username, budgetWeekStartKey());
+  const sched = budgetWeekItems(cls, user, username, records);
   const edited = budgetApplyEdits(user, sched); // the student's own edits to the day-by-day list (if any)
   const { items, weekStartKey, todayKey } = sched;
-  const actual = budgetWeekActuals(cls, username, weekStartKey);
+  const actual = budgetWeekActuals(cls, username, weekStartKey, records);
+  actual.assumedSaving = budgetRound(items.filter(i => i.custom && i.dir === "save" && i.status === "done").reduce((total, i) => total + i.amount, 0));
+  actual.saved = budgetRound(actual.saved + actual.assumedSaving);
   const historyIncomplete = (cls.txns || []).length >= MAX_STORED_TXNS && !(cls.txns || []).some(t =>
-    t && Number.isFinite(Number(t.ts)) && t.ts !== null && t.ts !== undefined && nzDateKey(new Date(Number(t.ts))) < weekStartKey);
+    t && Number.isFinite(new Date(Number(t.ts)).getTime()) && t.ts !== null && t.ts !== undefined && nzDateKey(new Date(Number(t.ts))) < weekStartKey);
   const plan = normalizeBudgetPlan(user.budget);
   const counted = i => BUDGET_COUNTED.includes(i.status);
   const sum = list => budgetRound(list.reduce((s, i) => s + i.amount, 0));
@@ -4445,148 +4574,36 @@ function buildBudgetView(cls, user, username) {
   const inItems = items.filter(i => i.dir === "in");
   // Bills for the week's plan. The card statement is left out on purpose: it pays off
   // card spending that was already counted as spending when it was swiped.
-  const outItems = items.filter(i => i.dir === "out" && !i.repay);
+  const outItems = items.filter(i => i.dir === "out" && !i.repay && !i.cashReserveOnly);
   const scheduledIn = sum(inItems.filter(counted));
   const inTotal = budgetRound(scheduledIn + actual.extraTotal);
+  const received = budgetRound(sum(inItems.filter(i => i.status === "done" && !i.custom)) + actual.extraTotal);
   const billsTotal = sum(outItems.filter(counted));
   const billsPaid = sum(outItems.filter(i => i.status === "done"));
   const billsLeft = budgetRound(billsTotal - billsPaid);
+  const assumedBills = sum(outItems.filter(i => i.custom && i.status === "done"));
   const left = budgetRound(inTotal - billsTotal);
-  const autoSave = sum(items.filter(i => i.dir === "save" && counted(i)));
+  const autoSave = Math.max(0, budgetRound(sum(items.filter(i => i.dir === "save" && counted(i)))
+    - sum(items.filter(i => i.dir === "unsave" && !i.liquidReturn && counted(i)))));
 
   const saveTarget = plan.saveAmount;
-  const spendAllowed = budgetRound(Math.max(0, left - saveTarget));
+  const spendAllowed = budgetRound(Math.max(0, left - Math.max(autoSave, saveTarget)));
   const spent = budgetRound(actual.purchasesTotal + actual.surprisesTotal);
   const spendLeft = budgetRound(spendAllowed - spent);
 
-  /* ---- Cash, day by day, for the rest of the week ----
-     Starting from the cash they have now, add each day's money still to
-     come in and take off each day's bills still to pay (money in first —
-     wages are paid as soon as anyone opens the site on pay day, before a
-     student can pay anything). Leaves out spending, which is up to them.
-     The lowest point is how much they could spend right now and still pay
-     every bill on its day. If it dips below $0, their Savings account can
-     make up the gap — they just have to move the money into cash first,
-     since bills only come out of cash. */
-  const cash = budgetRound(user.balance);
-  // Savings that can cover a gap — less anything an automatic transfer
-  // already moves back into cash this week (that's counted as money in).
-  // "Other accounts" = the Savings Account (unless closed) plus every extra account they hold. The money in them is
-  // theirs to move into cash, so it all counts; what can actually be moved is less any withdrawal fee, and nothing
-  // from an account whose withdrawal limit is used up.
   const other = budgetOtherMoney(cls, user);
-  const savings = other.total;
+  const cash = budgetRound(user.balance), savings = other.total;
   const hasExtras = acctActiveOf(user).length > 0;
   const savWord = hasExtras ? "other accounts" : "savings";
   const cashClosed = acctMainClosed(user);
-  const unsaving = sum(items.filter(i => i.dir === "unsave" && !i.liquidReturn && ["today", "upcoming", "overdue"].includes(i.status)));
-  const savingsSpare = budgetRound(Math.max(0, other.movable - unsaving));
-  // Scheduled card autopays use credit if there is room. Manual card use
-  // remains a choice, so reserve cash and show the card as an option.
   const cardNow = cardBudgetInfo(cls, user);
-  let cardRoom = cardNow ? cardNow.available : 0;
-  const paymentIssues = [];
-  items.filter(i => i.dir === "out" && (i.viaCard || i.cardable) && ["today", "upcoming"].includes(i.status))
-    .sort((a, b) => (a.dayKey < b.dayKey ? -1 : a.dayKey > b.dayKey ? 1 : 0))
-    .forEach(i => {
-      if (cardNow && i.amount <= cardRoom + 0.005) {
-        i.cardOk = true;
-        if (i.viaCard) cardRoom = budgetRound(cardRoom - i.amount);
-        if (!i.viaCard) i.note += ". You can put it on your credit card";
-      } else if (i.viaCard) {
-        paymentIssues.push(`${i.label} needs ${fmtMoney(i.amount)} of available credit. Change its payment source or pay down your card first.`);
-      }
-    });
-  // Check source-specific restrictions too: money elsewhere cannot make an
-  // automatic payment succeed from a locked, closed or empty source account.
-  let sourceUser = user;
-  items.filter(i => i.sourceId && i.sourceId !== "cash" && i.sourceId !== "card" && ["today", "upcoming", "overdue"].includes(i.status))
-    .sort((a, b) => a.dayKey.localeCompare(b.dayKey)).forEach(i => {
-      try {
-        const beforeOther = budgetOtherMoney(cls, sourceUser).movable;
-        const mv = acctApplyMove(sourceUser, cls, acctSrcToLogical(i.sourceId), null, i.amount);
-        sourceUser = Object.assign({}, sourceUser, acctMoveFields(sourceUser, mv));
-        i.liquidCost = i.fromOther ? budgetRound(Math.max(i.amount, beforeOther - budgetOtherMoney(cls, sourceUser).movable)) : i.amount;
-        i.sourceFee = mv.fee;
-      } catch (e) {
-        paymentIssues.push(`${i.label} cannot currently be paid from its chosen account. Check its balance, withdrawal fee and withdrawal limit on the Bank page.`);
-      }
-    });
-  let transferUser = sourceUser;
-  items.filter(i => i.dir === "unsave" && !i.liquidReturn && ["today", "upcoming", "overdue"].includes(i.status))
-    .sort((a, b) => a.dayKey.localeCompare(b.dayKey)).forEach(i => {
-      try {
-        const mv = acctApplyMove(transferUser, cls, i.fromAccount, i.toAccount, i.amount);
-        transferUser = Object.assign({}, transferUser, acctMoveFields(transferUser, mv));
-      } catch (e) {
-        i.transferBlocked = true;
-        paymentIssues.push(`${i.label} cannot currently run. Check the source balance, withdrawal rules and destination balance limit on the Bank page.`);
-      }
-    });
-  const todayIdx = budgetDayIndex(nzDayName());
-  let running = cash, lowest = cash, lowestDay = null, firstShort = null;
-  let liquid = budgetRound(cash + other.movable), lowestLiquid = liquid;
-  let unsaveRoom = other.movable;
-  // Totals for the rest of the week, for "safe to spend": money still to come in
-  // (not savings coming back, which is already counted in Savings) and bills still to pay.
-  let restIn = 0, restBills = 0, restReturns = 0;
-  for (let d = todayIdx; d < 7; d++) {
-    const dayKey = dateKeyPlusDays(weekStartKey, d);
-    let dayIn = 0, dayBills = 0, daySave = 0, dayOther = 0, dayUnsave = 0, dayReturn = 0;
-    items.forEach(i => {
-      if (i.status === "daily") {
-        if (dayKey > todayKey || user.lastLifeAllowanceDailyPaid !== todayKey) { dayIn += i.perDay; restIn += i.perDay; }
-        return;
-      }
-      if (i.dayKey !== dayKey || !["today", "upcoming", "overdue"].includes(i.status)) return;
-      if (i.dir === "out" && (i.chargedToCard || (i.viaCard && i.cardOk))) return;
-      // Manual card use is a choice, not an already-funded payment. Reserve
-      // cash until it is actually paid; an available card is shown as a tip.
-      if (i.dir === "out" && i.fromOther) { dayOther += i.liquidCost || i.amount; restBills += i.amount; return; }
-      if (i.dir === "in") { if (!i.conditional) dayIn += i.amount; restIn += i.amount; }
-      else if (i.dir === "unsave") {
-        if (i.liquidReturn) { dayReturn += i.amount; restReturns += i.amount; return; }
-        if (i.transferBlocked) return;
-        const usable = Math.min(i.amount, unsaveRoom);
-        dayUnsave += usable; unsaveRoom = budgetRound(unsaveRoom - usable);
-      }
-      else if (i.dir === "save") daySave += i.amount;
-      else { dayBills += i.amount + (i.sourceFee || 0); restBills += i.amount + (i.sourceFee || 0); }
-    });
-    const before = budgetRound(running + dayIn + dayUnsave + dayReturn);
-    if (!firstShort && dayBills > before + 0.005) firstShort = { dayKey, need: budgetRound(dayBills), have: before };
-    running = budgetRound(before - dayBills);
-    // An automatic transfer to savings only happens if there's the cash for it.
-    if (daySave > 0 && running >= daySave) running = budgetRound(running - daySave);
-    if (running < lowest) { lowest = running; lowestDay = dayKey; }
-    // Internal withdrawals never create money. Reserve automatic saving;
-    // it may go into an account with withdrawal restrictions.
-    liquid = budgetRound(liquid + dayIn + dayReturn - dayBills - dayOther - daySave);
-    lowestLiquid = Math.min(lowestLiquid, liquid);
-  }
-  // Not enough cash for a bill: how much has to come out of savings, and
-  // whether savings can cover all of it.
-  let shortfall = null;
-  if (firstShort) {
-    const gap = budgetRound(-lowest);
-    const uncovered = budgetRound(Math.max(0, gap - savingsSpare, -lowestLiquid));
-    shortfall = Object.assign(firstShort, {
-      gap, fromSavings: budgetRound(Math.min(gap, savingsSpare)), uncovered, covered: uncovered <= 0.005,
-      // The "move money from savings" reminder only appears the day before the
-      // bill (or on the day), not all week.
-      moveDue: firstShort.dayKey <= dateKeyPlusDays(todayKey, 1)
-    });
-  }
-  // End-of-week liquidity estimate, then capped by the lowest daily liquidity
-  // and the saved plan. Only withdrawable savings count; returned deposit
-  // principal is separate from income. Internal transfers create no income.
-  restIn = budgetRound(restIn); restBills = budgetRound(restBills); restReturns = budgetRound(restReturns);
-  const safeTotal = budgetRound(cash + other.movable + restIn + restReturns - restBills);
-  // How much of that is safe until the rest of the week's money arrives:
-  // the lowest point cash + savings reaches on any day (bills can land
-  // before the pay does).
-  const safeTimed = budgetRound(Math.max(0, Math.min(safeTotal, lowestLiquid)));
-  const safeNow = paymentIssues.length || historyIncomplete ? 0 : budgetRound(Math.min(safeTimed, plan.hasPlan ? Math.max(0, spendLeft) : safeTimed));
+
+  // Removing a line edits the weekly plan. The bank still processes real obligations.
+  const obligations = edited.removedItems.filter(i => i.dir !== "in" && !i.liquidReturn);
+  const forecast = budgetCashForecast(cls, user, items.concat(obligations), sched, other, cardNow, saveTarget, actual.saved);
+  const { safeTimed, safeTotal, lowestDay, shortfall, savingsSpare, paymentIssues, restIn, restBills, restReturns } = forecast;
+  const safeNow = historyIncomplete || cashClosed || paymentIssues.length ? 0
+    : budgetRound(Math.min(safeTimed, plan.hasPlan ? Math.max(0, spendLeft) : safeTimed));
 
   /* ---- The one-line verdict ---- */
   const dayWord = budgetDayWord;
@@ -4600,13 +4617,15 @@ function buildBudgetView(cls, user, username) {
     const start = `${when === "today" ? "Today" : "On " + dayWord(shortfall.dayKey)} you'll need ${fmtMoney(shortfall.need)} for bills, but you'll only have about ${fmtMoney(Math.max(0, shortfall.have))} in cash.`;
     verdict = shortfall.covered
       ? { tone: "warn", icon: "piggy", text: `${start} Move ${fmtMoney(shortfall.gap)} from your ${savWord} into cash ${when === "today" ? "now" : "before then"} to cover this week's bills (you have ${fmtMoney(savings)} in ${hasExtras ? "them" : "savings"}).` }
-      : { tone: "bad", icon: "shield", text: `Heads up: ${start} ${savingsSpare > 0 ? `Even with the ${fmtMoney(savingsSpare)} in your ${savWord}, you'll be` : `You have nothing in ${hasExtras ? "your other accounts" : "savings"} to cover it, so you'll be`} ${fmtMoney(shortfall.uncovered)} short this week. Spend as little as you can, and look for ways to earn extra.` };
+      : { tone: "bad", icon: "shield", text: `Heads up: ${start} ${savingsSpare > 0 ? `Even with the ${fmtMoney(savingsSpare)} in your ${savWord}, you'll be` : `With the money available for bills, you'll be`} ${fmtMoney(shortfall.uncovered)} short this week. Spend as little as you can, and look for ways to earn extra.` };
   } else if (billsTotal > inTotal + 0.005 && !shortfall) {
     verdict = { tone: "bad", icon: "shield", text: `This week's bills (${fmtMoney(billsTotal)}) are more than the money coming in (${fmtMoney(inTotal)}). The other ${fmtMoney(budgetRound(billsTotal - inTotal))} has to come from cash you already have or your ${savWord}.` };
   } else if (plan.hasPlan && spendLeft < -0.005) {
     verdict = { tone: "bad", icon: "cart", text: `You've spent ${fmtMoney(-spendLeft)} more than your plan's spending money this week.` };
   } else if (plan.hasPlan && saveTarget > Math.max(0, left) + 0.005) {
     verdict = { tone: "warn", icon: "piggy", text: `Your savings target is ${fmtMoney(saveTarget - Math.max(0, left))} more than this week's income can cover after bills. Lower it or use money you already have.` };
+  } else if (forecast.remainingTarget > 0 && safeTotal < 0) {
+    verdict = { tone: "warn", icon: "piggy", text: `You still need ${fmtMoney(-safeTotal)} to cover your savings plan with confirmed money. Check your expected income or adjust the target.` };
   } else if (!plan.hasPlan) {
     verdict = inTotal <= 0 && billsTotal <= 0
       ? { tone: "warn", icon: "calendar", text: "Nothing is coming in or going out this week yet. A job or a side hustle gets money coming in, then come back and plan it." }
@@ -4619,9 +4638,9 @@ function buildBudgetView(cls, user, username) {
 
   /* ---- A few short tips (only the ones that matter right now) ---- */
   const notes = [];
-  if (historyIncomplete) notes.push({ tone: "warn", icon: "history", text: "The class activity log no longer covers the full week. Recorded income, spending, saving and paid bills may be incomplete. Check your account history before relying on this plan." });
+  for (const message of paymentIssues.slice(1)) notes.push({ tone: "bad", icon: "shield", text: message });
   const conditional = inItems.filter(i => i.conditional && ["today", "upcoming"].includes(i.status));
-  if (conditional.length) notes.push({ tone: "warn", icon: "coin", text: "Coming in includes conditional income (job approval, a classmate's payment, or income you added yourself). Safe to spend excludes it until it arrives." });
+  if (conditional.length) notes.push({ tone: "warn", icon: "coin", text: `${fmtMoney(sum(conditional))} of expected income is conditional. It counts towards your weekly estimate. Safe spending uses money you can rely on.` });
   if (savings > other.movable + 0.005) notes.push({ tone: "warn", icon: "piggy", text: `${fmtMoney(savings)} is in your other accounts, but only ${fmtMoney(other.movable)} is currently withdrawable after fees and limits.` });
   // Insurance premiums aren't taken automatically — students are meant to
   // pay them with an automatic payment to their teacher (see
@@ -4684,8 +4703,8 @@ function buildBudgetView(cls, user, username) {
   }
 
   return {
-    ...sched, ...edited, actual, plan,
-    inItems, outItems, scheduledIn, inTotal, billsTotal, billsPaid, billsLeft, left,
+    ...sched, ...edited, ...forecast, actual, plan,
+    inItems, outItems, scheduledIn, inTotal, received, billsTotal, billsPaid, assumedBills, billsLeft, left,
     saveTarget, autoSave, spendAllowed, spent, spendLeft,
     cash, savings, savingsSpare, restIn, restBills, restReturns, safeTotal, safeNow, safeTimed, lowestDay, shortfall, verdict, notes, kiwi,
     mainLabel: acctSrcName(cls, user, "cash") || "Main account",
@@ -4705,18 +4724,19 @@ function classBudgetOverviewFromData(cls, students) {
     else if (v.shortfall) status = "move";
     else if (v.billsTotal > v.inTotal + 0.005) status = "short";
     else if (v.plan.hasPlan && (v.spendLeft < -0.005 || v.saveTarget > Math.max(0, v.left) + 0.005)) status = "over";
+    else if (v.remainingTarget > 0 && v.safeTotal < 0) status = "saving";
     else if (!v.plan.hasPlan) status = "none";
     else status = "ok";
     return {
       username: s.username, name: s.name || s.username,
       inTotal: v.inTotal, billsTotal: v.billsTotal, left: v.left,
       planned: v.plan.hasPlan, saveTarget: v.saveTarget, saved: v.actual.saved,
-      spent: v.spent, spendAllowed: v.spendAllowed, status
+      spent: v.spent, spendAllowed: v.spendAllowed, safeNow: v.safeNow, status
     };
   }).sort((a, b) => BUDGET_STATUS_ORDER[a.status] - BUDGET_STATUS_ORDER[b.status] || a.name.localeCompare(b.name));
 }
 // Who the teacher should look at first.
-const BUDGET_STATUS_ORDER = { unknown: 0, bounce: 1, move: 2, short: 3, over: 4, none: 5, ok: 6 };
+const BUDGET_STATUS_ORDER = { unknown: 0, bounce: 1, move: 2, short: 3, over: 4, saving: 4, none: 5, ok: 6 };
 
 // Whether a transaction belongs in a particular student's own activity
 // feed. Most types have exactly one participant on each side, so matching
