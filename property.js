@@ -1239,6 +1239,8 @@ function studentSubletRows(p, cls, nameOf) {
 }
 
 function ownedHomeCard(p, cls, nameOf) {
+  // Selling is held while a property big event is waiting (see bigEventLockUi in events-ui.js).
+  const beLock = IS_TEACHER ? { locked: false, attr: "", note: "" } : bigEventLockUi(cls, CURRENT.username, "property");
   const gain = propertyGainSinceBought(p);
   const gcls = gain ? (gain.diff > 0 ? "ticker-up" : gain.diff < 0 ? "ticker-down" : "muted-small") : "";
   const sgn = gain ? (gain.diff > 0 ? "+" : gain.diff < 0 ? "-" : "") : "";
@@ -1263,7 +1265,7 @@ function ownedHomeCard(p, cls, nameOf) {
       </div>
       ${p.mortgage ? mortgageSection(p, cls) : ""}
       ${studentOccupancySection(p, cls, nameOf)}
-      <div class="pcard-foot pcard-foot-end"><button class="btn small secondary" onclick="sellMine('${p.id}')">Sell back</button></div>
+      <div class="pcard-foot pcard-foot-end">${beLock.note}<button class="btn small secondary" onclick="sellMine('${p.id}')"${beLock.attr}>Sell back</button></div>
     </article>`;
 }
 

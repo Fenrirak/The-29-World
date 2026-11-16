@@ -32,7 +32,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=cb75c464">
+<link rel="stylesheet" href="style.css?v=911a85c5">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -241,6 +241,14 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
           </select>
         </div>
       </div>
+      <div id="beVehiclesWrap" class="hidden">
+        <label for="beVehicles" id="labVehicles">Which vehicles can it hit?</label>
+        <select id="beVehicles" onchange="updateCoverBox()">
+          <option value="cars">Cars and bikes</option>
+          <option value="trucks">Trucks only</option>
+        </select>
+        <p class="muted-small" id="beVehiclesHint">Trucks only get the events made for trucks, and a truck event never goes to a car or bike. Truck Insurance only covers truck events, and the other transport types only cover car and bike events.</p>
+      </div>
       <div id="beCoverBox" class="hidden"></div>
       <p class="muted-small hidden" id="bePercentInsNote">Because the cost is a percentage, it changes from student to student, so each insurance type you tick pays up to the dollar amount you enter for it (never more than the cost). Leave every type unticked and any matching plan that covers what happened pays the whole cost (the student still pays the plan's excess).</p>
       <div class="grid grid-3">
@@ -314,14 +322,14 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="shortcuts.js?v=a39d9a62"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=4da071cc"></script>
-<script defer src="data-money.js?v=9e80a313"></script>
-<script defer src="data-life.js?v=14548daf"></script>
+<script defer src="data-money.js?v=f022d758"></script>
+<script defer src="data-life.js?v=b41d2074"></script>
 <script defer src="data-property.js?v=2ae916b7"></script>
-<script defer src="data-markets.js?v=1c6f4fff"></script>
-<script defer src="events-ui.js?v=09a6e130"></script>
+<script defer src="data-markets.js?v=3c1c89ff"></script>
+<script defer src="events-ui.js?v=edb4fb7e"></script>
 <script defer src="base-template.js?v=42a151b2"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=0f7e459d"></script>
-<script defer src="events.js?v=f6237805"></script>
+<script defer src="events.js?v=30994de8"></script>
 </body>
 </html>

@@ -246,6 +246,9 @@ function renderSellList() {
     }
     const b = marketplacePriceBounds(CLS, a.refPrice);
     const several = a.assetType === "store" && a.count > 1;
+    // A vehicle or property can't be put up for sale while a big event about that kind of thing is waiting
+    // (store items are never held). bigEventLockUi gives the disabled attribute and the reason.
+    const beLock = a.assetType === "store" ? { locked: false, attr: "", note: "" } : bigEventLockUi(CLS, ME.username, a.assetType);
     return `<div class="mkt-sell-row">
       <div class="grow">
         <div class="mkt-sell-name">${esc(a.name)}${a.count > 1 ? ` <span class="badge navy">You have ${a.count}</span>` : ""}</div>
@@ -258,7 +261,8 @@ function renderSellList() {
         <input type="number" id="qty-${key}" min="1" max="${a.count}" step="1" value="1" aria-label="How many ${esc(a.name)} to list"></label>` : ""}
       <label class="mkt-field mkt-field-desc"><span>Note (optional)</span>
         <input type="text" id="desc-${key}" placeholder="Say something about it" aria-label="Description"></label>
-      <button class="btn small gold" onclick="listIt('${a.assetType}','${esc(a.assetId)}')" ${atCap ? "disabled" : ""}>${atCap ? "Listing limit reached" : "List it"}</button>
+      <button class="btn small gold" onclick="listIt('${a.assetType}','${esc(a.assetId)}')" ${atCap || beLock.locked ? "disabled" : ""}${beLock.locked ? ` title="${esc(beLock.reason)}"` : ""}>${atCap ? "Listing limit reached" : "List it"}</button>
+      ${beLock.note}
     </div>`;
   }).join("");
 }

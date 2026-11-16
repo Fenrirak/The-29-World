@@ -2788,116 +2788,59 @@ async function portfolioValue(username, classCode) {
   return Math.round(total * 100) / 100;
 }
 
-// All-time stock gain/loss, broken out per company plus a portfolio-wide
-// total: unrealized (current holdings vs what they cost) plus realized
-// (profit/loss already locked in from past sells/delistings).
-//
-// Two sources feed this, because co.costBasis only started being written
-// the day this feature shipped:
-//   - UNREALIZED comes straight from co.costBasis, which every buyShares/
-//     sellShares call keeps exact from now on (weighted-average cost,
-//     same approach a real brokerage statement uses since individual
-//     share lots aren't tracked separately).
-//   - REALIZED comes from walking cls.txns for this student's stock-sell
-//     and stock-close entries, which already carry a realizedGain field.
-//     cls.txns is a SHARED, class-wide log capped at MAX_STORED_TXNS (200)
-//     total, not 200 per student — so on an active class this rolls over
-//     within days/weeks, and a sale from a while back can already be gone.
-//
-// PERCENT is total gain ÷ totalBought (cumulative money ever put into that
-// company, tracked separately in co.costBasis and never reduced by a
-// sale — see buyShares/sellShares). That's "return on everything ever
-// invested here", not an annualized/time-weighted return; if the student
-// never has a tracked buy for a company (only ever held pre-feature
-// shares), pct is null rather than a fabricated number.
-//
-// `complete` (both per-company and overall) is false whenever the figure
-// might be missing something no longer retrievable — legacy pre-feature
-// shares with no recorded cost, or a transaction log full enough that
-// older sales may have scrolled out — so the UI can say "at least"
-// instead of implying a total that silently excludes lost history.
+// Market snapshot gain/loss for CURRENT holdings only: current value minus
+// the purchase cost of those shares, using the weighted-average cost pool
+// maintained by buyShares/sellShares (or today's cost after a snapshot reset).
+// Percentage uses that remaining cost, never cumulative totalBought. Past
+// sales and delistings are excluded, so the activity log cannot affect either
+// the figures or their completeness. A warning only applies to held shares
+// without a recorded purchase cost. Keep realized at zero in the return shape.
 async function stockAllTimeGain(username, classCode) {
   const cls = await getClassCached(classCode);
   if (!cls) return { unrealized: 0, realized: 0, total: 0, complete: true, perCompany: {} };
 
-  const txns = cls.txns || [];
-  const logMayBeTruncated = txns.length >= MAX_STORED_TXNS;
-  const perCompany = {}; // companyId -> { unrealized, realized, total, totalBought, pct, complete }
+  const perCompany = {};
 
   let unrealized = 0;
   cls.companies.forEach(co => {
     const shares = co.holders[username] || 0;
     const basis = (co.costBasis && co.costBasis[username]) || null;
 
-    // A holding with shares but no costBasis entry (or fewer tracked
-    // shares than actually held) means some or all of those shares predate
-    // this feature — bought before costBasis existed, so there's no
-    // honest cost recorded for them. Only the tracked portion is valued
-    // against its real cost; the untracked remainder is left out of
-    // unrealized entirely (not guessed at) rather than pairing a partial
-    // cost basis against the FULL share count and overstating the gain.
-    let coUntracked = false;
+    // Older holdings can lack purchase costs. Value only the tracked shares
+    // against their corresponding cost instead of inventing a purchase price.
+    let complete = true;
     let coUnrealized = 0;
+    let totalCost = 0;
     if (shares > 0) {
-      if (!basis || basis.shares <= 0) {
-        coUntracked = true;
+      if (!basis || !Number.isFinite(basis.shares) || basis.shares <= 0 ||
+          !Number.isFinite(basis.totalCost) || basis.totalCost < 0) {
+        complete = false;
       } else {
-        if (basis.shares < shares) coUntracked = true;
+        complete = basis.shares >= shares;
         const trackedShares = Math.min(basis.shares, shares);
-        coUnrealized = trackedShares * co.price - basis.totalCost;
+        totalCost = basis.totalCost * (trackedShares / basis.shares);
+        coUnrealized = trackedShares * co.price - totalCost;
       }
     }
     unrealized += coUnrealized;
 
+    const total = Math.round(coUnrealized * 100) / 100;
     perCompany[co.id] = {
-      unrealized: Math.round(coUnrealized * 100) / 100,
-      realized: 0, // filled in from txns below
-      totalBought: basis ? basis.totalBought : 0,
-      _untracked: coUntracked, // stripped before returning
-      // A sale reduces basis.totalCost proportionally but never reduces
-      // totalBought, so totalCost < totalBought means a sale happened for
-      // this company. Only then could an aged-out log entry hide realized
-      // gain — a company never sold can't be affected by log truncation.
-      _hasSold: !!basis && basis.totalBought - basis.totalCost > 0.01
+      unrealized: total,
+      realized: 0,
+      total,
+      totalCost: Math.round(totalCost * 100) / 100,
+      totalBought: basis && Number.isFinite(basis.totalBought) ? basis.totalBought : 0,
+      pct: totalCost > 0 ? Math.round((total / totalCost) * 1000) / 10 : shares > 0 ? null : 0,
+      complete
     };
   });
 
-  // If the student reset their Market snapshot (resetStockSnapshot in data-markets.js), every company's
-  // costBasis entry carries the same resetAt. Sales logged before it no longer count, so realized
-  // gain starts again from $0. Log entries with no timestamp are older than any reset.
-  let resetAt = 0;
-  cls.companies.forEach(co => {
-    const r = co.costBasis && co.costBasis[username] && co.costBasis[username].resetAt;
-    if (Number.isFinite(r) && r > resetAt) resetAt = r;
-  });
-
-  let realized = 0;
-  txns.forEach(t => {
-    if (t.realizedGain === undefined) return;
-    const isMine = (t.type === "stock-sell" || t.type === "stock-close") && t.to === username;
-    if (!isMine) return;
-    if (resetAt && !(t.ts > resetAt)) return;
-    realized += t.realizedGain;
-    if (t.companyId && perCompany[t.companyId]) {
-      perCompany[t.companyId].realized = Math.round((perCompany[t.companyId].realized + t.realizedGain) * 100) / 100;
-    }
-  });
-
-  Object.keys(perCompany).forEach(id => {
-    const b = perCompany[id];
-    b.total = Math.round((b.unrealized + b.realized) * 100) / 100;
-    b.pct = b.totalBought > 0 ? Math.round((b.total / b.totalBought) * 1000) / 10 : null;
-    b.complete = !b._untracked && !(logMayBeTruncated && b._hasSold);
-    delete b._untracked;
-    delete b._hasSold;
-  });
-  const allComplete = Object.keys(perCompany).every(id => perCompany[id].complete);
-
   return {
     unrealized: Math.round(unrealized * 100) / 100,
-    realized: Math.round(realized * 100) / 100,
-    total: Math.round((unrealized + realized) * 100) / 100,
-    complete: allComplete,
+    realized: 0,
+    total: Math.round(unrealized * 100) / 100,
+    complete: Object.values(perCompany).every(b => b.complete),
     perCompany
   };
 }

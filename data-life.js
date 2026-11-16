@@ -219,7 +219,8 @@ async function setStudentJobTier(classCode, username, tierId) {
     await usersCol().doc(username).update({
       pendingPromotion: {
         jobId: job.id, tierId: newTier.id,
-        jobTitle: job.title, tierName: newTier.name, wage: newTier.wage, date: nowStr()
+        jobTitle: job.title, tierName: newTier.name, description: newTier.description || "",
+        wage: newTier.wage, date: nowStr()
       }
     });
     return { ok: true, tier: newTier, isPromotion: true, offered: true };
@@ -283,7 +284,7 @@ async function processJobPromotions(classCode) {
         t.update(userRef, {
           pendingPromotion: {
             jobId: job.id, tierId: nextTier.id,
-            jobTitle: job.title, tierName: nextTier.name,
+            jobTitle: job.title, tierName: nextTier.name, description: nextTier.description || "",
             wage: nextTier.wage, date: nowStr()
           }
         });
@@ -306,7 +307,19 @@ async function processJobPromotions(classCode) {
 // instead of paying for a fifth network round trip in the same chain.
 async function checkPromotionNotification(username) {
   const user = await getUserCached(username);
-  return (user && user.pendingPromotion) || null;
+  const promo = user && user.pendingPromotion;
+  if (!promo) return null;
+  // Older offers predate the description snapshot. Resolve their target tier
+  // without changing the stored offer or preventing a response if offline.
+  if (typeof promo.description === "string") return promo;
+  try {
+    const cls = await getClassCached(user.classCode);
+    const job = ((cls && cls.jobs) || []).find(j => j.id === promo.jobId);
+    const tier = job && (job.tiers || []).find(t => t.id === promo.tierId);
+    return { ...promo, description: (tier && tier.description) || "" };
+  } catch (e) {
+    return { ...promo, description: "" };
+  }
 }
 
 // Student responds to a pending promotion offer, whether it was queued
@@ -1030,6 +1043,23 @@ function typeFitsVehicle(coverage, type, vehicleType) {
   return t.vehicles === "trucks" ? vehicleType === "truck" : vehicleType !== "truck";
 }
 
+// Which vehicles a transport event can hit. "cars" (the default, and what every event made before
+// this existed counts as) means cars and bikes; "trucks" means trucks only. A truck is only ever hit
+// by events made for trucks, and a truck event never goes to a car or a bike.
+function cleanEventVehicles(v) { return v === "trucks" ? "trucks" : "cars"; }
+function vehicleInEventScope(vehicle, scope) {
+  const isTruck = !!vehicle && normalizeVehicleType(vehicle.type) === "truck";
+  return cleanEventVehicles(scope) === "trucks" ? isTruck : !isTruck;
+}
+function eventVehiclesLabel(scope) { return cleanEventVehicles(scope) === "trucks" ? "Trucks only" : "Cars and bikes"; }
+// Whether an insurance type could cover an event that hits these vehicles (Truck Insurance is for
+// trucks only; the other transport types are for cars and bikes only).
+function typeFitsEventVehicles(coverage, type, scope) {
+  const t = insuranceTypeInfo(coverage, type);
+  if (coverage !== "transport" || !t || !t.vehicles) return true;
+  return cleanEventVehicles(scope) === "trucks" ? t.vehicles === "trucks" : t.vehicles !== "trucks";
+}
+
 // Indemnity pays the house's market price (and the insurer takes the
 // house) when the house itself was damaged.
 function isHouseWriteOff(coverage, type, incident) {
@@ -1088,12 +1118,13 @@ function cleanPlanName(name, coverage, insType) {
 // coverage that cover what happened, each listed once, with a payout that's
 // never negative. Indemnity on a house-only event needs no amount (it pays
 // the house's market price), so that's stored as 0.
-function cleanInsuranceCover(coverage, cover, incident) {
+function cleanInsuranceCover(coverage, cover, incident, vehicles) {
   const seen = new Set();
   return (Array.isArray(cover) ? cover : [])
     .filter(c => {
       if (!c || !insuranceTypeLabel(coverage, c.type) || seen.has(c.type)) return false;
       if (!typeCoversIncident(coverage, c.type, incident)) return false;
+      if (!typeFitsEventVehicles(coverage, c.type, vehicles)) return false; // Truck Insurance only on truck events, the rest only on car/bike events
       seen.add(c.type);
       return true;
     })
@@ -1128,10 +1159,14 @@ function insuranceCoverSummary(coverage, cover, incident) {
 //                  there's no house of theirs to record.
 //   pricedOnly   — only count vehicles/properties that have a price (what a
 //                  percentage-of-price event needs to be worked out).
-function pickEventAsset(cls, username, coverage, incident, allowRenters, pricedOnly) {
+//   vehicles     — transport only: "cars" (cars and bikes, the default) or "trucks".
+//                  An event never hits a vehicle outside its scope, so a truck only
+//                  ever gets events made for trucks.
+function pickEventAsset(cls, username, coverage, incident, allowRenters, pricedOnly, vehicles) {
   const pick = list => list[Math.floor(Math.random() * list.length)];
   if (coverage === "transport") {
-    const mine = (cls.vehicles || []).filter(v => (v.owners || []).includes(username) && (!pricedOnly || Number(v.price) > 0));
+    const mine = (cls.vehicles || []).filter(v => (v.owners || []).includes(username) && (!pricedOnly || Number(v.price) > 0)
+      && vehicleInEventScope(v, vehicles));
     if (!mine.length) return null;
     const v = pick(mine);
     return { assetId: v.id, assetName: v.name || "", assetType: normalizeVehicleType(v.type) };
@@ -1157,7 +1192,8 @@ function eventAssetNow(cls, username, coverage, entry) {
   const e = entry || {};
   if (coverage === "transport") {
     const mine = (cls.vehicles || []).filter(v => (v.owners || []).includes(username));
-    const vehicle = e.assetId ? (mine.find(v => v.id === e.assetId) || null) : (mine[0] || null);
+    const vehicle = e.assetId ? (mine.find(v => v.id === e.assetId) || null)
+      : (mine.find(v => vehicleInEventScope(v, e.vehicles)) || null);
     return { vehicle, vehicleType: vehicle ? normalizeVehicleType(vehicle.type) : (e.assetType || null) };
   }
   if (coverage === "property") {
@@ -1952,15 +1988,24 @@ async function buyInsurance(username, classCode, planId, opts) {
   await logTxn(classCode, { type: "insurance-buy", from: username, amount: 0, note: `Signed up for insurance: ${planName}. Premiums due weekly` });
   return { ok: true };
 }
+// Returns { ok } (ok: false with an error when a student's own cancellation is held by a waiting big
+// event — see hasPendingBigEvent). A teacher cancelling a student's plan is never held.
 async function cancelInsurance(username, planId) {
   const userRef = usersCol().doc(username);
+  let blocked = false;
   await fdb.runTransaction(async (t) => {
+    blocked = false;
     const snap = await t.get(userRef);
     if (!snap.exists) return;
     const user = snap.data();
+    if (t29SessionStudent() === username && user.classCode) {
+      const clsSnap = await t.get(classesCol().doc(user.classCode));
+      if (clsSnap.exists && hasPendingBigEvent(withNewModuleDefaults(clsSnap.data()), username)) { blocked = true; return; }
+    }
     user.insurance = (user.insurance || []).filter(id => id !== planId);
     t.update(userRef, { insurance: user.insurance });
   });
+  return blocked ? { ok: false, error: BIG_EVENT_BLOCK_MESSAGE } : { ok: true };
 }
 
 /* ===================== Class store ===================== */
@@ -2558,7 +2603,7 @@ function priceWithLifeDiscount(user, category, baseAmount) {
   const vs = base > 0 ? lifeUsableVouchers(user, category) : [];
   if (!vs.length) return `<strong>${fmtMoney(base)}</strong>`;
   const best = Math.max.apply(null, vs.map(v => v.pct));
-  return `<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;"><strong>${fmtMoney(base)}</strong><span class="badge lilac">${icon("ticket", 11)}${best}% voucher ready</span></span>`;
+  return `<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;"><strong>${fmtMoney(base)}</strong><span class="badge lilac">${icon("ticket", 11)}<span class="voucher-label">${best}% voucher ready</span></span></span>`;
 }
 async function addLifeItem(classCode, item) {
   const classRef = classesCol().doc(classCode);
@@ -2737,22 +2782,122 @@ const BIG_EVENT_ASSET_MODULES = ["income", "property", "transport"];
 const MODULE_TO_COVERAGE = { income: "jobs", property: "property", transport: "transport" };
 
 // A student with a bad big event still waiting for an answer has to deal
-// with it before doing anything else: the popup can't be closed, and the
-// job, property or vehicle it puts at risk can't be got rid of first
-// (sold, or sold on in the Trade Centre) — otherwise not paying would
-// cost them nothing. kind is "property" or "vehicle". Older events that
-// didn't record which one they hit block every one of that kind (losing
-// it took their first). Returns the event blocking it, or null.
+// with it before they can do anything related to it. They can look at everything, and can put the
+// popup away once for a few minutes (see snoozeBigEvent), but until it is answered they can't get
+// rid of the kind of thing it is about (sell a vehicle or a property, or sell it on in the Trade
+// Centre) or change their insurance — otherwise not paying would cost them nothing. kind is
+// "property" or "vehicle". It covers every one of that kind, not just the one the event hit.
+// Returns the event holding it, or null.
 function pendingBigEventFor(cls, username, kind, assetId) {
   const module = kind === "vehicle" ? "transport" : kind;
-  return (cls.bigEventLog || []).find(e => e.studentUser === username && e.status === "pending"
-    && e.takesAsset !== false && e.module === module && (!e.assetId || e.assetId === assetId)) || null;
+  return (cls.bigEventLog || []).find(e => e.studentUser === username && e.status === "pending" && e.module === module) || null;
 }
 // Whether the student has any bad big event still waiting for an answer.
 function hasPendingBigEvent(cls, username) {
   return (cls.bigEventLog || []).some(e => e.studentUser === username && e.status === "pending");
 }
-const BIG_EVENT_BLOCK_MESSAGE = "Answer your big event first. You can't do that while it's waiting for you.";
+// The first bad big event waiting for this student, or null.
+function firstPendingBigEvent(cls, username) {
+  return (cls.bigEventLog || []).find(e => e.studentUser === username && e.status === "pending") || null;
+}
+// What a waiting big event holds still, for the pages to show (buttons greyed out, with the reason).
+// { locked, event, vehicles, property, insurance }
+function bigEventLockFor(cls, username) {
+  const waiting = (cls && cls.bigEventLog || []).filter(e => e.studentUser === username && e.status === "pending");
+  return {
+    locked: waiting.length > 0, event: waiting[0] || null,
+    vehicles: waiting.some(e => e.module === "transport"),
+    property: waiting.some(e => e.module === "property"),
+    insurance: waiting.length > 0
+  };
+}
+const BIG_EVENT_BLOCK_MESSAGE = "You have a big event waiting. Deal with it first (tap the Big event timer to open it), then you can do that.";
+
+/* ---------------- Putting a big event aside for 5 minutes ----------------
+   A big event can be dismissed ONCE, for 5 minutes, so the student can check what they need and move
+   money between their accounts to pay for it. The moment it is first dismissed the 5 minutes start
+   (snoozeUntil, saved on the event so it holds on every page and device). Opening it again from the
+   timer doesn't reset anything: it can be dismissed again, but the same clock keeps running, and
+   once it reaches zero the popup comes back and can't be dismissed any more. While it is waiting,
+   everything in pendingBigEventFor / hasPendingBigEvent above stays locked. Two reminders happen on
+   the way: at half time (a reminder popup) and with 1 minute left ("have you moved your money?").
+   Each reminder is claimed once, on the event, so it isn't repeated on another page or device. */
+const BIG_EVENT_SNOOZE_MS = 5 * 60 * 1000;
+const BIG_EVENT_SNOOZE_HALF_MS = 2.5 * 60 * 1000;   // reminder when this much is left
+const BIG_EVENT_SNOOZE_FINAL_MS = 60 * 1000;        // "have you moved your money?" when this much is left
+
+// Where an event's 5 minutes stand, as of nowMs:
+//   used        — it has been dismissed once already (the clock is running or has run out)
+//   running     — the clock is still counting down
+//   expired     — the 5 minutes are up: the popup is forced and can't be dismissed
+//   remainingMs — what is left (0 when not started or expired)
+//   canDismiss  — the popup may be put away (not yet used, or still within the 5 minutes)
+function bigEventSnooze(entry, nowMs) {
+  const until = Number(entry && entry.snoozeUntil) || 0;
+  const now = nowMs === undefined ? trustedNow().getTime() : nowMs;
+  const used = until > 0;
+  const remainingMs = used ? Math.max(0, until - now) : 0;
+  return { used, running: used && remainingMs > 0, expired: used && remainingMs <= 0, remainingMs, canDismiss: !used || remainingMs > 0, total: BIG_EVENT_SNOOZE_MS };
+}
+
+// Dismiss a waiting big event. The first time starts the 5 minutes; any time after that, while they
+// last, it just confirms the clock that is already running. Once they are up it refuses.
+async function snoozeBigEvent(username, classCode, logId) {
+  const classRef = classesCol().doc(classCode);
+  let snoozeUntil = 0;
+  try {
+    await fdb.runTransaction(async (t) => {
+      snoozeUntil = 0;
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NOT_FOUND");
+      const log = withNewModuleDefaults(snap.data()).bigEventLog || [];
+      const entry = log.find(e => e.id === logId && e.studentUser === username && e.status === "pending");
+      if (!entry) throw new Error("NOT_FOUND");
+      const now = trustedNow().getTime();
+      if (!entry.snoozeUntil) {
+        entry.snoozeStartedAt = now;
+        entry.snoozeUntil = now + BIG_EVENT_SNOOZE_MS;
+        t.update(classRef, { bigEventLog: log });
+      } else if (entry.snoozeUntil <= now) {
+        throw new Error("EXPIRED");
+      }
+      snoozeUntil = entry.snoozeUntil;
+    });
+  } catch (e) {
+    if (e.message === "EXPIRED") return { ok: false, expired: true, error: "Your 5 minutes are up. You need to deal with this now." };
+    if (e.message === "NOT_FOUND") return { ok: false, gone: true, error: "That event isn't waiting any more." };
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
+  return { ok: true, snoozeUntil };
+}
+
+// Once-only claim of a reminder: which is "half" (halfway through the 5 minutes) or "final" (1 minute
+// left). Returns true ONLY to the single caller that flips it on, so the reminder is shown once, however
+// many pages or devices are open. Claiming "final" also uses up "half", so a student who comes back
+// late isn't given both reminders at once.
+async function claimBigEventReminder(classCode, logId, which) {
+  const classRef = classesCol().doc(classCode);
+  let won = false;
+  await fdb.runTransaction(async (t) => {
+    won = false;
+    const snap = await t.get(classRef);
+    if (!snap.exists) return;
+    const log = snap.data().bigEventLog || [];
+    const entry = log.find(e => e.id === logId);
+    if (!entry || entry.status !== "pending") return;
+    if (which === "final") {
+      if (entry.snoozeFinalShown) return;
+      entry.snoozeFinalShown = true;
+      entry.snoozeHalfShown = true;
+    } else {
+      if (entry.snoozeHalfShown) return;
+      entry.snoozeHalfShown = true;
+    }
+    t.update(classRef, { bigEventLog: log });
+    won = true;
+  });
+  return won;
+}
 
 // "general" is only a legal module for "good" events — a "bad" event
 // always needs a real asset to threaten/insure, so it silently falls back
@@ -2820,10 +2965,10 @@ function eventBaseValue(cls, student, base, assetEntry) {
   return null;
 }
 // Whether the student has anything a percentage of that kind could be taken from.
-function eventBaseAvailable(cls, student, base) {
+function eventBaseAvailable(cls, student, base, vehicles) {
   if (!student) return false;
   if (base === "income") return !!eventBaseValue(cls, student, "income", null);
-  if (base === "transport") return (cls.vehicles || []).some(v => (v.owners || []).includes(student.username) && Number(v.price) > 0);
+  if (base === "transport") return (cls.vehicles || []).some(v => (v.owners || []).includes(student.username) && Number(v.price) > 0 && vehicleInEventScope(v, vehicles));
   if (base === "property") return (cls.properties || []).some(p => p.owner === student.username && Number(p.price) > 0);
   return false;
 }
@@ -2857,7 +3002,10 @@ function buildBigEventDef(ev) {
     // Which property/transport insurance types cover this event and how much each pays out
     // (see insuranceClaimOptions). Empty = any plan of the matching coverage covers the whole cost.
     insuranceCover: kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[module],
-      ev.insuranceCover, cleanIncident(MODULE_TO_COVERAGE[module], ev.incident)) : [],
+      ev.insuranceCover, cleanIncident(MODULE_TO_COVERAGE[module], ev.incident), ev.vehicles) : [],
+    // Which vehicles a transport event can hit: "cars" (cars and bikes) or "trucks". Trucks only ever
+    // get the events made for them.
+    vehicles: module === "transport" ? cleanEventVehicles(ev.vehicles) : null,
     ...cleanBigEventCost(ev, module), description: ev.description || "", active: true,
     // Whether NOT paying this event costs the student the related job/property/vehicle. Defaults
     // to true so existing "bad" events keep behaving as before. When false the student only owes
@@ -2905,7 +3053,8 @@ async function updateBigEventDef(classCode, defId, ev) {
     existing.kind = kind;
     existing.module = resolveBigEventModule(ev.module, kind);
     existing.incident = kind === "bad" ? cleanIncident(MODULE_TO_COVERAGE[existing.module], ev.incident) : null;
-    existing.insuranceCover = kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[existing.module], ev.insuranceCover, existing.incident) : [];
+    existing.vehicles = existing.module === "transport" ? cleanEventVehicles(ev.vehicles) : null;
+    existing.insuranceCover = kind === "bad" ? cleanInsuranceCover(MODULE_TO_COVERAGE[existing.module], ev.insuranceCover, existing.incident, existing.vehicles) : [];
     Object.assign(existing, cleanBigEventCost(ev, existing.module));
     existing.description = ev.description || "";
     existing.takesAsset = ev.takesAsset === false ? false : true;
@@ -2989,11 +3138,15 @@ const BIG_EVENT_WEEKLY_CHANCE = 0.3;
 // anyone; a bad one needs the job, property or vehicle it puts at risk.
 function bigEventFitsStudent(cls, student, d) {
   // A percentage event needs something to take the percentage of.
-  if (bigEventIsPercent(d) && !eventBaseAvailable(cls, student, d.module)) return false;
-  if (d.kind === "good") return true;
+  if (bigEventIsPercent(d) && !eventBaseAvailable(cls, student, d.module, d.vehicles)) return false;
+  const ownsInScope = () => (cls.vehicles || []).some(v => (v.owners || []).includes(student.username) && vehicleInEventScope(v, d.vehicles));
+  // A windfall made for trucks only goes to someone who owns a truck.
+  if (d.kind === "good") return d.module === "transport" && cleanEventVehicles(d.vehicles) === "trucks" ? ownsInScope() : true;
   if (d.module === "income") return !!student.jobId;
   if (d.module === "property") return (cls.properties || []).some(p => p.owner === student.username);
-  if (d.module === "transport") return (cls.vehicles || []).some(v => (v.owners || []).includes(student.username));
+  // A transport event needs a vehicle it is allowed to hit: truck events only go to truck owners, and
+  // every other transport event only to owners of a car or bike, never to a truck.
+  if (d.module === "transport") return ownsInScope();
   return true;
 }
 function pickBigEventDef(cls, student, defs) {
@@ -3016,10 +3169,12 @@ function bigEventEntry(cls, username, def, weekKey, revealAt) {
   const assetKind = coverage === "property" || coverage === "transport" ? coverage
     : ((percent || def.kind === "good") && (def.module === "property" || def.module === "transport") ? def.module : null);
   const asset = assetKind
-    ? pickEventAsset(cls, username, assetKind, def.kind === "good" ? null : def.incident, false, percent) : null;
+    ? pickEventAsset(cls, username, assetKind, def.kind === "good" ? null : def.incident, false, percent, def.vehicles) : null;
   return {
     ...(asset || {}),
     incident: def.incident || null,
+    // Which vehicles this could hit, kept so the right one is found again later (see eventAssetNow).
+    vehicles: def.module === "transport" ? cleanEventVehicles(def.vehicles) : null,
     id: uid("bigevlog"), studentUser: username, defId: def.id, week: weekKey, date: nowStr(), revealAt,
     name: def.name, module: def.module, kind: def.kind || "bad", description: def.description || "",
     // A percentage event's dollar cost is worked out when it happens (revealBigEvent).
@@ -3141,8 +3296,10 @@ async function revealBigEvent(classCode, logId) {
     const fresh = bigEventEntry(liveCls, found.studentUser, def, found.week, found.revealAt);
     // Keep the vehicle/property it was planned to hit while it's still theirs.
     const coverage = def.kind !== "good" ? MODULE_TO_COVERAGE[def.module] : null;
-    const planned = (coverage === "property" || coverage === "transport") && def.id === found.defId && found.assetId
+    let planned = (coverage === "property" || coverage === "transport") && def.id === found.defId && found.assetId
       ? eventAssetNow(liveCls, found.studentUser, coverage, found)[coverage === "transport" ? "vehicle" : "property"] : null;
+    // A vehicle planned before trucks got their own events isn't kept if it's outside what the event can hit now.
+    if (planned && coverage === "transport" && !vehicleInEventScope(planned, def.vehicles)) planned = null;
     const asset = planned ? { assetId: found.assetId, assetName: found.assetName, assetType: found.assetType } : {};
     Object.assign(found, { assetId: null, assetName: null, assetType: null }, fresh, asset, {
       id: found.id, date: nowStr(),
@@ -3176,10 +3333,9 @@ async function revealBigEvent(classCode, logId) {
 }
 
 // choice: 'forfeit' | 'pay' | 'claim'
-// paySource (only used when choice === 'pay'): 'cash' | 'savings' — lets a
-// student cover a big event out of their Savings Account instead of their
-// everyday cash balance. Defaults to 'cash' so any existing caller that
-// doesn't pass this keeps behaving exactly as before.
+// paySource (used when choice is 'pay' or 'claim'): 'cash' (the default) or 'card'. A big event can
+// no longer be paid straight from savings: students get 5 minutes (see snoozeBigEvent) to move money
+// into their everyday account first.
 // planId (only used when choice === 'claim'): which of the student's plans
 // to claim on — optional, see the claim branch below.
 async function resolveBigEvent(username, classCode, logId, choice, paySource, planId) {
@@ -3220,24 +3376,17 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         if (entry.module === "income") t.update(classRef, { bigEventLog: cls.bigEventLog });
       } else if (choice === "pay") {
         bigCard = 0;
-        const source = paySource === "savings" ? "savings" : "cash"; // "card" is paid the same way as cash, via the credit card below
+        if (paySource === "savings") throw new Error("NO_SAVINGS_PAY");
         const cash = user.balance || 0;
-        const savings = user.savings || 0;
-        const available = source === "savings" ? savings : cash;
         // Cash is allowed to go negative here, same as fines and choice
-        // events elsewhere in the app — savings is the one balance that's
-        // never allowed to go negative, so that check stays. Hard-blocking
-        // the cash option too used to leave students with takesAsset:false
-        // events, no savings, and no matching insurance stuck in a modal
-        // with every button disabled and no way out.
-        if (!isTeacher && source === "savings" && available < entry.cost) throw new Error("BROKE_SAVINGS");
+        // events elsewhere in the app. Hard-blocking it used to leave
+        // students with takesAsset:false events and no matching insurance
+        // stuck in a modal with every button disabled and no way out.
         entry.status = "paid";
         amount = entry.cost;
-        outcomeNote = `Paid ${fmtMoney(entry.cost)} for "${entry.name}"` + (source === "savings" ? " (from savings)" : "");
+        outcomeNote = `Paid ${fmtMoney(entry.cost)} for "${entry.name}"`;
         if (!isTeacher) {
-          if (source === "savings") {
-            t.update(userRef, { savings: Math.round((savings - entry.cost) * 100) / 100 });
-          } else if (paySource === "card") {
+          if (paySource === "card") {
             // As much as the card has room for goes on it; the rest comes out
             // of cash (which may go negative here, like paying from cash does).
             const cp = cardTakeEventCost(user, cls, entry.cost, true);
@@ -3284,18 +3433,11 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
           if (!(cp.card > 0)) throw new Error("LIMIT");
           bigCard = cp.card;
         }
-        // Or straight from savings, if the student picked that (savings can't go negative).
-        let savPay = 0;
-        if (paySource === "savings" && !isTeacher && option.studentPays > 0) {
-          if ((user.savings || 0) < option.studentPays) throw new Error("BROKE_SAVINGS");
-          savPay = option.studentPays;
-          cp = { card: 0, cash: 0 };
-        }
+        if (paySource === "savings") throw new Error("NO_SAVINGS_PAY");
         const toPay = cp.cash;
         if (!isTeacher && cash < toPay) throw new Error("BROKE_EXCESS");
         const claimUpd = () => Object.assign({ balance: Math.round((cash - toPay) * 100) / 100 },
-          bigCard > 0 ? { creditCard: user.creditCard } : {},
-          savPay > 0 ? { savings: Math.round(((user.savings || 0) - savPay) * 100) / 100 } : {});
+          bigCard > 0 ? { creditCard: user.creditCard } : {});
         entry.status = "claimed";
         amount = option.studentPays;
         if (option.losesVehicle) {
@@ -3306,14 +3448,13 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
           entry.lostVehicle = true;
           outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}". Paid ${fmtMoney(option.excess)} excess; `
             + `the insurer covered the damage to someone else's property, but not their own vehicle${veh && veh.name ? ` (${veh.name})` : ""}, so they lost it`;
-          if (!isTeacher && (toPay > 0 || bigCard > 0 || savPay > 0)) t.update(userRef, claimUpd());
+          if (!isTeacher && (toPay > 0 || bigCard > 0)) t.update(userRef, claimUpd());
           t.update(classRef, { vehicles: cls.vehicles, bigEventLog: cls.bigEventLog });
           return;
         }
         outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}". Paid ${fmtMoney(option.excess)} excess`
-          + (option.uncovered > 0 ? ` + ${fmtMoney(option.uncovered)} not covered` : "")
-          + (savPay > 0 ? " (from savings)" : "");
-        if (!isTeacher && (toPay > 0 || bigCard > 0 || savPay > 0)) t.update(userRef, claimUpd());
+          + (option.uncovered > 0 ? ` + ${fmtMoney(option.uncovered)} not covered` : "");
+        if (!isTeacher && (toPay > 0 || bigCard > 0)) t.update(userRef, claimUpd());
         t.update(classRef, { bigEventLog: cls.bigEventLog });
       } else {
         throw new Error("BAD_CHOICE");
@@ -3322,8 +3463,8 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
   } catch (e) {
     { const cm = cardPayError(e); if (cm) return { ok: false, error: cm }; }
     if (e.message === "BROKE") return { ok: false, error: "You don't have enough cash to pay that." };
-    if (e.message === "BROKE_SAVINGS") return { ok: false, error: "You don't have enough in savings to pay that." };
-    if (e.message === "BROKE_EXCESS") return { ok: false, error: "You don't have enough cash to pay for this claim." };
+    if (e.message === "NO_SAVINGS_PAY") return { ok: false, error: "A big event can't be paid straight from savings. Move the money into your everyday account first." };
+    if (e.message === "BROKE_EXCESS") return { ok: false, error: "You don't have enough in your everyday account to pay for this claim. Move some money across first." };
     if (e.message === "NO_PLAN") return { ok: false, error: "You don't have an insurance plan that covers this." };
     if (e.message === "NO_FORFEIT") return { ok: false, error: "This event doesn't allow losing the asset. You need to pay or claim insurance." };
     if (e.message === "NOT_FOUND") return { ok: false, error: "That event is no longer pending." };
@@ -3351,7 +3492,8 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
 function weeklyEventInsurance(ev) {
   const coverage = ev.severity === "bad" && ["property", "transport"].includes(ev.coverage) ? ev.coverage : "general";
   const incident = cleanIncident(coverage, ev.incident);
-  return { coverage, incident, insuranceCover: cleanInsuranceCover(coverage, ev.insuranceCover, incident) };
+  const vehicles = cleanEventVehicles(ev.vehicles); // only matters when the event hits a vehicle; "cars" = cars and bikes
+  return { coverage, incident, vehicles, insuranceCover: cleanInsuranceCover(coverage, ev.insuranceCover, incident, vehicles) };
 }
 
 // A bad event tied to property or transport only goes to students who
@@ -3363,10 +3505,10 @@ function weeklyEventInsurance(ev) {
 function weeklyEventFitsStudent(cls, username, ev, student) {
   // A percentage event needs something to take the percentage of.
   const base = weeklyEventBase(ev);
-  if (base && !eventBaseAvailable(cls, student || { username }, base)) return false;
+  if (base && !eventBaseAvailable(cls, student || { username }, base, ev.vehicles)) return false;
   if (ev.severity !== "bad") return true;
   if (ev.coverage === "property" || ev.coverage === "transport") {
-    return pickEventAsset(cls, username, ev.coverage, cleanIncident(ev.coverage, ev.incident), !base, !!base) !== null;
+    return pickEventAsset(cls, username, ev.coverage, cleanIncident(ev.coverage, ev.incident), !base, !!base, ev.vehicles) !== null;
   }
   return true;
 }
@@ -3505,7 +3647,7 @@ function weeklyEventEntry(cls, username, ev, weekKey, dayKey, revealAt, manual) 
   const base = weeklyEventBase(ev);
   const assetCoverage = weeklyEventAssetCoverage(insurance, base);
   const asset = assetCoverage
-    ? pickEventAsset(cls, username, assetCoverage, assetCoverage === insurance.coverage ? insurance.incident : null, !base, !!base) : null;
+    ? pickEventAsset(cls, username, assetCoverage, assetCoverage === insurance.coverage ? insurance.incident : null, !base, !!base, insurance.vehicles) : null;
   const isChoice = ev.type === "choice";
   const entry = {
     id: uid("evlog"), studentUser: username, eventId: ev.id, date: nowStr(), day: dayKey, week: weekKey, revealAt,
@@ -3602,9 +3744,9 @@ async function processWeeklyEvents(classCode, opts) {
 
 // Whether the vehicle/home a planned weekly event was going to hit is still
 // the student's (see pickEventAsset for what each kind of event can hit).
-function weeklyEventAssetStillFits(cls, username, coverage, incident, entry, allowRenters = true) {
+function weeklyEventAssetStillFits(cls, username, coverage, incident, entry, allowRenters = true, vehicles) {
   if (coverage === "transport") {
-    return !!entry.assetId && (cls.vehicles || []).some(v => v.id === entry.assetId && (v.owners || []).includes(username));
+    return !!entry.assetId && (cls.vehicles || []).some(v => v.id === entry.assetId && (v.owners || []).includes(username) && vehicleInEventScope(v, vehicles));
   }
   if (coverage === "property") {
     if (entry.assetType === "rented-home") {
@@ -3685,9 +3827,9 @@ async function revealWeeklyEvent(classCode, eventLogId) {
       let asset = { assetId: null, assetName: null, assetType: null };
       if (ev && assetCoverage) {
         const assetIncident = assetCoverage === insurance.coverage ? insurance.incident : null;
-        asset = weeklyEventAssetStillFits(liveCls, found.studentUser, assetCoverage, assetIncident, found, !base)
+        asset = weeklyEventAssetStillFits(liveCls, found.studentUser, assetCoverage, assetIncident, found, !base, insurance.vehicles)
           ? { assetId: found.assetId, assetName: found.assetName, assetType: found.assetType }
-          : pickEventAsset(liveCls, found.studentUser, assetCoverage, assetIncident, !base, !!base);
+          : pickEventAsset(liveCls, found.studentUser, assetCoverage, assetIncident, !base, !!base, insurance.vehicles);
       }
       let priced = null;
       if (ev && base && asset) {

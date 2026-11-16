@@ -32,7 +32,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=cb75c464">
+<link rel="stylesheet" href="style.css?v=911a85c5">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -253,8 +253,8 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <tbody id="marketSnapshot"></tbody>
     </table>
     </div>
-    <p class="muted-small">All-time = every share you've ever bought/sold in that company, gains and losses combined, compared to what you paid. Use <strong>Reset snapshot</strong> to start counting again from today.</p>
-    <p class="muted-small hidden" id="allTimeNote">* means that row's all-time figure may be incomplete. Either it includes shares bought before this feature existed (no recorded cost), or a past sale old enough to have aged out of the activity log.</p>
+    <p class="muted-small">All-time = the current value of shares you still own minus what you paid for those shares. Sold shares are excluded. All-time (%) compares that gain or loss with the purchase cost of your remaining shares. Use <strong>Reset snapshot</strong> to start counting again from today.</p>
+    <p class="muted-small hidden" id="allTimeNote">* means the purchase cost is missing for some shares you still own, so that row's all-time figure only includes shares with a recorded cost.</p>
     <p class="muted-small" id="noCompanies">Your teacher hasn't opened any companies yet.</p>
   </div>
 
@@ -298,16 +298,16 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="shortcuts.js?v=a39d9a62"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=4da071cc"></script>
-<script defer src="data-money.js?v=9e80a313"></script>
-<script defer src="data-life.js?v=14548daf"></script>
+<script defer src="data-money.js?v=f022d758"></script>
+<script defer src="data-life.js?v=b41d2074"></script>
 <script defer src="data-property.js?v=2ae916b7"></script>
-<script defer src="data-markets.js?v=1c6f4fff"></script>
+<script defer src="data-markets.js?v=3c1c89ff"></script>
 <script defer src="tour.js?v=475f7fc8"></script>
-<script defer src="events-ui.js?v=09a6e130"></script>
+<script defer src="events-ui.js?v=edb4fb7e"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=db3368f8"></script>
 <script defer src="notifications.js?v=0f7e459d"></script>
 <script defer src="savings-goals.js?v=fa082683"></script>
-<script defer src="student.js?v=735640c5"></script>
+<script defer src="student.js?v=447a64ff"></script>
 </body>
 </html>

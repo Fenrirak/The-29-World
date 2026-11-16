@@ -204,7 +204,7 @@ function ccPerks(plan) {
   if (plan.cashbackPct > 0) out.push(`<span class="cc-chip mint">${icon("coin", 12)}${plan.cashbackPct}% cashback</span>`);
   if (plan.rewardEvery > 0 && plan.rewardBack > 0) out.push(`<span class="cc-chip mint">${fmtMoney(plan.rewardBack)} back per ${fmtMoney(plan.rewardEvery)} in one purchase</span>`);
   if (plan.storeDiscountPct > 0) out.push(`<span class="cc-chip gold">${icon("cart", 12)}${plan.storeDiscountPct}% off the class store</span>`);
-  (plan.vouchers || []).forEach(v => out.push(`<span class="cc-chip lilac">${icon("ticket", 12)}${v.kind === "percent" ? `${v.value}% off voucher` : `${fmtMoney(v.value)} store voucher`}</span>`));
+  (plan.vouchers || []).forEach(v => out.push(`<span class="cc-chip lilac">${icon("ticket", 12)}<span class="voucher-label">${v.kind === "percent" ? `${v.value}% off voucher` : `${fmtMoney(v.value)} store voucher`}</span></span>`));
   return out.length ? out.join("") : `<span class="cc-chip plain">No extra perks</span>`;
 }
 // Rewards panel: spend-and-earn counts ONE purchase at a time (nothing adds up or rolls over); % cashback is per statement.

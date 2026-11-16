@@ -286,13 +286,9 @@ async function render() {
   // price-lookup helpers the weekly stock estimate (the data-*.js files) already uses,
   // so this figure lines up with what students see there.
   const mondayKey = budgetWeekStartKey();
-  // All-time $ / % per company: unrealized (current holdings vs. what they
-  // cost) plus realized (locked in from past sells/delistings). See the
-  // big comment on stockAllTimeGain() in data-money.js for exactly what this can
-  // and can't see — a "*" after a row's all-time figures means that row's
-  // number might be missing history that's no longer retrievable (a
-  // legacy holding bought before this feature existed, or an older sale
-  // that's aged out of the shared transaction log).
+  // All-time compares the current value and purchase cost of shares still
+  // held. Sold shares are excluded. A "*" only flags held shares whose
+  // purchase cost wasn't recorded, never missing sales from the activity log.
   const gain = await stockAllTimeGain(me.username, me.classCode);
   cls.companies.forEach(co => {
     const mine = co.holders[me.username] || 0;
@@ -403,10 +399,9 @@ async function resetMarketSnapshot() {
     shares > 0
       ? `\u2022 Your ${plural(shares, "share")} in ${plural(companies, "company").replace("companys", "companies")} (worth ${fmtMoney(value)} at today's prices) are counted as if you bought them today. Today's market price becomes their purchase cost, so gains and losses are measured from now on.`
       : "\u2022 You don't hold any shares right now, so the snapshot simply starts fresh at $0.",
-    "\u2022 Profits and losses from shares you sold in the past are cleared from the snapshot.",
     "\u2022 The Price, My shares and Since Mon columns are not affected.",
     "",
-    `Right now your all-time total is ${gSign}${fmtMoney(Math.abs(gain.total))}${gain.complete ? "" : " (at least, some history is missing)"}.`,
+    `Right now your all-time total is ${gSign}${fmtMoney(Math.abs(gain.total))}${gain.complete ? "" : " (some held shares have no recorded purchase cost)"}.`,
     "This can't be undone."
   ].join("\n");
   if (!await t29Confirm(msg, { confirmText: "Reset snapshot", cancelText: "Cancel", danger: true })) return;
@@ -918,9 +913,13 @@ function showPromotionPopup(promo) {
       <h2 class="levelup-card-title">You've been offered a promotion!</h2>
       <p class="levelup-card-sub">Move up to</p>
       <div class="levelup-card-tier">
-        <div class="levelup-card-tier-name">${promo.tierName}</div>
-        <div class="levelup-card-tier-meta">${promo.jobTitle} &middot; ${typeof fmtMoney === "function" ? fmtMoney(promo.wage) : "$" + promo.wage}/pay day</div>
+        <div class="levelup-card-tier-name">${escapeHtml(promo.tierName)}</div>
+        <div class="levelup-card-tier-meta">${escapeHtml(promo.jobTitle)} &middot; ${typeof fmtMoney === "function" ? fmtMoney(promo.wage) : "$" + promo.wage}/pay day</div>
       </div>
+      <section class="levelup-card-duties" aria-label="New tier responsibilities">
+        <h3>What you'll do in this tier</h3>
+        <p>${escapeHtml(promo.description || "Your teacher hasn't added tasks for this tier yet. Ask them what you'll need to do.")}</p>
+      </section>
       <div class="levelup-card-actions">
         <button class="btn secondary" onclick="respondPromotionPopup(false)">Not right now</button>
         <button class="btn gold" onclick="respondPromotionPopup(true)">🎉 Accept</button>

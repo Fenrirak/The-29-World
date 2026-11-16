@@ -996,9 +996,13 @@ function showPromotionPopup(promo) {
       <h2 class="levelup-card-title">You've been offered a promotion!</h2>
       <p class="levelup-card-sub">Move up to</p>
       <div class="levelup-card-tier">
-        <div class="levelup-card-tier-name">${promo.tierName}</div>
-        <div class="levelup-card-tier-meta">${promo.jobTitle} &middot; ${fmtMoney(promo.wage)}/pay day</div>
+        <div class="levelup-card-tier-name">${escapeHtml(promo.tierName)}</div>
+        <div class="levelup-card-tier-meta">${escapeHtml(promo.jobTitle)} &middot; ${fmtMoney(promo.wage)}/pay day</div>
       </div>
+      <section class="levelup-card-duties" aria-label="New tier responsibilities">
+        <h3>What you'll do in this tier</h3>
+        <p>${escapeHtml(promo.description || "Your teacher hasn't added tasks for this tier yet. Ask them what you'll need to do.")}</p>
+      </section>
       <div class="levelup-card-actions">
         <button class="btn secondary" onclick="respondPromotionPopup(false)">Not right now</button>
         <button class="btn gold" onclick="respondPromotionPopup(true)">🎉 Accept</button>

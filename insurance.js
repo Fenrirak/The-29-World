@@ -1,4 +1,6 @@
 let CURRENT, IS_TEACHER, EDITING_PLAN_ID = null;
+// While a big event is waiting, signing up and cancelling are held (see bigEventLockUi in events-ui.js).
+let BE_LOCK = null;
 
 const DAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
@@ -88,9 +90,10 @@ function planButtonsHtml(p, me, owned) {
     return `<button class="btn small secondary" onclick="startEditPlan('${p.id}')">Edit</button>
       <button class="btn small coral" onclick="deletePlan('${p.id}')">Remove</button>`;
   }
+  const held = BE_LOCK && BE_LOCK.locked ? BE_LOCK.attr : "";
   return owned
-    ? `<button class="btn small secondary" id="cancelBtn-${p.id}" onclick="cancelPlan('${p.id}')">Cancel cover</button>`
-    : `<button class="btn small gold" id="buyBtn-${p.id}" onclick="buyPlan('${p.id}', ${Number(p.signupFee) || 0})">Sign up</button>`;
+    ? `<button class="btn small secondary" id="cancelBtn-${p.id}" onclick="cancelPlan('${p.id}')"${held}>Cancel cover</button>`
+    : `<button class="btn small gold" id="buyBtn-${p.id}" onclick="buyPlan('${p.id}', ${Number(p.signupFee) || 0})"${held}>Sign up</button>`;
 }
 
 function planPriceHtml(p, me) {
@@ -252,6 +255,7 @@ async function render() {
   // instead of waiting on one before starting the other.
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
   const plans = cls.insurancePlans || [];
+  BE_LOCK = IS_TEACHER ? null : bigEventLockUi(cls, CURRENT.username, "insurance");
   COMPANIES = insuranceCompaniesOf(cls);
   PLANS_BY_ID = {};
   plans.forEach(p => { PLANS_BY_ID[p.id] = p; });
@@ -277,6 +281,9 @@ async function render() {
   if (singles.length) {
     if (COMPANIES.length) html += `<h2 class="ins-section-title">${icon("shield", 22)} Other insurance</h2>`;
     html += singles.map(p => singlePlanCardHtml(p, me)).join("");
+  }
+  if (BE_LOCK && BE_LOCK.locked) {
+    html = `<div class="be-lock-banner" role="status">${icon("lock", 16)} <span>Signing up and cancelling cover are locked while a big event is waiting. Tap the Big event timer to deal with it first.</span></div>` + html;
   }
   list.innerHTML = html;
 
@@ -474,14 +481,19 @@ async function buyPlan(id, fee) {
 }
 
 async function cancelPlan(id) {
-  // Same double-tap guard as buyPlan above — this one has no confirm()
-  // at all.
+  // Same double-tap guard as buyPlan above.
   const btn = document.getElementById("cancelBtn-" + id);
   if (btn && btn.disabled) return;
+  const plan = PLANS_BY_ID[id];
+  const name = plan ? insurancePlanName(plan) : "this insurance";
+  if (!await t29Confirm(`Cancel ${name}?\n\nYou lose this cover straight away. To get it back you'd have to sign up again, and pay any sign-up fee again.`, { confirmText: "Cancel cover", cancelText: "Keep my cover", danger: true })) return;
   if (btn) btn.disabled = true;
   try {
-    await cancelInsurance(CURRENT.username, id);
+    const res = await cancelInsurance(CURRENT.username, id);
+    // render() rebuilds the list, so a refusal (a big event is waiting) is put in afterwards, same as buyPlan.
     await render();
+    const box = document.getElementById("msg-" + id);
+    if (box && res && !res.ok) box.innerHTML = `<div class="error-msg">${escapeHtml(res.error || "You can't cancel this right now.")}</div>`;
   } finally {
     if (btn) btn.disabled = false;
   }

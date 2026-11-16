@@ -331,7 +331,7 @@ async function claimFromPopup(eventLogId, username, classCode, btn, planId) {
 function anyModalShowing() {
   return !!(document.getElementById("anwEventModal") || document.getElementById("anwChoiceEventModal")
     || document.getElementById("anwBigEventModal") || document.getElementById("anwGoodBigEventModal")
-    || document.getElementById("anwAdjustmentModal"));
+    || document.getElementById("anwAdjustmentModal") || document.getElementById("anwBigEventReminderModal"));
 }
 
 async function checkAdjustmentPopup(username, classCode) {
@@ -374,10 +374,12 @@ function showAdjustmentPopup(txn) {
 }
 
 /* ===================== Big event popup =====================
-   Unlike small weekly events, big events must be resolved — the modal has
-   no close button and clicking outside doesn't dismiss it. It reappears on
-   every page load until the student picks pay / forfeit / claim, covering
-   the page so nothing else can be done until then: it's shown as soon as
+   Unlike small weekly events, big events must be resolved. The modal has no
+   close button and clicking outside doesn't dismiss it, with one exception:
+   it can be put away for 5 minutes (once started, the same clock keeps running
+   however often it is reopened from the countdown timer; at zero it is forced
+   back and can't be put away). Until the student picks pay / forfeit / claim
+   it covers the page so nothing else can be done: it's shown as soon as
    the page loads (see the listener at the end of this section), on top of
    any other popup, and — via the notification poll — on a page that was
    already open when the event arrived. The data-*.js files back this up
@@ -430,14 +432,20 @@ async function checkBigEventPopup(username, classCode, onlyPending) {
   // modal, must be resolved via pay / forfeit / claim before continuing.
   // Shown even over another popup: nothing else can happen until it's
   // answered, and that popup is still there underneath afterwards.
-  const pending = (cls.bigEventLog || []).find(e => e.studentUser === username && e.status === "pending");
-  if (pending) {
+  const waiting = (cls.bigEventLog || []).filter(e => e.studentUser === username && e.status === "pending");
+  if (waiting.length) {
+    // The 5 minutes (see snoozeBigEvent): one whose time is up is forced back, one never put away is shown
+    // now, and one whose clock is still running stays out of the way behind the countdown timer (the
+    // student is off moving money, so a page change mustn't bring it straight back).
+    const toShow = waiting.find(e => bigEventSnooze(e).expired) || waiting.find(e => !bigEventSnooze(e).used) || null;
+    beSyncTimer(waiting, username, classCode);
+    if (!toShow) return;
     const user = await getUserCached(username);
     if (document.getElementById("anwBigEventModal")) return; // another check got there while we waited
-    const claimOptions = bigEventClaimOptions(cls, user, pending);
-    showBigEventPopup(pending, claimOptions, username, classCode, user);
+    showBigEventPopup(toShow, bigEventClaimOptions(cls, user, toShow), username, classCode, user);
     return;
   }
+  beStopTimer(); // nothing waiting (any more): no timer
   if (onlyPending || anyModalShowing()) return;
 
   // Good (windfall) events are already paid out the moment they happen
@@ -514,14 +522,13 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
   // they don't actually need.
   const isTeacher = user && user.role === "teacher";
   const cash = (user && user.balance) || 0;
-  const savings = (user && user.savings) || 0;
   // Cash payment is never disabled for insufficient funds — it's allowed
   // to take the balance negative, same as fines and choice events
-  // elsewhere in the app (see resolveBigEvent). Savings genuinely can't go
-  // negative anywhere in the app, so that gate stays. Without this, an
-  // event with takesAsset:false plus no savings/insurance could disable
-  // every single button and leave the modal with no way out.
-  const savingsOk = isTeacher || savings >= entry.cost;
+  // elsewhere in the app (see resolveBigEvent). Without this, an event with
+  // takesAsset:false plus no insurance could disable every single button and
+  // leave the modal with no way out. There is no "pay from savings": the student
+  // moves money into their everyday account first (that's what the 5 minutes are for).
+  const snz = bigEventSnooze(entry);
   const cashWouldGoNegative = !isTeacher && cash < entry.cost;
 
   // Insurance: one button per matching plan. A claim is paid from cash and
@@ -530,7 +537,7 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
   // out with the reason; "Pay from cash" always stays available.
   const coverage = BIG_EVENT_COVERAGE[entry.module];
   const cover = entry.insuranceCover || [];
-  const claims = (claimOptions || []).map(o => ({ ...o, ok: isTeacher || o.studentPays <= 0 || cash >= o.studentPays || cardRoom >= o.studentPays || savings >= o.studentPays }));
+  const claims = (claimOptions || []).map(o => ({ ...o, ok: isTeacher || o.studentPays <= 0 || cash >= o.studentPays || cardRoom >= o.studentPays }));
   const impact = eventImpactText(entry, coverage);
   const coverLine = (impact ? `<p class="muted-small">${escapeHtml(impact)}</p>` : "")
     + (cover.length
@@ -568,9 +575,17 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
           : `Claim insurance. None of the insurance for this covers your ${entry.assetType === "truck" ? "truck" : "vehicle"}`)
         : "Claim insurance (no matching plan)"}</button>`;
 
+  const dismissHtml = snz.canDismiss
+    ? `<div class="be-dismiss" id="bigDismissWrap">
+        <button class="btn secondary" id="bigDismissBtn" type="button">${snz.used ? `Dismiss (${beFmt(snz.remainingMs)} left)` : "Dismiss for 5 minutes"}</button>
+        <p class="muted-small">${snz.used
+          ? "Your 5 minutes are already running, and putting this away again doesn't add any time. When they run out it comes back and can't be put away."
+          : "Need to move money into your everyday account first? You can put this away once. You get 5 minutes, then it comes back and can't be put away again."}</p>
+      </div>`
+    : `<div class="be-forced" id="bigForcedNote" role="status">${icon("lock", 15)} <span>Your 5 minutes are up. You need to deal with this now.</span></div>`;
   overlay.innerHTML = `
-    <div class="anw-modal-card">
-      <h2 style="display:flex;align-items:center;gap:9px;">${icon("bolt", 24)} Big event: ${escapeHtml(entry.name)}</h2>
+    <div class="anw-modal-card be-card" role="dialog" aria-modal="true" aria-labelledby="bigEventTitle">
+      <h2 id="bigEventTitle" class="be-title">${icon("bolt", 24)} <span>Big event: ${escapeHtml(entry.name)}</span></h2>
       <p>${escapeHtml(entry.description) || ""}</p>
       <p><strong>${BIG_EVENT_MODULE_LABEL[entry.module]}</strong> &middot; costs <strong>${fmtMoney(entry.cost)}</strong> to resolve</p>
       ${entry.basisNote ? `<p class="muted-small">${escapeHtml(entry.basisNote)}</p>` : ""}
@@ -584,31 +599,28 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
         ${hasCard ? `<button class="btn gold" id="bigPayCardBtn" ${cardRoom > 0 ? "" : "disabled"}>
           Pay ${fmtMoney(entry.cost)} on credit card${cardRoom <= 0 ? " (no credit available)" : cardRoom >= entry.cost ? ` (${fmtMoney(cardRoom)} available)` : ` (card covers ${fmtMoney(cardRoom)}, the other ${fmtMoney(entry.cost - cardRoom)} from cash)`}
         </button>` : ""}
-        <button class="btn gold" id="bigPaySavingsBtn" ${savingsOk ? "" : "disabled"}>
-          Pay ${fmtMoney(entry.cost)} from savings${savingsOk ? "" : ` (only ${fmtMoney(savings)} available)`}
-        </button>
-        ${claims.length && ((hasCard && cardRoom > 0) || savings > 0) ? `<label class="muted-small" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">Pay the claim's excess from:
-          <select id="bigClaimPayFrom"><option value="cash">Cash (${fmtMoney(cash)})</option>${hasCard && cardRoom > 0 ? `<option value="card">Credit card (${fmtMoney(cardRoom)} available)</option>` : ""}${savings > 0 ? `<option value="savings">Savings (${fmtMoney(savings)})</option>` : ""}</select></label>` : ""}
+        ${claims.length && hasCard && cardRoom > 0 ? `<label class="muted-small be-from" for="bigClaimPayFrom">Pay the claim's excess from:<select id="bigClaimPayFrom"><option value="cash">Cash (${fmtMoney(cash)})</option><option value="card">Credit card (${fmtMoney(cardRoom)} available)</option></select></label>` : ""}
         ${claimButtons}
       </div>
-      <div id="bigEventMsg"></div>
+      ${dismissHtml}
+      <div id="bigEventMsg" role="alert"></div>
     </div>
   `;
   document.body.appendChild(overlay);
 
   // Only buttons that are actually usable get toggled between attempts.
-  // Buttons disabled because of a genuine constraint (not enough cash, not
-  // enough savings, no matching insurance plan) must STAY disabled after a
+  // Buttons disabled because of a genuine constraint (not enough cash,
+  // no matching insurance plan) must STAY disabled after a
   // failed attempt at a different option. Previously ALL buttons were
   // blindly re-enabled on any error, which could un-disable e.g. "Claim
   // insurance" for a student with no matching plan.
   const eligibleIds = ["bigPayCashBtn"];
   if (canForfeit) eligibleIds.push("bigForfeitBtn");
-  if (savingsOk) eligibleIds.push("bigPaySavingsBtn");
   if (hasCard && cardRoom > 0) eligibleIds.push("bigPayCardBtn");
+  if (snz.canDismiss) eligibleIds.push("bigDismissBtn");
   claims.forEach((o, i) => { if (o.ok) eligibleIds.push("bigClaimBtn" + i); });
   const setBusy = (busy) => {
-    eligibleIds.forEach(id => { document.getElementById(id).disabled = busy; });
+    eligibleIds.forEach(id => { const b = overlay.querySelector("#" + id); if (b) b.disabled = busy; });
   };
 
   const resolve = async (choice, paySource, planId) => {
@@ -616,31 +628,249 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
     const res = await resolveBigEvent(username, classCode, entry.id, choice, paySource, planId);
     if (res.ok) {
       overlay.remove();
+      entry.status = "resolved"; beDropEntry(entry.id);
       if (typeof render === "function") render();
     } else {
-      document.getElementById("bigEventMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
+      overlay.querySelector("#bigEventMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
       setBusy(false);
     }
   };
 
   if (canForfeit) document.getElementById("bigForfeitBtn").addEventListener("click", () => resolve("forfeit"));
   document.getElementById("bigPayCashBtn").addEventListener("click", () => resolve("pay", "cash"));
-  document.getElementById("bigPaySavingsBtn").addEventListener("click", () => resolve("pay", "savings"));
   if (hasCard) document.getElementById("bigPayCardBtn").addEventListener("click", () => resolve("pay", "card"));
   claims.forEach((o, i) => {
     document.getElementById("bigClaimBtn" + i).addEventListener("click", async () => {
       if (o.writeOff && !await confirmWriteOff(o)) return;
       if (o.losesVehicle && !await t29Confirm(`${insurancePlanName(o.plan)} pays for the damage to someone else's property, but it doesn't cover your own vehicle, so you'll lose ${vehicleName}. You pay your ${fmtMoney(o.excess)} excess.\n\nClaim anyway?`)) return;
-      const sel = document.getElementById("bigClaimPayFrom");
+      const sel = overlay.querySelector("#bigClaimPayFrom");
       let src = sel ? sel.value : "cash";
-      if (src === "savings" && !isTeacher && savings < o.studentPays) {
-        document.getElementById("bigEventMsg").innerHTML = `<div class="error-msg">You only have ${fmtMoney(savings)} in savings. That's not enough for the ${fmtMoney(o.studentPays)} you'd pay.</div>`; return;
-      }
-      // If the chosen source can't cover it, fall back to whichever one can (card, then savings).
-      if (src === "cash" && !isTeacher && cash < o.studentPays) src = cardRoom >= o.studentPays ? "card" : (savings >= o.studentPays ? "savings" : "cash");
+      // If cash can't cover it, use the card when it can.
+      if (src === "cash" && !isTeacher && cash < o.studentPays && cardRoom >= o.studentPays) src = "card";
       resolve("claim", src === "cash" ? null : src, o.plan.id);
     });
   });
+
+  // Put it away for 5 minutes. The first time starts the clock; a reopened popup is dismissed on that same
+  // clock (snoozeBigEvent just confirms it); once the 5 minutes are up the server refuses and the button goes.
+  const dismissBtn = overlay.querySelector("#bigDismissBtn");
+  if (dismissBtn) dismissBtn.addEventListener("click", async () => {
+    setBusy(true);
+    const res = await snoozeBigEvent(username, classCode, entry.id);
+    if (res.ok) {
+      entry.snoozeUntil = res.snoozeUntil;
+      overlay.remove();
+      beSyncTimer([entry], username, classCode);
+    } else if (res.expired) {
+      entry.snoozeUntil = entry.snoozeUntil || 1; // time's up: make sure it reads as expired here too
+      overlay.beForce();
+    } else if (res.gone) {
+      overlay.remove(); beDropEntry(entry.id);
+      if (typeof render === "function") render();
+    } else {
+      overlay.querySelector("#bigEventMsg").innerHTML = `<div class="error-msg">${res.error}</div>`;
+      setBusy(false);
+    }
+  });
+  // Called every second by the countdown timer while this popup is open: keeps the dismiss label's time
+  // right, and takes the dismiss button away the moment the 5 minutes run out (so it can't be closed).
+  overlay.beTick = (s) => {
+    const b = overlay.querySelector("#bigDismissBtn");
+    if (b && s.used && !b.disabled) b.textContent = `Dismiss (${beFmt(s.remainingMs)} left)`;
+  };
+  overlay.beForce = () => {
+    const i = eligibleIds.indexOf("bigDismissBtn"); if (i >= 0) eligibleIds.splice(i, 1);
+    const w = overlay.querySelector("#bigDismissWrap");
+    if (w) w.outerHTML = `<div class="be-forced" id="bigForcedNote" role="status">${icon("lock", 15)} <span>Your 5 minutes are up. You need to deal with this now.</span></div>`;
+    setBusy(false);
+    overlay.scrollTop = 0;
+  };
+}
+
+/* ===================== Big event countdown timer + reminders =====================
+   A student who puts a big event away for 5 minutes (snoozeBigEvent in data-life.js) gets a small
+   floating timer, under the cash widget on wide desktops and above it on laptops, tablets and phones
+   (see .anw-be-timer in style.css). Tapping it reopens the popup, which can be dismissed again on the
+   same clock. Because the clock is saved on the event, the timer comes back on every page and device
+   (checkBigEventPopup restarts it on load), and at zero the forced popup returns.
+   Two reminders happen on the way, each claimed once on the event (claimBigEventReminder) so they
+   don't repeat on another page or device, and a student who reloads part-way through still gets the
+   one they're due: at half time, and with 1 minute left ("have you moved your money?"). */
+const BE_TIMER = { el: null, iv: null, entry: null, username: "", classCode: "", claiming: false, bound: false };
+
+// 4:05 style countdown text.
+function beFmt(ms) {
+  const s = Math.max(0, Math.ceil((Number(ms) || 0) / 1000));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+// Starts, retargets or stops the timer from the student's waiting events: it follows whichever
+// running clock ends first.
+function beSyncTimer(entries, username, classCode) {
+  const running = (entries || []).filter(e => bigEventSnooze(e).running).sort((a, b) => a.snoozeUntil - b.snoozeUntil);
+  if (!running.length) { beStopTimer(); return; }
+  BE_TIMER.entry = running[0];
+  BE_TIMER.username = username;
+  BE_TIMER.classCode = classCode;
+  if (!BE_TIMER.el || !BE_TIMER.el.isConnected) beMountTimer();
+  if (!BE_TIMER.iv) BE_TIMER.iv = setInterval(beTick, 1000);
+  beTick();
+}
+
+function beMountTimer() {
+  if (!document.body) return;
+  const old = document.getElementById("anwBigEventTimer");
+  if (old) old.remove();
+  const b = document.createElement("button");
+  b.type = "button";
+  b.id = "anwBigEventTimer";
+  b.className = "anw-be-timer";
+  b.setAttribute("aria-haspopup", "dialog");
+  b.innerHTML = `<span class="anw-be-label">${icon("bolt", 14)} <span class="anw-be-txt">Big event</span></span><span class="anw-be-value">0:00</span>`;
+  b.addEventListener("click", beReopen);
+  document.body.appendChild(b);
+  BE_TIMER.el = b;
+  if (!BE_TIMER.bound) { BE_TIMER.bound = true; window.addEventListener("resize", bePositionTimer); }
+  bePositionTimer();
+}
+
+// On a wide desktop the cash widget sits in the corner and the timer goes just below it; everywhere else
+// the CSS stacks it above the cash widget's pill, so nothing needs measuring.
+function bePositionTimer() {
+  const t = BE_TIMER.el;
+  if (!t) return;
+  const cash = document.getElementById("anwBalanceWidget");
+  if (cash && window.innerWidth > 1480) t.style.setProperty("--be-top", (cash.getBoundingClientRect().bottom + 10) + "px");
+  else t.style.removeProperty("--be-top");
+}
+
+function beStopTimer() {
+  if (BE_TIMER.iv) { clearInterval(BE_TIMER.iv); BE_TIMER.iv = null; }
+  if (BE_TIMER.el) { BE_TIMER.el.remove(); BE_TIMER.el = null; }
+  BE_TIMER.entry = null;
+  const r = document.getElementById("anwBigEventReminderModal");
+  if (r && r.beClose) r.beClose();
+}
+
+// The event was answered (or is gone): stop following it.
+function beDropEntry(id) {
+  if (BE_TIMER.entry && BE_TIMER.entry.id === id) beStopTimer();
+}
+
+function beTick() {
+  const T = BE_TIMER, e = T.entry;
+  if (!e) return;
+  if (!T.el || !T.el.isConnected) beMountTimer();
+  const s = bigEventSnooze(e);
+  if (s.expired) { beExpire(); return; }
+  const text = beFmt(s.remainingMs);
+  const v = T.el.querySelector(".anw-be-value");
+  if (v && v.textContent !== text) v.textContent = text;
+  T.el.classList.toggle("is-warn", s.remainingMs <= BIG_EVENT_SNOOZE_FINAL_MS);
+  T.el.title = `Big event: ${text} left. Tap to open it.`;
+  bePositionTimer();
+  const m = document.getElementById("anwBigEventModal");
+  if (m && m.beTick) m.beTick(s);
+  beCheckReminders(s);
+}
+
+// Shows the reminder that is due, once. The claim is atomic on the event, so only one page/device wins it.
+async function beCheckReminders(s) {
+  const T = BE_TIMER, e = T.entry;
+  if (!e || T.claiming) return;
+  let which = null;
+  if (s.remainingMs <= BIG_EVENT_SNOOZE_FINAL_MS && !e.snoozeFinalShown) which = "final";
+  else if (s.remainingMs <= BIG_EVENT_SNOOZE_HALF_MS && !e.snoozeHalfShown) which = "half";
+  if (!which) return;
+  T.claiming = true;
+  const before = { half: e.snoozeHalfShown, final: e.snoozeFinalShown };
+  // Mark it locally first so a slow claim isn't retried every second (claiming "final" also uses up "half").
+  if (which === "final") { e.snoozeFinalShown = true; e.snoozeHalfShown = true; } else e.snoozeHalfShown = true;
+  let won = false;
+  try { won = await claimBigEventReminder(T.classCode, e.id, which); }
+  catch (err) { e.snoozeHalfShown = before.half; e.snoozeFinalShown = before.final; } // couldn't claim: try again next tick
+  T.claiming = false;
+  if (won && BE_TIMER.entry === e && bigEventSnooze(e).running) beShowReminder(which, e);
+}
+
+function beShowReminder(which, entry) {
+  const old = document.getElementById("anwBigEventReminderModal");
+  if (old && old.beClose) old.beClose();
+  const final = which === "final";
+  const onBank = /bank\.html$/.test(location.pathname);
+  const overlay = document.createElement("div");
+  overlay.id = "anwBigEventReminderModal";
+  overlay.className = "anw-modal-overlay";
+  overlay.innerHTML = `
+    <div class="anw-modal-card be-card" role="alertdialog" aria-modal="true" aria-labelledby="beRemTitle" aria-describedby="beRemBody">
+      <h2 id="beRemTitle" class="be-title">${icon(final ? "bolt" : "hourglass", 24)} <span>${final ? "1 minute left" : "Halfway through your 5 minutes"}</span></h2>
+      <div id="beRemBody">
+        ${final
+          ? `<p><strong>Have you transferred money into your everyday account to pay the excess or cost?</strong></p>
+             <p class="muted-small">${escapeHtml(entry.name)} comes back in about a minute, and then you have to deal with it.</p>`
+          : `<p>About <strong>${beFmt(bigEventSnooze(entry).remainingMs)}</strong> left before <strong>${escapeHtml(entry.name)}</strong> comes back. If you need to move money into your everyday account to pay the excess or cost, now is the time.</p>`}
+      </div>
+      <div class="be-actions">
+        <button class="btn gold" id="beRemOpen" type="button">${final ? "Yes, open the big event" : "Open the big event"}</button>
+        ${final && !onBank
+          ? `<a class="btn secondary" href="bank.html">Not yet. Go to Bank</a>`
+          : `<button class="btn secondary" id="beRemClose" type="button">${final ? "Not yet" : "Keep going"}</button>`}
+      </div>
+    </div>`;
+  const onKey = (ev) => { if (ev.key === "Escape") overlay.beClose(); };
+  overlay.beClose = () => { document.removeEventListener("keydown", onKey); overlay.remove(); };
+  overlay.addEventListener("click", (ev) => { if (ev.target === overlay) overlay.beClose(); });
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(overlay);
+  overlay.querySelector("#beRemOpen").addEventListener("click", () => { overlay.beClose(); beReopen(); });
+  const closeBtn = overlay.querySelector("#beRemClose");
+  if (closeBtn) closeBtn.addEventListener("click", () => overlay.beClose());
+  overlay.querySelector("#beRemOpen").focus();
+}
+
+// The 5 minutes are up. If the popup is open it is locked in place (no dismiss, can't be closed);
+// otherwise the forced popup comes back.
+function beExpire() {
+  const { username, classCode } = BE_TIMER;
+  beStopTimer();
+  const m = document.getElementById("anwBigEventModal");
+  if (m && m.beForce) { m.beForce(); return; }
+  try { window._rcDel("classes", classCode); } catch (e) { /* the cache is only a safety net */ }
+  checkBigEventPopup(username, classCode, true).catch(() => {});
+}
+
+// Tapping the timer (or "open the big event" in a reminder): reads the latest copy, so money the student
+// just moved is counted, and shows the popup again.
+async function beReopen() {
+  if (document.getElementById("anwBigEventModal")) return;
+  const { username, classCode } = BE_TIMER;
+  const id = BE_TIMER.entry && BE_TIMER.entry.id;
+  if (!username || !classCode || !id) return;
+  try { window._rcDel("classes", classCode); window._rcDel("users", username); } catch (e) { /* ignore */ }
+  const [cls, user] = await Promise.all([getClassCached(classCode), getUserCached(username)]);
+  const entry = cls && (cls.bigEventLog || []).find(e => e.id === id && e.status === "pending");
+  if (!entry) { beStopTimer(); if (typeof render === "function") render(); return; } // answered somewhere else
+  if (document.getElementById("anwBigEventModal")) return;
+  showBigEventPopup(entry, bigEventClaimOptions(cls, user, entry), username, classCode, user);
+}
+
+/* ---------------- Buttons held while a big event is waiting ----------------
+   For the pages' sell / list / insurance buttons (the data-*.js files refuse these too, see
+   BIG_EVENT_BLOCK_MESSAGE). kind: "vehicle" | "property" | "insurance". Returns
+   { locked, reason, attr, note }: attr goes inside the <button> tag (disabled + the reason as a
+   tooltip), note is a visible line saying why (touch screens have no tooltips). */
+function bigEventLockUi(cls, username, kind) {
+  let lock;
+  try { lock = bigEventLockFor(cls, username); } catch (e) { lock = null; }
+  const on = !!lock && (kind === "vehicle" ? lock.vehicles : kind === "property" ? lock.property : kind === "insurance" ? lock.insurance : false);
+  if (!on) return { locked: false, reason: "", attr: "", note: "" };
+  const what = kind === "vehicle" ? "your transport big event is" : kind === "property" ? "your property big event is" : "a big event is";
+  const reason = `Locked while ${what} waiting. Tap the Big event timer to deal with it first.`;
+  return {
+    locked: true, reason,
+    attr: ` disabled aria-disabled="true" title="${escapeHtml(reason)}"`,
+    note: `<div class="be-lock-note">${icon("lock", 13)} <span>${escapeHtml(reason)}</span></div>`
+  };
 }
 
 /* ===================== Weekly life voucher picker =====================
@@ -762,11 +992,12 @@ function pickerIncident(box) {
   return sel ? sel.value : "";
 }
 
-function renderInsuranceCoverPicker(boxId, coverage, cover, incident) {
+function renderInsuranceCoverPicker(boxId, coverage, cover, incident, vehicles) {
   const box = document.getElementById(boxId);
   if (!box) return;
   const types = INSURANCE_TYPES[coverage] || [];
   box.dataset.coverage = types.length ? coverage : "";
+  box.dataset.vehicles = vehicles === undefined ? "" : cleanEventVehicles(vehicles);
   if (!types.length) { box.innerHTML = ""; box.classList.add("hidden"); return; }
   const multi = coverage === "transport";
   const inc = cleanIncident(coverage, incident);
@@ -776,7 +1007,9 @@ function renderInsuranceCoverPicker(boxId, coverage, cover, incident) {
   box.classList.remove("hidden");
   const rowHtml = t => {
     const row = byType[t.key];
-    const fits = picked.length > 0 && typeCoversIncident(coverage, t.key, inc, false);
+    // vehicles (transport big events only): Truck Insurance only fits events for trucks, the rest only cars and bikes.
+    const vehOk = vehicles === undefined || typeFitsEventVehicles(coverage, t.key, vehicles);
+    const fits = vehOk && picked.length > 0 && typeCoversIncident(coverage, t.key, inc, false);
     const coveredHere = picked.filter(k => t.covers.includes(k));
     const writeOff = fits && isHouseWriteOff(coverage, t.key, inc);
     const checked = fits && !!row;
@@ -791,6 +1024,7 @@ function renderInsuranceCoverPicker(boxId, coverage, cover, incident) {
     }
     let pay;
     if (!picked.length) pay = `<span class="muted-small">${multi ? "Tick what happened first" : "Choose what happened first"}</span>`;
+    else if (!vehOk) pay = `<span class="muted-small">Not for ${cleanEventVehicles(vehicles) === "trucks" ? "truck" : "car and bike"} events</span>`;
     else if (!fits) pay = `<span class="muted-small">Doesn't cover ${picked.length > 1 ? "any of these" : escapeHtml(incidentLabels(coverage, inc, "short")[0])}</span>`;
     else if (writeOff && inc === "house") pay = `<span class="muted-small ins-cover-pay">pays the house's market price</span>`;
     else pay = `<span class="ins-cover-pay"><span class="muted-small">${writeOff ? "market price + contents $" : "pays $"}</span>
@@ -833,7 +1067,7 @@ function renderInsuranceCoverPicker(boxId, coverage, cover, incident) {
       const amt = box.querySelector(`[data-ins-payout="${cb.dataset.insType}"]`);
       kept.push({ type: cb.dataset.insType, payout: amt ? amt.value : "" });
     });
-    renderInsuranceCoverPicker(boxId, coverage, kept, pickerIncident(box));
+    renderInsuranceCoverPicker(boxId, coverage, kept, pickerIncident(box), vehicles);
   };
   box.querySelectorAll("[data-ins-incident], [data-ins-incident-opt]").forEach(el => el.addEventListener("change", redraw));
 }

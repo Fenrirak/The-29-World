@@ -238,6 +238,7 @@ function bigDefRowHtml(d) {
     <div class="ev-main">
       <div class="ev-title"><span>${escapeHtml(d.name)}</span>
         <span class="badge navy">${MODULE_LABEL[d.module] || escapeHtml(d.module)}</span>
+        ${d.module === "transport" ? `<span class="badge lilac">${eventVehiclesLabel(d.vehicles)}</span>` : ""}
         <span class="badge ${isGood ? "gold" : "coral"}">${isGood ? "Good" : "Bad"}</span>
       </div>
       ${d.description ? `<div class="ev-desc">${escapeHtml(d.description)}</div>` : ""}
@@ -577,6 +578,8 @@ async function addEvent(e) {
     name: document.getElementById("beName").value.trim(),
     module: document.getElementById("beModule").value,
     kind: document.getElementById("beKind").value,
+    // Transport events: "cars" (cars and bikes) or "trucks" (trucks only). Saved as the event's `vehicles`.
+    vehicles: document.getElementById("beModule").value === "transport" ? document.getElementById("beVehicles").value : null,
     costMode,
     costPercent: costMode === "percent" ? costPercent : null,
     cost: costMode === "percent" ? 0 : document.getElementById("beCost").value,
@@ -599,6 +602,7 @@ function resetEventForm() {
   document.getElementById("beCostMode").value = "fixed";
   document.getElementById("beKind").value = "bad";
   document.getElementById("beModule").value = "income";
+  document.getElementById("beVehicles").value = "cars";
   updateCostLabel();
   updateCoverBox([]);
   document.getElementById("addBtn").innerHTML = icon("plus", 15) + " Add event";
@@ -616,6 +620,7 @@ function startEditEvent(id) {
     document.getElementById("beName").value = d.name;
     document.getElementById("beModule").value = d.module;
     document.getElementById("beKind").value = d.kind || "bad";
+    document.getElementById("beVehicles").value = d.vehicles === "trucks" ? "trucks" : "cars";
     const isPct = d.costMode === "percent";
     document.getElementById("beCostMode").value = isPct ? "percent" : "fixed";
     document.getElementById("beCostPercent").value = isPct ? d.costPercent : "";
@@ -688,10 +693,27 @@ function updateCostLabel() {
 // nothing ticked.
 function updateCoverBox(cover, incident) {
   const bad = document.getElementById("beKind").value === "bad";
-  const coverage = MODULE_TO_COVERAGE[document.getElementById("beModule").value] || "";
+  const module = document.getElementById("beModule").value;
+  const coverage = MODULE_TO_COVERAGE[module] || "";
+  // Which vehicles a transport event can hit decides which insurance types can be ticked (Truck Insurance
+  // only on truck events, the rest only on car and bike events).
+  document.getElementById("beVehiclesWrap").classList.toggle("hidden", module !== "transport");
+  const vehicles = module === "transport" ? document.getElementById("beVehicles").value : undefined;
   const box = document.getElementById("beCoverBox");
-  if (cover !== undefined || (box.dataset.coverage || "") !== (INSURANCE_TYPES[coverage] ? coverage : "")) {
-    renderInsuranceCoverPicker("beCoverBox", coverage, cover || [], incident || null);
+  const sameCoverage = (box.dataset.coverage || "") === (INSURANCE_TYPES[coverage] ? coverage : "");
+  const sameVehicles = (box.dataset.vehicles || "") === (vehicles === undefined ? "" : vehicles);
+  if (cover !== undefined || !sameCoverage || !sameVehicles) {
+    if (cover === undefined && sameCoverage && !sameVehicles) {
+      // Only the vehicles changed: keep what the teacher has ticked and typed.
+      cover = [];
+      box.querySelectorAll("[data-ins-type]").forEach(cb => {
+        if (!cb.checked) return;
+        const amt = box.querySelector(`[data-ins-payout="${cb.dataset.insType}"]`);
+        cover.push({ type: cb.dataset.insType, payout: amt ? amt.value : "" });
+      });
+      incident = pickerIncident(box);
+    }
+    renderInsuranceCoverPicker("beCoverBox", coverage, cover || [], incident || null, vehicles);
   }
   box.classList.toggle("hidden", !bad || !INSURANCE_TYPES[coverage]);
   // With a percentage cost the amounts each insurance type pays are still dollar caps — say so.

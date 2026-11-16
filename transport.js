@@ -141,6 +141,8 @@ async function render() {
     renderTransportExpenses(me, cls);
   }
 
+  // Selling a vehicle is held while a transport big event is waiting (see bigEventLockUi in events-ui.js).
+  const beLock = IS_TEACHER ? { locked: false, attr: "", note: "" } : bigEventLockUi(cls, me.username, "vehicle");
   if (!IS_TEACHER) {
     const mine = vehicles.filter(v => (v.owners || []).includes(me.username));
     const myList = document.getElementById("myVehiclesList");
@@ -164,9 +166,10 @@ async function render() {
           </div>
           <div class="row-flex" style="gap:8px;">
             ${isTruck ? `<button class="btn small gold" id="driveBtn-${v.id}" ${drivenToday ? "disabled" : ""} onclick="driveTruck('${v.id}')">${drivenToday ? "Driven today" : "Drive today"}</button>` : ""}
-            <button class="btn small secondary" onclick="sellMine('${v.id}')">Sell back</button>
+            <button class="btn small secondary" onclick="sellMine('${v.id}')"${beLock.attr}>Sell back</button>
           </div>
         </div>
+        ${beLock.note}
         <div id="drive-msg-${v.id}"></div>
       `;
       myList.appendChild(div);
@@ -218,7 +221,7 @@ async function render() {
           ${IS_TEACHER
             ? `<button class="btn small secondary" onclick="editVeh('${v.id}')">${icon("edit", 13)} Edit</button><button class="btn small coral" onclick="deleteVeh('${v.id}')">${icon("trash", 13)} Remove</button>`
             : isMine
-              ? `<button class="btn small secondary" onclick="sellMine('${v.id}')">Sell back</button>`
+              ? `<button class="btn small secondary" onclick="sellMine('${v.id}')"${beLock.attr}>Sell back</button>`
               : soldOut
                 ? `<button class="btn small gold" disabled>Sold out</button>`
                 : needsLicence
@@ -228,6 +231,7 @@ async function render() {
                     : `<button class="btn small gold" id="buyVehBtn-${v.id}" onclick="buyVeh('${v.id}')">Buy</button>`}
         </div>
       </div>
+      ${isMine ? beLock.note : ""}
       <div id="msg-${v.id}"></div>
     `;
     list.appendChild(div);

@@ -356,20 +356,11 @@ async function buyShares(username, classCode, companyId, shares) {
       co.holders[username] = (co.holders[username] || 0) + shares;
       coName = co.name;
 
-      // All-time gain/loss needs to know what each student actually paid,
-      // not just today's price. co.costBasis[username] tracks two related
-      // but different things per company:
-      //   - shares/totalCost: the average-cost pool for CURRENTLY HELD
-      //     shares only. This shrinks when shares are sold (see
-      //     sellShares) — it answers "what would it cost to buy back what
-      //     I hold right now".
-      //   - totalBought: cumulative cost of every buy ever made for this
-      //     company, and it NEVER decreases on a sell. It answers "how
-      //     much money have I ever put into this company", which is the
-      //     denominator a %-return figure needs — using the shrinking pool
-      //     instead would make % return swing wildly (or divide by zero)
-      //     the moment shares are sold off, which isn't what "all-time %
-      //     return" should mean.
+      // shares/totalCost tracks the weighted-average purchase cost of the
+      // shares CURRENTLY HELD. Sales reduce this pool; the Market snapshot
+      // uses its remaining cost for both gain/loss and percentage return.
+      // Keep totalBought as cumulative purchase history, separate from the
+      // current holdings calculation.
       co.costBasis = co.costBasis || {};
       // Normalize whatever's already on file: entries written by an older
       // version of this code (or otherwise missing a field) can have
@@ -445,14 +436,12 @@ async function sellShares(username, classCode, companyId, shares) {
       // pooled (not tracked buy-lot by buy-lot) in co.holders.
       // realizedGain is what actually separates "made money" from "lost
       // money" on this sale, and gets stamped onto the stock-sell txn
-      // below so both the live cost basis AND the transaction-log
-      // fallback agree with it.
+      // below for transaction history and income reports.
       //
       // Note: even when a student sells every share they hold (shares
       // drops to 0), the costBasis entry is kept rather than deleted —
-      // totalBought (cumulative money ever invested in this company) has
-      // to survive a full sell-out, or a company someone fully exited
-      // would lose its all-time %-return history the moment they sold.
+      // totalBought keeps the cumulative purchase history. The snapshot
+      // uses only the remaining shares/totalCost, both zero after a full sale.
       co.costBasis = co.costBasis || {};
       // Same normalization as buyShares (see the comment there): coerce
       // whatever's on file to finite numbers before using it. This matters
@@ -503,10 +492,8 @@ async function sellShares(username, classCode, companyId, shares) {
      - the shares they hold now are costed at TODAY'S market price (shares x price), so unrealized
        gain starts at $0 and the % starts at 0%;
      - the cumulative "totalBought" is set to that same amount (0 for a company they hold none of);
-     - resetAt (a timestamp) is stamped on the entry. stockAllTimeGain() in data-money.js ignores any
-       stock-sell / stock-close entry in the shared activity log from before the newest resetAt, which
-       is how realized profit and loss from earlier sales is cleared too. buyShares / sellShares carry
-       resetAt forward, so it survives later trades.
+     - resetAt (a timestamp) records the reset and survives later buys/sales.
+   The snapshot always excludes sold shares, regardless of when it was reset.
    Everything lives inside companies[].costBasis[username], the same place buyShares already writes,
    so it needs no new fields (and no rule changes). */
 async function resetStockSnapshot(username, classCode) {

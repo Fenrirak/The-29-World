@@ -588,12 +588,17 @@ tr:last-child td{border-bottom:none;}
   display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--sw-s);
   font-size:var(--fs-xs);font-weight:800;letter-spacing:.02em;
 }
-.badge .icon{width:12px;height:12px;}
+.badge .icon{width:12px;height:12px;flex-shrink:0;align-self:center;}
 .badge.mint{background:#e3f8f0;color:#217a5a;}
 .badge.coral{background:#fceae7;color:#b8402c;}
 .badge.gold{background:#fbf1dd;color:#8a6112;}
 .badge.navy{background:#e7ebf5;color:var(--navy-900);}
 .badge.lilac{background:#efecfb;color:#5a4fb0;}
+/* Centre voucher artwork against the visible letters inside the Sweep. */
+.voucher-label{display:block;line-height:1.2;}
+@supports (text-box: trim-both cap alphabetic) {
+  .voucher-label{text-box:trim-both cap alphabetic;}
+}
 
 .ticker-up{color:#217a5a;font-weight:800;}
 .ticker-down{color:#b8402c;font-weight:800;}
@@ -1183,6 +1188,87 @@ html:has(.cart-fab){scroll-padding-bottom:calc(var(--anw-cart-h) + 18px + 16px +
   html:has(.anw-balance-widget):has(.cart-fab){scroll-padding-bottom:calc(12px + var(--anw-bw-h) + 10px + var(--anw-cart-h) + 16px + env(safe-area-inset-bottom,0px));}
 }
 
+/* ===================== Floating big event countdown =====================
+   Shown (events-ui.js) while a big event is put away for its 5 minutes; tap it to reopen the popup.
+   Wide desktop: in the cash widget's corner, just BELOW the cash widget (events-ui.js measures it into --be-top).
+   Laptops, tablets and phones: the cash widget is a small pill in the bottom corner, and this sits ABOVE it. */
+:root{--anw-be-h:36px;}
+.anw-be-timer{
+  position:fixed;left:14px;top:var(--be-top,150px);z-index:45;
+  min-width:150px;box-sizing:border-box;
+  background:linear-gradient(135deg,var(--coral-fill),var(--coral-fill-dark));color:#fff;
+  border:0;margin:0;font:inherit;text-align:left;cursor:pointer;
+  border-radius:var(--radius);padding:14px 18px;
+  box-shadow:0 6px 18px rgba(204,74,52,0.28);
+  transition:transform .15s,box-shadow .15s;
+}
+.anw-be-timer:hover{transform:translateY(-2px);box-shadow:var(--shadow-lift);}
+.anw-be-timer:active{transform:none;}
+.anw-be-timer:focus-visible{outline:3px solid var(--navy-900);outline-offset:3px;}
+.anw-be-timer .anw-be-label{display:flex;align-items:center;gap:6px;font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:#fff;white-space:nowrap;}
+.anw-be-timer .anw-be-value{display:block;font-size:1.7rem;font-weight:700;margin-top:4px;line-height:1.1;font-variant-numeric:tabular-nums;white-space:nowrap;}
+/* Last minute: a gentle pulse so it can't be missed */
+.anw-be-timer.is-warn{animation:beWarn 1.2s ease-in-out infinite;}
+@keyframes beWarn{0%,100%{box-shadow:0 6px 18px rgba(204,74,52,0.28);}50%{box-shadow:0 0 0 6px rgba(204,74,52,0.3),0 6px 18px rgba(204,74,52,0.4);}}
+@media (prefers-reduced-motion:reduce){
+  .anw-be-timer{transition:none;}
+  .anw-be-timer:hover{transform:none;}
+  .anw-be-timer.is-warn{animation:none;box-shadow:0 0 0 4px rgba(204,74,52,0.35),0 6px 18px rgba(204,74,52,0.4);}
+}
+@media (max-width:1480px){
+  .anw-be-timer{left:14px;top:auto;bottom:calc(14px + env(safe-area-inset-bottom,0px));min-width:0;min-height:var(--anw-be-h);padding:7px 13px;max-width:calc(100vw - 28px);border-radius:var(--sw-m);display:flex;align-items:center;gap:8px;}
+  body:has(.anw-balance-widget) .anw-be-timer{bottom:calc(14px + var(--anw-bw-h) + 10px + env(safe-area-inset-bottom,0px));}
+  .anw-be-timer .anw-be-label{font-size:var(--fs-xs);}
+  .anw-be-timer .anw-be-value{font-size:1.1rem;margin-top:0;}
+  /* room at the page bottom so the last thing on it scrolls clear of both pills */
+  body:has(.anw-be-timer){padding-bottom:calc(var(--anw-bw-clear) + var(--anw-be-h) + 10px + env(safe-area-inset-bottom,0px));}
+  html:has(.anw-be-timer){scroll-padding-bottom:calc(var(--anw-bw-clear) + var(--anw-be-h) + 10px + env(safe-area-inset-bottom,0px));}
+}
+@media (max-width:640px){
+  .anw-be-timer{left:10px;bottom:calc(12px + env(safe-area-inset-bottom,0px));max-width:calc(100vw - 20px);}
+  body:has(.anw-balance-widget) .anw-be-timer{bottom:calc(12px + var(--anw-bw-h) + 10px + env(safe-area-inset-bottom,0px));}
+}
+/* Very narrow phones: just the icon and the time, so it never runs into the Store's Cart button */
+@media (max-width:380px){.anw-be-timer .anw-be-txt{display:none;}}
+/* With the sidebar navigation: the cash widget is top-right on wide screens, bottom-left of the content on narrower ones */
+@media (min-width:1481px){
+  html.sidebar-nav .anw-be-timer{left:auto;right:20px;min-width:120px;padding:11px 14px;}
+  html.sidebar-nav .anw-be-timer .anw-be-label{font-size:var(--fs-xs);}
+  html.sidebar-nav .anw-be-timer .anw-be-value{font-size:1.35rem;}
+}
+@media (min-width:901px) and (max-width:1480px){
+  html.sidebar-nav .anw-be-timer{left:calc(var(--sb-width) + 14px);max-width:calc(100vw - var(--sb-width) - 28px);}
+}
+html.dark-mode .anw-be-timer{background:linear-gradient(135deg,var(--coral-dim),var(--coral-dark-dim));color:var(--heading-text);box-shadow:var(--shadow);}
+html.dark-mode .anw-be-timer .anw-be-label{color:rgba(244,247,255,0.85);}
+html.dark-mode .anw-be-timer:focus-visible{outline-color:#fff;}
+
+/* Big event popup + reminders, and the buttons held while one is waiting */
+.be-card{max-width:440px;max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overscroll-behavior:contain;}
+@media (max-width:520px){.be-card{padding:20px 18px;}}
+.be-title{display:flex;align-items:flex-start;gap:9px;line-height:1.25;margin:0 0 10px;}
+.be-title .icon{flex-shrink:0;margin-top:2px;}
+.be-card .btn{white-space:normal;text-align:center;line-height:1.3;margin-top:0;}
+.be-card .btn.small{margin-top:0;}
+.be-card select{min-width:0;max-width:100%;}
+.be-from{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.be-actions{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
+.be-actions .btn{width:100%;}
+@media (min-width:521px){.be-actions{flex-direction:row;}.be-actions .btn{flex:1 1 0;width:auto;}}
+.be-dismiss{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
+.be-dismiss .btn{width:100%;}
+.be-dismiss p{margin:8px 0 0;}
+.be-forced{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 12px;border-radius:var(--r-2);background:#fdecea;color:#8a2c1c;font-weight:700;font-size:var(--fs-sm);line-height:1.35;}
+.be-forced .icon{flex-shrink:0;}
+html.dark-mode .be-forced{background:rgba(204,74,52,0.2);color:#ffb9ab;}
+.be-lock-note{display:flex;align-items:flex-start;gap:6px;margin-top:8px;max-width:38ch;font-size:var(--fs-xs);font-weight:700;line-height:1.35;color:var(--muted);}
+.be-lock-note .icon{flex-shrink:0;margin-top:1px;}
+.pcard-foot-end .be-lock-note{margin-top:0;max-width:none;align-self:stretch;justify-content:flex-end;text-align:right;}
+.mkt-sell-row .be-lock-note{flex:1 1 100%;max-width:none;margin-top:0;}
+.be-lock-banner{display:flex;align-items:flex-start;gap:9px;padding:12px 14px;margin:0 0 14px;border:1.5px solid var(--coral-fill);border-radius:var(--r-4);background:#fdecea;color:#7a2616;font-weight:700;font-size:var(--fs-sm);line-height:1.4;}
+.be-lock-banner .icon{flex-shrink:0;margin-top:1px;}
+html.dark-mode .be-lock-banner{background:rgba(204,74,52,0.16);color:#ffb9ab;border-color:var(--coral-dim);}
+
 /* ===================== Reports (report cards) ===================== */
 .rpt-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;}
 .rpt-bar-label{flex:0 0 150px;font-size:var(--fs-md);color:var(--navy-900);font-weight:600;}
@@ -1729,7 +1815,7 @@ a.notif-row.unread:hover{background:#f7f3e6;}
   /* The floating cash balance (and the phone menu button) are for using
      the site, not part of a report. */
   .topbar,.site-footer,.no-print,#settingsBtn,.settings-popover,.notif-panel,.notif-bell,
-  .anw-balance-widget,.sb-hamburger,.sb-backdrop,.anw-modal-overlay{display:none !important;}
+  .anw-balance-widget,.anw-be-timer,.sb-hamburger,.sb-backdrop,.anw-modal-overlay{display:none !important;}
   /* Browsers leave out background colours when printing unless told not
      to — which emptied every bar chart and blanked the coloured number
      tiles. Print them exactly as they look on screen. */
@@ -2550,6 +2636,9 @@ html.dark-mode .notif-dot{
   text-align: center;
   box-shadow: var(--shadow-xl);
   animation: levelupPop .35s cubic-bezier(.34,1.56,.64,1) both;
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
 }
 @keyframes levelupPop {
   from { opacity:0; transform:scale(.88) translateY(24px); }
@@ -2586,6 +2675,9 @@ html.dark-mode .notif-dot{
   color: var(--navy-700);
   margin-top: 4px;
 }
+.levelup-card-duties { text-align: left; margin-bottom: 22px; }
+.levelup-card-duties h3 { font-size: 1rem; margin: 0 0 8px; }
+.levelup-card-duties p { margin: 0; line-height: 1.5; white-space: pre-wrap; }
 .levelup-card-actions { display: flex; gap: 10px; margin-top: 4px; }
 .levelup-card-actions .btn { flex: 1; padding: 14px; font-size: 1rem; }
 
@@ -3409,7 +3501,7 @@ html.dark-mode{
 .cc-perks{display:flex;flex-wrap:wrap;gap:6px;}
 .cc-perks.center{justify-content:center;}
 .cc-chip{display:inline-flex;align-items:center;gap:5px;font-size:var(--fs-sm);font-weight:800;padding:5px 10px;border-radius:var(--sw-m);background:var(--cc-surface);color:var(--ink);border:1.5px solid var(--line);}
-.cc-chip .icon{width:12px;height:12px;}
+.cc-chip .icon{width:12px;height:12px;flex-shrink:0;align-self:center;}
 .cc-chip.mint{background:var(--cc-mint-bg);color:var(--cc-mint-ink);border-color:var(--cc-mint-line);}
 .cc-chip.gold{background:var(--cc-gold-bg);color:var(--cc-gold-ink);border-color:var(--cc-gold-line);}
 .cc-chip.lilac{background:#efecfb;color:#5b4fb3;border-color:#d9d3f5;}
