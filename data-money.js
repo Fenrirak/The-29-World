@@ -918,7 +918,7 @@ async function kiwiSaverContribute(username, amount) {
     if (govt > 0) ksAddGovt(next, govt, todayKey);
     return {
       kiwiSaver: next, balance: ksRound(user.balance - amount),
-      _log: { type: "kiwisaver-in", from: username, amount, note: "Extra KiwiSaver contribution" + (govt > 0 ? ` (+${fmtMoney(govt)} from the government)` : "") },
+      _log: { type: "kiwisaver-in", from: username, amount, govt, note: "Extra KiwiSaver contribution" + (govt > 0 ? ` (+${fmtMoney(govt)} from the government)` : "") },
       _result: { govt }
     };
   });
@@ -2722,59 +2722,52 @@ const RESTART_KEEP_USER_FIELDS = [
 // from this one as a template gets (see _classDataFromTemplate), except
 // prices stay where they are now. Each student goes back to a new
 // student's starting point: the welcome grant and nothing else.
-// Returns { ok, failed } — failed names students whose account couldn't
-// be reset (running Restart again finishes them off).
+// Save closing cards and restart the same roster in one commit.
 async function resetClass(classCode, teacherUsername) {
-  const cls = await getClass(classCode);
-  if (!cls) return { ok: false, failed: [] };
-  const students = await getClassStudents(classCode, cls);
-  const welcome = t29WelcomeGrantOf(cls);
-
-  const fresh = _classDataFromTemplate(classCode, cls.name, cls.teacher, cls, { keepPrices: true });
-  // The class's own identity, roster and saved report cards stay, and so
-  // do today's market-day stamps (otherwise prices would move twice today).
-  ["code", "name", "teacher", "students", "archived", "archivedAt", "templateShareToken", "reportArchives",
-    "lastPropertyMarketDayRun", "coTeachers", "coTeacherCode", "autoArchived"].forEach(k => { delete fresh[k]; });
-  fresh.listings = [];
-  fresh.teacherNotices = []; // old "your teacher changed..." notices belong to the last term
-  fresh.lastTermDepositCheckDay = null;
-  // A fresh createdAt marks where the new term's report-card period
-  // should start counting from, same as when the class was first made.
-  fresh.createdAt = Date.now();
-  fresh.txns = students.map(s => ({
-    id: uid("t"), type: "welcome", to: s.username, amount: welcome,
-    note: "Welcome grant (class restarted)", date: nowStr(), ts: Date.now()
-  }));
-  await classesCol().doc(classCode).update(fresh);
-
-  const failed = [];
-  await Promise.all(students.map(async s => {
-    try {
-      const reportMonth = Object.assign(emptyReportBucket(), { monthKey: nzMonthKey() });
-      const reportLifetime = emptyReportBucket();
-      addClassificationToBucket(reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: welcome });
-      addClassificationToBucket(reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: welcome });
-      const update = {
-        balance: welcome, savings: 0, loans: [],
-        jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null,
-        reportMonth, reportLifetime
-      };
-      // Everything else they had (insurance, store items, deposits, side
-      // hustle, gambling chips, life events, quiz results, savings goals...)
-      // is removed outright — a new student simply doesn't have it yet.
-      Object.keys(s).forEach(k => {
-        if (!(k in update) && !RESTART_KEEP_USER_FIELDS.includes(k)) update[k] = firebase.firestore.FieldValue.delete();
+  const classRef = classesCol().doc(classCode);
+  const closedAt = trustedNow().getTime();
+  let names;
+  try {
+    names = await fdb.runTransaction(async t => {
+      const cs = await t.get(classRef);
+      if (!cs.exists) throw new Error("Class not found");
+      const cls = withNewModuleDefaults(cs.data());
+      if (!t29CanTeachClass(cls, teacherUsername) || cls.createdAt >= closedAt) throw new Error("Class changed");
+      const names = [...new Set(cls.students)];
+      const refs = names.map(name => usersCol().doc(name));
+      const snaps = await Promise.all(refs.map(ref => t.get(ref)));
+      const welcome = t29WelcomeGrantOf(cls);
+      const fresh = _classDataFromTemplate(classCode, cls.name, cls.teacher, cls, { keepPrices: true });
+      for (const key of ["code", "name", "teacher", "students", "archived", "archivedAt", "templateShareToken", "reportArchives",
+        "lastPropertyMarketDayRun", "coTeachers", "coTeacherCode", "coTeacherJoin", "autoArchived"]) delete fresh[key];
+      Object.assign(fresh, { createdAt: closedAt, listings: [], teacherNotices: [], lastTermDepositCheckDay: null, netWorthLogWeek: null });
+      const entries = names.map(to => ({ id: uid("t"), type: "welcome", to, amount: welcome,
+        note: "Welcome grant (class restarted)", date: nowStr(), ts: closedAt }));
+      fresh.txns = entries.slice(0, MAX_STORED_TXNS);
+      snaps.forEach((snap, i) => {
+        const student = snap.exists && snap.data();
+        if (!student || student.role !== "student" || student.classCode !== classCode) throw new Error("Roster changed");
+        const card = buildStudentReportData(student, cls);
+        delete card.resetRequests;
+        const saved = { periodStart: dateKeyToUTC(nzMonthKey() + "-01"), periodEnd: closedAt, card };
+        const update = { balance: welcome, savings: 0, loans: [], jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null,
+          savedReportCards: [...(student.savedReportCards || []), _cloneDoc(saved)],
+          reportAccounting: reportAccountingView({ username: names[i] }, [entries[i]]) };
+        for (const key of Object.keys(student)) {
+          if (!Object.hasOwn(update, key) && !RESTART_KEEP_USER_FIELDS.includes(key)) update[key] = firebase.firestore.FieldValue.delete();
+        }
+        t.update(refs[i], update);
       });
-      await usersCol().doc(s.username).update(update);
-    } catch (e) {
-      console.warn("resetClass: couldn't reset " + s.username, e);
-      failed.push(s.name || s.username);
-    }
-  }));
-  await t29NotifyStudents(classCode, { to: students.map(s => s.username).filter(u => !failed.includes(u)), icon: "repeat", tone: "gold",
-    title: "Your teacher restarted the class",
-    body: `Everyone is back to the ${fmtMoney(welcome)} welcome grant. Your jobs, belongings and savings were reset.`, href: "student.html" });
-  return { ok: true, failed };
+      t.update(classRef, fresh);
+      return names;
+    });
+  } catch (e) {
+    console.warn("Class restart failed:", e);
+    return { ok: false, failed: [] };
+  }
+  await t29NotifyStudents(classCode, { to: names, icon: "repeat", tone: "gold", title: "Your teacher restarted the class",
+    body: "Your closing report card is available in Reports. Your new term starts with the welcome grant.", href: "reports.html" });
+  return { ok: true, failed: [] };
 }
 
 async function portfolioValue(username, classCode) {
@@ -2978,7 +2971,7 @@ function classifyTxnForReport(t, username) {
 // Version 2 reports distinguish earnings from returned capital and measure net
 // saving. Separate storage avoids mixing these definitions with old pages'
 // cash-flow counters while an update is being rolled out.
-function reportClassifications(t, username) {
+function originalReportClassifications(t, username) {
   if (!t || !txnBelongsTo(t, username)) return [];
   const amount = Math.abs(Number(t.amount));
   if (!Number.isFinite(amount)) return [];
@@ -3043,21 +3036,53 @@ function reportClassifications(t, username) {
 function emptyAccountingBucket() {
   return Object.assign(emptyReportBucket(), { returned: {}, returnedTotal: 0 });
 }
+// Retained v2 entries may already have contributed to stored totals. Apply
+// only the difference for these types, once, without rebuilding lost history.
+function reportCorrectionLines(t, username) {
+  if (!txnBelongsTo(t, username)) return [];
+  const amount = budgetRound(Math.abs(Number(t.amount) || 0));
+  const line = (bucket, category, amount) => ({ bucket, category, amount });
+  if (t.type === "insurance-claim" && Number(t.amount) < 0)
+    return [line("income", "Insurance claims", -amount), line("spent", "Insurance shortfall", amount)];
+  if (t.type === "insurance-premium") return [line("spent", "Insurance", amount)];
+  if (t.type === "property-occupancy" && t.to === username && amount)
+    return [line("spent", "Housing", amount)];
+  if (t.type === "kiwisaver-in") {
+    const match = /\+\$([\d,]+\.\d{2}) from the government/.exec(t.note || "");
+    const grant = budgetRound(t.govt ?? (match ? Number(match[1].replace(/,/g, "")) : 0));
+    if (grant > 0) return [line("income", "KiwiSaver employer/government additions", grant), line("saved", "KiwiSaver", grant)];
+  }
+  if (t.type === "property-buy") {
+    const match = /\$([\d,]+\.\d{2}) from KiwiSaver/.exec(t.note || "");
+    const used = budgetRound(t.fromKiwi ?? (match ? Number(match[1].replace(/,/g, "")) : 0));
+    if (used > 0) return [line("saved", "KiwiSaver", -used), line("spent", "Housing", used), line("returned", "KiwiSaver withdrawals", used)];
+  }
+  return [];
+}
+function reportClassifications(t, username) {
+  if (!t || t.type === "loan-interest") return [];
+  return originalReportClassifications(t, username).concat(reportCorrectionLines(t, username));
+}
 function reportEntryKey(t) {
   return String(t.id || "legacy:" + JSON.stringify([t.type,t.from,t.to,t.amount,t.ts,t.date,t.note]));
 }
 function reportAccountingApply(accounting, t, username) {
   if (!t || !txnBelongsTo(t, username)) return;
   const key = reportEntryKey(t);
-  if (accounting.seen.includes(key)) return;
-  const lines = reportClassifications(t, username);
+  const seen = accounting.seen.includes(key);
+  const lines = seen ? [] : originalReportClassifications(t, username);
+  const corrections = reportCorrectionLines(t, username);
+  if (corrections.length && !accounting.corrected.includes(key)) {
+    lines.push(...corrections);
+    accounting.corrected.push(key);
+  }
   const stamp = t.ts == null ? NaN : Number(t.ts);
   const inMonth = Number.isFinite(stamp) && Number.isFinite(new Date(stamp).getTime()) && nzMonthKey(new Date(stamp)) === accounting.monthKey;
   for (const line of lines) {
     addClassificationToBucket(accounting.lifetime, line);
     if (inMonth) addClassificationToBucket(accounting.month, line);
   }
-  accounting.seen.push(key);
+  if (!seen) accounting.seen.push(key);
 }
 function reportAccountingView(student, txns) {
   const monthKey = nzMonthKey();
@@ -3065,6 +3090,7 @@ function reportAccountingView(student, txns) {
   const fresh = !stored || stored.version !== 2;
   const accounting = fresh ? { version: 2, monthKey, month: emptyAccountingBucket(), lifetime: emptyAccountingBucket(), seen: [], historyComplete: true }
     : _cloneDoc(stored);
+  accounting.corrected = accounting.corrected || [];
   if (accounting.monthKey !== monthKey) { accounting.monthKey = monthKey; accounting.month = emptyAccountingBucket(); }
   const recent = (txns || []).filter(Boolean);
   // Compare old counters with the same old classification of retained history.
@@ -3083,9 +3109,10 @@ function reportAccountingView(student, txns) {
     accounting.historyComplete = !["incomeTotal","savedTotal","spentTotal","borrowedTotal"].some(k => (Number(old[k]) || 0) > (oldScan[k] || 0) + 0.005)
       && !(recent.length >= MAX_STORED_TXNS && !student.reportLifetime);
   }
-  // Scan newest first, then retain the newest IDs. Reads never alter stored totals.
+  // The ledger is newest first. Apply in commit order and retain recent IDs.
   for (const t of recent.slice().reverse()) reportAccountingApply(accounting, t, student.username);
   accounting.seen = accounting.seen.slice(-(MAX_STORED_TXNS + 20));
+  accounting.corrected = accounting.corrected.filter(id => accounting.seen.includes(id));
   return accounting;
 }
 function reportAccountingNote(report) {
@@ -3123,23 +3150,37 @@ function reportBaselineOf(student, scope, monthKey) {
 }
 // A copy of an accounting bucket with each reset category (and section total) reduced by its baseline.
 function reportAdjustBucket(bucket, base) {
-  if (!base) return bucket;
   const out = _cloneDoc(bucket);
+  base = base || {};
   ["income", "saved", "spent", "returned"].forEach(sec => {
     const cats = base[sec] || {};
     out[sec] = out[sec] || {};
-    Object.keys(cats).forEach(cat => { if (cat in out[sec]) out[sec][cat] = budgetRound(out[sec][cat] - cats[cat]); });
-    const off = Number((base.totals || {})[sec]) || 0;
-    if (off) out[sec + "Total"] = budgetRound((out[sec + "Total"] || 0) - off);
+    Object.keys(cats).forEach(cat => {
+      if (!Object.hasOwn(out[sec], cat)) return;
+      const shown = budgetRound(out[sec][cat] - cats[cat]);
+      out[sec][cat] = sec === "saved" ? shown : Math.max(0, shown);
+    });
+    // Interest increases the outstanding loan. Cash spending is recorded
+    // at repayment, which includes the interest. Fix evicted entries too.
+    if (sec === "spent") delete out.spent["Loan interest"];
+    out[sec + "Total"] = budgetRound(Object.values(out[sec]).reduce((sum, n) => sum + n, 0));
   });
   const bOff = Number((base.totals || {}).borrowed) || 0;
   if (bOff) out.borrowedTotal = budgetRound((out.borrowedTotal || 0) - bOff);
   return out;
 }
 function _reportResetId() { return "rr" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function validReportTarget(scope, section, category) {
+  return Object.hasOwn(REPORT_RESET_SCOPES, scope) && Object.hasOwn(REPORT_RESET_SECTIONS, section)
+    && typeof category === "string" && category.length > 0 && category.length <= 120
+    && !Object.hasOwn(Object.prototype, category) && (section !== "borrowed" || category === "*");
+}
+function reportRequestMonth(r) {
+  return r.monthKey || (Number.isFinite(r.ts) ? nzMonthKey(new Date(r.ts)) : "");
+}
 async function requestReportReset(username, classCode, scope, section, category) {
   category = String(category === undefined || category === null ? "" : category).trim();
-  if (!REPORT_RESET_SCOPES[scope] || !REPORT_RESET_SECTIONS[section] || !category || category.length > 120) return { ok: false, error: "That can't be reset." };
+  if (!validReportTarget(scope, section, category)) return { ok: false, error: "That can't be reset." };
   if (section === "borrowed") category = "*";
   const userRef = usersCol().doc(username);
   let req = null;
@@ -3149,10 +3190,11 @@ async function requestReportReset(username, classCode, scope, section, category)
       const us = await t.get(userRef);
       if (!us.exists) throw new Error("NOT_FOUND");
       const list = (us.data().reportResetRequests || []).slice();
-      const pend = list.filter(r => r.status === "pending");
-      if (pend.some(r => r.scope === scope && r.section === section && (r.category === category || r.category === "*"))) throw new Error("DUPLICATE");
+      const pend = list.filter(r => r.status === "pending" && (r.scope !== "month" || reportRequestMonth(r) === nzMonthKey()));
+      if (pend.some(r => r.scope === scope && r.section === section && (category === "*" || r.category === category || r.category === "*"))) throw new Error("DUPLICATE");
       if (pend.length >= REPORT_RESET_MAX_PENDING) throw new Error("TOO_MANY");
       req = { id: _reportResetId(), scope, section, category, status: "pending", ts: Date.now() };
+      if (scope === "month") req.monthKey = nzMonthKey();
       // Keep every pending request and only the 10 newest decided ones.
       const decided = list.filter(r => r.status !== "pending").slice(-10);
       t.update(userRef, { reportResetRequests: pend.concat(decided, [req]) });
@@ -3187,21 +3229,27 @@ async function withdrawReportReset(username, classCode, requestId) {
   return { ok: true };
 }
 // Teacher: approve (sets the baselines so the card shows 0 from now) or decline a request.
-async function decideReportReset(classCode, username, requestId, approve) {
+async function decideReportReset(classCode, username, requestId, approve, directTarget = null) {
   const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
   let decided = null;
   try {
+    const teacher = await getSessionUser();
     await fdb.runTransaction(async (t) => {
       decided = null;
       const us = await t.get(userRef), cs = await t.get(classRef);
       if (!us.exists || !cs.exists) throw new Error("NOT_FOUND");
       const user = us.data(), cls = withNewModuleDefaults(cs.data());
+      if (teacher?.role !== "teacher" || !t29CanTeachClass(cls, teacher.username) ||
+          user.role !== "student" || user.classCode !== classCode || !cls.students.includes(username) || cls.archived)
+        throw new Error("WRONG_CLASS");
       const list = (user.reportResetRequests || []).map(r => Object.assign({}, r));
-      const req = list.find(r => r.id === requestId && r.status === "pending");
+      const req = directTarget || list.find(r => r.id === requestId && r.status === "pending");
       if (!req) throw new Error("NOT_PENDING"); // withdrawn, or already answered
       const upd = {};
       if (approve) {
+        if (!validReportTarget(req.scope, req.section, req.category)) throw new Error("INVALID");
         const acc = reportAccountingView(Object.assign({ username }, user), cls.txns || []);
+        if (req.scope === "month" && reportRequestMonth(req) !== acc.monthKey) throw new Error("EXPIRED");
         const raw = req.scope === "month" ? acc.month : acc.lifetime;
         const baselines = _cloneDoc(user.reportBaselines || {});
         let b = baselines[req.scope] || {};
@@ -3215,27 +3263,44 @@ async function decideReportReset(classCode, username, requestId, approve) {
           if (req.category === "*") {
             Object.keys(rawCats).forEach(cat => { b[req.section][cat] = rawCats[cat]; });
             b.totals[req.section] = budgetRound(raw[req.section + "Total"] || 0);
-          } else if (req.category in rawCats) {
+          } else if (Object.hasOwn(rawCats, req.category)) {
             const shown = budgetRound(rawCats[req.category] - (b[req.section][req.category] || 0));
             b[req.section][req.category] = rawCats[req.category];
             b.totals[req.section] = budgetRound((Number(b.totals[req.section]) || 0) + shown);
-          }
+          } else throw new Error("INVALID");
         }
         baselines[req.scope] = b;
         upd.reportBaselines = baselines;
+        upd.reportAccounting = acc;
+        if (user.parentViewToken) {
+          const ref = parentViewsCol().doc(user.parentViewToken);
+          const family = await t.get(ref);
+          if (family.exists) {
+            const view = _buildParentView(Object.assign({ username }, user, upd), cls, family.data().view?.teacherName || "");
+            t.update(ref, { view, updatedAt: Date.now() });
+          }
+        }
       }
-      req.status = approve ? "approved" : "declined";
-      req.decidedTs = Date.now();
+      // A direct reset also answers any outstanding requests it covers.
+      for (const item of list) {
+        if (item.status !== "pending" || (directTarget
+          ? item.scope !== req.scope || item.section !== req.section || (req.category !== "*" && item.category !== req.category)
+            || (item.scope === "month" && reportRequestMonth(item) !== req.monthKey)
+          : item.id !== requestId)) continue;
+        item.status = approve ? "approved" : "declined";
+        item.decidedTs = Date.now();
+      }
       upd.reportResetRequests = list;
       t.update(userRef, upd);
       decided = Object.assign({}, req);
     });
   } catch (e) {
-    return { ok: false, error: e.message === "NOT_PENDING" ? "That request was withdrawn or already answered. Refresh to see the latest." : "Couldn't save that. Refresh and try again." };
+    return { ok: false, error: e.message === "EXPIRED" ? "That month has ended. The current month already starts from zero."
+      : e.message === "NOT_PENDING" ? "That request was withdrawn or already answered. Refresh to see the latest." : "Couldn't save that reset. Refresh and try again." };
   }
   if (decided) {
     await t29NotifyStudents(classCode, { to: username, icon: "chart", tone: approve ? "mint" : "coral",
-      title: approve ? "Your teacher approved your report card reset" : "Your teacher declined your report card reset",
+      title: directTarget ? "Your teacher reset part of your report card" : approve ? "Your teacher approved your report card reset" : "Your teacher declined your report card reset",
       body: `${reportResetLabel(decided)}.${approve ? " That number now starts again from 0 on your report card. Nothing else changed." : ""}`, href: "reports.html" });
   }
   return { ok: true };
@@ -3261,7 +3326,7 @@ function buildStudentReportData(student, cls) {
   const income = month.income, saved = month.saved, spent = month.spent;
   const incomeTotal = month.incomeTotal, savedTotal = month.savedTotal,
         spentTotal = month.spentTotal, borrowedTotal = month.borrowedTotal;
-  const topExpense = Object.entries(spent).sort((a, b) => b[1] - a[1])[0] || null;
+  const topExpense = Object.entries(spent).filter(([, amount]) => amount > 0).sort((a, b) => b[1] - a[1])[0] || null;
 
   // Loan history lives permanently on the student doc (never capped like
   // txns), so this is always complete regardless of the txn window above.
@@ -3274,7 +3339,7 @@ function buildStudentReportData(student, cls) {
 
   // Current net worth snapshot — same breakdown as classLeaderboard().
   let invested = 0;
-  (cls.companies || []).forEach(co => { invested += (co.holders[username] || 0) * co.price; });
+  (cls.companies || []).forEach(co => { invested += (co.holders?.[username] || 0) * co.price; });
   let storeValue = 0;
   (student.storeItems || []).forEach(itemId => {
     const item = (cls.storeItems || []).find(i => i.id === itemId);
@@ -3319,7 +3384,9 @@ function buildStudentReportData(student, cls) {
     topExpenseCategory: topExpense ? { category: topExpense[0], amount: topExpense[1] } : null,
     loans,
     // The student's reset requests (waiting or recently answered) for the report-card buttons and the teacher's queue.
-    resetRequests: (student.reportResetRequests || []).map(r => ({ id: r.id, scope: r.scope, section: r.section, category: r.category, status: r.status, ts: r.ts || 0 })),
+    resetRequests: (student.reportResetRequests || []).filter(r => r && validReportTarget(r.scope, r.section, r.category)
+      && (r.status !== "pending" || r.scope !== "month" || reportRequestMonth(r) === accounting.monthKey))
+      .map(r => ({ id: r.id, scope: r.scope, section: r.section, category: r.category, status: r.status, ts: r.ts || 0 })),
     // Entire history — never reset, see recordReportActivity above.
     lifetimeIncome: lifetime.income, lifetimeSaved: lifetime.saved, lifetimeSpent: lifetime.spent,
     lifetimeReturned: lifetime.returned, lifetimeReturnedTotal: lifetime.returnedTotal,
@@ -3333,15 +3400,28 @@ function buildStudentReportData(student, cls) {
 // Computes a live, unsaved report for the whole class covering the current
 // NZ calendar month so far. Safe to call as often as you like — this never
 // writes anything, so viewing it doesn't cost a class its "next" period.
-async function generateClassReport(classCode) {
-  const cls = withNewModuleDefaults(await getClass(classCode));
-  if (!cls) return null;
-  const students = await getClassStudents(classCode, cls);
-  const periodStart = dateKeyToUTC(nzMonthKey() + "-01");
-  return {
-    classCode, className: cls.name, periodStart, periodEnd: Date.now(),
-    students: students.map(s => buildStudentReportData(s, cls))
-  };
+async function generateClassReport(classCode, onlyUsername, cached = false) {
+  const cls = withNewModuleDefaults(await (cached ? getClassCached(classCode) : getClass(classCode)));
+  if (!cls) throw new Error("Class not found");
+  const names = onlyUsername ? [onlyUsername] : [...new Set(cls.students)];
+  const users = await Promise.all(names.map(name => cached ? getUserCached(name) : getUser(name)));
+  const students = users.filter(s => s && s.classCode === classCode && s.role === "student");
+  const archives = new Map();
+  for (const archive of cls.reportArchives || []) {
+    const periodEnd = Number(archive.periodEnd || archive.ts);
+    if (!Number.isFinite(periodEnd)) continue;
+    const cards = (archive.students || []).filter(s => !onlyUsername || s.username === onlyUsername);
+    if (cards.length) archives.set(periodEnd, { ...archive, periodEnd, students: cards });
+  }
+  for (const student of students) {
+    for (const saved of student.savedReportCards || []) {
+      if (!saved.card || !Number.isFinite(saved.periodEnd)) continue;
+      if (!archives.has(saved.periodEnd)) archives.set(saved.periodEnd, { periodStart: saved.periodStart, periodEnd: saved.periodEnd, students: [] });
+      archives.get(saved.periodEnd).students.push(saved.card);
+    }
+  }
+  return { classCode, className: cls.name, periodStart: dateKeyToUTC(nzMonthKey() + "-01"), periodEnd: trustedNow().getTime(),
+    students: students.map(s => buildStudentReportData(s, cls)), archives: [...archives.values()].sort((a,b) => b.periodEnd - a.periodEnd) };
 }
 
 /* ---------------- Net worth trend (noted every 3 days) ----------------
@@ -3369,20 +3449,29 @@ function netWorthTrendPoints(student, cls) {
     if (!me || typeof me.netWorth !== "number" || !Number.isFinite(t)) return;
     byDay.set(nzDateKey(new Date(t)), { t, v: me.netWorth, day: nzDateKey(new Date(t)), saved: true });
   });
+  for (const saved of student.savedReportCards || []) {
+    if (!Number.isFinite(saved.periodEnd) || !Number.isFinite(saved.card?.netWorth)) continue;
+    const day = nzDateKey(new Date(saved.periodEnd));
+    byDay.set(day, { t: saved.periodEnd, day, v: saved.card.netWorth, saved: true });
+  }
   (student.netWorthLog || []).forEach(e => {
     if (!e || typeof e.v !== "number" || !e.d) return;
-    byDay.set(e.d, { t: Number(e.t) || dateKeyToUTC(e.d), v: e.v, day: e.d });
+    const t = Number(e.t) || dateKeyToUTC(e.d);
+    if (!Number.isFinite(t) || !Number.isFinite(e.v)) return;
+    const day = nzDateKey(new Date(t));
+    if ((byDay.get(day)?.t || 0) <= t) byDay.set(day, { t, v: e.v, day });
   });
   return Array.from(byDay.values()).sort((x, y) => x.t - y.t);
 }
 
 // Every point known for one student's report: everything noted so far,
 // then "now" (their live net worth) on the end.
-function netWorthSeries(s) {
+function netWorthSeries(s, asOf = trustedNow().getTime()) {
   const pts = (s.netWorthTrend || []).slice();
-  const last = pts.length ? pts[pts.length - 1].t : 0;
-  pts.push({ t: Math.max(Date.now(), last), v: s.netWorth, day: nzDateKey(), now: true });
-  return pts;
+  const day = nzDateKey(new Date(asOf));
+  const earlier = pts.filter(p => p.t < asOf && nzDateKey(new Date(p.t)) !== day);
+  earlier.push({ t: asOf, v: s.netWorth, day, now: true });
+  return earlier;
 }
 
 // The same points, trimmed to the last month (30 days back from "now").
@@ -3458,7 +3547,7 @@ async function recordClassNetWorthIfDue(classCode) {
   const due = students.filter(st => { const l = (st.netWorthLog || [])[(st.netWorthLog || []).length - 1]; return !(l && l.d >= period); });
   for (let i = 0; i < due.length; i += 8) {
     await Promise.all(due.slice(i, i + 8).map(st =>
-      _appendNetWorthNote(st.username, period, buildStudentReportData(st, cls).netWorth).catch(e => console.warn("net worth note failed for " + st.username, e))));
+      _appendNetWorthNote(st.username, period, buildStudentReportData(st, cls).netWorth)));
   }
   await classesCol().doc(classCode).update({ netWorthLogWeek: period });
 }
@@ -4937,25 +5026,35 @@ function _buildParentView(student, cls, teacherName) {
     income: r.income, saved: r.saved, spent: r.spent, returned: r.returned, returnedTotal: r.returnedTotal,
     topExpenseCategory: r.topExpenseCategory,
     lifetimeIncomeTotal: r.lifetimeIncomeTotal, lifetimeSavedTotal: r.lifetimeSavedTotal,
-    lifetimeSpentTotal: r.lifetimeSpentTotal,
+    lifetimeSpentTotal: r.lifetimeSpentTotal, lifetimeReturnedTotal: r.lifetimeReturnedTotal,
+    borrowedTotal: r.borrowedTotal, lifetimeBorrowedTotal: r.lifetimeBorrowedTotal,
     activeLoanCount: activeLoans.length,
     goals: savingsGoalProgress(student).map(g => ({ name: g.name, target: g.target, saved: g.saved, reached: g.reached }))
   };
 }
 
-async function _writeParentView(token, student, cls) {
-  let teacherName = "";
-  try {
-    const teacher = await getClassTeacherDisplay(cls);
-    teacherName = teacher ? teacher.name : "";
-  } catch (e) { /* the teacher's name is optional on the parent page */ }
-  await parentViewsCol().doc(token).set({
-    username: student.username,
-    classCode: student.classCode,
-    updatedAt: Date.now(),
-    view: _buildParentView(student, cls, teacherName)
+// Read the live token and source documents in the same commit as the
+// public summary. A concurrent revocation cannot resurrect an old link.
+async function writeParentView(username, classCode, expectedToken, makeLink) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  const teacher = await getClassTeacherDisplay(await getClassCached(classCode));
+  const candidate = makeLink ? genShareToken() : null;
+  const token = await fdb.runTransaction(async t => {
+    const us = await t.get(userRef), cs = await t.get(classRef);
+    if (!us.exists || !cs.exists) throw new Error("Student or class unavailable");
+    const user = us.data(), cls = withNewModuleDefaults(cs.data());
+    if (user.role !== "student" || user.classCode !== classCode) throw new Error("Student changed class");
+    if (!makeLink && user.parentViewToken !== expectedToken) return null;
+    const token = user.parentViewToken || candidate;
+    if (!token) return null;
+    t.set(parentViewsCol().doc(token), { username, classCode, updatedAt: Date.now(), view: _buildParentView(user, cls, teacher?.name || "") });
+    if (!user.parentViewToken) t.update(userRef, { parentViewToken: token });
+    return token;
   });
-  try { localStorage.setItem("t29_pv_refreshed_" + token, String(Date.now())); } catch (e) { /* ignore */ }
+  if (token) {
+    try { localStorage.setItem("t29_pv_refreshed_" + token, String(Date.now())); } catch (e) {}
+  }
+  return token;
 }
 
 // Makes a family link for this student (or returns the one they already
@@ -4965,20 +5064,7 @@ async function createParentLink(username) {
   try {
     const student = await getUser(username);
     if (!student || student.role !== "student") return { ok: false, error: "Student not found." };
-    const cls = withNewModuleDefaults(await getClass(student.classCode));
-    if (!cls) return { ok: false, error: "Class not found." };
-    if (student.parentViewToken) {
-      await _writeParentView(student.parentViewToken, student, cls);
-      return { ok: true, token: student.parentViewToken, url: parentViewUrl(student.parentViewToken) };
-    }
-    const token = genShareToken();
-    await _writeParentView(token, student, cls);
-    try {
-      await usersCol().doc(username).update({ parentViewToken: token });
-    } catch (e) {
-      await parentViewsCol().doc(token).delete().catch(() => {});
-      throw e;
-    }
+    const token = await writeParentView(username, student.classCode, null, true);
     return { ok: true, token, url: parentViewUrl(token) };
   } catch (e) {
     console.error("Creating family link failed:", e);
@@ -4991,12 +5077,15 @@ async function createParentLink(username) {
 // Turns the family link off: the old link stops working at once.
 async function turnOffParentLink(username) {
   try {
-    const student = await getUser(username);
-    if (!student) return { ok: false, error: "Student not found." };
-    if (student.parentViewToken) {
-      await parentViewsCol().doc(student.parentViewToken).delete();
-      await usersCol().doc(username).update({ parentViewToken: null });
-    }
+    const ref = usersCol().doc(username);
+    await fdb.runTransaction(async t => {
+      const snap = await t.get(ref);
+      if (!snap.exists) throw new Error("Student not found");
+      const token = snap.data().parentViewToken;
+      if (!token) return;
+      t.delete(parentViewsCol().doc(token));
+      t.update(ref, { parentViewToken: null });
+    });
     return { ok: true };
   } catch (e) {
     console.error("Turning off family link failed:", e);
@@ -5014,8 +5103,7 @@ async function refreshParentViewIfStale(student, cls) {
     let last = 0;
     try { last = Number(localStorage.getItem("t29_pv_refreshed_" + token)) || 0; } catch (e) { /* ignore */ }
     if (Date.now() - last < PARENT_VIEW_REFRESH_MS) return false;
-    await _writeParentView(token, student, withNewModuleDefaults(cls));
-    return true;
+    return !!await writeParentView(student.username, student.classCode, token, false);
   } catch (e) {
     console.warn("Family link refresh skipped:", e);
     return false;

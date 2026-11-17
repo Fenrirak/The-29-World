@@ -63,6 +63,7 @@ async function init() {
   // Don't block the report on the day's jobs — draw first, then redraw
   // once the jobs have finished in case they changed anything.
   await t29FirstPaint(showCurrentPeriod);
+  watchReportChanges();
   await T29_STARTUP_JOBS;
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
@@ -77,15 +78,65 @@ async function init() {
   }
 }
 
-async function showCurrentPeriod() {
-  CURRENT_REPORT = await generateClassReport(CLASS_CODE);
-  VIEWED_REPORT = CURRENT_REPORT;
+let reportRead = 0;
+async function showCurrentPeriod(cached = false) {
+  const read = ++reportRead;
+  const msg = document.getElementById("reportLoadMsg");
+  try {
+    const report = await generateClassReport(CLASS_CODE, IS_TEACHER ? null : CURRENT.username, cached);
+    if (read !== reportRead) return;
+    CURRENT_REPORT = report;
+    const picker = document.getElementById("reportPeriod");
+    const selected = picker.value;
+    picker.innerHTML = '<option value="">Current report</option>' + report.archives.map(a =>
+      `<option value="${a.periodEnd}">Saved ${new Date(a.periodEnd).toLocaleString("en-NZ", { timeZone: "Pacific/Auckland" })}</option>`).join("");
+    picker.value = selected;
+    document.getElementById("reportPicker").classList.toggle("hidden", !report.archives.length);
+    msg.textContent = "";
+    selectReportPeriod();
+  } catch (e) {
+    if (read !== reportRead) return;
+    console.warn("Reports could not refresh", e);
+    msg.innerHTML = 'Could not refresh reports. <button class="btn small secondary" onclick="showCurrentPeriod()">Retry</button>';
+  }
+}
+function selectReportPeriod() {
+  const selected = Number(document.getElementById("reportPeriod").value);
+  VIEWED_REPORT = CURRENT_REPORT.archives.find(r => r.periodEnd === selected) || CURRENT_REPORT;
+  const archived = VIEWED_REPORT !== CURRENT_REPORT;
+  document.querySelectorAll("[data-live-report]").forEach(el => el.classList.toggle("hidden", archived));
   render();
+  if (MODAL_STUDENT) {
+    if (VIEWED_REPORT.students.some(s => s.username === MODAL_STUDENT.username)) openStudentReport(MODAL_STUDENT.username);
+    else closeStudentReport();
+  }
+}
+function watchReportChanges() {
+  let timer;
+  const users = new Map();
+  const refresh = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => showCurrentPeriod(true), 120);
+  };
+  t29WatchDoc("classes", CLASS_CODE, (cls, info) => {
+    if (!cls || info?.fromCache || info?.hasPendingWrites) return;
+    const names = new Set(IS_TEACHER ? cls.students : [CURRENT.username]);
+    for (const [name, unsubscribe] of users) {
+      if (!names.has(name)) { unsubscribe(); users.delete(name); }
+    }
+    for (const name of names) {
+      if (!users.has(name)) users.set(name, t29WatchDoc("users", name, (_, meta) => {
+        if (!meta?.error && !meta?.fromCache && !meta?.hasPendingWrites) refresh();
+      }));
+    }
+    refresh();
+  });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 }
 
 function fmtRange(start, end) {
-  const s = start ? new Date(start).toLocaleDateString() : "class started";
-  const e = end ? new Date(end).toLocaleDateString() : "now";
+  const s = start ? new Date(start).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland" }) : "class started";
+  const e = end ? new Date(end).toLocaleDateString("en-NZ", { timeZone: "Pacific/Auckland" }) : "now";
   return `${s} – ${e}`;
 }
 
@@ -97,7 +148,7 @@ function render() {
 /* ---------------- Teacher view ---------------- */
 function renderTeacher() {
   renderResetQueue();
-  document.getElementById("hPeriod").innerHTML = "This month";
+  document.getElementById("hPeriod").textContent = VIEWED_REPORT === CURRENT_REPORT ? "This month" : "Saved report";
   document.getElementById("periodRange").textContent = `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
 
   const rows = document.getElementById("classReportRows");
@@ -114,22 +165,34 @@ function renderTeacher() {
   `).join("");
 }
 
+let manageResets = false;
 let MODAL_STUDENT = null;   // whichever student's detail modal is open, for the PDF export
 
 function openStudentReport(username) {
   const s = (VIEWED_REPORT.students || []).find(x => x.username === username);
   if (!s) return;
+  if (MODAL_STUDENT?.username !== username || VIEWED_REPORT !== CURRENT_REPORT) manageResets = false;
   MODAL_STUDENT = s;
+  const manage = document.getElementById("rptManage");
+  manage.classList.toggle("hidden", VIEWED_REPORT !== CURRENT_REPORT);
+  manage.textContent = manageResets ? "Done resetting" : "Reset figures";
+  manage.setAttribute("aria-pressed", String(manageResets));
   document.getElementById("reportModalName").innerHTML =
     `<span class="student-avatar ${avatarClass(s.username)}">${initials(s.name)}</span> ${escapeHtml(s.name)}`;
   document.getElementById("reportModalSubtitle").textContent =
-    `@${s.username}. This month, covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
+    `@${s.username}. Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}`;
   // The modal's own heading isn't printed (it sits with the buttons), so
   // the printout gets the name and dates here instead.
   document.getElementById("reportModalBody").innerHTML =
     `<div class="print-only rpt-print-head"><h2>${escapeHtml(s.name)}</h2><p>${escapeHtml(document.getElementById("reportModalSubtitle").textContent)}</p></div>` +
-    studentReportHTML(s);
+    studentReportHTML(s, { manage: manageResets });
   document.getElementById("reportModal").classList.remove("hidden");
+}
+
+function toggleTeacherResets() {
+  if (!IS_TEACHER || !MODAL_STUDENT || VIEWED_REPORT !== CURRENT_REPORT) return;
+  manageResets = !manageResets;
+  openStudentReport(MODAL_STUDENT.username);
 }
 
 function closeStudentReport() {
@@ -140,7 +203,7 @@ function closeStudentReport() {
 /* ---------------- Student view ---------------- */
 function renderStudent() {
   const s = (VIEWED_REPORT.students || []).find(x => x.username === CURRENT.username);
-  document.getElementById("myPeriodRange").textContent = `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)} (updates automatically)`;
+  document.getElementById("myPeriodRange").textContent = `Covers ${fmtRange(VIEWED_REPORT.periodStart, VIEWED_REPORT.periodEnd)}${VIEWED_REPORT === CURRENT_REPORT ? " (updates automatically)" : " (saved report)"}`;
   const body = document.getElementById("myReportBody");
   if (!s) {
     body.innerHTML = `<p class="muted-small">No data yet. Get started with a job, some savings, or a purchase and check back here.</p>`;
@@ -148,7 +211,7 @@ function renderStudent() {
   }
   body.innerHTML = `
     <p class="print-only rpt-print-head"><strong>${escapeHtml(s.name)}</strong></p>
-    ${studentReportHTML(s, { mine: true })}
+    ${studentReportHTML(s, { mine: VIEWED_REPORT === CURRENT_REPORT && !CURRENT._studentView })}
   `;
 }
 
@@ -169,7 +232,7 @@ function nwShort(v, span) {
 // Which range the net worth chart shows: "month" (the last 30 days, the
 // default) or "all" (the whole history, averaged one week at a time).
 let NW_RANGE = "month";
-const NW_STUDENTS = {}; // username -> report data, so a click can redraw the chart
+const NW_STUDENTS = Object.create(null); // username -> report data, so a click can redraw the chart
 
 // Same pill buttons as the quick-bet amounts in Gambling (.bet-chip).
 function nwRangeBar(range) {
@@ -185,7 +248,7 @@ function nwRangeBar(range) {
 function netWorthChartHTML(s) {
   NW_STUDENTS[s.username] = s;
   const range = NW_RANGE === "all" ? "all" : "month";
-  const allPts = netWorthSeries(s);
+  const allPts = netWorthSeries(s, VIEWED_REPORT?.periodEnd);
   const open = `<section class="nw-trend" data-user="${escapeHtml(s.username)}">`;
   const title = `<h3>${icon("medal", 16)} Net worth over time</h3>`;
   if (allPts.length < 2) {
@@ -235,7 +298,7 @@ function netWorthChartHTML(s) {
   const diff = Math.round((now.v - first.v) * 100) / 100;
   const pct = first.v !== 0 ? ` (${diff >= 0 ? "+" : ""}${Math.round((diff / Math.abs(first.v)) * 1000) / 10}%)` : "";
   const span = range === "all"
-    ? `<div class="label">Weeks tracked</div><div class="value">${Math.max(1, Math.round((now.t - first.t) / 604800000))}</div>`
+    ? `<div class="label">Weeks tracked</div><div class="value">${pts.length}</div>`
     : `<div class="label">Days shown</div><div class="value">${Math.max(1, Math.round((now.t - first.t) / 86400000))}</div>`;
   return `${open}${head}
     <svg viewBox="0 0 ${W} ${H}" class="nw-chart" role="img" aria-label="Net worth over time (${range === "all" ? "all time, weekly averages" : "last month"}), from ${fmtMoney(first.v)} to ${fmtMoney(now.v)}" style="color:var(--ink);">${grid}${segs}${dots}${xlabels}</svg>
@@ -286,8 +349,8 @@ function renderBars(map, colorClass, ctx) {
 /* ---------------- Asking to reset a number (student) ----------------
    A reset only changes what this card shows, and only once the teacher approves it. */
 let RPT_MY_REQUESTS = [];
-const RPT_SECTION_NAMES = { income: "Income", saved: "Saved & invested", spent: "Spent", returned: "Returned money & sale proceeds", borrowed: "Borrowed" };
-const RPT_SCOPE_NAMES = { month: "this month", life: "all time" };
+const RPT_SECTION_NAMES = REPORT_RESET_SECTIONS;
+const RPT_SCOPE_NAMES = REPORT_RESET_SCOPES;
 function rptInjectCss() {
   if (document.getElementById("rptResetCss")) return;
   const st = document.createElement("style");
@@ -297,6 +360,8 @@ function rptInjectCss() {
 .rpt-reset-tag{font-size:var(--fs-xs,12px);font-weight:700;color:#8a6414;white-space:nowrap}
 .rpt-sec-btn{margin-left:10px;vertical-align:middle}
 .rpt-reqbox{border:1px solid rgba(128,128,128,.3);border-radius:10px;padding:10px 14px;margin:12px 0}
+.rpt-bar-label{overflow-wrap:anywhere}
+@media(max-width:600px){.rpt-bar-row:has(.rpt-reset-cell){display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px}.rpt-bar-row:has(.rpt-reset-cell) .rpt-bar-track{grid-column:1;grid-row:2}.rpt-bar-row:has(.rpt-reset-cell) .rpt-bar-amount{grid-column:2;grid-row:1}.rpt-reset-cell{grid-column:2;grid-row:2;flex-wrap:wrap}}
 .rpt-reqbox h4{margin:0 0 6px}
 .rpt-reqrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:4px 0}`;
   document.head.appendChild(st);
@@ -304,7 +369,22 @@ function rptInjectCss() {
 function rptPendingFor(scope, section, cat) {
   return RPT_MY_REQUESTS.find(r => r.status === "pending" && r.scope === scope && r.section === section && (r.category === cat || r.category === "*"));
 }
+function teacherResetButton(scope, section, cat) {
+  return `<button type="button" class="btn small secondary rpt-sec-btn no-print" aria-label="Reset ${escapeHtml(reportResetLabel({scope, section, category:cat}))}" data-scope="${scope}" data-section="${section}" data-cat="${escapeHtml(cat)}" onclick="rptTeacherReset(this)">${cat === "*" ? "Reset all" : "Reset"}</button>`;
+}
+async function rptTeacherReset(btn) {
+  if (!IS_TEACHER || !MODAL_STUDENT || VIEWED_REPORT !== CURRENT_REPORT) return;
+  const student = MODAL_STUDENT;
+  const target = {scope: btn.dataset.scope, section: btn.dataset.section, category: btn.dataset.cat,
+    monthKey: nzMonthKey(new Date(VIEWED_REPORT.periodEnd))};
+  if (!await t29Confirm(`Reset ${reportResetLabel(target)} for ${student.name} to zero? Future activity will count from this point. This affects the report only.`)) return;
+  btn.disabled = true;
+  const result = await decideReportReset(CLASS_CODE, student.username, null, true, target);
+  await showCurrentPeriod();
+  t29Toast(result.ok ? `Reset ${reportResetLabel(target)} for ${student.name}.` : result.error, {type: result.ok ? "success" : "error"});
+}
 function rptResetControl(scope, section, cat) {
+  if (IS_TEACHER) return teacherResetButton(scope, section, cat);
   const p = rptPendingFor(scope, section, cat);
   if (p) return `<span class="rpt-reset-tag">Reset requested</span><button type="button" class="btn small secondary" data-rid="${escapeHtml(p.id)}" onclick="rptWithdraw(this.dataset.rid)">Withdraw</button>`;
   return `<button type="button" class="btn small secondary" title="Ask your teacher to reset this to 0" data-scope="${scope}" data-section="${section}" data-cat="${escapeHtml(cat)}" onclick="rptRequest(this)">Reset</button>`;
@@ -314,6 +394,7 @@ function rptSectionButton(mine, scope, section, map) {
   if (!mine) return "";
   const has = Object.values(map || {}).some(v => Number.isFinite(v) && v !== 0);
   if (!has && section !== "borrowed") return "";
+  if (IS_TEACHER) return teacherResetButton(scope, section, "*");
   const p = rptPendingFor(scope, section, "*");
   if (p) return `<span class="rpt-reset-tag no-print" style="margin-left:10px;">Reset requested</span><button type="button" class="btn small secondary rpt-sec-btn no-print" data-rid="${escapeHtml(p.id)}" onclick="rptWithdraw(this.dataset.rid)">Withdraw</button>`;
   return `<button type="button" class="btn small secondary rpt-sec-btn no-print" title="Ask your teacher to reset all of this to 0" data-scope="${scope}" data-section="${section}" data-cat="*" onclick="rptRequest(this)">Reset all</button>`;
@@ -349,7 +430,7 @@ async function rptWithdraw(id) {
 function renderResetQueue() {
   const card = document.getElementById("resetRequestsCard"), body = document.getElementById("resetRequestsBody");
   if (!card || !body) return;
-  card.classList.toggle("hidden", !IS_TEACHER);
+  card.classList.toggle("hidden", !IS_TEACHER || VIEWED_REPORT !== CURRENT_REPORT);
   const rows = [];
   (VIEWED_REPORT.students || []).forEach(s => (s.resetRequests || []).filter(r => r.status === "pending").forEach(r => rows.push({ s, r })));
   rows.sort((a, b) => a.r.ts - b.r.ts);
@@ -375,7 +456,7 @@ function renderLoanHistory(loans) {
   if (!loans || !loans.length) return `<p class="muted-small">No loans taken.</p>`;
   return `<div class="table-scroll"><table class="stack-table"><thead><tr><th>Taken</th><th>Amount</th><th>Rate</th><th>Term</th><th>Due</th><th>Status</th></tr></thead><tbody>
     ${loans.map(l => `<tr>
-      <td>${l.takenDate || "—"}</td><td>${fmtMoney(l.principal)}</td><td>${l.rate}%/wk</td><td>${l.termWeeks} wk</td><td>${l.dueDate || "—"}</td>
+      <td>${escapeHtml(l.takenDate || "—")}</td><td>${fmtMoney(l.principal)}</td><td>${escapeHtml(l.rate)}%/wk</td><td>${escapeHtml(l.termWeeks)} wk</td><td>${escapeHtml(l.dueDate || "—")}</td>
       <td>${l.status === "active"
         ? `Active: ${fmtMoney(l.owed)} owed`
         : (l.onTime === null ? "Paid off" : l.onTime ? "Paid off on time" : "Paid off late")}</td>
@@ -386,12 +467,13 @@ function renderLoanHistory(loans) {
 function studentReportHTML(s, opts) {
   const mine = !!(opts && opts.mine);
   RPT_MY_REQUESTS = mine ? (s.resetRequests || []) : [];
-  if (mine) rptInjectCss();
-  const rc = (scope, section) => mine ? { scope, section } : null;
+  const editable = mine || !!opts?.manage;
+  if (editable) rptInjectCss();
+  const rc = (scope, section) => editable ? { scope, section } : null;
   const savedLabel = s.accountingVersion === 2 ? "Net saved &amp; invested" : "Deposited &amp; invested (legacy)";
   return `
     <p class="muted-small">${escapeHtml(reportAccountingNote(s))}</p>
-    ${mine ? rptRequestsBox() : ""}
+    ${mine ? rptRequestsBox() : opts?.manage ? '<p class="no-print">Choose a category or a whole section to reset. Monthly and all-time figures can be reset separately.</p>' : ""}
     <div class="profile-summary">
       <div class="profile-chip"><div class="label">Net worth</div><div class="value">${fmtMoney(s.netWorth)}</div></div>
       <div class="profile-chip"><div class="label">Savings rate</div><div class="value">${s.savingsRate === null ? "—" : s.savingsRate + "%"}</div></div>
@@ -415,30 +497,32 @@ function studentReportHTML(s, opts) {
       <tr><td>Owed (loans, mortgage and credit card)</td><td>${s.owed > 0 ? "-" : ""}${fmtMoney(s.owed)}</td></tr>
     </tbody></table></div>
 
-    <h4>${icon("download", 16)} Income this month ${fmtMoney(s.incomeTotal)}${rptSectionButton(mine, "month", "income", s.income)}</h4>
+    <h4>${icon("download", 16)} Income this month ${fmtMoney(s.incomeTotal)}${rptSectionButton(editable, "month", "income", s.income)}</h4>
     ${renderBars(s.income, "gold", rc("month", "income"))}
 
-    <h4>${icon("piggy", 16)} ${savedLabel} this month ${fmtMoney(s.savedTotal)}${rptSectionButton(mine, "month", "saved", s.saved)}</h4>
+    <h4>${icon("piggy", 16)} ${savedLabel} this month ${fmtMoney(s.savedTotal)}${rptSectionButton(editable, "month", "saved", s.saved)}</h4>
     ${renderBars(s.saved, "mint", rc("month", "saved"))}
-    ${s.borrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this month (not counted as income).${rptSectionButton(mine, "month", "borrowed", null)}</p>` : ""}
+    ${s.borrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.borrowedTotal)} in new loans this month (not counted as income).${rptSectionButton(editable, "month", "borrowed", null)}</p>` : ""}
 
-    <h4>${icon("send", 16)} Spent this month ${fmtMoney(s.spentTotal)}${rptSectionButton(mine, "month", "spent", s.spent)}</h4>
+    <h4>${icon("send", 16)} Spent this month ${fmtMoney(s.spentTotal)}${rptSectionButton(editable, "month", "spent", s.spent)}</h4>
     ${renderBars(s.spent, "coral", rc("month", "spent"))}
+
+    ${s.returnedTotal ? `<h4>Returned money &amp; sale proceeds this month ${fmtMoney(s.returnedTotal)}${rptSectionButton(editable, "month", "returned", s.returned)}</h4>${renderBars(s.returned, "gold", rc("month", "returned"))}` : ""}
 
     <h3 style="margin-top:26px;">${icon("history", 17)} Entire history</h3>
     <p class="muted-small">${REPORT_LIFETIME_NOTE}</p>
 
-    <h4>${icon("download", 16)} All-time income ${fmtMoney(s.lifetimeIncomeTotal)}${rptSectionButton(mine, "life", "income", s.lifetimeIncome)}</h4>
+    <h4>${icon("download", 16)} All-time income ${fmtMoney(s.lifetimeIncomeTotal)}${rptSectionButton(editable, "life", "income", s.lifetimeIncome)}</h4>
     ${renderBars(s.lifetimeIncome, "gold", rc("life", "income"))}
 
-    <h4>${icon("piggy", 16)} All-time ${savedLabel.toLowerCase()} ${fmtMoney(s.lifetimeSavedTotal)}${rptSectionButton(mine, "life", "saved", s.lifetimeSaved)}</h4>
+    <h4>${icon("piggy", 16)} All-time ${savedLabel.toLowerCase()} ${fmtMoney(s.lifetimeSavedTotal)}${rptSectionButton(editable, "life", "saved", s.lifetimeSaved)}</h4>
     ${renderBars(s.lifetimeSaved, "mint", rc("life", "saved"))}
-    ${s.lifetimeBorrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.lifetimeBorrowedTotal)} in loans in total (not counted as income).${rptSectionButton(mine, "life", "borrowed", null)}</p>` : ""}
+    ${s.lifetimeBorrowedTotal ? `<p class="muted-small">Also borrowed ${fmtMoney(s.lifetimeBorrowedTotal)} in loans in total (not counted as income).${rptSectionButton(editable, "life", "borrowed", null)}</p>` : ""}
 
-    <h4>${icon("send", 16)} All-time spent ${fmtMoney(s.lifetimeSpentTotal)}${rptSectionButton(mine, "life", "spent", s.lifetimeSpent)}</h4>
+    <h4>${icon("send", 16)} All-time spent ${fmtMoney(s.lifetimeSpentTotal)}${rptSectionButton(editable, "life", "spent", s.lifetimeSpent)}</h4>
     ${renderBars(s.lifetimeSpent, "coral", rc("life", "spent"))}
 
-    ${s.returnedTotal ? `<h4>Returned money &amp; sale proceeds this month ${fmtMoney(s.returnedTotal)}${rptSectionButton(mine, "month", "returned", s.returned)}</h4>${renderBars(s.returned, "gold", rc("month", "returned"))}` : ""}
+    ${s.lifetimeReturnedTotal ? `<h4>Returned money &amp; sale proceeds (all time) ${fmtMoney(s.lifetimeReturnedTotal)}${rptSectionButton(editable, "life", "returned", s.lifetimeReturned)}</h4>${renderBars(s.lifetimeReturned, "gold", rc("life", "returned"))}` : ""}
 
     <h4>${icon("loan", 16)} Loan history</h4>
     ${renderLoanHistory(s.loans)}
@@ -659,13 +743,14 @@ async function downloadReportPDF() {
 function reportToRows(report) {
   const rows = [["Name", "Username", "Net worth", "Cash", "Savings", "Term deposits", "KiwiSaver", "Gambling account", "Invested", "Property", "Vehicles", "Store items",
     "Owed", "Income (this month)", "Saved/invested (see accounting version; net in v2)", "Spent (this month)", "Borrowed (this month)", "Savings rate %", "Top expense category", "Top expense amount",
-    "Income (all-time)", "Saved/invested (all-time; net in v2)", "Spent (all-time)", "Borrowed (all-time)", "Returned money/sale proceeds (this month)", "Accounting version", "Earlier history complete"]];
+    "Income (all-time)", "Saved/invested (all-time; net in v2)", "Spent (all-time)", "Borrowed (all-time)", "Returned money/sale proceeds (this month)", "Accounting version", "Earlier history complete", "Returned money/sale proceeds (all-time)", "Period start (NZ)", "Period end (NZ)"]];
   (report.students || []).forEach(s => rows.push([
     s.name, s.username, s.netWorth, s.balance, s.savings, s.termDeposits, s.kiwiSaver || 0, s.gamblingBalance || 0, s.invested, s.propertyValue, s.vehicleValue, s.storeValue,
     s.owed, s.incomeTotal, s.savedTotal, s.spentTotal, s.borrowedTotal, s.savingsRate === null ? "" : s.savingsRate,
     s.topExpenseCategory ? s.topExpenseCategory.category : "", s.topExpenseCategory ? s.topExpenseCategory.amount : "",
     s.lifetimeIncomeTotal, s.lifetimeSavedTotal, s.lifetimeSpentTotal, s.lifetimeBorrowedTotal,
-    s.returnedTotal ?? "", s.accountingVersion || 1, s.historyComplete === false ? "No" : s.accountingVersion === 2 ? "Yes" : "Unknown"
+    s.returnedTotal ?? "", s.accountingVersion || 1, s.historyComplete === false ? "No" : s.accountingVersion === 2 ? "Yes" : "Unknown",
+    s.lifetimeReturnedTotal ?? "", report.periodStart ? nzDateKey(new Date(report.periodStart)) : "", report.periodEnd ? nzDateKey(new Date(report.periodEnd)) : ""
   ]));
   return rows;
 }
@@ -684,7 +769,7 @@ function downloadCSV(rows, filename) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 function safeFilenamePart(s) {
@@ -692,7 +777,8 @@ function safeFilenamePart(s) {
 }
 
 function exportCurrentCSV() {
-  downloadCSV(reportToRows(VIEWED_REPORT), `report-${safeFilenamePart(CLASS_CODE)}-current.csv`);
+  if (!IS_TEACHER || !VIEWED_REPORT) return;
+  downloadCSV(reportToRows(VIEWED_REPORT), `report-${safeFilenamePart(CLASS_CODE)}-${VIEWED_REPORT === CURRENT_REPORT ? "current" : nzDateKey(new Date(VIEWED_REPORT.periodEnd))}.csv`);
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -339,7 +339,7 @@ function pdfBarsSection(doc, title, map, colorName, total) {
 function pdfStudentReport(doc, s, report) {
   doc.para(reportAccountingNote(s));
   const savedLabel = s.accountingVersion === 2 ? "Net saved & invested" : "Deposited & invested (legacy)";
-  const trendPts = netWorthMonthPoints(netWorthSeries(s));
+  const trendPts = netWorthMonthPoints(netWorthSeries(s, report.periodEnd));
   doc.heading("Net worth over time (last month)", trendPts.length < 2 ? 36 : 100);
   if (trendPts.length < 2) doc.para("Net worth is noted every 3 days - the trend will appear here once it has been noted a couple of times.");
   else doc.trend(trendPts);
@@ -371,6 +371,7 @@ function pdfStudentReport(doc, s, report) {
   }
   pdfBarsSection(doc, "Spent this month", s.spent, "coral", s.spentTotal);
 
+  if (s.returnedTotal) pdfBarsSection(doc, "Returned money & sale proceeds this month", s.returned, "gold", s.returnedTotal);
   doc.heading("Entire history");
   doc.para(typeof REPORT_LIFETIME_NOTE === "string" ? REPORT_LIFETIME_NOTE : "Everything since the account was made, or since the class was last restarted.");
   pdfBarsSection(doc, "All-time income", s.lifetimeIncome, "gold", s.lifetimeIncomeTotal);
@@ -379,7 +380,7 @@ function pdfStudentReport(doc, s, report) {
     doc.para(`Also borrowed ${fmtMoney(s.lifetimeBorrowedTotal)} in loans in total (not counted as income).`);
   }
   pdfBarsSection(doc, "All-time spent", s.lifetimeSpent, "coral", s.lifetimeSpentTotal);
-  if (s.returnedTotal) pdfBarsSection(doc, "Returned money & sale proceeds this month", s.returned, "gold", s.returnedTotal);
+  if (s.lifetimeReturnedTotal) pdfBarsSection(doc, "All-time returned money & sale proceeds", s.lifetimeReturned, "gold", s.lifetimeReturnedTotal);
 
   doc.heading("Loan history");
   if (!s.loans || !s.loans.length) {

@@ -100,6 +100,10 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <main>
   <h1 id="pageTitle">Reports</h1>
   <p id="pageIntro"></p>
+  <p id="reportLoadMsg" role="status">Loading report…</p>
+  <label id="reportPicker" class="hidden no-print">Report period
+    <select id="reportPeriod" onchange="selectReportPeriod()"></select>
+  </label>
 
   <!-- ================= TEACHER VIEW ================= -->
   <div id="teacherPanel" class="card hidden">
@@ -109,7 +113,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <p class="muted-small" id="periodRange">–</p>
       </div>
       <div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn small secondary" id="familyLinksBtn" onclick="openClassFamilyLinks()">Family links</button>
+        <button class="btn small secondary" data-live-report id="familyLinksBtn" onclick="openClassFamilyLinks()">Family links</button>
         <button class="btn small secondary" onclick="exportCurrentCSV()">Export CSV</button>
         <button class="btn small secondary" onclick="printReport()">Print</button>
         <button class="btn small secondary" onclick="downloadReportPDF()">Download PDF</button>
@@ -128,7 +132,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
   </div>
 
   <!-- ================= TEACHER: report card reset requests ================= -->
-  <div id="resetRequestsCard" class="card hidden">
+  <div id="resetRequestsCard" class="card hidden no-print">
     <div class="flex-between"><h2>Report card reset requests</h2><span class="muted-small" id="resetRequestsCount"></span></div>
     <p class="muted-small">Students can ask to reset a number on their own report card back to 0. Nothing changes until you approve it.</p>
     <div id="resetRequestsBody"></div>
@@ -143,7 +147,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <p class="muted-small" id="myPeriodRange">–</p>
       </div>
       <div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn small gold" id="shareFamilyBtn" onclick="showMyFamilyLink()">Share with my family</button>
+        <button class="btn small gold" data-live-report id="shareFamilyBtn" onclick="showMyFamilyLink()">Share with my family</button>
         <button class="btn small secondary" onclick="printReport()">Print my report</button>
         <button class="btn small secondary" onclick="downloadReportPDF()">Download PDF</button>
       </div>
@@ -164,7 +168,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 </footer>
 
 <!-- Per-student detail modal (teacher only) -->
-<div id="reportModal" class="hidden t29-modal-backdrop" ondblclick="if(event.target===this)closeStudentReport()">
+<div id="reportModal" role="dialog" aria-labelledby="reportModalName" class="hidden t29-modal-backdrop" ondblclick="if(event.target===this)closeStudentReport()">
   <div class="card report-print-area" style="width:100%;max-width:720px;margin-top:0;">
     <div class="flex-between no-print">
       <div>
@@ -172,8 +176,9 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <p id="reportModalSubtitle" class="muted-small">@username</p>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn small secondary" onclick="previewModalStudentFamilyView()">Preview family view</button>
-        <button class="btn small secondary" onclick="showModalStudentFamilyLink()">Family link</button>
+        <button class="btn small secondary" id="rptManage" aria-pressed="false" onclick="toggleTeacherResets()">Reset figures</button>
+        <button class="btn small secondary" data-live-report onclick="previewModalStudentFamilyView()">Preview family view</button>
+        <button class="btn small secondary" data-live-report onclick="showModalStudentFamilyLink()">Family link</button>
         <button class="btn small secondary" onclick="printReport()">Print</button>
         <button class="btn small secondary" onclick="downloadReportPDF()">Download PDF</button>
         <button class="btn small secondary" onclick="closeStudentReport()">Close</button>
@@ -214,15 +219,15 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="shortcuts.js?v=a39d9a62"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=4da071cc"></script>
-<script defer src="data-money.js?v=f6a53080"></script>
+<script defer src="data-money.js?v=d7d02e61"></script>
 <script defer src="data-life.js?v=5703d77c"></script>
-<script defer src="data-property.js?v=2ae916b7"></script>
+<script defer src="data-property.js?v=d3163b64"></script>
 <script defer src="data-markets.js?v=3c1c89ff"></script>
 <script defer src="events-ui.js?v=edb4fb7e"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=0f7e459d"></script>
-<script defer src="pdf-report.js?v=cba2b85b"></script>
-<script defer src="parent.js?v=ecafca7a"></script>
-<script defer src="reports.js?v=77e7e67e"></script>
+<script defer src="pdf-report.js?v=02f2ce08"></script>
+<script defer src="parent.js?v=d1b9c5ad"></script>
+<script defer src="reports.js?v=af0c70e3"></script>
 </body>
 </html>

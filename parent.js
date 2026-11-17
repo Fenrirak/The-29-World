@@ -54,6 +54,9 @@ function pvBars(map, colorClass, emptyText) {
 }
 
 function pvShowError(title, text) {
+  const report = document.getElementById("parentReport");
+  report.classList.add("hidden");
+  report.replaceChildren();
   document.getElementById("parentLoading").classList.add("hidden");
   if (title) document.getElementById("parentErrorTitle").textContent = title;
   if (text) document.getElementById("parentErrorText").textContent = text;
@@ -159,6 +162,7 @@ function pvBuildReportHtml(doc, opts) {
         ${pvBars(v.spent, "coral", "Nothing spent yet this month.")}
       </div>
       ${v.returnedTotal ? `<div class="pv-section"><h3>Returned money &amp; sale proceeds</h3>${pvBars(v.returned, "gold", "")}</div>` : ""}
+      ${v.borrowedTotal ? `<p class="pv-note">Borrowed this month: ${pvMoney(v.borrowedTotal)}</p>` : ""}
       <p class="pv-note">${v.accountingVersion === 2 ? "Income excludes returned capital. Net saving subtracts withdrawals. Sale proceeds with no recorded original cost are shown separately." : "This summary uses the earlier cash-flow figures, including returned money in income and counting deposits before withdrawals."}${v.historyComplete === false ? " Earlier activity is incomplete; totals cover the records that can still be verified." : ""}${v.earningsComplete === false ? " Income is a verified subtotal; the savings-rate percentage is not shown." : ""}</p>
     </section>
 
@@ -173,11 +177,13 @@ function pvBuildReportHtml(doc, opts) {
         ${loanCount ? `<p class="pv-note">${loanCount} loan${loanCount === 1 ? "" : "s"} still being paid off.</p>` : ""}
       </section>
       <section class="card pv-card">
-        <h2>${pvIcon("star", 20)} Since joining</h2>
+        <h2>${pvIcon("star", 20)} Entire history</h2>
         <table class="pv-table"><tbody>
           ${tableRow("Earned in total", pvMoney(v.lifetimeIncomeTotal))}
           ${tableRow(savedLabel + " in total", pvMoney(v.lifetimeSavedTotal))}
           ${tableRow("Spent in total", pvMoney(v.lifetimeSpentTotal))}
+          ${v.lifetimeReturnedTotal ? tableRow("Returned money and sale proceeds", pvMoney(v.lifetimeReturnedTotal)) : ""}
+          ${v.lifetimeBorrowedTotal ? tableRow("Borrowed in total", pvMoney(v.lifetimeBorrowedTotal)) : ""}
         </tbody></table>
       </section>
     </div>
@@ -195,6 +201,7 @@ function pvBuildReportHtml(doc, opts) {
 
 function pvRender(doc) {
   const v = doc.view || {};
+  document.getElementById("parentError").classList.add("hidden");
   document.title = `${v.name || "Report card"}, Family View | The 29 World™`;
   document.getElementById("parentReport").innerHTML = pvBuildReportHtml(doc);
   document.getElementById("parentLoading").classList.add("hidden");
@@ -209,9 +216,10 @@ async function pvInit() {
     return;
   }
   try {
-    const snap = await fdb.collection("parentViews").doc(token).get();
-    if (!snap.exists) { pvShowError(); return; }
-    pvRender(snap.data());
+    fdb.collection("parentViews").doc(token).onSnapshot(snap => {
+      if (snap.exists) pvRender(snap.data());
+      else pvShowError();
+    }, () => pvShowError("Report unavailable", "Check the family link and your internet connection."));
   } catch (e) {
     console.error(e);
     if (navigator.onLine === false || (e && (e.code === "unavailable" || /offline/i.test(e.message || "")))) {

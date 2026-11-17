@@ -564,7 +564,7 @@ async function buyProperty(username, classCode, propId, financed, depositAmount,
   // doesn't offer one buys it outright, and is logged as that. The amount
   // is the CASH that left their account; KiwiSaver's part is in the note.
   const kiwiNote = fromKiwi > 0 ? ` (${fmtMoney(fromKiwi)} from KiwiSaver)` : "";
-  await logTxn(classCode, { type: "property-buy", from: username, amount: mortgaged ? Math.round((deposit - fromKiwi) * 100) / 100 : cashPaid, note: (mortgaged ? `Bought (mortgaged${boughtVariable ? ", variable rate" : ""}): ${propName}: ${fmtMoney(deposit)} deposit${kiwiNote}` : `Bought outright: ${propName}${kiwiNote}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
+  await logTxn(classCode, { type: "property-buy", from: username, fromKiwi, amount: mortgaged ? Math.round((deposit - fromKiwi) * 100) / 100 : cashPaid, note: (mortgaged ? `Bought (mortgaged${boughtVariable ? ", variable rate" : ""}): ${propName}: ${fmtMoney(deposit)} deposit${kiwiNote}` : `Bought outright: ${propName}${kiwiNote}`) + (taxAmount > 0 ? ` (incl. ${fmtMoney(taxAmount)} tax)` : "") });
   return { ok: true, fromKiwi, mortgageType: boughtVariable ? "variable" : "fixed" };
 }
 // Sells a property back to the class. The owner is paid whatever the
