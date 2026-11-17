@@ -92,3 +92,10 @@
 .days-dialog-actions .btn{margin-left:auto}
 @media(max-width:680px){.days-tools{grid-template-columns:1fr}.days-scope{margin-left:0}.days-save-row{justify-content:space-between}.days-heading{padding:9px 12px}.days-heading .days-disclosure{flex-basis:9rem}#budDaysBody{padding:0 10px 12px}.days-dialog{padding:18px}}
 @media(pointer:coarse){.days-grip{padding:13px 5px;margin:-9px -6px}.days-plus,.days-close{min-width:44px;min-height:44px}}
+
+/* Keep the tap area generous around the smaller visible add control. */
+.days-plus{position:relative;isolation:isolate;border:0;background:transparent}
+.days-plus::before{width:calc(100% - 6px);height:calc(100% - 6px);box-sizing:border-box;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.days-plus::after{position:absolute;inset:0;margin:auto;width:12px;height:12px;transform:none;background:linear-gradient(currentColor,currentColor) center/12px 2px no-repeat,linear-gradient(currentColor,currentColor) center/2px 12px no-repeat}
+.days-plus:hover::before{border-color:var(--sky-fill)}
+.days-minus{top:0;right:0;transform:translate(50%,-50%);z-index:1}
