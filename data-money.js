@@ -4361,17 +4361,42 @@ function budgetEditsFor(raw, weekStartKey) {
   const e = raw && raw.edits;
   if (!e) return null;
   const w = e.weeks && e.weeks[weekStartKey];
-  if (w) return { source: "week", removed: w.removed || [], added: w.added || [] };
-  if (e.rule && e.rule.from <= weekStartKey) return { source: "rule", removed: e.rule.removed || [], added: e.rule.added || [] };
+  if (w) return { ...w, source: "week", removed: w.removed || [], added: w.added || [] };
+  if (e.rule && e.rule.from <= weekStartKey) return { ...e.rule, source: "rule", removed: e.rule.removed || [], added: e.rule.added || [] };
   return null;
 }
 function budgetCustomItem(c, weekStartKey, todayKey) {
   const dayKey = dateKeyPlusDays(weekStartKey, Math.min(6, Math.max(0, Number(c.day) || 0)));
   // Personal items are assumed on their chosen date and never post a bank transaction.
   const status = dayKey <= todayKey ? "done" : "upcoming";
-  return { key: "custom-" + c.id, custom: true, customId: c.id, dir: c.dir, icon: c.dir === "in" ? "coin" : c.dir === "save" ? "piggy" : "cart",
+  return { key: "custom-" + c.id, custom: true, customId: c.id, category: c.category || budgetCategory(c), dir: c.dir, icon: c.dir === "in" ? "coin" : c.dir === "save" ? "piggy" : "cart",
     label: c.label, amount: budgetRound(c.amount), dayKey, status, conditional: c.dir === "in",
     note: status === "done" ? "Assumed on the date you chose. No bank transaction is created." : "Personal estimate. Counts on the date you chose." };
+}
+const BUD_CATEGORIES = { need: "Need", want: "Want", savings: "Savings", income: "Income", move: "Transfer", unsave: "Savings withdrawal" };
+function budgetCategory(i) { return i.category || ({ in: "income", out: "need", save: "savings", move: "move", unsave: "unsave" })[i.dir]; }
+function budgetCategoryDir(c) { return ({ need: "out", want: "out", savings: "save", income: "in", move: "move", unsave: "unsave" })[c]; }
+// A recurring allowance keeps its identity when next week's calendar dates change.
+function budgetBoardKey(i) {
+  const m = /^allowance-daily-(\d{4}-\d{2}-\d{2})$/.exec(i.key);
+  return m ? "allowance-weekday-" + new Date(dateKeyToUTC(m[1])).getUTCDay() : i.key;
+}
+function budgetBoardItems(base, draft, week, today) {
+  const rm = new Set(draft.removed), overrides = new Map((draft.changes || []).map(p => [p.key, p]));
+  const rank = new Map((draft.order || []).map((key, n) => [key, n]));
+  return base.filter(i => i.status === "done" || !rm.has(i.key)).map(i => {
+    const p = overrides.get(budgetBoardKey(i));
+    if (!p) return i;
+    const category = p.category || budgetCategory(i), dir = budgetCategoryDir(category);
+    const dayKey = p.day == null ? i.dayKey : dateKeyPlusDays(week, p.day);
+    const status = p.day == null || dayKey === i.dayKey || i.status === "done" ? i.status
+      : dayKey < today ? "missed" : dayKey === today ? "today" : "upcoming";
+    return { ...i, amount: p.amount ?? i.amount, category, dir, dayKey, status, adjusted: true,
+      repay: dir === i.dir && i.repay, cashReserveOnly: dir === i.dir && i.cashReserveOnly,
+      note: "Your plan estimate. Bank amounts and payment dates stay the same." };
+  }).concat(draft.added.map(c => budgetCustomItem(c, week, today))).sort((a,b) =>
+    (rank.get(budgetBoardKey(a)) ?? Infinity) - (rank.get(budgetBoardKey(b)) ?? Infinity) ||
+    ["in","unsave","out","save","move"].indexOf(a.dir) - ["in","unsave","out","save","move"].indexOf(b.dir));
 }
 // Applies the student's saved edits to the week's automatic list (changes sched.items) and says what was changed.
 function budgetApplyEdits(user, sched) {
@@ -4385,25 +4410,30 @@ function budgetApplyEdits(user, sched) {
     return "allowance-daily-" + dateKeyPlusDays(sched.weekStartKey, day);
   });
   const rm = new Set(removed);
-  sched.items = base.filter(i => i.status === "done" || !rm.has(i.key)).concat(eff.added.map(c => budgetCustomItem(c, sched.weekStartKey, sched.todayKey)));
+  sched.items = budgetBoardItems(base, { ...eff, removed }, sched.weekStartKey, sched.todayKey);
   return { baseItems: base, removedItems: base.filter(i => i.status !== "done" && rm.has(i.key)), removedKeys: removed, customAdded: eff.added.map(c => Object.assign({}, c)), editSource: eff.source };
 }
 function budgetCleanDraft(draft) {
   const removed = Array.from(new Set((draft && draft.removed || []).map(String)));
   const added = ((draft && draft.added) || []).map(c => ({
     id: String(c.id), label: String(c.label || "").trim(), amount: budgetRound(c.amount),
-    dir: c.dir === "in" || c.dir === "save" ? c.dir : "out", day: Math.floor(Number(c.day))
+    dir: c.dir === "in" || c.dir === "save" ? c.dir : "out", ...(c.category === "want" && c.dir === "out" ? { category: "want" } : {}), day: Math.floor(Number(c.day))
   }));
-  return { removed, added };
+  const changes = (draft?.changes || []).map(p => ({ key: String(p.key),
+    ...(p.amount == null ? {} : { amount: budgetRound(p.amount) }),
+    ...(p.category ? { category: p.category } : {}), ...(p.day == null ? {} : { day: p.day }) }));
+  const order = Array.from(new Set(draft?.order || []));
+  return { removed, added, ...(changes.length ? { changes } : {}), ...(order.length ? { order } : {}) };
 }
 // Everything that stops a set of edits being saved, each one specific, plus notes that don't block it.
 // `view` is buildBudgetView's result (it carries the automatic list), `draft` the edited state, `scope` "week" | "future".
 function budgetValidateEdits(view, user, draft, scope) {
   const errors = [], notes = [];
   const d = budgetCleanDraft(draft);
-  const prevRemoved = new Set(view.removedKeys || []), prevAdded = new Set((view.customAdded || []).map(c => c.id));
-  const todayIdx = Math.max(0, Math.round(daysBetweenKeys(view.weekStartKey, view.todayKey)));
-  const dayName = i => budgetDayWord(dateKeyPlusDays(view.weekStartKey, i));
+  if (d.changes?.some(p => (p.amount != null && !(p.amount >= 0 && p.amount <= BUDGET_MAX_ITEM)) ||
+    (p.category && !Object.hasOwn(BUD_CATEGORIES, p.category)) || (p.day != null && !(Number.isInteger(p.day) && p.day >= 0 && p.day <= 6))))
+    errors.push("Choose a valid amount, category and day.");
+  const prevRemoved = new Set(view.removedKeys || []);
   const dirWord = x => x === "in" ? "money in" : x === "save" ? "saving" : "bill or spending";
   // 1. Taking out regular items
   d.removed.forEach(key => {
@@ -4427,7 +4457,6 @@ function budgetValidateEdits(view, user, draft, scope) {
     if (c.label.length > BUDGET_MAX_LABEL) errors.push(`${nm} has a name longer than ${BUDGET_MAX_LABEL} characters. Shorten it.`);
     if (!(c.amount > 0) || c.amount > BUDGET_MAX_ITEM) errors.push(`${nm} needs an amount between $0.01 and ${fmtMoney(BUDGET_MAX_ITEM)}.`);
     if (!(c.day >= 0 && c.day <= 6)) { errors.push(`${nm} needs a day of the week.`); return; }
-    if (!prevAdded.has(c.id) && c.day < todayIdx) errors.push(`${nm} is set for ${dayName(c.day)}, which has already passed this week. Pick ${dayName(todayIdx)} (today) or a later day.`);
     const k = `${c.dir}|${c.label.toLowerCase()}|${c.day}`;
     if (seen.has(k)) errors.push(`${nm} on ${dayName(c.day)} is already in your plan as ${seen.get(k)} (${dirWord(c.dir)}). Change its name, day or type, or remove one of them.`);
     else seen.set(k, "another item you added");
@@ -4457,7 +4486,15 @@ function _budgetPrune(edits, weekStartKey) {
   if (!edits.rule) delete edits.rule;
   return Object.keys(edits).length ? edits : null;
 }
-async function saveBudgetEdits(username, scope, draft, weekStartKey) {
+function budgetEditSnapshot(raw, week) {
+  return { week: raw?.edits?.weeks?.[week] || null, rule: raw?.edits?.rule || null };
+}
+function budgetSameSnapshot(a, b) {
+  const canonical = v => Array.isArray(v) ? v.map(canonical) : v && typeof v === "object"
+    ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])])) : v;
+  return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+}
+async function saveBudgetEdits(username, scope, draft, weekStartKey, session) {
   const d = budgetCleanDraft(draft);
   const ref = usersCol().doc(username);
   try {
@@ -4467,15 +4504,22 @@ async function saveBudgetEdits(username, scope, draft, weekStartKey) {
       const raw = us.data().budget || {};
       const edits = _cloneDoc(raw.edits || {});
       edits.weeks = edits.weeks || {};
+      if (session) {
+        if (!budgetSameSnapshot(budgetEditSnapshot(raw, weekStartKey), session.expected)) throw new Error("STALE");
+        // Start each revision from the opening scope. Switching back to week-only
+        // or cancelling restores the original rule, without touching the savings target.
+        if (session.original.rule) edits.rule = session.original.rule; else delete edits.rule;
+        if (session.original.week) edits.weeks[weekStartKey] = session.original.week; else delete edits.weeks[weekStartKey];
+      }
       if (scope === "future") {
         const later = Object.keys(edits.weeks).filter(k => k > weekStartKey);
         if (later.length) throw new Error("CLASH:" + budDateLabelSafe(later[0]));
         delete edits.weeks[weekStartKey]; // the new rule covers this week too
-        edits.rule = { from: weekStartKey, removed: d.removed, added: d.added };
-      } else {
+        edits.rule = { from: weekStartKey, ...d };
+      } else if (scope !== "cancel") {
         const rule = edits.rule && edits.rule.from <= weekStartKey;
-        if (!d.removed.length && !d.added.length && !rule) delete edits.weeks[weekStartKey];
-        else edits.weeks[weekStartKey] = { removed: d.removed, added: d.added };
+        if (!d.removed.length && !d.added.length && !d.changes && !d.order && !rule) delete edits.weeks[weekStartKey];
+        else edits.weeks[weekStartKey] = d;
       }
       const clean = _budgetPrune(edits, weekStartKey), next = Object.assign({}, raw);
       if (clean) next.edits = clean; else delete next.edits;
@@ -4486,6 +4530,7 @@ async function saveBudgetEdits(username, scope, draft, weekStartKey) {
     return { ok: true, budget };
   } catch (e) {
     const m = String(e.message || "");
+    if (m === "STALE") return { ok: false, conflict: true, errors: ["Your plan changed in another tab. Reopen the latest plan to continue."] };
     if (m.startsWith("CLASH:")) return { ok: false, errors: [`The week of ${m.slice(6)} already has its own saved changes, and they would override this. Reset that week to automatic first.`] };
     return { ok: false, errors: ["Your changes couldn't be saved. Check your connection and try again."] };
   }
@@ -4649,9 +4694,11 @@ function budgetCashForecast(cls, user, items, week, other, card, saveTarget, sav
 function buildBudgetView(cls, user, username) {
   const records = budgetTransactions(cls, username, budgetWeekStartKey());
   const sched = budgetWeekItems(cls, user, username, records);
-  const edited = budgetApplyEdits(user, sched); // the student's own edits to the day-by-day list (if any)
-  const { items, weekStartKey, todayKey } = sched;
+  const { weekStartKey, todayKey } = sched;
   const actual = budgetWeekActuals(cls, username, weekStartKey, records);
+  sched.items.push(...actual.extra.map(e => ({ ...e, key: "extra-" + e.label, dir: "in", status: "done", dayKey: null, icon: "star" })));
+  const edited = budgetApplyEdits(user, sched);
+  const items = sched.items;
   actual.assumedSaving = budgetRound(items.filter(i => i.custom && i.dir === "save" && i.status === "done").reduce((total, i) => total + i.amount, 0));
   actual.saved = budgetRound(actual.saved + actual.assumedSaving);
   const historyIncomplete = (cls.txns || []).length >= MAX_STORED_TXNS && !(cls.txns || []).some(t =>
@@ -4663,12 +4710,15 @@ function buildBudgetView(cls, user, username) {
   const inItems = items.filter(i => i.dir === "in");
   // Bills for the week's plan. The card statement is left out on purpose: it pays off
   // card spending that was already counted as spending when it was swiped.
-  const outItems = items.filter(i => i.dir === "out" && !i.repay && !i.cashReserveOnly);
+  const outItems = items.filter(i => i.dir === "out" && budgetCategory(i) !== "want" && !i.repay && !i.cashReserveOnly);
   const scheduledIn = sum(inItems.filter(counted));
-  const inTotal = budgetRound(scheduledIn + actual.extraTotal);
-  const received = budgetRound(sum(inItems.filter(i => i.status === "done" && !i.custom)) + actual.extraTotal);
+  const inTotal = scheduledIn;
+  const received = sum(edited.baseItems.filter(i => i.dir === "in" && i.status === "done"));
   const billsTotal = sum(outItems.filter(counted));
-  const billsPaid = sum(outItems.filter(i => i.status === "done"));
+  // A larger planning estimate on a recorded card cannot increase the payment on record.
+  const recordedBills = new Map(edited.baseItems.filter(i => i.dir === "out" && i.status === "done").map(i => [i.key, i.amount]));
+  const billsPaid = budgetRound(outItems.filter(i => i.status === "done").reduce((n,i) =>
+    n + (i.custom ? i.amount : Math.min(i.amount, recordedBills.get(i.key) || 0)), 0));
   const billsLeft = budgetRound(billsTotal - billsPaid);
   const assumedBills = sum(outItems.filter(i => i.custom && i.status === "done"));
   const left = budgetRound(inTotal - billsTotal);
@@ -4677,7 +4727,9 @@ function buildBudgetView(cls, user, username) {
 
   const saveTarget = plan.saveAmount;
   const spendAllowed = budgetRound(Math.max(0, left - Math.max(autoSave, saveTarget)));
-  const spent = budgetRound(actual.purchasesTotal + actual.surprisesTotal);
+  const assumedWants = sum(items.filter(i => budgetCategory(i) === "want" && i.status === "done"));
+  const plannedWants = sum(items.filter(i => budgetCategory(i) === "want" && counted(i)));
+  const spent = budgetRound(actual.purchasesTotal + actual.surprisesTotal + assumedWants);
   const spendLeft = budgetRound(spendAllowed - spent);
 
   const other = budgetOtherMoney(cls, user);
@@ -4689,7 +4741,11 @@ function buildBudgetView(cls, user, username) {
 
   // Removing a line edits the weekly plan. The bank still processes real obligations.
   const obligations = edited.removedItems.filter(i => i.dir !== "in" && !i.liquidReturn);
-  const forecast = budgetCashForecast(cls, user, items.concat(obligations), sched, other, cardNow, saveTarget, actual.saved);
+  // Forecast real payment sources, credit limits and due dates from the bank schedule,
+  // even if a student moves a card or changes its amount in their personal plan.
+  const forecastItems = edited.baseItems.filter(i => !edited.removedKeys.includes(i.key) || obligations.includes(i) || i.status === "done")
+    .concat(items.filter(i => i.custom));
+  const forecast = budgetCashForecast(cls, user, forecastItems, sched, other, cardNow, saveTarget, actual.saved);
   const { safeTimed, safeTotal, lowestDay, shortfall, savingsSpare, paymentIssues, restIn, restBills, restReturns } = forecast;
   const safeNow = historyIncomplete || cashClosed || paymentIssues.length ? 0
     : budgetRound(Math.min(safeTimed, plan.hasPlan ? Math.max(0, spendLeft) : safeTimed));
@@ -4794,7 +4850,7 @@ function buildBudgetView(cls, user, username) {
   return {
     ...sched, ...edited, ...forecast, actual, plan,
     inItems, outItems, scheduledIn, inTotal, received, billsTotal, billsPaid, assumedBills, billsLeft, left,
-    saveTarget, autoSave, spendAllowed, spent, spendLeft,
+    saveTarget, autoSave, spendAllowed, spent, spendLeft, assumedWants, plannedWants,
     cash, savings, savingsSpare, restIn, restBills, restReturns, safeTotal, safeNow, safeTimed, lowestDay, shortfall, verdict, notes, kiwi,
     mainLabel: acctSrcName(cls, user, "cash") || "Main account",
     otherLabel: hasExtras ? "Other accounts" : "Savings", cashClosed,

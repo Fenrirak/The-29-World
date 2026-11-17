@@ -33,6 +33,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
 <link rel="stylesheet" href="style.css?v=60104fce">
+<link rel="stylesheet" href="budget-days.css?v=266e7442">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -163,12 +164,30 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       </div>
     </div>
 
-    <details class="bud-days-wrap" id="budDaysWrap" ontoggle="budgetDaysToggled(this)">
-      <summary class="bud-days-summary"><span id="hBudDays">Day by day</span><span class="bud-days-count" id="budDaysCount"></span></summary>
-      <p class="muted-small">Add personal items for money outside the app. Each counts on the date you choose. Bank transactions appear automatically.</p>
-      <div id="budEditBar"></div>
-      <div class="bud-days" id="budDays"></div>
-    </details>
+    <section class="bud-days-wrap" id="budDaysWrap" aria-labelledby="hBudDays">
+      <div class="days-heading">
+        <button type="button" id="budDisclosure" class="days-disclosure" aria-controls="budDaysBody" aria-expanded="false" onclick="budToggleDays()"><span id="hBudDays">Day by day</span><span class="bud-days-count" id="budDaysCount"></span></button>
+        <button type="button" id="budEditStart" class="btn small gold" onclick="budEditStart()"><span aria-hidden="true" class="icon-slot" data-icon="edit"></span>Edit my days</button>
+      </div>
+      <div id="budDaysBody" hidden>
+        <div id="budEditBar"></div>
+        <div class="bud-days" id="budDays"></div>
+      </div>
+    </section>
+    <dialog id="budItemDialog" class="days-dialog" aria-labelledby="budDialogTitle">
+      <form id="budItemForm">
+        <button id="budDialogClose" type="button" class="days-close" aria-label="Close item editor">×</button>
+        <div class="days-eyebrow">Day by day</div>
+        <h3 id="budDialogTitle">Edit item</h3>
+        <p class="days-hint" id="budDialogHint"></p>
+        <label for="budItemName">Item name</label><input id="budItemName" required maxlength="40" autocomplete="off" placeholder="e.g. Lunch with friends">
+        <label for="budItemAmount">Amount</label><div class="bud-money-field"><span class="bud-currency">$</span><input id="budItemAmount" type="number" required min="0.01" max="1000000" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+        <fieldset class="days-types"><legend>Counts as</legend><div id="budTypes"></div></fieldset>
+        <div class="days-fields"><div><label for="budItemDay">Day</label><select id="budItemDay"></select></div><div><label for="budPosition">Position in day</label><select id="budPosition"></select></div></div>
+        <p class="days-save" id="budDialogStatus" role="status"></p>
+        <div class="days-dialog-actions"><button type="button" class="days-link" id="budRemoveItem">Remove from plan</button><button type="submit" class="btn gold">Done</button></div>
+      </form>
+    </dialog>
   </div>
 </main>
 
@@ -189,13 +208,14 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="shortcuts.js?v=a39d9a62"></script>
 <script defer src="offline.js?v=9b6b8b81"></script>
 <script defer src="data-core.js?v=4da071cc"></script>
-<script defer src="data-money.js?v=d7d02e61"></script>
+<script defer src="data-money.js?v=db228a91"></script>
 <script defer src="data-life.js?v=5703d77c"></script>
 <script defer src="data-property.js?v=d3163b64"></script>
 <script defer src="data-markets.js?v=3c1c89ff"></script>
 <script defer src="events-ui.js?v=edb4fb7e"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=0f7e459d"></script>
-<script defer src="budget.js?v=650eb498"></script>
+<script defer src="budget-days.js?v=8d0efba4"></script>
+<script defer src="budget.js?v=bc793734"></script>
 </body>
 </html>
