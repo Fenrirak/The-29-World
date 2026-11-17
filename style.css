@@ -4034,7 +4034,7 @@ html.dark-mode .stat .value.t29-up{animation-name:t29UpDark;}
 /* ---- Net worth trend on the report card: its own full-width row ---- */
 .nw-trend{margin:18px 0 8px;padding:16px 16px 12px;border:1px solid var(--line);border-radius:var(--r-5);background:var(--card);}
 .nw-trend-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;}
-.nw-trend-head h3{margin:0;}
+.nw-trend-head h3,.report-print-area .nw-trend-head h3{margin:0;padding-top:0;border-top:none;flex-wrap:wrap;}
 .nw-trend-note{margin:4px 0 0;}
 /* Last month / All time — same pill look as the quick-bet chips in Gambling (.bet-chip). */
 .nw-range{display:flex;flex-wrap:wrap;gap:8px;}

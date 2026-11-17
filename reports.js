@@ -245,12 +245,12 @@ function nwRangeBar(range) {
 // per note, then now; "All time" shows the whole history with each point the
 // average of one week. Green where it rose, red where it fell. Drawn by time,
 // so a gap in the history is a gap on the chart rather than being squashed.
-function netWorthChartHTML(s) {
+function netWorthChartHTML(s, editable = false) {
   NW_STUDENTS[s.username] = s;
   const range = NW_RANGE === "all" ? "all" : "month";
   const allPts = netWorthSeries(s, VIEWED_REPORT?.periodEnd);
-  const open = `<section class="nw-trend" data-user="${escapeHtml(s.username)}">`;
-  const title = `<h3>${icon("medal", 16)} Net worth over time</h3>`;
+  const open = `<section class="nw-trend" data-user="${escapeHtml(s.username)}" data-editable="${editable}">`;
+  const title = `<h3>${icon("medal", 16)} Net worth over time${editable ? `<span class="no-print">${rptResetControl("life", "netWorthTrend", "*")}</span>` : ""}</h3>`;
   if (allPts.length < 2) {
     return `${open}<div class="nw-trend-head">${title}</div><p class="muted-small">Your trend starts building once your net worth has been noted. It's noted automatically every 3 days, so check back soon.</p></section>`;
   }
@@ -322,7 +322,7 @@ document.addEventListener("click", e => {
   NW_RANGE = next;
   document.querySelectorAll(".nw-trend[data-user]").forEach(el => {
     const st = NW_STUDENTS[el.dataset.user];
-    if (st) el.outerHTML = netWorthChartHTML(st);
+    if (st) el.outerHTML = netWorthChartHTML(st, el.dataset.editable === "true");
   });
   const again = [...document.querySelectorAll(".nw-trend[data-user]")].find(el => el.dataset.user === who);
   const nb = again && again.querySelector(`.nw-range-chip[data-range="${next}"]`);
@@ -377,7 +377,9 @@ async function rptTeacherReset(btn) {
   const student = MODAL_STUDENT;
   const target = {scope: btn.dataset.scope, section: btn.dataset.section, category: btn.dataset.cat,
     monthKey: nzMonthKey(new Date(VIEWED_REPORT.periodEnd))};
-  if (!await t29Confirm(`Reset ${reportResetLabel(target)} for ${student.name} to zero? Future activity will count from this point. This affects the report only.`)) return;
+  if (!await t29Confirm(target.section === "netWorthTrend"
+    ? `Restart the net worth graph for ${student.name}? The graph will start again from their current net worth. This resets both graph ranges and leaves balances and saved reports unchanged.`
+    : `Reset ${reportResetLabel(target)} for ${student.name} to zero? Future activity will count from this point. This affects the report only.`)) return;
   btn.disabled = true;
   const result = await decideReportReset(CLASS_CODE, student.username, null, true, target);
   await showCurrentPeriod();
@@ -387,7 +389,7 @@ function rptResetControl(scope, section, cat) {
   if (IS_TEACHER) return teacherResetButton(scope, section, cat);
   const p = rptPendingFor(scope, section, cat);
   if (p) return `<span class="rpt-reset-tag">Reset requested</span><button type="button" class="btn small secondary" data-rid="${escapeHtml(p.id)}" onclick="rptWithdraw(this.dataset.rid)">Withdraw</button>`;
-  return `<button type="button" class="btn small secondary" title="Ask your teacher to reset this to 0" data-scope="${scope}" data-section="${section}" data-cat="${escapeHtml(cat)}" onclick="rptRequest(this)">Reset</button>`;
+  return `<button type="button" class="btn small secondary" title="${section === "netWorthTrend" ? "Ask your teacher to restart this graph" : "Ask your teacher to reset this to 0"}" data-scope="${scope}" data-section="${section}" data-cat="${escapeHtml(cat)}" onclick="rptRequest(this)">Reset</button>`;
 }
 // "Reset all" for a whole section (only when something is showing).
 function rptSectionButton(mine, scope, section, map) {
@@ -406,7 +408,7 @@ function rptRequestsBox() {
   const what = r => `${RPT_SECTION_NAMES[r.section] || r.section}: ${r.category === "*" ? "everything" : escapeHtml(r.category)} (${RPT_SCOPE_NAMES[r.scope] || r.scope})`;
   return `<div class="rpt-reqbox no-print"><h4>Your reset requests</h4>
     ${pend.map(r => `<div class="rpt-reqrow"><span>${what(r)} <span class="rpt-reset-tag">Waiting for your teacher</span></span><button type="button" class="btn small secondary" data-rid="${escapeHtml(r.id)}" onclick="rptWithdraw(this.dataset.rid)">Withdraw</button></div>`).join("")}
-    ${done.map(r => `<div class="rpt-reqrow muted-small"><span>${what(r)}: ${r.status === "approved" ? "approved, now starts from 0" : "declined"}</span></div>`).join("")}
+    ${done.map(r => `<div class="rpt-reqrow muted-small"><span>${what(r)}: ${r.status === "approved" ? (r.section === "netWorthTrend" ? "approved, graph restarted" : "approved, now starts from 0") : "declined"}</span></div>`).join("")}
     <div class="muted-small">A reset only changes the numbers on this report card. Nothing else changes.</div>
   </div><div id="rptResetMsg" class="no-print"></div>`;
 }
@@ -414,7 +416,9 @@ function rptMsg(html) { const el = document.getElementById("rptResetMsg"); if (e
 async function rptRequest(btn) {
   const scope = btn.dataset.scope, section = btn.dataset.section, cat = btn.dataset.cat;
   const target = cat === "*" ? `all of ${RPT_SECTION_NAMES[section]} (${RPT_SCOPE_NAMES[scope]})` : `${cat} (${RPT_SECTION_NAMES[section]}, ${RPT_SCOPE_NAMES[scope]})`;
-  if (!await t29Confirm(`Ask your teacher to reset ${target} to 0? It only changes your report card, and only once your teacher approves. You can withdraw the request until then.`)) return;
+  if (!await t29Confirm(section === "netWorthTrend"
+    ? "Ask your teacher to restart your net worth graph? Once approved, both graph ranges start again from your current net worth. Your balances and saved reports stay unchanged. You can withdraw the request until then."
+    : `Ask your teacher to reset ${target} to 0? It only changes your report card, and only once your teacher approves. You can withdraw the request until then.`)) return;
   btn.disabled = true;
   const res = await requestReportReset(CURRENT.username, CLASS_CODE, scope, section, cat);
   await showCurrentPeriod();
@@ -449,7 +453,7 @@ async function rptDecide(btn, approve) {
   const res = await decideReportReset(CLASS_CODE, btn.dataset.user, btn.dataset.rid, approve);
   const msg = document.getElementById("resetRequestsMsg");
   await showCurrentPeriod();
-  if (msg) msg.innerHTML = res.ok ? `<div class="success-msg">${approve ? "Approved. That number now shows 0 on the student's report card." : "Declined."}</div>` : `<div class="error-msg">${escapeHtml(res.error)}</div>`;
+  if (msg) msg.innerHTML = res.ok ? `<div class="success-msg">${approve ? "Approved. The student's report card has been reset." : "Declined."}</div>` : `<div class="error-msg">${escapeHtml(res.error)}</div>`;
 }
 
 function renderLoanHistory(loans) {
@@ -481,7 +485,7 @@ function studentReportHTML(s, opts) {
       <div class="profile-chip"><div class="label">Biggest expense</div><div class="value">${s.topExpenseCategory ? escapeHtml(s.topExpenseCategory.category) : "—"}</div>${s.topExpenseCategory ? `<div class="muted-small">${fmtMoney(s.topExpenseCategory.amount)}</div>` : ""}</div>
     </div>
 
-    ${netWorthChartHTML(s)}
+    ${netWorthChartHTML(s, editable)}
 
     <h4>${icon("medal", 16)} Net worth breakdown</h4>
     <div class="table-scroll"><table><tbody>

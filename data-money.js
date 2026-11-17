@@ -3134,8 +3134,9 @@ function reportAccountingNote(report) {
    earned or spent afterwards counts from 0. Only a teacher can write baselines; students
    only write their own `reportResetRequests`. A "this month" baseline belongs to the month
    it was made in and is ignored once a new month starts (the month's numbers restart then
-   anyway). */
-const REPORT_RESET_SECTIONS = { income: "Income", saved: "Saved & invested", spent: "Spent", returned: "Returned money & sale proceeds", borrowed: "Borrowed" };
+   anyway). The net worth graph instead stores a restart time and the current
+   net worth, hiding earlier points without changing their original records. */
+const REPORT_RESET_SECTIONS = { income: "Income", saved: "Saved & invested", spent: "Spent", returned: "Returned money & sale proceeds", borrowed: "Borrowed", netWorthTrend: "Net worth over time" };
 const REPORT_RESET_SCOPES = { month: "this month", life: "all time" };
 const REPORT_RESET_MAX_PENDING = 20;
 function reportResetLabel(r) {
@@ -3171,6 +3172,7 @@ function reportAdjustBucket(bucket, base) {
 }
 function _reportResetId() { return "rr" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function validReportTarget(scope, section, category) {
+  if (section === "netWorthTrend") return scope === "life" && category === "*";
   return Object.hasOwn(REPORT_RESET_SCOPES, scope) && Object.hasOwn(REPORT_RESET_SECTIONS, section)
     && typeof category === "string" && category.length > 0 && category.length <= 120
     && !Object.hasOwn(Object.prototype, category) && (section !== "borrowed" || category === "*");
@@ -3256,7 +3258,11 @@ async function decideReportReset(classCode, username, requestId, approve, direct
         if (req.scope === "month" && b.monthKey !== acc.monthKey) b = { monthKey: acc.monthKey };
         if (req.scope === "month") b.monthKey = acc.monthKey;
         b.totals = b.totals || {};
-        if (req.section === "borrowed") b.totals.borrowed = budgetRound(raw.borrowedTotal || 0);
+        if (req.section === "netWorthTrend") {
+          // Keep the original notes and saved reports; only restart the displayed trend.
+          baselines.netWorthTrend = { t: trustedNow().getTime(), v: buildStudentReportData(Object.assign({ username }, user), cls).netWorth };
+        }
+        else if (req.section === "borrowed") b.totals.borrowed = budgetRound(raw.borrowedTotal || 0);
         else {
           const rawCats = raw[req.section] || {};
           b[req.section] = b[req.section] || {};
@@ -3301,7 +3307,7 @@ async function decideReportReset(classCode, username, requestId, approve, direct
   if (decided) {
     await t29NotifyStudents(classCode, { to: username, icon: "chart", tone: approve ? "mint" : "coral",
       title: directTarget ? "Your teacher reset part of your report card" : approve ? "Your teacher approved your report card reset" : "Your teacher declined your report card reset",
-      body: `${reportResetLabel(decided)}.${approve ? " That number now starts again from 0 on your report card. Nothing else changed." : ""}`, href: "reports.html" });
+      body: `${reportResetLabel(decided)}.${approve ? (decided.section === "netWorthTrend" ? " Your graph now starts again from your current net worth. Nothing else changed." : " That number now starts again from 0 on your report card. Nothing else changed.") : ""}`, href: "reports.html" });
   }
   return { ok: true };
 }
@@ -3461,7 +3467,13 @@ function netWorthTrendPoints(student, cls) {
     const day = nzDateKey(new Date(t));
     if ((byDay.get(day)?.t || 0) <= t) byDay.set(day, { t, v: e.v, day });
   });
-  return Array.from(byDay.values()).sort((x, y) => x.t - y.t);
+  const reset = student.reportBaselines?.netWorthTrend;
+  let points = Array.from(byDay.values());
+  if (reset && Number.isFinite(reset.t) && Number.isFinite(reset.v)) {
+    points = points.filter(p => p.t > reset.t);
+    points.push({ t: reset.t, v: reset.v, day: nzDateKey(new Date(reset.t)), reset: true });
+  }
+  return points.sort((x, y) => x.t - y.t);
 }
 
 // Every point known for one student's report: everything noted so far,
