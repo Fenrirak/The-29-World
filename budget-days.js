@@ -23,14 +23,15 @@ function budRenderEditArea(v) {
       (BUD_RESET_OPEN ? '<div class="days-reset"><strong>Restore the automatic plan?</strong><p>Choose which weeks to reset.</p><button class="btn small" onclick="budReset(\'week\')">This week only</button> <button class="btn small" onclick="budReset(\'future\')">This and future weeks</button> <button class="days-link" onclick="budResetAsk(false)">Never mind</button></div>' : '') + BUD_FLASH;
     return;
   }
-  bar.innerHTML = '<div class="days-tools"><div><div class="days-eyebrow">Weekly planner</div><h3>Arrange your days</h3><p>Drag the dotted handle to move a card. Select the card to edit its amount, category or position.</p></div>' +
+  bar.innerHTML = '<div class="days-tools"><div><div class="days-eyebrow">Weekly planner</div><h3>Arrange your days</h3><p>Select a card to edit it. Drag to move it, or drop it outside Day by day to remove it.</p></div>' +
     '<div class="days-session"><button class="btn small secondary" id="budCancel">Cancel edits</button><button class="btn small gold" id="budDone">Done editing</button></div>' +
     '<div class="days-save-row"><span id="budSaveStatus" class="days-save" role="status"></span><button class="days-link" id="budRetry" hidden>Retry</button>' +
-    '<label class="days-scope">Apply to <select id="budScope"><option value="week">This week only</option><option value="future">This and future weeks</option></select></label></div></div>';
+    '<button class="days-link" id="budUndoRemoval" hidden>Undo removal</button><label class="days-scope">Apply to <select id="budScope"><option value="week">This week only</option><option value="future">This and future weeks</option></select></label></div></div>';
   budEl("budScope").value = e.scope;
   budEl("budScope").onchange = ev => { e.scope = ev.target.value; budChanged(); };
   budEl("budDone").onclick = () => budFinish(false);
   budEl("budCancel").onclick = () => budFinish(true);
+  budEl("budUndoRemoval").onclick = () => budUndoRemoval();
   budEl("budRetry").onclick = () => e.conflict ? budReopenLatest() : e.cancelFailed ? budFinish(true) : budFlush(e);
   budBoardPaint(); budStatus(e);
 }
@@ -40,7 +41,7 @@ function budEditStart() {
   const original = budClone(budgetEditSnapshot(BUD_ME.budget, v.weekStartKey));
   BUD_EDIT = { week: v.weekStartKey, today: v.todayKey, base: v.baseItems, scope: "week", original, expected: original,
     draft: budClone({ removed: v.removedKeys, added: v.customAdded, changes: saved.changes || [], order: saved.order || [] }),
-    rev: 0, saved: 0, state: "ready", message: "", timer: null, flight: null, fieldError: "", locked: false };
+    rev: 0, saved: 0, state: "ready", message: "", timer: null, flight: null, fieldError: "", locked: false, removals: [] };
   BUD_FLASH = ""; BUD_RESET_OPEN = false;
   budSetDaysOpen(true); budRenderEditArea(v);
   budEl("budDone").focus({ preventScroll: true });
@@ -119,27 +120,81 @@ function budLane(i) {
 function budLaneLabel(day) {
   return day === -2 ? "Every day" : day === -1 ? "Extra money so far" : budgetDayWord(dateKeyPlusDays(BUD_EDIT.week, day));
 }
+function budRemoveCard(key) {
+  const e = BUD_EDIT;
+  if (!e || e.locked || e.conflict) return;
+  const rows = budRows(), item = rows.find(row => budgetBoardKey(row) === key);
+  if (!item) return;
+  const siblings = rows.filter(row => budLane(row) === budLane(item)).map(budgetBoardKey);
+  const entry = {key, sourceKey: item.key, label: item.label, siblings};
+  if (item.custom) {
+    entry.index = e.draft.added.findIndex(c => c.id === item.customId);
+    [entry.custom] = e.draft.added.splice(entry.index, 1);
+  } else {
+    e.draft.removed.push(item.key);
+  }
+  e.removals.push(entry);
+  e.draft.order = e.draft.order.filter(k => k !== key);
+  budBoardPaint();
+  budChanged();
+  budEl("budUndoRemoval").focus({preventScroll:true});
+}
+function budUndoRemoval(entry = BUD_EDIT?.removals.at(-1)) {
+  const e = BUD_EDIT;
+  if (!entry || !e || e.locked || e.conflict || e.dragging) return;
+  e.removals.splice(e.removals.indexOf(entry), 1);
+  if (entry.custom) e.draft.added.splice(entry.index, 0, entry.custom);
+  else e.draft.removed = e.draft.removed.filter(key => key !== entry.sourceKey);
+  // Restore this card relative to surviving neighbours while keeping any intervening edits.
+  const rows = budRows(), restored = rows.find(i => budgetBoardKey(i) === entry.key);
+  const day = budLane(restored), neighbours = rows.filter(i => i !== restored && budLane(i) === day).map(budgetBoardKey);
+  const index = entry.siblings.indexOf(entry.key);
+  const next = entry.siblings.slice(index + 1).find(k => neighbours.includes(k));
+  const previous = entry.siblings.slice(0, index).reverse().find(k => neighbours.includes(k));
+  const insertBefore = next || neighbours[previous ? neighbours.indexOf(previous) + 1 : index];
+  budMove(entry.key, day, insertBefore || "");
+  budBoardPaint();
+  budChanged();
+  budEl("budDays").querySelector('.days-card[data-key="' + CSS.escape(entry.key) + '"]')?.focus({preventScroll:true});
+}
+document.addEventListener("keydown", ev => {
+  if (!(ev.ctrlKey || ev.metaKey) || ev.altKey || ev.shiftKey || ev.key.toLowerCase() !== "z" || ev.defaultPrevented) return;
+  if (!BUD_EDIT?.removals.length || BUD_EDIT.locked || BUD_EDIT.conflict || BUD_EDIT.dragging || budEl("budItemDialog").open) return;
+  if (ev.target.isContentEditable || ev.target.closest?.("input, textarea, select, [role=textbox]")) return;
+  ev.preventDefault();
+  budUndoRemoval();
+});
 function budBoardPaint() {
   const e = BUD_EDIT, rows = budRows(), board = budEl("budDays");
+  const undo = budEl("budUndoRemoval"), last = e.removals.at(-1);
+  undo.hidden = !last;
+  if (last) undo.title = "Restore " + last.label + " (Ctrl/⌘ Z)";
   const lanes = [0,1,2,3,4,5,6,...[-2,-1].filter(d => rows.some(i => budLane(i) === d))];
   board.innerHTML = lanes.map(d => {
     const items = rows.filter(i => budLane(i) === d), key = d < 0 ? "" : dateKeyPlusDays(e.week,d);
     const cards = items.map(i => {
       const cat = budgetCategory(i);
-      return '<button type="button" class="days-card" data-key="' + budEsc(budgetBoardKey(i)) + '" data-cat="' + cat + '">' +
-        '<span class="days-grip" aria-hidden="true">⠿</span><span class="days-card-copy"><strong>' + budEsc(i.label) + '</strong><span class="days-cat" data-cat="' + cat + '">' + BUD_CATEGORIES[cat] + '</span></span><b>' + fmtMoney(i.amount) + '</b></button>';
+      const key = budEsc(budgetBoardKey(i));
+      return '<div class="days-card-wrap"><button type="button" class="days-card" data-key="' + key + '" data-cat="' + cat + '">' +
+        '<span class="days-grip" aria-hidden="true">⠿</span><span class="days-card-copy"><strong>' + budEsc(i.label) + '</strong><span class="days-cat" data-cat="' + cat + '">' + BUD_CATEGORIES[cat] + '</span></span><b>' + fmtMoney(i.amount) + '</b></button>' +
+        '<button type="button" class="days-minus" data-remove="' + key + '" aria-label="Remove ' + budEsc(i.label) + ' from plan" title="Remove from plan"></button></div>';
     }).join("");
     return '<section class="days-lane' + (key === e.today ? ' is-today' : '') + '" data-day="' + d + '"><div class="days-lane-head"><h4>' + (key ? budDateLabel(key) : budLaneLabel(d)) + '</h4>' +
-      (key === e.today ? '<span class="bud-today">Today</span>' : '') + (d < 0 ? '' : '<button class="days-plus" type="button" data-add="' + d + '" aria-label="Add item to ' + budLaneLabel(d) + '">+</button>') + '</div>' +
+      (key === e.today ? '<span class="bud-today">Today</span>' : '') + (d < 0 ? '' : '<button class="days-plus" type="button" data-add="' + d + '" aria-label="Add item to ' + budLaneLabel(d) + '"></button>') + '</div>' +
       cards + (items.length ? '' : '<button class="days-empty" type="button" data-add="' + d + '">Drop here or add an item</button>') + '</section>';
   }).join("");
-  const gone = e.base.filter(i => e.draft.removed.includes(i.key) && i.status !== "done");
+  const gone = e.base.filter(i => e.draft.removed.includes(i.key));
   if (gone.length) board.insertAdjacentHTML("beforeend", '<div class="days-removed"><strong>Removed from plan</strong>' + gone.map(i =>
     '<button class="days-link" data-restore="' + budEsc(i.key) + '">Restore ' + budEsc(i.label) + '</button>').join('') + '</div>');
   board.onclick = ev => {
-    if (!BUD_EDIT || e.locked || e.conflict || performance.now() < (e.ignoreClick || 0)) return;
+    if (!BUD_EDIT || e.locked || e.conflict || e.ignoreClick) return;
     const b = ev.target.closest("button"); if (!b) return;
-    if (b.dataset.restore) { e.draft.removed = e.draft.removed.filter(k => k !== b.dataset.restore); budBoardPaint(); budChanged(); }
+    if (b.dataset.remove) budRemoveCard(b.dataset.remove);
+    else if (b.dataset.restore) {
+      const entry = e.removals.find(r => r.sourceKey === b.dataset.restore);
+      if (entry) budUndoRemoval(entry);
+      else { e.draft.removed = e.draft.removed.filter(k => k !== b.dataset.restore); budBoardPaint(); budChanged(); }
+    }
     else if (b.dataset.key || b.dataset.add != null) budOpenItem(b.dataset.key, Number(b.dataset.add));
   };
   board.onpointerdown = budDragStart;
@@ -168,12 +223,18 @@ function budMove(key, day, before) {
 }
 function budDragStart(ev) {
   const card = ev.target.closest(".days-card"), e = BUD_EDIT;
-  if (!card || !e || e.locked || e.conflict || !ev.isPrimary || ev.button !== 0 || (ev.pointerType === "touch" && !ev.target.closest(".days-grip"))) return;
+  if (!card || !e || e.locked || e.conflict || e.dragging || !ev.isPrimary || ev.button !== 0 || (ev.pointerType === "touch" && !ev.target.closest(".days-grip"))) return;
   const key = card.dataset.key, from = Number(card.closest(".days-lane").dataset.day), sx = ev.clientX, sy = ev.clientY;
-  let active = false, x = sx, y = sy, lane, before, line, frame, ghost;
+  const wrap = card.closest(".days-card-wrap"), rect = wrap.getBoundingClientRect();
+  const grabX = sx - rect.left, grabY = sy - rect.top;
+  let active = false, x = sx, y = sy, lane, before, line, frame, ghost, layer, outside;
   const clean = () => { lane?.classList.remove("drop-target"); line?.classList.remove("drop-before"); lane = line = null; };
   function target() {
     clean();
+    const bounds = budEl("budDaysWrap").getBoundingClientRect();
+    outside = x < bounds.left || x >= bounds.right || y < bounds.top || y >= bounds.bottom;
+    ghost.classList.toggle("drop-remove", outside);
+    if (outside) return;
     lane = document.elementFromPoint(x,y)?.closest(".days-lane");
     if (!lane || (+lane.dataset.day < 0 && +lane.dataset.day !== from)) { lane = null; return; }
     lane.classList.add("drop-target");
@@ -190,26 +251,46 @@ function budDragStart(ev) {
     x = v.clientX; y = v.clientY;
     if (!active && Math.hypot(x-sx,y-sy) < 6) return;
     if (!active) {
-      active = true; card.setPointerCapture(ev.pointerId);
-      ghost = card.cloneNode(true); ghost.removeAttribute("data-key"); ghost.setAttribute("aria-hidden","true"); ghost.tabIndex = -1;
-      ghost.classList.add("days-drag-preview"); ghost.style.width = Math.min(card.offsetWidth,230) + "px";
-      document.body.appendChild(ghost); card.classList.add("is-dragging"); scroll();
+      active = e.dragging = true;
+      card.setPointerCapture(ev.pointerId);
+      layer = document.createElement("div");
+      layer.className = "days-drag-layer";
+      layer.inert = true;
+      layer.setAttribute("aria-hidden","true");
+      ghost = wrap.cloneNode(true);
+      ghost.classList.add("days-drag-preview");
+      ghost.style.width = rect.width + "px";
+      ghost.style.font = getComputedStyle(wrap).font;
+      layer.appendChild(ghost);
+      document.body.appendChild(layer);
+      wrap.classList.add("is-dragging");
+      scroll();
     }
-    ghost.style.left = Math.max(4,Math.min(innerWidth-ghost.offsetWidth-6,x+14)) + "px";
-    ghost.style.top = Math.max(4,Math.min(innerHeight-ghost.offsetHeight-6,y+14)) + "px";
+    ghost.style.transform = "translate3d(" + (x-grabX) + "px," + (y-grabY) + "px,0)";
     target();
   }
   function end(v) {
-    if (v.pointerId !== ev.pointerId) return;
+    if (v.pointerId != null && v.pointerId !== ev.pointerId) return;
+    // Touch initially captures the grip. Its capture loss bubbles when the card takes over.
+    if (v.type === "lostpointercapture" && v.target !== card) return;
+    if (v.type === "keydown" && v.key !== "Escape") return;
+    const dropped = active && v.type === "pointerup" && BUD_EDIT === e && !e.locked && !e.conflict;
+    if (dropped) { x = v.clientX; y = v.clientY; target(); }
     document.removeEventListener("pointermove",move); document.removeEventListener("pointerup",end); document.removeEventListener("pointercancel",end);
-    cancelAnimationFrame(frame); ghost?.remove(); card.classList.remove("is-dragging");
+    document.removeEventListener("keydown",end); window.removeEventListener("blur",end); card.removeEventListener("lostpointercapture",end);
+    cancelAnimationFrame(frame); layer?.remove(); wrap.classList.remove("is-dragging");
+    if (card.hasPointerCapture(ev.pointerId)) card.releasePointerCapture(ev.pointerId);
+    e.dragging = false;
     if (active && BUD_EDIT === e) {
-      e.ignoreClick = performance.now()+350;
-      if (lane && v.type === "pointerup" && budMove(key,+lane.dataset.day,before)) { budBoardPaint(); budChanged(); }
+      e.ignoreClick = true;
+      setTimeout(() => { e.ignoreClick = false; }, 0);
+      if (dropped && outside) budRemoveCard(key);
+      else if (dropped && lane && budMove(key,+lane.dataset.day,before)) { budBoardPaint(); budChanged(); }
     }
     clean();
   }
   document.addEventListener("pointermove",move); document.addEventListener("pointerup",end); document.addEventListener("pointercancel",end);
+  document.addEventListener("keydown",end); window.addEventListener("blur",end); card.addEventListener("lostpointercapture",end);
 }
 function budOpenItem(key, day) {
   const e = BUD_EDIT, dlg = budEl("budItemDialog"), form = budEl("budItemForm");
@@ -242,7 +323,7 @@ function budOpenItem(key, day) {
   }
   positions(true);
   const remove = budEl("budRemoveItem");
-  remove.hidden = fresh || (!personal && ["settled","done"].includes(initial.status));
+  remove.hidden = fresh;
   function sync(ev) {
     if (e.locked || e.conflict) return false;
     if (ev?.target === days) positions(false);
@@ -280,10 +361,8 @@ function budOpenItem(key, day) {
   budEl("budDialogClose").onclick = close;
   dlg.oncancel = ev => { ev.preventDefault(); close(); };
   remove.onclick = () => {
-    if (personal) e.draft.added = e.draft.added.filter(c => c.id !== id);
-    else e.draft.removed.push(initial.key);
-    e.draft.order = e.draft.order.filter(k => k !== itemKey);
-    budBoardPaint(); budChanged(); close();
+    close();
+    budRemoveCard(itemKey);
   };
   form.oninput = sync;
   form.onsubmit = ev => { ev.preventDefault(); if (sync()) { close(); budFlush(e); } };

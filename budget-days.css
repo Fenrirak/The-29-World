@@ -30,16 +30,30 @@
 .days-lane-head{min-height:36px;margin-bottom:5px;gap:7px}
 .days-lane-head h4{font-size:var(--fs-md);color:var(--ink);margin:0}
 .days-plus,.days-close{font:inherit;font-size:1.2rem;line-height:1;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;min-width:36px;min-height:36px}
-.days-plus{margin-left:auto}
+.days-plus{margin-left:auto;padding:0;display:inline-grid;place-items:center;aspect-ratio:1;flex:none}
+.days-plus::before,.days-plus::after{content:"";grid-area:1/1;background:currentColor;border-radius:2px;width:12px;height:2px}
+.days-plus::after{transform:rotate(90deg)}
+.days-card-wrap{position:relative;min-width:0}
+.days-card-wrap+.days-card-wrap{margin-top:7px}
 .days-card{width:100%;min-width:0;display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:8px;align-items:center;padding:10px 9px;text-align:left;position:relative;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;cursor:grab;user-select:none;box-shadow:0 1px 3px #12253b0c}
-.days-card+.days-card{margin-top:7px}
+.days-card{min-height:62px;padding-right:32px}
+.days-minus{position:absolute;top:1px;right:1px;width:28px;height:28px;display:grid;place-items:center;padding:0;background:none;color:var(--muted);border:0;border-radius:50%;cursor:pointer}
+.days-minus::before,.days-minus::after{content:"";grid-area:1/1}
+.days-minus::before{width:18px;height:18px;box-sizing:border-box;border-radius:50%;border:1px solid var(--line);background:var(--card)}
+.days-minus::after{width:8px;height:2px;border-radius:2px;background:currentColor}
+.days-minus:hover,.days-minus:focus-visible{color:var(--ink)}
+.days-minus:hover::before,.days-minus:focus-visible::before{border-color:currentColor}
 .days-card:hover{border-color:var(--sky-fill);box-shadow:0 2px 7px #12253b12}
 .days-card-copy{display:grid;justify-items:start;gap:4px;min-width:0}
 .days-card strong{font-size:var(--fs-md);line-height:1.35;overflow-wrap:anywhere}
 .days-card b{font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
 .days-grip{color:var(--muted);font-size:1.35rem;touch-action:none;padding:10px 0;margin:-8px -4px;text-align:center}
-.days-card.is-dragging{opacity:.48;cursor:grabbing}
-.days-card.days-drag-preview{position:fixed;z-index:10000;pointer-events:none;transform:rotate(-2deg);border-color:var(--sky-fill);box-shadow:var(--shadow-lg)}
+.days-card-wrap.is-dragging{opacity:.18}
+.days-drag-layer{position:fixed;inset:0;z-index:10000;overflow:clip;pointer-events:none}
+.days-drag-preview{position:absolute;left:0;top:0;pointer-events:none}
+.days-drag-preview .days-card{border-color:var(--sky-fill);box-shadow:var(--shadow-lg)}
+.days-drag-preview.drop-remove .days-card{border-color:var(--coral)}
+.days-drag-preview.drop-remove::after{content:"Release to remove";position:absolute;top:100%;left:0;margin-top:3px;border-radius:6px;background:var(--ink);color:var(--card);font-size:var(--fs-sm);font-weight:700;padding:3px 8px}
 .days-lane.drop-target{outline:2px solid var(--sky-fill);outline-offset:-2px;background:color-mix(in srgb,var(--card) 90%,var(--sky))}
 .days-card.drop-before:before{content:"";position:absolute;left:0;right:0;top:-5px;height:3px;border-radius:4px;background:var(--sky-fill)}
 .days-empty{width:100%;padding:16px 5px;border:1px dashed var(--line);border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:var(--fs-sm);cursor:pointer}

@@ -4384,7 +4384,7 @@ function budgetBoardKey(i) {
 function budgetBoardItems(base, draft, week, today) {
   const rm = new Set(draft.removed), overrides = new Map((draft.changes || []).map(p => [p.key, p]));
   const rank = new Map((draft.order || []).map((key, n) => [key, n]));
-  return base.filter(i => i.status === "done" || !rm.has(i.key)).map(i => {
+  return base.filter(i => !rm.has(i.key)).map(i => {
     const p = overrides.get(budgetBoardKey(i));
     if (!p) return i;
     const category = p.category || budgetCategory(i), dir = budgetCategoryDir(category);
@@ -4411,7 +4411,7 @@ function budgetApplyEdits(user, sched) {
   });
   const rm = new Set(removed);
   sched.items = budgetBoardItems(base, { ...eff, removed }, sched.weekStartKey, sched.todayKey);
-  return { baseItems: base, removedItems: base.filter(i => i.status !== "done" && rm.has(i.key)), removedKeys: removed, customAdded: eff.added.map(c => Object.assign({}, c)), editSource: eff.source };
+  return { baseItems: base, removedItems: base.filter(i => rm.has(i.key)), removedKeys: removed, customAdded: eff.added.map(c => Object.assign({}, c)), editSource: eff.source };
 }
 function budgetCleanDraft(draft) {
   const removed = Array.from(new Set((draft && draft.removed || []).map(String)));
@@ -4439,9 +4439,7 @@ function budgetValidateEdits(view, user, draft, scope) {
   d.removed.forEach(key => {
     const it = (view.baseItems || []).find(i => i.key === key);
     if (!it || prevRemoved.has(key)) return;
-    if (it.status === "done") {
-      errors.push(`"${it.label}" (${it.dayKey ? budgetDayWord(it.dayKey) : "every day"}) has already ${it.dir === "in" ? "arrived" : it.dir === "out" ? "been paid" : "happened"} this week, so it can't be taken out of this week's plan. Take it out after the week ends instead.`);
-    } else if (it.dir === "out" && it.status !== "missed") {
+    if (it.dir === "out" && ["today", "upcoming", "overdue"].includes(it.status)) {
       notes.push(`"${it.label}" still counts towards safe spending while the payment is due, even if you leave it out of your weekly plan.`);
     }
   });
