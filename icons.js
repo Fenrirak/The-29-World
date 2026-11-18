@@ -109,14 +109,12 @@ function icon(name, size) {
   return `<span class="icon" style="width:${s}px;height:${s}px;display:inline-flex;">${svgFor(name)}</span>`;
 }
 
-// Fills every element with a data-icon attribute (used for nav bars, brand
-// marks etc). Safe to call even if some pages don't have any such elements.
+// Fills every element with a data-icon attribute. Safe to call on pages
+// without icon slots.
 function paintIconSlots() {
   document.querySelectorAll("[data-icon]").forEach(el => {
     el.innerHTML = icon(el.getAttribute("data-icon"), el.getAttribute("data-icon-size") || 16);
   });
-  const brand = document.getElementById("brandCoin");
-  if (brand) brand.innerHTML = icon("coin", 24);
   fitTopbar();
 }
 

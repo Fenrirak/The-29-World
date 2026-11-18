@@ -57,7 +57,7 @@ async function precache() {
         let u;
         try { u = new URL(ref, new URL(page, self.registration.scope)); } catch (err) { continue; }
         if (u.origin !== self.location.origin) continue;
-        if (/\.(js|css|json)$/i.test(u.pathname)) assets.add(u.href);
+        if (/\.(js|css|json)$/i.test(u.pathname) || u.pathname.endsWith("/icon-512.png")) assets.add(u.href);
       }
     } catch (err) { /* offline during install: runtime caching still works later */ }
   }));

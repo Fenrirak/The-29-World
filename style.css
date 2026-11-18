@@ -139,12 +139,9 @@ p{color:var(--muted);line-height:1.5;}
   flex-shrink:0;
   white-space:nowrap;
 }
-.brand .coin, .brand .icon-slot{
+.brand-logo{
   width:calc(24px * var(--navscale));
   height:calc(24px * var(--navscale));
-  display:inline-flex;align-items:center;justify-content:center;
-  color:var(--gold);
-  filter:drop-shadow(0 3px 6px rgba(232,184,75,0.35));
   flex-shrink:0;
 }
 .topbar nav{
@@ -2210,7 +2207,6 @@ html.dark-mode .stat.lilac .muted-small{color:#fff;}
 /* ---------------- Remove the remaining glow/shine effects (colored
    drop-shadows, colored box-shadows, radial "shine" circles) so nothing
    throws a bright halo against the dark surface. ---------------- */
-html.dark-mode .brand .coin, html.dark-mode .brand .icon-slot{filter:none;}
 html.dark-mode .auth-logo .coin{filter:none;}
 
 html.dark-mode .anw-balance-widget{
