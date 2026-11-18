@@ -481,12 +481,15 @@ function showGoodBigEventPopup(entry) {
   overlay.className = "anw-modal-overlay";
 
   overlay.innerHTML = `
-    <div class="anw-modal-card">
-      <h2 style="display:flex;align-items:center;gap:9px;">${icon("bolt", 24)} Big event: ${escapeHtml(entry.name)}</h2>
-      <p>${escapeHtml(entry.description) || ""}</p>
-      <p class="ticker-up" style="font-weight:900;font-size:1.2em;">+${fmtMoney(entry.cost)}</p>
-      ${entry.basisNote ? `<p class="muted-small">${escapeHtml(entry.basisNote)}</p>` : ""}
-      <button class="btn gold" style="width:100%;justify-content:center;margin-top:16px;" id="anwGoodBigEventCloseBtn">Nice, got it</button>
+    <div class="anw-modal-card be-card" role="dialog" aria-modal="true" aria-labelledby="bigWindfallTitle">
+      <div class="be-heading">
+        <span class="badge gold">${icon("bolt", 14)} Big event</span>
+        <h2 id="bigWindfallTitle" class="be-title">${escapeHtml(entry.name)}</h2>
+        ${entry.description ? `<p>${escapeHtml(entry.description)}</p>` : ""}
+      </div>
+      <div class="be-summary"><span>Paid into your everyday account</span><strong class="ticker-up">+${fmtMoney(entry.cost)}</strong></div>
+      ${entry.basisNote ? `<p class="muted-small be-note">${escapeHtml(entry.basisNote)}</p>` : ""}
+      <button class="btn gold be-full" type="button" id="anwGoodBigEventCloseBtn">Nice, got it</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -495,7 +498,7 @@ function showGoodBigEventPopup(entry) {
 }
 
 // claimOptions: the student's plans that can claim this event, from
-// insuranceClaimOptions — each gets its own button showing what it costs.
+// bigEventClaimOptions — each gets its own breakdown and claim button.
 async function showBigEventPopup(entry, claimOptions, username, classCode, user) {
   // Room left on the student's credit card (if they have one) for the "pay on card" options.
   let hasCard = false, cardRoom = 0;
@@ -506,6 +509,7 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
       if (cardPlan) { hasCard = true; cardRoom = cardAvailable(user.creditCard, cardPlan); }
     }
   } catch (e) { /* no card options if it can't be read */ }
+  if (document.getElementById("anwBigEventModal")) return;
   const overlay = document.createElement("div");
   overlay.id = "anwBigEventModal";
   overlay.className = "anw-modal-overlay";
@@ -521,7 +525,7 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
   // pay/claim regardless of balance), so don't gate their buttons on funds
   // they don't actually need.
   const isTeacher = user && user.role === "teacher";
-  const cash = (user && user.balance) || 0;
+  const cash = Number(user && user.balance) || 0;
   // Cash payment is never disabled for insufficient funds — it's allowed
   // to take the balance negative, same as fines and choice events
   // elsewhere in the app (see resolveBigEvent). Without this, an event with
@@ -537,76 +541,93 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
   // out with the reason; "Pay from cash" always stays available.
   const coverage = BIG_EVENT_COVERAGE[entry.module];
   const cover = entry.insuranceCover || [];
-  const claims = (claimOptions || []).map(o => ({ ...o, ok: isTeacher || o.studentPays <= 0 || cash >= o.studentPays || cardRoom >= o.studentPays }));
+  const claims = claimOptions || [];
+  const canChooseClaimSource = cardRoom > 0 && claims.some(o => !o.writeOff && o.studentPays > 0);
+  const defaultClaimSource = canChooseClaimSource && claims.some(o => !o.writeOff && o.studentPays > Math.max(0, cash)
+    && o.studentPays <= cardRoom + Math.max(0, cash)) ? "card" : "cash";
   const impact = eventImpactText(entry, coverage);
-  const coverLine = (impact ? `<p class="muted-small">${escapeHtml(impact)}</p>` : "")
-    + (cover.length
-      ? `<p class="muted-small">Insurance that covers this: ${escapeHtml(insuranceCoverSummary(coverage, cover, entry.incident))}. You'd also pay your plan's excess.</p>`
-      : "");
   // Types listed on the event that could cover THIS vehicle (Truck
   // Insurance only covers trucks, the other types only cars and bikes).
   const fittingTypes = cover.filter(c => typeFitsVehicle(coverage, c.type, entry.assetType));
   const vehicleName = entry.assetName || "your vehicle";
+  const claimPayment = (o, source) => {
+    const card = source === "card" && !o.writeOff ? Math.min(cardRoom, Math.max(0, o.studentPays)) : 0;
+    const due = Math.round((o.studentPays - card) * 100) / 100;
+    return { card, due, ok: isTeacher || due <= 0 || cash >= due };
+  };
+  const claimPaymentNote = (o, source) => {
+    const { card, due, ok } = claimPayment(o, source);
+    const parts = [];
+    if (card > 0) parts.push(`${fmtMoney(card)} on credit card`);
+    if (due > 0 && !isTeacher) parts.push(`${fmtMoney(due)} from your everyday account`);
+    return parts.join(" · ") + (ok ? "" : `. Available in everyday: ${fmtMoney(cash)}`);
+  };
   const claimButtons = claims.length
     ? claims.map((o, i) => {
-        if (o.writeOff) {
-          // Gives the house away — red, and confirmed before it's sent.
-          return `<button class="btn coral" id="bigClaimBtn${i}" ${o.ok ? "" : "disabled"}>
-            ${escapeHtml(writeOffButtonLabel(o))}${o.ok ? "" : `. You only have ${fmtMoney(cash)}`}
-          </button>`;
-        }
-        if (o.losesVehicle) {
-          // Still costs them the vehicle — red, and confirmed before it's sent.
-          return `<button class="btn coral" id="bigClaimBtn${i}" ${o.ok ? "" : "disabled"}>
-            Claim on ${escapeHtml(insurancePlanName(o.plan))}. You pay ${fmtMoney(o.excess)} excess, but still lose ${escapeHtml(vehicleName)}${o.ok ? "" : `. You only have ${fmtMoney(cash)}`}
-          </button>`;
-        }
-        // The type is only added when the plan's own name doesn't already say it.
-        const typeLabel = insuranceTypeLabel(coverage, o.plan.insType);
-        const showType = typeLabel && o.plan.name !== typeLabel;
-        return `<button class="btn secondary" id="bigClaimBtn${i}" ${o.ok ? "" : "disabled"}>
-          Claim on ${escapeHtml(insurancePlanName(o.plan))}${showType ? ` (${escapeHtml(typeLabel)})` : ""}. You pay ${fmtMoney(o.studentPays)}
-          (${fmtMoney(o.excess)} excess${o.uncovered > 0 ? ` + ${fmtMoney(o.uncovered)} not covered` : ""})${o.ok ? "" : `. You only have ${fmtMoney(cash)}`}
-        </button>`;
+        const planName = escapeHtml(insurancePlanName(o.plan));
+        const takeAsset = o.writeOff || o.losesVehicle;
+        const amount = o.studentPays < 0 ? `You receive ${fmtMoney(-o.studentPays)}`
+          : o.studentPays === 0 ? "No charge" : `You pay ${fmtMoney(o.studentPays)}`;
+        const detail = o.writeOff ? `The insurer takes ${escapeHtml(o.property.name || "your house")}.`
+          : `Insurer covers ${fmtMoney(o.payout)} · Excess due ${fmtMoney(o.excessDue)}`
+            + (o.uncovered > 0 ? ` · Uncovered cost ${fmtMoney(o.uncovered)}` : "")
+            + (o.losesVehicle ? `. You lose ${escapeHtml(vehicleName)}.` : "");
+        return `<div class="be-claim">
+          <div class="be-claim-head"><strong>${planName}</strong><strong>${amount}</strong></div>
+          <p class="muted-small">${detail}</p>
+          <p class="muted-small be-pay-note" id="bigClaimNote${i}">${claimPaymentNote(o, defaultClaimSource)}</p>
+          <button type="button" class="btn small ${takeAsset ? "coral" : "gold"}" id="bigClaimBtn${i}"
+            aria-label="Claim on ${planName}" ${claimPayment(o, defaultClaimSource).ok ? "" : "disabled"}>Claim insurance</button>
+        </div>`;
       }).join("")
-    : `<button class="btn secondary" disabled>${cover.length
+    : `<p class="muted-small">${cover.length
         ? (fittingTypes.length
-          ? `Claim insurance. Needs ${escapeHtml(fittingTypes.map(c => insuranceTypeLabel(coverage, c.type)).join(" or "))}`
-          : `Claim insurance. None of the insurance for this covers your ${entry.assetType === "truck" ? "truck" : "vehicle"}`)
-        : "Claim insurance (no matching plan)"}</button>`;
+          ? `You need ${escapeHtml(fittingTypes.map(c => insuranceTypeLabel(coverage, c.type)).join(" or "))} to claim.`
+          : `No eligible plan covers this ${entry.assetType === "truck" ? "truck" : "vehicle"}.`)
+        : "You have no matching insurance plan."}</p>`;
 
   const dismissHtml = snz.canDismiss
     ? `<div class="be-dismiss" id="bigDismissWrap">
         <button class="btn secondary" id="bigDismissBtn" type="button">${snz.used ? `Dismiss (${beFmt(snz.remainingMs)} left)` : "Dismiss for 5 minutes"}</button>
         <p class="muted-small">${snz.used
-          ? "Your 5 minutes are already running, and putting this away again doesn't add any time. When they run out it comes back and can't be put away."
-          : "Need to move money into your everyday account first? You can put this away once. You get 5 minutes, then it comes back and can't be put away again."}</p>
+          ? "The popup will reopen when the timer runs out."
+          : "Use this time to move money into your everyday account if you need to."}</p>
       </div>`
     : `<div class="be-forced" id="bigForcedNote" role="status">${icon("lock", 15)} <span>Your 5 minutes are up. You need to deal with this now.</span></div>`;
   overlay.innerHTML = `
-    <div class="anw-modal-card be-card" role="dialog" aria-modal="true" aria-labelledby="bigEventTitle">
-      <h2 id="bigEventTitle" class="be-title">${icon("bolt", 24)} <span>Big event: ${escapeHtml(entry.name)}</span></h2>
-      <p>${escapeHtml(entry.description) || ""}</p>
-      <p><strong>${BIG_EVENT_MODULE_LABEL[entry.module]}</strong> &middot; costs <strong>${fmtMoney(entry.cost)}</strong> to resolve</p>
-      ${entry.basisNote ? `<p class="muted-small">${escapeHtml(entry.basisNote)}</p>` : ""}
-      <p class="muted-small">${canForfeit ? "You need to choose how to handle this before you can continue." : `This doesn't put ${assetLabel} at risk. You just need to cover the cost, or claim insurance if you have it.`}</p>
-      ${coverLine}
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
-        ${canForfeit ? `<button class="btn coral" id="bigForfeitBtn">Don't pay. Lose ${assetLabel}</button>` : ""}
-        <button class="btn gold" id="bigPayCashBtn">
-          Pay ${fmtMoney(entry.cost)} from cash${cashWouldGoNegative ? ` (will take your balance negative. You have ${fmtMoney(cash)})` : ""}
-        </button>
-        ${hasCard ? `<button class="btn gold" id="bigPayCardBtn" ${cardRoom > 0 ? "" : "disabled"}>
-          Pay ${fmtMoney(entry.cost)} on credit card${cardRoom <= 0 ? " (no credit available)" : cardRoom >= entry.cost ? ` (${fmtMoney(cardRoom)} available)` : ` (card covers ${fmtMoney(cardRoom)}, the other ${fmtMoney(entry.cost - cardRoom)} from cash)`}
-        </button>` : ""}
-        ${claims.length && hasCard && cardRoom > 0 ? `<label class="muted-small be-from" for="bigClaimPayFrom">Pay the claim's excess from:<select id="bigClaimPayFrom"><option value="cash">Cash (${fmtMoney(cash)})</option><option value="card">Credit card (${fmtMoney(cardRoom)} available)</option></select></label>` : ""}
-        ${claimButtons}
+    <div class="anw-modal-card be-card" role="dialog" aria-modal="true" aria-labelledby="bigEventTitle" tabindex="-1">
+      <div class="be-heading">
+        <span class="badge gold">${icon("bolt", 14)} Big event</span>
+        <span class="badge navy">${BIG_EVENT_MODULE_LABEL[entry.module] || "General"}</span>
+        <h2 id="bigEventTitle" class="be-title">${escapeHtml(entry.name)}</h2>
+        ${entry.description ? `<p>${escapeHtml(entry.description)}</p>` : ""}
+        ${impact ? `<p class="muted-small">${escapeHtml(impact)}</p>` : ""}
       </div>
+      <div class="be-summary"><span>Full cost without a claim</span><strong>${fmtMoney(entry.cost)}</strong></div>
+      <section class="be-section" aria-labelledby="bigInsuranceTitle">
+        <h3 id="bigInsuranceTitle">Insurance</h3>
+        ${canChooseClaimSource ? `<label class="muted-small be-from" for="bigClaimPayFrom">Pay your share from
+          <select id="bigClaimPayFrom"><option value="cash">Everyday (${fmtMoney(cash)})</option><option value="card" ${defaultClaimSource === "card" ? "selected" : ""}>Credit card (${fmtMoney(cardRoom)} available)</option></select></label>` : ""}
+        ${claimButtons}
+      </section>
+      <section class="be-section" aria-labelledby="bigPayTitle">
+        <h3 id="bigPayTitle">Pay in full</h3>
+        <div class="be-pay-buttons">
+          <button class="btn small ${claims.length ? "secondary" : "gold"}" id="bigPayCashBtn" type="button">Pay from everyday</button>
+          ${hasCard ? `<button class="btn small secondary" id="bigPayCardBtn" type="button" ${cardRoom > 0 ? "" : "disabled"}>Pay by credit card</button>` : ""}
+        </div>
+        ${cashWouldGoNegative ? `<p class="muted-small">You have ${fmtMoney(cash)} in everyday. Paying the full cost from everyday will take your balance below zero.</p>` : ""}
+        ${hasCard && cardRoom < entry.cost ? `<p class="muted-small">${cardRoom > 0
+          ? `Card payment uses ${fmtMoney(cardRoom)} of credit and ${fmtMoney(entry.cost - cardRoom)} from everyday.`
+          : "Your credit card has no available credit."}</p>` : ""}
+      </section>
+      ${canForfeit ? `<div class="be-section"><button class="btn small coral" id="bigForfeitBtn" type="button">Lose ${assetLabel} without paying</button></div>` : ""}
       ${dismissHtml}
       <div id="bigEventMsg" role="alert"></div>
     </div>
   `;
   document.body.appendChild(overlay);
+  overlay.querySelector(".be-card").focus();
 
   // Only buttons that are actually usable get toggled between attempts.
   // Buttons disabled because of a genuine constraint (not enough cash,
@@ -618,9 +639,19 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
   if (canForfeit) eligibleIds.push("bigForfeitBtn");
   if (hasCard && cardRoom > 0) eligibleIds.push("bigPayCardBtn");
   if (snz.canDismiss) eligibleIds.push("bigDismissBtn");
-  claims.forEach((o, i) => { if (o.ok) eligibleIds.push("bigClaimBtn" + i); });
+  const claimSource = overlay.querySelector("#bigClaimPayFrom");
+  const setClaimButtons = (busy) => {
+    const source = claimSource ? claimSource.value : "cash";
+    claims.forEach((o, i) => {
+      overlay.querySelector("#bigClaimBtn" + i).disabled = busy || !claimPayment(o, source).ok;
+      overlay.querySelector("#bigClaimNote" + i).textContent = claimPaymentNote(o, source);
+    });
+  };
+  if (claimSource) claimSource.addEventListener("change", () => setClaimButtons(false));
   const setBusy = (busy) => {
     eligibleIds.forEach(id => { const b = overlay.querySelector("#" + id); if (b) b.disabled = busy; });
+    if (claimSource) claimSource.disabled = busy;
+    setClaimButtons(busy);
   };
 
   const resolve = async (choice, paySource, planId) => {
@@ -642,12 +673,9 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
   claims.forEach((o, i) => {
     document.getElementById("bigClaimBtn" + i).addEventListener("click", async () => {
       if (o.writeOff && !await confirmWriteOff(o)) return;
-      if (o.losesVehicle && !await t29Confirm(`${insurancePlanName(o.plan)} pays for the damage to someone else's property, but it doesn't cover your own vehicle, so you'll lose ${vehicleName}. You pay your ${fmtMoney(o.excess)} excess.\n\nClaim anyway?`)) return;
-      const sel = overlay.querySelector("#bigClaimPayFrom");
-      let src = sel ? sel.value : "cash";
-      // If cash can't cover it, use the card when it can.
-      if (src === "cash" && !isTeacher && cash < o.studentPays && cardRoom >= o.studentPays) src = "card";
-      resolve("claim", src === "cash" ? null : src, o.plan.id);
+      if (o.losesVehicle && !await t29Confirm(`${insurancePlanName(o.plan)} covers the damage to someone else's property. You'll lose ${vehicleName} and pay ${fmtMoney(o.excessDue)} in excess.\n\nClaim anyway?`)) return;
+      const source = claimSource && !o.writeOff ? claimSource.value : "cash";
+      resolve("claim", source, o.plan.id);
     });
   });
 
@@ -664,6 +692,7 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
     } else if (res.expired) {
       entry.snoozeUntil = entry.snoozeUntil || 1; // time's up: make sure it reads as expired here too
       overlay.beForce();
+      setBusy(false);
     } else if (res.gone) {
       overlay.remove(); beDropEntry(entry.id);
       if (typeof render === "function") render();
@@ -682,8 +711,6 @@ async function showBigEventPopup(entry, claimOptions, username, classCode, user)
     const i = eligibleIds.indexOf("bigDismissBtn"); if (i >= 0) eligibleIds.splice(i, 1);
     const w = overlay.querySelector("#bigDismissWrap");
     if (w) w.outerHTML = `<div class="be-forced" id="bigForcedNote" role="status">${icon("lock", 15)} <span>Your 5 minutes are up. You need to deal with this now.</span></div>`;
-    setBusy(false);
-    overlay.scrollTop = 0;
   };
 }
 

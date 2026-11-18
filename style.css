@@ -1244,14 +1244,28 @@ html.dark-mode .anw-be-timer .anw-be-label{color:rgba(244,247,255,0.85);}
 html.dark-mode .anw-be-timer:focus-visible{outline-color:#fff;}
 
 /* Big event popup + reminders, and the buttons held while one is waiting */
-.be-card{max-width:440px;max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overscroll-behavior:contain;}
+.be-card{max-width:500px;max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overscroll-behavior:contain;overflow-wrap:anywhere;}
 @media (max-width:520px){.be-card{padding:20px 18px;}}
-.be-title{display:flex;align-items:flex-start;gap:9px;line-height:1.25;margin:0 0 10px;}
-.be-title .icon{flex-shrink:0;margin-top:2px;}
-.be-card .btn{white-space:normal;text-align:center;line-height:1.3;margin-top:0;}
-.be-card .btn.small{margin-top:0;}
-.be-card select{min-width:0;max-width:100%;}
-.be-from{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.be-heading .badge{display:inline-flex;align-items:center;gap:5px;}
+.be-title{line-height:1.25;margin:8px 0 0;}
+.be-heading p{margin:6px 0 0;}
+.be-summary{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;margin-top:14px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-2);background:var(--bg);}
+.be-summary span{font-size:var(--fs-sm);font-weight:700;}
+.be-summary strong{font-size:1.15rem;font-variant-numeric:tabular-nums;}
+.be-note{margin:6px 0 0;}
+.be-section{margin-top:14px;}
+.be-section h3{margin:0 0 8px;font-size:var(--fs-lg);}
+.be-section p{margin:6px 0 0;line-height:1.4;}
+.be-claim{padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-2);}
+.be-claim+.be-claim{margin-top:8px;}
+.be-claim-head{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 10px;font-size:var(--fs-md);}
+.be-claim .btn.small{margin-top:8px;}
+.be-pay-note:empty{display:none;}
+.be-pay-buttons{display:flex;flex-wrap:wrap;gap:8px;}
+.be-card .btn{white-space:normal;text-align:center;line-height:1.3;justify-content:center;margin-top:0;}
+.be-card .be-full{width:100%;margin-top:14px;}
+.be-from{display:flex;gap:6px 8px;align-items:center;flex-wrap:wrap;margin:0 0 8px;}
+.be-from select{min-width:0;max-width:100%;padding:6px 8px;font-size:var(--fs-sm);}
 .be-actions{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
 .be-actions .btn{width:100%;}
 @media (min-width:521px){.be-actions{flex-direction:row;}.be-actions .btn{flex:1 1 0;width:auto;}}

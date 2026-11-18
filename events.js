@@ -346,21 +346,28 @@ function randomHistoryItem(e, order) {
 
 function bigHistoryItem(e, order) {
   const good = e.kind === "good";
-  const money = e.autoClaimed ? e.insurancePaid : e.cost;
+  const claimNet = e.status === "claimed" && Number.isFinite(e.claimNet) ? e.claimNet : null;
+  const dir = claimNet === null ? (good ? "gain" : "cost") : evDirOf(claimNet, 0);
   const lines = [];
   if (e.description) lines.push(escapeHtml(e.description));
   if (e.basisNote) lines.push(escapeHtml(e.basisNote));
   if (e.autoClaimed) lines.push(`Cost ${fmtMoney(e.originalCost != null ? e.originalCost : e.cost)}` + (e.insuranceNote ? ": " + escapeHtml(e.insuranceNote) : ""));
   if (e.writtenOff) lines.push("The insurer took the property.");
   let amountHtml;
-  if (good) amountHtml = `<span class="ev-amt up">+${fmtMoney(money)}</span>`;
+  if (good) amountHtml = `<span class="ev-amt up">+${fmtMoney(e.cost)}</span>`;
   else if (e.status === "lost") amountHtml = `<span class="ev-amt flat">Not paid</span>`;
-  // Only a straight payment takes the full cost. A claim costs just the plan's excess and a pending one
-  // hasn't been paid yet, so the event's cost is shown as information rather than as money taken.
-  else if (e.status === "paid") amountHtml = `<span class="ev-amt down">-${fmtMoney(money)}</span>`;
-  else amountHtml = `<span class="ev-amt flat">Cost ${fmtMoney(money)}</span>`;
+  else if (e.status === "paid") amountHtml = `<span class="ev-amt down">-${fmtMoney(e.cost)}</span>`;
+  else if (claimNet !== null) {
+    amountHtml = claimNet === 0 ? `<span class="ev-amt flat">No charge</span>`
+      : `<span class="ev-amt ${evAmtClass(dir)}">${claimNet > 0 ? "+" : ""}${fmtMoney(claimNet)}</span>`;
+    lines.push(`Original event cost ${fmtMoney(e.cost)}`);
+  } else if (e.status === "claimed" && e.autoClaimed && Number.isFinite(e.insurancePaid)) {
+    amountHtml = `<span class="ev-amt flat">Claim cost ${fmtMoney(e.insurancePaid)}</span>`;
+  } else {
+    amountHtml = `<span class="ev-amt flat">${e.status === "claimed" ? "Original event cost" : "Cost to resolve"} ${fmtMoney(e.cost)}</span>`;
+  }
   const statusHtml = `<span class="${e.lostVehicle ? "status-declined" : (STATUS_CLASS[e.status] || "")}">${STATUS_LABEL[e.status] || ""}${e.lostVehicle ? ", lost the vehicle" : ""}</span>`;
-  return { kind: "big", name: e.name, dirs: [good ? "gain" : "cost"], assetName: e.assetName || "", module: e.module, lines, date: e.date || "", amountHtml, statusHtml, t: evWhen(e), order };
+  return { kind: "big", name: e.name, dirs: [dir], assetName: e.assetName || "", module: e.module, lines, date: e.date || "", amountHtml, statusHtml, t: evWhen(e), order };
 }
 
 // Only things that have actually happened: not ones still waiting for their day, or dropped.

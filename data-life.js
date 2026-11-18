@@ -1290,7 +1290,9 @@ function insuranceClaimOptions(cls, user, coverage, cover, cost, entry) {
       let covered = loss;
       if (typed) covered = Math.min(loss, Math.max(0, Number(row.payout) || 0));
       const uncovered = r2(loss - covered);
-      return { plan, covered: r2(covered), excess, uncovered, studentPays: r2(Math.min(loss, excess + uncovered)), payout: r2(Math.max(0, covered - excess)) };
+      const excessDue = r2(Math.min(covered, excess));
+      return { plan, covered: r2(covered), excess, excessDue, uncovered,
+        studentPays: r2(uncovered + excessDue), payout: r2(Math.max(0, covered - excess)) };
     })
     .filter(Boolean)
     .sort((a, b) => a.studentPays - b.studentPays);
@@ -1301,7 +1303,7 @@ function insuranceClaimOptions(cls, user, coverage, cover, cost, entry) {
 // only covers damage to someone ELSE's property (e.g. Third-Party Only
 // after an accident) doesn't fix the student's own vehicle, so claiming
 // on it still loses the vehicle (losesVehicle: true). The insurer pays for
-// the other person's damage and the student pays just their excess — the
+// the other person's damage and the student pays the excess due on that part — the
 // rest isn't charged, since losing the vehicle stands in for their own
 // damage. Events that never take the vehicle, events that only damaged
 // someone else's property, and plans with no type all work as before.
@@ -1315,7 +1317,7 @@ function bigEventClaimOptions(cls, user, entry) {
   return options.map(o => {
     const t = insuranceTypeInfo("transport", o.plan.insType);
     if (!t || t.covers.some(k => ownDamage.includes(k))) return o;
-    return Object.assign({}, o, { losesVehicle: true, uncovered: 0, studentPays: o.excess });
+    return Object.assign({}, o, { losesVehicle: true, uncovered: 0, studentPays: o.excessDue });
   }).sort((a, b) => a.studentPays - b.studentPays);
 }
 
@@ -3351,6 +3353,10 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
       const cls = withNewModuleDefaults(classSnap.data());
       const entry = (cls.bigEventLog || []).find(e => e.id === logId && e.studentUser === username && e.status === "pending");
       if (!entry) throw new Error("NOT_FOUND");
+      // Firestore can run this callback again after a concurrent update.
+      amount = 0;
+      writeOffNet = null;
+      bigCard = 0;
       const isTeacher = user.role === "teacher";
       assetTag = bigEventAssetTag(entry);
 
@@ -3410,7 +3416,8 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         // they must always be chosen on purpose.
         const option = planId ? options.find(o => o.plan.id === planId) : options.find(o => !o.writeOff && !o.losesVehicle);
         if (!option) throw new Error("NO_PLAN");
-        const cash = user.balance || 0;
+        const cash = Number(user.balance) || 0;
+        if (paySource === "savings") throw new Error("NO_SAVINGS_PAY");
         if (option.writeOff) {
           // Indemnity on house damage: the insurer pays the market price
           // and takes the house (see insuranceClaimOptions).
@@ -3418,6 +3425,7 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
           releasePropertyFields(option.property);
           entry.status = "claimed";
           entry.writtenOff = true;
+          entry.claimNet = isTeacher ? 0 : option.net;
           writeOffNet = option.net;
           outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}": ${writeOffText(option)}`;
           if (!isTeacher && option.net !== 0) t.update(userRef, { balance: Math.round((cash + option.net) * 100) / 100 });
@@ -3426,33 +3434,32 @@ async function resolveBigEvent(username, classCode, logId, choice, paySource, pl
         }
         // The excess (and anything the plan doesn't cover) can go on the card
         // too; whatever the card has no room for must still come from cash.
-        bigCard = 0;
         let cp = { card: 0, cash: option.studentPays };
         if (paySource === "card" && !isTeacher && option.studentPays > 0) {
           cp = cardTakeEventCost(user, cls, option.studentPays, true);
           if (!(cp.card > 0)) throw new Error("LIMIT");
           bigCard = cp.card;
         }
-        if (paySource === "savings") throw new Error("NO_SAVINGS_PAY");
         const toPay = cp.cash;
-        if (!isTeacher && cash < toPay) throw new Error("BROKE_EXCESS");
+        if (!isTeacher && toPay > 0 && cash < toPay) throw new Error("BROKE_EXCESS");
         const claimUpd = () => Object.assign({ balance: Math.round((cash - toPay) * 100) / 100 },
           bigCard > 0 ? { creditCard: user.creditCard } : {});
         entry.status = "claimed";
-        amount = option.studentPays;
+        amount = isTeacher ? 0 : option.studentPays;
+        entry.claimNet = amount === 0 ? 0 : -amount;
         if (option.losesVehicle) {
           // The insurer pays the other person; their own vehicle isn't
           // covered, so it's lost (see bigEventClaimOptions).
           const veh = eventAssetNow(cls, username, "transport", entry).vehicle;
           if (veh) veh.owners = veh.owners.filter(o => o !== username);
           entry.lostVehicle = true;
-          outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}". Paid ${fmtMoney(option.excess)} excess; `
+          outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}". Excess due ${fmtMoney(option.excessDue)}. `
             + `the insurer covered the damage to someone else's property, but not their own vehicle${veh && veh.name ? ` (${veh.name})` : ""}, so they lost it`;
           if (!isTeacher && (toPay > 0 || bigCard > 0)) t.update(userRef, claimUpd());
           t.update(classRef, { vehicles: cls.vehicles, bigEventLog: cls.bigEventLog });
           return;
         }
-        outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}". Paid ${fmtMoney(option.excess)} excess`
+        outcomeNote = `Claimed insurance (${insurancePlanName(option.plan)}) for "${entry.name}". Excess due ${fmtMoney(option.excessDue)}`
           + (option.uncovered > 0 ? ` + ${fmtMoney(option.uncovered)} not covered` : "");
         if (!isTeacher && (toPay > 0 || bigCard > 0)) t.update(userRef, claimUpd());
         t.update(classRef, { bigEventLog: cls.bigEventLog });
