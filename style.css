@@ -4394,16 +4394,17 @@ html.dark-mode .fin-sub .icon-slot{color:var(--accent-text);}
    it, strokes ~2px at the default 20px).
    ============================================================================ */
 html :is(.t29-keys-close,.t29-toast-close,.av-x,.av-lb-x,.av-toast-x,.cart-x,.chip-x,
+         .todo-dismiss,.notif-dismiss,.days-close,.ws-tab-x,.ws-paper .ws-x,.qb-opt-row .qb-del,
          .qty-btn,.cl-step,.cd-check,.cc-mini-tick,.ins-co-caret,.bc-chev){
   font-size:0;line-height:0;
   --g-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6l12 12M18 6L6 18' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
 }
-html .qb-opt-row .qb-del{font-size:0;line-height:0;--g-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6l12 12M18 6L6 18' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");}
 html :is(.qty-btn,.cl-step)[aria-label^="Increase"]{--g-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 5v14M5 12h14' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");}
 html :is(.qty-btn,.cl-step)[aria-label^="Decrease"]{--g-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12h14' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");}
 html :is(.cd-check,.cc-mini-tick){--g-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12l5 5L19 7' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");}
 html :is(.t29-keys-close,.t29-toast-close,.av-x,.av-lb-x,.av-toast-x,.cart-x,.chip-x,
-         .qb-opt-row .qb-del,.qty-btn,.cl-step,.cd-check,.cc-mini-tick,.ins-co-caret,.bc-chev)::before{
+         .todo-dismiss,.notif-dismiss,.days-close,.ws-tab-x,.ws-paper .ws-x,.qb-opt-row .qb-del,
+         .qty-btn,.cl-step,.cd-check,.cc-mini-tick,.ins-co-caret,.bc-chev)::before{
   content:"";position:absolute;left:50%;top:50%;
   width:var(--g-size,20px);height:var(--g-size,20px);
   margin:calc(var(--g-size,20px) / -2) 0 0 calc(var(--g-size,20px) / -2);
@@ -4416,10 +4417,13 @@ html :is(.bc-chev){--g-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 html :is(.cd-check){--g-size:40px;}
 html :is(.cc-mini-tick){--g-size:16px;}
 html :is(.chip-x){--g-size:14px;}
+.ws-tab-x,.ws-paper .ws-x{--g-size:16px;}
+.days-close,.ws-paper .ws-x{position:relative;}
 html :is(.qty-btn,.cl-step){--g-size:20px;}
 @media (forced-colors:active){
   html :is(.t29-keys-close,.t29-toast-close,.av-x,.av-lb-x,.av-toast-x,.cart-x,.chip-x,
-           .qb-opt-row .qb-del,.qty-btn,.cl-step,.cd-check,.cc-mini-tick,.ins-co-caret,.bc-chev)::before{background:CanvasText;forced-color-adjust:none;}
+           .todo-dismiss,.notif-dismiss,.days-close,.ws-tab-x,.ws-paper .ws-x,.qb-opt-row .qb-del,
+           .qty-btn,.cl-step,.cd-check,.cc-mini-tick,.ins-co-caret,.bc-chev)::before{background:CanvasText;forced-color-adjust:none;}
 }
 /* The little x on a chip (e.g. revoking a life item) */
 .chip-x{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
@@ -4606,7 +4610,7 @@ html.dark-mode .qr-card,html.dark-mode .qr-list li{border-color:var(--line);}
 
 /* ===== To do: dismiss ===== */
 .todo-actions{display:flex;align-items:center;justify-content:flex-end;gap:4px;flex-shrink:0;}
-.todo-dismiss,.notif-dismiss{display:inline-flex;align-items:center;justify-content:center;background:none;border:0;color:var(--muted);font-size:22px;line-height:1;height:32px;min-height:0;width:32px;padding:0;border-radius:8px;cursor:pointer;flex-shrink:0;}
+.todo-dismiss,.notif-dismiss{position:relative;display:inline-flex;align-items:center;justify-content:center;background:none;border:0;color:var(--muted);height:32px;min-height:0;width:32px;padding:0;border-radius:8px;cursor:pointer;flex-shrink:0;}
 .todo-dismiss:hover,.notif-dismiss:hover{background:var(--line);color:var(--navy-900);}
 .notif-dismiss{align-self:center;margin:0 -6px 0 0;}
 .todo-restore-row{margin:8px 0 0;}
