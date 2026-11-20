@@ -11,6 +11,7 @@ function paintChrome() {
   document.getElementById("pageTitle").innerHTML = icon("piggy", 26) + " Bank";
   document.getElementById("iconAuto").innerHTML = icon("repeat", 30);
   document.getElementById("iconCardStat").innerHTML = icon("creditcard", 30); // credit card tile: its own card icon (not the wallet)
+  document.getElementById("iconCreditStat").innerHTML = icon("medal", 28);
   document.getElementById("hActivity").innerHTML = icon(IS_TEACHER ? "history" : "bank", 18) + (IS_TEACHER ? " My recent activity" : " My recent activity (last 3 days)");
   if (IS_TEACHER) document.getElementById("labAmount").textContent = "Amount (negative to deduct from a student)";
   if (IS_TEACHER) {
@@ -141,7 +142,8 @@ async function render() {
     }
   }
   renderCreditCard(me, cls, allStudents);
-  if (typeof renderCreditScore === "function") renderCreditScore(me, cls); // the student's credit score, with any overdraft warning
+  const score = renderCreditScore(me, cls);
+  renderArrangedOverdraft(me, cls, score);
   AUTO_CARD_CTX = { me, cls };
   renderXfer(me, cls); // the automatic-transfer menus
 

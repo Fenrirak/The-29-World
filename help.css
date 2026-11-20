@@ -1,0 +1,17 @@
+.help-topbar{background:var(--card);border-bottom:1px solid var(--line);}
+.help-topbar .about-brand{color:var(--ink);}
+.help-main [hidden]{display:none;}
+.help-main .card h2{margin:0 0 10px;}
+.help-main .about-lead{margin-top:10px;}
+.help-search input{margin:0;}
+.help-result{margin:6px 0 0;font-size:var(--fs-md);}
+.help-result:empty{margin:0;}
+.help-topics{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:18px;}
+.help-topics a{font-weight:700;line-height:1.5;}
+.help-section{scroll-margin-top:80px;}
+.help-section details{border-top:1px solid var(--line);}
+.help-section summary{padding:12px 0;cursor:pointer;font-weight:700;line-height:1.5;}
+.help-section summary::marker{color:var(--muted);}
+.help-section details p,.help-section details ol{margin:0 0 12px;}
+.help-section details ol{padding-left:1.4em;color:var(--muted);line-height:1.6;}
+.help-section a:focus-visible,.help-section summary:focus-visible,.help-topics a:focus-visible{outline:2px solid var(--ink);outline-offset:3px;}

@@ -41,6 +41,7 @@
      Lean: each curve is about 2.3x wider than tall and rises to roughly half a typical element's height. A chip (m) sits 10px/5px under its rail (l) so the two curves stay parallel; knobs top out at their own 20px width. */
   --sw-xs:15px 0 15px 0 / 5px 0 5px 0; --sw-s:24px 0 24px 0 / 10px 0 10px 0; --sw-m:34px 0 34px 0 / 15px 0 15px 0; --sw-l:44px 0 44px 0 / 20px 0 20px 0;
   --sw-knob-m:20px 0 20px 0 / 9px 0 9px 0; --sw-knob-s:16px 0 16px 0 / 7px 0 7px 0;
+  --sw-slide:translate(16px,-2px); --sw-slide-small:translate(14px,-2px);
   --fs-xs:.75rem; --fs-sm:.8125rem; --fs-md:.875rem; --fs-lg:.9375rem;   /* type scale: 12 / 13 / 14 / 15px; 1rem and up are set per element */
 
   /* Shadow scale (dark mode swaps in black equivalents further down). Five steps, by how far a thing floats:
@@ -378,13 +379,14 @@ html.nav-bell-pre .topbar-actions::before{
   transition:background .2s ease;pointer-events:none;
 }
 .lg-switch-thumb{
-  position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:var(--sw-knob-m);
+  position:absolute;top:5px;left:5px;width:18px;height:18px;border-radius:var(--sw-knob-m);
   background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.25);
   transition:transform .2s ease;
 }
 .lg-switch input:checked + .lg-switch-track{background:linear-gradient(135deg,var(--gold),var(--gold-dark));}
-.lg-switch input:checked + .lg-switch-track .lg-switch-thumb{transform:translateX(18px);}
+.lg-switch input:checked + .lg-switch-track .lg-switch-thumb{transform:var(--sw-slide);}
 .lg-switch input:focus-visible + .lg-switch-track{outline:2px solid var(--gold);outline-offset:2px;}
+@media(prefers-reduced-motion:reduce){.lg-switch-track,.lg-switch-thumb{transition:none;}}
 
 main{
   flex:1;
@@ -530,6 +532,18 @@ html.dark-mode .legal-main .about-card .about-lead{color:var(--heading-text);}
 html.dark-mode .stat.mint .label,
 html.dark-mode .stat.sky .label,
 html.dark-mode .stat.lilac .label{color:rgba(255,255,255,.88);}
+
+.stat.credit-stat[data-tone="mint"]{background:linear-gradient(135deg,var(--mint-fill),var(--mint-fill-dark));}
+.stat.credit-stat[data-tone="lilac"]{background:linear-gradient(135deg,var(--lilac-fill),var(--lilac-fill-dark));}
+.stat.credit-stat[data-tone="gold"]{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);}
+.stat.credit-stat[data-tone="coral"]{background:linear-gradient(135deg,var(--coral-fill),var(--coral-fill-dark));}
+.stat.credit-stat .label{color:inherit;}
+.credit-stat[data-tone="gold"] > .icon{color:var(--navy-900);}
+.credit-stat-note{margin-top:6px;font-size:var(--fs-sm);line-height:1.35;}
+a.credit-stat{text-decoration:none;}
+a.credit-stat:hover .label{text-decoration:underline;}
+a.credit-stat:focus-visible{outline:3px solid var(--ink);outline-offset:3px;}
+#creditScoreCard{scroll-margin-top:var(--topbar-h, 90px);}
 
 label{display:block;font-weight:700;font-size:var(--fs-md);margin:12px 0 6px;color:var(--navy-900);}
 button,input,select,textarea{font-family:inherit;}
@@ -3624,10 +3638,10 @@ html.dark-mode .cc-timeline{background:rgba(255,255,255,.12);}
 /* ---- Teacher ---- */
 .cc-switch{display:inline-flex;align-items:center;gap:9px;font-weight:800;font-size:var(--fs-md);margin:0;cursor:pointer;}
 .cc-switch input{position:absolute;opacity:0;width:1px;height:1px;min-height:0;}
-.cc-switch-track{width:44px;height:25px;border-radius:var(--sw-m);background:var(--cc-track);position:relative;transition:background .2s;flex-shrink:0;}
-.cc-switch-track::after{content:"";position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:var(--sw-knob-m);background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s;}
+.cc-switch-track{width:44px;height:26px;border-radius:var(--sw-m);background:var(--cc-track);position:relative;transition:background .2s;flex-shrink:0;}
+.cc-switch-track::after{content:"";position:absolute;top:5px;left:5px;width:18px;height:18px;border-radius:var(--sw-knob-m);background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s;}
 .cc-switch input:checked + .cc-switch-track{background:var(--mint);}
-.cc-switch input:checked + .cc-switch-track::after{transform:translateX(19px);}
+.cc-switch input:checked + .cc-switch-track::after{transform:var(--sw-slide);}
 .cc-switch input:focus-visible + .cc-switch-track{outline:2px solid var(--gold);outline-offset:2px;}
 /* ---- Credit cards: teacher panel + shared form bits ---- */
 .cc-check{display:flex;align-items:center;gap:10px;font-weight:700;font-size:var(--fs-lg);cursor:pointer;}

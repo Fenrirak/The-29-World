@@ -674,14 +674,15 @@ function renderCart() {
 
   // ---- footer: totals, can-I-afford-it check, checkout ----
   const card = cardIsActive(ME_CACHE) && CC_STORE_PAY.useCard, split = card && CC_STORE_PAY.split;
-  const cash = Number(ME_CACHE.balance) || 0, plan = card ? cardPlanById(CLS_CACHE, ME_CACHE.creditCard.planId) : null;
+  const cash = arrangedCashAvailable(ME_CACHE), plan = card ? cardPlanById(CLS_CACHE, ME_CACHE.creditCard.planId) : null;
   const cardAvail = plan ? cardAvailable(ME_CACHE.creditCard, plan) : 0;
   const cap = !card ? cash : split ? cardAvail + cash : cardAvail;
   const short = cardRound(t.total - cap), blocked = short > 0.004;
-  const how = !card ? `Paying with cash · ${fmtMoney(cash)} available` : split ? "Paying part card, part cash" : `Paying by credit card · ${fmtMoney(cardAvail)} available`;
+  const cashLabel = arrangedOverdraftLimit(ME_CACHE) ? "cash and arranged overdraft" : "cash";
+  const how = !card ? `Paying with ${cashLabel} · ${fmtMoney(cash)} available` : split ? `Paying part card, part ${cashLabel}` : `Paying by credit card · ${fmtMoney(cardAvail)} available`;
   let warn = "";
-  if (blocked) warn = !card ? `You're ${fmtMoney(short)} short on cash. Remove something to check out.`
-    : split ? `You're ${fmtMoney(short)} over your card and cash combined.` : `Your card can only cover ${fmtMoney(cardAvail)}. Turn on "Part card, part cash" or remove something.`;
+  if (blocked) warn = !card ? `You're ${fmtMoney(short)} short. Remove something to check out.`
+    : split ? `You're ${fmtMoney(short)} over your combined spending limit.` : `Your card can only cover ${fmtMoney(cardAvail)}. Turn on "Part card, part cash" or remove something.`;
   let earn = "";
   if (cartApi() && card && !split && plan && plan.rewardEvery > 0 && plan.rewardBack > 0) {
     const steps = Math.floor(t.total / plan.rewardEvery + 1e-9);

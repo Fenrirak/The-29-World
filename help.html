@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en-NZ">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Help with The 29 World classroom simulation, including joining a class, logging in, privacy and device setup.">
+<title>Help Centre | The 29 World™</title>
+<link rel="canonical" href="https://fenrirak.github.io/The-29-World/help.html">
+<link rel="icon" href="favicon.ico" sizes="any">
+<script>try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}</script>
+<link rel="stylesheet" href="style.css?v=ac8b6aa3">
+<link rel="stylesheet" href="help.css?v=96845f5e">
+<script defer src="help.js?v=30f999a8"></script>
+</head>
+<body>
+<header class="about-topbar help-topbar">
+  <a class="about-brand" href="index.html"><img class="about-brand-icon" src="Favicon.png" width="28" height="28" alt="">The 29 World™</a>
+  <a class="btn small secondary" href="index.html">Home</a>
+</header>
+
+<main class="legal-main help-main">
+  <div class="card about-card">
+    <h1>Help Centre</h1>
+    <p class="about-lead">Find answers for teachers, students and whānau using The 29 World.</p>
+    <div class="help-search" role="search" id="helpSearch" hidden>
+      <label for="helpQuery">Search help articles</label>
+      <input type="search" id="helpQuery" placeholder="Try “class code” or “forgot password”" autocomplete="off">
+      <p class="help-result" id="helpResult" role="status"></p>
+    </div>
+    <nav class="help-topics" aria-label="Help topics">
+      <a href="#login">Login and accounts</a>
+      <a href="#classroom">Using it in class</a>
+      <a href="#privacy">Privacy and sharing</a>
+      <a href="#setup">Technical setup</a>
+    </nav>
+  </div>
+
+  <div id="helpArticles">
+    <section class="card about-card help-section" id="login" aria-labelledby="helpLogin">
+      <h2 id="helpLogin">Login and accounts</h2>
+      <details data-keywords="sign in invalid password locked out username">
+        <summary>I can’t log in. What should I check?</summary>
+        <ol>
+          <li>Open the <a href="index.html">home page</a>, choose <strong>Teacher</strong> or <strong>Student</strong>, then select <strong>Log in</strong>.</li>
+          <li>Check your username, Caps Lock and any extra spaces pasted into the password field. If you reset a teacher password by email, use the recovery email for future logins.</li>
+          <li>If a countdown appears, wait for it to finish before trying again. If the page stalls or shows a connection error, follow the <a href="#setup">technical setup checks</a>.</li>
+        </ol>
+      </details>
+      <details data-keywords="student forgot password reset recovery">
+        <summary>I’m a student and I forgot my password.</summary>
+        <p>Ask your teacher to check the username on the roster. If the account was created in a batch, your teacher may have kept the original login slip. Student accounts have no email reset. If you’re signed in and know your current password, use <strong>Settings → Change password</strong>. For help recovering an existing account, ask your teacher to <a href="about.html#contact">contact support</a>.</p>
+      </details>
+      <details data-keywords="teacher forgot password reset recovery email link spam">
+        <summary>How do I reset my teacher password?</summary>
+        <p>On the Teacher login form, select <strong>Forgot your password?</strong> and enter your username and the recovery email you saved. Check your inbox and spam folder. Open the one-time link to set a password, then sign in with your recovery email and new password.</p>
+        <p>If you still have a signed-in session, you can add or update your recovery email from <strong>Teacher Home</strong>. If you’re locked out and never added one, <a href="about.html#contact">contact support</a>.</p>
+      </details>
+      <details data-keywords="invalid class code new class invite archived">
+        <summary>Why won’t my class code work?</summary>
+        <p>Use <strong>Student → Join a class</strong> if your teacher asked you to create an account. Copy the current class code from your teacher and check any similar-looking characters. Ask your teacher to check that the class is open. If you already have a username and password for that class, use <strong>Log in</strong>.</p>
+      </details>
+    </section>
+
+    <section class="card about-card help-section" id="classroom" aria-labelledby="helpClassroom">
+      <h2 id="helpClassroom">Using it in class</h2>
+      <details data-keywords="teacher onboarding setup template roster bulk create invitation">
+        <summary>How do I set up a class and add students?</summary>
+        <ol>
+          <li>Create a class from the Teacher sign-up screen or from <strong>Teacher Home</strong>. Start with a ready-made template if you want jobs, prices and events already set up.</li>
+          <li>Open the class dashboard and review the starting money, pay schedule and modules for your lesson.</li>
+          <li>Give students the class code so they can join, or use <strong>Add students</strong> on the class dashboard. Bulk-generated passwords are shown once. Save the list securely and give each student only their own login.</li>
+        </ol>
+      </details>
+      <details data-keywords="student first lesson payday wages budget savings jobs">
+        <summary>What should students do in their first lesson?</summary>
+        <p>Start in <strong>Bank</strong> to check your balance. Open <strong>Jobs</strong> and follow the instructions for earning a wage in your class. Use <strong>Budget</strong> to plan for the next bill or payday, then set a savings goal in Bank. Your teacher can tell you which activities are available for the lesson.</p>
+      </details>
+      <details data-keywords="credit score borrowing overdraft good fair student bank money">
+        <summary>How do credit scores and arranged overdrafts work?</summary>
+        <p><strong>Bank</strong> shows your simulated score and what changes it. Paying your card on time and keeping its balance low can help. Your score determines which arranged limits you can choose. The agreed limit lets your main account go below $0 for eligible purchases, and money paid into the account reduces what you owe. Unarranged overdrafts can lower your score and trigger a fee.</p>
+      </details>
+      <details data-keywords="locked hidden module access disabled time limit">
+        <summary>Why is an activity missing or locked?</summary>
+        <p>Your teacher can turn modules off or set a lifestyle rating requirement. Read the notice on the page for the reason. If you’ve reached your daily time limit, use the request on the time-limit screen if you need more time for a class task.</p>
+      </details>
+      <details data-keywords="teacher roster report progress net worth restart archived">
+        <summary>Where can a teacher review student progress?</summary>
+        <p>Use the class dashboard for the roster, class credit score average and net worth ranking. Open <strong>Reports</strong> for individual report cards and saved snapshots. If you’re starting a new term, check the report copies you need before using <strong>Restart class</strong>.</p>
+      </details>
+    </section>
+
+    <section class="card about-card help-section" id="privacy" aria-labelledby="helpPrivacy">
+      <h2 id="helpPrivacy">Privacy and sharing</h2>
+      <details data-keywords="student data personal information classmates read notes firebase">
+        <summary>Who can see a student’s information?</summary>
+        <p>Teachers and co-teachers can see student records for their class. Classmates can see shared information and can access in-class simulation records under the current access rules. Keep personal or sensitive information out of transaction notes and other class fields. See the <a href="privacy.html">Privacy Policy</a> for what is collected and who can access it.</p>
+      </details>
+      <details data-keywords="parents whānau family link reports revoke share">
+        <summary>How do families view a report?</summary>
+        <p>A student or teacher can create a read-only family link from <strong>Reports</strong>. Anyone with the link can open the summary, so share it privately. If it was sent to the wrong person or is no longer needed, switch it off from Reports.</p>
+      </details>
+      <details data-keywords="delete remove export data retention correction">
+        <summary>How do I correct or request removal of account information?</summary>
+        <p>Students and families can start with the class teacher or <a href="about.html#contact">contact support</a>. Tell us what needs correcting or removing and which account it relates to. The <a href="privacy.html">Privacy Policy</a> explains what happens to activity history, archives, sign-in records and downloaded copies.</p>
+      </details>
+    </section>
+
+    <section class="card about-card help-section" id="setup" aria-labelledby="helpSetup">
+      <h2 id="helpSetup">Technical setup</h2>
+      <details data-keywords="device chromebook tablet phone browser wifi javascript cookies storage firewall">
+        <summary>What does a classroom device need?</summary>
+        <p>Use a current browser with JavaScript and site storage enabled, plus an internet connection for sign-in and saving. Test on a school device and network before the lesson. If the site works on another network, ask school IT to check access to the site and to Google Firebase, which handles sign-in and saves.</p>
+      </details>
+      <details data-keywords="blank spinning loading error blocked cache refresh proxy">
+        <summary>What if the site is blank, slow or stuck loading?</summary>
+        <ol>
+          <li>Check the connection and open the home page directly in your browser. If you opened it from a message or school portal, try opening the link in a full browser tab.</li>
+          <li>Reload once any pending action has finished. If only one browser is affected, try another approved browser and check whether the original one blocks site storage.</li>
+          <li>If the problem continues, note the page, device, browser and exact error, then ask your teacher or school IT for help.</li>
+        </ol>
+      </details>
+      <details data-keywords="offline internet lost disconnect transaction save duplicate">
+        <summary>What happens if the connection drops while I’m working?</summary>
+        <p>Previously loaded pages may still open, but sign-in and saving need an internet connection. When you reconnect, check the balance, activity or relevant page to see whether a payment or change already went through before trying it again.</p>
+      </details>
+      <details data-keywords="shared device remember username logout privacy">
+        <summary>How should we use shared classroom devices?</summary>
+        <p>Leave <strong>Remember my username on this device</strong> unticked and decline any browser prompt to save your password. Sign out when you finish. Before the next student signs in, check that the previous account has returned to the login page.</p>
+      </details>
+    </section>
+  </div>
+
+  <section class="card about-card help-section" aria-labelledby="helpContact">
+    <h2 id="helpContact">Still need help?</h2>
+    <p>Students should ask their teacher first about accounts, class settings and balances. When reporting a technical issue, include the page, what you were trying to do, your browser and the exact error. Leave passwords and private student information out of the message.</p>
+    <a class="btn small secondary" href="about.html#contact">Contact support</a>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-brand">The 29 World™</div>
+  <nav class="site-footer-links" aria-label="Footer">
+    <a href="about.html">About</a>
+    <a href="help.html" aria-current="page">Help Centre</a>
+    <a href="about.html#contact">Contact</a>
+    <a href="privacy.html">Privacy Policy</a>
+    <a href="terms.html">Terms of Use</a>
+  </nav>
+  <div class="site-footer-copy">© 2026 The 29 World™. All rights reserved.</div>
+</footer>
+</body>
+</html>

@@ -538,6 +538,12 @@ function ccInjectCreditCss() {
 .cc-pair{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px 8px}
 .cc-pair>span{white-space:nowrap}
 .cs-empty{margin:0;color:var(--muted);font-size:var(--fs-md);line-height:1.5}
+.od-actions{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin-top:12px}
+.od-actions label{flex:1 1 230px;margin:0}
+.od-actions select{margin-top:6px}
+.od-facts dd{margin:0;text-align:right;font-weight:700}
+.od-status{margin-top:12px}
+.od-status:empty{margin:0}
 `;
   document.head.appendChild(st);
 }
@@ -545,16 +551,21 @@ function ccInjectCreditCss() {
 function renderCreditScore(me, cls) {
   const el = document.getElementById("creditScoreCard");
   if (!el) return;
+  const tile = document.getElementById("creditStat");
   el.classList.toggle("hidden", !!IS_TEACHER);
+  tile.classList.toggle("hidden", !!IS_TEACHER);
   if (IS_TEACHER) return;
   ccInjectCreditCss();
   const r = creditScoreOf(cls, me), st = cardSettings(cls);
+  tile.dataset.tone = r.band.tone;
+  document.getElementById("creditStatValue").textContent = r.score;
+  document.getElementById("creditStatBand").textContent = `${r.band.label} (out of ${CREDIT_MAX})`;
   const pct = Math.max(0, Math.min(100, (r.score - CREDIT_MIN) / (CREDIT_MAX - CREDIT_MIN) * 100));
   const factors = r.factors.length
     ? `<ul class="cs-list">${r.factors.map(f => `<li><span class="cs-pts ${f.pts > 0 ? "good" : f.pts < 0 ? "bad" : "zero"}">${f.pts > 0 ? "+" : f.pts < 0 ? "−" : ""}${Math.abs(f.pts)}</span><div><strong>${ccEsc(f.label)}</strong><span class="cs-d">${ccEsc(f.detail)}</span></div></li>`).join("")}</ul>`
     : `<p class="cs-empty">Nothing is helping or hurting your score yet, so it sits at the starting score of ${CREDIT_BASE}. Pay a credit card on time and keep the balance low to build it up.</p>`;
   const od = r.stats.oweNow > 0.004
-    ? `<div class="cc-note bad">${icon("bell", 16)}<span><strong>Your cash is overdrawn by ${fmtMoney(r.stats.oweNow)}.</strong> ${st.overdraftOn && st.overdraftFee > 0 ? `You're charged a ${fmtMoney(st.overdraftFee)} overdraft fee now and again every week it stays below $0. ` : ""}Overdrafts lower your credit score. Get your cash back above $0 to stop it.</span></div>`
+    ? `<div class="cc-note bad">${icon("bell", 16)}<span><strong>You have an unarranged overdraft of ${fmtMoney(r.stats.oweNow)}.</strong> ${st.overdraftOn && st.overdraftFee > 0 ? `The ${fmtMoney(st.overdraftFee)} fee applies when it starts and each week it remains unpaid. ` : ""}This lowers your credit score until you bring the affected balances within their limits.</span></div>`
     : "";
   el.innerHTML = `
     <div class="flex-between cc-head"><h2 id="hCredit">${icon("medal", 20)} Credit score</h2><span class="badge ${r.band.tone}">${ccEsc(r.band.label)}</span></div>
@@ -578,11 +589,65 @@ function renderCreditScore(me, cls) {
       <ul class="cc-rules">
         <li>Your score runs from ${CREDIT_MIN} to ${CREDIT_MAX} and starts at ${CREDIT_BASE}. It's worked out fresh from your record every time you open this page.</li>
         <li><strong>Earns points:</strong> every credit card statement you pay on time (at least the minimum by the due date) adds 20, up to 200. A card balance under 30% of its limit adds points, and under 10% adds the most. A clean record with no slips adds a bonus.</li>
-        <li><strong>Costs points:</strong> a missed card payment, a card balance over half its limit, and every overdraft. Being overdrawn right now costs extra until it's sorted out.</li>
+        <li><strong>Costs points:</strong> a missed card payment, a card balance over half its limit, and any unarranged overdraft. An ongoing unarranged overdraft costs extra points.</li>
         <li>After a slip, every week with no new problems wins some points back.</li>
-        <li><strong>Overdrafts</strong> happen when your cash drops below $0. They are expensive and count against you.</li>
+        <li>An arranged overdraft within its agreed limit carries no credit score penalty. An overdraft on another account or beyond your limit is unarranged.</li>
       </ul>
     </details>`;
+  return r.score;
+}
+
+function renderArrangedOverdraft(me, cls, score) {
+  const el = document.getElementById("arrangedOverdraftCard");
+  el.classList.toggle("hidden", IS_TEACHER);
+  if (IS_TEACHER) return;
+  const limit = arrangedOverdraftLimit(me);
+  const account = acctSrcName(cls, me, "cash");
+  const balance = Number(me.balance) || 0;
+  const offers = CREDIT_BANDS.filter(b => b.overdraft).reverse();
+  let controls;
+  if (limit) {
+    const used = Math.min(limit, Math.max(0, -balance));
+    controls = `<dl class="cc-facts od-facts">
+      <div class="cc-fact"><dt>Main account</dt><dd>${ccEsc(account)}</dd></div>
+      <div class="cc-fact"><dt>Arranged limit</dt><dd>${fmtMoney(limit)}</dd></div>
+      <div class="cc-fact"><dt>Overdraft used</dt><dd>${fmtMoney(used)}</dd></div>
+      <div class="cc-fact"><dt>Overdraft remaining</dt><dd>${fmtMoney(cardRound(limit - used))}</dd></div>
+    </dl>
+    <button class="btn small secondary" type="button" onclick="changeArrangedOverdraft(this, 0)" ${balance < 0 ? "disabled" : ""}>Close overdraft</button>
+    ${balance < 0 ? '<p class="muted-small">Bring your main account back to $0 before closing your overdraft.</p>' : ""}`;
+  } else {
+    const available = offers.filter(b => score >= b.min);
+    if (!available.length) controls = `<p>You'll qualify for an arranged overdraft when your credit score reaches ${offers[0].min} (${offers[0].label}).</p>`;
+    else if (!account || balance < 0) controls = `<p>${!account ? "Open a main everyday account" : "Bring your main account back to $0"} before signing up.</p>`;
+    else controls = `<form class="od-actions" onsubmit="event.preventDefault(); changeArrangedOverdraft(this.querySelector('button'), Number(this.elements.limit.value));">
+      <label>Overdraft limit
+        <select name="limit">${available.map(b => `<option value="${b.overdraft}">${fmtMoney(b.overdraft)}</option>`).join("")}</select>
+      </label>
+      <button class="btn secondary" type="submit">Set up overdraft</button>
+    </form>`;
+    controls += `<p class="muted-small od-status">Limits by score: ${offers.map(b => `${fmtMoney(b.overdraft)} at ${b.min}+`).join(" · ")}</p>`;
+  }
+  el.innerHTML = `<h2 id="hArrangedOverdraft">${icon("bank", 20)} Arranged overdraft</h2>
+    <p>Borrow through your main account for Store purchases, transport purchases and bills, and insurance sign-up fees. Money that comes into the account pays back what you owe. There is no interest or overdraft fee within the agreed limit.</p>
+    ${controls}<div class="od-status" id="arrangedOverdraftMsg" role="status"></div>`;
+}
+
+async function changeArrangedOverdraft(button, limit) {
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    const copy = limit ? `Set up an arranged overdraft of ${fmtMoney(limit)} on your main account? Any amount you use needs to be repaid.` : "Close your arranged overdraft?";
+    if (!await t29Confirm(copy)) return;
+    const result = await setArrangedOverdraft(CURRENT.username, CURRENT.classCode, limit);
+    if (result.ok) await render();
+    ccMsg("arrangedOverdraftMsg", result.ok
+      ? `<div class="success-msg">${limit ? `Your ${fmtMoney(limit)} arranged overdraft is ready to use.` : "Arranged overdraft closed."}</div>`
+      : `<div class="error-msg">${ccEsc(result.error)}</div>`);
+    if (result.ok) document.querySelector("#arrangedOverdraftCard button")?.focus();
+  } finally {
+    button.disabled = false;
+  }
 }
 
 
@@ -677,7 +742,7 @@ function ccRenderTeacher(cls, students) {
         </div>
         <div class="cc-set cc-set-pen ${st.overdraftOn ? "" : "is-off"}">
           <div class="cc-set-text"><label for="ccsOdOn">Overdraft fee</label>
-            <p>Charged when a student's cash drops below $0 (after an unexpected cost, say), then once a week while it stays there. Overdrafts always lower their credit score, even with no fee.</p></div>
+            <p>Charged when a student goes over their arranged limit or overdraws an account without an overdraft, then once a week while it remains unpaid. Unarranged overdrafts lower credit scores even with fees switched off.</p></div>
           <div class="cc-set-ctl">
             <label class="cc-switch"><input type="checkbox" id="ccsOdOn" ${st.overdraftOn ? "checked" : ""} onchange="ccSaveSettings()"><span class="cc-switch-track"></span><span>${st.overdraftOn ? "On" : "Off"}</span></label>
             <div class="cc-sentence"><span class="cc-pair"><div class="cc-num money"><i>$</i>${decNum("ccsOdFee", st.overdraftFee)}</div><span>per week overdrawn</span></span></div>

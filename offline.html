@@ -17,14 +17,23 @@
   p{margin:0 0 14px;line-height:1.5;color:var(--muted);}
   button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 22px;background:var(--navy);color:#fff;cursor:pointer;}
   html.dark-mode button{background:#f0b84a;color:#1f2b44;}
+  .help-link{display:inline-block;margin-top:14px;color:var(--text);}
 </style>
 </head>
 <body>
 <main class="box">
   <h1>You're offline</h1>
   <p>The 29 World™ needs an internet connection to load your balance, class and activity. Check your Wi-Fi, then try again. Anything you had already finished before the connection dropped should be saved. Check it once you are back online.</p>
-  <button type="button" onclick="location.href='index.html'">Try again</button>
+  <button type="button" onclick="retryPage()">Try again</button>
+  <br><a class="help-link" href="help.html#setup">Connection help</a>
 </main>
-<script>window.addEventListener("online", function(){ location.href = "index.html"; });</script>
+<script>
+function retryPage() {
+  // The service worker serves this document at the URL the visitor requested.
+  if (location.pathname.endsWith("/offline.html")) location.replace("index.html");
+  else location.reload();
+}
+window.addEventListener("online", retryPage, { once: true });
+</script>
 </body>
 </html>

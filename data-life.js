@@ -479,7 +479,7 @@ async function buyVehicle(username, classCode, vehId, opts) {
       const { total: taxedPrice, taxAmount: tax } = applyTaxToExpense(cls, "transport", discountedVehPrice);
       taxAmount = tax;
       payRes = { card: 0, cash: taxedPrice };
-      if (!isTeacher) payRes = cardPayInTxn(user, cls, taxedPrice, opts); // throws BROKE / LIMIT / NOCARD / NO_SPLIT
+      if (!isTeacher) payRes = cardPayInTxn(user, cls, taxedPrice, opts, true); // throws BROKE / LIMIT / NOCARD / NO_SPLIT
       veh.owners.push(username);
       vehName = veh.name;
       cashPaid = taxedPrice;
@@ -563,7 +563,7 @@ async function buyTruckLicence(username, classCode, opts) {
       price = cls.truckLicence.price || 0;
       const isTeacher = user.role === "teacher";
       payRes = { card: 0, cash: price };
-      if (!isTeacher) payRes = cardPayInTxn(user, cls, price, opts);
+      if (!isTeacher) payRes = cardPayInTxn(user, cls, price, opts, true);
       const update = { truckLicence: true };
       if (!isTeacher) {
         update.balance = Math.round((user.balance - payRes.cash) * 100) / 100;
@@ -869,7 +869,7 @@ async function payTransportExpenses(username, classCode, opts) {
       breakdown = transportWeeklyAmount(cls, Object.assign({ username }, user));
       const amt = breakdown.total;
       payRes = { card: 0, cash: amt };
-      if (amt > 0) payRes = cardPayInTxn(user, cls, amt, opts);
+      if (amt > 0) payRes = cardPayInTxn(user, cls, amt, opts, true);
       const update = { transportLastWeekPaid: weekKey };
       if (amt > 0) {
         update.balance = Math.round((user.balance - payRes.cash) * 100) / 100;
@@ -1966,7 +1966,7 @@ async function buyInsurance(username, classCode, planId, opts) {
       if (lifeVid) lifeConsumeVoucher(user, "insurance", lifeVid);
       const isTeacher = user.role === "teacher";
       payRes = { card: 0, cash: fee };
-      if (!isTeacher && fee > 0) payRes = cardPayInTxn(user, cls, fee, opts);
+      if (!isTeacher && fee > 0) payRes = cardPayInTxn(user, cls, fee, opts, true);
       user.insurance.push(planId);
       const update = { insurance: user.insurance };
       if (lifeVid) update.lifeVoucherUsed = user.lifeVoucherUsed;
@@ -2222,7 +2222,7 @@ async function buyStoreItem(username, classCode, itemId, qty, opts) {
       if (pr.lifeVoucher) lifeConsumeVoucher(user, "store", pr.lifeVoucher.id);
       const total = pr.total;
       payRes = { card: 0, cash: total };
-      if (!isTeacher) payRes = cardPayInTxn(user, cls, total, { useCard: usedCard, split: !!opts.split, cardMax: opts.cardMax });
+      if (!isTeacher) payRes = cardPayInTxn(user, cls, total, { useCard: usedCard, split: !!opts.split, cardMax: opts.cardMax }, true);
       if (pr.voucher) { cardConsumeVoucher(user.creditCard, pr.voucher); voucherNote = ` (${pr.voucher.label} voucher saved ${fmtMoney(pr.voucher.saves)})`; }
       if (pr.lifeVoucher) voucherNote += ` (${pr.lifeVoucher.pct}% life voucher: ${pr.lifeVoucher.name})`;
       itemName = item.name;
@@ -2302,7 +2302,7 @@ async function buyStoreCart(username, classCode, lines, opts) {
       if (pr.lifeVoucher) lifeConsumeVoucher(user, "store", pr.lifeVoucher.id);
       const total = pr.total;
       payRes = { card: 0, cash: total };
-      if (!isTeacher) payRes = cardPayInTxn(user, cls, total, { useCard: usedCard, split: !!opts.split, cardMax: opts.cardMax });
+      if (!isTeacher) payRes = cardPayInTxn(user, cls, total, { useCard: usedCard, split: !!opts.split, cardMax: opts.cardMax }, true);
       if (pr.voucher) { cardConsumeVoucher(user.creditCard, pr.voucher); voucherNote = ` (${pr.voucher.label} voucher saved ${fmtMoney(pr.voucher.saves)})`; }
       if (pr.lifeVoucher) voucherNote += ` (${pr.lifeVoucher.pct}% life voucher: ${pr.lifeVoucher.name})`;
       user.storeItems = user.storeItems || [];

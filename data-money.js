@@ -5433,7 +5433,7 @@ async function saveCardSettings(classCode, s) {
   if (old.statementDay !== clean.statementDay) holdersOnly.push(`your statement now closes on ${clean.statementDay} (was ${old.statementDay})`);
   if (old.splitMin !== clean.splitMin) holdersOnly.push(`only purchases of ${fmtMoney(clean.splitMin)} or more can be split between card and cash (was ${fmtMoney(old.splitMin)})`);
   if (old.overdraftOn !== clean.overdraftOn || (clean.overdraftOn && old.overdraftFee !== clean.overdraftFee))
-    everyone.push(clean.overdraftOn ? `the overdraft fee is now ${fmtMoney(clean.overdraftFee)}, charged when your cash drops below $0 and then weekly while it stays there` : "overdraft fees are now switched off");
+    everyone.push(clean.overdraftOn ? `the unarranged overdraft fee is now ${fmtMoney(clean.overdraftFee)}, charged when it starts and weekly while it remains unpaid` : "overdraft fees are now switched off");
   const out = [];
   if (everyone.length) out.push({ to: "all", icon: "creditcard", tone: "gold", title: "Your teacher changed the credit card settings", body: everyone.join("; ") + ".", href: "bank.html#cardCard" });
   if (holdersOnly.length) {
@@ -5753,12 +5753,13 @@ async function setStorePayDefault(username, useCard) {
 }
 // Runs INSIDE the caller's transaction. Mutates user.creditCard (the caller
 // writes it back when card > 0) and returns { card, cash }; the caller
-// takes `cash` off user.balance. opts: { useCard, split, cardMax }.
-function cardPayInTxn(user, cls, total, opts) {
+// takes `cash` off user.balance. Only eligible purchases opt into the overdraft.
+function cardPayInTxn(user, cls, total, opts, allowOverdraft = false) {
   total = cardRound(total);
   opts = opts || {};
+  const cashAvailable = allowOverdraft ? arrangedCashAvailable(user) : (user.balance || 0);
   if (!opts.useCard) {
-    if ((user.balance || 0) < total) throw new Error("BROKE");
+    if (cashAvailable < total) throw new Error("BROKE");
     return { card: 0, cash: total };
   }
   if (!cardIsActive(user)) throw new Error("NOCARD");
@@ -5772,7 +5773,7 @@ function cardPayInTxn(user, cls, total, opts) {
     card = cardRound(Math.min(total, want, avail));
   } else if (total > avail + 0.004) throw new Error("LIMIT");
   const cash = cardRound(total - card);
-  if ((user.balance || 0) < cash) throw new Error("BROKE");
+  if (cashAvailable < cash) throw new Error("BROKE");
   if (card > 0) cardChargeInTxn(user, cls, card, !!opts.noReward);
   return { card, cash };
 }
@@ -6058,12 +6059,13 @@ async function _processCardStatements(classCode) {
    Two connected pieces, modelled on how a New Zealand bank treats them:
 
    - OVERDRAFTS. Cash (or an everyday account) can drop below $0, for example after an unexpected cost.
-     A student in that state is "overdrawn". The first time it happens they are charged the teacher's
-     overdraft fee, and again once a week while it lasts (processOverdrafts). The fee is logged as a normal
+     An arranged overdraft covers the main account up to a limit chosen at signup. Only debt outside
+     that limit (or on another account) triggers the teacher's overdraft fee and credit score penalties.
+     The fee is charged when an unarranged overdraft starts and again weekly. It is logged as a normal
      "account-fee", so reports, budgets and the activity list already know how to show it. Overdrafts are
-     remembered on the student's doc as `creditHistory` and ALWAYS count against their credit score, even
+     remembered on the student's doc as `creditHistory` and count against their credit score, even
      when the teacher sets the fee to $0 or switches fees off.
-   - CREDIT SCORE (Centrix scale, 0 to 1,000). Worked out from the stored data each time (creditScoreOf), never
+   - CREDIT SCORE (Centrix-style scale, 1 to 1,000). Worked out from the stored data each time (creditScoreOf), never
      stored, so it can never drift out of date. It rewards statements paid on time and a low card balance, and
      costs points for late payments and overdrafts. The teacher's dashboard shows the class average.
 
@@ -6072,19 +6074,63 @@ async function _processCardStatements(classCode) {
 const CREDIT_BASE = 700, CREDIT_MIN = 1, CREDIT_MAX = 1000;
 // Centrix bands (New Zealand), score out of 1,000.
 const CREDIT_BANDS = [
-  { min: 819, label: "Excellent", tone: "mint" },
-  { min: 760, label: "Very good", tone: "mint" },
-  { min: 669, label: "Good", tone: "navy" },
+  { min: 819, label: "Excellent", tone: "mint", overdraft: 150 },
+  { min: 760, label: "Very good", tone: "lilac", overdraft: 100 },
+  { min: 669, label: "Good", tone: "navy", overdraft: 50 },
   { min: 513, label: "Fair", tone: "gold" },
   { min: 0, label: "Poor", tone: "coral" }
 ];
 function creditBandOf(score) { return CREDIT_BANDS.find(b => score >= b.min) || CREDIT_BANDS[CREDIT_BANDS.length - 1]; }
 function creditHistoryOf(user) { return (user && user.creditHistory) || {}; }
 
-// How far below $0 a student's money is right now (0 when it isn't). Teachers are never overdrawn.
+function arrangedOverdraftLimit(user) {
+  const limit = user && user.role === "student" && user.arrangedOverdraftLimit;
+  return limit && CREDIT_BANDS.some(b => b.overdraft === limit) ? limit : 0;
+}
+
+// Stored balance belongs to the main account, even when the student has switched accounts.
+function arrangedCashAvailable(user) {
+  return cardRound(Math.max(0, (Number(user.balance) || 0) + arrangedOverdraftLimit(user)));
+}
+
+async function setArrangedOverdraft(username, classCode, limit) {
+  const userRef = usersCol().doc(username), classRef = classesCol().doc(classCode);
+  try {
+    await fdb.runTransaction(async t => {
+      const [us, cs] = await Promise.all([t.get(userRef), t.get(classRef)]);
+      if (!us.exists || !cs.exists) throw new Error("UNAVAILABLE");
+      const user = us.data(), cls = cs.data();
+      if (user.role !== "student" || user.classCode !== classCode || cls.archived) throw new Error("UNAVAILABLE");
+      const active = arrangedOverdraftLimit(user);
+      if (limit === active) return;
+      if (active && limit > 0) throw new Error("ALREADY_OPEN");
+      if (limit === 0 && user.balance < 0) throw new Error("OWING");
+      if (limit !== 0) {
+        if (acctMainClosed(user)) throw new Error("CLOSED");
+        if (user.balance < 0) throw new Error("OVERDRAWN");
+        const offer = CREDIT_BANDS.find(b => b.overdraft === limit && b.overdraft > 0);
+        if (!offer || creditScoreOf(cls, user).score < offer.min) throw new Error("INELIGIBLE");
+      }
+      t.update(userRef, { arrangedOverdraftLimit: limit });
+    });
+  } catch (e) {
+    const errors = {
+      UNAVAILABLE: "Arranged overdrafts are unavailable for this account.",
+      ALREADY_OPEN: "You already have an arranged overdraft. Close it before choosing another limit.",
+      OWING: "Bring your main account back to $0 before closing your overdraft.",
+      CLOSED: "Open a main everyday account before signing up.",
+      OVERDRAWN: "Bring your main account back to $0 before signing up.",
+      INELIGIBLE: "Your current credit score doesn't qualify for that limit. Refresh Bank to see your options."
+    };
+    return { ok: false, error: errors[e.message] || "Couldn't save your overdraft. Refresh and try again." };
+  }
+  return { ok: true };
+}
+
+// Only the part outside an arrangement (and negative balances on other accounts) counts here.
 function creditOverdrawnBy(user) {
   if (!user || user.role === "teacher") return 0;
-  let owed = Math.max(0, -(Number(user.balance) || 0));
+  let owed = Math.max(0, -(Number(user.balance) || 0) - arrangedOverdraftLimit(user));
   (user.bankAccounts || []).forEach(a => {
     if (a && a.status === "active" && (Number(a.balance) || 0) < 0) owed += -(Number(a.balance));
   });
@@ -6127,7 +6173,7 @@ function overdraftRun(user, cls, today, logs) {
         user.balance = cardRound((user.balance || 0) - amt);
         h.odFees = cardRound((h.odFees || 0) + amt);
         logs.push({ type: "account-fee", amount: amt,
-          note: `Overdraft fee: ${fmtMoney(owed)} below $0${repeat ? ", still overdrawn after a week" : ""}` });
+          note: `Overdraft fee: ${fmtMoney(owed)} unarranged${repeat ? ", still overdrawn after a week" : ""}` });
       }
     }
   } else if (h.odSince) {
@@ -6209,8 +6255,8 @@ function creditScoreOf(cls, user) {
   const odEvents = h.odEvents || 0;
   const odDays = (h.odDays || 0) + (h.odSince ? Math.max(0, daysBetweenKeys(h.odSince, today)) : 0);
   bump(h.odLastKey); bump(h.odClearedKey);
-  if (oweNow > 0.004) { bump(today); add("odnow", "Overdrawn right now", -140, `${fmtMoney(oweNow)} below $0`); }
-  if (odEvents > 0) add("odhist", "Overdrafts", -Math.min(180, odEvents * 36), `Overdrawn ${n(odEvents, "time")}`);
+  if (oweNow > 0.004) { bump(today); add("odnow", "Unarranged overdraft", -140, `${fmtMoney(oweNow)} outside your arranged limit`); }
+  if (odEvents > 0) add("odhist", "Past unarranged overdrafts", -Math.min(180, odEvents * 36), `Overdrawn ${n(odEvents, "time")}`);
   if (odDays >= 14) add("oddays", "Long overdrafts", -40, `${n(odDays, "day")} overdrawn in total`);
 
   // 4. A clean record earns a bonus; after a slip, every clean week wins some points back
@@ -6224,12 +6270,12 @@ function creditScoreOf(cls, user) {
 
   score = Math.max(CREDIT_MIN, Math.min(CREDIT_MAX, score));
 
-  if (oweNow > 0.004) tips.push("Get your cash back above $0 to stop the overdraft fees. Earn some, or sell something you no longer need.");
+  if (oweNow > 0.004) tips.push("Pay back the unarranged amount to stop the overdraft fees. Move money from savings or put your next pay towards it.");
   if (overdueNow) tips.push("Pay at least the minimum on your overdue card statement as soon as you can.");
   if (limit > 0 && util > 0.3) tips.push("Pay your card down to under 30% of its limit.");
   if (!tips.length) tips.push(cards.length
     ? "Keep paying your statements on time. Each one adds points, up to +200."
-    : "A credit card can help your score if you pay it on time and keep the balance low. Overdrafts always cost points.");
+    : "A credit card can help your score if you pay it on time and keep the balance low. Unarranged overdrafts cost points.");
   return { score, band: creditBandOf(score), factors, tips,
     stats: { onTime, late, util, oweNow, odEvents, limit, owing: cardRound(owing), hasCard: cards.length > 0 } };
 }
@@ -6609,6 +6655,7 @@ async function closeBankAccount(username, classCode, accountId, destId) {
       const raw = us.data(), cls = withNewModuleDefaults(cs.data());
       if (raw.role === "teacher") throw new Error("NOT_FOUND");
       const user = acctLogical(raw), mainL = acctMainId(raw);
+      if (accountId === mainL && arrangedOverdraftLimit(raw)) throw new Error("ARRANGED");
       const list = acctListOf(user).map(a => Object.assign({}, a));
       const isDefault = accountId === "cash" || accountId === "savings";
       const src = isDefault ? null : list.find(x => x.id === accountId && x.status === "active");
@@ -6652,6 +6699,7 @@ async function closeBankAccount(username, classCode, accountId, destId) {
     if (m[0] === "LAST") return { ok: false, error: "You need at least one account open to keep your money in. Open another one first, then close this one." };
     if (m[0] === "CAP") return { ok: false, error: `That account can only hold up to its balance cap. It has room for ${fmtMoney(Number(m[1]) || 0)} more. Pick another account to move the money to.` };
     if (m[0] === "NEGATIVE") return { ok: false, error: "You can't close an account that is overdrawn." };
+    if (m[0] === "ARRANGED") return { ok: false, error: "Close your arranged overdraft before closing your main account." };
     return { ok: false, error: "Couldn't close that account. Refresh and try again." };
   }
   if (moved > 0) await logTxn(classCode, { type: "account-close", to: username, amount: moved, cashDir, note: `Closed ${srcName}: ${fmtMoney(moved)} moved to ${destName}` });
@@ -6707,6 +6755,7 @@ async function setMainAccount(username, accountId) {
       const L = acctLogical(user);                                   // the real Cash account's balance + each account's own
       const next = Object.assign({}, L, { mainAccount: accountId }); // same money, new main
       const stored = _acctSwap(next);                                // what `balance` and the entries must hold now
+      if (arrangedOverdraftLimit(user) && (user.balance < 0 || stored.balance < 0)) throw new Error("ARRANGED");
       const upd = { mainAccount: accountId, balance: stored.balance };
       if (acctListOf(user).length) upd.bankAccounts = stored.bankAccounts;
       t.update(userRef, upd);
@@ -6715,7 +6764,8 @@ async function setMainAccount(username, accountId) {
     const m = { CASH_CLOSED: "Your Cash balance is closed. Open it again first, or pick another account.",
       NOT_FOUND: "That account isn't available any more.", NOT_EVERYDAY: "Only an everyday account can be your main account.",
       HAS_CAP: "That account has a balance limit, so it can't take your pay and payments. Pick one without a limit.",
-      TEACHER: "Teachers don't need a main account." };
+      TEACHER: "Teachers don't need a main account.",
+      ARRANGED: "Bring both accounts back to $0 or above before moving your arranged overdraft to a new main account." };
     return { ok: false, error: m[e.message] || "Something went wrong. Please try again." };
   }
   return { ok: true, name };

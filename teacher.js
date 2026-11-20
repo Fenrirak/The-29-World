@@ -139,6 +139,7 @@ async function render() {
   document.getElementById("statStudents").textContent = students.length;
   // Average credit score across the class (see creditScoreOf in data-money.js).
   const creditAvg = creditClassAverage(cls, students);
+  document.getElementById("classCreditStat").dataset.tone = creditAvg.band?.tone || "";
   document.getElementById("statCredit").textContent = creditAvg.avg === null ? "\u2014" : String(creditAvg.avg);
   document.getElementById("statCreditBand").textContent = creditAvg.avg === null ? "No students yet" : `${creditAvg.band.label} (out of ${CREDIT_MAX})`;
 
