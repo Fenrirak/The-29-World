@@ -751,18 +751,28 @@ function ccRenderTeacher(cls, students) {
         </div>
       </div>
     </section>
-    <form class="cc-panel" onsubmit="event.preventDefault(); ccSaveOverdraftOffers(this);">
-      <h3>Arranged overdraft offers</h3>
-      <p>Set the minimum score and borrowing limit for each offer. Enter $0 to turn an offer off. Students keep the limits they already agreed to.</p>
-      ${arrangedOverdraftOffers(cls).map((offer, i) => `<fieldset>
-        <legend>Offer ${i + 1}</legend>
-        <div class="grid grid-2">
-          <label>Minimum score <input id="ccOdScore-${i}" type="number" min="1" max="1000" step="1" required value="${offer.min}"></label>
-          <label>Limit ($) <input id="ccOdLimit-${i}" type="number" min="0" max="1000" step="1" required value="${offer.overdraft}"></label>
-        </div>
-      </fieldset>`).join("")}
-      <button class="btn small secondary" type="submit">Save overdraft offers</button>
-      <div class="od-status" id="ccOdMsg" role="status"></div>
+    <form class="cc-panel cc-od-panel" aria-labelledby="ccOdTitle" aria-describedby="ccOdHint" onsubmit="event.preventDefault(); ccSaveOverdraftOffers(this);">
+      <div class="cc-panel-head"><h3 id="ccOdTitle">Arranged overdraft offers</h3></div>
+      <p class="muted-small cc-od-hint" id="ccOdHint">Set a minimum score and borrowing limit for each offer. A $0 limit closes the offer to new signups. Students keep any limit they’ve already agreed to.</p>
+      <div class="cc-od-offers">
+        ${arrangedOverdraftOffers(cls).map((offer, i) => `<div class="cc-set" role="group" aria-labelledby="ccOdOffer-${i}">
+          <h4 id="ccOdOffer-${i}">Offer ${i + 1}</h4>
+          <div class="cc-od-fields">
+            <div>
+              <label for="ccOdScore-${i}">Minimum score</label>
+              <div class="cc-num"><input id="ccOdScore-${i}" type="number" min="1" max="1000" step="1" inputmode="numeric" required value="${offer.min}"></div>
+            </div>
+            <div>
+              <label for="ccOdLimit-${i}">Borrowing limit</label>
+              <div class="cc-num money"><i aria-hidden="true">$</i><input id="ccOdLimit-${i}" aria-label="Borrowing limit in dollars" type="number" min="0" max="1000" step="1" inputmode="numeric" required value="${offer.overdraft}"></div>
+            </div>
+          </div>
+        </div>`).join("")}
+      </div>
+      <div class="cc-od-footer">
+        <button class="btn gold" type="submit">Save overdraft offers</button>
+        <div id="ccOdMsg" role="status"></div>
+      </div>
     </form>
     <div id="ccTMsg" role="status"></div>
     <h3 class="cc-sub">Plans</h3>
