@@ -12,7 +12,7 @@ async function openCompany(classCode, name, price, totalShares) {
   if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
     return { ok: false, error: "Enter a valid starting price greater than 0." };
   }
-  if (!Number.isFinite(parsedShares) || parsedShares < 1) {
+  if (!Number.isSafeInteger(parsedShares) || parsedShares < 1) {
     return { ok: false, error: "Enter a valid whole number of shares (1 or more)." };
   }
   const classRef = classesCol().doc(classCode);
@@ -333,8 +333,8 @@ async function buyShares(username, classCode, companyId, shares) {
   if (await isModuleLockedForStudent(username, classCode, "market")) {
     return { ok: false, error: await moduleLockedError(username, classCode, "market", "The Stock Market") };
   }
-  shares = Math.floor(Number(shares));
-  if (!(shares > 0)) return { ok: false, error: "Enter a whole number of shares." };
+  shares = Number(shares);
+  if (!Number.isSafeInteger(shares) || shares < 1) return { ok: false, error: "Enter a whole number of shares." };
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let cost = 0, coName = "";
@@ -396,7 +396,7 @@ async function buyShares(username, classCode, companyId, shares) {
     return { ok: false, error: "Something went wrong. Please try again. (" + (e.code || e.message || "unknown") + ")" };
   }
   await logTxn(classCode, {
-    type: "stock-buy", from: username, amount: cost, note: `Bought ${shares} shares of ${coName}`,
+    type: "stock-buy", from: username, amount: cost, note: `Bought ${shares} share${shares === 1 ? "" : "s"} of ${coName}`,
     companyId, shares, pricePerShare: Math.round((cost / shares) * 100) / 100
   });
   return { ok: true };
@@ -406,8 +406,8 @@ async function sellShares(username, classCode, companyId, shares) {
   if (await isModuleLockedForStudent(username, classCode, "market")) {
     return { ok: false, error: await moduleLockedError(username, classCode, "market", "The Stock Market") };
   }
-  shares = Math.floor(Number(shares));
-  if (!(shares > 0)) return { ok: false, error: "Enter a whole number of shares." };
+  shares = Number(shares);
+  if (!Number.isSafeInteger(shares) || shares < 1) return { ok: false, error: "Enter a whole number of shares." };
   const userRef = usersCol().doc(username);
   const classRef = classesCol().doc(classCode);
   let proceeds = 0, coName = "", costBasisSold = 0;
@@ -479,7 +479,7 @@ async function sellShares(username, classCode, companyId, shares) {
     return { ok: false, error: "Something went wrong. Please try again. (" + (e.code || e.message || "unknown") + ")" };
   }
   await logTxn(classCode, {
-    type: "stock-sell", to: username, amount: proceeds, note: `Sold ${shares} shares of ${coName}`,
+    type: "stock-sell", to: username, amount: proceeds, note: `Sold ${shares} share${shares === 1 ? "" : "s"} of ${coName}`,
     companyId, shares, pricePerShare: Math.round((proceeds / shares) * 100) / 100,
     costBasisSold, realizedGain: Math.round((proceeds - costBasisSold) * 100) / 100
   });
@@ -1712,7 +1712,7 @@ async function setGamblingEnabled(classCode, enabled) {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = withNewModuleDefaults(snap.data());
-    wasOn = cls.gambling.enabled !== false;
+    wasOn = !!cls.gambling.enabled;
     cls.gambling.enabled = !!enabled;
     t.update(classRef, { gambling: cls.gambling });
   });

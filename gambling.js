@@ -1539,7 +1539,7 @@ async function render() {
   const bj = CLS.blackjack;
 
   if (IS_TEACHER) {
-    document.getElementById("gEnabled").checked = g.enabled !== false;
+    document.getElementById("gEnabled").checked = !!g.enabled;
     document.getElementById("gMin").value = g.minBet;
     document.getElementById("gMax").value = g.maxBet;
     document.getElementById("gDailyBuyIn").value = g.dailyBuyInLimit === null || g.dailyBuyInLimit === undefined ? "" : g.dailyBuyInLimit;
@@ -1559,7 +1559,7 @@ async function render() {
     return;
   }
 
-  const blackjackEnabled = g.enabled !== false && bj.enabled !== false;
+  const blackjackEnabled = !!g.enabled && bj.enabled !== false;
   // getModuleLockReasons and getBlackjackRound are independent reads (one's
   // cross-module lock state, the other is "does this student have a round
   // in progress"), but used to run one after the other — a second full
@@ -1594,7 +1594,7 @@ async function render() {
   renderGamblingAccountRecent(CLS);
 
   /* ---- Roulette tab ---- */
-  const rouletteEnabled = g.enabled !== false;
+  const rouletteEnabled = !!g.enabled;
   document.getElementById("disabledBanner").classList.toggle("hidden", rouletteEnabled);
   document.getElementById("rouletteStudentView").classList.toggle("hidden", !rouletteEnabled);
   if (rouletteEnabled) {
@@ -1605,7 +1605,7 @@ async function render() {
 
   /* ---- Blackjack tab ---- */
   document.getElementById("bjDisabledBanner").classList.toggle("hidden", blackjackEnabled);
-  document.getElementById("bjDisabledText").textContent = (g.enabled === false)
+  document.getElementById("bjDisabledText").textContent = (!g.enabled)
     ? "Your teacher has temporarily turned off the Gambling module. Check back later!"
     : "Your teacher has temporarily turned off Blackjack for this class. Check back later!";
   document.getElementById("bjStudentView").classList.toggle("hidden", !blackjackEnabled);

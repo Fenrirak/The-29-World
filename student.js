@@ -88,7 +88,7 @@ async function init() {
   // dashboard — confusing at best. Instead, sign this stale session out
   // and send them back to the login screen so the right person can log
   // in as themselves.
-  if (u.role !== "student") { clearSession(); window.location.href = "index.html"; return; }
+  if (u.role !== "student") { await logout(); return; }
   CURRENT = u;
   document.getElementById("whoami").textContent = u.name;
   paintChrome();

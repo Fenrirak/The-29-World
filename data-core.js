@@ -169,8 +169,31 @@ function flashMsg(el, html, ms) {
   setTimeout(() => { if (el.dataset.flash === token) el.innerHTML = ""; }, ms || 3000);
 }
 
+// Initial paint and background refreshes both fill teacher settings. Keep a
+// local edit until a read confirms it, even after focus moves to the Save button.
+function t29FillSetting(id, savedValue) {
+  const field = document.getElementById(id);
+  if (!field) return;
+  const next = String(savedValue ?? "");
+  const previous = field.dataset.savedValue;
+  if (previous === undefined || field.value === previous || field.value === next) {
+    field.value = next;
+    field.dataset.savedValue = next;
+  }
+}
+
 function usersCol() { installReadCache(); return fdb.collection("users"); }
 function classesCol() { installReadCache(); return fdb.collection("classes"); }
+
+// The rule for every NEW password (sign-up, recovery, changing it): at least 6 characters, with at
+// least one capital letter. Any uppercase letter counts, so a name-based password like "Āwhina1" is fine.
+// Existing passwords still log in as before: this is only checked when a password is being set.
+const T29_PASSWORD_RULE = "must be at least 6 characters and include a capital letter.";
+function t29PasswordProblem(pw, label) {
+  pw = String(pw == null ? "" : pw);
+  if (pw.length >= 6 && /\p{Lu}/u.test(pw)) return "";
+  return (label || "Password") + " " + T29_PASSWORD_RULE;
+}
 
 function genCode(len) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -563,7 +586,16 @@ function installReadCache() {
   window._rcSet = function (col, id, value, ttlMs) {
     store.set(cacheKey(col, id), { value, expires: Date.now() + (ttlMs || CACHE_TTL_MS) });
   };
-  window._rcDel = function (col, id) { store.delete(cacheKey(col, id)); };
+  window._rcDel = function (col, id) {
+    store.delete(cacheKey(col, id));
+    if (col === "users") {
+      _inFlightUserFetch.delete(id);
+      _inflightUserFetch.delete(id);
+    } else if (col === "classes") {
+      _inFlightClassFetch.delete(id);
+      _inflightClassFetch.delete(id);
+    }
+  };
 
   // Wrap fdb.collection("users"/"classes") so any direct write — from this
   // file or (via classesColUpdateRate in teacher.js) elsewhere — clears
@@ -585,7 +617,7 @@ function installReadCache() {
         const orig = docRef[method].bind(docRef);
         docRef[method] = function (...args) {
           const result = orig(...args);
-          result.then(() => { store.delete(cacheKey(name, id)); _anwOnWriteSettled(); }, () => {});
+          result.then(() => { window._rcDel(name, id); _anwOnWriteSettled(); }, () => {});
           return result;
         };
       });
@@ -602,7 +634,14 @@ function installReadCache() {
   const origRunTransaction = fdb.runTransaction.bind(fdb);
   fdb.runTransaction = function (updateFn) {
     const result = origRunTransaction(updateFn);
-    result.then(() => { store.clear(); _anwOnWriteSettled(); }, () => {});
+    result.then(() => {
+      store.clear();
+      _inFlightUserFetch.clear();
+      _inFlightClassFetch.clear();
+      _inflightUserFetch.clear();
+      _inflightClassFetch.clear();
+      _anwOnWriteSettled();
+    }, () => {});
     return result;
   };
 }
@@ -627,10 +666,10 @@ async function getUserCached(username) {
   const promise = (async () => {
     try {
       const value = await getUser(username);
-      window._rcSet("users", username, value);
+      if (_inflightUserFetch.get(username) === promise) window._rcSet("users", username, value);
       return value;
     } finally {
-      _inflightUserFetch.delete(username);
+      if (_inflightUserFetch.get(username) === promise) _inflightUserFetch.delete(username);
     }
   })();
   _inflightUserFetch.set(username, promise);
@@ -644,10 +683,10 @@ async function getClassCached(code) {
   const promise = (async () => {
     try {
       const value = await getClass(code);
-      window._rcSet("classes", code, value);
+      if (_inflightClassFetch.get(code) === promise) window._rcSet("classes", code, value);
       return value;
     } finally {
-      _inflightClassFetch.delete(code);
+      if (_inflightClassFetch.get(code) === promise) _inflightClassFetch.delete(code);
     }
   })();
   _inflightClassFetch.set(code, promise);
@@ -1331,10 +1370,8 @@ async function createTeacherAndClass(name, username, password, className, extra)
   // under 6 characters (see t29AuthErrorMessage's "auth/weak-password"
   // case below) — this check just catches that instantly, client-side,
   // instead of making a round trip to Firebase first just to get told
-  // the same thing.
-  if (!password || password.length < 6) {
-    return { ok: false, error: "Password must be at least 6 characters." };
-  }
+  // the same thing. It also holds the capital-letter rule, which Firebase doesn't know about.
+  { const pwProblem = t29PasswordProblem(password); if (pwProblem) return { ok: false, error: pwProblem }; }
   { const uProblem = t29UsernameProblem(username); if (uProblem) return { ok: false, error: uProblem }; }
 
   name = sanitizeUserText(name, 60);
@@ -1421,7 +1458,7 @@ async function createTeacherAndClass(name, username, password, className, extra)
 function t29AuthErrorMessage(e) {
   switch (e && e.code) {
     case "auth/email-already-in-use": return "That username is already taken. Try adding a number to the end.";
-    case "auth/weak-password": return "Password must be at least 6 characters.";
+    case "auth/weak-password": case "auth/password-does-not-meet-requirements": return "Password " + T29_PASSWORD_RULE;
     case "auth/invalid-email": return "That username can't be used. Try letters and numbers only.";
     case "auth/network-request-failed": return "Can't connect right now. Check your internet connection and try again.";
     case "auth/too-many-requests": return "Too many attempts in a row. Wait a minute, then try again.";
@@ -1730,13 +1767,22 @@ async function createClassFromTemplate(teacherUsername, className, templateCode)
    a share link at any time without affecting the class itself. */
 function templateSharesCol() { return fdb.collection("templateShares"); }
 
+// Unguessable link tokens, used for template-share links AND family (parent view) links: 22 characters
+// from a 62-letter alphabet (about 131 bits), all from the browser's cryptographic random generator.
+// Characters are picked by rejection sampling so none is even slightly more likely than another, and
+// there is deliberately NO Math.random() fallback: a guessable token would make a private link public,
+// so with no secure generator available this throws and the link simply isn't made.
 function genShareToken() {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const bytes = new Uint8Array(22);
-  if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
-  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  const c = (typeof window !== "undefined" && window.crypto) || (typeof crypto !== "undefined" ? crypto : null);
+  if (!c || typeof c.getRandomValues !== "function") throw new Error("NO_SECURE_RANDOM");
+  const limit = 256 - (256 % chars.length); // 248: bytes at or above this are thrown away
   let out = "";
-  for (let i = 0; i < bytes.length; i++) out += chars[bytes[i] % chars.length];
+  const buf = new Uint8Array(32);
+  while (out.length < 22) {
+    c.getRandomValues(buf);
+    for (let i = 0; i < buf.length && out.length < 22; i++) if (buf[i] < limit) out += chars[buf[i] % chars.length];
+  }
   return out;
 }
 
@@ -2109,9 +2155,7 @@ async function t29JoinClassAsNewStudent(db, cred, name, username, classCode) {
 
 async function createStudentAccount(name, username, password, classCode) {
   // See the matching check in createTeacherAndClass above — same reason.
-  if (!password || password.length < 6) {
-    return { ok: false, error: "Password must be at least 6 characters." };
-  }
+  { const pwProblem = t29PasswordProblem(password); if (pwProblem) return { ok: false, error: pwProblem }; }
   { const uProblem = t29UsernameProblem(username); if (uProblem) return { ok: false, error: uProblem }; }
 
   name = sanitizeUserText(name, 60);
@@ -2475,7 +2519,7 @@ function t29PendingRecovery() {
 async function t29CompleteRecovery(username, email, newPassword) {
   username = String(username || "").trim();
   email = String(email || "").trim().toLowerCase();
-  if (!newPassword || newPassword.length < 6) return { ok: false, error: "Password must be at least 6 characters." };
+  { const pwProblem = t29PasswordProblem(newPassword); if (pwProblem) return { ok: false, error: pwProblem }; }
   let cred;
   try {
     cred = await firebase.auth().signInWithEmailLink(email, location.href);
@@ -2719,9 +2763,7 @@ async function _t29FinishLegacyClaim(username, uid) {
    password so a student walking away from an unlocked device can't have
    their password silently swapped out from under them. */
 async function changePassword(username, oldPassword, newPassword) {
-  if (!newPassword || newPassword.length < 6) {
-    return { ok: false, error: "New password must be at least 6 characters." };
-  }
+  { const pwProblem = t29PasswordProblem(newPassword, "New password"); if (pwProblem) return { ok: false, error: pwProblem }; }
   if (newPassword === oldPassword) {
     return { ok: false, error: "New password must be different from your current password." };
   }
@@ -2742,8 +2784,8 @@ async function changePassword(username, oldPassword, newPassword) {
     if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential" || e.code === "auth/invalid-login-credentials") {
       return { ok: false, error: "Current password is incorrect." };
     }
-    if (e.code === "auth/weak-password") {
-      return { ok: false, error: "New password must be at least 6 characters." };
+    if (e.code === "auth/weak-password" || e.code === "auth/password-does-not-meet-requirements") {
+      return { ok: false, error: "New password " + T29_PASSWORD_RULE };
     }
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -2794,6 +2836,7 @@ function _pwBuildModal() {
       <input type="password" id="t29PwCurrent" autocomplete="current-password" style="width:100%;">
       <label style="display:block;margin:12px 0 4px;font-size:var(--fs-lg);" for="t29PwNew">New password</label>
       <input type="password" id="t29PwNew" autocomplete="new-password" style="width:100%;">
+      <p class="field-hint">At least 6 characters, including a capital letter.</p>
       <label style="display:block;margin:12px 0 4px;font-size:var(--fs-lg);" for="t29PwConfirm">Confirm new password</label>
       <input type="password" id="t29PwConfirm" autocomplete="new-password" style="width:100%;">
       <p class="muted-small" id="t29PwMsg" style="min-height:1.2em;margin-top:10px;"></p>
@@ -4128,7 +4171,7 @@ function withNewModuleDefaults(cls) {
     minBet: 1, maxBet: 20,
     payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 }
   };
-  if (cls.gambling.enabled === undefined) cls.gambling.enabled = true;
+  if (cls.gambling.enabled === undefined) cls.gambling.enabled = false; // the casino is OFF unless a teacher switches it on
   // Migrate the old shared "dailyBetCap" (a pure spending cap) into the
   // new "dailyBuyInLimit" (a cap on cash moved into the gambling account)
   // the first time a class with legacy data is loaded — same number,
@@ -4321,9 +4364,9 @@ async function anwGlobalBootstrap() {
 // confirmed" state set by the top-bar boot script: the link keeps its space
 // but stays invisible until this has checked, so a stale "on" never shows.
 function casinoOnFor(cls) {
-  // Same rule the Gambling page uses (enabled !== false), so a class that has
-  // never had the switch set behaves identically in the menu and on the page.
-  return !!cls && !(cls.gambling && cls.gambling.enabled === false);
+  // Same rule the Gambling page uses (only an explicit "on" counts), so a class that has
+  // never had the switch set behaves identically in the menu and on the page: off.
+  return !!(cls && cls.gambling && cls.gambling.enabled);
 }
 async function showCasinoNavIfOn(u) {
   const root = document.documentElement;

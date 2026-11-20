@@ -60,6 +60,7 @@
   ]
 }
 </script>
+<style>#contact{scroll-margin-top:16px;}#contact:target{border-color:var(--gold);}</style>
 </head>
 <body>
 <header class="about-topbar">
@@ -86,13 +87,26 @@
       <a class="btn secondary" href="index.html" data-back><span>Go back</span></a>
     </div>
   </div>
+
+  <div class="card about-card" id="contact" style="margin-top:16px;">
+    <h2 style="margin-top:0;">Contact</h2>
+    <p>Questions, feedback, or something not working? Send Nathan an email and he'll get back to you.</p>
+    <ul class="about-links">
+      <li><a class="about-link" href="mailto:Nathan.liu1211@gmail.com"><span class="about-link-text"><span class="about-link-title">Email Nathan</span><span class="about-link-url">Nathan.liu1211@gmail.com</span></span></a></li>
+    </ul>
+    <div class="about-actions" style="margin-top:18px;">
+      <button type="button" class="btn secondary" id="copyEmailBtn">Copy email address</button>
+    </div>
+    <p class="muted-small" id="copyEmailMsg" role="status" aria-live="polite" style="text-align:center;margin:12px 0 0;"></p>
+    <p class="muted-small" style="text-align:center;margin:6px 0 0;">No email app on this device? Copy the address and send it from any email account.</p>
+  </div>
 </main>
 
 <footer class="site-footer">
   <div class="site-footer-brand">The 29 World™</div>
   <nav class="site-footer-links" aria-label="Footer">
     <a href="about.html">About</a>
-    <a href="mailto:Nathan.liu1211@gmail.com">Contact</a>
+    <a href="about.html#contact">Contact</a>
     <a href="privacy.html">Privacy Policy</a>
     <a href="terms.html">Terms of Use</a>
   </nav>
@@ -108,6 +122,24 @@
     if(ok){ e.preventDefault(); history.back(); }
   };
   document.querySelectorAll('[data-back]').forEach(function(el){ el.addEventListener('click',go); });
+})();
+/* Contact: copy the email address (works even when the device has no email app set up for mailto: links). */
+(function(){
+  var btn=document.getElementById('copyEmailBtn'), msg=document.getElementById('copyEmailMsg');
+  if(!btn) return;
+  var addr='Nathan.liu1211@gmail.com';
+  var say=function(t){ msg.textContent=t; setTimeout(function(){ if(msg.textContent===t) msg.textContent=''; },3500); };
+  var legacy=function(){
+    var ta=document.createElement('textarea'); ta.value=addr; ta.setAttribute('readonly',''); ta.style.cssText='position:fixed;top:0;left:0;opacity:0;';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0,addr.length);
+    var ok=false; try{ ok=document.execCommand('copy'); }catch(_){}
+    document.body.removeChild(ta); return ok;
+  };
+  btn.addEventListener('click',function(){
+    var done=function(ok){ say(ok?'Email address copied.':'Couldn\'t copy it. The address is '+addr+'.'); };
+    if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(addr).then(function(){done(true);},function(){done(legacy());}); }
+    else done(legacy());
+  });
 })();
 </script>
 </body>

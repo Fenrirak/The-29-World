@@ -880,7 +880,7 @@ async function kiwiSaverSaveChoices(username, { rate, fund, paused } = {}) {
     if (rate !== undefined) next.rate = Number(rate);
     if (fund !== undefined) next.fund = fund;
     if (paused !== undefined) next.paused = !!paused;
-    return { kiwiSaver: next };
+    return { kiwiSaver: next, _result: { choices: next } };
   });
 }
 
@@ -2924,6 +2924,7 @@ function classifyTxnForReport(t, username) {
   if (REPORT_SAVED_TYPES[t.type]) return { bucket: "saved", category: REPORT_SAVED_TYPES[t.type], amount: amt };
   if (REPORT_SPENT_TYPES[t.type]) return { bucket: "spent", category: REPORT_SPENT_TYPES[t.type], amount: amt };
   if (t.type === "loan-taken") return { bucket: "borrowed", category: "Loans taken", amount: amt };
+  // Cash taken out against the credit card is borrowing too, just like a loan (the fee and interest are card costs).
   if (t.type === "property-occupancy" && t.from === username) return { bucket: "spent", category: "Housing", amount: amt };
 
   // Gambling always logs `from: username` regardless of outcome (see
@@ -3690,14 +3691,18 @@ async function classesColUpdateInsuranceDay(classCode, day) {
   await classesCol().doc(classCode).update({ insuranceDay: day });
 }
 
-async function saveTaxRates(classCode, rates) {
+async function saveTaxRates(classCode, rates, brackets) {
   const clean = {};
   Object.keys(rates).forEach(k => { clean[k] = Math.min(100, Math.max(0, Number(rates[k]) || 0)); });
-  const oldRates = ((await getClass(classCode).catch(() => null)) || {}).taxRates || {};
-  await classesCol().doc(classCode).update({ taxRates: clean });
+  const cls = await getClass(classCode);
+  const oldRates = cls.taxRates || {};
+  const update = { taxRates: clean };
+  if (brackets) update.wageTaxBrackets = cleanWageTaxBrackets(brackets);
+  await classesCol().doc(classCode).update(update);
   const label = { property: "tax on property", transport: "tax on transport", interest: "tax on interest", gambling: "tax on gambling" };
   const parts = Object.keys(clean).filter(k => (Number(oldRates[k]) || 0) !== clean[k]).map(k => `${label[k] || k} ${Number(oldRates[k]) || 0}% → ${clean[k]}%`);
-  if (parts.length) await t29NotifyStudents(classCode, { to: "all", icon: "percent", tone: "gold", title: "Your teacher changed the tax rates", body: parts.join("; ") + ".", href: "tax.html" });
+  if (parts.length) await t29NotifyStudents(classCode, { to: "all", icon: "percent", tone: "gold", title: "Your teacher changed the tax rates", body: parts.join("; ") + ".", href: "student.html" });
+  if (brackets) await notifyWageTaxChange(classCode, cls.wageTaxBrackets || [], update.wageTaxBrackets);
 }
 // For purchases: student pays base cost + tax on top.
 function applyTaxToExpense(cls, category, baseAmount) {
@@ -3766,21 +3771,26 @@ function t29WageTaxBands(cls) {
   let prev = 0;
   return bands.map(b => { const row = { from: prev, upTo: b.upTo, rate: b.rate }; if (b.upTo != null) prev = b.upTo; return row; });
 }
-async function saveWageTaxBrackets(classCode, brackets) {
-  const clean = (brackets || [])
+function cleanWageTaxBrackets(brackets) {
+  return (brackets || [])
     .map(b => ({
       upTo: (b.upTo === null || b.upTo === "" || b.upTo === undefined) ? null : Math.max(0, Number(b.upTo) || 0),
       rate: Math.min(100, Math.max(0, Number(b.rate) || 0))
     }))
     .sort((a, b) => (a.upTo == null ? Infinity : a.upTo) - (b.upTo == null ? Infinity : b.upTo));
-  const oldCls = await getClass(classCode).catch(() => null);
-  const oldBr = (oldCls && oldCls.wageTaxBrackets) || [];
+}
+async function saveWageTaxBrackets(classCode, brackets) {
+  const oldCls = await getClass(classCode);
+  const clean = cleanWageTaxBrackets(brackets);
   await classesCol().doc(classCode).update({ wageTaxBrackets: clean });
+  await notifyWageTaxChange(classCode, oldCls.wageTaxBrackets || [], clean);
+}
+async function notifyWageTaxChange(classCode, oldBr, clean) {
   if (JSON.stringify(oldBr) !== JSON.stringify(clean)) {
     const desc = clean.length ? clean.map(b => `${b.upTo == null ? "above that" : "up to " + fmtMoney(b.upTo)}: ${b.rate}%`).join(", ") : "no wage tax";
     const earners = await t29StudentsWhere(classCode, s => !!s.jobId);
     await t29NotifyStudents(classCode, { to: earners, icon: "percent", tone: "gold",
-      title: "Your teacher changed the wage tax brackets", body: `Your wages are now taxed like this: ${desc}.`, href: "tax.html" });
+      title: "Your teacher changed the wage tax brackets", body: `Your wages are now taxed like this: ${desc}.`, href: "jobs.html" });
   }
 }
 
@@ -5234,7 +5244,8 @@ async function _deleteParentViewFor(username) {
    class-wide safety net. Statements catch up if nobody opened the site. */
 const CARD_CYCLE_DAYS = 14;
 const CARD_MAX_FREE_DAYS = 13; // must end before the next statement closes
-const CARD_DEFAULT_SETTINGS = { enabled: true, approval: "teacher", statementDay: "Fri", splitMin: 100, maxCards: 2 }; // splitMin: smallest purchase that may be split between card and cash; maxCards: most cards a student may hold (or have applied for) at once
+const CARD_DEFAULT_SETTINGS = { enabled: true, approval: "teacher", statementDay: "Fri", splitMin: 100, maxCards: 2,
+  overdraftOn: true, overdraftFee: 5 }; // splitMin: smallest purchase that may be split between card and cash; maxCards: most cards a student may hold (or have applied for) at once
 
 function cardRound(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function cardSettings(cls) { return Object.assign({}, CARD_DEFAULT_SETTINGS, (cls && cls.cardSettings) || {}); }
@@ -5393,13 +5404,21 @@ function cardCleanPlan(p) {
 }
 
 /* ---------------- Teacher: settings, plans, penalty ---------------- */
+// A teacher-typed number setting: blank or invalid falls back to the default; otherwise 0 up to `max`.
+function cardNumSetting(v, dflt, max) {
+  if (v === undefined || v === null || v === "" || !Number.isFinite(Number(v))) return dflt;
+  return Math.min(max, Math.max(0, cardRound(v)));
+}
 async function saveCardSettings(classCode, s) {
   const clean = {
     enabled: !!s.enabled,
     approval: s.approval === "instant" ? "instant" : "teacher",
     statementDay: DAY_NAMES.includes(s.statementDay) ? s.statementDay : "Fri",
     splitMin: s.splitMin === undefined || s.splitMin === "" ? CARD_DEFAULT_SETTINGS.splitMin : Math.max(0, cardRound(s.splitMin)),
-    maxCards: (() => { const n = Math.floor(Number(s.maxCards)); return Number.isFinite(n) && n >= 1 ? Math.min(CARD_MAX_ALLOWED, n) : CARD_DEFAULT_SETTINGS.maxCards; })()
+    maxCards: (() => { const n = Math.floor(Number(s.maxCards)); return Number.isFinite(n) && n >= 1 ? Math.min(CARD_MAX_ALLOWED, n) : CARD_DEFAULT_SETTINGS.maxCards; })(),
+    // Overdrafts (see "Overdrafts and the credit score" below).
+    overdraftOn: s.overdraftOn === undefined ? CARD_DEFAULT_SETTINGS.overdraftOn : !!s.overdraftOn,
+    overdraftFee: cardNumSetting(s.overdraftFee, CARD_DEFAULT_SETTINGS.overdraftFee, 1000)
   };
   const oldCls = await getClass(classCode).catch(() => null);
   const old = cardSettings(oldCls);
@@ -5413,6 +5432,8 @@ async function saveCardSettings(classCode, s) {
   if (old.approval !== clean.approval) everyone.push(clean.approval === "instant" ? "new cards are now approved instantly" : "new cards now need teacher approval");
   if (old.statementDay !== clean.statementDay) holdersOnly.push(`your statement now closes on ${clean.statementDay} (was ${old.statementDay})`);
   if (old.splitMin !== clean.splitMin) holdersOnly.push(`only purchases of ${fmtMoney(clean.splitMin)} or more can be split between card and cash (was ${fmtMoney(old.splitMin)})`);
+  if (old.overdraftOn !== clean.overdraftOn || (clean.overdraftOn && old.overdraftFee !== clean.overdraftFee))
+    everyone.push(clean.overdraftOn ? `the overdraft fee is now ${fmtMoney(clean.overdraftFee)}, charged when your cash drops below $0 and then weekly while it stays there` : "overdraft fees are now switched off");
   const out = [];
   if (everyone.length) out.push({ to: "all", icon: "creditcard", tone: "gold", title: "Your teacher changed the credit card settings", body: everyone.join("; ") + ".", href: "bank.html#cardCard" });
   if (holdersOnly.length) {
@@ -5616,8 +5637,9 @@ async function cancelCreditCard(username, classCode, planId) {
       }
       if (c.status === "active" && (c.balance || 0) > 0.004) throw new Error("OWING");
       wasPending = c.status === "pending";
+      creditArchiveCard(user, c); // its late payments stay on the student's credit history
       cardRemove(user, c);
-      t.update(userRef, cardWriteFields(user));
+      t.update(userRef, Object.assign(cardWriteFields(user), user.creditHistory ? { creditHistory: user.creditHistory } : {}));
     });
   } catch (e) {
     return { ok: false, error: e.message === "OWING" ? "You can only close a card once you owe nothing on it. Pay off everything you owe on that card (you can pay any time), then close it." : "Something went wrong. Please try again." };
@@ -5879,7 +5901,11 @@ function cardLateCheck(card, plan, asOfKey, logs) {
   const s = card.stmt;
   if (!s || s.lateChecked || !(asOfKey > s.dueKey)) return false;
   s.lateChecked = true;
-  if ((s.paidOnTime || 0) < (s.minDue || 0) - 0.004 && plan.lateFee > 0) {
+  // Tallies for the credit score: a statement is "on time" when at least the minimum is in by the due date.
+  const missed = (s.paidOnTime || 0) < (s.minDue || 0) - 0.004;
+  if (missed) { card.lateCount = cardLateTally(card, plan) + 1; card.lastLateKey = s.dueKey; }
+  else if ((s.amount || 0) > 0.004) card.onTimeCount = (card.onTimeCount || 0) + 1;
+  if (missed && plan.lateFee > 0) {
     card.balance = cardRound(card.balance + plan.lateFee);
     card.lifetime.fees = cardRound((card.lifetime.fees || 0) + plan.lateFee);
     s.lateFee = plan.lateFee;
@@ -5957,8 +5983,9 @@ function cardCloseStatement(user, card, plan, closeKey, logs) {
 function cardRunCycle(user, cls, today, logs) {
   const card = user.creditCard;
   if (!card || card.status !== "active") return false;
-  const plan = cardPlanById(cls, card.planId);
-  if (!plan) return false;
+  const planBase = cardPlanById(cls, card.planId);
+  if (!planBase) return false;
+  const plan = planBase;
   card.lifetime = card.lifetime || { cashback: 0, interest: 0, fees: 0 };
   let changed = false, guard = 0;
   while (card.nextCloseKey && today >= card.nextCloseKey && guard++ < 8) {
@@ -5987,7 +6014,16 @@ function cardRunAll(user, cls, today, logs) {
   });
   return changed;
 }
+// The credit side of the class for whoever is looking (a student: only themselves; a teacher: everyone): card
+// statements first, then overdraft fees. Each part runs on its own, so a problem in one never stops the other.
 async function processCreditCards(classCode) {
+  let count = 0, failure = null;
+  try { count += await _processCardStatements(classCode); } catch (e) { failure = e; }
+  try { count += await processOverdrafts(classCode); } catch (e) { failure = failure || e; }
+  if (failure) throw failure;
+  return count;
+}
+async function _processCardStatements(classCode) {
   const cls = await getClass(classCode);
   if (!cls || cls.archived || !cardSettings(cls).enabled && !(cls.cardPlans || []).length) return 0;
   const selfOnly = t29SessionStudent();
@@ -6016,6 +6052,193 @@ async function processCreditCards(classCode) {
     }
   }
   return count;
+}
+
+/* ===================== Overdrafts and the credit score =====================
+   Two connected pieces, modelled on how a New Zealand bank treats them:
+
+   - OVERDRAFTS. Cash (or an everyday account) can drop below $0, for example after an unexpected cost.
+     A student in that state is "overdrawn". The first time it happens they are charged the teacher's
+     overdraft fee, and again once a week while it lasts (processOverdrafts). The fee is logged as a normal
+     "account-fee", so reports, budgets and the activity list already know how to show it. Overdrafts are
+     remembered on the student's doc as `creditHistory` and ALWAYS count against their credit score, even
+     when the teacher sets the fee to $0 or switches fees off.
+   - CREDIT SCORE (Centrix scale, 0 to 1,000). Worked out from the stored data each time (creditScoreOf), never
+     stored, so it can never drift out of date. It rewards statements paid on time and a low card balance, and
+     costs points for late payments and overdrafts. The teacher's dashboard shows the class average.
+
+   The teacher's settings live inside `cardSettings` (overdraftOn, overdraftFee), so they travel with class
+   templates like every other card setting. */
+const CREDIT_BASE = 700, CREDIT_MIN = 1, CREDIT_MAX = 1000;
+// Centrix bands (New Zealand), score out of 1,000.
+const CREDIT_BANDS = [
+  { min: 819, label: "Excellent", tone: "mint" },
+  { min: 760, label: "Very good", tone: "mint" },
+  { min: 669, label: "Good", tone: "navy" },
+  { min: 513, label: "Fair", tone: "gold" },
+  { min: 0, label: "Poor", tone: "coral" }
+];
+function creditBandOf(score) { return CREDIT_BANDS.find(b => score >= b.min) || CREDIT_BANDS[CREDIT_BANDS.length - 1]; }
+function creditHistoryOf(user) { return (user && user.creditHistory) || {}; }
+
+// How far below $0 a student's money is right now (0 when it isn't). Teachers are never overdrawn.
+function creditOverdrawnBy(user) {
+  if (!user || user.role === "teacher") return 0;
+  let owed = Math.max(0, -(Number(user.balance) || 0));
+  (user.bankAccounts || []).forEach(a => {
+    if (a && a.status === "active" && (Number(a.balance) || 0) < 0) owed += -(Number(a.balance));
+  });
+  return cardRound(owed);
+}
+
+// A card being closed takes its record with it, so its late payments are folded
+// into the student's own credit history first. Runs inside the caller's transaction.
+function creditArchiveCard(user, card) {
+  if (!card || card.status !== "active") return;
+  const h = Object.assign({}, user.creditHistory || {});
+  const p = Object.assign({ late: 0, onTime: 0 }, h.past || {});
+  p.late += cardLateTally(card, null); p.onTime += card.onTimeCount || 0;
+  if (card.lastLateKey && card.lastLateKey > (p.lastLateKey || "")) p.lastLateKey = card.lastLateKey;
+  h.past = p; user.creditHistory = h;
+}
+// Late-payment count for a card. Cards from before this was tracked fall back on the late fees they paid.
+function cardLateTally(card, plan) {
+  if (card.lateCount !== undefined) return card.lateCount;
+  const f = (card.lifetime && card.lifetime.lateFees) || 0;
+  return f > 0 ? Math.max(1, Math.round(f / ((plan && plan.lateFee) || f))) : 0;
+}
+
+/* ---------------- Overdrafts ---------------- */
+// Brings one student's overdraft record up to date, charging a fee when one is due. Mutates user.balance and
+// user.creditHistory; returns true when something changed. Pure apart from that, so it runs in a transaction.
+function overdraftRun(user, cls, today, logs) {
+  const st = cardSettings(cls), old = user.creditHistory || {}, h = Object.assign({}, old);
+  const owed = creditOverdrawnBy(user);
+  if (owed > 0.004) {
+    h.odWorst = Math.max(Number(h.odWorst) || 0, owed);
+    let charge = false, repeat = false;
+    if (!h.odSince) { h.odSince = today; h.odEvents = (h.odEvents || 0) + 1; charge = true; }
+    else if (daysBetweenKeys(h.odFeeKey || h.odSince, today) >= 7) { charge = true; repeat = true; }
+    h.odLastKey = today;
+    if (charge) {
+      h.odFeeKey = today;
+      const amt = st.overdraftOn ? cardRound(Math.max(0, Number(st.overdraftFee) || 0)) : 0;
+      if (amt > 0) {
+        user.balance = cardRound((user.balance || 0) - amt);
+        h.odFees = cardRound((h.odFees || 0) + amt);
+        logs.push({ type: "account-fee", amount: amt,
+          note: `Overdraft fee: ${fmtMoney(owed)} below $0${repeat ? ", still overdrawn after a week" : ""}` });
+      }
+    }
+  } else if (h.odSince) {
+    h.odDays = (h.odDays || 0) + Math.max(1, daysBetweenKeys(h.odSince, today));
+    h.odClearedKey = today; h.odSince = null;
+  } else return false;
+  user.creditHistory = h;
+  return JSON.stringify(h) !== JSON.stringify(old);
+}
+async function processOverdrafts(classCode) {
+  const cls = await getClass(classCode);
+  if (!cls || cls.archived) return 0;
+  const selfOnly = t29SessionStudent();
+  const students = selfOnly ? [await getUser(selfOnly)].filter(Boolean) : await getClassStudents(classCode, cls);
+  const today = nzDateKey();
+  let count = 0;
+  for (const s of students) {
+    if (!s || s.role !== "student") continue;
+    if (!(creditOverdrawnBy(s) > 0.004) && !(s.creditHistory && s.creditHistory.odSince)) continue;
+    const ref = usersCol().doc(s.username);
+    let logs = [];
+    try {
+      await fdb.runTransaction(async (t) => {
+        logs = []; // reset every attempt: a retried callback would log everything twice
+        const snap = await t.get(ref);
+        if (!snap.exists) return;
+        const user = snap.data();
+        if (user.role !== "student") return;
+        if (overdraftRun(user, cls, today, logs)) t.update(ref, { balance: user.balance, creditHistory: user.creditHistory });
+        else logs = [];
+      });
+    } catch (e) { continue; }
+    for (const l of logs) { await logTxn(classCode, Object.assign({}, l, { from: s.username })); count++; }
+  }
+  return count;
+}
+
+/* ---------------- The credit score ---------------- */
+// Returns { score, band, factors: [{ id, label, pts, detail }], tips, stats }. Starts at 700 ("Good"); a clean
+// record with every statement paid on time and a low balance can reach 1,000.
+function creditScoreOf(cls, user) {
+  const h = creditHistoryOf(user), today = nzDateKey(), cards = cardsActive(user), past = h.past || {};
+  const factors = [], tips = [];
+  let score = CREDIT_BASE, lastBad = "";
+  const bump = k => { if (k && k > lastBad) lastBad = k; };
+  const add = (id, label, pts, detail) => { pts = Math.round(pts); score += pts; factors.push({ id, label, pts, detail }); };
+  const n = (c, w) => `${c} ${w}${c === 1 ? "" : "s"}`;
+
+  let onTime = past.onTime || 0, late = past.late || 0;
+  let limit = 0, owing = 0, overdueNow = false;
+  bump(past.lastLateKey);
+  cards.forEach(c => {
+    const plan = cardPlanById(cls, c.planId);
+    late += cardLateTally(c, plan); onTime += c.onTimeCount || 0;
+    bump(c.lastLateKey);
+    if (c.stmt && cardStmtRemaining(c) > 0.004 && today > c.stmt.dueKey) overdueNow = true;
+    if (plan) limit += plan.limit;
+    owing += c.balance || 0;
+  });
+
+  // 1. Paying the card on time (a statement counts as on time when at least the minimum is in by the due date)
+  if (onTime > 0) add("ontime", "Statements paid on time", Math.min(200, onTime * 20), `${n(onTime, "statement")} paid on time (up to +200)`);
+  if (late > 0) add("late", "Late card payments", -Math.min(330, late * 110), `${n(late, "statement")} without the minimum paid by the due date`);
+  if (overdueNow) add("overdue", "Card payment overdue", -80, "A card statement is past its due date and still owing");
+
+  // 2. How much of the card limit is in use
+  const util = limit > 0 ? owing / limit : 0;
+  if (limit > 0) {
+    const pct = Math.round(util * 100);
+    if (util <= 0.1) add("util", "Low card balance", 80, `${pct}% of your limit in use (10% or less is best)`);
+    else if (util <= 0.3) add("util", "Card balance", 60, `${pct}% of your limit in use`);
+    else if (util <= 0.5) add("util", "Card balance", 0, `${pct}% of your limit in use`);
+    else if (util <= 0.75) add("util", "High card balance", -70, `${pct}% of your limit in use`);
+    else add("util", "Very high card balance", -140, `${pct}% of your limit in use`);
+  }
+
+  // 3. Overdrafts
+  const oweNow = creditOverdrawnBy(user);
+  const odEvents = h.odEvents || 0;
+  const odDays = (h.odDays || 0) + (h.odSince ? Math.max(0, daysBetweenKeys(h.odSince, today)) : 0);
+  bump(h.odLastKey); bump(h.odClearedKey);
+  if (oweNow > 0.004) { bump(today); add("odnow", "Overdrawn right now", -140, `${fmtMoney(oweNow)} below $0`); }
+  if (odEvents > 0) add("odhist", "Overdrafts", -Math.min(180, odEvents * 36), `Overdrawn ${n(odEvents, "time")}`);
+  if (odDays >= 14) add("oddays", "Long overdrafts", -40, `${n(odDays, "day")} overdrawn in total`);
+
+  // 4. A clean record earns a bonus; after a slip, every clean week wins some points back
+  const anyBad = late > 0 || odEvents > 0 || oweNow > 0.004;
+  const bad = oweNow > 0.004 || overdueNow;
+  if (!anyBad && onTime >= 2) add("clean", "Clean borrowing record", 60, "No late payments or overdrafts");
+  else if (anyBad && !bad && lastBad) {
+    const weeks = Math.floor(daysBetweenKeys(lastBad, today) / 7);
+    if (weeks > 0) add("streak", "Recovering", Math.min(80, weeks * 16), `${n(weeks, "week")} with no new problems (up to +80)`);
+  }
+
+  score = Math.max(CREDIT_MIN, Math.min(CREDIT_MAX, score));
+
+  if (oweNow > 0.004) tips.push("Get your cash back above $0 to stop the overdraft fees. Earn some, or sell something you no longer need.");
+  if (overdueNow) tips.push("Pay at least the minimum on your overdue card statement as soon as you can.");
+  if (limit > 0 && util > 0.3) tips.push("Pay your card down to under 30% of its limit.");
+  if (!tips.length) tips.push(cards.length
+    ? "Keep paying your statements on time. Each one adds points, up to +200."
+    : "A credit card can help your score if you pay it on time and keep the balance low. Overdrafts always cost points.");
+  return { score, band: creditBandOf(score), factors, tips,
+    stats: { onTime, late, util, oweNow, odEvents, limit, owing: cardRound(owing), hasCard: cards.length > 0 } };
+}
+// The whole class at a glance: { avg, n, band } (avg is null when there are no students yet).
+function creditClassAverage(cls, students) {
+  const list = (students || []).filter(s => s && s.role !== "teacher");
+  if (!list.length) return { avg: null, n: 0, band: null };
+  const avg = Math.round(list.reduce((sum, s) => sum + creditScoreOf(cls, s).score, 0) / list.length);
+  return { avg, n: list.length, band: creditBandOf(avg) };
 }
 
 // What the budget needs to know about a student's card (null = no card).

@@ -141,6 +141,7 @@ async function render() {
     }
   }
   renderCreditCard(me, cls, allStudents);
+  if (typeof renderCreditScore === "function") renderCreditScore(me, cls); // the student's credit score, with any overdraft warning
   AUTO_CARD_CTX = { me, cls };
   renderXfer(me, cls); // the automatic-transfer menus
 

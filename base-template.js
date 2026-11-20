@@ -780,7 +780,8 @@ function t29ApplyBaseTemplate(cls, terms) {
   ].map(p => ({ id: uid("td"), ...p, active: true }));
 
   // ---- Credit cards and extra accounts ----
-  cls.cardSettings = { enabled: true, approval: "teacher", statementDay: "Fri", splitMin: M(20) };
+  cls.cardSettings = { enabled: true, approval: "teacher", statementDay: "Fri", splitMin: M(20),
+    overdraftOn: true, overdraftFee: M(5) };
   cls.cardPlans = d.cards.map(p => cardCleanPlan(p));
   cls.accountSettings = { enabled: true, approval: "instant", maxEveryday: 1, maxSavings: 2 };
   cls.accountPlans = d.accounts.map(p => acctCleanPlan(p));

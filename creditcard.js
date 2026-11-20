@@ -263,6 +263,7 @@ function ccInjectMultiCss() {
 }
 function ccRenderStudent(me, cls) {
   ccInjectMultiCss();
+  ccInjectCreditCss();
   const el = document.getElementById("cardCard");
   const st = cardSettings(cls), plans = cardPlansOf(cls).slice().sort((a, b) => a.limit - b.limit);
   const maxN = cardMaxFor(cls), held = cardsHeld(me);
@@ -505,8 +506,89 @@ async function ccCancel(pid) {
   await render();
 }
 
+/* ================= Credit score and overdrafts (student side) ================= */
+function ccInjectCreditCss() {
+  if (document.getElementById("ccCreditCss")) return;
+  const st = document.createElement("style");
+  st.id = "ccCreditCss";
+  st.textContent = `
+.cs-wrap{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:16px;align-items:stretch;margin-top:6px}
+@media(max-width:760px){.cs-wrap{grid-template-columns:minmax(0,1fr)}}
+.cs-main,.cs-factors{background:var(--cc-surface);border:1.5px solid var(--line);border-radius:var(--r-5);padding:18px 20px;min-width:0}
+.cs-main{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;justify-content:center}
+.cs-num{font-size:3.4rem;font-weight:900;line-height:1;color:var(--ink)}
+.cs-scale{width:100%;margin-top:10px;padding:0 10px;box-sizing:border-box}
+.cs-track{position:relative;height:12px;border-radius:99px;background:linear-gradient(90deg,#d9654b 0%,#e8a94a 38%,#e9cf55 60%,#4fb58a 84%,#2f9a72 100%)}
+.cs-pin{position:absolute;top:50%;width:20px;height:20px;border-radius:50%;background:var(--card);border:4px solid var(--ink);transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.cs-ends{display:flex;justify-content:space-between;font-size:var(--fs-sm);color:var(--muted);margin-top:8px;font-weight:700}
+.cs-sub{margin:4px 0 0;font-size:var(--fs-sm);color:var(--muted);line-height:1.4}
+.cs-factors h3{margin:0 0 12px;font-size:1rem}
+.cs-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.cs-list li{display:flex;gap:12px;align-items:flex-start}
+.cs-pts{flex:none;min-width:58px;text-align:center;font-weight:900;border-radius:99px;padding:3px 10px;font-size:var(--fs-md);border:1.5px solid transparent}
+.cs-pts.good{background:var(--cc-mint-bg);color:var(--cc-mint-ink);border-color:var(--cc-mint-line)}
+.cs-pts.bad{background:var(--cc-coral-bg);color:var(--cc-coral-ink);border-color:var(--cc-coral-line)}
+.cs-pts.zero{background:var(--cc-gold-bg);color:var(--cc-gold-ink);border-color:var(--cc-gold-line)}
+.cs-list strong{display:block;line-height:1.3}
+.cs-list .cs-d{display:block;font-size:var(--fs-sm);color:var(--muted);line-height:1.4}
+.cs-tips{margin-top:14px;border:1.5px solid var(--cc-gold-line);background:var(--cc-gold-bg);color:var(--cc-gold-ink);border-radius:var(--r-5);padding:14px 18px}
+.cs-tips h3{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:1rem;color:inherit}
+.cs-tips ul{margin:0;padding-left:1.2em;line-height:1.55;font-size:var(--fs-md)}
+.cs-tips li{margin:2px 0}
+.cc-pair{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px 8px}
+.cc-pair>span{white-space:nowrap}
+.cs-empty{margin:0;color:var(--muted);font-size:var(--fs-md);line-height:1.5}
+`;
+  document.head.appendChild(st);
+}
+
+function renderCreditScore(me, cls) {
+  const el = document.getElementById("creditScoreCard");
+  if (!el) return;
+  el.classList.toggle("hidden", !!IS_TEACHER);
+  if (IS_TEACHER) return;
+  ccInjectCreditCss();
+  const r = creditScoreOf(cls, me), st = cardSettings(cls);
+  const pct = Math.max(0, Math.min(100, (r.score - CREDIT_MIN) / (CREDIT_MAX - CREDIT_MIN) * 100));
+  const factors = r.factors.length
+    ? `<ul class="cs-list">${r.factors.map(f => `<li><span class="cs-pts ${f.pts > 0 ? "good" : f.pts < 0 ? "bad" : "zero"}">${f.pts > 0 ? "+" : f.pts < 0 ? "−" : ""}${Math.abs(f.pts)}</span><div><strong>${ccEsc(f.label)}</strong><span class="cs-d">${ccEsc(f.detail)}</span></div></li>`).join("")}</ul>`
+    : `<p class="cs-empty">Nothing is helping or hurting your score yet, so it sits at the starting score of ${CREDIT_BASE}. Pay a credit card on time and keep the balance low to build it up.</p>`;
+  const od = r.stats.oweNow > 0.004
+    ? `<div class="cc-note bad">${icon("bell", 16)}<span><strong>Your cash is overdrawn by ${fmtMoney(r.stats.oweNow)}.</strong> ${st.overdraftOn && st.overdraftFee > 0 ? `You're charged a ${fmtMoney(st.overdraftFee)} overdraft fee now and again every week it stays below $0. ` : ""}Overdrafts lower your credit score. Get your cash back above $0 to stop it.</span></div>`
+    : "";
+  el.innerHTML = `
+    <div class="flex-between cc-head"><h2 id="hCredit">${icon("medal", 20)} Credit score</h2><span class="badge ${r.band.tone}">${ccEsc(r.band.label)}</span></div>
+    ${od}
+    <div class="cs-wrap">
+      <div class="cs-main">
+        <div class="cs-num" aria-label="Your credit score is ${r.score} out of ${CREDIT_MAX}">${r.score}</div>
+        <div><span class="badge ${r.band.tone}">${ccEsc(r.band.label)}</span></div>
+        <div class="cs-scale"><div class="cs-track"><span class="cs-pin" style="left:${pct.toFixed(1)}%"></span></div>
+          <div class="cs-ends"><span>${CREDIT_MIN}</span><span>${CREDIT_MAX}</span></div></div>
+        <p class="cs-sub">Centrix-style score out of ${CREDIT_MAX.toLocaleString("en-NZ")}. Everyone starts at ${CREDIT_BASE}.</p>
+      </div>
+      <div class="cs-factors">
+        <h3>What's affecting your score</h3>
+        ${factors}
+      </div>
+    </div>
+    <div class="cs-tips"><h3>${icon("sparkle", 16)} How to improve it</h3><ul>${r.tips.map(t => `<li>${ccEsc(t)}</li>`).join("")}</ul></div>
+    <details class="cc-more">
+      <summary>${icon("settings", 14)} How your credit score works</summary>
+      <ul class="cc-rules">
+        <li>Your score runs from ${CREDIT_MIN} to ${CREDIT_MAX} and starts at ${CREDIT_BASE}. It's worked out fresh from your record every time you open this page.</li>
+        <li><strong>Earns points:</strong> every credit card statement you pay on time (at least the minimum by the due date) adds 20, up to 200. A card balance under 30% of its limit adds points, and under 10% adds the most. A clean record with no slips adds a bonus.</li>
+        <li><strong>Costs points:</strong> a missed card payment, a card balance over half its limit, and every overdraft. Being overdrawn right now costs extra until it's sorted out.</li>
+        <li>After a slip, every week with no new problems wins some points back.</li>
+        <li><strong>Overdrafts</strong> happen when your cash drops below $0. They are expensive and count against you.</li>
+      </ul>
+    </details>`;
+}
+
+
 /* ================= Teacher ================= */
 function ccRenderTeacher(cls, students) {
+  ccInjectCreditCss();
   const el = document.getElementById("cardTeacherCard");
   const st = cardSettings(cls), allPlans = cls.cardPlans || [];
   const live = allPlans.filter(p => !p.archived), archived = allPlans.filter(p => p.archived);
@@ -552,6 +634,15 @@ function ccRenderTeacher(cls, students) {
       return `<tr><td>${ccEsc(s.name)}</td><td>${p ? ccEsc(p.name) : "—"}${s.creditCard === c && cardsActive(s).length > 1 ? ` <span class="muted-small">(for purchases)</span>` : ""}</td><td>${fmtMoney(c.balance || 0)}</td><td>${rem > 0.004 ? fmtMoney(rem) : "—"}</td><td>${due}</td><td>${status}</td></tr>`;
     }).join("")}</tbody></table></div>` : "";
 
+  const decNum = (id, val) => `<input id="${id}" type="number" min="0" step="0.01" value="${val}" onchange="ccSaveSettings()">`;
+  const scoreRows = (() => {
+    const rows = students.filter(s => s && s.role !== "teacher").map(s => ({ s, r: creditScoreOf(cls, s) })).sort((a, b) => a.r.score - b.r.score);
+    if (!rows.length) return "";
+    const avg = creditClassAverage(cls, students);
+    return `<h3 class="cc-sub">${icon("medal", 16)} Credit scores <span class="muted-small">Class average ${avg.avg} (${ccEsc(avg.band.label)}). Lowest first.</span></h3>
+    <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Score</th><th>Overdrawn now</th><th>Late payments</th></tr></thead><tbody>${rows.map(({ s, r }) =>
+      `<tr><td>${ccEsc(s.name)}</td><td><span class="badge ${r.band.tone}">${r.score} · ${ccEsc(r.band.label)}</span></td><td>${r.stats.oweNow > 0.004 ? `<span class="badge coral">${fmtMoney(r.stats.oweNow)}</span>` : "No"}</td><td>${r.stats.late || "None"}</td></tr>`).join("")}</tbody></table></div>`;
+  })();
   const overdueN = active.filter(({ c }) => c.stmt && cardStmtRemaining(c) > 0.004 && daysBetweenKeys(today, c.stmt.dueKey) < 0).length;
   const penNum = (id, val, ph) => `<input id="${id}" type="number" min="0" step="1" value="${val}" ${ph ? `placeholder="${ph}"` : ""} onchange="ccSaveSettings()">`;
 
@@ -584,6 +675,14 @@ function ccRenderTeacher(cls, students) {
             <div class="cc-sentence"><span>−</span><div class="cc-num">${penNum("ccsPenPts", pen.points || 1)}</div><span>pt per</span><div class="cc-num money"><i>$</i>${penNum("ccsPenAmt", pen.perAmount || "", "50")}</div><span>unpaid</span></div>
           </div>
         </div>
+        <div class="cc-set cc-set-pen ${st.overdraftOn ? "" : "is-off"}">
+          <div class="cc-set-text"><label for="ccsOdOn">Overdraft fee</label>
+            <p>Charged when a student's cash drops below $0 (after an unexpected cost, say), then once a week while it stays there. Overdrafts always lower their credit score, even with no fee.</p></div>
+          <div class="cc-set-ctl">
+            <label class="cc-switch"><input type="checkbox" id="ccsOdOn" ${st.overdraftOn ? "checked" : ""} onchange="ccSaveSettings()"><span class="cc-switch-track"></span><span>${st.overdraftOn ? "On" : "Off"}</span></label>
+            <div class="cc-sentence"><span class="cc-pair"><div class="cc-num money"><i>$</i>${decNum("ccsOdFee", st.overdraftFee)}</div><span>per week overdrawn</span></span></div>
+          </div>
+        </div>
       </div>
     </section>
     <div id="ccTMsg"></div>
@@ -592,7 +691,7 @@ function ccRenderTeacher(cls, students) {
     ${archived.length ? `<p class="muted-small cc-archived">Retired: ${archived.map(p => `${ccEsc(p.name)} <a href="#" onclick="ccRestorePlan('${ccEsc(p.id)}');return false;">restore</a>`).join(" · ")}</p>` : ""}
     <div class="cc-form-wrap"><button class="btn gold small" onclick="ccEditPlan('')" id="ccNewBtn">+ Add a plan</button>
       <form class="cc-form hidden" id="ccPlanForm" onsubmit="return ccSavePlan(event)"></form></div>
-    ${pendRows}${cardRows}`;
+    ${pendRows}${cardRows}${scoreRows}`;
 }
 
 function ccRewardEditHtml(p) {
@@ -696,7 +795,8 @@ async function ccRestorePlan(id) {
 }
 async function ccSaveSettings() {
   const g = id => document.getElementById(id);
-  await saveCardSettings(CURRENT.classCode, { enabled: g("ccsEnabled").checked, approval: g("ccsApproval").value, statementDay: g("ccsDay").value, splitMin: g("ccsSplit").value, maxCards: g("ccsMax").value });
+  await saveCardSettings(CURRENT.classCode, { enabled: g("ccsEnabled").checked, approval: g("ccsApproval").value, statementDay: g("ccsDay").value, splitMin: g("ccsSplit").value, maxCards: g("ccsMax").value,
+    overdraftOn: g("ccsOdOn").checked, overdraftFee: g("ccsOdFee").value });
   await setCardLifestylePenalty(CURRENT.classCode, { enabled: g("ccsPenOn").checked, perAmount: g("ccsPenAmt").value, points: g("ccsPenPts").value });
   await render();
   ccMsg("ccTMsg", `<div class="success-msg">Saved.</div>`);

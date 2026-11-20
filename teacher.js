@@ -23,7 +23,7 @@ function paintChrome() {
   document.getElementById("iconNetWorth").innerHTML = icon("cashnote", 30);
   document.getElementById("classArchivedIcon").innerHTML = icon("lock", 15);
   // Same icon as the Stock Market page and menu.
-  document.getElementById("iconCompanies").innerHTML = icon("chart", 30);
+  document.getElementById("iconCredit").innerHTML = icon("creditcard", 30);
   document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students" + '<span id="onlineCount" class="online-pill" hidden aria-live="polite"></span>';
   document.getElementById("hNetWorth").innerHTML = icon("medal", 18) + " Net worth ranking";
   document.getElementById("hAdjust").innerHTML = icon("coin", 18) + " Quick transactions";
@@ -137,7 +137,10 @@ async function render() {
   // Pass the class doc already in hand, so this doesn't read it again first.
   const students = await getClassStudents(CLASS_CODE, cls);
   document.getElementById("statStudents").textContent = students.length;
-  document.getElementById("statCompanies").textContent = cls.companies.length;
+  // Average credit score across the class (see creditScoreOf in data-money.js).
+  const creditAvg = creditClassAverage(cls, students);
+  document.getElementById("statCredit").textContent = creditAvg.avg === null ? "\u2014" : String(creditAvg.avg);
+  document.getElementById("statCreditBand").textContent = creditAvg.avg === null ? "No students yet" : `${creditAvg.band.label} (out of ${CREDIT_MAX})`;
 
   // Time exemption requests (students out of time asking for more — see
   // requestTimeExemption/decideTimeExemption in data-markets.js). Surfaced as a
