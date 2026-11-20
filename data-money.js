@@ -5422,7 +5422,9 @@ async function saveCardSettings(classCode, s) {
   };
   const oldCls = await getClass(classCode).catch(() => null);
   const old = cardSettings(oldCls);
-  await classesCol().doc(classCode).update({ cardSettings: clean });
+  await classesCol().doc(classCode).update(Object.fromEntries(
+    Object.entries(clean).map(([key, value]) => ["cardSettings." + key, value])
+  ));
   // Tell students what changed. On/off and how cards are approved matter to
   // anyone who might apply; the statement day and split minimum only to people
   // who already hold (or have applied for) a card.
@@ -6083,9 +6085,23 @@ const CREDIT_BANDS = [
 function creditBandOf(score) { return CREDIT_BANDS.find(b => score >= b.min) || CREDIT_BANDS[CREDIT_BANDS.length - 1]; }
 function creditHistoryOf(user) { return (user && user.creditHistory) || {}; }
 
+function arrangedOverdraftOffers(cls) {
+  const saved = cardSettings(cls).arrangedOverdraftOffers;
+  return CREDIT_BANDS.filter(b => b.overdraft).reverse().map((band, i) => ({
+    min: Math.max(CREDIT_MIN, Math.round(cardNumSetting(saved?.[i]?.min, band.min, CREDIT_MAX))),
+    overdraft: Math.round(cardNumSetting(saved?.[i]?.overdraft, band.overdraft, 1000))
+  }));
+}
+
+async function saveArrangedOverdraftOffers(classCode, offers) {
+  await classesCol().doc(classCode).update({
+    "cardSettings.arrangedOverdraftOffers": arrangedOverdraftOffers({ cardSettings: { arrangedOverdraftOffers: offers } })
+  });
+}
+
 function arrangedOverdraftLimit(user) {
   const limit = user && user.role === "student" && user.arrangedOverdraftLimit;
-  return limit && CREDIT_BANDS.some(b => b.overdraft === limit) ? limit : 0;
+  return Number.isInteger(limit) && limit > 0 && limit <= 1000 ? limit : 0;
 }
 
 // Stored balance belongs to the main account, even when the student has switched accounts.
@@ -6108,8 +6124,8 @@ async function setArrangedOverdraft(username, classCode, limit) {
       if (limit !== 0) {
         if (acctMainClosed(user)) throw new Error("CLOSED");
         if (user.balance < 0) throw new Error("OVERDRAWN");
-        const offer = CREDIT_BANDS.find(b => b.overdraft === limit && b.overdraft > 0);
-        if (!offer || creditScoreOf(cls, user).score < offer.min) throw new Error("INELIGIBLE");
+        const score = creditScoreOf(cls, user).score;
+        if (!arrangedOverdraftOffers(cls).some(b => b.overdraft === limit && limit > 0 && score >= b.min)) throw new Error("INELIGIBLE");
       }
       t.update(userRef, { arrangedOverdraftLimit: limit });
     });

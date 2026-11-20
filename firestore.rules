@@ -512,6 +512,17 @@ service cloud.firestore {
       return request.resource.data.get('comets', 0) <= resource.data.get('comets', 0);
     }
 
+    function classOffersOverdraft(classCode, limit) {
+      let cls = get(/databases/$(database)/documents/classes/$(classCode)).data;
+      let offers = cls.get('cardSettings', {}).get('arrangedOverdraftOffers', []);
+      return !cls.get('archived', false) && (
+        (offers.size() == 0 && limit in [50, 100, 150])
+        || (offers.size() == 3 && (
+          limit == offers[0].overdraft || limit == offers[1].overdraft || limit == offers[2].overdraft
+        ))
+      );
+    }
+
     function isAllowedArrangedOverdraftChange() {
       let before = resource.data;
       let after = request.resource.data;
@@ -520,9 +531,10 @@ service cloud.firestore {
       let newLimit = after.get('arrangedOverdraftLimit', 0);
       return !changed.hasAny(['arrangedOverdraftLimit']) || (
         before.role == 'student' && changed.hasOnly(['arrangedOverdraftLimit'])
-        && newLimit is int && newLimit in [0, 50, 100, 150]
+        && newLimit is int && newLimit >= 0 && newLimit <= 1000
         && before.get('balance', 0) >= 0
         && (oldLimit == 0 || newLimit == 0)
+        && (newLimit == 0 || classOffersOverdraft(before.classCode, newLimit))
       );
     }
 

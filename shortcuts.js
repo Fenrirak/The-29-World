@@ -241,7 +241,9 @@
       ok: function () { return !!byId("settingsBtn"); }, run: function () { togglePanel("settingsBtn"); } },
     { id: "notifications", label: "Notifications", words: ["alerts"], does: "opens notifications",
       ok: function () { return !!byId("notifBell"); }, run: function () { togglePanel("notifBell"); } },
-    { id: "help", label: "Help", words: ["shortcuts", "keys"], does: "shows the shortcut list",
+    { id: "help", label: "Help Centre", words: ["help center", "faq", "support", "knowledge base"], does: "opens the Help Centre",
+      ok: function () { return true; }, run: function () { location.href = "help.html"; } },
+    { id: "shortcuts", label: "Keyboard shortcuts", words: ["shortcuts", "keys"], does: "shows the shortcut list",
       ok: function () { return true; }, run: function () { showHelp(); } }
   ];
   function finderEntries() {
@@ -373,7 +375,7 @@
     if (!q) return [];
     if (isNumberQuery(typed)) { // 1 = first module in the menu, 2 = second ...
       var raw = typed.trim();
-      return items.filter(function (it) { return it.kind === "module" && String(it.num).indexOf(raw) === 0; })
+      return items.filter(function (it) { return it.id === "help" ? raw === "0" : it.kind === "module" && String(it.num).indexOf(raw) === 0; })
         .map(function (it) { return withAt(it, 0); })
         .sort(function (a, b) { return (String(a.num) === raw ? 0 : 1) - (String(b.num) === raw ? 0 : 1) || a.num - b.num; });
     }

@@ -23,7 +23,6 @@ function paintChrome() {
   document.getElementById("iconNetWorth").innerHTML = icon("cashnote", 30);
   document.getElementById("classArchivedIcon").innerHTML = icon("lock", 15);
   // Same icon as the Stock Market page and menu.
-  document.getElementById("iconCredit").innerHTML = icon("creditcard", 30);
   document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students" + '<span id="onlineCount" class="online-pill" hidden aria-live="polite"></span>';
   document.getElementById("hNetWorth").innerHTML = icon("medal", 18) + " Net worth ranking";
   document.getElementById("hAdjust").innerHTML = icon("coin", 18) + " Quick transactions";

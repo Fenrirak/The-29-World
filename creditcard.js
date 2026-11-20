@@ -568,7 +568,7 @@ function renderCreditScore(me, cls) {
     ? `<div class="cc-note bad">${icon("bell", 16)}<span><strong>You have an unarranged overdraft of ${fmtMoney(r.stats.oweNow)}.</strong> ${st.overdraftOn && st.overdraftFee > 0 ? `The ${fmtMoney(st.overdraftFee)} fee applies when it starts and each week it remains unpaid. ` : ""}This lowers your credit score until you bring the affected balances within their limits.</span></div>`
     : "";
   el.innerHTML = `
-    <div class="flex-between cc-head"><h2 id="hCredit">${icon("medal", 20)} Credit score</h2><span class="badge ${r.band.tone}">${ccEsc(r.band.label)}</span></div>
+    <div class="flex-between cc-head"><h2 id="hCredit">Credit score</h2><span class="badge ${r.band.tone}">${ccEsc(r.band.label)}</span></div>
     ${od}
     <div class="cs-wrap">
       <div class="cs-main">
@@ -604,7 +604,7 @@ function renderArrangedOverdraft(me, cls, score) {
   const limit = arrangedOverdraftLimit(me);
   const account = acctSrcName(cls, me, "cash");
   const balance = Number(me.balance) || 0;
-  const offers = CREDIT_BANDS.filter(b => b.overdraft).reverse();
+  const offers = arrangedOverdraftOffers(cls).filter(b => b.overdraft).sort((a, b) => a.min - b.min);
   let controls;
   if (limit) {
     const used = Math.min(limit, Math.max(0, -balance));
@@ -618,17 +618,18 @@ function renderArrangedOverdraft(me, cls, score) {
     ${balance < 0 ? '<p class="muted-small">Bring your main account back to $0 before closing your overdraft.</p>' : ""}`;
   } else {
     const available = offers.filter(b => score >= b.min);
-    if (!available.length) controls = `<p>You'll qualify for an arranged overdraft when your credit score reaches ${offers[0].min} (${offers[0].label}).</p>`;
+    if (!offers.length) controls = "<p>Your class has paused new overdrafts.</p>";
+    else if (!available.length) controls = `<p>You'll qualify for an arranged overdraft when your credit score reaches ${offers[0].min}.</p>`;
     else if (!account || balance < 0) controls = `<p>${!account ? "Open a main everyday account" : "Bring your main account back to $0"} before signing up.</p>`;
     else controls = `<form class="od-actions" onsubmit="event.preventDefault(); changeArrangedOverdraft(this.querySelector('button'), Number(this.elements.limit.value));">
       <label>Overdraft limit
-        <select name="limit">${available.map(b => `<option value="${b.overdraft}">${fmtMoney(b.overdraft)}</option>`).join("")}</select>
+        <select name="limit">${[...new Set(available.map(b => b.overdraft))].sort((a, b) => a - b).map(amount => `<option value="${amount}">${fmtMoney(amount)}</option>`).join("")}</select>
       </label>
       <button class="btn secondary" type="submit">Set up overdraft</button>
     </form>`;
-    controls += `<p class="muted-small od-status">Limits by score: ${offers.map(b => `${fmtMoney(b.overdraft)} at ${b.min}+`).join(" · ")}</p>`;
+    if (offers.length) controls += `<p class="muted-small od-status">Limits by score: ${offers.map(b => `${fmtMoney(b.overdraft)} at ${b.min}+`).join(" · ")}</p>`;
   }
-  el.innerHTML = `<h2 id="hArrangedOverdraft">${icon("bank", 20)} Arranged overdraft</h2>
+  el.innerHTML = `<h2 id="hArrangedOverdraft">Arranged overdraft</h2>
     <p>Borrow through your main account for Store purchases, transport purchases and bills, and insurance sign-up fees. Money that comes into the account pays back what you owe. There is no interest or overdraft fee within the agreed limit.</p>
     ${controls}<div class="od-status" id="arrangedOverdraftMsg" role="status"></div>`;
 }
@@ -704,7 +705,7 @@ function ccRenderTeacher(cls, students) {
     const rows = students.filter(s => s && s.role !== "teacher").map(s => ({ s, r: creditScoreOf(cls, s) })).sort((a, b) => a.r.score - b.r.score);
     if (!rows.length) return "";
     const avg = creditClassAverage(cls, students);
-    return `<h3 class="cc-sub">${icon("medal", 16)} Credit scores <span class="muted-small">Class average ${avg.avg} (${ccEsc(avg.band.label)}). Lowest first.</span></h3>
+    return `<h3 class="cc-sub">Credit scores <span class="muted-small">Class average ${avg.avg} (${ccEsc(avg.band.label)}). Lowest first.</span></h3>
     <div class="table-scroll cc-tablewrap"><table class="stack-table"><thead><tr><th>Student</th><th>Score</th><th>Overdrawn now</th><th>Late payments</th></tr></thead><tbody>${rows.map(({ s, r }) =>
       `<tr><td>${ccEsc(s.name)}</td><td><span class="badge ${r.band.tone}">${r.score} · ${ccEsc(r.band.label)}</span></td><td>${r.stats.oweNow > 0.004 ? `<span class="badge coral">${fmtMoney(r.stats.oweNow)}</span>` : "No"}</td><td>${r.stats.late || "None"}</td></tr>`).join("")}</tbody></table></div>`;
   })();
@@ -750,7 +751,20 @@ function ccRenderTeacher(cls, students) {
         </div>
       </div>
     </section>
-    <div id="ccTMsg"></div>
+    <form class="cc-panel" onsubmit="event.preventDefault(); ccSaveOverdraftOffers(this);">
+      <h3>Arranged overdraft offers</h3>
+      <p>Set the minimum score and borrowing limit for each offer. Enter $0 to turn an offer off. Students keep the limits they already agreed to.</p>
+      ${arrangedOverdraftOffers(cls).map((offer, i) => `<fieldset>
+        <legend>Offer ${i + 1}</legend>
+        <div class="grid grid-2">
+          <label>Minimum score <input id="ccOdScore-${i}" type="number" min="1" max="1000" step="1" required value="${offer.min}"></label>
+          <label>Limit ($) <input id="ccOdLimit-${i}" type="number" min="0" max="1000" step="1" required value="${offer.overdraft}"></label>
+        </div>
+      </fieldset>`).join("")}
+      <button class="btn small secondary" type="submit">Save overdraft offers</button>
+      <div class="od-status" id="ccOdMsg" role="status"></div>
+    </form>
+    <div id="ccTMsg" role="status"></div>
     <h3 class="cc-sub">Plans</h3>
     <div class="cc-tplans">${planRows}</div>
     ${archived.length ? `<p class="muted-small cc-archived">Retired: ${archived.map(p => `${ccEsc(p.name)} <a href="#" onclick="ccRestorePlan('${ccEsc(p.id)}');return false;">restore</a>`).join(" · ")}</p>` : ""}
@@ -865,6 +879,22 @@ async function ccSaveSettings() {
   await setCardLifestylePenalty(CURRENT.classCode, { enabled: g("ccsPenOn").checked, perAmount: g("ccsPenAmt").value, points: g("ccsPenPts").value });
   await render();
   ccMsg("ccTMsg", `<div class="success-msg">Saved.</div>`);
+}
+async function ccSaveOverdraftOffers(form) {
+  const button = form.querySelector("button");
+  button.disabled = true;
+  const offers = [0, 1, 2].map(i => ({
+    min: form.elements["ccOdScore-" + i].value,
+    overdraft: form.elements["ccOdLimit-" + i].value
+  }));
+  try {
+    await saveArrangedOverdraftOffers(CURRENT.classCode, offers);
+    ccMsg("ccOdMsg", '<div class="success-msg">Overdraft offers saved.</div>');
+  } catch (e) {
+    ccMsg("ccOdMsg", '<div class="error-msg">Couldn’t save your overdraft offers. Please try again.</div>');
+  } finally {
+    button.disabled = false;
+  }
 }
 async function ccApprove(username, eligible, planId) {
   if (!eligible && !await t29Confirm("This student is below the lifestyle rating for that card. Approve anyway?")) return;

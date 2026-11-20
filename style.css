@@ -537,8 +537,7 @@ html.dark-mode .stat.lilac .label{color:rgba(255,255,255,.88);}
 .stat.credit-stat[data-tone="lilac"]{background:linear-gradient(135deg,var(--lilac-fill),var(--lilac-fill-dark));}
 .stat.credit-stat[data-tone="gold"]{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);}
 .stat.credit-stat[data-tone="coral"]{background:linear-gradient(135deg,var(--coral-fill),var(--coral-fill-dark));}
-.stat.credit-stat .label{color:inherit;}
-.credit-stat[data-tone="gold"] > .icon{color:var(--navy-900);}
+.stat.credit-stat .label{color:inherit;padding-right:0;}
 .credit-stat-note{margin-top:6px;font-size:var(--fs-sm);line-height:1.35;}
 a.credit-stat{text-decoration:none;}
 a.credit-stat:hover .label{text-decoration:underline;}
