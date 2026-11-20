@@ -65,6 +65,7 @@ async function init() {
   await t29FirstPaint(showCurrentPeriod);
   watchReportChanges();
   await T29_STARTUP_JOBS;
+  await safeBgJob(processOverdrafts(u.classCode), "processOverdrafts");
   await checkWeeklyEventPopup(u.username, u.classCode);
   await checkBigEventPopup(u.username, u.classCode);
   await showCurrentPeriod();

@@ -660,7 +660,11 @@ var AUTO_CARD_CTX = null;
 function payWithOptionsHtml(me, cls, toUser) {
   // Payment sources: "cash" is the student's MAIN account (the default), "cashacct" the real Cash account when another is main.
   const ch = acctPaySources(me, cls);
-  const opt = c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}${c.isMain && ch.length > 1 ? " (main)" : ""}: ${fmtMoney(c.bal)}</option>`;
+  const opt = c => {
+    const logicalId = c.isMain ? acctMainId(me) : acctSrcToLogical(c.id);
+    const available = c.kind === "everyday" && arrangedOverdraftLimit(me) ? arrangedCashAvailable(me, cls, logicalId) : c.bal;
+    return `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}${c.isMain && ch.length > 1 ? " (main)" : ""}: ${fmtMoney(available)}${available !== c.bal ? " available with overdraft" : ""}</option>`;
+  };
   const group = (label, items) => items.length ? `<optgroup label="${label}">${items.map(opt).join("")}</optgroup>` : "";
   let html = group("Everyday", ch.filter(c => c.kind === "everyday")) + group("Savings", ch.filter(c => c.kind === "savings"));
   if (cardIsActive(me)) {

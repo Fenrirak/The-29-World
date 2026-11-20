@@ -2980,7 +2980,14 @@ async function transferMoney(fromUser, toUser, amount, note, opts) {
       const toSnap = await t.get(toRef);
       const fromData = fromSnap.data();
       const toData = toSnap.data();
-      if (!fromIsTeacher && fromData.balance < amount) throw new Error("BROKE");
+      if (!fromIsTeacher) {
+        let available = fromData.balance;
+        if (opts?.allowOverdraft && arrangedOverdraftLimit(fromData)) {
+          const cs = await t.get(classesCol().doc(fromData.classCode));
+          if (cs.exists && !cs.data().archived) available = arrangedCashAvailable(fromData, cs.data());
+        }
+        if (available < amount) throw new Error("BROKE");
+      }
       if (!fromIsTeacher) t.update(fromRef, { balance: Math.round((fromData.balance - amount) * 100) / 100 });
       t.update(toRef, { balance: Math.round((toData.balance + amount) * 100) / 100 });
     });

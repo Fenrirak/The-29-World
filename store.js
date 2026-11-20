@@ -674,7 +674,7 @@ function renderCart() {
 
   // ---- footer: totals, can-I-afford-it check, checkout ----
   const card = cardIsActive(ME_CACHE) && CC_STORE_PAY.useCard, split = card && CC_STORE_PAY.split;
-  const cash = arrangedCashAvailable(ME_CACHE), plan = card ? cardPlanById(CLS_CACHE, ME_CACHE.creditCard.planId) : null;
+  const cash = arrangedCashAvailable(ME_CACHE, CLS_CACHE), plan = card ? cardPlanById(CLS_CACHE, ME_CACHE.creditCard.planId) : null;
   const cardAvail = plan ? cardAvailable(ME_CACHE.creditCard, plan) : 0;
   const cap = !card ? cash : split ? cardAvail + cash : cardAvail;
   const short = cardRound(t.total - cap), blocked = short > 0.004;
