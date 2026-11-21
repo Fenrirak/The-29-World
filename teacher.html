@@ -199,7 +199,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     <div class="flex-between">
       <h2 id="hStudents">Students</h2>
       <div class="bulk-head-actions">
-        <button class="btn small gold" onclick="openBulkAdd()" id="addStudentsBtn">Add students</button>
+        <button class="btn small gold" onclick="openBulkAddTools(this)" id="addStudentsBtn">Add students</button>
         <button class="btn small mint" onclick="markAllJobTasksDone()" id="markAllJobsBtn">Mark all jobs done</button>
       </div>
     </div>
@@ -265,10 +265,10 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <h3 id="hExport">Export this class</h3>
         <p>Download everything in this class as one file: every setting, price and price history (with the chance of each going up or down), every wage, every student&rsquo;s full account, net worths, lifestyle ratings and the whole transaction log. Only you can see this. Login and sharing links are left out.</p>
         <div class="set-controls">
-          <button class="btn gold export-class-btn" onclick="exportClassClick('pdf')" id="exportPdfBtn">Download as PDF</button>
-          <button class="btn secondary export-class-btn" onclick="exportClassClick('md')" id="exportMdBtn">Download as Markdown</button>
+          <button class="btn gold export-class-btn" onclick="openClassExport('pdf')" id="exportPdfBtn">Download as PDF</button>
+          <button class="btn secondary export-class-btn" onclick="openClassExport('md')" id="exportMdBtn">Download as Markdown</button>
         </div>
-        <div id="exportClassMsg"></div>
+        <div id="exportClassMsg" role="status"></div>
       </section>
 
       <section class="set-tile danger" id="restartTile" aria-labelledby="hDanger">
@@ -461,9 +461,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=e731e566"></script>
 <script defer src="notifications.js?v=dcb44da8"></script>
-<script defer src="pdf-report.js?v=02f2ce08"></script>
-<script defer src="class-export.js?v=23014cb0"></script>
-<script defer src="teacher.js?v=8c2658bc"></script>
-<script defer src="bulk-students.js?v=15607512"></script>
+<script defer src="on-demand.js?v=8865de24"></script>
+<script defer src="teacher.js?v=2c035eee"></script>
 </body>
 </html>

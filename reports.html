@@ -116,7 +116,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <button class="btn small secondary" data-live-report id="familyLinksBtn" onclick="openClassFamilyLinks()">Family links</button>
         <button class="btn small secondary" onclick="exportCurrentCSV()">Export CSV</button>
         <button class="btn small secondary" onclick="printReport()">Print</button>
-        <button class="btn small secondary" onclick="downloadReportPDF()">Download PDF</button>
+        <button class="btn small secondary" onclick="downloadReportPDF(this)">Download PDF</button>
       </div>
     </div>
 
@@ -149,7 +149,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn small gold" data-live-report id="shareFamilyBtn" onclick="showMyFamilyLink()">Share with my family</button>
         <button class="btn small secondary" onclick="printReport()">Print my report</button>
-        <button class="btn small secondary" onclick="downloadReportPDF()">Download PDF</button>
+        <button class="btn small secondary" onclick="downloadReportPDF(this)">Download PDF</button>
       </div>
     </div>
     <div id="myReportBody" class="report-print-area"></div>
@@ -181,7 +181,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <button class="btn small secondary" data-live-report onclick="previewModalStudentFamilyView()">Preview family view</button>
         <button class="btn small secondary" data-live-report onclick="showModalStudentFamilyLink()">Family link</button>
         <button class="btn small secondary" onclick="printReport()">Print</button>
-        <button class="btn small secondary" onclick="downloadReportPDF()">Download PDF</button>
+        <button class="btn small secondary" onclick="downloadReportPDF(this)">Download PDF</button>
         <button class="btn small secondary" onclick="closeStudentReport()">Close</button>
       </div>
     </div>
@@ -227,8 +227,8 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="events-ui.js?v=17ce0701"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=dcb44da8"></script>
-<script defer src="pdf-report.js?v=02f2ce08"></script>
+<script defer src="on-demand.js?v=8865de24"></script>
 <script defer src="parent.js?v=d1b9c5ad"></script>
-<script defer src="reports.js?v=2fb38cca"></script>
+<script defer src="reports.js?v=49d20dc4"></script>
 </body>
 </html>

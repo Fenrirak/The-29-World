@@ -728,21 +728,37 @@ function printReport() {
 // screen, exactly like printReport() above: the open student modal wins,
 // then a teacher gets the whole class, and a student gets their own card.
 // See pdf-report.js for the writer itself.
-async function downloadReportPDF() {
-  if (!VIEWED_REPORT) return;
+let downloadingReportPDF = false;
+async function downloadReportPDF(button) {
+  if (!VIEWED_REPORT || downloadingReportPDF) return;
+  const report = VIEWED_REPORT;
   const modalOpen = !document.getElementById("reportModal").classList.contains("hidden");
-  if (modalOpen && MODAL_STUDENT) {
-    downloadStudentReportPDF(MODAL_STUDENT, VIEWED_REPORT);
-    return;
+  const student = modalOpen && MODAL_STUDENT
+    ? MODAL_STUDENT
+    : !IS_TEACHER && (report.students || []).find(x => x.username === CURRENT.username);
+  if (!student && !IS_TEACHER) { alert("There's no report data to download yet."); return; }
+  const label = button?.textContent;
+  downloadingReportPDF = true;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Preparing PDF…";
   }
-  if (IS_TEACHER) {
-    const cls = await getClassCached(CLASS_CODE);
-    downloadClassReportPDF(VIEWED_REPORT, (cls && cls.name) || "Class report");
-    return;
+  try {
+    const [, cls] = await Promise.all([
+      t29LoadScript("pdf-report.js?v=02f2ce08"),
+      student ? null : getClassCached(CLASS_CODE)
+    ]);
+    if (student) downloadStudentReportPDF(student, report);
+    else downloadClassReportPDF(report, (cls && cls.name) || "Class report");
+  } catch (e) {
+    t29Toast("Couldn’t download the PDF. Please try again.");
+  } finally {
+    downloadingReportPDF = false;
+    if (button) {
+      button.textContent = label;
+      button.disabled = false;
+    }
   }
-  const me = (VIEWED_REPORT.students || []).find(x => x.username === CURRENT.username);
-  if (!me) { alert("There's no report data to download yet."); return; }
-  downloadStudentReportPDF(me, VIEWED_REPORT);
 }
 
 function reportToRows(report) {

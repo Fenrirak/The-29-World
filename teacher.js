@@ -24,6 +24,7 @@ function paintChrome() {
   document.getElementById("classArchivedIcon").innerHTML = icon("lock", 15);
   // Same icon as the Stock Market page and menu.
   document.getElementById("hStudents").innerHTML = icon("users", 18) + " Students" + '<span id="onlineCount" class="online-pill" hidden aria-live="polite"></span>';
+  document.getElementById("addStudentsBtn").innerHTML = icon("plus", 14) + " Add students";
   document.getElementById("hNetWorth").innerHTML = icon("medal", 18) + " Net worth ranking";
   document.getElementById("hAdjust").innerHTML = icon("coin", 18) + " Quick transactions";
   document.getElementById("hSettings").innerHTML = icon("settings", 18) + " Class settings";
@@ -46,6 +47,40 @@ function paintChrome() {
   document.getElementById("hThresholds").innerHTML = icon("star", 18) + " Lifestyle rating bands";
   document.getElementById("addThresholdBtn").innerHTML = icon("plus", 13) + " Add band";
   document.getElementById("saveThresholdsBtn").innerHTML = "Save bands";
+}
+
+async function openBulkAddTools(button) {
+  if (button.disabled) return;
+  const label = button.innerHTML;
+  button.disabled = true;
+  button.textContent = "Loading student tools…";
+  try {
+    await t29LoadScript("bulk-students.js?v=ac80d1c8");
+    await openBulkAdd();
+  } catch (e) {
+    t29Toast("Couldn’t open Add students. Please try again.");
+  } finally {
+    button.innerHTML = label;
+    button.disabled = false;
+  }
+}
+
+async function openClassExport(format) {
+  const buttons = document.querySelectorAll(".export-class-btn");
+  if (Array.from(buttons).some(button => button.disabled)) return;
+  buttons.forEach(button => { button.disabled = true; });
+  const msg = document.getElementById("exportClassMsg");
+  flashMsg(msg, "Loading class export…", 60000);
+  try {
+    const scripts = [t29LoadScript("class-export.js?v=37f9a956")];
+    if (format === "pdf") scripts.push(t29LoadScript("pdf-report.js?v=02f2ce08"));
+    await Promise.all(scripts);
+    await exportClassClick(format);
+  } catch (e) {
+    flashMsg(msg, '<span class="err">Couldn’t load class export. Please try again.</span>', 12000);
+  } finally {
+    buttons.forEach(button => { button.disabled = false; });
+  }
 }
 
 async function init() {

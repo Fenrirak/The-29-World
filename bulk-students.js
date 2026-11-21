@@ -574,8 +574,6 @@
   }
 
   function init() {
-    const open = $("addStudentsBtn");
-    if (open) open.innerHTML = icon("plus", 14) + " Add students";
     if (!$("bulkAddModal")) return;
     const ic = $("bulkIcon");
     if (ic) ic.innerHTML = icon("users", 22);

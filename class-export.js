@@ -291,19 +291,16 @@ function t29xDownloadText(text, filename) {
 
 async function exportClassClick(format) {
   const msg = document.getElementById("exportClassMsg");
-  const btns = document.querySelectorAll(".export-class-btn");
-  btns.forEach(b => b.disabled = true);
   flashMsg(msg, "Building the export... this can take a few seconds for a big class.", 60000);
   try {
     const { cls, L } = await t29xBuild(CLASS_CODE);
-    const base = `${pdfSafeName(cls.name)}-full-export-${nzDateKey()}`;
+    const name = String(cls.name || "report").replace(/[^\w\- ]+/g, "").replace(/\s+/g, "-").slice(0, 60) || "report";
+    const base = `${name}-full-export-${nzDateKey()}`;
     if (format === "pdf") pdfSave(t29xPdf(cls, L), base + ".pdf");
     else t29xDownloadText(t29xMarkdown(cls, L), base + ".md");
     flashMsg(msg, `<span class="ok">Downloaded ${base}.${format === "pdf" ? "pdf" : "md"} (${L.length.toLocaleString()} lines).</span>`, 8000);
   } catch (e) {
     console.error(e);
     flashMsg(msg, `<span class="err">Export failed: ${escapeHtml(e.message || String(e))}</span>`, 12000);
-  } finally {
-    btns.forEach(b => b.disabled = false);
   }
 }
