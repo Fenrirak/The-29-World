@@ -6087,7 +6087,7 @@ const CREDIT_BANDS = [
   { min: 819, label: "Excellent", tone: "mint", overdraft: 150 },
   { min: 760, label: "Very good", tone: "lilac", overdraft: 100 },
   { min: 669, label: "Good", tone: "navy", overdraft: 50 },
-  { min: 513, label: "Fair", tone: "gold" },
+  { min: 513, label: "Fair", tone: "yellow" },
   { min: 0, label: "Poor", tone: "coral" }
 ];
 function creditBandOf(score) { return CREDIT_BANDS.find(b => score >= b.min) || CREDIT_BANDS[CREDIT_BANDS.length - 1]; }

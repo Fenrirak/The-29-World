@@ -536,6 +536,8 @@ html.dark-mode .stat.lilac .label{color:rgba(255,255,255,.88);}
 .stat.credit-stat[data-tone="mint"]{background:linear-gradient(135deg,var(--mint-fill),var(--mint-fill-dark));}
 .stat.credit-stat[data-tone="lilac"]{background:linear-gradient(135deg,var(--lilac-fill),var(--lilac-fill-dark));}
 .stat.credit-stat[data-tone="gold"]{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--navy-900);}
+/* Credit score "Fair" = a lemon yellow, deliberately not the site's gold theme colour. */
+.stat.credit-stat[data-tone="yellow"]{background:linear-gradient(135deg,#e6e04a,#cfc92f);color:var(--navy-900);}
 .stat.credit-stat[data-tone="coral"]{background:linear-gradient(135deg,var(--coral-fill),var(--coral-fill-dark));}
 .stat.credit-stat .label{color:inherit;padding-right:0;}
 .credit-stat-note{margin-top:6px;font-size:var(--fs-sm);line-height:1.35;}
@@ -603,6 +605,7 @@ tr:last-child td{border-bottom:none;}
 .badge.mint{background:#e3f8f0;color:#217a5a;}
 .badge.coral{background:#fceae7;color:#b8402c;}
 .badge.gold{background:#fbf1dd;color:#8a6112;}
+.badge.yellow{background:#f7f6cc;color:#686508;}
 .badge.navy{background:#e7ebf5;color:var(--navy-900);}
 .badge.lilac{background:#efecfb;color:#5a4fb0;}
 /* Keep full line boxes: cap-height trimming can leave descenders outside a
@@ -2126,6 +2129,7 @@ html.dark-mode .bud-warn,
 html.dark-mode .bud-track-nums strong.bud-bad,
 html.dark-mode .bud-tile.left.neg .bud-tile-value{color:var(--pastel-coral-text);}
 
+html.dark-mode .badge.yellow{background:#3b3b1c;color:#ecea8e;}
 /* ---------------- Gold (warning / highlight) pastel family ---------------- */
 html.dark-mode .badge.gold,
 html.dark-mode .notif-ic.gold,
@@ -3468,6 +3472,7 @@ html.dark-mode .btn:disabled:not(.t29-busy):hover{
 :root{
   --cc-surface:#f8faff;
   --cc-gold-bg:#fff7e3; --cc-gold-line:#f1deaa; --cc-gold-ink:#7a5a10;
+  --cc-yellow-bg:#fbfad9; --cc-yellow-line:#e3e08f; --cc-yellow-ink:#5f5c06;
   --cc-coral-bg:#fdeceb; --cc-coral-line:#f4c4bc; --cc-coral-ink:#a8392a;
   --cc-mint-bg:#e6f8f0; --cc-mint-line:#b9e8d5; --cc-mint-ink:#1c6b4e;
   --cc-track:#e9edf6;
@@ -3475,6 +3480,7 @@ html.dark-mode .btn:disabled:not(.t29-busy):hover{
 html.dark-mode{
   --cc-surface:#212a4a;
   --cc-gold-bg:#3a3220; --cc-gold-line:#5c4c25; --cc-gold-ink:#f0d48a;
+  --cc-yellow-bg:#37371b; --cc-yellow-line:#5a5a28; --cc-yellow-ink:#ecea8e;
   --cc-coral-bg:#432a2b; --cc-coral-line:#6e3d3a; --cc-coral-ink:#ffb4a6;
   --cc-mint-bg:#1f3a35; --cc-mint-line:#2f5c50; --cc-mint-ink:#8fe3c1;
   --cc-track:#2d3856;

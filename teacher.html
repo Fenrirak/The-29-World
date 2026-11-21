@@ -33,7 +33,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=e1466d90">
+<link rel="stylesheet" href="style.css?v=91f8426d">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -261,6 +261,19 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <div id="dailyTimeLimitMsg"></div>
       </section>
 
+      <section class="set-tile" aria-labelledby="hOnlineVis">
+        <h3 id="hOnlineVis">Student online status</h3>
+        <p>Choose whether you can see which students are on the site right now and when they last opened it: the green dots, the &ldquo;online&rdquo; count beside Students and the status at the top of each profile. When it&rsquo;s off, students stop sharing it and nothing is shown or read. Students get a notification whenever you switch it on or off.</p>
+        <div class="set-controls">
+          <label class="lg-switch">
+            <input type="checkbox" id="showOnlineToggle" role="switch" aria-label="Show when students are online" onchange="toggleStudentOnline(this)" checked>
+            <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
+          </label>
+          <span id="showOnlineState" class="muted-small" aria-live="polite"><strong>On</strong>: you can see who&rsquo;s online</span>
+        </div>
+        <div id="showOnlineMsg" role="status"></div>
+      </section>
+
       <section class="set-tile" aria-labelledby="hExport">
         <h3 id="hExport">Export this class</h3>
         <p>Download everything in this class as one file: every setting, price and price history (with the chance of each going up or down), every wage, every student&rsquo;s full account, net worths, lifestyle ratings and the whole transaction log. Only you can see this. Login and sharing links are left out.</p>
@@ -451,8 +464,8 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="settings-menu.js?v=87649e37"></script>
 <script defer src="shortcuts.js?v=8ce32ffe"></script>
 <script defer src="offline.js?v=a51010b5"></script>
-<script defer src="data-core.js?v=d7d7a6a6"></script>
-<script defer src="data-money.js?v=257f87fa"></script>
+<script defer src="data-core.js?v=3c0a4a04"></script>
+<script defer src="data-money.js?v=5b956b5f"></script>
 <script defer src="data-life.js?v=72af86eb"></script>
 <script defer src="data-property.js?v=d3163b64"></script>
 <script defer src="data-markets.js?v=cec75f30"></script>
@@ -463,6 +476,6 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="avatar.js?v=e731e566"></script>
 <script defer src="notifications.js?v=dcb44da8"></script>
 <script defer src="on-demand.js?v=8865de24"></script>
-<script defer src="teacher.js?v=2c035eee"></script>
+<script defer src="teacher.js?v=a16d4780"></script>
 </body>
 </html>

@@ -518,7 +518,7 @@ function ccInjectCreditCss() {
 .cs-main{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;justify-content:center}
 .cs-num{font-size:3.4rem;font-weight:900;line-height:1;color:var(--ink)}
 .cs-scale{width:100%;margin-top:10px;padding:0 10px;box-sizing:border-box}
-.cs-track{position:relative;height:12px;border-radius:99px;background:linear-gradient(90deg,#d9654b 0%,#e8a94a 38%,#e9cf55 60%,#4fb58a 84%,#2f9a72 100%)}
+.cs-track{position:relative;height:12px;border-radius:99px;background:linear-gradient(90deg,#d9654b 0%,#e5873f 28%,#dede3c 58%,#4fb58a 84%,#2f9a72 100%)}
 .cs-pin{position:absolute;top:50%;width:20px;height:20px;border-radius:50%;background:var(--card);border:4px solid var(--ink);transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,.35)}
 .cs-ends{display:flex;justify-content:space-between;font-size:var(--fs-sm);color:var(--muted);margin-top:8px;font-weight:700}
 .cs-sub{margin:4px 0 0;font-size:var(--fs-sm);color:var(--muted);line-height:1.4}
@@ -528,10 +528,10 @@ function ccInjectCreditCss() {
 .cs-pts{flex:none;min-width:58px;text-align:center;font-weight:900;border-radius:99px;padding:3px 10px;font-size:var(--fs-md);border:1.5px solid transparent}
 .cs-pts.good{background:var(--cc-mint-bg);color:var(--cc-mint-ink);border-color:var(--cc-mint-line)}
 .cs-pts.bad{background:var(--cc-coral-bg);color:var(--cc-coral-ink);border-color:var(--cc-coral-line)}
-.cs-pts.zero{background:var(--cc-gold-bg);color:var(--cc-gold-ink);border-color:var(--cc-gold-line)}
+.cs-pts.zero{background:var(--cc-yellow-bg);color:var(--cc-yellow-ink);border-color:var(--cc-yellow-line)}
 .cs-list strong{display:block;line-height:1.3}
 .cs-list .cs-d{display:block;font-size:var(--fs-sm);color:var(--muted);line-height:1.4}
-.cs-tips{margin-top:14px;border:1.5px solid var(--cc-gold-line);background:var(--cc-gold-bg);color:var(--cc-gold-ink);border-radius:var(--r-5);padding:14px 18px}
+.cs-tips{margin-top:14px;border:1.5px solid var(--cc-yellow-line);background:var(--cc-yellow-bg);color:var(--cc-yellow-ink);border-radius:var(--r-5);padding:14px 18px}
 .cs-tips h3{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:1rem;color:inherit}
 .cs-tips ul{margin:0;padding-left:1.2em;line-height:1.55;font-size:var(--fs-md)}
 .cs-tips li{margin:2px 0}

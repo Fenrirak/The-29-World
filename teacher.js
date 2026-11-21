@@ -1,5 +1,5 @@
 let CURRENT, CLASS_CODE, PROFILE_USER = null;
-let PRESENCE = {}, PRESENCE_LOADED = false, PRESENCE_AT = 0, PRESENCE_INFLIGHT = null, PRESENCE_TIMER = null, PRESENCE_STUDENTS = [];
+let PRESENCE = {}, PRESENCE_LOADED = false, PRESENCE_AT = 0, PRESENCE_INFLIGHT = null, PRESENCE_TIMER = null, PRESENCE_STUDENTS = [], PRESENCE_ON = true;
 let LAST_STUDENTS = []; // roster snapshot from the last render(), reused by "pay all" so it doesn't need its own fetch
 
 // Teachers naturally type amounts like "$10" or "1,000" in a money app —
@@ -162,6 +162,7 @@ async function render() {
   const welcomeEl = document.getElementById("welcomeGrant");
   if (document.activeElement !== welcomeEl) welcomeEl.value = t29WelcomeGrantOf(cls);
   document.getElementById("dailyTimeLimit").value = cls.dailyTimeLimitMinutes || "";
+  syncOnlineToggle(cls);
   document.getElementById("restartTile").classList.toggle("hidden", cls.teacher !== CURRENT.username);
   renderCoTeachers(cls).catch(e => console.warn("Co-teacher panel failed:", e));
 
@@ -841,6 +842,43 @@ async function saveDailyTimeLimit() {
     btn.disabled = false;
   }
 }
+function paintOnlineToggleState() {
+  const el = document.getElementById("showOnlineState");
+  if (el) el.innerHTML = PRESENCE_ON ? "<strong>On</strong>: you can see who&rsquo;s online" : "<strong>Off</strong>: online status is hidden";
+}
+
+// Keeps the switch and the dashboard in step with the saved class setting (no reads of its own).
+function syncOnlineToggle(cls) {
+  const wasOn = PRESENCE_ON;
+  PRESENCE_ON = t29PresenceOn(cls);
+  const cb = document.getElementById("showOnlineToggle");
+  if (cb && !cb.disabled) cb.checked = PRESENCE_ON;
+  paintOnlineToggleState();
+  if (PRESENCE_ON && !wasOn) refreshPresence(true).then(paintPresence);
+}
+
+async function toggleStudentOnline(cb) {
+  const msg = document.getElementById("showOnlineMsg");
+  const want = cb.checked;
+  cb.disabled = true;
+  try {
+    const r = await t29SetPresenceVisible(CLASS_CODE, want);
+    PRESENCE_ON = r.on;
+    paintOnlineToggleState();
+    paintPresence();
+    if (PRESENCE_ON) refreshPresence(true).then(paintPresence);
+    const told = !r.changed ? "" : r.notified ? " Students have been notified." : " Students could not be notified just now.";
+    msg.innerHTML = `<div class="${r.changed && !r.notified ? "error-msg" : "success-msg"}">${PRESENCE_ON
+      ? "Online status is on. Students will start showing as online within a couple of minutes."
+      : "Online status is off. Nothing about who is online is collected or shown."}${told}</div>`;
+  } catch (e) {
+    cb.checked = !want;
+    msg.innerHTML = `<div class="error-msg">Couldn't change online status. Please try again.</div>`;
+  } finally {
+    cb.disabled = false;
+  }
+}
+
 async function quickView(username) {
   await renderProfile(username);
   document.getElementById("profileModal").classList.remove("hidden");
@@ -1555,6 +1593,7 @@ function presenceWhen(ms) {
 }
 
 function presenceProfileHtml(username) {
+  if (!PRESENCE_ON) return `<span class="muted-small">Online status is turned off for this class.</span>`;
   if (!PRESENCE_LOADED) {
     return `<span class="presence-badge"><i></i>Status unavailable</span><span class="muted-small">Online status couldn't be loaded just now.</span>`;
   }
@@ -1576,6 +1615,13 @@ function paintProfilePresence() {
 
 // Updates everything that shows presence from the copy already in memory (no reads).
 function paintPresence() {
+  if (!PRESENCE_ON) {
+    const off = document.getElementById("onlineCount");
+    if (off) off.hidden = true;
+    document.querySelectorAll("#studentTable .presence-dot").forEach(dot => { dot.style.display = "none"; });
+    paintProfilePresence();
+    return;
+  }
   const total = PRESENCE_STUDENTS.length;
   let online = 0;
   PRESENCE_STUDENTS.forEach(s => { if (t29IsOnline(PRESENCE[s.username])) online++; });
@@ -1590,6 +1636,7 @@ function paintPresence() {
   }
   document.querySelectorAll("#studentTable .presence-dot").forEach(dot => {
     const on = t29IsOnline(PRESENCE[dot.dataset.user]);
+    dot.style.display = "";
     dot.classList.toggle("on", on);
     dot.title = on ? "Online now" : "Offline";
   });
@@ -1600,6 +1647,7 @@ function paintPresence() {
 // (so the many re-renders that follow teacher actions never re-read it), and two callers
 // at once share one read.
 function refreshPresence(force, maxAgeMs) {
+  if (!PRESENCE_ON) return Promise.resolve(); // switched off: no reads at all
   const maxAge = maxAgeMs === undefined ? 30000 : maxAgeMs;
   if (!force && PRESENCE_LOADED && Date.now() - PRESENCE_AT < maxAge) return Promise.resolve();
   if (!force && !PRESENCE_LOADED && T29_PRESENCE_READ_DENIED) return Promise.resolve();
@@ -1615,7 +1663,7 @@ function refreshPresence(force, maxAgeMs) {
 function startPresencePolling() {
   if (PRESENCE_TIMER) return;
   const tick = () => {
-    if (document.visibilityState !== "visible" || T29_PRESENCE_READ_DENIED || !PRESENCE_STUDENTS.length) return;
+    if (document.visibilityState !== "visible" || T29_PRESENCE_READ_DENIED || !PRESENCE_ON || !PRESENCE_STUDENTS.length) return;
     refreshPresence(true).then(paintPresence);
   };
   PRESENCE_TIMER = setInterval(tick, 60000);

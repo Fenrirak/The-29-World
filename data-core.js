@@ -1029,6 +1029,7 @@ const T29_PRESENCE_IDLE_MS = 5 * 60 * 1000;       // no interaction for this lon
 
 let _presenceCtx = null;            // { ref, username, storeKey } once running on this page
 let _presenceDead = false;
+let _presenceOff = false;           // teacher turned online status off for this class
 let T29_PRESENCE_READ_DENIED = false;
 
 function startPresence(u) {
@@ -1052,6 +1053,16 @@ function startPresence(u) {
     return n > 0 && n <= Date.now() + 60000 ? n : 0; // a mark from the "future" means the clock moved: ignore it
   };
 
+  // The teacher can switch online status off for the whole class (class.showStudentOnline
+  // === false). Off = nothing is written. If the setting can't be read, nothing is written
+  // this time round either (the next ping tries again).
+  async function presenceAllowed() {
+    try {
+      _presenceOff = !t29PresenceOn(await getClassCached(u.classCode));
+    } catch (e) { return false; }
+    return !_presenceOff;
+  }
+
   async function beat() {
     if (_presenceDead || busy || document.visibilityState !== "visible") return;
     const now = Date.now();
@@ -1062,6 +1073,7 @@ function startPresence(u) {
     const entry = newVisit ? { o: sv(), a: sv(), off: false } : { a: sv(), off: false };
     busy = true;
     try {
+      if (!(await presenceAllowed())) return;
       await ctx.ref.set({ p: { [ctx.username]: entry } }, { merge: true });
       memMark = Date.now();
       try { localStorage.setItem(ctx.storeKey, String(memMark)); } catch (e) { /* ignore */ }
@@ -1100,6 +1112,7 @@ async function t29PresenceOnLogout() {
   if (!c) return;
   _presenceDead = true;
   try { localStorage.removeItem(c.storeKey); } catch (e) { /* ignore */ }
+  if (_presenceOff) return; // online status is off for this class: nothing was shared
   try {
     await Promise.race([
       c.ref.set({ p: { [c.username]: { a: firebase.firestore.FieldValue.serverTimestamp(), off: true } } }, { merge: true }),
@@ -1129,6 +1142,30 @@ async function t29LoadPresence(classCode) {
     else console.warn("t29LoadPresence failed:", e);
     return null;
   }
+}
+
+// Class-wide switch, class.showStudentOnline (missing = on). Off: students stop sending
+// presence and the teacher's dashboard neither reads nor shows it.
+function t29PresenceOn(cls) { return !cls || cls.showStudentOnline !== false; }
+
+// Teacher turns online status on/off for the class and the students are told (bell).
+// Returns { on, changed, notified }. Throws if the class couldn't be updated.
+async function t29SetPresenceVisible(classCode, on) {
+  on = !!on;
+  const was = t29PresenceOn(await getClass(classCode));
+  await classesCol().doc(classCode).update({ showStudentOnline: on });
+  let notified = false;
+  if (was !== on) {
+    notified = await t29NotifyStudents(classCode, {
+      to: "all", icon: on ? "eye" : "eyeOff", tone: on ? "mint" : "navy",
+      title: on ? "Your teacher can now see when you're online" : "Your teacher can no longer see when you're online",
+      body: on
+        ? "Online status was turned on for this class. Your teacher can see when you're on the site and when you last opened it."
+        : "Online status was turned off for this class. Your teacher can't see whether you're on the site or when you last opened it.",
+      href: ""
+    });
+  }
+  return { on, changed: was !== on, notified };
 }
 
 // "On the site right now": signed in, and pinged within the last few minutes.
