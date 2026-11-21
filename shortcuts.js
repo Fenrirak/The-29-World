@@ -24,7 +24,7 @@
                   - It forgives typos, as a last resort when nothing else
                     matches ("bnk" = Bank, "kiwsaver" = KiwiSaver). A correctly
                     typed start of a name is never treated as a typo.
-                  - It runs actions too: dark, settings, notifications, help.
+                  - It runs actions too: dark, settings, notifications, help, status.
      Space Space  double-tap Space quickly: the same Jump box as tapping Shift (only
                   when nothing is focused that Space would already press — it also
                   works inside number/date/time boxes, which never need a space)
@@ -129,7 +129,7 @@
 
   // ---------- "tap Shift, then type a name" ----------
   // The box finds modules (Bank, Store ...) and a few actions (dark, settings,
-  // notifications, help). Matching goes, in order:
+  // notifications, help, status). Matching goes, in order:
   //   0 the whole name   1 the start of the name   2 the start of a later word
   //   3 another name people use (an "alias", e.g. the old "account")
   //   4 a typo, ONLY when nothing in 0-3 matches ("bnk" = Bank)
@@ -243,6 +243,8 @@
       ok: function () { return !!byId("notifBell"); }, run: function () { togglePanel("notifBell"); } },
     { id: "help", label: "Help Centre", words: ["help center", "faq", "support", "knowledge base"], does: "opens the Help Centre",
       ok: function () { return true; }, run: function () { location.href = "help.html"; } },
+    { id: "status", label: "System status", words: ["uptime", "outage", "server status", "is it down"], does: "opens the status page",
+      ok: function () { return true; }, run: function () { location.href = "status.html"; } },
     { id: "shortcuts", label: "Keyboard shortcuts", words: ["shortcuts", "keys"], does: "shows the shortcut list",
       ok: function () { return true; }, run: function () { showHelp(); } }
   ];
@@ -495,7 +497,7 @@
       if (!input.value.trim()) {
         txt = (opts.length ? opts[eo].says + (opts.length > 1 ? " \u00B7 \u2191\u2193 to switch" : "") + " \u00B7 or type" : "Type") +
           (sample ? " the start of a name or a number, e.g. \u201C" + shortestPrefix(sample, items).toLowerCase() + "\u201D or \u201C" + sample.num + "\u201D" : " a name") +
-          " \u00B7 actions: dark, settings, notifications, help";
+          " \u00B7 actions: dark, settings, notifications, help, status";
       } else if (!m) {
         txt = isNumberQuery(input.value) ? "No module is numbered " + input.value.trim() : "Nothing matches \u201C" + input.value.trim() + "\u201D";
       } else {
@@ -624,7 +626,7 @@
     var go = items.map(function (it) {
       return '<div class="t29-keys-row"><span class="t29-keys-label">' + esc(it.label + (it.here ? ". You\u2019re here" : "")) + "</span></div>";
     });
-    var goIntro = go.length ? '<p class="t29-keys-intro">Tap ' + kbd("Shift") + ", type part of a name or its number, then press " + kbd("Enter") + ".<br>Forgives typos, learns your favourites, and runs actions: " + kbd("dark") + " " + kbd("settings") + " " + kbd("notifications") + " " + kbd("help") + ".<br>" + kbd("Shift") + " then " + kbd("Enter") + " returns to your last module.</p>" : "";
+    var goIntro = go.length ? '<p class="t29-keys-intro">Tap ' + kbd("Shift") + ", type part of a name or its number, then press " + kbd("Enter") + ".<br>Forgives typos, learns your favourites, and runs actions: " + kbd("dark") + " " + kbd("settings") + " " + kbd("notifications") + " " + kbd("help") + " " + kbd("status") + ".<br>" + kbd("Shift") + " then " + kbd("Enter") + " returns to your last module.</p>" : "";
     var offNote = keysOn ? "" : '<p class="t29-keys-intro"><strong>Shortcuts are switched off.</strong> Turn them back on in Settings.</p>';
     return '<div class="t29-dialog t29-keys-card" role="dialog" aria-modal="true" aria-labelledby="t29KeysTitle">' +
       '<div class="t29-keys-head"><h2 id="t29KeysTitle">Keyboard shortcuts</h2>' +

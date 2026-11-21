@@ -1,0 +1,99 @@
+/* The 29 World — status page. Page-specific rules only; everything else comes from style.css. */
+.status-topbar{background:var(--card);border-bottom:1px solid var(--line);}
+.status-topbar .about-brand{color:var(--ink);}
+.status-main [hidden]{display:none;}
+.status-main .card h2{margin:0 0 10px;}
+
+/* Status colours: the same tints as the .badge colours, with the dark-mode versions swapped in below. */
+.status-main{
+  --st-ok-bg:#e3f8f0;--st-ok-fg:#217a5a;--st-ok-line:var(--mint);
+  --st-slow-bg:#fbf1dd;--st-slow-fg:#8a6112;--st-slow-line:var(--gold);
+  --st-down-bg:#fceae7;--st-down-fg:#b8402c;--st-down-line:var(--coral);
+  --st-idle-bg:#e7ebf5;--st-idle-fg:var(--navy-900);--st-idle-line:var(--navy-500);
+}
+html.dark-mode .status-main{
+  --st-ok-bg:var(--pastel-mint-bg);--st-ok-fg:var(--pastel-mint-text);--st-ok-line:var(--pastel-mint-border);
+  --st-slow-bg:var(--pastel-gold-bg);--st-slow-fg:var(--pastel-gold-text);--st-slow-line:var(--pastel-gold-border);
+  --st-down-bg:var(--pastel-coral-bg);--st-down-fg:var(--pastel-coral-text);--st-down-line:var(--pastel-coral-border);
+  --st-idle-bg:var(--pastel-navy-bg);--st-idle-fg:var(--accent-text);--st-idle-line:var(--line);
+}
+
+/* Overall result */
+.status-summary{
+  --st-bg:var(--st-idle-bg);--st-fg:var(--st-idle-fg);--st-line:var(--st-idle-line);
+  display:flex;align-items:center;gap:14px;margin:20px 0 0;padding:16px 18px;
+  border:1.5px solid var(--st-line);border-radius:var(--r-5);background:var(--st-bg);color:var(--st-fg);
+}
+.status-summary[data-state="ok"]{--st-bg:var(--st-ok-bg);--st-fg:var(--st-ok-fg);--st-line:var(--st-ok-line);}
+.status-summary[data-state="slow"]{--st-bg:var(--st-slow-bg);--st-fg:var(--st-slow-fg);--st-line:var(--st-slow-line);}
+.status-summary[data-state="issue"],.status-summary[data-state="down"]{--st-bg:var(--st-down-bg);--st-fg:var(--st-down-fg);--st-line:var(--st-down-line);}
+.status-summary-icon{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--st-fg);color:var(--card);}
+.status-summary-icon svg{width:20px;height:20px;display:block;}
+.status-spinner{width:18px;height:18px;border:2.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:status-spin .8s linear infinite;}
+@keyframes status-spin{to{transform:rotate(360deg);}}
+.status-main .about-card .status-headline{margin:0;font-size:1.15rem;font-weight:800;line-height:1.3;color:var(--st-fg);}
+.status-main .about-card .status-sub{margin:3px 0 0;font-size:var(--fs-lg);line-height:1.5;color:var(--ink);}
+.status-main .about-card .status-noscript{margin:18px 0 0;color:var(--ink);}
+
+/* Check again + notes */
+.status-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin-top:16px;}
+.status-main .card .status-checked{display:block;margin:0;}
+.status-main .card .status-note{display:block;margin:12px 0 0;line-height:1.5;}
+.status-main .btn[aria-disabled="true"]{opacity:.7;cursor:progress;pointer-events:none;transform:none;box-shadow:none;}
+.status-main .btn[aria-busy="true"] .icon{animation:status-spin 1s linear infinite;}
+
+/* Service rows */
+.status-main .card .status-list{list-style:none;margin:4px 0 0;padding:0;color:var(--ink);}
+.status-main .card .status-item{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 16px;margin:0;padding:14px 0;border-top:1px solid var(--line);}
+.status-main .card .status-name{margin:0;font-weight:700;line-height:1.4;color:var(--ink);}
+.status-main .card .status-desc{margin:2px 0 0;color:var(--muted);font-size:var(--fs-md);line-height:1.5;}
+.status-meta{display:flex;align-items:center;justify-content:flex-end;gap:12px;}
+.status-meta .badge{min-width:7.5em;justify-content:center;}
+.status-ms{order:-1;min-width:4.5em;text-align:right;color:var(--muted);font-size:var(--fs-sm);font-variant-numeric:tabular-nums;}
+.status-main .card .status-detail{grid-column:1 / -1;margin:0;color:var(--st-down-fg);font-size:var(--fs-md);font-weight:600;line-height:1.5;}
+.status-trend{grid-column:1 / -1;display:flex;align-items:center;gap:10px;}
+.status-bars{display:flex;align-items:flex-end;gap:3px;height:16px;}
+.status-bar{display:block;width:6px;height:100%;border-radius:var(--sw-xs);background:var(--line);}
+.status-bar[data-s="ok"]{background:var(--mint);}
+.status-bar[data-s="slow"]{background:var(--gold);}
+.status-bar[data-s="down"]{background:var(--coral);}
+.status-trend-text{color:var(--muted);font-size:var(--fs-xs);}
+
+/* Notices */
+.status-main .card .status-notices{list-style:none;margin:12px 0 0;padding:0;color:var(--ink);}
+.status-main .card .status-notices li{margin:0;padding:12px 0;border-top:1px solid var(--line);}
+.status-notice-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;}
+.status-notice-head time{color:var(--muted);font-size:var(--fs-sm);}
+.status-notice-title{font-weight:700;}
+.status-main .card .status-notices p{margin:6px 0 0;color:var(--muted);}
+
+/* What to try */
+.status-main .card .status-steps{margin:8px 0 0;padding-left:1.4em;color:var(--muted);line-height:1.6;}
+.status-main .card .status-steps li{margin:0 0 8px;}
+
+/* Addresses for school IT */
+.status-main .card .status-hosts{list-style:none;margin:14px 0 0;padding:0;color:var(--ink);}
+.status-main .card .status-hosts li{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:2px 16px;margin:0;padding:10px 0;border-top:1px solid var(--line);}
+.status-hosts code{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;font-size:var(--fs-md);font-weight:600;overflow-wrap:anywhere;color:var(--ink);}
+.status-host-use{color:var(--muted);font-size:var(--fs-md);}
+.status-copy{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-top:14px;}
+.status-main .card .status-copy-msg{display:block;min-height:1.3em;margin:0;}
+
+/* Questions */
+.status-faq details{border-top:1px solid var(--line);}
+.status-faq summary{padding:12px 0;cursor:pointer;font-weight:700;line-height:1.5;}
+.status-faq summary::marker{color:var(--muted);}
+.status-faq details p{margin:0 0 12px;}
+
+.status-main a:focus-visible,.status-main summary:focus-visible{outline:2px solid var(--ink);outline-offset:3px;}
+
+@media (max-width:520px){
+  .status-main .card .status-item{grid-template-columns:minmax(0,1fr);}
+  .status-meta{justify-content:flex-start;}
+  .status-ms{order:0;min-width:0;text-align:left;}
+  .status-main .card .status-hosts li{grid-template-columns:minmax(0,1fr);}
+  .status-summary{padding:14px;}
+}
+@media (prefers-reduced-motion:reduce){
+  .status-spinner,.status-main .btn[aria-busy="true"] .icon{animation:none;}
+}
