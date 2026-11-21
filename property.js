@@ -372,7 +372,7 @@ function mortgageStatusBadges(cls, previewForceDue) {
 
 function populateMortgageSettings(cls) {
   MORTGAGE_SETTINGS_CLS = cls;
-  document.getElementById("mortgageDaySelect").value = cls.mortgageDay || "Fri";
+  t29FillSetting("mortgageDaySelect", cls.mortgageDay || "Fri");
   document.getElementById("mortgageForceDue").checked = cls.mortgageForceDueWeek === isoWeekKey();
   document.getElementById("mortgageStatusRow").innerHTML = mortgageStatusBadges(cls);
   document.getElementById("movingCostInput").value = cls.movingCost || 0;

@@ -9,6 +9,7 @@ A classroom economy simulator for whole-class use, with individual student accou
 - **Student pages:** bank, budget, jobs, loans, KiwiSaver, term deposits, insurance, tax, shares market, marketplace, property, store, transport, events, quizzes, worksheets and reports.
 - **Teacher and parent pages:** class management, bulk student setup, class export and parent view.
 - **Installable and offline-friendly:** works as a web app (PWA) with an offline page.
+- **Status page:** checks from the visitor's own device whether the website, sign-in, saving and security check can be reached, with steps to try and a list of addresses for school IT.
 
 ## How it's built
 

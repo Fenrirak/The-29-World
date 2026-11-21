@@ -261,7 +261,7 @@ async function render() {
   plans.forEach(p => { PLANS_BY_ID[p.id] = p; });
 
   if (IS_TEACHER) {
-    document.getElementById("insuranceDay").value = cls.insuranceDay || "Fri";
+    t29FillSetting("insuranceDay", cls.insuranceDay || "Fri");
     updatePlanFormForCoverage(); // refresh the company list, keeping the current picks
   }
 

@@ -13,26 +13,34 @@ const TAX_CATEGORIES = [
 // only the slice of the wage between the previous bracket's cap and its own
 // "up to" amount; the last row (upTo left blank) covers everything above it.
 let wageBrackets = [];
+let dirty = false;
 
 function renderWageBracketRows() {
   const rows = document.getElementById("wageBracketRows");
   if (!rows) return;
   rows.innerHTML = wageBrackets.map((b, i) => `
     <div class="bracket-row" style="display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
-      <span>${fmtBracketFloor(i)} up to and including</span>
+      <span class="bracket-floor">${fmtBracketFloor(i)} up to and including</span>
       <input type="number" min="0" step="1" placeholder="no limit" value="${b.upTo === null ? "" : b.upTo}"
-        style="width:110px" onchange="updateBracket(${i}, 'upTo', this.value)">
+        aria-label="Bracket ${i + 1} upper limit" style="width:110px" oninput="updateBracket(${i}, 'upTo', this.value)">
       <span>tax</span>
-      <input type="number" min="0" max="100" step="0.5" value="${b.rate}"
-        style="width:80px" onchange="updateBracket(${i}, 'rate', this.value)">
+      <input type="number" min="0" max="100" step="0.5" required value="${b.rate}"
+        aria-label="Bracket ${i + 1} tax rate" style="width:80px" oninput="updateBracket(${i}, 'rate', this.value)">
       <span>%</span>
       <button type="button" class="btn small" onclick="removeBracket(${i})">Remove</button>
     </div>
   `).join("") || `<p>No wage tax brackets yet. Wages aren't taxed. Add a bracket below.</p>`;
-  const lastBr = wageBrackets[wageBrackets.length - 1];
-  if (lastBr && lastBr.upTo !== null && lastBr.upTo !== "") {
-    rows.innerHTML += `<p class="muted-small">Wages above $${Number(lastBr.upTo)} won't be taxed, because the last row has a limit. Leave the last row's limit blank to tax everything above the earlier rows.</p>`;
-  }
+  rows.insertAdjacentHTML("beforeend", '<p id="bracketHint" class="muted-small"></p>');
+  refreshBracketLabels();
+}
+
+function refreshBracketLabels() {
+  document.querySelectorAll(".bracket-floor").forEach((el, i) => {
+    el.textContent = fmtBracketFloor(i) + " up to and including";
+  });
+  const cap = wageBrackets.at(-1)?.upTo;
+  document.getElementById("bracketHint").textContent = cap == null ? "" :
+    `Wages above ${fmtMoney(cap)} won't be taxed. Leave the final limit blank to tax the rest.`;
 }
 
 function fmtBracketFloor(index) {
@@ -42,15 +50,17 @@ function fmtBracketFloor(index) {
 }
 
 function updateBracket(i, field, value) {
+  dirty = true;
   if (field === "upTo") {
     wageBrackets[i].upTo = value === "" ? null : Number(value);
   } else {
     wageBrackets[i].rate = Number(value) || 0;
   }
-  renderWageBracketRows();
+  refreshBracketLabels();
 }
 
 function addBracket() {
+  dirty = true;
   // New bracket starts above the current top; if the previous "last" bracket
   // had no cap, give it one now so there's still exactly one open-ended row.
   if (wageBrackets.length && wageBrackets[wageBrackets.length - 1].upTo === null) {
@@ -64,6 +74,7 @@ function addBracket() {
 }
 
 function removeBracket(i) {
+  dirty = true;
   wageBrackets.splice(i, 1);
   renderWageBracketRows();
 }
@@ -86,6 +97,7 @@ async function init() {
   // interest tax on Bank, winnings tax on Gambling). This page is where the
   // teacher sets the rates.
   if (!IS_TEACHER) { location.replace("student.html"); return; }
+  document.getElementById("taxGrid").addEventListener("input", () => { dirty = true; });
   document.getElementById("whoami").textContent = t29DisplayName(u);
   document.getElementById("navHome").href = IS_TEACHER ? "teacher.html" : "student.html";
   document.getElementById("navHomeLabel").textContent = "Dashboard";
@@ -128,6 +140,7 @@ async function init() {
 
 async function render() {
   const cls = await getClassCached(CURRENT.classCode);
+  if (dirty) return;
   const rates = cls.taxRates || {};
   wageBrackets = (cls.wageTaxBrackets || []).map(b => ({ upTo: b.upTo, rate: b.rate }));
 
@@ -136,7 +149,7 @@ async function render() {
     grid.innerHTML = TAX_CATEGORIES.map(c => `
       <div>
         <label for="tax-${c.key}">${c.label} ${c.kind === "income" ? "" : ""}</label>
-        <input type="number" min="0" max="100" step="0.5" id="tax-${c.key}" value="${rates[c.key] || 0}">
+        <input type="number" min="0" max="100" step="0.5" required id="tax-${c.key}" value="${rates[c.key] || 0}">
       </div>
     `).join("");
     renderWageBracketRows();
@@ -144,12 +157,36 @@ async function render() {
 }
 
 async function saveRates() {
+  const btn = document.getElementById("saveBtn");
+  if (btn.disabled) return;
+  const status = document.getElementById("saveMsg");
+  status.textContent = "";
+  const panel = document.getElementById("teacherPanel");
+  for (const field of panel.querySelectorAll("input")) {
+    if (!field.reportValidity()) return;
+  }
+  let floor = 0;
+  for (const [i, bracket] of wageBrackets.entries()) {
+    if (bracket.upTo === null ? i < wageBrackets.length - 1 : bracket.upTo <= floor) {
+      status.textContent = "Enter increasing bracket limits. Only the final limit may be blank.";
+      panel.querySelectorAll(".bracket-row")[i].querySelector("input").focus();
+      return;
+    }
+    floor = bracket.upTo;
+  }
   const rates = {};
   TAX_CATEGORIES.forEach(c => { rates[c.key] = document.getElementById("tax-" + c.key).value; });
-  await saveTaxRates(CURRENT.classCode, rates);
-  await saveWageTaxBrackets(CURRENT.classCode, wageBrackets);
-  document.getElementById("saveMsg").innerHTML = `<div class="success-msg">Saved!</div>`;
-  await render();
+  const controls = [...panel.querySelectorAll("input:enabled, button:enabled")];
+  controls.forEach(el => { el.disabled = true; });
+  try {
+    await saveTaxRates(CURRENT.classCode, rates, wageBrackets);
+    dirty = false;
+    status.innerHTML = '<div class="success-msg">Saved!</div>';
+  } catch (err) {
+    status.textContent = "Couldn't save the tax settings. Your edits are still here. Try again.";
+  } finally {
+    controls.forEach(el => { el.disabled = false; });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);

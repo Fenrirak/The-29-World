@@ -101,8 +101,7 @@ function renderTeacherView(cls, students) {
 
 /* ── Pay day (teacher setting) ─────────────────────────────────────── */
 function renderPayDay(cls) {
-  const sel = document.getElementById("payDaySelect");
-  if (sel && document.activeElement !== sel) sel.value = cls.payDay || "Fri";
+  t29FillSetting("payDaySelect", cls.payDay || "Fri");
 }
 
 async function savePayDay() {

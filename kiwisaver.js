@@ -54,11 +54,14 @@ async function init() {
   await render();
 }
 
-async function render() {
+let renderVersion = 0;
+async function render(savedChoices) {
+  const version = ++renderVersion;
   const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+  if (version !== renderVersion) return;
   if (!cls) return;
   if (IS_TEACHER) await renderTeacher(cls);
-  else renderStudent(Object.assign({ username: CURRENT.username }, me), cls);
+  else renderStudent(Object.assign({ username: CURRENT.username }, me, savedChoices ? {kiwiSaver: savedChoices} : {}), cls);
 }
 
 /* ---------------- Small helpers ---------------- */
@@ -315,7 +318,7 @@ async function ksChoice(btnId, change, okText) {
   try {
     const res = await kiwiSaverSaveChoices(CURRENT.username, change);
     if (!res.ok) { ksMsg("ksChoiceMsg", `<div class="error-msg">${escapeHtml(res.error)}</div>`); return; }
-    await render();
+    await render(res.result.choices);
     if (okText) t29Toast(okText, { type: "success" });
   } finally { if (btn) btn.disabled = false; }
 }

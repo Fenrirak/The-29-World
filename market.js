@@ -25,6 +25,7 @@ function applyCompanyMsg(id) {
   box.innerHTML = entry.html;
   clearTimeout(box._clearTimer);
   box._clearTimer = setTimeout(() => {
+    if (COMPANY_MSGS[id] !== entry) return;
     delete COMPANY_MSGS[id];
     const stillThere = document.getElementById("msg-" + id);
     if (stillThere) stillThere.innerHTML = "";
@@ -96,7 +97,7 @@ async function init() {
     await T29_STARTUP_JOBS;
     await checkWeeklyEventPopup(CURRENT.username, CLASS_CODE);
     await checkBigEventPopup(CURRENT.username, CLASS_CODE);
-    await render();
+    await render(true);
     startAutoRefresh();
   } catch (err) {
     console.error("Stock Market failed to load:", err);
@@ -126,7 +127,7 @@ function marketRedraw() {
   const list = document.getElementById("companyList");
   if (list && list.contains(active)) { MARKET_REDRAW_PENDING = true; return; }
   MARKET_REDRAW_PENDING = false;
-  render();
+  render(true);
 }
 function marketStopLive() {
   MARKET_UNWATCH.forEach(stop => { try { stop(); } catch (e) { /* already stopped */ } });
@@ -178,7 +179,7 @@ function startAutoRefresh() {
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) { marketStopAll(); return; }
-    render();
+    render(true);
     marketStartLive();
   });
 }
@@ -200,7 +201,7 @@ function sparkline(history) {
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${segments}</svg>`;
 }
 
-async function render() {
+async function render(background = false) {
   try {
   // Re-derive IS_TEACHER from the live user doc every render (not just on
   // page load) so the teacher's management controls never get replaced by
@@ -225,15 +226,24 @@ async function render() {
     }
   }
   banner.classList.add("hidden");
+  // Focus can move into a card while the database reads are in flight.
+  // Replacing that button between pointer-down and click drops the trade.
+  if (background && list.contains(document.activeElement)) {
+    MARKET_REDRAW_PENDING = true;
+    return;
+  }
 
   const range = cls.priceRange || { min: 1, max: 5 };
-  document.getElementById("rangeMin").value = range.min;
-  document.getElementById("rangeMax").value = range.max;
+  t29FillSetting("rangeMin", range.min);
+  t29FillSetting("rangeMax", range.max);
   const moveEl = document.getElementById("showShareMove");
   if (moveEl) moveEl.checked = !!cls.showShareMove;
   const upEl = document.getElementById("upChance");
   if (upEl && document.activeElement !== upEl) { upEl.value = t29UpChance(cls.marketUpChance); paintDownChance(); }
 
+  // A class snapshot can arrive between typing a quantity and pressing Buy/Sell.
+  const quantities = new Map([...list.querySelectorAll('input[id^="buy-"], input[id^="sell-"]')]
+    .filter(input => input.value !== "").map(input => [input.id, input.value]));
   list.innerHTML = "";
 
   if (cls.companies.length === 0) {
@@ -317,6 +327,9 @@ async function render() {
       <div id="msg-${co.id}"></div>
     `;
     list.appendChild(div);
+    for (const input of div.querySelectorAll('input[id^="buy-"], input[id^="sell-"]')) {
+      if (quantities.has(input.id)) input.value = quantities.get(input.id);
+    }
     applyCompanyMsg(co.id);
   });
   } catch (err) {
@@ -379,6 +392,7 @@ async function buy(id) {
   try {
     const qty = document.getElementById("buy-" + id).value;
     const res = await buyShares(CURRENT.username, CLASS_CODE, id, qty);
+    if (res.ok) { const input = document.getElementById("buy-" + id); if (input && input.value === qty) input.value = ""; }
     setCompanyMsg(id, res.ok ? `<div class="success-msg">Purchased!</div>` : `<div class="error-msg">${res.error}</div>`);
     await render();
   } finally {
@@ -393,6 +407,7 @@ async function sell(id) {
   try {
     const qty = document.getElementById("sell-" + id).value;
     const res = await sellShares(CURRENT.username, CLASS_CODE, id, qty);
+    if (res.ok) { const input = document.getElementById("sell-" + id); if (input && input.value === qty) input.value = ""; }
     setCompanyMsg(id, res.ok ? `<div class="success-msg">Sold!</div>` : `<div class="error-msg">${res.error}</div>`);
     await render();
   } finally {

@@ -98,16 +98,16 @@ async function render() {
   const hasTruckVehicle = vehicles.some(v => v.type === "truck");
 
   if (IS_TEACHER) {
-    document.getElementById("lcPrice").value = licence.price || "";
-    document.getElementById("lcDesc").value = licence.description || "";
+    t29FillSetting("lcPrice", licence.price);
+    t29FillSetting("lcDesc", licence.description);
     const rates = cls.sellBackRates || { car: 0.85, truck: 0.85, bike: 0.85 };
-    document.getElementById("sbCar").value = Math.round((rates.car !== undefined ? rates.car : 0.85) * 100);
-    document.getElementById("sbTruck").value = Math.round((rates.truck !== undefined ? rates.truck : 0.85) * 100);
-    document.getElementById("sbBike").value = Math.round((rates.bike !== undefined ? rates.bike : 0.85) * 100);
+    t29FillSetting("sbCar", Math.round((rates.car ?? 0.85) * 100));
+    t29FillSetting("sbTruck", Math.round((rates.truck ?? 0.85) * 100));
+    t29FillSetting("sbBike", Math.round((rates.bike ?? 0.85) * 100));
     const ptf = cls.publicTransportFee || { amount: 0, description: "" };
-    document.getElementById("ptfAmount").value = ptf.amount || "";
-    document.getElementById("ptfDesc").value = ptf.description || "";
-    document.getElementById("transportDaySelect").value = cls.transportDay || "Fri";
+    t29FillSetting("ptfAmount", ptf.amount);
+    t29FillSetting("ptfDesc", ptf.description);
+    t29FillSetting("transportDaySelect", cls.transportDay || "Fri");
 
     // One row per life event template currently defined in the Life
     // module, pre-filled with its current fee override (blank = none, so

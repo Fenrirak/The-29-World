@@ -44,7 +44,7 @@ function dmSetOn(on) {
 }
 
 const SM_BUNDLES = {
-  sb: { css: "sidebar-nav.css?v=876c8ecb", js: "sidebar-nav.js?v=d620d750", setter: "sbSetOn" }
+  sb: { css: "sidebar-nav.css?v=876c8ecb", js: "sidebar-nav.js?v=639b9798", setter: "sbSetOn" }
 };
 
 // Loads a feature's CSS+JS the first time it's needed (idempotent — safe to
@@ -144,7 +144,7 @@ function smBuildPopover() {
         <div class="settings-popover-desc">Switch to a dark theme. Easier on the eyes in low light.</div>
       </div>
       <label class="lg-switch">
-        <input type="checkbox" id="t29DarkModeToggle">
+        <input type="checkbox" id="t29DarkModeToggle" aria-label="Dark mode">
         <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
       </label>
     </div>`,
@@ -154,7 +154,7 @@ function smBuildPopover() {
         <div class="settings-popover-desc">Show the menu as a side panel instead of the top bar. A slide-out menu on phones (${smIsTeacher() ? "on by default for teachers too" : "on by default there"}).</div>
       </div>
       <label class="lg-switch">
-        <input type="checkbox" id="t29SidebarNavToggle">
+        <input type="checkbox" id="t29SidebarNavToggle" aria-label="Sidebar navigation">
         <span class="lg-switch-track"><span class="lg-switch-thumb"></span></span>
       </label>
     </div>` : "",
@@ -204,6 +204,14 @@ function smBuildPopover() {
   `;
 
   document.body.appendChild(pop);
+
+  // These rows have button semantics but are not native buttons.
+  pop.addEventListener("keydown", e => {
+    if (!e.target.matches('.settings-popover-row[role="button"]')) return;
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    if (!e.repeat) e.target.click();
+  });
 
   // Per-device alerts (students only — renders nothing for teachers). The
   // control lives in notifications.js, which loads on every page.

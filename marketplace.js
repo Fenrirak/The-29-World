@@ -69,6 +69,7 @@ async function init() {
   // what made a phone sit on a blank page. The popups and the final
   // render() below still run after the jobs, exactly as they did before.
   await t29FirstPaint(render);
+  const initialVersion = renderVersion;
   await T29_STARTUP_JOBS;
   await checkBigEventPopup(u.username, u.classCode);
 
@@ -81,15 +82,35 @@ async function init() {
   const teacher = await getClassTeacherDisplay(cls);
   if (teacher) NAMES[teacher.username] = teacher.name;
 
-  await render();
+  if (renderVersion === initialVersion) await render();
 }
 
-async function render() {
-  const [me, cls] = await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+let renderVersion = 0;
+async function render(committed = false) {
+  const version = ++renderVersion;
+  // A listener can still be displaying the state before a just-committed
+  // trade. Read both sides of the student's screen at one database revision.
+  const [me, cls] = committed
+    ? await fdb.runTransaction(async tx => {
+        const user = await tx.get(usersCol().doc(CURRENT.username));
+        const classroom = await tx.get(classesCol().doc(CURRENT.classCode));
+        return [user.data(), classroom.data()];
+      })
+    : await Promise.all([getUserCached(CURRENT.username), getClassCached(CURRENT.classCode)]);
+  if (version !== renderVersion) return;
   ME = Object.assign({ username: CURRENT.username }, me);
   CLS = withNewModuleDefaults(cls);
   if (IS_TEACHER) renderTeacher();
   else renderStudent();
+}
+
+// These actions change only this listing. Apply the transaction result
+// immediately, so an older snapshot can't hide a creation or undo a cancellation.
+function showCommittedListing(id, listing) {
+  renderVersion++;
+  const existing = (CLS.listings || []).filter(l => l.id !== id);
+  CLS = { ...CLS, listings: listing ? [...existing, listing] : existing };
+  renderStudent();
 }
 
 function bandText(refPrice) {
@@ -144,19 +165,19 @@ async function saveSettings() {
     feePct: document.getElementById("mpFee").value
   });
   document.getElementById("settingsMsg").innerHTML = `<div class="success-msg">Trade Centre settings saved.</div>`;
-  await render();
+  await render(true);
 }
 
 async function approve(id, yes) {
   const reason = yes ? "" : (await t29Prompt("Tell the student why (optional):", "", { confirmText: "Send", placeholder: "Reason (optional)" }) || "");
   await decideListing(CURRENT.classCode, id, yes, reason);
-  await render();
+  await render(true);
 }
 
 async function pullListing(id) {
   const reason = await t29Prompt("Why are you taking this listing down? (shown to the student)", "", { confirmText: "Take it down", danger: true, placeholder: "Reason" }) || "Removed by your teacher";
   await teacherRemoveListing(CURRENT.classCode, id, reason);
-  await render();
+  await render(true);
 }
 
 /* ================= Student ================= */
@@ -281,7 +302,7 @@ async function listIt(assetType, assetId) {
   document.getElementById("sellMsg").innerHTML = res.ok
     ? `<div class="success-msg">Listed${CLS.marketplace.requireApproval ? `: ${qty > 1 ? `${what} are` : "it's"} waiting for your teacher to approve.` : `! ${what} ${qty > 1 ? "are" : "is"} live in the Trade Centre now.`}</div>`
     : `<div class="error-msg">${esc(res.error)}</div>`;
-  await render();
+  if (res.ok) showCommittedListing(res.listing.id, res.listing);
 }
 
 /* ---------------- One listing card, shared by all three views ---------------- */
@@ -309,13 +330,16 @@ function listingCardHtml(l, opts) {
     }
   }
 
+  const offerBounds = marketplacePriceBounds(CLS, l.refPrice);
+  const suggestedOffer = Math.min(offerBounds.max ?? Infinity,
+    Math.max(0.01, offerBounds.min, Math.round(l.price * 80) / 100));
   const offerForm = (!mine && !teacher && OFFERING === l.id) ? `
     <div class="mkt-offer-list">
       <label for="offer-${l.id}">Your price${qty > 1 ? " for ONE" : ""} (allowed: ${bandText(l.refPrice)})</label>
-      <input id="offer-${l.id}" type="number" min="0" step="0.01" value="${Math.round(l.price * 0.8 * 100) / 100}" oninput="offerTotal('${l.id}')">
+      <input id="offer-${l.id}" type="number" min="${Math.max(0.01, offerBounds.min)}" ${offerBounds.max == null ? "" : `max="${offerBounds.max}"`} step="0.01" value="${suggestedOffer}" oninput="offerTotal('${l.id}')">
       ${qty > 1 ? `<label for="offerqty-${l.id}" style="margin-top:8px;display:block;">How many at that price (1–${qty})</label>
       <input id="offerqty-${l.id}" type="number" min="1" max="${qty}" step="1" value="1" oninput="offerTotal('${l.id}')">` : ""}
-      <div class="muted-small" id="offertotal-${l.id}" style="margin:6px 0;">Total: <strong>${fmtMoney(Math.round(l.price * 0.8 * 100) / 100)}</strong></div>
+      <div class="muted-small" id="offertotal-${l.id}" style="margin:6px 0;">Total: <strong>${fmtMoney(suggestedOffer)}</strong></div>
       <input id="offernote-${l.id}" type="text" placeholder="Why should they take it? (optional)">
       <div class="row-flex" style="gap:8px;margin-top:10px;">
         <button class="btn small gold" onclick="sendOffer('${l.id}')">Send offer</button>
@@ -510,7 +534,7 @@ async function buyIt(id) {
   if (!await t29Confirm(`Buy ${several ? "one " : ""}"${l.name}" from ${nameOf(l.seller)} for ${fmtMoney(l.price)}, paid ${how}?${isHouse && mktHasCard() && MP_PAY.useCard ? " (Houses are always paid in cash.)" : ""}`)) return;
   const pay = card ? { useCard: true, split: MP_PAY.split, cardMax: MP_PAY.cardMax } : {};
   const res = await buyListing(CURRENT.username, CURRENT.classCode, id, pay, l.price);
-  await render();
+  await render(true);
   if (res.ok) {
     // The listing's card may be gone once it's sold, so the message goes
     // in the box at the top of the list instead.
@@ -528,7 +552,7 @@ async function sendOffer(id) {
     document.getElementById("offernote-" + id).value,
     (document.getElementById("offerqty-" + id) || { value: 1 }).value);
   if (res.ok) OFFERING = null;
-  await render();
+  await render(true);
   const box = document.getElementById("msg-" + id);
   if (box) box.innerHTML = res.ok ? `<div class="success-msg">Offer sent. The seller will be notified.</div>` : `<div class="error-msg">${esc(res.error)}</div>`;
   else if (!res.ok) alert(res.error);
@@ -536,7 +560,7 @@ async function sendOffer(id) {
 
 async function withdraw(listingId, offerId) {
   await setOfferStatus(CURRENT.username, CURRENT.classCode, listingId, offerId, "withdrawn");
-  await render();
+  await render(true);
 }
 // Asks for an optional reason before an offer or counter is declined. Returns the reason ("" if they left it blank),
 // or null if they backed out. The reason has to be school-appropriate (the same check as payment reasons): if it isn't,
@@ -564,7 +588,7 @@ async function decline(listingId, offerId) {
     : await askReason(`Decline ${nameOf(l.seller)}'s counter-offer of ${fmtMoney(o.counter ? o.counter.amount : 0)}? You can tell them why (optional).`, "Decline counter");
   if (reason === null) return;
   const res = await setOfferStatus(CURRENT.username, CURRENT.classCode, listingId, offerId, "declined", reason);
-  await render();
+  await render(true);
   if (!res.ok) alert(res.error);
 }
 async function accept(listingId, offerId) {
@@ -576,13 +600,13 @@ async function accept(listingId, offerId) {
     : (l && listingQuantity(l) > 1 ? "Accept this offer and hand one of them over?" : "Accept this offer and hand the item over?");
   if (!await t29Confirm(ask)) return;
   const res = await acceptOffer(CURRENT.username, CURRENT.classCode, listingId, offerId);
-  await render();
+  await render(true);
   if (!res.ok) alert(res.error);
 }
 async function sendCounter(listingId, offerId) {
   const res = await counterOffer(CURRENT.username, CURRENT.classCode, listingId, offerId,
     document.getElementById("counter-" + offerId).value, document.getElementById("counternote-" + offerId).value);
-  if (res.ok) { COUNTERING = null; await render(); return; }
+  if (res.ok) { COUNTERING = null; await render(true); return; }
   const box = document.getElementById("countermsg-" + offerId);
   if (box) box.innerHTML = `<div class="error-msg">${esc(res.error)}</div>`; else alert(res.error);
 }
@@ -598,7 +622,7 @@ async function acceptCounterUi(listingId, offerId) {
   if (!await t29Confirm(`Accept ${nameOf(l.seller)}'s counter-offer and buy ${oq > 1 ? oq + " × " : ""}"${l.name}" for ${fmtMoney(o.counter.amount)}${oq > 1 ? " each (" + fmtMoney(total) + " in total)" : ""}, paid ${how}?`)) return;
   const pay = card ? { useCard: true, split: MP_PAY.split, cardMax: MP_PAY.cardMax } : {};
   const res = await acceptCounter(CURRENT.username, CURRENT.classCode, listingId, offerId, pay);
-  await render();
+  await render(true);
   if (res.ok) flashMsg(document.getElementById("browseMsg"), `<div class="success-msg">Bought ${esc(l.name)} at the countered price! It's yours now.</div>`);
   else alert(res.error);
 }
@@ -617,7 +641,7 @@ async function saveEdit(id) {
     return;
   }
   MKT_EDITING = null;
-  await render();
+  await render(true);
   const box = document.getElementById("msg-" + id);
   if (!box) return;
   const note = res.unchanged ? "Nothing was changed."
@@ -629,8 +653,13 @@ async function saveEdit(id) {
 async function cancelMine(id) {
   const l = (CLS.listings || []).find(x => x.id === id);
   if (!await t29Confirm(l && listingQuantity(l) > 1 ? `Take this listing down? All ${listingQuantity(l)} still for sale come off the market.` : "Take this listing down?")) return;
-  await cancelListing(CURRENT.username, CURRENT.classCode, id);
-  await render();
+  try {
+    const res = await cancelListing(CURRENT.username, CURRENT.classCode, id);
+    if (!res.ok) { await t29Alert(res.error); return; }
+    showCommittedListing(id, null);
+  } catch (e) {
+    await t29Alert("Couldn’t confirm that the listing was taken down. Refresh to check its status.");
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);

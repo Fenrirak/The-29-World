@@ -88,7 +88,10 @@ function sbBuildScaffold() {
 function sbSetDrawerOpen(open) {
   sbDrawerOpen = open;
   document.documentElement.classList.toggle("sidebar-open", open);
-  if (sbHamburgerEl) sbHamburgerEl.setAttribute("aria-expanded", String(open));
+  if (sbHamburgerEl) {
+    sbHamburgerEl.setAttribute("aria-expanded", String(open));
+    sbHamburgerEl.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+  }
 
   // Only the sidebar's own mobile drawer needs the topbar's nav/actions
   // taken out of the tab order while closed. When sidebar-nav mode isn't
