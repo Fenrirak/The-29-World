@@ -179,6 +179,7 @@ async function t29xBuild(classCode) {
     const r = co.priceRange || cls.priceRange || {};
     H(3, `${co.name} - ${money(co.price)}`);
     P(`Last move: ${chg === null ? "no previous price" : (chg >= 0 ? "+" : "") + chg.toFixed(2) + "%"} | Daily move range: ${r.min}% to ${r.max}% (${co.priceRange ? "this company's own" : "class default"}) | Chance up ${t29xChance(cls.marketUpChance).up}% / down ${t29xChance(cls.marketUpChance).down}%`, 1);
+    (co.splits || []).forEach(sp => P(`Share split ${sp.to}-for-${sp.from} on ${sp.dateKey || "an unknown date"}: price ${money(sp.priceBefore)} to ${money(sp.priceAfter)} (older prices below are already adjusted for it)`, 1));
     P("Price history, oldest to newest: " + (hist.length ? hist.map((p, n) => `${dates[n] ? dates[n] + " " : ""}${money(p)}`).join(", ") : "none"), 1);
     const holders = Object.entries(co.holders || {}).filter(([, n]) => n > 0);
     P("Shareholders: " + (holders.length ? holders.map(([u, n]) => `${ids.get(u) || u} x${n} = ${money(n * co.price)}`).join(", ") : "none"), 1);

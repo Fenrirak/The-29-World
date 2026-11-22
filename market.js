@@ -32,11 +32,25 @@ function applyCompanyMsg(id) {
   }, entry.expiresAt - Date.now());
 }
 
+// Share splits live in split.js. The page keeps working if that file didn't load.
+function splitTag(co) { return window.T29Split ? T29Split.tagHtml(co) : ""; }
+function splitHistory(co) { return window.T29Split ? T29Split.historyHtml(co, { me: CURRENT.username, teacher: IS_TEACHER }) : ""; }
+function splitRow(co) {
+  if (!window.T29Split) return "";
+  return `<div class="t29s-teacher-row">
+          <div>
+            <strong>${icon("split", 18)} Share split</strong>
+            <p class="muted-small">Change how many shares exist without changing what anyone's shares are worth.</p>
+          </div>
+          <button class="btn small secondary" onclick="T29Split.open('${co.id}')">Split shares&hellip;</button>
+        </div>`;
+}
+
 function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("chart", 26) + " Stock Market";
   document.getElementById("pageIntro").textContent = IS_TEACHER
-    ? "Open companies for your class to invest in, move prices with a simulated market day, and set how far the daily price swings can go."
+    ? "Open companies for your class to invest in, move prices with a simulated market day, split a company's shares, and set how far the daily price swings can go."
     : "Buy and sell shares in companies your teacher has opened for the class.";
   document.getElementById("hOpen").innerHTML = "Open a new company";
   document.getElementById("labName").innerHTML = "Company name";
@@ -184,7 +198,7 @@ function startAutoRefresh() {
   });
 }
 
-function sparkline(history) {
+function sparkline(history, splits) {
   const w = 140, h = 40;
   const max = Math.max(...history), min = Math.min(...history);
   const range = (max - min) || 1;
@@ -198,7 +212,8 @@ function sparkline(history) {
     const up = p.y <= prev.y; // y is inverted (smaller y = higher price)
     return `<line x1="${prev.x.toFixed(1)}" y1="${prev.y.toFixed(1)}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${up ? '#3fbf8f' : '#e8735f'}" stroke-width="2.5" stroke-linecap="round"/>`;
   }).join("");
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${segments}</svg>`;
+  const marks = window.T29Split ? T29Split.marksSvg(history.length, splits, w, h) : "";
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${segments}${marks}</svg>`;
 }
 
 async function render(background = false) {
@@ -270,14 +285,15 @@ async function render(background = false) {
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${escapeHtml(co.name)}</h4>
+          <h4>${escapeHtml(co.name)}${splitTag(co)}</h4>
           <div class="${change > 0 ? 'ticker-up' : change < 0 ? 'ticker-down' : ''}">${fmtMoney(co.price)} ${hist.length > 1 ? `<span class="muted-small">(${change > 0 ? '+' : ''}${changePct}% today)</span>` : ""}</div>
           ${!IS_TEACHER && cls.showShareMove ? shareMoveHtml(co, cls) : ""}
         </div>
-        ${sparkline(co.history)}
+        ${sparkline(co.history, co.splits)}
       </div>
       <div class="progress-bar"><div style="width:${pctSold}%"></div></div>
       <p class="muted-small">${co.availableShares} of ${co.totalShares} shares still available &middot; You own ${myShares} share${myShares === 1 ? "" : "s"}</p>
+      ${splitHistory(co)}
 
       ${IS_TEACHER ? `
         <div class="grid grid-2" style="margin-top:10px;">
@@ -306,6 +322,7 @@ async function render(background = false) {
             <button class="btn small secondary" style="width:100%;" onclick="setCoRange('${co.id}')">Save range</button>
           </div>
         </div>
+        ${splitRow(co)}
       ` : `
         <div class="grid grid-2" style="margin-top:10px;">
           <div>
@@ -332,6 +349,8 @@ async function render(background = false) {
     }
     applyCompanyMsg(co.id);
   });
+  // A student who held shares through a split is told once, with a before-and-after (see split.js).
+  if (!IS_TEACHER && window.T29Split) T29Split.celebrate(cls, CURRENT);
   } catch (err) {
     console.error("Stock Market render failed:", err);
     const list = document.getElementById("companyList");

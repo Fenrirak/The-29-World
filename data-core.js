@@ -1692,6 +1692,7 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
     c.availableShares = c.totalShares;
     c.holders = {};
     c.costBasis = {};
+    c.splits = []; // a new term starts with a clean share-split history
     c.history = [startPrice];
     c.historyDates = [nzDateKey()];
     return c;

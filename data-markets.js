@@ -97,6 +97,7 @@ async function updateCompanyPrice(classCode, companyId, newPrice) {
     (co.historyDates = co.historyDates || []).push(nzDateKey());
     if (co.history.length > 30) co.history.shift();
     if (co.historyDates.length > 30) co.historyDates.shift();
+    t29AgeSplitMarkers(co);
     t.update(classRef, { companies: cls.companies });
     changed = { name: co.name, prev, price: co.price, holders: Object.assign({}, co.holders || {}) };
   });
@@ -163,6 +164,7 @@ function applyMarketDayMoves(cls) {
     (co.historyDates = co.historyDates || []).push(nzDateKey());
     if (co.history.length > 30) co.history.shift();
     if (co.historyDates.length > 30) co.historyDates.shift();
+    t29AgeSplitMarkers(co);
     results.push({ name: co.name, pct: direction * pct });
   });
   return results;
@@ -527,6 +529,217 @@ async function resetStockSnapshot(username, classCode) {
     return { ok: false, error: "Something went wrong. Please try again. (" + (e.code || e.message || "unknown") + ")" };
   }
   return { ok: true, companies, shares: shareCount, value: Math.round(value * 100) / 100 };
+}
+
+/* ===================== Share splits =====================
+   The teacher can SPLIT a company's shares (2-for-1, 3-for-1 ...) or COMBINE them (a "reverse split",
+   1-for-2, 1-for-5 ...). A split changes how many shares exist and what each one costs, never what
+   anyone's holding is worth:
+     - every holder's shares are multiplied (split) or divided (reverse split) by the ratio;
+     - the share price goes the other way, and the saved price history is rescaled with it so charts
+       and "today's move" don't show a fake crash or jump;
+     - the money each student paid (cost basis) stays exactly the same, spread over the new share count,
+       so gains and losses are untouched;
+     - a reverse split can leave a student a fraction of a share. That part-share is paid out in cash at
+       the new price (the same "cash in lieu" real companies use) and logged as a share sale.
+   Everything is saved on the company: co.splits = [{ id, ts, dateKey, to, from, priceBefore, priceAfter,
+   ago, moves }]. "to-for-from" reads like "2-for-1": for every `from` shares held, a holder ends up with
+   `to`. `ago` counts the price points recorded since, so the chart can draw the marker in the right place
+   (see t29AgeSplitMarkers). `moves` ({ username: [before, after, cash] }) is kept for the latest few
+   splits only, so the class document stays small. No new rules are needed: a split only edits an existing
+   company in place, the same as a trade. */
+const T29_SPLIT_MAX_FACTOR = 100;          // biggest number allowed on either side of a ratio
+const T29_SPLIT_MAX_SHARES = 1000000000;   // most shares one company may have after a split
+const T29_SPLIT_KEEP = 10;                 // splits remembered per company
+const T29_SPLIT_KEEP_MOVES = 3;            // splits that also remember who held what
+
+function t29SplitGcd(a, b) { while (b) { const r = a % b; a = b; b = r; } return a; }
+function t29SplitRound(n, dp) { const m = Math.pow(10, dp); return Math.round(n * m) / m; }
+function t29SplitLabel(to, from) { return `${to}-for-${from}`; }
+
+// Moves every split marker one price point further back along the chart. Called whenever a new price
+// point is recorded, so the marker stays on the point where the split happened.
+function t29AgeSplitMarkers(co) {
+  if (Array.isArray(co.splits)) co.splits.forEach(s => { s.ago = (Number(s.ago) || 0) + 1; });
+}
+
+// Works out exactly what a split would do to one company and changes nothing, so the teacher's preview
+// and the real transaction always agree. to-for-from: every `from` shares held become `to` shares.
+function t29PlanShareSplit(co, toIn, fromIn) {
+  let to = Number(toIn), from = Number(fromIn);
+  const okFactor = n => Number.isInteger(n) && n >= 1 && n <= T29_SPLIT_MAX_FACTOR;
+  if (!okFactor(to) || !okFactor(from)) return { ok: false, error: `Use whole numbers from 1 to ${T29_SPLIT_MAX_FACTOR} for the split.` };
+  const g = t29SplitGcd(to, from);
+  to /= g; from /= g; // 4-for-2 is just 2-for-1
+  if (to === from) return { ok: false, error: "Pick two different numbers: a split has to change the number of shares." };
+  if (!co) return { ok: false, error: "That company isn't listed any more." };
+  const price = Number(co.price);
+  if (!Number.isFinite(price) || price <= 0) return { ok: false, error: "This company's price is invalid. Set a new price first." };
+  const label = t29SplitLabel(to, from);
+  const newPrice = t29SplitRound((price * from) / to, 6);
+  if (newPrice < 0.01) return { ok: false, error: `A ${label} split would take the share price below 1 cent. Pick a smaller split.` };
+
+  const holdersIn = co.holders || {};
+  const rows = [];
+  let sumBefore = 0, sumAfter = 0, cashTotal = 0;
+  for (const u of Object.keys(holdersIn)) {
+    const h = holdersIn[u];
+    if (!(h > 0)) continue;
+    if (!Number.isSafeInteger(h) || !Number.isSafeInteger(h * to)) return { ok: false, error: "A share count in this company is too large or isn't a whole number, so it can't be split." };
+    const scaled = h * to;
+    const rem = scaled % from;                 // left over, in 1/from of a new share (always 0 for a normal split)
+    const after = (scaled - rem) / from;       // whole new shares
+    const cash = rem > 0 ? Math.round(((rem * price) / to) * 100) / 100 : 0; // value of the part-share, at the new price
+    let basis = null, costOut = null;
+    const raw = co.costBasis && co.costBasis[u];
+    if (raw && typeof raw === "object") {
+      const bs = Number.isFinite(raw.shares) ? raw.shares : 0;
+      const tc = Number.isFinite(raw.totalCost) ? raw.totalCost : 0;
+      const tb = Number.isFinite(raw.totalBought) ? raw.totalBought : 0;
+      const removed = rem > 0 ? Math.round(tc * (rem / scaled) * 100) / 100 : 0; // cost that left with the part-share
+      basis = {
+        shares: t29SplitRound(from === 1 ? bs * to : (bs * after) / h, 6),
+        totalCost: rem > 0 ? Math.max(0, Math.round((tc - removed) * 100) / 100) : tc,
+        totalBought: tb
+      };
+      if (Number.isFinite(raw.resetAt)) basis.resetAt = raw.resetAt; // keep the "snapshot was reset at" marker
+      costOut = bs > 0 ? removed : null;
+    }
+    sumBefore += h; sumAfter += after; cashTotal += cash;
+    rows.push({
+      username: u, before: h, after, rem, cash, basis,
+      costBasisSold: cash > 0 ? (costOut != null ? costOut : cash) : 0,
+      valueBefore: Math.round(h * price * 100) / 100,
+      valueAfter: Math.round((after * newPrice + cash) * 100) / 100
+    });
+  }
+  const avail = Math.max(0, Math.floor(Number(co.availableShares) || 0));
+  if (!Number.isSafeInteger(avail * to)) return { ok: false, error: "This company has too many shares for that split." };
+  const availAfter = (avail * to - ((avail * to) % from)) / from;
+  const totalAfter = availAfter + sumAfter;
+  if (totalAfter < 1) return { ok: false, error: "That split would leave the company with no shares." };
+  if (totalAfter > T29_SPLIT_MAX_SHARES) return { ok: false, error: `That split would give the company more than ${T29_SPLIT_MAX_SHARES.toLocaleString("en-NZ")} shares. Pick a smaller split.` };
+  return {
+    ok: true, to, from, label, forward: to > from,
+    priceBefore: price, priceAfter: newPrice,
+    totalBefore: Number(co.totalShares) || avail + sumBefore, totalAfter,
+    availBefore: avail, availAfter,
+    holders: rows, cashTotal: Math.round(cashTotal * 100) / 100,
+    valueBefore: Math.round(sumBefore * price * 100) / 100,
+    valueAfter: Math.round((sumAfter * newPrice + cashTotal) * 100) / 100
+  };
+}
+
+// Teacher: split (to > from) or combine (to < from) one company's shares. `expectedPrice` (optional) is the
+// price the teacher was looking at: if it has changed since, nothing happens and the page can refresh.
+async function splitCompany(classCode, companyId, to, from, expectedPrice) {
+  const classRef = classesCol().doc(classCode);
+  let done = null;
+  try {
+    await fdb.runTransaction(async (t) => {
+      done = null; // reset every attempt: this callback can be retried
+      const snap = await t.get(classRef);
+      if (!snap.exists) throw new Error("NO_CLASS");
+      const cls = snap.data();
+      const co = (cls.companies || []).find(c => c.id === companyId);
+      if (!co) throw new Error("NO_COMPANY");
+      const plan = t29PlanShareSplit(co, to, from);
+      if (!plan.ok) { const err = new Error("BAD_PLAN"); err.userMessage = plan.error; throw err; }
+      if (expectedPrice !== undefined && expectedPrice !== null && Math.abs(Number(expectedPrice) - plan.priceBefore) > 1e-9) throw new Error("STALE");
+      // Firestore wants every read before any write: look up the students who are owed cash first.
+      const payees = plan.holders.filter(r => r.cash > 0);
+      const refs = payees.map(r => usersCol().doc(r.username));
+      const snaps = await Promise.all(refs.map(ref => t.get(ref)));
+      const paid = {};
+      payees.forEach((r, i) => {
+        if (!snaps[i].exists) return; // a deleted student can't be paid: their part-share simply goes
+        paid[r.username] = true;
+        t.update(refs[i], { balance: Math.round(((Number(snaps[i].data().balance) || 0) + r.cash) * 100) / 100 });
+      });
+      const ratio = plan.from / plan.to;
+      co.history = (co.history || []).map(p => (Number.isFinite(p) ? t29SplitRound(p * ratio, 6) : p));
+      co.price = plan.priceAfter;
+      co.totalShares = plan.totalAfter;
+      co.availableShares = plan.availAfter;
+      co.holders = {};
+      co.costBasis = co.costBasis || {};
+      const moves = {};
+      plan.holders.forEach(r => {
+        if (r.after > 0) co.holders[r.username] = r.after;
+        if (r.basis) co.costBasis[r.username] = r.basis;
+        moves[r.username] = [r.before, r.after, paid[r.username] ? r.cash : 0];
+      });
+      const stamp = (typeof trustedNow === "function" ? trustedNow().getTime() : Date.now());
+      const splits = Array.isArray(co.splits) ? co.splits : [];
+      splits.push({
+        id: uid("sp"), ts: stamp, dateKey: nzDateKey(), to: plan.to, from: plan.from,
+        priceBefore: plan.priceBefore, priceAfter: plan.priceAfter, ago: 0, moves
+      });
+      if (splits.length > T29_SPLIT_KEEP) splits.splice(0, splits.length - T29_SPLIT_KEEP);
+      splits.forEach((s, i) => { if (i < splits.length - T29_SPLIT_KEEP_MOVES) delete s.moves; });
+      co.splits = splits;
+      t.update(classRef, { companies: cls.companies });
+      done = { plan, paid, name: co.name, companyId: co.id, students: (cls.students || []).slice(), splitId: splits[splits.length - 1].id };
+    });
+  } catch (e) {
+    if (e.message === "NO_CLASS") return { ok: false, error: "Class not found." };
+    if (e.message === "NO_COMPANY") return { ok: false, error: "That company isn't listed any more. Refresh the page.", stale: true };
+    if (e.message === "BAD_PLAN") return { ok: false, error: e.userMessage || "That split can't be done." };
+    if (e.message === "STALE") return { ok: false, error: "The share price changed while you were looking. Check the new numbers and try again.", stale: true };
+    console.error("splitCompany failed:", e);
+    return { ok: false, error: "Something went wrong, so the split may not have saved. Check the company before trying again. (" + (e.code || e.message || "unknown") + ")" };
+  }
+  // The split is saved by now. Anything that goes wrong below must NOT make this look like a failure,
+  // or a teacher would retry and split twice. Alerts and the activity log are best-effort.
+  try { await t29NotifySplit(classCode, done); } catch (e) { console.warn("Split alerts failed:", e); }
+  for (const r of done.plan.holders) {
+    if (!(r.cash > 0) || !done.paid[r.username]) continue;
+    try {
+      await logTxn(classCode, {
+        type: "stock-sell", to: r.username, amount: r.cash,
+        note: `${done.name} ${done.plan.label} reverse split: part-share paid out in cash`,
+        companyId: done.companyId, shares: t29SplitRound(r.rem / done.plan.from, 4), pricePerShare: done.plan.priceAfter,
+        costBasisSold: r.costBasisSold, realizedGain: Math.round((r.cash - r.costBasisSold) * 100) / 100
+      });
+    } catch (e) { console.warn("Couldn't log a part-share payout:", e); }
+  }
+  return {
+    ok: true, label: done.plan.label, forward: done.plan.forward, splitId: done.splitId,
+    priceBefore: done.plan.priceBefore, priceAfter: done.plan.priceAfter,
+    totalAfter: done.plan.totalAfter, holders: done.plan.holders.length,
+    cashTotal: Math.round(done.plan.holders.reduce((s, r) => s + (done.paid[r.username] ? r.cash : 0), 0) * 100) / 100
+  };
+}
+
+// Tells every student what happened: shareholders get their own before-and-after, everyone else a short heads-up.
+async function t29NotifySplit(classCode, d) {
+  const p = d.plan, word = p.forward ? "split" : "reverse split";
+  const plural = n => (n === 1 ? "share" : "shares");
+  const notices = p.holders.map(r => {
+    const paid = d.paid[r.username] ? r.cash : 0;
+    const cashLine = paid > 0 ? ` A leftover part-share was paid out in cash: ${fmtMoney(paid)} was added to your balance.` : "";
+    return {
+      to: r.username, icon: "chart", tone: "gold",
+      title: r.after > 0 ? `${d.name} ${word} ${p.label}: you now hold ${r.after} ${plural(r.after)}` : `${d.name} ${word} ${p.label}: your shares were paid out`,
+      body: r.after > 0
+        ? `You had ${r.before} ${plural(r.before)}. Each share is now ${fmtMoney(p.priceAfter)} (was ${fmtMoney(p.priceBefore)}), so your holding is still worth about ${fmtMoney(r.valueAfter)}.${cashLine}`
+        : `You had ${r.before} ${plural(r.before)}, too few to make a whole new share, so you were paid ${fmtMoney(paid)} in cash instead.`,
+      href: "market.html"
+    };
+  });
+  const holderSet = new Set(p.holders.map(r => r.username));
+  const others = d.students.filter(u => !holderSet.has(u));
+  if (others.length) {
+    notices.push({
+      to: others, icon: "chart", tone: "navy",
+      title: `${d.name} ${word} ${p.label}: each share is now ${fmtMoney(p.priceAfter)}`,
+      body: p.forward
+        ? `Shareholders got more shares, each worth less, so the company is worth the same. The price was ${fmtMoney(p.priceBefore)}.`
+        : `Shareholders now have fewer shares, each worth more, so the company is worth the same. The price was ${fmtMoney(p.priceBefore)}.`,
+      href: "market.html"
+    });
+  }
+  await t29NotifyStudents(classCode, notices);
 }
 
 /* ===================== Peer-to-peer marketplace =====================
