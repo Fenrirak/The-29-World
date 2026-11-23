@@ -258,6 +258,33 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div id="myJobBox"></div>
     </div>
 
+    <div class="grid grid-2">
+      <section class="card">
+        <h2>CV builder</h2>
+        <form id="careerCv" onsubmit="saveCareerCv(event)">
+          <p class="muted-small">Write a practice CV. Use classroom examples and leave out contact details.</p>
+          <label for="careerSummary">Personal statement</label>
+          <textarea id="careerSummary" name="summary" rows="2" maxlength="400" placeholder="What would you bring to a workplace?"></textarea>
+          <label for="careerSkills">Skills</label>
+          <textarea id="careerSkills" name="skills" rows="2" maxlength="500" placeholder="List skills and give an example of each."></textarea>
+          <label for="careerExperience">Experience</label>
+          <textarea id="careerExperience" name="experience" rows="2" maxlength="700" placeholder="Include school projects, activities or classroom jobs."></textarea>
+          <label for="careerEducation">Education and training</label>
+          <textarea id="careerEducation" name="education" rows="2" maxlength="500" placeholder="Include relevant subjects, courses or certificates."></textarea>
+          <div class="row-flex" style="gap:8px;flex-wrap:wrap;margin-top:12px;">
+            <button class="btn gold" type="submit" disabled>Save CV</button>
+            <button class="btn secondary" type="button" onclick="downloadCareerCv()">Download CV</button>
+          </div>
+          <p id="careerCvMsg" role="status"></p>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Daily career check-in</h2>
+        <form id="careerCheckIn" onsubmit="submitCareerCheckIn(event)"></form>
+        <p id="careerCheckInMsg" role="status"></p>
+      </section>
+    </div>
+
     <div class="card hidden" id="jobLogCard">
       <h2 id="hJobLog">Job log</h2>
       <div id="jobLogBox"></div>
@@ -276,11 +303,19 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     </div>
 
     <div class="card">
-      <h2>Job board</h2>
+      <h2>Careers market</h2>
       <p class="muted-small">Each job has a progression of tiers. You start at the bottom and work your way up.</p>
       <div id="jobBoardGrid" class="job-board-grid" style="margin-top:16px;"></div>
       <p class="muted-small hidden" id="noJobs">Your teacher hasn't posted any jobs yet.</p>
     </div>
+
+    <section class="card">
+      <h2>Training and student loans</h2>
+      <p>Use a classroom student loan to pay for training. The debt stays with you when you change jobs.</p>
+      <div id="careerLoanBalance"></div>
+      <div id="careerCourses" class="grid grid-3"></div>
+      <p id="careerLoanMsg" role="status"></p>
+    </section>
 
     <div class="card">
       <h2>My applications</h2>
@@ -367,7 +402,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="settings-menu.js?v=87649e37"></script>
 <script defer src="shortcuts.js?v=8ce32ffe"></script>
 <script defer src="offline.js?v=a51010b5"></script>
-<script defer src="data-core.js?v=22452053"></script>
+<script defer src="data-core.js?v=7d494ebe"></script>
 <script defer src="data-money.js?v=452cbe61"></script>
 <script defer src="data-life.js?v=d50f031d"></script>
 <script defer src="data-property.js?v=d3163b64"></script>
@@ -377,7 +412,8 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=e731e566"></script>
 <script defer src="notifications.js?v=def2a521"></script>
-<script defer src="jobs.js?v=bb97fbaa"></script>
+<script defer src="careers.js?v=2de9be9c"></script>
+<script defer src="jobs.js?v=704b0e34"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
 </body>
 </html>

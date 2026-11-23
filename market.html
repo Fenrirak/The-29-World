@@ -34,7 +34,7 @@
 <meta name="theme-color" content="#1f2b44">
 <link rel="stylesheet" href="style.css?v=91f8426d">
 <link rel="stylesheet" href="split.css?v=40125d17">
-<link rel="stylesheet" href="real-stocks.css?v=7d8b7293">
+<link rel="stylesheet" href="real-stocks.css?v=e31a20e9">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -134,11 +134,22 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <label class="cc-switch"><input id="realSwitch" type="checkbox" aria-label="Enable real-world stocks and funds" aria-controls="realPicker" onchange="toggleRealStocks()"><span class="cc-switch-track"></span><span id="realSwitchText">Off</span></label>
       </div>
       <div id="realPicker" hidden>
-        <label for="realSymbol">Choose a company or fund</label>
-        <select id="realSymbol" onchange="previewRealStock()"><option value="">Select a listing…</option></select>
-        <p class="muted-small" id="realFundNote" hidden></p>
-        <div id="realPreview" aria-live="polite"></div>
-        <button type="button" class="btn gold" id="listReal" onclick="listRealStock()" disabled>Add to class market</button>
+        <button type="button" class="btn gold" onclick="openRealPicker()">Choose stocks and funds</button>
+        <dialog id="realDialog" class="real-dialog" aria-labelledby="realDialogTitle" oncancel="if (realBusy) event.preventDefault()">
+          <div class="flex-between real-dialog-header">
+            <h2 id="realDialogTitle">Choose stocks and funds</h2>
+            <button class="btn small secondary" type="button" onclick="document.getElementById('realDialog').close()" id="closeReal">Close</button>
+          </div>
+          <label for="realSearch">Search by name or symbol</label>
+          <input id="realSearch" type="search" oninput="filterRealPicker()" autofocus>
+          <div id="realChoices" onchange="updateRealSelection()"></div>
+          <p id="realEmpty" class="muted-small" hidden>No listings match your search.</p>
+          <div class="real-dialog-footer">
+            <p id="realSelection" class="muted-small" role="status"></p>
+            <button type="button" class="btn gold" id="listReal" onclick="listRealStock()" disabled>Add selected listings</button>
+            <p id="realDialogMsg" role="status"></p>
+          </div>
+        </dialog>
         <p class="muted-small">One classroom dollar buys one dollar of stock in the listing currency. Turning this setting off pauses updates and keeps existing holdings.</p>
       </div>
       <div id="realMsg" role="status"></div>
@@ -215,7 +226,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="settings-menu.js?v=87649e37"></script>
 <script defer src="shortcuts.js?v=8ce32ffe"></script>
 <script defer src="offline.js?v=a51010b5"></script>
-<script defer src="data-core.js?v=22452053"></script>
+<script defer src="data-core.js?v=7d494ebe"></script>
 <script defer src="data-money.js?v=452cbe61"></script>
 <script defer src="data-life.js?v=d50f031d"></script>
 <script defer src="data-property.js?v=d3163b64"></script>
@@ -224,7 +235,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=def2a521"></script>
 <script defer src="split.js?v=1fda302d"></script>
-<script defer src="real-stocks.js?v=db1ebbda"></script>
-<script defer src="market.js?v=83f54dc4"></script>
+<script defer src="real-stocks.js?v=07fe0d70"></script>
+<script defer src="market.js?v=c5ec9a83"></script>
 </body>
 </html>

@@ -2,7 +2,6 @@
   margin: 22px 0;
   padding: clamp(16px, 3vw, 24px);
   border: 1px solid var(--line);
-  border-inline-start: 4px solid var(--gold);
   border-radius: 14px;
   background: var(--surface, transparent);
 }
@@ -10,14 +9,22 @@
 .real-market .set-row { align-items: center; gap: 16px; }
 .real-market .cc-switch { flex-shrink: 0; }
 #realPicker { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 16px; }
-#realSymbol { width: 100%; max-width: 34rem; }
-#realPreview { margin-top: 10px; }
-.real-figures { display: flex; flex-wrap: wrap; gap: 12px 36px; margin: 16px 0 6px; }
-.real-figures dt { font-size: .83rem; }
-.real-figures dd { margin: 2px 0 0; font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.real-dialog { width: min(100% - 24px, 42rem); max-height: calc(100dvh - 24px); padding: clamp(14px, 3vw, 24px); border: 1px solid var(--line); border-radius: var(--r-4); background: var(--card); color: var(--ink); }
+.real-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.real-dialog-header { flex-wrap: wrap; gap: 8px; }
+.real-dialog-footer { position: sticky; bottom: -24px; background: var(--card); padding: 8px 0 12px; }
+#realChoices { margin-top: 12px; }
+#realChoices h3 { font-size: 1rem; margin: 14px 0 5px; }
+.real-choice { display: flex; align-items: start; gap: 10px; padding: 10px; margin: 4px 0; border: 1px solid var(--line); border-radius: var(--r-2); }
+.real-choice[hidden] { display: none; }
+.real-choice:has(input:checked) { border-color: var(--gold-dark); }
+.real-choice input { flex: 0 0 18px; width: 18px; height: 18px; padding: 0; margin: 2px 0 0; min-height: 0; }
+.real-choice span { display: block; }
+#realDialogMsg:empty { display: none; }
 .real-quote-note { margin: 3px 0 10px; }
 .real-market .btn:disabled { opacity: .6; cursor: default; }
 .company-card:has(.real-quote-note) .flex-between { flex-wrap: wrap; gap: 8px; }
+.company-card .stock-graph { flex: 0 0 140px; }
 @media (max-width: 520px) {
   .real-market .set-row { flex-wrap: wrap; }
   #listReal { width: 100%; }

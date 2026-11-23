@@ -1,61 +1,41 @@
 let CURRENT, CLASS_CODE, IS_TEACHER;
-let realEnabled = false, realBusy = false, realPreviewQuote = null, realRequest = 0;
-const realDate = key => new Intl.DateTimeFormat("en-NZ", {
+let realEnabled = false, realBusy = false, realRequest = 0;
+let realListings = [];
+const realEl = id => document.getElementById(id);
+const realDate = key => realDateKeyValid(key) ? new Intl.DateTimeFormat("en-NZ", {
   day: "numeric", month: "short", year: "numeric", timeZone: "UTC"
-}).format(new Date(key + "T12:00:00Z"));
+}).format(new Date(key + "T12:00:00Z")) : "Date unavailable";
 const quotePrice = value => "$" + value.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 const closeLabel = date => Date.parse(nzDateKey()) - Date.parse(date) > 7 * 86400000 ? "Last available close" : "Market close";
 function fundSummary(fund) {
   return fund.exposure + " Annual fund fee " + fund.annualFee + ".";
 }
 
+function realAlreadyListed(companies, spec) {
+  return companies.some(co => co.realSymbol === spec.symbol || co.name?.toLowerCase() === spec.name.toLowerCase());
+}
+
 function renderRealPicker(cls) {
-  const select = document.getElementById("realSymbol");
-  if (select.options.length === 1) {
-    for (const [label, listings] of [
-      ["NZX funds · NZD", REAL_STOCKS.filter(s => s.exchange === "NZX" && s.kind === "etf")],
-      ["NZX companies · NZD", REAL_STOCKS.filter(s => s.exchange === "NZX" && s.kind !== "etf")],
-      ["US funds · USD", REAL_STOCKS.filter(s => s.exchange === "NYSE Arca")],
-      ["US companies · USD", REAL_STOCKS.filter(s => s.exchange === "Nasdaq")]
-    ]) {
-      const group = document.createElement("optgroup");
-      group.label = label;
-      for (const s of listings) {
-        group.appendChild(new Option(s.name + " (" + s.symbol + ")", s.symbol));
-      }
-      select.appendChild(group);
-    }
-  }
-  const listedNames = new Set(cls.companies.map(co => co.name.toLowerCase()));
-  for (const s of REAL_STOCKS) {
-    select.querySelector('option[value="' + s.symbol + '"]').disabled = listedNames.has(s.name.toLowerCase());
-  }
+  realListings = cls.companies || [];
   realEnabled = cls.realStocksEnabled === true;
-  const toggle = document.getElementById("realSwitch");
-  if (!realBusy) toggle.checked = realEnabled;
-  toggle.disabled = realBusy;
-  document.getElementById("realSwitchText").textContent = realEnabled ? "On" : "Off";
-  document.getElementById("realPicker").hidden = !realEnabled;
-  if (!realEnabled || select.selectedOptions[0]?.disabled) {
-    select.value = "";
-    realPreviewQuote = null;
-    realRequest++;
-    document.getElementById("realPreview").replaceChildren();
-    document.getElementById("realFundNote").hidden = true;
-  }
-  document.getElementById("listReal").disabled = realBusy || !realEnabled || !realPreviewQuote;
+  if (!realBusy) realEl("realSwitch").checked = realEnabled;
+  realEl("realSwitch").disabled = realBusy;
+  realEl("realSwitchText").textContent = realEnabled ? "On" : "Off";
+  realEl("realPicker").hidden = !realEnabled;
+  if (!realEnabled && realEl("realDialog").open && !realBusy) realEl("realDialog").close();
+  if (realEl("realDialog").open) updateRealSelection();
 }
 
 async function toggleRealStocks() {
   if (!IS_TEACHER || realBusy) return;
-  const toggle = document.getElementById("realSwitch");
-  const msg = document.getElementById("realMsg");
+  const toggle = realEl("realSwitch");
+  const msg = realEl("realMsg");
   realBusy = toggle.disabled = true;
   try {
     await classesCol().doc(CLASS_CODE).update({realStocksEnabled: toggle.checked});
     msg.textContent = "";
-  } catch {
-    msg.textContent = "Couldn't save this setting. Check your connection and try again.";
+  } catch (err) {
+    msg.textContent = realWriteError(err, "save this setting");
     toggle.checked = realEnabled;
   } finally {
     realBusy = toggle.disabled = false;
@@ -63,66 +43,141 @@ async function toggleRealStocks() {
   }
 }
 
-async function previewRealStock() {
+let realQuotes = new Map();
+function realWriteError(err, action) {
+  if (err.code === "permission-denied") return "Couldn't " + action + ". Check that the latest Firestore rules are deployed.";
+  if (err.code === "aborted" || err.code === "failed-precondition") return "The market changed while saving. Refresh the listings and try again.";
+  return err.code && err.code !== "quote-changed" ? "Couldn't " + action + ". Try again." : err.message;
+}
+
+async function openRealPicker(refreshAfterChange = false) {
+  if (!IS_TEACHER || !realEnabled || (realBusy && !refreshAfterChange)) return;
   const request = ++realRequest;
-  const symbol = document.getElementById("realSymbol").value;
-  const spec = REAL_STOCKS.find(s => s.symbol === symbol);
-  const isFund = spec?.kind === "etf";
-  const note = document.getElementById("realFundNote");
-  note.hidden = !isFund;
-  note.textContent = isFund ? fundSummary(spec) : "";
-  const preview = document.getElementById("realPreview");
-  realPreviewQuote = null;
-  document.getElementById("listReal").disabled = true;
-  document.getElementById("realMsg").textContent = "";
-  preview.textContent = spec ? "Checking the latest close…" : "";
-  if (!spec || !realEnabled) return;
-  try {
-    const snap = await fdb.collection("marketQuotes").doc(symbol).get();
-    if (request !== realRequest) return;
-    const q = snap.exists && snap.data();
-    if (!validRealQuote(q) || q.symbol !== symbol) {
-      preview.textContent = "Waiting for a verified price and " + (isFund ? "unit" : "share") + " count for this listing.";
-      return;
-    }
-    preview.innerHTML = `<dl class="real-figures"><div><dt>Closing price · ${spec.currency}</dt><dd>${quotePrice(q.price)}</dd></div><div><dt>Reported ${isFund ? "units" : "shares"}</dt><dd>${(q.reportedUnits ?? q.totalShares).toLocaleString("en-NZ", {maximumFractionDigits:6})}</dd></div></dl><p class="muted-small">${closeLabel(q.date)} ${realDate(q.date)} · ${isFund ? "Unit" : "Share"} count as of ${realDate(q.sharesDate)}</p>`;
-    realPreviewQuote = q;
-    document.getElementById("listReal").disabled = realBusy;
-  } catch {
-    if (request === realRequest) preview.textContent = "Couldn't load the quote. Select the listing again to retry.";
+  const dialog = realEl("realDialog");
+  const checked = refreshAfterChange ? new Set([...realEl("realChoices").querySelectorAll("input:checked")].map(input => input.value)) : new Set();
+  if (!dialog.open) {
+    realEl("realSearch").value = "";
+    dialog.showModal();
   }
+  realQuotes = new Map();
+  realEl("realDialogMsg").textContent = "Checking closing prices…";
+  const groups = [
+    ["NZX", false, "NZX companies · NZD"], ["NZX", true, "NZX funds · NZD"],
+    ["Nasdaq", false, "US companies · USD"], ["NYSE Arca", true, "US funds · USD"]
+  ];
+  realEl("realChoices").innerHTML = groups.map(([exchange, fund, title]) => `
+    <section><h3>${title}</h3>${REAL_STOCKS.filter(s => s.exchange === exchange && (s.kind === "etf") === fund).map(s => `
+      <label class="real-choice"><input type="checkbox" value="${s.symbol}" disabled>
+        <span><strong>${s.name} (${s.symbol})</strong>
+          ${fund ? `<span class="muted-small">${fundSummary(s)}</span>` : ""}
+          <span class="muted-small" id="realQuote-${s.symbol}">Checking closing price…</span>
+        </span>
+      </label>`).join("")}</section>`).join("");
+  filterRealPicker();
+  updateRealSelection();
+  const results = await Promise.allSettled(REAL_STOCKS.map(s => fdb.collection("marketQuotes").doc(s.symbol).get()));
+  if (request !== realRequest || !dialog.open) return;
+  for (const [i, spec] of REAL_STOCKS.entries()) {
+    const result = results[i];
+    const q = result.status === "fulfilled" && result.value.exists && result.value.data();
+    const note = realEl("realQuote-" + spec.symbol);
+    delete note.dataset.listed;
+    if (validRealQuote(q) && q.symbol === spec.symbol) {
+      realQuotes.set(spec.symbol, q);
+      if (checked.has(spec.symbol)) note.closest("label").querySelector("input").checked = true;
+      note.textContent = quotePrice(q.price) + " " + spec.currency + " · " + closeLabel(q.date) + " " + realDate(q.date)
+        + " · " + (q.reportedUnits ?? q.totalShares).toLocaleString("en-NZ", {maximumFractionDigits: 6})
+        + (spec.kind === "etf" ? " units" : " shares") + " as of " + realDate(q.sharesDate);
+    } else {
+      note.textContent = result.status === "rejected" ? "Quote could not be loaded." : "Waiting for a verified price and share or unit count.";
+    }
+  }
+  const denied = results.some(r => r.status === "rejected" && r.reason?.code === "permission-denied");
+  realEl("realDialogMsg").textContent = denied
+    ? "Quote access was denied. Check that the latest Firestore rules are deployed."
+    : realQuotes.size ? "" : "No verified closing prices are available yet. Check the stock refresh workflow.";
+  updateRealSelection();
+}
+
+function filterRealPicker() {
+  const query = realEl("realSearch").value.trim().toLowerCase();
+  let matches = 0;
+  for (const group of realEl("realChoices").children) {
+    const choices = [...group.querySelectorAll(".real-choice")];
+    for (const choice of choices) {
+      choice.hidden = !choice.querySelector("strong").textContent.toLowerCase().includes(query);
+      if (!choice.hidden) matches++;
+    }
+    group.hidden = choices.every(choice => choice.hidden);
+  }
+  realEl("realEmpty").hidden = matches > 0;
+}
+
+function updateRealSelection() {
+  let count = 0;
+  for (const input of realEl("realChoices").querySelectorAll("input")) {
+    const spec = REAL_STOCKS.find(s => s.symbol === input.value);
+    const listed = realAlreadyListed(realListings, spec);
+    if (listed) input.checked = false;
+    const note = realEl("realQuote-" + spec.symbol);
+    if (listed && !note.dataset.listed) {
+      note.dataset.listed = "yes";
+      note.textContent = "Already listed · " + note.textContent;
+    } else if (!listed && note.dataset.listed) {
+      delete note.dataset.listed;
+      note.textContent = note.textContent.replace(/^Already listed · /, "");
+    }
+    input.disabled = realBusy || listed || !realQuotes.has(spec.symbol);
+    if (input.checked) count++;
+  }
+  realEl("realSelection").textContent = count ? count + " selected" : "Select the listings you want to add.";
+  realEl("listReal").disabled = realBusy || !realEnabled || count === 0;
+  realEl("closeReal").disabled = realBusy;
 }
 
 async function listRealStock() {
-  if (!IS_TEACHER || realBusy || !realEnabled || !realPreviewQuote) return;
-  const quote = realPreviewQuote;
-  const spec = REAL_STOCKS.find(s => s.symbol === quote.symbol);
-  const select = document.getElementById("realSymbol");
-  const msg = document.getElementById("realMsg");
-  realBusy = select.disabled = document.getElementById("listReal").disabled = document.getElementById("realSwitch").disabled = true;
+  if (!IS_TEACHER || !realEnabled || realBusy) return;
+  const selected = [...realEl("realChoices").querySelectorAll("input:checked")].map(input => {
+    const spec = REAL_STOCKS.find(s => s.symbol === input.value);
+    return {spec, quote: realQuotes.get(spec.symbol), id: uid("co")};
+  });
+  if (!selected.length) return;
+  const day = nzDateKey();
+  const msg = realEl("realDialogMsg");
+  realBusy = true;
+  updateRealSelection();
+  msg.textContent = "Adding listings…";
   try {
     const ref = classesCol().doc(CLASS_CODE);
-    const message = await fdb.runTransaction(async t => {
-      const cls = (await t.get(ref)).data();
-      const q = (await t.get(fdb.collection("marketQuotes").doc(spec.symbol))).data();
-      if (!cls?.realStocksEnabled || cls.archived) return "Real-world listings are paused for this class.";
-      if (!validRealQuote(q) || q.symbol !== spec.symbol || q.price !== quote.price || q.totalShares !== quote.totalShares) return "The quote changed. Review the latest figures and try again.";
-      if (cls.companies.some(c => c.realSymbol === spec.symbol || c.name.toLowerCase() === spec.name.toLowerCase())) return "Your class already has this listing.";
-      t.update(ref, {companies: [...cls.companies, {
-        id: uid("co"), name: spec.name, realSymbol: spec.symbol, price: q.price, quoteDate: q.date,
-        totalShares: q.totalShares, availableShares: q.totalShares, sharesDate: q.sharesDate,
-        ...(q.reportedUnits !== undefined ? {reportedUnits:q.reportedUnits} : {}),
-        holders: {}, history: [q.price], historyDates: [nzDateKey()], quoteSource: q.source || ""
-      }]});
-      return "";
+    const count = await fdb.runTransaction(async tx => {
+      const cls = (await tx.get(ref)).data();
+      if (!cls?.realStocksEnabled || cls.archived) throw new Error("Real-world listings are paused for this class.");
+      const companies = cls.companies || [];
+      const pending = selected.filter(({spec}) => !realAlreadyListed(companies, spec));
+      if (!pending.length) return 0;
+      const quotes = await Promise.all(pending.map(({spec}) => tx.get(fdb.collection("marketQuotes").doc(spec.symbol))));
+      const added = pending.map(({spec, quote, id}, i) => {
+        const q = quotes[i].data();
+        if (!validRealQuote(q) || q.symbol !== spec.symbol || ["price", "totalShares", "date", "sharesDate", "reportedUnits"].some(key => q[key] !== quote[key])) {
+          throw Object.assign(new Error(spec.symbol + " changed. Review the new figures before adding listings."), {code: "quote-changed"});
+        }
+        return {
+          id, name: spec.name, realSymbol: spec.symbol, price: q.price, quoteDate: q.date,
+          totalShares: q.totalShares, availableShares: q.totalShares, sharesDate: q.sharesDate,
+          ...(q.reportedUnits !== undefined ? {reportedUnits: q.reportedUnits} : {}),
+          holders: {}, history: [q.price], historyDates: [day], quoteSource: q.source || ""
+        };
+      });
+      tx.update(ref, {companies: [...companies, ...added]});
+      return added.length;
     });
-    if (!message) select.value = "";
-    await previewRealStock();
-    msg.textContent = message || spec.name + " is now listed.";
-  } catch {
-    msg.textContent = "Couldn't add this listing. Check your connection and try again.";
+    realEl("realDialog").close();
+    realEl("realMsg").textContent = count ? count + (count === 1 ? " listing added." : " listings added.") : "Those listings are already in your class market.";
+  } catch (err) {
+    if (err.code === "quote-changed") await openRealPicker(true);
+    msg.textContent = realWriteError(err, "add these listings");
   } finally {
-    realBusy = select.disabled = document.getElementById("realSwitch").disabled = false;
+    realBusy = false;
     await render();
   }
 }
@@ -330,8 +385,8 @@ function sparkline(history, splits) {
   const max = Math.max(...history), min = Math.min(...history);
   const range = (max - min) || 1;
   const pts = history.map((v, i) => {
-    const x = (i / (history.length - 1 || 1)) * w;
-    const y = h - ((v - min) / range) * h;
+    const x = history.length === 1 ? w / 2 : (i / (history.length - 1)) * w;
+    const y = max === min ? h / 2 : h - 3 - ((v - min) / range) * (h - 6);
     return { x, y };
   });
   const segments = pts.slice(1).map((p, i) => {
@@ -340,7 +395,8 @@ function sparkline(history, splits) {
     return `<line x1="${prev.x.toFixed(1)}" y1="${prev.y.toFixed(1)}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${up ? '#3fbf8f' : '#e8735f'}" stroke-width="2.5" stroke-linecap="round"/>`;
   }).join("");
   const marks = window.T29Split ? T29Split.marksSvg(history.length, splits, w, h) : "";
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${segments}${marks}</svg>`;
+  const point = pts.length === 1 ? `<circle cx="${pts[0].x}" cy="${pts[0].y}" r="3" fill="currentColor"/>` : "";
+  return `<svg class="stock-graph" role="img" aria-label="Price history, ${history.length} recorded ${history.length === 1 ? "price" : "prices"}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${segments}${point}${marks}</svg>`;
 }
 
 async function render(background = false) {
@@ -395,13 +451,14 @@ async function render(background = false) {
   }
 
   cls.companies.forEach(co => {
-    const totalHeld = Object.values(co.holders).reduce((a, b) => a + b, 0);
+    const holders = co.holders || {};
+    const totalHeld = Object.values(holders).reduce((a, b) => a + b, 0);
     const pctSold = Math.round((totalHeld / co.totalShares) * 100);
-    const myShares = co.holders[CURRENT.username] || 0;
+    const myShares = holders[CURRENT.username] || 0;
     // "Today" is the last two points in the history — NOT oldest vs newest of the whole
     // 30-day window, which blurred a month of moves into one number that was labelled "today"
     // (and often looked like nothing had moved). Same rule the Property page uses.
-    const hist = co.history && co.history.length ? co.history : [co.price];
+    const hist = co.history?.length ? co.history.slice(-30) : [co.price];
     const listing = REAL_STOCKS.find(s => s.symbol === co.realSymbol);
     const isFund = listing?.kind === "etf";
     const unitLabel = isFund ? "units" : "shares";
@@ -416,13 +473,13 @@ async function render(background = false) {
     div.innerHTML = `
       <div class="flex-between">
         <div>
-          <h4>${escapeHtml(co.name)}${splitTag(co)}</h4>
+          <h4>${escapeHtml(co.name)}${IS_TEACHER ? splitTag(co) : ""}</h4>
           ${isFund ? `<p class="muted-small real-quote-note">${fundSummary(listing)}</p>` : ""}
           ${listing ? `<p class="muted-small real-quote-note">${listing.exchange} · ${listing.symbol} · ${cls.realStocksEnabled ? closeLabel(co.quoteDate) : "Updates paused"} · ${realDate(co.quoteDate)}</p>` : ""}
           <div class="${change > 0 ? 'ticker-up' : change < 0 ? 'ticker-down' : ''}">${listing ? quotePrice(co.price) + " " + listing.currency : fmtMoney(co.price)} ${hist.length > 1 ? `<span class="muted-small">(${change > 0 ? '+' : ''}${changePct}% ${listing ? "since last recorded close" : "today"})</span>` : ""}</div>
           ${!listing && !IS_TEACHER && cls.showShareMove ? shareMoveHtml(co, cls) : ""}
         </div>
-        ${sparkline(co.history, co.splits)}
+        ${sparkline(hist, co.splits)}
       </div>
       <div class="progress-bar"><div style="width:${pctSold}%"></div></div>
       <p class="muted-small">${co.availableShares.toLocaleString("en-NZ")} of ${co.totalShares.toLocaleString("en-NZ")} ${unitLabel} available &middot; You own ${myShares.toLocaleString("en-NZ")}</p>

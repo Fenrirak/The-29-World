@@ -33,7 +33,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
 <link rel="stylesheet" href="style.css?v=91f8426d">
-<link rel="stylesheet" href="crisis.css?v=52ac97d9">
+<link rel="stylesheet" href="crisis.css?v=904b985c">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -287,29 +287,29 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
     <div class="card">
       <h2>Crisis events</h2>
       <p>Set a one-off shock to classroom prices. Choose a saved scenario or build one for your class.</p>
+      <div id="crisisSaved"></div>
       <form id="crisisForm" onsubmit="return false">
         <fieldset id="crisisControls">
-          <label for="crisisPreset">Saved scenario</label>
-          <select id="crisisPreset" onchange="chooseCrisis()"><option value="">New crisis</option></select>
           <div class="crisis-editor">
             <div>
               <label for="crisisName">Crisis name</label>
               <input id="crisisName" maxlength="80" required placeholder="e.g. Supply shortage">
               <label for="crisisSeverity">Average price movement <output id="crisisPct" for="crisisSeverity">10%</output></label>
-              <input id="crisisSeverity" type="range" min="1" max="50" step="1" value="10">
-              <p class="muted-small">Shares and property fall. Store and vehicle prices rise. Each listing can move by a different amount.</p>
+              <input id="crisisSeverity" type="range" min="1" max="100" step="1" value="10">
+              <p class="muted-small">Shares and property fall. Store and vehicle prices rise. The target averages the size of each price change across all affected listings.</p>
               <fieldset class="crisis-sectors"><legend>Affected markets</legend><div id="crisisSectors"></div></fieldset>
             </div>
             <div class="crisis-preview">
               <h3>Price preview</h3>
               <div id="crisisPreview"></div>
-              <p class="muted-small">Figures show average changes after rounding to cents. Vehicle running costs move with vehicle prices. Exchange-tracked shares keep their real-world prices.</p>
+              <p class="muted-small">Vehicle running costs follow vehicle prices. Exchange-tracked shares keep their real-world prices.</p>
+              <button class="btn small secondary" type="button" onclick="rerollCrisis()">Randomise prices</button>
             </div>
           </div>
           <div class="crisis-actions">
             <button class="btn gold" id="crisisRun" type="button" onclick="submitCrisis('run')">Run crisis</button>
             <button class="btn secondary" type="button" onclick="submitCrisis('save')">Save scenario</button>
-            <button class="btn secondary" type="button" onclick="chooseCrisis(true)">Cancel</button>
+            <button class="btn secondary" type="button" onclick="chooseCrisis()">New draft</button>
           </div>
         </fieldset>
       </form>
@@ -359,7 +359,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="settings-menu.js?v=87649e37"></script>
 <script defer src="shortcuts.js?v=8ce32ffe"></script>
 <script defer src="offline.js?v=a51010b5"></script>
-<script defer src="data-core.js?v=22452053"></script>
+<script defer src="data-core.js?v=7d494ebe"></script>
 <script defer src="data-money.js?v=452cbe61"></script>
 <script defer src="data-life.js?v=d50f031d"></script>
 <script defer src="data-property.js?v=d3163b64"></script>
@@ -368,7 +368,7 @@ Do it yourself and save money | -3 | It mostly worked, but you had to buy some p
 <script defer src="base-template.js?v=834065ab"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=def2a521"></script>
-<script defer src="crisis.js?v=1197c68b"></script>
+<script defer src="crisis.js?v=e50a47c0"></script>
 <script defer src="events.js?v=3c3e604b"></script>
 </body>
 </html>

@@ -37,14 +37,17 @@ function applyRealQuote(co, q, day) {
   if (!validRealQuote(q) || q.symbol !== co.realSymbol || q.date < co.quoteDate) return false;
   const held = Object.values(co.holders || {}).reduce((sum, n) => sum + n, 0);
   if (q.totalShares < held) throw new Error("Reported supply is below classroom holdings");
+  const history = co.history?.length ? co.history : [co.price];
+  const dates = (co.historyDates || []).slice(-history.length);
   if (q.date === co.quoteDate && q.price === co.price &&
       q.totalShares === co.totalShares && q.sharesDate === co.sharesDate &&
-      (q.source || "") === (co.quoteSource || "") && q.reportedUnits === co.reportedUnits) return false;
+      (q.source || "") === (co.quoteSource || "") && q.reportedUnits === co.reportedUnits && co.history?.length) return false;
   if (co.quoteDate !== q.date) {
-    co.history = [...co.history, q.price].slice(-30);
-    co.historyDates = [...co.historyDates, day].slice(-30);
+    co.history = [...history, q.price].slice(-30);
+    co.historyDates = [...Array(history.length - dates.length).fill(""), ...dates, day].slice(-30);
   } else {
-    co.history[co.history.length - 1] = q.price;
+    co.history = [...history.slice(0, -1), q.price];
+    co.historyDates = [...Array(history.length - Math.max(dates.length, 1)).fill(""), ...(dates.length ? dates : [day])];
   }
   Object.assign(co, { price: q.price, quoteDate: q.date, sharesDate: q.sharesDate, quoteSource: q.source || "",
     totalShares: q.totalShares, availableShares: q.totalShares - held });

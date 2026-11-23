@@ -673,6 +673,7 @@ async function renderStudentView(me, cls) {
   renderPayslips(me, cls);
   renderJobBoard(me, cls);
   renderMyApplications(me, cls);
+  renderCareers(me, cls);
 }
 
 /* ── Tax on my pay (the wage tax bands; hidden when no pay is taxed) ─────── */

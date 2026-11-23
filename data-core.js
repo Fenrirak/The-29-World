@@ -2093,10 +2093,12 @@ async function deleteClassPermanently(teacherUsername, classCode) {
   try {
     // Family links first, while the student docs that name them still exist.
     await Promise.all((cls.students || []).map(u => _deleteParentViewFor(u)));
-    // Individual doc deletes (not a batch) so each one still goes through
-    // the wrapped docRef.delete() in installReadCache(), which is what
-    // keeps the read cache correct — a raw WriteBatch would bypass that.
-    await Promise.all((cls.students || []).map(u => usersCol().doc(u).delete()));
+    await Promise.all((cls.students || []).map(u => {
+      const batch = fdb.batch();
+      batch.delete(usersCol().doc(u));
+      batch.delete(fdb.collection("careerProfiles").doc(u));
+      return batch.commit();
+    }));
     if (cls.templateShareToken) {
       await templateSharesCol().doc(cls.templateShareToken).delete();
     }
@@ -3382,6 +3384,7 @@ async function removeStudent(classCode, studentUser) {
     // this same transaction means it can no longer happen independently
     // of the rest of the removal.
     t.delete(userRef);
+    t.delete(fdb.collection("careerProfiles").doc(studentUser));
   });
   return true;
 }
