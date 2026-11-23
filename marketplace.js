@@ -41,6 +41,7 @@ async function init() {
   document.getElementById("studentPanel").classList.toggle("hidden", IS_TEACHER);
   paintChrome();
   if (!IS_TEACHER) {
+    mcLoad(); mcBuildDom();
     document.getElementById("iconListings").innerHTML = icon("tag", 30);
     document.getElementById("iconEarned").innerHTML = icon("bag", 30);
     document.getElementById("iconForSale").innerHTML = icon("swap", 30);
@@ -203,6 +204,7 @@ function renderStudent() {
   document.getElementById("statEarned").textContent = fmtMoney(earned);
   document.getElementById("statForSale").textContent = String(others.length);
 
+  mcClean();
   renderSellList();
 
   document.getElementById("noMine").classList.toggle("hidden", mine.length > 0);
@@ -220,6 +222,7 @@ function renderStudent() {
   document.getElementById("noBrowse").classList.toggle("hidden", shown.length > 0);
   document.getElementById("browseList").innerHTML = shown.map(l => listingCardHtml(l, {})).join("");
   mktSyncNotifyBox();
+  mcRender();
 
   document.getElementById("noSold").classList.toggle("hidden", sold.length > 0);
   document.getElementById("soldTable").innerHTML = sold.slice(0, 20).map(l => {
@@ -320,7 +323,7 @@ function listingCardHtml(l, opts) {
   } else if (mine) {
     actions = `<button class="btn small secondary" onclick="editMine('${l.id}')" aria-expanded="${MKT_EDITING === l.id}">${icon("edit", 13)} Edit</button><button class="btn small secondary" onclick="cancelMine('${l.id}')">${icon("trash", 13)} Cancel listing</button>`;
   } else if (CLS.marketplace.enabled) {
-    actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${qty > 1 ? "Buy 1" : "Buy"} for ${fmtMoney(l.price)}</button>`;
+    actions = `<button class="btn small gold" onclick="buyIt('${l.id}')">${qty > 1 ? "Buy 1" : "Buy"} for ${fmtMoney(l.price)}</button><span class="mc-slot" id="mcslot-${l.id}">${mcSlotHtml(l)}</span>`;
     if (CLS.marketplace.allowOffers) {
       actions += (myOffer && myOffer.status === "countered")
         ? `<button class="btn small mint" onclick="acceptCounterUi('${l.id}','${myOffer.id}')">Accept ${fmtMoney(myOffer.counter.amount)}${offerQuantity(myOffer) > 1 ? " each" : ""}</button><button class="btn small secondary" onclick="decline('${l.id}','${myOffer.id}')">Decline counter</button>`
@@ -484,9 +487,9 @@ function mktInjectCss() {
   document.head.appendChild(st);
 }
 function mktPayBarRender() {
-  const el = document.getElementById("mktPayBar");
-  if (!el) return;
-  if (!mktHasCard()) { el.classList.add("hidden"); MP_PAY.useCard = false; MP_PAY.split = false; MP_PAY.init = false; return; }
+  const els = ["mktPayBar", "mcPay"].map(id => document.getElementById(id)).filter(Boolean);
+  if (!els.length) return;
+  if (!mktHasCard()) { els.forEach(el => el.classList.add("hidden")); MP_PAY.useCard = false; MP_PAY.split = false; MP_PAY.init = false; mcRender(); return; }
   mktInjectCss();
   if (!MP_PAY.init) {
     let d = ME.mpPayDefault;
@@ -496,6 +499,7 @@ function mktPayBarRender() {
   const plan = cardPlanById(CLS, ME.creditCard.planId);
   const avail = cardAvailable(ME.creditCard, plan);
   const useCard = MP_PAY.useCard;
+  els.forEach((el, i) => {
   el.classList.remove("hidden");
   el.innerHTML = `
     <strong>Pay with</strong>
@@ -508,9 +512,11 @@ function mktPayBarRender() {
       : `<span class="mkt-chip">Switch to card for cashback &amp; rewards</span>`}</div>
     ${useCard ? `<div class="mkt-pb-split">
       <label style="display:flex;align-items:center;gap:8px;font-weight:700;"><input type="checkbox" style="width:20px;height:20px;min-height:auto;" ${MP_PAY.split ? "checked" : ""} onchange="mktSetSplit(this.checked)"> Part card, part cash</label>
-      ${MP_PAY.split ? `<div style="margin-top:6px;">Card covers up to $<input id="mktCardMax" type="number" min="0.01" step="0.01" style="width:100px" value="${esc(MP_PAY.cardMax)}" placeholder="all it can" onchange="mktSetCardMax(this.value)"></div>` : ""}
+      ${MP_PAY.split ? `<div style="margin-top:6px;">Card covers up to $<input type="number" min="0.01" step="0.01" style="width:100px" value="${esc(MP_PAY.cardMax)}" placeholder="all it can" onchange="mktSetCardMax(this.value)"></div>` : ""}
       <div class="muted-small">Splitting works on purchases of ${fmtMoney(cardSettings(CLS).splitMin)} or more, or whenever the card can't cover it all.</div></div>` : ""}
-    <p class="muted-small mkt-pb-note">This is also your default account: when a classmate accepts one of your offers, it comes out of ${useCard ? "your credit card" : "your cash"}. Houses are always paid in cash.</p>`;
+    ${i === 0 ? `<p class="muted-small mkt-pb-note">This is also your default account: when a classmate accepts one of your offers, it comes out of ${useCard ? "your credit card" : "your cash"}. Houses are always paid in cash.</p>` : ""}`;
+  });
+  mcRender();
 }
 async function mktSetPay(useCard) {
   MP_PAY.useCard = !!useCard;
@@ -682,4 +688,260 @@ async function mktToggleNotify(on) {
   notifMktNewSet(ME.username, on);
   mktSyncNotifyBox();
   if (typeof notifRefresh === "function") notifRefresh(ME.username, CURRENT.classCode);
+}
+
+
+/* ===================== Student: Trade Centre cart =====================
+   Put several classmates' listings in a cart, then pay for them in one checkout
+   (same look as the Store's cart; the "Pay with" bar is shared with the Browse card).
+   buyListing() buys ONE unit of ONE listing per call, so checkout runs those calls
+   one after another: if one fails, the ones before it have already gone through and
+   the rest stay in the cart. */
+let MC = {}, MC_BUSY = false, MC_DONE = null, MC_MSG = "", MC_NOTE = "", MC_OPEN = false;
+const mcEl = id => document.getElementById(id);
+const mcKey = () => "anw_mpcart_" + CURRENT.username + "_" + CURRENT.classCode;
+function mcLoad() { try { const o = JSON.parse(localStorage.getItem(mcKey()) || "{}"); MC = o && typeof o === "object" ? o : {}; } catch (e) { MC = {}; } }
+function mcSave() { try { localStorage.setItem(mcKey(), JSON.stringify(MC)); } catch (e) { /* ignore */ } }
+const mcRound = n => Math.round((Number(n) || 0) * 100) / 100;
+const mcFind = id => (CLS.listings || []).find(x => x.id === id);
+const mcValid = l => !!l && l.status === "active" && l.seller !== ME.username;
+const mcLines = () => Object.keys(MC).map(id => ({ l: mcFind(id), qty: MC[id] })).filter(x => mcValid(x.l));
+function mcTotals(lines) {
+  let total = 0, house = 0, units = 0;
+  lines.forEach(({ l, qty }) => { const t = l.price * qty; total += t; units += qty; if (l.assetType === "property") house += t; });
+  return { total: mcRound(total), house: mcRound(house), units };
+}
+
+// Drop listings that sold, were cancelled or went back to approval; cap quantities to what's left.
+function mcClean() {
+  if (!CLS || !ME) return;
+  let changed = false, dropped = 0;
+  Object.keys(MC).forEach(id => {
+    const l = mcFind(id);
+    let q = Math.floor(Number(MC[id])) || 0;
+    q = mcValid(l) ? Math.min(q, listingQuantity(l)) : 0;
+    if (q < 1) { delete MC[id]; changed = true; dropped++; }
+    else if (q !== MC[id]) { MC[id] = q; changed = true; }
+  });
+  if (changed) mcSave();
+  if (dropped) MC_NOTE = `${dropped} listing${dropped === 1 ? " was" : "s were"} taken out of your cart because ${dropped === 1 ? "it isn't" : "they aren't"} for sale any more.`;
+}
+
+// The "Add to cart" part of a listing card (re-drawn on its own, so open offer boxes keep what was typed).
+function mcSlotHtml(l) {
+  const q = MC[l.id] || 0, max = listingQuantity(l);
+  if (!q) return `<button class="btn small secondary" onclick="mcAdd('${l.id}')">${icon("cart", 13)} Add to cart</button>`;
+  return `<button class="btn small mint" onclick="mcOpen()">${icon("cart", 13)} In cart ×${q}</button>` +
+    (q < max ? `<button class="btn small secondary" onclick="mcAdd('${l.id}')">Add another</button>` : "");
+}
+function mcSlot(id) { const el = mcEl("mcslot-" + id), l = CLS && mcFind(id); if (el && l) el.innerHTML = mcSlotHtml(l); }
+
+function mcAdd(id) {
+  const l = mcFind(id); if (!mcValid(l)) return;
+  const have = MC[id] || 0, max = listingQuantity(l);
+  if (have >= max) { const b = mcEl("msg-" + id); if (b) b.innerHTML = `<div class="error-msg">You already have all ${max} in your cart.</div>`; return; }
+  MC[id] = have + 1; mcSave(); MC_DONE = null; MC_MSG = ""; MC_NOTE = "";
+  mcSlot(id); mcRender();
+  const fab = mcEl("mcFab"); if (fab) { fab.classList.remove("bump"); void fab.offsetWidth; fab.classList.add("bump"); }
+}
+function mcSet(id, qty) {
+  const l = mcFind(id); if (!mcValid(l)) return;
+  qty = Math.min(Math.floor(qty), listingQuantity(l));
+  if (qty < 1) delete MC[id]; else MC[id] = qty;
+  mcSave(); MC_MSG = ""; MC_NOTE = ""; mcSlot(id); mcRender();
+}
+const mcStep = (id, d) => mcSet(id, (MC[id] || 0) + d);
+const mcRemove = id => mcSet(id, 0);
+async function mcClear() {
+  if (!mcLines().length || !await t29Confirm("Remove everything from your cart?")) return;
+  const ids = Object.keys(MC); MC = {}; mcSave(); MC_MSG = ""; MC_NOTE = ""; ids.forEach(mcSlot); mcRender();
+}
+
+async function mcCheckout() {
+  if (MC_BUSY || !CLS.marketplace.enabled) return;
+  const lines = mcLines(); if (!lines.length) return;
+  const t = mcTotals(lines);
+  const card = mktHasCard() && MP_PAY.useCard;
+  // "Card covers up to $X" is per purchase, so over several purchases it would not mean what the box says.
+  if (card && MP_PAY.split && MP_PAY.cardMax !== "" && t.units > 1) {
+    MC_MSG = `<div class="error-msg">A card limit on a part-card payment only works for one purchase at a time. Clear the limit box, or pay fully by card or cash.</div>`;
+    mcRender(); return;
+  }
+  const how = card ? (MP_PAY.split ? "part on your credit card, the rest in cash" : "on your credit card") : "in cash";
+  const hasHouse = lines.some(x => x.l.assetType === "property");
+  if (!await t29Confirm(`Buy ${t.units} item${t.units === 1 ? "" : "s"} from your classmates for ${fmtMoney(t.total)} in total, paid ${how}?${hasHouse && card ? " (Houses are always paid in cash.)" : ""}`)) return;
+
+  MC_BUSY = true; MC_MSG = ""; MC_NOTE = ""; mcRender();
+  const done = []; let err = "";
+  try {
+    for (const { l, qty } of lines.slice().sort((a, b) => b.l.price * b.qty - a.l.price * a.qty)) {
+      const pay = card && l.assetType !== "property" ? { useCard: true, split: MP_PAY.split, cardMax: MP_PAY.cardMax } : {};
+      let n = 0;
+      while (n < qty) {
+        const r = await buyListing(CURRENT.username, CURRENT.classCode, l.id, pay, l.price);
+        if (!r || !r.ok) { err = `${l.name}: ${(r && r.error) || "The purchase didn't go through."}`; break; }
+        n++;
+      }
+      if (n) { done.push({ name: l.name, qty: n, spent: mcRound(l.price * n) }); MC[l.id] = (MC[l.id] || 0) - n; if (MC[l.id] < 1) delete MC[l.id]; }
+      if (err) break;
+    }
+  } catch (e) { console.error("Trade Centre checkout failed", e); err = "Something went wrong. Please try again."; }
+  mcSave();
+  const bought = done.reduce((s, x) => s + x.qty, 0);
+  if (done.length) MC_DONE = { lines: done, total: mcRound(done.reduce((s, x) => s + x.spent, 0)) };
+  if (err) MC_MSG = `<div class="error-msg">${bought ? `Bought ${bought} of ${t.units} items. ` : ""}${esc(err)}</div>`;
+  MC_BUSY = false;
+  await render(true);
+}
+
+/* ---- drawer ---- */
+function mcOpen() {
+  MC_OPEN = true; mcRender();
+  mcEl("mcOverlay").classList.add("open"); mcEl("mcDrawer").classList.add("open");
+  document.body.classList.add("mc-lock");
+  setTimeout(() => { const c = mcEl("mcClose"); if (c) c.focus({ preventScroll: true }); }, 60);
+}
+function mcClose() {
+  MC_OPEN = false; MC_DONE = null; MC_MSG = ""; MC_NOTE = "";
+  mcEl("mcOverlay").classList.remove("open"); mcEl("mcDrawer").classList.remove("open");
+  document.body.classList.remove("mc-lock");
+  mcRender();
+  const f = mcEl("mcFab"); if (f && f.style.display !== "none") f.focus({ preventScroll: true });
+}
+
+function mcInjectCss() {
+  const st = document.createElement("style");
+  st.textContent = `
+.mc-slot{display:contents}
+.mc-fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:2000;display:inline-flex;align-items:center;gap:10px;width:auto;margin:0;padding:12px 18px;border:0;border-radius:var(--sw-l,23px 3px 23px 3px / 18px 3px 18px 3px);background:#e3a72f;color:#1f2b44;font:inherit;font-weight:600;cursor:pointer;box-shadow:var(--shadow-pop);transition:transform .15s}
+.mc-fab:hover{transform:translateY(-2px)}
+.mc-fab:focus-visible,.mc-x:focus-visible{outline:3px solid rgba(227,167,47,.6);outline-offset:2px}
+.mc-fab.bump{animation:mcBump .45s}
+@keyframes mcBump{30%{transform:scale(1.12)}60%{transform:scale(.97)}}
+.mc-count{min-width:24px;height:24px;padding:0 7px;border-radius:12px;background:#1f2b44;color:#fff;font-size:var(--fs-sm);display:inline-flex;align-items:center;justify-content:center}
+.mc-overlay{position:fixed;inset:0;z-index:2001;background:rgba(15,20,32,.5);opacity:0;pointer-events:none;transition:opacity .22s}
+.mc-overlay.open{opacity:1;pointer-events:auto}
+.mc-drawer{position:fixed;top:0;right:0;bottom:0;z-index:2002;width:min(430px,100vw);display:flex;flex-direction:column;background:#fff;color:#1f2b44;box-shadow:var(--shadow-edge-end);transform:translateX(102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);visibility:hidden}
+.mc-drawer.open{transform:none;visibility:visible}
+html.dark-mode .mc-drawer{background:#1c2433;color:#eef1f7}
+body.mc-lock{overflow:hidden}
+.mc-head{display:flex;align-items:center;gap:10px;padding:16px 18px;padding-top:calc(16px + env(safe-area-inset-top,0px));border-bottom:1px solid rgba(128,128,128,.25)}
+.mc-head h3{margin:0;flex:1;display:flex;align-items:center;gap:8px;font-size:1.2rem}
+.mc-clear{width:auto;margin:0;background:none;border:0;font:inherit;font-size:var(--fs-md);color:inherit;opacity:.65;text-decoration:underline;cursor:pointer}
+.mc-clear:hover{opacity:1}
+.mc-x{width:36px;height:36px;margin:0;padding:0;border-radius:50%;border:1.5px solid rgba(128,128,128,.4);background:transparent;color:inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.mc-x:hover{border-color:#e3a72f;background:rgba(227,167,47,.14)}
+.mc-body{flex:1;overflow-y:auto;padding:4px 18px 16px;overscroll-behavior:contain}
+.mc-note{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:rgba(227,167,47,.18);font-size:var(--fs-md)}
+.mc-line{display:grid;grid-template-columns:1fr auto;gap:8px 12px;padding:14px 0;border-bottom:1px solid rgba(128,128,128,.2)}
+.mc-name{font-weight:700;line-height:1.25;word-break:break-word}
+.mc-unit{display:block;font-size:var(--fs-sm);font-weight:400;opacity:.65;margin-top:2px}
+.mc-price{font-weight:800;text-align:right;white-space:nowrap}
+.mc-ctl{justify-self:start;display:inline-flex;align-items:center;gap:4px;border:1.5px solid rgba(128,128,128,.35);border-radius:var(--sw-m,17px 2px 17px 2px / 13px 2px 13px 2px);padding:2px}
+.mc-step{width:30px;height:30px;margin:0;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.mc-step:hover:not(:disabled){background:rgba(227,167,47,.25)}
+.mc-step:disabled{opacity:.3;cursor:default}
+.mc-q{min-width:26px;text-align:center;font-weight:700}
+.mc-rm{width:auto;margin:0;justify-self:end;align-self:center;background:none;border:0;padding:4px 2px;font:inherit;font-size:var(--fs-md);color:#d8563f;cursor:pointer}
+.mc-rm:hover{text-decoration:underline}
+.mc-lnote{grid-column:1/-1;font-size:var(--fs-sm);opacity:.7}
+.mc-paywrap{margin-top:16px}
+.mc-paywrap .mkt-paybar{margin:0}
+.mc-empty,.mc-done{text-align:center;padding:48px 10px 20px}
+.mc-empty svg{opacity:.35}
+.mc-empty h4,.mc-done h4{margin:12px 0 4px;font-size:1.1rem}
+.mc-empty p,.mc-done p{margin:0 0 16px;opacity:.7;font-size:var(--fs-lg)}
+.mc-check{width:64px;height:64px;margin:0 auto;border-radius:50%;background:#2e9d6a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.8rem;animation:mcPop .4s cubic-bezier(.2,1.4,.4,1)}
+@keyframes mcPop{from{transform:scale(.3);opacity:0}}
+.mc-dlist{list-style:none;margin:0 0 18px;padding:0;text-align:left;font-size:var(--fs-lg)}
+.mc-dlist li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(128,128,128,.18)}
+.mc-foot{padding:14px 18px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid rgba(128,128,128,.25);background:inherit}
+.mc-row{display:flex;justify-content:space-between;gap:10px;font-size:var(--fs-lg);padding:2px 0}
+.mc-total{font-size:1.2rem;font-weight:800;padding-top:8px;margin-top:6px;border-top:1px dashed rgba(128,128,128,.4)}
+.mc-sub{font-size:var(--fs-sm);opacity:.7;margin:4px 0 10px}
+.mc-checkout{width:100%;margin:6px 0 0;min-height:48px;font-size:1rem}
+.mc-checkout:disabled{opacity:.5;cursor:not-allowed}
+.mc-foot .error-msg{margin:8px 0 0}
+@media (max-width:520px){.mc-fab{right:12px}}
+@media (prefers-reduced-motion:reduce){.mc-drawer,.mc-overlay,.mc-fab,.mc-check{transition:none;animation:none}}`;
+  document.head.appendChild(st);
+}
+
+function mcBuildDom() {
+  mcInjectCss();
+  const fab = document.createElement("button");
+  fab.type = "button"; fab.id = "mcFab"; fab.className = "mc-fab"; fab.style.display = "none"; fab.setAttribute("aria-label", "Open cart"); fab.onclick = mcOpen;
+  fab.innerHTML = `${icon("cart", 20)}<span>Cart</span><span class="mc-count" id="mcFabCount">0</span><span id="mcFabTotal"></span>`;
+  const ov = document.createElement("div"); ov.id = "mcOverlay"; ov.className = "mc-overlay"; ov.onclick = mcClose;
+  const dr = document.createElement("aside"); dr.id = "mcDrawer"; dr.className = "mc-drawer"; dr.setAttribute("role", "dialog"); dr.setAttribute("aria-modal", "true"); dr.setAttribute("aria-label", "Your cart");
+  dr.innerHTML = `
+    <div class="mc-head"><h3>${icon("cart", 20)} Your cart</h3><button type="button" class="mc-clear" id="mcClearBtn" onclick="mcClear()">Clear</button><button type="button" class="mc-x" id="mcClose" aria-label="Close cart" onclick="mcClose()">×</button></div>
+    <div class="mc-body"><div id="mcLines"></div><div class="mc-paywrap" id="mcPayWrap"><div class="mkt-paybar hidden" id="mcPay"></div></div></div>
+    <div class="mc-foot" id="mcFoot"></div>`;
+  document.body.append(fab, ov, dr);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && MC_OPEN) mcClose(); });
+}
+
+function mcRender() {
+  if (IS_TEACHER || !ME || !CLS || !mcEl("mcDrawer")) return;
+  const lines = mcLines(), t = mcTotals(lines), n = t.units, open = !!CLS.marketplace.enabled;
+  const card = mktHasCard() && MP_PAY.useCard, split = card && MP_PAY.split;
+  const fab = mcEl("mcFab"), body = mcEl("mcLines"), foot = mcEl("mcFoot"), wrap = mcEl("mcPayWrap");
+  fab.style.display = (n || MC_OPEN) ? "" : "none";
+  mcEl("mcFabCount").textContent = n;
+  mcEl("mcFabTotal").textContent = n ? fmtMoney(t.total) : "";
+  fab.setAttribute("aria-label", `Open cart, ${n} item${n === 1 ? "" : "s"}`);
+  mcEl("mcClearBtn").style.display = n ? "" : "none";
+  const note = MC_NOTE ? `<p class="mc-note">${esc(MC_NOTE)}</p>` : "";
+
+  if (MC_DONE && !n) {
+    wrap.style.display = "none";
+    body.innerHTML = `<div class="mc-done"><div class="mc-check" aria-hidden="true">✓</div><h4>${MC_MSG ? "Part of your order went through" : "Purchase complete"}</h4>
+      <p>${fmtMoney(MC_DONE.total)} spent with your classmates.</p>
+      <ul class="mc-dlist">${MC_DONE.lines.map(l => `<li><span>${esc(l.name)}</span><strong>×${l.qty}</strong></li>`).join("")}</ul></div>`;
+    foot.innerHTML = `${MC_MSG}<button type="button" class="btn gold mc-checkout" onclick="mcClose()">Continue shopping</button>`;
+    return;
+  }
+  wrap.style.display = n ? "" : "none";
+  if (!n) {
+    body.innerHTML = `${note}<div class="mc-empty">${icon("cart", 48)}<h4>Your cart is empty</h4><p>Add listings from your classmates and pay for them all at once.</p></div>`;
+    foot.innerHTML = `${MC_MSG}<button type="button" class="btn secondary mc-checkout" onclick="mcClose()">Keep browsing</button>`;
+    return;
+  }
+  body.innerHTML = note + lines.map(({ l, qty: q }) => {
+    const max = listingQuantity(l);
+    return `<div class="mc-line">
+      <div class="mc-name">${esc(l.name)}<span class="mc-unit">${fmtMoney(l.price)}${max > 1 ? " each" : ""} · from ${esc(nameOf(l.seller))}</span></div>
+      <div class="mc-price">${fmtMoney(mcRound(l.price * q))}</div>
+      ${max > 1 ? `<div class="mc-ctl" role="group" aria-label="Quantity of ${esc(l.name)}">
+        <button type="button" class="mc-step" aria-label="Decrease quantity" ${q <= 1 ? "disabled" : ""} onclick="mcStep('${l.id}', -1)">−</button>
+        <span class="mc-q">${q}</span>
+        <button type="button" class="mc-step" aria-label="Increase quantity" ${q >= max ? "disabled" : ""} onclick="mcStep('${l.id}', 1)">+</button>
+      </div>` : "<span></span>"}
+      <button type="button" class="mc-rm" onclick="mcRemove('${l.id}')">Remove</button>
+      ${max > 1 && q >= max ? `<div class="mc-lnote">That's all ${max} they have.</div>` : ""}
+      ${card && l.assetType === "property" ? `<div class="mc-lnote">Houses are always paid in cash.</div>` : ""}
+    </div>`;
+  }).join("");
+
+  // Can they afford it? Houses always come out of cash; everything else follows the "Pay with" choice.
+  const cash = arrangedCashAvailable(ME, CLS), plan = card ? cardPlanById(CLS, ME.creditCard.planId) : null;
+  const cardAvail = plan ? cardAvailable(ME.creditCard, plan) : 0;
+  const other = mcRound(t.total - t.house);
+  const needCash = mcRound(!card ? t.total : split ? t.house + Math.max(0, other - cardAvail) : t.house);
+  const needCard = card && !split ? other : 0;
+  const shortCash = mcRound(needCash - cash), shortCard = mcRound(needCard - cardAvail);
+  const cashLabel = arrangedOverdraftLimit(ME) ? "cash and arranged overdraft" : "cash";
+  const how = !card ? `Paying with ${cashLabel} · ${fmtMoney(cash)} available` : split ? `Paying part card, part ${cashLabel}` : `Paying by credit card · ${fmtMoney(cardAvail)} available`;
+  let warn = "";
+  if (!open) warn = "The Trade Centre is closed right now, so you can't check out.";
+  else if (shortCard > 0.004) warn = `Your card can only cover ${fmtMoney(cardAvail)}. Turn on "Part card, part cash" or remove something.`;
+  else if (shortCash > 0.004) warn = card ? `You're ${fmtMoney(shortCash)} short on cash (houses${split ? " and anything the card can't cover" : ""} are paid in cash). Remove something to check out.`
+    : `You're ${fmtMoney(shortCash)} short. Remove something to check out.`;
+  foot.innerHTML = `
+    <div class="mc-row"><span>${n} item${n === 1 ? "" : "s"}</span><span>${fmtMoney(t.total)}</span></div>
+    <div class="mc-row mc-total"><span>Total</span><span>${fmtMoney(t.total)}</span></div>
+    <div class="mc-sub">${how}${n > 1 ? ". Items are bought one after another: if one can't be bought, the ones before it still go through and the rest stay in your cart." : ""}</div>
+    ${warn ? `<div class="error-msg">${esc(warn)}</div>` : ""}${MC_MSG}
+    <button type="button" class="btn gold mc-checkout" onclick="mcCheckout()" ${warn || MC_BUSY ? "disabled" : ""}>${MC_BUSY ? "Processing…" : `Check out · ${fmtMoney(t.total)}`}</button>`;
 }
