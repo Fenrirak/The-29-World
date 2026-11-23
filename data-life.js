@@ -140,6 +140,19 @@ async function assignJob(studentUser, jobId, classCode) {
   }
 }
 
+/* ---------------- Approval settings (Jobs page) ----------------
+   "auto": the student gets the job / side hustle straight away. "approval": it waits for the teacher.
+   Nothing saved counts as "approval", which is how classes worked before this setting existed. */
+function approvalModeFor(cls, kind) {
+  const v = cls && (kind === "job" ? cls.jobApprovalMode : cls.sideHustleApprovalMode);
+  return v === "auto" ? "auto" : "approval";
+}
+async function setApprovalModes(classCode, jobMode, hustleMode) {
+  const ok = m => m === "auto" || m === "approval";
+  if (!ok(jobMode) || !ok(hustleMode)) throw new Error("Choose auto-approve or teacher approval.");
+  await classesCol().doc(classCode).update({ jobApprovalMode: jobMode, sideHustleApprovalMode: hustleMode });
+}
+
 /* ---------------- Job applications ---------------- */
 async function approveApplication(classCode, appId) {
   const classRef = classesCol().doc(classCode);
@@ -1802,9 +1815,10 @@ async function removeSideHustle(classCode, hustleId) {
 }
 
 // Student picks (or changes) which hustle + hour they're committing to.
-// First-ever pick applies immediately. After that, changes require the
-// teacher's approval (this just stops someone quietly retiming their
-// check-in to whenever they happen to be checking in).
+// The teacher chooses (Jobs page) whether that applies at once ("auto") or waits for
+// their approval ("approval", which includes the very first pick). A class that never
+// chose keeps the old rule: the first pick is free, later changes need approval (this
+// stops someone quietly retiming their check-in to whenever they happen to be checking in).
 async function requestSideHustleChange(username, classCode, hustleId, hour) {
   if (await isModuleLockedForStudent(username, classCode, "sidehustle")) {
     return { ok: false, error: "Side hustles are locked for you right now. Check the message on your dashboard for what will unlock them." };
@@ -1819,14 +1833,19 @@ async function requestSideHustleChange(username, classCode, hustleId, hour) {
   const user = await getUser(username);
   if (!user) return { ok: false, error: "User not found." };
 
-  if (!user.sideHustle || !user.sideHustle.hustleId) {
-    // Nothing set yet — no approval needed for the first pick.
-    const res = await setStudentSideHustle(username, classCode, hustleId, h);
-    return res;
+  const hasCurrent = !!(user.sideHustle && user.sideHustle.hustleId);
+  if (hasCurrent && user.sideHustle.hustleId === hustleId && user.sideHustle.checkinHour === h) {
+    return { ok: false, error: "That's already your current side hustle." };
   }
 
-  if (user.sideHustle.hustleId === hustleId && user.sideHustle.checkinHour === h) {
-    return { ok: false, error: "That's already your current side hustle." };
+  const mode = cls.sideHustleApprovalMode;
+  if (mode === "auto" || (!hasCurrent && mode !== "approval")) {
+    const res = await setStudentSideHustle(username, classCode, hustleId, h);
+    // Anything that was waiting from before auto-approve was switched on is replaced by this pick.
+    if (res.ok && (user.sideHustleRequest || user.sideHustleDenialNote)) {
+      await usersCol().doc(username).update({ sideHustleRequest: null, sideHustleDenialNote: null });
+    }
+    return res;
   }
 
   await usersCol().doc(username).update({

@@ -589,12 +589,26 @@ async function renderSideHustle(me, cls, lockedModules) {
   shSetBlock(state);
 
   if (state === "pick" || state === "request") {
+    // Whether this pick waits for the teacher is their choice. A class that never chose keeps the old rule: first pick free.
+    const hustleMode = cls.sideHustleApprovalMode;
+    const needsApproval = state === "pick" ? hustleMode === "approval" : hustleMode !== "auto";
     const intro = sh("shPickIntro");
-    if (intro) intro.textContent = state === "pick"
-      ? "Compare every side hustle below, then tap the pay for the hustle and hour you want. You must check in within 15 minutes after your chosen hour to get paid."
-      : "Tap the pay for the hustle and hour you want to switch to. Your teacher has to approve the change before it applies, and your current hustle keeps working until they do.";
+    if (intro) {
+      const waitingFor = hasPendingRequest ? hustles.find(h => h.id === request.hustleId) : null;
+      intro.textContent = state === "pick"
+        ? "Compare every side hustle below, then tap the pay for the hustle and hour you want. You must check in within 15 minutes after your chosen hour to get paid."
+          + (needsApproval ? " Your teacher has to approve your pick before it starts." : "")
+          + (waitingFor ? ` Waiting on your teacher to approve ${waitingFor.name} at ${hourLabel(request.checkinHour)}. Pick again to replace that request.` : "")
+        : needsApproval
+          ? "Tap the pay for the hustle and hour you want to switch to. Your teacher has to approve the change before it applies, and your current hustle keeps working until they do."
+          : "Tap the pay for the hustle and hour you want to switch to. The change applies straight away.";
+    }
     const saveBtn = sh("shSaveBtn");
-    if (saveBtn) saveBtn.textContent = state === "pick" ? "Save my side hustle" : "Request this change";
+    if (saveBtn) saveBtn.textContent = state === "pick"
+      ? (needsApproval ? "Request this side hustle" : "Save my side hustle")
+      : (needsApproval ? "Request this change" : "Switch side hustle");
+    const pickMsg = sh("shPickMsg");
+    if (pickMsg && state === "pick" && me.sideHustleDenialNote && !pickMsg.textContent) pickMsg.textContent = "Request denied: " + me.sideHustleDenialNote;
     const cancelBtn = sh("shCancelBtn");
     if (cancelBtn) cancelBtn.classList.toggle("hidden", state === "pick");
     if (SH_SEL && !hustles.some(h => h.id === SH_SEL.hustleId)) SH_SEL = null;
@@ -647,7 +661,10 @@ async function renderSideHustle(me, cls, lockedModules) {
     else statusEl.textContent = `Come back at ${hourLabel(myHustle.checkinHour)} to check in.`;
   }
   const changeBtn = sh("shChangeBtn");
-  if (changeBtn) changeBtn.classList.toggle("hidden", hasPendingRequest);
+  if (changeBtn) {
+    changeBtn.classList.toggle("hidden", hasPendingRequest);
+    changeBtn.textContent = cls.sideHustleApprovalMode === "auto" ? "Change side hustle" : "Request a change";
+  }
 }
 
 // Explains the teacher's streak bonus to the student and where their own streak stands.

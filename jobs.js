@@ -4,6 +4,7 @@ let JOBS_CACHE = [];
 let ADD_LOG = null, EDIT_LOG = null; // log-type settings held by the create / edit forms
 let LOG_CTX = null;                  // student's latest { me, cls }, repainted as the check-in window moves
 let QUIZ = null;                     // the open daily-questions dialog
+let STUDENT_CTX = null;              // student's latest { me, cls }, so the job board repaints once their CV loads
 
 /* ── Avatar helpers (also in teacher.js / student.js — duplicated here
       since jobs.html loads only the data-*.js files + jobs.js) ────────────────── */
@@ -92,6 +93,7 @@ async function render() {
 ══════════════════════════════════════════════════════════════════════ */
 function renderTeacherView(cls, students) {
   renderPayDay(cls);
+  renderApprovalSettings(cls);
   renderSideHustles(cls, students);
   paintHustleReco(cls);
   renderJobsGrid(cls, students);
@@ -597,7 +599,78 @@ async function deleteJobClick(jobId) {
   await render();
 }
 
+/* ── Approval settings (teacher) ───────────────────────────────────
+   "auto" = students get the job / side hustle straight away; "approval" = it waits for the teacher. */
+let APPR = { job: "approval", hustle: "approval" }, APPR_DIRTY = false;
+const APPR_HINTS = {
+  job: {
+    auto: "Students who apply start the job straight away at the entry tier. Each CV is still saved for you to look at.",
+    approval: "Each application waits for you to approve it, with the student's CV attached."
+  },
+  hustle: {
+    auto: "Students start or switch side hustles whenever they like.",
+    approval: "Picking or changing a side hustle waits for you to approve it."
+  }
+};
+function renderApprovalSettings(cls) {
+  if (!document.getElementById("approvalCard")) return;
+  if (!APPR_DIRTY) APPR = { job: approvalModeFor(cls, "job"), hustle: approvalModeFor(cls, "hustle") };
+  paintApprovalModes();
+}
+function paintApprovalModes() {
+  ["job", "hustle"].forEach(kind => {
+    document.querySelectorAll(`#approvalCard [data-kind="${kind}"]`).forEach(b => b.setAttribute("aria-checked", String(b.dataset.mode === APPR[kind])));
+    const hint = document.getElementById(kind === "job" ? "apprJobHint" : "apprHustleHint");
+    if (hint) hint.textContent = APPR_HINTS[kind][APPR[kind]];
+  });
+  const btn = document.getElementById("saveApprovalBtn");
+  if (btn) btn.disabled = !APPR_DIRTY;
+}
+function pickApprovalMode(kind, mode) {
+  APPR[kind] = mode;
+  APPR_DIRTY = true;
+  document.getElementById("approvalMsg").innerHTML = "";
+  paintApprovalModes();
+}
+async function saveApprovalModes() {
+  const btn = document.getElementById("saveApprovalBtn");
+  const msg = document.getElementById("approvalMsg");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  msg.innerHTML = "";
+  try {
+    await setApprovalModes(CLASS_CODE, APPR.job, APPR.hustle);
+    APPR_DIRTY = false;
+    await render();
+    const say = (m, a, b) => m === "auto" ? a : b;
+    flashMsg(msg, `<div class="success-msg">Saved. Jobs ${say(APPR.job, "are approved automatically", "need your approval")}; side hustles ${say(APPR.hustle, "are approved automatically", "need your approval")}.</div>`, 6000);
+  } catch (e) {
+    btn.disabled = false;
+    msg.innerHTML = `<div class="error-msg">Couldn't save. Please try again.</div>`;
+  }
+}
+
 /* ── Applications (teacher) ────────────────────────────────────────── */
+function careerSubmissionRef(classCode, appId) {
+  return fdb.collection("careerSubmissions").doc(classCode + "_" + appId);
+}
+// The CV a student sent is loaded only when the teacher opens it.
+function appCvDetails(a) {
+  return `<details class="app-cv" ontoggle="loadAppCv(this,'${escapeJsAttr(a.id)}')"><summary>View CV</summary><div class="app-cv-body cv-view"><p class="muted-small">Loading…</p></div></details>`;
+}
+async function loadAppCv(el, appId) {
+  if (!el.open || el.dataset.loaded) return;
+  el.dataset.loaded = "1";
+  const body = el.querySelector(".app-cv-body");
+  try {
+    const snap = await careerSubmissionRef(CLASS_CODE, appId).get();
+    body.innerHTML = snap.exists ? careerCvHtml(snap.data().cv) : `<p class="muted-small">No CV was attached to this application.</p>`;
+  } catch (e) {
+    delete el.dataset.loaded;
+    body.innerHTML = `<p class="muted-small">Couldn't load the CV. Close and reopen to try again.</p>`;
+  }
+}
+
 function renderApplications(cls, students) {
   const pending = (cls.jobApplications || []).filter(a => a.status === "pending");
   const hustleReqs = students.filter(s => s.sideHustleRequest && s.sideHustleRequest.status === "pending");
@@ -605,9 +678,10 @@ function renderApplications(cls, students) {
   const box     = document.getElementById("applicationsBox");
   document.getElementById("applicationsBadge").textContent = total || "";
   document.getElementById("applicationsBadge").classList.toggle("hidden", !total);
+  renderApplicationHistory(cls, students);
 
   if (!total) {
-    box.innerHTML = `<p class="muted-small">No pending applications or requests.</p>`;
+    box.innerHTML = `<p class="muted-small">Nothing is waiting for approval.</p>`;
     return;
   }
 
@@ -622,6 +696,7 @@ function renderApplications(cls, students) {
         <span class="badge navy">Job</span> <strong>${s ? escapeHtml(s.name) : escapeHtml(a.studentUser)}</strong> applied for <strong>${j ? escapeHtml(j.title) : "Unknown job"}</strong>
         ${j && j.tiers && j.tiers.length ? `<div class="muted-small">Starting at: ${escapeHtml(j.tiers[0].name)}: ${fmtMoney(j.tiers[0].wage)}/pay day</div>` : ""}
         <div class="muted-small">${a.coverLetter ? `"${escapeHtml(a.coverLetter)}"` : "No cover letter."}</div>
+        ${appCvDetails(a)}
       </div>
       <div class="row-flex" style="gap:8px;">
         <button class="btn small mint"  onclick="approveApp('${a.id}')">Approve</button>
@@ -631,7 +706,7 @@ function renderApplications(cls, students) {
     box.appendChild(row);
   });
 
-  // Side hustle change requests sit in the same list.
+  // Side hustle requests sit in the same list.
   const hustles = cls.sideHustles || [];
   hustleReqs.forEach(s => {
     const req = s.sideHustleRequest;
@@ -641,8 +716,8 @@ function renderApplications(cls, students) {
     row.className = "auto-row";
     row.innerHTML = `
       <div class="auto-details"><span class="badge gold">Side hustle</span> <strong>${escapeHtml(s.name)}</strong>
-        wants to switch ${from ? `from ${escapeHtml(from.name)} (${hourLabel((s.sideHustle || {}).checkinHour)})` : "(no current hustle)"}
-        to <strong>${to ? escapeHtml(to.name) : "—"}</strong> at ${hourLabel(req.checkinHour)}
+        ${from ? `wants to switch from ${escapeHtml(from.name)} (${hourLabel((s.sideHustle || {}).checkinHour)}) to` : "wants to start"}
+        <strong>${to ? escapeHtml(to.name) : "—"}</strong> at ${hourLabel(req.checkinHour)}
       </div>
       <div class="row-flex" style="gap:8px;">
         <button class="btn small mint" onclick="approveSideHustleRequest('${escapeJsAttr(s.username)}')">Approve</button>
@@ -651,6 +726,22 @@ function renderApplications(cls, students) {
     `;
     box.appendChild(row);
   });
+}
+
+// The last few decisions, including jobs students got automatically, so CVs can still be looked at.
+function renderApplicationHistory(cls, students) {
+  const wrap = document.getElementById("applicationsHistoryWrap"), box = document.getElementById("applicationsHistory");
+  if (!wrap || !box) return;
+  const done = (cls.jobApplications || []).filter(a => a.status === "approved" || a.status === "declined").slice(-8).reverse();
+  wrap.classList.toggle("hidden", !done.length);
+  box.innerHTML = done.map(a => {
+    const j = (cls.jobs || []).find(jj => jj.id === a.jobId);
+    const s = students.find(ss => ss.username === a.studentUser);
+    const badge = a.status === "declined" ? `<span class="status-declined">Declined</span>`
+      : `<span class="status-approved">${a.auto ? "Auto-approved" : "Approved"}</span>`;
+    return `<div class="auto-row"><div class="auto-details"><strong>${s ? escapeHtml(s.name) : escapeHtml(a.studentUser)}</strong> · ${j ? escapeHtml(j.title) : "Unknown job"}
+      <div class="muted-small">${escapeHtml(a.date || "")}</div>${a.cvAttached ? appCvDetails(a) : ""}</div>${badge}</div>`;
+  }).join("");
 }
 
 async function approveApp(appId) {
@@ -667,6 +758,7 @@ async function declineApp(appId) {
    STUDENT VIEW
 ══════════════════════════════════════════════════════════════════════ */
 async function renderStudentView(me, cls) {
+  STUDENT_CTX = { me, cls };
   renderMyJob(me, cls);
   renderJobLog(me, cls);
   renderWageTax(cls);
@@ -848,11 +940,25 @@ function renderJobBoard(me, cls) {
   const jobs = (cls.jobs || []).filter(j => j.tiers && j.tiers.length);
   document.getElementById("noJobs").classList.toggle("hidden", jobs.length > 0);
 
+  // Applying needs a saved CV, which is sent with the application.
+  const cvState = typeof careerProfile === "undefined" ? "loading" : careerSavedCv() ? "ready" : "missing";
+  const autoJobs = approvalModeFor(cls, "job") === "auto";
+  const note = document.getElementById("jobBoardNote");
+  if (note) note.innerHTML = !jobs.length || cvState === "loading" ? ""
+    : cvState === "ready"
+      ? `<div class="cv-gate ok"><span class="muted-small">Your saved CV is sent with every application. ${autoJobs ? "Jobs are approved automatically, so you start as soon as you apply." : "Your teacher reviews each application and your CV."}</span></div>`
+      : `<div class="cv-gate"><span><strong>Save your CV to apply.</strong> <span class="muted-small">It's sent with each job application.</span></span><button type="button" class="btn small gold" onclick="t29Jump('cvCard')">Go to CV builder</button></div>`;
+
   jobs.forEach(j => {
     const isMine    = me.jobId === j.id;
     const myTier    = isMine ? getStudentTier(j, me) : null;
     const myApp     = (cls.jobApplications || []).find(a => a.jobId === j.id && a.studentUser === me.username && a.status === "pending");
     const tiers     = j.tiers || [];
+    const applyBtn  = (kind, label) => cvState === "ready"
+      ? `<button class="btn small ${kind}" onclick="applyForJob('${j.id}')">${label}</button>`
+      : cvState === "missing"
+        ? `<button class="btn small secondary" onclick="t29Jump('cvCard')">Save your CV to apply</button>`
+        : `<button class="btn small ${kind}" disabled>Apply</button>`;
 
     const card = document.createElement("div");
     card.className = "job-board-card" + (isMine ? " is-mine" : "");
@@ -884,8 +990,8 @@ function renderJobBoard(me, cls) {
           : myApp
             ? `<span class="status-pending">Application pending</span>`
             : me.jobId
-              ? `<span class="muted-small">Switch to this job?</span> <button class="btn small secondary" onclick="applyForJob('${j.id}')">Apply</button>`
-              : `<button class="btn small gold" onclick="applyForJob('${j.id}')">${icon("send", 13)} Apply</button>`
+              ? `<span class="muted-small">Switch to this job?</span> ${applyBtn("secondary", "Apply")}`
+              : applyBtn("gold", `${icon("send", 13)} Apply`)
         }
       </div>
     `;
@@ -895,16 +1001,29 @@ function renderJobBoard(me, cls) {
 
 /* ── Apply dialog ───────────────────────────────────────────────────── */
 let APPLYING_JOB_ID = null;
+// careers.js calls this when the student's saved CV has loaded or changed.
+function onCareerCvChange() {
+  if (STUDENT_CTX) renderJobBoard(STUDENT_CTX.me, STUDENT_CTX.cls);
+}
 function applyForJob(jobId) {
+  const cv = careerSavedCv();
+  if (!cv) { t29Jump("cvCard"); return; }
   APPLYING_JOB_ID = jobId;
   const j = JOBS_CACHE.find(jj => jj.id === jobId);
+  const auto = approvalModeFor(STUDENT_CTX && STUDENT_CTX.cls, "job") === "auto";
   document.getElementById("applyJobName").textContent = j ? j.title : "";
   document.getElementById("applyStartingTier").textContent = j && j.tiers && j.tiers[0]
     ? `Starting tier: ${j.tiers[0].name} (${fmtMoney(j.tiers[0].wage)}/pay day)`
     : "";
+  document.getElementById("applyModeNote").textContent = auto
+    ? "Your teacher approves jobs automatically, so you start as soon as you apply."
+    : "Your teacher will review your application and CV, and you'll be told their decision.";
+  document.getElementById("applyCvBody").innerHTML = careerCvHtml(cv);
+  document.getElementById("submitApplyBtn").textContent = auto ? "Apply and start job" : "Submit application";
   document.getElementById("applyLetter").value = "";
   document.getElementById("applyModal").classList.remove("hidden");
   document.getElementById("applyModalMsg").textContent = "";
+  document.getElementById("applyModalMsg").className = "";
 }
 function closeApplyModal() {
   document.getElementById("applyModal").classList.add("hidden");
@@ -912,28 +1031,36 @@ function closeApplyModal() {
 }
 async function submitApplication() {
   if (!APPLYING_JOB_ID) return;
+  const msg    = document.getElementById("applyModalMsg");
+  const cv     = careerSavedCv();
+  if (!cv) { msg.textContent = "Save your CV in the CV builder first."; msg.className = "error-msg"; return; }
   const letter = document.getElementById("applyLetter").value.trim();
   const btn    = document.getElementById("submitApplyBtn");
   btn.disabled = true;
   try {
-    await applyForJob_data(CLASS_CODE, APPLYING_JOB_ID, CURRENT.username, letter);
-    document.getElementById("applyModalMsg").textContent = "Application sent!";
-    document.getElementById("applyModalMsg").className   = "success-msg";
+    const res = await applyForJob_data(CLASS_CODE, APPLYING_JOB_ID, CURRENT.username, letter, cv);
+    msg.textContent = res.auto ? "You got the job! You start now." : "Application sent with your CV!";
+    msg.className   = "success-msg";
     setTimeout(closeApplyModal, 1200);
     await render();
   } catch (e) {
-    document.getElementById("applyModalMsg").textContent = e.message || "Couldn't submit. Try again.";
-    document.getElementById("applyModalMsg").className   = "error-msg";
+    msg.textContent = e.message || "Couldn't submit. Try again.";
+    msg.className   = "error-msg";
   } finally {
     btn.disabled = false;
   }
 }
 
 /* We alias because the function name `applyForJob` is used for the
-   UI trigger; the data layer call has the same spirit but a different name. */
-async function applyForJob_data(classCode, jobId, studentUser, letter) {
-  const classRef = classesCol().doc(classCode);
-  let jobTitle = "";
+   UI trigger; the data layer call has the same spirit but a different name.
+   The CV is copied into its own record (careerSubmissions) that only the student and
+   their teachers can read; the class document, which every classmate can read, never holds it.
+   When the teacher has chosen auto-approve, the job is given in the same transaction. */
+async function applyForJob_data(classCode, jobId, studentUser, letter, cv) {
+  if (!cv) throw new Error("Save your CV in the CV builder before you apply.");
+  const classRef = classesCol().doc(classCode), userRef = usersCol().doc(studentUser);
+  const appId = uid("a");
+  let jobTitle = "", auto = false;
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) throw new Error("Class not found.");
@@ -941,16 +1068,27 @@ async function applyForJob_data(classCode, jobId, studentUser, letter) {
     const job = (cls.jobs || []).find(j => j.id === jobId);
     if (!job) throw new Error("That job no longer exists.");
     jobTitle = job.title || "";
-    const existing = (cls.jobApplications || []).find(
-      a => a.jobId === jobId && a.studentUser === studentUser && a.status === "pending"
-    );
-    if (existing) throw new Error("You already have a pending application for this job.");
     const apps = cls.jobApplications || [];
-    apps.push({ id: uid("a"), jobId, studentUser, coverLetter: letter, status: "pending", date: nowStr() });
+    if (apps.some(a => a.jobId === jobId && a.studentUser === studentUser && a.status === "pending")) {
+      throw new Error("You already have a pending application for this job.");
+    }
+    auto = approvalModeFor(cls, "job") === "auto";
+    let tierId = null;
+    if (auto) {
+      if (!(job.tiers && job.tiers.length)) throw new Error("That job isn't open yet.");
+      tierId = job.tiers[0].id;
+      const me = await t.get(userRef);
+      if (!me.exists) throw new Error("Account not found.");
+      if (me.data().jobId === jobId) throw new Error("You already work in this job.");
+    }
+    apps.push({ id: appId, jobId, studentUser, coverLetter: letter, cvAttached: true, status: auto ? "approved" : "pending", auto, date: nowStr() });
+    t.set(careerSubmissionRef(classCode, appId), { classCode, studentUser, jobId, cv, submittedAt: nowStr() });
     t.update(classRef, { jobApplications: apps });
+    if (auto) t.update(userRef, { jobId, jobTierId: tierId, jobTierSince: nzDateKey(), pendingPromotion: null });
   });
-  // Tell the teacher (best-effort; the application itself is already saved).
-  await t29NotifyTeacher(classCode, "job", "req", jobTitle);
+  // Tell the teacher only when there is something for them to approve (best-effort; the application is already saved).
+  if (!auto) await t29NotifyTeacher(classCode, "job", "req", jobTitle);
+  return { auto };
 }
 
 /* ── My applications (student) ─────────────────────────────────────── */
@@ -965,13 +1103,14 @@ function renderMyApplications(me, cls) {
     row.className = "auto-row";
     const statusBadge =
       a.status === "pending"  ? `<span class="status-pending">Pending</span>`  :
-      a.status === "approved" ? `<span class="status-approved">Approved</span>` :
+      a.status === "approved" ? `<span class="status-approved">${a.auto ? "Approved automatically" : "Approved"}</span>` :
                                 `<span class="status-declined">Declined</span>`;
     row.innerHTML = `
       <div class="auto-details">
         <strong>${j ? escapeHtml(j.title) : "Unknown job"}</strong>
         ${j && j.tiers && j.tiers[0] ? `<div class="muted-small">Entry tier: ${escapeHtml(j.tiers[0].name)}</div>` : ""}
         ${a.coverLetter ? `<div class="muted-small">"${escapeHtml(a.coverLetter)}"</div>` : ""}
+        ${a.cvAttached ? `<div class="muted-small">CV attached</div>` : ""}
         <div class="muted-small">${a.date || ""}</div>
       </div>
       ${statusBadge}

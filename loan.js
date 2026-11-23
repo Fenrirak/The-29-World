@@ -162,8 +162,7 @@ async function render() {
       row.innerHTML = `
         <div class="auto-row">
           <div class="auto-details">
-            ${loan.courseId ? `<strong>Student loan · ${escapeHtml(loan.courseName || "Training")}</strong><div>${fmtMoney(loan.principal)} borrowed · Interest-free</div>` :
-              `<strong>${fmtMoney(loan.principal)}</strong> borrowed &middot; ${loan.rate}%/week over ${termLabel(loan.termWeeks)}`}
+            <strong>${fmtMoney(loan.principal)}</strong> borrowed &middot; ${loan.rate}%/week over ${termLabel(loan.termWeeks)}
             <div class="muted-small">Due ${loan.dueDate}${overdue ? ". Overdue" : ""}</div>
           </div>
           <div class="${overdue ? 'status-declined' : 'status-pending'}">${fmtMoney(loan.owed)} owed</div>
@@ -185,8 +184,7 @@ async function render() {
     past.forEach(l => {
       const row = document.createElement("div");
       row.className = "auto-row";
-      row.innerHTML = `<div class="auto-details">${l.courseId ? `<strong>Student loan · ${escapeHtml(l.courseName || "Training")}</strong>` :
-        `<strong>${fmtMoney(l.principal)}</strong> borrowed &middot; ${l.rate}%/week over ${termLabel(l.termWeeks)}`}<div class="muted-small">Taken ${l.takenDate}</div></div><span class="status-approved">Paid off</span>`;
+      row.innerHTML = `<div class="auto-details"><strong>${fmtMoney(l.principal)}</strong> borrowed &middot; ${l.rate}%/week over ${termLabel(l.termWeeks)}<div class="muted-small">Taken ${l.takenDate}</div></div><span class="status-approved">Paid off</span>`;
       pastBox.appendChild(row);
     });
 

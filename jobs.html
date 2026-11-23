@@ -51,6 +51,26 @@ if(m&&m.u===u&&Array.isArray(m.k)){for(var i=0;i<m.k.length;i++)h.classList.add(
 else if(here){h.classList.add('mod-hold');setTimeout(function(){h.classList.remove('mod-hold');},4000);}
 }catch(_){}})();</script>
 <style>@media (max-width:480px){label[for$="JobAutoWeeks"]{flex-wrap:wrap;}}</style>
+<style>
+.appr-list{display:grid;gap:12px;margin-top:14px}
+.appr-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--line);border-radius:var(--r-3);background:var(--card)}
+.appr-text{flex:1 1 240px;min-width:0}
+.appr-text strong{display:block;margin-bottom:2px;color:var(--navy-900);font-size:var(--fs-md)}
+.appr-seg{display:inline-flex;padding:3px;border:1.5px solid var(--navy-900);border-radius:999px;background:#fff}
+.appr-seg button{border:0;background:transparent;color:var(--navy-900);font:inherit;font-weight:700;font-size:var(--fs-sm);padding:8px 16px;min-height:38px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s}
+.appr-seg button[aria-checked="true"]{background:var(--navy-900);color:#fff}
+.appr-seg button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media (max-width:480px){.appr-seg{width:100%}.appr-seg button{flex:1;padding:8px 6px}}
+.cv-gate{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;margin:12px 0;border:1.5px dashed var(--gold-dark);border-radius:var(--r-3);background:var(--card)}
+.cv-gate.ok{border:1px solid var(--line)}
+.cv-view .cv-label{margin-top:10px;font-size:var(--fs-xs);font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.cv-view .cv-label:first-child{margin-top:0}
+.cv-view .cv-text{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+details.app-cv{margin-top:8px}
+details.app-cv summary{cursor:pointer;font-weight:700;font-size:var(--fs-sm)}
+.app-cv-body{margin-top:8px;padding:6px 0 6px 12px;border-left:3px solid var(--line)}
+#cvCard textarea{resize:vertical}
+</style>
 </head>
 <body>
 
@@ -127,6 +147,32 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div id="payDayMsg"></div>
     </div>
 
+    <!-- Approvals: auto-approve, or wait for the teacher -->
+    <div class="card" id="approvalCard">
+      <h2>Approvals</h2>
+      <p class="muted-small">Choose whether students get jobs and side hustles straight away, or wait for you to approve them first. This only changes new applications and requests; anything already waiting stays in the list below.</p>
+      <div class="appr-list">
+        <div class="appr-row">
+          <div class="appr-text"><strong>Jobs</strong><span class="muted-small" id="apprJobHint"></span></div>
+          <div class="appr-seg" role="radiogroup" aria-label="How students get jobs">
+            <button type="button" role="radio" aria-checked="false" data-kind="job" data-mode="auto" onclick="pickApprovalMode('job','auto')">Auto-approve</button>
+            <button type="button" role="radio" aria-checked="false" data-kind="job" data-mode="approval" onclick="pickApprovalMode('job','approval')">Teacher approves</button>
+          </div>
+        </div>
+        <div class="appr-row">
+          <div class="appr-text"><strong>Side hustles</strong><span class="muted-small" id="apprHustleHint"></span></div>
+          <div class="appr-seg" role="radiogroup" aria-label="How students get side hustles">
+            <button type="button" role="radio" aria-checked="false" data-kind="hustle" data-mode="auto" onclick="pickApprovalMode('hustle','auto')">Auto-approve</button>
+            <button type="button" role="radio" aria-checked="false" data-kind="hustle" data-mode="approval" onclick="pickApprovalMode('hustle','approval')">Teacher approves</button>
+          </div>
+        </div>
+      </div>
+      <div class="row-flex" style="gap:12px;flex-wrap:wrap;margin-top:14px;">
+        <button class="btn secondary" type="button" id="saveApprovalBtn" onclick="saveApprovalModes()" disabled>Save approvals</button>
+        <div id="approvalMsg"></div>
+      </div>
+    </div>
+
     <!-- This pay cycle: who has met their job's requirement -->
     <div class="card" id="logTrackerCard">
       <h2>This pay cycle</h2>
@@ -139,8 +185,12 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div class="flex-between">
         <h2>Pending applications <span id="applicationsBadge" class="badge coral hidden" style="font-size:var(--fs-xs);vertical-align:middle;"></span></h2>
       </div>
-      <p class="muted-small">Job applications and side hustle change requests wait here for your approval. Students who apply for a job always start at the entry tier.</p>
+      <p class="muted-small">When approval is on, job applications (with the student's CV) and side hustle requests wait here. Students who get a job always start at the entry tier.</p>
       <div id="applicationsBox"></div>
+      <details id="applicationsHistoryWrap" class="app-cv hidden" style="margin-top:14px;">
+        <summary>Recent decisions</summary>
+        <div id="applicationsHistory" style="margin-top:8px;"></div>
+      </details>
     </div>
 
     <!-- Jobs grid -->
@@ -258,33 +308,6 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div id="myJobBox"></div>
     </div>
 
-    <div class="grid grid-2">
-      <section class="card">
-        <h2>CV builder</h2>
-        <form id="careerCv" onsubmit="saveCareerCv(event)">
-          <p class="muted-small">Write a practice CV. Use classroom examples and leave out contact details.</p>
-          <label for="careerSummary">Personal statement</label>
-          <textarea id="careerSummary" name="summary" rows="2" maxlength="400" placeholder="What would you bring to a workplace?"></textarea>
-          <label for="careerSkills">Skills</label>
-          <textarea id="careerSkills" name="skills" rows="2" maxlength="500" placeholder="List skills and give an example of each."></textarea>
-          <label for="careerExperience">Experience</label>
-          <textarea id="careerExperience" name="experience" rows="2" maxlength="700" placeholder="Include school projects, activities or classroom jobs."></textarea>
-          <label for="careerEducation">Education and training</label>
-          <textarea id="careerEducation" name="education" rows="2" maxlength="500" placeholder="Include relevant subjects, courses or certificates."></textarea>
-          <div class="row-flex" style="gap:8px;flex-wrap:wrap;margin-top:12px;">
-            <button class="btn gold" type="submit" disabled>Save CV</button>
-            <button class="btn secondary" type="button" onclick="downloadCareerCv()">Download CV</button>
-          </div>
-          <p id="careerCvMsg" role="status"></p>
-        </form>
-      </section>
-      <section class="card">
-        <h2>Daily career check-in</h2>
-        <form id="careerCheckIn" onsubmit="submitCareerCheckIn(event)"></form>
-        <p id="careerCheckInMsg" role="status"></p>
-      </section>
-    </div>
-
     <div class="card hidden" id="jobLogCard">
       <h2 id="hJobLog">Job log</h2>
       <div id="jobLogBox"></div>
@@ -302,20 +325,38 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div id="payslipBox"></div>
     </div>
 
+    <section class="card" id="cvCard">
+      <div class="flex-between" style="gap:12px;flex-wrap:wrap;align-items:flex-start;">
+        <div style="flex:1 1 260px;">
+          <h2 style="margin-bottom:4px;">CV builder</h2>
+          <p class="muted-small" style="margin:0;">Write a practice CV with classroom examples and no contact details. Once it's saved you can apply for jobs below, and your CV is sent with each application.</p>
+        </div>
+        <span id="careerCvStatus"></span>
+      </div>
+      <form id="careerCv" onsubmit="saveCareerCv(event)" style="margin-top:12px;">
+        <label for="careerSummary">Personal statement</label>
+        <textarea id="careerSummary" name="summary" rows="3" maxlength="400" placeholder="What would you bring to a workplace?"></textarea>
+        <label for="careerSkills">Skills</label>
+        <textarea id="careerSkills" name="skills" rows="3" maxlength="500" placeholder="List skills and give an example of each."></textarea>
+        <label for="careerExperience">Experience</label>
+        <textarea id="careerExperience" name="experience" rows="3" maxlength="700" placeholder="Include school projects, activities or classroom jobs."></textarea>
+        <label for="careerEducation">Education and training</label>
+        <textarea id="careerEducation" name="education" rows="3" maxlength="500" placeholder="Include relevant subjects, courses or certificates."></textarea>
+        <div class="row-flex" style="gap:8px;flex-wrap:wrap;margin-top:12px;">
+          <button class="btn gold" type="submit" disabled>Save CV</button>
+          <button class="btn secondary" type="button" onclick="downloadCareerCv()">Download CV</button>
+        </div>
+        <p id="careerCvMsg" role="status"></p>
+      </form>
+    </section>
+
     <div class="card">
       <h2>Careers market</h2>
       <p class="muted-small">Each job has a progression of tiers. You start at the bottom and work your way up.</p>
+      <div id="jobBoardNote"></div>
       <div id="jobBoardGrid" class="job-board-grid" style="margin-top:16px;"></div>
       <p class="muted-small hidden" id="noJobs">Your teacher hasn't posted any jobs yet.</p>
     </div>
-
-    <section class="card">
-      <h2>Training and student loans</h2>
-      <p>Use a classroom student loan to pay for training. The debt stays with you when you change jobs.</p>
-      <div id="careerLoanBalance"></div>
-      <div id="careerCourses" class="grid grid-3"></div>
-      <p id="careerLoanMsg" role="status"></p>
-    </section>
 
     <div class="card">
       <h2>My applications</h2>
@@ -363,8 +404,13 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <h2 style="margin:0;">Apply for <span id="applyJobName"></span></h2>
       <button class="btn small secondary" onclick="closeApplyModal()">Cancel</button>
     </div>
-    <p id="applyStartingTier" class="muted-small" style="margin:8px 0 14px;"></p>
-    <label for="applyLetter">Cover letter (optional)</label>
+    <p id="applyStartingTier" class="muted-small" style="margin:8px 0 10px;"></p>
+    <p id="applyModeNote" class="muted-small" style="margin:0 0 12px;"></p>
+    <details class="app-cv">
+      <summary>Your CV, sent with this application</summary>
+      <div class="app-cv-body cv-view" id="applyCvBody"></div>
+    </details>
+    <label for="applyLetter" style="display:block;margin-top:14px;">Cover letter (optional)</label>
     <textarea id="applyLetter" rows="3" placeholder="Tell your teacher why you're great for this job…" style="resize:vertical;"></textarea>
     <div style="display:flex;gap:8px;align-items:center;margin-top:12px;">
       <button class="btn gold" id="submitApplyBtn" onclick="submitApplication()">Submit application</button>
@@ -404,7 +450,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="offline.js?v=a51010b5"></script>
 <script defer src="data-core.js?v=7d494ebe"></script>
 <script defer src="data-money.js?v=452cbe61"></script>
-<script defer src="data-life.js?v=d50f031d"></script>
+<script defer src="data-life.js?v=ae27df05"></script>
 <script defer src="data-property.js?v=d3163b64"></script>
 <script defer src="data-markets.js?v=9b0491d9"></script>
 <script defer src="base-template.js?v=834065ab"></script>
@@ -412,8 +458,8 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=e731e566"></script>
 <script defer src="notifications.js?v=def2a521"></script>
-<script defer src="careers.js?v=2de9be9c"></script>
-<script defer src="jobs.js?v=704b0e34"></script>
+<script defer src="careers.js?v=b82b046d"></script>
+<script defer src="jobs.js?v=6e799824"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
 </body>
 </html>
