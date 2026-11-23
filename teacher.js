@@ -72,8 +72,8 @@ async function openClassExport(format) {
   const msg = document.getElementById("exportClassMsg");
   flashMsg(msg, "Loading class export…", 60000);
   try {
-    const scripts = [t29LoadScript("class-export.js?v=2c9f99a7")];
-    if (format === "pdf") scripts.push(t29LoadScript("pdf-report.js?v=02f2ce08"));
+    const scripts = [t29LoadScript("class-export.js?v=9ed2482f")];
+    if (format === "pdf") scripts.push(t29LoadScript("pdf-report.js?v=dd12b4f3"));
     await Promise.all(scripts);
     await exportClassClick(format);
   } catch (e) {

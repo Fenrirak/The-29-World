@@ -351,6 +351,10 @@ function pdfStudentReport(doc, s, report) {
       sub: s.topExpenseCategory ? fmtMoney(s.topExpenseCategory.amount) : "", color: "coral" }
   ]);
 
+  if (s.crisisEvents?.length) {
+    doc.heading("Classroom crises this month");
+    s.crisisEvents.forEach(e => doc.para(e.day + "  " + e.name + " - " + e.summary));
+  }
   doc.heading("Net worth breakdown");
   doc.row("Cash balance", fmtMoney(s.balance), { rule: true });
   doc.row("Savings account", fmtMoney(s.savings), { rule: true });

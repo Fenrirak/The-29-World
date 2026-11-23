@@ -119,6 +119,7 @@ function pvBuildReportHtml(doc, opts) {
           <div class="pv-eyebrow">Report card</div>
           <h1>${pvEscape(v.name)}</h1>
           ${meta.length ? `<div class="pv-meta">${meta.map(m => `<span>${m}</span>`).join("")}</div>` : ""}
+          ${Array.isArray(v.crisisEvents) && v.crisisEvents.length ? `<h3>Classroom crises this month</h3><ul>${v.crisisEvents.map(e => `<li>${pvEscape(e.day)} · ${pvEscape(e.name)}<br>${pvEscape(e.summary)}</li>`).join("")}</ul>` : ""}
           <p class="pv-updated">Last updated ${pvTimeAgo(doc.updatedAt)}</p>
         </div>
         ${opts.preview ? "" : `<button class="btn secondary no-print pv-print" onclick="window.print()">Print</button>`}

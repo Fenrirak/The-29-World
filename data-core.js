@@ -1323,14 +1323,27 @@ function t29SessionStudent() {
 }
 
 /* ---------------- Teacher account + class creation ---------------- */
-// The full set of fields a brand new class starts with — shared by the
-// original "new teacher" signup flow, "create a brand new class" on the
-// teacher's Home page, and (as a starting point before its config gets
-// overwritten by the template) "new class from a template".
+// Base classes created before crisis events use the same term-scaled scenarios as new ones.
+function baseCrisisEvents(terms) {
+  const scale = Number(terms) === 4 ? 2 : Number(terms) === 2 ? 1.5 : 1;
+  return [
+    { id: "cr_market", name: "Market correction", severity: 8 * scale, sectors: ["market", "property"] },
+    { id: "cr_supply", name: "Supply shortage", severity: 6 * scale, sectors: ["store", "transport"] },
+    { id: "cr_recession", name: "Classroom recession", severity: 12 * scale, sectors: ["market", "property", "store", "transport"] }
+  ];
+}
+function crisisMarketSummary(event) {
+  const labels = { market: "Simulated shares", property: "Property", store: "Store goods", transport: "Vehicles" };
+  return (event.markets || []).map(m => (labels[m.key] || "Market") + " " + (m.changePct > 0 ? "+" : "") + Number(m.changePct) + "%").join(" · ");
+}
+function classCrisisEvents(cls) {
+  return Array.isArray(cls.crisisDefs) ? cls.crisisDefs : cls.baseTemplate ? baseCrisisEvents(cls.baseTemplateTerms) : [];
+}
+// Shared by teacher signup, creating an empty class, and creating a class from a template.
 function defaultClassData(code, className, teacherUsername) {
   return {
     code, name: className || "Room " + code, teacher: teacherUsername,
-    students: [], jobs: [], companies: [],
+    students: [], jobs: [], companies: [], realStocksEnabled: false,
     interestRate: 1, txns: [],
     createdAt: Date.now(), reportArchives: [],
     archived: false, archivedAt: null,
@@ -1384,7 +1397,7 @@ function defaultClassData(code, className, teacherUsername) {
     },
     taxRates: { property: 0, transport: 0, interest: 0, gambling: 0 },
     wageTaxBrackets: [],
-    bigEventDefs: [], bigEventLog: [], lastBigEventWeekRun: null,
+    crisisDefs: [], crisisLog: [], bigEventDefs: [], bigEventLog: [], lastBigEventWeekRun: null,
     lifestyleConfig: {
       property: { enabled: true, weight: 4 },
       store: { enabled: true, weight: 2 },
@@ -1654,6 +1667,8 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
     const item = _cloneDoc(it);
     item.stock = (item.stockTotal === null || item.stockTotal === undefined) ? null : item.stockTotal;
     item.sold = 0;
+    if (!keepPrices && item.preCrisisPrice != null) item.price = item.preCrisisPrice;
+    delete item.preCrisisPrice;
     return item;
   });
   cls.properties = (template.properties || []).map(p => {
@@ -1683,11 +1698,15 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
   cls.vehicles = (template.vehicles || []).map(v => {
     const veh = _cloneDoc(v);
     veh.owners = [];
+    if (!keepPrices && veh.preCrisisPrice != null) veh.price = veh.preCrisisPrice;
+    if (!keepPrices && veh.preCrisisExpense != null) veh.weeklyExpense = veh.preCrisisExpense;
+    delete veh.preCrisisPrice;
+    delete veh.preCrisisExpense;
     return veh;
   });
   cls.companies = (template.companies || []).map(co => {
     const c = _cloneDoc(co);
-    const startPrice = keepPrices ? c.price : (c.history && c.history.length) ? c.history[0] : c.price;
+    const startPrice = keepPrices || c.realSymbol ? c.price : (c.history && c.history.length) ? c.history[0] : c.price;
     c.price = startPrice;
     c.availableShares = c.totalShares;
     c.holders = {};
@@ -1701,6 +1720,7 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
   cls.lifeItems = _cloneDoc(template.lifeItems || []);
   cls.eventDefs = _cloneDoc(template.eventDefs || []);
   cls.bigEventDefs = _cloneDoc(template.bigEventDefs || []);
+  cls.crisisDefs = _cloneDoc(classCrisisEvents(template));
   cls.loanTiers = _cloneDoc(template.loanTiers || []);
   cls.maxLoanAmount = template.maxLoanAmount || 0;
   cls.maxLoanCount = template.maxLoanCount || 0;
@@ -1774,7 +1794,7 @@ function t29UpChance(v) {
 function _templateSnapshot(cls) {
   const t = _classDataFromTemplate("", cls.name || "", cls.teacher || "", withNewModuleDefaults(_cloneDoc(cls)));
   ["code", "name", "teacher", "students", "txns", "createdAt", "reportArchives", "archived", "archivedAt",
-    "templateShareToken", "automations", "jobApplications", "eventLog", "bigEventLog",
+    "templateShareToken", "automations", "jobApplications", "eventLog", "bigEventLog", "crisisLog",
     "lastActivityAt", "autoArchived", "coTeachers", "coTeacherCode"].forEach(k => { delete t[k]; });
   return _cloneDoc(t);
 }

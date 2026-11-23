@@ -34,6 +34,7 @@
 <meta name="theme-color" content="#1f2b44">
 <link rel="stylesheet" href="style.css?v=91f8426d">
 <link rel="stylesheet" href="split.css?v=40125d17">
+<link rel="stylesheet" href="real-stocks.css?v=7d8b7293">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -124,17 +125,36 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     </form>
     <div id="coMsg"></div>
 
+    <section class="real-market" aria-labelledby="realMarketTitle">
+      <div class="set-row">
+        <div class="set-row-text">
+          <h2 id="realMarketTitle">Real-world stocks and funds</h2>
+          <p class="muted-small">List a company or an exchange-traded fund (ETF) for your class. Closing prices refresh daily at midnight NZ time.</p>
+        </div>
+        <label class="cc-switch"><input id="realSwitch" type="checkbox" aria-label="Enable real-world stocks and funds" aria-controls="realPicker" onchange="toggleRealStocks()"><span class="cc-switch-track"></span><span id="realSwitchText">Off</span></label>
+      </div>
+      <div id="realPicker" hidden>
+        <label for="realSymbol">Choose a company or fund</label>
+        <select id="realSymbol" onchange="previewRealStock()"><option value="">Select a listing…</option></select>
+        <p class="muted-small" id="realFundNote" hidden></p>
+        <div id="realPreview" aria-live="polite"></div>
+        <button type="button" class="btn gold" id="listReal" onclick="listRealStock()" disabled>Add to class market</button>
+        <p class="muted-small">One classroom dollar buys one dollar of stock in the listing currency. Turning this setting off pauses updates and keeps existing holdings.</p>
+      </div>
+      <div id="realMsg" role="status"></div>
+    </section>
+
     <div class="set-row" style="margin-top:22px;padding-top:18px;border-top:1.5px solid var(--line);">
       <div class="set-row-text">
         <h2 id="hMarketDay">Market day</h2>
-        <p class="muted-small">Moves every share price once, up or down by a random amount within the daily range below.</p>
+        <p class="muted-small">Moves each simulated company's price once, within its daily range.</p>
       </div>
       <button class="btn gold" onclick="runMarketDay()" id="simDayBtn" style="margin-top:0;">Simulate a market day</button>
     </div>
 
     <details class="fold-sub" id="rangeFold">
       <summary><span class="fold-head"><h2 id="hVolatility">Daily price movement</h2><span class="fold-hint">How far a share price can move each simulated day.</span></span></summary>
-      <p>Set how much every <strong>new</strong> company's share price can randomly move each time you simulate a market day. Each simulated day picks a random direction: <strong>up or down</strong>, with the chance of going up set below (55% by default), and a random size within this range, so prices can rise <em>or</em> fall. Each company's range can also be fine-tuned individually below once it's listed.</p>
+      <p>Set how much a new <strong>simulated company</strong>'s share price can randomly move each time you simulate a market day. Each simulated day picks a random direction: <strong>up or down</strong>, with the chance of going up set below (55% by default), and a random size within this range, so prices can rise <em>or</em> fall. Each company's range can also be fine-tuned individually below once it's listed.</p>
       <div class="grid grid-3">
         <div>
           <label for="rangeMin" id="labRangeMin">Minimum % change</label>
@@ -151,7 +171,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div id="rangeMsg"></div>
 
       <h3 style="margin:20px 0 6px;" id="hUpChance">Chance of going up or down</h3>
-      <p class="muted-small" style="margin:0 0 10px;">Each simulated day, every company independently rolls this chance of moving <strong>up</strong>. Otherwise it moves down. 50% is a fair coin flip. New classes start at 55%.</p>
+      <p class="muted-small" style="margin:0 0 10px;">Each simulated day, every simulated company independently rolls this chance of moving <strong>up</strong>. Otherwise it moves down. 50% is a fair coin flip. New classes start at 55%.</p>
       <div class="grid grid-3">
         <div>
           <label for="upChance" id="labUpChance">Chance of going up (%)</label>
@@ -168,7 +188,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <div id="upChanceMsg"></div>
 
       <h3 style="margin:20px 0 6px;" id="hShowMove">Show students how far prices can move</h3>
-      <p class="muted-small" style="margin:0 0 10px;">When this is on, each company card shows students the range its price can move on a simulated market day (the minimum and maximum % above, or the company's own range if you set one). Off by default.</p>
+      <p class="muted-small" style="margin:0 0 10px;">When this is on, each simulated company card shows students the range its price can move on a simulated market day (the minimum and maximum % above, or the company's own range if you set one). Off by default.</p>
       <label class="cc-switch"><input type="checkbox" id="showShareMove" onchange="saveShowShareMove()"><span class="cc-switch-track"></span><span id="labShowMove">Let students see each company's daily price range</span></label>
       <div id="showMoveMsg"></div>
     </details>
@@ -195,15 +215,16 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="settings-menu.js?v=87649e37"></script>
 <script defer src="shortcuts.js?v=8ce32ffe"></script>
 <script defer src="offline.js?v=a51010b5"></script>
-<script defer src="data-core.js?v=6e748bcb"></script>
-<script defer src="data-money.js?v=5b956b5f"></script>
-<script defer src="data-life.js?v=72af86eb"></script>
+<script defer src="data-core.js?v=22452053"></script>
+<script defer src="data-money.js?v=452cbe61"></script>
+<script defer src="data-life.js?v=d50f031d"></script>
 <script defer src="data-property.js?v=d3163b64"></script>
-<script defer src="data-markets.js?v=1c17fe29"></script>
+<script defer src="data-markets.js?v=9b0491d9"></script>
 <script defer src="events-ui.js?v=17ce0701"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
-<script defer src="notifications.js?v=dcb44da8"></script>
+<script defer src="notifications.js?v=def2a521"></script>
 <script defer src="split.js?v=1fda302d"></script>
-<script defer src="market.js?v=924c870c"></script>
+<script defer src="real-stocks.js?v=db1ebbda"></script>
+<script defer src="market.js?v=83f54dc4"></script>
 </body>
 </html>

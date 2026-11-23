@@ -1,0 +1,20 @@
+#crisisControls, .crisis-sectors { margin: 0; padding: 0; border: 0; min-width: 0; }
+.crisis-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; margin: 18px 0; }
+.crisis-editor output { float: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+#crisisSeverity { display: block; padding: 0; width: 100%; min-height: 32px; accent-color: var(--gold-dark); }
+.crisis-sectors legend { font-weight: 700; }
+#crisisSectors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+#crisisSectors label { display: flex; align-items: center; gap: 8px; margin: 0; padding: 9px; border: 1px solid var(--line); border-radius: var(--r-2); cursor: pointer; }
+#crisisSectors input { width: auto; margin: 0; accent-color: var(--mint-dark); }
+.crisis-preview { padding: 18px; border: 1px solid var(--line); border-top: 3px solid var(--gold); border-radius: var(--r-4); }
+.crisis-preview h3 { margin-top: 0; }
+.crisis-market { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.crisis-market strong, .crisis-market span, .crisis-record span { display: block; }
+.crisis-market b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.crisis-market, .crisis-record { overflow-wrap: anywhere; }
+.crisis-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.crisis-record { padding: 12px 0; border-bottom: 1px solid var(--line); }
+#crisisMessage:empty { display: none; }
+@media (max-width: 700px) {
+  .crisis-editor { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+}

@@ -60,6 +60,7 @@ function t29xCtx(ids) {
     const k = String(key), p = String(path);
     if (/sellBackRates/i.test(p)) return Math.round(v * 10000) / 100 + "%";
     const plain = Number.isInteger(v) ? String(v) : String(Math.round(v * 10000) / 10000);
+    if (k === "severity" && /crisis/i.test(p)) return plain + "%";
     if (T29X_NOT_MONEY.test(k)) return plain;
     if (/priceRange|taxRates/i.test(p) || (T29X_PCT.test(k) && !/upto/i.test(k))) return plain + "%";
     if (T29X_MONEY.test(k)) return fmtMoney(v);
@@ -169,7 +170,7 @@ async function t29xBuild(classCode) {
 
   /* markets */
   H(1, "Markets: prices, history and the chance of going up or down");
-  P(`Shares: every simulated market day each company independently has a ${t29xChance(cls.marketUpChance).up}% chance of moving UP and a ${t29xChance(cls.marketUpChance).down}% chance of moving DOWN. The size of the move is random between the company's own % range (or the class default ${cls.priceRange ? cls.priceRange.min + "% to " + cls.priceRange.max + "%" : "1% to 5%"}).`);
+  P(`Simulated shares: each company independently has a ${t29xChance(cls.marketUpChance).up}% chance of moving UP and a ${t29xChance(cls.marketUpChance).down}% chance of moving DOWN. The size of the move is random between the company's own % range (or the class default ${cls.priceRange ? cls.priceRange.min + "% to " + cls.priceRange.max + "%" : "1% to 5%"}).`);
   P(`Property: a ${t29xChance(cls.propertyUpChance).up}% up / ${t29xChance(cls.propertyUpChance).down}% down rule, with a move between the listing's own % range (or the class default ${cls.propertyPriceRange ? cls.propertyPriceRange.min + "% to " + cls.propertyPriceRange.max + "%" : "0.5% to 2%"}).`);
   H(2, "Companies (shares)");
   (cls.companies || []).forEach(co => {
@@ -178,7 +179,8 @@ async function t29xBuild(classCode) {
     const chg = prev ? ((co.price - prev) / prev * 100) : null;
     const r = co.priceRange || cls.priceRange || {};
     H(3, `${co.name} - ${money(co.price)}`);
-    P(`Last move: ${chg === null ? "no previous price" : (chg >= 0 ? "+" : "") + chg.toFixed(2) + "%"} | Daily move range: ${r.min}% to ${r.max}% (${co.priceRange ? "this company's own" : "class default"}) | Chance up ${t29xChance(cls.marketUpChance).up}% / down ${t29xChance(cls.marketUpChance).down}%`, 1);
+    if (co.realSymbol) P(`Real-world stock ${co.realSymbol} | Closing price dated ${co.quoteDate} | Reported shares dated ${co.sharesDate} | Daily updates ${cls.realStocksEnabled ? "on" : "paused"}`, 1);
+    else P(`Last move: ${chg === null ? "no previous price" : (chg >= 0 ? "+" : "") + chg.toFixed(2) + "%"} | Daily move range: ${r.min}% to ${r.max}% (${co.priceRange ? "this company's own" : "class default"}) | Chance up ${t29xChance(cls.marketUpChance).up}% / down ${t29xChance(cls.marketUpChance).down}%`, 1);
     (co.splits || []).forEach(sp => P(`Share split ${sp.to}-for-${sp.from} on ${sp.dateKey || "an unknown date"}: price ${money(sp.priceBefore)} to ${money(sp.priceAfter)} (older prices below are already adjusted for it)`, 1));
     P("Price history, oldest to newest: " + (hist.length ? hist.map((p, n) => `${dates[n] ? dates[n] + " " : ""}${money(p)}`).join(", ") : "none"), 1);
     const holders = Object.entries(co.holders || {}).filter(([, n]) => n > 0);

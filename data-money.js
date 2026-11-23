@@ -3374,6 +3374,8 @@ function buildStudentReportData(student, cls) {
 
   return {
     username, name: student.name,
+    crisisEvents: (cls.crisisLog || []).filter(e => e.day?.slice(0, 7) === accounting.monthKey && e.ts >= (student.joinedAt || 0))
+      .map(e => ({ day: e.day, name: e.name, summary: crisisMarketSummary(e) })),
     accountingVersion: 2, historyComplete: accounting.historyComplete, earningsComplete,
     netWorth, balance: Math.round(student.balance * 100) / 100, savings: Math.round(savings * 100) / 100,
     invested: Math.round(invested * 100) / 100, storeValue: Math.round(storeValue * 100) / 100,
@@ -5098,7 +5100,7 @@ function _buildParentView(student, cls, teacherName) {
     name: student.name || student.username,
     className: cls.name || "",
     teacherName: teacherName || "",
-    monthLabel,
+    monthLabel, crisisEvents: r.crisisEvents,
     accountingVersion: r.accountingVersion, historyComplete: r.historyComplete, earningsComplete: r.earningsComplete,
     job: job ? (tier ? tier.name : job.title) : null,
     netWorth: r.netWorth, balance: r.balance, savings: r.savings,
@@ -5186,7 +5188,7 @@ async function refreshParentViewIfStale(student, cls) {
     if (!token || !cls) return false;
     let last = 0;
     try { last = Number(localStorage.getItem("t29_pv_refreshed_" + token)) || 0; } catch (e) { /* ignore */ }
-    if (Date.now() - last < PARENT_VIEW_REFRESH_MS) return false;
+    if (Date.now() - last < PARENT_VIEW_REFRESH_MS && last >= (cls.crisisLog?.[0]?.ts || 0)) return false;
     return !!await writeParentView(student.username, student.classCode, token, false);
   } catch (e) {
     console.warn("Family link refresh skipped:", e);

@@ -3,7 +3,7 @@ let ACTIVE_TAB = null, LAST_TABS = null;
 let STUDENT_DATA = { hist: [], cat: [] };
 const EV_FILTERS = { hist: { type: "all", dir: "all" }, all: { type: "all", dir: "all" } };
 const EV_TAB_KEY = "t29-events-tab";
-const EV_PANES = { random: "paneRandom", big: "paneBig", history: "paneHistory", all: "paneAll" };
+const EV_PANES = { random: "paneRandom", big: "paneBig", crisis: "paneCrisis", history: "paneHistory", all: "paneAll" };
 
 const MODULE_LABEL = { income: "Income", property: "Property", transport: "Transport", general: "General" };
 const STATUS_LABEL = { pending: "Awaiting response", paid: "Paid", lost: "Lost the asset", claimed: "Claimed on insurance", received: "Received" };
@@ -32,7 +32,8 @@ function evTabList(cls, counts) {
   if (IS_TEACHER) {
     return [
       { key: "random", label: "Random events", count: (cls.eventDefs || []).length },
-      { key: "big", label: "Big events", count: (cls.bigEventDefs || []).length }
+      { key: "big", label: "Big events", count: (cls.bigEventDefs || []).length },
+      { key: "crisis", label: "Crisis events", count: classCrisisEvents(cls).length }
     ];
   }
   const list = [{ key: "history", label: "My history", count: counts.hist }];
@@ -82,7 +83,7 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("bolt", 26) + " Events";
   document.getElementById("pageIntro").textContent = IS_TEACHER
-    ? "Everything unexpected that can happen to your students lives here. Random events are everyday surprises spread across the school week, and big events are rarer, high-stakes moments. Set both up, run them on demand, and choose whether students can see what could happen."
+    ? "Everything unexpected that can happen to your students lives here. Random events are everyday surprises spread across the school week, and big events are rarer, high-stakes moments. Use Crisis events to change prices across the classroom economy."
     : "Random events are everyday surprises that can land on any school day, and big events are rarer with higher stakes. Everything that has happened to you is listed below.";
   document.getElementById("hRandom").innerHTML = "Random events";
   document.getElementById("hBig").innerHTML = "Big events";
@@ -163,11 +164,12 @@ function renderTeacher(cls) {
   paintVisNote(on);
   renderRandomList(cls);
   renderBigList(cls);
+  renderCrisis(cls);
 }
 
 function paintVisNote(on) {
   document.getElementById("visNote").textContent = on
-    ? "On: students have an \"All possible events\" tab here listing every active random and big event, with amounts and who can get it. They don't see the \"what happened\" lines on multiple choice events. Switch off to hide it again."
+    ? "On: students have an \"All possible events\" tab here listing active random and big events, and saved crisis scenarios. They don't see the \"what happened\" lines on multiple choice events. Switch off to hide it again."
     : "Off: students only see events that have already happened to them. Switch on to let them browse everything that could happen.";
 }
 
@@ -381,6 +383,11 @@ function buildHistory(cls, username) {
     if (e.studentUser !== username || e.status === "scheduled" || e.status === "skipped") return;
     out.push(bigHistoryItem(e, 100000 + i));
   });
+  (cls.crisisLog || []).forEach((e, i) => {
+    if (e.ts < (CURRENT.joinedAt || 0)) return;
+    out.push({ kind: "crisis", name: e.name, dirs: ["none"], lines: [escapeHtml(crisisMarketSummary(e))],
+      date: e.day, t: e.ts, order: 200000 - i, amountHtml: "", statusHtml: "Class prices changed" });
+  });
   return out.sort((a, b) => b.t - a.t || b.order - a.order);
 }
 
@@ -451,6 +458,10 @@ function buildCatalogue(cls) {
   const out = [];
   (cls.eventDefs || []).filter(e => e.active).forEach(ev => out.push(randomCatalogItem(ev)));
   (cls.bigEventDefs || []).filter(e => e.active).forEach(d => out.push(bigCatalogItem(d)));
+  for (const d of classCrisisEvents(cls)) out.push({
+    kind: "crisis", name: d.name, dirs: ["none"], tags: [], badges: "",
+    desc: Number(d.severity) + "% average price movement", body: CRISIS_MARKETS.filter(m => d.sectors.includes(m.key)).map(m => evTag(m.icon, m.label)).join(" ")
+  });
   return out;
 }
 
@@ -459,7 +470,7 @@ function historyRowHtml(it) {
   return `<div class="ev-row ${it.kind}">
     <div class="ev-main">
       <div class="ev-title"><span>${escapeHtml(it.name)}</span>
-        <span class="badge ${big ? "gold" : "lilac"}">${big ? "Big" : "Random"}</span>
+        <span class="badge ${big ? "gold" : "lilac"}">${it.kind === "crisis" ? "Crisis" : big ? "Big" : "Random"}</span>
         ${it.assetName ? `<span class="ev-asset">${escapeHtml(it.assetName)}</span>` : ""}
       </div>
       ${it.lines.map(l => `<div class="ev-desc">${l}</div>`).join("")}
@@ -485,7 +496,8 @@ function paintSummary(hist) {
   document.getElementById("evSummary").innerHTML = `
     <div class="stat"><span class="icon">${icon("history", 30)}</span><div class="label">All events</div><div class="value">${hist.length}</div></div>
     <div class="stat lilac"><span class="icon">${icon("dice", 30)}</span><div class="label">Random events</div><div class="value">${random}</div></div>
-    <div class="stat gold"><span class="icon">${icon("bolt", 30)}</span><div class="label">Big events</div><div class="value">${hist.length - random}</div></div>`;
+    <div class="stat gold"><span class="icon">${icon("bolt", 30)}</span><div class="label">Big events</div><div class="value">${hist.filter(i => i.kind === "big").length}</div></div>
+    ${hist.some(i => i.kind === "crisis") ? `<div class="stat"><span class="icon">${icon("chart", 30)}</span><div class="label">Crisis events</div><div class="value">${hist.filter(i => i.kind === "crisis").length}</div></div>` : ""}`;
 }
 
 function paintFilters(pane, counts) {
@@ -495,7 +507,7 @@ function paintFilters(pane, counts) {
       <span class="ev-filter-label">${label}</span>
       ${opts.map(([v, text, n]) => `<button type="button" class="ev-chip" data-k="${key}" data-v="${v}" aria-pressed="${f[key] === v}" onclick="setEvFilter('${pane}','${key}','${v}')">${text}${n === undefined ? "" : ` <span class="ev-chip-n">${n}</span>`}</button>`).join("")}
     </div>`;
-  box.innerHTML = group("Type", "type", [["all", "All", counts.all], ["random", "Random", counts.random], ["big", "Big", counts.big]])
+  box.innerHTML = group("Type", "type", [["all", "All", counts.all], ["random", "Random", counts.random], ["big", "Big", counts.big], ...(counts.crisis ? [["crisis", "Crisis", counts.crisis]] : [])])
     + group("Outcome", "dir", [["all", "Any"], ["gain", "Gains"], ["cost", "Costs"]]);
 }
 
@@ -527,7 +539,7 @@ function paintStudentList(pane) {
     empty.classList.remove("hidden");
     return;
   }
-  paintFilters(pane, { all: items.length, random, big: items.length - random });
+  paintFilters(pane, { all: items.length, random, big: items.filter(i => i.kind === "big").length, crisis: items.filter(i => i.kind === "crisis").length });
   const shown = items.filter(i => (f.type === "all" || i.kind === f.type) && (f.dir === "all" || i.dirs.includes(f.dir)));
   if (!shown.length) {
     listBox.innerHTML = "";
@@ -542,7 +554,8 @@ function paintStudentList(pane) {
   }
   const groups = [
     ["random", "Random events", `Everyday surprises. Every student gets ${evWeeklyRange()} a week, each on a different school day.`],
-    ["big", "Big events", `Rarer and higher stakes. Each week there's about a ${evChancePct()}% chance of one.`]
+    ["big", "Big events", `Rarer and higher stakes. Each week there's about a ${evChancePct()}% chance of one.`],
+    ["crisis", "Crisis events", "Your teacher can run these scenarios to change classroom prices."]
   ];
   listBox.innerHTML = groups.map(([k, title, sub]) => {
     const arr = shown.filter(i => i.kind === k);

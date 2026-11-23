@@ -56,7 +56,7 @@ async function setCompanyPriceRange(classCode, companyId, min, max) {
     if (!snap.exists) return;
     const cls = snap.data();
     const co = cls.companies.find(c => c.id === companyId);
-    if (!co) return;
+    if (!co || co.realSymbol) return;
     const old = co.priceRange || cls.priceRange || { min: 1, max: 5 };
     co.priceRange = { min: Math.max(0, parsedMin), max: Math.max(0, parsedMax) };
     t.update(classRef, { companies: cls.companies });
@@ -90,7 +90,7 @@ async function updateCompanyPrice(classCode, companyId, newPrice) {
     if (!snap.exists) return;
     const cls = snap.data();
     const co = cls.companies.find(c => c.id === companyId);
-    if (!co) return;
+    if (!co || co.realSymbol) return;
     const prev = co.price;
     co.price = Math.max(0.01, parsed);
     co.history.push(co.price);
@@ -154,6 +154,7 @@ function applyMarketDayMoves(cls) {
   const range = cls.priceRange || { min: 1, max: 5 };
   const upChance = t29UpChance(cls.marketUpChance);
   cls.companies.forEach(co => {
+    if (co.realSymbol) return;
     const coRange = co.priceRange || range;
     const pct = coRange.min + Math.random() * (coRange.max - coRange.min);
     // Up with the teacher's chance (cls.marketUpChance, 55% unless changed), down otherwise.
@@ -573,6 +574,7 @@ function t29PlanShareSplit(co, toIn, fromIn) {
   to /= g; from /= g; // 4-for-2 is just 2-for-1
   if (to === from) return { ok: false, error: "Pick two different numbers: a split has to change the number of shares." };
   if (!co) return { ok: false, error: "That company isn't listed any more." };
+  if (co.realSymbol) return { ok: false, error: "This company's shares follow its exchange listing." };
   const price = Number(co.price);
   if (!Number.isFinite(price) || price <= 0) return { ok: false, error: "This company's price is invalid. Set a new price first." };
   const label = t29SplitLabel(to, from);

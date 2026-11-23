@@ -421,11 +421,13 @@ async function updateVehicle(classCode, vehId, updates) {
                weeklyExpense: veh.weeklyExpense || 0, offset: veh.publicTransportOffsetPct || 0, owners: (veh.owners || []).slice() };
     veh.name = updates.name;
     veh.price = Math.max(0, Number(updates.price) || 0);
+    if (veh.price !== before.price) delete veh.preCrisisPrice;
     veh.comfort = Math.max(1, Math.min(5, Number(updates.comfort) || 1));
     veh.description = updates.description || "";
     veh.type = normalizeVehicleType(updates.type);
     veh.drivePayout = Math.max(0, Number(updates.drivePayout) || 0);
     veh.weeklyExpense = Math.max(0, Number(updates.weeklyExpense) || 0);
+    if (veh.weeklyExpense !== before.weeklyExpense) delete veh.preCrisisExpense;
     veh.publicTransportOffsetPct = Math.max(0, Math.min(100, Number(updates.publicTransportOffsetPct) || 0));
     veh.stockLimit = (updates.stockLimit === "" || updates.stockLimit === undefined || updates.stockLimit === null) ? null : Math.max(0, Math.floor(Number(updates.stockLimit)));
     t.update(classRef, { vehicles: cls.vehicles });
@@ -2062,6 +2064,7 @@ async function updateStoreItem(classCode, itemId, item) {
                description: existing.description || "", countsNetWorth: existing.countsNetWorth !== false };
     existing.name = item.name;
     existing.price = Math.max(0, Number(item.price) || 0);
+    if (existing.price !== before.price) delete existing.preCrisisPrice;
     existing.description = item.description || "";
     existing.effect = item.effect || "";
     const newStockTotal = item.stock === "" || item.stock === undefined ? null : Math.max(0, Number(item.stock) || 0);

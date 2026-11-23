@@ -486,6 +486,7 @@ function studentReportHTML(s, opts) {
       <div class="profile-chip"><div class="label">Biggest expense</div><div class="value">${s.topExpenseCategory ? escapeHtml(s.topExpenseCategory.category) : "—"}</div>${s.topExpenseCategory ? `<div class="muted-small">${fmtMoney(s.topExpenseCategory.amount)}</div>` : ""}</div>
     </div>
 
+    ${s.crisisEvents?.length ? `<h4>Classroom crises this month</h4><ul>${s.crisisEvents.map(e => `<li><strong>${escapeHtml(e.name)}</strong> · ${escapeHtml(e.day)}<br>${escapeHtml(e.summary)}</li>`).join("")}</ul>` : ""}
     ${netWorthChartHTML(s, editable)}
 
     <h4>${icon("medal", 16)} Net worth breakdown</h4>
@@ -745,7 +746,7 @@ async function downloadReportPDF(button) {
   }
   try {
     const [, cls] = await Promise.all([
-      t29LoadScript("pdf-report.js?v=02f2ce08"),
+      t29LoadScript("pdf-report.js?v=dd12b4f3"),
       student ? null : getClassCached(CLASS_CODE)
     ]);
     if (student) downloadStudentReportPDF(student, report);
@@ -764,14 +765,15 @@ async function downloadReportPDF(button) {
 function reportToRows(report) {
   const rows = [["Name", "Username", "Net worth", "Cash", "Savings", "Term deposits", "KiwiSaver", "Gambling account", "Invested", "Property", "Vehicles", "Store items",
     "Owed", "Income (this month)", "Saved/invested (see accounting version; net in v2)", "Spent (this month)", "Borrowed (this month)", "Savings rate %", "Top expense category", "Top expense amount",
-    "Income (all-time)", "Saved/invested (all-time; net in v2)", "Spent (all-time)", "Borrowed (all-time)", "Returned money/sale proceeds (this month)", "Accounting version", "Earlier history complete", "Returned money/sale proceeds (all-time)", "Period start (NZ)", "Period end (NZ)"]];
+    "Income (all-time)", "Saved/invested (all-time; net in v2)", "Spent (all-time)", "Borrowed (all-time)", "Returned money/sale proceeds (this month)", "Accounting version", "Earlier history complete", "Returned money/sale proceeds (all-time)", "Period start (NZ)", "Period end (NZ)", "Classroom crises this month"]];
   (report.students || []).forEach(s => rows.push([
     s.name, s.username, s.netWorth, s.balance, s.savings, s.termDeposits, s.kiwiSaver || 0, s.gamblingBalance || 0, s.invested, s.propertyValue, s.vehicleValue, s.storeValue,
     s.owed, s.incomeTotal, s.savedTotal, s.spentTotal, s.borrowedTotal, s.savingsRate === null ? "" : s.savingsRate,
     s.topExpenseCategory ? s.topExpenseCategory.category : "", s.topExpenseCategory ? s.topExpenseCategory.amount : "",
     s.lifetimeIncomeTotal, s.lifetimeSavedTotal, s.lifetimeSpentTotal, s.lifetimeBorrowedTotal,
     s.returnedTotal ?? "", s.accountingVersion || 1, s.historyComplete === false ? "No" : s.accountingVersion === 2 ? "Yes" : "Unknown",
-    s.lifetimeReturnedTotal ?? "", report.periodStart ? nzDateKey(new Date(report.periodStart)) : "", report.periodEnd ? nzDateKey(new Date(report.periodEnd)) : ""
+    s.lifetimeReturnedTotal ?? "", report.periodStart ? nzDateKey(new Date(report.periodStart)) : "", report.periodEnd ? nzDateKey(new Date(report.periodEnd)) : "",
+    (s.crisisEvents || []).map(e => `${e.day} ${e.name} (${e.summary})`).join(" | ")
   ]));
   return rows;
 }

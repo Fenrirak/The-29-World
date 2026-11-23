@@ -750,6 +750,7 @@ function t29ApplyBaseTemplate(cls, terms) {
 
   // ---- Weekly random events and big events (built the same way the teacher's own forms build them) ----
   cls.eventDefs = d.events.map(e => buildEventDef(_btEventInput(e)));
+  cls.crisisDefs = baseCrisisEvents(S.terms);
   cls.bigEventDefs = d.bigEvents.map(e => buildBigEventDef(_btBigEventInput(e)));
 
   // ---- Life events ----
@@ -854,6 +855,7 @@ function t29BaseTemplateSummary(terms) {
     `KiwiSaver and a stock market with ${BT_COMPANIES.length} companies`,
     `${BT_ALL_QUIZZES.length} financial literacy quizzes, one for every module, with a $${S.M(5)} bonus for passing (ready to switch on as unlock gates)`,
     `Light tax, a small gambling limit, and a trade centre for students`,
+    `3 ready-to-run crisis events with severity scaled for the term`,
     `Paced for ${S.terms} term${S.terms > 1 ? "s" : ""} (about ${S.terms * 10} weeks)`,
     `Students start with $${S.M(BT_WELCOME_GRANT)}`
   ];

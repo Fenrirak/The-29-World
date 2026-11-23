@@ -662,7 +662,10 @@ function notifSafeHref(h) {
 function notifTeacherChangeItems(me, cls) {
   const list = cls && Array.isArray(cls.teacherNotices) ? cls.teacherNotices : [];
   const cutoff = trustedNow().getTime() - NOTIF_TEACHER_TTL_MS;
-  const out = [];
+  const out = (cls?.crisisLog || []).filter(e => e.ts >= cutoff && e.ts >= (me.joinedAt || 0)).map(e => ({
+    id: "crisis-" + e.id, ts: e.ts, icon: "chart", tone: "gold",
+    title: "Classroom crisis: " + e.name, body: crisisMarketSummary(e), href: "events.html#history"
+  }));
   list.forEach(n => {
     if (!n || !n.id || !n.title || (n.ts || 0) < cutoff) return;
     const mine = n.to === "all" || (Array.isArray(n.to) && n.to.indexOf(me.username) !== -1);

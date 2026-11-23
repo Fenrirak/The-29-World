@@ -1,4 +1,131 @@
 let CURRENT, CLASS_CODE, IS_TEACHER;
+let realEnabled = false, realBusy = false, realPreviewQuote = null, realRequest = 0;
+const realDate = key => new Intl.DateTimeFormat("en-NZ", {
+  day: "numeric", month: "short", year: "numeric", timeZone: "UTC"
+}).format(new Date(key + "T12:00:00Z"));
+const quotePrice = value => "$" + value.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+const closeLabel = date => Date.parse(nzDateKey()) - Date.parse(date) > 7 * 86400000 ? "Last available close" : "Market close";
+function fundSummary(fund) {
+  return fund.exposure + " Annual fund fee " + fund.annualFee + ".";
+}
+
+function renderRealPicker(cls) {
+  const select = document.getElementById("realSymbol");
+  if (select.options.length === 1) {
+    for (const [label, listings] of [
+      ["NZX funds · NZD", REAL_STOCKS.filter(s => s.exchange === "NZX" && s.kind === "etf")],
+      ["NZX companies · NZD", REAL_STOCKS.filter(s => s.exchange === "NZX" && s.kind !== "etf")],
+      ["US funds · USD", REAL_STOCKS.filter(s => s.exchange === "NYSE Arca")],
+      ["US companies · USD", REAL_STOCKS.filter(s => s.exchange === "Nasdaq")]
+    ]) {
+      const group = document.createElement("optgroup");
+      group.label = label;
+      for (const s of listings) {
+        group.appendChild(new Option(s.name + " (" + s.symbol + ")", s.symbol));
+      }
+      select.appendChild(group);
+    }
+  }
+  const listedNames = new Set(cls.companies.map(co => co.name.toLowerCase()));
+  for (const s of REAL_STOCKS) {
+    select.querySelector('option[value="' + s.symbol + '"]').disabled = listedNames.has(s.name.toLowerCase());
+  }
+  realEnabled = cls.realStocksEnabled === true;
+  const toggle = document.getElementById("realSwitch");
+  if (!realBusy) toggle.checked = realEnabled;
+  toggle.disabled = realBusy;
+  document.getElementById("realSwitchText").textContent = realEnabled ? "On" : "Off";
+  document.getElementById("realPicker").hidden = !realEnabled;
+  if (!realEnabled || select.selectedOptions[0]?.disabled) {
+    select.value = "";
+    realPreviewQuote = null;
+    realRequest++;
+    document.getElementById("realPreview").replaceChildren();
+    document.getElementById("realFundNote").hidden = true;
+  }
+  document.getElementById("listReal").disabled = realBusy || !realEnabled || !realPreviewQuote;
+}
+
+async function toggleRealStocks() {
+  if (!IS_TEACHER || realBusy) return;
+  const toggle = document.getElementById("realSwitch");
+  const msg = document.getElementById("realMsg");
+  realBusy = toggle.disabled = true;
+  try {
+    await classesCol().doc(CLASS_CODE).update({realStocksEnabled: toggle.checked});
+    msg.textContent = "";
+  } catch {
+    msg.textContent = "Couldn't save this setting. Check your connection and try again.";
+    toggle.checked = realEnabled;
+  } finally {
+    realBusy = toggle.disabled = false;
+    await render();
+  }
+}
+
+async function previewRealStock() {
+  const request = ++realRequest;
+  const symbol = document.getElementById("realSymbol").value;
+  const spec = REAL_STOCKS.find(s => s.symbol === symbol);
+  const isFund = spec?.kind === "etf";
+  const note = document.getElementById("realFundNote");
+  note.hidden = !isFund;
+  note.textContent = isFund ? fundSummary(spec) : "";
+  const preview = document.getElementById("realPreview");
+  realPreviewQuote = null;
+  document.getElementById("listReal").disabled = true;
+  document.getElementById("realMsg").textContent = "";
+  preview.textContent = spec ? "Checking the latest close…" : "";
+  if (!spec || !realEnabled) return;
+  try {
+    const snap = await fdb.collection("marketQuotes").doc(symbol).get();
+    if (request !== realRequest) return;
+    const q = snap.exists && snap.data();
+    if (!validRealQuote(q) || q.symbol !== symbol) {
+      preview.textContent = "Waiting for a verified price and " + (isFund ? "unit" : "share") + " count for this listing.";
+      return;
+    }
+    preview.innerHTML = `<dl class="real-figures"><div><dt>Closing price · ${spec.currency}</dt><dd>${quotePrice(q.price)}</dd></div><div><dt>Reported ${isFund ? "units" : "shares"}</dt><dd>${(q.reportedUnits ?? q.totalShares).toLocaleString("en-NZ", {maximumFractionDigits:6})}</dd></div></dl><p class="muted-small">${closeLabel(q.date)} ${realDate(q.date)} · ${isFund ? "Unit" : "Share"} count as of ${realDate(q.sharesDate)}</p>`;
+    realPreviewQuote = q;
+    document.getElementById("listReal").disabled = realBusy;
+  } catch {
+    if (request === realRequest) preview.textContent = "Couldn't load the quote. Select the listing again to retry.";
+  }
+}
+
+async function listRealStock() {
+  if (!IS_TEACHER || realBusy || !realEnabled || !realPreviewQuote) return;
+  const quote = realPreviewQuote;
+  const spec = REAL_STOCKS.find(s => s.symbol === quote.symbol);
+  const select = document.getElementById("realSymbol");
+  const msg = document.getElementById("realMsg");
+  realBusy = select.disabled = document.getElementById("listReal").disabled = document.getElementById("realSwitch").disabled = true;
+  try {
+    const ref = classesCol().doc(CLASS_CODE);
+    const message = await fdb.runTransaction(async t => {
+      const cls = (await t.get(ref)).data();
+      const q = (await t.get(fdb.collection("marketQuotes").doc(spec.symbol))).data();
+      if (!cls?.realStocksEnabled || cls.archived) return "Real-world listings are paused for this class.";
+      if (!validRealQuote(q) || q.symbol !== spec.symbol || q.price !== quote.price || q.totalShares !== quote.totalShares) return "The quote changed. Review the latest figures and try again.";
+      if (cls.companies.some(c => c.realSymbol === spec.symbol || c.name.toLowerCase() === spec.name.toLowerCase())) return "Your class already has this listing.";
+      t.update(ref, {companies: [...cls.companies, {
+        id: uid("co"), name: spec.name, realSymbol: spec.symbol, price: q.price, quoteDate: q.date,
+        totalShares: q.totalShares, availableShares: q.totalShares, sharesDate: q.sharesDate,
+        ...(q.reportedUnits !== undefined ? {reportedUnits:q.reportedUnits} : {}),
+        holders: {}, history: [q.price], historyDates: [nzDateKey()], quoteSource: q.source || ""
+      }]});
+      return "";
+    });
+    if (!message) select.value = "";
+    await previewRealStock();
+    msg.textContent = message || spec.name + " is now listed.";
+  } catch {
+    msg.textContent = "Couldn't add this listing. Check your connection and try again.";
+  } finally {
+    realBusy = select.disabled = document.getElementById("realSwitch").disabled = false;
+    await render();
+  }
+}
 
 // buy()/sell() show a success/error message inside each company's card, but
 // render() wipes and rebuilds the whole card list (including a fresh, empty
@@ -50,8 +177,8 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("chart", 26) + " Stock Market";
   document.getElementById("pageIntro").textContent = IS_TEACHER
-    ? "Open companies for your class to invest in, move prices with a simulated market day, split a company's shares, and set how far the daily price swings can go."
-    : "Buy and sell shares in companies your teacher has opened for the class.";
+    ? "Open a classroom company, or choose a real-world stock or fund to follow."
+    : "Buy and sell the stocks and funds your teacher has listed.";
   document.getElementById("hOpen").innerHTML = "Open a new company";
   document.getElementById("labName").innerHTML = "Company name";
   document.getElementById("labPrice").innerHTML = "Starting share price";
@@ -249,6 +376,7 @@ async function render(background = false) {
   }
 
   const range = cls.priceRange || { min: 1, max: 5 };
+  if (IS_TEACHER) renderRealPicker(cls);
   t29FillSetting("rangeMin", range.min);
   t29FillSetting("rangeMax", range.max);
   const moveEl = document.getElementById("showShareMove");
@@ -274,6 +402,9 @@ async function render(background = false) {
     // 30-day window, which blurred a month of moves into one number that was labelled "today"
     // (and often looked like nothing had moved). Same rule the Property page uses.
     const hist = co.history && co.history.length ? co.history : [co.price];
+    const listing = REAL_STOCKS.find(s => s.symbol === co.realSymbol);
+    const isFund = listing?.kind === "etf";
+    const unitLabel = isFund ? "units" : "shares";
     const last = hist[hist.length - 1];
     const prev = hist.length > 1 ? hist[hist.length - 2] : last;
     const change = last - prev;
@@ -286,16 +417,19 @@ async function render(background = false) {
       <div class="flex-between">
         <div>
           <h4>${escapeHtml(co.name)}${splitTag(co)}</h4>
-          <div class="${change > 0 ? 'ticker-up' : change < 0 ? 'ticker-down' : ''}">${fmtMoney(co.price)} ${hist.length > 1 ? `<span class="muted-small">(${change > 0 ? '+' : ''}${changePct}% today)</span>` : ""}</div>
-          ${!IS_TEACHER && cls.showShareMove ? shareMoveHtml(co, cls) : ""}
+          ${isFund ? `<p class="muted-small real-quote-note">${fundSummary(listing)}</p>` : ""}
+          ${listing ? `<p class="muted-small real-quote-note">${listing.exchange} · ${listing.symbol} · ${cls.realStocksEnabled ? closeLabel(co.quoteDate) : "Updates paused"} · ${realDate(co.quoteDate)}</p>` : ""}
+          <div class="${change > 0 ? 'ticker-up' : change < 0 ? 'ticker-down' : ''}">${listing ? quotePrice(co.price) + " " + listing.currency : fmtMoney(co.price)} ${hist.length > 1 ? `<span class="muted-small">(${change > 0 ? '+' : ''}${changePct}% ${listing ? "since last recorded close" : "today"})</span>` : ""}</div>
+          ${!listing && !IS_TEACHER && cls.showShareMove ? shareMoveHtml(co, cls) : ""}
         </div>
         ${sparkline(co.history, co.splits)}
       </div>
       <div class="progress-bar"><div style="width:${pctSold}%"></div></div>
-      <p class="muted-small">${co.availableShares} of ${co.totalShares} shares still available &middot; You own ${myShares} share${myShares === 1 ? "" : "s"}</p>
+      <p class="muted-small">${co.availableShares.toLocaleString("en-NZ")} of ${co.totalShares.toLocaleString("en-NZ")} ${unitLabel} available &middot; You own ${myShares.toLocaleString("en-NZ")}</p>
+      ${listing ? `<p class="muted-small">${isFund ? "Unit" : "Share"} count as of ${realDate(co.sharesDate)} · ${listing.issuer || (co.quoteSource === "Anthropic Investor Relations" ? co.quoteSource : listing.exchange === "NZX" ? "NZXplorer and issuer disclosures" : "Stock Market API")}</p>` : ""}
       ${splitHistory(co)}
 
-      ${IS_TEACHER ? `
+      ${IS_TEACHER && listing ? `<button class="btn small coral" onclick="closeCo('${co.id}')">Delist &amp; cash out holders</button>` : IS_TEACHER ? `
         <div class="grid grid-2" style="margin-top:10px;">
           <div>
             <label for="price-${co.id}">Set new price</label>
@@ -326,14 +460,14 @@ async function render(background = false) {
       ` : `
         <div class="grid grid-2" style="margin-top:10px;">
           <div>
-            <label for="buy-${co.id}">Buy shares</label>
+            <label for="buy-${co.id}">Buy ${unitLabel}</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="1" step="1" id="buy-${co.id}" placeholder="qty">
               <button class="btn small gold" id="buyBtn-${co.id}" onclick="buy('${co.id}')">Buy</button>
             </div>
           </div>
           <div>
-            <label for="sell-${co.id}">Sell shares</label>
+            <label for="sell-${co.id}">Sell ${unitLabel}</label>
             <div class="row-flex" style="gap:8px;">
               <input type="number" min="1" step="1" id="sell-${co.id}" placeholder="qty">
               <button class="btn small secondary" id="sellBtn-${co.id}" onclick="sell('${co.id}')">Sell</button>
@@ -391,7 +525,7 @@ async function setCoRange(id) {
   await render();
 }
 async function closeCo(id) {
-  if (await t29Confirm("Delist this company? All shareholders will be cashed out at the current price.")) {
+  if (await t29Confirm("Remove this listing? Everyone who owns it will be paid at the current price.")) {
     await closeCompany(CLASS_CODE, id);
     await render();
   }
@@ -488,14 +622,14 @@ async function saveRange() {
   const min = document.getElementById("rangeMin").value;
   const max = document.getElementById("rangeMax").value;
   await setPriceRange(CLASS_CODE, min, max);
-  document.getElementById("rangeMsg").innerHTML = `<div class="success-msg">Saved. Companies will move between ${min}% and ${max}% per simulated day.</div>`;
+  document.getElementById("rangeMsg").innerHTML = `<div class="success-msg">Saved. Simulated companies will move between ${min}% and ${max}% per simulated day.</div>`;
   await render();
 }
 
 async function runMarketDay() {
   const results = await simulateMarketDay(CLASS_CODE);
   if (results.length === 0) {
-    alert("There are no companies listed yet.");
+    alert("List a simulated company to run a market day.");
     return;
   }
   const summary = results.map(r => `${r.name}: ${r.pct >= 0 ? "+" : ""}${r.pct.toFixed(1)}%`).join("\n");

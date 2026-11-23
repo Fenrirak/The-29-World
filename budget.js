@@ -71,6 +71,24 @@ async function init() {
   await checkBigEventPopup(u.username, u.classCode);
   await checkAdjustmentPopup(u.username, u.classCode);
   await render(true);
+  t29WatchDoc("classes", u.classCode, (cls, info) => {
+    if (!cls || info?.fromCache || info?.hasPendingWrites || (cls.crisisLog?.[0]?.id || null) === budgetLastCrisis) return;
+    if (BUD_EDIT) {
+      // Keep the open planner under the student's cursor. Closing it uses the new class prices.
+      budgetClass = cls;
+      paintBudgetCrises(cls);
+    } else {
+      render().catch(err => console.warn("Budget refresh after a crisis failed", err));
+    }
+  });
+}
+
+let budgetLastCrisis = null;
+function paintBudgetCrises(cls) {
+  budgetLastCrisis = cls.crisisLog?.[0]?.id || null;
+  const crises = (cls.crisisLog || []).filter(e => e.day >= budgetWeekStartKey() && e.day <= nzDateKey());
+  document.getElementById("budgetCrisis").classList.toggle("hidden", !crises.length);
+  document.getElementById("budgetCrisisList").innerHTML = crises.map(e => `<p><strong>${budEsc(e.name)}</strong> · ${budEsc(e.day)}<br>${budEsc(crisisMarketSummary(e))}</p>`).join("");
 }
 
 let budgetRenderRequest = 0;
@@ -81,6 +99,7 @@ async function render(fresh = false) {
     fresh ? getClass(CURRENT.classCode) : getClassCached(CURRENT.classCode)
   ]);
   if (request !== budgetRenderRequest) return;
+  paintBudgetCrises(cls);
   document.getElementById("budgetCard").classList.toggle("hidden", IS_TEACHER);
   document.getElementById("budgetTeacherCard").classList.toggle("hidden", !IS_TEACHER);
   if (IS_TEACHER) {
