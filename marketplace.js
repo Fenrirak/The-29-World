@@ -829,7 +829,7 @@ body.mc-lock{overflow:hidden}
 .mc-head h3{margin:0;flex:1;display:flex;align-items:center;gap:8px;font-size:1.2rem}
 .mc-clear{width:auto;margin:0;background:none;border:0;font:inherit;font-size:var(--fs-md);color:inherit;opacity:.65;text-decoration:underline;cursor:pointer}
 .mc-clear:hover{opacity:1}
-.mc-x{width:36px;height:36px;margin:0;padding:0;border-radius:50%;border:1.5px solid rgba(128,128,128,.4);background:transparent;color:inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.mc-x{position:relative;width:36px;height:36px;margin:0;padding:0;border-radius:50%;border:1.5px solid rgba(128,128,128,.4);background:transparent;color:inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .mc-x:hover{border-color:#e3a72f;background:rgba(227,167,47,.14)}
 .mc-body{flex:1;overflow-y:auto;padding:4px 18px 16px;overscroll-behavior:contain}
 .mc-note{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:rgba(227,167,47,.18);font-size:var(--fs-md)}
@@ -838,7 +838,7 @@ body.mc-lock{overflow:hidden}
 .mc-unit{display:block;font-size:var(--fs-sm);font-weight:400;opacity:.65;margin-top:2px}
 .mc-price{font-weight:800;text-align:right;white-space:nowrap}
 .mc-ctl{justify-self:start;display:inline-flex;align-items:center;gap:4px;border:1.5px solid rgba(128,128,128,.35);border-radius:var(--sw-m,17px 2px 17px 2px / 13px 2px 13px 2px);padding:2px}
-.mc-step{width:30px;height:30px;margin:0;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.mc-step{position:relative;width:30px;height:30px;margin:0;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .mc-step:hover:not(:disabled){background:rgba(227,167,47,.25)}
 .mc-step:disabled{opacity:.3;cursor:default}
 .mc-q{min-width:26px;text-align:center;font-weight:700}

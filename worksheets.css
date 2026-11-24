@@ -223,7 +223,7 @@ html.dark-mode .ws-stage{background:rgba(255,255,255,.045);}
 .ws-paper .ws-mini:disabled{opacity:.4;cursor:not-allowed;}
 .ws-paper .ws-step{display:inline-flex;align-items:center;gap:7px;}
 .ws-paper .ws-step b{min-width:1.5em;color:#18202f;text-align:center;}
-.ws-paper .ws-step button{width:24px;height:24px;padding:0;border:1px solid #c5cddc;border-radius:50%;background:#f5f7fb;color:#2b3547;font:inherit;font-size:15px;line-height:1;cursor:pointer;}
+.ws-paper .ws-step button{position:relative;width:24px;height:24px;padding:0;border:1px solid #c5cddc;border-radius:50%;background:#f5f7fb;color:#2b3547;font:inherit;font-size:15px;line-height:1;cursor:pointer;}
 .ws-paper .ws-step button:hover:not(:disabled){border-color:#5b8def;background:#eaf1ff;}
 .ws-paper .ws-step button:disabled{opacity:.35;cursor:not-allowed;}
 .ws-paper .ws-mk{display:inline-flex;align-items:center;gap:6px;}

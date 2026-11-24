@@ -63,7 +63,7 @@ html.t29s-lock{overflow:hidden;}
 .t29s-head-txt{min-width:0;}
 .t29s-head h2{font-size:1.25rem;font-weight:900;color:#fff;}
 .t29s-head p{margin:2px 0 0;color:rgba(255,255,255,.8);font-size:var(--fs-md);overflow-wrap:anywhere;}
-.t29s-x{margin-left:auto;flex:none;width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:1.5rem;line-height:1;cursor:pointer;transition:background .15s;}
+.t29s-x{position:relative;margin-left:auto;flex:none;width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:1.5rem;line-height:1;cursor:pointer;transition:background .15s;}
 .t29s-x:hover{background:rgba(255,255,255,.26);}
 .t29s-x:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
 .t29s-body{padding:16px 18px;overflow:auto;flex:1 1 auto;min-height:0;}
