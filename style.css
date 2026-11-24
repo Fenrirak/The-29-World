@@ -616,51 +616,50 @@ tr:last-child td{border-bottom:none;}
 .ticker-up{color:#217a5a;font-weight:800;}
 .ticker-down{color:#b8402c;font-weight:800;}
 
-@font-face{
-  font-family:"Young Serif";
-  src:url("fonts/YoungSerif-Regular.ttf") format("truetype");
-  font-weight:400;
-  font-display:swap;
-}
 .auth-wrap{
-  --account-ink:#173c3c;
-  --account-paper:#f8f5ea;
-  --account-card:#fffdf5;
   min-height:100vh;
   display:flex;
   align-items:center;
   justify-content:center;
   position:relative;
   overflow:hidden;
-  background:var(--account-paper);
+  background:
+    radial-gradient(circle at 18% 22%, rgba(232,184,75,0.22), transparent 40%),
+    radial-gradient(circle at 82% 15%, rgba(91,141,239,0.20), transparent 42%),
+    radial-gradient(circle at 78% 85%, rgba(63,191,143,0.18), transparent 45%),
+    linear-gradient(135deg,var(--navy-900) 0%,#233657 60%,var(--navy-700) 100%);
   padding:20px;
 }
-html.dark-mode .auth-wrap{
-  --account-ink:#f5eedc;
-  --account-paper:#162d2f;
-  --account-card:var(--card);
+.auth-wrap::before, .auth-wrap::after{
+  content:"$";
+  position:absolute;
+  font-family:"Trebuchet MS","T29 Heading Fallback",sans-serif;
+  font-weight:900;
+  color:rgba(255,255,255,0.05);
+  pointer-events:none;
 }
+.auth-wrap::before{font-size:22rem;top:-6rem;left:-4rem;transform:rotate(-12deg);}
+.auth-wrap::after{font-size:16rem;bottom:-5rem;right:-3rem;transform:rotate(10deg);}
 .auth-card{
-  background:var(--account-card);
-  border:1px solid #87978b;
-  border-top:6px solid #315650;
-  box-shadow:5px 5px 0 rgba(85,98,74,.2);
+  background:#fff;
+  border-radius:var(--r-7);
+  box-shadow:var(--shadow-xl);
   padding:36px;
   width:100%;
-  max-width:460px;
+  max-width:420px;
   position:relative;
   z-index:1;
+  /* no coloured top bar */
 }
 .auth-logo{
-  display:flex;align-items:center;gap:6px;justify-content:center;text-decoration:none;
-  border-bottom:3px double #87978b;padding-bottom:14px;margin-bottom:14px;
+  display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px;
 }
-.auth-logo h1{margin:0;color:var(--account-ink);font:400 2.1rem/1.1 "Young Serif",Georgia,serif;letter-spacing:-.05em;}
-.auth-logo sup{font:700 .38em/1 "Segoe UI",sans-serif;vertical-align:top;letter-spacing:0;}
-.auth-card .btn.gold{border-radius:2px;background:#193d3d;color:#fffae9;box-shadow:none;}
-.auth-card .btn.gold:hover{background:#335957;}
-.auth-card .start-tag{color:#29342d;}
-.auth-card .tabs,.auth-card .tabs button{border-radius:2px;}
+.auth-logo .coin{
+  width:48px;height:48px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  filter:drop-shadow(0 6px 12px rgba(201,154,46,0.45));
+  color:var(--gold);
+}
 .auth-title{text-align:center;color:var(--muted);font-size:var(--fs-lg);margin-bottom:22px;}
 .tabs{display:flex;gap:6px;background:var(--bg);border-radius:var(--r-3);padding:4px;margin-bottom:18px;}
 .tabs button{
@@ -2225,6 +2224,7 @@ html.dark-mode .stat.lilac .muted-small{color:#fff;}
 /* ---------------- Remove the remaining glow/shine effects (colored
    drop-shadows, colored box-shadows, radial "shine" circles) so nothing
    throws a bright halo against the dark surface. ---------------- */
+html.dark-mode .auth-logo .coin{filter:none;}
 
 html.dark-mode .anw-balance-widget{
   background:linear-gradient(135deg,var(--gold-dim),var(--gold-dark-dim));

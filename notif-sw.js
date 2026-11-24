@@ -10,7 +10,7 @@
    No file list to maintain: install reads the core pages' own <script>/<link> tags
    (so the ?v=hash names always match), and everything else is cached as it is used.
    To wipe every old cache, change CACHE below. */
-const CACHE = "t29-cache-v3";
+const CACHE = "t29-cache-v4";
 const OFFLINE_URL = "offline.html";
 // Pages (and everything they load) saved at install. Other pages cache the first time they are opened.
 const CORE_PAGES = ["index.html", "login.html", "student.html", "teacher-home.html", "teacher.html", "help.html", OFFLINE_URL,
@@ -49,19 +49,15 @@ async function precache() {
       if (!res.ok) return;
       const html = await res.clone().text();
       await putOk(cache, pageKey(page), res);
-      const re = /\b(src|href|srcset)\s*=\s*["']([^"'#]+)["']/gi;
+      const re = /(?:src|href)\s*=\s*["']([^"'#]+)["']/gi;
       let m;
       while ((m = re.exec(html))) {
-        const refs = m[1].toLowerCase() === "srcset"
-          ? m[2].split(",").map(candidate => candidate.trim().split(/\s+/)[0])
-          : [m[2]];
-        for (const ref of refs) {
-          let u;
-          try { u = new URL(ref, new URL(page, self.registration.scope)); } catch (err) { continue; }
-          if (u.origin !== self.location.origin) continue;
-          const coverAsset = page === "index.html" && /\.(webp|ttf|png)$/i.test(u.pathname);
-          if (coverAsset || /\.(js|css|json)$/i.test(u.pathname) || u.pathname.endsWith("/icon-512.png")) assets.add(u.href);
-        }
+        const ref = m[1];
+        if (/^(mailto:|tel:|data:|javascript:)/i.test(ref)) continue;
+        let u;
+        try { u = new URL(ref, new URL(page, self.registration.scope)); } catch (err) { continue; }
+        if (u.origin !== self.location.origin) continue;
+        if (/\.(js|css|json)$/i.test(u.pathname) || u.pathname.endsWith("/icon-512.png")) assets.add(u.href);
       }
     } catch (err) { /* offline during install: runtime caching still works later */ }
   }));

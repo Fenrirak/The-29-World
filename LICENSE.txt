@@ -138,13 +138,6 @@ own licences, which continue to apply to them.
     fonts/opensans-latin-ext-400.woff2 and fonts/opensans-latin-ext-600.woff2
     Licence text: fonts/OpenSans-LICENSE.txt
 
-  Young Serif (font)
-    Copyright 2023 The Young Serif Project Authors
-    (https://github.com/noirblancrouge/YoungSerif)
-    Licensed under the SIL Open Font License, Version 1.1.
-    Included in: fonts/YoungSerif-Regular.ttf (unmodified).
-    Licence text: fonts/YoungSerif-OFL.txt
-
   Firebase JavaScript SDK (Authentication, Cloud Firestore, App Check)
     Copyright Google LLC
     Licensed under the Apache License, Version 2.0
@@ -154,7 +147,7 @@ own licences, which continue to apply to them.
     Firebase online services are provided by Google under Google's own
     terms.
 
-The licence texts for Selawik, Open Sans and Young Serif must stay with their font files.
+The licence texts for Selawik and Open Sans must stay with their font files.
 Google and Firebase are trademarks of Google LLC.
 
 

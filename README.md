@@ -2,7 +2,7 @@
 
 A classroom economy simulator for whole-class use, with individual student accounts. Students run their own money in a shared make-believe world: they earn from jobs, bank, budget, take loans, save with KiwiSaver and term deposits, trade shares, buy property, and more. Teachers manage the class, and parents can follow along.
 
-The homepage introduces the simulation and includes a sample payday. Access is free for everyone. Optional [donations](https://buymeacoffee.com/29world) help cover the database costs, especially for larger groups.
+The homepage has tabs for the class overview, setup, a sample payday and pricing. Access is free for everyone. Optional [donations](https://buymeacoffee.com/29world) help cover the database costs, especially for larger groups.
 
 **Live site:** https://fenrirak.github.io/The-29-World/
 
@@ -51,7 +51,7 @@ The feed publishes end-of-day quotes. Follow the display, entitlement, reporting
 
 © 2026 29 World™. All rights reserved. The source code and content are covered by the [License](LICENSE.txt). Use of the site is covered by the [Terms](terms.html), and personal data is handled as described in the [Privacy Policy](privacy.html).
 
-Young Serif is used for the illustrated homepage. Young Serif, Selawik and Open Sans are used under their own licenses (see `fonts/`).
+Selawik and Open Sans are used under their own licenses (see `fonts/`).
 
 ## Contact
 

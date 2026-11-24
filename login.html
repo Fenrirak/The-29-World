@@ -10,8 +10,8 @@
 <link rel="shortcut icon" href="favicon.ico">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta name="theme-color" content="#f8f5ea">
-<link rel="stylesheet" href="style.css?v=008a9c34">
+<meta name="theme-color" content="#1f2b44">
+<link rel="stylesheet" href="style.css?v=91f8426d">
 <style>.start-option input[type="radio"]{flex:0 0 20px;width:20px;min-width:20px;height:20px;min-height:20px;max-width:20px;aspect-ratio:1/1;padding:0;margin:2px 0 0;align-self:flex-start;border-radius:50%}</style>
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
@@ -28,11 +28,11 @@
 
 <div class="auth-wrap" role="main">
   <div class="auth-card">
-    <a class="auth-logo" href="index.html#home" aria-label="29 World™ homepage">
-      <img src="Favicon.png" width="44" height="44" alt="">
-      <h1>29 World<sup>™</sup></h1>
-    </a>
-    <p class="auth-title">Teacher and student accounts</p>
+    <div class="auth-logo">
+      <span class="coin" id="logoCoin">$</span>
+      <h1 style="margin:0;">29 World™</h1>
+    </div>
+    <p class="auth-title">A classroom economy for the whole class, where every student runs their own money.</p>
 
     <!-- ROLE SWITCH -->
     <div class="tabs">
@@ -212,7 +212,6 @@
 <footer class="site-footer">
   <div class="site-footer-brand">29 World™</div>
   <nav class="site-footer-links" aria-label="Footer">
-    <a href="index.html#home">Home</a>
     <a href="about.html">About</a>
     <a href="help.html">Help Centre</a>
     <a href="status.html">Status</a>
@@ -235,7 +234,7 @@
      DOMContentLoaded — matching how every other page already does it. -->
 <script type="module" src="firebase-init.js?v=cc4f78f0"></script>
 <script defer src="icons.js?v=be447cba"></script>
-<script defer src="offline.js?v=4ba93d81"></script>
+<script defer src="offline.js?v=7c18231f"></script>
 <script defer src="data-core.js?v=c70a2043"></script>
 <script defer src="data-money.js?v=4dc6f0d3"></script>
 <script defer src="data-life.js?v=e6f73869"></script>
@@ -271,6 +270,8 @@ function paintIcons() {
     const slot = el && el.querySelector(".icon-slot");
     if (slot) slot.innerHTML = icon(name, 14);
   });
+  const logo = document.getElementById("logoCoin");
+  logo.innerHTML = icon("coin", 26);
 }
 
 // After switching tabs, put the cursor in the first box so typing can start

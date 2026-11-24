@@ -8,21 +8,14 @@
   <link rel="canonical" href="https://fenrirak.github.io/The-29-World/index.html">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="29 World™">
-  <meta property="og:title" content="29 World™ | A town run by your class">
+  <meta property="og:title" content="29 World™ | Free classroom economy simulator">
   <meta property="og:description" content="Create a free classroom economy where students earn a wage, budget for bills and decide what to save.">
   <meta property="og:url" content="https://fenrirak.github.io/The-29-World/index.html">
-  <meta property="og:image" content="https://fenrirak.github.io/The-29-World/og-image.png">
-  <meta property="og:image:type" content="image/png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="29 World™ and a woodcut of a New Zealand harbour town">
   <meta property="og:locale" content="en_NZ">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="29 World™ | A town run by your class">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="29 World™ | Free classroom economy simulator">
   <meta name="twitter:description" content="A free classroom economy with jobs, bills, savings and a marketplace.">
-  <meta name="twitter:image" content="https://fenrirak.github.io/The-29-World/og-image.png">
-  <meta name="twitter:image:alt" content="29 World™ and a woodcut of a New Zealand harbour town">
-  <meta name="theme-color" content="#f8f5ea">
+  <meta name="theme-color" content="#1f2b44">
   <link rel="icon" type="image/png" href="Favicon.png">
   <link rel="shortcut icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -42,10 +35,10 @@
       if (accountLink || resume) location.replace("login.html" + location.search + location.hash);
     })();
   </script>
-  <link rel="preload" href="fonts/YoungSerif-Regular.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="stylesheet" href="homepage.css?v=323262b1">
-  <script defer src="homepage.js?v=303f1c5b"></script>
-  <script defer src="offline.js?v=4ba93d81"></script>
+  <link rel="stylesheet" href="style.css?v=91f8426d">
+  <link rel="stylesheet" href="homepage.css?v=a87463d1">
+  <script defer src="homepage.js?v=4ed912cc"></script>
+  <script defer src="offline.js?v=7c18231f"></script>
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -66,7 +59,7 @@
           "applicationCategory": "EducationalApplication",
           "operatingSystem": "Web browser",
           "browserRequirements": "Requires JavaScript",
-          "image": "https://fenrirak.github.io/The-29-World/og-image.png",
+
           "inLanguage": "en-NZ",
           "isAccessibleForFree": true,
           "offers": { "@type": "Offer", "price": "0", "priceCurrency": "NZD" },
@@ -76,123 +69,99 @@
       ]
     }
   </script>
+  <noscript>
+    <style>
+      .home-tabs { display: none; }
+      .home-panel[hidden]:target { display: block; }
+      .home-card:has(.home-panel[hidden]:target) #overview { display: none; }
+    </style>
+  </noscript>
 </head>
 <body id="home">
   <a class="skip-link" href="#main">Skip to content</a>
-  <header class="masthead page-width">
-    <a class="wordmark" href="#home" aria-label="29 World™ home">
-      <img src="Favicon.png" alt="" width="44" height="44">
-      <span>29 World<sup>™</sup></span>
-    </a>
-    <nav class="contents" aria-label="On this page">
-      <a href="#how-it-works">How it works</a>
-      <a href="#payday">Try a payday</a>
-      <a href="#pricing">Pricing</a>
-    </nav>
-    <a class="login-link" href="login.html">Log in</a>
+  <header class="about-topbar">
+    <a class="about-brand" href="index.html#home">29 World™</a>
+    <a class="btn gold small" href="login.html">Log in</a>
   </header>
 
-  <main id="main">
-    <section class="cover page-width" aria-labelledby="cover-title">
-      <div class="cover-copy">
-        <p class="kicker"><span class="ink-rule" aria-hidden="true"></span> Classroom economy simulator</p>
-        <h1 id="cover-title">A town run by <em>your class.</em></h1>
-        <p class="lead">What will your students do with their first pay? In 29 World™, they earn classroom dollars, pay their bills and choose what’s worth saving for.</p>
-        <div class="entry-links">
-          <a class="button" href="login.html?role=teacher&amp;action=signup">Start a class</a>
-          <a class="text-link" href="login.html?role=student&amp;action=join">Join with a class code</a>
-        </div>
+  <main id="main" class="home-main">
+    <div class="card home-card">
+      <div class="tabs home-tabs" role="tablist" aria-label="Explore 29 World™">
+        <button type="button" id="tab-overview" role="tab" aria-controls="overview" aria-selected="true" class="active">Overview</button>
+        <button type="button" id="tab-how-it-works" role="tab" aria-controls="how-it-works" aria-selected="false" tabindex="-1">How it works</button>
+        <button type="button" id="tab-payday" role="tab" aria-controls="payday" aria-selected="false" tabindex="-1">Try a payday</button>
+        <button type="button" id="tab-pricing" role="tab" aria-controls="pricing" aria-selected="false" tabindex="-1">Pricing</button>
       </div>
-      <figure class="town-print">
-        <img src="images/harbour-town.webp"
-             srcset="images/harbour-town-small.webp 768w, images/harbour-town.webp 1536w"
-             sizes="(min-width: 90rem) 47rem, (min-width: 55rem) 54vw, 92vw"
-             width="1536" height="1024" fetchpriority="high"
-             alt="Students pass a corner dairy and catch a yellow bus on their way to a red-roofed school above the harbour.">
-        <figcaption>An imagined harbour town, Aotearoa New Zealand.</figcaption>
-      </figure>
-    </section>
+      <noscript>
+        <nav class="home-fallback" aria-label="Homepage sections">
+          <a href="#overview">Overview</a><a href="#how-it-works">How it works</a>
+          <a href="#payday">Try a payday</a><a href="#pricing">Pricing</a>
+        </nav>
+      </noscript>
 
-    <section class="classroom" id="how-it-works" aria-labelledby="classroom-title">
-      <div class="classroom-spread page-width">
-        <div class="spread-heading">
-          <p class="kicker">How it works</p>
-          <h2 id="classroom-title">A week in class</h2>
+      <section class="home-panel" id="overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+        <h1>Run a classroom economy</h1>
+        <p>In 29 World™, students earn classroom dollars, pay rent, trade with classmates and save for a goal. Teachers choose the jobs, prices and paydays. It’s free for every class.</p>
+        <div class="home-roles">
+          <section>
+            <h2>Teachers</h2>
+            <p>Start with a class template or set up your own economy.</p>
+            <a class="btn gold" href="login.html?role=teacher&amp;action=signup">Start a class</a>
+          </section>
+          <section>
+            <h2>Students</h2>
+            <p>Use the code from your teacher to create your student account.</p>
+            <a class="btn secondary" href="login.html?role=student&amp;action=join">Join with a class code</a>
+          </section>
         </div>
-        <div class="class-column">
-          <h3>At the teacher’s desk</h3>
-          <p>Open a class with jobs, homes and prices already set, or build your own. Choose when wages land and give students a code to join.</p>
-          <a class="text-link" href="help.html#classroom">Class setup guide</a>
-        </div>
-        <div class="class-column">
-          <h3>In a student’s shoes</h3>
-          <p>Earn a wage, budget for rent and trade with classmates. A student saving for a home can try a term deposit while another starts putting money into KiwiSaver.</p>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="payday page-width" id="payday" aria-labelledby="payday-title">
-      <div class="payday-copy">
-        <p class="kicker"><span class="ink-rule" aria-hidden="true"></span> Try a payday</p>
-        <h2 id="payday-title">Where does <em>$120</em> go?</h2>
-        <p>Imagine your first week on the job. After rent and bus fares, you have $70 left. How much will you move into savings?</p>
-        <div class="savings-control" id="savings-control" hidden>
-          <div class="control-label">
-            <label for="savings">Move to savings</label>
-            <span id="savings-amount" aria-hidden="true">$20</span>
+      <section class="home-panel" id="how-it-works" role="tabpanel" aria-labelledby="tab-how-it-works" tabindex="0" hidden>
+        <h1>How a class works</h1>
+        <ol class="home-steps">
+          <li><strong>Set up the class.</strong> Choose a template with jobs, homes and prices already set, or create your own. Pick the activities you want to teach.</li>
+          <li><strong>Bring students in.</strong> Share the class code so students can join, or create their accounts together from the teacher dashboard.</li>
+          <li><strong>Run a payday.</strong> Students check their wages, cover their bills and choose what to do with the balance. Teachers can follow their progress in class reports.</li>
+        </ol>
+        <a href="help.html#classroom">Read the class setup guide</a>
+      </section>
+
+      <section class="home-panel" id="payday" role="tabpanel" aria-labelledby="tab-payday" tabindex="0" hidden>
+        <h1>Try a payday</h1>
+        <p>Your take-home pay is $120 in classroom dollars. Rent costs $45 and bus fares cost $5. How much of the remaining $70 would you save?</p>
+        <div class="home-example">
+          <div id="savings-control" hidden>
+            <label for="savings">Move to savings <strong id="savings-amount" aria-hidden="true">$20</strong></label>
+            <input id="savings" type="range" min="0" max="70" step="5" value="20" aria-valuetext="20 classroom dollars">
+            <div class="home-scale" aria-hidden="true"><span>$0</span><span>$70</span></div>
           </div>
-          <input id="savings" type="range" min="0" max="70" step="5" value="20" aria-valuetext="20 classroom dollars">
-          <div class="scale" aria-hidden="true"><span>$0</span><span>$70</span></div>
+          <dl class="home-ledger">
+            <div><dt>After rent and fares</dt><dd>$70</dd></div>
+            <div><dt>Moved to savings</dt><dd id="ledger-savings">$20</dd></div>
+            <div><dt>Left to spend</dt><dd><output id="spending" for="savings" aria-label="Left to spend">$50</output></dd></div>
+          </dl>
         </div>
-      </div>
-      <div class="pay-slip">
-        <div class="slip-header">
-          <h3>Payday ledger</h3>
-          <span class="sample-stamp">Sample</span>
-        </div>
-        <p class="slip-subtitle">One week in classroom dollars</p>
-        <dl class="ledger">
-          <div><dt>Take-home pay</dt><dd>+$120</dd></div>
-          <div><dt>Room rent</dt><dd>−$45</dd></div>
-          <div><dt>Bus fares</dt><dd>−$5</dd></div>
-          <div><dt>Moved to savings</dt><dd id="ledger-savings">−$20</dd></div>
-          <div class="ledger-total"><dt>Left to spend</dt><dd><output id="spending" for="savings" aria-label="Left to spend">$50</output></dd></div>
-        </dl>
-      </div>
-    </section>
+      </section>
 
-    <section class="pricing" id="pricing" aria-labelledby="pricing-title">
-      <div class="price-spread page-width">
-        <div class="price-ticket">
-          <span class="ticket-label">Price per learner</span>
-          <span class="ticket-value">$0</span>
-          <span class="ticket-foot">For any class size</span>
+      <section class="home-panel" id="pricing" role="tabpanel" aria-labelledby="tab-pricing" tabindex="0" hidden>
+        <h1>Free for everyone</h1>
+        <p>29 World™ is completely free for students, teachers and schools of any size. There are no subscriptions or per-student fees.</p>
+        <h2>Help cover the database costs</h2>
+        <p>Every class uses the database to save balances, paydays and purchases. Donations help pay that bill. If you’re bringing a large group or a whole school, please contribute if you can. Donations are always optional.</p>
+        <div class="home-actions">
+          <a class="btn gold" href="https://buymeacoffee.com/29world">Donate via Buy Me a Coffee</a>
+          <a href="about.html#contact">Group donation enquiries</a>
         </div>
-        <div class="pricing-copy">
-          <p class="kicker">Pricing &amp; donations</p>
-          <h2 id="pricing-title">Free for everyone.</h2>
-          <p>Bring one class or your whole school. Every learner gets full access to 29 World™ at no charge.</p>
-          <p>Class balances and purchases live in a database that costs money to run. We rely on donations to help cover that bill. If you’re bringing a large group, please contribute if you can. Giving is always optional.</p>
-          <div class="support-links">
-            <a class="button" href="https://buymeacoffee.com/29world">Donate via Buy Me a Coffee</a>
-            <a class="text-link" href="about.html#contact">Group donation enquiries</a>
-          </div>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
   </main>
 
-  <footer class="colophon page-width">
-    <div>
-      <a class="wordmark" href="#home" aria-label="29 World™ home">
-        <img src="Favicon.png" alt="" width="36" height="36"><span>29 World<sup>™</sup></span>
-      </a>
-      <p>© 2026 29 World™. All rights reserved.</p>
-    </div>
-    <nav aria-label="Footer">
+  <footer class="site-footer">
+    <nav class="site-footer-links" aria-label="Footer">
       <a href="about.html">About</a><a href="help.html">Help Centre</a><a href="status.html">Status</a>
       <a href="about.html#contact">Contact</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms of Use</a>
     </nav>
+    <div class="site-footer-copy">© 2026 29 World™. All rights reserved.</div>
   </footer>
 </body>
 </html>
