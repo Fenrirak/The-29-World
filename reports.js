@@ -461,7 +461,9 @@ function renderLoanHistory(loans) {
   if (!loans || !loans.length) return `<p class="muted-small">No loans taken.</p>`;
   return `<div class="table-scroll"><table class="stack-table"><thead><tr><th>Taken</th><th>Amount</th><th>Rate</th><th>Term</th><th>Due</th><th>Status</th></tr></thead><tbody>
     ${loans.map(l => `<tr>
-      <td>${escapeHtml(l.takenDate || "—")}</td><td>${fmtMoney(l.principal)}</td><td>${escapeHtml(l.rate)}%/wk</td><td>${escapeHtml(l.termWeeks)} wk</td><td>${escapeHtml(l.dueDate || "—")}</td>
+      <td>${escapeHtml(l.takenDate || "—")}${l.kind === "student" ? '<div class="muted-small">Student loan</div>' : ""}</td><td>${fmtMoney(l.principal)}</td>
+      <td>${l.kind === "student" ? "0%" : escapeHtml(l.rate) + "%/wk"}</td>
+      <td>${l.kind === "student" ? "Income-based" : escapeHtml(l.termWeeks) + " wk"}</td><td>${escapeHtml(l.dueDate || "—")}</td>
       <td>${l.status === "active"
         ? `Active: ${fmtMoney(l.owed)} owed`
         : (l.onTime === null ? "Paid off" : l.onTime ? "Paid off on time" : "Paid off late")}</td>
@@ -746,7 +748,7 @@ async function downloadReportPDF(button) {
   }
   try {
     const [, cls] = await Promise.all([
-      t29LoadScript("pdf-report.js?v=dd12b4f3"),
+      t29LoadScript("pdf-report.js?v=a563b672"),
       student ? null : getClassCached(CLASS_CODE)
     ]);
     if (student) downloadStudentReportPDF(student, report);

@@ -73,7 +73,7 @@ async function openClassExport(format) {
   flashMsg(msg, "Loading class export…", 60000);
   try {
     const scripts = [t29LoadScript("class-export.js?v=9ed2482f")];
-    if (format === "pdf") scripts.push(t29LoadScript("pdf-report.js?v=dd12b4f3"));
+    if (format === "pdf") scripts.push(t29LoadScript("pdf-report.js?v=a563b672"));
     await Promise.all(scripts);
     await exportClassClick(format);
   } catch (e) {
@@ -365,7 +365,9 @@ async function render() {
 function jobSelectHtml(cls, student) {
   let opts = `<option value="">No job</option>`;
   (cls.jobs || []).forEach(j => {
-    opts += `<option value="${j.id}" ${student.jobId === j.id ? "selected" : ""}>${escapeHtml(j.title)}</option>`;
+    const current = student.jobId === j.id;
+    const needsLoan = !current && jobStudentLoanRequired(j, student) > 0;
+    opts += `<option value="${escapeHtml(j.id)}" ${current ? "selected" : ""} ${needsLoan ? "disabled" : ""}>${escapeHtml(j.title)}${needsLoan ? " (student applies)" : ""}</option>`;
   });
   return `<select onchange="onAssignJob('${escapeJsAttr(student.username)}', this.value)">${opts}</select>`;
 }
@@ -406,6 +408,7 @@ function describeTxn(t, nameOf) {
     case "savings-withdraw": return escapeHtml(`${nameOf(t.to)}: ${t.note || "Withdrew from Savings Account"}`);
     case "account-close": return escapeHtml(`${nameOf(t.to)}: ${t.note || "Closed an account"}`);
     case "loan-taken": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
+    case "student-loan": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
     case "loan-repayment": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
     case "loan-interest": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
     case "card-purchase": case "card-payment": case "card-interest": case "card-fee": case "account-fee": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
@@ -461,6 +464,7 @@ function badge(type) {
     "cash-interest": ["gold", "coin", "Cash interest"],
     "account-close": ["gold", "piggy", "Account closed"], "savings-deposit": ["mint", "piggy", "Savings deposit"], "savings-withdraw": ["gold", "piggy", "Savings withdrawal"],
     "loan-taken": ["navy", "loan", "Loan"], "loan-repayment": ["mint", "loan", "Loan repayment"],
+    "student-loan": ["navy", "loan", "Student loan"],
     "card-purchase": ["navy", "cards", "Card purchase"], "card-payment": ["mint", "cards", "Card payment"],
     "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"], "account-fee": ["coral", "coin", "Account fee"],
     "card-cashback": ["mint", "cards", "Cashback"], "card-statement": ["gold", "cards", "Statement"],
@@ -493,7 +497,11 @@ function avatarClass(username) {
 }
 
 async function onAssignJob(username, jobId) {
-  await assignJob(username, jobId, CLASS_CODE);
+  try {
+    await assignJob(username, jobId, CLASS_CODE);
+  } catch (err) {
+    alert(err.message || "Couldn't assign this job. Try again.");
+  }
   await render();
 }
 

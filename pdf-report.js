@@ -392,7 +392,9 @@ function pdfStudentReport(doc, s, report) {
   } else {
     doc.row("Taken / amount / rate / term", "Status", { bold: true, rule: true, color: PDF_COLORS.muted });
     s.loans.forEach(l => {
-      const left = `${l.takenDate || "-"}   ${fmtMoney(l.principal)}   ${l.rate}%/wk   ${l.termWeeks} wk   due ${l.dueDate || "-"}`;
+      const left = `${l.takenDate || "-"}   ${fmtMoney(l.principal)}   ` + (l.kind === "student"
+        ? "Student loan, 0%, income-based"
+        : `${l.rate}%/wk   ${l.termWeeks} wk   due ${l.dueDate || "-"}`);
       const status = l.status === "active"
         ? `Active - ${fmtMoney(l.owed)} owed`
         : (l.onTime === null ? "Paid off" : l.onTime ? "Paid off on time" : "Paid off late");

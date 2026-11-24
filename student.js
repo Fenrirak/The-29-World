@@ -32,6 +32,7 @@ function badgeType(type) {
     "card-interest": ["coral", "cards", "Card interest"], "card-fee": ["coral", "cards", "Card fee"], "account-fee": ["coral", "coin", "Account fee"],
     "card-cashback": ["mint", "cards", "Cashback"], "card-statement": ["gold", "cards", "Statement"],
     "loan-taken": ["navy", "vault", "Loan"], "loan-repayment": ["mint", "vault", "Loan repayment"],
+    "student-loan": ["navy", "vault", "Student loan"],
     "side-hustle": ["mint", "briefcase", "Side hustle"],
     "store-gift": ["mint", "cart", "Free item"],
     "quiz-reward": ["mint", "idcard", "Quiz passed"],

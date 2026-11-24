@@ -1724,6 +1724,7 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
   cls.loanTiers = _cloneDoc(template.loanTiers || []);
   cls.maxLoanAmount = template.maxLoanAmount || 0;
   cls.maxLoanCount = template.maxLoanCount || 0;
+  if (template.studentLoanThreshold != null) cls.studentLoanThreshold = template.studentLoanThreshold;
   cls.termDepositPlans = _cloneDoc(template.termDepositPlans || []);
   cls.quizzes = _cloneDoc(template.quizzes || []);
   cls.quizGate = _cloneDoc(template.quizGate || cls.quizGate);

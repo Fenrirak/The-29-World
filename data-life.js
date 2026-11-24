@@ -18,23 +18,75 @@ function getStudentTier(job, student) {
   return job.tiers[0]; // entry-level fallback
 }
 
-async function addJob(classCode, title, tiers, autoPromoteWeeks, logType, log) {
+function jobStudentLoanAmount(job) {
+  const amount = cleanAmount(job?.studentLoanAmount ?? 0);
+  return Number.isFinite(amount) && amount > 0 ? amount : 0;
+}
+
+function cleanJobStudentLoan(value) {
+  const amount = cleanAmount(value);
+  if (!Number.isSafeInteger(Math.round(amount * 100)) || amount < 0) {
+    throw new Error("Enter a valid student loan amount.");
+  }
+  return amount;
+}
+
+function jobStudentLoanRequired(job, student) {
+  return (student.loans || []).some(loan => loan.kind === "student" && loan.jobId === job.id)
+    ? 0 : jobStudentLoanAmount(job);
+}
+
+function jobStudentLoanLimit(cls, student, amount) {
+  const limit = loanLimitForAmount(cls, student.loans || [], amount);
+  if (limit === "OVER_COUNT") return "The class limit for open loans has been reached. Pay off a loan before borrowing again.";
+  if (limit === "OVER_MAX") return "This student loan would exceed the class borrowing limit.";
+  return "";
+}
+
+// Both hiring paths use the current job and student documents in the same transaction.
+function jobHire(cls, job, student, username, agreedAmount) {
+  const tier = job?.tiers?.[0];
+  if (!tier) throw new Error("That job isn't open anymore.");
+  if (student.jobId === job.id) return { update: null, loanEntry: null };
+  const amount = jobStudentLoanRequired(job, student);
+  if (agreedAmount !== amount) throw new Error("The job's loan terms changed. The student needs to apply again.");
+  const update = { jobId: job.id, jobTierId: tier.id, jobTierSince: nzDateKey(), pendingPromotion: null };
+  if (!amount) return { update, loanEntry: null };
+
+  const limit = jobStudentLoanLimit(cls, student, amount);
+  if (limit) throw new Error(limit);
+  const loan = {
+    id: uid("loan"), kind: "student", jobId: job.id, jobTitle: job.title,
+    principal: amount, owed: amount, rate: 0, takenDate: nzDateKey(), status: "active"
+  };
+  update.loans = (student.loans || []).concat(loan);
+  const loanEntry = buildLedgerEntry({
+    type: "student-loan", to: username, amount,
+    note: `Student loan for ${job.title} training. ${fmtMoney(amount)} borrowed at 0% interest.`
+  });
+  _autoAppendTxns(cls, [loanEntry]);
+  return { update, loanEntry };
+}
+
+async function addJob(classCode, title, tiers, autoPromoteWeeks, logType, log, studentLoanAmount = 0) {
   const classRef = classesCol().doc(classCode);
   const clean = cleanJobLog(logType, log);
+  const loanAmount = cleanJobStudentLoan(studentLoanAmount);
   await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
-    if (!snap.exists) return;
+    if (!snap.exists) throw new Error("Class not found.");
     const cls = snap.data();
-    cls.jobs.push({
+    const jobs = cls.jobs || [];
+    jobs.push({
       id: uid("j"), title: sanitizeUserText(title, 60),
       tiers: (tiers || []).map(tier => ({
         id: uid("t"), name: sanitizeUserText(tier.name, 60) || "Tier 1",
         wage: Math.max(0, Number(tier.wage) || 0), description: sanitizeUserText(tier.description, 200)
       })),
       autoPromoteWeeks: Math.max(0, Number(autoPromoteWeeks) || 0),
-      logType: clean.type, log: clean.log
+      logType: clean.type, log: clean.log, studentLoanAmount: loanAmount
     });
-    t.update(classRef, { jobs: cls.jobs });
+    t.update(classRef, { jobs });
   });
 }
 async function updateJob(classCode, jobId, updates) {
@@ -43,10 +95,10 @@ async function updateJob(classCode, jobId, updates) {
   await fdb.runTransaction(async (t) => {
     before = null; after = null; // reset every attempt — this callback can be retried
     const snap = await t.get(classRef);
-    if (!snap.exists) return;
+    if (!snap.exists) throw new Error("Class not found.");
     const cls = snap.data();
     const job = cls.jobs.find(j => j.id === jobId);
-    if (!job) return;
+    if (!job) throw new Error("That job no longer exists.");
     before = { title: job.title, autoPromoteWeeks: job.autoPromoteWeeks || 0, tiers: (job.tiers || []).map(x => ({ id: x.id, name: x.name, wage: x.wage })) };
     // Same sanitizing as addJob — editing a job is the same write path and
     // shouldn't be a way to sneak back in what creating one blocks.
@@ -59,6 +111,7 @@ async function updateJob(classCode, jobId, updates) {
     }
     job.autoPromoteWeeks = Math.max(0, Number(updates.autoPromoteWeeks) || 0);
     if (updates.logType !== undefined) { const c = cleanJobLog(updates.logType, updates.log); job.logType = c.type; job.log = c.log; }
+    if (updates.studentLoanAmount !== undefined) job.studentLoanAmount = cleanJobStudentLoan(updates.studentLoanAmount);
     t.update(classRef, { jobs: cls.jobs });
     after = { title: job.title, autoPromoteWeeks: job.autoPromoteWeeks, tiers: (job.tiers || []).map(x => ({ id: x.id, name: x.name, wage: x.wage })) };
   });
@@ -112,28 +165,34 @@ async function removeJob(classCode, jobId) {
   }
 }
 async function assignJob(studentUser, jobId, classCode) {
-  let tierId = null, job = null;
-  const stu = await getUser(studentUser).catch(() => null);
-  const cc = classCode || (stu && stu.classCode);
-  const cls = cc ? await getClass(cc).catch(() => null) : null;
-  if (jobId && cls) {
-    job = (cls.jobs || []).find(j => j.id === jobId) || null;
-    if (job && job.tiers && job.tiers.length) tierId = job.tiers[0].id;
-  }
-  await usersCol().doc(studentUser).update({
-    jobId: jobId || null,
-    jobTierId: tierId,
-    jobTierSince: tierId ? nzDateKey() : null,
-    pendingPromotion: null
+  const ref = usersCol().doc(studentUser);
+  const assigned = await fdb.runTransaction(async t => {
+    const snap = await t.get(ref);
+    if (!snap.exists) throw new Error("Student not found.");
+    const stu = snap.data();
+    if ((stu.jobId || null) === (jobId || null)) return null;
+    const cc = classCode || stu.classCode;
+    const classSnap = await t.get(classesCol().doc(cc));
+    const cls = classSnap.data();
+    if (!cls || stu.classCode !== cc) throw new Error("Class not found.");
+    const jobs = cls.jobs || [];
+    const job = jobs.find(j => j.id === jobId);
+    if (jobId && !job?.tiers?.length) throw new Error("That job isn't open anymore.");
+    if (job && jobStudentLoanRequired(job, stu)) {
+      throw new Error("Ask the student to apply from Jobs so they can agree to the loan.");
+    }
+    const tierId = job?.tiers[0].id || null;
+    t.update(ref, { jobId: jobId || null, jobTierId: tierId, jobTierSince: tierId ? nzDateKey() : null, pendingPromotion: null });
+    return { cc, job, oldJob: jobs.find(j => j.id === stu.jobId) };
   });
-  if (cc && stu && (stu.jobId || null) !== (jobId || null)) {
-    if (jobId) {
-      const tier = job && job.tiers && job.tiers[0];
+  if (assigned) {
+    const { cc, job, oldJob } = assigned;
+    if (job) {
+      const tier = job.tiers[0];
       await t29NotifyStudents(cc, { to: studentUser, icon: "briefcase", tone: "mint",
         title: `Your teacher gave you a job: ${job ? job.title : "a new job"}`,
         body: tier ? `You start as ${tier.name}, earning ${fmtMoney(tier.wage)} per pay.` : "Check the Jobs page for the details.", href: "jobs.html" });
     } else {
-      const oldJob = ((cls && cls.jobs) || []).find(j => j.id === stu.jobId);
       await t29NotifyStudents(cc, { to: studentUser, icon: "briefcase", tone: "coral",
         title: "Your teacher took you off your job", body: oldJob ? `You no longer work as ${oldJob.title}.` : "You no longer have a job.", href: "jobs.html" });
     }
@@ -156,32 +215,30 @@ async function setApprovalModes(classCode, jobMode, hustleMode) {
 /* ---------------- Job applications ---------------- */
 async function approveApplication(classCode, appId) {
   const classRef = classesCol().doc(classCode);
-  let studentUser = null, jobId = null, tierId = null;
-  await fdb.runTransaction(async (t) => {
+  const approved = await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) return;
     const cls = snap.data();
     const app = (cls.jobApplications || []).find(a => a.id === appId);
-    if (!app) return;
+    if (app?.status !== "pending") return;
+    const job = (cls.jobs || []).find(j => j.id === app.jobId);
+    const userRef = usersCol().doc(app.studentUser);
+    const user = (await t.get(userRef)).data();
+    if (!user || user.classCode !== classCode) throw new Error("The student is no longer in this class.");
+    const { update, loanEntry } = jobHire(cls, job, user, app.studentUser, app.studentLoanAmount || 0);
     app.status = "approved";
-    studentUser = app.studentUser;
-    jobId = app.jobId;
-    const job = (cls.jobs || []).find(j => j.id === jobId);
-    if (job && job.tiers && job.tiers.length) tierId = job.tiers[0].id;
-    t.update(classRef, { jobApplications: cls.jobApplications });
+    t.update(classRef, { jobApplications: cls.jobApplications, ...(loanEntry ? { txns: cls.txns } : {}) });
+    if (update) t.update(userRef, update);
+    return { studentUser: app.studentUser, job, loanEntry };
   });
-  if (studentUser) await usersCol().doc(studentUser).update({
-    jobId,
-    jobTierId: tierId,
-    jobTierSince: tierId ? nzDateKey() : null,
-    pendingPromotion: null
-  });
-  if (studentUser) {
-    const cls = await getClass(classCode).catch(() => null);
-    const job = cls && (cls.jobs || []).find(j => j.id === jobId);
+  if (approved) {
+    const { studentUser, job, loanEntry } = approved;
+    const tier = job.tiers[0];
+    if (loanEntry) await recordReportActivity(studentUser, loanEntry);
     await t29NotifyStudents(classCode, { to: studentUser, icon: "briefcase", tone: "mint",
-      title: `Your teacher approved your job application${job ? `: ${job.title}` : ""}`,
-      body: job && job.tiers && job.tiers[0] ? `You start as ${job.tiers[0].name}, earning ${fmtMoney(job.tiers[0].wage)} per pay.` : "You got the job.", href: "jobs.html" });
+      title: `Your teacher approved your job application: ${job.title}`,
+      body: `You start as ${tier.name}, earning ${fmtMoney(tier.wage)} per pay.` +
+        (loanEntry ? ` Your ${fmtMoney(loanEntry.amount)} student loan is in Loans.` : ""), href: "jobs.html" });
   }
 }
 async function declineApplication(classCode, appId) {
@@ -193,7 +250,7 @@ async function declineApplication(classCode, appId) {
     if (!snap.exists) return;
     const cls = snap.data();
     const app = (cls.jobApplications || []).find(a => a.id === appId);
-    if (!app) return;
+    if (app?.status !== "pending") return;
     app.status = "declined";
     t.update(classRef, { jobApplications: cls.jobApplications });
     declined = { user: app.studentUser, jobId: app.jobId, title: ((cls.jobs || []).find(j => j.id === app.jobId) || {}).title };

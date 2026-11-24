@@ -4,8 +4,8 @@ function paintChrome() {
   paintIconSlots();
   document.getElementById("pageTitle").innerHTML = icon("loan", 26) + " Loans";
   document.getElementById("pageIntro").textContent = IS_TEACHER
-    ? "Build the loan ranges your students can borrow from, each with its own amounts, term and weekly interest rate. You can also cap how much they can borrow and dock lifestyle points for money owed."
-    : "Borrow against your future income: pick an amount and a range decides your rate. Interest is charged the moment you borrow, then again every Monday until it's paid off, so the sooner you repay it, the less it costs you.";
+    ? "Set up bank loan ranges, class borrowing limits, and the pay-day threshold for student loan repayments."
+    : "Bank loans charge interest when you borrow and each Monday while you owe money. Interest-free student loans pay for training in selected jobs.";
   document.getElementById("hSettings").innerHTML = "Loan settings";
   document.getElementById("addTierBtn").innerHTML = "Add loan range";
   document.getElementById("labTierMin").innerHTML = "Minimum amount";
@@ -107,6 +107,7 @@ async function render() {
     });
     document.getElementById("maxLoanInput").value = cls.maxLoanAmount || "";
     document.getElementById("maxLoanCountInput").value = cls.maxLoanCount || "";
+    t29FillSetting("studentLoanThresholdInput", studentLoanThreshold(cls));
     const lc = cls.lifestyleConfig.loan;
     document.getElementById("loanLifestyleEnabled").checked = !!(lc && lc.enabled);
     document.getElementById("loanLifestylePoints").value = lc && lc.points ? lc.points : "";
@@ -155,15 +156,21 @@ async function render() {
     document.getElementById("takeLoanBtn").disabled = atCountLimit || noLoanOptions;
     const todayKey = nzDateKeyLocal();
     activeLoans.forEach(loan => {
-      const overdue = loan.dueDate < todayKey;
+      const isStudent = loan.kind === "student";
+      const overdue = !!loan.dueDate && loan.dueDate < todayKey;
+      const terms = isStudent
+        ? `<strong>Student loan · ${escapeHtml(loan.jobTitle || "Job training")}</strong>
+            <div class="muted-small">${fmtMoney(loan.principal)} borrowed · 0% interest</div>
+            <div class="muted-small">Pay day puts 12% of gross pay above ${fmtMoney(studentLoanThreshold(cls))} towards your student loans. You can make extra repayments below.</div>`
+        : `<strong>${fmtMoney(loan.principal)}</strong> borrowed &middot; ${loan.rate}%/week over ${termLabel(loan.termWeeks)}
+            <div class="muted-small">Due ${loan.dueDate}${overdue ? ". Overdue" : ""}</div>`;
       const row = document.createElement("div");
       row.className = "card company-card";
       row.style.marginBottom = "12px";
       row.innerHTML = `
         <div class="auto-row">
           <div class="auto-details">
-            <strong>${fmtMoney(loan.principal)}</strong> borrowed &middot; ${loan.rate}%/week over ${termLabel(loan.termWeeks)}
-            <div class="muted-small">Due ${loan.dueDate}${overdue ? ". Overdue" : ""}</div>
+            ${terms}
           </div>
           <div class="${overdue ? 'status-declined' : 'status-pending'}">${fmtMoney(loan.owed)} owed</div>
         </div>
@@ -184,7 +191,10 @@ async function render() {
     past.forEach(l => {
       const row = document.createElement("div");
       row.className = "auto-row";
-      row.innerHTML = `<div class="auto-details"><strong>${fmtMoney(l.principal)}</strong> borrowed &middot; ${l.rate}%/week over ${termLabel(l.termWeeks)}<div class="muted-small">Taken ${l.takenDate}</div></div><span class="status-approved">Paid off</span>`;
+      const terms = l.kind === "student"
+        ? `<strong>Student loan · ${escapeHtml(l.jobTitle || "Job training")}</strong><div class="muted-small">${fmtMoney(l.principal)} borrowed · 0% interest</div>`
+        : `<strong>${fmtMoney(l.principal)}</strong> borrowed &middot; ${l.rate}%/week over ${termLabel(l.termWeeks)}`;
+      row.innerHTML = `<div class="auto-details">${terms}<div class="muted-small">Taken ${l.takenDate}</div></div><span class="status-approved">Paid off</span>`;
       pastBox.appendChild(row);
     });
 
@@ -268,6 +278,24 @@ async function removeTier(id) {
   if (await t29Confirm("Remove this loan range?")) {
     await removeLoanTier(CURRENT.classCode, id);
     await render();
+  }
+}
+
+async function saveStudentLoanSettings(event) {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector("button");
+  if (button.disabled) return;
+  const msg = document.getElementById("studentLoanSettingsMsg");
+  button.disabled = true;
+  try {
+    await saveStudentLoanThreshold(CURRENT.classCode, document.getElementById("studentLoanThresholdInput").value);
+    msg.className = "success-msg";
+    msg.textContent = "Repayment threshold saved.";
+  } catch (err) {
+    msg.className = "error-msg";
+    msg.textContent = err.message || "Couldn't save the threshold. Try again.";
+  } finally {
+    button.disabled = false;
   }
 }
 

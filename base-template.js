@@ -39,7 +39,7 @@ const BT_WELCOME_GRANT = 100;
 
 // Jobs: every default job is a daily Questionnaire job. Each has 3 pay tiers (weekly gross wage) and a pool of
 // questions about the job's subject. Students answer 3 of the 8 each school day (Mon-Fri) to earn their wage.
-// autoPromoteWeeks = weeks in a tier before moving up automatically.
+// autoPromoteWeeks = weeks in a tier before moving up automatically. Training loan amounts stay fixed like wages.
 // qs: [question, [options], index of the correct option]
 const BT_JOBS = [
   { title: "Mathematician", promote: 4, tiers: [
@@ -107,8 +107,8 @@ const BT_JOBS = [
     ["Which word is a synonym for \"happy\"?", ["Gloomy", "Angry", "Joyful", "Tired"], 2],
     ["In \"Mia's bag\", what does the apostrophe show?", ["A plural", "A question", "Speech", "Possession"], 3],
     ["Which of these is a complete sentence?", ["Running down the road.", "Because it was late.", "After the game.", "The dog barked loudly."], 3] ] },
-  { title: "Software Developer", promote: 6, tiers: [
-    ["Junior Coder", 92, "Fixes small bugs and writes simple programs."],
+  { title: "Software Developer", promote: 6, studentLoanAmount: 30, tiers: [
+    ["Junior Coder", 108, "Fixes small bugs and writes simple programs."],
     ["Software Developer", 122, "Builds features and tests them properly."],
     ["Tech Team Lead", 158, "Leads the team and reviews everyone's code."] ],
     qs: [
@@ -120,8 +120,8 @@ const BT_JOBS = [
     ["Which of these is the strongest password?", ["password123", "12345678", "A long mix of random words, numbers and symbols", "Your birthday"], 2],
     ["What does CPU stand for?", ["Central Processing Unit", "Computer Personal Unit", "Central Program Utility", "Core Power Unit"], 0],
     ["What is a variable used for in code?", ["Printing on paper", "Storing a value", "Connecting to wifi", "Speeding up the screen"], 1] ] },
-  { title: "Accountant", promote: 6, tiers: [
-    ["Bookkeeper", 95, "Keeps track of money coming in and going out."],
+  { title: "Accountant", promote: 6, studentLoanAmount: 40, tiers: [
+    ["Bookkeeper", 112, "Keeps track of money coming in and going out."],
     ["Accountant", 125, "Prepares budgets and works out tax and profit."],
     ["Chief Financial Officer", 165, "Plans how the whole class economy spends and saves."] ],
     qs: [
@@ -671,6 +671,7 @@ function t29ApplyBaseTemplate(cls, terms) {
     id: uid("j"), title: sanitizeUserText(j.title, 60),
     tiers: j.tiers.map(t => ({ id: uid("t"), name: sanitizeUserText(t[0], 60), wage: t[1], description: sanitizeUserText(t[2], 200) })),
     autoPromoteWeeks: j.promote,
+    studentLoanAmount: j.studentLoanAmount || 0,
     // Every default job is a daily questionnaire: 3 questions from the pool, every school day (Mon-Fri).
     ...(() => { const c = cleanJobLog("quiz", { days: ["Mon", "Tue", "Wed", "Thu", "Fri"], freq: "daily", windowOn: false, attempts: 2, perDay: 3,
       questions: j.qs.map(q => ({ prompt: q[0], options: q[1], correct: q[2] })) }); return { logType: c.type, log: c.log }; })()
@@ -844,7 +845,7 @@ function t29BaseTemplateSummary(terms) {
   const S = t29BaseTemplateScale(terms), d = t29BaseTemplateData(terms);
   const propUnits = d.properties.reduce((a, p) => a + p.qty, 0);
   return [
-    `${d.jobs.length} daily-questionnaire jobs (maths, science, history and more) with 3 pay tiers each ($${d.jobs[0].tiers[0][1]}–$${Math.max(...d.jobs.map(j => j.tiers[2][1]))} a week)`,
+    `${d.jobs.length} daily-questionnaire jobs with 3 pay tiers each ($${d.jobs[0].tiers[0][1]}–$${Math.max(...d.jobs.map(j => j.tiers[2][1]))} a week). Software Developer and Accountant require an interest-free student loan for training. The other jobs have no borrowing requirement.`,
     `${d.store.length} store items ($${d.store[0][1]}–$${d.store[d.store.length - 1][1]})`,
     `${d.properties.length} home listings (${propUnits} homes, $${d.properties[0].price}–$${d.properties[d.properties.length - 1].price}) and ${BT_RENTALS.length} rental types`,
     `${d.vehicles.length} vehicles (bikes, cars and a truck) and a weekly bus pass`,

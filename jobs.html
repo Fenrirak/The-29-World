@@ -70,6 +70,37 @@ details.app-cv{margin-top:8px}
 details.app-cv summary{cursor:pointer;font-weight:700;font-size:var(--fs-sm)}
 .app-cv-body{margin-top:8px;padding:6px 0 6px 12px;border-left:3px solid var(--line)}
 #cvCard textarea{resize:vertical}
+#cvCard{container-type:inline-size;scroll-margin-top:80px}
+.cv-builder-heading{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.cv-builder-heading h2{margin:0 0 4px}
+#careerCvHeading{scroll-margin-top:80px}
+.cv-builder-heading p{margin:0}
+.cv-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:clamp(16px,3vw,32px);margin-top:20px;align-items:start}
+.cv-reference{padding:clamp(16px,3vw,26px);background:var(--bg);border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:var(--r-4);scroll-margin-top:80px}
+.cv-reference h3{margin:0 0 4px}
+.cv-reference-intro{margin:0}
+.cv-reference-sheet{margin-top:16px;padding:clamp(14px,2vw,20px);background:var(--card);border:1px solid var(--line);border-radius:var(--r-3);overflow-wrap:anywhere}
+.cv-reference-name{display:block;font-size:1.15rem;padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.cv-reference .cv-label{margin-top:14px}
+.cv-reference .cv-text{line-height:1.5;font-size:var(--fs-md)}
+.cv-reference-jump{display:none}
+#careerCvMsg:empty{display:none}
+@container (max-width:680px){
+  .cv-layout{grid-template-columns:minmax(0,1fr)}
+  .cv-reference-jump{display:inline-block;margin-top:8px}
+}
+.job-loan-panel{margin:16px 0;padding:14px 16px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-3)}
+.job-loan-panel label.job-loan-toggle{display:flex;align-items:center;gap:8px;margin:0;cursor:pointer}
+.job-loan-toggle input{width:18px;height:18px;min-height:0;margin:0;flex:none}
+.job-loan-panel input[type=number]{max-width:12rem}
+.job-loan-panel p{margin:5px 0 0}
+.job-loan-tag{display:flex;align-items:center;gap:7px;margin:8px 0 0;flex-wrap:wrap}
+.job-apply-dialog{color:var(--ink);background:var(--card);border:0;border-radius:var(--r-6);box-shadow:var(--shadow-xl);padding:clamp(16px,4vw,28px);width:min(520px,calc(100% - 28px));max-height:calc(100% - 28px);margin:auto;overflow:auto}
+.job-apply-dialog::backdrop{background:rgba(14,22,40,.62)}
+.job-apply-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;overflow-wrap:anywhere}
+.job-apply-heading h2{margin:0}
+.job-apply-heading button{flex:none;margin:0}
+.job-apply-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
 </style>
 </head>
 <body>
@@ -219,6 +250,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       </label>
 
       <div id="addLogBox"></div>
+      <div id="addJobLoanBox"></div>
 
       <h3 style="margin:20px 0 10px;font-size:var(--fs-lg);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);">Tiers</h3>
       <div id="addTiersList"></div>
@@ -227,9 +259,10 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <div style="flex:1;"></div>
         <div id="addJobSuccess" class="success-msg hidden" style="align-self:center;">Job created!</div>
         <button class="btn gold" type="button" id="addJobBtn" onclick="submitAddJob()">
-          + Add job
+          <span data-icon="plus" data-icon-size="15" aria-hidden="true"></span> Add job
         </button>
       </div>
+      <div id="addJobMsg" role="status"></div>
     </details>
 
     <!-- Recommended side hustles (premade, dismissable) -->
@@ -326,14 +359,16 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     </div>
 
     <section class="card" id="cvCard">
-      <div class="flex-between" style="gap:12px;flex-wrap:wrap;align-items:flex-start;">
-        <div style="flex:1 1 260px;">
-          <h2 style="margin-bottom:4px;">CV builder</h2>
-          <p class="muted-small" style="margin:0;">Write a practice CV with classroom examples and no contact details. Once it's saved you can apply for jobs below, and your CV is sent with each application.</p>
+      <div class="cv-builder-heading">
+        <div>
+          <h2 id="careerCvHeading" tabindex="-1">CV builder</h2>
+          <p class="muted-small">Use examples from school and leave out contact details. Save your CV to send it with your job applications.</p>
+          <a href="#careerCvExample" class="cv-reference-jump">See an example CV ↓</a>
         </div>
         <span id="careerCvStatus"></span>
       </div>
-      <form id="careerCv" onsubmit="saveCareerCv(event)" style="margin-top:12px;">
+      <div class="cv-layout">
+      <form id="careerCv" onsubmit="saveCareerCv(event)" aria-labelledby="careerCvHeading">
         <label for="careerSummary">Personal statement</label>
         <textarea id="careerSummary" name="summary" rows="3" maxlength="400" placeholder="What would you bring to a workplace?"></textarea>
         <label for="careerSkills">Skills</label>
@@ -348,6 +383,23 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         </div>
         <p id="careerCvMsg" role="status"></p>
       </form>
+      <aside class="cv-reference" id="careerCvExample" aria-labelledby="careerCvExampleTitle" tabindex="-1">
+        <h3 id="careerCvExampleTitle">Example CV</h3>
+        <p class="muted-small cv-reference-intro">Jordan is applying for a library assistant role. Use the structure and add examples from your own experience.</p>
+        <div class="cv-view cv-reference-sheet">
+          <strong class="cv-reference-name">Jordan Taylor</strong>
+          <h4 class="cv-label">Personal statement</h4>
+          <p class="cv-text">I enjoy organising things and helping classmates find what they need. I’d bring care and reliability to the library team.</p>
+          <h4 class="cv-label">Skills</h4>
+          <p class="cv-text">Organisation — I keep our group’s resources sorted and labelled.<br>Teamwork — I share tasks and check that everyone knows what to do.</p>
+          <h4 class="cv-label">Experience</h4>
+          <p class="cv-text">Class book swap — I sorted books by genre and helped classmates find something they wanted to read.</p>
+          <h4 class="cv-label">Education and training</h4>
+          <p class="cv-text">English — practised writing clear book reviews.<br>Digital technology — used a spreadsheet to track our book swap.</p>
+        </div>
+        <a href="#careerCvHeading" class="cv-reference-jump">Back to CV builder ↑</a>
+      </aside>
+      </div>
     </section>
 
     <div class="card">
@@ -385,39 +437,39 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     </label>
 
     <div id="editLogBox"></div>
+    <div id="editJobLoanBox"></div>
 
     <h3 style="margin:20px 0 10px;font-size:var(--fs-lg);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);">Tiers</h3>
     <div id="editTiersList"></div>
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center;">
       <button class="btn small secondary" type="button" onclick="addTierRowBtn('edit')">+ Add tier</button>
       <div style="flex:1;"></div>
-      <div id="editModalMsg"></div>
+      <div id="editModalMsg" role="status"></div>
       <button class="btn gold" id="saveEditBtn" onclick="saveEditJob()">Save changes</button>
     </div>
   </div>
 </div>
 
 <!-- ══ Apply modal ════════════════════════════════════════════════════ -->
-<div id="applyModal" class="hidden t29-modal-backdrop center">
-  <div class="card" style="max-width:480px;width:100%;">
-    <div class="flex-between">
-      <h2 style="margin:0;">Apply for <span id="applyJobName"></span></h2>
-      <button class="btn small secondary" onclick="closeApplyModal()">Cancel</button>
+<dialog id="applyModal" class="job-apply-dialog" aria-labelledby="applyJobHeading">
+    <div class="job-apply-heading">
+      <h2 id="applyJobHeading" tabindex="-1">Apply for <span id="applyJobName"></span></h2>
+      <button class="btn small secondary" type="button" id="cancelApplyBtn" onclick="closeApplyModal()">Cancel</button>
     </div>
     <p id="applyStartingTier" class="muted-small" style="margin:8px 0 10px;"></p>
     <p id="applyModeNote" class="muted-small" style="margin:0 0 12px;"></p>
+    <div id="applyLoanNote" class="job-loan-panel hidden"></div>
     <details class="app-cv">
       <summary>Your CV, sent with this application</summary>
       <div class="app-cv-body cv-view" id="applyCvBody"></div>
     </details>
     <label for="applyLetter" style="display:block;margin-top:14px;">Cover letter (optional)</label>
     <textarea id="applyLetter" rows="3" placeholder="Tell your teacher why you're great for this job…" style="resize:vertical;"></textarea>
-    <div style="display:flex;gap:8px;align-items:center;margin-top:12px;">
+    <div class="job-apply-actions">
       <button class="btn gold" id="submitApplyBtn" onclick="submitApplication()">Submit application</button>
-      <div id="applyModalMsg"></div>
+      <div id="applyModalMsg" role="status"></div>
     </div>
-  </div>
-</div>
+</dialog>
 
 <!-- ══ Daily questions modal ═══════════════════════════════════════════ -->
 <div id="logQuizModal" class="hidden t29-modal-backdrop">
@@ -448,18 +500,18 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="settings-menu.js?v=87649e37"></script>
 <script defer src="shortcuts.js?v=8ce32ffe"></script>
 <script defer src="offline.js?v=a51010b5"></script>
-<script defer src="data-core.js?v=7d494ebe"></script>
-<script defer src="data-money.js?v=452cbe61"></script>
-<script defer src="data-life.js?v=ae27df05"></script>
+<script defer src="data-core.js?v=a94c915c"></script>
+<script defer src="data-money.js?v=b077a1b2"></script>
+<script defer src="data-life.js?v=64646b87"></script>
 <script defer src="data-property.js?v=d3163b64"></script>
 <script defer src="data-markets.js?v=9b0491d9"></script>
-<script defer src="base-template.js?v=834065ab"></script>
+<script defer src="base-template.js?v=39e8ee84"></script>
 <script defer src="events-ui.js?v=17ce0701"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="avatar.js?v=e731e566"></script>
 <script defer src="notifications.js?v=def2a521"></script>
 <script defer src="careers.js?v=b82b046d"></script>
-<script defer src="jobs.js?v=6e799824"></script>
+<script defer src="jobs.js?v=c6d1dc29"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>
 </body>
 </html>

@@ -75,7 +75,7 @@ function wageAttendance(cls, student) {
   return { done: st.done, expected: st.expected };
 }
 // What this student's wage comes to after tax, life-event benefits and
-// KiwiSaver, whether or not this week's job task has been approved yet —
+// student loan repayments and KiwiSaver, whether or not this week's job task has been approved yet —
 // the budget uses it to show what pay day will bring, and pay day itself
 // pays exactly this. Assumes they have a job.
 //
@@ -83,7 +83,7 @@ function wageAttendance(cls, student) {
 // (`taxAmount`), and every line of the payslip: `gross`, `bracketTax`
 // (the normal bracket tax), `taxRefund` (the life-event tax cut), `boost`
 // (the life-event pay change, can be negative) and `kiwi` (KiwiSaver, or
-// null). net = gross - bracketTax + boost + taxRefund - kiwi.you, exactly.
+// null). Take-home pay includes the student loan and KiwiSaver deductions.
 function wageCreditEstimate(cls, student, att) {
   const job = (cls.jobs || []).find(j => j.id === student.jobId) || {};
   const tier = getStudentTier(job, student);
@@ -108,13 +108,15 @@ function wageCreditEstimate(cls, student, att) {
     net = Math.round((net + taxRefund) * 100) / 100;
     taxAmount = Math.round((taxAmount - taxRefund) * 100) / 100;
   }
+  const studentLoan = studentLoanPayroll(cls, student, wage, net);
+  net = cleanAmount(net - studentLoan.amount);
   // KiwiSaver comes out last, as a percentage of the GROSS wage (that's
   // how it works in real life — it's worked out before tax, but taken
   // from the pay that's left after tax).
   const kiwi = kiwiSaverPayBreakdown(cls, student, wage, net, nzDateKey());
   if (kiwi && kiwi.you > 0) net = Math.round((net - kiwi.you) * 100) / 100;
   const tierLabel = tier ? tier.name : job.title;
-  return { net, taxAmount, tierLabel, jobTitle: job.title || "", gross: Math.round(wage * 100) / 100, bracketTax, taxRefund, boost, kiwi,
+  return { net, taxAmount, tierLabel, jobTitle: job.title || "", gross: Math.round(wage * 100) / 100, bracketTax, taxRefund, boost, kiwi, studentLoan,
            fullWage: Math.round(fullWage * 100) / 100, attendance: att ? { done: att.done, expected: att.expected } : null };
 }
 
@@ -194,12 +196,13 @@ async function _payStudentWage(classCode, username, dateKey, { force = false, cl
       }
       const credit = computeWageCredit(cls, user);
       if (!credit) return;
-      if (mode === "legacy" && credit.kiwi) return;
+      if (mode === "legacy" && (credit.kiwi || credit.studentLoan.amount > 0)) return;
       const newBalance = Math.round(((user.balance || 0) + credit.net) * 100) / 100;
       const update = { balance: newBalance, lastWagePaid: dateKey };
       if (mode === "full") {
         update.payslips = [buildPayslip(cls, credit, dateKey)].concat(Array.isArray(user.payslips) ? user.payslips : []).slice(0, PAYSLIPS_MAX);
         if (credit.kiwi) update.kiwiSaver = kiwiSaverAfterPay(user, credit.kiwi, dateKey, cls);
+        if (credit.studentLoan.amount > 0) update.loans = credit.studentLoan.loans;
       }
       t.update(userRef, update);
       result = { credited: credit };
@@ -216,6 +219,7 @@ async function _payStudentWage(classCode, username, dateKey, { force = false, cl
     const extras = [];
     if (c.taxAmount > 0) extras.push(`${fmtMoney(c.taxAmount)} tax withheld`);
     if (c.kiwi && c.kiwi.you > 0) extras.push(`${fmtMoney(c.kiwi.you)} to KiwiSaver`);
+    if (c.studentLoan.amount > 0) extras.push(`${fmtMoney(c.studentLoan.amount)} to student loans`);
     const entry = { type: "wage", to: username, amount: c.net, kiwi: c.kiwi || null, note: "Pay day: " + c.tierLabel + (extras.length ? ` (${extras.join(", ")})` : "") };
     if (logSink) logSink.push(entry);
     else await logTxn(classCode, entry);
@@ -469,7 +473,7 @@ async function dailyLifeAllowanceForClassIfDue(classCode) {
        kiwi: null | { rate, paused, you, employerRate, employerGross,
                       esctRate, esct, employerNet, govt },
        net }                       // what landed in their cash
-   net = gross - tax + taxRefund + boost - kiwi.you, to the cent. */
+   net = gross - tax + taxRefund + boost - studentLoan - kiwi.you, to the cent. */
 const PAYSLIPS_MAX = 12;
 
 // The wage tax bracket by bracket, for the payslip: how much of the wage
@@ -514,7 +518,7 @@ function buildPayslip(cls, credit, dateKey) {
       employerGross: k.employerGross, esctRate: k.esctRate, esct: k.esct,
       employerNet: k.employerNet, govt: k.govt
     } : null,
-    net: credit.net,
+    net: credit.net, studentLoan: credit.studentLoan?.amount || 0,
     // For check-in / questionnaire jobs: days logged out of days possible, and the full wage before scaling.
     attendance: credit.attendance || null, fullWage: credit.fullWage || credit.gross
   };
@@ -1329,6 +1333,48 @@ function findLoanTier(cls, amount) {
   return (cls.loanTiers || []).find(t => t.active && amount >= t.min && amount <= t.max) || null;
 }
 
+const STUDENT_LOAN_RATE = 0.12;
+const DEFAULT_STUDENT_LOAN_THRESHOLD = 90;
+
+function studentLoanThreshold(cls) {
+  const amount = cleanAmount(cls?.studentLoanThreshold ?? DEFAULT_STUDENT_LOAN_THRESHOLD);
+  return Number.isFinite(amount) && amount >= 0 ? amount : DEFAULT_STUDENT_LOAN_THRESHOLD;
+}
+
+function studentLoanDeduction(cls, gross) {
+  return cleanAmount(Math.max(0, gross - studentLoanThreshold(cls)) * STUDENT_LOAN_RATE);
+}
+
+function studentLoanPayroll(cls, student, gross, available) {
+  const deduction = Math.min(studentLoanDeduction(cls, gross), Math.max(0, available));
+  let remaining = deduction;
+  const loans = (student.loans || []).map(loan => {
+    if (!(remaining > 0) || loan.kind !== "student" || loan.status !== "active" || !(loan.owed > 0)) return loan;
+    const payment = Math.min(remaining, loan.owed);
+    remaining = cleanAmount(remaining - payment);
+    const owed = cleanAmount(loan.owed - payment);
+    return owed ? { ...loan, owed } : { ...loan, owed: 0, status: "paid", paidDate: nzDateKey() };
+  });
+  return { amount: cleanAmount(deduction - remaining), loans };
+}
+
+async function saveStudentLoanThreshold(classCode, value) {
+  const amount = cleanAmount(value);
+  if (String(value).trim() === "" || !Number.isSafeInteger(Math.round(amount * 100)) || amount < 0) {
+    throw new Error("Enter a repayment threshold of $0 or more.");
+  }
+  await classesCol().doc(classCode).update({ studentLoanThreshold: amount });
+}
+
+// Class borrowing limits count principal and active loans across both loan types.
+function loanLimitForAmount(cls, loans, amount) {
+  const active = loans.filter(loan => loan.status === "active");
+  const total = cleanAmount(amount + active.reduce((sum, loan) => sum + Number(loan.principal || 0), 0));
+  if (cls.maxLoanAmount > 0 && total > cls.maxLoanAmount) return "OVER_MAX";
+  if (cls.maxLoanCount > 0 && active.length >= cls.maxLoanCount) return "OVER_COUNT";
+  return "";
+}
+
 async function takeLoan(username, classCode, amount) {
   amount = cleanAmount(amount);
   const userRef = usersCol().doc(username);
@@ -1343,23 +1389,10 @@ async function takeLoan(username, classCode, amount) {
       const cls = withNewModuleDefaults(classSnap.data());
       if (!(amount > 0)) throw new Error("BAD_AMOUNT");
       const existingLoans = user.loans || [];
-      const activeLoans = existingLoans.filter(l => l.status === "active");
       const tier = findLoanTier(cls, amount);
       if (!tier) throw new Error("NO_TIER");
-      // "Overall maximum loan amount" is a TOTAL cap across every active
-      // loan a student is carrying at once, not just a per-loan cap — a
-      // student with two loans already open could otherwise stack them
-      // past this limit even though neither individual loan exceeds it
-      // on its own. Compare against principal (what they actually
-      // borrowed), not owed (which includes interest), so the cap tracks
-      // how much a student has chosen to take out rather than fluctuating
-      // with interest accrual.
-      const totalPrincipalAfter = activeLoans.reduce((sum, l) => sum + l.principal, 0) + amount;
-      if (cls.maxLoanAmount > 0 && totalPrincipalAfter > cls.maxLoanAmount) throw new Error("OVER_MAX");
-      // Cap on how many loans a student can have open (active) at the same
-      // time — paid-off loans don't count against it, so a student can
-      // reborrow after repaying, separate from the per-loan amount cap.
-      if (cls.maxLoanCount > 0 && activeLoans.length >= cls.maxLoanCount) throw new Error("OVER_COUNT");
+      const limit = loanLimitForAmount(cls, existingLoans, amount);
+      if (limit) throw new Error(limit);
       const todayKey = nzDateKey();
       const dueDate = dateKeyPlusDays(todayKey, tier.termWeeks * 7);
       // tier.rate is a WEEKLY rate that compounds live, not a lump sum
@@ -2924,6 +2957,7 @@ function classifyTxnForReport(t, username) {
   if (REPORT_SAVED_TYPES[t.type]) return { bucket: "saved", category: REPORT_SAVED_TYPES[t.type], amount: amt };
   if (REPORT_SPENT_TYPES[t.type]) return { bucket: "spent",
     category: t.type === "account-fee" && t.feeKind === "overdraft" ? "Overdraft fees" : REPORT_SPENT_TYPES[t.type], amount: amt };
+  if (t.type === "student-loan") return { bucket: "borrowed", category: "Student loans", amount: amt };
   if (t.type === "loan-taken") return { bucket: "borrowed", category: "Loans taken", amount: amt };
   // Cash taken out against the credit card is borrowing too, just like a loan (the fee and interest are card costs).
   if (t.type === "property-occupancy" && t.from === username) return { bucket: "spent", category: "Housing", amount: amt };
@@ -3339,10 +3373,10 @@ function buildStudentReportData(student, cls) {
   // Loan history lives permanently on the student doc (never capped like
   // txns), so this is always complete regardless of the txn window above.
   const loans = (student.loans || []).map(l => ({
-    id: l.id, principal: l.principal, rate: l.rate, termWeeks: l.termWeeks,
-    takenDate: l.takenDate, dueDate: l.dueDate, status: l.status, owed: l.owed,
+    id: l.id, kind: l.kind || null, jobTitle: l.jobTitle || null, principal: l.principal, rate: l.rate, termWeeks: l.termWeeks ?? null,
+    takenDate: l.takenDate, dueDate: l.dueDate ?? null, status: l.status, owed: l.owed,
     paidDate: l.paidDate || null,
-    onTime: l.status === "paid" ? (l.paidDate ? l.paidDate <= l.dueDate : null) : null
+    onTime: l.status === "paid" && l.paidDate && l.dueDate ? l.paidDate <= l.dueDate : null
   }));
 
   // Current net worth snapshot — same breakdown as classLeaderboard().
@@ -3968,10 +4002,11 @@ function budgetWeekItems(cls, user, username, records) {
     // KiwiSaver rate, or been promoted, since).
     const slip = paidSlips.find(p => p.dateKey === dayKey);
     const pay = slip
-      ? { net: slip.net, tax: budgetRound((slip.tax || 0) - (slip.taxRefund || 0)), tier: slip.tier || credit.tierLabel, kiwi: slip.kiwi }
-      : { net: credit.net, tax: credit.taxAmount, tier: credit.tierLabel, kiwi: credit.kiwi };
+      ? { net: slip.net, tax: budgetRound((slip.tax || 0) - (slip.taxRefund || 0)), tier: slip.tier || credit.tierLabel, kiwi: slip.kiwi, studentLoan: slip.studentLoan }
+      : { net: credit.net, tax: credit.taxAmount, tier: credit.tierLabel, kiwi: credit.kiwi, studentLoan: credit.studentLoan.amount };
     const k = pay.kiwi;
-    const off = [pay.tax > 0 ? `${fmtMoney(pay.tax)} tax` : "", k && k.you > 0 ? `${fmtMoney(k.you)} KiwiSaver` : ""].filter(Boolean).join(" and ");
+    const off = [pay.tax > 0 ? `${fmtMoney(pay.tax)} tax` : "", k && k.you > 0 ? `${fmtMoney(k.you)} KiwiSaver` : "",
+      pay.studentLoan > 0 ? `${fmtMoney(pay.studentLoan)} student loan` : ""].filter(Boolean).join(", ");
     const ksLine = (kk, gross) => kk ? { rate: kk.rate, paused: !!kk.paused, you: kk.you || 0, employerNet: kk.employerNet || 0, govt: kk.govt || 0, gross: Number(gross) || 0 } : null;
     if (pay.net > 0 || (k && k.you > 0)) {
       items.push({

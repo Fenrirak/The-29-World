@@ -356,6 +356,7 @@ function renderJobsGrid(cls, students) {
 
 function buildJobCard(j, jobStudents) {
   const tiers = j.tiers || [];
+  const loanAmount = jobStudentLoanAmount(j);
   const autoLabel = j.autoPromoteWeeks > 0
     ? `Auto-promotes every <strong>${j.autoPromoteWeeks}</strong> week${j.autoPromoteWeeks === 1 ? "" : "s"}`
     : `Auto-promote: <span class="muted-small">off</span>`;
@@ -368,6 +369,7 @@ function buildJobCard(j, jobStudents) {
         <h3 class="job-family-title">${icon("briefcase", 16)} ${escapeHtml(j.title)}</h3>
         <div class="job-family-auto muted-small">${autoLabel}</div>
         <div class="job-family-log"><span class="badge navy">${JOB_LOG_TYPES[jobLogType(j)]}</span><span class="muted-small">${escapeHtml(jobLogSummary(j))}</span></div>
+        ${loanAmount ? `<p class="job-loan-tag"><span class="badge gold">Student loan required</span><span class="muted-small">${fmtMoney(loanAmount)} for training</span></p>` : ""}
       </div>
       <div class="job-family-actions">
         <button class="btn small secondary" onclick="openEditModal('${j.id}')">Edit</button>
@@ -411,6 +413,43 @@ function initAddForm() {
   renderAddTiers();
   ADD_LOG = newLogState(null);
   renderLogBox("add");
+  renderJobLoanField("add");
+}
+
+function renderJobLoanField(prefix, amount = 0) {
+  const input = prefix + "JobLoanAmount";
+  document.getElementById(prefix + "JobLoanBox").innerHTML = `
+    <div class="job-loan-panel">
+      <label class="job-loan-toggle" for="${prefix}JobLoanOn">
+        <input id="${prefix}JobLoanOn" type="checkbox" aria-controls="${input}Row" ${amount ? "checked" : ""}
+          onchange="toggleJobLoanField('${prefix}', this.checked)">
+        Require a student loan for training
+      </label>
+      <div id="${input}Row" ${amount ? "" : "hidden"} style="margin-top:10px">
+        <label for="${input}">Training cost ($)</label>
+        <input id="${input}" data-enter="${prefix === "add" ? "addJobBtn" : "saveEditBtn"}" type="number" min="0.01" step="0.01"
+          aria-describedby="${input}Help" ${amount ? `value="${amount}"` : "disabled"}>
+        <p id="${input}Help" class="muted-small">Students agree when they apply. When hired, they borrow this amount at 0% interest and repay it through wages above your <a href="loan.html#studentLoanSettings">class repayment threshold</a>.</p>
+      </div>
+    </div>`;
+}
+
+function toggleJobLoanField(prefix, on) {
+  const input = document.getElementById(prefix + "JobLoanAmount");
+  document.getElementById(input.id + "Row").hidden = !on;
+  input.disabled = !on;
+  if (on) input.focus();
+}
+
+function readJobLoanField(prefix) {
+  const input = document.getElementById(prefix + "JobLoanAmount");
+  if (input.disabled) return 0;
+  const amount = cleanAmount(input.value);
+  if (!input.validity.valid || !(amount > 0) || !Number.isSafeInteger(Math.round(amount * 100))) {
+    input.focus();
+    throw new Error("Enter a training cost of at least $0.01, in dollars and cents.");
+  }
+  return amount;
 }
 
 function renderAddTiers() {
@@ -474,9 +513,14 @@ function addTierRowBtn(prefix) {
 }
 
 async function submitAddJob() {
+  const btn = document.getElementById("addJobBtn");
+  if (btn.disabled) return;
+  const msg = document.getElementById("addJobMsg");
+  msg.className = "error-msg";
+  msg.textContent = "";
   const title = (document.getElementById("addJobTitle").value || "").trim();
   const weeks = parseInt(document.getElementById("addJobAutoWeeks").value) || 0;
-  if (!title) { alert("Please enter a job name."); return; }
+  if (!title) { msg.textContent = "Enter a job name."; document.getElementById("addJobTitle").focus(); return; }
 
   // Sync any in-progress typing by reading directly from DOM
   const rows = document.querySelectorAll("#addTiersList .tier-form-row");
@@ -488,23 +532,25 @@ async function submitAddJob() {
   });
 
   const validTiers = ADD_TIERS.filter(t => t.name.trim());
-  if (validTiers.length === 0) { alert("Please name at least one tier."); return; }
-  let logData;
-  try { logData = readLogForm("add"); } catch (e) { alert(e.message); return; }
+  if (validTiers.length === 0) { msg.textContent = "Name at least one tier."; rows[0]?.querySelector(".tier-name-input").focus(); return; }
+  let logData, loanAmount;
+  try {
+    loanAmount = readJobLoanField("add");
+    logData = readLogForm("add");
+  } catch (e) { msg.textContent = e.message; return; }
 
-  const btn = document.getElementById("addJobBtn");
   btn.disabled = true;
   btn.textContent = "Adding…";
   try {
-    await addJob(CLASS_CODE, title, validTiers, weeks, logData.logType, logData.log);
+    await addJob(CLASS_CODE, title, validTiers, weeks, logData.logType, logData.log, loanAmount);
     document.getElementById("addJobTitle").value     = "";
     document.getElementById("addJobAutoWeeks").value = "0";
     initAddForm();
     document.getElementById("addJobSuccess").classList.remove("hidden");
     setTimeout(() => document.getElementById("addJobSuccess").classList.add("hidden"), 3000);
-    await render();
+    void render().catch(console.error);
   } catch (e) {
-    alert("Couldn't add job: " + e.message);
+    msg.textContent = "Couldn't add job. " + e.message;
   } finally {
     btn.disabled = false;
     btn.innerHTML = icon("plus", 15) + " Add job";
@@ -523,6 +569,7 @@ function openEditModal(jobId) {
   renderEditTiers();
   EDIT_LOG = newLogState(j);
   renderLogBox("edit");
+  renderJobLoanField("edit", jobStudentLoanAmount(j));
   document.getElementById("editModal").classList.remove("hidden");
   document.getElementById("editModalMsg").textContent = "";
 }
@@ -543,7 +590,8 @@ function renderEditTiers() {
 }
 
 async function saveEditJob() {
-  if (!EDIT_JOB_ID) return;
+  const btn = document.getElementById("saveEditBtn");
+  if (!EDIT_JOB_ID || btn.disabled) return;
   const title = (document.getElementById("editJobTitle").value || "").trim();
   const weeks = parseInt(document.getElementById("editJobAutoWeeks").value) || 0;
   if (!title) { showEditMsg("Please enter a job name.", "error"); return; }
@@ -565,17 +613,18 @@ async function saveEditJob() {
     description: t.description || ""
   }));
   if (validTiers.length === 0) { showEditMsg("Need at least one named tier.", "error"); return; }
-  let logData;
-  try { logData = readLogForm("edit"); } catch (e) { showEditMsg(e.message, "error"); return; }
+  let logData, loanAmount;
+  try {
+    loanAmount = readJobLoanField("edit");
+    logData = readLogForm("edit");
+  } catch (e) { showEditMsg(e.message, "error"); return; }
 
-  const btn = document.getElementById("saveEditBtn");
   btn.disabled    = true;
   btn.textContent = "Saving…";
   try {
-    await updateJob(CLASS_CODE, EDIT_JOB_ID, { title, tiers: validTiers, autoPromoteWeeks: weeks, logType: logData.logType, log: logData.log });
-    showEditMsg("Saved!", "success");
-    setTimeout(closeEditModal, 900);
-    await render();
+    await updateJob(CLASS_CODE, EDIT_JOB_ID, { title, tiers: validTiers, autoPromoteWeeks: weeks, logType: logData.logType, log: logData.log, studentLoanAmount: loanAmount });
+    closeEditModal();
+    void render().catch(console.error);
   } catch (e) {
     showEditMsg("Couldn't save: " + e.message, "error");
   } finally {
@@ -689,17 +738,21 @@ function renderApplications(cls, students) {
   pending.forEach(a => {
     const j   = (cls.jobs || []).find(jj => jj.id === a.jobId);
     const s   = students.find(ss => ss.username === a.studentUser);
+    const needsNewTerms = j && s && s.jobId !== j.id && jobStudentLoanRequired(j, s) !== (a.studentLoanAmount || 0);
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
       <div class="auto-details">
         <span class="badge navy">Job</span> <strong>${s ? escapeHtml(s.name) : escapeHtml(a.studentUser)}</strong> applied for <strong>${j ? escapeHtml(j.title) : "Unknown job"}</strong>
         ${j && j.tiers && j.tiers.length ? `<div class="muted-small">Starting at: ${escapeHtml(j.tiers[0].name)}: ${fmtMoney(j.tiers[0].wage)}/pay day</div>` : ""}
+        ${a.studentLoanAmount ? `<div class="muted-small">Agreed student loan: ${fmtMoney(a.studentLoanAmount)}</div>` : ""}
+        ${needsNewTerms ? '<div class="error-msg">Loan terms changed. The student can apply again.</div>' : ""}
         <div class="muted-small">${a.coverLetter ? `"${escapeHtml(a.coverLetter)}"` : "No cover letter."}</div>
         ${appCvDetails(a)}
+        <div class="job-decision-error" role="status"></div>
       </div>
       <div class="row-flex" style="gap:8px;">
-        <button class="btn small mint"  onclick="approveApp('${a.id}')">Approve</button>
+        <button class="btn small mint" onclick="approveApp('${a.id}', this)" ${needsNewTerms ? "disabled" : ""}>Approve</button>
         <button class="btn small coral" onclick="declineApp('${a.id}')">Decline</button>
       </div>
     `;
@@ -744,9 +797,19 @@ function renderApplicationHistory(cls, students) {
   }).join("");
 }
 
-async function approveApp(appId) {
-  await approveApplication(CLASS_CODE, appId);
-  await render();
+async function approveApp(appId, button) {
+  const msg = button.closest(".auto-row").querySelector(".job-decision-error");
+  msg.textContent = "";
+  button.disabled = true;
+  try {
+    await approveApplication(CLASS_CODE, appId);
+    void render().catch(console.error);
+  } catch (err) {
+    msg.classList.add("error-msg");
+    msg.textContent = err.message || "Couldn't approve this application. Try again.";
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function declineApp(appId) {
@@ -890,6 +953,7 @@ function payslipHtml(p, latest = false) {
       ${bands.length && p.tax > 0 ? `<details class="ps-tax-details"><summary>View tax breakdown</summary><div>${bandLines}</div></details>` : ""}
       ${k && !k.paused ? line(`Your KiwiSaver contribution (${psPct(k.rate)})`, "−" + fmtMoney(k.you), "ps-debit") : ""}
       ${k && k.paused ? line("KiwiSaver", "Paused", "ps-paused") : ""}
+      ${p.studentLoan > 0 ? line("Student loan repayment", "−" + fmtMoney(p.studentLoan), "ps-debit") : ""}
       ${adjustments ? `<div class="ps-section">Life-event adjustments</div>${adjustments}` : ""}
       ${line("Take-home pay", fmtMoney(p.net), "total")}
     </section>${kiwiBox}
@@ -913,7 +977,7 @@ function renderPayslips(me, cls) {
       next = `<aside class="ps-upcoming" aria-label="Next pay estimate">
         <div class="ps-upcoming-main"><div><span class="ps-kicker">Next pay estimate</span><strong>${escapeHtml(DAY_FULL[cls.payDay] || cls.payDay)}</strong></div>
         <div class="ps-upcoming-amount"><strong>${fmtMoney(est.net)}</strong><span>estimated take-home</span></div></div>
-        <p>${fmtMoney(est.gross)} before tax. ${payNote}</p>
+        <p>${fmtMoney(est.gross)} before tax. ${payNote}${est.studentLoan.amount > 0 ? ` Includes a ${fmtMoney(est.studentLoan.amount)} student loan repayment.` : ""}</p>
       </aside>`;
     }
   }
@@ -954,6 +1018,8 @@ function renderJobBoard(me, cls) {
     const myTier    = isMine ? getStudentTier(j, me) : null;
     const myApp     = (cls.jobApplications || []).find(a => a.jobId === j.id && a.studentUser === me.username && a.status === "pending");
     const tiers     = j.tiers || [];
+    const loanAmount = jobStudentLoanRequired(j, me);
+    const loanTermsChanged = myApp && (myApp.studentLoanAmount || 0) !== loanAmount;
     const applyBtn  = (kind, label) => cvState === "ready"
       ? `<button class="btn small ${kind}" onclick="applyForJob('${j.id}')">${label}</button>`
       : cvState === "missing"
@@ -969,6 +1035,8 @@ function renderJobBoard(me, cls) {
           ${isMine ? `<span class="badge mint">Your job</span>` : ""}
         </div>
       </div>
+      ${loanAmount ? `<p class="job-loan-tag"><span class="badge gold">Student loan required</span><span class="muted-small">${fmtMoney(loanAmount)} for training · 0% interest</span></p>`
+        : jobStudentLoanAmount(j) ? '<p class="job-loan-tag"><span class="badge mint">Training funded</span></p>' : ""}
       <div class="job-board-tiers">
         ${tiers.map((t, i) => `
           <div class="job-board-tier-row ${isMine && myTier && t.id === myTier.id ? "active" : ""}">
@@ -987,6 +1055,8 @@ function renderJobBoard(me, cls) {
       <div class="job-board-footer">
         ${isMine
           ? `<span class="muted-small">You work here. Starting pay: ${fmtMoney(tiers[0] ? tiers[0].wage : 0)}/pay day</span>`
+          : loanTermsChanged
+            ? `<span class="muted-small">Loan terms changed.</span> ${applyBtn("secondary", "Apply again")}`
           : myApp
             ? `<span class="status-pending">Application pending</span>`
             : me.jobId
@@ -1000,7 +1070,7 @@ function renderJobBoard(me, cls) {
 }
 
 /* ── Apply dialog ───────────────────────────────────────────────────── */
-let APPLYING_JOB_ID = null;
+let APPLYING_JOB = null;
 // careers.js calls this when the student's saved CV has loaded or changed.
 function onCareerCvChange() {
   if (STUDENT_CTX) renderJobBoard(STUDENT_CTX.me, STUDENT_CTX.cls);
@@ -1008,46 +1078,81 @@ function onCareerCvChange() {
 function applyForJob(jobId) {
   const cv = careerSavedCv();
   if (!cv) { t29Jump("cvCard"); return; }
-  APPLYING_JOB_ID = jobId;
   const j = JOBS_CACHE.find(jj => jj.id === jobId);
-  const auto = approvalModeFor(STUDENT_CTX && STUDENT_CTX.cls, "job") === "auto";
-  document.getElementById("applyJobName").textContent = j ? j.title : "";
-  document.getElementById("applyStartingTier").textContent = j && j.tiers && j.tiers[0]
-    ? `Starting tier: ${j.tiers[0].name} (${fmtMoney(j.tiers[0].wage)}/pay day)`
-    : "";
+  if (!j?.tiers?.length || !STUDENT_CTX) return;
+  const { me, cls } = STUDENT_CTX;
+  const auto = approvalModeFor(cls, "job") === "auto";
+  const amount = jobStudentLoanRequired(j, me);
+  const blocked = amount ? jobStudentLoanLimit(cls, me, amount) : "";
+  APPLYING_JOB = { id: jobId, auto, amount };
+  document.getElementById("applyJobName").textContent = j.title;
+  document.getElementById("applyStartingTier").textContent = `Starting tier: ${j.tiers[0].name} (${fmtMoney(j.tiers[0].wage)} gross per pay day)`;
   document.getElementById("applyModeNote").textContent = auto
     ? "Your teacher approves jobs automatically, so you start as soon as you apply."
     : "Your teacher will review your application and CV, and you'll be told their decision.";
   document.getElementById("applyCvBody").innerHTML = careerCvHtml(cv);
-  document.getElementById("submitApplyBtn").textContent = auto ? "Apply and start job" : "Submit application";
+  const loanNote = document.getElementById("applyLoanNote");
+  loanNote.classList.toggle("hidden", !amount);
+  if (amount) {
+    const totalDebt = (me.loans || []).reduce((sum, loan) =>
+      loan.kind === "student" && loan.status === "active" ? sum + loan.owed : sum, amount);
+    const estimate = Math.min(totalDebt, studentLoanDeduction(cls, j.tiers[0].wage));
+    loanNote.innerHTML = `<strong>${fmtMoney(amount)} student loan · 0% interest</strong>
+      <p class="muted-small">${auto ? "The loan opens when you start." : "The loan opens only if your teacher approves."} It pays for your training directly. Your cash balance stays the same.</p>
+      <p class="muted-small">Pay day puts 12% of gross wages above ${fmtMoney(studentLoanThreshold(cls))} towards your student loans, even if you change jobs. At full starting pay, the estimated deduction is ${fmtMoney(estimate)} per pay day.</p>
+      ${blocked ? `<p class="error-msg">${escapeHtml(blocked)} <a href="loan.html">View your loans</a></p>` : ""}`;
+  }
+  const submit = document.getElementById("submitApplyBtn");
+  submit.textContent = amount ? (auto ? "Borrow and start job" : "Agree to borrow and apply") : (auto ? "Apply and start job" : "Submit application");
+  submit.disabled = !!blocked;
+  document.getElementById("cancelApplyBtn").textContent = "Cancel";
   document.getElementById("applyLetter").value = "";
-  document.getElementById("applyModal").classList.remove("hidden");
+  document.querySelector("#applyModal details").open = false;
   document.getElementById("applyModalMsg").textContent = "";
   document.getElementById("applyModalMsg").className = "";
+  const dialog = document.getElementById("applyModal");
+  dialog.oncancel = event => {
+    event.preventDefault();
+    closeApplyModal();
+  };
+  dialog.showModal();
+  document.getElementById("applyJobHeading").focus();
 }
 function closeApplyModal() {
-  document.getElementById("applyModal").classList.add("hidden");
-  APPLYING_JOB_ID = null;
+  if (document.getElementById("cancelApplyBtn").disabled) return;
+  document.getElementById("applyModal").close();
+  APPLYING_JOB = null;
 }
 async function submitApplication() {
-  if (!APPLYING_JOB_ID) return;
+  const btn = document.getElementById("submitApplyBtn");
+  if (!APPLYING_JOB || btn.disabled) return;
   const msg    = document.getElementById("applyModalMsg");
   const cv     = careerSavedCv();
   if (!cv) { msg.textContent = "Save your CV in the CV builder first."; msg.className = "error-msg"; return; }
   const letter = document.getElementById("applyLetter").value.trim();
-  const btn    = document.getElementById("submitApplyBtn");
+  const cancel = document.getElementById("cancelApplyBtn");
   btn.disabled = true;
+  cancel.disabled = true;
+  msg.textContent = "Sending…";
+  msg.className = "";
+  const offer = APPLYING_JOB;
+  let sent = false;
   try {
-    const res = await applyForJob_data(CLASS_CODE, APPLYING_JOB_ID, CURRENT.username, letter, cv);
-    msg.textContent = res.auto ? "You got the job! You start now." : "Application sent with your CV!";
+    const res = await applyForJob_data(CLASS_CODE, offer.id, CURRENT.username, letter, cv, offer);
+    sent = true;
+    msg.textContent = res.auto ? "You got the job!" + (res.borrowed ? ` Your ${fmtMoney(res.borrowed)} student loan is in Loans.` : "")
+      : "Application sent with your CV.";
     msg.className   = "success-msg";
-    setTimeout(closeApplyModal, 1200);
-    await render();
+    cancel.textContent = "Done";
+    void render().catch(console.error);
   } catch (e) {
     msg.textContent = e.message || "Couldn't submit. Try again.";
     msg.className   = "error-msg";
+    void render().catch(console.error);
   } finally {
-    btn.disabled = false;
+    cancel.disabled = false;
+    btn.disabled = sent;
+    if (sent) cancel.focus();
   }
 }
 
@@ -1056,39 +1161,44 @@ async function submitApplication() {
    The CV is copied into its own record (careerSubmissions) that only the student and
    their teachers can read; the class document, which every classmate can read, never holds it.
    When the teacher has chosen auto-approve, the job is given in the same transaction. */
-async function applyForJob_data(classCode, jobId, studentUser, letter, cv) {
+async function applyForJob_data(classCode, jobId, studentUser, letter, cv, offer) {
   if (!cv) throw new Error("Save your CV in the CV builder before you apply.");
   const classRef = classesCol().doc(classCode), userRef = usersCol().doc(studentUser);
   const appId = uid("a");
-  let jobTitle = "", auto = false;
-  await fdb.runTransaction(async (t) => {
+  const result = await fdb.runTransaction(async (t) => {
     const snap = await t.get(classRef);
     if (!snap.exists) throw new Error("Class not found.");
     const cls = snap.data();
     const job = (cls.jobs || []).find(j => j.id === jobId);
-    if (!job) throw new Error("That job no longer exists.");
-    jobTitle = job.title || "";
+    if (!job?.tiers?.length) throw new Error("That job isn't open anymore.");
+    const me = (await t.get(userRef)).data();
+    if (!me || me.role !== "student" || me.classCode !== classCode) throw new Error("Student account not found.");
+    if (me.jobId === jobId) throw new Error("You already work in this job.");
+    const auto = approvalModeFor(cls, "job") === "auto";
+    const amount = jobStudentLoanRequired(job, me);
+    if ((offer?.amount ?? 0) !== amount || (offer && offer.auto !== auto)) {
+      throw new Error("The application terms changed. Close this window and reopen the job to review them.");
+    }
+    const limit = amount ? jobStudentLoanLimit(cls, me, amount) : "";
+    if (limit) throw new Error(limit);
     const apps = cls.jobApplications || [];
-    if (apps.some(a => a.jobId === jobId && a.studentUser === studentUser && a.status === "pending")) {
+    const pending = apps.find(a => a.jobId === jobId && a.studentUser === studentUser && a.status === "pending");
+    if (pending && (pending.studentLoanAmount || 0) === amount) {
       throw new Error("You already have a pending application for this job.");
     }
-    auto = approvalModeFor(cls, "job") === "auto";
-    let tierId = null;
-    if (auto) {
-      if (!(job.tiers && job.tiers.length)) throw new Error("That job isn't open yet.");
-      tierId = job.tiers[0].id;
-      const me = await t.get(userRef);
-      if (!me.exists) throw new Error("Account not found.");
-      if (me.data().jobId === jobId) throw new Error("You already work in this job.");
-    }
-    apps.push({ id: appId, jobId, studentUser, coverLetter: letter, cvAttached: true, status: auto ? "approved" : "pending", auto, date: nowStr() });
+    const hire = auto ? jobHire(cls, job, me, studentUser, amount) : null;
+    if (pending) pending.status = "superseded";
+    apps.push({ id: appId, jobId, studentUser, coverLetter: letter, cvAttached: true, studentLoanAmount: amount,
+      status: auto ? "approved" : "pending", auto, date: nowStr() });
     t.set(careerSubmissionRef(classCode, appId), { classCode, studentUser, jobId, cv, submittedAt: nowStr() });
-    t.update(classRef, { jobApplications: apps });
-    if (auto) t.update(userRef, { jobId, jobTierId: tierId, jobTierSince: nzDateKey(), pendingPromotion: null });
+    t.update(classRef, { jobApplications: apps, ...(hire?.loanEntry ? { txns: cls.txns } : {}) });
+    if (hire?.update) t.update(userRef, hire.update);
+    return { auto, jobTitle: job.title, loanEntry: hire?.loanEntry };
   });
   // Tell the teacher only when there is something for them to approve (best-effort; the application is already saved).
-  if (!auto) await t29NotifyTeacher(classCode, "job", "req", jobTitle);
-  return { auto };
+  if (!result.auto) await t29NotifyTeacher(classCode, "job", "req", result.jobTitle);
+  if (result.loanEntry) await recordReportActivity(studentUser, result.loanEntry);
+  return { auto: result.auto, borrowed: result.loanEntry?.amount || 0 };
 }
 
 /* ── My applications (student) ─────────────────────────────────────── */
@@ -1104,6 +1214,7 @@ function renderMyApplications(me, cls) {
     const statusBadge =
       a.status === "pending"  ? `<span class="status-pending">Pending</span>`  :
       a.status === "approved" ? `<span class="status-approved">${a.auto ? "Approved automatically" : "Approved"}</span>` :
+      a.status === "superseded" ? `<span class="muted-small">Replaced</span>` :
                                 `<span class="status-declined">Declined</span>`;
     row.innerHTML = `
       <div class="auto-details">
@@ -1111,6 +1222,7 @@ function renderMyApplications(me, cls) {
         ${j && j.tiers && j.tiers[0] ? `<div class="muted-small">Entry tier: ${escapeHtml(j.tiers[0].name)}</div>` : ""}
         ${a.coverLetter ? `<div class="muted-small">"${escapeHtml(a.coverLetter)}"</div>` : ""}
         ${a.cvAttached ? `<div class="muted-small">CV attached</div>` : ""}
+        ${a.studentLoanAmount ? `<div class="muted-small">Agreed student loan: ${fmtMoney(a.studentLoanAmount)}</div>` : ""}
         <div class="muted-small">${a.date || ""}</div>
       </div>
       ${statusBadge}
