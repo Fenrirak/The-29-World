@@ -55,7 +55,7 @@ async function openBulkAddTools(button) {
   button.disabled = true;
   button.textContent = "Loading student tools…";
   try {
-    await t29LoadScript("bulk-students.js?v=ac80d1c8");
+    await t29LoadScript("bulk-students.js?v=39965254");
     await openBulkAdd();
   } catch (e) {
     t29Toast("Couldn’t open Add students. Please try again.");
@@ -72,8 +72,8 @@ async function openClassExport(format) {
   const msg = document.getElementById("exportClassMsg");
   flashMsg(msg, "Loading class export…", 60000);
   try {
-    const scripts = [t29LoadScript("class-export.js?v=9ed2482f")];
-    if (format === "pdf") scripts.push(t29LoadScript("pdf-report.js?v=a563b672"));
+    const scripts = [t29LoadScript("class-export.js?v=55903d79")];
+    if (format === "pdf") scripts.push(t29LoadScript("pdf-report.js?v=c833098a"));
     await Promise.all(scripts);
     await exportClassClick(format);
   } catch (e) {

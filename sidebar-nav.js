@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Sidebar navigation =====================
+/* ===================== 29 World™ — Sidebar navigation =====================
    Lets students swap the top bar for a left sidebar: a permanent rail on
    computer/tablet screens, a slide-in drawer (opened via a hamburger
    button) on phones. Purely additive — the existing .topbar / nav /

@@ -40,14 +40,14 @@
   }
 
   async function loadRenderer() {
-    if (!window.T29AvatarCore) await loadScript("avatar-renderer.js?v=f19b02eb");
+    if (!window.T29AvatarCore) await loadScript("avatar-renderer.js?v=9e9560e0");
     return window.T29AvatarCore;
   }
 
   let tools;
   async function loadTools() {
     if (tools) return tools;
-    const [core] = await Promise.all([loadRenderer(), loadScript("avatar-tools.js?v=b696e3e2")]);
+    const [core] = await Promise.all([loadRenderer(), loadScript("avatar-tools.js?v=8a3f38e8")]);
     tools ??= window.T29CreateAvatarTools(core);
     return tools;
   }

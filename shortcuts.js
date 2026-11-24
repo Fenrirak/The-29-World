@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Keyboard shortcuts =====================
+/* ===================== 29 World™ — Keyboard shortcuts =====================
    One small file, loaded (deferred) on every signed-in page, that adds the
    keyboard conveniences people expect on a computer. Everything here is
    additive — nothing changes for touch use, and every shortcut stands down
@@ -224,7 +224,7 @@
 
   function moduleItems() {
     var out = [], seen = {}, cur = pageFile();
-    var links = document.querySelectorAll(".topbar nav a[href]"); // the menu only, not the "The 29 World" brand link
+    var links = document.querySelectorAll(".topbar nav a[href]"); // the menu only, not the "29 World™" brand link
     for (var i = 0; i < links.length; i++) {
       var f = fileOf(links[i]);
       if (links[i].classList.contains("brand") || MODULE_FILES.indexOf(f) < 0 || seen[f] || hiddenByRole(f)) continue;

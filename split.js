@@ -1,4 +1,4 @@
-/* The 29 World — share splits (screens).
+/* 29 World™ — share splits (screens).
    - The teacher's Split Studio: pick a ratio, see exactly what will change, then split.
    - The students' split announcement, shown once to each student who held shares.
    - The split tag, chart marker and history on each company card of the Stock Market page.

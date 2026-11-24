@@ -1,4 +1,4 @@
-/* ===================== The 29 World — data layer: markets & games =====================
+/* ===================== 29 World™ — data layer: markets & games =====================
    The stock market, the Trade Centre (peer-to-peer marketplace), and
    gambling (roulette, the gambling account, blackjack).
    Part of the data layer — see the top of data-core.js for how the five
@@ -301,7 +301,7 @@ async function closeCompany(classCode, companyId) {
     const dividendUpdate = {};
     const plan = cls.dividendPlans?.[co.id];
     if (plan) {
-      if (nzDateKey() < plan.ex) delete cls.dividendPlans[co.id];
+      if (plan.issuer ? trustedNow().getTime() < plan.cutoff : nzDateKey() < plan.ex) delete cls.dividendPlans[co.id];
       else {
         Object.assign(dividendUpdate, dividendRegisterUpdate(cls, co));
         plan.interval = 0;
@@ -324,6 +324,11 @@ async function closeCompany(classCode, companyId) {
         t.update(ownerRefs[i], { balance: Math.round(((Number(owner.balance) || 0) + payout) * 100) / 100 });
       }
     });
+    journalIssuerTrade(t, classCode, cls, co);
+    if (cls.issuerBook?.[co.id]) {
+      cls.issuerBook[co.id].ended = trustedNow().getTime();
+      dividendUpdate.issuerBook = cls.issuerBook;
+    }
     cls.companies = cls.companies.filter(c => c.id !== companyId);
     t.update(classRef, { companies: cls.companies, ...dividendUpdate });
   });
@@ -342,9 +347,18 @@ async function closeCompany(classCode, companyId) {
   }
 }
 
+// Keep the register immediately before a real trade. Its server timestamp
+// lets the importer recover ownership when a cash declaration arrives late.
+function journalIssuerTrade(t, code, cls, co) {
+  if (!co.realSymbol) return;
+  const ref = fdb.collection("classes/" + code + "/issuerPositions/" + co.id + "/trades").doc(uid("trade"));
+  t.set(ref, { at:firebase.firestore.FieldValue.serverTimestamp(), index:cls.companies.indexOf(co), holders:{...co.holders} });
+}
+
 function dividendRegisterUpdate(cls, co) {
   const plan = cls.dividendPlans?.[co.id];
-  if (!plan || nzDateKey() < plan.ex || cls.dividendRegisters?.[co.id]) return {};
+  if (!plan || cls.dividendRegisters?.[co.id]) return {};
+  if (plan.issuer ? trustedNow().getTime() < plan.cutoff : nzDateKey() < plan.ex) return {};
   return { dividendRegisterIndex: cls.companies.indexOf(co),
     dividendRegisters: { ...cls.dividendRegisters, [co.id]: { ...co.holders } } };
 }
@@ -373,6 +387,7 @@ async function buyShares(username, classCode, companyId, shares) {
       if (user.balance < cost) throw new Error("BROKE");
 
       const register = dividendRegisterUpdate(cls, co);
+      journalIssuerTrade(t, classCode, cls, co);
       co.availableShares -= shares;
       co.holders[username] = (co.holders[username] || 0) + shares;
       coName = co.name;
@@ -447,6 +462,7 @@ async function sellShares(username, classCode, companyId, shares) {
 
       proceeds = Math.round(shares * co.price * 100) / 100;
       const register = dividendRegisterUpdate(cls, co);
+      journalIssuerTrade(t, classCode, cls, co);
       co.availableShares += shares;
       co.holders[username] = owned - shares;
       if (co.holders[username] === 0) delete co.holders[username];

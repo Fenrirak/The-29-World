@@ -1,6 +1,6 @@
 /* Blackjack table — layered on top of style.css, which already defines
    .card, .btn, .muted-small, .success-msg, .error-msg, .hidden, and the
-   --gold/--coral colour variables used elsewhere in The 29 World. */
+   --gold/--coral colour variables used elsewhere in 29 World™. */
 
 .bj-table {
   margin-top: 16px;

@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Quiz gate popup =====================
+/* ===================== 29 World™ — Quiz gate popup =====================
    When a teacher attaches a financial-literacy quiz to a module and turns
    the gate on, the student doesn't go looking for a Quizzes page — the
    quiz comes to THEM, as a popup, the moment they try to open the module

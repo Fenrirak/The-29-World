@@ -1,11 +1,11 @@
-/* ===================== The 29 World — Avatars =====================
+/* ===================== 29 World™ — Avatars =====================
    Students are shown as their initials by default. Clicking their own
    round avatar opens the editor, where they can build a character out of
    body type, skin, hair, eyes, eyebrows, mouth, outfits, hats, glasses, extras, pets,
    backgrounds, effects and costumes. Everything is drawn as inline SVG
    (no image files).
 
-   Teachers choose, per class, how items are paid for: 29 World money,
+   Teachers choose, per class, how items are paid for: 29 World™ money,
    free, or Comets (a separate currency only teachers can hand out) — plus
    per-item prices, and hiding items they don't want in their class.
 

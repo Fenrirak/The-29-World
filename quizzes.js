@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Financial-literacy quizzes =====================
+/* ===================== 29 World™ — Financial-literacy quizzes =====================
    Two pages in one, same as store.js/property.js do it: the teacher gets a
    quiz builder + class results, the student gets a list of quizzes and the
    flow for actually sitting one.

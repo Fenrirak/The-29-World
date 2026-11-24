@@ -1,4 +1,4 @@
-/* The 29 World — status page. Page-specific rules only; everything else comes from style.css. */
+/* 29 World™ — status page. Page-specific rules only; everything else comes from style.css. */
 .status-topbar{background:var(--card);border-bottom:1px solid var(--line);}
 .status-topbar .about-brand{color:var(--ink);}
 .status-main [hidden]{display:none;}

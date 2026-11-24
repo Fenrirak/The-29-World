@@ -1,16 +1,16 @@
-THE 29 WORLD™ - PROPRIETARY LICENCE
+29 WORLD™ - PROPRIETARY LICENCE
 ====================================
 
 Copyright © 2026 Nathan Chuantao Liu. All rights reserved.
 
-"The 29 World" is a classroom economy simulator (the "Work"). Nathan
+"29 World™" is a classroom economy simulator (the "Work"). Nathan
 Chuantao Liu (the "Owner") is its author and copyright owner, and he
 asserts his moral right to be identified as the author of the Work.
 
 Website: https://fenrirak.github.io/The-29-World/
 Contact: Nathan.liu1211@gmail.com
 
-Last updated: 15 November 2026
+Last updated: 25 November 2026
 
 
 1. WHAT THIS LICENCE COVERS
@@ -18,7 +18,7 @@ Last updated: 15 November 2026
 "Software" means everything in this repository and on the website,
 including the source code (HTML, CSS and JavaScript), page designs,
 text, icons, avatar and other artwork, simulation data, worksheets,
-images, and the name and logo of The 29 World. It does not include the
+images, and the name and logo of 29 World™. It does not include the
 Third-Party Components listed in section 9.
 
 
@@ -73,7 +73,7 @@ Unless the Owner gives you written permission, you may not:
   - sell, rent, lend, sublicense or otherwise commercialise the
     Software;
   - use the Software, or any substantial part of it, to build or offer
-    a copy of The 29 World or a substantially similar product or
+    a copy of 29 World™ or a substantially similar product or
     service;
   - run your own copy of the Software for a class, school or any other
     group, rather than using the official website;
@@ -83,8 +83,8 @@ Unless the Owner gives you written permission, you may not:
 
 5. NAME AND LOGO
 
-This licence does not give you any right to use the name "The 29
-World", its wordmark, logo or icons. You must not use them in a way
+This licence does not give you any right to use the name "29 World™",
+its wordmark, logo or icons. You must not use them in a way
 that suggests the Owner has endorsed you or that you are connected to
 him or to the website.
 
@@ -138,6 +138,13 @@ own licences, which continue to apply to them.
     fonts/opensans-latin-ext-400.woff2 and fonts/opensans-latin-ext-600.woff2
     Licence text: fonts/OpenSans-LICENSE.txt
 
+  Young Serif (font)
+    Copyright 2023 The Young Serif Project Authors
+    (https://github.com/noirblancrouge/YoungSerif)
+    Licensed under the SIL Open Font License, Version 1.1.
+    Included in: fonts/YoungSerif-Regular.ttf (unmodified).
+    Licence text: fonts/YoungSerif-OFL.txt
+
   Firebase JavaScript SDK (Authentication, Cloud Firestore, App Check)
     Copyright Google LLC
     Licensed under the Apache License, Version 2.0
@@ -147,7 +154,7 @@ own licences, which continue to apply to them.
     Firebase online services are provided by Google under Google's own
     terms.
 
-The licence texts for Selawik and Open Sans must stay with their font files.
+The licence texts for Selawik, Open Sans and Young Serif must stay with their font files.
 Google and Firebase are trademarks of Google LLC.
 
 

@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Settings menu (always loaded) =====================
+/* ===================== 29 World™ — Settings menu (always loaded) =====================
    Builds and drives the gear-icon "Settings" popover (Sidebar navigation
    switch, Change password). This file is small and is the ONE settings-
    related file every page with a #settingsBtn loads unconditionally — it
@@ -44,7 +44,7 @@ function dmSetOn(on) {
 }
 
 const SM_BUNDLES = {
-  sb: { css: "sidebar-nav.css?v=876c8ecb", js: "sidebar-nav.js?v=639b9798", setter: "sbSetOn" }
+  sb: { css: "sidebar-nav.css?v=ef049c15", js: "sidebar-nav.js?v=e152f46c", setter: "sbSetOn" }
 };
 
 // Loads a feature's CSS+JS the first time it's needed (idempotent — safe to

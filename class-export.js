@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Full class export (teacher only) =====================
+/* ===================== 29 World™ — Full class export (teacher only) =====================
    Writes a complete, human-readable snapshot of ONE class to a .pdf or .md file:
    class settings, every price/wage/rate, market history, every student's full account,
    net worth + lifestyle rating (calculated with the app's own functions), and the whole

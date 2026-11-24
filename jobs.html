@@ -23,16 +23,16 @@
     var s = document.createElement('script'); s.src = js;
     document.head.appendChild(s);
   }
-  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=876c8ecb', 'sidebar-nav.js?v=639b9798');
+  loadIfOn('t29-sidebar-nav', 'sidebar-nav', 'sidebar-nav.css?v=ef049c15', 'sidebar-nav.js?v=e152f46c');
 })();
 </script>
-<title>Jobs | The 29 World™</title>
+<title>Jobs | 29 World™</title>
 <link rel="icon" type="image/png" href="Favicon.png">
 <link rel="shortcut icon" href="favicon.ico">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=91f8426d">
+<link rel="stylesheet" href="style.css?v=008a9c34">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -76,13 +76,14 @@ details.app-cv summary{cursor:pointer;font-weight:700;font-size:var(--fs-sm)}
 #careerCvHeading{scroll-margin-top:80px}
 .cv-builder-heading p{margin:0}
 .cv-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:clamp(16px,3vw,32px);margin-top:20px;align-items:start}
-.cv-reference{padding:clamp(16px,3vw,26px);background:var(--bg);border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:var(--r-4);scroll-margin-top:80px}
+.cv-reference{padding:clamp(16px,3vw,26px);background:var(--bg);border:1px solid var(--line);border-radius:var(--r-4);scroll-margin-top:80px}
 .cv-reference h3{margin:0 0 4px}
 .cv-reference-intro{margin:0}
 .cv-reference-sheet{margin-top:16px;padding:clamp(14px,2vw,20px);background:var(--card);border:1px solid var(--line);border-radius:var(--r-3);overflow-wrap:anywhere}
 .cv-reference-name{display:block;font-size:1.15rem;padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid var(--line)}
-.cv-reference .cv-label{margin-top:14px}
-.cv-reference .cv-text{line-height:1.5;font-size:var(--fs-md)}
+.cv-reference .cv-label{margin-top:14px;font-size:var(--fs-md);letter-spacing:normal;text-transform:none;color:var(--ink)}
+.cv-reference .cv-text{line-height:1.5;font-size:var(--fs-md);white-space:normal}
+.cv-reference ul.cv-text{padding-inline-start:1.25em}
 .cv-reference-jump{display:none}
 #careerCvMsg:empty{display:none}
 @container (max-width:680px){
@@ -106,7 +107,7 @@ details.app-cv summary{cursor:pointer;font-weight:700;font-size:var(--fs-sm)}
 <body>
 
 <div class="topbar">
-  <a class="brand" href="jobs.html"><img class="brand-logo" src="icon-512.png" width="24" height="24" alt=""> The 29 World™</a>
+  <a class="brand" href="jobs.html"><img class="brand-logo" src="icon-512.png" width="24" height="24" alt=""> 29 World™</a>
   <nav>
     <a href="teacher.html" id="navHome"><span class="icon-slot" data-icon="grid"></span><span class="nav-label" id="navHomeLabel">Dashboard</span></a>
     <a href="bank.html" data-module="bank"><span class="icon-slot" data-icon="piggy"></span><span class="nav-label">Bank</span></a>
@@ -385,17 +386,20 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       </form>
       <aside class="cv-reference" id="careerCvExample" aria-labelledby="careerCvExampleTitle" tabindex="-1">
         <h3 id="careerCvExampleTitle">Example CV</h3>
-        <p class="muted-small cv-reference-intro">Jordan is applying for a library assistant role. Use the structure and add examples from your own experience.</p>
+        <p class="muted-small cv-reference-intro">Aldemar is applying to help out at the school library. For your own CV, think about things you’ve done at school, at home or in a team.</p>
         <div class="cv-view cv-reference-sheet">
-          <strong class="cv-reference-name">Jordan Taylor</strong>
+          <strong class="cv-reference-name">Aldemar Willows</strong>
           <h4 class="cv-label">Personal statement</h4>
-          <p class="cv-text">I enjoy organising things and helping classmates find what they need. I’d bring care and reliability to the library team.</p>
+          <p class="cv-text">I’m in Year 10 and I often go to the library at lunchtime. I’d like to help put books away and show other students where to find things.</p>
           <h4 class="cv-label">Skills</h4>
-          <p class="cv-text">Organisation — I keep our group’s resources sorted and labelled.<br>Teamwork — I share tasks and check that everyone knows what to do.</p>
+          <ul class="cv-text">
+            <li>I keep track of equipment and put it back after class.</li>
+            <li>I share out the jobs when we work in groups.</li>
+          </ul>
           <h4 class="cv-label">Experience</h4>
-          <p class="cv-text">Class book swap — I sorted books by genre and helped classmates find something they wanted to read.</p>
+          <p class="cv-text">I helped run a book swap in my form class. I set out the books, helped people choose one and packed up at the end.</p>
           <h4 class="cv-label">Education and training</h4>
-          <p class="cv-text">English — practised writing clear book reviews.<br>Digital technology — used a spreadsheet to track our book swap.</p>
+          <p class="cv-text">Year 10 at secondary school. In English, I wrote a short review of a book I’d recommend to my class.</p>
         </div>
         <a href="#careerCvHeading" class="cv-reference-jump">Back to CV builder ↑</a>
       </aside>
@@ -483,7 +487,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 </div>
 
 <footer class="site-footer">
-  <div class="site-footer-brand">The 29 World™</div>
+  <div class="site-footer-brand">29 World™</div>
   <nav class="site-footer-links" aria-label="Footer">
     <a href="about.html">About</a>
     <a href="help.html">Help Centre</a>
@@ -492,24 +496,24 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     <a href="privacy.html">Privacy Policy</a>
     <a href="terms.html">Terms of Use</a>
   </nav>
-  <div class="site-footer-copy">© 2026 The 29 World™. All rights reserved.</div>
+  <div class="site-footer-copy">© 2026 29 World™. All rights reserved.</div>
 </footer>
 
-<script type="module" src="firebase-init.js?v=e3543fda"></script>
-<script defer src="icons.js?v=5ec87922"></script>
-<script defer src="settings-menu.js?v=87649e37"></script>
-<script defer src="shortcuts.js?v=8ce32ffe"></script>
-<script defer src="offline.js?v=a51010b5"></script>
-<script defer src="data-core.js?v=744ac532"></script>
-<script defer src="data-money.js?v=3dd1f15a"></script>
-<script defer src="data-life.js?v=64646b87"></script>
-<script defer src="data-property.js?v=d3163b64"></script>
-<script defer src="data-markets.js?v=bbb5fcf2"></script>
-<script defer src="base-template.js?v=39e8ee84"></script>
-<script defer src="events-ui.js?v=17ce0701"></script>
-<script defer src="quiz-gate.js?v=9beab624"></script>
-<script defer src="avatar.js?v=e731e566"></script>
-<script defer src="notifications.js?v=def2a521"></script>
+<script type="module" src="firebase-init.js?v=cc4f78f0"></script>
+<script defer src="icons.js?v=be447cba"></script>
+<script defer src="settings-menu.js?v=441cc269"></script>
+<script defer src="shortcuts.js?v=280acadf"></script>
+<script defer src="offline.js?v=4ba93d81"></script>
+<script defer src="data-core.js?v=c70a2043"></script>
+<script defer src="data-money.js?v=4dc6f0d3"></script>
+<script defer src="data-life.js?v=e6f73869"></script>
+<script defer src="data-property.js?v=4b2feaee"></script>
+<script defer src="data-markets.js?v=d85af4d9"></script>
+<script defer src="base-template.js?v=00f9bee4"></script>
+<script defer src="events-ui.js?v=22803e68"></script>
+<script defer src="quiz-gate.js?v=f03b3b40"></script>
+<script defer src="avatar.js?v=f2a3ef95"></script>
+<script defer src="notifications.js?v=a6619764"></script>
 <script defer src="careers.js?v=b82b046d"></script>
 <script defer src="jobs.js?v=c6d1dc29"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { if (typeof initAddForm === 'function') initAddForm(); });</script>

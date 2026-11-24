@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Firebase init =====================
+/* ===================== 29 World™ — Firebase init =====================
    Loaded as an ES module (type="module" in the HTML), BEFORE icons.js,
    settings-menu.js, the data-*.js files, and everything else, on every page.
 

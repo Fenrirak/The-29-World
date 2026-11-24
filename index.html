@@ -1,664 +1,198 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-NZ">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="A whole-class classroom economy and life simulation with individual student accounts, jobs, banking, loans, KiwiSaver, shares and property.">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="The 29 World™">
-<meta property="og:title" content="The 29 World™, Classroom Economy">
-<meta property="og:description" content="A whole-class classroom economy and life simulation with individual student accounts, jobs, banking, loans, KiwiSaver, shares and property.">
-<meta property="og:url" content="https://fenrirak.github.io/The-29-World/index.html">
-<meta property="og:image" content="https://fenrirak.github.io/The-29-World/og-image.png">
-<meta property="og:image:type" content="image/png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="The 29 World™ logo, a gold dollar coin, beside the title The 29 World™">
-<meta property="og:locale" content="en_NZ">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="The 29 World™, Classroom Economy">
-<meta name="twitter:description" content="A whole-class classroom economy and life simulation with individual student accounts, jobs, banking, loans, KiwiSaver, shares and property.">
-<meta name="twitter:image" content="https://fenrirak.github.io/The-29-World/og-image.png">
-<meta name="twitter:image:alt" content="The 29 World™ logo, a gold dollar coin, beside the title The 29 World™">
-<link rel="canonical" href="https://fenrirak.github.io/The-29-World/index.html">
-<script>try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}</script>
-<title>Classroom Economy | The 29 World™</title>
-<link rel="icon" type="image/png" href="Favicon.png">
-<link rel="shortcut icon" href="favicon.ico">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=91f8426d">
-<style>.start-option input[type="radio"]{flex:0 0 20px;width:20px;min-width:20px;height:20px;min-height:20px;max-width:20px;aspect-ratio:1/1;padding:0;margin:2px 0 0;align-self:flex-start;border-radius:50%}</style>
-<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
-<link rel="dns-prefetch" href="https://www.gstatic.com">
-<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
-<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
-<link rel="dns-prefetch" href="https://firestore.googleapis.com">
-<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
-<!-- Start downloading the Firebase SDK straight away instead of after firebase-init.js arrives (saves a round trip before anything can load). -->
-<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js">
-<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js">
-<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js">
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@graph": [
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>29 World™ | Free classroom economy simulator</title>
+  <meta name="description" content="Give your class its own economy. Students earn classroom dollars, budget for bills and save for the future in 29 World™. Free for everyone.">
+  <link rel="canonical" href="https://fenrirak.github.io/The-29-World/index.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="29 World™">
+  <meta property="og:title" content="29 World™ | A town run by your class">
+  <meta property="og:description" content="Create a free classroom economy where students earn a wage, budget for bills and decide what to save.">
+  <meta property="og:url" content="https://fenrirak.github.io/The-29-World/index.html">
+  <meta property="og:image" content="https://fenrirak.github.io/The-29-World/og-image.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="29 World™ and a woodcut of a New Zealand harbour town">
+  <meta property="og:locale" content="en_NZ">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="29 World™ | A town run by your class">
+  <meta name="twitter:description" content="A free classroom economy with jobs, bills, savings and a marketplace.">
+  <meta name="twitter:image" content="https://fenrirak.github.io/The-29-World/og-image.png">
+  <meta name="twitter:image:alt" content="29 World™ and a woodcut of a New Zealand harbour town">
+  <meta name="theme-color" content="#f8f5ea">
+  <link rel="icon" type="image/png" href="Favicon.png">
+  <link rel="shortcut icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.json">
+  <script>
+    // Invitations, shared templates and emailed recovery links may still point at the old entry point.
+    // Forward the complete link so the account page can validate it.
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const accountLink = ["role", "returnTo", "mode", "oobCode", "link", "deep_link_id"]
+        .some(key => params.has(key));
+      let resume = false;
+      try {
+        resume = !!localStorage.getItem("anw_session") && !location.hash;
+        document.documentElement.classList.toggle("dark-mode", localStorage.getItem("t29-dark-mode") === "1");
+      } catch (_) { /* Public pages also work with storage disabled. */ }
+      if (accountLink || resume) location.replace("login.html" + location.search + location.hash);
+    })();
+  </script>
+  <link rel="preload" href="fonts/YoungSerif-Regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="homepage.css?v=323262b1">
+  <script defer src="homepage.js?v=303f1c5b"></script>
+  <script defer src="offline.js?v=4ba93d81"></script>
+  <script type="application/ld+json">
     {
-      "@type": "WebSite",
-      "@id": "https://fenrirak.github.io/The-29-World/#website",
-      "name": "The 29 World™",
-      "url": "https://fenrirak.github.io/The-29-World/index.html",
-      "inLanguage": "en-NZ"
-    },
-    {
-      "@type": "WebApplication",
-      "@id": "https://fenrirak.github.io/The-29-World/#app",
-      "name": "The 29 World™",
-      "url": "https://fenrirak.github.io/The-29-World/index.html",
-      "description": "A whole-class classroom economy and life simulation with individual student accounts, jobs, banking, loans, KiwiSaver, shares and property.",
-      "applicationCategory": "EducationalApplication",
-      "operatingSystem": "Any (web browser)",
-      "browserRequirements": "Requires JavaScript",
-      "image": "https://fenrirak.github.io/The-29-World/og-image.png",
-      "inLanguage": "en-NZ",
-      "isAccessibleForFree": true,
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "NZD"
-      },
-      "audience": {
-        "@type": "EducationalAudience",
-        "educationalRole": [
-          "teacher",
-          "student"
-        ]
-      },
-      "isPartOf": {
-        "@id": "https://fenrirak.github.io/The-29-World/#website"
-      }
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://fenrirak.github.io/The-29-World/#website",
+          "name": "29 World™",
+          "url": "https://fenrirak.github.io/The-29-World/index.html",
+          "inLanguage": "en-NZ"
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://fenrirak.github.io/The-29-World/#app",
+          "name": "29 World™",
+          "url": "https://fenrirak.github.io/The-29-World/login.html",
+          "description": "A classroom economy and life simulator with student accounts, jobs, banking, KiwiSaver, shares and property.",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "Web browser",
+          "browserRequirements": "Requires JavaScript",
+          "image": "https://fenrirak.github.io/The-29-World/og-image.png",
+          "inLanguage": "en-NZ",
+          "isAccessibleForFree": true,
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "NZD" },
+          "audience": { "@type": "EducationalAudience", "educationalRole": ["teacher", "student"] },
+          "isPartOf": { "@id": "https://fenrirak.github.io/The-29-World/#website" }
+        }
+      ]
     }
-  ]
-}
-</script>
+  </script>
 </head>
-<body>
+<body id="home">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="masthead page-width">
+    <a class="wordmark" href="#home" aria-label="29 World™ home">
+      <img src="Favicon.png" alt="" width="44" height="44">
+      <span>29 World<sup>™</sup></span>
+    </a>
+    <nav class="contents" aria-label="On this page">
+      <a href="#how-it-works">How it works</a>
+      <a href="#payday">Try a payday</a>
+      <a href="#pricing">Pricing</a>
+    </nav>
+    <a class="login-link" href="login.html">Log in</a>
+  </header>
 
-<div class="auth-wrap">
-  <div class="auth-card">
-    <div class="auth-logo">
-      <span class="coin" id="logoCoin">$</span>
-      <h1 style="margin:0;">The 29 World™</h1>
-    </div>
-    <p class="auth-title">A classroom economy for the whole class, where every student runs their own money.</p>
-
-    <!-- ROLE SWITCH -->
-    <div class="tabs">
-      <button id="role-teacher" class="active" onclick="showRole('teacher')"><span class="icon-slot"></span> I'm a Teacher</button>
-      <button id="role-student" onclick="showRole('student')"><span class="icon-slot"></span> I'm a Student</button>
-    </div>
-
-    <!-- ================= TEACHER SIDE ================= -->
-    <div id="role-panel-teacher">
-      <div class="tabs subtabs" id="teacher-subtabs">
-        <button id="tab-teacher-login" class="active" onclick="showPanel('teacher-login')"><span class="icon-slot"></span> Log in</button>
-        <button id="tab-teacher-new" onclick="showPanel('teacher-new')"><span class="icon-slot"></span> Sign up</button>
+  <main id="main">
+    <section class="cover page-width" aria-labelledby="cover-title">
+      <div class="cover-copy">
+        <p class="kicker"><span class="ink-rule" aria-hidden="true"></span> Classroom economy simulator</p>
+        <h1 id="cover-title">A town run by <em>your class.</em></h1>
+        <p class="lead">What will your students do with their first pay? In 29 World™, they earn classroom dollars, pay their bills and choose what’s worth saving for.</p>
+        <div class="entry-links">
+          <a class="button" href="login.html?role=teacher&amp;action=signup">Start a class</a>
+          <a class="text-link" href="login.html?role=student&amp;action=join">Join with a class code</a>
+        </div>
       </div>
+      <figure class="town-print">
+        <img src="images/harbour-town.webp"
+             srcset="images/harbour-town-small.webp 768w, images/harbour-town.webp 1536w"
+             sizes="(min-width: 90rem) 47rem, (min-width: 55rem) 54vw, 92vw"
+             width="1536" height="1024" fetchpriority="high"
+             alt="Students pass a corner dairy and catch a yellow bus on their way to a red-roofed school above the harbour.">
+        <figcaption>An imagined harbour town, Aotearoa New Zealand.</figcaption>
+      </figure>
+    </section>
 
-      <!-- Teacher login -->
-      <form id="panel-teacher-login" onsubmit="return doLogin(event)">
-        <label for="l-username"><span class="icon-slot"></span> Username or email</label>
-        <input id="l-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username (or your recovery email)">
-        <label for="l-password"><span class="icon-slot"></span> Password</label>
-        <input id="l-password" type="password" required autocomplete="current-password" placeholder="Password">
-        <div class="remember-row">
-          <input type="checkbox" id="l-remember">
-          <label for="l-remember">Remember my username on this device</label>
+    <section class="classroom" id="how-it-works" aria-labelledby="classroom-title">
+      <div class="classroom-spread page-width">
+        <div class="spread-heading">
+          <p class="kicker">How it works</p>
+          <h2 id="classroom-title">A week in class</h2>
         </div>
-        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Log in</button>
-        <p class="muted-small" style="text-align:center;margin:10px 0 0;"><button type="button" class="link-btn" onclick="showTeacherSpecial('forgot')">Forgot your password?</button> · <a href="help.html#login">Login help</a></p>
-      </form>
-
-      <!-- Teacher forgot password: emails a one-time link to the recovery email -->
-      <form id="panel-teacher-forgot" class="hidden" onsubmit="return doForgot(event)">
-        <p class="muted-small" style="margin-top:0;">Enter your username and the recovery email you gave when you created your account. We'll email you a link to set a new password.</p>
-        <label for="f-username"><span class="icon-slot"></span> Username</label>
-        <input id="f-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
-        <label for="f-email"><span class="icon-slot"></span> Recovery email</label>
-        <input id="f-email" type="email" required autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
-        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Email me a link</button>
-        <p class="field-hint" style="text-align:center;">No recovery email on your account? It's optional, so it may not have been set. A teacher can add one on Teacher Home once logged in.</p>
-        <p class="muted-small" style="text-align:center;margin:6px 0 0;"><button type="button" class="link-btn" onclick="showPanel('teacher-login')">Back to log in</button></p>
-      </form>
-
-      <!-- Teacher reset password: where the emailed link lands -->
-      <form id="panel-teacher-reset" class="hidden" onsubmit="return doReset(event)">
-        <p class="muted-small" style="margin-top:0;">Confirm your details and choose a new password.</p>
-        <label for="r-username"><span class="icon-slot"></span> Username</label>
-        <input id="r-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
-        <label for="r-email"><span class="icon-slot"></span> Recovery email</label>
-        <input id="r-email" type="email" required autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="The email the link was sent to">
-        <label for="r-password"><span class="icon-slot"></span> New password</label>
-        <input id="r-password" type="password" required autocomplete="new-password" placeholder="Choose a new password">
-        <p class="field-hint">At least 6 characters, including a capital letter. After this you can log in with your recovery email and this password.</p>
-        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Set new password</button>
-      </form>
-
-      <!-- Teacher signs up, with optional class setup -->
-      <form id="panel-teacher-new" class="hidden" onsubmit="return doTeacherSignup(event)">
-        <p class="muted-small" style="margin-top:0;">Create your teacher account, then start a class, join a colleague's class or set up your classes later.</p>
-        <label for="t-title"><span class="icon-slot"></span> Title</label>
-        <select id="t-title" required autocomplete="honorific-prefix">
-          <option value="" disabled selected>Choose a title</option>
-          <option value="Mr">Mr</option>
-          <option value="Ms">Ms</option>
-          <option value="Mrs">Mrs</option>
-          <option value="Miss">Miss</option>
-          <option value="Dr">Dr</option>
-        </select>
-        <div class="name-row">
-          <div>
-            <label for="t-first"><span class="icon-slot"></span> First name</label>
-            <input id="t-first" required maxlength="29" autocomplete="given-name" autocapitalize="words" placeholder="First name">
-          </div>
-          <div>
-            <label for="t-last"><span class="icon-slot"></span> Last name</label>
-            <input id="t-last" required maxlength="30" autocomplete="family-name" autocapitalize="words" placeholder="Last name">
-          </div>
+        <div class="class-column">
+          <h3>At the teacher’s desk</h3>
+          <p>Open a class with jobs, homes and prices already set, or build your own. Choose when wages land and give students a code to join.</p>
+          <a class="text-link" href="help.html#classroom">Class setup guide</a>
         </div>
-        <p class="field-hint" id="t-name-hint">This is how your students will see you, e.g. Ms Smith.</p>
-        <label for="t-email"><span class="icon-slot"></span> Recovery email <span class="muted-small">(optional)</span></label>
-        <input id="t-email" type="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
-        <p class="field-hint">Only used to get you back into your account if you forget your password. Students can't see it. You can add or change it later.</p>
-        <label for="t-class-mode">Class setup</label>
-        <select id="t-class-mode" onchange="updateTeacherClassSetup()">
-          <option value="create">Create a new class</option>
-          <option value="join">Join as co-teacher</option>
-          <option value="later">Skip for now</option>
-        </select>
-        <div id="t-create-fields">
-        <label for="t-class"><span class="icon-slot"></span> Class name</label>
-        <input id="t-class" maxlength="60" placeholder="Class name, e.g. Room 12" autocomplete="off" required>
-        <label>How do you want to start?</label>
-        <div class="start-choice" role="radiogroup" aria-label="How do you want to start?">
-          <label class="start-option">
-            <input type="radio" name="t-start" value="base" checked>
-            <span class="start-option-body">
-              <strong>Use the base template <span class="start-tag">Recommended</span></strong>
-              <span class="muted-small">Jobs, store, homes, cars, insurance, events, loans and quizzes, already set up and balanced for a school term to a full year.</span>
-            </span>
-          </label>
-          <label class="start-option">
-            <input type="radio" name="t-start" value="scratch">
-            <span class="start-option-body">
-              <strong>Start from scratch</strong>
-              <span class="muted-small">A completely empty class. You add everything yourself.</span>
-            </span>
-          </label>
+        <div class="class-column">
+          <h3>In a student’s shoes</h3>
+          <p>Earn a wage, budget for rent and trade with classmates. A student saving for a home can try a term deposit while another starts putting money into KiwiSaver.</p>
         </div>
-        <p class="field-hint">You can change anything later.</p>
-        </div>
-        <div id="t-join-fields" class="hidden">
-          <label for="t-co-code">Co-teacher code</label>
-          <input id="t-co-code" disabled autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="e.g. F7K2M-AB12CD34" style="text-transform:uppercase;" aria-describedby="t-co-code-hint">
-          <p class="field-hint" id="t-co-code-hint">Ask the class owner for their co-teacher code. This is longer than the code students use.</p>
-        </div>
-        <p id="t-later-hint" class="field-hint hidden">You can create or join a class from My Classes whenever you're ready.</p>
-        <label for="t-username"><span class="icon-slot"></span> Choose a username</label>
-        <input id="t-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
-        <p class="field-hint">This is what you'll type to log in. Keep it simple, with no spaces.</p>
-        <label for="t-password"><span class="icon-slot"></span> Choose a password</label>
-        <input id="t-password" type="password" required autocomplete="new-password" placeholder="Choose a password">
-        <p class="field-hint">At least 6 characters, including a capital letter.</p>
-        <button id="t-signup-submit" class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Create account &amp; class</button>
-        <p class="muted-small" style="text-align:center;margin:10px 0 0;">By continuing you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
-      </form>
-    </div>
-
-    <!-- ================= STUDENT SIDE ================= -->
-    <div id="role-panel-student" class="hidden">
-      <div class="tabs subtabs">
-        <button id="tab-student-login" class="active" onclick="showPanel('student-login')"><span class="icon-slot"></span> Log in</button>
-        <button id="tab-student-new" onclick="showPanel('student-new')"><span class="icon-slot"></span> Join a class</button>
       </div>
+    </section>
 
-      <!-- Student login -->
-      <form id="panel-student-login" onsubmit="return doLogin(event)">
-        <label for="sl-username"><span class="icon-slot"></span> Username</label>
-        <input id="sl-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
-        <label for="sl-password"><span class="icon-slot"></span> Password</label>
-        <input id="sl-password" type="password" required autocomplete="current-password" placeholder="Password">
-        <div class="remember-row">
-          <input type="checkbox" id="sl-remember">
-          <label for="sl-remember">Remember my username on this device</label>
+    <section class="payday page-width" id="payday" aria-labelledby="payday-title">
+      <div class="payday-copy">
+        <p class="kicker"><span class="ink-rule" aria-hidden="true"></span> Try a payday</p>
+        <h2 id="payday-title">Where does <em>$120</em> go?</h2>
+        <p>Imagine your first week on the job. After rent and bus fares, you have $70 left. How much will you move into savings?</p>
+        <div class="savings-control" id="savings-control" hidden>
+          <div class="control-label">
+            <label for="savings">Move to savings</label>
+            <span id="savings-amount" aria-hidden="true">$20</span>
+          </div>
+          <input id="savings" type="range" min="0" max="70" step="5" value="20" aria-valuetext="20 classroom dollars">
+          <div class="scale" aria-hidden="true"><span>$0</span><span>$70</span></div>
         </div>
-        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Log in</button>
-        <p class="muted-small" style="text-align:center;margin:10px 0 0;"><a href="help.html#login">Login help</a></p>
-      </form>
+      </div>
+      <div class="pay-slip">
+        <div class="slip-header">
+          <h3>Payday ledger</h3>
+          <span class="sample-stamp">Sample</span>
+        </div>
+        <p class="slip-subtitle">One week in classroom dollars</p>
+        <dl class="ledger">
+          <div><dt>Take-home pay</dt><dd>+$120</dd></div>
+          <div><dt>Room rent</dt><dd>−$45</dd></div>
+          <div><dt>Bus fares</dt><dd>−$5</dd></div>
+          <div><dt>Moved to savings</dt><dd id="ledger-savings">−$20</dd></div>
+          <div class="ledger-total"><dt>Left to spend</dt><dd><output id="spending" for="savings" aria-label="Left to spend">$50</output></dd></div>
+        </dl>
+      </div>
+    </section>
 
-      <!-- Student joins a class -->
-      <form id="panel-student-new" class="hidden" onsubmit="return doStudentSignup(event)">
-        <label for="s-code"><span class="icon-slot"></span> Class code</label>
-        <input id="s-code" placeholder="Class code, e.g. F7K2M" required autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" style="text-transform:uppercase;">
-        <div class="name-row">
-          <div>
-            <label for="s-first"><span class="icon-slot"></span> First name</label>
-            <input id="s-first" required maxlength="29" autocomplete="given-name" autocapitalize="words" placeholder="First name">
-          </div>
-          <div>
-            <label for="s-last"><span class="icon-slot"></span> Last name</label>
-            <input id="s-last" required maxlength="30" autocomplete="family-name" autocapitalize="words" placeholder="Last name">
+    <section class="pricing" id="pricing" aria-labelledby="pricing-title">
+      <div class="price-spread page-width">
+        <div class="price-ticket">
+          <span class="ticket-label">Price per learner</span>
+          <span class="ticket-value">$0</span>
+          <span class="ticket-foot">For any class size</span>
+        </div>
+        <div class="pricing-copy">
+          <p class="kicker">Pricing &amp; donations</p>
+          <h2 id="pricing-title">Free for everyone.</h2>
+          <p>Bring one class or your whole school. Every learner gets full access to 29 World™ at no charge.</p>
+          <p>Class balances and purchases live in a database that costs money to run. We rely on donations to help cover that bill. If you’re bringing a large group, please contribute if you can. Giving is always optional.</p>
+          <div class="support-links">
+            <a class="button" href="https://buymeacoffee.com/29world">Donate via Buy Me a Coffee</a>
+            <a class="text-link" href="about.html#contact">Group donation enquiries</a>
           </div>
         </div>
-        <p class="field-hint">This is your display name. Your teacher and classmates will see it.</p>
-        <label for="s-username"><span class="icon-slot"></span> Choose a username</label>
-        <input id="s-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Choose a username">
-        <p class="field-hint">This is what you'll type to log in. We suggest one from your name, and you can change it (no spaces).</p>
-        <label for="s-password"><span class="icon-slot"></span> Choose a password</label>
-        <input id="s-password" type="password" required autocomplete="new-password" placeholder="Choose a password">
-        <p class="field-hint">At least 6 characters, including a capital letter.</p>
-        <button class="btn gold" style="width:100%;justify-content:center;" type="submit"><span class="icon-slot"></span> Join class</button>
-        <p class="muted-small" style="text-align:center;margin:10px 0 0;">By continuing you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
-        <p class="muted-small" style="text-align:center;margin-top:10px;">Ask your teacher for the class code.</p>
-      </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="colophon page-width">
+    <div>
+      <a class="wordmark" href="#home" aria-label="29 World™ home">
+        <img src="Favicon.png" alt="" width="36" height="36"><span>29 World<sup>™</sup></span>
+      </a>
+      <p>© 2026 29 World™. All rights reserved.</p>
     </div>
-
-    <div id="msg"></div>
-  </div>
-</div>
-
-<footer class="site-footer">
-  <div class="site-footer-brand">The 29 World™</div>
-  <nav class="site-footer-links" aria-label="Footer">
-    <a href="about.html">About</a>
-    <a href="help.html">Help Centre</a>
-    <a href="status.html">Status</a>
-    <a href="about.html#contact">Contact</a>
-    <a href="privacy.html">Privacy Policy</a>
-    <a href="terms.html">Terms of Use</a>
-  </nav>
-  <div class="site-footer-copy">© 2026 The 29 World™. All rights reserved.</div>
-</footer>
-
-<!-- These were the only non-deferred scripts on any page in the app — every
-     other page (bank.html, gambling.html, teacher.html, ...) already loads
-     this same stack with `defer`. That meant this specific page, the very
-     first thing every visitor's browser loads, blocked on three external
-     Firebase fetches plus the large local data layer before it could paint or
-     parse anything else — the slowest possible page to hit that cost on,
-     since there's nothing cached yet and no connection warmed up. `defer`
-     lets the HTML parse and paint immediately while these load in the
-     background, in the same relative order, still finishing before
-     DOMContentLoaded — matching how every other page already does it. -->
-<script type="module" src="firebase-init.js?v=e3543fda"></script>
-<script defer src="icons.js?v=5ec87922"></script>
-<script defer src="offline.js?v=a51010b5"></script>
-<script defer src="data-core.js?v=744ac532"></script>
-<script defer src="data-money.js?v=3dd1f15a"></script>
-<script defer src="data-life.js?v=64646b87"></script>
-<script defer src="data-property.js?v=d3163b64"></script>
-<script defer src="data-markets.js?v=bbb5fcf2"></script>
-<script defer src="base-template.js?v=39e8ee84"></script>
-<script>
-// Fill every .icon-slot next to its text with the matching icon. This is
-// purely decorative — every label/button already has real text, so the
-// page is fully usable even if this script fails to load.
-function paintIcons() {
-  if (typeof icon !== "function") return;
-  const map = [
-    ["#role-teacher", "mortarboard"], ["#role-student", "user"],
-    ["#tab-teacher-login", "key"], ["#tab-teacher-new", "plus"],
-    ["#tab-student-login", "key"], ["#tab-student-new", "users"],
-    ['label[for="l-username"]', "at"], ['label[for="l-password"]', "lock"],
-    ['#panel-teacher-login button[type="submit"]', "send"],
-    ['label[for="t-title"]', "user"], ['label[for="t-first"]', "user"], ['label[for="t-last"]', "user"],
-    ['label[for="t-class"]', "mortarboard"], ['label[for="t-email"]', "at"],
-    ['label[for="f-username"]', "at"], ['label[for="f-email"]', "at"], ['#panel-teacher-forgot button[type="submit"]', "send"],
-    ['label[for="r-username"]', "at"], ['label[for="r-email"]', "at"], ['label[for="r-password"]', "lock"], ['#panel-teacher-reset button[type="submit"]', "lock"],
-    ['label[for="t-username"]', "at"], ['label[for="t-password"]', "lock"],
-    ['#panel-teacher-new button[type="submit"]', "plus"],
-    ['label[for="sl-username"]', "at"], ['label[for="sl-password"]', "lock"],
-    ['#panel-student-login button[type="submit"]', "send"],
-    ['label[for="s-code"]', "mortarboard"], ['label[for="s-first"]', "user"], ['label[for="s-last"]', "user"],
-    ['label[for="s-username"]', "at"], ['label[for="s-password"]', "lock"],
-    ['#panel-student-new button[type="submit"]', "users"]
-  ];
-  map.forEach(([sel, name]) => {
-    const el = document.querySelector(sel);
-    const slot = el && el.querySelector(".icon-slot");
-    if (slot) slot.innerHTML = icon(name, 14);
-  });
-  const logo = document.getElementById("logoCoin");
-  logo.innerHTML = icon("coin", 26);
-}
-
-// After switching tabs, put the cursor in the first box so typing can start
-// straight away. Computers only — on a phone the keyboard popping up would
-// cover the form.
-function focusFirstField(panelId) {
-  if (!window.matchMedia || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
-  const first = document.querySelector("#" + panelId + " input:not([type=checkbox])");
-  if (first) first.focus({ preventScroll: true });
-}
-
-function showRole(which) {
-  document.getElementById("role-panel-teacher").classList.toggle("hidden", which !== "teacher");
-  document.getElementById("role-panel-student").classList.toggle("hidden", which !== "student");
-  document.getElementById("role-teacher").classList.toggle("active", which === "teacher");
-  document.getElementById("role-student").classList.toggle("active", which === "student");
-  document.getElementById("msg").innerHTML = "";
-  focusFirstField(which === "teacher" ? "panel-teacher-login" : "panel-student-login");
-}
-
-// The "forgot password" and "reset password" screens replace the teacher
-// Log in / Create a class tabs until the teacher goes back.
-function showTeacherSpecial(which) {
-  ["teacher-login", "teacher-new", "teacher-forgot", "teacher-reset"].forEach(p => {
-    document.getElementById("panel-" + p).classList.toggle("hidden", p !== "teacher-" + which);
-  });
-  document.getElementById("teacher-subtabs").classList.add("hidden");
-  document.getElementById("msg").innerHTML = "";
-  if (which === "forgot") {
-    const pend = t29PendingRecovery();
-    const lu = document.getElementById("l-username").value.trim();
-    if (!document.getElementById("f-username").value) document.getElementById("f-username").value = (lu && !lu.includes("@")) ? lu : (pend.username || "");
-    if (!document.getElementById("f-email").value) document.getElementById("f-email").value = lu.includes("@") ? lu : (pend.email || "");
-  }
-  if (which === "reset") {
-    const pend = t29PendingRecovery();
-    document.getElementById("r-username").value = pend.username || "";
-    document.getElementById("r-email").value = pend.email || "";
-  }
-  focusFirstField("panel-teacher-" + which);
-}
-
-async function doForgot(e) {
-  e.preventDefault();
-  return withBusyButton(e.target, "Sending…", async () => {
-    const res = await t29SendRecoveryLink(document.getElementById("f-username").value, document.getElementById("f-email").value);
-    if (!res.ok) { showMsg(res.error, false); return false; }
-    showMsg("If that's the recovery email on this account, a link is on its way. Check your inbox (and spam), then open the link to choose a new password.", true);
-    return false;
-  });
-}
-
-async function doReset(e) {
-  e.preventDefault();
-  return withBusyButton(e.target, "Saving…", async () => {
-    const res = await t29CompleteRecovery(
-      document.getElementById("r-username").value,
-      document.getElementById("r-email").value,
-      document.getElementById("r-password").value);
-    if (!res.ok) { showMsg(res.error, false); return false; }
-    window.location.href = "teacher-home.html";
-    return false;
-  });
-}
-
-function showPanel(which) {
-  const groups = which.startsWith("teacher") ? ["teacher-login", "teacher-new"] : ["student-login", "student-new"];
-  if (which.startsWith("teacher")) {
-    ["teacher-forgot", "teacher-reset"].forEach(p => document.getElementById("panel-" + p).classList.add("hidden"));
-    document.getElementById("teacher-subtabs").classList.remove("hidden");
-  }
-  groups.forEach(p => {
-    document.getElementById("panel-" + p).classList.toggle("hidden", p !== which);
-    document.getElementById("tab-" + p).classList.toggle("active", p === which);
-  });
-  document.getElementById("msg").innerHTML = "";
-  focusFirstField("panel-" + which);
-}
-
-function showMsg(text, ok) {
-  document.getElementById("msg").innerHTML =
-    `<div class="${ok ? 'success-msg' : 'error-msg'}">${text}</div>`;
-}
-
-// Lets a link like import-template.html send a not-yet-logged-in teacher
-// through the login/signup form and straight back afterwards. Only ever
-// a bare same-origin page name (+ optional query string) is accepted —
-// never an absolute or protocol-relative URL — so this can't be turned
-// into an open redirect.
-function getSafeReturnTo() {
-  const rt = new URLSearchParams(window.location.search).get("returnTo");
-  if (!rt) return null;
-  return /^[a-zA-Z0-9_-]+\.html(\?[^\s]*)?$/.test(rt) ? rt : null;
-}
-
-// Shows the button as busy while a request is in flight (so it can't be
-// pressed twice, and it's obvious something is happening on a slow
-// connection), and turns anything unexpected into a readable message
-// instead of the form silently doing nothing.
-async function withBusyButton(form, busyText, fn) {
-  const btn = form.querySelector('button[type="submit"]');
-  const original = btn ? btn.innerHTML : null;
-  if (btn) {
-    if (btn.disabled) return false;
-    btn.disabled = true;
-    btn.innerHTML = `<span class="t29-spinner" aria-hidden="true"></span> ${busyText}`;
-  }
-  document.getElementById("msg").innerHTML = "";
-  try {
-    return await fn();
-  } catch (err) {
-    console.error(err);
-    showMsg(t29IsConnectionError(err)
-      ? "Can't connect right now. Check your internet connection and try again."
-      : "Something went wrong. Please try again.", false);
-    return false;
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = original; }
-  }
-}
-
-async function doLogin(e) {
-  e.preventDefault();
-  const r = await withBusyButton(e.target, "Logging in…", () => doLoginInner(e));
-  refreshLoginLock(); // withBusyButton re-enables the button; re-apply any lock
-  return r;
-}
-
-// Keeps both Log in buttons disabled (with a countdown) while this browser
-// or the typed username is locked out.
-function refreshLoginLock() {
-  if (typeof t29DeviceLockUntil !== "function") return;
-  for (const [fid, uid] of [["panel-teacher-login", "l-username"], ["panel-student-login", "sl-username"]]) {
-    const form = document.getElementById(fid);
-    if (!form) continue;
-    const btn = form.querySelector('button[type="submit"]');
-    let note = form.querySelector(".lock-note");
-    if (!note) {
-      note = document.createElement("div");
-      note.className = "error-msg lock-note";
-      note.style.display = "none";
-      note.style.marginTop = "10px";
-      form.appendChild(note);
-    }
-    const dev = t29DeviceLockUntil();
-    const usr = t29UserLockUntil(document.getElementById(uid).value);
-    const until = Math.max(dev, usr);
-    if (until) {
-      const left = Math.max(0, until - Date.now());
-      const ss = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
-      btn.disabled = true;
-      form.dataset.locked = "1";
-      note.style.display = "";
-      note.textContent = (dev ? "This browser is locked out of logging in. " : "This account is locked. ") +
-        `Try again in ${Math.floor(left / 60000)}:${ss}.`;
-    } else if (form.dataset.locked) {
-      delete form.dataset.locked;
-      btn.disabled = false;
-      note.style.display = "none";
-    }
-  }
-}
-setInterval(refreshLoginLock, 1000);
-["l-username", "sl-username"].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener("input", refreshLoginLock);
-});
-
-async function doLoginInner(e) {
-  const isTeacherForm = e.target.id === "panel-teacher-login";
-  const uField = isTeacherForm ? "l-username" : "sl-username";
-  const pField = isTeacherForm ? "l-password" : "sl-password";
-  const rField = isTeacherForm ? "l-remember" : "sl-remember";
-  const username = document.getElementById(uField).value.trim();
-  const password = document.getElementById(pField).value;
-  const remember = document.getElementById(rField).checked;
-
-  const res = await login(username, password);
-  if (!res.ok) { showMsg(res.error, false); return false; }
-
-  // SECURITY FIX: this used to also save the plaintext password to
-  // localStorage for autofill. That's no longer needed — Firebase Auth
-  // already keeps the visitor signed in on this device on its own — so
-  // "remember" now only prefills the username field, never the password.
-  const key = "anw_remember_" + (isTeacherForm ? "teacher" : "student");
-  if (remember) {
-    localStorage.setItem(key, JSON.stringify({ username: res.user.username || username }));
-  } else {
-    localStorage.removeItem(key);
-  }
-
-  window.location.href = getSafeReturnTo() || (res.user.role === "teacher" ? "teacher-home.html" : "student.html");
-  return false;
-}
-
-// Pre-fill saved logins, if any, on page load
-function loadRememberedLogins() {
-  ["teacher", "student"].forEach(role => {
-    const raw = localStorage.getItem("anw_remember_" + role);
-    if (!raw) return;
-    try {
-      const saved = JSON.parse(raw);
-      const uField = role === "teacher" ? "l-username" : "sl-username";
-      const pField = role === "teacher" ? "l-password" : "sl-password";
-      const rField = role === "teacher" ? "l-remember" : "sl-remember";
-      document.getElementById(uField).value = saved.username || "";
-      document.getElementById(rField).checked = true;
-    } catch (e) { /* ignore corrupt storage */ }
-  });
-}
-
-async function doTeacherSignup(e) {
-  e.preventDefault();
-  return withBusyButton(e.target, "Creating your account…", () => doTeacherSignupInner(e));
-}
-
-function updateTeacherClassSetup() {
-  const mode = document.getElementById("t-class-mode").value;
-  document.getElementById("t-create-fields").classList.toggle("hidden", mode !== "create");
-  document.querySelectorAll("#t-create-fields input").forEach(input => { input.disabled = mode !== "create"; });
-  document.getElementById("t-class").required = mode === "create";
-  document.getElementById("t-join-fields").classList.toggle("hidden", mode !== "join");
-  const code = document.getElementById("t-co-code");
-  code.disabled = mode !== "join";
-  code.required = mode === "join";
-  document.getElementById("t-later-hint").classList.toggle("hidden", mode !== "later");
-  document.getElementById("t-signup-submit").textContent = mode === "create"
-    ? "Create account & class" : mode === "join" ? "Create account & join class" : "Create teacher account";
-}
-
-async function doTeacherSignupInner(e) {
-  const title = document.getElementById("t-title").value;
-  const first = document.getElementById("t-first").value.trim();
-  const last = t29TidyName(document.getElementById("t-last").value.replace(/\s+/g, " ").trim());
-  const name = t29TidyName(first.replace(/\s+/g, " ")) + " " + last;
-  const className = document.getElementById("t-class").value.trim();
-  const username = document.getElementById("t-username").value.trim();
-  const password = document.getElementById("t-password").value;
-  const classMode = document.getElementById("t-class-mode").value;
-  const coTeacherCode = document.getElementById("t-co-code").value;
-  if (/\s/.test(username)) { showMsg("Usernames can't have spaces. Try something like smith.m", false); return false; }
-  const email = document.getElementById("t-email").value.trim();
-  const res = await createTeacherAndClass(name, username, password, className, { title, lastName: last, email, classMode, coTeacherCode });
-  if (!res.ok) { showMsg(res.error, false); return false; }
-  const startChoice = (document.querySelector('input[name="t-start"]:checked') || {}).value;
-  if (classMode === "create" && startChoice === "base" && typeof applyBaseTemplateToClass === "function") {
-    try {
-      const applied = await applyBaseTemplateToClass(res.code);
-      if (!applied.ok) throw new Error(applied.error);
-    } catch (err) {
-      console.warn("Base template failed:", err);
-      alert("Your account and class were created, but the base template couldn't be added. You can create a new class from Teacher Home and pick the base template there.");
-    }
-  }
-  if (res.joinError) alert("Your teacher account was created, but the class couldn't be opened. " + res.joinError + " You can try again from My Classes; you don't need to sign up again.");
-  setSession(username);
-  window.location.href = getSafeReturnTo() || (res.code ? (classMode === "create" ? "teacher.html?welcome=1" : "teacher.html") : "teacher-home.html");
-  return false;
-}
-
-// Shows a teacher exactly how their students will see them, as they pick a title and type a last name.
-function updateTeacherNameHint() {
-  const t = document.getElementById("t-title").value;
-  const l = t29TidyName(document.getElementById("t-last").value.replace(/\s+/g, " ").trim());
-  document.getElementById("t-name-hint").textContent = (t && l)
-    ? "Your students will see you as " + t + " " + l + "."
-    : "This is how your students will see you, e.g. Ms Smith.";
-}
-
-// Fills in the username from the first and last name, until the student types their own.
-let sUsernameEdited = false;
-function suggestStudentUsername() {
-  if (sUsernameEdited) return;
-  document.getElementById("s-username").value =
-    t29SuggestUsername(document.getElementById("s-first").value, document.getElementById("s-last").value);
-}
-
-async function doStudentSignup(e) {
-  e.preventDefault();
-  return withBusyButton(e.target, "Joining…", () => doStudentSignupInner(e));
-}
-
-async function doStudentSignupInner(e) {
-  const code = document.getElementById("s-code").value.trim().toUpperCase();
-  const first = document.getElementById("s-first").value.trim();
-  const last = document.getElementById("s-last").value.trim();
-  const name = t29TidyName(first.replace(/\s+/g, " ")) + " " + t29TidyName(last.replace(/\s+/g, " "));
-  const username = document.getElementById("s-username").value.trim();
-  const password = document.getElementById("s-password").value;
-  if (/\s/.test(username)) { showMsg("Usernames can't have spaces. Try something like sam.lee", false); return false; }
-  const res = await createStudentAccount(name, username, password, code);
-  if (!res.ok) { showMsg(res.error, false); return false; }
-  setSession(username);
-  window.location.href = "student.html?welcome=1";
-  return false;
-}
-
-// The functions called here (paintIcons/enablePasswordToggles -> icons.js,
-// getSessionUser -> data-core.js) now load with `defer`, so — same as every
-// other page's init script — this waits for DOMContentLoaded, which the
-// spec guarantees only fires after every deferred script has finished
-// running. Same calls, same order, just no longer relying on blocking
-// script tags to guarantee that.
-document.addEventListener("DOMContentLoaded", async () => {
-  paintIcons();
-  updateTeacherClassSetup();
-  enablePasswordToggles();
-  loadRememberedLogins();
-  refreshLoginLock();
-  document.getElementById("t-title").addEventListener("change", updateTeacherNameHint);
-  document.getElementById("t-last").addEventListener("input", updateTeacherNameHint);
-  document.getElementById("s-first").addEventListener("input", suggestStudentUsername);
-  document.getElementById("s-last").addEventListener("input", suggestStudentUsername);
-  // Typing their own username stops the suggestions; emptying the box starts them again.
-  document.getElementById("s-username").addEventListener("input", (ev) => { sUsernameEdited = ev.target.value.trim() !== ""; });
-
-  // The link a teacher hands to students (index.html?role=student) opens
-  // straight on the student tab instead of the teacher one.
-  if (new URLSearchParams(window.location.search).get("role") === "student") showRole("student");
-
-  // The emailed "forgot password" link lands here: show the reset form (and
-  // don't bounce an already-logged-in browser to the dashboard before it's done).
-  if (t29IsRecoveryLink()) { showRole("teacher"); showTeacherSpecial("reset"); return; }
-
-  // If already logged in, skip straight to dashboard
-  const u = await getSessionUser();
-  if (u) window.location.href = getSafeReturnTo() || (u.role === "teacher" ? "teacher-home.html" : "student.html");
-});
-</script>
+    <nav aria-label="Footer">
+      <a href="about.html">About</a><a href="help.html">Help Centre</a><a href="status.html">Status</a>
+      <a href="about.html#contact">Contact</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms of Use</a>
+    </nav>
+  </footer>
 </body>
 </html>

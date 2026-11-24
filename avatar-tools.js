@@ -298,7 +298,7 @@ html.dark-mode .av-tile .av-t-price.own{color:#5be3a5;}
       <div id="avTGuide" style="margin:8px 0;"></div>
       <div class="av-t-cur">
         <label><input type="radio" name="avCur" value="free"> Free</label>
-        <label><input type="radio" name="avCur" value="money"> 29 World money</label>
+        <label><input type="radio" name="avCur" value="money"> 29 World™ money</label>
         <label><input type="radio" name="avCur" value="comets"> ${COMET} Comets</label>
       </div>
       <div id="avTierBox"></div>
@@ -321,7 +321,7 @@ html.dark-mode .av-tile .av-t-price.own{color:#5be3a5;}
       const c = cur(), box = host.querySelector("#avTierBox");
       host.querySelector("#avTGuide").innerHTML = rarityGuide({ currency: c, tiers: draft.tiers }, "teacher");
       if (c === "free") { box.innerHTML = `<p class="muted-small">Everything is free. Students can wear anything.</p>`; return; }
-      box.innerHTML = `<div class="muted-small">Default price for each tier (${c === "comets" ? "in Comets" : "in 29 World dollars"}):</div><div class="av-t-tiers">${[1, 2, 3, 4].map(r => `<div><label>${RARITY[r]}</label><input type="number" min="0" step="${c === "comets" ? 1 : .5}" data-tier="${r}" value="${draft.tiers[c][r]}"></div>`).join("")}</div>`;
+      box.innerHTML = `<div class="muted-small">Default price for each tier (${c === "comets" ? "in Comets" : "in 29 World™ dollars"}):</div><div class="av-t-tiers">${[1, 2, 3, 4].map(r => `<div><label>${RARITY[r]}</label><input type="number" min="0" step="${c === "comets" ? 1 : .5}" data-tier="${r}" value="${draft.tiers[c][r]}"></div>`).join("")}</div>`;
       box.querySelectorAll("[data-tier]").forEach(i => i.oninput = () => { draft.tiers[c][i.dataset.tier] = Math.max(0, Number(i.value) || 0); host.querySelector("#avTGuide").innerHTML = rarityGuide({ currency: c, tiers: draft.tiers }, "teacher"); });
     }
     function paintItems() {

@@ -1,4 +1,4 @@
-/* ===================== The 29 World — data layer: life =====================
+/* ===================== 29 World™ — data layer: life =====================
    Jobs, transport, insurance, side hustles, the class store, the Life
    module, big events and random events, the lifestyle rating (including
    module locks and the nav-bar helpers that go with them), and quizzes.

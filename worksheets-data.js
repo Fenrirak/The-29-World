@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Worksheets: content & layout =====================
+/* ===================== 29 World™ — Worksheets: content & layout =====================
    EVERYTHING that is placeholder lives in THIS file, so it can be swapped for the real
    thing without touching worksheets.js / worksheets.css / worksheets.html.
 
@@ -29,7 +29,7 @@ const WS_LAYOUT = {
   nameLine: true,                       // Name / Class / Date line under the title
   nameFields: ["Name", "Class", "Date"],
   marks: false,                         // show marks next to questions + a total
-  footer: "The 29 World™ · Free to copy for classroom use"
+  footer: "29 World™ · Free to copy for classroom use"
 };
 
 const WS_GROUPS = ["Money", "Life"];    // order of the headings in the module list

@@ -1,4 +1,4 @@
-/* ===================== The 29 World — data layer: money =====================
+/* ===================== 29 World™ — data layer: money =====================
    Wages and allowances, savings, loans, automatic payments, term deposits,
    interest, net worth / leaderboard, reports, tax, the budgeting tool,
    savings goals and the parent view.

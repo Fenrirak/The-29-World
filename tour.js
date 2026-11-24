@@ -1,4 +1,4 @@
-/* ===================== The 29 World — first-time walkthrough =====================
+/* ===================== 29 World™ — first-time walkthrough =====================
    A short guided tour of the student dashboard (student.html) and the
    teacher dashboard (teacher.html): each step highlights one part of the
    page and explains it in a sentence or two.
@@ -23,7 +23,7 @@
 
 const T29_TOURS = {
   student: [
-    { title: "Welcome to The 29 World™! 👋",
+    { title: "Welcome to 29 World™! 👋",
       text: "This is your own pretend-money world. You'll earn money, save it, spend it and invest it, and see how good you are with money. Here's a quick tour." },
     { target: ["#balance"], card: true, title: "Your cash",
       text: "The money you can spend right now. It also stays in the corner of every page so you always know what you've got." },

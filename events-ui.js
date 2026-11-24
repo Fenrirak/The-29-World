@@ -1,4 +1,4 @@
-/* ===================== The 29 World — random event popups =====================
+/* ===================== 29 World™ — random event popups =====================
    Each NZ week every student gets 2-5 random events, each planned for its
    own school day (see processWeeklyEvents in data-life.js) — so a student
    never sees them (or feels their balance change) all at once. This file:

@@ -1,4 +1,4 @@
-/* ===================== The 29 World — data layer: property =====================
+/* ===================== 29 World™ — data layer: property =====================
    Buying and selling property, mortgages, daily price movement, renting a
    property out to a classmate, and school-owned (NPC) rentals.
    Part of the data layer — see the top of data-core.js for how the five

@@ -1,8 +1,8 @@
 // This page has its own, non-standard login handling (rather than the
 // usual requireLogin()) because a share link needs to survive a round
-// trip through the login/signup form on index.html — see getSafeReturnTo()
+// trip through the login/signup form on login.html — see getSafeReturnTo()
 // there. requireLogin()'s normal "not logged in" redirect just goes to a
-// bare index.html with no memory of where the visitor was headed.
+// bare login.html with no memory of where the visitor was headed.
 let CURRENT, TOKEN, SHARE;
 
 function showState(name) {
@@ -37,9 +37,9 @@ async function _init() {
   const u = await getSessionUser();
   if (!u) {
     // Send the visitor to log in (or sign up), then straight back here —
-    // see getSafeReturnTo()/doLogin() in index.html.
+    // see getSafeReturnTo()/doLogin() in login.html.
     const returnTo = encodeURIComponent("import-template.html" + window.location.search);
-    window.location.href = "index.html?returnTo=" + returnTo;
+    window.location.href = "login.html?returnTo=" + returnTo;
     return;
   }
   CURRENT = u;
@@ -58,7 +58,7 @@ async function _init() {
   }
   if (info.needsRefresh) {
     showState("stateError");
-    document.getElementById("errorMsg").textContent = "This link was made with an older version of The 29 World™. Ask the teacher who sent it to click Share Template on that class again, then this same link will work.";
+    document.getElementById("errorMsg").textContent = "This link was made with an older version of 29 World™. Ask the teacher who sent it to click Share Template on that class again, then this same link will work.";
     return;
   }
   SHARE = info;

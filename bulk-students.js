@@ -1,4 +1,4 @@
-/* ===================== The 29 World — add students in bulk =====================
+/* ===================== 29 World™ — add students in bulk =====================
    Teacher page only (loaded by teacher.html after data-core.js and teacher.js).
 
    The teacher pastes one student per line (first name, then last name). This
@@ -17,11 +17,11 @@
   const MAX_PER_RUN = 50;
   const TEMPLATE_KEY = "t29-bulk-email-template";
   const DEFAULT_TEMPLATE = {
-    subject: "Your login for The 29 World™",
+    subject: "Your login for 29 World™",
     body: [
       "Hi {first},",
       "",
-      "You can log in to The 29 World™ with this link:",
+      "You can log in to 29 World™ with this link:",
       "{link}",
       "",
       "Your login details are:",
@@ -324,7 +324,7 @@
 
   /* ---------------- Sharing the logins ---------------- */
 
-  function loginLink() { return new URL("index.html?role=student", window.location.href).href; }
+  function loginLink() { return new URL("login.html?role=student", window.location.href).href; }
 
   // Short form for the printed slips: no "https://", no page name.
   function shortLink() {
@@ -461,7 +461,7 @@
     sheet.id = "bulkPrintSheet";
     sheet.innerHTML = S.created.map((st) => `
       <div class="bulk-slip">
-        <div class="bulk-slip-brand">The 29 World™</div>
+        <div class="bulk-slip-brand">29 World™</div>
         <div class="bulk-slip-class">${esc(S.className)}</div>
         <div class="bulk-slip-name">${esc(st.name)}</div>
         <div class="bulk-slip-row"><span>Go to</span><strong>${esc(shortLink())}</strong></div>

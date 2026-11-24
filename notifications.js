@@ -1,4 +1,4 @@
-/* ===================== The 29 World — To-do feed (bell icon) =====================
+/* ===================== 29 World™ — To-do feed (bell icon) =====================
    A single place a student can see everything that needs them to DO
    something — a loan due, a mortgage payment, a decision waiting (a big
    event, a job promotion offer), a quiz standing between them and a
@@ -904,7 +904,7 @@ async function notifGetSwReg() {
   if (!("serviceWorker" in navigator)) return null;
   try {
     let reg = await navigator.serviceWorker.getRegistration();
-    if (!reg) reg = await navigator.serviceWorker.register("notif-sw.js?v=c92a16a6");
+    if (!reg) reg = await navigator.serviceWorker.register("notif-sw.js?v=d6a190a1");
     if (!reg.active) await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(r, 4000))]);
     return reg;
   } catch (e) { return null; }
@@ -1033,7 +1033,7 @@ function notifDeviceRender(host) {
     desc = notifIsIos()
       ? (notifIsStandalone()
           ? "Alerts need iOS or iPadOS 16.4 or newer. Update your device, then reopen the app."
-          : "iPhone and iPad only allow alerts for sites added to the Home Screen. Tap Share, then Add to Home Screen, open The 29 World™ from its new icon, and switch this on there.")
+          : "iPhone and iPad only allow alerts for sites added to the Home Screen. Tap Share, then Add to Home Screen, open 29 World™ from its new icon, and switch this on there.")
       : window.isSecureContext === false ? "Alerts need a secure (https) connection."
       : "Not available in this browser. Try Chrome, Edge, Firefox or Safari.";
   } else if (blocked) {

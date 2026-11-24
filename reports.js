@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Reports page =====================
+/* ===================== 29 World™ — Reports page =====================
    Teacher side: a live "this month" report for the whole class (net
    worth, savings rate, biggest expense category, loan history per
    student). Each student's report card carries a net-worth trend built from
@@ -748,7 +748,7 @@ async function downloadReportPDF(button) {
   }
   try {
     const [, cls] = await Promise.all([
-      t29LoadScript("pdf-report.js?v=a563b672"),
+      t29LoadScript("pdf-report.js?v=c833098a"),
       student ? null : getClassCached(CLASS_CODE)
     ]);
     if (student) downloadStudentReportPDF(student, report);

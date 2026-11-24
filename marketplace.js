@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Peer-to-peer marketplace =====================
+/* ===================== 29 World™ — Peer-to-peer marketplace =====================
    Students trading with each other at prices they set, next to (not
    instead of) the teacher's fixed-price store. Teacher view is settings +
    moderation; student view is sell / my listings / browse / sold prices.

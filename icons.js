@@ -1,4 +1,4 @@
-/* ===================== The 29 World — icon set =====================
+/* ===================== 29 World™ — icon set =====================
    Small inline SVG icons, colored via currentColor. Usage: ICONS.coin
 ====================================================================== */
 const ICONS = {

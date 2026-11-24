@@ -1,4 +1,4 @@
-/* ===================== The 29 World — data layer: core =====================
+/* ===================== 29 World™ — data layer: core =====================
    The data layer used to be one very large data.js. It is now five files,
    split by topic, which every page loads in this order (all `defer`):
 
@@ -52,8 +52,8 @@ const MAX_AUTOMATIONS_PER_STUDENT = 20;
 // as a "Pay to" option and to label it in the automatic-payments list).
 const AUTOPAY_ALL_STUDENTS = "__ALL__";
 
-// Shared HTML-escaping helper. The data-*.js files load before every other The 29
-// World script on every page, so this is available globally as soon as
+// Shared HTML-escaping helper. The data-*.js files load before every other
+// 29 World™ script on every page, so this is available globally as soon as
 // any page script runs. ALWAYS wrap user-supplied strings (student/teacher
 // display names, job titles, event/property/vehicle/store item names,
 // notes, etc.) in this before inserting them via innerHTML. Escaping at
@@ -1227,7 +1227,7 @@ async function requireLogin(opts) {
   const u = await getSessionUser();
   if (!u) {
     if (_t29SessionConnectionFailed) { t29ShowConnectionProblem(); return null; }
-    window.location.href = "index.html";
+    window.location.href = "login.html";
     return null;
   }
   T29_SESSION_ROLE = u.role;
@@ -1274,7 +1274,7 @@ async function requireLogin(opts) {
   } catch (e) {
     if (t29IsConnectionError(e)) { t29ShowConnectionProblem(); return null; }
     clearSession();
-    window.location.href = "index.html";
+    window.location.href = "login.html";
     return null;
   }
   if (u.role === "student" && !u._studentView && !opts.skipTimeLimit && !archivedReadOnly) {
@@ -1306,7 +1306,7 @@ async function logout() {
       new Promise(resolve => setTimeout(resolve, 2000))
     ]);
   } catch (e) { /* still leave the page below */ }
-  window.location.href = "index.html";
+  window.location.href = "login.html";
 }
 
 // Who is signed in on THIS page — set by requireLogin(). Lets the shared
@@ -1344,7 +1344,7 @@ function defaultClassData(code, className, teacherUsername) {
   return {
     code, name: className || "Room " + code, teacher: teacherUsername,
     students: [], jobs: [], companies: [], realStocksEnabled: false,
-    dividendPlans: {}, dividendRegisters: {}, dividendsActive: false,
+    dividendPlans: {}, dividendRegisters: {}, dividendsActive: false, issuerBook: {}, issuerTracked: false,
     interestRate: 1, txns: [],
     createdAt: Date.now(), reportArchives: [],
     archived: false, archivedAt: null,
@@ -2472,7 +2472,7 @@ function t29UserLockUntil(username) {
 }
 function t29DeviceLockedMessage(msLeft) {
   const m = Math.max(1, Math.ceil((msLeft || T29_LOCK_MS) / 60000));
-  return `A password was entered incorrectly ${T29_LOCK_MAX} times, so this browser can't log in to any 29 World account for another ${m} minute${m === 1 ? "" : "s"}. Devices that are already signed in can keep being used.`;
+  return `A password was entered incorrectly ${T29_LOCK_MAX} times, so this browser can't log in to any 29 World™ account for another ${m} minute${m === 1 ? "" : "s"}. Devices that are already signed in can keep being used.`;
 }
 async function login(username, password) {
   // A teacher who set a recovery email (and used "Forgot password") signs in with that email.
@@ -2534,7 +2534,7 @@ async function t29LoginByEmail(email, password) {
       It is sent whatever the address is (nothing here reveals whether a username
       or email is registered); the link does nothing unless the address matches the
       recovery email on that teacher's account.
-   2. The teacher opens the link (index.html?...), and t29CompleteRecovery signs in
+   2. The teacher opens the link (login.html?...), and t29CompleteRecovery signs in
       with it — which proves they own the email — then takes over the teacher account
       (rules: isRecoveryTakeover in firestore.rules) and sets a new password. The old
       login stops working; from then on they can log in with the email + new password.
@@ -2564,7 +2564,7 @@ async function t29SendRecoveryLink(username, email) {
   }
   const base = location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, "");
   try {
-    await firebase.auth().sendSignInLinkToEmail(email, { url: base + "index.html", handleCodeInApp: true });
+    await firebase.auth().sendSignInLinkToEmail(email, { url: base + "login.html", handleCodeInApp: true });
   } catch (e) {
     if (e.code === "auth/network-request-failed" || e.code === "auth/too-many-requests") return { ok: false, error: t29AuthErrorMessage(e) };
     if (e.code === "auth/operation-not-allowed") return { ok: false, error: "Account recovery isn't switched on yet. Ask whoever runs this site to enable email-link sign-in in Firebase." };
@@ -2624,7 +2624,7 @@ async function t29CompleteRecovery(username, email, newPassword) {
    (with its students, family links and shared template), their recovery email + fingerprint,
    their /users doc, their /uidIndex entry and finally their Firebase login. Classes they were
    only a co-teacher on are left alone. Returns { ok, error? }. The page should confirm first,
-   then send the person back to index.html on success. */
+   then send the person back to login.html on success. */
 async function t29DeleteTeacherAccount(username, password) {
   const user = firebase.auth().currentUser;
   if (!user || !username) return { ok: false, error: "You need to be logged in to delete your account." };
@@ -3973,7 +3973,7 @@ function t29ShowConnectionProblem() {
   box.innerHTML = `
     <div class="t29-conn-card" role="alert">
       <h2>Can't connect right now</h2>
-      <p>The 29 World™ couldn't reach its server. Check your Wi-Fi or mobile data, then try again. You're still logged in.</p>
+      <p>29 World™ couldn't reach its server. Check your Wi-Fi or mobile data, then try again. You're still logged in.</p>
       <button type="button" class="btn gold">Try again</button>
     </div>`;
   box.querySelector("button").addEventListener("click", () => window.location.reload());

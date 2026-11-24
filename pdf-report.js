@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Report card PDF export =====================
+/* ===================== 29 World™ — Report card PDF export =====================
    Writes a real .pdf file straight from the browser, with no library and
    no network call. "Print" already existed and relies on the browser's
    print dialog (and whatever the student picks in it); this gives a
@@ -239,7 +239,7 @@ function pdfDoc() {
     titleBlock(title, subtitle, meta) {
       this._startPage();
       this.rect(0, PDF_PAGE_H - 92, PDF_PAGE_W, 92, PDF_COLORS.navy);
-      this.text("The 29 World™", PDF_MARGIN, PDF_PAGE_H - 36, 11, { bold: true, color: PDF_COLORS.gold });
+      this.text("29 World™", PDF_MARGIN, PDF_PAGE_H - 36, 11, { bold: true, color: PDF_COLORS.gold });
       const titleSize = Math.min(19, PDF_CONTENT_W * 0.94 / Math.max(1, pdfTextWidth(title, 1, true)));
       this.text(title, PDF_MARGIN, PDF_PAGE_H - 60, titleSize, { bold: true, color: PDF_COLORS.white });
       if (subtitle) this.text(subtitle, PDF_MARGIN, PDF_PAGE_H - 78, 9.5, { color: [0.78, 0.82, 0.89] });

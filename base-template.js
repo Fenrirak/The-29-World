@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Base template =====================
+/* ===================== 29 World™ — Base template =====================
    A ready-made, balanced class setup a teacher can pick instead of
    starting from scratch. Everything in it is scaled for a school TERM
    (about 10 weeks) up to a school YEAR (about 40 weeks): small dollar

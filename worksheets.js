@@ -1,4 +1,4 @@
-/* ===================== The 29 World — Worksheets page (teacher only) =====================
+/* ===================== 29 World™ — Worksheets page (teacher only) =====================
    Pick a module, edit its worksheet straight on the page, print it. Content and layout
    defaults come from worksheets-data.js; this file is only the editor.
 

@@ -1,4 +1,4 @@
-/* The 29 World — status page.
+/* 29 World™ — status page.
    Checks, from this device, whether each part of the site can be reached, and shows the results.
    Every check is a HEAD request with no cookies and no account or class data, and nothing is stored.
    The service worker (notif-sw.js) only handles GET requests, so HEAD checks always go to the network
@@ -170,7 +170,7 @@
     const slow = services.filter(s => states[s.id] === "slow");
     if (down.length === services.length) {
       return ["down", "No services can be reached",
-        "Check your internet connection. If other websites work, The 29 World™ may be having problems, so try again in a few minutes."];
+        "Check your internet connection. If other websites work, 29 World™ may be having problems, so try again in a few minutes."];
     }
     if (down.length) {
       return ["issue", down.length === 1 ? "One service can’t be reached" : "Some services can’t be reached",

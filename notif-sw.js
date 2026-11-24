@@ -1,4 +1,4 @@
-/* Service worker for The 29 World.
+/* Service worker for 29 World™.
    1. Device alerts: lets alerts show on phones (Android Chrome refuses page-created
       notifications; iOS only allows notifications from a Home Screen web app) and
       brings the site to the front when one is tapped.
@@ -13,7 +13,7 @@
 const CACHE = "t29-cache-v3";
 const OFFLINE_URL = "offline.html";
 // Pages (and everything they load) saved at install. Other pages cache the first time they are opened.
-const CORE_PAGES = ["index.html", "student.html", "teacher-home.html", "teacher.html", "help.html", OFFLINE_URL,
+const CORE_PAGES = ["index.html", "login.html", "student.html", "teacher-home.html", "teacher.html", "help.html", OFFLINE_URL,
   "bank.html", "market.html", "loan.html", "transport.html", "property.html", "store.html", "marketplace.html"];
 const NAV_TIMEOUT_MS = 4000;
 
@@ -49,15 +49,19 @@ async function precache() {
       if (!res.ok) return;
       const html = await res.clone().text();
       await putOk(cache, pageKey(page), res);
-      const re = /(?:src|href)\s*=\s*["']([^"'#]+)["']/gi;
+      const re = /\b(src|href|srcset)\s*=\s*["']([^"'#]+)["']/gi;
       let m;
       while ((m = re.exec(html))) {
-        const ref = m[1];
-        if (/^(mailto:|tel:|data:|javascript:)/i.test(ref)) continue;
-        let u;
-        try { u = new URL(ref, new URL(page, self.registration.scope)); } catch (err) { continue; }
-        if (u.origin !== self.location.origin) continue;
-        if (/\.(js|css|json)$/i.test(u.pathname) || u.pathname.endsWith("/icon-512.png")) assets.add(u.href);
+        const refs = m[1].toLowerCase() === "srcset"
+          ? m[2].split(",").map(candidate => candidate.trim().split(/\s+/)[0])
+          : [m[2]];
+        for (const ref of refs) {
+          let u;
+          try { u = new URL(ref, new URL(page, self.registration.scope)); } catch (err) { continue; }
+          if (u.origin !== self.location.origin) continue;
+          const coverAsset = page === "index.html" && /\.(webp|ttf|png)$/i.test(u.pathname);
+          if (coverAsset || /\.(js|css|json)$/i.test(u.pathname) || u.pathname.endsWith("/icon-512.png")) assets.add(u.href);
+        }
       }
     } catch (err) { /* offline during install: runtime caching still works later */ }
   }));

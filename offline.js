@@ -1,4 +1,4 @@
-/* The 29 World — offline support.
+/* 29 World™ — offline support.
    Registers the service worker (notif-sw.js) on every page so the app shell is saved
    for fast, flaky-Wi-Fi-friendly loading, and shows a small banner while the device has
    no connection. Money actions need the internet, so the banner says changes can't save. */
@@ -9,7 +9,7 @@
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
     window.addEventListener("load", function () {
       navigator.serviceWorker.getRegistration().then(function (reg) {
-        if (!reg) return navigator.serviceWorker.register("notif-sw.js?v=c92a16a6");
+        if (!reg) return navigator.serviceWorker.register("notif-sw.js?v=d6a190a1");
       }).catch(function () { /* the app works fine without it */ });
     });
   }
