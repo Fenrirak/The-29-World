@@ -298,6 +298,16 @@ async function closeCompany(classCode, companyId) {
     const cls = snap.data();
     const co = cls.companies.find(c => c.id === companyId);
     if (!co) return;
+    const dividendUpdate = {};
+    const plan = cls.dividendPlans?.[co.id];
+    if (plan) {
+      if (nzDateKey() < plan.ex) delete cls.dividendPlans[co.id];
+      else {
+        Object.assign(dividendUpdate, dividendRegisterUpdate(cls, co));
+        plan.interval = 0;
+      }
+      Object.assign(dividendUpdate, { dividendPlans: cls.dividendPlans, dividendsActive: Object.keys(cls.dividendPlans).length > 0 });
+    }
     const holders = Object.keys(co.holders || {}).filter(uname => co.holders[uname] > 0);
     const ownerRefs = holders.map(uname => usersCol().doc(uname));
     const ownerSnaps = await Promise.all(ownerRefs.map(ref => t.get(ref)));
@@ -315,7 +325,7 @@ async function closeCompany(classCode, companyId) {
       }
     });
     cls.companies = cls.companies.filter(c => c.id !== companyId);
-    t.update(classRef, { companies: cls.companies });
+    t.update(classRef, { companies: cls.companies, ...dividendUpdate });
   });
   await t29NotifyStudents(classCode, payouts.map(p => ({
     to: p.uname, icon: "chart", tone: "gold",
@@ -330,6 +340,13 @@ async function closeCompany(classCode, companyId) {
       costBasisSold: p.costBasisSold, realizedGain: Math.round((p.payout - p.costBasisSold) * 100) / 100
     });
   }
+}
+
+function dividendRegisterUpdate(cls, co) {
+  const plan = cls.dividendPlans?.[co.id];
+  if (!plan || nzDateKey() < plan.ex || cls.dividendRegisters?.[co.id]) return {};
+  return { dividendRegisterIndex: cls.companies.indexOf(co),
+    dividendRegisters: { ...cls.dividendRegisters, [co.id]: { ...co.holders } } };
 }
 
 async function buyShares(username, classCode, companyId, shares) {
@@ -355,6 +372,7 @@ async function buyShares(username, classCode, companyId, shares) {
       cost = Math.round(shares * co.price * 100) / 100;
       if (user.balance < cost) throw new Error("BROKE");
 
+      const register = dividendRegisterUpdate(cls, co);
       co.availableShares -= shares;
       co.holders[username] = (co.holders[username] || 0) + shares;
       coName = co.name;
@@ -388,7 +406,7 @@ async function buyShares(username, classCode, companyId, shares) {
       };
 
       t.update(userRef, { balance: Math.round((user.balance - cost) * 100) / 100 });
-      t.update(classRef, { companies: cls.companies });
+      t.update(classRef, { companies: cls.companies, ...register });
     });
   } catch (e) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "Not found." };
@@ -428,6 +446,7 @@ async function sellShares(username, classCode, companyId, shares) {
       if (shares > owned) throw new Error("TOO_MANY");
 
       proceeds = Math.round(shares * co.price * 100) / 100;
+      const register = dividendRegisterUpdate(cls, co);
       co.availableShares += shares;
       co.holders[username] = owned - shares;
       if (co.holders[username] === 0) delete co.holders[username];
@@ -472,7 +491,7 @@ async function sellShares(username, classCode, companyId, shares) {
       };
 
       t.update(userRef, { balance: Math.round((user.balance + proceeds) * 100) / 100 });
-      t.update(classRef, { companies: cls.companies });
+      t.update(classRef, { companies: cls.companies, ...register });
     });
   } catch (e) {
     if (e.message === "NOT_FOUND") return { ok: false, error: "Not found." };
@@ -659,6 +678,13 @@ async function splitCompany(classCode, companyId, to, from, expectedPrice) {
         t.update(refs[i], { balance: Math.round(((Number(snaps[i].data().balance) || 0) + r.cash) * 100) / 100 });
       });
       const ratio = plan.from / plan.to;
+      const dividend = cls.dividendPlans?.[co.id];
+      const dividendUpdate = dividendRegisterUpdate(cls, co);
+      if (dividend) {
+        if (nzDateKey() < dividend.ex) dividend.cents *= ratio;
+        else if (dividend.interval) dividend.nextCents = (dividend.nextCents ?? dividend.cents) * ratio;
+        dividendUpdate.dividendPlans = cls.dividendPlans;
+      }
       co.history = (co.history || []).map(p => (Number.isFinite(p) ? t29SplitRound(p * ratio, 6) : p));
       co.price = plan.priceAfter;
       co.totalShares = plan.totalAfter;
@@ -680,7 +706,7 @@ async function splitCompany(classCode, companyId, to, from, expectedPrice) {
       if (splits.length > T29_SPLIT_KEEP) splits.splice(0, splits.length - T29_SPLIT_KEEP);
       splits.forEach((s, i) => { if (i < splits.length - T29_SPLIT_KEEP_MOVES) delete s.moves; });
       co.splits = splits;
-      t.update(classRef, { companies: cls.companies });
+      t.update(classRef, { companies: cls.companies, ...dividendUpdate });
       done = { plan, paid, name: co.name, companyId: co.id, students: (cls.students || []).slice(), splitId: splits[splits.length - 1].id };
     });
   } catch (e) {

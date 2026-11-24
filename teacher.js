@@ -382,6 +382,7 @@ function describeTxn(t, nameOf) {
     case "transfer": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)} ${t.note ? ": " + t.note : ""}`);
     case "automation": return escapeHtml(`${nameOf(t.from)} → ${nameOf(t.to)}: ${t.note || "Automatic payment"}`);
     case "stock-buy": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
+    case "stock-dividend":
     case "stock-sell": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
     case "stock-close": return escapeHtml(`${nameOf(t.to)}: ${t.note}`);
     case "insurance-buy": return escapeHtml(`${nameOf(t.from)}: ${t.note}`);
@@ -444,6 +445,7 @@ function badge(type) {
     transfer: ["navy", "send", "Transfer"],
     automation: ["navy", "repeat", "Auto-pay"],
     "stock-buy": ["gold", "chart", "Stock buy"],
+    "stock-dividend": ["mint", "chart", "Dividend"],
     "stock-sell": ["gold", "chart", "Stock sell"],
     "stock-close": ["gold", "building", "Delisted"],
     "insurance-buy": ["lilac", "shield", "Insurance"],

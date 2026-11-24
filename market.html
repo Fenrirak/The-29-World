@@ -34,7 +34,7 @@
 <meta name="theme-color" content="#1f2b44">
 <link rel="stylesheet" href="style.css?v=91f8426d">
 <link rel="stylesheet" href="split.css?v=40125d17">
-<link rel="stylesheet" href="real-stocks.css?v=e31a20e9">
+<link rel="stylesheet" href="real-stocks.css?v=3f635d1d">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -206,6 +206,24 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
   </div>
 
   <div id="companyList"></div>
+  <dialog id="dividendDialog" class="real-dialog" aria-labelledby="dividendTitle">
+    <form id="dividendForm" onsubmit="submitDividend(event)">
+      <h2 id="dividendTitle">Declare a dividend</h2>
+      <p id="dividendCompany"></p>
+      <label for="divRate">Cash per share ($)</label>
+      <input id="divRate" type="number" min="0.01" step="0.01" required placeholder="0.25">
+      <div class="dividend-dates">
+        <label>Ex-dividend date<input id="divEx" type="date" required></label>
+        <label>Payment date<input id="divPay" type="date" required></label>
+      </div>
+      <p class="muted-small">Students must own shares before the ex-dividend date begins in New Zealand. They can sell after that and still receive the payment.</p>
+      <label for="divRepeat">Repeat payment</label>
+      <select id="divRepeat"><option value="0">Once only</option><option value="28">Every 4 weeks</option><option value="91">Every 13 weeks</option></select>
+      <p id="divError" role="alert" class="error-msg" hidden></p>
+      <div class="dividend-actions"><button class="btn secondary" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+        <button class="btn gold" id="divSubmit" type="submit">Declare dividend</button></div>
+    </form>
+  </dialog>
 </main>
 
 <footer class="site-footer">
@@ -226,16 +244,17 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="settings-menu.js?v=87649e37"></script>
 <script defer src="shortcuts.js?v=8ce32ffe"></script>
 <script defer src="offline.js?v=a51010b5"></script>
-<script defer src="data-core.js?v=a94c915c"></script>
-<script defer src="data-money.js?v=b077a1b2"></script>
+<script defer src="data-core.js?v=744ac532"></script>
+<script defer src="data-money.js?v=3dd1f15a"></script>
 <script defer src="data-life.js?v=64646b87"></script>
 <script defer src="data-property.js?v=d3163b64"></script>
-<script defer src="data-markets.js?v=9b0491d9"></script>
+<script defer src="data-markets.js?v=bbb5fcf2"></script>
 <script defer src="events-ui.js?v=17ce0701"></script>
 <script defer src="quiz-gate.js?v=9beab624"></script>
 <script defer src="notifications.js?v=def2a521"></script>
-<script defer src="split.js?v=1fda302d"></script>
+<script defer src="split.js?v=6b83b26f"></script>
 <script defer src="real-stocks.js?v=8b0dde32"></script>
-<script defer src="market.js?v=65144310"></script>
+<script defer src="dividends.js?v=0c7c94c2"></script>
+<script defer src="market.js?v=159d1ce9"></script>
 </body>
 </html>

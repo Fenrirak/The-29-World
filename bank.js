@@ -244,7 +244,7 @@ async function render() {
       interest: ["gold", "piggy", "Savings interest"], "cash-interest": ["gold", "coin", "Cash interest"], bonus: ["mint", "star", "Bonus"],
       fine: ["coral", "coin", "Fine"], transfer: ["navy", "send", "Transfer"],
       automation: ["navy", "repeat", "Auto-pay"], "stock-buy": ["gold", "chart", "Stock buy"],
-      "stock-sell": ["gold", "chart", "Stock sell"], "stock-close": ["gold", "building", "Delisted"],
+      "stock-dividend": ["mint", "chart", "Dividend"], "stock-sell": ["gold", "chart", "Stock sell"], "stock-close": ["gold", "building", "Delisted"],
       "insurance-buy": ["lilac", "shield", "Insurance"], "store-buy": ["mint", "cart", "Store"], "store-sell": ["gold", "cart", "Store sale"],
       "property-buy": ["navy", "house", "Property"], "property-sell": ["gold", "house", "Property sold"],
       "mortgage": ["coral", "house", "Mortgage"], "mortgage-extra": ["coral", "house", "Extra mortgage payment"], "event": ["lilac", "dice", "Random event"],

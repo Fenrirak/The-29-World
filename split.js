@@ -212,6 +212,11 @@
     msg.innerHTML = "";
     if (p.ok) {
       stage.innerHTML = stageHtml(p) + `<p class="t29s-explain">${esc(explainText(p))}</p>`;
+      if (st.dividend) {
+        const recorded = nzDateKey() >= st.dividend.ex;
+        const text = recorded ? "The recorded dividend still pays on the original shares." : "The declared cash per share adjusts in the same ratio as the share price.";
+        stage.innerHTML += `<p class="t29s-explain">${text}</p>`;
+      }
       stats.innerHTML = statsHtml(p);
       impact.innerHTML = impactHtml(st, p);
       go.innerHTML = `${ico("split", 16)} ${p.forward ? "Split" : "Reverse split"} ${esc(p.label)}`;
@@ -315,6 +320,7 @@
     const co = cls && (cls.companies || []).find(c => c.id === coId);
     if (!co) { studio = null; toast("Couldn't load that company. Refresh the page and try again."); return; }
     st.co = co;
+    st.dividend = cls.dividendPlans?.[co.id];
     st.busy = false;
     // Start on 2-for-1 when it's allowed, otherwise on the first split that is.
     if (!t29PlanShareSplit(co, 2, 1).ok) {

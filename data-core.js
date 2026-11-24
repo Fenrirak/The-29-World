@@ -1344,6 +1344,7 @@ function defaultClassData(code, className, teacherUsername) {
   return {
     code, name: className || "Room " + code, teacher: teacherUsername,
     students: [], jobs: [], companies: [], realStocksEnabled: false,
+    dividendPlans: {}, dividendRegisters: {}, dividendsActive: false,
     interestRate: 1, txns: [],
     createdAt: Date.now(), reportArchives: [],
     archived: false, archivedAt: null,
@@ -1711,6 +1712,7 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
     c.availableShares = c.totalShares;
     c.holders = {};
     c.costBasis = {};
+    delete c.lastDividend;
     c.splits = []; // a new term starts with a clean share-split history
     c.history = [startPrice];
     c.historyDates = [nzDateKey()];
@@ -3374,6 +3376,10 @@ async function removeStudent(classCode, studentUser) {
       properties: cls.properties || [], vehicles: cls.vehicles || [],
       listings: cls.listings
     };
+    if (cls.dividendRegisters) {
+      for (const holders of Object.values(cls.dividendRegisters)) delete holders[studentUser];
+      update.dividendRegisters = cls.dividendRegisters;
+    }
     if (cls.npcProperties) update.npcProperties = cls.npcProperties;
     t.update(classRef, update);
     // BUGFIX: this used to be a separate `await usersCol().doc(studentUser)

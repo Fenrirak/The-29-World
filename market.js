@@ -433,7 +433,10 @@ async function render(background = false) {
   }
 
   const range = cls.priceRange || { min: 1, max: 5 };
-  if (IS_TEACHER) renderRealPicker(cls);
+  if (IS_TEACHER) {
+    renderRealPicker(cls);
+    if (cls.dividendsActive) catchUpMarketDividends(cls);
+  }
   t29FillSetting("rangeMin", range.min);
   t29FillSetting("rangeMax", range.max);
   const moveEl = document.getElementById("showShareMove");
@@ -486,6 +489,7 @@ async function render(background = false) {
       <p class="muted-small">${co.availableShares.toLocaleString("en-NZ")} of ${co.totalShares.toLocaleString("en-NZ")} ${unitLabel} available &middot; You own ${myShares.toLocaleString("en-NZ")}</p>
       ${listing ? `<p class="muted-small">${isFund ? "Unit" : "Share"} count as of ${realDate(co.sharesDate)} · ${listing.issuer || (co.quoteSource === "Anthropic Investor Relations" ? co.quoteSource : listing.exchange === "NZX" ? "NZXplorer and issuer disclosures" : "Stock Market API")}</p>` : ""}
       ${splitHistory(co)}
+      ${dividendCard(co, cls, myShares, unitLabel)}
 
       ${IS_TEACHER && listing ? `<button class="btn small coral" onclick="closeCo('${co.id}')">Delist &amp; cash out holders</button>` : IS_TEACHER ? `
         <div class="grid grid-2" style="margin-top:10px;">
@@ -536,6 +540,8 @@ async function render(background = false) {
       <div id="msg-${co.id}"></div>
     `;
     list.appendChild(div);
+    div.querySelector(".declare-dividend")?.addEventListener("click", () => openDividend(co, isFund));
+    div.querySelector(".stop-dividend")?.addEventListener("click", () => stopDividend(co.id, cls.dividendPlans[co.id]));
     for (const input of div.querySelectorAll('input[id^="buy-"], input[id^="sell-"]')) {
       if (quantities.has(input.id)) input.value = quantities.get(input.id);
     }
@@ -548,6 +554,89 @@ async function render(background = false) {
     const list = document.getElementById("companyList");
     if (list) list.innerHTML = `<div class="card"><p class="error-msg" style="margin:0;">Something went wrong showing the companies: ${(err && err.message) || err}. Try refreshing the page.</p></div>`;
   }
+}
+
+const dividendJobs = new Set();
+async function catchUpMarketDividends(cls) {
+  const now = trustedNow(), today = nzDateKey(now);
+  for (const [id, plan] of Object.entries(cls.dividendPlans || {})) {
+    if (cls.archived || today < plan.ex || (today < plan.pay && cls.dividendRegisters?.[id]) || dividendJobs.has(id)) continue;
+    dividendJobs.add(id);
+    try {
+      await settleDividend(fdb, classesCol().doc(CLASS_CODE), u => usersCol().doc(u), id, today, now,
+        (user, username, entry, ledger) => ({reportAccounting: reportAccountingView({...user, username}, [entry, ...ledger])}));
+    } catch (err) { console.warn("Dividend settlement will retry on the next market visit or daily run.", err); }
+    finally { dividendJobs.delete(id); }
+  }
+}
+
+function dividendCard(co, cls, owned, units) {
+  const plan = cls.dividendPlans?.[co.id];
+  const unit = units === "units" ? "unit" : "share";
+  if (!plan) {
+    const last = co.lastDividend;
+    return (last ? `<p class="muted-small">Last dividend · ${dividendRate(last.cents)} per ${unit} on ${realDate(last.pay)}</p>` : "") +
+      (IS_TEACHER ? '<button class="btn small secondary declare-dividend">Declare dividend</button>' : "");
+  }
+  const recorded = nzDateKey() >= plan.ex;
+  const register = cls.dividendRegisters?.[co.id];
+  const mine = register ? register[CURRENT.username] || 0 : owned;
+  const caption = recorded ? "Your payment" : "At your current holding";
+  const frequency = plan.interval ? "Every " + plan.interval / 7 + " weeks" : "One-off";
+  return `<section class="dividend-panel" aria-label="Cash dividend">
+    <div class="dividend-heading"><strong>${co.realSymbol ? "Classroom cash dividend" : "Cash dividend"}</strong><span>${frequency}</span></div>
+    <p class="dividend-rate">${dividendRate(plan.cents)} <small>per ${unit}</small></p>
+    <dl class="dividend-dates"><div><dt>Ex-dividend date</dt><dd>${realDate(plan.ex)}</dd></div>
+    <div><dt>Payment date</dt><dd>${realDate(plan.pay)}</dd></div></dl>
+    ${IS_TEACHER ? ((!recorded || plan.interval) ? `<button class="btn small secondary stop-dividend">${recorded ? "Stop future dividends" : "Cancel schedule"}</button>` : "") :
+      `<p>${caption} · <strong>${fmtMoney(mine * plan.cents / 100)}</strong> (${mine} ${units})</p>
+      <small>${recorded ? "Eligibility is fixed for this payment." : "Own shares before the ex-dividend date to qualify."}</small>`}
+  </section>`;
+}
+
+function openDividend(co, isFund) {
+  if (!IS_TEACHER) return;
+  const dialog = realEl("dividendDialog");
+  realEl("dividendForm").reset();
+  realEl("dividendCompany").textContent = co.name + (co.realSymbol ? " · Classroom dividend" : "");
+  document.querySelector('label[for="divRate"]').textContent = isFund ? "Cash per unit ($)" : "Cash per share ($)";
+  dialog.dataset.company = co.id;
+  const today = nzDateKey();
+  realEl("divEx").min = dividendDate(today, 1);
+  realEl("divEx").value = dividendDate(today, 7);
+  realEl("divPay").min = realEl("divEx").value;
+  realEl("divPay").value = dividendDate(today, 14);
+  realEl("divEx").onchange = () => { realEl("divPay").min = realEl("divEx").value; };
+  realEl("divError").hidden = true;
+  dialog.showModal();
+  realEl("divRate").focus();
+}
+
+async function submitDividend(event) {
+  event.preventDefault();
+  if (!IS_TEACHER || realEl("divSubmit").disabled) return;
+  const dialog = realEl("dividendDialog"), id = dialog.dataset.company;
+  realEl("divSubmit").disabled = true;
+  try {
+    await saveDividendPlan(CLASS_CODE, id, { rate: realEl("divRate").value, ex: realEl("divEx").value,
+      pay: realEl("divPay").value, interval: Number(realEl("divRepeat").value) }, "");
+    dialog.close();
+    await render();
+    setCompanyMsg(id, '<p role="status">Dividend declared.</p>');
+  } catch (err) {
+    realEl("divError").textContent = err.message;
+    realEl("divError").hidden = false;
+  } finally { realEl("divSubmit").disabled = false; }
+}
+
+async function stopDividend(id, plan) {
+  if (!IS_TEACHER) return;
+  const question = nzDateKey() < plan.ex ? "Cancel this dividend and its future payments?" : "Stop future dividends? The recorded payment will still be made.";
+  if (!await t29Confirm(question)) return;
+  try {
+    await saveDividendPlan(CLASS_CODE, id, null, plan.ex);
+    await render();
+  } catch (err) { setCompanyMsg(id, `<p class="error-msg">${escapeHtml(err.message)}</p>`); }
 }
 
 async function openCo(e) {
@@ -583,8 +672,9 @@ async function setCoRange(id) {
   await render();
 }
 async function closeCo(id) {
-  if (await t29Confirm("Remove this listing? Everyone who owns it will be paid at the current price.")) {
-    await closeCompany(CLASS_CODE, id);
+  if (await t29Confirm("Remove this listing? Holders will be paid the current price. Recorded dividends will still be paid, and future dividends will stop.")) {
+    try { await closeCompany(CLASS_CODE, id); }
+    catch (err) { setCompanyMsg(id, `<div class="error-msg">${escapeHtml(err.message)}</div>`); }
     await render();
   }
 }

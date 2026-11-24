@@ -2913,7 +2913,7 @@ const NET_WORTH_MONTH_DAYS = 30;
 //   store-gift, or a student's own savings-withdraw, which just moves
 //   their own money and is neither earned nor spent)
 const REPORT_INCOME_TYPES = {
-  wage: "Wages", interest: "Interest earned", "cash-interest": "Interest earned",
+  wage: "Wages", "stock-dividend": "Dividends", interest: "Interest earned", "cash-interest": "Interest earned",
   bonus: "Bonuses", "side-hustle": "Side hustle", "truck-drive": "Side hustle",
   "property-rent": "Rent received", "property-rent-receive": "Rent received", "insurance-claim": "Insurance claims",
   "stock-sell": "Asset sales", "stock-close": "Asset sales", "property-sell": "Asset sales",
@@ -3120,12 +3120,11 @@ function reportAccountingApply(accounting, t, username) {
   }
   if (!seen) accounting.seen.push(key);
 }
-function reportAccountingView(student, txns) {
-  const monthKey = nzMonthKey();
+function reportAccountingView(student, txns, monthKey = nzMonthKey(), historyLimit = MAX_STORED_TXNS) {
   const stored = student.reportAccounting;
   const fresh = !stored || stored.version !== 2;
   const accounting = fresh ? { version: 2, monthKey, month: emptyAccountingBucket(), lifetime: emptyAccountingBucket(), seen: [], historyComplete: true }
-    : _cloneDoc(stored);
+    : JSON.parse(JSON.stringify(stored));
   accounting.corrected = accounting.corrected || [];
   if (accounting.monthKey !== monthKey) { accounting.monthKey = monthKey; accounting.month = emptyAccountingBucket(); }
   const recent = (txns || []).filter(Boolean);
@@ -3143,11 +3142,11 @@ function reportAccountingView(student, txns) {
     }
     const old = student.reportLifetime || {};
     accounting.historyComplete = !["incomeTotal","savedTotal","spentTotal","borrowedTotal"].some(k => (Number(old[k]) || 0) > (oldScan[k] || 0) + 0.005)
-      && !(recent.length >= MAX_STORED_TXNS && !student.reportLifetime);
+      && !(recent.length >= historyLimit && !student.reportLifetime);
   }
   // The ledger is newest first. Apply in commit order and retain recent IDs.
   for (const t of recent.slice().reverse()) reportAccountingApply(accounting, t, student.username);
-  accounting.seen = accounting.seen.slice(-(MAX_STORED_TXNS + 20));
+  accounting.seen = accounting.seen.slice(-(historyLimit + 20));
   accounting.corrected = accounting.corrected.filter(id => accounting.seen.includes(id));
   return accounting;
 }
@@ -3666,7 +3665,10 @@ function addClassificationToBucket(bucket, c) {
 
 // "YYYY-MM" in NZ wall-clock time — the reset key for reportMonth, same
 // convention as nzDateKey()'s "YYYY-MM-DD" just above.
-function nzMonthKey(d) { const p = nzParts(d); return `${p.year}-${p.month}`; }
+function nzMonthKey(d = trustedNow()) {
+  return d.toLocaleDateString("sv-SE", { timeZone: "Pacific/Auckland" }).slice(0, 7);
+}
+if (typeof module !== "undefined") module.exports = { reportAccountingView };
 
 // Applies one txn's effect (if any) to a single student's rolling report
 // totals. Safe to call for any (txn, username) pair, including ones the
@@ -4335,6 +4337,7 @@ function budgetWeekActuals(cls, username, weekStartKey, records = budgetTransact
     count++;
     switch (t.type) {
       case "interest": add(extra, "Account interest", amt); break;
+      case "stock-dividend": add(extra, "Dividends", amt); break;
       case "insurance-claim": if (neg) add(surprises, "Insurance shortfall", amt); else add(extra, "Insurance claims", amt); break;
       case "side-hustle": case "truck-drive": case "bonus": case "quiz-reward":
       case "cash-interest": case "welcome": case "store-sell": case "vehicle-sell": case "p2p-sell":
@@ -4986,7 +4989,7 @@ function txnBelongsTo(t, username) {
    note) is left plain. Returns { sign: "+" | "-" | "", amount } from
    `username`'s point of view, with amount always positive. */
 const TXN_MONEY_IN = new Set([
-  "stock-sell", "stock-close", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell",
+  "stock-sell", "stock-close", "stock-dividend", "wage", "interest", "cash-interest", "bonus", "welcome", "property-sell", "vehicle-sell",
   "store-sell", "term-deposit-mature", "term-deposit-early", "insurance-claim", "side-hustle", "truck-drive", "property-rent",
   "property-rent-receive", "quiz-reward", "p2p-sell", "gambling-cashout", "life-allowance", "savings-withdraw", "loan-taken",
   "kiwisaver-out", "kiwisaver-refund"

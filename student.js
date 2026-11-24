@@ -11,6 +11,7 @@ function badgeType(type) {
     transfer: ["navy", "send", "Transfer"],
     automation: ["navy", "repeat", "Auto-pay"],
     "stock-buy": ["gold", "chart", "Stock buy"],
+    "stock-dividend": ["mint", "chart", "Dividend"],
     "stock-sell": ["gold", "chart", "Stock sell"],
     "stock-close": ["gold", "building", "Delisted"],
     "insurance-buy": ["lilac", "shield", "Insurance"],
