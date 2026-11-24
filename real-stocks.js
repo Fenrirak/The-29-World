@@ -20,6 +20,36 @@ const REAL_STOCKS = [
 ].map(fund => ({...fund, kind:"etf", exchange:fund.vanguardId ? "NYSE Arca" : "NZX",
   currency:fund.vanguardId ? "USD" : "NZD", issuer:fund.vanguardId ? "Vanguard" : "Smart"})));
 
+// Published closing snapshots for a site whose nightly importer has yet to populate Firestore.
+// US stocks use Yahoo Finance daily close and dated shares_out series. NZX company closes
+// use NZXplorer and issued counts from NZX. Funds use Smart and Vanguard issuer feeds.
+const startingQuotes = new Map([
+  ["AAPL", 349.08, 14532182000, "2026-11-23", "2026-11-23", "Yahoo Finance"],
+  ["MSFT", 492.50, 7426194552, "2026-11-23", "2026-11-23", "Yahoo Finance"],
+  ["GOOGL", 282.10, 12294000000, "2026-11-23", "2026-11-23", "Yahoo Finance"],
+  ["ANT", 88.91, 13366642276, "2026-11-20", "2026-11-20", "Anthropic Investor Relations"],
+  ["FPH", 48.02, 588265424, "2026-11-23", "2026-11-23", "NZXplorer / NZX"],
+  ["AIA", 8.85, 1704603694, "2026-11-23", "2026-11-23", "NZXplorer / NZX"],
+  ["MCY", 6.59, 1436932703, "2026-11-23", "2026-11-23", "NZXplorer / NZX"],
+  ["MFT", 69.25, 100698548, "2026-11-23", "2026-11-23", "NZXplorer / NZX"],
+  ["WBC", 42.76, 3420303305, "2026-11-23", "2026-11-23", "NZXplorer / NZX"],
+  ["ANZ", 45.80, 3015919897, "2026-11-23", "2026-11-23", "NZXplorer / NZX"],
+  ["NZG", 2.693, 57251142, "2026-11-20", "2026-11-20", "Smart"],
+  ["MDZ", 5.778, 20940674, "2026-11-20", "2026-11-20", "Smart"],
+  ["AUS", 4.18, 110412708, "2026-11-20", "2026-11-20", "Smart"],
+  ["VTI", 355.27, 1855370703.805, "2026-11-23", "2026-10-31", "Vanguard"],
+  ["VOO", 663.91, 1506693906.78, "2026-11-23", "2026-10-31", "Vanguard"]
+].map(([symbol, price, units, date, sharesDate, source]) => [symbol, {
+  symbol, price, totalShares: Math.floor(units), date, sharesDate, source,
+  ...(REAL_STOCKS.find(s => s.symbol === symbol).kind === "etf" ? {reportedUnits: units} : {})
+}]));
+
+function listingQuote(symbol, published) {
+  const starting = startingQuotes.get(symbol);
+  if (validRealQuote(published) && published.symbol === symbol && (!starting || published.date >= starting.date)) return published;
+  return starting;
+}
+
 function realDateKeyValid(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const timestamp = Date.parse(value);

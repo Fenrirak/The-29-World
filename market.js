@@ -79,7 +79,7 @@ async function openRealPicker(refreshAfterChange = false) {
   if (request !== realRequest || !dialog.open) return;
   for (const [i, spec] of REAL_STOCKS.entries()) {
     const result = results[i];
-    const q = result.status === "fulfilled" && result.value.exists && result.value.data();
+    const q = result.status === "fulfilled" && listingQuote(spec.symbol, result.value.data());
     const note = realEl("realQuote-" + spec.symbol);
     delete note.dataset.listed;
     if (validRealQuote(q) && q.symbol === spec.symbol) {
@@ -87,7 +87,8 @@ async function openRealPicker(refreshAfterChange = false) {
       if (checked.has(spec.symbol)) note.closest("label").querySelector("input").checked = true;
       note.textContent = quotePrice(q.price) + " " + spec.currency + " · " + closeLabel(q.date) + " " + realDate(q.date)
         + " · " + (q.reportedUnits ?? q.totalShares).toLocaleString("en-NZ", {maximumFractionDigits: 6})
-        + (spec.kind === "etf" ? " units" : " shares") + " as of " + realDate(q.sharesDate);
+        + (spec.kind === "etf" ? " units" : " shares") + " as of " + realDate(q.sharesDate)
+        + (q === startingQuotes.get(spec.symbol) ? " · Saved quote from " + q.source : "");
     } else {
       note.textContent = result.status === "rejected" ? "Quote could not be loaded." : "Waiting for a verified price and share or unit count.";
     }
@@ -157,7 +158,7 @@ async function listRealStock() {
       if (!pending.length) return 0;
       const quotes = await Promise.all(pending.map(({spec}) => tx.get(fdb.collection("marketQuotes").doc(spec.symbol))));
       const added = pending.map(({spec, quote, id}, i) => {
-        const q = quotes[i].data();
+        const q = listingQuote(spec.symbol, quotes[i].data());
         if (!validRealQuote(q) || q.symbol !== spec.symbol || ["price", "totalShares", "date", "sharesDate", "reportedUnits"].some(key => q[key] !== quote[key])) {
           throw Object.assign(new Error(spec.symbol + " changed. Review the new figures before adding listings."), {code: "quote-changed"});
         }
