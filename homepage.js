@@ -17,6 +17,28 @@ window.addEventListener("pageshow", updatePayday);
 updatePayday();
 $("savings-control").hidden = false;
 
+const previewLink = $("preview-play");
+const previewVideo = $("preview-video");
+const previewError = $("preview-error");
+
+previewLink.addEventListener("click", event => {
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  previewError.hidden = true;
+  previewVideo.src = previewLink.href;
+  previewVideo.hidden = false;
+  previewLink.hidden = true;
+  previewVideo.focus({ preventScroll: true });
+  previewVideo.play().catch(() => {});
+});
+
+previewVideo.addEventListener("error", () => {
+  previewLink.hidden = false;
+  previewVideo.hidden = true;
+  previewError.hidden = false;
+  previewLink.focus({ preventScroll: true });
+});
+
 // Contact: copy the address (works even when the device has no email app for mailto: links).
 const addr = "Nathan.liu1211@gmail.com";
 const copyBtn = $("copyEmailBtn"), copyMsg = $("copyEmailMsg");
