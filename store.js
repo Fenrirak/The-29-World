@@ -174,13 +174,13 @@ async function render() {
               ? `<button class="btn small gold" disabled title="Your teacher limits this item to ${lim} per student">${icon("cart", 13)} Limit reached</button>`
               : `<div class="qty-buy-block">
                    <div class="qty-stepper">
-                     <button type="button" class="qty-btn" aria-label="Decrease quantity" onclick="qtyStep('${it.id}', -1)">−</button>
-                     <input id="qty-${it.id}" class="qty-input" type="number" inputmode="numeric" min="1"
+                     <button type="button" class="qty-btn" aria-label="Decrease quantity of ${escapeHtml(it.name)}" onclick="qtyStep('${it.id}', -1)">−</button>
+                     <input id="qty-${it.id}" class="qty-input" aria-label="Quantity of ${escapeHtml(it.name)}" type="number" inputmode="numeric" min="1"
                        ${maxQty !== null ? `max="${maxQty}"` : ""} step="1" value="1"
                        onfocus="this.select()" onclick="this.select()"
                        oninput="qtyLiveInput('${it.id}')" onblur="qtyNormalize('${it.id}')"
                        onkeydown="if(event.key==='Enter'){qtyNormalize('${it.id}');event.preventDefault();}">
-                     <button type="button" class="qty-btn" aria-label="Increase quantity" onclick="qtyStep('${it.id}', 1)">+</button>
+                     <button type="button" class="qty-btn" aria-label="Increase quantity of ${escapeHtml(it.name)}" onclick="qtyStep('${it.id}', 1)">+</button>
                    </div>
                    <button class="btn small gold qty-buy-btn" id="buyBtn-${it.id}" onclick="addToCart('${it.id}')"><span id="buyLabel-${it.id}">Add to cart</span></button>
                  </div>`}
@@ -207,7 +207,7 @@ function qtyStep(id, delta) {
   const input = document.getElementById("qty-" + id);
   if (!input) return;
   const max = input.getAttribute("max");
-  let v = (parseInt(input.value, 10) || 1) + delta;
+  let v = (Math.trunc(input.valueAsNumber) || 1) + delta;
   if (v < 1) v = 1;
   if (max !== null && max !== "" && v > Number(max)) v = Number(max);
   input.value = v;
@@ -226,7 +226,7 @@ function qtyNormalize(id) {
   const input = document.getElementById("qty-" + id);
   if (!input) return;
   const max = input.getAttribute("max");
-  let v = parseInt(input.value, 10);
+  let v = Math.trunc(input.valueAsNumber);
   if (!v || v < 1) v = 1;
   if (max !== null && max !== "" && v > Number(max)) v = Number(max);
   input.value = v;
@@ -240,7 +240,7 @@ function updateBuyLabel(id) {
   const it = ITEMS_CACHE.find(i => i.id === id);
   if (!it) return;
   const max = input.getAttribute("max");
-  let qty = parseInt(input.value, 10);
+  let qty = Math.trunc(input.valueAsNumber);
   if (!qty || qty < 1) qty = 1;
   if (max !== null && max !== "" && qty > Number(max)) qty = Number(max);
   // Same pricing function the checkout uses, so the button always matches the charge.
@@ -487,7 +487,7 @@ function cartTotals(lines) {
 function addToCart(id) {
   const it = ITEMS_CACHE.find(i => i.id === id); if (!it) return;
   const input = $id("qty-" + id), msg = $id("msg-" + id);
-  const want = Math.max(1, parseInt(input && input.value, 10) || 1);
+  const want = Math.max(1, Math.trunc(input?.valueAsNumber) || 1);
   const have = CART[id] || 0, max = cartStockMax(it), room = max - have;
   if (room < 1) { if (msg) msg.innerHTML = `<div class="error-msg">You already have all ${max} in your cart${cartCapIsLimit(it) ? " (that's your limit for this item)" : ""}.</div>`; return; }
   const add = Math.min(want, room);
@@ -653,7 +653,7 @@ function renderCart() {
   pay.classList.remove("hidden");
   if (!n) {
     pay.classList.add("hidden");
-    body.innerHTML = `<div class="cart-empty">${icon("cart", 48)}<h4>Your cart is empty</h4><p>Add items from the store and check out them all at once.</p></div>`;
+    body.innerHTML = `<div class="cart-empty">${icon("cart", 48)}<h4>Your cart is empty</h4><p>Add items from the store, then check out when you're ready.</p></div>`;
     foot.innerHTML = `${CART_MSG}<button type="button" class="btn secondary cart-checkout" onclick="cartContinue()">Browse the store</button>`;
     return;
   }
@@ -663,9 +663,9 @@ function renderCart() {
       <div class="cl-name">${escapeHtml(it.name)}<span class="cl-unit">${fmtMoney(unit)} each</span></div>
       <div class="cl-price">${fmtMoney(cartPrice(it.price, l.qty, ""))}</div>
       <div class="cl-ctl" role="group" aria-label="Quantity of ${escapeHtml(it.name)}">
-        <button type="button" class="cl-step" aria-label="Decrease quantity" ${l.qty <= 1 ? "disabled" : ""} onclick="cartStep('${it.id}', -1)">−</button>
+        <button type="button" class="cl-step" aria-label="Decrease quantity of ${escapeHtml(it.name)}" ${l.qty <= 1 ? "disabled" : ""} onclick="cartStep('${it.id}', -1)">−</button>
         <span class="cl-q">${l.qty}</span>
-        <button type="button" class="cl-step" aria-label="Increase quantity" ${l.qty >= max ? "disabled" : ""} onclick="cartStep('${it.id}', 1)">+</button>
+        <button type="button" class="cl-step" aria-label="Increase quantity of ${escapeHtml(it.name)}" ${l.qty >= max ? "disabled" : ""} onclick="cartStep('${it.id}', 1)">+</button>
       </div>
       <button type="button" class="cl-rm" onclick="cartRemove('${it.id}')">Remove</button>
       ${l.qty >= max && max !== Infinity ? `<div class="cl-note">${cartCapIsLimit(it) ? `That's your limit of ${storeBuyLimit(it)} for this item.` : `That's all ${max} we have in stock.`}</div>` : ""}

@@ -56,6 +56,9 @@
   --shadow-lift:0 10px 26px rgba(31,43,68,0.12);
   --shadow-lg:0 18px 44px rgba(31,43,68,0.26);
   --shadow-xl:0 24px 60px rgba(0,0,0,0.35);
+  --shadow-box:var(--shadow); --shadow-btn:var(--shadow-sm); --shadow-hover:var(--shadow-lift);
+  --shadow-pop:var(--shadow-lg); --shadow-modal:var(--shadow-xl);
+  --shadow-edge:4px 0 16px rgba(31,43,68,.18); --shadow-edge-end:-4px 0 16px rgba(31,43,68,.18);
 
   /* Fills that sit under WHITE text. The plain --coral / --sky / --lilac are
      kept for borders, icons and tints; these are the same hues, deepened just
@@ -1901,6 +1904,7 @@ html.dark-mode{
   --shadow-lift:0 8px 20px rgba(0,0,0,0.45);
   --shadow-lg:0 20px 50px rgba(0,0,0,0.4);
   --shadow-xl:0 28px 70px rgba(0,0,0,0.6);
+  --shadow-edge:4px 0 16px rgba(0,0,0,.45); --shadow-edge-end:-4px 0 16px rgba(0,0,0,.45);
 
   --surface-2:#212a4a;
   --heading-text:#f7f1e6;

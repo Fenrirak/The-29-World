@@ -242,6 +242,13 @@ function nowStr() {
   return trustedNow().toLocaleString("en-NZ", { timeZone: "Pacific/Auckland" });
 }
 
+function txnDisplayDate(txn) {
+  if (typeof txn.date === "string" && txn.date.trim()) return txn.date;
+  if (!Number.isFinite(txn.ts)) return "—";
+  const date = new Date(txn.ts);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString("en-NZ", { timeZone: "Pacific/Auckland" }) : "—";
+}
+
 /* ---------------- Server-trusted clock ----------------
    BUGFIX: every "has this already run today?" check below (pay day,
    automatic payments, interest, term deposits...) used to read the
@@ -2076,6 +2083,20 @@ async function t29LeaveAsCoTeacher(classCode, username) {
   return { ok: true };
 }
 
+// The teacher sets the deletion marker first. Rules then prevent new CVs
+// from arriving between the server query and removal of the parent record.
+async function deleteCareerSubmissions(classCode, studentUser) {
+  const submissions = fdb.collection("careerSubmissions");
+  let query = submissions.where("classCode", "==", classCode);
+  if (studentUser) query = query.where("studentUser", "==", studentUser);
+  const { docs } = await query.get({ source: "server" });
+  for (let i = 0; i < docs.length; i += 100) {
+    const batch = fdb.batch();
+    for (const doc of docs.slice(i, i + 100)) batch.delete(submissions.doc(doc.id));
+    await batch.commit();
+  }
+}
+
 // Permanently deletes a class AND every student account in it. This is
 // the one truly irreversible class action — the teacher.js UI backs it
 // with a "type the class name to confirm" prompt, same pattern already
@@ -2094,14 +2115,17 @@ async function deleteClassPermanently(teacherUsername, classCode) {
   if (previousOpen !== classCode) await usersCol().doc(teacherUsername).update({ classCode });
 
   try {
+    await classesCol().doc(classCode).update({ cvDeletionPending: true });
+    await deleteCareerSubmissions(classCode);
     // Family links first, while the student docs that name them still exist.
     await Promise.all((cls.students || []).map(u => _deleteParentViewFor(u)));
-    await Promise.all((cls.students || []).map(u => {
-      const batch = fdb.batch();
-      batch.delete(usersCol().doc(u));
-      batch.delete(fdb.collection("careerProfiles").doc(u));
-      return batch.commit();
-    }));
+    await Promise.all((cls.students || []).map(u => fdb.runTransaction(async t => {
+      const user = usersCol().doc(u);
+      const snap = await t.get(user);
+      if (!snap.exists || snap.data().classCode !== classCode) return;
+      t.delete(user);
+      t.delete(fdb.collection("careerProfiles").doc(u));
+    })));
     if (cls.templateShareToken) {
       await templateSharesCol().doc(cls.templateShareToken).delete();
     }
@@ -3306,6 +3330,8 @@ async function removeStudent(classCode, studentUser) {
   // A family link (see "Parent view" in data-money.js) must stop working
   // once the student is gone. Best-effort, and done first, while the
   // student doc that names the link still exists.
+  await userRef.update({ cvDeletionPending: true });
+  await deleteCareerSubmissions(classCode, studentUser);
   await _deleteParentViewFor(studentUser);
   // Both the class-doc cleanup and the user-doc deletion happen in ONE
   // transaction now (they used to be two separate calls — see BUGFIX
@@ -3812,8 +3838,13 @@ function t29Jump(id) {
   const el = document.getElementById(id);
   if (!el) return;
   const bar = document.querySelector(".topbar");
-  const barH = bar && getComputedStyle(bar).position !== "static" ? bar.getBoundingClientRect().height : 0;
-  window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - barH - 12), behavior: "smooth" });
+  const target = el.getBoundingClientRect();
+  const header = bar?.getBoundingClientRect();
+  const coversTarget = header && header.right > target.left && header.left < target.right
+    && ["sticky", "fixed"].includes(getComputedStyle(bar).position);
+  const offset = coversTarget ? header.height : 0;
+  window.scrollTo({ top: Math.max(0, target.top + window.scrollY - offset - 12),
+    behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
 }
 
 function t29Toast(message, opts) {

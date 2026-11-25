@@ -52,8 +52,8 @@ function badgeType(type) {
     "kiwisaver-in": ["navy", "kiwi", "KiwiSaver"], "kiwisaver-out": ["mint", "kiwi", "KiwiSaver withdrawal"],
     "kiwisaver-refund": ["gold", "kiwi", "KiwiSaver refund"]
   };
-  const [cls, ic, label] = map[type] || ["navy", "coin", type];
-  return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
+  const [cls, ic, label] = Object.prototype.hasOwnProperty.call(map, type) ? map[type] : ["navy", "coin", type || "Activity"];
+  return `<span class="badge ${cls}">${icon(ic, 12)}${escapeHtml(label)}</span>`;
 }
 const AVATAR_COLORS = ["c1", "c2", "c3", "c4", "c5"];
 function avatarClass(username) {
@@ -352,11 +352,11 @@ async function render() {
     const { sign, amount: amt } = txnDirection(t, me.username);
 
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${escapeHtml(detail)}</td>
+    tr.innerHTML = `<td class="muted-small">${escapeHtml(txnDisplayDate(t))}</td><td>${badgeType(t.type)}</td><td>${escapeHtml(detail)}</td>
       <td class="${moneyClass(sign)}">${fmtSignedMoney(sign, amt)}</td>`;
     tbody.appendChild(tr);
 
-    if (BANK_PREVIEW_TYPES.has(t.type) && bankPreview.length < 3) bankPreview.push({ type: t.type, detail, sign, amt, date: t.date });
+    if (BANK_PREVIEW_TYPES.has(t.type) && bankPreview.length < 3) bankPreview.push({ type: t.type, detail, sign, amt, date: txnDisplayDate(t) });
   });
 
   const bpBox = document.getElementById("bcRecentActivity");
@@ -368,7 +368,7 @@ async function render() {
     row.innerHTML = `
       <div style="min-width:0;">
         ${badgeType(t.type)}
-        <div class="muted-small" style="margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.detail)} · ${t.date}</div>
+        <div class="muted-small" style="margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.detail)} · ${escapeHtml(t.date)}</div>
       </div>
       <div class="${moneyClass(t.sign)}" style="white-space:nowrap;">${fmtSignedMoney(t.sign, t.amt)}</div>
     `;

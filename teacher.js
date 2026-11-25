@@ -357,7 +357,7 @@ async function render() {
     const who = t.to && t.to !== cls.teacher ? t.to : t.from;
     const dir = BETWEEN_STUDENTS.includes(t.type) ? { sign: "", amount: Math.abs(Number(t.amount) || 0) } : txnDirection(t, who);
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badge(t.type)}</td><td>${describeTxn(t, nameOf)}</td><td class="${moneyClass(dir.sign)}">${fmtSignedMoney(dir.sign, dir.amount)}</td>`;
+    tr.innerHTML = `<td class="muted-small">${escapeHtml(txnDisplayDate(t))}</td><td>${badge(t.type)}</td><td>${describeTxn(t, nameOf)}</td><td class="${moneyClass(dir.sign)}">${fmtSignedMoney(dir.sign, dir.amount)}</td>`;
     txbody.appendChild(tr);
   });
 }
@@ -488,8 +488,8 @@ function badge(type) {
     "kiwisaver-in": ["navy", "kiwi", "KiwiSaver"], "kiwisaver-out": ["mint", "kiwi", "KiwiSaver withdrawal"],
     "kiwisaver-refund": ["gold", "kiwi", "KiwiSaver refund"]
   };
-  const [cls, ic, label] = map[type] || ["navy", "coin", type];
-  return `<span class="badge ${cls}">${icon(ic, 12)}${label}</span>`;
+  const [cls, ic, label] = Object.prototype.hasOwnProperty.call(map, type) ? map[type] : ["navy", "coin", type || "Activity"];
+  return `<span class="badge ${cls}">${icon(ic, 12)}${escapeHtml(label)}</span>`;
 }
 const AVATAR_COLORS = ["c1", "c2", "c3", "c4", "c5"];
 function avatarClass(username) {
@@ -1233,9 +1233,9 @@ async function renderProfile(username) {
     ? storeGroups.map(g => `<div class="auto-row"><div class="auto-details">${escapeHtml(g.item.name)} <span class="badge mint">×${g.qty}</span>${g.item.countsNetWorth === false ? ' <span class="muted-small">(not counted)</span>' : ""}</div>
         <div class="row-flex" style="gap:8px;align-items:center;">
           <div class="qty-stepper">
-            <button class="qty-btn" type="button" onclick="bulkRemoveQtyStep('${g.item.id}',-1,${g.qty})" aria-label="Decrease quantity">−</button>
-            <input class="qty-input" type="number" inputmode="numeric" id="bulkRemoveQty_${g.item.id}" min="1" max="${g.qty}" step="1" value="1" onchange="bulkRemoveQtyClamp('${g.item.id}',${g.qty})">
-            <button class="qty-btn" type="button" onclick="bulkRemoveQtyStep('${g.item.id}',1,${g.qty})" aria-label="Increase quantity">+</button>
+            <button class="qty-btn" type="button" onclick="bulkRemoveQtyStep('${g.item.id}',-1,${g.qty})" aria-label="Decrease removal quantity for ${escapeHtml(g.item.name)}">−</button>
+            <input class="qty-input" type="number" inputmode="numeric" aria-label="Quantity of ${escapeHtml(g.item.name)} to remove" id="bulkRemoveQty_${g.item.id}" min="1" max="${g.qty}" step="1" value="1" onchange="bulkRemoveQtyClamp('${g.item.id}',${g.qty})">
+            <button class="qty-btn" type="button" onclick="bulkRemoveQtyStep('${g.item.id}',1,${g.qty})" aria-label="Increase removal quantity for ${escapeHtml(g.item.name)}">+</button>
           </div>
           <button class="btn small coral" onclick="profileRemoveStoreItemBulk('${escapeJsAttr(username)}','${g.item.id}',${g.qty})">Remove</button>
         </div></div>`).join("")
@@ -1485,21 +1485,21 @@ async function profileRemoveStoreItem(username, itemId) {
 function bulkRemoveQtyStep(itemId, delta, maxQty) {
   const input = document.getElementById(`bulkRemoveQty_${itemId}`);
   if (!input) return;
-  let val = (parseInt(input.value, 10) || 1) + delta;
+  let val = (Math.trunc(input.valueAsNumber) || 1) + delta;
   val = Math.max(1, Math.min(maxQty, val));
   input.value = val;
 }
 function bulkRemoveQtyClamp(itemId, maxQty) {
   const input = document.getElementById(`bulkRemoveQty_${itemId}`);
   if (!input) return;
-  let val = parseInt(input.value, 10);
+  let val = Math.trunc(input.valueAsNumber);
   if (isNaN(val)) val = 1;
   val = Math.max(1, Math.min(maxQty, val));
   input.value = val;
 }
 async function profileRemoveStoreItemBulk(username, itemId, maxQty) {
   const input = document.getElementById(`bulkRemoveQty_${itemId}`);
-  let qty = input ? parseInt(input.value, 10) : 1;
+  let qty = input ? Math.trunc(input.valueAsNumber) : 1;
   if (isNaN(qty) || qty < 1) qty = 1;
   qty = Math.min(qty, maxQty);
   const rate = await confirmRefundRate(

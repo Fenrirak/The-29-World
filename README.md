@@ -2,21 +2,21 @@
 
 A classroom economy simulator for whole-class use, with individual student accounts. Students run their own money in a shared make-believe world: they earn from jobs, bank, budget, take loans, save with KiwiSaver and term deposits, trade shares, buy property, and more. Teachers manage the class, and parents can follow along.
 
-The homepage has tabs for the class overview, setup, a sample payday and pricing. Access is free for everyone. Optional [donations](https://buymeacoffee.com/29world) help cover the database costs, especially for larger groups.
+The homepage has sections for the class overview, setup, a sample payday and pricing. Access is free for everyone. Optional [donations](https://buymeacoffee.com/29world) help cover the database costs, especially for larger groups.
 
 **Live site:** https://fenrirak.github.io/The-29-World/
 
 ## What's inside
 
-- **Student pages:** bank, budget, jobs, loans, KiwiSaver, term deposits, insurance, tax, shares market, marketplace, property, store, transport, events, quizzes, worksheets and reports.
-- **Teacher and parent pages:** class management, bulk student setup, class export and parent view.
+- **Student pages:** bank, budget, jobs, loans, KiwiSaver, term deposits, insurance, shares market, marketplace, property, store, transport, events and reports.
+- **Teacher and parent pages:** class management, tax settings, quiz creation, worksheets, bulk student setup, class export and parent view.
 - **Installable and offline-friendly:** works as a web app (PWA) with an offline page.
-- **Status page:** checks from the visitor's own device whether the website, sign-in, saving and security check can be reached, with steps to try and a list of addresses for school IT.
+- **Status page:** checks from the visitor's own device whether the website, sign-in, saving and supporting files can be reached, with steps to try and a list of addresses for school IT.
 
 ## How it's built
 
 - Plain HTML, CSS and JavaScript. There is no build step and no package manager.
-- Accounts and data use [Firebase](https://firebase.google.com/) (Authentication, Firestore and App Check), loaded from Google's CDN.
+- Accounts and data use [Firebase](https://firebase.google.com/) (Authentication and Firestore), loaded from Google's CDN. Optional App Check is disabled in this copy.
 - Hosted on GitHub Pages.
 - Fonts: the site uses Segoe UI and Trebuchet MS where the device has them. Devices without them get Selawik and Open Sans, served from `fonts/` with their license files.
 

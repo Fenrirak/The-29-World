@@ -12,8 +12,8 @@
   const REFRESH_MS = 60000;   // automatic re-check while the page is open and visible
   const HISTORY_MAX = 20;     // checks kept for the small trend bars (this visit only)
 
-  /* One entry per row in status.html (matched by data-service). A service is "Working" only when every
-     address in it answers. The other addresses are the ones the site's sign-in, saving and security
+  /* One entry per row in status.html (matched by data-service). A service is "Reachable" only when every
+     address in it answers. The other addresses are the ones the site's sign-in and saving
      check use (see firebase-init.js). They are opaque no-cors checks: any answer counts as reachable. */
   const SERVICES = [
     { id: "website", hosts: [{ label: location.host || "this website", url: "index.html", same: true }] },
@@ -21,9 +21,6 @@
       { label: "identitytoolkit.googleapis.com", url: "https://identitytoolkit.googleapis.com/" },
       { label: "securetoken.googleapis.com", url: "https://securetoken.googleapis.com/" }] },
     { id: "data", hosts: [{ label: "firestore.googleapis.com", url: "https://firestore.googleapis.com/" }] },
-    { id: "security", hosts: [
-      { label: "content-firebaseappcheck.googleapis.com", url: "https://content-firebaseappcheck.googleapis.com/" },
-      { label: "www.google.com", url: "https://www.google.com/recaptcha/api.js" }] },
     { id: "files", hosts: [{ label: "www.gstatic.com", url: "https://www.gstatic.com/firebasejs/" }] }
   ];
 
@@ -51,7 +48,7 @@
   /* Row badges reuse the site's .badge colours. */
   const BADGE = {
     checking: { tone: "navy", icon: "clock", label: "Checking…" },
-    ok: { tone: "mint", icon: "check", label: "Working" },
+    ok: { tone: "mint", icon: "check", label: "Reachable" },
     slow: { tone: "gold", icon: "clock", label: "Slow" },
     down: { tone: "coral", icon: "cross", label: "Can’t reach" },
     offline: { tone: "navy", icon: "dash", label: "Not checked" }
@@ -148,7 +145,7 @@
       count[s]++;
     });
     const parts = [];
-    if (count.ok) parts.push(count.ok + " working");
+    if (count.ok) parts.push(count.ok + " reachable");
     if (count.slow) parts.push(count.slow + " slow");
     if (count.down) parts.push(count.down + " can’t reach");
     svc.bars.setAttribute("aria-label", "Last " + h.length + " checks on this device: " + parts.join(", "));
@@ -180,7 +177,7 @@
       return ["slow", slow.length === 1 ? "One service is slow" : "Some services are slow",
         quoted(slow) + (slow.length === 1 ? " is" : " are") + " answering slowly, so pages may be slow to load or save."];
     }
-    return ["ok", "Everything is working", "Every service answered quickly from this device."];
+    return ["ok", "All services are reachable", "Every service answered quickly from this device."];
   }
 
   function showOffline() {

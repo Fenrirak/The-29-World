@@ -130,6 +130,7 @@ function _wrapQuerySnap(snap) {
 
 function _wrapQueryRef(ref) {
   return {
+    where(field, op, value) { return _wrapQueryRef(query(ref, where(field, op, value))); },
     async get(opts) { return _wrapQuerySnap(await (opts && opts.source === "server" ? getDocsFromServer(ref) : getDocs(ref))); },
     onSnapshot(next, error) {
       return onSnapshot(ref, { includeMetadataChanges: true },

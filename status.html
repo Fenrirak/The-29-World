@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Live status for 29 World™. Check whether the website, sign-in and saving are working on your device, and what to try if something can’t be reached.">
+<meta name="description" content="Live status for 29 World™. Check whether your device can reach the website and the services used for sign-in and saving, and what to try if something can’t be reached.">
 <link rel="canonical" href="https://fenrirak.github.io/The-29-World/status.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="29 World™">
 <meta property="og:title" content="System Status | 29 World™">
-<meta property="og:description" content="Live status for 29 World™. Check whether the website, sign-in and saving are working on your device, and what to try if something can’t be reached.">
+<meta property="og:description" content="Live status for 29 World™. Check whether your device can reach the website and the services used for sign-in and saving, and what to try if something can’t be reached.">
 <meta property="og:url" content="https://fenrirak.github.io/The-29-World/status.html">
 <meta property="og:image" content="https://fenrirak.github.io/The-29-World/og-image.png">
 <meta property="og:image:type" content="image/png">
@@ -18,7 +18,7 @@
 <meta property="og:locale" content="en_NZ">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="System Status | 29 World™">
-<meta name="twitter:description" content="Live status for 29 World™. Check whether the website, sign-in and saving are working on your device, and what to try if something can’t be reached.">
+<meta name="twitter:description" content="Live status for 29 World™. Check whether your device can reach the website and the services used for sign-in and saving, and what to try if something can’t be reached.">
 <meta name="twitter:image" content="https://fenrirak.github.io/The-29-World/og-image.png">
 <meta name="twitter:image:alt" content="29 World™ — Free classroom economy simulator">
 <script>try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}</script>
@@ -28,9 +28,9 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=b182782b">
+<link rel="stylesheet" href="style.css?v=a27c8e99">
 <link rel="stylesheet" href="status.css?v=29351695">
-<script defer src="status.js?v=657fcc8a"></script>
+<script defer src="status.js?v=50da8598"></script>
 <noscript><style>.status-summary,.status-meta{display:none;}</style></noscript>
 <script type="application/ld+json">
 {
@@ -48,7 +48,7 @@
       "@id": "https://fenrirak.github.io/The-29-World/status.html#page",
       "name": "System Status | 29 World™",
       "url": "https://fenrirak.github.io/The-29-World/status.html",
-      "description": "Live status for 29 World™. Check whether the website, sign-in and saving are working on your device, and what to try if something can’t be reached.",
+      "description": "Live status for 29 World™. Check whether your device can reach the website and the services used for sign-in and saving, and what to try if something can’t be reached.",
       "inLanguage": "en-NZ",
       "isPartOf": {
         "@id": "https://fenrirak.github.io/The-29-World/#website"
@@ -73,7 +73,7 @@
 <main class="legal-main status-main">
   <section class="card about-card" aria-labelledby="statusTitle">
     <h1 id="statusTitle">System status</h1>
-    <p class="about-lead">Check whether 29 World™ is working on this device.</p>
+    <p class="about-lead">Check which services this device can reach.</p>
 
     <div class="status-summary" id="statusSummary" data-state="checking" role="status">
       <span class="status-summary-icon" id="statusSummaryIcon" aria-hidden="true"><span class="status-spinner"></span></span>
@@ -130,18 +130,6 @@
         <p class="status-detail" data-detail hidden></p>
         <div class="status-trend" data-trend hidden><span class="status-bars" data-bars role="img"></span><span class="status-trend-text" data-trend-text></span></div>
       </li>
-      <li class="status-item" data-service="security" data-state="checking">
-        <div>
-          <p class="status-name">Security check</p>
-          <p class="status-desc">Stops bots and misuse so accounts stay safe.</p>
-        </div>
-        <div class="status-meta">
-          <span class="badge navy" data-badge><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" focusable="false"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>Checking…</span></span>
-          <span class="status-ms" data-ms></span>
-        </div>
-        <p class="status-detail" data-detail hidden></p>
-        <div class="status-trend" data-trend hidden><span class="status-bars" data-bars role="img"></span><span class="status-trend-text" data-trend-text></span></div>
-      </li>
       <li class="status-item" data-service="files" data-state="checking">
         <div>
           <p class="status-name">Supporting files</p>
@@ -185,15 +173,13 @@
 
   <section class="card about-card" id="allowlist" aria-labelledby="statusAllow">
     <h2 id="statusAllow">For school IT</h2>
-    <p>These are the addresses 29 World™ uses for sign-in, saving and its security check. All of them use HTTPS (port 443). If one is blocked on school devices but works on mobile data, allow it and check again.</p>
+    <p>These are the addresses 29 World™ uses for sign-in, saving and supporting files. All of them use HTTPS (port 443). If one is blocked on school devices but works on mobile data, allow it and check again.</p>
     <ul class="status-hosts" id="statusHosts">
       <li><code>fenrirak.github.io</code><span class="status-host-use">The website</span></li>
       <li><code>www.gstatic.com</code><span class="status-host-use">Supporting files</span></li>
       <li><code>identitytoolkit.googleapis.com</code><span class="status-host-use">Sign-in</span></li>
       <li><code>securetoken.googleapis.com</code><span class="status-host-use">Staying signed in</span></li>
       <li><code>firestore.googleapis.com</code><span class="status-host-use">Saving and class data</span></li>
-      <li><code>content-firebaseappcheck.googleapis.com</code><span class="status-host-use">Security check</span></li>
-      <li><code>www.google.com</code><span class="status-host-use">Security check (the /recaptcha path)</span></li>
     </ul>
     <div class="status-copy" id="statusCopy" hidden>
       <button type="button" class="btn small secondary" id="copyHostsBtn">Copy addresses</button>
@@ -205,11 +191,11 @@
     <h2 id="statusQuestions">Questions</h2>
     <details>
       <summary>Is 29 World™ down for everyone?</summary>
-      <p>This page can only test from your device. If every service shows Working but a page still won’t load, reload it. If services show Can’t reach on several devices and networks, the problem is probably with Google or GitHub, which run sign-in, saving and hosting. You can check <a href="https://status.firebase.google.com/" target="_blank" rel="noopener">Google Firebase status</a> and <a href="https://www.githubstatus.com/" target="_blank" rel="noopener">GitHub status</a>.</p>
+      <p>This page can only test from your device. If every service shows Reachable but a page still won’t load, reload it. If services show Can’t reach on several devices and networks, the problem is probably with Google or GitHub, which run sign-in, saving and hosting. You can check <a href="https://status.firebase.google.com/" target="_blank" rel="noopener">Google Firebase status</a> and <a href="https://www.githubstatus.com/" target="_blank" rel="noopener">GitHub status</a>.</p>
     </details>
     <details>
-      <summary>What do Working, Slow and Can’t reach mean?</summary>
-      <p>Working means the service answered in under 3 seconds. Slow means it answered, but took 3 seconds or longer. Can’t reach means there was no answer within 10 seconds, or an error came back. Slow or unreachable usually means pages will load or save slowly, or not at all, on this device.</p>
+      <summary>What do Reachable, Slow and Can’t reach mean?</summary>
+      <p>Reachable means the address answered in under 3 seconds. The checks do not sign you in or save a record. Slow means it answered, but took 3 seconds or longer. Can’t reach means the request failed, timed out after 10 seconds, or the website returned an error. Slow or unreachable usually means pages will load or save slowly, or not at all, on this device.</p>
     </details>
     <details>
       <summary>Why is only one service marked Can’t reach?</summary>

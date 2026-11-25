@@ -675,7 +675,7 @@ function renderRecentRoulette(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details">${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details">${escapeHtml(t.note)} <div class="muted-small">${escapeHtml(txnDisplayDate(t))}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);
@@ -708,7 +708,7 @@ function renderGamblingAccountRecent(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details">${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details">${escapeHtml(t.note)} <div class="muted-small">${escapeHtml(txnDisplayDate(t))}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);
@@ -745,7 +745,7 @@ async function renderTeacherGamblingRecent(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details"><strong>${escapeHtml(who)}</strong>: ${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details"><strong>${escapeHtml(who)}</strong>: ${escapeHtml(t.note)} <div class="muted-small">${escapeHtml(txnDisplayDate(t))}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);
@@ -1382,7 +1382,7 @@ function renderRecentBlackjack(cls) {
     const row = document.createElement("div");
     row.className = "auto-row";
     row.innerHTML = `
-      <div class="auto-details">${escapeHtml(t.note)} <div class="muted-small">${t.date}</div></div>
+      <div class="auto-details">${escapeHtml(t.note)} <div class="muted-small">${escapeHtml(txnDisplayDate(t))}</div></div>
       <div class="${won ? 'ticker-up' : 'ticker-down'}" style="font-weight:900;">${won ? "+" : "-"}${fmtMoney(t.amount)}</div>
     `;
     box.appendChild(row);

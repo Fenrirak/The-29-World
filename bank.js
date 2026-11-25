@@ -274,8 +274,8 @@ async function render() {
       "kiwisaver-in": ["navy", "kiwi", "KiwiSaver"], "kiwisaver-out": ["mint", "kiwi", "KiwiSaver withdrawal"],
       "kiwisaver-refund": ["gold", "kiwi", "KiwiSaver refund"]
     };
-    const [c, ic, label] = map[type] || ["navy", "coin", type];
-    return `<span class="badge ${c}">${ic === "cards" ? "" : icon(ic, 12)}${label}</span>`;
+    const [c, ic, label] = Object.prototype.hasOwnProperty.call(map, type) ? map[type] : ["navy", "coin", type || "Activity"];
+    return `<span class="badge ${c}">${ic === "cards" ? "" : icon(ic, 12)}${escapeHtml(label)}</span>`;
   };
   my.forEach(t => {
     let detail = escapeHtml(t.note || "");
@@ -288,7 +288,7 @@ async function render() {
     // it only moved between the student's own pockets.
     const { sign, amount } = txnDirection(t, me.username);
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="muted-small">${t.date}</td><td>${badgeType(t.type)}</td><td>${detail}</td>
+    tr.innerHTML = `<td class="muted-small">${escapeHtml(txnDisplayDate(t))}</td><td>${badgeType(t.type)}</td><td>${detail}</td>
       <td class="${moneyClass(sign)}">${fmtSignedMoney(sign, amount)}</td>`;
     tbody.appendChild(tr);
   });
