@@ -3,12 +3,23 @@ function dividendDate(key, days) {
   return new Date(Date.parse(key + "T00:00:00Z") + days * 86400000).toISOString().slice(0, 10);
 }
 
+function dividendCashCents(shares, rate) {
+  // Exchange declarations can carry fractional cents. Round once per holding.
+  const scaled = Math.round(rate * 100000000);
+  if (!Number.isSafeInteger(scaled)) return Math.round(shares * rate);
+  return Number((BigInt(shares) * BigInt(scaled) + 50000000n) / 100000000n);
+}
+
 function dividendRate(cents) {
   return "$" + (cents / 100).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 8 });
 }
 
-function dividendCutoff(key) {
+function dividendCutoff(key, zone = "Pacific/Auckland") {
   const utc = Date.parse(key + "T00:00:00Z");
+  if (zone === "America/New_York") {
+    const hour = Number(new Intl.DateTimeFormat("en-US", {timeZone:zone,hour:"2-digit",hourCycle:"h23"}).format(utc + 5 * 3600000));
+    return utc + (hour === 1 ? 4 : 5) * 3600000;
+  }
   const hour = Number(new Intl.DateTimeFormat("en-NZ", {timeZone:"Pacific/Auckland", hour:"2-digit", hourCycle:"h23"}).format(utc - 12 * 3600000));
   return utc - (hour === 1 ? 13 : 12) * 3600000;
 }
@@ -34,6 +45,7 @@ async function saveDividendPlan(code, id, terms, expectedEx) {
     const cls = (await t.get(ref)).data();
     const co = cls?.companies.find(item => item.id === id);
     if (!co || cls.archived) throw new Error("This listing is no longer active.");
+    if (co.realSymbol) throw new Error("Real listings follow published issuer dividends automatically.");
     const plans = cls.dividendPlans || {};
     const plan = plans[id];
     if ((plan?.ex || "") !== expectedEx) throw new Error("The dividend schedule changed. Reopen it to review the current dates.");
@@ -55,6 +67,7 @@ async function settleDividend(db, classRef, userRef, id, today, now, reportUpdat
     const cls = classSnap.data();
     const plan = cls?.dividendPlans?.[id];
     const co = cls?.companies?.find(item => item.id === id);
+    if (plan?.issuer) today = now.toLocaleDateString("sv-SE",{timeZone:plan.zone});
     if (!plan || cls.archived || today < plan.ex) return;
     const registers = cls.dividendRegisters || {};
     if (!registers[id]) {
@@ -73,18 +86,26 @@ async function settleDividend(db, classRef, userRef, id, today, now, reportUpdat
     students.forEach((username, i) => {
       const user = snaps[i].data();
       if (!user || user.classCode !== classSnap.id || user.role !== "student") return;
-      const shares = holders[username], cents = Math.round(shares * plan.cents);
+      const shares = holders[username], cents = dividendCashCents(shares, plan.cents);
       if (cents === 0) return; // A split can produce a sub-cent dividend.
       const balance = Math.round(user.balance * 100) + cents;
       if (!Number.isSafeInteger(cents) || cents <= 0 || !Number.isSafeInteger(balance)) throw new Error("Invalid dividend balance.");
       const entry = { id: "div-" + id + "-" + plan.ex + "-" + username, type: "stock-dividend", companyId: id,
-        to: username, amount: cents / 100, shares, pricePerShare: plan.cents / 100, ts: now.getTime(),
+        to: username, amount: cents / 100, shares, pricePerShare: Number((plan.cents / 100).toFixed(10)), ts: now.getTime(),
+        ...(plan.issuer ? {currency:plan.currency, exDate:plan.ex, paymentDate:plan.pay} : {}),
         date: now.toLocaleString("en-NZ", { timeZone: "Pacific/Auckland" }),
-        note: (plan.name || co.name) + " dividend · " + shares + " × " + dividendRate(plan.cents) };
+        note: (plan.name || co.name) + " dividend · " + shares + " × " + dividendRate(plan.cents) + (plan.issuer ? " " + plan.currency : "") };
       entries.push(entry);
       t.update(refs[i], { balance: balance / 100, ...reportUpdate?.(user, username, entry, cls.txns || []) });
     });
-    if (co) co.lastDividend = { pay: plan.pay, cents: plan.cents };
+    const issuerUpdate = {};
+    if (plan.issuer) {
+      const item = cls.issuerBook?.[id];
+      if (!item) throw new Error("Issuer listing missing during settlement.");
+      item.paid = [...new Set([...(item.paid || []),plan.key])];
+      issuerUpdate.issuerBook = cls.issuerBook;
+    }
+    if (co) co.lastDividend = { pay: plan.pay, cents: plan.cents, ...(plan.issuer ? {currency:plan.currency} : {}) };
     delete registers[id];
     if (plan.interval) {
       // Announce the next future cutoff. Never infer ownership for missed periods.
@@ -95,9 +116,9 @@ async function settleDividend(db, classRef, userRef, id, today, now, reportUpdat
       plan.cents = plan.nextCents ?? plan.cents;
       delete plan.nextCents;
     } else delete cls.dividendPlans[id];
-    t.update(classRef, { companies: cls.companies, dividendPlans: cls.dividendPlans, dividendRegisters: registers,
+    t.update(classRef, { ...issuerUpdate, companies: cls.companies, dividendPlans: cls.dividendPlans, dividendRegisters: registers,
       dividendsActive: Object.keys(cls.dividendPlans).length > 0, txns: entries.concat(cls.txns || []).slice(0, 250) });
   });
 }
 
-if (typeof module !== "undefined") module.exports = { settleDividend, dividendTerms };
+if (typeof module !== "undefined") module.exports = { settleDividend, dividendTerms, dividendCutoff };

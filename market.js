@@ -156,6 +156,7 @@ async function listRealStock() {
       const companies = cls.companies || [];
       const pending = selected.filter(({spec}) => !realAlreadyListed(companies, spec));
       if (!pending.length) return 0;
+      const dividendCatalog = (await tx.get(fdb.collection("marketQuotes").doc("issuerDividends"))).data() || {};
       const quotes = await Promise.all(pending.map(({spec}) => tx.get(fdb.collection("marketQuotes").doc(spec.symbol))));
       const added = pending.map(({spec, quote, id}, i) => {
         const q = listingQuote(spec.symbol, quotes[i].data());
@@ -169,7 +170,23 @@ async function listRealStock() {
           holders: {}, history: [q.price], historyDates: [day], quoteSource: q.source || ""
         };
       });
-      tx.update(ref, {companies: [...companies, ...added]});
+      const issuerBook = cls.issuerBook || {};
+      const plans = cls.dividendPlans || {};
+      const since = trustedNow().getTime();
+      for (const co of added) {
+        const item = issuerBook[co.id] = {symbol:co.realSymbol, name:co.name, since};
+        const feed = dividendCatalog[co.realSymbol] || startingIssuerFeed(co.realSymbol);
+        if (!feed) continue;
+        item.checked = feed.checked;
+        item.latest = feed.events.filter(e=>dividendCutoff(e.ex,e.zone) <= since).at(-1) || null;
+        item.upcoming = feed.events.find(e=>dividendCutoff(e.ex,e.zone) > since) || null;
+        if (item.upcoming && Date.parse(day) - Date.parse(feed.checked) <= 2 * 86400000) {
+          const e = item.upcoming;
+          plans[co.id] = {...e, issuer:true, cutoff:dividendCutoff(e.ex,e.zone), interval:0, name:co.name};
+        }
+      }
+      tx.update(ref, {companies: [...companies, ...added], issuerBook, issuerTracked:true,
+        dividendPlans:plans, dividendsActive:Object.keys(plans).length > 0});
       return added.length;
     });
     realEl("realDialog").close();
@@ -570,7 +587,40 @@ async function catchUpMarketDividends(cls) {
   }
 }
 
+function issuerCard(co, cls, owned, units) {
+  const item = cls.issuerBook?.[co.id];
+  const plan = cls.dividendPlans?.[co.id];
+  const seed = startingIssuerFeed(co.realSymbol);
+  const now = trustedNow().getTime();
+  const snapshot = seed?.events.at(-1);
+  const upcoming = item?.upcoming && dividendCutoff(item.upcoming.ex,item.upcoming.zone) > now ? item.upcoming : null;
+  const event = (plan?.issuer && plan) || upcoming || item?.latest || (!item?.checked && snapshot);
+  const checked = item?.checked || seed?.checked;
+  const spec = REAL_STOCKS.find(s => s.symbol === co.realSymbol);
+  if (!spec) return "";
+  const source = spec.exchange === "NZX" ? ["NZX dividend calendar","https://www.nzx.com/markets/NZSX/dividends"] :
+    spec.vanguardId ? ["Vanguard distributions","https://investor.vanguard.com/investment-products/etfs/profile/" + spec.symbol.toLowerCase()] :
+    ["Nasdaq dividend history","https://www.nasdaq.com/market-activity/stocks/" + spec.symbol.toLowerCase() + "/dividend-history"];
+  const link = `<a href="${source[1]}" target="_blank" rel="noopener noreferrer">${source[0]}</a>`;
+  const title = spec.kind === "etf" ? "Fund distribution" : "Issuer dividend";
+  if (!event) return `<section class="dividend-panel"><strong>${title}</strong><p>${checked ? "No cash declaration on file as of " + realDate(checked) + "." : "Awaiting the first exchange update."}</p>${link}</section>`;
+  const recorded = now >= dividendCutoff(event.ex,event.zone);
+  const register = cls.dividendRegisters?.[co.id];
+  const mine = register ? register[CURRENT.username] || 0 : owned;
+  const position = !IS_TEACHER && plan?.issuer ? `<p>${recorded ? "Your payment" : "At your current holding"} · <strong>${fmtMoney(dividendCashCents(mine,event.cents) / 100)}</strong></p>` : "";
+  return `<section class="dividend-panel" aria-label="${title}"><div class="dividend-heading"><strong>${title}</strong>
+    <span>${plan?.issuer ? (recorded ? "Awaiting payment" : "Declared") : (recorded ? "Latest reported" : "Published")}</span></div>
+    <p class="dividend-rate">${dividendRate(event.cents)} <small>${escapeHtml(event.currency)} per ${units === "units" ? "unit" : "share"}</small></p>
+    <dl class="dividend-dates"><div><dt>Ex-dividend date</dt><dd>${realDate(event.ex)}</dd></div>
+    <div><dt>Payment date</dt><dd>${realDate(event.pay)}</dd></div></dl>${position}
+    <p class="muted-small">${event.zone === "America/New_York" ? "New York" : "New Zealand"} dates · 1 ${escapeHtml(event.currency)} pays 1 classroom dollar.</p>${link}</section>`;
+}
+
 function dividendCard(co, cls, owned, units) {
+  if (co.realSymbol) {
+    const legacy = cls.dividendPlans?.[co.id];
+    if (!legacy || legacy.issuer) return issuerCard(co, cls, owned, units);
+  }
   const plan = cls.dividendPlans?.[co.id];
   const unit = units === "units" ? "unit" : "share";
   if (!plan) {
@@ -588,14 +638,14 @@ function dividendCard(co, cls, owned, units) {
     <p class="dividend-rate">${dividendRate(plan.cents)} <small>per ${unit}</small></p>
     <dl class="dividend-dates"><div><dt>Ex-dividend date</dt><dd>${realDate(plan.ex)}</dd></div>
     <div><dt>Payment date</dt><dd>${realDate(plan.pay)}</dd></div></dl>
-    ${IS_TEACHER ? ((!recorded || plan.interval) ? `<button class="btn small secondary stop-dividend">${recorded ? "Stop future dividends" : "Cancel schedule"}</button>` : "") :
+    ${IS_TEACHER ? ((!co.realSymbol && (!recorded || plan.interval)) ? `<button class="btn small secondary stop-dividend">${recorded ? "Stop future dividends" : "Cancel schedule"}</button>` : "") :
       `<p>${caption} · <strong>${fmtMoney(mine * plan.cents / 100)}</strong> (${mine} ${units})</p>
       <small>${recorded ? "Eligibility is fixed for this payment." : "Own shares before the ex-dividend date to qualify."}</small>`}
   </section>`;
 }
 
 function openDividend(co, isFund) {
-  if (!IS_TEACHER) return;
+  if (!IS_TEACHER || co.realSymbol) return;
   const dialog = realEl("dividendDialog");
   realEl("dividendForm").reset();
   realEl("dividendCompany").textContent = co.name + (co.realSymbol ? " · Classroom dividend" : "");

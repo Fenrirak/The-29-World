@@ -36,8 +36,8 @@
     })();
   </script>
   <link rel="stylesheet" href="style.css?v=b182782b">
-  <link rel="stylesheet" href="homepage.css?v=cd4a9d21">
-  <script defer src="homepage.js?v=9d3fb3de"></script>
+  <link rel="stylesheet" href="homepage.css?v=33ccbc3f">
+  <script defer src="homepage.js?v=f37f446f"></script>
   <script defer src="offline.js?v=7c18231f"></script>
   <script type="application/ld+json">
     {
@@ -74,7 +74,7 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="about-topbar">
     <a class="about-brand" href="index.html#home"><img class="about-brand-icon" src="Favicon.png" alt="" width="28" height="28">29 World™</a>
-    <nav class="home-nav" aria-label="Page sections"><a href="#how-it-works">How it works</a><a href="#payday">Try a payday</a><a href="#pricing">Pricing</a></nav>
+    <nav class="home-nav" aria-label="Page sections"><a href="#how-it-works">How it works</a><a href="#payday">Try a payday</a><a href="#pricing">Pricing</a><a href="#about">About</a></nav>
     <a class="btn gold small" href="login.html">Log in</a>
   </header>
 
@@ -145,15 +145,46 @@
       <div class="price">
         <div class="free"><h2 id="price-title">Free for everyone</h2><p>29 World™ is completely free for students, teachers and schools of any size. There are no subscriptions or per-student fees.</p></div>
         <div class="give"><h3>Help cover the database costs</h3><p>Every class uses the database to save balances, paydays and purchases. Donations help pay that bill. If you’re bringing a large group or a whole school, please contribute if you can. Donations are always optional.</p>
-          <div class="actions"><a class="btn gold" href="https://buymeacoffee.com/29world">Donate via Buy Me a Coffee</a><a href="about.html#contact">Group donation enquiries</a></div></div>
+          <div class="actions"><a class="btn gold" href="https://buymeacoffee.com/29world">Donate via Buy Me a Coffee</a><a href="#contact">Group donation enquiries</a></div></div>
+      </div>
+    </section>
+    <section class="wrap" id="about" aria-labelledby="about-title">
+      <div class="about">
+        <div>
+          <h2 id="about-title">Hi there, I’m Nathan</h2>
+          <span class="about-tag">Creator of 29 World™</span>
+          <p>I built this website as part of an ongoing project to make good quality, completely free websites that anyone can use.</p>
+          <p>If you enjoyed 29 World™, I’d love for you to take a look at these:</p>
+        </div>
+        <ul class="about-links">
+          <li><a class="about-link" href="https://www.legend-of-fenrirak.com" target="_blank" rel="noopener"><span class="about-link-text"><span class="about-link-title">Legend of Fenrirak</span><span class="about-link-url">www.legend-of-fenrirak.com</span></span></a></li>
+          <li><a class="about-link" href="https://fenrirak.github.io/No-BG/" target="_blank" rel="noopener"><span class="about-link-text"><span class="about-link-title">No BG</span><span class="about-link-url">fenrirak.github.io/No-BG</span></span></a></li>
+          <li><a class="about-link" href="https://fenrirak.github.io/Moonlit-Lantern/" target="_blank" rel="noopener"><span class="about-link-text"><span class="about-link-title">Moonlit Lantern</span><span class="about-link-url">fenrirak.github.io/Moonlit-Lantern</span></span></a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="wrap" id="contact" aria-labelledby="contact-title">
+      <div class="contact">
+        <div>
+          <h2 id="contact-title">Questions, feedback or something not working?</h2>
+          <p>Send Nathan an email and he’ll get back to you.</p>
+          <p class="contact-addr">Nathan.liu1211@gmail.com</p>
+        </div>
+        <div class="contact-actions">
+          <a class="btn gold" href="mailto:Nathan.liu1211@gmail.com">Email Nathan</a>
+          <button type="button" class="btn on-dark" id="copyEmailBtn">Copy email address</button>
+          <p class="contact-msg" id="copyEmailMsg" role="status" aria-live="polite"></p>
+          <small>No email app on this device? Copy the address and send it from any email account.</small>
+        </div>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
     <nav class="site-footer-links" aria-label="Footer">
-      <a href="about.html">About</a><a href="help.html">Help Centre</a><a href="status.html">Status</a>
-      <a href="about.html#contact">Contact</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms of Use</a>
+      <a href="index.html#home">Home</a><a href="help.html">Help Centre</a><a href="status.html">Status</a>
+      <a href="#contact">Contact</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms of Use</a>
     </nav>
     <div class="site-footer-copy">© 2026 29 World™. All rights reserved.</div>
   </footer>
