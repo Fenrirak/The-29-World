@@ -40,6 +40,27 @@ previewVideo.addEventListener("error", () => {
   previewLink.focus({ preventScroll: true });
 });
 
+// Intro: the preview prints out like the payday slip when it scrolls into view (skipped for reduced motion).
+const previewBox = previewLink.parentElement;
+if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  const poster = previewLink.querySelector("img");
+  const posterReady = poster.complete ? Promise.resolve() : new Promise(done => {
+    poster.addEventListener("load", done, { once: true });
+    poster.addEventListener("error", done, { once: true });
+    setTimeout(done, 2000);
+  });
+  const watcher = new IntersectionObserver(entries => {
+    if (!entries.some(entry => entry.isIntersecting)) return;
+    watcher.disconnect();
+    posterReady.then(() => previewBox.classList.replace("print-wait", "print-go"));
+  }, { threshold: 0.4 });
+  previewBox.addEventListener("animationend", event => {
+    if (event.animationName === "print-slot") previewBox.classList.remove("print-go");
+  });
+  previewBox.classList.add("print-wait");
+  watcher.observe(previewBox);
+}
+
 // Contact: copy the address (works even when the device has no email app for mailto: links).
 const addr = "Nathan.liu1211@gmail.com";
 const copyBtn = $("copyEmailBtn"), copyMsg = $("copyEmailMsg");
