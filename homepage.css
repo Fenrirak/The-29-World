@@ -25,7 +25,7 @@ main.home-main { width: 100%; max-width: none; margin: 0; padding: 0; flex: 1; }
 
 /* Payday slip: the one memorable element */
 .slip-wrap { justify-self: center; width: 100%; max-width: 430px; transform: rotate(1.6deg); filter: drop-shadow(0 24px 34px rgba(0,0,0,.4)); }
-.slip { color: var(--ink); animation: print .9s .15s cubic-bezier(.3,.7,.2,1) both; }
+.slip { color: var(--ink); }
 .slip-a, .slip-b { --y: 100%; background: var(--card);
   -webkit-mask: radial-gradient(circle 11px at 0 var(--y), #0000 10.5px, #000 11px) left / 51% 100% no-repeat, radial-gradient(circle 11px at 100% var(--y), #0000 10.5px, #000 11px) right / 51% 100% no-repeat;
   mask: radial-gradient(circle 11px at 0 var(--y), #0000 10.5px, #000 11px) left / 51% 100% no-repeat, radial-gradient(circle 11px at 100% var(--y), #0000 10.5px, #000 11px) right / 51% 100% no-repeat; }
@@ -52,7 +52,7 @@ html.dark-mode .ledger .out dd { color: var(--coral); }
 .slip input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--navy-900); background: var(--gold); box-shadow: var(--shadow-sm); }
 .scale { display: flex; justify-content: space-between; font-size: var(--fs-sm); color: var(--muted); }
 .bar { display: grid; grid-template-columns: 45fr 5fr 20fr 50fr; gap: 3px; height: 14px; margin-top: 14px; transition: grid-template-columns .25s ease; }
-.bar i { background: var(--c); border-radius: 4px; transform-origin: left; animation: grow .7s .8s cubic-bezier(.3,.7,.2,1) both; }
+.bar i { background: var(--c); border-radius: 4px; }
 .key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 10px 0 0; padding: 0; list-style: none; font-size: var(--fs-sm); color: var(--muted); }
 .key li::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; background: var(--c); }
 .result { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
@@ -62,7 +62,7 @@ html.dark-mode .ledger .out dd { color: var(--coral); }
 .result span { display: block; font-size: var(--fs-sm); font-weight: 600; color: var(--muted); }
 .result b, .result output { font: 800 1.9rem/1.2 var(--hf); color: var(--hd); font-variant-numeric: tabular-nums; }
 @keyframes print { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0); } }
-@keyframes grow { from { transform: scaleX(0); } }
+@keyframes fill-bar { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
 
 /* Sections */
 .wrap { max-width: 1080px; margin: 0 auto; padding: clamp(48px, 7vw, 84px) var(--gx) 0; }
@@ -79,19 +79,13 @@ html.dark-mode .ledger .out dd { color: var(--coral); }
 .preview-play .btn { position: absolute; right: 3.65%; bottom: max(8px, 5%); margin: 0; padding: 8px 14px; min-height: 44px; font-size: var(--fs-sm); }
 .preview-frame video[hidden], .preview-play[hidden] { display: none; }
 
-/* Preview intro: the frame prints out like the payday slip when it scrolls into view.
-   homepage.js adds .print-wait (hidden), then .print-go (plays), then removes it again. */
+/* Preview intro: the frame prints out like the payday slip when it scrolls into view. */
 .preview-media { position: relative; }
 .preview-media::before { content: ""; position: absolute; z-index: 2; top: -9px; left: -12px; right: -12px; height: 14px; border-radius: 99px; opacity: 0; pointer-events: none;
   background: linear-gradient(var(--navy-700), var(--navy-900));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 3px 0 -1px var(--gold), 0 10px 18px rgba(0,0,0,.28); }
 .preview-play::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 84px; transform: translateY(-100%); opacity: 0; pointer-events: none;
   background: linear-gradient(rgba(232,184,75,0), rgba(232,184,75,.32) calc(100% - 3px), var(--gold) calc(100% - 3px)); }
-.print-wait .preview-play { clip-path: inset(0 -4px 100%); }
-.print-go .preview-play { animation: print-paper 1.3s .1s cubic-bezier(.35,.15,.25,1) backwards; }
-.print-go .preview-play::after { animation: print-head 1.3s .1s cubic-bezier(.35,.15,.25,1) backwards; }
-.print-go .preview-play .btn { animation: print-stamp .6s 1s cubic-bezier(.2,.9,.3,1.3) backwards; }
-.print-go::before { animation: print-slot 1.8s both; }
 @keyframes print-paper { from { clip-path: inset(0 -4px 100%); } to { clip-path: inset(-4px); } }
 @keyframes print-head { from { top: -2px; opacity: 1; } to { top: calc(100% + 6px); opacity: 1; } }
 @keyframes print-slot { 0% { opacity: 0; transform: scaleX(.15); } 10%, 72% { opacity: 1; transform: none; } 100% { opacity: 0; transform: none; } }
@@ -132,11 +126,18 @@ html.dark-mode .ledger .out dd { color: var(--coral); }
   .tiles { grid-template-columns: 1fr; }
   .hero-cta div { max-width: none; width: 100%; }
 }
+@media (prefers-reduced-motion: no-preference) {
+  .print-wait .slip { clip-path: inset(0 0 100% 0); }
+  .print-go .slip { animation: print 1.05s .08s cubic-bezier(.35,.15,.25,1) backwards; }
+  .print-go .bar { animation: fill-bar .55s .65s ease-out backwards; }
+  .print-wait .preview-play { clip-path: inset(0 -4px 100%); }
+  .print-go .preview-play { animation: print-paper 1.3s .1s cubic-bezier(.35,.15,.25,1) backwards; }
+  .print-go .preview-play::after { animation: print-head 1.3s .1s cubic-bezier(.35,.15,.25,1) backwards; }
+  .print-go .preview-play .btn { animation: print-stamp .6s 1s cubic-bezier(.2,.9,.3,1.3) backwards; }
+  .preview-media.print-go::before { animation: print-slot 1.8s backwards; }
+}
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .slip, .bar i { animation: none; }
-  .print-wait .preview-play { clip-path: none; }
-  .print-go .preview-play, .print-go .preview-play::after, .print-go .preview-play .btn, .print-go::before { animation: none; }
   .bar { transition: none; }
 }
 

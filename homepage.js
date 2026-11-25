@@ -40,25 +40,54 @@ previewVideo.addEventListener("error", () => {
   previewLink.focus({ preventScroll: true });
 });
 
-// Intro: the preview prints out like the payday slip when it scrolls into view (skipped for reduced motion).
-const previewBox = previewLink.closest(".preview-media");
+function replayPrint(box, { replayDelay = 0, ready = Promise.resolve(), canPrint = () => true } = {}) {
+  const revealThreshold = 0.15;
+  let inView = false;
+  let rearmTimer;
+
+  function rearm() {
+    box.classList.remove("print-go");
+    box.classList.toggle("print-wait", canPrint());
+  }
+
+  const watcher = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      inView = entry.isIntersecting && entry.intersectionRatio >= revealThreshold;
+      if (!entry.isIntersecting) {
+        if (replayDelay) rearmTimer = setTimeout(rearm, replayDelay);
+        else rearm();
+        continue;
+      }
+
+      clearTimeout(rearmTimer);
+      if (inView && box.classList.contains("print-wait")) {
+        ready.then(() => {
+          if (inView && canPrint()) box.classList.replace("print-wait", "print-go");
+        });
+      }
+    }
+  }, { threshold: [0, revealThreshold] });
+
+  // Reveal immediately when a control receives focus during the intro.
+  box.addEventListener("focusin", () => box.classList.remove("print-wait", "print-go"));
+  rearm();
+  watcher.observe(box);
+}
+
 if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  replayPrint($("payday").closest(".slip-wrap"));
+
   const poster = previewLink.querySelector("img");
   const posterReady = poster.complete ? Promise.resolve() : new Promise(done => {
     poster.addEventListener("load", done, { once: true });
     poster.addEventListener("error", done, { once: true });
     setTimeout(done, 2000);
   });
-  const watcher = new IntersectionObserver(entries => {
-    if (!entries.some(entry => entry.isIntersecting)) return;
-    watcher.disconnect();
-    posterReady.then(() => previewBox.classList.replace("print-wait", "print-go"));
-  }, { threshold: 0.5, rootMargin: "0px 0px -25% 0px" }); // half the frame must be above the lowest quarter of the screen
-  previewBox.addEventListener("animationend", event => {
-    if (event.animationName === "print-slot") previewBox.classList.remove("print-go");
+  replayPrint(previewLink.closest(".preview-media"), {
+    replayDelay: 1200,
+    ready: posterReady,
+    canPrint: () => !previewLink.hidden
   });
-  previewBox.classList.add("print-wait");
-  watcher.observe(previewBox);
 }
 
 // Contact: copy the address (works even when the device has no email app for mailto: links).
