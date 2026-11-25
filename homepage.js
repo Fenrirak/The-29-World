@@ -25,6 +25,7 @@ previewLink.addEventListener("click", event => {
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   previewError.hidden = true;
+  previewVideo.poster = previewLink.querySelector("img").src;
   previewVideo.src = previewLink.href;
   previewVideo.hidden = false;
   previewLink.hidden = true;
