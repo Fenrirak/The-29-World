@@ -4,7 +4,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
 .skip-link { position: absolute; left: 12px; top: 8px; z-index: 60; transform: translateY(-150%); padding: 8px 14px; background: var(--card); color: var(--ink); }
 .skip-link:focus { transform: none; }
 main.home-main { width: 100%; max-width: none; margin: 0; padding: 0; flex: 1; }
-.home-main a:focus-visible, .home-main input:focus-visible { outline: 3px solid var(--gold-dark); outline-offset: 4px; }
+.home-main a:focus-visible { outline: 3px solid var(--gold-dark); outline-offset: 4px; }
 .hero a:focus-visible { outline-color: var(--gold); }
 .home-nav { display: flex; gap: 4px; }
 .home-nav a { color: #fff; text-decoration: none; font-weight: 600; font-size: var(--fs-md); padding: 8px 14px; border-radius: var(--sw-m); }
@@ -44,6 +44,8 @@ html.dark-mode .ledger .out dd { color: var(--coral); }
 .slip label { display: flex; justify-content: space-between; font-weight: 700; color: var(--hd); }
 .slip label strong { font-variant-numeric: tabular-nums; }
 .slip input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 30px; margin: 4px 0 0; padding: 0; background: none; cursor: pointer; --fill: 28.5%; }
+.slip input[type="range"]:focus { outline: none; }
+.slip label:has(+ input[type="range"]:focus-visible) { text-decoration: underline 2px; text-underline-offset: 4px; }
 .slip input[type="range"]::-webkit-slider-runnable-track { height: 10px; border-radius: 6px; background: linear-gradient(90deg, var(--mint) var(--fill), var(--line) var(--fill)); }
 .slip input[type="range"]::-moz-range-track { height: 10px; border-radius: 6px; background: linear-gradient(90deg, var(--mint) var(--fill), var(--line) var(--fill)); }
 .slip input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; margin-top: -9px; border-radius: 50%; border: 3px solid var(--navy-900); background: linear-gradient(135deg, var(--gold), var(--gold-dark)); box-shadow: var(--shadow-sm); }
