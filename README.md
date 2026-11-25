@@ -55,4 +55,4 @@ Selawik and Open Sans are used under their own licenses (see `fonts/`).
 
 ## Contact
 
-See the [About page](about.html).
+See the [About section](index.html#about).

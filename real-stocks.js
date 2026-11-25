@@ -20,6 +20,29 @@ const REAL_STOCKS = [
 ].map(fund => ({...fund, kind:"etf", exchange:fund.vanguardId ? "NYSE Arca" : "NZX",
   currency:fund.vanguardId ? "USD" : "NZD", issuer:fund.vanguardId ? "Vanguard" : "Smart"})));
 
+// Latest cash declaration available when the initial quote catalog was checked.
+const initialIssuerCash = [
+  ["AAPL","2026-11-12","2026-11-16",27,"USD"],
+  ["ANZ","2026-11-12","2026-12-18",83,"AUD"],
+  ["AUS","2026-11-27","2026-12-18",4.635,"NZD"],
+  ["GOOGL","2026-12-07","2026-12-14",22,"USD"],
+  ["MDZ","2026-11-27","2026-12-18",8.643,"NZD"],
+  ["MFT","2026-12-10","2026-12-18",85,"NZD"],
+  ["MSFT","2026-11-19","2026-12-10",98,"USD"],
+  ["NZG","2026-11-27","2026-12-18",2.661,"NZD"],
+  ["VOO","2026-09-28","2026-09-30",182.26,"USD"],
+  ["VTI","2026-09-28","2026-09-30",95.55,"USD"],
+  ["WBC","2026-11-05","2026-12-21",77,"AUD"]
+];
+function startingIssuerFeed(symbol) {
+  const spec = REAL_STOCKS.find(s=>s.symbol === symbol);
+  if (!spec) return null;
+  const events = initialIssuerCash.filter(row=>row[0] === symbol).map(([,ex,pay,cents,currency])=>({
+    ex,pay,cents,currency,key:ex,zone:spec.exchange === "NZX" ? "Pacific/Auckland" : "America/New_York"
+  }));
+  return {checked:"2026-11-24", events};
+}
+
 // Published closing snapshots for a site whose nightly importer has yet to populate Firestore.
 // US stocks use Yahoo Finance daily close and dated shares_out series. NZX company closes
 // use NZXplorer and issued counts from NZX. Funds use Smart and Vanguard issuer feeds.
