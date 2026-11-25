@@ -274,6 +274,31 @@ async function _t29DirectWrite(db, ref, method, data, options) {
       if (method === "update") return await updateDoc(ref, data);
       return await (options ? setDoc(ref, data, options) : setDoc(ref, data));
     }
+    // Opening a page only stamps activity. A trade or clock probe can change
+    // the class version without changing any summary fields. Commit this
+    // pair without a class-wide updateTime precondition. The rules still
+    // check the entire projection against the class as it exists at commit.
+    if (method === "update" && Object.keys(data).length === 1 && "lastActivityAt" in data) {
+      const snap = await getDocFromServer(ref);
+      if (!snap.exists()) throw Object.assign(new Error("Class not found."), { code: "not-found" });
+      const source = _t29SummarySource(snap.data());
+      if (source.archived || source.lastActivityAt >= data.lastActivityAt) return;
+      const batch = writeBatch(db);
+      await _t29Flush(db, batch, [op], new Map([[ref.path, source]]));
+      try { return await batch.commit(); }
+      catch (error) {
+        if (error.code !== "permission-denied") throw error;
+        // A concurrent rename, roster edit or archive changes the projection
+        // itself. Recheck the latest state before writing either document.
+        return await runTransaction(db, async tx => {
+          const latest = await tx.get(ref);
+          if (!latest.exists()) throw error;
+          const cls = _t29SummarySource(latest.data());
+          if (cls.archived || cls.lastActivityAt >= data.lastActivityAt) return;
+          await _t29Flush(db, tx, [op], new Map([[ref.path, cls]]));
+        });
+      }
+    }
     // Co-teacher join is deliberately blind: the joining teacher has no
     // permission to read this class before committing the invitation.
     if (method === "update" && Object.hasOwn(data, "coTeacherJoin")) {
