@@ -11,9 +11,8 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=b182782b">
+<link rel="stylesheet" href="style.css?v=8566c89f">
 <style>.auth-home{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px;font-weight:700;font-size:var(--fs-md);color:var(--navy-700);text-decoration:none}.auth-home:hover,.auth-home:focus-visible{text-decoration:underline}html.dark-mode .auth-home{color:var(--heading-text)}</style>
-<style>.start-option input[type="radio"]{flex:0 0 20px;width:20px;min-width:20px;height:20px;min-height:20px;max-width:20px;aspect-ratio:1/1;padding:0;margin:2px 0 0;align-self:flex-start;border-radius:50%}</style>
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -31,8 +30,8 @@
   <div class="auth-card">
     <a class="auth-home" href="index.html">&larr; Back to homepage</a>
     <div class="auth-logo">
-      <span class="coin" id="logoCoin">$</span>
-      <h1 style="margin:0;">29 World™</h1>
+      <img class="auth-logo-icon" src="Favicon.png" alt="" width="40" height="40">
+      <h1>29 World™</h1>
     </div>
     <p class="auth-title">A classroom economy for the whole class, where every student runs their own money.</p>
 
@@ -245,7 +244,7 @@
 <script defer src="data-markets.js?v=d85af4d9"></script>
 <script defer src="base-template.js?v=00f9bee4"></script>
 <script>
-// Paint the role tabs, account tabs and header logo.
+// Paint the role and account tab icons.
 function paintIcons() {
   if (typeof icon !== "function") return;
   const map = [
@@ -258,8 +257,6 @@ function paintIcons() {
     const slot = el && el.querySelector(".icon-slot");
     if (slot) slot.innerHTML = icon(name, 14);
   });
-  const logo = document.getElementById("logoCoin");
-  logo.innerHTML = icon("coin", 26);
 }
 
 // After switching tabs, put the cursor in the first box so typing can start
