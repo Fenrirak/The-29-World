@@ -7,7 +7,7 @@ function lifeStoreBarRender(me) {
   if (!vs.length) { LIFE_STORE_VID = ""; el.classList.add("hidden"); el.innerHTML = ""; return; }
   if (!vs.some(v => v.id === LIFE_STORE_VID)) LIFE_STORE_VID = "";
   el.classList.remove("hidden");
-  el.innerHTML = `<div class="cc-pb-voucher"><label for="lifeStoreVoucher">${icon("ticket", 14)} Life voucher <span class="muted-small">(weekly, one use)</span></label>
+  el.innerHTML = `<div class="cc-pb-voucher"><label for="lifeStoreVoucher">Life voucher <span class="muted-small">(weekly, one use)</span></label>
     <select id="lifeStoreVoucher" onchange="lifeStoreSetVoucher(this.value)"><option value="">None</option>${vs.map(v => `<option value="${escapeHtml(v.id)}" ${LIFE_STORE_VID === v.id ? "selected" : ""}>${v.pct}% off &middot; ${escapeHtml(v.itemName)} &middot; this week only</option>`).join("")}</select></div>`;
 }
 function lifeStoreSetVoucher(id) { LIFE_STORE_VID = id || ""; updateAllBuyLabels(); }

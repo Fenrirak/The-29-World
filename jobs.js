@@ -897,7 +897,7 @@ function renderMyJob(me, cls) {
           </div>
         </div>
         ${!isTop && job.autoPromoteWeeks > 0
-          ? `<p class="muted-small tier-auto-note">${icon("repeat", 12)} Auto-promotes every ${job.autoPromoteWeeks} week${job.autoPromoteWeeks === 1 ? "" : "s"}. Next tier: <strong>${escapeHtml(tiers[tierIdx + 1].name)}</strong> (${fmtMoney(tiers[tierIdx + 1].wage)}/pay day)</p>`
+          ? `<p class="muted-small tier-auto-note">Auto-promotes every ${job.autoPromoteWeeks} week${job.autoPromoteWeeks === 1 ? "" : "s"}. Next tier: <strong>${escapeHtml(tiers[tierIdx + 1].name)}</strong> (${fmtMoney(tiers[tierIdx + 1].wage)}/pay day)</p>`
           : isTop ? `<p class="muted-small tier-auto-note">Top tier. You've reached the highest level!</p>` : ""}
       ` : ""}
     </div>
@@ -1050,7 +1050,7 @@ function renderJobBoard(me, cls) {
           </div>
         `).join("")}
       </div>
-      ${j.autoPromoteWeeks > 0 ? `<p class="muted-small" style="margin:10px 0 0;">${icon("repeat", 11)} Auto-promotes every ${j.autoPromoteWeeks} week${j.autoPromoteWeeks === 1 ? "" : "s"}</p>` : ""}
+      ${j.autoPromoteWeeks > 0 ? `<p class="muted-small" style="margin:10px 0 0;">Auto-promotes every ${j.autoPromoteWeeks} week${j.autoPromoteWeeks === 1 ? "" : "s"}</p>` : ""}
       <p class="muted-small" style="margin:10px 0 0;">${escapeHtml(jobLogSummary(j))}</p>
       <div class="job-board-footer">
         ${isMine

@@ -973,7 +973,7 @@ function ccStoreBarRender(me, cls) {
       <label class="cc-check"><input type="checkbox" ${CC_STORE_PAY.split ? "checked" : ""} onchange="ccStoreSetSplit(this.checked)"> Part card, part cash</label>
       ${CC_STORE_PAY.split ? `<span>Card covers up to $<input id="ccStoreCardMax" type="number" min="0.01" step="0.01" style="width:90px" value="${ccEsc(CC_STORE_PAY.cardMax)}" placeholder="all it can" onchange="ccStoreSetCardMax(this.value)"></span>` : ""}
       <div class="muted-small">${CC_STORE_PAY.split ? "A split gets cashback on the card part but not the store discount. " : ""}Splitting works on purchases of ${fmtMoney(cardSettings(cls).splitMin)} or more, or whenever the card can't cover it all.</div></div>` : ""}
-    ${vs.length ? `<div class="cc-pb-voucher"><label for="ccStoreVoucher">${icon("ticket", 14)} Voucher</label>
+    ${vs.length ? `<div class="cc-pb-voucher"><label for="ccStoreVoucher">Voucher</label>
       <select id="ccStoreVoucher" onchange="ccStoreSetVoucher(this.value)"><option value="">None</option>${vs.map(v => `<option value="${ccEsc(v.id)}" ${CC_STORE_PAY.voucherId === v.id ? "selected" : ""}>${ccEsc(cardVoucherLabel(v))} · by ${ccEsc(cardDateLabel(v.expiryKey))}</option>`).join("")}</select></div>` : ""}`;
 }
 async function ccStoreSetPay(useCard) {

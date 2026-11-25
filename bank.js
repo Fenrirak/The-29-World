@@ -339,7 +339,7 @@ function renderSavingsSettings(cls) {
         <div class="cc-set ${freq === "daily" ? "hidden" : ""}" id="bsDayWrap"><label for="bsDay">On which day</label><p>The day of the week interest is paid.</p>
           <select id="bsDay" onchange="bsChanged()" ${auto ? "" : "disabled"}>${Object.keys(DAY_LABEL).map(d => `<option value="${d}" ${d === day ? "selected" : ""}>${DAY_LABEL[d]}</option>`).join("")}</select></div>
       </div>
-      <p class="muted-small bs-tune">${icon("sparkle", 14)}<span>Accounts you add from the recommended list are personalised to this schedule: fees and withdrawal limits scale with how often interest is paid.</span></p>
+      <p class="muted-small bs-tune"><span>Accounts you add from the recommended list are personalised to this schedule: fees and withdrawal limits scale with how often interest is paid.</span></p>
     </section>
     <div class="bs-save"><button class="btn gold" id="bsSaveBtn" onclick="bsSave()">Save interest settings</button>
       <span class="muted-small">These settings are for the <strong>Default everyday</strong> and <strong>savings</strong> accounts. Students are told when rates or the schedule change.</span></div>

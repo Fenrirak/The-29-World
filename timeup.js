@@ -67,7 +67,7 @@ function renderExemptionBox(u) {
   const box = document.getElementById("exemptionBox");
   const state = timeExemptionState(u);
   if (state === "pending") {
-    box.innerHTML = `<p class="muted-small">${icon("send", 13)} Your request for more time has been sent. Waiting on your teacher.</p>`;
+    box.innerHTML = `<p class="muted-small">Your request for more time has been sent. Waiting on your teacher.</p>`;
   } else if (state === "declined") {
     box.innerHTML = `<p class="muted-small">Your teacher declined your request for more time today. You can ask again tomorrow.</p>`;
   } else {

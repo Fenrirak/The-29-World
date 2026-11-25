@@ -120,7 +120,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
       <button class="btn small secondary" type="button" onclick="closeNewClassModal()">Close</button>
     </div>
     <form onsubmit="return submitNewClass(event)">
-      <label for="ncName"><span class="icon-slot" data-icon="building"></span> Class name</label>
+      <label for="ncName">Class name</label>
       <input id="ncName" required placeholder="Class name, e.g. Room 12">
       <div id="ncStartWrap">
         <label>How do you want to start?</label>
@@ -147,7 +147,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         </details>
       </div>
       <div id="ncTemplateWrap" class="hidden">
-        <label for="ncTemplate"><span class="icon-slot" data-icon="repeat"></span> Copy settings from</label>
+        <label for="ncTemplate">Copy settings from</label>
         <select id="ncTemplate"></select>
         <p class="muted-small">Jobs, properties, side hustles, the store, random events, tax rates and every other class setting will be copied over. Students, balances, and activity history always start fresh.</p>
       </div>
