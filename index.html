@@ -27,16 +27,14 @@
       const params = new URLSearchParams(location.search);
       const accountLink = ["role", "returnTo", "mode", "oobCode", "link", "deep_link_id"]
         .some(key => params.has(key));
-      let resume = false;
       try {
-        resume = !!localStorage.getItem("anw_session") && !location.hash;
         document.documentElement.classList.toggle("dark-mode", localStorage.getItem("t29-dark-mode") === "1");
       } catch (_) { /* Public pages also work with storage disabled. */ }
-      if (accountLink || resume) location.replace("login.html" + location.search + location.hash);
+      if (accountLink) location.replace("login.html" + location.search + location.hash);
     })();
   </script>
   <link rel="stylesheet" href="style.css?v=b182782b">
-  <link rel="stylesheet" href="homepage.css?v=a3ab900f">
+  <link rel="stylesheet" href="homepage.css?v=d40b8c73">
   <script defer src="homepage.js?v=69c1167f"></script>
   <script defer src="offline.js?v=7c18231f"></script>
   <script type="application/ld+json">
@@ -175,6 +173,7 @@
           <li><a class="about-link" href="https://www.legend-of-fenrirak.com" target="_blank" rel="noopener"><span class="about-link-text"><span class="about-link-title">Legend of Fenrirak</span><span class="about-link-url">www.legend-of-fenrirak.com</span></span></a></li>
           <li><a class="about-link" href="https://fenrirak.github.io/No-BG/" target="_blank" rel="noopener"><span class="about-link-text"><span class="about-link-title">No BG</span><span class="about-link-url">fenrirak.github.io/No-BG</span></span></a></li>
           <li><a class="about-link" href="https://fenrirak.github.io/Moonlit-Lantern/" target="_blank" rel="noopener"><span class="about-link-text"><span class="about-link-title">Moonlit Lantern</span><span class="about-link-url">fenrirak.github.io/Moonlit-Lantern</span></span></a></li>
+          <li><a class="about-link" href="https://fenrirak.github.io/Hedgehogs-Comet/index.html" target="_blank" rel="noopener"><span class="about-link-text"><span class="about-link-title">Hedgehog's Comet</span><span class="about-link-url">fenrirak.github.io/Hedgehogs-Comet</span></span></a></li>
         </ul>
       </div>
     </section>
