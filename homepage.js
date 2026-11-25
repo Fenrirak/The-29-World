@@ -53,7 +53,7 @@ if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: re
     if (!entries.some(entry => entry.isIntersecting)) return;
     watcher.disconnect();
     posterReady.then(() => previewBox.classList.replace("print-wait", "print-go"));
-  }, { threshold: 0.4 });
+  }, { threshold: 0.5, rootMargin: "0px 0px -25% 0px" }); // half the frame must be above the lowest quarter of the screen
   previewBox.addEventListener("animationend", event => {
     if (event.animationName === "print-slot") previewBox.classList.remove("print-go");
   });
