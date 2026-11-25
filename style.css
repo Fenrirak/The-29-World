@@ -4433,7 +4433,6 @@ html :is(.t29-keys-close,.t29-toast-close,.av-x,.av-lb-x,.av-toast-x,.cart-x,.ch
          .todo-dismiss,.notif-dismiss,.days-close,.ws-tab-x,.ws-paper .ws-x,.qb-opt-row .qb-del,
          .qty-btn,.cl-step,.mc-x,.mc-step,.t29s-x,.ws-paper .ws-step button,.cd-check,.cc-mini-tick,.ins-co-caret,.bc-chev){
   font-size:0;line-height:0;
-  --g-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6l12 12M18 6L6 18' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 html :is(.qty-btn,.cl-step,.mc-step)[aria-label^="Increase"],
 html .ws-paper .ws-step button[aria-label^="More"]{--g-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 5v14M5 12h14' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");}
@@ -4447,8 +4446,9 @@ html :is(.t29-keys-close,.t29-toast-close,.av-x,.av-lb-x,.av-toast-x,.cart-x,.ch
   width:var(--g-size,20px);height:var(--g-size,20px);
   margin:calc(var(--g-size,20px) / -2) 0 0 calc(var(--g-size,20px) / -2);
   background:currentColor;pointer-events:none;
-  -webkit-mask:var(--g-img) center / 100% 100% no-repeat;
-          mask:var(--g-img) center / 100% 100% no-repeat;
+  --g-close-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6l12 12M18 6L6 18' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
+  -webkit-mask:var(--g-img,var(--g-close-img)) center / 100% 100% no-repeat;
+          mask:var(--g-img,var(--g-close-img)) center / 100% 100% no-repeat;
 }
 html :is(.ins-co-caret){--g-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7.5 5v14l9-7z' fill='%23000' stroke='%23000' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E");}
 html :is(.bc-chev){--g-img:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 7.5h14l-7 9z' fill='%23000' stroke='%23000' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E");}

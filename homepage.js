@@ -41,7 +41,7 @@ previewVideo.addEventListener("error", () => {
 });
 
 // Intro: the preview prints out like the payday slip when it scrolls into view (skipped for reduced motion).
-const previewBox = previewLink.parentElement;
+const previewBox = previewLink.closest(".preview-media");
 if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
   const poster = previewLink.querySelector("img");
   const posterReady = poster.complete ? Promise.resolve() : new Promise(done => {
