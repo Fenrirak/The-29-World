@@ -6,6 +6,13 @@
 .dividend-heading, .dividend-actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
 .dividend-heading span, .dividend-panel dt, .dividend-rate small { font-size: .9rem; font-weight: normal; }
 .dividend-panel .dividend-rate { font-size: 1.6rem; font-weight: bold; margin: .4rem 0; }
+.issuer-dividend { border-inline-start: 1px solid var(--line); }
+.issuer-dividend > summary { cursor: pointer; list-style: none; justify-content: flex-start; }
+.issuer-dividend > summary::-webkit-details-marker { display: none; }
+.issuer-dividend > summary::before { content: "\25B8"; transition: transform .15s; }
+.issuer-dividend[open] > summary::before { transform: rotate(90deg); }
+.issuer-dividend > summary span { margin-inline-start: auto; }
+.issuer-dividend[open] > summary { margin-bottom: .25rem; }
 .dividend-dates { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,9rem),1fr)); gap: .75rem; margin: 1rem 0; }
 .dividend-panel dd { margin: .2rem 0 0; font-weight: bold; }
 .dividend-actions { justify-content: flex-end; margin-top: 1.25rem; }

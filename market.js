@@ -464,6 +464,7 @@ async function render(background = false) {
   // A class snapshot can arrive between typing a quantity and pressing Buy/Sell.
   const quantities = new Map([...list.querySelectorAll('input[id^="buy-"], input[id^="sell-"]')]
     .filter(input => input.value !== "").map(input => [input.id, input.value]));
+  const openDividends = new Set([...list.querySelectorAll("details.issuer-dividend[open]")].map(d => d.dataset.dividendCo));
   list.innerHTML = "";
 
   if (cls.companies.length === 0) {
@@ -562,6 +563,7 @@ async function render(background = false) {
     for (const input of div.querySelectorAll('input[id^="buy-"], input[id^="sell-"]')) {
       if (quantities.has(input.id)) input.value = quantities.get(input.id);
     }
+    if (openDividends.has(co.id)) div.querySelector("details.issuer-dividend")?.setAttribute("open", "");
     applyCompanyMsg(co.id);
   });
   // A student who held shares through a split is told once, with a before-and-after (see split.js).
@@ -603,17 +605,17 @@ function issuerCard(co, cls, owned, units) {
     ["Nasdaq dividend history","https://www.nasdaq.com/market-activity/stocks/" + spec.symbol.toLowerCase() + "/dividend-history"];
   const link = `<a href="${source[1]}" target="_blank" rel="noopener noreferrer">${source[0]}</a>`;
   const title = spec.kind === "etf" ? "Fund distribution" : "Issuer dividend";
-  if (!event) return `<section class="dividend-panel"><strong>${title}</strong><p>${checked ? "No cash declaration on file as of " + realDate(checked) + "." : "Awaiting the first exchange update."}</p>${link}</section>`;
+  if (!event) return `<details class="dividend-panel issuer-dividend" data-dividend-co="${co.id}"><summary class="dividend-heading"><strong>${title}</strong></summary><p>${checked ? "No cash declaration on file as of " + realDate(checked) + "." : "Awaiting the first exchange update."}</p>${link}</details>`;
   const recorded = now >= dividendCutoff(event.ex,event.zone);
   const register = cls.dividendRegisters?.[co.id];
   const mine = register ? register[CURRENT.username] || 0 : owned;
   const position = !IS_TEACHER && plan?.issuer ? `<p>${recorded ? "Your payment" : "At your current holding"} · <strong>${fmtMoney(dividendCashCents(mine,event.cents) / 100)}</strong></p>` : "";
-  return `<section class="dividend-panel" aria-label="${title}"><div class="dividend-heading"><strong>${title}</strong>
-    <span>${plan?.issuer ? (recorded ? "Awaiting payment" : "Declared") : (recorded ? "Latest reported" : "Published")}</span></div>
+  return `<details class="dividend-panel issuer-dividend" data-dividend-co="${co.id}" aria-label="${title}"><summary class="dividend-heading"><strong>${title}</strong>
+    <span>${plan?.issuer ? (recorded ? "Awaiting payment" : "Declared") : (recorded ? "Latest reported" : "Published")}</span></summary>
     <p class="dividend-rate">${dividendRate(event.cents)} <small>${escapeHtml(event.currency)} per ${units === "units" ? "unit" : "share"}</small></p>
     <dl class="dividend-dates"><div><dt>Ex-dividend date</dt><dd>${realDate(event.ex)}</dd></div>
     <div><dt>Payment date</dt><dd>${realDate(event.pay)}</dd></div></dl>${position}
-    <p class="muted-small">${event.zone === "America/New_York" ? "New York" : "New Zealand"} dates · 1 ${escapeHtml(event.currency)} pays 1 classroom dollar.</p>${link}</section>`;
+    <p class="muted-small">${event.zone === "America/New_York" ? "New York" : "New Zealand"} dates · 1 ${escapeHtml(event.currency)} pays 1 classroom dollar.</p>${link}</details>`;
 }
 
 function dividendCard(co, cls, owned, units) {
