@@ -239,6 +239,31 @@ async function autoMarketDayIfDue(classCode) {
   return results;
 }
 
+// TODO(database migration): Restore midnight-only updates when the replacement
+// backend can run the quote importer reliably without a site visit.
+async function requestRealStockRefreshIfDue(classCode) {
+  const now = trustedNow().getTime();
+  const cacheKey = "t29-real-stock-check-until";
+  try { if (Number(sessionStorage.getItem(cacheKey)) > now) return; }
+  catch (e) { /* storage is optional */ }
+
+  const cls = await getClassCached(classCode);
+  if (!cls?.realStocksEnabled || cls.archived) return;
+
+  // One shared request covers all enabled classes. The worker publishes the quotes.
+  const ref = fdb.collection("marketRefresh").doc("global");
+  const nextCheck = await fdb.runTransaction(async tx => {
+    const state = (await tx.get(ref)).data() || {};
+    if (state.nextCheckAt > now) return state.nextCheckAt;
+    if (_t29TsMs(state.requestedAt) <= (state.checkedAt || 0)) {
+      tx.set(ref, {requestedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge: true});
+    }
+    return now + 5 * 60000;
+  });
+  try { sessionStorage.setItem(cacheKey, String(nextCheck)); }
+  catch (e) { /* storage is optional */ }
+}
+
 async function simulateMarketDay(classCode) {
   const classRef = classesCol().doc(classCode);
   let results = [];

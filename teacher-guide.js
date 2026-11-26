@@ -15,7 +15,8 @@ export function mountTeacherGuide(key, label) {
   guide.innerHTML = `
     <button class="tg-handle" type="button" aria-expanded="false" aria-controls="tgPanel"
       title="Pull down or click to open the guide">
-      <span aria-hidden="true" class="tg-film"></span> Guide <span aria-hidden="true" class="tg-chevron"></span>
+      <span aria-hidden="true" class="tg-film"></span> Guide
+      <span aria-hidden="true" class="tg-flap">Pull</span>
     </button>
     <section id="tgPanel" aria-labelledby="tgTitle" hidden>
       <header class="tg-heading"><h2 id="tgTitle"></h2>
@@ -32,7 +33,7 @@ export function mountTeacherGuide(key, label) {
 
   const stylesheet = document.createElement("link");
   stylesheet.rel = "stylesheet";
-  stylesheet.href = "teacher-guide.css?v=77d75371";
+  stylesheet.href = "teacher-guide.css?v=60da471c";
   stylesheet.onload = () => { guide.hidden = false; };
   document.body.append(guide);
   document.head.append(stylesheet);
@@ -48,9 +49,7 @@ export function mountTeacherGuide(key, label) {
   let video;
   function prepareStage() {
     if (!source) {
-      const activeIcon = topbar.querySelector('a.active [data-icon]');
       stage.innerHTML = `<div class="tg-preview">
-        <span class="tg-emblem" aria-hidden="true">${icon(activeIcon?.dataset.icon || "book", 24)}</span>
         <strong>Guide Video Coming Soon</strong>
       </div>`;
       return;

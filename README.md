@@ -32,9 +32,9 @@ Sign-in and saved data connect to the live Firebase project, so some features ma
 
 Teachers can enable **Stock Market → Real-world stocks and funds**, preview closing prices and add any number of available companies and funds in one selection. Every new class starts with this switched off. Turning it off pauses updates and keeps existing holdings. Trades use the numerical exchange price in classroom dollars. NZX listings show NZD and US listings show USD.
 
-The five exchange-traded funds use issuer feeds from Smart (NZG, MDZ and AUS) and Vanguard (VTI and VOO). The nightly job uses each fund's closing market price and reported units outstanding. Students trade whole units. The teacher preview retains the full reported amount when Vanguard reports fractions. The annual fund fee is informational and is already reflected in fund performance.
+The five exchange-traded funds use issuer feeds from Smart (NZG, MDZ and AUS) and Vanguard (VTI and VOO). The refresh job uses each fund's closing market price and reported units outstanding. Students trade whole units. The teacher preview retains the full reported amount when Vanguard reports fractions. The annual fund fee is informational and is already reflected in fund performance.
 
-The GitHub Actions workflow in `.github/workflows/real-stocks.yml` runs at midnight in `Pacific/Auckland`, including daylight saving. It updates Firestore even when the website is closed. Each quote carries its trading date and share-count date. Weekends keep the last close. If a feed is incomplete, the last verified quote stays in place and the workflow reports the affected ticker.
+The stock workflow runs at 12:13 am in `Pacific/Auckland`, including daylight saving. It updates Firestore even when the website is closed. Opening any signed-in page in a class with real stocks enabled queues a shared refresh if one is due. GitHub Actions checks for requests every 30 minutes and publishes verified prices to all active classes with real stocks enabled. Another check can be requested after the NZ or US close is due. Each quote carries its trading date and share-count date. Weekends keep the last close. If a feed is incomplete, the last verified quote stays in place and the workflow reports the affected ticker.
 
 ### One-time setup
 

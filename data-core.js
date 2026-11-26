@@ -1302,7 +1302,7 @@ async function requireLogin(opts) {
     const key = moduleKeyOfPage() || page;
     const extraGuides = { teacher: "Dashboard", "teacher-home": "My Classes", quizzes: "Quizzes", reports: "Reports", worksheets: "Worksheets" };
     const label = key === "budget" ? "Budgeting" : T29_MODULES[key] || extraGuides[key];
-    if (label) import(new URL("teacher-guide.js?v=6324d65c", document.baseURI)).then(({ mountTeacherGuide }) => mountTeacherGuide(key, label))
+    if (label) import(new URL("teacher-guide.js?v=07565f9c", document.baseURI)).then(({ mountTeacherGuide }) => mountTeacherGuide(key, label))
       .catch(error => console.warn("Could not load the teacher guide.", error));
   }
   return u;
@@ -4496,6 +4496,9 @@ async function anwGlobalBootstrap() {
       window.T29_RATES_READY = Promise.resolve();
     } else {
       autoMarketDayIfDue(u.classCode).catch(e => console.error("Auto stock market day failed:", e));
+      if (u.role === "student" || u.role === "teacher") {
+        requestRealStockRefreshIfDue(u.classCode).catch(e => console.warn("Real stock refresh request failed:", e));
+      }
       autoPropertyMarketDayIfDue(u.classCode).catch(e => console.error("Auto property market day failed:", e));
       window.T29_RATES_READY = autoVariableRatesIfDue(u.classCode).catch(() => {});
     }

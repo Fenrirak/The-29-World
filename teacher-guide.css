@@ -18,6 +18,7 @@ body:has(#tgPanel:not([hidden])) .sidebar-hint { display: none; }
 #teacherGuide button { font: inherit; cursor: pointer; }
 #teacherGuide button:focus-visible { outline: 3px solid #e5ac32; outline-offset: 2px; }
 #teacherGuide .tg-handle {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -56,14 +57,30 @@ body:has(#tgPanel:not([hidden])) .sidebar-hint { display: none; }
   border-left: 6px solid currentColor;
   border-block: 3.5px solid transparent;
 }
-.tg-chevron {
-  width: 7px;
-  height: 7px;
-  margin: -3px 1px 0 2px;
-  border: solid #ebcb80;
-  border-width: 0 1.5px 1.5px 0;
-  transform: rotate(45deg);
+.tg-flap {
+  position: absolute;
+  top: 100%;
+  right: 11px;
+  display: grid;
+  place-items: center;
+  min-width: 37px;
+  height: 20px;
+  padding: 1px 7px 2px;
+  border-radius: 0 0 7px 3px;
+  background: linear-gradient(#bc9247, #ffdf98 32%, #f4cb7e);
+  box-shadow: 0 2px 3px #17243c28;
+  color: #2c3040;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  transform-origin: top center;
+  transform: perspective(90px) rotateX(-12deg) rotate(-3deg);
+  transition: transform .22s ease;
 }
+@media (hover: hover) {
+  .tg-handle:hover .tg-flap { transform: perspective(90px) rotateX(-23deg) rotate(2deg); }
+}
+.tg-handle:active .tg-flap { transform: none; }
 #tgPanel {
   width: min(360px, 82vw, max(210px, 82vh));
   max-width: calc(100vw - var(--tg-edge) - 10px);
@@ -75,7 +92,7 @@ body:has(#tgPanel:not([hidden])) .sidebar-hint { display: none; }
   border-radius: 0 0 17px 17px;
   box-shadow: 0 12px 36px #101c3540, 0 2px 8px #101c351a;
   transform-origin: 95% 0;
-  animation: tg-unfold .36s cubic-bezier(.2,.8,.25,1) both;
+  animation: tg-unfold .55s cubic-bezier(.24,.68,.26,1) both;
 }
 .tg-heading {
   display: flex;
@@ -143,7 +160,6 @@ body:has(#tgPanel:not([hidden])) .sidebar-hint { display: none; }
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 12px;
   padding: 16px;
   color: #fff4d9;
   text-align: center;
@@ -152,7 +168,7 @@ body:has(#tgPanel:not([hidden])) .sidebar-hint { display: none; }
     radial-gradient(ellipse at 12% -20%, #56648c 0%, transparent 55%),
     linear-gradient(140deg, #273651, #16283b 64%, #284347);
 }
-/* Fine concentric orbits cross the film frame, behind the module's own icon. */
+/* Fine concentric orbits frame the preview text. */
 .tg-preview::before, .tg-preview::after {
   content: "";
   position: absolute;
@@ -165,17 +181,6 @@ body:has(#tgPanel:not([hidden])) .sidebar-hint { display: none; }
 }
 .tg-preview::before { bottom: 56%; left: -32%; box-shadow: 0 5px 0 #f6d78810; }
 .tg-preview::after { top: 66%; left: 8%; box-shadow: 0 -6px 0 #f6d78812; }
-.tg-emblem {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid #fae4b0;
-  border-radius: 50%;
-  color: #24364c;
-  background: linear-gradient(145deg, #fff0c1, #e7ba67);
-  box-shadow: 0 0 0 5px #e3c38317, 0 4px 16px #09111f55;
-}
 .tg-preview strong { font-size: clamp(.95rem, 2.8vw, 1.15rem); line-height: 1.2; }
 .tg-stage .tg-error { margin: 0; padding: 20px; color: #fff4d9; }
 @keyframes tg-unfold {
@@ -186,14 +191,13 @@ body:has(#tgPanel:not([hidden])) .sidebar-hint { display: none; }
 @media (max-width: 640px) {
   #teacherGuide { --tg-edge: max(8px, env(safe-area-inset-right, 0px)); }
   #tgPanel { width: min(76vw, 300px); }
-  .tg-preview { gap: 9px; }
-  .tg-emblem { width: 40px; height: 40px; }
 }
 @media (max-height: 480px) and (orientation: landscape) {
   #tgPanel { width: min(230px, 55vw); }
 }
 @media (prefers-reduced-motion: reduce) {
   #tgPanel { animation: none; }
+  #teacherGuide .tg-flap { transform: none; transition: none; }
 }
 @media print {
   #teacherGuide { display: none !important; }
