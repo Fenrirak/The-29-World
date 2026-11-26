@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=a27c8e99">
+<link rel="stylesheet" href="style.css?v=6ca6b908">
 <style>.auth-home{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px;font-weight:700;font-size:var(--fs-md);color:var(--navy-700);text-decoration:none}.auth-home:hover,.auth-home:focus-visible{text-decoration:underline}html.dark-mode .auth-home{color:var(--heading-text)}</style>
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
@@ -37,7 +37,7 @@
     <p class="auth-title">A classroom economy for the whole class, where every student runs their own money.</p>
 
     <!-- ROLE SWITCH -->
-    <div class="tabs">
+    <div class="tabs" id="roleTabs">
       <button id="role-teacher" class="active" onclick="showRole('teacher')"><span class="icon-slot"></span> I'm a Teacher</button>
       <button id="role-student" onclick="showRole('student')"><span class="icon-slot"></span> I'm a Student</button>
     </div>
@@ -184,6 +184,7 @@
       <form id="panel-student-new" class="hidden" onsubmit="return doStudentSignup(event)">
         <label for="s-code">Class code</label>
         <input id="s-code" placeholder="Class code, e.g. F7K2M" required autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" style="text-transform:uppercase;">
+        <p class="field-hint">If your teacher reviews new students, this form sends them a join request.</p>
         <div class="name-row">
           <div>
             <label for="s-first">First name</label>
@@ -207,6 +208,13 @@
       </form>
     </div>
 
+    <section id="joinStatusPanel" class="admission-box hidden" aria-labelledby="joinStatusTitle">
+      <span id="joinStatusIcon" class="admission-status-icon" aria-hidden="true"></span>
+      <h2 id="joinStatusTitle" tabindex="-1"></h2>
+      <p id="joinStatusText" role="status"></p>
+      <div class="admission-person"><strong id="joinStatusName"></strong><small id="joinStatusClass"></small></div>
+      <button class="btn secondary" type="button" onclick="leaveJoinStatus()">Back to login</button>
+    </section>
     <div id="msg"></div>
   </div>
 </div>
@@ -238,7 +246,7 @@
 <script type="module" src="firebase-init.js?v=6c92cfd5"></script>
 <script defer src="icons.js?v=be447cba"></script>
 <script defer src="offline.js?v=7c18231f"></script>
-<script defer src="data-core.js?v=4c750c38"></script>
+<script defer src="data-core.js?v=502ea8ab"></script>
 <script defer src="data-money.js?v=4dc6f0d3"></script>
 <script defer src="data-life.js?v=e6f73869"></script>
 <script defer src="data-property.js?v=4b2feaee"></script>
@@ -444,11 +452,12 @@ async function doLoginInner(e) {
   // "remember" now only prefills the username field, never the password.
   const key = "anw_remember_" + (isTeacherForm ? "teacher" : "student");
   if (remember) {
-    localStorage.setItem(key, JSON.stringify({ username: res.user.username || username }));
+    localStorage.setItem(key, JSON.stringify({ username: (res.applicant || res.user).username || username }));
   } else {
     localStorage.removeItem(key);
   }
 
+  if (res.applicant) { showJoinStatus(res.applicant); return false; }
   window.location.href = getSafeReturnTo() || (res.user.role === "teacher" ? "teacher-home.html" : "student.html");
   return false;
 }
@@ -550,9 +559,49 @@ async function doStudentSignupInner(e) {
   if (/\s/.test(username)) { showMsg("Usernames can't have spaces. Try something like sam.lee", false); return false; }
   const res = await createStudentAccount(name, username, password, code);
   if (!res.ok) { showMsg(res.error, false); return false; }
+  if (res.applicant) { showJoinStatus(res.applicant); return false; }
   setSession(username);
   window.location.href = "student.html?welcome=1";
   return false;
+}
+
+let stopJoinWatch;
+const joinStatusKey = "t29-waiting-for-class";
+function showJoinStatus(applicant) {
+  if (stopJoinWatch) stopJoinWatch();
+  sessionStorage.setItem(joinStatusKey, applicant.username);
+  for (const id of ["roleTabs", "role-panel-teacher", "role-panel-student"]) document.getElementById(id).classList.add("hidden");
+  document.getElementById("msg").replaceChildren();
+  document.getElementById("joinStatusPanel").classList.remove("hidden");
+  document.getElementById("joinStatusName").textContent = applicant.username;
+  document.getElementById("joinStatusClass").textContent = "Class code · " + applicant.requestedClass;
+  function paint(status) {
+    const declined = status === "declined";
+    document.getElementById("joinStatusIcon").innerHTML = icon(declined ? "lock" : "hourglass", 24);
+    document.getElementById("joinStatusTitle").textContent = declined ? "Request declined" : "Waiting for your teacher";
+    document.getElementById("joinStatusText").textContent = declined
+      ? "Your teacher declined this request. If you expected to join, speak to them about getting access."
+      : "Your request has been sent. This page will open your class when you’re approved. You can also come back and log in later.";
+  }
+  paint(applicant.joinStatus);
+  document.getElementById("joinStatusTitle").focus();
+  stopJoinWatch = usersCol().doc(applicant.username).onSnapshot({ includeMetadataChanges: true }, snap => {
+    if (snap.metadata.fromCache || snap.metadata.hasPendingWrites || !snap.exists) return;
+    const user = snap.data();
+    if (user.authUid !== applicant.authUid || firebase.auth().currentUser?.uid !== user.authUid) return;
+    if (user.role === "student") {
+      stopJoinWatch();
+      sessionStorage.removeItem(joinStatusKey);
+      setSession(user.username, user.sessionVersion);
+      location.replace("student.html?welcome=1");
+    } else paint(user.joinStatus);
+  }, () => { document.getElementById("joinStatusText").textContent = "Log in again to check your request when you’re back online."; });
+}
+async function leaveJoinStatus() {
+  if (stopJoinWatch) stopJoinWatch();
+  sessionStorage.removeItem(joinStatusKey);
+  await firebase.auth().signOut();
+  location.replace("login.html?role=student");
 }
 
 // Open the requested form as soon as the markup exists, including on slow school Wi-Fi.
@@ -583,7 +632,24 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // If already logged in, skip straight to dashboard
   const u = await getSessionUser();
-  if (u) location.replace(getSafeReturnTo() || (u.role === "teacher" ? "teacher-home.html" : "student.html"));
+  if (u) {
+    sessionStorage.removeItem(joinStatusKey);
+    location.replace(getSafeReturnTo() || (u.role === "teacher" ? "teacher-home.html" : "student.html"));
+    return;
+  }
+  // A reload of the waiting screen should resume the signed-in student's request.
+  const waiting = sessionStorage.getItem(joinStatusKey);
+  if (waiting) {
+    const profile = await getUser(waiting, { fresh: true }).catch(() => null);
+    if (profile && profile.authUid === firebase.auth().currentUser?.uid) {
+      if (profile.role === "applicant") showJoinStatus(profile);
+      else if (profile.role === "student") {
+        sessionStorage.removeItem(joinStatusKey);
+        setSession(profile.username, profile.sessionVersion);
+        location.replace("student.html?welcome=1");
+      }
+    }
+  }
 });
 </script>
 </body>

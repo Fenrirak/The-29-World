@@ -33,7 +33,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=a27c8e99">
+<link rel="stylesheet" href="style.css?v=6ca6b908">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -203,6 +203,24 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <button class="btn small mint" onclick="markAllJobTasksDone()" id="markAllJobsBtn">Mark all jobs done</button>
       </div>
     </div>
+    <section class="admission-box" aria-labelledby="admissionTitle">
+      <div class="admission-setting">
+        <div>
+          <h3 id="admissionTitle"><span data-icon="key" aria-hidden="true"></span> Class code access</h3>
+          <p id="joinHelp">Review students who sign up with your code. Accounts you create with <strong>Add students</strong> can log in straight away.</p>
+        </div>
+        <label class="admission-toggle">Require approval
+          <span class="lg-switch"><input id="joinApproval" type="checkbox" role="switch" aria-describedby="joinHelp" disabled><span class="lg-switch-track"><span class="lg-switch-thumb"></span></span></span>
+        </label>
+      </div>
+      <p id="admissionFeedback" role="status"></p>
+      <div id="joinQueue" class="hidden">
+        <h4>Join requests <span id="joinCount"></span></h4>
+        <div id="joinRows"></div>
+        <p id="joinEmpty" class="muted-small">No students are waiting for approval.</p>
+      </div>
+      <p id="joinQueueError" role="status"></p>
+    </section>
     <input id="studentFilter" type="search" class="hidden" placeholder="Find a student…" aria-label="Find a student" oninput="filterStudentRows()" autocomplete="off" style="margin-top:12px;">
     <div class="table-scroll">
     <table id="studentTable" class="stack-table">
@@ -464,7 +482,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="settings-menu.js?v=441cc269"></script>
 <script defer src="shortcuts.js?v=280acadf"></script>
 <script defer src="offline.js?v=7c18231f"></script>
-<script defer src="data-core.js?v=4c750c38"></script>
+<script defer src="data-core.js?v=502ea8ab"></script>
 <script defer src="data-money.js?v=4dc6f0d3"></script>
 <script defer src="data-life.js?v=e6f73869"></script>
 <script defer src="data-property.js?v=4b2feaee"></script>
@@ -476,6 +494,6 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="avatar.js?v=f2a3ef95"></script>
 <script defer src="notifications.js?v=43d851d5"></script>
 <script defer src="on-demand.js?v=8865de24"></script>
-<script defer src="teacher.js?v=a24a12c7"></script>
+<script defer src="teacher.js?v=dc8184b5"></script>
 </body>
 </html>

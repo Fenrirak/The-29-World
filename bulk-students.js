@@ -316,6 +316,8 @@
         <div>They're still in your list. Use <strong>Add more students</strong> to try them again.</div>
       </div>`;
     }
+    const waiting = made.filter(r => r.needsReview);
+    if (waiting.length) note += `<div class="error-msg">Keep these login details. Check Join requests for ${waiting.map(r => esc(r.name)).join(", ")} to finish enrollment.</div>`;
     $("bulkFailures").innerHTML = note;
     renderResults();
     setPhase("results");

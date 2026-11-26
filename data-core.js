@@ -841,6 +841,7 @@ async function getSessionUser() {
     return null;
   }
   if (!u) { clearSession(); return null; }
+  if (u.role === "applicant") { clearSession(); return null; }
   if ((u.sessionVersion || 0) !== (sess.sv || 0)) {
     // Password was changed (here or elsewhere) since this device's
     // session was created — treat this device as logged out too.
@@ -2116,10 +2117,11 @@ async function deleteClassPermanently(teacherUsername, classCode) {
 
   try {
     await classesCol().doc(classCode).update({ cvDeletionPending: true });
+    const closingClass = (await classesCol().doc(classCode).get({ source: "server" })).data();
     await deleteCareerSubmissions(classCode);
     // Family links first, while the student docs that name them still exist.
-    await Promise.all((cls.students || []).map(u => _deleteParentViewFor(u)));
-    await Promise.all((cls.students || []).map(u => fdb.runTransaction(async t => {
+    await Promise.all((closingClass.students || []).map(u => _deleteParentViewFor(u)));
+    await Promise.all((closingClass.students || []).map(u => fdb.runTransaction(async t => {
       const user = usersCol().doc(u);
       const snap = await t.get(user);
       if (!snap.exists || snap.data().classCode !== classCode) return;
@@ -2129,7 +2131,15 @@ async function deleteClassPermanently(teacherUsername, classCode) {
     if (cls.templateShareToken) {
       await templateSharesCol().doc(cls.templateShareToken).delete();
     }
-    await classesCol().doc(classCode).delete();
+    // Stop new applications via cvDeletionPending before closing outstanding ones.
+    const requests = await t29PendingJoinRequests(classCode).get({ source: "server" });
+    for (const request of requests.docs) {
+      await usersCol().doc(request.id).update({ joinStatus: "declined" });
+    }
+    const removal = fdb.batch();
+    removal.delete(fdb.collection("classAdmission").doc(classCode));
+    removal.delete(classesCol().doc(classCode));
+    await removal.commit();
   } catch (e) {
     console.warn("deleteClassPermanently failed:", e);
     if (previousOpen !== classCode) await usersCol().doc(teacherUsername).update({ classCode: previousOpen }).catch(() => {});
@@ -2179,64 +2189,88 @@ async function setClassWelcomeGrant(classCode, amount) {
   return { ok: true, amount: value };
 }
 
-// The Firestore half of joining a class as a brand-new student: the /uidIndex
-// entry, the /users doc and the roster line (plus the welcome grant) all
-// written together in one transaction. Shared by a student signing
-// themselves up (createStudentAccount, below) and a teacher adding a whole
-// list at once (t29BulkCreateStudents, below), so a new student always
-// starts out identical whichever way their account was made.
-//
-// `db` must be the Firestore connection the NEW student's Auth login is
-// signed in on: firestore.rules only lets that brand-new login write these
-// three things (see isSignupClassJoin) — fdb for self-signup, or the
-// teacher's separate sign-up session (t29OpenSignupSession) for a bulk add.
+function t29PendingJoinRequests(code) {
+  return usersCol().where("requestedClass", "==", code).where("joinStatus", "==", "pending");
+}
+
+// Read the policy in the signup transaction so a concurrent toggle is respected.
+// Protected signup creates only the applicant's identity, without reading class data.
 async function t29JoinClassAsNewStudent(db, cred, name, username, classCode) {
   const classRef = db.collection("classes").doc(classCode);
-  await db.runTransaction(async (t) => {
+  const identity = { username, authUid: cred.user.uid, name };
+  return db.runTransaction(async (t) => {
+    const admission = await t.get(db.collection("classAdmission").doc(classCode));
+    const index = db.collection("uidIndex").doc(cred.user.uid);
+    if (admission.exists) {
+      const applicant = { ...identity, role: "applicant", requestedClass: classCode, joinStatus: "pending" };
+      t.set(index, { username });
+      t.set(db.collection("users").doc(username), applicant);
+      return applicant;
+    }
     const clsSnap = await t.get(classRef);
-    if (!clsSnap.exists) throw new Error("NO_CLASS");
-    const cls = clsSnap.data();
-    const welcome = t29WelcomeGrantOf(cls);
+    if (!clsSnap.exists || clsSnap.data().cvDeletionPending) throw new Error("NO_CLASS");
+    t.set(index, { username });
+    t29EnrollStudent(t, db, classCode, clsSnap.data(), identity);
+    return null;
+  });
+}
 
-    t.set(db.collection("uidIndex").doc(cred.user.uid), { username });
+function t29EnrollStudent(t, db, classCode, cls, identity) {
+  const { username } = identity;
+  const welcome = t29WelcomeGrantOf(cls);
+  // firestore.rules (isSaneNewStudentDoc) only accepts exactly these fields on a
+  // brand-new student doc — add any new one there too, or signup will be refused.
+  const user = {
+    ...identity, role: "student",
+    classCode, joinedAt: Date.now(), balance: welcome, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
+    sessionVersion: 0,
+    // Denormalized copy of the class's daily time limit (see
+    // setStudentTimeLimit below). Kept on the user doc itself so
+    // requireLogin() can check/enforce it using the user doc it
+    // already reads on every page — no extra class-doc read needed.
+    dailyLimitMinutes: cls.dailyTimeLimitMinutes || null,
+    timeSpentTodaySec: 0,
+    timeSpentDate: null,
+    // Time-limit exemption requests (see requestTimeExemption below).
+    // status is null/"pending"/"declined", scoped to timeExemptionDate
+    // (an NZ date key) so it naturally resets each day without a
+    // migration job — see timeExemptionState(). extraMinutesToday/
+    // -Date is the bonus time a teacher has granted for today only,
+    // added on top of dailyLimitMinutes by timeLimitStatus().
+    timeExemptionStatus: null,
+    timeExemptionDate: null,
+    extraMinutesToday: 0,
+    extraMinutesDate: null,
+    // Rolling report totals (see recordReportActivity below) — seeded
+    // here with the welcome grant itself, since it's logged inline
+    // below rather than through logTxn's usual recordReportActivity hook.
+    reportMonth: Object.assign(emptyReportBucket(), { monthKey: nzMonthKey() }),
+    reportLifetime: emptyReportBucket()
+  };
+  addClassificationToBucket(user.reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: welcome });
+  addClassificationToBucket(user.reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: welcome });
+  t.set(db.collection("users").doc(username), user);
 
-    // firestore.rules (isSaneNewStudentDoc) only accepts exactly these fields on a
-    // brand-new student doc — add any new one there too, or signup will be refused.
-    const user = {
-      username, authUid: cred.user.uid, role: "student", name,
-      classCode, joinedAt: Date.now(), balance: welcome, jobId: null, jobTierId: null, jobTierSince: null, pendingPromotion: null, savings: 0, loans: [],
-      sessionVersion: 0,
-      // Denormalized copy of the class's daily time limit (see
-      // setStudentTimeLimit below). Kept on the user doc itself so
-      // requireLogin() can check/enforce it using the user doc it
-      // already reads on every page — no extra class-doc read needed.
-      dailyLimitMinutes: cls.dailyTimeLimitMinutes || null,
-      timeSpentTodaySec: 0,
-      timeSpentDate: null,
-      // Time-limit exemption requests (see requestTimeExemption below).
-      // status is null/"pending"/"declined", scoped to timeExemptionDate
-      // (an NZ date key) so it naturally resets each day without a
-      // migration job — see timeExemptionState(). extraMinutesToday/
-      // -Date is the bonus time a teacher has granted for today only,
-      // added on top of dailyLimitMinutes by timeLimitStatus().
-      timeExemptionStatus: null,
-      timeExemptionDate: null,
-      extraMinutesToday: 0,
-      extraMinutesDate: null,
-      // Rolling report totals (see recordReportActivity below) — seeded
-      // here with the welcome grant itself, since it's logged inline
-      // below rather than through logTxn's usual recordReportActivity hook.
-      reportMonth: Object.assign(emptyReportBucket(), { monthKey: nzMonthKey() }),
-      reportLifetime: emptyReportBucket()
-    };
-    addClassificationToBucket(user.reportMonth, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: welcome });
-    addClassificationToBucket(user.reportLifetime, { bucket: "income", category: REPORT_INCOME_TYPES.welcome, amount: welcome });
-    t.set(db.collection("users").doc(username), user);
+  cls.students.push(username);
+  cls.txns.unshift({ id: uid("t"), type: "welcome", to: username, amount: welcome, note: welcome > 0 ? "Welcome grant" : "Joined the class", date: nowStr(), ts: Date.now() });
+  if (cls.txns.length > MAX_STORED_TXNS) cls.txns.length = MAX_STORED_TXNS;
+  t.update(db.collection("classes").doc(classCode), { students: cls.students, txns: cls.txns });
+}
 
-    cls.students.push(username);
-    cls.txns.unshift({ id: uid("t"), type: "welcome", to: username, amount: welcome, note: welcome > 0 ? "Welcome grant" : "Joined the class", date: nowStr(), ts: Date.now() });
-    if (cls.txns.length > MAX_STORED_TXNS) cls.txns.length = MAX_STORED_TXNS;
-    t.update(classRef, { students: cls.students, txns: cls.txns });
+async function t29ReviewJoinRequest(classCode, username, approve) {
+  return fdb.runTransaction(async t => {
+    const ref = usersCol().doc(username);
+    const snap = await t.get(ref);
+    const user = snap.data();
+    if (!user || user.role !== "applicant" || user.requestedClass !== classCode || user.joinStatus !== "pending") return false;
+    if (!approve) {
+      t.update(ref, { joinStatus: "declined" });
+    } else {
+      const cls = (await t.get(classesCol().doc(classCode))).data();
+      if (!cls || cls.cvDeletionPending) throw new Error("Class is closing");
+      t29EnrollStudent(t, fdb, classCode, cls, { username, name: user.name, authUid: user.authUid });
+    }
+    return true;
   });
 }
 
@@ -2259,7 +2293,8 @@ async function createStudentAccount(name, username, password, classCode) {
   }
 
   try {
-    await t29JoinClassAsNewStudent(fdb, cred, name, username, classCode);
+    const applicant = await t29JoinClassAsNewStudent(fdb, cred, name, username, classCode);
+    if (applicant) { clearSession(); return { ok: true, applicant }; }
   } catch (e) {
     console.warn("Student signup failed:", e && (e.code || e.message), e);
     await cred.user.delete().catch(() => {}); // don't leave an orphaned Auth account
@@ -2342,8 +2377,21 @@ async function _t29BulkCreateOne(session, classCode, entry) {
   if (!cred) { res.error = "Couldn't find a free username for this name."; return res; }
 
   try {
-    await t29JoinClassAsNewStudent(session.fdb, cred, name, res.username, classCode);
+    const applicant = await t29JoinClassAsNewStudent(session.fdb, cred, name, res.username, classCode);
     res.ok = true;
+    if (applicant) {
+      // Only the primary (teacher) connection has permission to admit this account.
+      try {
+        const admitted = await t29ReviewJoinRequest(classCode, res.username, true);
+        if (!admitted && (await getUser(res.username))?.classCode !== classCode) throw new Error("Enrollment unconfirmed");
+      } catch (e) {
+        // The account exists. Preserve its login slip and let the teacher finish
+        // from the request queue if their connection failed between transactions.
+        res.needsReview = true;
+        res.fatal = true;
+        res.error = "Couldn't confirm enrollment. Check this account in Join requests.";
+      }
+    }
   } catch (e) {
     console.warn("Bulk student signup failed:", e && (e.code || e.message), e);
     await cred.user.delete().catch(() => {}); // don't leave an orphaned Auth account
@@ -2786,6 +2834,7 @@ async function t29LoginCore(username, password) {
     await firebase.auth().signOut().catch(() => {});
     return { ok: false, error: "Incorrect username or password." };
   }
+  if (u.role === "applicant") { clearSession(); return { ok: true, applicant: u }; }
   setSession(username, u.sessionVersion || 0);
   return { ok: true, user: u };
 }

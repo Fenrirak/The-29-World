@@ -389,6 +389,24 @@ html.nav-bell-pre .topbar-actions::before{
 .lg-switch input:checked + .lg-switch-track{background:linear-gradient(135deg,var(--gold),var(--gold-dark));}
 .lg-switch input:checked + .lg-switch-track .lg-switch-thumb{transform:var(--sw-slide);}
 .lg-switch input:focus-visible + .lg-switch-track{outline:2px solid var(--gold);outline-offset:2px;}
+.admission-box{margin:16px 0;padding:16px 18px;border:1px solid var(--line);border-radius:var(--r-4);background:var(--bg);color:var(--ink);}
+.admission-setting,.admission-row,.admission-actions,.admission-toggle{display:flex;align-items:center;gap:12px;}
+.admission-setting,.admission-row{justify-content:space-between;flex-wrap:wrap;}
+.admission-setting>div{flex:1 1 260px;}
+.admission-box h3,.admission-box h4,.admission-box h2{margin:0;color:inherit;}
+.admission-box p{margin:5px 0 0;font-size:var(--fs-md);}
+.admission-box p:empty{display:none;}
+.admission-box .admission-toggle{margin:0;font-weight:700;cursor:pointer;}
+.admission-box .lg-switch{margin:0;}
+#joinQueue{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
+#joinCount:not(:empty){display:inline-block;margin-left:4px;padding:1px 7px;background:var(--card);border-radius:var(--r-1);font-size:var(--fs-sm);}
+.admission-row{background:var(--card);margin-top:8px;border:1px solid var(--line);border-radius:var(--r-2);padding:10px 12px;}
+.admission-person{min-width:0;overflow-wrap:anywhere;}
+.admission-person strong,.admission-person small{display:block;}
+.admission-person small{color:var(--muted);margin-top:2px;}
+.admission-actions{gap:6px;}
+.admission-status-icon{display:inline-flex;padding:10px;margin-bottom:10px;border-radius:var(--r-3);background:var(--card);color:var(--ink);}
+#joinStatusPanel .admission-person{margin:16px 0;padding:10px 0;border-block:1px solid var(--line);}
 @media(prefers-reduced-motion:reduce){.lg-switch-track,.lg-switch-thumb{transition:none;}}
 
 main{

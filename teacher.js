@@ -55,7 +55,7 @@ async function openBulkAddTools(button) {
   button.disabled = true;
   button.textContent = "Loading student tools…";
   try {
-    await t29LoadScript("bulk-students.js?v=39965254");
+    await t29LoadScript("bulk-students.js?v=acf03810");
     await openBulkAdd();
   } catch (e) {
     t29Toast("Couldn’t open Add students. Please try again.");
@@ -98,6 +98,7 @@ async function init() {
   if (!clsCheck) { window.location.href = "teacher-home.html"; return; }
   document.getElementById("whoami").textContent = t29DisplayName(u);
   paintChrome();
+  setupClassAdmission(CLASS_CODE);
   enablePasswordToggles();
   // BUGFIX: get a server-trustworthy "now" before any of the day-gated
   // jobs below decide "has this already run today?" — see
@@ -151,6 +152,80 @@ async function init() {
   if (!firstPaintOk || (window._t29WriteSeq || 0) !== T29_WRITES_BEFORE) await render();
   startPresencePolling();
   if (typeof t29MaybeStartTour === "function") t29MaybeStartTour("teacher", CURRENT);
+}
+
+function setupClassAdmission(code) {
+  const el = id => document.getElementById(id);
+  const policy = fdb.collection("classAdmission").doc(code);
+  const toggle = el("joinApproval"), feedback = el("admissionFeedback");
+  let required = false, saving = false, pendingCount = 0, queueReady = false;
+  function syncQueue() {
+    el("joinQueue").classList.toggle("hidden", !queueReady || (!required && !pendingCount));
+    el("joinCount").textContent = pendingCount ? String(pendingCount) : "";
+    el("joinEmpty").classList.toggle("hidden", pendingCount !== 0);
+  }
+  policy.onSnapshot({ includeMetadataChanges: true }, snap => {
+    if (snap.metadata.fromCache || snap.metadata.hasPendingWrites) return;
+    required = snap.exists;
+    if (!saving) { toggle.checked = required; toggle.disabled = false; }
+    syncQueue();
+  }, () => {
+    toggle.disabled = true;
+    feedback.textContent = "Couldn’t load the approval setting. Reload to try again.";
+  });
+  toggle.onchange = async () => {
+    const desired = toggle.checked;
+    saving = true;
+    toggle.disabled = true;
+    feedback.textContent = "Saving…";
+    try {
+      if (desired) await policy.set({ required: true });
+      else await policy.delete();
+      required = desired;
+      feedback.textContent = desired ? "New students must request access." : "New students can join with the code. Existing requests still need a decision.";
+    } catch (e) {
+      feedback.textContent = "Couldn’t save this setting. Check your connection and try again.";
+    } finally {
+      saving = false;
+      toggle.checked = required;
+      toggle.disabled = false;
+      syncQueue();
+    }
+  };
+  const requests = t29PendingJoinRequests(code);
+  requests.onSnapshot(snap => {
+    if (snap.metadata.fromCache || snap.metadata.hasPendingWrites) return;
+    const rows = el("joinRows");
+    rows.replaceChildren();
+    const docs = snap.docs.slice().sort((a, b) => a.data().name.localeCompare(b.data().name));
+    for (const doc of docs) {
+      const user = doc.data();
+      const row = document.createElement("div");
+      row.className = "admission-row";
+      row.innerHTML = `<div class="admission-person"><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.username)}</small></div>
+        <div class="admission-actions"><button class="btn small gold" type="button">Approve</button><button class="btn small secondary" type="button">Decline</button></div>`;
+      row.querySelectorAll("button").forEach((button, i, buttons) => {
+        const approve = i === 0;
+        button.setAttribute("aria-label", button.textContent + " " + user.name);
+        button.onclick = async () => {
+          buttons.forEach(b => { b.disabled = true; });
+          try {
+            const changed = await t29ReviewJoinRequest(code, user.username, approve);
+            feedback.textContent = !changed ? "This request has already been reviewed." :
+              (approve ? user.name + " has joined the class." : "Declined the request from " + user.name + ".");
+            if (approve && changed) render().catch(() => { feedback.textContent += " Reload to refresh the roster."; });
+          } catch (e) {
+            feedback.textContent = "Couldn’t review this request. Please try again.";
+            buttons.forEach(b => { b.disabled = false; });
+          }
+        };
+      });
+      rows.appendChild(row);
+    }
+    pendingCount = docs.length;
+    queueReady = true;
+    syncQueue();
+  }, () => { el("joinQueueError").textContent = "Couldn’t load join requests. Reload to try again."; });
 }
 
 async function render() {
