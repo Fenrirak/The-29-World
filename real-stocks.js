@@ -86,16 +86,36 @@ function validRealQuote(q) {
     realDateKeyValid(q.date) && realDateKeyValid(q.sharesDate);
 }
 
+// Dated closes the quote feed may publish with a quote: [{date, close}], any order.
+function realCloses(q) {
+  const rows = (Array.isArray(q?.closes) ? q.closes : [])
+    .filter(r => r && realDateKeyValid(r.date) && Number.isFinite(r.close) && r.close > 0 && r.date < q.date)
+    .sort((a, b) => a.date < b.date ? -1 : 1);
+  return rows.filter((r, i) => i === 0 || r.date !== rows[i - 1].date).slice(-29);
+}
+
+// Starting graph for a new listing: real past closes plus the latest quote.
+function seedRealHistory(q, day) {
+  const rows = realCloses(q);
+  if (!rows.length) return {history: [q.price], historyDates: [day]};
+  return {history: [...rows.map(r => r.close), q.price], historyDates: [...rows.map(r => r.date), q.date]};
+}
+
 function applyRealQuote(co, q, day) {
   if (!validRealQuote(q) || q.symbol !== co.realSymbol || q.date < co.quoteDate) return false;
   const held = Object.values(co.holders || {}).reduce((sum, n) => sum + n, 0);
   if (q.totalShares < held) throw new Error("Reported supply is below classroom holdings");
+  const seed = realCloses(q).length && !Object.keys(co.splits || {}).length ? seedRealHistory(q, day) : null;
+  const backfill = !!seed && seed.history.length > (co.history?.length || 0);
   const history = co.history?.length ? co.history : [co.price];
   const dates = (co.historyDates || []).slice(-history.length);
   if (q.date === co.quoteDate && q.price === co.price &&
       q.totalShares === co.totalShares && q.sharesDate === co.sharesDate &&
-      (q.source || "") === (co.quoteSource || "") && q.reportedUnits === co.reportedUnits && co.history?.length) return false;
-  if (co.quoteDate !== q.date) {
+      (q.source || "") === (co.quoteSource || "") && q.reportedUnits === co.reportedUnits && co.history?.length && !backfill) return false;
+  if (backfill) {
+    co.history = seed.history;
+    co.historyDates = seed.historyDates;
+  } else if (co.quoteDate !== q.date) {
     co.history = [...history, q.price].slice(-30);
     co.historyDates = [...Array(history.length - dates.length).fill(""), ...dates, day].slice(-30);
   } else {
@@ -108,4 +128,4 @@ function applyRealQuote(co, q, day) {
   return true;
 }
 
-if (typeof module !== "undefined") module.exports = { REAL_STOCKS, validRealQuote, applyRealQuote };
+if (typeof module !== "undefined") module.exports = { REAL_STOCKS, validRealQuote, applyRealQuote, realCloses, seedRealHistory };

@@ -167,7 +167,7 @@ async function listRealStock() {
           id, name: spec.name, realSymbol: spec.symbol, price: q.price, quoteDate: q.date,
           totalShares: q.totalShares, availableShares: q.totalShares, sharesDate: q.sharesDate,
           ...(q.reportedUnits !== undefined ? {reportedUnits: q.reportedUnits} : {}),
-          holders: {}, history: [q.price], historyDates: [day], quoteSource: q.source || ""
+          holders: {}, ...seedRealHistory(q, day), quoteSource: q.source || ""
         };
       });
       const issuerBook = cls.issuerBook || {};
@@ -496,7 +496,7 @@ async function render(background = false) {
         <div>
           <h4>${escapeHtml(co.name)}${IS_TEACHER ? splitTag(co) : ""}</h4>
           ${isFund ? `<p class="muted-small real-quote-note">${fundSummary(listing)}</p>` : ""}
-          ${listing ? `<p class="muted-small real-quote-note">${listing.exchange} · ${listing.symbol} · ${cls.realStocksEnabled ? closeLabel(co.quoteDate) : "Updates paused"} · ${realDate(co.quoteDate)}</p>` : ""}
+          ${listing ? `<p class="muted-small real-quote-note">${listing.exchange} · ${listing.symbol} · ${cls.realStocksEnabled ? closeLabel(co.quoteDate) : "Updates paused"} · ${realDate(co.quoteDate)}${hist.length < 2 ? " · Graph builds with each close" : ""}</p>` : ""}
           <div class="${change > 0 ? 'ticker-up' : change < 0 ? 'ticker-down' : ''}">${listing ? quotePrice(co.price) + " " + listing.currency : fmtMoney(co.price)} ${hist.length > 1 ? `<span class="muted-small">(${change > 0 ? '+' : ''}${changePct}% ${listing ? "since last recorded close" : "today"})</span>` : ""}</div>
           ${!listing && !IS_TEACHER && cls.showShareMove ? shareMoveHtml(co, cls) : ""}
         </div>
