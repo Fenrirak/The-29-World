@@ -1243,7 +1243,6 @@ function showPromotionPopup(promo) {
   overlay.innerHTML = `
     <div class="levelup-card-card">
       <div class="levelup-card-stars">✦ ✦ ✦</div>
-      <div class="levelup-card-emoji">🎉</div>
       <h2 class="levelup-card-title">You've been offered a promotion!</h2>
       <p class="levelup-card-sub">Move up to</p>
       <div class="levelup-card-tier">
@@ -1256,7 +1255,7 @@ function showPromotionPopup(promo) {
       </section>
       <div class="levelup-card-actions">
         <button class="btn secondary" onclick="respondPromotionPopup(false)">Not right now</button>
-        <button class="btn gold" onclick="respondPromotionPopup(true)">🎉 Accept</button>
+        <button class="btn gold" onclick="respondPromotionPopup(true)">Accept</button>
       </div>
     </div>
   `;

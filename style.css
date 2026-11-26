@@ -2703,7 +2703,6 @@ html.dark-mode .notif-dot{
   color: var(--gold);
   margin-bottom: 8px;
 }
-.levelup-card-emoji { font-size: 3.4rem; margin-bottom: 10px; }
 .levelup-card-title {
   font-size: 1.7rem;
   font-weight: 900;

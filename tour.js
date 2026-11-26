@@ -23,7 +23,7 @@
 
 const T29_TOURS = {
   student: [
-    { title: "Welcome to 29 World™! 👋",
+    { title: "Welcome to 29 World™!",
       text: "This is your own pretend-money world. You'll earn money, save it, spend it and invest it, and see how good you are with money. Here's a quick tour." },
     { target: ["#balance"], card: true, title: "Your cash",
       text: "The money you can spend right now. It also stays in the corner of every page so you always know what you've got." },
@@ -41,13 +41,13 @@ const T29_TOURS = {
       text: "See where your money went this month, and share it with your family if you like." },
     { target: ["#settingsBtn", ".sb-hamburger"], title: "Settings",
       text: "Dark mode, keyboard shortcuts, change your password, and this tour again any time you want it. On a phone, Settings is at the bottom of the menu." },
-    { keyboard: true, title: "Keyboard shortcuts ⌨️",
+    { keyboard: true, title: "Keyboard shortcuts",
       text: "Using a computer? Press the ? key (or /) any time to see every keyboard shortcut. Tap Shift and start typing to jump to any page, or use the ← → keys to move along the menu. You can turn them off in Settings." },
     { title: "You're all set!",
       text: "A good first step: visit the Bank and put some money into Savings to start on a goal. Have fun!" }
   ],
   teacher: [
-    { title: "Welcome to your class dashboard! 👋",
+    { title: "Welcome to your class dashboard!",
       text: "This is where you run your class's economy. Here's a quick tour of the main parts. It takes about a minute." },
     { target: ["#classCode"], closest: "p", title: "Your class code",
       text: "Give this code to your students. They choose \"I'm a Student\" → \"Join a class\" on the login page and type it in." },
@@ -67,7 +67,7 @@ const T29_TOURS = {
       text: "Report cards for every student, CSV and PDF export, and family links so parents can see how their child is doing." },
     { target: ["#settingsBtn", ".sb-hamburger"], title: "Settings",
       text: "Dark mode, keyboard shortcuts, change your password, and this tour again any time. On a phone, Settings is at the bottom of the menu." },
-    { keyboard: true, title: "Keyboard shortcuts ⌨️",
+    { keyboard: true, title: "Keyboard shortcuts",
       text: "Press the ? key (or /) any time to see every keyboard shortcut. Tap Shift and start typing to jump to any page, or use the ← → keys to move along the menu. You can turn them off in Settings." },
     { title: "You're ready to go!",
       text: "Suggested first steps: add a few jobs, set your pay day, then share your class code with your students." }
