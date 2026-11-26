@@ -39,23 +39,21 @@
   "use strict";
 
   var POLICY = {
-    version: "1.1",
+    version: "1.2",
     updated: "2026-11-27",
     updatedLabel: "27 November 2026",
     nextReviewBy: "2027-11-27",
     // Plain-language summary of what changed, shown in the IMPORTANT popup. Replace on every version bump.
     changes: [
-      "We now explain where your data is stored and which companies handle it (Google Firebase and GitHub).",
-      "We added a way to make a privacy complaint, and we explain how we review these documents every year.",
-      "Asking to see, correct or delete your information is free, and we explain how long it takes.",
-      "From now on we will show an IMPORTANT notice whenever these documents change, and before your data moves to another country."
+      "We now say exactly where your data is stored: Google's Sydney, Australia data centre (Google may also process some data in other countries).",
+      "We made sure the casino-style games can never be switched on by default; only a teacher can turn them on."
     ]
   };
 
   var HOSTING = {
     // Where the database lives. Look it up in Firebase console > Firestore > Data (location shown at the top of the
     // database settings) and put it here AND in privacy.html Section 5 (search for "REGION TO CONFIRM").
-    dataRegion: "REGION TO CONFIRM",
+    dataRegion: "Sydney, Australia (australia-southeast1)",
     minNoticeDays: 30,
     // null = no move planned. To announce a move, set something like:
     // { id: "2027-eu-move", announced: "2027-01-10", effective: "2027-02-15",

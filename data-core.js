@@ -1749,7 +1749,7 @@ function _classDataFromTemplate(code, className, teacherUsername, template, opts
   cls.lifestyleConfig = _cloneDoc(template.lifestyleConfig || cls.lifestyleConfig);
   cls.lifestyleLock = _cloneDoc(template.lifestyleLock || cls.lifestyleLock);
   if (template.lifestyleThresholds) cls.lifestyleThresholds = _cloneDoc(template.lifestyleThresholds);
-  cls.gambling = _cloneDoc(template.gambling || cls.gambling);
+  cls.gambling = _cloneDoc(template.gambling || cls.gambling); cls.gambling.enabled = false; /* a copied template never switches the casino on */
   cls.blackjack = _cloneDoc(template.blackjack || cls.blackjack);
   cls.marketplace = _cloneDoc(template.marketplace || cls.marketplace);
   cls.taxRates = _cloneDoc(template.taxRates || cls.taxRates);
@@ -4334,7 +4334,7 @@ function withNewModuleDefaults(cls) {
     minBet: 1, maxBet: 20,
     payouts: { straightUp: 35, split: 17, street: 11, corner: 8, sixLine: 5, oddEven: 1 }
   };
-  if (cls.gambling.enabled === undefined) cls.gambling.enabled = false; // the casino is OFF unless a teacher switches it on
+  if (cls.gambling.enabled !== true) cls.gambling.enabled = false; // the casino is OFF unless a teacher switches it on
   // Migrate the old shared "dailyBetCap" (a pure spending cap) into the
   // new "dailyBuyInLimit" (a cap on cash moved into the gambling account)
   // the first time a class with legacy data is loaded — same number,

@@ -436,7 +436,7 @@ function renderGamblingAccountCard(view) {
 
   if (!view) return; // couldn't load (offline etc.) — leave whatever was last shown
 
-  disabledBanner.classList.toggle("hidden", view.gamblingEnabled !== false);
+  disabledBanner.classList.toggle("hidden", view.gamblingEnabled === true);
 
   balanceEl.textContent = fmtMoney(view.balance);
   cashOutBtn.disabled = !(view.balance > 0);
@@ -488,7 +488,7 @@ function renderGamblingAccountCard(view) {
     divider.classList.add("hidden");
     lockedMsg.classList.remove("hidden");
     lockedMsg.innerHTML = `<div class="success-msg">${escapeHtml(view.winLimitMessage || "You've hit today's winning limit. Come back tomorrow.")}</div>`;
-  } else if (view.gamblingEnabled === false) {
+  } else if (view.gamblingEnabled !== true) {
     buyInForm.classList.add("hidden");
     divider.classList.add("hidden");
     lockedMsg.classList.add("hidden");

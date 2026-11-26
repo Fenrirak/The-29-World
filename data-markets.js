@@ -1632,7 +1632,7 @@ async function saveGamblingSettings(classCode, settings) {
   const oldG = (((await getClass(classCode).catch(() => null)) || {}).gambling) || {};
   await classesCol().doc(classCode).update({
     gambling: {
-      enabled: settings.enabled !== false,
+      enabled: settings.enabled === true, /* never default ON */
       minBet: Math.max(0, Number(settings.minBet) || 0),
       maxBet: Math.max(0, Number(settings.maxBet) || 0),
       dailyBuyInLimit: (settings.dailyBuyInLimit === "" || settings.dailyBuyInLimit === undefined || settings.dailyBuyInLimit === null) ? null : Math.max(0, Number(settings.dailyBuyInLimit) || 0),
@@ -1743,7 +1743,7 @@ async function getGamblingAccountView(username, classCode) {
     boughtInToday: acc.boughtInToday,
     netToday: acc.netToday,
     winLimitHit: acc.winLimitHit,
-    gamblingEnabled: g.enabled !== false,
+    gamblingEnabled: g.enabled === true,
     dailyBuyInLimit: g.dailyBuyInLimit,
     remainingBuyIn: g.dailyBuyInLimit ? Math.max(0, Math.round((g.dailyBuyInLimit - acc.boughtInToday) * 100) / 100) : null,
     dailyWinLimit: g.dailyWinLimit,
