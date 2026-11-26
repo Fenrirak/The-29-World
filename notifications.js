@@ -904,7 +904,7 @@ async function notifGetSwReg() {
   if (!("serviceWorker" in navigator)) return null;
   try {
     let reg = await navigator.serviceWorker.getRegistration();
-    if (!reg) reg = await navigator.serviceWorker.register("notif-sw.js?v=ef4dbc72");
+    if (!reg) reg = await navigator.serviceWorker.register("notif-sw.js?v=21f43c3d");
     if (!reg.active) await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(r, 4000))]);
     return reg;
   } catch (e) { return null; }

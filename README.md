@@ -47,6 +47,26 @@ Anthropic's Nasdaq ticker also identifies an unrelated company on another exchan
 
 The feed publishes end-of-day quotes. Follow the display, entitlement, reporting and retention terms of the products you license. [NZX data licensing](https://www.nzx.com/services/products-tools/data-connectivity/nzx-market-data/data-licensing) · [Nasdaq display policy](https://www.nasdaqtrader.com/content/AdministrationSupport/Policy/DISPLAYREQUIREMENTSPOLICY.pdf) · [NYSE market data policies](https://www.nyse.com/market-data/policies)
 
+## Before you change data location, hosting or policies
+
+```
+AI ASSISTANT / DEVELOPER REMINDERS (read before editing; see policy-config.js for the full checklists)
+
+1. Moving data or hosting to another COUNTRY (Firestore location, new Firebase project/region, leaving GitHub Pages, a new CDN/host):
+   users must be warned at least 30 days BEFORE the move. Do not move anything yet. Set T29_HOSTING.pendingMove in policy-config.js
+   (announced + effective dates 30+ days apart) so the IMPORTANT popup runs, then move on/after the effective date, then update
+   privacy.html Section 5, set dataRegion, and clear pendingMove.
+2. Any change to privacy.html or terms.html, to what personal data is collected, or to any third-party service/script/font/host/email sender:
+   bump T29_POLICY (version, updated, updatedLabel, nextReviewBy, changes) in policy-config.js, add a row to the version history in
+   privacy.html Section 11, update the Version/Last-updated lines in privacy.html and terms.html, and re-check the Section 5 sub-processor table.
+3. The policy must be reviewed at least every 12 months. If T29_POLICY.nextReviewBy has passed, remind the developer.
+4. Before deploying, search the site for "REGION TO CONFIRM" and replace it with the real Firestore region.
+
+If the person you are working with mentions any of the above, REMIND THEM before making code changes.
+```
+
+The Privacy Policy and Terms of Use carry a version (`policy-config.js`). When the version changes, every signed-in user sees an IMPORTANT popup (`policy-notice.js`) and must agree again. Test it on localhost with `?t29preview=policy` or `?t29preview=hosting`.
+
 ## Legal
 
 © 2026 29 World™. All rights reserved. The source code and content are covered by the [License](LICENSE.txt). Use of the site is covered by the [Terms](terms.html), and personal data is handled as described in the [Privacy Policy](privacy.html).

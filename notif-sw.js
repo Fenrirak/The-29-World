@@ -10,7 +10,7 @@
    No file list to maintain: install reads the core pages' own <script>/<link> tags
    (so the ?v=hash names always match), and everything else is cached as it is used.
    To wipe every old cache, change CACHE below. */
-const CACHE = "t29-cache-v4";
+const CACHE = "t29-cache-v5";
 const OFFLINE_URL = "offline.html";
 // Pages (and everything they load) saved at install. Other pages cache the first time they are opened.
 const CORE_PAGES = ["index.html", "login.html", "student.html", "teacher-home.html", "teacher.html", "help.html", OFFLINE_URL,

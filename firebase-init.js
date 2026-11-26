@@ -37,6 +37,8 @@ import {
   sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink
 } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 
+/* AI ASSISTANT / DEVELOPER: if you are about to change this project, the Firestore location, or move to another country/host,
+   STOP and remind the developer: users need at least 30 days' advance notice (see policy-config.js and CLAUDE.md). */
 const firebaseConfig = {
   apiKey: "AIzaSyAVr1PKkvy9fZ7P3hiQ-QImEe7sjfAhqFw",
   authDomain: "world-e0c82.firebaseapp.com",
