@@ -15,7 +15,6 @@ function parseMoneyInput(str) {
 
 function paintChrome() {
   paintIconSlots();
-  document.getElementById("codeIcon").innerHTML = icon("key", 15);
   document.getElementById("payDayBtn").innerHTML = icon("briefcase", 15) + " Run Pay Day";
   document.getElementById("interestBtn").innerHTML = icon("percent", 15) + " Apply Interest";
   document.getElementById("studentViewBtn").innerHTML = icon("eye", 15) + " View as student";
@@ -28,15 +27,8 @@ function paintChrome() {
   document.getElementById("hNetWorth").innerHTML = icon("medal", 18) + " Net worth ranking";
   document.getElementById("hAdjust").innerHTML = icon("coin", 18) + " Quick transactions";
   document.getElementById("hSettings").innerHTML = icon("settings", 18) + " Class settings";
-  document.getElementById("hWelcome").innerHTML = icon("sparkle", 18) + " Welcome grant";
-  document.getElementById("hTimeLimit").innerHTML = icon("hourglass", 18) + " Daily time limit";
-  document.getElementById("hExport").innerHTML = icon("download", 18) + " Export this class";
-  document.getElementById("hDanger").innerHTML = icon("repeat", 18) + " Restart class";
   document.getElementById("saveWelcomeBtn").innerHTML = "Save welcome grant";
   document.getElementById("saveDailyTimeLimitBtn").innerHTML = "Save time limit";
-  document.getElementById("exportPdfBtn").innerHTML = icon("download", 15) + " Download as PDF";
-  document.getElementById("exportMdBtn").innerHTML = icon("download", 15) + " Download as Markdown";
-  document.getElementById("restartBtn").innerHTML = icon("repeat", 15) + " Restart class";
   document.getElementById("hActivity").innerHTML = icon("history", 18) + " Recent activity";
   document.getElementById("labAdjStudent").innerHTML = icon("users", 13) + " Student";
   document.getElementById("labAdjAmount").innerHTML = icon("coin", 13) + " Amount (negative for a fine)";

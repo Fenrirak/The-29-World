@@ -152,7 +152,7 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
   <div class="flex-between class-head">
     <div>
       <h1 id="className">Class</h1>
-      <p class="class-code-line"><span>Class code:</span> <span class="class-code-pill"><span class="icon" id="codeIcon" style="width:16px;height:16px;"></span><span id="classCode">-----</span></span> <span> share this with your students so they can join.</span></p>
+      <p class="class-code-line"><span>Class code:</span> <span class="class-code-pill"><span id="classCode">-----</span></span> <span> share this with your students so they can join.</span></p>
     </div>
     <div class="class-head-actions">
       <button class="btn gold" onclick="runPayDay()" id="payDayBtn">Run Pay Day</button>
@@ -203,24 +203,6 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
         <button class="btn small mint" onclick="markAllJobTasksDone()" id="markAllJobsBtn">Mark all jobs done</button>
       </div>
     </div>
-    <section class="admission-box" aria-labelledby="admissionTitle">
-      <div class="admission-setting">
-        <div>
-          <h3 id="admissionTitle"><span data-icon="key" aria-hidden="true"></span> Class code access</h3>
-          <p id="joinHelp">Review students who sign up with your code. Accounts you create with <strong>Add students</strong> can log in straight away.</p>
-        </div>
-        <label class="admission-toggle">Require approval
-          <span class="lg-switch"><input id="joinApproval" type="checkbox" role="switch" aria-describedby="joinHelp" disabled><span class="lg-switch-track"><span class="lg-switch-thumb"></span></span></span>
-        </label>
-      </div>
-      <p id="admissionFeedback" role="status"></p>
-      <div id="joinQueue" class="hidden">
-        <h4>Join requests <span id="joinCount"></span></h4>
-        <div id="joinRows"></div>
-        <p id="joinEmpty" class="muted-small">No students are waiting for approval.</p>
-      </div>
-      <p id="joinQueueError" role="status"></p>
-    </section>
     <input id="studentFilter" type="search" class="hidden" placeholder="Find a student…" aria-label="Find a student" oninput="filterStudentRows()" autocomplete="off" style="margin-top:12px;">
     <div class="table-scroll">
     <table id="studentTable" class="stack-table">
@@ -252,6 +234,24 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
     <p class="set-lead">These apply to the whole class. Settings for a single module, pay day, interest, loans, gambling and so on, live on that module&rsquo;s own page.</p>
 
     <div class="set-grid">
+      <section class="set-tile admission-box" aria-labelledby="admissionTitle">
+        <div class="admission-setting">
+          <div>
+            <h3 id="admissionTitle">Class code access</h3>
+            <p id="joinHelp">Review students who sign up with your code. Accounts you create with <strong>Add students</strong> can log in straight away.</p>
+          </div>
+          <label class="admission-toggle">Require approval
+            <span class="lg-switch"><input id="joinApproval" type="checkbox" role="switch" aria-describedby="joinHelp" disabled><span class="lg-switch-track"><span class="lg-switch-thumb"></span></span></span>
+          </label>
+        </div>
+        <p id="admissionFeedback" role="status"></p>
+        <div id="joinQueue" class="hidden">
+          <h4>Join requests <span id="joinCount"></span></h4>
+          <div id="joinRows"></div>
+          <p id="joinEmpty" class="muted-small">No students are waiting for approval.</p>
+        </div>
+        <p id="joinQueueError" role="status"></p>
+      </section>
       <section class="set-tile" aria-labelledby="hWelcome">
         <h3 id="hWelcome">Welcome grant</h3>
         <p>Given once to every student who joins this class, whether they sign up themselves or you add them. Students already in the class keep what they have. Restarting the class puts everyone back on this amount.</p>
@@ -494,6 +494,6 @@ if(k.indexOf('role-teacher')>-1){var l=nav.querySelector('a[data-module="budget"
 <script defer src="avatar.js?v=f2a3ef95"></script>
 <script defer src="notifications.js?v=43d851d5"></script>
 <script defer src="on-demand.js?v=8865de24"></script>
-<script defer src="teacher.js?v=dc8184b5"></script>
+<script defer src="teacher.js?v=f206bda8"></script>
 </body>
 </html>
