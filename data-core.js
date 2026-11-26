@@ -1297,6 +1297,14 @@ async function requireLogin(opts) {
   // Counts towards the class's 3-month inactivity clock (never blocks the page).
   // Teacher Home passes skipActivity: just browsing the list isn't using a class.
   if (!opts.skipActivity && !archivedReadOnly && !u._studentView) t29TouchClassActivity(u).catch(() => {});
+  if (u.role === "teacher") {
+    const page = location.pathname.split("/").pop().replace(/\.html$/, "");
+    const key = moduleKeyOfPage() || page;
+    const extraGuides = { teacher: "Dashboard", "teacher-home": "My Classes", quizzes: "Quizzes", reports: "Reports", worksheets: "Worksheets" };
+    const label = key === "budget" ? "Budgeting" : T29_MODULES[key] || extraGuides[key];
+    if (label) import(new URL("teacher-guide.js?v=6324d65c", document.baseURI)).then(({ mountTeacherGuide }) => mountTeacherGuide(key, label))
+      .catch(error => console.warn("Could not load the teacher guide.", error));
+  }
   return u;
 }
 // BUGFIX: logging out used to only forget the username in localStorage —
