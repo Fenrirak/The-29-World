@@ -15,6 +15,7 @@ async function init() {
   if (!u) return;
   if (u.role !== "teacher") { window.location.href = "student.html"; return; }
   CURRENT = u;
+  document.getElementById("accountSecurityBtn").classList.toggle("hidden", !T29_REQUIRE_TEACHER_MFA);
   await t29SvRecoverStale(u); // clears what a student view left behind if its tab was closed without exiting
   document.getElementById("whoami").textContent = t29DisplayName(u);
   paintIconSlots();
@@ -131,6 +132,7 @@ async function leaveCoTeachClick(code, name) {
 }
 
 async function accountSecurityClick() {
+  if (!T29_REQUIRE_TEACHER_MFA) return;
   const button = document.getElementById("accountSecurityBtn");
   showMsg("");
   button.disabled = true;

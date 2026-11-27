@@ -39,14 +39,14 @@
   "use strict";
 
   var POLICY = {
-    version: "1.5",
+    version: "1.6",
     updated: "2026-11-27",
     updatedLabel: "27 November 2026",
     nextReviewBy: "2027-11-27",
     // Plain-language summary of what changed, shown in the IMPORTANT popup. Replace on every version bump.
     changes: [
-      "Teachers and co-teachers now sign in with a verified email, password and authenticator app code. Students continue to sign in with their username and password.",
-      "Google Firebase handles teacher email verification, password resets and authenticator enrolment. A password reset keeps the authenticator requirement in place."
+      "Teachers and co-teachers can sign in with their username and password. Existing email logins still work. Authenticator setup is paused.",
+      "New teachers can add an optional recovery email to reset a forgotten password."
     ]
   };
 

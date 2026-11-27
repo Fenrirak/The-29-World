@@ -842,7 +842,7 @@ async function getSessionUser() {
   }
   if (!u) { clearSession(); return null; }
   if (u.role === "applicant") { clearSession(); return null; }
-  if (u.role === "teacher" && window.t29TeacherMfa) {
+  if (u.role === "teacher" && T29_REQUIRE_TEACHER_MFA) {
     try {
       if (!u.teacherMfaReady || !await window.t29TeacherMfa.hasSecondFactor(u.authUid)) {
         clearSession();
@@ -1314,7 +1314,7 @@ async function requireLogin(opts) {
     const key = moduleKeyOfPage() || page;
     const extraGuides = { teacher: "Dashboard", "teacher-home": "My Classes", quizzes: "Quizzes", reports: "Reports", worksheets: "Worksheets" };
     const label = key === "budget" ? "Budgeting" : T29_MODULES[key] || extraGuides[key];
-    if (label) import(new URL("teacher-guide.js?v=07565f9c", document.baseURI)).then(({ mountTeacherGuide }) => mountTeacherGuide(key, label))
+    if (label) import(new URL("teacher-guide.js?v=93dac7b6", document.baseURI)).then(({ mountTeacherGuide }) => mountTeacherGuide(key, label))
       .catch(error => console.warn("Could not load the teacher guide.", error));
   }
   return u;
@@ -1449,6 +1449,10 @@ function defaultClassData(code, className, teacherUsername) {
 // a plain Firestore field. See firebase-init.js for t29AuthEmail() and
 // firestore.rules for how /uidIndex maps the resulting Auth uid back to
 // this app's own username.
+// When the future authentication backend supports TOTP, enable it there first,
+// then turn on BOTH this flag and teacherMfaRequired() in firestore.rules.
+// Release both together and update the sign-in help and policy.
+const T29_REQUIRE_TEACHER_MFA = false;
 const T29_EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 async function createTeacherAndClass(name, username, password, className, extra) {
   // Firebase itself already refuses to create an account with a password
@@ -1473,8 +1477,8 @@ async function createTeacherAndClass(name, username, password, className, extra)
   const title = T29_TEACHER_TITLES.includes(extra.title) ? extra.title : "";
   const lastName = sanitizeUserText(extra.lastName, 60);
   const email = String(extra.email || "").trim().toLowerCase();
-  if (!T29_EMAIL_RE.test(email) || /@t29\.local$/.test(email)) {
-    return { ok: false, error: "Enter an email address you can open to verify your teacher account." };
+  if ((T29_REQUIRE_TEACHER_MFA || email) && (!T29_EMAIL_RE.test(email) || /@t29\.local$/.test(email))) {
+    return { ok: false, error: "Enter a valid email address you can open." };
   }
 
   // These two checks run before the visitor is signed in, which
@@ -1490,9 +1494,9 @@ async function createTeacherAndClass(name, username, password, className, extra)
 
   let cred;
   try {
-    cred = await firebase.auth().createUserWithEmailAndPassword(email, password);
+    cred = await firebase.auth().createUserWithEmailAndPassword(T29_REQUIRE_TEACHER_MFA ? email : t29AuthEmail(username), password);
   } catch (e) {
-    if (e.code === "auth/email-already-in-use") return { ok: false, error: "This email may already have an account. Try logging in or resetting your password." };
+    if (e.code === "auth/email-already-in-use") return { ok: false, error: "This login is already in use. Try logging in or choose another username." };
     return { ok: false, error: t29AuthErrorMessage(e) };
   }
 
@@ -1508,6 +1512,10 @@ async function createTeacherAndClass(name, username, password, className, extra)
       t.set(fdb.collection("uidIndex").doc(cred.user.uid), { username });
       t.set(usersCol().doc(username), user);
       if (cls) t.set(classesCol().doc(code), cls);
+      if (email && !T29_REQUIRE_TEACHER_MFA) {
+        t.set(fdb.collection("teacherRecovery").doc(username), { email });
+        t.set(fdb.collection("recoveryCheck").doc(username), { hash: await t29RecoveryHash(username, email) });
+      }
     });
   } catch (e) {
     console.warn("Teacher signup failed:", e && (e.code || e.message), e);
@@ -2636,6 +2644,7 @@ function t29SignInStepFailure(e) {
 }
 
 async function t29FinishTeacherMfa(username, user, password) {
+  if (!T29_REQUIRE_TEACHER_MFA) return { ok: true };
   const auth = firebase.auth();
   const mfa = window.t29TeacherMfa;
   const markReady = () => {
@@ -2673,6 +2682,7 @@ async function t29ReadLoginProfile(username, user, password) {
     if (t29IsConnectionError(e)) return { ok: false, error: t29AuthErrorMessage({ code: "auth/network-request-failed" }) };
   }
   if (!user) return { ok: true, user: null };
+  if (!T29_REQUIRE_TEACHER_MFA) return { ok: true, user: profile?.authUid === user.uid ? profile : null };
   if (profile?.authUid === user.uid && (profile.role !== "teacher"
     || (profile.teacherMfaReady && await window.t29TeacherMfa.hasSecondFactor(user.uid)))) {
     return { ok: true, user: profile };
@@ -2698,7 +2708,7 @@ async function t29ReadLoginProfile(username, user, password) {
    2. The teacher opens the link (login.html?...), and t29CompleteRecovery signs in
       with it — which proves they own the email — then takes over the teacher account
       (rules: isRecoveryTakeover in firestore.rules) and sets a new password. The old
-      login stops working. The new identity must complete MFA before using classes.
+      login stops working. Future MFA enforcement also covers recovered accounts.
    Needs "Email link (passwordless sign-in)" switched on under Firebase console →
    Authentication → Sign-in method → Email/Password. */
 const T29_RECOVERY_KEY = "t29-recovery-pending";

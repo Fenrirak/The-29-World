@@ -51,9 +51,9 @@
 
       <!-- Teacher login -->
       <form id="panel-teacher-login" onsubmit="return doLogin(event)">
-        <label for="l-username">Sign-in email or existing username</label>
-        <input id="l-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
-        <p class="field-hint">Use your sign-in email after setup. Existing teachers can use their username for first-time setup.</p>
+        <label for="l-username">Username or sign-in email</label>
+        <input id="l-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username or email">
+        <p class="field-hint">If you previously set up an email login, use that address.</p>
         <label for="l-password">Password</label>
         <input id="l-password" type="password" required autocomplete="current-password" placeholder="Password">
         <div class="remember-row">
@@ -66,7 +66,7 @@
 
       <!-- Teacher forgot password: emails a one-time link to the recovery email -->
       <form id="panel-teacher-forgot" class="hidden" onsubmit="return doForgot(event)">
-        <p class="muted-small" style="margin-top:0;">Enter the email you use to sign in. We'll email you a link to set a new password. You'll still need your authenticator to log in.</p>
+        <p class="muted-small" style="margin-top:0;">For a username login, enter your saved recovery email and expand the username option below. For an email login, enter just your sign-in address.</p>
         <label for="f-email">Sign-in or recovery email</label>
         <input id="f-email" type="email" required autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
         <details id="f-legacy" style="margin:8px 0 14px;">
@@ -76,7 +76,7 @@
           <input id="f-username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
         </details>
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit">Email me a link</button>
-        <p class="field-hint" style="text-align:center;">Need help with your email or authenticator? <a href="index.html#contact">Contact support</a>.</p>
+        <p class="field-hint" style="text-align:center;">Need help with your sign-in details? <a href="index.html#contact">Contact support</a>.</p>
         <p class="muted-small" style="text-align:center;margin:6px 0 0;"><button type="button" class="link-btn" onclick="showPanel('teacher-login')">Back to log in</button></p>
       </form>
 
@@ -89,7 +89,7 @@
         <input id="r-email" type="email" required autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="The email the link was sent to">
         <label for="r-password">New password</label>
         <input id="r-password" type="password" required autocomplete="new-password" placeholder="Choose a new password">
-        <p class="field-hint">At least 6 characters, including a capital letter. Next you'll set up an authenticator for this account.</p>
+        <p class="field-hint">At least 6 characters, including a capital letter.</p>
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit">Set new password</button>
         <p class="muted-small" style="text-align:center;margin:8px 0 0;"><a href="login.html?role=teacher">Back to log in</a></p>
       </form>
@@ -117,9 +117,9 @@
           </div>
         </div>
         <p class="field-hint" id="t-name-hint">This is how your students will see you, e.g. Ms Smith.</p>
-        <label for="t-email">Sign-in email</label>
-        <input id="t-email" type="email" required maxlength="254" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
-        <p class="field-hint">You'll verify this email and set up an authenticator app. Students can't see your email.</p>
+        <label for="t-email">Recovery email (optional)</label>
+        <input id="t-email" type="email" maxlength="254" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
+        <p class="field-hint">Add an address you can open if you forget your password. Students can't see it.</p>
         <label for="t-class-mode">Class setup</label>
         <select id="t-class-mode" onchange="updateTeacherClassSetup()">
           <option value="create">Create a new class</option>
@@ -252,13 +252,13 @@
 <script type="module" src="firebase-init.js?v=ccc7d974"></script>
 <script defer src="icons.js?v=be447cba"></script>
 <script defer src="offline.js?v=55c545a6"></script>
-<script defer src="data-core.js?v=715bec8d"></script>
+<script defer src="data-core.js?v=a8cc2e6c"></script>
 <script defer src="data-money.js?v=4dc6f0d3"></script>
 <script defer src="data-life.js?v=e6f73869"></script>
 <script defer src="data-property.js?v=4b2feaee"></script>
 <script defer src="data-markets.js?v=5b7478f9"></script>
 <script defer src="base-template.js?v=00f9bee4"></script>
-<script defer src="policy-config.js?v=33573636"></script>
+<script defer src="policy-config.js?v=b9a37ecb"></script>
 <script>
 // Paint the role and account tab icons.
 function paintIcons() {
@@ -475,8 +475,7 @@ async function doLoginInner(e) {
   // "remember" now only prefills the username field, never the password.
   const key = "anw_remember_" + (isTeacherForm ? "teacher" : "student");
   if (remember) {
-    const identifier = res.user?.role === "teacher" ? firebase.auth().currentUser?.email : (res.applicant || res.user).username;
-    localStorage.setItem(key, JSON.stringify({ username: identifier || username }));
+    localStorage.setItem(key, JSON.stringify({ username }));
   } else {
     localStorage.removeItem(key);
   }
@@ -496,7 +495,7 @@ function loadRememberedLogins() {
       const uField = role === "teacher" ? "l-username" : "sl-username";
       const pField = role === "teacher" ? "l-password" : "sl-password";
       const rField = role === "teacher" ? "l-remember" : "sl-remember";
-      document.getElementById(uField).value = saved.username || "";
+      document.getElementById(uField).value = (saved.username || "").replace(/@t29\.local$/i, "");
       document.getElementById(rField).checked = true;
     } catch (e) { /* ignore corrupt storage */ }
   });
