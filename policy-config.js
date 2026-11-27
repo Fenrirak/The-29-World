@@ -41,15 +41,15 @@
   "use strict";
 
   var POLICY = {
-    version: "1.6",
-    agreementVersion: "1.6", // Version of the latest policy or terms change that requires agreement.
-    updated: "2026-11-27",
-    updatedLabel: "27 November 2026",
-    nextReviewBy: "2027-11-27",
+    version: "1.7",
+    agreementVersion: "1.7", // Version of the latest policy or terms change that requires agreement.
+    updated: "2026-11-28",
+    updatedLabel: "28 November 2026",
+    nextReviewBy: "2027-11-28",
     // Plain-language summary shown in the IMPORTANT popup. Replace when agreementVersion changes.
     changes: [
-      "Teachers and co-teachers can sign in with their username and password. Existing email logins still work. Authenticator setup is paused.",
-      "New teachers can add an optional recovery email to reset a forgotten password."
+      "Teachers and co-teachers can use their username or the email on their account with the same password.",
+      "A Google Firebase function in Sydney checks alternate sign-ins with Firebase Authentication. The function does not store passwords."
     ]
   };
 

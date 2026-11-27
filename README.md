@@ -28,9 +28,19 @@ The homepage has sections for the class overview, setup, a sample payday and pri
 
 Sign-in and saved data connect to the live Firebase project, so some features may not work on your own copy.
 
-## Teacher multi-factor authentication
+## Teacher sign-in
 
-Teacher and co-teacher accounts currently use username and password, with optional email recovery. Accounts already switched to sign-in email still use their email and password. MFA enrollment and enforcement are paused. Student and pending student accounts continue to use their existing username and password. Family view uses a read-only sharing link and does not have a separate account type.
+Teachers and co-teachers can sign in with their username or the email on their account and use the same password. If teachers share a recovery email, they use their usernames. For accounts created with a recovery email, the password reset form accepts the username and recovery email together. Accounts whose main Firebase sign-in uses a real email can request a password reset with the email alone. Student and pending student accounts use their username and password. Family view uses a read-only sharing link.
+
+Deploy the alternate sign-in function to the existing Firebase project in Sydney before publishing the site changes. Cloud Functions requires the Firebase Blaze plan. [Cloud Functions setup](https://firebase.google.com/docs/functions/get-started)
+
+1. Create a dedicated runtime service account in `world-e0c82` with Firebase Authentication Viewer (`roles/firebaseauth.viewer`) and Cloud Datastore Viewer (`roles/datastore.viewer`). The deployer needs permission to attach that account.
+2. Use an API key from `world-e0c82` that permits the Identity Toolkit API and works for server requests. Set `T29_AUTH_API_KEY` to that key and `T29_LOGIN_SERVICE_ACCOUNT` to the runtime account's email in the function's deployment configuration. The Firebase CLI prompts for these parameters if they are unset.
+3. With the Firebase CLI signed in, run `firebase deploy --only functions:resolveTeacherLogin --project world-e0c82`. Verify both identifiers on a test teacher account, then publish the site files together. Keep the function origin allowlist in `functions/index.js` in sync with the site.
+
+### Multi-factor authentication
+
+New MFA enrolment and enforcement are paused. Teachers with an enrolled factor continue to receive the Firebase prompt when signing in.
 
 For a future MFA rollout, switch `T29_REQUIRE_TEACHER_MFA` in `data-core.js` and `teacherMfaRequired()` in `firestore.rules` on together, restore the MFA signup copy and required email field, and update the policy. Before that release, check that the existing Firebase project uses Authentication with Identity Platform, has [TOTP enabled](https://firebase.google.com/docs/auth/web/totp-mfa), and can send and complete email verification, email changes and password resets with the project's configured email handlers. Keep Email/Password enabled and retain Email Link sign-in while legacy username-based recovery is needed. Check Identity Platform billing before upgrading the project. Verify a new signup, a legacy teacher migration, a second-factor sign-in and password reset, and a student sign-in in a test configuration before releasing. Once enabled, existing teacher sessions without TOTP will be asked to sign in and complete setup.
 
