@@ -2578,8 +2578,8 @@ function t29DeviceLockedMessage(msLeft) {
   const m = Math.max(1, Math.ceil((msLeft || T29_LOCK_MS) / 60000));
   return `A password was entered incorrectly ${T29_LOCK_MAX} times, so this browser can't log in to any 29 World™ account for another ${m} minute${m === 1 ? "" : "s"}. Devices that are already signed in can keep being used.`;
 }
-async function login(username, password, teacherAliases = false) {
-  if (String(username).includes("@")) return t29LoginByEmail(String(username).trim().toLowerCase(), password, teacherAliases);
+async function login(username, password) {
+  if (String(username).includes("@")) return t29LoginByEmail(String(username).trim().toLowerCase(), password);
   const devUntil = t29DeviceLockUntil();
   if (devUntil) return { ok: false, locked: true, deviceLocked: true, lockedUntil: devUntil, error: t29DeviceLockedMessage(devUntil - Date.now()) };
   const lock = await t29LoginLockStatus(username);
@@ -2587,7 +2587,7 @@ async function login(username, password, teacherAliases = false) {
     t29UserLockSet(username, lock.lockedUntil);
     return { ok: false, locked: true, lockedUntil: lock.lockedUntil, error: t29LockedMessage(lock.msLeft) };
   }
-  const res = await t29LoginCore(username, password, teacherAliases);
+  const res = await t29LoginCore(username, password);
   if (res.ok) {
     await t29ClearLoginAttempts(username, lock);
     return res;
@@ -2607,72 +2607,26 @@ async function login(username, password, teacherAliases = false) {
   return res;
 }
 
-async function t29LoginByEmail(email, password, teacherAliases) {
+// Firebase checks the teacher's email, password and enrolled factor. /uidIndex
+// links that Firebase identity to a teacher profile.
+async function t29LoginByEmail(email, password) {
   const devUntil = t29DeviceLockUntil();
   if (devUntil) return { ok: false, locked: true, deviceLocked: true, lockedUntil: devUntil, error: t29DeviceLockedMessage(devUntil - Date.now()) };
-  const result = await t29SignInTeacher(email, password);
-  if (teacherAliases && result.badCredentials && T29_EMAIL_RE.test(email) && !/@t29\.local$/i.test(email)) {
-    return await t29LoginWithAlias(email, password) || result;
-  }
-  return result;
-}
-
-async function t29LoginWithAlias(identifier, password) {
-  if (!window.T29_TEACHER_LOGIN_URL) return null;
-  const unavailable = { ok: false, aliasUnavailable: true, error: "Alternate teacher sign-in is temporarily unavailable. Try again shortly or use your usual sign-in." };
-  let alias;
-  try {
-    const response = await fetch(window.T29_TEACHER_LOGIN_URL, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier, password }),
-      signal: AbortSignal.timeout?.(15000), redirect: "error", cache: "no-store"
-    });
-    if (response.status === 429) return t29SignInStepFailure({ code: "auth/too-many-requests" });
-    if (response.status === 400 || response.status === 401) return null;
-    if (!response.ok) return unavailable;
-    alias = await response.json();
-  } catch (e) {
-    return unavailable;
-  }
-  if (typeof alias?.email !== "string" || typeof alias.uid !== "string") return unavailable;
-  const expectedUsername = identifier.includes("@") ? null : identifier;
-  return t29SignInTeacher(alias.email, password, alias.uid, expectedUsername);
-}
-
-// The browser completes normal Firebase sign-in, including any enrolled factor.
-async function t29SignInTeacher(email, password, expectedUid, expectedUsername) {
   const bad = { ok: false, badCredentials: true, error: "Incorrect email or password." };
-  const auth = firebase.auth();
-  let authUser;
   try {
-    const credential = await auth.signInWithEmailAndPassword(email, password);
-    authUser = credential.user;
+    await firebase.auth().signInWithEmailAndPassword(email, password);
   } catch (e) {
     return t29SignInStepFailure(e) || bad;
   }
-  if (expectedUid && expectedUid !== authUser.uid) {
-    await auth.signOut().catch(() => {});
-    return bad;
-  }
-  const idx = await fdb.collection("uidIndex").doc(authUser.uid).get({ source: "server" }).catch(() => null);
+  const authUser = firebase.auth().currentUser;
+  const idx = authUser ? await fdb.collection("uidIndex").doc(authUser.uid).get().catch(() => null) : null;
   const username = idx && idx.exists ? idx.data().username : null;
-  const matchesUsername = typeof username === "string" && username
-    && (!expectedUsername || username.toLowerCase() === expectedUsername.toLowerCase());
-  const result = matchesUsername ? await t29ReadLoginProfile(username, authUser, password) : null;
+  const result = username ? await t29ReadLoginProfile(username, authUser, password) : null;
+  if (result && !result.ok) return result;
   const u = result?.user;
   if (!u || u.role !== "teacher") {
-    await auth.signOut().catch(() => {});
-    return result && !result.ok ? result : bad;
-  }
-  // Login by username already checks and clears this lock in login().
-  if (!expectedUsername) {
-    const lock = await t29LoginLockStatus(username);
-    if (lock.locked) {
-      await auth.signOut().catch(() => {});
-      t29UserLockSet(username, lock.lockedUntil);
-      return { ok: false, locked: true, lockedUntil: lock.lockedUntil, error: t29LockedMessage(lock.msLeft) };
-    }
-    await t29ClearLoginAttempts(username, lock);
+    await firebase.auth().signOut().catch(() => {});
+    return bad;
   }
   setSession(username, u.sessionVersion || 0);
   return { ok: true, user: u };
@@ -2919,21 +2873,12 @@ async function t29DeleteTeacherAccount(username, password) {
    password, so nobody else can either. Until a legacy account logs in
    once, its old password is still on its /users doc, which classmates
    and the teacher can read like any other classmate's doc. */
-async function t29LoginCore(username, password, teacherAliases = false) {
-  let triedAlias = false;
-  async function tryTeacherAlias() {
-    if (!teacherAliases || triedAlias) return null;
-    triedAlias = true;
-    const result = await t29LoginWithAlias(username, password);
-    return result?.badCredentials ? null : result;
-  }
+async function t29LoginCore(username, password) {
   try {
     await firebase.auth().signInWithEmailAndPassword(t29AuthEmail(username), password);
   } catch (e) {
     const interrupted = t29SignInStepFailure(e);
     if (interrupted) return interrupted;
-    const alias = await tryTeacherAlias();
-    if (alias && !alias.aliasUnavailable) return alias;
     // BUGFIX: newer Firebase projects have "email enumeration protection"
     // on by default, which reports a nonexistent account as
     // auth/invalid-credential (identical to a wrong password) rather than
@@ -2946,9 +2891,9 @@ async function t29LoginCore(username, password, teacherAliases = false) {
     // still correctly falls through to "Incorrect username or password."
     if (e.code === "auth/user-not-found" || e.code === "auth/invalid-credential") {
       const migrated = await t29TryMigrateLegacyLogin(username, password);
-      if (!migrated.ok) return alias || { ok: false, badCredentials: true, error: "Incorrect username or password." };
+      if (!migrated.ok) return { ok: false, badCredentials: true, error: "Incorrect username or password." };
     } else {
-      return alias || { ok: false, badCredentials: true, error: "Incorrect username or password." };
+      return { ok: false, badCredentials: true, error: "Incorrect username or password." };
     }
   }
 
@@ -2980,7 +2925,7 @@ async function t29LoginCore(username, password, teacherAliases = false) {
   const u = result.user;
   if (!u) {
     await firebase.auth().signOut().catch(() => {});
-    return await tryTeacherAlias() || { ok: false, error: "Incorrect username or password." };
+    return { ok: false, error: "Incorrect username or password." };
   }
   if (u.role === "applicant") { clearSession(); return { ok: true, applicant: u }; }
   setSession(username, u.sessionVersion || 0);

@@ -53,7 +53,7 @@
       <form id="panel-teacher-login" onsubmit="return doLogin(event)">
         <label for="l-username">Username or sign-in email</label>
         <input id="l-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username or email">
-        <p class="field-hint">Use your username or the email on your teacher account. Both use the same password.</p>
+        <p class="field-hint">Use the username you signed up with. If you set up email sign-in, use that address.</p>
         <label for="l-password">Password</label>
         <input id="l-password" type="password" required autocomplete="current-password" placeholder="Password">
         <div class="remember-row">
@@ -66,7 +66,7 @@
 
       <!-- Teacher forgot password: emails a one-time link to the recovery email -->
       <form id="panel-teacher-forgot" class="hidden" onsubmit="return doForgot(event)">
-        <p class="muted-small" style="margin-top:0;">Enter your sign-in email. If you added a recovery email when you created your account, include your username below.</p>
+        <p class="muted-small" style="margin-top:0;">For an email login, enter your sign-in address. For a username login, enter your saved recovery email and add your username below.</p>
         <label for="f-email">Sign-in or recovery email</label>
         <input id="f-email" type="email" required autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
         <details id="f-legacy" style="margin:8px 0 14px;">
@@ -119,7 +119,7 @@
         <p class="field-hint" id="t-name-hint">This is how your students will see you, e.g. Ms Smith.</p>
         <label for="t-email">Recovery email (optional)</label>
         <input id="t-email" type="email" maxlength="254" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
-        <p class="field-hint">Use an address you can access and that’s unique to your teacher account. You can use it to sign in or reset your password.</p>
+        <p class="field-hint">Add an address you can access if you forget your password. Students cannot see it.</p>
         <label for="t-class-mode">Class setup</label>
         <select id="t-class-mode" onchange="updateTeacherClassSetup()">
           <option value="create">Create a new class</option>
@@ -249,16 +249,16 @@
      lets the HTML parse and paint immediately while these load in the
      background, in the same relative order, still finishing before
      DOMContentLoaded — matching how every other page already does it. -->
-<script type="module" src="firebase-init.js?v=1fef7bcc"></script>
+<script type="module" src="firebase-init.js?v=ccc7d974"></script>
 <script defer src="icons.js?v=be447cba"></script>
 <script defer src="offline.js?v=55c545a6"></script>
-<script defer src="data-core.js?v=b03e32b9"></script>
+<script defer src="data-core.js?v=04c89331"></script>
 <script defer src="data-money.js?v=4dc6f0d3"></script>
 <script defer src="data-life.js?v=e6f73869"></script>
 <script defer src="data-property.js?v=4b2feaee"></script>
 <script defer src="data-markets.js?v=5b7478f9"></script>
 <script defer src="base-template.js?v=00f9bee4"></script>
-<script defer src="policy-config.js?v=6853ed48"></script>
+<script defer src="policy-config.js?v=15b7d661"></script>
 <script>
 // Paint the role and account tab icons.
 function paintIcons() {
@@ -466,7 +466,7 @@ async function doLoginInner(e) {
   const password = document.getElementById(pField).value;
   const remember = document.getElementById(rField).checked;
 
-  const res = await login(username, password, isTeacherForm);
+  const res = await login(username, password);
   if (!res.ok) { showMsg(res.error, false); return false; }
 
   // SECURITY FIX: this used to also save the plaintext password to

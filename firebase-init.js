@@ -52,7 +52,6 @@ const firebaseConfig = {
 };
 
 const _app = initializeApp(firebaseConfig);
-window.T29_TEACHER_LOGIN_URL = `https://australia-southeast1-${firebaseConfig.projectId}.cloudfunctions.net/resolveTeacherLogin`;
 
 /* ---------------- App Check (OFF until you paste a key) ----------------
    App Check makes Firebase refuse requests that don't come from THIS

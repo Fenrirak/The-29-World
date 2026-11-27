@@ -30,13 +30,7 @@ Sign-in and saved data connect to the live Firebase project, so some features ma
 
 ## Teacher sign-in
 
-Teachers and co-teachers can sign in with their username or the email on their account and use the same password. If teachers share a recovery email, they use their usernames. For accounts created with a recovery email, the password reset form accepts the username and recovery email together. Accounts whose main Firebase sign-in uses a real email can request a password reset with the email alone. Student and pending student accounts use their username and password. Family view uses a read-only sharing link.
-
-Deploy the alternate sign-in function to the existing Firebase project in Sydney before publishing the site changes. Cloud Functions requires the Firebase Blaze plan. [Cloud Functions setup](https://firebase.google.com/docs/functions/get-started)
-
-1. Create a dedicated runtime service account in `world-e0c82` with Firebase Authentication Viewer (`roles/firebaseauth.viewer`) and Cloud Datastore Viewer (`roles/datastore.viewer`). The deployer needs permission to attach that account.
-2. Use an API key from `world-e0c82` that permits the Identity Toolkit API and works for server requests. Set `T29_AUTH_API_KEY` to that key and `T29_LOGIN_SERVICE_ACCOUNT` to the runtime account's email in the function's deployment configuration. The Firebase CLI prompts for these parameters if they are unset.
-3. With the Firebase CLI signed in, run `firebase deploy --only functions:resolveTeacherLogin --project world-e0c82`. Verify both identifiers on a test teacher account, then publish the site files together. Keep the function origin allowlist in `functions/index.js` in sync with the site.
+Teachers and co-teachers sign in with their username and password. Accounts previously set up for email sign-in use their sign-in email and password. An optional recovery address is used for password recovery. Student and pending student accounts use their username and password. Family view uses a read-only sharing link.
 
 ### Multi-factor authentication
 
