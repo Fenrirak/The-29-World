@@ -754,7 +754,7 @@ function notifShowCrisis(event, onClose) {
   dialog.setAttribute("aria-describedby", "crisisAlertBody");
   dialog.innerHTML = `
     <div class="be-heading">
-      <span class="badge coral" id="crisisAlertLabel">${icon("chart", 14)} Classroom crisis</span>
+      <span class="badge coral" id="crisisAlertLabel">Classroom crisis</span>
       <h2 class="be-title" id="crisisAlertTitle">${escapeHtml(event.name)}</h2>
       <p id="crisisAlertBody">Prices in your classroom economy have changed.</p>
     </div>
