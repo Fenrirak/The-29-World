@@ -686,13 +686,17 @@ function notifAnimateCrisis(dialog) {
 
   const slamDuration = 180;
   const shake = [
-    { translate: "-10px 6px", offset: 0 },
-    { translate: "9px -5px", offset: .08 },
-    { translate: "-7px 4px", offset: .18 },
-    { translate: "5px -3px", offset: .29 },
-    { translate: "-3px 2px", offset: .42 },
-    { translate: "2px -1px", offset: .57 },
-    { translate: "-1px 1px", offset: .74 },
+    { translate: "-16px 12px", offset: 0 },
+    { translate: "15px -9px", offset: .06 },
+    { translate: "-12px 7px", offset: .12 },
+    { translate: "9px -5px", offset: .18 },
+    { translate: "-11px 8px", offset: .24 },
+    { translate: "8px -6px", offset: .31 },
+    { translate: "-6px 4px", offset: .39 },
+    { translate: "5px -3px", offset: .48 },
+    { translate: "-3px 2px", offset: .58 },
+    { translate: "2px -2px", offset: .69 },
+    { translate: "-1px 1px", offset: .81 },
     { translate: "0px", offset: 1 }
   ];
   // Animate the page's rendered sections individually so the body stays untransformed
@@ -704,9 +708,18 @@ function notifAnimateCrisis(dialog) {
     { opacity: 1, transform: "none" }
   ], { id: "crisis-alert-slam", duration: slamDuration, easing: "cubic-bezier(.55,.05,.85,.55)" });
   const shakes = targets.map(el => el.animate(shake, {
-    id: "crisis-alert-shake", delay: slamDuration, duration: 1000
+    id: "crisis-alert-shake", delay: slamDuration, duration: 1600
   }));
-  return [slam, ...shakes];
+  // Give the popup its own recoil on top of the page's shared movement.
+  const landing = dialog.animate([
+    { transform: "rotate(-1deg) scale(.99,.94)" },
+    { transform: "rotate(.85deg) scale(1.012,1.025)", offset: .175 },
+    { transform: "rotate(-.6deg) scale(.998,.985)", offset: .35 },
+    { transform: "rotate(.45deg)", offset: .53 },
+    { transform: "rotate(-.3deg)", offset: .7 },
+    { transform: "none" }
+  ], { id: "crisis-alert-landing", delay: slamDuration, duration: 550 });
+  return [slam, ...shakes, landing];
 }
 
 function notifShowCrisis(event, onClose) {
