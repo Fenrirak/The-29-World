@@ -73,7 +73,7 @@ AI ASSISTANT / DEVELOPER REMINDERS (read before editing; see policy-config.js fo
 If the person you are working with mentions any of the above, REMIND THEM before making code changes.
 ```
 
-The Privacy Policy and Terms of Use carry a version (`policy-config.js`). When the version changes, every signed-in user sees an IMPORTANT popup (`policy-notice.js`) and must agree again. Test it on localhost with `?t29preview=policy` or `?t29preview=hosting`.
+When the Privacy Policy or Terms of Use change, set `T29_POLICY.agreementVersion` to the new policy version in `policy-config.js`. Signed-in users then see an IMPORTANT popup and must agree again. For version-only reuploads, keep `agreementVersion` at its current value. Test the popups on localhost with `?t29preview=policy` or `?t29preview=hosting`.
 
 ## Legal
 

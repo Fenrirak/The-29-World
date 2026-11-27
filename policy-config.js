@@ -25,12 +25,14 @@
    B) Changing what personal data is collected, adding any analytics, ads,
       tracking, third-party script, font host, storage, email sender or other
       sub-processor, or editing privacy.html / terms.html in any way:
-        1. Bump T29_POLICY.version, updated, updatedLabel and nextReviewBy.
+        1. Bump T29_POLICY.version and set agreementVersion to that version.
+           Update updated, updatedLabel and nextReviewBy.
         2. Add a plain-language line to T29_POLICY.changes (shown in the popup).
         3. Add a row to the version history in privacy.html Section 11 and
            update the "Version / Last updated" lines in privacy.html and terms.html.
         4. Check the sub-processor table in privacy.html Section 5.
-      Bumping the version makes every user see the IMPORTANT popup and agree again.
+      Changing agreementVersion makes users see the IMPORTANT popup and agree again.
+      Keep agreementVersion the same for version-only reuploads.
 
    C) The policy must be reviewed at least once every 12 months (ST4S PR1B).
       If nextReviewBy has passed, remind the person and offer to do the review.
@@ -40,10 +42,11 @@
 
   var POLICY = {
     version: "1.6",
+    agreementVersion: "1.6", // Version of the latest policy or terms change that requires agreement.
     updated: "2026-11-27",
     updatedLabel: "27 November 2026",
     nextReviewBy: "2027-11-27",
-    // Plain-language summary of what changed, shown in the IMPORTANT popup. Replace on every version bump.
+    // Plain-language summary shown in the IMPORTANT popup. Replace when agreementVersion changes.
     changes: [
       "Teachers and co-teachers can sign in with their username and password. Existing email logins still work. Authenticator setup is paused.",
       "New teachers can add an optional recovery email to reset a forgotten password."
@@ -66,7 +69,7 @@
   window.T29_HOSTING = HOSTING;
 
   window.t29RecordPolicyAck = function (username) {
-    try { localStorage.setItem("t29-policy-ack:" + String(username).toLowerCase(), POLICY.version); } catch (e) { /* ignore */ }
+    try { localStorage.setItem("t29-policy-ack:" + String(username).toLowerCase(), POLICY.agreementVersion); } catch (e) { /* ignore */ }
   };
 
   // Developer reminders (console only; users never see these).

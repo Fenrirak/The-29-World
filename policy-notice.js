@@ -1,5 +1,5 @@
 /* IMPORTANT notices shown to signed-in users:
-   1) the Privacy Policy / Terms of Use changed (version in policy-config.js) -> must agree again;
+   1) the Privacy Policy / Terms of Use changed (agreementVersion in policy-config.js) -> must agree again;
    2) data or hosting is moving to another country (T29_HOSTING.pendingMove) -> must acknowledge.
    Agreement is remembered per user, per device, in localStorage.
    Developers can test on localhost with ?t29preview=policy or ?t29preview=hosting (nothing is saved). */
@@ -28,7 +28,8 @@
     move = { id: "preview", announced: "2026-01-01", effective: "2099-01-01", what: "the database that stores your account and class data", from: "its current location", to: "a new country" };
   }
   var queue = [];
-  if (preview === "policy" || (!preview && get("t29-policy-ack:" + user) !== P.version)) queue.push("policy");
+  var agreementVersion = P.agreementVersion || P.version;
+  if (preview === "policy" || (!preview && get("t29-policy-ack:" + user) !== agreementVersion)) queue.push("policy");
   if (preview === "hosting" || (!preview && move && get("t29-hosting-ack:" + user) !== move.id)) queue.push("hosting");
   if (preview === "policy") queue = ["policy"];
   if (preview === "hosting") queue = ["hosting"];
@@ -95,7 +96,7 @@
       dlg.appendChild(el("p", "t29n-meta", "Students: if you're not sure, ask your teacher before you agree."));
       okBtn.textContent = "Agree and continue"; okBtn.disabled = true;
       cb.addEventListener("change", function () { okBtn.disabled = !cb.checked; });
-      okBtn.addEventListener("click", function () { if (!cb.checked) return; if (!preview) set("t29-policy-ack:" + user, P.version); finish(); });
+      okBtn.addEventListener("click", function () { if (!cb.checked) return; if (!preview) window.t29RecordPolicyAck(user); finish(); });
       var out = el("button", "btn secondary", "Log out"); out.type = "button"; out.addEventListener("click", logOut);
       actions.appendChild(out);
     } else {
