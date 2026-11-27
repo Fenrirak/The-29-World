@@ -1360,9 +1360,15 @@ function baseCrisisEvents(terms) {
     { id: "cr_recession", name: "Classroom recession", severity: 12 * scale, sectors: ["market", "property", "store", "transport"] }
   ];
 }
-function crisisMarketSummary(event) {
+function crisisMarketChanges(event) {
   const labels = { market: "Simulated shares", property: "Property", store: "Store goods", transport: "Vehicles" };
-  return (event.markets || []).map(m => (labels[m.key] || "Market") + " " + (m.changePct > 0 ? "+" : "") + Number(m.changePct) + "%").join(" · ");
+  return (event.markets || []).map(m => ({
+    label: labels[m.key] || "Market",
+    change: (m.changePct > 0 ? "+" : "") + Number(m.changePct) + "%"
+  }));
+}
+function crisisMarketSummary(event) {
+  return crisisMarketChanges(event).map(({ label, change }) => `${label} ${change}`).join(" · ");
 }
 function classCrisisEvents(cls) {
   return Array.isArray(cls.crisisDefs) ? cls.crisisDefs : cls.baseTemplate ? baseCrisisEvents(cls.baseTemplateTerms) : [];

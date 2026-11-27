@@ -28,6 +28,14 @@ The homepage has sections for the class overview, setup, a sample payday and pri
 
 Sign-in and saved data connect to the live Firebase project, so some features may not work on your own copy.
 
+## Teacher multi-factor authentication
+
+Teacher and co-teacher accounts require a verified email, password and a time-based authenticator code. Firestore grants classroom access to a teacher only after account setup and with a Firebase token issued through a TOTP challenge. Student and pending student accounts continue to use their existing username and password. Family view uses a read-only sharing link and does not have a separate account type.
+
+Before releasing the site and `firestore.rules` together, check that the existing Firebase project uses Authentication with Identity Platform, has [TOTP enabled](https://firebase.google.com/docs/auth/web/totp-mfa), and can send and complete email verification, email changes and password resets with the project's configured email handlers. Keep Email/Password enabled and retain Email Link sign-in while legacy username-based recovery is needed. Check Identity Platform billing before upgrading the project. Verify a new signup, a legacy teacher migration, a second-factor sign-in and password reset, and a student sign-in in a test configuration before releasing. Existing teacher sessions without TOTP will be asked to sign in and complete setup.
+
+For a lost authenticator, verify the teacher through a trusted school contact or other independently verified channel before any administrative action. For a verified recovery, use the Firebase Admin account tools to remove only the unavailable factor if a backup remains, or clear the unavailable factors and revoke refresh tokens if a full re-enrolment is needed. The teacher signs in and enrols again before opening classes. Vendor staff and administrators use separate Google Cloud and GitHub identities. Their MFA enforcement and evidence are managed in those platforms for ST4S A5.
+
 ## Real-world stocks
 
 Teachers can enable **Stock Market → Real-world stocks and funds**, preview closing prices and add any number of available companies and funds in one selection. Every new class starts with this switched off. Turning it off pauses updates and keeps existing holdings. Trades use the numerical exchange price in classroom dollars. NZX listings show NZD and US listings show USD.

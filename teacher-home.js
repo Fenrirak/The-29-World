@@ -130,19 +130,23 @@ async function leaveCoTeachClick(code, name) {
   await render();
 }
 
-// Optional recovery email: lets a teacher reset a forgotten password from the login page.
-async function recoveryEmailClick() {
+async function accountSecurityClick() {
+  const button = document.getElementById("accountSecurityBtn");
   showMsg("");
-  const current = await t29GetRecoveryEmail(CURRENT.username);
-  const typed = await t29Prompt(
-    (current ? `Your recovery email is ${current}.\n\nType a new one to change it, or clear the box to remove it.` : "You haven't set a recovery email.\n\nAdd one so you can reset your password if you ever forget it. Only you can see it.") ,
-    current, { placeholder: "you@example.com", confirmText: "Save" });
-  if (typed === null) return;
+  button.disabled = true;
   try {
-    const res = await t29SetRecoveryEmail(CURRENT.username, typed);
-    if (!res.ok) { showMsg(res.error, false); return; }
-    showMsg(res.email ? "Recovery email saved." : "Recovery email removed.", true);
-  } catch (e) { showMsg("Couldn't save that. Please try again.", false); }
+    const message = await window.t29TeacherMfa.manage();
+    if (message) showMsg(message, true);
+  } catch (e) {
+    if (e.code !== "t29/mfa-cancelled") {
+      const failure = t29SignInStepFailure(e);
+      const wrongPassword = ["auth/invalid-credential", "auth/wrong-password"].includes(e.code);
+      showMsg(failure?.error || (wrongPassword ? "Your current password is incorrect." : "Couldn't open or update account security. Log in again and retry."), false);
+    }
+  } finally {
+    button.disabled = false;
+    button.focus();
+  }
 }
 
 async function toggleArchive(code, currentlyArchived, name) {

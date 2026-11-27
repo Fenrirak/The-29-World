@@ -687,53 +687,19 @@ function notifShowCrisis(event, onClose) {
     style.id = "t29CrisisAlertCss";
     style.textContent = `
       .crisis-alert {
-        box-sizing: border-box;
-        width: min(30rem, calc(100% - 2rem));
-        max-height: calc(100% - 2rem);
-        padding: clamp(1.25rem, 5vw, 2rem);
-        border: 1px solid #ff7866;
-        border-top: 4px solid #ff7866;
-        border-radius: 20px;
-        background: radial-gradient(ellipse at 20% 0, #56272d, transparent 75%), #211b2a;
-        color: #fff7f2;
-        box-shadow: 0 20px 70px #100a17a6;
-        overflow-wrap: anywhere;
+        width: calc(100% - 2rem);
+        border: 1px solid var(--line);
+        color: var(--ink);
       }
       .crisis-alert[open] { animation: crisis-alert-tremor 1s ease-out both; }
-      .crisis-alert::backdrop { background: #0e0b18c9; }
-      .crisis-alert-heading { display: flex; align-items: center; gap: .8rem; margin-bottom: .9rem; }
-      .crisis-alert-icon {
-        display: grid;
-        place-items: center;
-        flex: 0 0 3rem;
-        height: 3rem;
-        border: 1px solid #ff9b86;
-        border-radius: 14px;
-        background: #793b3a;
-        color: #ffd3a6;
-      }
-      .crisis-alert-label { color: #ffb7a7; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-      dialog.crisis-alert h2 { margin: 0 0 .5rem; color: inherit; font-size: clamp(1.6rem, 6vw, 2.35rem); line-height: 1.1; }
-      .crisis-alert p { margin: 0; color: #f2e2e8; }
-      .crisis-alert .crisis-alert-impact {
-        margin-top: 1rem;
-        padding: .7rem .85rem;
-        border-left: 3px solid #ff9b86;
-        border-radius: 0 8px 8px 0;
-        background: #fff2ec12;
-        color: #fff2ec;
-        font-weight: 700;
-      }
-      .crisis-alert form { margin-top: 1.25rem; }
-      .crisis-alert button.btn {
-        width: 100%;
-        margin: 0;
-        background: #ffb39c;
-        color: #261621;
-        border: 1px solid #ffb39c;
-      }
-      .crisis-alert button.btn:hover { background: #ffcebb; }
-      .crisis-alert button.btn:focus-visible { outline: 2px solid #fff7f2; outline-offset: 3px; }
+      .crisis-alert::backdrop { background: rgba(31, 43, 68, .55); }
+      .crisis-alert .crisis-alert-impact { display: block; background: var(--surface-2, var(--bg)); }
+      .crisis-alert-impact h3 { margin: 0 0 4px; font-size: var(--fs-sm); }
+      .crisis-alert-impact dl { margin: 0; }
+      .crisis-alert-market { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 6px 0; }
+      .crisis-alert-market + .crisis-alert-market { border-top: 1px solid var(--line); }
+      .crisis-alert-market:last-child { padding-bottom: 0; }
+      .crisis-alert-market dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
       @keyframes crisis-alert-tremor {
         0% { opacity: 0; transform: translate(0, 8px); }
         20% { opacity: 1; transform: translateX(-7px); }
@@ -749,22 +715,26 @@ function notifShowCrisis(event, onClose) {
       }`;
     document.head.appendChild(style);
   }
-  const summary = crisisMarketSummary(event);
+  const markets = crisisMarketChanges(event);
   const dialog = document.createElement("dialog");
-  dialog.className = "crisis-alert";
+  dialog.className = "anw-modal-card be-card crisis-alert";
   dialog.setAttribute("role", "alertdialog");
   dialog.setAttribute("aria-modal", "true");
   dialog.setAttribute("aria-labelledby", "crisisAlertLabel crisisAlertTitle");
-  dialog.setAttribute("aria-describedby", summary ? "crisisAlertBody crisisAlertImpact" : "crisisAlertBody");
+  dialog.setAttribute("aria-describedby", "crisisAlertBody");
   dialog.innerHTML = `
-    <div class="crisis-alert-heading">
-      <span class="crisis-alert-icon" aria-hidden="true">${icon("bolt", 28)}</span>
-      <span class="crisis-alert-label" id="crisisAlertLabel">Classroom crisis</span>
+    <div class="be-heading">
+      <span class="badge gold" id="crisisAlertLabel">${icon("chart", 14)} Classroom crisis</span>
+      <h2 class="be-title" id="crisisAlertTitle">${escapeHtml(event.name)}</h2>
+      <p id="crisisAlertBody">Prices in your classroom economy have changed.</p>
     </div>
-    <h2 id="crisisAlertTitle">${escapeHtml(event.name)}</h2>
-    <p id="crisisAlertBody">Prices in your classroom economy have changed.</p>
-    ${summary ? `<p class="crisis-alert-impact" id="crisisAlertImpact">${escapeHtml(summary)}</p>` : ""}
-    <form method="dialog"><button class="btn" autofocus>Got it</button></form>`;
+    ${markets.length ? `<section class="be-summary crisis-alert-impact" aria-labelledby="crisisAlertImpactTitle">
+      <h3 id="crisisAlertImpactTitle">Average price changes</h3>
+      <dl>${markets.map(({ label, change }) => `<div class="crisis-alert-market">
+        <dt>${escapeHtml(label)}</dt><dd>${escapeHtml(change)}</dd>
+      </div>`).join("")}</dl>
+    </section>` : ""}
+    <form method="dialog"><button class="btn gold be-full" autofocus>Got it</button></form>`;
   dialog.addEventListener("close", () => { dialog.remove(); onClose(); }, { once: true });
   document.body.appendChild(dialog);
   dialog.showModal();
