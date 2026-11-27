@@ -754,7 +754,7 @@ function notifShowCrisis(event, onClose) {
   dialog.setAttribute("aria-describedby", "crisisAlertBody");
   dialog.innerHTML = `
     <div class="be-heading">
-      <span class="badge gold" id="crisisAlertLabel">${icon("chart", 14)} Classroom crisis</span>
+      <span class="badge coral" id="crisisAlertLabel">${icon("chart", 14)} Classroom crisis</span>
       <h2 class="be-title" id="crisisAlertTitle">${escapeHtml(event.name)}</h2>
       <p id="crisisAlertBody">Prices in your classroom economy have changed.</p>
     </div>
@@ -764,7 +764,7 @@ function notifShowCrisis(event, onClose) {
         <dt>${escapeHtml(label)}</dt><dd>${escapeHtml(change)}</dd>
       </div>`).join("")}</dl>
     </section>` : ""}
-    <form method="dialog"><button class="btn gold be-full" autofocus>Got it</button></form>`;
+    <form method="dialog"><button class="btn coral be-full" autofocus>Got it</button></form>`;
   document.body.appendChild(dialog);
   dialog.showModal();
   const animations = notifAnimateCrisis(dialog);
