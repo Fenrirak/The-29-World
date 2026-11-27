@@ -8,7 +8,7 @@
 <link rel="canonical" href="https://fenrirak.github.io/The-29-World/help.html">
 <link rel="icon" href="favicon.ico" sizes="any">
 <script>try { if (localStorage.getItem('t29-dark-mode') === '1') document.documentElement.classList.add('dark-mode'); } catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=95c2f4c4">
+<link rel="stylesheet" href="style.css?v=60775b11">
 <link rel="stylesheet" href="help.css?v=96845f5e">
 <script defer src="help.js?v=30f999a8"></script>
 </head>
@@ -42,7 +42,7 @@
         <summary>I can’t log in. What should I check?</summary>
         <ol>
           <li>Open the <a href="login.html">class login page</a>, choose <strong>Teacher</strong> or <strong>Student</strong>, then select <strong>Log in</strong>.</li>
-          <li>Check your username, Caps Lock and any extra spaces pasted into the password field. If you reset a teacher password by email, use the recovery email for future logins.</li>
+          <li>Students use their username and password. Teachers use their verified email, password and authenticator code. If you have a teacher account from before this change, sign in with your existing username and password the first time to set up your email and authenticator.</li>
           <li>If a countdown appears, wait for it to finish before trying again. If the page stalls or shows a connection error, follow the <a href="#setup">technical setup checks</a>.</li>
         </ol>
       </details>
@@ -52,8 +52,13 @@
       </details>
       <details data-keywords="teacher forgot password reset recovery email link spam">
         <summary>How do I reset my teacher password?</summary>
-        <p>On the Teacher login form, select <strong>Forgot your password?</strong> and enter your username and the recovery email you saved. Check your inbox and spam folder. Open the one-time link to set a password, then sign in with your recovery email and new password.</p>
-        <p>If you still have a signed-in session, you can add or update your recovery email from <strong>Teacher Home</strong>. If you’re locked out and never added one, <a href="index.html#contact">contact support</a>.</p>
+        <p>On the Teacher login form, select <strong>Forgot your password?</strong> and enter your sign-in email. Open the one-time link from your inbox or spam folder to set a new password. Then sign in with your email, new password and authenticator.</p>
+        <p>If you still use a username, select <strong>I still sign in with a username</strong> and enter the username and the recovery email you previously saved. If you can't access the email, <a href="index.html#contact">contact support</a>.</p>
+      </details>
+      <details data-keywords="teacher authenticator password mfa two-factor totp lost phone school account">
+        <summary>How do I manage my teacher authenticator?</summary>
+        <p>Open <strong>Teacher Home → Account security</strong> to view your sign-in email, verify a new address or add a backup authenticator on a separate device. Choose the backup from the authenticator list when you sign in if your main device is unavailable.</p>
+        <p>If you lose access to every authenticator, <a href="index.html#contact">contact support</a> for identity verification. A password reset keeps your authenticators in place.</p>
       </details>
       <details data-keywords="invalid class code new class invite archived">
         <summary>Why won’t my class code work?</summary>

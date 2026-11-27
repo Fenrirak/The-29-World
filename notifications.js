@@ -659,10 +659,13 @@ function notifSafeHref(h) {
   h = String(h || "");
   return /^(?![a-z][a-z0-9+.-]*:|\/\/)[\w\-./]*(\?[\w\-=&%.]*)?(#[\w\-]*)?$/i.test(h) ? h : "";
 }
+function notifRecentCrises(me, cls, cutoff) {
+  return (cls?.crisisLog || []).filter(e => e.ts >= cutoff && e.ts >= (me.joinedAt || 0));
+}
 function notifTeacherChangeItems(me, cls) {
   const list = cls && Array.isArray(cls.teacherNotices) ? cls.teacherNotices : [];
   const cutoff = trustedNow().getTime() - NOTIF_TEACHER_TTL_MS;
-  const out = (cls?.crisisLog || []).filter(e => e.ts >= cutoff && e.ts >= (me.joinedAt || 0)).map(e => ({
+  const out = notifRecentCrises(me, cls, cutoff).map(e => ({
     id: "crisis-" + e.id, ts: e.ts, icon: "chart", tone: "gold",
     title: "Classroom crisis: " + e.name, body: crisisMarketSummary(e), href: "events.html#history"
   }));
@@ -676,6 +679,162 @@ function notifTeacherChangeItems(me, cls) {
     });
   });
   return out;
+}
+
+function notifShowCrisis(event, onClose) {
+  if (!document.getElementById("t29CrisisAlertCss")) {
+    const style = document.createElement("style");
+    style.id = "t29CrisisAlertCss";
+    style.textContent = `
+      .crisis-alert {
+        box-sizing: border-box;
+        width: min(30rem, calc(100% - 2rem));
+        max-height: calc(100% - 2rem);
+        padding: clamp(1.25rem, 5vw, 2rem);
+        border: 1px solid #ff7866;
+        border-top: 4px solid #ff7866;
+        border-radius: 20px;
+        background: radial-gradient(ellipse at 20% 0, #56272d, transparent 75%), #211b2a;
+        color: #fff7f2;
+        box-shadow: 0 20px 70px #100a17a6;
+        overflow-wrap: anywhere;
+      }
+      .crisis-alert[open] { animation: crisis-alert-tremor 1s ease-out both; }
+      .crisis-alert::backdrop { background: #0e0b18c9; }
+      .crisis-alert-heading { display: flex; align-items: center; gap: .8rem; margin-bottom: .9rem; }
+      .crisis-alert-icon {
+        display: grid;
+        place-items: center;
+        flex: 0 0 3rem;
+        height: 3rem;
+        border: 1px solid #ff9b86;
+        border-radius: 14px;
+        background: #793b3a;
+        color: #ffd3a6;
+      }
+      .crisis-alert-label { color: #ffb7a7; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+      dialog.crisis-alert h2 { margin: 0 0 .5rem; color: inherit; font-size: clamp(1.6rem, 6vw, 2.35rem); line-height: 1.1; }
+      .crisis-alert p { margin: 0; color: #f2e2e8; }
+      .crisis-alert .crisis-alert-impact {
+        margin-top: 1rem;
+        padding: .7rem .85rem;
+        border-left: 3px solid #ff9b86;
+        border-radius: 0 8px 8px 0;
+        background: #fff2ec12;
+        color: #fff2ec;
+        font-weight: 700;
+      }
+      .crisis-alert form { margin-top: 1.25rem; }
+      .crisis-alert button.btn {
+        width: 100%;
+        margin: 0;
+        background: #ffb39c;
+        color: #261621;
+        border: 1px solid #ffb39c;
+      }
+      .crisis-alert button.btn:hover { background: #ffcebb; }
+      .crisis-alert button.btn:focus-visible { outline: 2px solid #fff7f2; outline-offset: 3px; }
+      @keyframes crisis-alert-tremor {
+        0% { opacity: 0; transform: translate(0, 8px); }
+        20% { opacity: 1; transform: translateX(-7px); }
+        35% { transform: translateX(6px); }
+        52% { transform: translateX(-4px); }
+        67% { transform: translateX(3px); }
+        82% { transform: translateX(-1px); }
+        100% { opacity: 1; transform: translateX(0); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .crisis-alert[open] { animation: none; }
+        .crisis-alert button.btn { transition: none; transform: none; }
+      }`;
+    document.head.appendChild(style);
+  }
+  const summary = crisisMarketSummary(event);
+  const dialog = document.createElement("dialog");
+  dialog.className = "crisis-alert";
+  dialog.setAttribute("role", "alertdialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", "crisisAlertLabel crisisAlertTitle");
+  dialog.setAttribute("aria-describedby", summary ? "crisisAlertBody crisisAlertImpact" : "crisisAlertBody");
+  dialog.innerHTML = `
+    <div class="crisis-alert-heading">
+      <span class="crisis-alert-icon" aria-hidden="true">${icon("bolt", 28)}</span>
+      <span class="crisis-alert-label" id="crisisAlertLabel">Classroom crisis</span>
+    </div>
+    <h2 id="crisisAlertTitle">${escapeHtml(event.name)}</h2>
+    <p id="crisisAlertBody">Prices in your classroom economy have changed.</p>
+    ${summary ? `<p class="crisis-alert-impact" id="crisisAlertImpact">${escapeHtml(summary)}</p>` : ""}
+    <form method="dialog"><button class="btn" autofocus>Got it</button></form>`;
+  dialog.addEventListener("close", () => { dialog.remove(); onClose(); }, { once: true });
+  document.body.appendChild(dialog);
+  dialog.showModal();
+}
+
+let NOTIF_CRISIS_REFRESH = null;
+function notifWatchCrises(student) {
+  const { username, classCode } = student;
+  const key = `t29-crisis-seen:${classCode}:${username}`;
+  const seen = new Set();
+  let latestClass, retry, unwatch;
+  let showing = false;
+
+  function readSeen() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(key));
+      if (Array.isArray(saved)) saved.forEach(id => seen.add(id));
+    } catch (e) { /* the in-memory set still covers this visit */ }
+  }
+
+  function showNext() {
+    clearTimeout(retry);
+    if (document.hidden || showing || !latestClass) return;
+    readSeen();
+    const cutoff = trustedNow().getTime() - NOTIF_TEACHER_TTL_MS;
+    // The class log is newest first. Present missed crises in the order they happened.
+    const event = notifRecentCrises(student, latestClass, cutoff).reverse().find(e => e.id && !seen.has(e.id));
+    if (!event) return;
+    const openDialogs = document.querySelectorAll('dialog[open], [aria-modal="true"], .anw-modal-overlay, .t29-modal-backdrop, #t29LevelupOverlay');
+    if (Array.from(openDialogs).some(el => el.getClientRects().length)) {
+      retry = setTimeout(showNext, 750);
+      return;
+    }
+    notifShowCrisis(event, () => {
+      readSeen();
+      seen.add(event.id);
+      try { localStorage.setItem(key, JSON.stringify([...seen].slice(-100))); } catch (e) { /* optional storage */ }
+      showing = false;
+      showNext();
+    });
+    showing = true;
+  }
+
+  function update(cls) {
+    latestClass = cls;
+    showNext();
+  }
+
+  function syncWatch() {
+    if (document.hidden) {
+      unwatch?.();
+      unwatch = null;
+      clearTimeout(retry);
+      return;
+    }
+    if (!unwatch && typeof t29WatchDoc === "function") {
+      unwatch = t29WatchDoc("classes", classCode, (cls, info) => {
+        if (info?.error) { unwatch?.(); unwatch = null; return; }
+        if (!info?.fromCache && !info?.hasPendingWrites) update(cls);
+      });
+    }
+    showNext();
+  }
+
+  document.addEventListener("visibilitychange", syncWatch);
+  syncWatch();
+  return cls => {
+    if (!unwatch || latestClass === undefined) latestClass = cls;
+    showNext();
+  };
 }
 
 /* ---- Dismissing to-do items ----
@@ -1382,8 +1541,9 @@ async function notifRefresh(username, classCode) {
   }
   // A big event handed out while this page was already open still has to
   // be answered before anything else (see checkBigEventPopup).
-  if (t29EffRole(me) === "student" && typeof checkBigEventPopup === "function") {
-    checkBigEventPopup(username, classCode, true).catch(() => {});
+  if (t29EffRole(me) === "student") {
+    if (typeof checkBigEventPopup === "function") await checkBigEventPopup(username, classCode, true).catch(() => {});
+    NOTIF_CRISIS_REFRESH?.(cls);
   }
 }
 
@@ -1437,6 +1597,7 @@ async function notifInit() {
   notifDeviceRepaintAll(); // a settings control may have been drawn before we knew who this was
 
   if (!notifBuildBell()) return;
+  if (!isTeacher) NOTIF_CRISIS_REFRESH = notifWatchCrises(u);
 
   // Another tab on this device marked read: repaint right away.
   window.addEventListener("storage", e => {

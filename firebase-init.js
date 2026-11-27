@@ -34,7 +34,9 @@ import {
   getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signOut, signInAnonymously,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   EmailAuthProvider, reauthenticateWithCredential, updatePassword, deleteUser,
-  sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink
+  sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail,
+  sendEmailVerification, verifyBeforeUpdateEmail, reload, getIdTokenResult,
+  getMultiFactorResolver, multiFactor, TotpMultiFactorGenerator
 } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 
 /* AI ASSISTANT / DEVELOPER: if you are about to change this project, the Firestore location, or move to another country/host,
@@ -372,6 +374,74 @@ const fdb = _makeFdb(_db);
    modular top-level functions of the same name — modular moved these off
    the User object itself, onto standalone functions. */
 
+const loadTeacherMfa = () => import(new URL("teacher-mfa.js?v=5bef299f", import.meta.url));
+
+async function _t29WithMfa(action) {
+  try { return await action(); }
+  catch (error) {
+    if (error.code !== "auth/multi-factor-auth-required") throw error;
+    const resolver = getMultiFactorResolver(_auth, error);
+    const factors = resolver.hints.filter(hint => hint.factorId === TotpMultiFactorGenerator.FACTOR_ID);
+    const { promptAuthenticator } = await loadTeacherMfa().catch(() => {
+      throw Object.assign(new Error("Authenticator dialog unavailable."), { code: "t29/mfa-unavailable" });
+    });
+    return promptAuthenticator(factors, (uid, code) => resolver.resolveSignIn(
+      TotpMultiFactorGenerator.assertionForSignIn(uid, code)
+    ));
+  }
+}
+
+function _t29CurrentAuth(uid) {
+  const user = _auth.currentUser;
+  if (!user || user.uid !== uid) throw Object.assign(new Error("Sign in again."), { code: "t29/mfa-session" });
+  return user;
+}
+
+window.t29TeacherMfa = {
+  async setUp(options) { return (await loadTeacherMfa()).setUpAuthenticator(options); },
+  async manage() { return (await loadTeacherMfa()).manageAuthenticators(); },
+  async hasSecondFactor(uid) {
+    const token = await getIdTokenResult(_t29CurrentAuth(uid));
+    return token.claims.firebase?.sign_in_second_factor === TotpMultiFactorGenerator.FACTOR_ID;
+  },
+  state(uid) {
+    const user = _t29CurrentAuth(uid);
+    return { email: user.email, verified: user.emailVerified, factors: multiFactor(user).enrolledFactors };
+  },
+  async refresh(uid) {
+    const user = _t29CurrentAuth(uid);
+    await reload(user);
+    await getIdTokenResult(user, true);
+  },
+  sendVerification(uid, email) {
+    const user = _t29CurrentAuth(uid);
+    return user.email === email ? sendEmailVerification(user) : verifyBeforeUpdateEmail(user, email);
+  },
+  async confirmEmail(uid, email, password) {
+    // Verifying a new address can invalidate the old browser token. Use the
+    // password already supplied for this operation to resume on the same UID.
+    const result = await signInWithEmailAndPassword(_auth, email, password);
+    if (result.user.uid !== uid) {
+      await signOut(_auth);
+      throw Object.assign(new Error("Sign in again."), { code: "t29/mfa-session" });
+    }
+    return result.user.emailVerified;
+  },
+  async startEnrollment(uid) {
+    const factors = multiFactor(_t29CurrentAuth(uid));
+    const secret = await TotpMultiFactorGenerator.generateSecret(await factors.getSession());
+    return {
+      key: secret.secretKey,
+      uri: secret.generateQrCodeUrl(_t29CurrentAuth(uid).email, "29 World"),
+      enroll(code, label) {
+        return multiFactor(_t29CurrentAuth(uid)).enroll(
+          TotpMultiFactorGenerator.assertionForEnrollment(secret, code), label
+        );
+      }
+    };
+  }
+};
+
 function _wrapUser(u) {
   if (!u) return null;
   return {
@@ -379,7 +449,7 @@ function _wrapUser(u) {
     email: u.email || null,
     isAnonymous: u.isAnonymous,
     delete() { return deleteUser(u); },
-    reauthenticateWithCredential(cred) { return reauthenticateWithCredential(u, cred); },
+    reauthenticateWithCredential(cred) { return _t29WithMfa(() => reauthenticateWithCredential(u, cred)); },
     updatePassword(newPw) { return updatePassword(u, newPw); }
   };
 }
@@ -399,13 +469,14 @@ const authShim = {
   },
   // Teacher account recovery (see t29SendRecoveryLink / t29CompleteRecovery in data-core.js).
   sendSignInLinkToEmail(email, settings) { return sendSignInLinkToEmail(_auth, email, settings); },
+  sendPasswordResetEmail(email) { return sendPasswordResetEmail(_auth, email); },
   isSignInWithEmailLink(link) { return isSignInWithEmailLink(_auth, link); },
   async signInWithEmailLink(email, link) {
-    const r = await signInWithEmailLink(_auth, email, link);
+    const r = await _t29WithMfa(() => signInWithEmailLink(_auth, email, link));
     return { user: _wrapUser(r.user) };
   },
   async signInWithEmailAndPassword(email, password) {
-    const r = await signInWithEmailAndPassword(_auth, email, password);
+    const r = await _t29WithMfa(() => signInWithEmailAndPassword(_auth, email, password));
     return { user: _wrapUser(r.user) };
   },
   get currentUser() { return _wrapUser(_auth.currentUser); }
@@ -529,10 +600,9 @@ window.T29_AUTH_READY = _appCheckReady.then(() => new Promise(resolve => {
   });
 }));
 
-// Every account is stored in Firebase Auth under a synthetic email built
-// from its app-level username, since this app never collects real email
-// addresses. Centralised here so login/signup/migration all construct it
-// identically.
+// Students and older teacher accounts use a synthetic Firebase Auth email
+// derived from their username. Teachers switch to a verified sign-in email
+// during MFA setup, while their app username and Firebase UID stay the same.
 //
 // BUGFIX: usernames only ever went through Firebase's own email-format
 // check starting with the password-encryption security fix — the

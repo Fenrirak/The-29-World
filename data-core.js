@@ -842,6 +842,18 @@ async function getSessionUser() {
   }
   if (!u) { clearSession(); return null; }
   if (u.role === "applicant") { clearSession(); return null; }
+  if (u.role === "teacher" && window.t29TeacherMfa) {
+    try {
+      if (!u.teacherMfaReady || !await window.t29TeacherMfa.hasSecondFactor(u.authUid)) {
+        clearSession();
+        return null;
+      }
+    } catch (e) {
+      if (t29IsConnectionError(e)) _t29SessionConnectionFailed = true;
+      else clearSession();
+      return null;
+    }
+  }
   if ((u.sessionVersion || 0) !== (sess.sv || 0)) {
     // Password was changed (here or elsewhere) since this device's
     // session was created — treat this device as logged out too.
@@ -1454,10 +1466,9 @@ async function createTeacherAndClass(name, username, password, className, extra)
   }
   const title = T29_TEACHER_TITLES.includes(extra.title) ? extra.title : "";
   const lastName = sanitizeUserText(extra.lastName, 60);
-  // Optional recovery email (lets the teacher reset a forgotten password). Blank = none.
-  const recoveryEmail = String(extra.email || "").trim().toLowerCase();
-  if (recoveryEmail && !T29_EMAIL_RE.test(recoveryEmail)) {
-    return { ok: false, error: "That email address doesn't look right. Fix it, or leave it blank. It's optional." };
+  const email = String(extra.email || "").trim().toLowerCase();
+  if (!T29_EMAIL_RE.test(email) || /@t29\.local$/.test(email)) {
+    return { ok: false, error: "Enter an email address you can open to verify your teacher account." };
   }
 
   // These two checks run before the visitor is signed in, which
@@ -1473,8 +1484,9 @@ async function createTeacherAndClass(name, username, password, className, extra)
 
   let cred;
   try {
-    cred = await firebase.auth().createUserWithEmailAndPassword(t29AuthEmail(username), password);
+    cred = await firebase.auth().createUserWithEmailAndPassword(email, password);
   } catch (e) {
+    if (e.code === "auth/email-already-in-use") return { ok: false, error: "This email may already have an account. Try logging in or resetting your password." };
     return { ok: false, error: t29AuthErrorMessage(e) };
   }
 
@@ -1486,14 +1498,10 @@ async function createTeacherAndClass(name, username, password, className, extra)
   const cls = code ? defaultClassData(code, className, username) : null;
 
   try {
-    const recoveryHash = recoveryEmail ? await t29RecoveryHash(username, recoveryEmail) : "";
     await fdb.runTransaction(async (t) => {
       t.set(fdb.collection("uidIndex").doc(cred.user.uid), { username });
       t.set(usersCol().doc(username), user);
       if (cls) t.set(classesCol().doc(code), cls);
-      // Kept apart from the /users doc (which classmates can read): only this teacher can read it.
-      if (recoveryEmail) t.set(fdb.collection("teacherRecovery").doc(username), { email: recoveryEmail });
-      if (recoveryHash) t.set(fdb.collection("recoveryCheck").doc(username), { hash: recoveryHash });
     });
   } catch (e) {
     console.warn("Teacher signup failed:", e && (e.code || e.message), e);
@@ -1502,6 +1510,8 @@ async function createTeacherAndClass(name, username, password, className, extra)
     return { ok: false, error: "Something went wrong creating your account. Please try again." };
   }
 
+  const security = await t29FinishTeacherMfa(username, cred.user, password);
+  if (!security.ok) return { ok: false, setupPending: true, error: "Your account was created. Log in with your email to finish setting it up. " + security.error };
   setSession(username, 0);
   if (classMode === "join") {
     // The new teacher identity must be committed before the existing
@@ -2555,7 +2565,7 @@ function t29DeviceLockedMessage(msLeft) {
   return `A password was entered incorrectly ${T29_LOCK_MAX} times, so this browser can't log in to any 29 World™ account for another ${m} minute${m === 1 ? "" : "s"}. Devices that are already signed in can keep being used.`;
 }
 async function login(username, password) {
-  // A teacher who set a recovery email (and used "Forgot password") signs in with that email.
+  // Teachers use their verified email after account security setup.
   if (String(username).includes("@")) return t29LoginByEmail(String(username).trim().toLowerCase(), password);
   const devUntil = t29DeviceLockUntil();
   if (devUntil) return { ok: false, locked: true, deviceLocked: true, lockedUntil: devUntil, error: t29DeviceLockedMessage(devUntil - Date.now()) };
@@ -2584,9 +2594,8 @@ async function login(username, password) {
   return res;
 }
 
-// Sign-in with an email address instead of a username: the login a teacher ends up
-// with after recovering their account. Firebase Auth does the password check (and its
-// own too-many-attempts throttling); /uidIndex says which teacher that login belongs to.
+// Firebase checks the teacher's email, password and enrolled factor. /uidIndex
+// links that Firebase identity to a teacher profile.
 async function t29LoginByEmail(email, password) {
   const devUntil = t29DeviceLockUntil();
   if (devUntil) return { ok: false, locked: true, deviceLocked: true, lockedUntil: devUntil, error: t29DeviceLockedMessage(devUntil - Date.now()) };
@@ -2594,13 +2603,14 @@ async function t29LoginByEmail(email, password) {
   try {
     await firebase.auth().signInWithEmailAndPassword(email, password);
   } catch (e) {
-    if (e.code === "auth/network-request-failed" || e.code === "auth/too-many-requests") return { ok: false, error: t29AuthErrorMessage(e) };
-    return bad;
+    return t29SignInStepFailure(e) || bad;
   }
   const authUser = firebase.auth().currentUser;
   const idx = authUser ? await fdb.collection("uidIndex").doc(authUser.uid).get().catch(() => null) : null;
   const username = idx && idx.exists ? idx.data().username : null;
-  const u = username ? await getUser(username).catch(() => null) : null;
+  const result = username ? await t29ReadLoginProfile(username, authUser, password) : null;
+  if (result && !result.ok) return result;
+  const u = result?.user;
   if (!u || u.role !== "teacher") {
     await firebase.auth().signOut().catch(() => {});
     return bad;
@@ -2609,7 +2619,72 @@ async function t29LoginByEmail(email, password) {
   return { ok: true, user: u };
 }
 
-/* ---------------- Teacher account recovery (forgot password) ----------------
+function t29SignInStepFailure(e) {
+  const code = String(e?.code || "");
+  if (code === "auth/network-request-failed" || code === "auth/too-many-requests") return { ok: false, error: t29AuthErrorMessage(e) };
+  if (code === "t29/mfa-cancelled") return { ok: false, error: "Verification cancelled. Log in again when you're ready." };
+  if (code === "t29/mfa-unavailable" || code === "auth/multi-factor-auth-required") {
+    return { ok: false, error: "This account needs an authenticator app. Contact support for help signing in." };
+  }
+  return null;
+}
+
+async function t29FinishTeacherMfa(username, user, password) {
+  const auth = firebase.auth();
+  const mfa = window.t29TeacherMfa;
+  const markReady = () => {
+    const batch = fdb.batch();
+    batch.update(usersCol().doc(username), { teacherMfaReady: true });
+    batch.delete(fdb.collection("teacherRecovery").doc(username));
+    batch.delete(fdb.collection("recoveryCheck").doc(username));
+    return batch.commit();
+  };
+  try {
+    if (await mfa.hasSecondFactor(user.uid)) {
+      await markReady();
+    } else {
+      const recovery = /@t29\.local$/i.test(user.email)
+        ? await fdb.collection("teacherRecovery").doc(username).get({ source: "server" }) : null;
+      const email = await mfa.setUp({ uid: user.uid, password, recoveryEmail: recovery?.data()?.email, markReady });
+      await auth.signOut();
+      const signedIn = await auth.signInWithEmailAndPassword(email, password);
+      if (signedIn.user.uid !== user.uid || !await mfa.hasSecondFactor(user.uid)) {
+        throw new Error("Teacher sign-in needs an authenticator code.");
+      }
+    }
+    return { ok: true };
+  } catch (e) {
+    clearSession();
+    await auth.signOut().catch(() => {});
+    return t29SignInStepFailure(e) || { ok: false, error: "Couldn't finish account security. Log in again to continue setup." };
+  }
+}
+
+async function t29ReadLoginProfile(username, user, password) {
+  let profile;
+  try { profile = await getUser(username, { fresh: true }); }
+  catch (e) {
+    if (t29IsConnectionError(e)) return { ok: false, error: t29AuthErrorMessage({ code: "auth/network-request-failed" }) };
+  }
+  if (!user) return { ok: true, user: null };
+  if (profile?.authUid === user.uid && (profile.role !== "teacher"
+    || (profile.teacherMfaReady && await window.t29TeacherMfa.hasSecondFactor(user.uid)))) {
+    return { ok: true, user: profile };
+  }
+
+  // This probe can only be read by a teacher with the exact mapped Firebase UID.
+  try { await fdb.collection("teacherMfaSetup").doc(user.uid).get({ source: "server" }); }
+  catch (e) {
+    if (t29IsConnectionError(e)) return { ok: false, error: t29AuthErrorMessage({ code: "auth/network-request-failed" }) };
+    return { ok: true, user: null };
+  }
+  const security = await t29FinishTeacherMfa(username, user, password);
+  if (!security.ok) return security;
+  profile = await getUser(username, { fresh: true });
+  return { ok: true, user: profile?.authUid === user.uid ? profile : null };
+}
+
+/* ---------------- Legacy teacher account recovery ----------------
    1. t29SendRecoveryLink: emails a one-time sign-in link to the address typed.
       It is sent whatever the address is (nothing here reveals whether a username
       or email is registered); the link does nothing unless the address matches the
@@ -2617,7 +2692,7 @@ async function t29LoginByEmail(email, password) {
    2. The teacher opens the link (login.html?...), and t29CompleteRecovery signs in
       with it — which proves they own the email — then takes over the teacher account
       (rules: isRecoveryTakeover in firestore.rules) and sets a new password. The old
-      login stops working; from then on they can log in with the email + new password.
+      login stops working. The new identity must complete MFA before using classes.
    Needs "Email link (passwordless sign-in)" switched on under Firebase console →
    Authentication → Sign-in method → Email/Password. */
 const T29_RECOVERY_KEY = "t29-recovery-pending";
@@ -2631,8 +2706,18 @@ async function t29RecoveryHash(username, email) {
 async function t29SendRecoveryLink(username, email) {
   username = String(username || "").trim();
   email = String(email || "").trim().toLowerCase();
-  if (!username || /\s/.test(username)) return { ok: false, error: "Enter your username." };
-  if (!T29_EMAIL_RE.test(email)) return { ok: false, error: "Enter the recovery email address you gave when you signed up." };
+  if (!T29_EMAIL_RE.test(email) || /@t29\.local$/.test(email)) return { ok: false, error: "Enter your sign-in or recovery email address." };
+  if (!username) {
+    // Native password reset leaves the UID and all enrolled authenticators intact.
+    try { await firebase.auth().sendPasswordResetEmail(email); }
+    catch (e) {
+      if (e.code !== "auth/user-not-found" && e.code !== "auth/user-disabled") {
+        return t29SignInStepFailure(e) || { ok: false, error: "Couldn't send a reset email. Try again later or contact support." };
+      }
+    }
+    return { ok: true };
+  }
+  if (/\s/.test(username)) return { ok: false, error: "Enter your username without spaces." };
   // Only send if this username + email pair matches. Silent success otherwise, so nothing reveals which usernames/emails exist.
   try {
     const snap = await fdb.collection("recoveryCheck").doc(username).get();
@@ -2667,11 +2752,9 @@ async function t29CompleteRecovery(username, email, newPassword) {
   try {
     cred = await firebase.auth().signInWithEmailLink(email, location.href);
   } catch (e) {
-    if (e.code === "auth/network-request-failed") return { ok: false, error: t29AuthErrorMessage(e) };
-    return { ok: false, error: "That link has expired, was already used, or the email doesn't match. Go back and ask for a new link." };
+    return t29SignInStepFailure(e) || { ok: false, error: "That link has expired, was already used, or the email doesn't match. Go back and ask for a new link." };
   }
   const uid = cred.user.uid;
-  const undo = async () => { await cred.user.delete().catch(() => {}); await firebase.auth().signOut().catch(() => {}); };
   try {
     const idx = await fdb.collection("uidIndex").doc(uid).get().catch(() => null);
     if (idx && idx.exists && idx.data().username !== username) {
@@ -2685,17 +2768,22 @@ async function t29CompleteRecovery(username, email, newPassword) {
     });
   } catch (e) {
     if (t29IsConnectionError(e)) { await firebase.auth().signOut().catch(() => {}); return { ok: false, error: t29AuthErrorMessage({ code: "auth/network-request-failed" }) }; }
-    await undo();
-    return { ok: false, error: "That email isn't the recovery email for this username. Check both and try again." };
+    // Email-link sign-in can return an existing Firebase identity. A refused
+    // takeover must never delete that identity, including its authenticators.
+    await firebase.auth().signOut().catch(() => {});
+    return { ok: false, error: "That link can't recover this account. If you already verified your sign-in email, request a password reset using just that email." };
   }
   try {
     await cred.user.updatePassword(newPassword);
   } catch (e) {
-    return { ok: false, error: "Your account is recovered, but the new password couldn't be saved. Use the link again to retry." };
+    await firebase.auth().signOut().catch(() => {});
+    return { ok: false, setupPending: true, error: "Your recovery email is now your sign-in email. Request a password reset using just that email to set a password." };
   }
+  try { localStorage.removeItem(T29_RECOVERY_KEY); } catch (e) { /* ignore */ }
+  const security = await t29FinishTeacherMfa(username, cred.user, newPassword);
+  if (!security.ok) return { ok: false, setupPending: true, error: "Your password was saved. Log in with your recovery email to finish account setup. " + security.error };
   const u = await getUser(username).catch(() => null);
   if (!u) return { ok: false, error: "Something went wrong. Please try again." };
-  try { localStorage.removeItem(T29_RECOVERY_KEY); } catch (e) { /* ignore */ }
   setSession(username, u.sessionVersion || 0);
   return { ok: true, user: u };
 }
@@ -2714,8 +2802,7 @@ async function t29DeleteTeacherAccount(username, password) {
   try {
     await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, password));
   } catch (e) {
-    if (e.code === "auth/network-request-failed") return { ok: false, error: t29AuthErrorMessage(e) };
-    return { ok: false, error: "That password isn't right." };
+    return t29SignInStepFailure(e) || { ok: false, error: "That password isn't right." };
   }
   try {
     const owned = await classesCol().where("teacher", "==", username).get();
@@ -2755,25 +2842,6 @@ async function t29DeleteTeacherAccount(username, password) {
   return { ok: true, warning };
 }
 
-// Teacher Home: see / change / remove the recovery email after signup.
-async function t29GetRecoveryEmail(username) {
-  const snap = await fdb.collection("teacherRecovery").doc(username).get().catch(() => null);
-  const em = snap && snap.exists ? (snap.data().email || "") : "";
-  // Backfill: accounts made before this check get their fingerprint when Teacher Home loads.
-  if (em) t29RecoveryHash(username, em).then(h => fdb.collection("recoveryCheck").doc(username).set({ hash: h })).catch(() => {});
-  return em;
-}
-async function t29SetRecoveryEmail(username, email) {
-  email = String(email || "").trim().toLowerCase();
-  const ref = fdb.collection("teacherRecovery").doc(username);
-  const chk = fdb.collection("recoveryCheck").doc(username);
-  if (!email) { await ref.delete(); await chk.delete().catch(() => {}); return { ok: true, email: "" }; }
-  if (!T29_EMAIL_RE.test(email)) return { ok: false, error: "That email address doesn't look right." };
-  await ref.set({ email });
-  await chk.set({ hash: await t29RecoveryHash(username, email) });
-  return { ok: true, email };
-}
-
 /* ---------------- Login ----------------
    SECURITY FIX: password verification is now done entirely by Firebase
    Auth (signInWithEmailAndPassword) instead of comparing a plaintext
@@ -2794,6 +2862,8 @@ async function t29LoginCore(username, password) {
   try {
     await firebase.auth().signInWithEmailAndPassword(t29AuthEmail(username), password);
   } catch (e) {
+    const interrupted = t29SignInStepFailure(e);
+    if (interrupted) return interrupted;
     // BUGFIX: newer Firebase projects have "email enumeration protection"
     // on by default, which reports a nonexistent account as
     // auth/invalid-credential (identical to a wrong password) rather than
@@ -2807,9 +2877,6 @@ async function t29LoginCore(username, password) {
     if (e.code === "auth/user-not-found" || e.code === "auth/invalid-credential") {
       const migrated = await t29TryMigrateLegacyLogin(username, password);
       if (!migrated.ok) return { ok: false, badCredentials: true, error: "Incorrect username or password." };
-    } else if (e.code === "auth/network-request-failed" || e.code === "auth/too-many-requests") {
-      // Not the password's fault — say what actually went wrong.
-      return { ok: false, error: t29AuthErrorMessage(e) };
     } else {
       return { ok: false, badCredentials: true, error: "Incorrect username or password." };
     }
@@ -2828,16 +2895,19 @@ async function t29LoginCore(username, password) {
     }
   }
 
-  let u = await getUser(username).catch(() => null);
-  if (!u) {
+  let result = await t29ReadLoginProfile(username, signedInUser, password);
+  if (!result.ok) return result;
+  if (!result.user) {
     // A legacy migration that got its /uidIndex entry written but never
     // finished stamping the /users doc can't read its own doc yet — finish
     // it now (refused for anyone it doesn't belong to) and try once more.
     const authUser = firebase.auth().currentUser;
     if (authUser && await _t29FinishLegacyClaim(username, authUser.uid)) {
-      u = await getUser(username).catch(() => null);
+      result = await t29ReadLoginProfile(username, authUser, password);
     }
   }
+  if (!result.ok) return result;
+  const u = result.user;
   if (!u) {
     await firebase.auth().signOut().catch(() => {});
     return { ok: false, error: "Incorrect username or password." };
@@ -2925,6 +2995,8 @@ async function changePassword(username, oldPassword, newPassword) {
     await authUser.reauthenticateWithCredential(cred);
     await authUser.updatePassword(newPassword);
   } catch (e) {
+    const interrupted = t29SignInStepFailure(e);
+    if (interrupted) return interrupted;
     if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential" || e.code === "auth/invalid-login-credentials") {
       return { ok: false, error: "Current password is incorrect." };
     }
@@ -3950,7 +4022,7 @@ function t29Alert(message) { return _t29Enqueue("alert", message); }
 // opts: { confirmText, cancelText, danger } — all optional; sensible labels are
 // worked out from the question itself ("Remove this…?" -> a red "Remove" button).
 function t29Confirm(message, opts) { return _t29Enqueue("confirm", message, opts); }
-// opts: { type: "text"|"number", min, max, step, placeholder, confirmText, cancelText, danger }
+// opts: { type: "text"|"number"|"password", min, max, step, placeholder, confirmText, cancelText, danger }
 function t29Prompt(message, defaultValue, opts) {
   return _t29Enqueue("prompt", message, Object.assign({}, opts, { defaultValue: defaultValue === undefined || defaultValue === null ? "" : String(defaultValue) }));
 }
@@ -4005,8 +4077,12 @@ function _t29ShowNextDialog() {
   okBtn.textContent = lb.ok;
   if (cancelBtn) cancelBtn.textContent = lb.cancel;
   if (input) {
-    input.type = o.type === "number" ? "number" : "text";
+    if (o.type === "password") {
+      input.type = "password";
+      input.autocomplete = "current-password";
+    }
     if (o.type === "number") {
+      input.type = "number";
       ["min", "max"].forEach(k => { if (o[k] !== undefined) input.setAttribute(k, o[k]); });
       input.setAttribute("step", o.step !== undefined ? o.step : "any");
       input.inputMode = "decimal";

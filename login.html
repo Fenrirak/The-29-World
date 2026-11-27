@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1f2b44">
-<link rel="stylesheet" href="style.css?v=95c2f4c4">
+<link rel="stylesheet" href="style.css?v=60775b11">
 <style>.auth-home{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px;font-weight:700;font-size:var(--fs-md);color:var(--navy-700);text-decoration:none}.auth-home:hover,.auth-home:focus-visible{text-decoration:underline}html.dark-mode .auth-home{color:var(--heading-text)}</style>
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://www.gstatic.com">
@@ -51,13 +51,14 @@
 
       <!-- Teacher login -->
       <form id="panel-teacher-login" onsubmit="return doLogin(event)">
-        <label for="l-username">Username or email</label>
-        <input id="l-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username (or your recovery email)">
+        <label for="l-username">Sign-in email or existing username</label>
+        <input id="l-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
+        <p class="field-hint">Use your sign-in email after setup. Existing teachers can use their username for first-time setup.</p>
         <label for="l-password">Password</label>
         <input id="l-password" type="password" required autocomplete="current-password" placeholder="Password">
         <div class="remember-row">
           <input type="checkbox" id="l-remember">
-          <label for="l-remember">Remember my username on this device</label>
+          <label for="l-remember">Remember my sign-in on this device</label>
         </div>
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit">Log in</button>
         <p class="muted-small" style="text-align:center;margin:10px 0 0;"><button type="button" class="link-btn" onclick="showTeacherSpecial('forgot')">Forgot your password?</button> · <a href="help.html#login">Login help</a></p>
@@ -65,13 +66,17 @@
 
       <!-- Teacher forgot password: emails a one-time link to the recovery email -->
       <form id="panel-teacher-forgot" class="hidden" onsubmit="return doForgot(event)">
-        <p class="muted-small" style="margin-top:0;">Enter your username and the recovery email you gave when you created your account. We'll email you a link to set a new password.</p>
-        <label for="f-username">Username</label>
-        <input id="f-username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
-        <label for="f-email">Recovery email</label>
+        <p class="muted-small" style="margin-top:0;">Enter the email you use to sign in. We'll email you a link to set a new password. You'll still need your authenticator to log in.</p>
+        <label for="f-email">Sign-in or recovery email</label>
         <input id="f-email" type="email" required autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
+        <details id="f-legacy" style="margin:8px 0 14px;">
+          <summary>I still sign in with a username</summary>
+          <p class="field-hint">Enter the recovery email you previously saved above, and your username below.</p>
+          <label for="f-username">Existing username</label>
+          <input id="f-username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Username">
+        </details>
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit">Email me a link</button>
-        <p class="field-hint" style="text-align:center;">No recovery email on your account? It's optional, so it may not have been set. A teacher can add one on Teacher Home once logged in.</p>
+        <p class="field-hint" style="text-align:center;">Need help with your email or authenticator? <a href="index.html#contact">Contact support</a>.</p>
         <p class="muted-small" style="text-align:center;margin:6px 0 0;"><button type="button" class="link-btn" onclick="showPanel('teacher-login')">Back to log in</button></p>
       </form>
 
@@ -84,8 +89,9 @@
         <input id="r-email" type="email" required autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="The email the link was sent to">
         <label for="r-password">New password</label>
         <input id="r-password" type="password" required autocomplete="new-password" placeholder="Choose a new password">
-        <p class="field-hint">At least 6 characters, including a capital letter. After this you can log in with your recovery email and this password.</p>
+        <p class="field-hint">At least 6 characters, including a capital letter. Next you'll set up an authenticator for this account.</p>
         <button class="btn gold" style="width:100%;justify-content:center;" type="submit">Set new password</button>
+        <p class="muted-small" style="text-align:center;margin:8px 0 0;"><a href="login.html?role=teacher">Back to log in</a></p>
       </form>
 
       <!-- Teacher signs up, with optional class setup -->
@@ -111,9 +117,9 @@
           </div>
         </div>
         <p class="field-hint" id="t-name-hint">This is how your students will see you, e.g. Ms Smith.</p>
-        <label for="t-email">Recovery email <span class="muted-small">(optional)</span></label>
-        <input id="t-email" type="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
-        <p class="field-hint">Only used to get you back into your account if you forget your password. Students can't see it. You can add or change it later.</p>
+        <label for="t-email">Sign-in email</label>
+        <input id="t-email" type="email" required maxlength="254" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
+        <p class="field-hint">You'll verify this email and set up an authenticator app. Students can't see your email.</p>
         <label for="t-class-mode">Class setup</label>
         <select id="t-class-mode" onchange="updateTeacherClassSetup()">
           <option value="create">Create a new class</option>
@@ -243,16 +249,16 @@
      lets the HTML parse and paint immediately while these load in the
      background, in the same relative order, still finishing before
      DOMContentLoaded — matching how every other page already does it. -->
-<script type="module" src="firebase-init.js?v=02430e7b"></script>
+<script type="module" src="firebase-init.js?v=ccc7d974"></script>
 <script defer src="icons.js?v=be447cba"></script>
 <script defer src="offline.js?v=55c545a6"></script>
-<script defer src="data-core.js?v=052b3b84"></script>
+<script defer src="data-core.js?v=303784dd"></script>
 <script defer src="data-money.js?v=4dc6f0d3"></script>
 <script defer src="data-life.js?v=e6f73869"></script>
 <script defer src="data-property.js?v=4b2feaee"></script>
 <script defer src="data-markets.js?v=5b7478f9"></script>
 <script defer src="base-template.js?v=00f9bee4"></script>
-<script defer src="policy-config.js?v=25cd8c5f"></script>
+<script defer src="policy-config.js?v=33573636"></script>
 <script>
 // Paint the role and account tab icons.
 function paintIcons() {
@@ -312,11 +318,23 @@ function showTeacherSpecial(which) {
 async function doForgot(e) {
   e.preventDefault();
   return withBusyButton(e.target, "Sending…", async () => {
-    const res = await t29SendRecoveryLink(document.getElementById("f-username").value, document.getElementById("f-email").value);
+    const legacy = document.getElementById("f-legacy").open;
+    const username = legacy ? document.getElementById("f-username").value.trim() : "";
+    if (legacy && !username) { showMsg("Enter your existing username.", false); return false; }
+    const res = await t29SendRecoveryLink(username, document.getElementById("f-email").value);
     if (!res.ok) { showMsg(res.error, false); return false; }
     showMsg("If that's the recovery email on this account, a link is on its way. Check your inbox (and spam), then open the link to choose a new password.", true);
     return false;
   });
+}
+
+function goToTeacherLogin(email) {
+  // Remove a spent recovery link so a refresh returns to the login form.
+  if (t29IsRecoveryLink()) history.replaceState(null, "", "login.html?role=teacher");
+  showRole("teacher");
+  showPanel("teacher-login");
+  document.getElementById("l-username").value = email.trim().toLowerCase();
+  document.getElementById("l-password").focus();
 }
 
 async function doReset(e) {
@@ -326,7 +344,11 @@ async function doReset(e) {
       document.getElementById("r-username").value,
       document.getElementById("r-email").value,
       document.getElementById("r-password").value);
-    if (!res.ok) { showMsg(res.error, false); return false; }
+    if (!res.ok) {
+      if (res.setupPending) goToTeacherLogin(document.getElementById("r-email").value);
+      showMsg(res.error, false);
+      return false;
+    }
     window.location.href = "teacher-home.html";
     return false;
   });
@@ -453,7 +475,8 @@ async function doLoginInner(e) {
   // "remember" now only prefills the username field, never the password.
   const key = "anw_remember_" + (isTeacherForm ? "teacher" : "student");
   if (remember) {
-    localStorage.setItem(key, JSON.stringify({ username: (res.applicant || res.user).username || username }));
+    const identifier = res.user?.role === "teacher" ? firebase.auth().currentUser?.email : (res.applicant || res.user).username;
+    localStorage.setItem(key, JSON.stringify({ username: identifier || username }));
   } else {
     localStorage.removeItem(key);
   }
@@ -512,7 +535,14 @@ async function doTeacherSignupInner(e) {
   if (/\s/.test(username)) { showMsg("Usernames can't have spaces. Try something like smith.m", false); return false; }
   const email = document.getElementById("t-email").value.trim();
   const res = await createTeacherAndClass(name, username, password, className, { title, lastName: last, email, classMode, coTeacherCode });
-  if (!res.ok) { showMsg(res.error, false); return false; }
+  if (!res.ok) {
+    if (res.setupPending) {
+      if (typeof t29RecordPolicyAck === "function") t29RecordPolicyAck(username);
+      goToTeacherLogin(email);
+    }
+    showMsg(res.error, false);
+    return false;
+  }
   if (typeof t29RecordPolicyAck === "function") t29RecordPolicyAck(username);
   const startChoice = (document.querySelector('input[name="t-start"]:checked') || {}).value;
   if (classMode === "create" && startChoice === "base" && typeof applyBaseTemplateToClass === "function") {
