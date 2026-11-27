@@ -362,15 +362,15 @@ async function render() {
   const bpBox = document.getElementById("bcRecentActivity");
   bpBox.innerHTML = "";
   document.getElementById("bcNoActivity").classList.toggle("hidden", bankPreview.length > 0);
-  bankPreview.forEach((t, i) => {
+  bankPreview.forEach(t => {
     const row = document.createElement("div");
-    row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;" + (i < bankPreview.length - 1 ? "border-bottom:1px solid var(--line);" : "");
+    row.className = "bank-activity-row";
     row.innerHTML = `
-      <div style="min-width:0;">
+      <div class="bank-activity-summary">
         ${badgeType(t.type)}
-        <div class="muted-small" style="margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.detail)} · ${escapeHtml(t.date)}</div>
+        <div class="muted-small bank-activity-detail">${escapeHtml(t.detail)} · ${escapeHtml(t.date)}</div>
       </div>
-      <div class="${moneyClass(t.sign)}" style="white-space:nowrap;">${fmtSignedMoney(t.sign, t.amt)}</div>
+      <div class="${moneyClass(t.sign)} bank-activity-amount">${fmtSignedMoney(t.sign, t.amt)}</div>
     `;
     bpBox.appendChild(row);
   });

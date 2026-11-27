@@ -1,0 +1,48 @@
+.bank-activity-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 10px;
+  padding: 7px 0;
+}
+
+.bank-activity-row:not(:last-child) { border-bottom: 1px solid var(--line); }
+
+.bank-activity-summary {
+  flex: 1 1 10em;
+  min-width: 0;
+}
+
+.bank-activity-detail {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bank-activity-amount {
+  margin-left: auto;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.bank-activity-summary > .badge,
+table.txn-table td:nth-child(2) > .badge {
+  overflow-wrap: normal;
+}
+
+@media (max-width: 640px) {
+  table.txn-table tr {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  table.txn-table td:nth-child(1),
+  table.txn-table td:nth-child(3) { flex-basis: 100%; }
+
+  table.txn-table td:nth-child(4) {
+    margin-left: auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

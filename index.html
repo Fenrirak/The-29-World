@@ -27,10 +27,13 @@
       const params = new URLSearchParams(location.search);
       const accountLink = ["role", "returnTo", "mode", "oobCode", "link", "deep_link_id"]
         .some(key => params.has(key));
+      // Older home-screen installs may still launch the old start URL.
+      const legacyAppLaunch = !document.referrer && !location.search && !location.hash &&
+        (navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches);
       try {
         document.documentElement.classList.toggle("dark-mode", localStorage.getItem("t29-dark-mode") === "1");
       } catch (_) { /* Public pages also work with storage disabled. */ }
-      if (accountLink) location.replace("login.html" + location.search + location.hash);
+      if (accountLink || legacyAppLaunch) location.replace("login.html" + location.search + location.hash);
     })();
   </script>
   <link rel="stylesheet" href="style.css?v=95c2f4c4">
