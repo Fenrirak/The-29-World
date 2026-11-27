@@ -39,14 +39,15 @@
   "use strict";
 
   var POLICY = {
-    version: "1.3",
+    version: "1.4",
     updated: "2026-11-27",
     updatedLabel: "27 November 2026",
     nextReviewBy: "2027-11-27",
     // Plain-language summary of what changed, shown in the IMPORTANT popup. Replace on every version bump.
     changes: [
       "We now say exactly where your data is stored: Google's Sydney, Australia data centre (Google may also process some data in other countries).",
-      "If a data breach ever happens, we will tell affected schools and teachers within 72 hours of confirming it.",
+      "All accounts now use Google Firebase sign-in, so no one's password is stored in a readable form.",
+    "If a data breach ever happens, we will tell affected schools and teachers within 72 hours of confirming it.",
     "We made sure the casino-style games can never be switched on by default; only a teacher can turn them on."
     ]
   };
