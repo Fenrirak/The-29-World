@@ -681,6 +681,34 @@ function notifTeacherChangeItems(me, cls) {
   return out;
 }
 
+function notifAnimateCrisis(dialog) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return [];
+
+  const slamDuration = 180;
+  const shake = [
+    { translate: "-10px 6px", offset: 0 },
+    { translate: "9px -5px", offset: .08 },
+    { translate: "-7px 4px", offset: .18 },
+    { translate: "5px -3px", offset: .29 },
+    { translate: "-3px 2px", offset: .42 },
+    { translate: "2px -1px", offset: .57 },
+    { translate: "-1px 1px", offset: .74 },
+    { translate: "0px", offset: 1 }
+  ];
+  // Animate the page's rendered sections individually so the body stays untransformed
+  // and viewport-fixed widgets and the sidebar keep their positioning on scrolled pages.
+  const targets = Array.from(document.body.children).filter(el => el.getClientRects().length);
+  const slam = dialog.animate([
+    { opacity: 0, transform: "translateY(-96px) scale(1.18)" },
+    { opacity: 1, offset: .35 },
+    { opacity: 1, transform: "none" }
+  ], { id: "crisis-alert-slam", duration: slamDuration, easing: "cubic-bezier(.55,.05,.85,.55)" });
+  const shakes = targets.map(el => el.animate(shake, {
+    id: "crisis-alert-shake", delay: slamDuration, duration: 1000
+  }));
+  return [slam, ...shakes];
+}
+
 function notifShowCrisis(event, onClose) {
   if (!document.getElementById("t29CrisisAlertCss")) {
     const style = document.createElement("style");
@@ -691,7 +719,6 @@ function notifShowCrisis(event, onClose) {
         border: 1px solid var(--line);
         color: var(--ink);
       }
-      .crisis-alert[open] { animation: crisis-alert-tremor 1s ease-out both; }
       .crisis-alert::backdrop { background: rgba(31, 43, 68, .55); }
       .crisis-alert .crisis-alert-impact { display: block; background: var(--surface-2, var(--bg)); }
       .crisis-alert-impact h3 { margin: 0 0 4px; font-size: var(--fs-sm); }
@@ -700,17 +727,7 @@ function notifShowCrisis(event, onClose) {
       .crisis-alert-market + .crisis-alert-market { border-top: 1px solid var(--line); }
       .crisis-alert-market:last-child { padding-bottom: 0; }
       .crisis-alert-market dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
-      @keyframes crisis-alert-tremor {
-        0% { opacity: 0; transform: translate(0, 8px); }
-        20% { opacity: 1; transform: translateX(-7px); }
-        35% { transform: translateX(6px); }
-        52% { transform: translateX(-4px); }
-        67% { transform: translateX(3px); }
-        82% { transform: translateX(-1px); }
-        100% { opacity: 1; transform: translateX(0); }
-      }
       @media (prefers-reduced-motion: reduce) {
-        .crisis-alert[open] { animation: none; }
         .crisis-alert button.btn { transition: none; transform: none; }
       }`;
     document.head.appendChild(style);
@@ -735,9 +752,14 @@ function notifShowCrisis(event, onClose) {
       </div>`).join("")}</dl>
     </section>` : ""}
     <form method="dialog"><button class="btn gold be-full" autofocus>Got it</button></form>`;
-  dialog.addEventListener("close", () => { dialog.remove(); onClose(); }, { once: true });
   document.body.appendChild(dialog);
   dialog.showModal();
+  const animations = notifAnimateCrisis(dialog);
+  dialog.addEventListener("close", () => {
+    animations.forEach(animation => animation.cancel());
+    dialog.remove();
+    onClose();
+  }, { once: true });
 }
 
 let NOTIF_CRISIS_REFRESH = null;
